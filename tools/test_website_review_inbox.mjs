@@ -81,7 +81,7 @@ test('settle waits for actual preview hashing, not a fixed number of event-loop 
   beforeDigest = () => new Promise(resolve => { release = resolve })
   let settling
   try {
-    click(render(), 'Preview saved website')
+    click(render(), 'Review saved website')
     let settled = false
     settling = settle().then(() => { settled = true })
     for (let i = 0; i < 20; i++) await new Promise(resolve => setImmediate(resolve))
@@ -262,7 +262,7 @@ test('saved-source verification binds complete preview bytes and refuses authori
 test('staff can inspect verified saved pages without active links, an invitation or provider writes', async () => {
   fixture(); sandbox.h.prepareResponse = () => preparationFixture()
   let tree = render(); assert.equal(sandbox.h.calls.length, 0)
-  click(tree, 'Preview saved website'); await settle(); tree = render()
+  click(tree, 'Review saved website'); await settle(); tree = render()
   assert.match(text(tree), /Example Studio · saved revision 2/)
   assert.match(text(tree), /Unsaved edits are not included/)
   assert.match(text(tree), /Saved headline/)
@@ -282,7 +282,7 @@ test('staff can inspect verified saved pages without active links, an invitation
 test('saved-source late response cannot cross an account boundary', async () => {
   let release
   fixture(); sandbox.h.prepareResponse = () => new Promise(resolve => { release = resolve })
-  let tree = render(); click(tree, 'Preview saved website'); await settle()
+  let tree = render(); click(tree, 'Review saved website'); await settle()
   sandbox.h.identity = { userId: 'another', workspaceId: 'elsewhere' }
   release(preparationFixture()); await settle(); tree = render()
   assert.doesNotMatch(text(tree), /Saved headline/)
@@ -390,7 +390,7 @@ function prepareReceipt(command) {
 async function openRecipients() {
   sandbox.h.prepareResponse = () => preparationFixture()
   sandbox.h.recipientResponse = () => recipients
-  let tree = render(); click(tree, 'Preview saved website'); await settle(); tree = render()
+  let tree = render(); click(tree, 'Review saved website'); await settle(); tree = render()
   click(tree, 'Choose customer for review'); await settle(); return render()
 }
 function selectAndConfirm(tree) {
@@ -475,8 +475,8 @@ test('reload retains minimal reference and blocks a duplicate while list absence
   assert.deepEqual(Object.keys(receipt).sort(), ['contentRevision', 'expectedVersion', 'expiresAt', 'previewDigest', 'readAt', 'recipientGrantId', 'reviewId'])
   let tree = reloadInbox()
   assert.ok(text(tree).includes(receipt.reviewId))
-  assert.equal(elements(tree).find(n => text(n) === 'Preview saved website').props.disabled, true)
-  click(tree, 'Preview saved website'); await settle()
+  assert.equal(elements(tree).find(n => text(n) === 'Review saved website').props.disabled, true)
+  click(tree, 'Review saved website'); await settle()
   assert.equal(sandbox.h.writes.length, 1)
   sandbox.h.response = () => ({ ...listing, reviews: [] })
   click(render(), 'Refresh reviews'); await settle(); tree = render()
@@ -501,7 +501,7 @@ test('only matching retained source, digest and expiry clear recovery after relo
     let tree = reloadInbox(); click(tree, 'Refresh reviews'); await settle(); tree = render()
     click(tree, 'View response for revision 2'); await settle(); tree = render()
     assert.equal(sandbox.window.sessionStorage.getItem(recoveryKey) === null, mismatch === 'none')
-    assert.equal(elements(tree).find(n => text(n) === 'Preview saved website').props.disabled, mismatch !== 'none')
+    assert.equal(elements(tree).find(n => text(n) === 'Review saved website').props.disabled, mismatch !== 'none')
     assert.equal(sandbox.h.writes.length, 1)
   }
 })
@@ -512,7 +512,7 @@ test('corrupt or inaccessible recovery storage fails closed without a write', as
     if (mode === 'corrupt') sandbox.window.sessionStorage.setItem(recoveryKey, '{broken')
     if (mode === 'read') sandbox.window.sessionStorage.getItem = () => { throw Error('denied') }
     if (mode === 'corrupt' || mode === 'read') {
-      const tree = render(); click(tree, 'Preview saved website'); await settle()
+      const tree = render(); click(tree, 'Review saved website'); await settle()
       assert.match(text(render()), /storage is unavailable or invalid/)
     } else {
       const tree = selectAndConfirm(await openRecipients())

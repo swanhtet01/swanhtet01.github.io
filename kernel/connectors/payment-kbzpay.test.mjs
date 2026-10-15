@@ -6,8 +6,10 @@
 import { afterEach, beforeEach, test } from 'node:test'
 import assert from 'node:assert/strict'
 import crypto from 'node:crypto'
+import { PassThrough } from 'node:stream'
 
 import { createQR, queryPayment, verifyNotify } from './payment-kbzpay.mjs'
+import notifyHandler from '../api/kbzpay-notify.mjs'
 
 const originalFetch = globalThis.fetch
 const trackedEnv = ['KBZPAY_APP_ID', 'KBZPAY_MERCH_CODE', 'KBZPAY_APP_SECRET', 'KBZPAY_NOTIFY_URL', 'KBZPAY_SANDBOX']
@@ -40,6 +42,7 @@ function configureAll() {
   process.env.KBZPAY_APP_ID = APP_ID
   process.env.KBZPAY_MERCH_CODE = MERCH_CODE
   process.env.KBZPAY_APP_SECRET = SECRET
+  process.env.KBZPAY_SANDBOX = 'true'
 }
 
 beforeEach(() => {
@@ -62,21 +65,31 @@ test('createQR and queryPayment fail closed without credentials or order identit
   assert.equal((await queryPayment({ orderId: 'ORD-1' })).reason, 'kbzpay_not_configured')
 
   configureAll()
+  delete process.env.KBZPAY_SANDBOX
+  assert.equal((await createQR({ amount: 5000, orderId: 'ORD-1' })).reason, 'kbzpay_not_configured')
+  assert.equal((await queryPayment({ orderId: 'ORD-1' })).reason, 'kbzpay_not_configured')
+  process.env.KBZPAY_SANDBOX = 'true'
   assert.equal((await createQR({})).reason, 'kbzpay_missing_amount_or_orderId')
   assert.equal((await createQR({ amount: 5000 })).reason, 'kbzpay_missing_amount_or_orderId')
   assert.equal((await queryPayment({})).reason, 'kbzpay_missing_orderId')
+  for (const amount of [0, -1, 1.2, Infinity, NaN, Number.MAX_SAFE_INTEGER + 1]) {
+    assert.equal((await createQR({ amount, orderId: 'ORD-1' })).ok, false)
+  }
+  assert.equal((await createQR({ amount: 5000, orderId: ' ORD-1' })).reason, 'kbzpay_invalid_orderId')
+  assert.equal((await queryPayment({ orderId: 'ORD/1' })).reason, 'kbzpay_invalid_orderId')
   assert.equal(calls, 0)
 })
 
 test('createQR posts a correctly signed precreate request without transmitting the secret', async () => {
   configureAll()
+  process.env.KBZPAY_SANDBOX = 'false'
   const calls = []
   globalThis.fetch = async (url, options) => {
     calls.push({ url: String(url), options })
     return response(200, { return_code: 'SUCCESS', result: { qrCode: 'QR-DATA', prepay_id: 'PP-1' } })
   }
 
-  const result = await createQR({ amount: 4999.6, orderId: 'ORD-1', title: 'Tyre deposit' })
+  const result = await createQR({ amount: 5000, orderId: 'ORD-1', title: 'Tyre deposit' })
   assert.deepEqual(result, { ok: true, qrCode: 'QR-DATA', prepayId: 'PP-1', orderId: 'ORD-1' })
   assert.equal(calls.length, 1)
   assert.equal(calls[0].url, 'https://api.kbzpay.com/payment/gateway/precreate')
@@ -89,7 +102,7 @@ test('createQR posts a correctly signed precreate request without transmitting t
   assert.equal(body.merch_order_id, 'ORD-1') // the merchant order id is the transaction identity
   assert.equal(body.trade_type, 'PAYSCORE')
   assert.equal(body.title, 'Tyre deposit')
-  assert.equal(body.total_amount, '5000') // rounded, stringified kyat
+  assert.equal(body.total_amount, '5000') // exact integer kyat amount
   assert.equal(body.notify_url, 'https://console.supermega.dev/api/kbzpay-notify')
   assert.match(body.timestamp, /^\d{10}$/)
   // Self-consistent signature over the exact transmitted fields — and the secret itself
@@ -114,6 +127,7 @@ test('KBZPAY_SANDBOX=true routes to the UAT gateway', async () => {
 
 test('queryPayment posts a signed status query keyed by the merchant order id', async () => {
   configureAll()
+  process.env.KBZPAY_SANDBOX = 'false'
   const calls = []
   globalThis.fetch = async (url, options) => {
     calls.push({ url: String(url), options })
@@ -132,6 +146,9 @@ test('queryPayment posts a signed status query keyed by the merchant order id', 
 
 test('provider failures return stable reasons without the secret and never throw', async () => {
   configureAll()
+
+  globalThis.fetch = async () => response(200, { return_code: 'SUCCESS', result: {} })
+  assert.deepEqual(await createQR({ amount: 1000, orderId: 'ORD-1' }), { ok: false, reason: 'kbzpay_missing_qr' })
 
   globalThis.fetch = async () => response(500, { hostile: 'gateway stack trace detail' })
   const http = await createQR({ amount: 1000, orderId: 'ORD-1' })
@@ -171,4 +188,24 @@ test('verifyNotify accepts only a correctly signed IPN callback (forged paid-not
   // Without the signing secret the verifier must fail closed, not accept blindly.
   delete process.env.KBZPAY_APP_SECRET
   assert.deepEqual(verifyNotify(signed), { ok: false, reason: 'kbzpay_not_configured' })
+})
+
+test('rejected callbacks do not write submitted payment data to logs', async () => {
+  configureAll()
+  const request = new PassThrough()
+  request.method = 'POST'
+  const reply = { code: 0, status(code) { this.code = code; return this }, json(body) { this.body = body } }
+  const warnings = []
+  const originalWarn = console.warn
+  console.warn = (...parts) => warnings.push(parts.join(' '))
+  try {
+    const done = notifyHandler(request, reply)
+    request.end(JSON.stringify({ merch_order_id: 'PRIVATE-ORDER', customer_phone: 'PRIVATE-PHONE', sign: 'bad' }))
+    await done
+  } finally {
+    console.warn = originalWarn
+  }
+  assert.equal(reply.code, 400)
+  assert.equal(warnings.length, 1)
+  assert.doesNotMatch(warnings[0], /PRIVATE-ORDER|PRIVATE-PHONE/)
 })

@@ -13,7 +13,7 @@ export const SHOP_PILOT_PRIVATE_INTAKE_PACKET_CONTRACT = 'supermega.shop.pilot_p
 
 const root = resolve(import.meta.dirname, '..')
 const REPOSITORY = 'swanhtet01/swanhtet01.github.io'
-const REQUIRED_PRODUCTS = ['shop', 'plant', 'website', 'ecommerce']
+const ACTIVE_CUSTOMER_PRODUCTS = ['shop', 'website', 'ecommerce']
 const REQUIRED_BLOCKING_GATES = ['preview_rehearsal', 'pilot_evidence', 'production_activation']
 const REQUIRED_PILOT_DAY_INDEXES = [1, 2, 3, 4, 5]
 const REQUIRED_PILOT_CALENDAR_DATES = 5
@@ -222,10 +222,10 @@ export function buildShopPilotPrivateIntakePacket(input = {}) {
       readinessDigest: input.readinessDigest || null,
     },
     portfolioBoundary: {
-      customerProducts: REQUIRED_PRODUCTS,
+      customerProducts: ACTIVE_CUSTOMER_PRODUCTS,
       firstPilotProduct: 'shop',
       aiIsSharedCapability: true,
-      nextProductSequenceAfterShop: ['plant', 'website', 'ecommerce'],
+      nextProductSequenceAfterShop: ['website', 'ecommerce'],
     },
     publicSafeRules: {
       allowedOutsidePrivateWorkspace: ['stage labels', 'counts', 'booleans', 'digests', 'gate ids', 'safe commands'],
@@ -325,6 +325,11 @@ export function validateShopPilotPrivateIntakePacket(packet) {
     throw new Error('shop_pilot_private_intake_packet_not_ready')
   }
   if (packet.product !== 'shop' || packet.pilotMode !== 'owner_named') throw new Error('shop_pilot_private_intake_packet_scope_invalid')
+  if (!sameArray(packet.portfolioBoundary?.customerProducts, ACTIVE_CUSTOMER_PRODUCTS)
+    || !sameArray(packet.portfolioBoundary?.nextProductSequenceAfterShop, ['website', 'ecommerce'])
+    || packet.portfolioBoundary?.firstPilotProduct !== 'shop') {
+    throw new Error('shop_pilot_private_intake_packet_portfolio_invalid')
+  }
   if (packet.readiness?.hostedActivationReady !== false
     || packet.readiness?.managedWritesEnabled !== false
     || packet.readiness?.previewRehearsalProofComplete !== false
@@ -385,7 +390,7 @@ Owner-private intake preparation only. It does not allow customer contact, payme
 
 ## Product order
 
-Shop is first. Plant, Website, and Ecommerce stay in security, dependency, and regression maintenance until Shop has real accepted evidence.
+Shop is first. Website and Ecommerce are optional, separately scoped additions after Shop has real accepted evidence. Retired Plant records remain in security, dependency, and regression maintenance; Plant is not part of this pilot intake.
 
 ## Required private stages
 

@@ -297,7 +297,7 @@ export function ManagedLoginPage() {
         </div>
         {notice ? <p className="form-notice" data-tone={noticeTone} role="status">{notice}</p> : null}
       </section> : creatingAccount && !reviewReturnPath ? <form aria-label="Create company account" aria-busy={busy} className="managed-login-panel core-form" onSubmit={(event) => void requestAccount(event)}>
-        {!signupPolicy ? <p role="status">New account creation is not open. Sign in or request assisted setup.</p> : <>
+        {!signupPolicy ? <p role="status">New account creation is not open. Sign in or contact support.</p> : <>
           <h2>{sentRequest ? 'Check your email.' : 'Your work account'}</h2>
           {sentRequest ? null : <>
             <label>Email<input autoComplete="username" disabled={busy} maxLength={160} onChange={(event) => setEmail(event.target.value)} required type="email" value={email} /></label>

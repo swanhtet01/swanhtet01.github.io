@@ -2,7 +2,11 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 
 const root = process.cwd()
-const outputDir = resolve(root, '.vercel/output')
+const isolatedOutputId = process.env.SUPERMEGA_PUBLIC_OUTPUT_ID || ''
+if (isolatedOutputId && !/^[a-z0-9][a-z0-9-]{0,63}$/.test(isolatedOutputId)) throw new Error('public_output_id_invalid')
+const outputDir = isolatedOutputId
+  ? resolve(root, '.tmp', `supermega-public-output-${isolatedOutputId}`)
+  : resolve(root, '.vercel/output')
 const functionsApiDir = resolve(outputDir, 'functions/api')
 const manifest = JSON.parse(readFileSync(resolve(root, 'site-manifest.json'), 'utf8'))
 

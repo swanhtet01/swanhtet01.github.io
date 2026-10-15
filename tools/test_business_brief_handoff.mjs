@@ -60,29 +60,12 @@ for (const product of ['website', 'ecommerce']) {
   })
 }
 
-for (const outcome of ['success', 'validation', 'exception']) {
-  test(`preview ${outcome}: uses local callback without contact navigation or losing input`, () => {
-    const draft = Object.freeze({ company: 'Thazin Bakery', description: 'Bread and cakes', reference: '' })
-    let received, issue, prevented = false
-    vm.runInNewContext(`(() => {${submit}})()`, {
-      draft,
-      event: { preventDefault() { prevented = true } },
-      onPreparePreview(value) { received = value; if (outcome === 'exception') throw Error('staging failed'); return outcome === 'validation' ? 'Review the business name' : null },
-      setPreviewIssue(value) { issue = value },
-      window: { location: { assign() { assert.fail('must not navigate to contact') } } },
-    })
-    assert.equal(prevented, true)
-    assert.equal(received, draft)
-    assert.equal(issue, outcome === 'success' ? null : outcome === 'validation' ? 'Review the business name' : 'Could not prepare your preview. Your details are still here.')
-  })
-}
-
-test('saved Website bypasses the intake after refresh', async () => {
-  const website = await readFile(new URL('../showroom/src/products/website/WebsiteProduct.tsx', import.meta.url), 'utf8')
-  const condition = website.match(/if \((showAssistedWebsitePreview[^\n]+)\) \{\s*return <BusinessBrief/)?.[1]
+test('explicit Commerce workspace bypasses the business intake', async () => {
+  const ecommerce = await readFile(new URL('../showroom/src/products/ecommerce/EcommerceProduct.tsx', import.meta.url), 'utf8')
+  const condition = ecommerce.match(/if \(\((showAssistedCatalogSetup[^\n]+)\)\) \{\s*return <BusinessBrief/)?.[1]
   assert.ok(condition)
-  const base = { showAssistedWebsitePreview: true, starterAvailable: true, workspaceOpened: false, searchParams: new URLSearchParams() }
-  assert.equal(vm.runInNewContext(condition, base), true)
-  assert.equal(vm.runInNewContext(condition, { ...base, starterAvailable: false }), false)
-  assert.equal(vm.runInNewContext(condition, { ...base, workspaceOpened: true }), false)
+  const base = { showAssistedCatalogSetup: true, assistedCatalogEntry: true, location: { search: '' }, URLSearchParams }
+  assert.equal(vm.runInNewContext(`(${condition})`, base), true)
+  assert.equal(vm.runInNewContext(`(${condition})`, { ...base, location: { search: '?workspace=1' } }), false)
+  assert.equal(vm.runInNewContext(`(${condition})`, { ...base, assistedCatalogEntry: false, location: { search: '?setup=1' } }), true)
 })

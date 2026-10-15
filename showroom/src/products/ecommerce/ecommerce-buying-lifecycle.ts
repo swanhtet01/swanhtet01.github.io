@@ -30,6 +30,7 @@ import {
   validateStorefrontPreview,
   type StorefrontPreview,
 } from './storefront-model.ts'
+import type { EcommerceShopIntentReference, EcommerceShopNavigationIntents } from './ecommerce-shop-intent-route.ts'
 
 export const ECOMMERCE_PIM_SCHEMA = 'supermega.ecommerce.pim_projection.v1' as const
 export const ECOMMERCE_QUOTE_SCHEMA = 'supermega.ecommerce.checkout_quote.v1' as const
@@ -2825,6 +2826,54 @@ export async function readEcommerceBuyingState(
   } catch {
     return { status: 'invalid', state: null, error: 'Saved checkout recovery is invalid and was left unchanged.' }
   }
+}
+
+export async function recoverEcommerceShopIntent(
+  scope: string,
+  reference: EcommerceShopIntentReference,
+  commerceState: CommerceState,
+): Promise<EcommerceShopNavigationIntents> {
+  const recovered = await readEcommerceBuyingState(scope)
+  if (recovered.status !== 'ready' || !recovered.state) {
+    throw new Error(recovered.error || 'The saved Ecommerce request is unavailable.')
+  }
+  const empty: EcommerceShopNavigationIntents = {
+    orderDraft: null,
+    returnIntent: null,
+    supportIntent: null,
+    correctionIntent: null,
+    cancellationIntent: null,
+    amendmentIntent: null,
+    rescheduleIntent: null,
+  }
+  const { kind, id } = reference
+  if (kind === 'order') {
+    const request = recovered.state.requests.find((candidate) => candidate.id === id)
+    if (request) return {
+      ...empty,
+      orderDraft: await prepareEcommerceShopDraftV2({
+        request,
+        state: recovered.state,
+        currentCatalog: commerceState.items,
+        currentPromotionPolicies: commerceState.promotionPolicies ?? [],
+        currentShippingPolicies: commerceState.shippingPolicies ?? [],
+        currentPaymentPolicies: commerceState.paymentPolicies ?? [],
+        currentTaxConfigurations: commerceState.taxConfigurations ?? [],
+        catalogRevision: commerceState.catalogChanges?.length ?? 0,
+        confirmedAt: new Date().toISOString(),
+      }),
+    }
+  } else {
+    const records = kind === 'return' ? recovered.state.returnIntents
+      : kind === 'support' ? recovered.state.supportIntents
+        : kind === 'correction' ? recovered.state.correctionIntents
+          : kind === 'cancellation' ? recovered.state.cancellationIntents
+            : kind === 'amendment' ? recovered.state.amendmentIntents
+              : recovered.state.rescheduleIntents
+    const value = records.find((candidate) => candidate.id === id)
+    if (value) return { ...empty, [`${kind}Intent`]: value } as EcommerceShopNavigationIntents
+  }
+  throw new Error('The referenced Ecommerce request was not found in this workspace.')
 }
 
 export async function saveEcommerceOrderRequestV2(

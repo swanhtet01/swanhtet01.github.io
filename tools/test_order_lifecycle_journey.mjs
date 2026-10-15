@@ -14,6 +14,7 @@
 // payment is reconciled. That is the rule that stops a shop handing goods over and losing
 // track of whether it was paid.
 import assert from 'node:assert/strict'
+import { spawnSync } from 'node:child_process'
 import { createRequire } from 'node:module'
 import { pathToFileURL } from 'node:url'
 
@@ -25,9 +26,10 @@ const bundle = await build({
     contents: `
       export {
         createSeedCommerce, reserveCommerceOrder, advanceCommerceOrder, reconcileCommercePayment,
-        commerceOrderAcknowledgement, commerceOrderAcknowledgementText,
+        commerceOrderAcknowledgement, commerceOrderAcknowledgementText, countCommerceStockBatch,
       } from './commerce-workspace.ts'
       export { buildEcommerceReturnIntent } from '../products/ecommerce/ecommerce-buying-lifecycle.ts'
+      export { createEmptyShopInventoryState, buildShopInventoryImportPackage, applyShopInventoryImport } from './shop-inventory-foundation.ts'
     `,
     resolveDir: 'showroom/src/core',
     sourcefile: 'showroom/src/core/lifecycle-test-entry.ts',
@@ -43,7 +45,9 @@ const bundle = await build({
 const {
   createSeedCommerce, reserveCommerceOrder, advanceCommerceOrder, reconcileCommercePayment,
   commerceOrderAcknowledgement, commerceOrderAcknowledgementText,
+  countCommerceStockBatch,
   buildEcommerceReturnIntent,
+  createEmptyShopInventoryState, buildShopInventoryImportPackage, applyShopInventoryImport,
 } = await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].contents).toString('base64')}`)
 
 let checks = 0
@@ -63,6 +67,114 @@ const proof = (suffix, hour) => ({
   reason: `Lifecycle step ${suffix}`,
   evidenceReference: `LIFECYCLE-${suffix}`,
 })
+
+// --- one stocktake reviews and applies multiple scanned products atomically ----
+const stocktakeState = createSeedCommerce()
+const countableItems = stocktakeState.items.filter((candidate) => candidate.onHand > 1).slice(0, 2)
+check(countableItems.length === 2, 'the seed includes two products for a multi-item stocktake')
+const stocktakeProof = proof('COUNT-BATCH', 8)
+const stocktakeLines = countableItems.map((candidate, index) => ({
+  sku: candidate.sku,
+  expectedOnHand: candidate.onHand,
+  countedQuantity: candidate.onHand + index + 2,
+}))
+const stocktakeApplied = countCommerceStockBatch(stocktakeState, stocktakeLines, stocktakeProof)
+check(Boolean(stocktakeApplied), 'one reviewed stocktake applies multiple product counts')
+check(countableItems.every((candidate, index) => stocktakeApplied.items.find((item) => item.sku === candidate.sku)?.onHand === stocktakeLines[index].countedQuantity), 'each product count is reflected in the resulting state')
+check(stocktakeApplied.movements.filter((movement) => movement.actionId === stocktakeProof.actionId && movement.kind === 'count').length === 2, 'each stocktake line has auditable movement evidence under one action')
+const stocktakeReplay = countCommerceStockBatch(stocktakeApplied, stocktakeLines, stocktakeProof)
+check(Boolean(stocktakeReplay) && JSON.stringify(stocktakeReplay) === JSON.stringify(stocktakeApplied), 'replaying the same reviewed batch is idempotent')
+check(countCommerceStockBatch(stocktakeState, [{ ...stocktakeLines[0], expectedOnHand: stocktakeLines[0].expectedOnHand + 1 }, stocktakeLines[1]], stocktakeProof) === null, 'a stale expected stock value rejects the whole batch')
+check(countCommerceStockBatch(stocktakeState, [stocktakeLines[0], stocktakeLines[0]], proof('COUNT-DUPLICATE', 8)) === null, 'duplicate product lines are rejected before any count applies')
+check(countCommerceStockBatch(stocktakeApplied, stocktakeLines.map((line) => ({ ...line, countedQuantity: line.countedQuantity + 1 })), stocktakeProof) === null, 'reusing a batch action id with changed counts is rejected')
+check(stocktakeState.items.find((candidate) => candidate.sku === countableItems[0].sku)?.onHand === stocktakeLines[0].expectedOnHand, 'rejected stocktake attempts leave the original immutable state unchanged')
+
+const [managedFirst, managedSecond] = countableItems
+const managedCatalog = stocktakeState.items.map((item) => item.sku).sort()
+const frontOpening = Math.floor(managedFirst.onHand / 2)
+const managedUnits = []
+const managedOpenings = []
+for (const item of stocktakeState.items) {
+  if (item.sku === managedFirst.sku) {
+    managedUnits.push(
+      { id: `LOT-${item.sku}-A`, sku: item.sku, tracking: 'lot', trackingCode: `${item.sku}-A` },
+      { id: `LOT-${item.sku}-B`, sku: item.sku, tracking: 'lot', trackingCode: `${item.sku}-B` },
+    )
+    managedOpenings.push(
+      { stockUnitId: `LOT-${item.sku}-A`, locationId: 'LOC-FRONT', vendorId: 'VEN-COUNT', quantity: frontOpening },
+      { stockUnitId: `LOT-${item.sku}-B`, locationId: 'LOC-BACK', vendorId: 'VEN-COUNT', quantity: item.onHand - frontOpening },
+    )
+  } else {
+    managedUnits.push({ id: `LOT-${item.sku}-A`, sku: item.sku, tracking: 'lot', trackingCode: `${item.sku}-A` })
+    if (item.onHand > 0) managedOpenings.push({ stockUnitId: `LOT-${item.sku}-A`, locationId: 'LOC-FRONT', vendorId: 'VEN-COUNT', quantity: item.onHand })
+  }
+}
+managedUnits.sort((left, right) => left.id.localeCompare(right.id))
+managedOpenings.sort((left, right) => left.stockUnitId.localeCompare(right.stockUnitId) || left.locationId.localeCompare(right.locationId))
+let managedImportPackage
+try { managedImportPackage = buildShopInventoryImportPackage({
+  importId: 'IMP-COUNT-BATCH-1',
+  sourceDigest: `sha256:${'b'.repeat(64)}`,
+  catalogSkus: managedCatalog,
+  clients: [{ id: 'CLI-COUNT', name: 'Stock count client' }],
+  vendors: [{ id: 'VEN-COUNT', name: 'Stock count vendor' }],
+  locations: [{ id: 'LOC-BACK', name: 'Back store' }, { id: 'LOC-FRONT', name: 'Front counter' }],
+  stockUnits: managedUnits,
+  openings: managedOpenings,
+}) } catch (error) { throw new Error(`stocktake import fixture: ${error.message}`) }
+const managedImport = applyShopInventoryImport(createEmptyShopInventoryState(), managedImportPackage, proof('COUNT-IMPORT', 7), managedCatalog, createEmptyShopInventoryState().headDigest)
+check(Boolean(managedImport?.state), 'managed multi-location inventory fixture is established')
+const managedCountState = { ...stocktakeState, inventoryFoundation: managedImport.state }
+const managedCountProof = proof('COUNT-FOUNDATION-BATCH', 8)
+const managedHeadDigest = managedImport.state.headDigest
+const firstFrontUnit = managedUnits.find((unit) => unit.sku === managedFirst.sku && unit.trackingCode.endsWith('-A'))
+const firstBackUnit = managedUnits.find((unit) => unit.sku === managedFirst.sku && unit.trackingCode.endsWith('-B'))
+const secondFrontUnit = managedUnits.find((unit) => unit.sku === managedSecond.sku)
+const managedCountLines = [
+  { sku: managedFirst.sku, expectedOnHand: managedFirst.onHand, countedQuantity: frontOpening + 1, locationCount: { countId: 'CNT-BATCH-FRONT', stockUnitId: firstFrontUnit.id, locationId: 'LOC-FRONT', expectedQuantity: frontOpening, countedQuantity: frontOpening + 1, expectedHeadDigest: managedHeadDigest } },
+  { sku: managedFirst.sku, expectedOnHand: managedFirst.onHand, countedQuantity: managedFirst.onHand - frontOpening - 1, locationCount: { countId: 'CNT-BATCH-BACK', stockUnitId: firstBackUnit.id, locationId: 'LOC-BACK', expectedQuantity: managedFirst.onHand - frontOpening, countedQuantity: managedFirst.onHand - frontOpening - 1, expectedHeadDigest: managedHeadDigest } },
+  { sku: managedSecond.sku, expectedOnHand: managedSecond.onHand, countedQuantity: managedSecond.onHand + 2, locationCount: { countId: 'CNT-BATCH-SECOND', stockUnitId: secondFrontUnit.id, locationId: 'LOC-FRONT', expectedQuantity: managedSecond.onHand, countedQuantity: managedSecond.onHand + 2, expectedHeadDigest: managedHeadDigest } },
+]
+const managedCountApplied = countCommerceStockBatch(managedCountState, managedCountLines, managedCountProof)
+check(Boolean(managedCountApplied), 'one batch counts products across locations and lots')
+check(managedCountApplied.items.find((candidate) => candidate.sku === managedFirst.sku)?.onHand === managedFirst.onHand, 'multi-location count variances reconcile to the correct product total')
+check(managedCountApplied.items.find((candidate) => candidate.sku === managedSecond.sku)?.onHand === managedSecond.onHand + 2, 'the other product total includes its location count')
+const managedCountReplay = countCommerceStockBatch(managedCountApplied, managedCountLines, managedCountProof)
+check(Boolean(managedCountReplay) && JSON.stringify(managedCountReplay) === JSON.stringify(managedCountApplied), 'multi-location stocktake replay preserves the exact state')
+check(countCommerceStockBatch(managedCountState, managedCountLines.map((line) => ({ ...line, locationCount: { ...line.locationCount, expectedHeadDigest: `sha256:${'0'.repeat(64)}` } })), managedCountProof) === null, 'a stale multi-location stocktake snapshot is rejected atomically')
+
+const pythonStocktakeValidator = `
+import copy, json, sys
+from supermega_runtime.commerce_runtime import TrialValidationError, reduce_commerce_state
+current, accepted = json.load(sys.stdin)
+proof_movement = accepted["movements"][0]
+evidence = {
+    "actionId": proof_movement["actionId"],
+    "capturedAt": proof_movement["createdAt"],
+    "actor": proof_movement["actor"],
+    "reason": proof_movement["reason"],
+    "evidenceReference": proof_movement["evidenceReference"],
+}
+reduced = reduce_commerce_state("commerce.stock.counted", current, {"state": accepted, "evidence": evidence})
+assert reduced == accepted
+tampered = copy.deepcopy(accepted)
+tampered["items"][0]["onHand"] += 1
+try:
+    reduce_commerce_state("commerce.stock.counted", current, {"state": tampered, "evidence": evidence})
+except TrialValidationError:
+    pass
+else:
+    raise AssertionError("the runtime accepted a forged post-count balance")
+`
+for (const [label, current, accepted] of [
+  ['simple', stocktakeState, stocktakeApplied],
+  ['location-managed', managedCountState, managedCountApplied],
+]) {
+  const runtimeResult = spawnSync('python', ['-c', pythonStocktakeValidator], {
+    input: JSON.stringify([current, accepted]), encoding: 'utf8', maxBuffer: 2 * 1024 * 1024,
+  })
+  check(runtimeResult.status === 0, `${label} stocktake is accepted by managed runtime and tampered balance is rejected${runtimeResult.stderr ? `: ${runtimeResult.stderr.trim().slice(-400)}` : ''}`)
+}
 
 const seed = createSeedCommerce()
 const item = seed.items.find((candidate) => candidate.onHand > 3)

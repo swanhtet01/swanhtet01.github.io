@@ -25,7 +25,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request as UrlRequest, urlopen
 
 import uvicorn
-from dotenv import load_dotenv
+from dotenv import dotenv_values, load_dotenv
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -636,8 +636,12 @@ def _canonical_preview_target_state(
         blockers.append("canonical_vercel_team_environment_missing")
     if environment_project_id != CANONICAL_APP_VERCEL_PROJECT_ID:
         blockers.append("canonical_vercel_project_environment_missing")
-    if not str(environment.get("VERCEL_TOKEN", "")).strip():
-        blockers.append("vercel_token_missing")
+    has_vercel_credential = any(
+        str(environment.get(name, "")).strip()
+        for name in ("VERCEL_TOKEN", "VERCEL_OIDC_TOKEN")
+    )
+    if not has_vercel_credential:
+        blockers.append("vercel_credential_missing")
     return {
         "contract": "supermega.canonical-preview-target.v1",
         "ready": not blockers,
@@ -9008,6 +9012,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             phase="pull",
         )
         _require_canonical_preview_deploy_target()
+        _require_canonical_preview_managed_runtime(normalized_revision, deploy_environment)
         run_phase(["build", "--yes"], phase="build")
         prebuilt_config = REPO_ROOT / ".vercel" / "output" / "config.json"
         if not prebuilt_config.is_file():
@@ -9049,6 +9054,61 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
             },
         }
         return payload
+
+    def _require_canonical_preview_managed_runtime(
+        revision: str,
+        base_environment: dict[str, str],
+    ) -> None:
+        """Fail before build when Preview cannot support the managed sign-in journey."""
+        preview_environment_path = REPO_ROOT / ".vercel" / ".env.preview.local"
+        verifier_path = REPO_ROOT / "tools" / "verify_acceptance_runtime_environment.mjs"
+        node_path = shutil.which("node")
+        if not preview_environment_path.is_file() or not verifier_path.is_file() or not node_path:
+            raise HTTPException(
+                status_code=503,
+                detail="canonical_preview_managed_runtime_preflight_unavailable",
+            )
+
+        verifier_environment = dict(base_environment)
+        for key, value in dotenv_values(preview_environment_path, interpolate=False).items():
+            normalized_key = str(key or "").strip()
+            if normalized_key and value is not None:
+                verifier_environment[normalized_key] = str(value)
+        verifier_environment["SUPERMEGA_RELEASE_COMMIT"] = revision
+        try:
+            completed = subprocess.run(
+                [node_path, str(verifier_path), revision],
+                cwd=str(REPO_ROOT),
+                env=verifier_environment,
+                capture_output=True,
+                text=True,
+                timeout=30,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise HTTPException(
+                status_code=503,
+                detail="canonical_preview_managed_runtime_preflight_failed",
+            ) from exc
+        if completed.returncode == 0:
+            return
+
+        failures: list[str] = []
+        try:
+            result = json.loads((completed.stdout or "").strip())
+            if isinstance(result, dict) and isinstance(result.get("failures"), list):
+                failures = [
+                    str(item).strip()
+                    for item in result["failures"]
+                    if str(item).strip()
+                ]
+        except (TypeError, ValueError, json.JSONDecodeError):
+            failures = []
+        detail = ",".join(failures) if failures else "verification_failed"
+        raise HTTPException(
+            status_code=503,
+            detail=f"canonical_preview_managed_runtime_not_ready:{detail}",
+        )
 
     def _require_canonical_preview_deploy_target() -> dict[str, Any]:
         target = _canonical_preview_target_state(

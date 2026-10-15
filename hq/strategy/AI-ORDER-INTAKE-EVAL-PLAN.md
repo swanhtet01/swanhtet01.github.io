@@ -1,15 +1,24 @@
-# AI Order Intake: Executable Eval Plan
+# AI Order Intake: Historical Evaluation Plan
 
 Date: 2026-08-14
 Author: AI Codex
-Status: plan only. This document authorizes nothing. No model call, deploy,
-or gate change happens by writing it. The eval run is a separate session.
+Status: RETIRED CUSTOMER UI / R&D REFERENCE (2026-10-07). The paste-first
+ChannelOrderIntake surface described below was removed because customers
+should not have to manually import messages to create orders. The draft API,
+parser and evaluation corpus may remain as isolated R&D components; they are
+not a live customer workflow and do not establish any connected-channel
+capability. Website and Ecommerce structured requests can arrive in Shop
+automatically. Meta, Messenger, Telegram, TikTok and Viber connectors are not
+verified live. This document authorizes nothing: no model call, deploy, or
+gate change happens by writing it. Any future customer workflow requires a
+provider integration and authenticated, idempotent end-to-end acceptance.
 Gate context: portfolio.json researchGates `order-intake-agent` = evaluate,
 evaluationStatus design-complete; sharedCapabilities `ai-assistance` =
 gated-r-and-d, firstWorkflow "Order Intake".
 
 Freshness note, 2026-08-27: cloud-provider eval lanes are suspended for the
-current owner-named wave. The active eval path is local Ollama only:
+current owner-named wave (historical policy marker; this document is not a
+live customer workflow). The active eval path is local Ollama only:
 `llama3.2:1b`, `OLLAMA_KEEP_ALIVE=0s`, no cloud fallback, no provider key, and
 no hosted model route. If the local model cannot meet the quality gate, the
 feature remains blocked; do not route to a paid provider without a separate
@@ -17,9 +26,10 @@ owner-approved source-controlled cut.
 
 ## 1. What the feature does end-to-end
 
-An operator pastes or forwards one customer message (Messenger, Viber, phone
-note; Burmese, English, or mixed script) into the existing intake surface
-(showroom/src/core/ChannelOrderIntake.tsx). The browser POSTs
+In the retired prototype, an operator pasted or forwarded one customer message
+(Messenger, Viber, phone note; Burmese, English, or mixed script) into the
+former intake surface (showroom/src/core/ChannelOrderIntake.tsx; removed
+2026-10-07). The prototype POSTed
 { source_label, message } to /api/trial/v1/commerce/order-intake/drafts
 (prepareManagedOrderIntakeDraft in showroom/src/core/managed-trial.ts).
 The server (supermega_runtime/order_intake_provider.py) sends the message
@@ -143,16 +153,17 @@ records no write during the full run including forced failures. The
 a named reviewer processes all 20 drafts in the review surface; average
 fields_corrected / total_extracted_fields <= 0.20 (research doc sec 9).
 
-Wiring plan (all behind the existing choose/review/approve surface; zero
-new side-effect paths):
+Historical wiring plan (not an implementation or launch plan; no customer-
+facing capability is implied):
 1. Land the evidence JSON; update portfolio.json evaluationStatus to
    eval-passed with the evidence path. Founder signs the evaluation record
    (founder gates all external actions).
-2. ChannelOrderIntake.tsx already gates "Prepare with AI" on a managed
-   identity and falls back to lockedCapabilityNotice('ai-order-intake') +
-   manual quote mapping. No UI change needed to adopt: the button, blocker
-   labels (ai_unknown_sku, ai_scope_*, ai_insufficient_stock), per-field
-   attribution review, and "Use reviewed draft" confirm are built.
+2. Prototype-specific UI contract (historical): the retired surface gated
+   "Prepare with AI" on managed identity and fell back to a locked notice plus
+   manual quote mapping. Its button, blocker labels (ai_unknown_sku,
+   ai_scope_*, ai_insufficient_stock), attribution review and confirmation
+   are not available to customers. Reuse requires a newly designed connector
+   flow and fresh product/security review.
 3. Pilot exposure = enabling the server capability for one named operator
    on one isolated managed tenant (operational gate, research doc sec 10):
    deployed endpoint behind operator auth, monthly workspace budget

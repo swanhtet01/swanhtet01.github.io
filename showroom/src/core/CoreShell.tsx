@@ -1,5 +1,5 @@
 import { createContext, lazy, Suspense, type ReactNode, useContext, useEffect, useRef, useState } from 'react'
-import { Link, Navigate, NavLink, Outlet, useLocation, useOutletContext } from 'react-router'
+import { Link, Navigate, NavLink, Outlet, useLocation } from 'react-router'
 import { productionEntryDecision } from './production-entry'
 
 import './core-app.css'
@@ -21,6 +21,10 @@ import type { SetupProductId } from './product-setup'
 
 const ProductSystemNavigator = lazy(() => import('./ProductSystemNavigator').then((module) => ({ default: module.ProductSystemNavigator })))
 const ManagedProductConnections = lazy(() => import('./ManagedProductConnections').then((module) => ({ default: module.ManagedProductConnections })))
+const DesktopShopNavigation = lazy(() => import('./PremiumWorkspaceChrome').then((module) => ({ default: module.DesktopShopNavigation })))
+const DesktopSitesNavigation = lazy(() => import('./PremiumWorkspaceChrome').then((module) => ({ default: module.DesktopSitesNavigation })))
+const DesktopCommerceNavigation = lazy(() => import('./PremiumWorkspaceChrome').then((module) => ({ default: module.DesktopCommerceNavigation })))
+const WorkspaceAccount = lazy(() => import('./PremiumWorkspaceChrome').then((module) => ({ default: module.WorkspaceAccount })))
 
 type RuntimeStatus = 'checking' | 'enterprise' | 'demo'
 
@@ -182,8 +186,8 @@ function productFromPathname(pathname: string): ClientSolutionId | null {
 function productDisplayName(product: string) {
   if (product === 'commerce') return 'Shop'
   if (product === 'production') return 'Plant'
-  if (product === 'website') return 'Website'
-  if (product === 'ecommerce') return 'Ecommerce'
+  if (product === 'website') return 'Sites'
+  if (product === 'ecommerce') return 'Commerce'
   return 'SuperMega'
 }
 
@@ -291,7 +295,10 @@ function useRuntimeHealth() {
 
   useEffect(() => {
     const controller = new AbortController()
-    fetch('/api/health', { headers: { accept: 'application/json' }, cache: 'no-store', credentials: 'omit', redirect: 'error', signal: controller.signal })
+    // Keep credentials confined to this origin. Protected Vercel previews use a
+    // same-origin cookie before the application can reach its own health route;
+    // omitting it made a healthy managed preview fail closed as an isolated demo.
+    fetch('/api/health', { headers: { accept: 'application/json' }, cache: 'no-store', credentials: 'same-origin', redirect: 'error', signal: controller.signal })
       .then(async (response) => {
         const type = response.headers.get('content-type') ?? ''
         if (!response.ok || !type.includes('application/json')) throw new Error('health_unavailable')
@@ -385,10 +392,9 @@ function Brand() {
   )
 }
 
-// Design phase 2 item 10: the toggle used to render as the raw glyphs ☼/◐, which
-// have inconsistent font coverage across platforms (missing or mismatched-weight
-// on several Android system fonts). Plain stroke SVGs render identically everywhere
-// and pick up the button's own color via currentColor.
+// Operational and internal settings screens can expose runtime state when it is
+// needed for a concrete decision. The customer shell intentionally omits this
+// badge so product navigation stays focused on the work itself.
 export function RuntimeBadge({ status }: { status: RuntimeStatus }) {
   return <span className={`runtime-badge ${status}`}><i />{status === 'checking' ? 'Checking' : status === 'enterprise' ? 'Company data' : 'Private device'}</span>
 }
@@ -439,14 +445,27 @@ export function CoreLayout() {
   // (activeCommerceTab), so the highlight matches the in-page toolbar even
   // during the frame before that page canonicalizes a missing ?tab=.
   const mobileCommerceTab = routeProduct === 'commerce' ? activeCommerceTab(new URLSearchParams(location.search).get('tab')) : null
+  const requestedSitesView = routeProduct === 'website' ? new URLSearchParams(location.search).get('view') : null
+  const desktopSitesView = requestedSitesView === 'inquiries' || requestedSitesView === 'publish' ? requestedSitesView : 'pages'
+  const commerceSearch = routeProduct === 'ecommerce' ? new URLSearchParams(location.search) : null
+  const requestedCommerceView = commerceSearch?.get('view') ?? null
+  const desktopCommerceView = requestedCommerceView === 'preview' || requestedCommerceView === 'setup' ? requestedCommerceView : 'orders'
+  const commerceWorkspaceEntry = routeProduct === 'ecommerce'
+    && commerceSearch?.get('workspace') === '1'
+    && commerceSearch.get('setup') !== '1'
+  const commerceWorkspaceName = desktopCommerceView === 'preview'
+    ? 'Store'
+    : desktopCommerceView === 'setup'
+      ? 'Store setup'
+      : 'Orders'
   const routeName = loginRoute
     ? 'Sign in'
     : sensitiveAccountRoute
       ? (location.pathname.startsWith('/account/recovery') ? 'Account recovery' : 'Account setup')
       : location.pathname.startsWith('/website/')
-      ? 'Website'
+      ? 'Sites'
       : location.pathname.startsWith('/ecommerce/')
-      ? 'Ecommerce'
+      ? (commerceWorkspaceEntry ? `${commerceWorkspaceName} · Commerce` : 'Commerce')
       : location.pathname.startsWith('/vision/')
         ? 'Vision'
       : internalBuilderRoute
@@ -465,6 +484,7 @@ export function CoreLayout() {
   const managedProductAllowed = !requestedProduct
     || portalAccess.status === 'local'
     || (portalAccess.status === 'ready' && managedRouteDecision.kind === 'allow')
+  const managedWorkspace = portalAccess.status === 'ready' ? portalAccess : null
 
   useEffect(() => {
     document.title = `${routeName} | SuperMega`
@@ -516,17 +536,17 @@ export function CoreLayout() {
   if (productionEntry === 'login') return <Navigate replace to={companyLoginPath} />
 
   return (
-    <div className={`core-shell theme-light${routeProduct === 'commerce' ? ' shop-product-shell' : ''}${routeProduct === 'production' ? ' plant-shell' : ''}`}>
+    <div className={`core-shell theme-light${routeProduct === 'commerce' ? ' shop-product-shell' : ''}${routeProduct === 'website' ? ' sites-product-shell' : ''}${commerceWorkspaceEntry ? ' commerce-product-shell' : ''}${routeProduct === 'production' ? ' plant-shell' : ''}`}>
       <a className="core-skip" href="#workspace-main" onClick={() => requestAnimationFrame(() => workspaceMainRef.current?.focus())}>Skip to workspace</a>
       <aside className="core-sidebar">
         <Brand />
-        {activeNavigation.length ? <nav className="core-nav" aria-label="Application">
+        {routeProduct === 'commerce' && mobileCommerceTab ? <Suspense fallback={null}><DesktopShopNavigation activeTab={mobileCommerceTab} /></Suspense> : routeProduct === 'website' ? <Suspense fallback={null}><DesktopSitesNavigation activeView={desktopSitesView} /></Suspense> : commerceWorkspaceEntry ? <Suspense fallback={null}><DesktopCommerceNavigation activeView={desktopCommerceView} /></Suspense> : activeNavigation.length ? <nav className="core-nav" aria-label="Application">
           {activeNavigation.map((item) => <NavLink className={({ isActive }) => navigationClass(item.to, isActive)} end={item.end} key={item.to} to={item.to}>{item.label}</NavLink>)}
         </nav> : null}
-        <div className="sidebar-foot">{routeProduct || setupRoute ? <RuntimeBadge status={runtime.status} /> : null}{!accountEntryRoute ? <Link className="account-shell-link" to={companyLoginPath}>Login</Link> : null}</div>
+        <div className="sidebar-foot">{routeProduct && canSwitchProduct ? <Link className="product-switch-shell-link" to="/?choose=1"><span className="shell-nav-icon" aria-hidden="true" data-icon="products" /><span>All products</span></Link> : null}</div>
       </aside>
       <div className="core-stage">
-        <header className="core-topbar"><div className="mobile-brand"><Brand /></div><div className="topbar-title"><strong>{routeName}</strong><span>SuperMega</span></div><div className="topbar-meta">{!accountEntryRoute ? <Link aria-label="Login" className="account-shell-link mobile-account-link" to={companyLoginPath}>Login</Link> : null}{!accountEntryRoute ? <RuntimeBadge status={runtime.status} /> : null}</div></header>
+        <header className="core-topbar"><div className="mobile-brand"><Brand /></div><div className="topbar-title"><strong>{routeName}</strong><span>{managedWorkspace ? managedWorkspace.companyName : 'SuperMega workspace'}</span></div><div className="topbar-meta">{!accountEntryRoute ? <Suspense fallback={<Link aria-label="Login" className="account-shell-link mobile-account-link" to={companyLoginPath}>Login</Link>}><WorkspaceAccount companyLoginPath={companyLoginPath} companyName={managedWorkspace?.companyName} companyRole={managedWorkspace?.companyRole} /></Suspense> : null}</div></header>
         {/* Shop's bottom bar is task navigation (all four links share the /shop/
             pathname, so NavLink's pathname-based isActive would mark every tab
             active — the highlight must come from the ?tab= param instead). Every
@@ -542,7 +562,7 @@ export function CoreLayout() {
         <main id="workspace-main" className={`core-main${routeProduct ? ' has-system-navigator' : ''}${routeProduct === 'ecommerce' || routeProduct === 'website' ? ' natural-scroll' : ''}`} ref={workspaceMainRef} tabIndex={-1}>
           <div className="core-route-content">
             <ManagedPortalAccessContext.Provider value={portalAccess}>
-              <RouteErrorBoundary resetKey={location.pathname}>
+              <RouteErrorBoundary resetKey={`${location.pathname}${location.search}`}>
                 {requestedProduct && portalAccess.status === 'checking'
                   ? <PortalAccessPanel copy="Verifying this company and its assigned products." title="Opening company portal…" />
                   : requestedProduct && portalAccess.status === 'reauthenticate'
@@ -572,14 +592,14 @@ export function CoreLayout() {
 const PRODUCT_SETUP_KEY: Record<string, SetupProductId> = {
   Shop: 'commerce',
   Plant: 'production',
-  Website: 'website',
-  Ecommerce: 'ecommerce',
+  Sites: 'website',
+  Commerce: 'ecommerce',
 }
 
 const customerProducts = [
   ['Shop', 'Sales, stock and your daily totals.', 'Shop', '/shop/'],
-  ['Website', 'Your services, photos and contact details.', 'Website', '/website/'],
-  ['Ecommerce', 'A product catalog and customer requests.', 'Ecommerce', '/ecommerce/'],
+  ['Sites', 'Your services, photos and contact details.', 'Sites', '/website/'],
+  ['Commerce', 'A product catalog and customer requests.', 'Commerce', '/ecommerce/'],
 ] as const
 
 export function ProductHomeEntry() {
@@ -615,59 +635,14 @@ export function ProductHomeEntry() {
 }
 
 export function ProductHomePage() {
-  const runtime = useOutletContext<RuntimeHealth | undefined>()
-  const [authConfigured, setAuthConfigured] = useState(false)
-  useEffect(() => {
-    if (runtime?.status !== 'enterprise') return
-    let active = true
-    void import('./managed-login-availability').then(({ managedTrialAuthConfigured }) => {
-      if (active) setAuthConfigured(managedTrialAuthConfigured())
-    }).catch(() => { if (active) setAuthConfigured(false) })
-    return () => { active = false }
-  }, [runtime?.status])
-  const loginAvailable = runtime?.status === 'enterprise' && authConfigured
   const portalAccess = useContext(ManagedPortalAccessContext)
   const managedPortal = portalAccess.status === 'ready'
   const emptyCompany = managedPortal && !customerProducts.some(([name]) => managedProductIsVisible(portalAccess.products, PRODUCT_SETUP_KEY[name]))
-  const [localProductSetups, setLocalProductSetups] = useState<Record<SetupProductId, { startedAt?: string; workspace: string } | null> | null>(null)
-  const [activeSetupIds, setActiveSetupIds] = useState<SetupProductId[]>([])
-  const [savedWebsiteName, setSavedWebsiteName] = useState<string | null>(null)
-  const [setupLoadFailed, setSetupLoadFailed] = useState(false)
-  const [setupLoadAttempt, setSetupLoadAttempt] = useState(0)
-  useEffect(() => {
-    let active = true
-    if (managedPortal || typeof window === 'undefined') return () => { active = false }
-    void Promise.all([import('./product-setup'), import('./saved-website-entry')]).then(([{ readProductSetup, activeSetupProductContracts }, { savedWebsiteEntry }]) => {
-      if (!active) return
-      setSavedWebsiteName(savedWebsiteEntry(window.localStorage))
-      setActiveSetupIds(activeSetupProductContracts.map(product => product.id))
-      setLocalProductSetups({
-        commerce: readProductSetup(window.localStorage, 'commerce'),
-        production: readProductSetup(window.localStorage, 'production'),
-        website: readProductSetup(window.localStorage, 'website'),
-        ecommerce: readProductSetup(window.localStorage, 'ecommerce'),
-      })
-    }).catch(() => {
-      // A missing setup chunk must not invent first-run or saved-workspace state.
-      if (active) {
-        setLocalProductSetups(null)
-        setSetupLoadFailed(true)
-      }
-    })
-    return () => { active = false }
-  }, [managedPortal, setupLoadAttempt])
-  const productSetups = managedPortal ? null : localProductSetups
-  const anyStarted = Boolean(savedWebsiteName) || (productSetups ? Object.values(productSetups).some((s) => s?.startedAt) : false)
-  if (!managedPortal && !productSetups) {
-    return setupLoadFailed
-      ? <PortalAccessPanel action={<button className="button" onClick={() => { setSetupLoadFailed(false); setSetupLoadAttempt(attempt => attempt + 1) }} type="button">Try again</button>} copy="We could not open your saved workspace. Check that browser storage is available and try again." title="Workspace unavailable" />
-      : <PortalAccessPanel copy="Opening your saved work." title="Loading workspace" />
-  }
   return (
     <div className="workspace-screen product-home-screen">
       {managedPortal
         ? emptyCompany ? null : <PageHeading copy="" eyebrow="SuperMega" title="Workspace" />
-        : <PageHeading copy={loginAvailable ? "Sign in to your business." : "Your business, in one place."} eyebrow="SuperMega" title="Welcome back" actions={<Link className="core-button primary" to={managedLoginPath(null)}>Login</Link>} />}
+        : <PageHeading copy="Sign in to your business." eyebrow="SuperMega" title="Welcome back" actions={<Link className="core-button primary" to={managedLoginPath(null)}>Login</Link>} />}
       {managedPortal ? <section aria-label="Active company" className="company-portal-identity">
         <div>
           <span>Active company</span>
@@ -682,32 +657,21 @@ export function ProductHomePage() {
       {emptyCompany
         ? <PortalAccessPanel action={<a className="core-button primary" href="https://supermega.dev/contact/?product=guide&amp;source=company-no-products" target="_blank" rel="noopener noreferrer">Contact support</a>} copy="Your company has no active products yet. SuperMega can help you get started." title="No products yet" />
         : null}
-      {!emptyCompany && (managedPortal || anyStarted) ? <nav aria-label="Your workspace" className="product-track-grid">
-        {customerProducts.filter(([name]) => managedPortal
-          ? managedProductIsVisible(portalAccess.products, PRODUCT_SETUP_KEY[name])
-          : Boolean(productSetups?.[PRODUCT_SETUP_KEY[name]]?.startedAt) || (name === 'Website' && Boolean(savedWebsiteName)))
-          .sort(([left], [right]) => managedPortal ? 0
-            : (activeSetupIds.indexOf(PRODUCT_SETUP_KEY[left]) < 0 ? activeSetupIds.length : activeSetupIds.indexOf(PRODUCT_SETUP_KEY[left]))
-              - (activeSetupIds.indexOf(PRODUCT_SETUP_KEY[right]) < 0 ? activeSetupIds.length : activeSetupIds.indexOf(PRODUCT_SETUP_KEY[right])))
+      {!emptyCompany && managedPortal ? <nav aria-label="Your workspace" className="product-track-grid">
+        {customerProducts.filter(([name]) => managedProductIsVisible(portalAccess.products, PRODUCT_SETUP_KEY[name]))
           .map(([name, outcome, , path]) => {
           const setupKey = PRODUCT_SETUP_KEY[name]
-          if (managedPortal && !managedProductIsVisible(portalAccess.products, setupKey)) return null
-          const setup = productSetups?.[setupKey]
-          if (!managedPortal && !activeSetupIds.includes(setupKey) && !setup) return null
-          const workspaceName = name === 'Website' && savedWebsiteName ? savedWebsiteName : setup?.startedAt ? setup.workspace : null
-          const workspacePath = !managedPortal && (name === 'Website' || name === 'Ecommerce') ? `${path}?workspace=1` : path
-          return <Link aria-label={name} className="product-track-card" data-active={workspaceName ? true : undefined} key={name} to={workspacePath}>
+          if (!managedProductIsVisible(portalAccess.products, setupKey)) return null
+          return <Link aria-label={name} className="product-track-card" key={name} to={path}>
               <span className="product-track-copy">
-                {!managedPortal ? <small>On this device</small> : null}
                 <h2>{name}</h2>
-                <p>{workspaceName || outcome}</p>
+                <p>{outcome}</p>
               </span>
               <span aria-hidden="true" className="product-track-open">→</span>
             </Link>
         })}
       </nav> : null}
       {managedPortal && !emptyCompany ? <Suspense fallback={null}><ManagedProductConnections products={portalAccess.products.filter(product => product !== 'production')} /></Suspense> : null}
-      {!managedPortal && anyStarted ? <p className="product-home-note">Saved on this device.</p> : null}
     </div>
   )
 }

@@ -607,3 +607,25 @@ test('private counter browser fixture explicitly supplies validated trade data',
   assert.ok(state.items.some(item => item.name === 'Premium rice 25kg'))
   assert.deepEqual(miniMartCounterFixture(), fixture)
 })
+
+test('Ecommerce request fixture uses an operator-owned catalog rather than preview-only sample rows', async () => {
+  const { miniMartOwnedCatalogFixture } = await import('./verify_app_entry_rendered.mjs')
+  const { classifyStorefrontCatalogSource } = await import('../showroom/src/products/ecommerce/storefront-model.ts')
+  const { LOCAL_STOREFRONT_DRAFT_SCOPE, readStorefrontDraft, storefrontDraftStorageKey } = await import('../showroom/src/products/ecommerce/storefront-draft.ts')
+  const fixture = miniMartOwnedCatalogFixture()
+  const state = commerceModel.validateCommerceState(JSON.parse(fixture.retained[commerceModel.COMMERCE_KEY]))
+  const draftKey = storefrontDraftStorageKey(LOCAL_STOREFRONT_DRAFT_SCOPE)
+  const draftResult = readStorefrontDraft(LOCAL_STOREFRONT_DRAFT_SCOPE, {
+    getItem: (key) => fixture.retained[key] ?? null,
+    setItem() {},
+    removeItem() {},
+  })
+  assert.equal(classifyStorefrontCatalogSource(state, 'local'), 'shop-local')
+  assert.equal(commerceModel.commerceWorkingSampleCatalogId(state), null)
+  assert.ok(state.items.some(item => item.name === 'Premium rice 25kg'))
+  assert.equal(commerceModel.commerceCurrentPaymentPolicy(state, 'pay_on_pickup')?.status, 'active')
+  assert.equal(draftResult.status, 'ready')
+  assert.equal(draftResult.draft?.storeName, 'Mingalar Mini Mart')
+  assert.ok(fixture.retained[draftKey])
+  assert.deepEqual(miniMartOwnedCatalogFixture(), fixture)
+})

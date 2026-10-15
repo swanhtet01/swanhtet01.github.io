@@ -3,6 +3,7 @@ import { lstat, readFile } from 'node:fs/promises'
 import { dirname, extname, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { RETIRED_PRODUCT_CASES, RETIRED_PRODUCT_PREVIEW_POLICY } from './retired_product_preview_policy.mjs'
+import { isStoreToShopReviewPath, storeToShopReviewPath } from './store_to_shop_route.mjs'
 
 import {
   APP_ENTRY_RENDERED_CONTRACT,
@@ -15,9 +16,10 @@ export const APP_ENTRY_RENDERED_VALIDATION_CONTRACT = 'supermega.app-entry-rende
 
 const SHA_PATTERN = /^[0-9a-f]{40}$/
 const DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/
-const ALLOWED_SCOPES = new Set(['full', 'shop-counter', 'ecommerce-claim'])
+const ALLOWED_SCOPES = new Set(['full', 'shop-counter', 'shop-accounting-export', 'shop-offline-restore', 'ecommerce-claim', 'store-to-shop', 'sites-workspace'])
 const MAX_REPORT_BYTES = 10 * 1024 * 1024
 const MAX_SCREENSHOT_BYTES = 32 * 1024 * 1024
+const MAX_DOWNLOAD_BYTES = 4 * 1024 * 1024
 const MAX_CASES = 100
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -29,9 +31,9 @@ export function assertLauncherProductLinks(links, expected = [['Shop', '/shop/']
 }
 
 const FULL_CASE_MATRIX = Object.freeze([
-  { name: 'desktop root shows launcher despite remembered product', route: '/', viewport: '1280x900', width: 1280, height: 900, path: '/', screenshot: 'app-launcher-desktop-1280x900.png' },
-  { name: 'desktop choose query shows launcher', route: '/?choose=1', viewport: '1280x900', width: 1280, height: 900, path: '/?choose=1', screenshot: null },
-  { name: 'mobile root shows launcher', route: '/', viewport: '390x844 mobile', width: 390, height: 844, path: '/', screenshot: 'app-launcher-mobile-390x844.png' },
+  { name: 'desktop root presents login despite remembered product', route: '/', viewport: '1280x900', width: 1280, height: 900, path: '/', screenshot: 'app-launcher-desktop-1280x900.png' },
+  { name: 'desktop choose query presents login', route: '/?choose=1', viewport: '1280x900', width: 1280, height: 900, path: '/?choose=1', screenshot: null },
+  { name: 'mobile root presents login', route: '/', viewport: '390x844 mobile', width: 390, height: 844, path: '/', screenshot: 'app-launcher-mobile-390x844.png' },
   { name: 'retired Shop demo query returns to account home', route: '/?demo=shop', viewport: '1280x900', width: 1280, height: 900, path: '/', screenshot: null },
   {
     name: 'desktop trade link opens a complete mini-mart counter',
@@ -53,6 +55,35 @@ const FULL_CASE_MATRIX = Object.freeze([
     screenshot: 'shop-counter-mini-mart-mobile-390x844.png',
     semantics: 'shop-counter',
   },
+  ...[{ width: 1280, height: 900 }, { width: 390, height: 844, mobile: true }].map(size => ({
+    name: `Shop Today keeps one accountable decision at ${size.width}px`,
+    route: '/shop/?tab=today',
+    viewport: `${size.width}x${size.height}${size.mobile ? ' mobile' : ''}`,
+    width: size.width,
+    height: size.height,
+    path: '/shop/?tab=today',
+    screenshot: `shop-today-decision-desk-${size.width}.png`,
+  })),
+  {
+    name: 'Shop Today downloads a completed accounting handoff',
+    route: '/shop/?tab=today',
+    viewport: '1280x900',
+    width: 1280,
+    height: 900,
+    path: '/shop/?tab=today',
+    screenshot: 'shop-today-accountant-handoff-1280x900.png',
+    semantics: 'shop-accounting-export',
+  },
+  {
+    name: 'Shop Today reloads the current business offline',
+    route: '/shop/?tab=today',
+    viewport: '1280x900',
+    width: 1280,
+    height: 900,
+    path: '/shop/?tab=today',
+    screenshot: 'shop-today-offline-restore-1280x900.png',
+    semantics: 'shop-offline-restore',
+  },
   ...RETIRED_PRODUCT_CASES.map(spec => ({ name: spec.id, route: spec.route,
     viewport: `${spec.width}x${spec.height}${spec.mobile ? ' mobile' : ''}`,
     width: spec.width, height: spec.height, path: spec.expectedPath,
@@ -60,9 +91,29 @@ const FULL_CASE_MATRIX = Object.freeze([
   { name: 'retired Website demo query returns to account home', route: '/?demo=website', viewport: '1280x900', width: 1280, height: 900, path: '/', screenshot: null },
   { name: 'desktop Website opens real business setup', route: '/website/?workspace=1', viewport: '1280x900', width: 1280, height: 900, path: '/website/?workspace=1', screenshot: 'website-business-setup-desktop-1280x900.png' },
   { name: 'mobile Website opens real business setup', route: '/website/?workspace=1', viewport: '390x844 mobile', width: 390, height: 844, path: '/website/?workspace=1', screenshot: 'website-business-setup-mobile-390x844.png' },
+  {
+    name: 'desktop Sites opens the real saved page editor',
+    route: '/website/?workspace=1',
+    viewport: '1440x900',
+    width: 1440,
+    height: 900,
+    path: '/website/?workspace=1',
+    screenshot: 'sites-pages-current-desktop-1440x900.png',
+    semantics: 'sites-pages',
+  },
+  {
+    name: 'desktop Sites opens the real inquiry workspace',
+    route: '/website/?workspace=1&view=inquiries',
+    viewport: '1440x900',
+    width: 1440,
+    height: 900,
+    path: '/website/?workspace=1&view=inquiries',
+    screenshot: 'sites-inquiries-current-desktop-1440x900.png',
+    semantics: 'sites-inquiries',
+  },
   { name: 'retired Commerce demo query returns to account home', route: '/?demo=ecommerce', viewport: '1280x900', width: 1280, height: 900, path: '/', screenshot: null },
   ...[{ width: 1280, height: 900 }, { width: 390, height: 844, mobile: true }].map(size => ({
-    name: `empty Ecommerce offers real catalog setup at ${size.width}px`,
+    name: `empty Ecommerce offers catalog help at ${size.width}px`,
     route: '/ecommerce/?workspace=1',
     viewport: `${size.width}x${size.height}${size.mobile ? ' mobile' : ''}`,
     width: size.width, height: size.height,
@@ -70,7 +121,7 @@ const FULL_CASE_MATRIX = Object.freeze([
     screenshot: `ecommerce-empty-catalog-${size.width}.png`,
   })),
   {
-    name: 'desktop isolated Ecommerce keeps a submitted sample request browser-local',
+    name: 'desktop Ecommerce keeps a reviewed order request locally',
     route: '/ecommerce/?workspace=1',
     viewport: '1280x900',
     width: 1280,
@@ -80,7 +131,7 @@ const FULL_CASE_MATRIX = Object.freeze([
     semantics: 'ecommerce-claim',
   },
   {
-    name: 'mobile isolated Ecommerce keeps a submitted sample request browser-local',
+    name: 'mobile Ecommerce keeps a reviewed order request locally',
     route: '/ecommerce/?workspace=1',
     viewport: '390x844 mobile',
     width: 390,
@@ -89,12 +140,26 @@ const FULL_CASE_MATRIX = Object.freeze([
     screenshot: 'ecommerce-local-request-mobile-390x844.png',
     semantics: 'ecommerce-claim',
   },
+  {
+    name: 'Commerce request becomes one accountable Shop order',
+    route: '/ecommerce/?workspace=1',
+    viewport: '1280x900',
+    width: 1280,
+    height: 900,
+    path: '/shop/?tab=orders',
+    screenshot: 'commerce-request-shop-order-desktop-1280x900.png',
+    semantics: 'store-to-shop',
+  },
 ])
 
 const CASE_MATRIX_BY_SCOPE = Object.freeze({
   full: FULL_CASE_MATRIX,
   'shop-counter': FULL_CASE_MATRIX.filter((entry) => entry.semantics === 'shop-counter'),
+  'shop-accounting-export': FULL_CASE_MATRIX.filter((entry) => entry.semantics === 'shop-accounting-export'),
+  'shop-offline-restore': FULL_CASE_MATRIX.filter((entry) => entry.semantics === 'shop-offline-restore'),
   'ecommerce-claim': FULL_CASE_MATRIX.filter((entry) => entry.semantics === 'ecommerce-claim'),
+  'store-to-shop': FULL_CASE_MATRIX.filter((entry) => entry.semantics === 'store-to-shop'),
+  'sites-workspace': FULL_CASE_MATRIX.filter((entry) => entry.semantics === 'sites-pages' || entry.semantics === 'sites-inquiries'),
 })
 
 function fail(code) {
@@ -217,10 +282,9 @@ export function assertCaseSemantics(testCase, expected) {
     || rendered.documentScrollWidth > rendered.viewportWidth + 1
     || rendered.noHorizontalOverflow !== true) fail('app_entry_rendered_viewport_or_overflow_invalid')
 
-  if (expected.name === 'desktop root shows launcher despite remembered product'
-    || expected.name === 'desktop choose query shows launcher'
-    || expected.name === 'mobile root shows launcher') assertLauncherProductLinks(rendered.launcherLinks,
-      expected.name === 'desktop root shows launcher despite remembered product' ? [['Shop', '/shop/']] : [])
+  if (expected.name === 'desktop root presents login despite remembered product'
+    || expected.name === 'desktop choose query presents login'
+    || expected.name === 'mobile root presents login') assertLauncherProductLinks(rendered.launcherLinks, [])
 
   if (expected.semantics === 'retired-product') {
     assertLauncherProductLinks(rendered.launcherLinks, [])
@@ -287,6 +351,173 @@ export function assertCaseSemantics(testCase, expected) {
       fail('app_entry_rendered_ecommerce_network_proof_missing')
     }
   }
+
+  if (expected.semantics === 'store-to-shop') {
+    const journey = testCase.storeToShop
+    if (testCase.browserContextIsolated !== true || !isObject(journey) || journey.ok !== true
+      || journey.viewportWidth !== expected.width || journey.viewportHeight !== expected.height
+      || journey.documentScrollWidth > journey.viewportWidth + 1
+      || !isObject(journey.claimBoundary) || journey.claimBoundary.ok !== true
+      || !isObject(journey.source) || !exactString(journey.source.requestId, 'app_entry_rendered_store_to_shop_source_invalid')
+      || journey.source.requestCount !== 1 || journey.source.recoveryKeyCount !== 1 || journey.source.sharedRequestCountBefore !== 0
+      || journey.source.orderCountBefore !== 0 || journey.source.actionCountBefore !== 0
+      || !exactString(journey.source.customer, 'app_entry_rendered_store_to_shop_customer_invalid')
+      || !exactString(journey.source.customerReference, 'app_entry_rendered_store_to_shop_customer_reference_invalid')
+      || !['pickup', 'delivery'].includes(journey.source.fulfilment)
+      || !exactString(journey.source.handoffReference, 'app_entry_rendered_store_to_shop_handoff_reference_invalid')
+      || !exactString(journey.source.payment, 'app_entry_rendered_store_to_shop_payment_invalid')
+      || !Number.isSafeInteger(journey.source.totalMmk) || journey.source.totalMmk < 1
+      || !Array.isArray(journey.source.lines) || !journey.source.lines.length
+      || journey.source.lines.some((line) => !isObject(line)
+        || !exactString(line.sku, 'app_entry_rendered_store_to_shop_line_sku_invalid')
+        || !exactString(line.name, 'app_entry_rendered_store_to_shop_line_name_invalid')
+        || line.variant !== null && typeof line.variant !== 'string'
+        || !Number.isSafeInteger(line.quantity) || line.quantity < 1
+        || !Number.isSafeInteger(line.unitPriceMmk) || line.unitPriceMmk < 1
+        || line.lineTotalMmk !== line.quantity * line.unitPriceMmk)
+      || !Number.isInteger(journey.source.quantity) || journey.source.quantity < 1
+      || !Number.isInteger(journey.source.stockBefore) || journey.source.stockBefore < journey.source.quantity
+      || !isObject(journey.handoff) || journey.handoff.ready !== true || journey.handoff.sourceVisible !== true
+      || !isObject(journey.prepared) || journey.prepared.ready !== true
+      || !isStoreToShopReviewPath(journey.prepared.route, journey.source.requestId) || journey.prepared.sourceBound !== true
+      || journey.prepared.customer !== journey.source.customer
+      || journey.prepared.fulfilment !== journey.source.fulfilment
+      || journey.prepared.handoffReference !== journey.source.handoffReference
+      || JSON.stringify(journey.prepared.lines) !== JSON.stringify(journey.source.lines)
+      || journey.prepared.totalMmk !== journey.source.totalMmk
+      || journey.prepared.paymentLocked !== true || journey.prepared.payment !== journey.source.payment
+      || !isObject(journey.gate) || journey.gate.ready !== true || journey.gate.summaryBound !== true
+      || journey.gate.actor !== 'Shop reviewer' || journey.gate.reasonPresent !== true || journey.gate.sourceEvidenceBound !== true
+      || !exactString(journey.gate.evidenceReference, 'app_entry_rendered_store_to_shop_gate_evidence_invalid').includes(journey.source.requestId)
+      || !isObject(journey.network) || journey.network.externalRequestCount !== 0 || journey.network.failedRequestCount !== 0
+      || journey.network.httpErrorResponseCount !== 0
+      || !isObject(journey.committed) || !isObject(journey.restored)
+      || journey.committed.matchingOrderCount !== 1 || journey.restored.matchingOrderCount !== 1
+      || journey.committed.orderStatus !== 'confirmed' || journey.restored.orderStatus !== 'confirmed'
+      || journey.committed.paymentStatus !== 'pending' || journey.restored.paymentStatus !== 'pending'
+      || journey.committed.stockAfter !== journey.source.stockBefore - journey.source.quantity
+      || journey.restored.stockAfter !== journey.committed.stockAfter
+      || journey.committed.sourceRequestCopies !== 1 || journey.restored.sourceRequestCopies !== 1
+      || journey.committed.sharedInboxRequestCount !== 0 || journey.restored.sharedInboxRequestCount !== 0
+      || journey.committed.owner !== 'Shop reviewer' || journey.restored.owner !== 'Shop reviewer'
+      || journey.committed.accountableActionCount !== 1 || journey.restored.accountableActionCount !== 1
+      || exactArray(journey.committed.orderCreateActionIds, 'app_entry_rendered_store_to_shop_actions_invalid').length !== 1
+      || JSON.stringify(journey.restored.orderCreateActionIds) !== JSON.stringify(journey.committed.orderCreateActionIds)
+      || !exactString(journey.committed.actionId, 'app_entry_rendered_store_to_shop_action_invalid')
+      || !exactString(journey.committed.commandId, 'app_entry_rendered_store_to_shop_command_invalid')
+      || !exactString(journey.committed.actionReason, 'app_entry_rendered_store_to_shop_reason_invalid')
+      || journey.committed.actionActor !== 'Shop reviewer'
+      || !exactString(journey.committed.actionEvidenceReference, 'app_entry_rendered_store_to_shop_evidence_invalid')
+      || journey.committed.actionEvidenceReference !== journey.gate.evidenceReference
+      || journey.committed.actionSubjectId !== journey.committed.orderId
+      || journey.restored.actionId !== journey.committed.actionId
+      || journey.restored.commandId !== journey.committed.commandId
+      || journey.restored.actionActor !== journey.committed.actionActor
+      || journey.restored.actionReason !== journey.committed.actionReason
+      || journey.restored.actionEvidenceReference !== journey.committed.actionEvidenceReference
+      || journey.restored.actionSubjectId !== journey.committed.actionSubjectId
+      || !isObject(journey.replay) || journey.replay.attempted !== true
+      || journey.replay.route !== storeToShopReviewPath(journey.source.requestId)
+      || journey.replay.duplicateBlocked !== true || journey.replay.gateOpened !== false
+      || journey.replay.matchingOrderCount !== 1 || journey.replay.accountableActionCount !== 1
+      || JSON.stringify(journey.replay.orderCreateActionIds) !== JSON.stringify(journey.restored.orderCreateActionIds)
+      || journey.replay.orderId !== journey.committed.orderId || journey.replay.stockAfter !== journey.restored.stockAfter
+      || journey.replay.sourceRequestCopies !== 1 || journey.replay.sharedInboxRequestCount !== 0
+      || journey.committed.route !== expected.path || journey.restored.route !== expected.path) {
+      fail('app_entry_rendered_store_to_shop_failed')
+    }
+    assertAllChecksTrue(journey.checks, [
+      'localRequestCaptured',
+      'sameDeviceHandoff',
+      'exactSourcePrepared',
+      'accountableSourceBound',
+      'confirmedOnce',
+      'paymentStillPending',
+      'stockReservedOnce',
+      'sourceRetained',
+      'replayBlocked',
+      'accountableOwner',
+      'accountableActionRecorded',
+      'persistedAfterReload',
+      'operatorViewRestored',
+      'noHorizontalOverflow',
+    ], 'app_entry_rendered_store_to_shop_failed')
+  }
+
+  if (expected.semantics === 'shop-accounting-export') {
+    const artifact = testCase.accountingExport
+    if (testCase.browserContextIsolated !== true || !isObject(artifact) || artifact.ok !== true
+      || artifact.schema !== 'supermega.commerce.accounting-handoff.v3'
+      || !/^\d{4}-\d{2}-\d{2}$/u.test(artifact.businessDate)
+      || !Number.isInteger(artifact.bytes) || artifact.bytes < 4 || artifact.bytes > MAX_DOWNLOAD_BYTES
+      || !DIGEST_PATTERN.test(artifact.digest)
+      || !/^downloads\/supermega-shop-accounting-\d{4}-\d{2}-\d{2}-[0-9a-f]{8}\.csv$/u.test(artifact.file)
+      || artifact.filename !== artifact.file.slice('downloads/'.length)
+      || artifact.viewportWidth !== expected.width || artifact.viewportHeight !== expected.height
+      || artifact.documentScrollWidth > artifact.viewportWidth + 1) {
+      fail('app_entry_rendered_shop_accounting_export_failed')
+    }
+    assertAllChecksTrue(artifact.checks, [
+      'controlVisible',
+      'controlNamed',
+      'mappingReviewed',
+      'filenameBounded',
+      'bomPresent',
+      'schemaPresent',
+      'closeIdPresent',
+      'reviewBoundaryPresent',
+      'businessDatePresent',
+      'noHorizontalOverflow',
+    ], 'app_entry_rendered_shop_accounting_export_failed')
+  }
+
+  if (expected.semantics === 'shop-offline-restore') {
+    const restore = testCase.offlineRestore
+    if (testCase.browserContextIsolated !== true || !isObject(restore) || restore.ok !== true
+      || restore.controllerScript !== '/sw.js'
+      || !Number.isInteger(restore.cacheCount) || restore.cacheCount < 1
+      || !Number.isInteger(restore.cacheEntryCount) || restore.cacheEntryCount < 1
+      || restore.transportFailureCount !== 1
+      || restore.viewportWidth !== expected.width || restore.viewportHeight !== expected.height
+      || restore.documentScrollWidth > restore.viewportWidth + 1) {
+      fail('app_entry_rendered_shop_offline_restore_failed')
+    }
+    assertAllChecksTrue(restore.checks, [
+      'serviceWorkerSupported',
+      'serviceWorkerReady',
+      'controllerActive',
+      'sealedCachePresent',
+      'offlineModeActive',
+      'routeRestored',
+      'businessRecordRestored',
+      'storageRecordPreserved',
+      'expectedFallbackTransportFailure',
+      'noHorizontalOverflow',
+    ], 'app_entry_rendered_shop_offline_restore_failed')
+  }
+
+  if (expected.semantics === 'sites-pages' || expected.semantics === 'sites-inquiries') {
+    const workspace = testCase.sitesWorkspace
+    if (testCase.browserContextIsolated !== true || !isObject(workspace) || workspace.ok !== true
+      || workspace.documentScrollWidth > workspace.viewportWidth) {
+      fail('app_entry_rendered_sites_workspace_failed')
+    }
+    assertAllChecksTrue(workspace.checks, expected.semantics === 'sites-pages' ? [
+      'workbenchVisible',
+      'pageRailVisible',
+      'editorVisible',
+      'insightsVisible',
+      'threePagesPresent',
+      'activePagePresent',
+    ] : [
+      'workspaceVisible',
+      'captureFormVisible',
+      'queueVisible',
+      'oneSyntheticLeadPresent',
+      'consentControlVisible',
+      'decisionControlsPresent',
+    ], 'app_entry_rendered_sites_workspace_failed')
+  }
 }
 
 async function assertScreenshot(evidenceDir, descriptor, seenFiles) {
@@ -304,6 +535,28 @@ async function assertScreenshot(evidenceDir, descriptor, seenFiles) {
     fail('app_entry_rendered_screenshot_mismatch')
   }
   return { file: screenshot.relative, bytes: payload.byteLength, digest: descriptor.digest }
+}
+
+async function assertAccountingExport(evidenceDir, descriptor, seenFiles) {
+  const artifact = safeRelativePath(evidenceDir, descriptor.file, 'app_entry_rendered_accounting_export_path_invalid')
+  if (extname(artifact.relative).toLowerCase() !== '.csv' || seenFiles.has(artifact.relative)) {
+    fail('app_entry_rendered_accounting_export_path_invalid')
+  }
+  seenFiles.add(artifact.relative)
+  await assertPathChain(evidenceDir, artifact.parts, 'file', 'app_entry_rendered_accounting_export_invalid')
+  const payload = await readFile(artifact.absolute)
+  const text = payload.toString('utf8')
+  if (payload.byteLength < 4 || payload.byteLength > MAX_DOWNLOAD_BYTES
+    || descriptor.bytes !== payload.byteLength
+    || exactDigest(descriptor.digest, 'app_entry_rendered_accounting_export_digest_invalid') !== sha256Digest(payload)
+    || !payload.subarray(0, 3).equals(Buffer.from([0xef, 0xbb, 0xbf]))
+    || !text.includes('supermega.commerce.accounting-handoff.v3')
+    || !text.includes('CLOSE-33333333-3333-4333-8333-333333333333')
+    || !text.includes('"review_required","none","false"')
+    || !text.includes(descriptor.businessDate)) {
+    fail('app_entry_rendered_accounting_export_mismatch')
+  }
+  return { file: artifact.relative, bytes: payload.byteLength, digest: descriptor.digest }
 }
 
 export function parseRenderedProofValidationArgs(args = []) {
@@ -400,14 +653,18 @@ export async function validateRenderedProofReport({ reportPath, expectedHead, ex
   const cases = exactArray(report.cases, 'app_entry_rendered_cases_invalid')
   if (!cases.length || cases.length > MAX_CASES || report.checks !== cases.length) fail('app_entry_rendered_cases_invalid')
   const expectedCases = assertRenderedProofCaseMatrix(cases, expectedScope)
-  const seenScreenshots = new Set()
+  const seenEvidenceFiles = new Set()
   const screenshots = []
+  const downloads = []
   for (let index = 0; index < cases.length; index += 1) {
     const testCase = cases[index]
     const expected = expectedCases[index]
     assertCaseSemantics(testCase, expected)
     if (expected.screenshot !== null) {
-      screenshots.push(await assertScreenshot(evidenceDir, testCase.screenshot, seenScreenshots))
+      screenshots.push(await assertScreenshot(evidenceDir, testCase.screenshot, seenEvidenceFiles))
+    }
+    if (expected.semantics === 'shop-accounting-export') {
+      downloads.push(await assertAccountingExport(evidenceDir, testCase.accountingExport, seenEvidenceFiles))
     }
   }
   const runtimeErrorCount = cases.reduce((total, testCase) => total + testCase.runtime.errors.length, 0)
@@ -428,6 +685,7 @@ export async function validateRenderedProofReport({ reportPath, expectedHead, ex
     verifier: { digest: report.verifier.digest, bytes: report.verifier.bytes },
     artifact: { digest: manifest.digest, fileCount: manifest.fileCount, totalBytes: manifest.totalBytes },
     screenshots,
+    downloads,
     validatorDigest: sha256Digest(validatorPayload),
   }
 }

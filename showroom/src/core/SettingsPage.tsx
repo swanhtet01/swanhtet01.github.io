@@ -66,12 +66,8 @@ import {
   type ManagedIdentity,
   type ManagedWorkspaceSignIn,
 } from './managed-trial'
+import { validateEcommerceManagedStoreActivationPacket } from '../products/ecommerce/ecommerce-activation-packet'
 import {
-  buildEcommerceManagedStoreActivationPacket,
-  validateEcommerceManagedStoreActivationPacket,
-} from '../products/ecommerce/ecommerce-activation-packet'
-import {
-  buildEcommerceOrderImportReviewPacket,
   buildEcommerceOrderQueueReadinessPacket,
   validateEcommerceOrderImportReviewPacket,
   type EcommerceOrderQueueReadinessPacket,
@@ -184,7 +180,7 @@ const demoRunbookLabels = {
 } as const
 
 const demoLaunchLabels = {
-  prepare_data: 'Sample ready',
+  prepare_data: 'Template ready',
   needs_fix: 'Fix client data',
   ready_to_run: 'Client data ready',
   proven: 'Evidence proven',
@@ -466,7 +462,7 @@ export function SettingsPage() {
           ['Gate', 'Owner approves launch', 'No domain, form send, analytics install, CRM write, or publish action runs from setup.'],
         ]
         : [
-          ['Bring', 'Catalog rows, order CSV, channel samples', 'Start from products plus Viber, LINE, WeChat, email, form, or CSV order examples.'],
+          ['Bring', 'Catalog rows, order CSV, source messages', 'Start from products plus Viber, LINE, WeChat, email, form, or CSV order records.'],
           ['AI prepares', 'Store, quote, order review, Shop review', 'SuperMega normalizes customer, SKU, quantity, fulfilment, payment, and source proof.'],
           ['First proof', 'One Shop-ready order packet', 'Show ready/blocked order rows and owner review before customer contact or fulfilment.'],
           ['Gate', 'Owner approves fulfilment', 'No customer message, payment capture, delivery booking, stock move, refund, or Shop write runs from setup.'],
@@ -488,8 +484,8 @@ export function SettingsPage() {
     activationRequired: true,
   }
   const evidenceDate = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Yangon' }).format(new Date())
-  const evidenceFilename = `supermega-trial-evidence-${evidenceDate}.json`
-  const demoBlueprintFilename = `supermega-client-demo-${setup.workspace.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || evidenceDate}.json`
+  const evidenceFilename = `supermega-workspace-evidence-${evidenceDate}.json`
+  const demoBlueprintFilename = `supermega-client-workspace-${setup.workspace.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || evidenceDate}.json`
   const demoBlueprintHref = demoKitReadiness?.ready ? `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(demoKitReadiness.kit, null, 2))}` : ''
   const clientCsvStarterPack = useMemo(() => demoBlueprint ? buildClientCsvStarterPack(demoBlueprint) : null, [demoBlueprint])
   const clientCsvStarterPackDownloadHref = useMemo(() => clientCsvStarterPack ? clientCsvStarterPackHref(clientCsvStarterPack) : '', [clientCsvStarterPack])
@@ -604,9 +600,9 @@ export function SettingsPage() {
       ? `${productFirstValue.detail ?? 'A useful product workflow was completed.'}${firstValueElapsed ? ` First value took ${firstValueElapsed} in this browser.` : ''}`
       : productFirstValue.status === 'in_progress'
         ? 'The product journey started. Complete its guided first workflow to prove useful value.'
-        : 'Open onboarding or the product sample, then complete its guided first workflow to begin.'],
+        : 'Open the product workspace, then complete its first guided workflow to begin.'],
     ['Next steps', productActivationFunnel.nextStepsOpened ? `${productActivationFunnel.nextStepsOpened} opened` : 'Not opened', 'The user opened this product\'s optional next-step panel.'],
-    ['Own data', productActivationFunnel.dataSetupsOpened ? `${productActivationFunnel.dataSetupsOpened} started` : 'Not started', 'The user opened local CSV or sample-data setup for this product.'],
+    ['Own data', productActivationFunnel.dataSetupsOpened ? `${productActivationFunnel.dataSetupsOpened} started` : 'Not started', 'The user opened local CSV or template-data setup for this product.'],
     ['Product request', productActivationFunnel.productRequests ? `${productActivationFunnel.productRequests} intent` : 'No intent yet', 'The user chose the product-specific setup handoff. No message was sent by this scorecard.'],
     ['Next move', productActivationFunnel.nextAction, `${productActivationFunnel.completionPercent}% of the local activation journey observed in this browser.`],
   ] as const
@@ -621,7 +617,7 @@ export function SettingsPage() {
     ['Behavior trail', behaviorSignalCount ? `${behaviorSignalCount} local signals` : 'No local signals yet', behaviorSignalCount ? 'Premium can rank next actions from reviewed workspace behavior after import.' : 'Open Shop, Plant, Website, Ecommerce, or setup so the system can capture local activity history.'],
     ['Decision memory', reviewedDecisionCount ? `${reviewedDecisionCount} reviewed decisions` : 'No reviewed decisions yet', reviewedDecisionCount ? 'Named human decisions can become reusable context after managed activation.' : 'Approve or decline at least one prepared decision before relying on AI context.'],
     ['Pilot outcome', pilotOutcomeReport?.review ? `${pilotOutcomeReport.outcomeStatus} / owner accepted` : 'No accepted outcome yet', pilotOutcomeReport?.review ? 'The measured aggregate result is bound to a named-owner acceptance.' : 'Start from validated product data, run one workflow, and accept a clear or improved result.'],
-    ['Owner gate', isPilotReady ? 'Ready for managed review' : `${completion}% trial evidence`, isPilotReady ? 'Export evidence, then request managed trial; writes stay locked until server controls pass.' : 'Complete baseline, target, authority boundary, and acceptance evidence first.'],
+    ['Owner gate', isPilotReady ? 'Ready for managed review' : `${completion}% workspace evidence`, isPilotReady ? 'Export evidence, then request managed activation; writes stay locked until server controls pass.' : 'Complete baseline, target, authority boundary, and acceptance evidence first.'],
   ] as const
   const agentPlanRows = [
     ['Product helper', `${selectedProduct.name} operator`, `Prepares ${selectedTemplate.name.toLowerCase()} from approved sources.`],
@@ -777,7 +773,7 @@ export function SettingsPage() {
     ['Decisions', reviewedDecisionCount > 0, reviewedDecisionCount ? `${reviewedDecisionCount} named human decision${reviewedDecisionCount === 1 ? '' : 's'} ready.` : 'Record one approval or decline before premium learns from decisions.'],
     ['Controls', runtime.writesReady && evidencePlanReady, runtime.writesReady && evidencePlanReady ? 'Managed evidence gates are ready.' : 'Managed Postgres, identity, audit, and write gates remain locked.'],
     ['Products', aiProductSourceMap.products.some((product) => product.prepared), aiProductSourceMap.products.some((product) => product.prepared) ? 'At least one product has a usable source package.' : 'Create Shop, Plant, Website, or Ecommerce evidence.'],
-    ['Owner setup', Boolean(setup.savedAt), setup.savedAt ? 'Trial plan is saved for handoff.' : 'Save the trial plan before requesting managed activation.'],
+    ['Owner setup', Boolean(setup.savedAt), setup.savedAt ? 'Workspace plan is saved for handoff.' : 'Save the workspace plan before requesting managed activation.'],
     ['Outcome', Boolean(pilotOutcomeReport?.review), pilotOutcomeReport?.review ? `${pilotOutcomeReport.outcomeStatus} result accepted by ${pilotOutcomeReport.review.reviewedBy}.` : 'Accept one measured product outcome before managed activation.'],
   ] as const
   const aiContextReadyGateCount = aiContextReadinessGates.filter(([, ready]) => ready).length
@@ -789,7 +785,7 @@ export function SettingsPage() {
       : !reviewedDecisionCount
         ? 'Record owner decision'
       : !setup.savedAt
-          ? 'Save trial plan'
+          ? 'Save workspace plan'
           : !pilotOutcomeReport?.review
             ? 'Prove one product outcome'
           : !runtime.writesReady || !evidencePlanReady
@@ -841,14 +837,14 @@ export function SettingsPage() {
       pilotOutcomeDigest: pilotOutcomeReport?.review ? pilotOutcomeReport.reportDigest : null,
     },
     requiredControls: ['dedicated_postgres_rls', 'trusted_identity_gateway', 'private_storage', 'audit_trail', 'owner_write_approvals', 'scheduler_budget_limits'],
-    firstSafeActivation: provisioningReady ? 'Create managed tenant from exported evidence after activation gates pass.' : 'Finish trial evidence, local records, owner-reviewed decisions, and one accepted product outcome before provisioning.',
+    firstSafeActivation: provisioningReady ? 'Create managed tenant from exported evidence after activation gates pass.' : 'Finish workspace evidence, local records, owner-reviewed decisions, and one accepted product outcome before provisioning.',
     forbiddenUntilProvisioned: ['copy_browser_storage_to_production', 'enable_hosted_scheduler', 'send_customer_messages', 'capture_payments', 'publish_domains'],
   }
   const importProvisioningRows = runtime.importProvisioning?.checks.length
     ? runtime.importProvisioning.checks.map((check) => [check.label, check.ready ? 'Ready' : 'Blocked', check.action] as const)
     : [
       ['Managed identity', runtime.authReady ? 'Ready' : 'Blocked', 'Verify trusted gateway or Supabase named-user identity before import approval.'] as const,
-      ['Private workspace schema', runtime.enterpriseDbReady ? 'Ready' : 'Blocked', 'Apply the private trial schema with a non-BYPASSRLS runtime role.'] as const,
+      ['Private workspace schema', runtime.enterpriseDbReady ? 'Ready' : 'Blocked', 'Apply the private workspace schema with a non-BYPASSRLS runtime role.'] as const,
       ['Zero-write validation', runtime.auditReady ? 'Ready' : 'Blocked', 'Run the managed import validation endpoint and prove external_writes_performed is false.'] as const,
       ['Owner approval', reviewedDecisionCount ? 'Ready' : 'Blocked', 'Capture a named owner approval before any import apply request.'] as const,
       ['Atomic adapter', runtime.writesReady ? 'Ready' : 'Blocked', 'Confirm the product adapter can create one idempotent managed revision.'] as const,
@@ -866,7 +862,7 @@ export function SettingsPage() {
   }
   const provisioningRows = [
     ['Tenant', managedWorkspaceProvisioningPacket.tenantMode === 'managed_ready' ? 'Ready' : 'Required', runtime.requirements[0] ?? 'Managed controls must be verified before customer data import.'],
-    ['Data package', `${preparedRecordCount} records`, preparedRecordCount ? 'Exported evidence can seed a reviewed company account.' : 'Import or use a product demo before provisioning.'],
+    ['Data package', `${preparedRecordCount} records`, preparedRecordCount ? 'Exported evidence can seed a reviewed company account.' : 'Import data or configure a product workspace before provisioning.'],
     ['Roles', reviewedDecisionCount ? `${reviewedDecisionCount} reviewed` : 'Need owner review', 'Named owner decisions define who can approve writes after activation.'],
     ['Controls', runtime.writesReady && evidencePlanReady ? 'Ready' : 'Locked', 'RLS, identity, storage privacy, audit, write approvals, and scheduler budgets are required.'],
     ['First safe step', provisioningReady ? 'Create tenant' : 'Finish proof', managedWorkspaceProvisioningPacket.firstSafeActivation],
@@ -874,7 +870,7 @@ export function SettingsPage() {
   const activationManifestRows = [
     ['Next action', runtime.activationManifest?.next_action ?? runtime.requirements[0] ?? 'Checking managed activation.'],
     ['Blocked gates', runtime.activationManifest?.blocked_gate_ids.length ? runtime.activationManifest.blocked_gate_ids.join(', ') : 'No blocked gates'],
-    ['Safe enables', runtime.activationManifest?.safe_enable.length ? runtime.activationManifest.safe_enable.join(', ') : 'Browser-local trial only'],
+    ['Safe enables', runtime.activationManifest?.safe_enable.length ? runtime.activationManifest.safe_enable.join(', ') : 'Browser-local workspace only'],
   ] as const
   const schedulerActivationRows = [
     ['Scheduler', schedulerActivation?.configured ? 'Ready' : schedulerActivation?.status ?? 'Blocked'],
@@ -935,7 +931,7 @@ export function SettingsPage() {
     ['Write boundary', 'No external send or managed write from this packet'],
   ] as const
   const activationRows: Array<readonly [string, string]> = [
-    ['Trial', isPilotReady ? 'Ready' : `${completion}%`],
+    ['Workspace', isPilotReady ? 'Ready' : `${completion}%`],
     ['Runtime', runtime.serviceStatus],
     ['Mode', runtime.operatingMode.replace('_', ' ')],
     ...(runtime.activationSteps.length
@@ -963,7 +959,7 @@ export function SettingsPage() {
       : !reviewedDecisionCount
         ? 'Record owner decision'
         : !setup.savedAt
-          ? 'Save trial plan'
+          ? 'Save workspace plan'
           : !runtime.writesReady || !evidencePlanReady
             ? 'Request managed activation'
             : 'Export context for review'
@@ -1056,9 +1052,9 @@ export function SettingsPage() {
   const operatingLearning = managedPilotBrief ? operatingChangeCopy(managedPilotBrief.operatingChange) : null
   const premiumPilotRows = [
     ['Owner pattern', retainedOwnerProduct ? `${managedContextProductLabel(retainedOwnerProduct)} retained` : topAgentJob ? `${agentProductName(topAgentJob.product)}: ${topAgentJob.detail}` : 'Not learned yet', retainedOwnerProduct ? 'Managed briefs may use this preference only after risk and evidence checks.' : topAgentJob ? `${topAgentJob.chosenCount} local choice${topAgentJob.chosenCount === 1 ? '' : 's'}.` : 'Choose a recommended product action to teach the next handoff.'],
-    ['Company account', managedIdentity?.email ?? 'Not connected', managedIdentity ? 'Named-user access verified for this company.' : 'Your local trial remains usable without an account.'],
+    ['Company account', managedIdentity?.email ?? 'Not connected', managedIdentity ? 'Named-user access verified for this company.' : 'Your local workspace remains usable without an account.'],
     ['Approved sources', managedPilotBrief ? `${managedPilotBrief.sourceCount} company` : preparedRecordCount ? `${preparedRecordCount} local prepared` : 'No source proof yet', managedPilotBrief ? 'Counts only; raw source records are not shown here.' : 'Open a company account to verify company-scoped sources.'],
-    ['Learning checkpoint', premiumPilotProofKept ? 'Kept in audit' : managedPilotBrief ? 'Ready to keep' : 'Local preview only', premiumPilotProofKept ? 'The aggregate operating baseline has a managed audit receipt.' : 'No external action runs from this panel.'],
+    ['Learning checkpoint', premiumPilotProofKept ? 'Kept in audit' : managedPilotBrief ? 'Ready to keep' : 'Local workspace only', premiumPilotProofKept ? 'The aggregate operating baseline has a managed audit receipt.' : 'No external action runs from this panel.'],
   ] as const
   const evidenceHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify({ contract: 'supermega_trial_evidence', version: 24, exportedAt: new Date().toISOString(), environment: 'isolated_demo', pilotReady: isPilotReady && Boolean(pilotOutcomeReport?.review), setup, workflowProfile: selectedTemplate, launchPackManifest, commerce, production, accountableActions: actions, approvals, managedApprovalRequests, teams: teamWorkspace, localProductRecords, localWorkspaceBackup, behaviorTrail, behaviorPreference, productActivationFunnel, productFirstValue, pilotOutcomeReport, activationRows, activationSteps: runtime.activationSteps, activationEvidencePlan: runtime.evidencePlan, activationManifest: runtime.activationManifest, activationManifestRows, importProvisioning: runtime.importProvisioning, importProvisioningPacket, importProvisioningRows, schedulerActivation, schedulerActivationRows, managedTrialRequest, managedTrialRequestRows, learningRows, learningPlanRows, agentPlanRows, aiContextQualityRows, aiProductSourceRows, aiProductSourceMap, contextHandoffManifest, contextHandoffRows, aiContextReadinessScore, aiContextReadyGateCount, aiContextReadinessGates, aiContextReadinessScoreRows, managedWorkspaceProvisioningPacket, provisioningRows }, null, 2))}`
   const managedTrialRequestHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(managedTrialRequest, null, 2))}`
@@ -1235,7 +1231,7 @@ export function SettingsPage() {
     setPlantIndustryPackId(plantIndustryPack(industryPackId).id)
     setDemoBlueprint(null)
     setDemoWorkspace(null)
-    setNotice('Plant pack changed. Create the client demo again to bind this configuration.')
+    setNotice('Plant pack changed. Update the client workspace to bind this configuration.')
   }
 
   function configureDemoProduct(product: SetupProductId, templateId: string, openProduct: boolean) {
@@ -1249,7 +1245,7 @@ export function SettingsPage() {
       savedAt: undefined,
     }))
     if (openProduct) navigate(setupProductPreviewPath(product))
-    else setNotice(`${productDisplayName(product)} is selected below. Add client data or try the prepared sample.`)
+    else setNotice(`${productDisplayName(product)} is selected below. Add client data or use the prepared template.`)
   }
 
   function prepareDemoProduct(product: SetupProductId, templateId: string) {
@@ -1289,7 +1285,7 @@ export function SettingsPage() {
         capturedAt: new Date().toISOString(),
       })
       websitePackNotice = activation.ok
-        ? ` ${templateFor('website', websiteSelection.templateId).name} Website sample is prepared.`
+        ? ` ${templateFor('website', websiteSelection.templateId).name} Website template is prepared.`
         : ` ${activation.error}`
     }
     // Retain the client's chosen template for every selected product, not only the
@@ -1325,7 +1321,7 @@ export function SettingsPage() {
     }
     setNotice(origin === 'loaded'
       ? `${blueprint.products.length}-product setup loaded. Review and prepare data on this device.`
-      : `${blueprint.products.length}-product demo kit ready.${shopPackNotice}${plantPackNotice}${websitePackNotice} Prepare data or open a product.`)
+      : `${blueprint.products.length}-product workspace ready.${shopPackNotice}${plantPackNotice}${websitePackNotice} Prepare data or open a product.`)
   }
 
   async function loadDemoKit(file: File | null) {
@@ -1382,7 +1378,7 @@ export function SettingsPage() {
       for (const file of files) {
         const product = clientCsvProductByName[file.name.trim().toLowerCase()]
         if (!product) throw new Error('Use shop.csv, plant.csv, website.csv, or ecommerce.csv.')
-        if (!selectedProducts.has(product)) throw new Error(`${productDisplayName(product)} is not selected in this client demo.`)
+        if (!selectedProducts.has(product)) throw new Error(`${productDisplayName(product)} is not selected in this client workspace.`)
         if (seenProducts.has(product)) throw new Error(`Choose only one ${productDisplayName(product)} CSV.`)
         if (file.size < 1 || file.size > CLIENT_IMPORT_MAX_BYTES) throw new Error(`${file.name} must be between 1 byte and 512 KB.`)
         seenProducts.add(product)
@@ -1390,7 +1386,7 @@ export function SettingsPage() {
       }
       const artifact = await prepareClientDemoInBrowser(demoKitReadiness.kit, sources)
       setPreparedArtifact(artifact)
-      setPreparedNotice(`${artifact.products.length}-product package verified locally. ${sources.length} client file${sources.length === 1 ? '' : 's'} used; missing products use visible sample data.`)
+      setPreparedNotice(`${artifact.products.length}-product package verified locally. ${sources.length} client file${sources.length === 1 ? '' : 's'} used; missing products use visible template data.`)
     } catch (error) {
       setPreparedNotice(error instanceof Error ? error.message : 'The selected client files could not be prepared.')
     } finally {
@@ -1445,7 +1441,7 @@ export function SettingsPage() {
         setPreparedNotice(`${productDisplayName(product)} installed.${packNotice}`)
       }
       setPreparedBlockedProduct(null)
-      setPreparedNotice(`Demo ready: ${summaries.join(' · ')}. Open each product below and run its proof workflow.`)
+      setPreparedNotice(`Workspace ready: ${summaries.join(' · ')}. Open each product below and run its proof workflow.`)
     } catch (error) {
       const detail = error instanceof Error ? error.message : 'The product could not be installed.'
       setPreparedBlockedProduct(activeProduct)
@@ -1471,7 +1467,7 @@ export function SettingsPage() {
       })
       await installDemoBlueprint(blueprint, 'created')
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : 'The client demo kit could not be prepared.')
+      setNotice(error instanceof Error ? error.message : 'The client workspace could not be prepared.')
     } finally {
       preparedInstallRunning.current = false
     }
@@ -1502,7 +1498,7 @@ export function SettingsPage() {
     }
     const savedAt = new Date().toISOString()
     setSetup((current) => ({ ...current, startedAt: current.startedAt || savedAt, savedAt }))
-    setNotice('Trial plan saved locally. No external action was connected.')
+    setNotice('Workspace plan saved locally. No external action was connected.')
   }
 
   function recordAcceptedPilotOutcomeDecision(report: PilotOutcomeReport, review: PilotOutcomeReview) {
@@ -1533,49 +1529,6 @@ export function SettingsPage() {
       ])
       setNotice('Ecommerce activation packet rejected locally. No managed action ran.')
     }
-  }
-
-  function loadSampleEcommerceActivationPacket() {
-    const packet = buildEcommerceManagedStoreActivationPacket({
-      generatedAt: new Date().toISOString(),
-      product: 'ecommerce',
-      storeName: 'Sample Ecommerce Store',
-      stage: 'Support review sample',
-      operatingMode: 'browser_local_trial',
-      source: {
-        catalogSource: 'sample',
-        catalogItems: 2,
-        selectedSkus: ['DEMO-SKU-01', 'DEMO-SKU-02'],
-        previewDigest: null,
-        managedCatalogDigest: null,
-        savedRevision: null,
-        savedAt: null,
-      },
-      readiness: {
-        Catalog: 'Sample catalog ready',
-        Storefront: 'Sample fingerprint',
-        Checkout: 'Quote review only',
-        Payments: 'Manual review only',
-        Delivery: 'Template review only',
-        'Shop gate': 'No live queue',
-        Activation: 'Free local only',
-      },
-      orderQueue: {
-        pendingShopReviews: 0,
-        stockRisk: 0,
-        expiringQuotes: 0,
-        manualPaymentReview: 0,
-        deliveryReview: 0,
-        pickupReview: 0,
-      },
-    })
-    setEcommerceActivationPacketText(`${JSON.stringify(packet, null, 2)}\n`)
-    setEcommerceActivationPacketReview([
-      ['Status', 'Sample loaded'],
-      ['Store', packet.storeName],
-      ['Boundary', 'Review only'],
-    ])
-    setNotice('Sample Ecommerce activation packet loaded locally. Review it to test the handoff gate.')
   }
 
   function clearEcommerceActivationPacketReview() {
@@ -1632,40 +1585,6 @@ export function SettingsPage() {
       ])
       setNotice('Ecommerce order review packet rejected locally. No order or managed action ran.')
     }
-  }
-
-  function loadSampleEcommerceOrderReviewPacket() {
-    const packet = buildEcommerceOrderImportReviewPacket({
-      generatedAt: new Date().toISOString(),
-      product: 'ecommerce',
-      storeName: 'Sample Ecommerce Store',
-      operatingMode: 'browser_local_trial',
-      catalog: {
-        source: 'sample',
-        items: 2,
-        selectedSkus: ['DEMO-SKU-01', 'DEMO-SKU-02'],
-      },
-      review: {
-        status: 'ready',
-        totalRows: 2,
-        readyRows: 2,
-        blockedRows: 0,
-        summary: '2 rows ready for owner review.',
-      },
-      sourceCsv: 'customer_reference,channel,sku,quantity,fulfilment,payment,source_message\nDaw Mya - Yangon,viber,DEMO-SKU-01,1,delivery,manual_review,Viber screenshot retained\nKo Min - pickup,line,DEMO-SKU-02,2,pickup,cash_on_pickup,LINE order retained\n',
-    })
-    setEcommerceOrderReviewPacketText(`${JSON.stringify(packet, null, 2)}\n`)
-    setEcommerceOrderReviewPacketReview([
-      ['Status', 'Sample loaded'],
-      ['Store', packet.storeName],
-      ['Rows', `${packet.review.readyRows} ready / ${packet.review.blockedRows} blocked`],
-      ['Boundary', 'Review only'],
-    ])
-    setEcommerceOrderQueueReadinessPacket(null)
-    setEcommerceOrderQueueServerValidation(null)
-    setEcommerceOrderQueueImportPlan(null)
-    setEcommerceOrderQueueApplyPreflight(null)
-    setNotice('Sample Ecommerce order review packet loaded locally. Review it to test the order handoff gate.')
   }
 
   function clearEcommerceOrderReviewPacketReview() {
@@ -1911,7 +1830,7 @@ export function SettingsPage() {
       window.location.assign('/')
     } catch (error) {
       localWorkspaceOperation.current = null
-      setNotice(error instanceof Error ? error.message : 'The local trial could not be reset safely.')
+      setNotice(error instanceof Error ? error.message : 'The local workspace could not be reset safely.')
       setResetBusy(false)
     }
   }
@@ -2038,17 +1957,17 @@ export function SettingsPage() {
 
   return (
     <div className="workspace-screen settings-screen">
-      <PageHeading eyebrow="Client setup" title="Set up a client demo" copy="Name the client, choose the business, create one workspace, then open any selected product demo." />
+      <PageHeading eyebrow="Client setup" title="Create a client workspace" copy="Name the client, choose the business and prepare the products they need in one workspace." />
       {!preparedArtifact && preparedNotice ? <p className="form-notice" role="status">{preparedNotice}</p> : null}
       <div className="settings-grid settings-step-content">
         <form className="core-panel setup-form" onSubmit={save}>
-          <div className="panel-head"><div><span className="core-eyebrow">Client demo</span><h2>{settingsStep === 'workflow' ? 'Client and business' : 'Define success'}</h2></div><span className={`status-pill ${displayedReady ? 'approved' : 'bounded'}`}>{displayedReady ? 'ready' : `${displayedCompletion}%`}</span></div>
+          <div className="panel-head"><div><span className="core-eyebrow">Client workspace</span><h2>{settingsStep === 'workflow' ? 'Client and business' : 'Define success'}</h2></div><span className={`status-pill ${displayedReady ? 'approved' : 'bounded'}`}>{displayedReady ? 'ready' : `${displayedCompletion}%`}</span></div>
           <div className="pilot-progress"><div className="progress-track"><i style={{ width: `${displayedCompletion}%` }} /></div><small>{settingsStep === 'workflow' ? 'Client - business - ready' : 'Record - target - evidence'}</small></div>
           <fieldset className="settings-step-fields" disabled={settingsStep !== 'workflow'} hidden={settingsStep !== 'workflow'}>
           <div className="form-row"><label>Client or workspace name<input maxLength={60} required value={setup.workspace} onChange={(event) => updateSetup({ workspace: event.target.value })} placeholder="Example: Golden Valley Trading" /></label><label>Responsible owner<input maxLength={80} required value={setup.owner} onChange={(event) => updateSetup({ owner: event.target.value })} placeholder="Name or role" /></label></div>
           <>
             <label className="demo-preset-select">Business type<select aria-label="Choose client business type" onChange={(event) => chooseDemoPreset(event.target.value as ClientDemoPresetId)} value={demoPresetId}>{clientDemoPresets.map((preset) => <option key={preset.id} value={preset.id}>{preset.name}</option>)}</select><small>{selectedDemoPreset.description} Includes {selectedDemoProductSummary}.</small></label>
-            <div className="settings-step-actions"><span>{demoBlueprint ? 'Updates the saved local setup package. No client data is sent.' : 'Creates a local setup package. No client data is sent.'}</span><button className="core-button primary" disabled={!demoInputReady} onClick={createDemoKit} type="button">{demoBlueprint ? 'Update client demo' : 'Create client demo'}</button></div>
+            <div className="settings-step-actions"><span>{demoBlueprint ? 'Updates the saved local workspace package. No client data is sent.' : 'Creates a local workspace package. No client data is sent.'}</span><button className="core-button primary" disabled={!demoInputReady} onClick={createDemoKit} type="button">{demoBlueprint ? 'Update workspace' : 'Create workspace'}</button></div>
             <details className="compact-disclosure demo-product-customizer">
               <summary><span>Customize products</span><small>{selectedDemoEntries.length} selected</small></summary>
               <div><span className="core-eyebrow">Products and workflows</span><p className="panel-copy">Keep only what this client will actually use. Every selected product shares the client name and owner.</p></div>
@@ -2056,11 +1975,11 @@ export function SettingsPage() {
                 {demoSelections.commerce ? <label className="demo-pack-select">Shop pack<select onChange={(event) => changeShopIndustryPack(event.target.value as ShopIndustryPackId)} value={shopIndustryPackId}>{shopIndustryPacks.map((pack) => <option key={pack.id} value={pack.id}>{pack.name} · {pack.nameMy}</option>)}</select><small>{selectedShopIndustryPack.firstWorkflow} {selectedShopIndustryPack.description}</small></label> : null}
                 {demoSelections.production ? <label className="demo-pack-select">Plant pack<select onChange={(event) => changePlantIndustryPack(event.target.value as PlantIndustryPackId)} value={plantIndustryPackId}>{plantIndustryPacks.map((pack) => <option key={pack.id} value={pack.id}>{pack.name}</option>)}</select><small>{selectedPlantIndustryPack.firstWorkflow} {selectedPlantIndustryPack.description}</small></label> : null}
               </div>
-              <div aria-label="Choose products for the client demo" className="demo-solution-grid">{Object.values(productContracts).map((product) => {
+              <div aria-label="Choose products for the client workspace" className="demo-solution-grid">{Object.values(productContracts).map((product) => {
                 const templateId = demoSelections[product.id]
                 return <section className="demo-solution-card" data-selected={Boolean(templateId)} key={product.id}>
                   <label><input checked={Boolean(templateId)} onChange={() => toggleDemoProduct(product.id)} type="checkbox" /><span><strong>{product.name}</strong><small>{product.headline}</small></span></label>
-                  {templateId ? product.id === 'commerce' ? <small>{templateFor('commerce', selectedShopIndustryPack.workflowTemplateId).name} · selected by Shop pack</small> : <select aria-label={`${product.name} workflow`} onChange={(event) => changeDemoTemplate(product.id, event.target.value)} value={templateId}>{templatesFor(product.id).map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}</select> : <small>Not included in this demo.</small>}
+                  {templateId ? product.id === 'commerce' ? <small>{templateFor('commerce', selectedShopIndustryPack.workflowTemplateId).name} · selected by Shop pack</small> : <select aria-label={`${product.name} workflow`} onChange={(event) => changeDemoTemplate(product.id, event.target.value)} value={templateId}>{templatesFor(product.id).map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}</select> : <small>Not included in this workspace.</small>}
                 </section>
               })}</div>
             </details>
@@ -2068,17 +1987,17 @@ export function SettingsPage() {
               <summary><span>Continue existing setup</span><small>Load a saved kit or prepared private package</small></summary>
               <div className="setup-action-group"><label className="core-button">Load setup kit<input accept=".json,application/json" className="sr-only" onChange={(event) => { const file = event.currentTarget.files?.[0] ?? null; event.currentTarget.value = ''; void loadDemoKit(file) }} type="file" /></label><label className="core-button primary">Load private package<input accept=".json,application/json" className="sr-only" onChange={(event) => { const file = event.currentTarget.files?.[0] ?? null; event.currentTarget.value = ''; void loadPreparedClientDemo(file) }} type="file" /></label></div>
             </details>
-            {demoRecoveryNeeded ? <section aria-label="Client demo recovery" className="demo-kit-result"><div className="panel-head"><div><span className="core-eyebrow">Recovery needed</span><h3>Rebuild the saved client demo</h3><p>{demoKitReadiness?.reason ?? 'The saved workspace no longer matches the current setup contract.'}</p></div><button className="core-button primary" disabled={!demoInputReady} onClick={createDemoKit} type="button">Rebuild demo</button></div></section> : null}
-            {demoBlueprint ? <section aria-label="Client demo kit" className="demo-kit-result">
+            {demoRecoveryNeeded ? <section aria-label="Client workspace recovery" className="demo-kit-result"><div className="panel-head"><div><span className="core-eyebrow">Recovery needed</span><h3>Rebuild the saved client workspace</h3><p>{demoKitReadiness?.reason ?? 'The saved workspace no longer matches the current setup contract.'}</p></div><button className="core-button primary" disabled={!demoInputReady} onClick={createDemoKit} type="button">Rebuild workspace</button></div></section> : null}
+            {demoBlueprint ? <section aria-label="Client workspace package" className="demo-kit-result">
               <div className="panel-head"><div><span className="core-eyebrow">Client workspace</span><h3>{demoBlueprint.client.workspace}</h3><p>{demoRunbook?.provenCount ?? 0} proven · {demoReadyCount} data-ready · owner {demoBlueprint.client.owner}</p></div><a className="core-button" download={demoBlueprintFilename} href={demoBlueprintHref}>Download setup kit</a></div>
-              <section aria-label="Client demo launchpad" className="client-demo-launchpad">
-                <div className="client-demo-launchpad-head"><div><span className="core-eyebrow">Demo launchpad</span><strong>{nextDemoMission ? `Next: ${nextDemoMission.label}` : 'All selected demos are proven'}</strong><small>Every product below uses this client setup. Open any working sample now; add client data only when it is ready.</small></div><Link className="core-button primary" ref={demoLaunchActionRef} to={demoLaunchPath}>{nextDemoMission ? 'Open next demo' : 'Review demos'}</Link></div>
+              <section aria-label="Client workspace launchpad" className="client-demo-launchpad">
+                <div className="client-demo-launchpad-head"><div><span className="core-eyebrow">Workspace launchpad</span><strong>{nextDemoMission ? `Next: ${nextDemoMission.label}` : 'All selected workflows are proven'}</strong><small>Every product below uses this client setup. Open the next workspace now; add client data when it is ready.</small></div><Link className="core-button primary" ref={demoLaunchActionRef} to={demoLaunchPath}>{nextDemoMission ? 'Open next product' : 'Review products'}</Link></div>
                 <div className="client-demo-launch-grid">{demoRunbook?.products.map((mission) => {
                   const blueprintProduct = demoBlueprint.products.find((product) => product.product === mission.product)
                   const statusClass = mission.status === 'proven' ? 'approved' : mission.status === 'needs_fix' ? 'pending' : 'bounded'
-                  return <Link aria-label={`Open ${mission.label} demo`} className="client-demo-launch-card" data-next={mission.product === demoRunbook.nextProduct || undefined} key={mission.product} to={mission.startPath}><span><small>{templateFor(mission.product, blueprintProduct?.templateId ?? '').name}</small><strong>{mission.label}</strong><em>{mission.scenario}</em></span><span className={`status-pill ${statusClass}`}>{demoLaunchLabels[mission.status]}</span></Link>
+                  return <Link aria-label={`Open ${mission.label} workspace`} className="client-demo-launch-card" data-next={mission.product === demoRunbook.nextProduct || undefined} key={mission.product} to={mission.startPath}><span><small>{templateFor(mission.product, blueprintProduct?.templateId ?? '').name}</small><strong>{mission.label}</strong><em>{mission.scenario}</em></span><span className={`status-pill ${statusClass}`}>{demoLaunchLabels[mission.status]}</span></Link>
                 })}</div>
-                {nextDemoMission && (nextDemoMission.status === 'prepare_data' || nextDemoMission.status === 'needs_fix') ? <div className="client-demo-launch-data"><span>The sample is ready. Personalize it when you have reviewed client data.</span><button className="text-link" onClick={() => prepareDemoProduct(nextDemoMission.product, demoBlueprint.products.find((product) => product.product === nextDemoMission.product)?.templateId ?? '')} type="button">Add {nextDemoMission.label} data</button></div> : null}
+                {nextDemoMission && (nextDemoMission.status === 'prepare_data' || nextDemoMission.status === 'needs_fix') ? <div className="client-demo-launch-data"><span>The template is ready. Personalize it when you have reviewed client data.</span><button className="text-link" onClick={() => prepareDemoProduct(nextDemoMission.product, demoBlueprint.products.find((product) => product.product === nextDemoMission.product)?.templateId ?? '')} type="button">Add {nextDemoMission.label} data</button></div> : null}
               </section>
               <details className="compact-disclosure client-system-details">
                 <summary><span>Client system details</span><small>{demoBlueprint.products.length} products · {demoBlueprint.integrations.length} connections</small></summary>
@@ -2094,12 +2013,12 @@ export function SettingsPage() {
                   <p className="capability-control-note">Shared controls: {capabilityPlan.sharedControls.join(' · ')}. Every capability must be verified before it is presented as available.</p>
                 </div>
               </details> : null}
-                {demoBlueprint.integrations.length ? <ol className="demo-integration-flow">{demoBlueprint.integrations.map((integration) => <li key={`${integration.from}-${integration.to}`}><strong>{productDisplayName(integration.from)} → {productDisplayName(integration.to)}</strong><span>{integration.from === 'website' && integration.to === 'ecommerce' ? 'Website presents the business; Ecommerce lets customers browse products and send requests.' : integration.outcome}</span></li>)}</ol> : <p className="form-notice">This demo has one standalone product.</p>}
+                {demoBlueprint.integrations.length ? <ol className="demo-integration-flow">{demoBlueprint.integrations.map((integration) => <li key={`${integration.from}-${integration.to}`}><strong>{productDisplayName(integration.from)} → {productDisplayName(integration.to)}</strong><span>{integration.from === 'website' && integration.to === 'ecommerce' ? 'Website presents the business; Ecommerce lets customers browse products and send requests.' : integration.outcome}</span></li>)}</ol> : <p className="form-notice">This workspace has one standalone product.</p>}
               </details>
               <details className="compact-disclosure client-preparation-handoff">
                 <summary><span>Use client data</span><small>One local step</small></summary>
                 <div className="client-preparation-picker">
-                  <div><strong>Download ready files or choose client files.</strong><p>Selected product templates are included. Missing files keep sample data.</p><small>Accepted: shop.csv, plant.csv, website.csv, ecommerce.csv (512 KB each).</small></div>
+                  <div><strong>Download ready files or choose client files.</strong><p>Selected product templates are included. Missing files keep template data.</p><small>Accepted: shop.csv, plant.csv, website.csv, ecommerce.csv (512 KB each).</small></div>
                   <div className="client-preparation-actions">
                     {clientCsvStarterPack ? <a className="core-button" download={clientCsvStarterPack.filename} href={clientCsvStarterPackDownloadHref}>Download CSV starter pack</a> : null}
                     <label className={`core-button primary${preparingClientFiles ? ' disabled' : ''}`}>
@@ -2116,7 +2035,7 @@ export function SettingsPage() {
               </details>
               {preparedArtifact ? <section aria-label="Private client package installer" className="setup-template-summary">
                 <div><span className="core-eyebrow">Verified private package</span><strong>Review and install locally.</strong><small>Data stays in this browser. Installation needs your approval.</small></div>
-                <div className="template-contract"><span>Founder approval</span><strong>{preparedArtifact.products.length} product{preparedArtifact.products.length === 1 ? '' : 's'} · {preparedArtifact.products.reduce((total, product) => total + product.rowCount, 0)} rows to review</strong><small>{preparedArtifact.controls.containsSampleFixtures ? 'Includes sample data. Review before delivery.' : 'Client CSV data. Review before delivery.'}</small></div>
+                <div className="template-contract"><span>Founder approval</span><strong>{preparedArtifact.products.length} product{preparedArtifact.products.length === 1 ? '' : 's'} · {preparedArtifact.products.reduce((total, product) => total + product.rowCount, 0)} rows to review</strong><small>{preparedArtifact.controls.containsSampleFixtures ? 'Includes template data. Review before delivery.' : 'Client CSV data. Review before delivery.'}</small></div>
                 <div style={{ gridColumn: '1 / -1' }}>
                   <details className="compact-disclosure"><summary><span>Review exact package</span><small>{preparedArtifact.bundleDigest.slice(0, 22)}...</small></summary><ol>{preparedArtifact.review.checklist.map((item) => <li key={item}>{item}</li>)}</ol><code>{preparedArtifact.review.confirmation}</code></details>
                   <label>Paste the exact approval phrase<input autoComplete="off" disabled={Boolean(managedIdentity || preparedBusyProduct)} onChange={(event) => setPreparedConfirmation(event.target.value)} spellCheck={false} value={preparedConfirmation} /></label>
@@ -2126,7 +2045,7 @@ export function SettingsPage() {
                     const applied = preparedAppliedProducts.has(product.product)
                     const busy = preparedBusyProduct === product.product
                     const blocked = preparedBlockedProduct === product.product
-                    return <section className="demo-solution-card" data-selected key={product.product}><div><strong>{product.label}</strong><small>{busy ? 'Installing now...' : applied ? `Installed locally · ${product.sourceMode === 'client_csv' ? 'client CSV' : 'sample data'}` : blocked ? 'Existing work needs a decision' : `${product.rowCount} rows · ${product.sourceMode === 'client_csv' ? 'client CSV' : 'prepared sample'}`}</small></div>{applied || blocked ? <Link className="core-button" to={product.demoPath}>{blocked ? 'Review existing work' : bi('Open')}</Link> : null}</section>
+                    return <section className="demo-solution-card" data-selected key={product.product}><div><strong>{product.label}</strong><small>{busy ? 'Installing now...' : applied ? `Installed locally · ${product.sourceMode === 'client_csv' ? 'client CSV' : 'template data'}` : blocked ? 'Existing work needs a decision' : `${product.rowCount} rows · ${product.sourceMode === 'client_csv' ? 'client CSV' : 'prepared template'}`}</small></div>{applied || blocked ? <Link className="core-button" to={product.demoPath}>{blocked ? 'Review existing work' : bi('Open')}</Link> : null}</section>
                   })}</div>
                   <p className="form-notice" aria-live="polite">{preparedNotice}</p>
                   {preparedBlockedEntry ? <div className="settings-step-actions" aria-label="Blocked installation recovery"><span>Keep the existing {preparedBlockedEntry.label} work, or use the recoverable reset controls before retrying.</span><div className="setup-action-group"><Link className="core-button" to={preparedBlockedEntry.demoPath}>Review {preparedBlockedEntry.label}</Link><a className="core-button primary" href="#controls">Open restore or reset controls</a></div></div> : null}
@@ -2139,8 +2058,8 @@ export function SettingsPage() {
               })}</div></details>
             </section> : null}
           </>
-          {demoBlueprint && demoDataSetupOpen ? <section className="demo-data-setup" id="client-data-setup"><div><span className="core-eyebrow">Client data</span><h3>Load data when ready</h3><p>The working sample is available first. Import the client's matching CSV only when you have it.</p></div>{runtime.status === 'enterprise' && !managedIdentity ? <p className="form-notice" role="status">{managedIdentitySettled ? <Link to={`/login?product=${selectedProduct.slug}`}>Login to import data</Link> : 'Loading your account...'}</p> : <Suspense fallback={<p className="form-notice" role="status">Loading the client data template...</p>}><ClientDataOnboarding initiallyOpen managedIdentity={managedIdentity} onProgress={recordDemoProductProgress} owner={setup.owner} plantIndustryPackId={setup.product === 'production' ? plantIndustryPackId : undefined} product={setup.product} productName={selectedProduct.name} productSlug={selectedProduct.slug} shopIndustryPackId={setup.product === 'commerce' ? shopIndustryPackId : undefined} workflowTemplateId={selectedTemplate.id} workspace={setup.workspace} /></Suspense>}</section> : null}
-          {demoBlueprint && demoDataSetupOpen ? <div className="settings-step-actions"><span>Optional: add measurable success criteria after the demo works.</span><div className="setup-action-group"><button className="text-link" disabled={!workflowReady} onClick={() => chooseSettingsStep('success')} type="button">Add success criteria</button></div></div> : null}
+          {demoBlueprint && demoDataSetupOpen ? <section className="demo-data-setup" id="client-data-setup"><div><span className="core-eyebrow">Client data</span><h3>Load data when ready</h3><p>The workspace template is ready first. Import the client's matching CSV only when you have it.</p></div>{runtime.status === 'enterprise' && !managedIdentity ? <p className="form-notice" role="status">{managedIdentitySettled ? <Link to={`/login?product=${selectedProduct.slug}`}>Login to import data</Link> : 'Loading your account...'}</p> : <Suspense fallback={<p className="form-notice" role="status">Loading the client data template...</p>}><ClientDataOnboarding initiallyOpen managedIdentity={managedIdentity} onProgress={recordDemoProductProgress} owner={setup.owner} plantIndustryPackId={setup.product === 'production' ? plantIndustryPackId : undefined} product={setup.product} productName={selectedProduct.name} productSlug={selectedProduct.slug} shopIndustryPackId={setup.product === 'commerce' ? shopIndustryPackId : undefined} workflowTemplateId={selectedTemplate.id} workspace={setup.workspace} /></Suspense>}</section> : null}
+          {demoBlueprint && demoDataSetupOpen ? <div className="settings-step-actions"><span>Optional: add measurable success criteria after the workflow works.</span><div className="setup-action-group"><button className="text-link" disabled={!workflowReady} onClick={() => chooseSettingsStep('success')} type="button">Add success criteria</button></div></div> : null}
           </fieldset>
           <fieldset className="settings-step-fields" disabled={settingsStep !== 'success'} hidden={settingsStep !== 'success'}>
           <div className="template-contract settings-workflow-summary"><span>{productDisplayName(setup.product)}</span><strong>{setup.workspace || 'Unnamed workspace'}</strong><small>{selectedTemplate.name} - {setup.owner || 'Owner needed'}</small></div>
@@ -2149,15 +2068,15 @@ export function SettingsPage() {
           <div className="form-row pilot-text-row"><label>Human authority boundary<textarea maxLength={240} required value={setup.authorityBoundary} onChange={(event) => updateSetup({ authorityBoundary: event.target.value })} placeholder="Which actions need owner approval?" /></label><label>Acceptance evidence<textarea maxLength={240} required value={setup.acceptanceEvidence} onChange={(event) => updateSetup({ acceptanceEvidence: event.target.value })} placeholder="What proves the pilot works?" /></label></div>
           <div className="settings-step-actions"><button className="text-link" onClick={() => chooseSettingsStep('workflow')} type="button">{bi('Back')}</button><button className="core-button primary" type="submit">{bi('Save client setup')}</button></div>
           {setup.savedAt ? <>
-            <div className="setup-complete"><div><strong>Trial plan saved.</strong><small>Your AI memory preview is ready.</small></div><div className="setup-complete-actions"><Link className="core-button" to={setupProductPreviewPath(setup.product)}>Open {productDisplayName(setup.product)}</Link><a className="core-button" download={aiMemoryFilename} href={aiMemoryHref}>Download AI memory</a>{managedTrialProofReady ? <a className="core-button primary" href={managedTrialRequestUrl(setup.product, selectedTemplate.id, managedTrialPrefill)}>Request managed AI</a> : <a className="core-button primary" href={managedTrialProofActionPath}>{managedTrialProofActionLabel}</a>}</div></div>
-            <section aria-label="AI memory preview" className="ai-memory-preview">
-              <div className="ai-memory-preview-heading"><div><span className="core-eyebrow">AI memory preview</span><h3>{selectedProduct.name} context is {aiMemoryReadinessScore}% ready</h3><p>SuperMega summarizes business goals, source counts, owner choices, and reviewed decisions. Raw product records stay out of this preview.</p></div><strong>{aiMemoryReadyGateCount}/{aiMemoryReadinessGates.length} gates</strong></div>
+            <div className="setup-complete"><div><strong>Workspace plan saved.</strong><small>Your AI context summary is ready.</small></div><div className="setup-complete-actions"><Link className="core-button" to={setupProductPreviewPath(setup.product)}>Open {productDisplayName(setup.product)}</Link><a className="core-button" download={aiMemoryFilename} href={aiMemoryHref}>Download AI context</a>{managedTrialProofReady ? <a className="core-button primary" href={managedTrialRequestUrl(setup.product, selectedTemplate.id, managedTrialPrefill)}>Request managed AI</a> : <a className="core-button primary" href={managedTrialProofActionPath}>{managedTrialProofActionLabel}</a>}</div></div>
+            <section aria-label="AI context summary" className="ai-memory-preview">
+              <div className="ai-memory-preview-heading"><div><span className="core-eyebrow">AI context</span><h3>{selectedProduct.name} context is {aiMemoryReadinessScore}% ready</h3><p>SuperMega summarizes business goals, source counts, owner choices, and reviewed decisions. Raw product records stay out of this summary.</p></div><strong>{aiMemoryReadyGateCount}/{aiMemoryReadinessGates.length} gates</strong></div>
               <div className="ai-memory-preview-rows">{aiMemoryRows.map(([label, value, detail]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{detail}</em></span>)}</div>
-              <p className="ai-memory-next"><strong>Next:</strong> {aiMemoryNextMove}. No customer message, payment, stock move, production write, domain publish, managed write, or model training runs from this preview.</p>
+              <p className="ai-memory-next"><strong>Next:</strong> {aiMemoryNextMove}. No customer message, payment, stock move, production write, domain publish, managed write, or model training runs from this screen.</p>
             </section>
           </> : null}
           </fieldset>
-          <p className="form-notice" aria-live="polite">{notice || (setup.savedAt ? `Last saved ${formatTime(setup.savedAt)}` : setup.startedAt ? `Guided ${selectedTemplate.name} sample started.` : 'Draft stays local.')}</p>
+          <p className="form-notice" aria-live="polite">{notice || (setup.savedAt ? `Last saved ${formatTime(setup.savedAt)}` : setup.startedAt ? `${selectedTemplate.name} workspace started.` : 'Draft stays local.')}</p>
         </form>
       </div>
       {setup.savedAt ? <PilotOutcomePanel metric={pilotOutcomeMetric} onAccepted={recordAcceptedPilotOutcomeDecision} onChanged={refreshPilotOutcome} report={pilotOutcomeReport} setup={pilotOutcomeSetup} /> : null}
@@ -2182,7 +2101,7 @@ export function SettingsPage() {
         </div>
         {managedPilotBrief ? <div className="premium-pilot-brief"><div><span className="core-eyebrow">Managed company brief</span><h3>{managedPilotBrief.title}</h3><p>{managedPilotBrief.summary}</p>{operatingLearning ? <div className="premium-pilot-learning"><span className="core-eyebrow">AI learned</span><strong>{operatingLearning.label}</strong><small>{operatingLearning.detail}</small></div> : null}</div><div className="premium-pilot-next"><small>Reviewed next move</small><strong>{managedPilotBrief.nextAction.label}</strong><em>{managedPilotBrief.boundary}</em></div></div> : null}
         <ManagedContextConsent approvedContext={approvedAiContextExport} identity={managedIdentity} onRetained={() => void verifyManagedPilot()} />
-        {runtime.status === 'enterprise' && managedTrialAuthConfigured() ? managedIdentity ? <div className="premium-pilot-actions"><button className="core-button" disabled={managedPilotBusy} onClick={() => void verifyManagedPilot()} type="button">{managedPilotBusy && !managedPilotBrief ? 'Verifying...' : 'Verify context'}</button>{managedPilotBrief ? <><Link className="core-button" to={managedPilotBrief.nextAction.path}>{managedPilotBrief.nextAction.label}</Link><button className="core-button primary" disabled={managedPilotBusy || premiumPilotProofKept} onClick={() => void keepManagedPilotProof()} type="button">{premiumPilotProofKept ? 'Checkpoint kept' : managedPilotBusy ? 'Keeping...' : 'Keep learning checkpoint'}</button></> : null}</div> : <form className="premium-pilot-login" onSubmit={(event) => void connectManagedWorkspace(event)}><div><span className="core-eyebrow">Connect company account</span><strong>Verify this company, not a generic demo.</strong></div>{managedWorkspaceSignIn ? <label>Company<select onChange={(event) => setManagedWorkspace(event.target.value)} required value={managedWorkspace}>{managedWorkspaceSignIn.workspaces.map((workspace) => <option key={workspace.workspaceId} value={workspace.workspaceId}>{workspace.label} - {workspace.access}</option>)}</select></label> : <><label>Email<input autoComplete="username" maxLength={160} onChange={(event) => setManagedEmail(event.target.value)} required type="email" value={managedEmail} /></label><label>Password<input autoComplete="current-password" minLength={8} onChange={(event) => setManagedPassword(event.target.value)} required type="password" value={managedPassword} /></label></>}<button className="core-button primary" disabled={managedBusy} type="submit">{managedBusy ? 'Checking...' : managedWorkspaceSignIn ? bi('Open company') : bi('Find my company')}</button></form> : <div className="premium-pilot-actions">{managedTrialProofReady ? <a className="core-button primary" href={managedTrialRequestUrl(setup.product, selectedTemplate.id, managedTrialPrefill)}>Request managed pilot</a> : <a className="core-button primary" href={managedTrialProofActionPath}>{managedTrialProofActionLabel}</a>}</div>}
+        {runtime.status === 'enterprise' && managedTrialAuthConfigured() ? managedIdentity ? <div className="premium-pilot-actions"><button className="core-button" disabled={managedPilotBusy} onClick={() => void verifyManagedPilot()} type="button">{managedPilotBusy && !managedPilotBrief ? 'Verifying...' : 'Verify context'}</button>{managedPilotBrief ? <><Link className="core-button" to={managedPilotBrief.nextAction.path}>{managedPilotBrief.nextAction.label}</Link><button className="core-button primary" disabled={managedPilotBusy || premiumPilotProofKept} onClick={() => void keepManagedPilotProof()} type="button">{premiumPilotProofKept ? 'Checkpoint kept' : managedPilotBusy ? 'Keeping...' : 'Keep learning checkpoint'}</button></> : null}</div> : <form className="premium-pilot-login" onSubmit={(event) => void connectManagedWorkspace(event)}><div><span className="core-eyebrow">Connect company account</span><strong>Verify the company workspace.</strong></div>{managedWorkspaceSignIn ? <label>Company<select onChange={(event) => setManagedWorkspace(event.target.value)} required value={managedWorkspace}>{managedWorkspaceSignIn.workspaces.map((workspace) => <option key={workspace.workspaceId} value={workspace.workspaceId}>{workspace.label} - {workspace.access}</option>)}</select></label> : <><label>Email<input autoComplete="username" maxLength={160} onChange={(event) => setManagedEmail(event.target.value)} required type="email" value={managedEmail} /></label><label>Password<input autoComplete="current-password" minLength={8} onChange={(event) => setManagedPassword(event.target.value)} required type="password" value={managedPassword} /></label></>}<button className="core-button primary" disabled={managedBusy} type="submit">{managedBusy ? 'Checking...' : managedWorkspaceSignIn ? bi('Open company') : bi('Find my company')}</button></form> : <div className="premium-pilot-actions">{managedTrialProofReady ? <a className="core-button primary" href={managedTrialRequestUrl(setup.product, selectedTemplate.id, managedTrialPrefill)}>Request managed activation</a> : <a className="core-button primary" href={managedTrialProofActionPath}>{managedTrialProofActionLabel}</a>}</div>}
         {managedNotice || managedPilotNotice ? <p className="form-notice" role="status">{managedPilotNotice || managedNotice}</p> : null}
         <p className="premium-pilot-boundary">Review only. No customer send, payment, stock move, production write, domain publish, or model training runs from this pilot.</p>
       </section> : null}
@@ -2193,7 +2112,7 @@ export function SettingsPage() {
           {restoreNotice ? <p className="form-notice settings-restore-point" role="status">{restoreNotice}</p> : null}
           <section className="core-panel system-boundary-panel">
             <div className="panel-head"><div><span className="core-eyebrow">System boundary</span><h2>{runtime.status === 'enterprise' ? 'Managed mode ready' : 'Managed mode locked'}</h2></div><RuntimeBadge status={runtime.status} /></div>
-            {managedIdentity ? <div className="template-contract"><span>Company account</span><strong>{managedIdentity.email}</strong><small>Named-user access verified in Premium pilot</small><button className="text-link" disabled={managedBusy} onClick={() => void disconnectManagedWorkspace()} type="button">Disconnect</button></div> : runtime.status === 'enterprise' && managedTrialAuthConfigured() && !setup.savedAt ? <form className="core-form compact-form managed-recovery-login" onSubmit={(event) => void connectManagedWorkspace(event)}><span className="core-eyebrow">Company access recovery</span><p className="authority-note">Sign in and SuperMega will find the active companies assigned to you.</p>{managedWorkspaceSignIn ? <label>Company<select onChange={(event) => setManagedWorkspace(event.target.value)} required value={managedWorkspace}>{managedWorkspaceSignIn.workspaces.map((workspace) => <option key={workspace.workspaceId} value={workspace.workspaceId}>{workspace.label} - {workspace.access}</option>)}</select></label> : <><label>Email<input autoComplete="username" maxLength={160} onChange={(event) => setManagedEmail(event.target.value)} required type="email" value={managedEmail} /></label><label>Password<input autoComplete="current-password" minLength={8} onChange={(event) => setManagedPassword(event.target.value)} required type="password" value={managedPassword} /></label></>}<button className="core-button primary" disabled={managedBusy} type="submit">{managedBusy ? 'Checking...' : managedWorkspaceSignIn ? bi('Open company') : 'Recover company access'}</button>{managedNotice ? <p className="form-notice" role="status">{managedNotice}</p> : null}</form> : runtime.status === 'enterprise' && managedTrialAuthConfigured() ? <p className="authority-note">Connect through Premium pilot after saving a trial.</p> : null}
+            {managedIdentity ? <div className="template-contract"><span>Company account</span><strong>{managedIdentity.email}</strong><small>Named-user access verified in the managed workspace</small><button className="text-link" disabled={managedBusy} onClick={() => void disconnectManagedWorkspace()} type="button">Disconnect</button></div> : runtime.status === 'enterprise' && managedTrialAuthConfigured() && !setup.savedAt ? <form className="core-form compact-form managed-recovery-login" onSubmit={(event) => void connectManagedWorkspace(event)}><span className="core-eyebrow">Company access recovery</span><p className="authority-note">Sign in and SuperMega will find the active companies assigned to you.</p>{managedWorkspaceSignIn ? <label>Company<select onChange={(event) => setManagedWorkspace(event.target.value)} required value={managedWorkspace}>{managedWorkspaceSignIn.workspaces.map((workspace) => <option key={workspace.workspaceId} value={workspace.workspaceId}>{workspace.label} - {workspace.access}</option>)}</select></label> : <><label>Email<input autoComplete="username" maxLength={160} onChange={(event) => setManagedEmail(event.target.value)} required type="email" value={managedEmail} /></label><label>Password<input autoComplete="current-password" minLength={8} onChange={(event) => setManagedPassword(event.target.value)} required type="password" value={managedPassword} /></label></>}<button className="core-button primary" disabled={managedBusy} type="submit">{managedBusy ? 'Checking...' : managedWorkspaceSignIn ? bi('Open company') : 'Recover company access'}</button>{managedNotice ? <p className="form-notice" role="status">{managedNotice}</p> : null}</form> : runtime.status === 'enterprise' && managedTrialAuthConfigured() ? <p className="authority-note">Connect a company account after saving the workspace plan.</p> : null}
             <div className="readiness-list" aria-label="Go-live readiness">{activationRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
             <div className="readiness-list" aria-label="AI learning readiness">{learningRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
             <div className="learning-plan" aria-label="Premium company learning plan">
@@ -2236,13 +2155,13 @@ export function SettingsPage() {
                   <div aria-label="Order queue owner approval packet" className="context-quality-rows">{ecommerceOrderQueueApprovalRows.map(([label, value, detail]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{detail}</em></span>)}</div>
                   <div aria-label="Shop queue import plan" className="context-quality-rows">{ecommerceOrderQueueImportPlanRows.map(([label, value, detail]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{detail}</em></span>)}</div>
                   <div aria-label="Shop queue apply preflight" className="context-quality-rows">{ecommerceOrderQueueApplyPreflightRows.map(([label, value, detail]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{detail}</em></span>)}</div>
-                  <div className="learning-plan-actions"><button className="core-button" onClick={loadSampleEcommerceOrderReviewPacket} type="button">{bi('Load sample order packet')}</button><button className="core-button" disabled={!ecommerceOrderReviewPacketText.trim()} onClick={reviewEcommerceOrderReviewPacket} type="button">Check order packet locally</button><button className="core-button" disabled={!managedIdentity || !ecommerceOrderQueueReadinessPacket || ecommerceOrderQueueServerBusy} onClick={() => void runManagedEcommerceOrderQueueCheck()} type="button">{ecommerceOrderQueueServerBusy ? 'Checking managed queue...' : 'Run managed queue check'}</button><button className="core-button" disabled={!ecommerceOrderQueueReadinessPacket} onClick={downloadEcommerceOrderQueueReadinessPacket} type="button">Download queue packet</button>{ecommerceOrderQueueApprovalPacket ? <a className="core-button" download={ecommerceOrderQueueApprovalFilename} href={ecommerceOrderQueueApprovalHref}>Download approval packet</a> : <button className="core-button" disabled type="button">Download approval packet</button>}<button className="core-button" disabled={!managedIdentity || !ecommerceOrderQueueApprovalPacket || ecommerceOrderQueueApprovalBusy} onClick={() => void requestManagedEcommerceOrderQueueApproval()} type="button">{ecommerceOrderQueueApprovalBusy ? 'Recording approval...' : 'Record owner approval request'}</button><button className="core-button" disabled={!managedIdentity || !ecommerceOrderQueueApprovalPacket || ecommerceOrderQueueImportPlanBusy} onClick={() => void prepareManagedEcommerceOrderQueueImportPlan()} type="button">{ecommerceOrderQueueImportPlanBusy ? 'Preparing plan...' : 'Prepare import plan'}</button><button className="core-button" disabled={!managedIdentity || !ecommerceOrderQueueImportPlan || !approvedEcommerceQueueApproval || ecommerceOrderQueueApplyPreflightBusy} onClick={() => void runManagedEcommerceOrderQueueApplyPreflight()} type="button">{ecommerceOrderQueueApplyPreflightBusy ? 'Checking apply...' : 'Run apply preflight'}</button><button className="text-link" disabled={!ecommerceOrderReviewPacketText.trim()} onClick={clearEcommerceOrderReviewPacketReview} type="button">{bi('Clear order packet')}</button></div>
+                  <div className="learning-plan-actions"><button className="core-button" disabled={!ecommerceOrderReviewPacketText.trim()} onClick={reviewEcommerceOrderReviewPacket} type="button">Check order packet locally</button><button className="core-button" disabled={!managedIdentity || !ecommerceOrderQueueReadinessPacket || ecommerceOrderQueueServerBusy} onClick={() => void runManagedEcommerceOrderQueueCheck()} type="button">{ecommerceOrderQueueServerBusy ? 'Checking managed queue...' : 'Run managed queue check'}</button><button className="core-button" disabled={!ecommerceOrderQueueReadinessPacket} onClick={downloadEcommerceOrderQueueReadinessPacket} type="button">Download queue packet</button>{ecommerceOrderQueueApprovalPacket ? <a className="core-button" download={ecommerceOrderQueueApprovalFilename} href={ecommerceOrderQueueApprovalHref}>Download approval packet</a> : <button className="core-button" disabled type="button">Download approval packet</button>}<button className="core-button" disabled={!managedIdentity || !ecommerceOrderQueueApprovalPacket || ecommerceOrderQueueApprovalBusy} onClick={() => void requestManagedEcommerceOrderQueueApproval()} type="button">{ecommerceOrderQueueApprovalBusy ? 'Recording approval...' : 'Record owner approval request'}</button><button className="core-button" disabled={!managedIdentity || !ecommerceOrderQueueApprovalPacket || ecommerceOrderQueueImportPlanBusy} onClick={() => void prepareManagedEcommerceOrderQueueImportPlan()} type="button">{ecommerceOrderQueueImportPlanBusy ? 'Preparing plan...' : 'Prepare import plan'}</button><button className="core-button" disabled={!managedIdentity || !ecommerceOrderQueueImportPlan || !approvedEcommerceQueueApproval || ecommerceOrderQueueApplyPreflightBusy} onClick={() => void runManagedEcommerceOrderQueueApplyPreflight()} type="button">{ecommerceOrderQueueApplyPreflightBusy ? 'Checking apply...' : 'Run apply preflight'}</button><button className="text-link" disabled={!ecommerceOrderReviewPacketText.trim()} onClick={clearEcommerceOrderReviewPacketReview} type="button">{bi('Clear order packet')}</button></div>
                 </div>
                 <div aria-label="Ecommerce go-live file review" className="learning-plan-agent context-quality-panel">
                   <div><span className="core-eyebrow">Ecommerce go-live file</span><h3>Review before company setup</h3><p>Paste the downloaded Ecommerce go-live JSON. The browser validates schema, source, queue, and forbidden actions locally; no import, managed activation, Shop write, payment, delivery, stock, or customer action runs.</p></div>
                   <label className="packet-review-field">Go-live file JSON<textarea maxLength={12000} onChange={(event) => setEcommerceActivationPacketText(event.target.value)} placeholder="Paste supermega.ecommerce.managed_store_activation_packet.v1 JSON" rows={5} value={ecommerceActivationPacketText} /></label>
                   <div className="context-quality-rows">{ecommerceActivationPacketReview.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{label === 'Boundary' ? 'Review only; production setup still requires managed proof.' : 'Local packet check'}</em></span>)}</div>
-                  <div className="learning-plan-actions"><button className="core-button" onClick={loadSampleEcommerceActivationPacket} type="button">{bi('Load sample packet')}</button><button className="core-button" disabled={!ecommerceActivationPacketText.trim()} onClick={reviewEcommerceActivationPacket} type="button">Review packet locally</button><button className="text-link" disabled={!ecommerceActivationPacketText.trim()} onClick={clearEcommerceActivationPacketReview} type="button">{bi('Clear packet')}</button></div>
+                  <div className="learning-plan-actions"><button className="core-button" disabled={!ecommerceActivationPacketText.trim()} onClick={reviewEcommerceActivationPacket} type="button">Review packet locally</button><button className="text-link" disabled={!ecommerceActivationPacketText.trim()} onClick={clearEcommerceActivationPacketReview} type="button">{bi('Clear packet')}</button></div>
                 </div>
               </> : null}
               <div aria-label={`${selectedProduct.name} activation journey`} className="learning-plan-agent">
@@ -2257,11 +2176,11 @@ export function SettingsPage() {
                 <div><span className="core-eyebrow">Scheduler go-live</span><h3>Automation stays blocked until proof passes</h3><p>Hosted workers can run only after signed evidence, protected secrets, worker allowlist, budget grants, and no-redirect checks are ready.</p></div>
                 <div className="managed-request-rows">{schedulerActivationRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
               </div>
-              <div aria-label="Managed trial request packet" className="learning-plan-agent managed-request-panel">
-                <div><span className="core-eyebrow">Managed trial request</span><h3>What support needs</h3><p>This local activation packet includes the exact owner-approved context summary and digest. Raw records remain excluded; managed writes stay locked.</p></div>
+              <div aria-label="Managed activation request packet" className="learning-plan-agent managed-request-panel">
+                <div><span className="core-eyebrow">Managed activation request</span><h3>What support needs</h3><p>This local activation packet includes the exact owner-approved context summary and digest. Raw records remain excluded; managed writes stay locked.</p></div>
                 <div className="managed-request-rows">{managedTrialRequestRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
               </div>
-              <div className="learning-plan-actions">{approvedAiContextExport ? <a className="core-button" download={approvedAiContextExportFilename} href={approvedAiContextExportHref}>Download approved context</a> : <button className="core-button" disabled type="button">Review context above</button>}{setup.savedAt ? <>{approvedAiContextExport ? <a className="core-button" download={managedTrialRequestFilename} href={managedTrialRequestHref}>Download managed activation packet</a> : <button className="core-button" disabled type="button">Approve context first</button>}{managedTrialProofReady ? <a className="core-button primary" href={managedTrialRequestUrl(setup.product, selectedTemplate.id, managedTrialPrefill)}>Request managed trial</a> : <a className="core-button primary" href={managedTrialProofActionPath}>{managedTrialProofActionLabel}</a>}</> : <button className="core-button primary" disabled type="button">Save trial first</button>}</div>
+              <div className="learning-plan-actions">{approvedAiContextExport ? <a className="core-button" download={approvedAiContextExportFilename} href={approvedAiContextExportHref}>Download approved context</a> : <button className="core-button" disabled type="button">Review context above</button>}{setup.savedAt ? <>{approvedAiContextExport ? <a className="core-button" download={managedTrialRequestFilename} href={managedTrialRequestHref}>Download managed activation packet</a> : <button className="core-button" disabled type="button">Approve context first</button>}{managedTrialProofReady ? <a className="core-button primary" href={managedTrialRequestUrl(setup.product, selectedTemplate.id, managedTrialPrefill)}>Request managed activation</a> : <a className="core-button primary" href={managedTrialProofActionPath}>{managedTrialProofActionLabel}</a>}</> : <button className="core-button primary" disabled type="button">Save workspace first</button>}</div>
             </div>
             <Suspense fallback={<p className="form-notice" role="status">Loading managed activation plan...</p>}><ManagedActivationRunbook runtime={runtime} /></Suspense>
             {runtime.status !== 'enterprise' ? <ul className="requirement-list">{(runtime.requirements.length ? runtime.requirements : ['Configure managed tenant persistence.', 'Verify production identity and source coverage.']).map((requirement) => <li key={requirement}>{requirement}</li>)}</ul> : null}
@@ -2270,12 +2189,12 @@ export function SettingsPage() {
           <div className="settings-control-stack">
             <Suspense fallback={<section className="core-panel company-backup-panel"><p className="form-notice" role="status">Loading encrypted company backup...</p></section>}><CompanyBackupPanel /></Suspense>
             <section className="core-panel trial-control-panel">
-              <div><span className="core-eyebrow">Safety and recovery</span><h2>Save, export, restore, or reset.</h2><p>Save a restore point before a demo. Export complete local evidence for durable recovery. Reset clears current Shop, Plant, Website, Ecommerce, owner-control, outcome, setup, unfinished order drafts, and local AI-memory records.</p></div>
+              <div><span className="core-eyebrow">Safety and recovery</span><h2>Save, export, restore, or reset.</h2><p>Save a restore point before major changes. Export complete local evidence for durable recovery. Reset clears current Shop, Plant, Website, Ecommerce, owner-control, outcome, setup, unfinished order drafts, and local AI-memory records.</p></div>
               <div className="trial-actions">
                 <button className="core-button" onClick={saveLocalRestorePoint} type="button">{bi('Save restore point')}</button>
                 <a className="core-button" download={evidenceFilename} href={evidenceHref}>{bi('Export full evidence')}</a>
                 <label className="core-button">Load evidence backup<input accept=".json,application/json" className="sr-only" onChange={(event) => { const file = event.currentTarget.files?.[0] ?? null; event.currentTarget.value = ''; void loadEvidenceRestorePoint(file) }} type="file" /></label>
-                {resetArmed ? <><button className="text-link" disabled={resetBusy} onClick={() => setResetArmed(false)} type="button">{bi('Cancel')}</button><button className="core-button danger" disabled={resetBusy} onClick={() => void resetDemoWorkspace()} type="button">{resetBusy ? 'Resetting...' : 'Confirm reset'}</button></> : <button className="text-link danger-text" onClick={() => setResetArmed(true)} type="button">Reset local trial</button>}
+                {resetArmed ? <><button className="text-link" disabled={resetBusy} onClick={() => setResetArmed(false)} type="button">{bi('Cancel')}</button><button className="core-button danger" disabled={resetBusy} onClick={() => void resetDemoWorkspace()} type="button">{resetBusy ? 'Resetting...' : 'Confirm reset'}</button></> : <button className="text-link danger-text" onClick={() => setResetArmed(true)} type="button">Reset local workspace</button>}
               </div>
             </section>
             {runtime.status !== 'enterprise' ? <section className="core-panel company-backup-panel">

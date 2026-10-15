@@ -82,7 +82,7 @@ test('Ecommerce checkout proof explicitly opens the workspace and requires local
   const source = await readFile(new URL('../showroom/src/products/ecommerce/EcommerceProduct.tsx', import.meta.url), 'utf8')
   const needles = expectedText({ surface: 'ecommerce' })
   for (const needle of needles) assert.ok(source.includes(needle))
-  assert.ok(needles.includes('Browse your catalog and take order requests. Requests stay on this device until Shop review.'))
+  assert.ok(needles.includes('Review customer requests on this device. Requests stay on this device until Shop review.'))
   assert.ok(needles.includes('Open customer ordering'))
   assert.ok(!needles.some(needle => /sample|demo|preview options/i.test(needle)))
 })
@@ -528,9 +528,9 @@ test('builds and validates the exact twenty-eight-case technical preview proof',
   ]) assert.equal(paymentPrioritySource.split(sourceBinding).length - 1, 1)
   const publicExpectedText = await loadPublicHomepageExpectedText()
   assert.deepEqual(publicExpectedText, [
-    'Your business.',
-    'Working together.',
-    'Shop. Sites. Commerce. One SuperMega account.',
+    'Run the business.',
+    'Without the busywork.',
+    'Run in-store sales, your website and online orders from one clear platform.',
     'Login',
   ])
   assert.deepEqual(
@@ -541,11 +541,11 @@ test('builds and validates the exact twenty-eight-case technical preview proof',
   changedManifest.company.headline = 'Current source-owned homepage claim.'
   assert.equal(
     derivePublicHomepageExpectedText({ manifest: changedManifest, generatorSource })[0],
-    'Your business.',
+    'Run the business.',
   )
   for (const binding of [
-    '<h1>Your business.<br>Working together.</h1>',
-    '<p class="lede">Manage sales and stock. Publish your website. Take orders online.</p>',
+    '<h1>Run the business.<br>Without the busywork.</h1>',
+    '<p class="lede">Run in-store sales, your website and online orders from one clear platform.</p>',
     'href="https://app.supermega.dev/login">Login</a>',
   ]) {
     assert.throws(
@@ -1032,8 +1032,7 @@ test('brief proof refuses missing, disabled, unrequired or prematurely enabled c
 
 test('actual brief harness expression rejects unusable DOM controls', async () => {
   const source = await readFile(new URL('./verify_app_entry_rendered.mjs', import.meta.url), 'utf8')
-  const line = source.split('\n').find(line => line.includes('const briefControls = testCase.inspectBusinessBrief'))
-  assert.ok(line)
+  assert.ok(source.includes('(${inspectBusinessBrief.toString()})(document)'))
   async function inspect(change = () => {}, website = false) {
     const field = required => ({ required, value: '', disabled: false, readOnly: false, tabIndex: 0, labels: [{ textContent: 'Field' }], getClientRects: () => [{}], visibility: 'visible' })
     const data = { fields: website ? [field(true), field(true), field(false), field(true), field(true)] : [field(true), field(true), field(false)],
@@ -1041,9 +1040,8 @@ test('actual brief harness expression rejects unusable DOM controls', async () =
     change(data)
     const form = { querySelectorAll: () => data.fields, querySelector: () => data.submit, checkValidity: () => data.valid }
     const document = { querySelector: selector => data.absent ? null : selector === '.website-starter-form' ? (website ? form : null) : (!website ? form : null) }
-    const context = { testCase: { inspectBusinessBrief: true }, cdp: {}, sessionId: 'synthetic', inspectBusinessBrief,
-      evalInPage: async (_cdp, _session, expression) => runInNewContext(expression, { document, getComputedStyle: node => ({ visibility: node.visibility }) }) }
-    return runInNewContext(`(async () => { ${line}; return briefControls })()`, context)
+    return runInNewContext(`(${inspectBusinessBrief.toString()})(document)`,
+      { document, getComputedStyle: node => ({ visibility: node.visibility }) })
   }
   assert.ok(Object.values(await inspect()).every(value => value === true))
   assert.ok(Object.values(await inspect(() => {}, true)).every(value => value === true))

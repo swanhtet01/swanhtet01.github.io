@@ -56,7 +56,7 @@ for (const managed of [false, true]) for (const failure of ['', 'storage', 'beha
     assert.equal(result.delivered, managed ? 1 : 0)
     assert.equal(result.fresh, 'REQUEST')
     assert.equal(result.busy, false)
-    assert.match(result.notice, managed ? /Company Shop inbox and local recovery/ : /saved on this device/)
+    assert.match(result.notice, managed ? /Company Shop inbox and local recovery/ : /saved locally/i)
   })
 }
 for (const failure of ['save', 'delivery']) {
@@ -97,7 +97,7 @@ for (const managed of [false, true]) {
       latestRequest: { id: 'REQUEST', quote: { pimDigest: 'pim' } },
       quoteCurrent: false, receiptCurrent: true, handoffBusy: false, handoffInFlight: { current: false },
       scope: 'local', sourcePreviewDigest: 'digest', preview: {}, activeBuyingState: {},
-      currentCatalog: [], commerceState: {}, checkoutPaymentPolicies: [],
+      currentCatalog: [], commerceState: {}, configuredPaymentPolicies: [], checkoutPaymentPolicies: [],
       setHandoffBusy() {}, setNotice() {}, emitMetric() {}, formatMmk: String,
       buildEcommercePimProjection: async () => ({ pimDigest: 'pim' }),
       prepareEcommerceShopDraftV2: async () => {
@@ -143,10 +143,46 @@ test('saved receipt remains current with an empty cart only for the matching req
   assert.equal(evaluate({ sourcePreviewDigest: 'changed' }), false)
 })
 
+const durableProofStart = source.indexOf('  const managedRequestRetainedByShop =')
+const durableProofEnd = source.indexOf('  const combinedOrderTimeline =', durableProofStart)
+assert.ok(durableProofStart >= 0 && durableProofEnd > durableProofStart)
+const durableProof = source.slice(durableProofStart, durableProofEnd)
+
+test('an exact managed request remains received after session confirmation is gone', () => {
+  const latestRequest = { id: 'REQUEST', idempotencyKey: 'KEY', totalMmk: 100 }
+  const evaluate = ({ managed = true, sessionConfirmed = false, sharedRequests = [] } = {}) => runInNewContext(
+    durableProof + '\n;({ managedRequestRetainedByShop, managedDeliveryConfirmed })',
+    {
+      latestRequest,
+      managedConfirmation: sessionConfirmed ? 'confirmed' : '',
+      managedRequestWasConfirmed: () => sessionConfirmed,
+      sourceStorefront: managed ? { revision: 1, actionId: 'ACTION' } : null,
+      sharedRequests,
+      commerceStorefrontRequestEquals: (left, right) => JSON.stringify(left) === JSON.stringify(right),
+    },
+  )
+
+  const retained = evaluate({ sharedRequests: [latestRequest] })
+  assert.equal(retained.managedRequestRetainedByShop, true)
+  assert.equal(retained.managedDeliveryConfirmed, true)
+  assert.equal(evaluate({ sharedRequests: [{ ...latestRequest, totalMmk: 101 }] }).managedDeliveryConfirmed, false)
+  assert.equal(evaluate({ managed: false, sharedRequests: [latestRequest] }).managedDeliveryConfirmed, false)
+  assert.equal(evaluate({ sessionConfirmed: true }).managedDeliveryConfirmed, true)
+})
+
+test('the current receipt shows one truthful request-to-order progress rail', () => {
+  assert.match(source, /aria-label="Order progress"/)
+  assert.match(source, /Request saved/)
+  assert.match(source, /Received · review needed/)
+  assert.match(source, /Confirmed in Shop/)
+  assert.match(source, /<EcommerceOrderProgress delivered=\{managedDeliveryConfirmed\} \/>/)
+  assert.match(source, /<EcommerceOrderProgress delivered orderId=\{latestRequestOrder\.id\} \/>/)
+})
+
 for (const invalidateAt of ['save', 'delivery']) test(`replaced checkout ignores late ${invalidateAt} completion`, async () => {
   const result = await run({ managed: true, invalidateAt })
   assert.equal(result.cartClears, 0)
   assert.equal(result.fresh, '')
   assert.equal(result.delivered, invalidateAt === 'save' ? 0 : 1)
-  assert.doesNotMatch(result.notice, /Company Shop inbox|saved on this device/)
+  assert.doesNotMatch(result.notice, /Company Shop inbox|saved locally/)
 })

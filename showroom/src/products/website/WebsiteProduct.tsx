@@ -47,6 +47,7 @@ import {
   LEGACY_WEBSITE_STORAGE_KEY,
   listWebsiteRecoveryArchives,
   MAX_WEBSITE_PAGES,
+  pageIssues,
   readinessChecks,
   readWebsiteRecoveryArchive,
   recordWebsiteEvidence,
@@ -67,7 +68,7 @@ import {
 } from './website-model'
 import './website-product.css'
 
-type WebsiteView = 'content' | 'publish'
+type WebsiteView = 'content' | 'inquiries' | 'publish'
 
 type WebsiteEditSessionState = {
   scope: string
@@ -78,8 +79,12 @@ const DEFAULT_NOTICE = 'Website ready to edit. Nothing has been published.'
 
 const viewCopy: Record<WebsiteView, { title: string; copy: string }> = {
   content: {
-    title: 'Edit page',
-    copy: 'Edit one section, review it, then save or discard.',
+    title: 'Pages',
+    copy: 'Build and maintain the pages customers see.',
+  },
+  inquiries: {
+    title: 'Inquiries',
+    copy: 'Capture requests, assign responsibility and record the next decision.',
   },
   publish: {
     title: 'Prepare website file',
@@ -123,7 +128,7 @@ function DownloadWorkspace({
         <ol className="website-download-steps">
           <li>
             <span aria-hidden="true">1</span>
-            <div><strong>Review</strong><p>Go back, then Review page. The layout follows your screen automatically.</p></div>
+            <div><strong>Review</strong><p>Open Website view to check the page on the screen you use every day.</p></div>
           </li>
           <li>
             <span aria-hidden="true">2</span>
@@ -183,6 +188,7 @@ export function WebsiteProduct() {
   const [recoveryFocusRequest, setRecoveryFocusRequest] = useState(0)
   const headingRef = useRef<HTMLHeadingElement>(null)
   const siteSettingsRef = useRef<HTMLDetailsElement>(null)
+  const previousRequestedViewRef = useRef(requestedView)
   useEffect(() => {
     const disclosure = siteSettingsRef.current
     if (!siteSettingsOpen || !disclosure) return
@@ -256,7 +262,11 @@ export function WebsiteProduct() {
   const workingSampleIsCurrent = Boolean(workspace.workingSample
     && workspace.workingSample.contentFingerprint === fingerprint)
   const canReview = !hasUnsavedChanges && !starterAvailable && contentChecksPass
-  const view: WebsiteView = requestedView === 'publish' && canReview ? 'publish' : 'content'
+  const view: WebsiteView = requestedView === 'inquiries'
+    ? 'inquiries'
+    : requestedView === 'publish' && canReview
+      ? 'publish'
+      : 'content'
   // Read once for the life of this screen. The setup component is required to stay free of
   // device reads, so the shell does it and hands the answer down as a prop.
   const [shopTradeId] = useState(readLocalShopBusinessTemplateId)
@@ -264,7 +274,7 @@ export function WebsiteProduct() {
   const starterSetupActive = view === 'content' && starterAvailable && !starterDismissed
   const activeViewCopy = view === 'content' && starterAvailable && surface === 'preview'
     ? {
-        title: 'Website',
+        title: 'Pages',
         copy: 'Edit your pages and download your website.',
       }
     : starterSetupActive
@@ -274,13 +284,15 @@ export function WebsiteProduct() {
       }
     : view === 'content' && surface === 'preview'
     ? {
-        title: hasUnsavedChanges ? 'Unsaved changes' : 'Website',
+        title: hasUnsavedChanges ? 'Unsaved changes' : 'Pages',
         copy: hasUnsavedChanges
           ? 'Your changes are not saved. Return to edit to save or discard them.'
           : selectedPage.stage === 'draft'
-            ? 'This page is saved as a draft. Select Edit page to update it and mark it ready.'
-            : 'Review the selected page. Its layout follows your screen automatically.',
+            ? 'This page is saved as a draft. Select Edit website to update it and mark it ready.'
+            : 'Edit your pages, review inquiries and download your site.',
       }
+    : view === 'inquiries'
+      ? viewCopy.inquiries
     : view === 'publish' && storageMode === 'session-only'
       ? {
           title: 'Your website is ready',
@@ -306,8 +318,8 @@ export function WebsiteProduct() {
           ? 'Saved on this device'
           : 'Session only'
   const websiteSurfaceActionLabel = surface === 'preview'
-    ? 'Edit page'
-    : 'Review page'
+    ? 'Edit website'
+    : 'View website'
   const showWebsiteEditorAction = true
   const visiblePageCount = editorWorkspace.pages.filter((page) => page.navigation.visible).length
   const statusNotice = editConflict
@@ -329,12 +341,12 @@ export function WebsiteProduct() {
   }, [hasUnsavedChanges])
 
   useEffect(() => {
-    document.title = 'Website | SuperMega'
+    document.title = 'Sites | SuperMega'
     window.scrollTo({ top: 0, behavior: 'instant' })
   }, [])
 
   useEffect(() => {
-    if (requestedView === null || requestedView === 'publish') return
+    if (requestedView === null || requestedView === 'publish' || requestedView === 'inquiries') return
     const next = new URLSearchParams(searchParams)
     next.delete('view')
     setSearchParams(next, { replace: true })
@@ -389,6 +401,14 @@ export function WebsiteProduct() {
   }, [headingFocusRequest])
 
   useEffect(() => {
+    if (previousRequestedViewRef.current === requestedView) return
+    previousRequestedViewRef.current = requestedView
+    setSurface('work')
+    setSiteSettingsOpen(false)
+    setHeadingFocusRequest((current) => current + 1)
+  }, [requestedView])
+
+  useEffect(() => {
     if (recoveryFocusRequest > 0) recoveryPrimaryActionRef.current?.focus()
   }, [recoveryFocusRequest])
 
@@ -415,6 +435,7 @@ export function WebsiteProduct() {
     }
     const next = new URLSearchParams(searchParams)
     if (nextView === 'publish') next.set('view', 'publish')
+    else if (nextView === 'inquiries') next.set('view', 'inquiries')
     else next.delete('view')
     setSearchParams(next)
     setSurface('work')
@@ -710,7 +731,7 @@ export function WebsiteProduct() {
 
   function startWithBusiness(brief: WebsiteStarterBrief) {
     if (!starterAvailable) {
-      setNotice('The Website example has already changed. Nothing was replaced.')
+      setNotice('This setup has already changed. Nothing was replaced.')
       return false
     }
     const staged = stageWorkspace((current) => (
@@ -722,14 +743,14 @@ export function WebsiteProduct() {
     }
     setSelectedPageId(staged.workspace.selectedPageId)
     setStarterDismissed(true)
-    openContentSurface('preview')
+    openContentSurface('work')
     recordBehaviorSignal(window.localStorage, {
       event: 'agent_job_chosen',
       product: 'website',
       route: location.pathname + location.search,
       detail: `Website starter brief generated: ${brief.businessName}`,
     })
-    setNotice('Your three-page site is ready. Review every page, then Save or Discard.')
+    setNotice('Review Home, mark each page ready, then save.')
     return true
   }
 
@@ -894,16 +915,15 @@ export function WebsiteProduct() {
   }
 
   const failingContentChecks = checks.filter((check) => !check.id.startsWith('evidence-') && !check.passed)
-  const readyBuyerCtaPages = workspace.pages.filter((page) => page.stage === 'ready'
-    && Boolean(page.hero.ctaLabel.trim())
-    && Boolean(page.hero.ctaHref.trim()))
+  const selectedPageIssues = pageIssues(selectedPage)
+  const nextDraftPage = editorWorkspace.pages.find((page) => page.id !== selectedPage.id && page.stage === 'draft')
   // Inbox membership follows the ledger this workspace owns, not the name shown on the site.
   // Filtering these two on workspace.siteName meant one rename in Navigation emptied the inbox,
   // the "N new" badge, and the export -- with every captured inquiry still sitting on disk.
   const websiteLeads = websiteInboxLeads(leadLedger)
   const leadCounts = websiteLeadCounts(leadLedger)
   const releaseRecordRequired = storageMode === 'managed'
-  const localPreviewReady = storageMode !== 'managed' && !starterAvailable && !hasUnsavedChanges
+  const localPreviewReady = storageMode !== 'managed' && !starterAvailable && !hasUnsavedChanges && contentChecksPass
   const websiteTodayStep = storageIssue || canRepairLocalStorage
     ? 'recover'
     : pendingRestoredDraft
@@ -951,15 +971,15 @@ export function WebsiteProduct() {
     : pendingRestoredDraft
       ? `This tab has an unsaved ${pendingRestoredDraft.session.workspace.siteName} draft, while the current Website is ${workspace.siteName}. Choose one before editing.`
     : starterSetupActive
-      ? 'Answer a short brief to replace the example with client-specific pages.'
+      ? 'Answer a short brief to prepare client-specific pages.'
       : starterAvailable
         ? 'Add the business details once. SuperMega will prepare the pages, wording and navigation.'
         : hasUnsavedChanges
           ? 'Save the draft or discard it before review.'
           : localPreviewReady
-            ? 'Your saved customization is ready as a standalone review file. Page checks and managed approval remain separate before go-live.'
+            ? 'Download an HTML file of your saved site. This does not publish it.'
           : failingContentChecks.length
-            ? `${failingContentChecks.length} page check${failingContentChecks.length === 1 ? '' : 's'} need attention before approval.`
+            ? `${failingContentChecks.length} page check${failingContentChecks.length === 1 ? '' : 's'} need attention before the website file is ready.`
             : leadCounts.new
               ? `${leadCounts.new} new inquir${leadCounts.new === 1 ? 'y needs' : 'ies need'} a responsible person and a local decision before follow-up.`
               : releaseRecordRequired && !approvalIsCurrent
@@ -1000,21 +1020,66 @@ export function WebsiteProduct() {
         ? 'attention'
         : 'ready'
   const statusWorkspace = hasUnsavedChanges ? editorWorkspace : workspace
-  const websiteTodayMetrics = [
-    ['Pages', `${statusWorkspace.pages.filter((page) => page.stage === 'ready').length}/${statusWorkspace.pages.length} ready`],
-    ['Readiness', hasUnsavedChanges ? 'Review draft' : failingContentChecks.length ? `${failingContentChecks.length} to fix` : 'Clear'],
-    ['Inquiries', leadCounts.new ? `${leadCounts.new} new` : websiteLeads.length ? `${websiteLeads.length} total` : 'None yet'],
-    ['Review', hasUnsavedChanges ? 'Blocked by draft' : releaseRecordRequired ? approvalIsCurrent ? 'Recorded' : 'Needed' : 'Not required'],
-    ['File', hasUnsavedChanges ? 'Blocked by draft' : releaseRecordRequired ? publishIsCurrent ? 'Ready' : 'Needed' : 'Ready to download'],
+  const readyPageCount = statusWorkspace.pages.filter((page) => page.stage === 'ready').length
+  const readinessSummary = hasUnsavedChanges
+    ? 'Review draft'
+    : failingContentChecks.length
+      ? `${failingContentChecks.length} to fix`
+      : 'Checks clear'
+  const websiteWorkflowSteps = [
+    {
+      id: 'brief',
+      label: 'Business brief',
+      detail: starterAvailable || starterSetupActive ? 'Add details' : 'Complete',
+      state: starterAvailable || starterSetupActive ? 'current' : 'complete',
+    },
+    {
+      id: 'pages',
+      label: 'Pages',
+      detail: `${readyPageCount}/${statusWorkspace.pages.length} ready`,
+      state: starterAvailable || starterSetupActive
+        ? 'waiting'
+        : hasUnsavedChanges || failingContentChecks.length
+          ? 'current'
+          : 'complete',
+    },
+    {
+      id: 'review',
+      label: 'Review',
+      detail: releaseRecordRequired
+        ? approvalIsCurrent ? 'Recorded' : 'Owner approval'
+        : readinessSummary,
+      state: starterAvailable || starterSetupActive || hasUnsavedChanges || failingContentChecks.length
+        ? 'waiting'
+        : releaseRecordRequired && !approvalIsCurrent
+          ? 'current'
+          : 'complete',
+    },
+    {
+      id: 'file',
+      label: 'Website file',
+      detail: releaseRecordRequired
+        ? publishIsCurrent ? 'Ready' : approvalIsCurrent ? 'Create file' : 'After review'
+        : localPreviewReady ? 'Ready to download' : 'After review',
+      state: releaseRecordRequired && publishIsCurrent
+        ? 'complete'
+        : releaseRecordRequired
+          ? approvalIsCurrent && !hasUnsavedChanges && !failingContentChecks.length ? 'current' : 'waiting'
+          : localPreviewReady ? 'current' : 'waiting',
+    },
   ] as const
   const websiteTodaySource = storageMode === 'managed'
     ? `Company account · ${managedActorId || 'signed in'}`
     : storageMode === 'browser-local'
       ? 'Saved on this device'
       : 'Available in this browser session'
-  const websiteTodayContext = workingSampleTemplate
-    ? `${workingSampleTemplate.label} ${workingSampleIsCurrent ? 'current design' : 'starting design'} · ${websiteTodaySource}`
-    : websiteTodaySource
+  const editingRoutineStatus = view === 'content' && surface === 'work'
+    && websiteTodayState === 'ready' && !pendingRestoredDraft
+    && !storageIssue && !canRepairLocalStorage
+  const websiteTodayOwner = portalViewOnly ? 'Company owner' : 'Website operator'
+  const websiteTodayContext = `${workingSampleTemplate
+    ? `${workingSampleTemplate.label} ${workingSampleIsCurrent ? 'current layout' : 'selected layout'} · ${websiteTodaySource}`
+    : websiteTodaySource} · Next owner: ${websiteTodayOwner}`
   const leadExportHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify({
     contract: 'supermega.website.lead-export.v1',
     exportedAt: new Date().toISOString(),
@@ -1060,13 +1125,7 @@ export function WebsiteProduct() {
       return
     }
     if (leadCounts.new) {
-      const controls = document.querySelector<HTMLDetailsElement>('.website-business-controls')
-      if (controls) controls.open = true
-      requestAnimationFrame(() => {
-        const inbox = document.getElementById('website-lead-inbox')
-        inbox?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-        document.getElementById('website-lead-inbox-title')?.focus({ preventScroll: true })
-      })
+      openWorkspaceView('inquiries')
       return
     }
     openWorkspaceView('publish')
@@ -1177,7 +1236,7 @@ export function WebsiteProduct() {
             </div>
           ) : null}
 
-          <header className="website-heading" data-view={view}>
+          <header aria-label={view === 'content' ? 'Edit page' : view === 'inquiries' ? 'Manage inquiries' : 'Publish website'} className="website-heading" data-view={view}>
             <div>
               <h1 ref={headingRef} tabIndex={-1}>{activeViewCopy.title}</h1>
               <p>{activeViewCopy.copy}</p>
@@ -1186,6 +1245,22 @@ export function WebsiteProduct() {
               <button className="website-button is-secondary" onClick={() => openWorkspaceView('content')} type="button">Back to edit</button>
             ) : null}
           </header>
+
+          {!starterSetupActive ? <nav aria-label="Sites workspace" className="website-mode-nav">
+            <button aria-current={view === 'content' ? 'page' : undefined} onClick={() => openWorkspaceView('content')} type="button">Pages</button>
+            <button aria-current={view === 'inquiries' ? 'page' : undefined} onClick={() => openWorkspaceView('inquiries')} type="button">
+              Inquiries{leadCounts.new ? <span>{leadCounts.new}</span> : null}
+            </button>
+            <button
+              aria-current={view === 'publish' ? 'page' : undefined}
+              disabled={!canReview}
+              onClick={() => openWorkspaceView('publish')}
+              title={!canReview ? 'Finish and save every page before preparing the website file' : undefined}
+              type="button"
+            >
+              Publish
+            </button>
+          </nav> : null}
 
           {pendingRestoredDraft ? (
             <section aria-labelledby="website-restored-draft-title" className="website-restored-draft-choice">
@@ -1208,7 +1283,9 @@ export function WebsiteProduct() {
             </section>
           ) : null}
 
-          {!starterSetupActive ? <section aria-label="Website status" className="website-today" data-state={websiteTodayState} data-step={websiteTodayStep}>
+          {view === 'content' && !starterSetupActive ? <details className="website-status-disclosure" data-editing-routine={editingRoutineStatus} open={!editingRoutineStatus}>
+            <summary>Site status · {websiteAgentJob}</summary>
+            <section aria-label="Website status" className="website-today" data-state={websiteTodayState} data-step={websiteTodayStep}>
             <div className="website-today-priority">
               <span className="core-eyebrow">Next action</span>
               <h2 id="website-today-title">{websiteAgentJob}</h2>
@@ -1217,11 +1294,16 @@ export function WebsiteProduct() {
               <small className="website-today-context">{websiteTodayContext}</small>
             </div>
             <div className="website-today-signals">
-              <div aria-label="Website today status" className="website-today-metrics" role="group">
-                {websiteTodayMetrics.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
-              </div>
+              <ol aria-label="Website workflow" className="website-workflow-rail">
+                {websiteWorkflowSteps.map((step, index) => (
+                  <li aria-current={step.state === 'current' ? 'step' : undefined} data-state={step.state} key={step.id}>
+                    <span aria-hidden="true">{step.state === 'complete' ? '✓' : index + 1}</span>
+                    <div><small>{step.label}</small><strong>{step.detail}</strong></div>
+                  </li>
+                ))}
+              </ol>
               <details className="website-today-checks">
-                <summary>Review site checks · {websiteTodayMetrics[1][1]}</summary>
+                <summary>Review site checks · {readinessSummary}</summary>
                 {hasUnsavedChanges ? (
                   <p className="website-check-guidance">Save or discard your draft before checking the saved website. These checks do not approve or publish it.</p>
                 ) : failingContentChecks.length > 0 ? (
@@ -1234,7 +1316,8 @@ export function WebsiteProduct() {
                 ) : null}
               </details>
             </div>
-          </section> : null}
+          </section>
+          </details> : null}
 
           {view === 'content' && !starterSetupActive ? (
             <section
@@ -1250,19 +1333,9 @@ export function WebsiteProduct() {
                   <strong>Business website</strong>
                 </div>
               ) : (
-                <div className="website-page-control">
-                  <label htmlFor="website-page-select">Page</label>
-                  <select
-                    id="website-page-select"
-                    onChange={(event) => selectPage(event.currentTarget.value)}
-                    value={selectedPage.id}
-                  >
-                    {editorWorkspace.pages.map((page) => (
-                      <option key={page.id} value={page.id}>
-                        {page.internalName || 'Untitled page'} — {page.slug || 'No path'} ({page.stage})
-                      </option>
-                    ))}
-                  </select>
+                <div className="website-action-context">
+                  <strong>{selectedPage.internalName || 'Untitled page'}</strong>
+                  <span>{selectedPage.slug || 'No path'} · {selectedPage.stage}</span>
                 </div>
               )}
               <span
@@ -1377,49 +1450,53 @@ export function WebsiteProduct() {
                   <button className="website-button is-primary" onClick={() => openWorkspaceView('publish')} type="button">
                     Prepare file
                   </button>
-                ) : null : localPreviewReady ? (
-                  <button className="website-button is-primary" onClick={downloadWebsiteFile} type="button">
-                    Download website file
-                  </button>
-                ) : null}
+                ) : null : null}
                 </div>
               ) : null}
             </section>
           ) : null}
 
-          {storageMode === 'managed' && canWrite && managedWorkspaceId && managedActorId
+          {view === 'content' && storageMode === 'managed' && canWrite && managedWorkspaceId && managedActorId
             ? <WebsiteReviewInbox key={`${managedWorkspaceId}:${managedActorId}`} workspaceId={managedWorkspaceId} actorId={managedActorId} /> : null}
-          {!starterSetupActive ? <details className="website-start-tools website-business-controls">
-            <summary><span><strong>Inquiries</strong><small>Inquiry inbox, customer capture, ownership, and export</small></span><b>{leadCounts.new} new</b></summary>
-            <div className="website-business-controls-content">
-              <section aria-labelledby="website-lead-inbox-title" className="website-lead-inbox" id="website-lead-inbox">
-                <header>
-                  <div><span className="core-eyebrow">Inquiry inbox</span><h2 id="website-lead-inbox-title" tabIndex={-1}>Capture customer inquiries</h2><p>{storageMode === 'managed' ? 'Inquiries stay in this company account with ownership and decision history.' : 'Contact data stays in this browser.'} Nothing is sent to customers, CRM, or Shop from this screen.</p></div>
-                  <div className="website-lead-counts"><span><strong>{leadCounts.new}</strong><small>New</small></span><span><strong>{leadCounts.qualified}</strong><small>Qualified</small></span><span><strong>{leadCounts.closed}</strong><small>Closed</small></span></div>
-                </header>
+          {view === 'inquiries' ? <section aria-labelledby="website-lead-inbox-title" className="website-inquiry-workspace" id="website-inquiries">
+            <header className="website-inquiry-workspace-head">
+              <div>
+                <span className="core-eyebrow">Inquiry inbox</span>
+                <h2 id="website-lead-inbox-title" tabIndex={-1}>{leadCounts.new ? `${leadCounts.new} ${leadCounts.new === 1 ? 'request needs' : 'requests need'} review` : 'Customer requests are up to date'}</h2>
+                <p>{storageMode === 'managed' ? 'Inquiries stay in this company account with ownership and decision history.' : 'Contact data stays in this browser.'} Recording a decision does not message the customer or create a Shop order.</p>
+              </div>
+              <div aria-label="Inquiry status" className="website-lead-counts" role="group"><span><strong>{leadCounts.new}</strong><small>New</small></span><span><strong>{leadCounts.qualified}</strong><small>Qualified</small></span><span><strong>{leadCounts.closed}</strong><small>Closed</small></span></div>
+            </header>
 
+            <div className="website-inquiry-workspace-grid">
+              <section aria-labelledby="website-inquiry-capture-title" className="website-inquiry-card website-inquiry-capture">
+                <div className="website-inquiry-card-head"><span className="core-eyebrow">New request</span><h3 id="website-inquiry-capture-title">Add an inquiry</h3><p>Use this when a customer contacts the business by phone, message or in person.</p></div>
                 <form className="website-lead-capture-form" onSubmit={captureInquiry}>
                   <label>Name<input autoComplete="name" disabled={portalViewOnly} maxLength={80} onChange={(event) => setLeadDraft((current) => ({ ...current, name: event.target.value }))} placeholder="Customer name" required value={leadDraft.name} /></label>
                   <label>Phone or email<input autoComplete="email" disabled={portalViewOnly} maxLength={120} onChange={(event) => setLeadDraft((current) => ({ ...current, contact: event.target.value }))} placeholder="09… or name@example.com" required value={leadDraft.contact} /></label>
-                  <label className="website-lead-request">What do they need?<textarea disabled={portalViewOnly} maxLength={500} onChange={(event) => setLeadDraft((current) => ({ ...current, request: event.target.value }))} placeholder="Product, service, quantity, timing, or question" required rows={3} value={leadDraft.request} /></label>
+                  <label className="website-lead-request">Request<textarea disabled={portalViewOnly} maxLength={500} onChange={(event) => setLeadDraft((current) => ({ ...current, request: event.target.value }))} placeholder="What they need, quantity, timing and any question" required rows={4} value={leadDraft.request} /></label>
                   <label className="website-lead-consent"><input checked={leadDraft.consentRecorded} disabled={portalViewOnly} onChange={(event) => setLeadDraft((current) => ({ ...current, consentRecorded: event.target.checked }))} required type="checkbox" /> Customer agreed to save these contact details for follow-up.</label>
-                  <button className="website-button is-primary is-compact" disabled={portalViewOnly || !readyBuyerCtaPages.length} type="submit">{portalViewOnly ? 'View only' : 'Add inquiry'}</button>
-                  {!readyBuyerCtaPages.length ? <small className="website-field-error">Add a ready page with a contact action before capturing inquiries.</small> : null}
+                  <button className="website-button is-primary" disabled={portalViewOnly} type="submit">{portalViewOnly ? 'View only' : 'Add to inbox'}</button>
                 </form>
+              </section>
 
-                {websiteLeads.length ? <div className="website-lead-review-controls"><label>Responsible person<input maxLength={120} onChange={(event) => setLeadOwner(event.target.value)} placeholder="Name or role" value={leadOwner} /></label><label>Decision note <small>optional</small><input maxLength={500} onChange={(event) => setLeadDecisionNote(event.target.value)} placeholder="Need, budget, timing, or closure reason" value={leadDecisionNote} /></label></div> : null}
+              <section aria-labelledby="website-inquiry-queue-title" className="website-inquiry-card website-inquiry-queue" id="website-lead-inbox">
+                <div className="website-inquiry-card-head website-inquiry-queue-head">
+                  <div><span className="core-eyebrow">Follow-up queue</span><h3 id="website-inquiry-queue-title">Review and assign</h3><p>Record who owns the next step, then qualify or close the request.</p></div>
+                  {websiteLeads.length ? <a className="website-button is-secondary is-compact website-lead-export" download={`website-leads-${workspace.siteName.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'site'}.json`} href={leadExportHref}>Export</a> : null}
+                </div>
+                {websiteLeads.length ? <div className="website-lead-review-controls"><label>Responsible person<input maxLength={120} onChange={(event) => setLeadOwner(event.target.value)} placeholder="Name or role" value={leadOwner} /></label><label>Decision note <small>optional</small><input maxLength={500} onChange={(event) => setLeadDecisionNote(event.target.value)} placeholder="Need, budget, timing or closure reason" value={leadDecisionNote} /></label></div> : null}
                 <div className="website-lead-list">
                   {websiteLeads.length ? websiteLeads.slice(0, 8).map((lead) => <article data-status={lead.status} key={lead.id}>
-                    <div><span>{lead.status}</span><strong>{lead.name}</strong><small>{lead.contact} · {lead.sourcePage} · {formatRecoveryDate(lead.createdAt)}</small><p>{lead.request}</p>{lead.owner ? <small>Person: {lead.owner}{lead.decisionNote ? ` · ${lead.decisionNote}` : ''}</small> : null}</div>
-                    {lead.status !== 'closed' ? <div><button className="website-button is-secondary is-compact" disabled={portalViewOnly || leadOwner.trim().length < 2} onClick={() => decideLead(lead.id, 'qualified')} type="button">Qualify</button><button className="website-button is-quiet is-compact" disabled={portalViewOnly || leadOwner.trim().length < 2} onClick={() => decideLead(lead.id, 'closed')} type="button">Close</button></div> : null}
-                  </article>) : <p className="website-lead-empty">No inquiries yet.</p>}
+                    <div><span>{lead.status}</span><strong>{lead.name}</strong><small>{lead.contact} · {lead.sourcePage} · {formatRecoveryDate(lead.createdAt)}</small><p>{lead.request}</p>{lead.owner ? <small>Responsible: {lead.owner}{lead.decisionNote ? ` · ${lead.decisionNote}` : ''}</small> : null}</div>
+                    {lead.status !== 'closed' ? <div><button className="website-button is-primary is-compact" disabled={portalViewOnly || leadOwner.trim().length < 2} onClick={() => decideLead(lead.id, 'qualified')} type="button">Qualify</button><button className="website-button is-quiet is-compact" disabled={portalViewOnly || leadOwner.trim().length < 2} onClick={() => decideLead(lead.id, 'closed')} type="button">Close</button></div> : null}
+                  </article>) : <div className="website-lead-empty"><strong>No inquiries yet</strong><p>Add a request when a customer gets in touch. Nothing is sent automatically.</p></div>}
                 </div>
-                {websiteLeads.length ? <a className="website-button is-secondary is-compact website-lead-export" download={`website-leads-${workspace.siteName.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'site'}.json`} href={leadExportHref}>Export inquiries</a> : null}
               </section>
             </div>
-          </details> : null}
+          </section> : null}
 
-          <div
+          {view !== 'inquiries' ? <div
             aria-label={view === 'content' ? 'Edit' : 'Publish'}
             className={'website-workspace-grid view-' + view}
             data-surface={surface}
@@ -1435,14 +1512,86 @@ export function WebsiteProduct() {
                     onCreate={startWithBusiness}
                   />
                 ) : (
-                  <ContentWorkspace
-                    canDuplicate={editorWorkspace.pages.length < MAX_WEBSITE_PAGES}
-                    deleteArmed={deleteCandidateId === selectedPage.id}
-                    onDuplicate={copySelectedPage}
-                    onRequestDelete={requestDeletePage}
-                    onUpdatePage={(update) => updatePage(selectedPage.id, update)}
-                    page={selectedPage}
-                  />
+                  <div className="website-editor-workbench">
+                    <nav aria-label="Website pages" className="website-page-rail">
+                      <div className="website-page-rail-head">
+                        <span>Pages</span>
+                        <button
+                          aria-label="Add page"
+                          disabled={editorWorkspace.pages.length >= MAX_WEBSITE_PAGES}
+                          onClick={addPage}
+                          title={editorWorkspace.pages.length >= MAX_WEBSITE_PAGES ? 'The four-page workspace limit is reached' : 'Add page'}
+                          type="button"
+                        >
+                          +
+                        </button>
+                      </div>
+                      <ul className="website-page-list">
+                        {editorWorkspace.pages.map((page) => (
+                          <li key={page.id}>
+                            <button
+                              aria-current={page.id === selectedPage.id ? 'page' : undefined}
+                              className={page.id === selectedPage.id ? 'is-active' : ''}
+                              onClick={() => selectPage(page.id)}
+                              type="button"
+                            >
+                              <span>{page.internalName || 'Untitled page'}</span>
+                              <small>{page.slug || 'No path'}</small>
+                              <i data-stage={page.stage}>{page.stage}</i>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </nav>
+
+                    <ContentWorkspace
+                      canDuplicate={editorWorkspace.pages.length < MAX_WEBSITE_PAGES}
+                      deleteArmed={deleteCandidateId === selectedPage.id}
+                      onDuplicate={copySelectedPage}
+                      onRequestDelete={requestDeletePage}
+                      onUpdatePage={(update) => updatePage(selectedPage.id, update)}
+                      page={selectedPage}
+                    />
+
+                    <aside className="website-editor-insights">
+                      <section aria-labelledby="website-page-checks-title" className="website-insight-card">
+                        <header>
+                          <div>
+                            <span>Page checks</span>
+                            <strong id="website-page-checks-title">{selectedPageIssues.length ? `${selectedPageIssues.length} to fix` : selectedPage.stage === 'ready' ? 'Ready' : 'Review'}</strong>
+                          </div>
+                          <b className={selectedPageIssues.length ? 'has-issues' : 'is-complete'}>{selectedPageIssues.length ? '!' : selectedPage.stage === 'ready' ? '✓' : '→'}</b>
+                        </header>
+                        {selectedPageIssues.length ? (
+                          <ul>{selectedPageIssues.slice(0, 4).map((issue) => <li key={issue}>{issue}</li>)}</ul>
+                        ) : (
+                          <>
+                            <p>{selectedPage.stage === 'ready' ? 'Ready for site checks.' : 'Checks pass. Review, then mark ready.'}</p>
+                            {selectedPage.stage === 'draft' ? <button className="website-button is-primary is-compact" onClick={() => {
+                              updatePage(selectedPage.id, (page) => ({ ...page, stage: 'ready' }))
+                              if (nextDraftPage) setSelectedPageId(nextDraftPage.id)
+                            }} type="button">{nextDraftPage ? 'Mark ready & next' : 'Mark page ready'}</button> : null}
+                          </>
+                        )}
+                      </section>
+
+                      <section aria-labelledby="website-inquiry-summary-title" className="website-insight-card">
+                        <header>
+                          <div>
+                            <span>Inquiries</span>
+                            <strong id="website-inquiry-summary-title">{leadCounts.new ? `${leadCounts.new} new` : 'Inbox clear'}</strong>
+                          </div>
+                          <b>{websiteLeads.length}</b>
+                        </header>
+                        <div className="website-inquiry-summary">
+                          <span><strong>{leadCounts.new}</strong><small>New</small></span>
+                          <span><strong>{leadCounts.qualified}</strong><small>Qualified</small></span>
+                          <span><strong>{leadCounts.closed}</strong><small>Closed</small></span>
+                        </div>
+                        <button onClick={() => openWorkspaceView('inquiries')} type="button">Open inquiry workspace</button>
+                      </section>
+                    </aside>
+                  </div>
                 )
               ) : null}
 
@@ -1484,7 +1633,7 @@ export function WebsiteProduct() {
                 siteName={editorWorkspace.siteName}
               />
             </div>
-          </div>
+          </div> : null}
 
         </div>
       </div>

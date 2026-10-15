@@ -3,7 +3,7 @@ import { resolve } from 'node:path'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 const { build } = createRequire(resolve('showroom/package.json'))('esbuild')
 const managed = process.argv.includes('--managed')
-const out = resolve(managed ? 'showroom/dist/__qa-managed-shop' : 'showroom/dist/__qa-shop')
+const out = resolve(managed ? '.tmp/qa-managed-shop' : '.tmp/qa-shop')
 mkdirSync(out,{recursive:true})
 await build({stdin:{resolveDir:resolve('showroom'),loader:'tsx',contents:`
 import React,{useState} from 'react';import {createRoot} from 'react-dom/client';import {MemoryRouter} from 'react-router';

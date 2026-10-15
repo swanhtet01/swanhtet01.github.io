@@ -5,7 +5,6 @@ import { runInNewContext } from 'node:vm'
 import test from 'node:test'
 import * as starter from '../showroom/src/products/website/website-starter.ts'
 import * as trade from '../showroom/src/products/website/website-trade-brief.ts'
-import * as offeringImport from '../showroom/src/products/website/website-offering-import.ts'
 import './test_website_shell_flow.mjs'
 
 // Exercise actual component handlers with deterministic hook state. This is not
@@ -27,7 +26,6 @@ function harness({ fillBusiness = true, initialTradeId = null, initialBusinessNa
     if (name === 'react/jsx-runtime') return require(name)
     if (name === './website-starter') return starter
     if (name === './website-trade-brief') return trade
-    if (name === './website-offering-import') return offeringImport
     throw new Error('Unexpected component dependency: ' + name)
   } })
   function render() { cursor = 0; tree = exports.WebsiteStarterSetup({ initialTradeId, initialBusinessName, onCreate: value => created.push(value) }); return tree }
@@ -113,62 +111,11 @@ test('removing a middle entry preserves remaining content and removing all remai
   assert.equal(ui.created[1].offerings, '')
 })
 
-test('catalog import remains optional and never rewrites entered offerings', () => {
+test('first-run setup keeps direct offerings and exposes no file-preview workflow', () => {
   const ui = harness()
   ui.click('Add featured entry'); ui.edit(0, 'Owner service', 'Confirmed description')
-  assert.ok(ui.find(node => node.type === 'input' && node.props.type === 'file'))
+  assert.equal(ui.nodes().some(node => node.type === 'input' && node.props.type === 'file'), false)
+  assert.equal(ui.nodes().some(node => node.type === 'button' && ['Add reviewed entries', 'Discard file', 'Cancel import'].includes(node.props.children)), false)
   ui.submit()
   assert.equal(ui.created[0].offerings, 'Owner service | Confirmed description')
-})
-
-test('CSV selection is preview-only until explicitly accepted and cannot replace entered rows', async () => {
-  const ui = harness()
-  const selectFile = async () => {
-    ui.find(node => node.type === 'input' && node.props.type === 'file').props.onChange({ target: { files: [{ name: 'menu.csv', size: 40, text: async () => 'name,description\nTea,2000 MMK' }], value: 'menu.csv' } })
-    await new Promise(resolve => setImmediate(resolve)); ui.render()
-  }
-  await selectFile()
-  assert.equal(ui.nodes().filter(node => node.type === 'fieldset').length, 0)
-  assert.equal(ui.find(node => node.type === 'button' && node.props.type === 'submit').props.disabled, true)
-  ui.submit()
-  assert.equal(ui.created.length, 0)
-  assert.match(ui.find(node => node.props.id === 'website-import-pending').props.children, /discard/)
-  ui.click('Add reviewed entries'); ui.submit()
-  assert.equal(ui.created[0].offerings, 'Tea | 2000 MMK')
-  await selectFile()
-  assert.equal(ui.find(node => node.type === 'button' && node.props.children === 'Add reviewed entries').props.disabled, true)
-  ui.click('Discard file'); ui.submit()
-  assert.equal(ui.created[1].offerings, 'Tea | 2000 MMK')
-})
-
-test('canceling a slow read ignores its late result and allows another preview', async () => {
-  const ui = harness()
-  let finish
-  const slow = new Promise(resolve => { finish = resolve })
-  const select = file => { ui.find(node => node.type === 'input' && node.props.type === 'file').props.onChange({ target: { files: [file], value: file.name } }); ui.render() }
-  select({ name: 'slow.csv', size: 40, text: () => slow })
-  await new Promise(resolve => setImmediate(resolve)); ui.render()
-  assert.equal(ui.find(node => node.type === 'button' && node.props.type === 'submit').props.disabled, true)
-  assert.equal(ui.find(node => node.type === 'input' && node.props.type === 'file').props.disabled, true)
-  ui.submit()
-  assert.equal(ui.created.length, 0)
-  ui.click('Cancel import')
-  assert.equal(ui.find(node => node.type === 'button' && node.props.type === 'submit').props.disabled, false)
-  select({ name: 'new.csv', size: 40, text: async () => 'name,description\nNew entry,Confirmed details' })
-  await new Promise(resolve => setImmediate(resolve)); ui.render()
-  finish('name,description\nOld entry,Outdated details')
-  await new Promise(resolve => setImmediate(resolve)); ui.render()
-  ui.click('Add reviewed entries'); ui.submit()
-  assert.equal(ui.created[0].offerings, 'New entry | Confirmed details')
-})
-
-test('rejected file keeps entered content and does not expose an apply action', async () => {
-  const ui = harness()
-  ui.click('Add featured entry'); ui.edit(0, 'Keep me', 'Approved details')
-  ui.find(node => node.type === 'input' && node.props.type === 'file').props.onChange({ target: { files: [{ name: 'menu.csv', size: 50, text: async () => 'name,description\nBad,"unclosed' }], value: 'menu.csv' } })
-  await new Promise(resolve => setImmediate(resolve)); ui.render()
-  assert.equal(ui.nodes().some(node => node.type === 'button' && node.props.children === 'Add reviewed entries'), false)
-  assert.match(ui.find(node => node.props.id === 'website-import-status').props.children, /unclosed/)
-  ui.submit()
-  assert.equal(ui.created[0].offerings, 'Keep me | Approved details')
 })

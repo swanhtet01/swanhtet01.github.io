@@ -27,6 +27,20 @@ test('memory-only company baskets remain isolated without global storage fallbac
     else delete globalThis.localStorage
   }
 })
+test('managed recovery is isolated by exact workspace and user scope', async () => {
+  const values = new Map(), lockNames = []
+  const storage = { getItem: key => values.get(key) ?? null, setItem: (key, value) => { values.set(key, value) } }
+  const locks = { request: async (name, _options, callback) => { lockNames.push(name); return callback() } }
+  const firstScope = ':company-a:user-one'
+  const first = createCounterTicketSession(storage, locks, '', firstScope)
+  first.dispatch({ kind: 'save', basket: { ...input, customer: 'Scoped customer' } })
+  await first.settled()
+  assert.deepEqual(createCounterTicketSession(storage, locks, '', firstScope).getSnapshot().state.cart, input.cart)
+  assert.equal(createCounterTicketSession(storage, locks, '', ':company-b:user-one').getSnapshot().state.customer, '')
+  assert.equal(createCounterTicketSession(storage, locks, '', ':company-a:user-two').getSnapshot().state.customer, '')
+  assert.deepEqual(lockNames, [`supermega:shop:order-draft:reset${firstScope}`])
+  assert.equal(values.size, 1)
+})
 test('legacy recovery migrates without changing basket contents', () => {
   const result = parseCounterTickets(JSON.stringify(input))
   assert.deepEqual(result.cart, input.cart)
@@ -89,7 +103,7 @@ test('failed or changed storage stops the queue and checkout; malformed recovery
   assert.equal(fresh.checkpoint(), false)
 })
 
-test('scope departure cancels delayed writes inside the lock; managed session performs no storage access', async () => {
+test('scope departure cancels delayed writes inside the lock; memory-only session performs no storage access', async () => {
   let raw = null, release
   const storage = { getItem: key => key === COUNTER_TICKETS_KEY ? raw : null, setItem: (_key, value) => { raw = value } }
   const locks = { request: (_name, _options, callback) => new Promise((resolve, reject) => { release = () => callback().then(resolve, reject) }) }

@@ -259,7 +259,7 @@ export function WebsiteCommerceIntake({
         </div>
       ) : null}
 
-      {context || notice ? <p aria-live="polite" className="form-notice">{notice || 'Saved on this device. No payment collected.'}</p> : null}
+      {context || notice ? <p aria-live="polite" className="form-notice">{notice || 'Request saved locally for review. No payment was collected.'}</p> : null}
     </section>
   )
 }

@@ -36,7 +36,7 @@ const bundle = await build({
 
 const {
   FREE_FOREVER, capabilities, capability, capabilitiesForTier, capabilityTierOrder,
-  currentCapabilityTier, isCapabilityAvailable, lockedCapabilityNotice,
+  currentCapabilityTier, isCapabilityAvailable,
   shopBusinessTemplates, shopPlanGuideForTemplate, shopPlanTemplateIds,
 } = await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].contents).toString('base64')}`)
 
@@ -128,8 +128,7 @@ check(
   currentCapabilityTier({ managedIdentity: { email: 'a@b.co' }, premiumUnlocked: false }) === 'enterprise',
   'a managed identity is not downgraded by a missing premium flag',
 )
-check(!isCapabilityAvailable('ai-order-intake', 'free'), 'a premium capability is not free')
-check(isCapabilityAvailable('ai-order-intake', 'premium'), 'and is reachable when premium')
+check(!capabilitiesForTier('premium').some((item) => item.id === 'ai-order-intake'), 'manual message paste is not sold as a product capability')
 check(isCapabilityAvailable('shop-counter', 'free'), 'the till is always reachable')
 
 // --- each trade gets a truthful Core -> Premium -> Managed path ------------------------------
@@ -142,7 +141,7 @@ for (const templateId of shopPlanTemplateIds) {
   const guide = shopPlanGuideForTemplate(templateId)
   check(guide.templateId === templateId, `${templateId}: guide binds the requested template`)
   check(guide.core.length >= 4 && guide.core.every((item) => item.tier === 'free'), `${templateId}: Core contains only free-forever daily operations`)
-  check(guide.premium.length >= 3 && guide.premium.every((item) => item.tier === 'premium'), `${templateId}: Premium contains only server-assisted capabilities`)
+  check(guide.premium.length >= 2 && guide.premium.every((item) => item.tier === 'premium'), `${templateId}: Premium contains only server-assisted capabilities`)
   check(guide.managed.length >= 3 && guide.managed.every((item) => item.tier === 'enterprise'), `${templateId}: Managed contains only shared-team capabilities`)
   check(new Set([...guide.core, ...guide.premium, ...guide.managed].map((item) => item.id)).size === guide.core.length + guide.premium.length + guide.managed.length, `${templateId}: guide repeats no capability`)
   check(guide.boundary.includes('neither charges nor activates'), `${templateId}: plan guide grants no commercial authority`)
@@ -152,16 +151,6 @@ for (const templateId of shopPlanTemplateIds) {
   check(guide.managed.every((item) => item.availabilityLabel === 'Availability confirmed during setup'), `${templateId}: a plan guide does not establish managed activation`)
 }
 assert.throws(() => shopPlanGuideForTemplate('unknown-template'), /Unknown Shop plan template/)
-
-// --- a locked capability explains itself ------------------------------------------------------
-const notice = lockedCapabilityNotice('ai-order-intake')
-check(notice.outcome.length > 12 && notice.reason.length > 12, 'a locked capability still says what it does and why')
-for (const word of ['upgrade', 'trial ends', 'expires', 'only', 'unlock now']) {
-  check(
-    !`${notice.action} ${notice.outcome} ${notice.reason}`.toLowerCase().includes(word),
-    `a locked capability does not pressure the owner -- found "${word}"`,
-  )
-}
 
 // --- no prices, anywhere ------------------------------------------------------------------------
 const source = readFileSync('showroom/src/core/capability-tiers.ts', 'utf8')

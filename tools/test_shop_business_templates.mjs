@@ -18,7 +18,7 @@ const { build } = await import(pathToFileURL(requireFromShowroom.resolve('esbuil
 const bundle = await build({
   stdin: {
     contents: `
-      export { shopBusinessTemplates, shopBusinessTemplate, shopBusinessTemplateCatalogCsv } from './business-templates.ts'
+      export { shopBusinessTemplates, shopBusinessTemplate, shopBusinessTemplateCatalogCsv, shopBusinessTemplateManifest, shopBusinessTemplateManifests } from './business-templates.ts'
       export { createClientImportPreview } from '../../core/client-onboarding.ts'
     `,
     resolveDir: 'showroom/src/products/shop',
@@ -32,7 +32,7 @@ const bundle = await build({
   logLevel: 'error',
 })
 
-const { shopBusinessTemplates, shopBusinessTemplate, shopBusinessTemplateCatalogCsv, createClientImportPreview } = await import(
+const { shopBusinessTemplates, shopBusinessTemplate, shopBusinessTemplateCatalogCsv, shopBusinessTemplateManifest, shopBusinessTemplateManifests, createClientImportPreview } = await import(
   `data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].contents).toString('base64')}`
 )
 
@@ -47,6 +47,10 @@ check(
   new Set(shopBusinessTemplates.map((template) => template.id)).size === shopBusinessTemplates.length,
   'template ids are unique, so selecting one cannot be ambiguous',
 )
+check(
+  shopBusinessTemplateManifests.manifests.length === shopBusinessTemplates.length,
+  'every shipped Shop pack is registered once for cross-product capability lookup',
+)
 
 const MYANMAR = /[က-႟ꩠ-ꩿꧠ-꧿]/
 
@@ -59,6 +63,8 @@ for (const template of shopBusinessTemplates) {
   check(MYANMAR.test(template.name?.my ?? ''), `${where} has a genuinely Myanmar-script name, not a Latin placeholder`)
 
   check(shopBusinessTemplate(template.id) === template, `${where} is retrievable by its own id`)
+  const manifest = shopBusinessTemplateManifest(template.id)
+  check(manifest.id === `shop-${template.id}` && manifest.capabilities.includes('commerce.storefront'), `${where} has a portable Shop/Sites/Commerce capability manifest`)
 
   // --- catalog ---------------------------------------------------------------
   check(template.catalog.length > 0, `${where} ships a non-empty catalog`)

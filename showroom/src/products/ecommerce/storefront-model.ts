@@ -1,14 +1,21 @@
 import {
   COMMERCE_KEY,
   COMMERCE_WORKSPACE_SCHEMA,
+  commerceCatalogDigestSource,
+  commerceSeedAnchor,
+  commerceWorkingSampleCatalogId,
+  createSeedCommerce,
   validateCommerceState,
   type CommerceItem,
+  type CommerceState,
   type CommerceStorefrontMerchandising,
 } from '../../core/commerce-workspace.ts'
 
 export const STOREFRONT_PREVIEW_SCHEMA = 'supermega.ecommerce.storefront_preview.v1' as const
 
 export type StorefrontCatalogSource = 'shop-local' | 'sample' | 'unavailable'
+export type StorefrontOperationalSource = StorefrontCatalogSource | 'managed-shop'
+export type StorefrontCatalogOrigin = 'local' | 'managed'
 
 export type StorefrontCatalogSnapshot = {
   source: StorefrontCatalogSource
@@ -134,6 +141,38 @@ function validateCatalog(items: CommerceItem[]) {
   })
 }
 
+const GENERIC_SEED_CATALOG_DIGEST_SOURCE = commerceCatalogDigestSource(createSeedCommerce())
+
+export function classifyStorefrontCatalogSource(
+  stateValue: CommerceState,
+  origin: 'local',
+): 'shop-local' | 'sample'
+export function classifyStorefrontCatalogSource(
+  stateValue: CommerceState,
+  origin: 'managed',
+): 'managed-shop' | 'sample'
+export function classifyStorefrontCatalogSource(
+  stateValue: CommerceState,
+  origin: StorefrontCatalogOrigin,
+): Exclude<StorefrontOperationalSource, 'unavailable'> {
+  const state = validateCommerceState(stateValue)
+  const isSample = commerceWorkingSampleCatalogId(state) !== null
+    || commerceSeedAnchor(state) !== null
+    || commerceCatalogDigestSource(state) === GENERIC_SEED_CATALOG_DIGEST_SOURCE
+  if (isSample) return 'sample'
+  return origin === 'managed' ? 'managed-shop' : 'shop-local'
+}
+
+export function storefrontBuyingReady(input: {
+  source: StorefrontOperationalSource
+  previewReady: boolean
+  savedDraftIsCurrent: boolean
+}) {
+  return input.previewReady
+    && input.savedDraftIsCurrent
+    && (input.source === 'shop-local' || input.source === 'managed-shop')
+}
+
 export function readStorefrontCatalog(storage = browserStorage()): StorefrontCatalogSnapshot {
   if (!storage) {
     return {
@@ -160,9 +199,10 @@ export function readStorefrontCatalog(storage = browserStorage()): StorefrontCat
     }
   }
   try {
+    const state = validateCommerceState(JSON.parse(raw))
     return {
-      source: 'shop-local',
-      items: validateCommerceState(JSON.parse(raw)).items,
+      source: classifyStorefrontCatalogSource(state, 'local'),
+      items: state.items,
       error: '',
     }
   } catch {

@@ -8,6 +8,15 @@ by this document). Supersedes the feature-gap sections of
 Rule inherited from that doc: every claim cites a repo file or a source, or
 names the gap outright.
 
+**Current-status correction, 2026-10-07:** this document is a historical
+competitive research reference, not current release or feature-status
+authority. The paste-first Shop message-intake UI was removed. Its parser,
+draft endpoint and fixtures are R&D material only; no Meta/Messenger/Viber/
+Telegram/TikTok connector or customer-facing AI message intake is live. Use
+`supergoal.md`, `PRODUCT-CATALOG-AND-PRICING.md` and the launch-control record
+for current product and release status. Do not treat the ranked items below
+as shipped capabilities without fresh source and acceptance evidence.
+
 Method: two independent research passes on 2026-08-19 (retail POS vs
 Loyverse/Square/Odoo/Shopify + Myanmar-specific tools; Plant/Website/Ecommerce
 vs Katana/Odoo Manufacturing/Shopify/Wix + Myanmar channels), every candidate
@@ -75,12 +84,15 @@ the moat — incumbents bolt chatbots on; we ship accountable drafts.
 
 Ranked; each item names its gate.
 
-1. **Order intake from chat** (design complete; 20-fixture Burmese/mixed-script
-   golden set exists — `hq/research/order-intake-agent-evaluation-2026-08.md`).
-   Paste a Messenger/Viber/Telegram message → draft Shop order, every field
-   quoting its source text. Gate: run the server-only eval, record correction
-   effort. First and only until its eval passes. This is the single
-   highest-value AI feature for the Myanmar channel-commerce reality.
+1. **Order intake from chat — R&D candidate, customer UI retired.** A
+   20-fixture Burmese/mixed-script golden set exists
+   (`hq/research/order-intake-agent-evaluation-2026-08.md`), but the paste-first
+   UI has been removed and no channel connector is live. Before reconsidering,
+   choose one provider and obtain its documented permissions, then implement
+   signed event verification, tenant routing, idempotency, minimal retention,
+   draft-only extraction, human confirmation, and isolated managed acceptance.
+   Only after that may measured Burmese/English correction effort inform the
+   feature's placement in the product tiers.
    **Freshness note, 2026-08-27: cloud-provider order-intake eval lanes are
    suspended for this owner-named wave. Active AI R&D is local Ollama only:
    `llama3.2:1b`, `OLLAMA_KEEP_ALIVE=0s`, no cloud fallback, no provider key,

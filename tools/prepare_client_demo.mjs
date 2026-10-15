@@ -76,6 +76,13 @@ const RECORDS_BY_PRODUCT = Object.freeze({
 const REVIEW_CHECKLIST = Object.freeze([
   'Confirm the workspace, owner, selected templates, and industry packs.',
   'Review every normalized source row and resolve client-data corrections.',
+  'Open each product workspace and complete its operational proof scenario.',
+  'Confirm Shop, Plant, Website, and Ecommerce cross-product checks.',
+  'Approve this exact bundle digest before any managed activation.',
+])
+const LEGACY_REVIEW_CHECKLIST = Object.freeze([
+  'Confirm the workspace, owner, selected templates, and industry packs.',
+  'Review every normalized source row and resolve client-data corrections.',
   'Open each product demo path and complete its operational proof scenario.',
   'Confirm Shop, Plant, Website, and Ecommerce cross-product checks.',
   'Approve this exact bundle digest before any managed activation.',
@@ -831,7 +838,7 @@ export async function prepareClientDemo({ kitPath, dataDirectory, preparedAt = n
     bundleDigest,
     review: {
       status: 'awaiting_founder_review',
-      confirmation: `APPROVE CLIENT DEMO ${bundleDigest}`,
+      confirmation: `APPROVE CLIENT WORKSPACE ${bundleDigest}`,
       checklist: [...REVIEW_CHECKLIST],
     },
   }
@@ -906,9 +913,12 @@ export function verifyClientDemoPreparation(value) {
     controls: value.controls,
   }
   if (sha256(JSON.stringify(payload)) !== value.bundleDigest) fail('client_demo_bundle_digest_invalid')
+  const currentReview = value.review.confirmation === `APPROVE CLIENT WORKSPACE ${value.bundleDigest}`
+    && JSON.stringify(value.review.checklist) === JSON.stringify(REVIEW_CHECKLIST)
+  const legacyReview = value.review.confirmation === `APPROVE CLIENT DEMO ${value.bundleDigest}`
+    && JSON.stringify(value.review.checklist) === JSON.stringify(LEGACY_REVIEW_CHECKLIST)
   if (value.review.status !== 'awaiting_founder_review'
-    || value.review.confirmation !== `APPROVE CLIENT DEMO ${value.bundleDigest}`
-    || JSON.stringify(value.review.checklist) !== JSON.stringify(REVIEW_CHECKLIST)) fail('client_demo_review_contract_invalid')
+    || !currentReview && !legacyReview) fail('client_demo_review_contract_invalid')
   return {
     ok: true,
     contract: CLIENT_DEMO_PREPARATION_CONTRACT,

@@ -5,7 +5,7 @@
 Current public page:
 
 - `Sites | Your business online | SuperMega`
-- `A clear website for your services, photos and contact details. Review a prepared preview before agreeing to launch.`
+- `Publish business pages and services, keep details current, and handle customer inquiries in one workspace.`
 
 The public website shows interface screenshots and one Login. Contact is in the footer. It has no sample, trial, setup or product-launch buttons.
 

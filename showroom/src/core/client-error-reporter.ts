@@ -41,6 +41,7 @@ declare global {
 export const ERROR_CLASSES = [
   'chunk_load', // stale deploy or dropped request on a lazy route chunk
   'network_fetch', // fetch/XHR-shaped TypeError
+  'managed_persistence', // caught managed workspace load/save/reconcile failure
   'quota_exceeded', // storage quota (localStorage-heavy app, worth its own bucket)
   'security', // SecurityError DOMException
   'type',
@@ -69,6 +70,17 @@ export type ClientErrorEvent = {
 const CHUNK_FAILURE = /ChunkLoadError|Failed to fetch dynamically imported module|error loading dynamically imported module|Importing a module script failed|Unable to preload CSS/i
 
 const MAX_REPORTS_PER_SESSION = 5
+
+export const MANAGED_PERSISTENCE_OPERATIONS = [
+  'shop.load',
+  'shop.save',
+  'shop.reconcile',
+  'plant.load',
+  'plant.save',
+  'plant.reconcile',
+] as const
+
+export type ManagedPersistenceOperation = (typeof MANAGED_PERSISTENCE_OPERATIONS)[number]
 
 // Identical expression to the beacon loader gate in showroom/index.html. The error
 // lane exists only where the beacon exists, so local, dev and preview hosts never
@@ -153,15 +165,10 @@ const sessionReports: ClientErrorEvent[] = []
 // their own -- calling report() from the boundary is the only way that class
 // of failure (the stale-deploy chunk load this reporter exists for) ever
 // reaches the beacon. Same dedupe/rate-limit/fail-open guarantees either way.
-export function report(candidate: unknown, fallbackMessage: string): void {
+function reportClass(errorClass: ClientErrorClass, messageText: string): void {
   try {
+    if (!isBeaconHost()) return
     if (reportsSent >= MAX_REPORTS_PER_SESSION) return
-    const errorClass = classifyError(candidate, fallbackMessage)
-    // A render crash caught by RouteErrorBoundary reaches the beacon only through this
-    // direct call, so the owner-facing quota notice is raised here too -- not only from
-    // the window listeners in startStorageQuotaWatch below.
-    if (errorClass === 'quota_exceeded') noteStorageQuotaExceeded()
-    const messageText = candidate instanceof Error ? candidate.message : fallbackMessage
     const hash = hashErrorMessage(messageText)
     const key = `${errorClass}:${hash}`
     // A render loop rethrowing one error must not burn the whole session budget.
@@ -178,6 +185,28 @@ export function report(candidate: unknown, fallbackMessage: string): void {
   } catch {
     // The error lane must never throw an error of its own into the page.
   }
+}
+
+export function report(candidate: unknown, fallbackMessage: string): void {
+  const errorClass = classifyError(candidate, fallbackMessage)
+  // A render crash caught by RouteErrorBoundary reaches the beacon only through this
+  // direct call, so the owner-facing quota notice is raised here too -- not only from
+  // the window listeners in startStorageQuotaWatch below.
+  if (errorClass === 'quota_exceeded') noteStorageQuotaExceeded()
+  reportClass(errorClass, candidate instanceof Error ? candidate.message : fallbackMessage)
+}
+
+// Managed workspace failures are intentionally caught so the operator receives a clear
+// recovery message. Report them through an explicit closed operation enum as well, or
+// those production failures disappear from the error lane. Only the operation label and
+// a one-way hash reach the beacon; raw error text, account and workspace ids never do.
+export function reportManagedPersistenceFailure(
+  operation: ManagedPersistenceOperation,
+  candidate: unknown,
+  fallbackMessage: string,
+): void {
+  const message = candidate instanceof Error ? candidate.message : fallbackMessage
+  reportClass('managed_persistence', `${operation}:${message}`)
 }
 
 // In-memory record of what this session actually reported (already PII-free by

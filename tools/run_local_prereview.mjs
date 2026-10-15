@@ -13,6 +13,7 @@
 
 import { createHash, randomUUID } from 'node:crypto'
 import { execFile } from 'node:child_process'
+import { existsSync } from 'node:fs'
 import { mkdir, stat, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { relative, resolve, sep } from 'node:path'
@@ -28,7 +29,16 @@ export const MAX_TASK_DOCUMENT_BYTES = 30_000
 export const MAX_TASK_FILE_LIST = 50
 
 const root = resolve(import.meta.dirname, '..')
-const defaultLauncher = resolve(root, '..', 'local-agent-company', 'local-code.cmd')
+export function resolveDefaultLauncher(projectRoot = root, exists = existsSync) {
+  const candidates = [
+    // Canonical sibling checkout: Projects/supermega-platform + Projects/local-agent-company.
+    resolve(projectRoot, '..', 'local-agent-company', 'local-code.cmd'),
+    // Managed worktree: Projects/supermega-platform-worktrees/<worktree>.
+    resolve(projectRoot, '..', '..', 'local-agent-company', 'local-code.cmd'),
+  ]
+  return candidates.find((candidate) => exists(candidate)) ?? candidates[0]
+}
+const defaultLauncher = resolveDefaultLauncher()
 const defaultProbeScript = resolve(homedir(), '.codex', 'skills', 'supermega-local-ai', 'scripts', 'check_local_ai.ps1')
 const defaultPowershell = resolve(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
 const defaultOutputDirectory = resolve(root, '.tmp', 'local-prereview')

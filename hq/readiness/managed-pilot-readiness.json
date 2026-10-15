@@ -1,22 +1,22 @@
 {
   "contract": "supermega.managed-pilot-readiness.v5",
-  "asOf": "2026-09-29T18:51:02.652Z",
+  "asOf": "2026-10-09T13:26:17.536Z",
   "pilotMode": "owner_named",
   "localDatabase": {
     "contract": "supermega.hq.database-rehearsal.v3",
     "schemaVersion": 13,
     "schemaProfile": "v13-self-serve",
     "migrationCount": 23,
-    "implementationCommit": "02d744790f624587eb987fd603fabb4928bde8a2",
-    "implementationTree": "2be33f834f36a1b32ec6868449b7a0cb7fa94265",
-    "implementationDigest": "sha256:8a1966eedbf8490168c4ffb94b17683293882c6f0b79e488a62bcba5f234b5ca",
-    "receiptDigest": "sha256:014a392e146e3c700c66415d251904b22c2edcdf8468b0e7351f9b00a978f044",
+    "implementationCommit": "c32f38757e503160b390ea4de2c8202d0a6f1fe6",
+    "implementationTree": "f3370a33ce6fda5eb0ef8f06f60abbfa34a80143",
+    "implementationDigest": "sha256:4fbee3890045465ce7b35fddd821b2acc1531332b44b8915691db88aa734cdd6",
+    "receiptDigest": "sha256:a61787767f7758d3a86a48602ea511f897f214c8f8bea704099b820d28437d8d",
     "behaviorChecks": 74,
     "catalogChecksBefore": 33,
     "catalogChecksAfter": 33,
     "hostedEvidenceCurrent": false
   },
-  "sourceDigest": "sha256:f1b13c7fe50f3ecb14a04f06c0934cd5da09aec556775578875ef132dc76e8a0",
+  "sourceDigest": "sha256:d8582587f20061b9e10f8bf50400835055572e6868fc580a81ac886c45cbef7c",
   "overall": {
     "status": "blocked",
     "localDatabaseProofReady": true,
@@ -282,7 +282,7 @@
     },
     {
       "path": "hq/research/postgres17-rehearsal.json",
-      "digest": "sha256:b6bdb31872a0c952b452390171b8c6421bff247a1e9718e19066f4761602851a"
+      "digest": "sha256:fd08324e539f5236815a5cf6920bc60d3c07de6f5ab651759c6aa77678eb7892"
     },
     {
       "path": "hq/pilots/private-storage-privacy-audit.md",
@@ -310,7 +310,7 @@
     },
     {
       "path": "package.json",
-      "digest": "sha256:ca837d73d193aa662fdb0adfcd4cf4cefc9b295a27da72473490bc9af0de716e"
+      "digest": "sha256:ca4475989019594fbe70155f344e0ed649731e473b8b13487110148d4d1bc5cc"
     },
     {
       "path": "kernel/managed-pilot-readiness.mjs",

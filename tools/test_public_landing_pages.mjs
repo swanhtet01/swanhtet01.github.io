@@ -9,13 +9,20 @@ import { validateShopBusinessTemplates } from '../showroom/src/products/shop/bus
 import { activeProductContracts } from '../showroom/src/core/product-visibility.ts'
 
 const root = process.cwd()
-const staticDir = resolve(root, '.vercel', 'output', 'static')
+const manifestSource = readFileSync(resolve(root, 'site-manifest.json'), 'utf8')
+const isolatedOutputId = process.env.SUPERMEGA_PUBLIC_OUTPUT_ID || ''
+if (isolatedOutputId && !/^[a-z0-9][a-z0-9-]{0,63}$/.test(isolatedOutputId)) throw new Error('public_output_id_invalid')
+const outputDir = isolatedOutputId
+  ? resolve(root, '.tmp', `supermega-public-output-${isolatedOutputId}`)
+  : resolve(root, '.vercel', 'output')
+const staticDir = resolve(outputDir, 'static')
 const manifest = JSON.parse(readFileSync(resolve(root, 'site-manifest.json'), 'utf8'))
 const activeIds = activeProductContracts(manifest).map(product => product.id)
 const discoverablePages = manifest.pages.filter(page => !page.productId || activeIds.includes(page.productId))
-const config = JSON.parse(readFileSync(resolve(root, '.vercel', 'output', 'config.json'), 'utf8'))
+const config = JSON.parse(readFileSync(resolve(outputDir, 'config.json'), 'utf8'))
 const readStatic = (path) => readFileSync(resolve(staticDir, path), 'utf8')
 const publicObservabilitySource = readStatic('vercel-insights.js')
+const publicCarouselSource = readStatic('platform-carousel.js')
 const publicGeneratorSource = readFileSync(resolve(root, 'tools/create_public_vercel_output.mjs'), 'utf8')
 const skipLinkTouchTargetCss = '.skip-link { position: fixed; z-index: 60; top: 12px; left: 12px; min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; padding: 10px 14px; border-radius: 10px; background: var(--ink); color: #ffffff; font-size: 13px; font-weight: 720; text-decoration: none; transform: translateY(-160%); }'
 
@@ -31,6 +38,15 @@ function countOccurrences(source, token) {
 
 const landingPages = manifest.pages.filter((page) => page.productId)
 check(landingPages.map((page) => page.route).join(',') === '/shop/,/plant/,/website/,/ecommerce/', 'landing_route_set')
+for (const route of ['/website/', '/ecommerce/']) {
+  const start = manifestSource.indexOf(`"route": "${route}"`)
+  const end = manifestSource.indexOf('\n    }', start)
+  const entry = start < 0 || end < 0 ? '' : manifestSource.slice(start, end)
+  const description = manifest.pages.find((page) => page.route === route)?.description || ''
+  check(countOccurrences(entry, '"description":') === 1, `manifest_description_unique:${route}`)
+  check(!/\b(preview|trial|demo)\b/i.test(description), `manifest_description_no_preview_funnel:${route}`)
+}
+check(publicCarouselSource.includes('data-gallery-previous') && publicCarouselSource.includes('data-gallery-next') && publicCarouselSource.includes('prefers-reduced-motion'), 'public_carousel_runtime_controls_and_motion')
 check(countOccurrences(publicGeneratorSource, skipLinkTouchTargetCss) === 1, 'landing_skip_link_touch_target_source_contract')
 check(publicGeneratorSource.includes('--blue: #5b4ee8;') && publicGeneratorSource.includes('background:#f1f0fb;border:1px solid #dedbf4;'), 'landing_indigo_visual_system_source_contract')
 check(!publicGeneratorSource.includes('#edf4f0') && !publicGeneratorSource.includes('#dce8e1'), 'landing_legacy_green_frames_removed')
@@ -54,6 +70,25 @@ check(config.routes.at(-1)?.dest === '/404.html' && config.routes.at(-1)?.status
 
 // Page content markers, SEO metadata, and CTA wiring.
 const descriptions = []
+const productScreens = {
+  shop: ['actual-shop-today.png', 'actual-shop-sell.png', 'actual-shop-orders.png'],
+  website: ['actual-sites-editor.png', 'actual-sites-inquiries.png'],
+  ecommerce: ['actual-commerce-catalog.png', 'actual-commerce-order-request.png'],
+}
+const interfaceCaptureDates = {
+  'actual-shop-today.png': '2 Oct 2026',
+  'actual-shop-sell.png': '2 Oct 2026',
+  'actual-shop-orders.png': '2 Oct 2026',
+  'actual-shop-stock.png': '2 Oct 2026',
+  'actual-sites-editor.png': '4 Oct 2026',
+  'actual-sites-inquiries.png': '4 Oct 2026',
+  'actual-sites-pages.png': '2 Oct 2026',
+  'actual-sites-setup.png': '2 Oct 2026',
+  'actual-commerce-catalog.png': '2 Oct 2026',
+  'actual-commerce-order-request.png': '4 Oct 2026',
+}
+const interfaceDisclosure = (image) => `App capture · synthetic example records · captured ${interfaceCaptureDates[image]}`
+check(!publicGeneratorSource.includes('compatibilityScreens') && !publicGeneratorSource.includes('data-legacy-interface-assets'), 'landing_legacy_interface_compatibility_removed')
 for (const page of landingPages) {
   const product = manifest.customerProducts.find((candidate) => candidate.id === page.productId)
   check(Boolean(product), `landing_product_exists:${page.productId}`)
@@ -89,7 +124,37 @@ for (const page of landingPages) {
   check(schema['@context'] === 'https://schema.org' && schema['@type'] === 'Product' && schema.name === product.name && schema.url === canonical && schema.description === description, `landing_structured_data:${page.route}`)
   check(html.includes('<meta name="robots" content="index,follow" />'), `landing_indexable:${page.route}`)
   check((html.match(/<h1>/g) || []).length === 1, `landing_single_headline:${page.route}`)
-  check(html.includes('class="platform-image"') && html.includes('class="feature-line"'), `landing_interface_and_features:${page.route}`)
+  check(html.includes('class="platform-gallery"') && html.includes('class="platform-image"') && html.includes('class="product-proof"') && html.includes('class="feature-line"'), `landing_interface_and_features:${page.route}`)
+  check(countOccurrences(html, '<figure class="platform-image') === productScreens[page.productId]?.length, `landing_product_views:${page.route}`)
+  const carousel = (productScreens[page.productId]?.length || 0) > 1
+  check(
+    html.includes('aria-roledescription="carousel"') &&
+      html.includes('align-items:stretch') &&
+      html.includes('display:flex;flex:0 0 100%;flex-direction:column') &&
+      html.includes('width:100%;height:auto;max-width:1440px') &&
+      html.includes('margin-top:auto;padding:16px 0 0') &&
+      !html.includes('aspect-ratio:16/10') &&
+      !html.includes('object-fit:contain'),
+    `landing_gallery_native_ratio_equal_width_slides:${page.route}`,
+  )
+  check(countOccurrences(html, 'data-gallery-previous') === Number(carousel) && countOccurrences(html, 'data-gallery-next') === Number(carousel), `landing_gallery_navigation:${page.route}`)
+  check(html.includes('role="group" aria-roledescription="slide"'), `landing_gallery_accessible_slides:${page.route}`)
+  check(carousel === html.includes('<script src="/platform-carousel.js" defer></script>'), `landing_gallery_script:${page.route}`)
+  check(!html.includes('data-legacy-interface-assets'), `landing_legacy_interface_assets_absent:${page.route}`)
+  for (const screen of productScreens[page.productId] || []) check(html.includes(`/images/${screen}`), `landing_product_view:${page.route}:${screen}`)
+  if (page.productId === 'ecommerce') {
+    check(html.includes('alt="Commerce catalog showing available products, local pricing and customer ordering"'), 'landing_commerce_catalog_capture_description')
+    check(html.includes(`Commerce &middot; Store catalog and availability &middot; ${interfaceDisclosure('actual-commerce-catalog.png')}`), 'landing_commerce_catalog_capture_scope_truthful')
+    check(html.includes('alt="Commerce Store showing a locally saved customer request awaiting Shop confirmation"'), 'landing_commerce_capture_matches_store_flow')
+    check(html.includes('width="1280" height="900"'), 'landing_commerce_capture_dimensions_exact')
+    check(html.includes(`Commerce &middot; Customer request and Shop review &middot; ${interfaceDisclosure('actual-commerce-order-request.png')}`), 'landing_commerce_request_capture_scope_truthful')
+  }
+  if (page.productId === 'website') {
+    check(html.includes('alt="Sites editor showing page navigation, focused content editing and readiness checks"'), 'landing_sites_editor_capture_description')
+    check(html.includes('alt="Sites inquiry workspace showing a synthetic customer request, ownership and decision controls"'), 'landing_sites_inquiry_capture_description')
+    check(html.includes(`Sites &middot; Page workspace and readiness &middot; ${interfaceDisclosure('actual-sites-editor.png')}`), 'landing_sites_editor_capture_scope_truthful')
+    check(html.includes(`Sites &middot; Inquiry review and ownership &middot; ${interfaceDisclosure('actual-sites-inquiries.png')}`), 'landing_sites_inquiry_capture_scope_truthful')
+  }
   check(countOccurrences(html, 'href="https://app.supermega.dev/login"') === 1, `landing_single_login:${page.route}`)
   check(!html.includes('Request assisted setup') && !html.includes('id="first-loop"'), `landing_no_setup_funnel:${page.route}`)
   for (const unsupportedClaim of ['AI may help prepare drafts', 'AI assisted', 'Ranked next actions', 'approved AI context']) {
@@ -166,9 +231,9 @@ for (const token of ['No action is needed now.', 'SuperMega will review your bri
 // Homepage links each product to its landing page without replacing the guided sample CTA.
 const home = readStatic('index.html')
 const homePage = manifest.pages.find((page) => page.route === '/')
-const expectedHomeDescription = 'Sales and stock, business websites, and customer requests. Shop, Sites and Commerce for your business.'
+const expectedHomeDescription = 'Sell, publish and fulfil from one connected platform. Shop, Sites and Commerce keep the record, next action and result together.'
 check(homePage?.file === 'index.html', 'home_manifest_entry_exact')
-check(homePage?.title === 'SuperMega | Business tools for Myanmar', 'home_manifest_business_title_exact')
+check(homePage?.title === 'SuperMega | Run the business without the busywork', 'home_manifest_business_title_exact')
 check(homePage?.description === expectedHomeDescription, 'home_manifest_description_derived_from_supported_copy')
 for (const token of [
   `<title>${homePage.title}</title>`,
@@ -190,18 +255,40 @@ const shopLanding = readStatic('shop/index.html')
 const shopProduct = manifest.customerProducts.find(product => product.id === 'shop')
 for (const [route, html] of [['/', home], ...activeIds.map(id => [`/${id}/`, readStatic(`${id}/index.html`)])]) {
   const body = html.slice(html.indexOf('<body')).replace(/<script[\s\S]*?<\/script>/g, '')
+  const interfaceFigureCount = (body.match(/<figure class="platform-image/g) || []).length
   check(countOccurrences(body, 'href="https://app.supermega.dev/login"') === 1, `one_login:${route}`)
-  check(!/<button\b/.test(body), `no_extra_buttons:${route}`)
+  const marketingButtons = (body.match(/<button\b/g) || []).length
+  const routeProduct = route === '/' ? null : route.slice(1, -1)
+  check(marketingButtons === ((productScreens[routeProduct]?.length || 0) > 1 ? 2 : 0), `marketing_only_gallery_controls:${route}`)
+  check(interfaceFigureCount > 0, `interface_figures_present:${route}`)
+  const expectedCaptureScreens = route === '/' ? Object.values(productScreens).map((screens) => screens[0]) : productScreens[route.slice(1, -1)] || []
+  for (const screen of expectedCaptureScreens) check(body.includes(interfaceDisclosure(screen)), `interface_disclosure_per_image:${route}:${screen}`)
+  check(!body.includes('Current Shop') && !body.includes('Current Sites') && !body.includes('Current Commerce'), `capture_not_claimed_current:${route}`)
+  check(!body.includes('Illustrative interface and records.'), `illustrative_mockups_absent:${route}`)
   for (const forbidden of ['Open Shop', 'Open Ecommerce', 'Open Website', 'Profit Control', 'Choose shop type', 'Request assisted setup', 'trial', 'preview', 'demo', 'theme-toggle', 'dark mode']) {
     check(!body.toLowerCase().includes(forbidden.toLowerCase()), `no_clutter:${route}:${forbidden}`)
   }
   check(!/href="https:\/\/app\.supermega\.dev\/(?!login")/.test(body), `no_app_detours:${route}`)
 }
 for (const id of activeIds) check(home.includes(`id="${id}"`), `home_product_story:${id}`)
-for (const filename of ['platform-stock.jpg', 'platform-pages.jpg', 'platform-catalog.jpg']) {
+for (const id of activeIds) {
+  const route = manifest.pages.find((page) => page.productId === id)?.route
+  check(typeof route === 'string' && countOccurrences(home, `class="story-link" href="${route}"`) === 1, `home_product_story_link:${id}`)
+}
+check(countOccurrences(home, '<figure class="platform-image') === activeIds.length, 'home_one_view_per_active_product')
+check(countOccurrences(home, 'class="product-card-flow"') === activeIds.length, 'home_compact_product_flows')
+check(home.includes('href="/contact/">Contact SuperMega</a>'), 'home_clear_contact_action')
+const screenshotHashes = new Set()
+const screenshotDimensions = { 'actual-commerce-order-request.png': [1280, 900] }
+for (const filename of Object.values(productScreens).flat()) {
   const image = readFileSync(resolve(staticDir, 'images', filename))
-  check(image.subarray(0, 3).equals(Buffer.from([255,216,255])), `screenshot_jpeg:${filename}`)
+  const [expectedWidth, expectedHeight] = screenshotDimensions[filename] ?? [1440, 900]
+  check(image.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10])), `screenshot_png:${filename}`)
+  check(image.readUInt32BE(16) === expectedWidth && image.readUInt32BE(20) === expectedHeight, `screenshot_full_render:${filename}`)
   check(image.length > 10000, `screenshot_not_empty:${filename}`)
+  const hash = image.toString('base64')
+  check(!screenshotHashes.has(hash), `screenshot_unique:${filename}`)
+  screenshotHashes.add(hash)
 }
 const shopTemplates = validateShopBusinessTemplates()
 const shopTemplateIds = shopTemplates.map((template) => template.id)
@@ -316,8 +403,13 @@ check(/<lastmod>\d{4}-\d{2}-\d{2}<\/lastmod>/.test(sitemap), 'sitemap_lastmod_fo
 check(readStatic('robots.txt').includes('Sitemap: https://supermega.dev/sitemap.xml'), 'robots_references_sitemap')
 
 
-check((home.match(/class="product-story"/g) || []).length === activeIds.length, 'home_one_card_per_active_product')
-check(home.includes('Myanmar Text'), 'home_myanmar_language_and_font_fallback')
+check((home.match(/class="product-card-compact"/g) || []).length === activeIds.length, 'home_one_card_per_active_product')
+check(home.includes('SuperMega Noto Sans'), 'home_noto_font')
+for (const html of [home, shopLanding]) {
+  check(html.includes('<html lang="en">'), 'marketing_page_english')
+  check(!html.includes('data-language-toggle') && !html.includes('src="/site-language.js"'), 'marketing_page_has_no_language_control')
+  check(!html.includes('data-i18n=') && !/[\u1000-\u109f]/u.test(html), 'marketing_page_has_no_myanmar_copy')
+}
 for (const id of activeIds) {
   const html = readStatic(`${id}/index.html`)
   check(!html.includes('<details class="frame product-details">'), `workflows_not_hidden:${id}`)

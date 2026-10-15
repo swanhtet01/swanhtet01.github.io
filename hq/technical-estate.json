@@ -7,7 +7,7 @@
     "readinessContract": "supermega.managed-pilot-readiness.v5",
     "securityAuditAsOf": "2026-08-20T17:02:04.312+06:30"
   },
-  "sourceDigest": "sha256:5e1e8afa2b0ace95a7e4a029e5eafae10d4e181fef3b79e777f943f568c2ccbd",
+  "sourceDigest": "sha256:f715e691743333abd3ff1c1855cc7960a6325d34853a609768d31df3fd6b2c38",
   "canonicalSource": {
     "repository": "swanhtet01/swanhtet01.github.io",
     "activeBranch": "main",
@@ -38,7 +38,7 @@
           "app.supermega.dev",
           "megaos.vercel.app"
         ],
-        "buildScript": "npm run app:release:write && npm --prefix showroom run build",
+        "buildScript": "node --test tools/test_production_entry.mjs && npm run app:release:write && npm --prefix showroom run build",
         "verifyScript": "node tools/run_app_verify.mjs --serial",
         "output": "showroom/dist",
         "productionPromotion": "owner-approved coordinated workflow only"
@@ -234,7 +234,7 @@
     },
     {
       "path": "site-manifest.json",
-      "digest": "sha256:65a7c4f1e909e08edae4b6a7815ed50fe1da2ef80e7927116d324cc47868604e"
+      "digest": "sha256:1c45bc985b3146663c7b244d3926790ca51bf91eb01b22e71eac42ca406dea89"
     },
     {
       "path": "vercel.json",
@@ -242,7 +242,7 @@
     },
     {
       "path": "package.json",
-      "digest": "sha256:ca837d73d193aa662fdb0adfcd4cf4cefc9b295a27da72473490bc9af0de716e"
+      "digest": "sha256:ca4475989019594fbe70155f344e0ed649731e473b8b13487110148d4d1bc5cc"
     },
     {
       "path": "hq/readiness/supabase-security-advisor-audit.json",
@@ -250,7 +250,7 @@
     },
     {
       "path": "hq/readiness/managed-pilot-readiness.json#semantic-projection-v1",
-      "digest": "sha256:a739dc10a33eab92e93af8b70186d8845f015a5743b2d6c171f057487c716998"
+      "digest": "sha256:38ff12d5242a391266eb1108ddcd0a1fdc186a737c5418f8ca69490a52c8bb3e"
     }
   ]
 }

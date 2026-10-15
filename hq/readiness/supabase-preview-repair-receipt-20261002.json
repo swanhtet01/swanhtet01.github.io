@@ -1,0 +1,156 @@
+{
+  "contract": "supermega.supabase-preview-repair-receipt.v1",
+  "state": "database-parity-repaired-provider-status-stale",
+  "capturedAt": "2026-10-01T18:14:25.6304717Z",
+  "integrationCommit": "4ead3bcb82ea94a0f391940e105c4e9a937e4c6f",
+  "pullRequest": 639,
+  "sourcePlan": {
+    "path": "hq/readiness/supabase-preview-recovery-plan.json",
+    "contract": "supermega.supabase-preview-recovery-plan.v1",
+    "digest": "sha256:20bf89c7904f016972d0f79cf5257f63551ac70838f1969b24acfa5d74c41690",
+    "integrationBaseCommit": "0423c4fc73d9dd48cfbffa72e4ec22a615a21cf4"
+  },
+  "target": {
+    "projectRef": "twflgmlwfkykgzsxnegc",
+    "branchId": "8ceada93-22b2-405d-98fd-4e682471b9bd",
+    "branchName": "supermega-three-product-acceptance-20260919",
+    "parentProjectRef": "zvtzwcimpvvtkowflhda",
+    "providerStatusBefore": "MIGRATIONS_FAILED",
+    "providerStatusAfter": "MIGRATIONS_FAILED",
+    "previewProjectStatus": "ACTIVE_HEALTHY",
+    "persistent": false,
+    "withData": false,
+    "schemaVersionBefore": 13,
+    "schemaVersionAfter": 13
+  },
+  "preconditions": {
+    "migrationCount": 21,
+    "appliedMigrationNames": [
+      "private_trial_backend_role_preflight",
+      "private_trial_backend_foundation",
+      "private_trial_backend_v2",
+      "private_trial_backend_v3_website",
+      "private_trial_backend_v4_hardening",
+      "private_trial_backend_v5_read_capabilities",
+      "private_trial_backend_v6_managed_activation",
+      "private_trial_backend_v7_workspace_discovery",
+      "private_trial_backend_v8_rls_initplan",
+      "private_trial_backend_v9_metadata_rls",
+      "private_trial_backend_v10_supabase_session_revocation",
+      "private_trial_backend_v11_self_serve_grants",
+      "private_trial_backend_v12_billing_rail",
+      "private_trial_backend_v13_billing_entitlement_read",
+      "self_serve_durable_attempt_budget",
+      "website_customer_review_storage",
+      "website_review_entitlement_proof",
+      "website_customer_acceptance",
+      "ecommerce_review_entitlement_proof",
+      "ecommerce_customer_review_storage",
+      "ecommerce_customer_decisions"
+    ],
+    "rowCounts": {
+      "workspace_memberships": 0,
+      "workspace_state": 0,
+      "workspace_events": 0,
+      "website_customer_reviews": 0,
+      "ecommerce_customer_reviews": 0,
+      "ecommerce_customer_decisions": 0
+    },
+    "indexPresent": false,
+    "policyCount": 13
+  },
+  "appliedMigrations": [
+    {
+      "name": "ecommerce_decision_review_fk_index",
+      "sourcePath": "supabase/migrations/20260929171000_ecommerce_decision_review_fk_index.sql",
+      "sourceDigest": "sha256:6ad14b664f4b9ad560a7cbaf37c6d4dcf8c26d3709e5bb44d40ea2f4029785c3",
+      "providerVersion": "20261001180832"
+    },
+    {
+      "name": "app_rls_initplan_optimization",
+      "sourcePath": "supabase/migrations/20260930010000_app_rls_initplan_optimization.sql",
+      "sourceDigest": "sha256:eda938f781a7e854c9d83567600ad912bd07cadc27f4479b1bf7ee410d451a57",
+      "providerVersion": "20261001180915"
+    }
+  ],
+  "postconditions": {
+    "migrationCount": 23,
+    "appliedMigrationNames": [
+      "private_trial_backend_role_preflight",
+      "private_trial_backend_foundation",
+      "private_trial_backend_v2",
+      "private_trial_backend_v3_website",
+      "private_trial_backend_v4_hardening",
+      "private_trial_backend_v5_read_capabilities",
+      "private_trial_backend_v6_managed_activation",
+      "private_trial_backend_v7_workspace_discovery",
+      "private_trial_backend_v8_rls_initplan",
+      "private_trial_backend_v9_metadata_rls",
+      "private_trial_backend_v10_supabase_session_revocation",
+      "private_trial_backend_v11_self_serve_grants",
+      "private_trial_backend_v12_billing_rail",
+      "private_trial_backend_v13_billing_entitlement_read",
+      "self_serve_durable_attempt_budget",
+      "website_customer_review_storage",
+      "website_review_entitlement_proof",
+      "website_customer_acceptance",
+      "ecommerce_review_entitlement_proof",
+      "ecommerce_customer_review_storage",
+      "ecommerce_customer_decisions",
+      "ecommerce_decision_review_fk_index",
+      "app_rls_initplan_optimization"
+    ],
+    "rowCounts": {
+      "workspace_memberships": 0,
+      "workspace_state": 0,
+      "workspace_events": 0,
+      "website_customer_reviews": 0,
+      "ecommerce_customer_reviews": 0,
+      "ecommerce_customer_decisions": 0
+    },
+    "indexPresent": true,
+    "policyCount": 13,
+    "cachedPolicySubqueries": true
+  },
+  "advisors": {
+    "security": {
+      "errorCount": 0,
+      "warningCount": 0,
+      "infoCount": 2,
+      "remaining": [
+        "rls_enabled_no_policy:app_private.billing_events",
+        "rls_enabled_no_policy:app_private.billing_invoices"
+      ],
+      "reference": "https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy"
+    },
+    "performance": {
+      "unusedIndexCount": 5,
+      "authConnectionStrategy": "absolute-10-connections",
+      "references": [
+        "https://supabase.com/docs/guides/database/database-linter?lint=0005_unused_index",
+        "https://supabase.com/docs/guides/deployment/going-into-prod"
+      ]
+    }
+  },
+  "controls": {
+    "productionDatabaseWrites": 0,
+    "previewDatabaseWrites": 2,
+    "authUsersCreated": 0,
+    "customerRowsWritten": 0,
+    "vercelDeployments": 0,
+    "iamChanges": 0,
+    "credentialValuesRead": false
+  },
+  "acceptance": {
+    "providerBranchStatusReconciled": false,
+    "hostedSignIn": "NOT RUN",
+    "saveReload": "NOT RUN",
+    "crossTenantDenial": "NOT RUN",
+    "recovery": "NOT RUN"
+  },
+  "limitations": [
+    "The provider branch inventory still reports MIGRATIONS_FAILED after migration parity was repaired.",
+    "No immutable Vercel Preview was created or bound to this database receipt.",
+    "Authenticated hosted sign-in, save/reload, tenant isolation and recovery acceptance remain unverified."
+  ]
+}

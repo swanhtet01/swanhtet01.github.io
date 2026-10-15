@@ -114,7 +114,7 @@ check(coreApp.includes('localBatchFirstUseAllowed={confirmedLocalShop}'), 'the l
 check(coreApp.includes("key={confirmedLocalShop ? 'confirmed-local' : 'managed-or-unconfirmed'}"), 'a local-to-managed identity transition must synchronously replace the Shop Today lifecycle')
 check(today.includes('if (!localBatchFirstUseAllowed) return'), 'managed or unconfirmed shops must not action-load the local Batch workflow')
 check(today.includes('shopBatchFirstUseWorkspaceCapabilityIsCurrent(localResult.workspaceCapability, currentWorkspaceCapability)'), 'a prior local Batch projection must not surface after capability revocation or lifecycle replacement')
-check(today.includes('Managed company records stay separate; no local Batch record is read or saved.'), 'managed and unconfirmed shops must show the fail-closed local Batch boundary')
+check(!today.includes('Managed company records stay separate; no local Batch record is read or saved.'), 'managed and unconfirmed shops must omit the retired local Batch unavailable panel')
 check(firstUseSource.includes("SHOP_BATCH_FIRST_USE_STORAGE_KEY = 'supermega.shop.batch-profit-control.local-workspace.v1'"), 'local Batch storage must be explicitly versioned')
 check(workspaceCapabilitySource.includes("SHOP_BATCH_FIRST_USE_LOCAL_SCOPE = 'confirmed-local'"), 'the local Batch storage API must require an explicit confirmed-local scope')
 check(workspaceCapabilitySource.includes('capabilityState = new WeakMap'), 'only a source-owned capability may authorize local Batch storage')

@@ -331,7 +331,7 @@ export function WebsiteReviewInbox({ workspaceId, actorId }: { workspaceId: stri
   return <section className="website-editor-panel" aria-labelledby="website-review-inbox-title">
     <h2 id="website-review-inbox-title">Customer reviews</h2>
     <p>Prepare a review or read customer feedback. Publishing requires a separate approval.</p>
-    <button className="core-button" disabled={busy || pendingReceipt !== null} onClick={() => void inspectSavedSource()} type="button">Preview saved website</button>
+    <button className="core-button" disabled={busy || pendingReceipt !== null} onClick={() => void inspectSavedSource()} type="button">Review saved website</button>
     <button className="core-button" disabled={busy} onClick={() => void load()} type="button">Refresh reviews</button>
     <p className="form-notice" role="status">{message}</p>
     {pendingReceipt === 'unavailable' ? <p>Review recovery storage is unavailable or invalid. New preparation is blocked. Restore this browser session or ask the workspace owner to reconcile retained reviews; do not clear storage to retry.</p>

@@ -345,8 +345,8 @@ for (const badOrder of [
   check(!source.includes('owner-observed'), 'UI does not infer owner observation from an absent sample marker')
   check(source.includes('useMemo(() => projectShopCostCoverageAndMarginAtRisk(commerce), [commerce])'), 'Today memoizes the projection by retained Commerce state')
   check(!coreSource.includes('projectShopCostCoverageAndMarginAtRisk'), 'non-Today Commerce renders do not derive the margin projection')
-  check((source.match(/Margin rate unavailable — no sold value/g) ?? []).length === 2, 'Today renders an explicit unavailable rate for zero-sale priorities in real and synthetic views')
-  check((source.match(/Critical cost with no sold value/g) ?? []).length === 2, 'Today names zero-sale cost exposure as critical without fabricating a percentage')
+  check((source.match(/Margin rate unavailable — no sold value/g) ?? []).length === 1, 'Today renders one explicit unavailable rate for zero-sale priorities in the retained margin view')
+  check((source.match(/Critical cost with no sold value/g) ?? []).length === 1, 'Today names zero-sale cost exposure once as critical without fabricating a percentage')
   check(source.includes('No payment, stock, supplier, accounting, customer, or hosted write runs from this panel.'), 'UI repeats the external-write boundary')
 }
 

@@ -68,3 +68,53 @@ test('recognized cafe headings do not bypass declared foreign currency', async (
   assert.equal(result.totals.ready, 0)
   assert.ok(result.rows[0].issues.some(issue => issue.code === 'unsupported_currency'))
 })
+
+
+test('invalid model output cannot earn a correct-rejection score', async () => {
+  const { evaluateCatalogMappings } = await import('./evaluate_catalog_mapping.mjs')
+  const source = csv.replace('1200', '12.50')
+  const scenario = { id: 'fractional', csv: source, ready: 0, expectedRejection: 'import_validation_failed' }
+  for (const proposal of [null, {}, { ...(await proposalFor(source)), sourceDigest: 'stale' }]) {
+    const result = await evaluateCatalogMappings({ cases: [scenario] }, [{ id: scenario.id, proposal }])
+    assert.equal(result.technicalPass, false)
+  }
+  const valid = await evaluateCatalogMappings({ cases: [scenario] }, [{ id: scenario.id, proposal: await proposalFor(source) }])
+  assert.equal(valid.technicalPass, true)
+  assert.equal(valid.adoptionApproved, false)
+  await assert.rejects(evaluateCatalogMappings({ cases: [{ ...scenario, expectedRejection: undefined }] }, [{ id: scenario.id, proposal: null }]), /expected_rejection_required/)
+})
+
+
+test('reference proposals satisfy every fixed corpus expectation', async () => {
+  const { readFile } = await import('node:fs/promises')
+  const { evaluateCatalogMappings } = await import('./evaluate_catalog_mapping.mjs')
+  const corpus = JSON.parse(await readFile(new URL('./catalog_mapping_corpus.json', import.meta.url), 'utf8'))
+  const responses = []
+  for (const scenario of corpus.cases) {
+    const baseline = await createShopCatalogImportPreview(scenario.csv, [])
+    const mapping = { ...baseline.mapping }
+    // Deliberately choose a competing source for this negative fixture. The
+    // guard must still insist on human choice, not trust the proposed mapping.
+    if (scenario.ambiguous) mapping[scenario.ambiguous] = 'stock'
+    responses.push({ id: scenario.id, proposal: { sourceDigest: baseline.sourceDigest, mapping } })
+  }
+  const result = await evaluateCatalogMappings(corpus, responses)
+  assert.equal(result.technicalPass, true, JSON.stringify(result.results))
+  assert.equal(result.results.length, corpus.cases.length)
+  assert.equal(result.modelCalled, false)
+  assert.equal(result.adoptionApproved, false)
+  const malformed = await evaluateCatalogMappings(corpus, responses.map(row => ({ ...row, proposal: null })))
+  assert.equal(malformed.results.filter(row => row.expectationMet).length, 0)
+})
+
+
+test('batch evaluation checks row count and later-row values', async () => {
+  const { evaluateCatalogMappings } = await import('./evaluate_catalog_mapping.mjs')
+  const source = csv + '\nSYN-2,Second item,8,2,2400'
+  const response = [{ id: 'batch', proposal: await proposalFor(source) }]
+  const scenario = { id: 'batch', csv: source, ready: 2, valuesByRow: [{ price: '1200' }, { price: '2400', onHand: '8' }] }
+  assert.equal((await evaluateCatalogMappings({ cases: [scenario] }, response)).technicalPass, true)
+  assert.equal((await evaluateCatalogMappings({ cases: [{ ...scenario, valuesByRow: [{ price: '1200' }, { price: '1' }] }] }, response)).technicalPass, false)
+  assert.equal((await evaluateCatalogMappings({ cases: [{ ...scenario, ready: 1 }] }, response)).technicalPass, false)
+  await assert.rejects(evaluateCatalogMappings({ cases: [{ ...scenario, valuesByRow: undefined }] }, response), /batch_expectations_required/)
+})

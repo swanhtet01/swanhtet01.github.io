@@ -44,15 +44,6 @@ from supermega_runtime.production_runtime import (
     PRODUCTION_HUMAN_EVENTS,
     require_shop_demand_source_current,
 )
-from supermega_runtime.order_intake import (
-    MAX_ORDER_MESSAGE_LENGTH,
-    OrderIntakeCatalogItem,
-)
-from supermega_runtime.order_intake_provider import (
-    MAX_ORDER_INTAKE_CATALOG_ITEMS,
-    OrderIntakeDraftProvider,
-    OrderIntakeProviderError,
-)
 from supermega_runtime.plant_equipment_import import (
     PLANT_EQUIPMENT_MAX_PACKAGE_BYTES,
     PlantEquipmentImportError,
@@ -274,25 +265,6 @@ class TrialPlantEquipmentMaintenanceStrategyRequest(_StrictRequest):
     procedure_reference: str = Field(min_length=1, max_length=240)
     safety_baseline_reference: str = Field(min_length=1, max_length=240)
     confirmation: str = Field(min_length=18, max_length=98)
-
-
-class TrialOrderIntakeDraftRequest(_StrictRequest):
-    source_label: str = Field(min_length=1, max_length=120)
-    message: str = Field(min_length=1, max_length=MAX_ORDER_MESSAGE_LENGTH)
-
-    @field_validator("source_label")
-    @classmethod
-    def require_canonical_source_label(cls, value: str) -> str:
-        if not value.strip() or value != value.strip():
-            raise ValueError("source label must be canonical visible text")
-        return value
-
-    @field_validator("message")
-    @classmethod
-    def require_visible_order_message(cls, value: str) -> str:
-        if not value.strip():
-            raise ValueError("order message must contain visible characters")
-        return value
 
 
 class TrialCompanyBriefRequest(_StrictRequest):
@@ -1032,41 +1004,11 @@ def _commerce_retains_website_source(commerce_state: object, source: object) -> 
     )
 
 
-def _order_intake_catalog(commerce_state: object) -> list[OrderIntakeCatalogItem]:
-    if not isinstance(commerce_state, Mapping):
-        raise _error(409, "order_intake_catalog_unavailable")
-    items = commerce_state.get("items")
-    if not isinstance(items, list) or not items:
-        raise _error(409, "order_intake_catalog_unavailable")
-    if len(items) > MAX_ORDER_INTAKE_CATALOG_ITEMS:
-        raise _error(
-            409,
-            "order_intake_catalog_too_large",
-            maximum_items=MAX_ORDER_INTAKE_CATALOG_ITEMS,
-        )
-    if any(not isinstance(item, Mapping) for item in items):
-        raise _error(409, "order_intake_catalog_invalid")
-    try:
-        return [
-            OrderIntakeCatalogItem(
-                sku=item["sku"],
-                name=item["name"],
-                variant=item.get("variant"),
-                on_hand=item["onHand"],
-                unit_price_mmk=item["price"],
-            )
-            for item in items
-        ]
-    except (KeyError, ValidationError) as exc:
-        raise _error(409, "order_intake_catalog_invalid") from exc
-
-
 def create_trial_router(
     *,
     store: TrialStore,
     resolve_principal: PrincipalResolver,
     resolve_signup_session: SignupSessionResolver | None = None,
-    order_intake_provider: OrderIntakeDraftProvider | None = None,
     send_welcome_email: WelcomeEmailSender | None = None,
     current_date: DateResolver = _current_yangon_date,
 ) -> APIRouter:
@@ -1845,58 +1787,6 @@ def create_trial_router(
             },
             "secretValuesExposed": False,
             **_command_response(result),
-        }
-
-    @router.post("/commerce/order-intake/drafts")
-    async def trial_order_intake_draft(request: Request) -> dict[str, Any]:
-        principal = _resolve_principal(request, resolve_principal)
-        readiness = _readiness(store, principal)
-        _require_read_ready(readiness)
-        if not has_surface_read_capability(readiness.capabilities, "commerce"):
-            raise _error(
-                403,
-                "trial_capability_required",
-                required_capability="commerce.read",
-            )
-        if principal.actor_kind != "human":
-            raise _error(403, "trial_human_approval_required")
-        if order_intake_provider is None:
-            raise _error(503, "order_intake_provider_not_configured")
-        raw_body = await _bounded_json_body(
-            request,
-            maximum_bytes=MAX_ORDER_MESSAGE_LENGTH + 512,
-        )
-        try:
-            body = TrialOrderIntakeDraftRequest.model_validate(raw_body)
-        except ValidationError as exc:
-            raise _error(422, "order_intake_request_invalid") from exc
-        commerce = _invoke(lambda: store.get_state(principal, "commerce"))
-        catalog = _order_intake_catalog(commerce.state)
-        try:
-            draft = await order_intake_provider.generate(
-                message=body.message,
-                catalog=catalog,
-                workspace_id=principal.workspace_id,
-                actor_id=principal.actor_id,
-            )
-        except OrderIntakeProviderError as exc:
-            status_code = 503
-            if exc.code == "order_intake_company_budget_reached":
-                status_code = 429
-            elif exc.code in {
-                "order_intake_catalog_empty",
-                "order_intake_catalog_invalid",
-                "order_intake_catalog_too_large",
-            }:
-                status_code = 409
-            elif exc.code == "order_intake_provider_refused":
-                status_code = 422
-            raise _error(status_code, exc.code) from exc
-        return {
-            "draft": draft.model_dump(mode="json"),
-            "source_label_digest": (
-                f"sha256:{sha256(body.source_label.encode('utf-8')).hexdigest()}"
-            ),
         }
 
     @router.get("/commerce/service-schedule")

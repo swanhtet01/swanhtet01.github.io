@@ -507,12 +507,24 @@ class LegacyPilotSecurityTests(unittest.TestCase):
         self.assertFalse(ready["production_alias_mutation"])
         self.assertNotIn("secret-not-returned", json.dumps(ready))
 
+        oidc_environment = {
+            **{key: value for key, value in valid_environment.items() if key != "VERCEL_TOKEN"},
+            "VERCEL_OIDC_TOKEN": "oidc-secret-not-returned",
+        }
+        oidc_ready = target_state(valid_link, oidc_environment)
+        self.assertTrue(oidc_ready["ready"])
+        self.assertNotIn("oidc-secret-not-returned", json.dumps(oidc_ready))
+
         invalid_cases = {
             "link-team": ({**valid_link, "orgId": "team_wrong"}, valid_environment, "canonical_vercel_team_link_missing"),
             "link-project": ({**valid_link, "projectId": "prj_wrong"}, valid_environment, "canonical_vercel_project_link_missing"),
             "env-team": (valid_link, {**valid_environment, "VERCEL_ORG_ID": "team_wrong"}, "canonical_vercel_team_environment_missing"),
             "env-project": (valid_link, {**valid_environment, "VERCEL_PROJECT_ID": "prj_wrong"}, "canonical_vercel_project_environment_missing"),
-            "token": (valid_link, {**valid_environment, "VERCEL_TOKEN": ""}, "vercel_token_missing"),
+            "credential": (
+                valid_link,
+                {**valid_environment, "VERCEL_TOKEN": "", "VERCEL_OIDC_TOKEN": ""},
+                "vercel_credential_missing",
+            ),
         }
         for label, (project_link, environment, blocker) in invalid_cases.items():
             with self.subTest(label=label):

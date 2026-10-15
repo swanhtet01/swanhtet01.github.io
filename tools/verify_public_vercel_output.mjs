@@ -4,9 +4,14 @@ import { join, relative, resolve } from 'node:path'
 import { activeProductContracts } from '../showroom/src/core/product-visibility.ts'
 
 const root = process.cwd()
-const staticDir = resolve(root, '.vercel', 'output', 'static')
-const functionsDir = resolve(root, '.vercel', 'output', 'functions', 'api')
-const configPath = resolve(root, '.vercel', 'output', 'config.json')
+const isolatedOutputId = process.env.SUPERMEGA_PUBLIC_OUTPUT_ID || ''
+if (isolatedOutputId && !/^[a-z0-9][a-z0-9-]{0,63}$/.test(isolatedOutputId)) throw new Error('public_output_id_invalid')
+const outputDir = isolatedOutputId
+  ? resolve(root, '.tmp', `supermega-public-output-${isolatedOutputId}`)
+  : resolve(root, '.vercel', 'output')
+const staticDir = resolve(outputDir, 'static')
+const functionsDir = resolve(outputDir, 'functions', 'api')
+const configPath = resolve(outputDir, 'config.json')
 const manifest = JSON.parse(readFileSync(resolve(root, 'site-manifest.json'), 'utf8'))
 
 function fail(code, detail = {}) {
@@ -89,10 +94,17 @@ const expectedStaticFiles = new Set([
   '404.html',
   '__release.json',
   'favicon.svg',
+  'fonts/noto-sans-latin.woff2',
+  'fonts/noto-sans-latin-OFL.txt',
   'vercel-insights.js',
-  'images/platform-stock.jpg',
-  'images/platform-pages.jpg',
-  'images/platform-catalog.jpg',
+  'platform-carousel.js',
+  'images/actual-shop-today.png',
+  'images/actual-shop-sell.png',
+  'images/actual-shop-orders.png',
+  'images/actual-sites-editor.png',
+  'images/actual-sites-inquiries.png',
+  'images/actual-commerce-catalog.png',
+  'images/actual-commerce-order-request.png',
   'og-card.png',
   ...manifest.customerProducts.map((product) => `og-card-${product.id}.png`),
   'robots.txt',
@@ -105,6 +117,10 @@ for (const path of actualStaticFiles) {
 }
 for (const path of expectedStaticFiles) {
   if (!actualStaticFiles.includes(path)) fail('expected_public_artifact_missing', { path })
+}
+const ecommercePage = readStatic('ecommerce/index.html')
+for (const path of ['/images/actual-commerce-catalog.png', '/images/actual-commerce-order-request.png']) {
+  if (!ecommercePage.includes(`src="${path}"`)) fail('commerce_showcase_capture_missing', { path })
 }
 
 const sharedRequired = [
@@ -125,6 +141,8 @@ const sharedRequired = [
   '--bg-raised: #f1f1fb;',
   '--ink: #151521;',
   '--blue: #5b4ee8;',
+  'font-family: "SuperMega Noto Sans"',
+  '--font-latin: "SuperMega Noto Sans"',
   '.platform-image {margin:0;padding:24px;background:#f1f0fb;border:1px solid #dedbf4;',
 ]
 
@@ -221,12 +239,11 @@ if (new Set(pageTitles).size !== pageTitles.length) fail('page_titles_not_unique
 // JSON-LD structured data: the homepage carries one Organization schema and each
 // product landing page one Product schema, sourced verbatim from the manifest.
 // Every JSON-LD element must keep type="application/ld+json" so it remains an
-// HTML data block that browsers never execute — that is what keeps the pinned
-// single-hash script-src contract valid without hashing these blocks.
+// HTML data block that browsers never execute.
 const jsonLdBlocks = (html) => [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map((match) => match[1])
 const executableScriptCount = (html) => (html.match(/<script(?![^>]*type="application\/ld\+json")[\s>]/g) || []).length
 for (const [route, page] of pages) {
-  const expectedExecutable = route === '/contact/' ? 2 : 1
+  const expectedExecutable = route === '/contact/' ? 2 : page.html.includes('data-platform-carousel') ? 2 : 1
   if (executableScriptCount(page.html) !== expectedExecutable) fail('unexpected_executable_script_element', { route, expected: expectedExecutable })
   const blocks = jsonLdBlocks(page.html)
   const landingProduct = publicProducts.find((product) => `/${product.id}/` === route)
@@ -272,9 +289,9 @@ if (publicObservability.indexOf("window.si('beforeSend'") > publicObservability.
 if (/(?:conversion|contact-form|customer|email|payment|proof_|window\.va\('event')/i.test(publicObservability)) fail('public_observability_private_or_custom_event_surface')
 
 const home = pages.get('/')?.html || ''
-const expectedHomeDescription = 'Sales and stock, business websites, and customer requests. Shop, Sites and Commerce for your business.'
+const expectedHomeDescription = 'Sell, publish and fulfil from one connected platform. Shop, Sites and Commerce keep the record, next action and result together.'
 if (homePage?.file !== 'index.html') fail('home_manifest_entry_invalid')
-if (homePage.title !== 'SuperMega | Business tools for Myanmar') fail('home_manifest_title_drift')
+if (homePage.title !== 'SuperMega | Run the business without the busywork') fail('home_manifest_title_drift')
 if (homePage.description !== expectedHomeDescription) fail('home_manifest_description_source_drift')
 for (const staleToken of [
   '<title>SuperMega | Four products</title>',
@@ -285,7 +302,7 @@ for (const staleToken of [
   if (home.includes(staleToken)) fail('stale_home_metadata_present', { token: staleToken })
 }
 if (/\.brand-name\s*\{[^}]*display\s*:\s*none/i.test(home)) fail('mobile_brand_name_hidden')
-for (const token of ['Your business.<br>Working together.', 'id="products"', 'class="platform-image"', 'href="https://app.supermega.dev/login"']) {
+for (const token of ['Run the business.<br>Without the busywork.', 'id="products"', 'class="platform-image"', 'href="https://app.supermega.dev/login"', 'href="/contact/">Contact SuperMega</a>']) {
   if (!home.includes(token)) fail('homepage_contract_missing', { token })
 }
 for (const retiredToken of [
@@ -309,28 +326,53 @@ for (const retiredLabel of ['>Open Commerce<', '>Open Production<']) {
   if (home.includes(retiredLabel)) fail('ambiguous_demo_cta_present', { retiredLabel })
 }
 if (home.includes('Commerce and Production carry real records and actions.')) fail('unsupported_live_record_claim_present')
-// Navigation is shared across all marketing pages: skip, home, Login, Contact, Privacy.
+// Navigation is shared across all marketing pages: skip, home, header Contact,
+// Login, footer Contact and Privacy. The homepage adds one internal link for
+// each product and one closing Contact action.
 for (const [route, html] of [['/', home], ...publicProducts.map(product => [`/${product.id}/`, pages.get(`/${product.id}/`).html])]) {
   const body = html.slice(html.indexOf('<body'))
-  if ((body.match(/<a\b/g) || []).length !== 5) fail('marketing_link_surface_drift', { route })
+  const expectedLinks = route === '/' ? 7 + publicProducts.length : 6
+  if ((body.match(/<a\b/g) || []).length !== expectedLinks) fail('marketing_link_surface_drift', { route, expectedLinks })
   if (countOccurrences(body, 'href="https://app.supermega.dev/login"') !== 1) fail('single_login_missing', { route })
-  if (!body.includes('class="platform-image"') || !body.includes('class="feature-line"')) fail('product_visual_missing', { route })
+  if (!body.includes('class="platform-image"') || !(route === '/' ? body.includes('class="product-card-flow"') : body.includes('class="feature-line"'))) fail('product_visual_missing', { route })
   for (const token of ['Request assisted setup', 'Open Shop', 'Open Ecommerce', 'Open Website', 'Profit Control', 'Choose shop type', 'theme-toggle', 'Start guided trial']) {
     if (body.includes(token)) fail('retired_acquisition_surface', { route, token })
   }
 }
+for (const product of publicProducts) {
+  const productRoute = manifest.pages.find(page => page.productId === product.id)?.route
+  if (typeof productRoute !== 'string' || countOccurrences(home, `class="story-link" href="${productRoute}"`) !== 1) fail('homepage_product_link_missing', { product: product.id })
+}
+
+const shopPage = pages.get('/shop/')?.html || ''
+for (const [route, html] of [['/', home], ['/shop/', shopPage]]) {
+  if (!html.includes('<html lang="en">')) fail('marketing_page_not_english', { route })
+  if (html.includes('data-language-toggle') || html.includes('src="/site-language.js"')) fail('marketing_language_control_present', { route })
+  if (html.includes('data-i18n=') || /[\u1000-\u109f]/u.test(html)) fail('marketing_myanmar_copy_present', { route })
+}
 
 const contact = pages.get('/contact/')?.html || ''
-for (const token of ['data-contact-form', 'action="/api/contact-submissions"', 'name="name"', 'name="email"', 'name="company"', 'name="product"', 'value="shop"', 'value="website"', 'value="ecommerce"', 'name="template"', 'name="goal"', 'name="idempotency_key"', 'name="proof_contract"', 'name="proof_version"', 'name="proof_digest"', 'name="proof_product"', 'name="proof_template"', 'name="proof_readiness"', 'name="proof_sources"', 'name="proof_behavior"', 'name="proof_decisions"', 'proof_outcome', 'proof_outcome_digest', 'proof_outcome_accepted', 'name="proof_raw_records"', 'class="contact-honeypot" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" inert', 'x-idempotency-key', 'rate_limited', 'trial_proof_invalid', 'Tell us what your business needs.', 'What to include', 'scope, price and timing', 'Include your products or services, location and contact details.', '<input type="hidden" name="template" maxlength="120"', '>Send message</button>', '>Shop<', '>Sites<', '>Commerce<', 'We use your email to reply about this request.', 'Reply email', 'data-contact-heading', 'data-contact-lede', 'data-contact-copy-heading', 'data-contact-copy', 'data-trial-proof', 'Attached request details', 'Request summary', 'it does not verify a managed account.', 'digest-bound aggregate summary', 'location.hash.slice(1)', `${JSON.stringify(['guide', ...publicProducts.map(product => product.id)])}.includes(requestedProduct||'')`, "handoff.get('company')", "handoff.get('goal')", "history.replaceState(null,'',location.pathname+location.search)", "heading.textContent='Finish your '+productName+' request.'", 'Add your contact details, review your brief, and send.', 'An aggregate summary is attached. Raw business records and account details are not included.', 'Your brief will be sent with your contact details.', 'Request summary attached for review. Nothing has been sent.', 'Attached summary removed. Review the updated request before sending.', 'Your brief is ready. Nothing has been sent.', 'Request received:', 'Keep this for follow-up.', 'Too many requests from this connection. Please wait ten minutes and try again.', 'We could not confirm receipt. Your details are still here.', 'receipt_unconfirmed', 'Promise.race', 'controller.abort()', 'clearTimeout(deadline)']) {
+const contactMain = contact.match(/<main\b[\s\S]*?<\/main>/)?.[0] || ''
+for (const token of [
+  'data-contact-form', 'action="/api/contact-submissions"', 'name="name"', 'name="email"',
+  'name="company"', 'name="product"', 'value="guide"', 'name="template"', 'name="goal"',
+  'name="idempotency_key"', 'name="proof_contract"', 'name="proof_digest"', 'class="contact-honeypot"',
+  'x-idempotency-key', 'Tell us what your business needs.', 'How can we help?', 'Company (optional)',
+  'Tell us what your business does and what you would like to improve.', '>Send message</button>',
+  'We’ll reply by email.', "shop:'Shop'", "website:'Sites'", "ecommerce:'Commerce'",
+]) {
   if (!contact.includes(token)) fail('contact_contract_missing', { token })
 }
-for (const token of ['Template, if known', '>Send workflow</button>', "body.request_id||'confirmed'"]) {
-  if (contact.includes(token)) fail('retired_contact_contract_present', { token })
+for (const token of [
+  '<select name="product"', 'Choose a service', 'What would you like us to prepare?', 'What to include',
+  'Attached request details', 'Readiness', 'Sources', 'Behavior', 'Decisions', 'Reply email',
+]) {
+  if (contactMain.includes(token)) fail('retired_contact_ui_present', { token })
 }
-if (contact.includes('mailto:') || contact.includes('tel:') || contact.includes('Email swanhtet@supermega.dev')) fail('contact_bypass_links_returned')
 for (const token of ['Request managed company intelligence.', "submit.textContent='Request managed pilot'", 'managedIntelligenceRequest']) {
   if (contact.includes(token)) fail('retired_managed_pilot_pitch_present', { token })
 }
+if (contact.includes('mailto:') || contact.includes('tel:') || contact.includes('Email swanhtet@supermega.dev')) fail('contact_bypass_links_returned')
 if (!contact.includes('source.value=location.href')) fail('contact_source_attribution_missing')
 
 if (/<(?:input|textarea)\b(?=[^>]*\bname="(?:name|email|company|template|goal)")(?=[^>]*\bvalue=)[^>]*>/i.test(contact)

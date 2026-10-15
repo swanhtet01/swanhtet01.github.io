@@ -3,11 +3,26 @@ import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import { createInitialWorkspace, createWebsitePreviewArtifact, restoreWorkspace, createWebsiteEditSession, updateWebsiteEditSession, commitWebsiteEditSession, mutateWebsiteWorkspace, loadWebsiteWorkspace } from '../showroom/src/products/website/website-model.ts'
 import { buildWebsiteHtml } from '../showroom/src/products/website/website-export.ts'
-import { applyWebsiteStarterBrief, installWebsiteWorkingSample, websiteStarterTemplates } from '../showroom/src/products/website/website-starter.ts'
+import { applyWebsiteStarterBrief, installWebsiteWorkingSample, websiteStarterTemplateManifest, websiteStarterTemplateManifests, websiteStarterTemplates } from '../showroom/src/products/website/website-starter.ts'
 import { websiteTradeBrief, websiteTradeBriefOptions } from '../showroom/src/products/website/website-trade-brief.ts'
 
 const capturedAt = '2026-09-18T00:00:00.000Z'
 const brief = { businessName: 'Example Studio', audience: 'local businesses', offer: 'Print design for local businesses', proof: 'Owner-supplied description for review.', contactHref: '' }
+test('Sites layouts resolve through portable manifests with only supported customer-facing slots', () => {
+  assert.equal(websiteStarterTemplateManifests.manifests.length, websiteStarterTemplates.length)
+  for (const template of websiteStarterTemplates) {
+    const manifest = websiteStarterTemplateManifest(template.id)
+    assert.equal(manifest.id, `sites-${template.id}`)
+    assert.equal(manifest.version, 'v1')
+    assert.deepEqual(manifest.capabilities, ['website.presence', 'website.inquiries'])
+    assert.equal(manifest.slots.identity, true)
+    assert.equal(manifest.slots.content, true)
+  }
+  assert.equal(websiteStarterTemplateManifest('catalog-showcase').slots.catalog, true)
+  assert.equal(websiteStarterTemplateManifest('lead-generation').slots.services, true)
+  assert.equal(websiteStarterTemplateManifest('business-presence').slots.catalog, undefined)
+})
+
 const expected = {
   'business-presence': { slug: '/about', label: 'Ask about our business', need: 'which service or information' },
   'lead-generation': { slug: '/services', label: 'Discuss your requirements', need: 'scope of the work' },
@@ -157,10 +172,24 @@ test('operator starter does not prefill an unrelated business contact', () => {
   assert.ok(!source.includes('Choose business type'))
   assert.ok(!source.includes('View example'))
   assert.ok(!source.includes('onViewSample'))
+  assert.ok(!source.includes('type="file"'))
+  assert.ok(!source.includes('Preview only.'))
+  assert.ok(!source.includes('Website example'))
   assert.ok(source.includes('Use accurate public details, such as opening hours or service areas.'))
   assert.doesNotMatch(source, /Why should customers trust it\?|same-day neighborhood delivery/)
   assert.match(styles, /\.website-starter-setup input,[\s\S]*?min-height: 2\.75rem;[\s\S]*?font-size: 1rem;/)
   assert.match(styles, /\.website-starter-setup \.website-button \{[\s\S]*?font-size: \.875rem;/)
+})
+
+test('business brief opens the real page-review workspace and keeps publish explicit', () => {
+  const source = readFileSync(new URL('../showroom/src/products/website/WebsiteProduct.tsx', import.meta.url), 'utf8')
+  const handoff = source.slice(source.indexOf('function startWithBusiness'), source.indexOf('function openStarterSetup'))
+  assert.ok(handoff.includes("openContentSurface('work')"))
+  assert.ok(!handoff.includes("openContentSurface('preview')"))
+  assert.ok(source.includes("? 'Ready' : 'Review'"))
+  assert.ok(source.includes('Mark ready & next'))
+  assert.ok(source.includes("if (nextDraftPage) setSelectedPageId(nextDraftPage.id)"))
+  assert.ok(!readFileSync(new URL('../showroom/src/products/website/ContentWorkspace.tsx', import.meta.url), 'utf8').includes('Mark page ready'))
 })
 
 test('all trade outputs give useful inquiry guidance without asserting business operations', () => {

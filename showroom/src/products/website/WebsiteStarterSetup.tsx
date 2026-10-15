@@ -63,10 +63,6 @@ export function WebsiteStarterSetup({
   const [brief, setBrief] = useState<WebsiteStarterBrief>(() => ({ ...opening.brief }))
   const [attempted, setAttempted] = useState(false)
   const [offeringRows, setOfferingRows] = useState<{ name: string; details: string }[]>([])
-  const [importPreview, setImportPreview] = useState<{ name: string; details: string }[] | null>(null)
-  const [importMessage, setImportMessage] = useState('')
-  const [importBusy, setImportBusy] = useState(false)
-  const importAttempt = useRef(0)
   const starterFormRef = useRef<HTMLFormElement>(null)
   const issues = websiteStarterBriefIssues(brief)
   if (offeringRows.some((row) => row.name.includes('|'))) issues.push({ field: 'offerings', message: 'Use a name without the | character.' })
@@ -85,36 +81,12 @@ export function WebsiteStarterSetup({
     setBrief((current) => ({ ...current, offerings: rows.map((row) => `${row.name} | ${row.details.replace(/\s+/gu, ' ')}`).join('\n') }))
   }
 
-  async function previewOfferingFile(file: File | undefined) {
-    const attempt = ++importAttempt.current
-    setImportPreview(null)
-    setImportMessage('')
-    if (!file) { setImportBusy(false); return }
-    setImportBusy(true)
-    try {
-      if (!file.name.toLowerCase().endsWith('.csv') || file.size > 64 * 1024) throw new Error('Choose a .csv file smaller than 64 KB.')
-      const { previewWebsiteOfferingCsv } = await import('./website-offering-import')
-      const rows = previewWebsiteOfferingCsv(await file.text())
-      if (attempt !== importAttempt.current) return
-      setImportPreview(rows)
-      setImportMessage('Preview only. Check every entry against your current menu or service list before adding it. Nothing was uploaded.')
-    } catch (error) {
-      if (attempt === importAttempt.current) setImportMessage(error instanceof Error ? error.message : 'Could not read this file. Your existing entries are unchanged.')
-    } finally {
-      if (attempt === importAttempt.current) setImportBusy(false)
-    }
-  }
-
   function updateBrief<Field extends keyof WebsiteStarterBrief>(field: Field, value: WebsiteStarterBrief[Field]) {
     setBrief((current) => ({ ...current, [field]: value }))
   }
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (importBusy || importPreview) {
-      setImportMessage(importBusy ? 'Wait for the file preview, or cancel it before preparing your draft.' : 'Use reviewed entries or discard the preview before preparing your draft.')
-      return
-    }
     setAttempted(true)
     if (issues.length > 0) {
       requestAnimationFrame(() => {
@@ -222,13 +194,6 @@ export function WebsiteStarterSetup({
         <details open={offeringsIssue ? true : undefined}>
           <summary>Menu, services or featured products — optional</summary>
           <p id="website-offerings-help">Add up to four featured entries using approved public details. They appear on your Services, Catalog or About page. Displaying a price does not collect payment.</p>
-          <div>
-            <label><span>Import services or products — optional</span><input type="file" accept=".csv,text/csv" disabled={importBusy} onChange={(event) => { void previewOfferingFile(event.target.files?.[0]); event.target.value = '' }} aria-describedby="website-import-help website-import-status" /></label>
-            <p id="website-import-help">Columns: name, description. Up to four featured entries; include approved prices or durations in description. The file stays on this device. Existing entries are never replaced by import.</p>
-            <p role="status" id="website-import-status">{importBusy ? 'Reading local file…' : importMessage}</p>
-            {importBusy ? <button type="button" className="website-button is-secondary" onClick={() => { importAttempt.current++; setImportBusy(false); setImportPreview(null); setImportMessage('Import canceled. Your website is unchanged.') }}>Cancel import</button> : null}
-            {importPreview ? <div><ul>{importPreview.map(row => <li key={row.name}><strong>{row.name}</strong> — {row.details}</li>)}</ul><button type="button" className="website-button is-secondary" disabled={offeringRows.length > 0} onClick={() => { if (offeringRows.length) return; updateOfferings(importPreview); setImportPreview(null); setImportMessage('Reviewed entries added. Nothing is published.') }}>Add reviewed entries</button>{offeringRows.length > 0 ? <p>Keep your existing entries, or remove them before using this file.</p> : null}<button type="button" className="website-button is-secondary" onClick={() => setImportPreview(null)}>Discard file</button></div> : null}
-          </div>
           {offeringRows.map((row, index) => (
             <fieldset key={index}>
               <legend>Featured entry {index + 1}</legend>
@@ -242,8 +207,7 @@ export function WebsiteStarterSetup({
         </details>
 
         <footer className="website-starter-actions">
-          <button className="website-button is-primary" type="submit" disabled={importBusy || Boolean(importPreview)} aria-describedby={importBusy || importPreview ? 'website-import-pending' : undefined}>Create website</button>
-          {importBusy || importPreview ? <p id="website-import-pending" role="status">{importBusy ? 'Wait for the file to finish, or cancel the import.' : 'Add the reviewed entries or discard the file before continuing.'}</p> : null}
+          <button className="website-button is-primary" type="submit">Create website</button>
         </footer>
       </form>
     </section>

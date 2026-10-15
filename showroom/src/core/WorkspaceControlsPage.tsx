@@ -551,7 +551,7 @@ export function WorkspaceControlsPage() {
   )
   const recordCount = currentBackup ? Object.keys(currentBackup.records).length : backupRefusal?.records ?? 0
   const statusRows: Array<readonly [string, string]> = [
-    ['Mode', runtime.status === 'enterprise' ? 'Company data' : runtime.status === 'checking' ? 'Checking' : 'Demo on this device'],
+    ['Mode', runtime.status === 'enterprise' ? 'Company data' : runtime.status === 'checking' ? 'Checking' : 'Device workspace'],
     ['Company changes', runtime.writesReady ? 'Available' : 'Unavailable'],
     ['Local records', currentBackup ? String(recordCount) : `${recordCount} · no backup file possible`],
   ]
@@ -745,7 +745,7 @@ export function WorkspaceControlsPage() {
             {runtime.activationManifest?.next_action ? <p>{runtime.activationManifest.next_action}</p> : null}
             {runtime.requirements.length ? <ul className="requirement-list">{runtime.requirements.map((requirement) => <li key={requirement}>{requirement}</li>)}</ul> : null}
           </details> : null}
-          <div className="trial-actions"><Link className="core-button" to="/login">Login</Link><Link className="core-button primary" to="/">Open a product</Link></div>
+          <div className="trial-actions"><Link className="core-button" to="/login">Sign in</Link><Link className="core-button primary" to="/">Open a product</Link></div>
           <p className="authority-note">SuperMega can prepare local work. Customer messages, payments, publishing, imports, and managed writes still require verified company controls and human approval.</p>
         </section>
 

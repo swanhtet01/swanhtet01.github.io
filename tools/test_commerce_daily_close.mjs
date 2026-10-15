@@ -22,7 +22,10 @@ const bundle = await build({
     contents: `export {
       createSeedCommerce, commerceCloseExpectation, saveCommerceClose,
       commerceDailyCloseExport, commerceDailyCloseCsv, commerceOrderAdjustedTotal,
-    } from './commerce-workspace.ts'`,
+      reserveCommerceOrder,
+      advanceCommerceOrder, reconcileCommercePayment, validateCommerceState,
+    } from './commerce-workspace.ts'
+    export { registerCommerceOperatingUnit, openCommerceShiftSession } from './commerce-operating-session.ts'`,
     resolveDir: 'showroom/src/core',
     sourcefile: 'showroom/src/core/close-test-entry.ts',
     loader: 'ts',
@@ -37,6 +40,8 @@ const bundle = await build({
 const {
   createSeedCommerce, commerceCloseExpectation, saveCommerceClose,
   commerceDailyCloseExport, commerceDailyCloseCsv, commerceOrderAdjustedTotal,
+  registerCommerceOperatingUnit, openCommerceShiftSession, reserveCommerceOrder,
+  advanceCommerceOrder, reconcileCommercePayment, validateCommerceState,
 } = await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].contents).toString('base64')}`)
 
 let checks = 0
@@ -209,6 +214,7 @@ check(csv.split('\n').filter((line) => line.trim()).length >= exported.orders.le
 const { readFile } = await import('node:fs/promises')
 const encodedBytes = (text) => new TextEncoder().encode(text).byteLength
 const corePageSource = await readFile(new URL('../showroom/src/core/CoreApp.tsx', import.meta.url), 'utf8')
+const shopTodaySource = await readFile(new URL('../showroom/src/core/ShopToday.tsx', import.meta.url), 'utf8')
 // Execute the actual UI draft projection: expected sales are not cashier counts.
 const settlementDraftExpression = corePageSource.match(/const effectiveCloseSettlementDraft = ([\s\S]*?)\n  const closeSettlementInput =/)
 check(Boolean(settlementDraftExpression), 'settlement draft projection remains inspectable')
@@ -223,6 +229,22 @@ check(retainedCounts[0] === enteredCount && retainedCounts[1].countedMmk === '',
 check(projectSettlementDraft(new Map([['Cash', 35000]]), [enteredCount])[0] === enteredCount, 'changed expectation must not overwrite a cashier count')
 check(corePageSource.includes('!closePreview || !closeSettlement} onClick={closeDay}'), 'close action remains disabled without a complete settlement')
 check(corePageSource.includes("if (!/^(?:0|[1-9]\\d*)$/.test(line.countedMmk)) return null"), 'empty settlement input remains invalid rather than zero')
+
+// Today must expose the same guarded close as a real queue rather than a generic
+// finance shortcut. It may show Shop-record expectations, but it must never imply
+// that a wallet or bank has independently confirmed settlement.
+check(corePageSource.includes('const shopCloseQueue = {'), 'Shop Today close queue projection is missing')
+check(corePageSource.includes('paymentMethods: [...closeExpectedByPayment.entries()]'), 'Shop Today no longer groups close-ready value by recorded payment method')
+check(corePageSource.includes('totalMmk: reconciledValue'), 'Shop Today close total is no longer the adjusted close expectation')
+check(corePageSource.includes('closeReadyMmk: reconciledValue'), 'profit control close value drifted from the adjusted close expectation')
+check(corePageSource.includes("target: paymentReview.length ? '/shop/?tab=orders#shop-payment-review' : '/shop/?tab=orders#shop-close-controls'"), 'payment exceptions no longer route ahead of the close count')
+check(corePageSource.includes('closeQueue={shopCloseQueue}'), 'Shop Today is not receiving the source close queue')
+check(corePageSource.includes('id="shop-payment-review" open={Boolean(paymentReview.length)}'), 'payment exception review is not directly addressable and visible when needed')
+check(shopTodaySource.includes('aria-label="Cash and wallet close queue"'), 'Shop Today close queue lost its accessible identity')
+check(shopTodaySource.includes('closeQueue.paymentMethods.map'), 'Shop Today no longer renders the recorded payment-method split')
+check(shopTodaySource.includes('Expected from completed, reconciled Shop orders. Wallet and bank settlement is not independently confirmed.'), 'Shop Today close queue overstates settlement evidence')
+check(shopTodaySource.includes("? 'Review payment exceptions'") || corePageSource.includes("? 'Review payment exceptions'"), 'Shop Today does not prioritize payment exceptions')
+check(shopTodaySource.includes("? 'Count and close'") || corePageSource.includes("? 'Count and close'"), 'Shop Today does not give a close-ready next action')
 
 // Exactly what CoreApp.tsx built on the render path before this change, kept here so the cost
 // it carried stays measurable after the code that carried it is gone.
@@ -286,6 +308,255 @@ check(
 // is not possible by editing status fields: the workspace validator demands the full
 // reconciliation record and enforces order chronology. Recorded rather than papered over, so
 // the count is not mistaken for coverage of that clause.
+
+// --- operating-unit and shift isolation --------------------------------------
+// A configured shop closes a shift, not a whole browser. That permits two branches to close
+// on the same Myanmar date without mixing orders, while preserving the exact legacy behavior
+// exercised above when no operating registry exists.
+const UNIT_A = 'UNIT-11111111-1111-4111-8111-111111111111'
+const UNIT_B = 'UNIT-22222222-2222-4222-8222-222222222222'
+const SHIFT_A = 'SHIFT-AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA'
+const SHIFT_A2 = 'SHIFT-ABABABAB-ABAB-4BAB-8BAB-ABABABABABAB'
+const SHIFT_B = 'SHIFT-BBBBBBBB-BBBB-4BBB-8BBB-BBBBBBBBBBBB'
+const scopedAt = (hour, minute = 0) => `2026-07-24T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00.000Z`
+const scopedProof = (actionId, hour, minute = 0, actor = 'Swan Htet') => ({
+  actionId,
+  capturedAt: scopedAt(hour, minute),
+  actor,
+  reason: `Operating-session evidence for ${actionId}`,
+  evidenceReference: `SHIFT-EVIDENCE:${actionId}`,
+})
+
+let scoped = registerCommerceOperatingUnit(createSeedCommerce(), {
+  id: UNIT_A,
+  name: 'Yangon flagship',
+}, scopedProof('ACT-UNIT-A-REGISTER', 6))
+check(Boolean(scoped), 'the first operating unit activates scoped mode without rewriting legacy orders')
+scoped = registerCommerceOperatingUnit(scoped, {
+  id: UNIT_B,
+  name: 'Mandalay branch',
+}, scopedProof('ACT-UNIT-B-REGISTER', 6, 5))
+check(Boolean(scoped), 'a second operating unit can be registered')
+scoped = openCommerceShiftSession(scoped, { id: SHIFT_A, unitId: UNIT_A }, scopedProof('ACT-SHIFT-A-OPEN', 7))
+scoped = openCommerceShiftSession(scoped, { id: SHIFT_B, unitId: UNIT_B }, scopedProof('ACT-SHIFT-B-OPEN', 7, 5))
+check(Boolean(scoped), 'different operating units can run concurrent shifts')
+check(
+  openCommerceShiftSession(scoped, {
+    id: 'SHIFT-CCCCCCCC-CCCC-4CCC-8CCC-CCCCCCCCCCCC',
+    unitId: UNIT_A,
+  }, scopedProof('ACT-SHIFT-A-OVERLAP', 7, 10)) === null,
+  'one operating unit cannot open overlapping shifts',
+)
+
+const scopedItem = scoped.items.find((item) => item.onHand >= 4)
+check(Boolean(scopedItem), 'the operating-session fixture has a sellable catalog item')
+function reserveScopedSale(state, id, shiftId, suffix, hour, minute = 0) {
+  const actor = 'Swan Htet'
+  return reserveCommerceOrder(state, {
+    id,
+    createdAt: scopedAt(hour, minute),
+    customer: `Customer ${suffix}`,
+    owner: actor,
+    shiftId,
+    channel: 'Counter',
+    item: scopedItem.name,
+    itemSku: scopedItem.sku,
+    quantity: 1,
+    payment: 'Cash',
+    paymentStatus: 'pending',
+    refundStatus: 'none',
+    fulfilment: 'pickup',
+    fulfilmentReference: `Counter ${suffix}`,
+    promisedAt: scopedAt(20),
+    lines: [{
+      sku: scopedItem.sku,
+      name: scopedItem.name,
+      ...(scopedItem.variant ? { variant: scopedItem.variant } : {}),
+      quantity: 1,
+      unitPriceMmk: scopedItem.price,
+    }],
+    total: scopedItem.price,
+    status: 'confirmed',
+  }, scopedProof(`ACT-${suffix}-RESERVE`, hour, minute, actor))
+}
+function completeScopedSale(state, orderId, suffix, startHour) {
+  let next = advanceCommerceOrder(state, orderId, 'confirmed', scopedProof(`ACT-${suffix}-PREPARE`, startHour))
+  next = advanceCommerceOrder(next, orderId, 'preparing', scopedProof(`ACT-${suffix}-READY`, startHour + 1))
+  next = reconcileCommercePayment(next, orderId, scopedProof(`ACT-${suffix}-PAYMENT`, startHour + 2))
+  return advanceCommerceOrder(next, orderId, 'ready', scopedProof(`ACT-${suffix}-COMPLETE`, startHour + 3))
+}
+
+scoped = reserveScopedSale(scoped, 'ORD-SHIFT-A-1', SHIFT_A, 'SHIFT-A', 8)
+const exactShiftAReserve = scoped
+check(Boolean(scoped), 'a sale reserves against an open shift')
+check(
+  reserveScopedSale(scoped, 'ORD-SHIFT-A-MISSING', undefined, 'SHIFT-MISSING', 8, 5) === null,
+  'scoped mode refuses a new sale without a shift',
+)
+scoped = reserveScopedSale(scoped, 'ORD-SHIFT-B-1', SHIFT_B, 'SHIFT-B', 8, 10)
+check(Boolean(scoped), 'the other branch can reserve its own sale')
+scoped = completeScopedSale(scoped, 'ORD-SHIFT-A-1', 'SHIFT-A', 9)
+check(
+  commerceCloseExpectation(scoped, scopedAt(13), SHIFT_B) === null,
+  'a shift with an unfinished order cannot close and strand that order',
+)
+scoped = completeScopedSale(scoped, 'ORD-SHIFT-B-1', 'SHIFT-B', 9)
+
+const shiftAExpectation = commerceCloseExpectation(scoped, scopedAt(13), SHIFT_A)
+const shiftBExpectation = commerceCloseExpectation(scoped, scopedAt(13, 5), SHIFT_B)
+check(Boolean(shiftAExpectation) && shiftAExpectation.orderIds.join(',') === 'ORD-SHIFT-A-1', 'shift A review contains only shift A orders')
+check(Boolean(shiftBExpectation) && shiftBExpectation.orderIds.join(',') === 'ORD-SHIFT-B-1', 'shift B review contains only shift B orders')
+check(shiftAExpectation.businessDate === shiftBExpectation.businessDate, 'both shifts retain the same Myanmar business date')
+
+const shiftACloseProof = scopedProof('ACT-33333333-3333-4333-8333-333333333333', 13, 10)
+const shiftAClosed = saveCommerceClose(
+  scoped,
+  'CLOSE-33333333-3333-4333-8333-333333333333',
+  shiftACloseProof,
+  shiftAExpectation,
+)
+check(Boolean(shiftAClosed), 'shift A closes atomically')
+check(
+  reserveScopedSale(shiftAClosed, 'ORD-SHIFT-A-LATE', SHIFT_A, 'SHIFT-A-LATE', 13, 15) === null,
+  'a new sale cannot enter a closed shift',
+)
+check(
+  reserveCommerceOrder(shiftAClosed, exactShiftAReserve.orders.find((order) => order.id === 'ORD-SHIFT-A-1'), scopedProof('ACT-SHIFT-A-RESERVE', 8)) === shiftAClosed,
+  'an exact reserve retry remains idempotent after its shift closes',
+)
+
+check(
+  saveCommerceClose(
+    shiftAClosed,
+    'CLOSE-44444444-4444-4444-8444-444444444444',
+    scopedProof('ACT-44444444-4444-4444-8444-444444444444', 13, 20),
+    shiftBExpectation,
+  ) === null,
+  'another unit changing the workspace makes an earlier close review stale',
+)
+const refreshedShiftBExpectation = commerceCloseExpectation(shiftAClosed, scopedAt(13, 20), SHIFT_B)
+const shiftBClosed = saveCommerceClose(
+  shiftAClosed,
+  'CLOSE-44444444-4444-4444-8444-444444444444',
+  scopedProof('ACT-44444444-4444-4444-8444-444444444444', 13, 20),
+  refreshedShiftBExpectation,
+)
+check(Boolean(shiftBClosed), 'a second branch closes on the same business date')
+check(
+  shiftBClosed.closes.filter((close) => close.businessDate === shiftAExpectation.businessDate).length === 2,
+  'same-day close uniqueness is scoped by shift rather than browser workspace',
+)
+
+const withSecondShift = openCommerceShiftSession(
+  shiftBClosed,
+  { id: SHIFT_A2, unitId: UNIT_A },
+  scopedProof('ACT-SHIFT-A2-OPEN', 14),
+)
+check(Boolean(withSecondShift), 'the same unit can open a later shift on the same date')
+const emptyShiftExpectation = commerceCloseExpectation(withSecondShift, scopedAt(15), SHIFT_A2)
+check(Boolean(emptyShiftExpectation) && emptyShiftExpectation.orderIds.length === 0, 'an empty reviewed shift can close cleanly')
+const secondShiftClosed = saveCommerceClose(
+  withSecondShift,
+  'CLOSE-55555555-5555-4555-8555-555555555555',
+  scopedProof('ACT-55555555-5555-4555-8555-555555555555', 15),
+  emptyShiftExpectation,
+)
+check(Boolean(secondShiftClosed), 'a later same-unit shift closes without colliding with the first')
+check(
+  validateCommerceState(structuredClone(secondShiftClosed)) !== null,
+  'the complete multi-unit, multi-shift state survives exact validation and reload',
+)
+check(
+  saveCommerceClose(
+    shiftAClosed,
+    'CLOSE-33333333-3333-4333-8333-333333333333',
+    shiftACloseProof,
+    shiftAExpectation,
+  ) === shiftAClosed,
+  'an exact close replay returns the retained state after the shift is closed',
+)
+check(
+  saveCommerceClose(
+    shiftAClosed,
+    'CLOSE-33333333-3333-4333-8333-333333333333',
+    shiftACloseProof,
+    { ...shiftAExpectation, orderIds: [] },
+  ) === null,
+  'a close replay with changed membership is refused',
+)
+
+const minimalScopedClose = structuredClone(withSecondShift)
+minimalScopedClose.closes.unshift({
+  id: 'CLOSE-LEGACY-SHIFT-TAMPER',
+  createdAt: scopedAt(14, 30),
+  total: 0,
+  orders: 0,
+  shiftId: SHIFT_A2,
+})
+assert.throws(
+  () => validateCommerceState(minimalScopedClose),
+  /operating records are invalid/,
+  'a four-field legacy close cannot impersonate a shift close',
+)
+checks += 1
+
+const missingReservation = structuredClone(shiftAClosed)
+missingReservation.movements = missingReservation.movements.filter((movement) => movement.orderId !== 'ORD-SHIFT-A-1')
+missingReservation.items.find((item) => item.sku === scopedItem.sku).onHand += 1
+assert.throws(
+  () => validateCommerceState(missingReservation),
+  /operating records are invalid/,
+  'a shift-bound order without reservation evidence is refused',
+)
+checks += 1
+
+const lateReservation = structuredClone(shiftAClosed)
+lateReservation.movements
+  .filter((movement) => movement.orderId === 'ORD-SHIFT-A-1' && movement.kind === 'reserve')
+  .forEach((movement) => { movement.createdAt = scopedAt(13, 11) })
+assert.throws(
+  () => validateCommerceState(lateReservation),
+  /operating records are invalid/,
+  'reservation evidence cannot be moved after its shift close',
+)
+checks += 1
+
+check(
+  registerCommerceOperatingUnit(createSeedCommerce(), {
+    id: 'UNIT-66666666-6666-4666-8666-666666666666',
+    name: 'Invalid timestamp',
+  }, { ...scopedProof('ACT-INVALID-TIME', 6), capturedAt: 'not-a-time' }) === null,
+  'malformed operating proofs return null instead of throwing',
+)
+check(
+  registerCommerceOperatingUnit(createSeedCommerce(), {
+    id: 'UNIT-77777777-7777-4777-8777-777777777777',
+    name: 'Overlong evidence',
+  }, { ...scopedProof('ACT-OVERLONG-EVIDENCE', 6), evidenceReference: 'x'.repeat(181) }) === null,
+  'overlong operating proofs return null instead of reaching persisted validation',
+)
+check(
+  registerCommerceOperatingUnit(scoped, {
+    id: 'UNIT-88888888-8888-4888-8888-888888888888',
+    name: 'Backdated branch',
+  }, scopedProof('ACT-BACKDATED-UNIT', 5)) === null,
+  'a later unit cannot move operating activation backwards',
+)
+check(
+  openCommerceShiftSession(shiftAClosed, {
+    id: 'SHIFT-99999999-9999-4999-8999-999999999999',
+    unitId: UNIT_A,
+  }, scopedProof('ACT-BACKDATED-SHIFT', 12)) === null,
+  'a new shift cannot open before the prior shift closed',
+)
+const mixedOffsetShift = openCommerceShiftSession(shiftAClosed, {
+  id: 'SHIFT-12121212-1212-4212-8212-121212121212',
+  unitId: UNIT_A,
+}, {
+  ...scopedProof('ACT-MIXED-OFFSET-SHIFT', 14),
+  capturedAt: '2026-07-24T20:00:00+06:30',
+})
+check(Boolean(mixedOffsetShift), 'shift chronology compares instants rather than ISO timestamp text')
 
 console.log(`commerce daily close contract: ${checks} checks passed`)
 

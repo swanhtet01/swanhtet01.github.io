@@ -202,8 +202,13 @@ const ACTION_TRANSLATIONS: Record<string, ActionTranslation> = {
 // inside the nav's own rule without also constraining every other label there. The
 // class ships now, wired and styled, so that flipping a work-mode entry to
 // 'confirmed' after review stays the one-line table edit batch 2 established.
-export function bi(en: string): ReactNode {
+export function confirmedBurmese(en: string): string | null {
   const entry = ACTION_TRANSLATIONS[en]
-  if (!entry || entry.status !== 'confirmed') return en
-  return createElement('span', { className: 'bi-label' }, `${en} · `, createElement('span', { lang: 'my' }, entry.my))
+  return entry?.status === 'confirmed' ? entry.my : null
+}
+
+export function bi(en: string): ReactNode {
+  const my = confirmedBurmese(en)
+  if (!my) return en
+  return createElement('span', { className: 'bi-label' }, `${en} · `, createElement('span', { lang: 'my' }, my))
 }
