@@ -3216,6 +3216,7 @@ input, select, textarea,
 .shop-first-product-eyebrow { color: var(--core-accent); font-size: .75rem; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
 .shop-first-product-card h2 { margin: .75rem 0 .5rem; color: var(--core-ink); font-size: clamp(1.6rem,3vw,2.25rem); letter-spacing: -.035em; line-height: 1.15; }
 .shop-first-product-card p { margin: 0; color: var(--core-muted); font-size: .9375rem; line-height: 1.55; }
+.shop-first-product-note { border: 1px solid color-mix(in srgb,var(--core-warning) 38%,var(--core-line)); border-radius: .75rem; padding: .75rem 1rem; background: color-mix(in srgb,var(--core-warning) 7%,var(--core-panel)); }
 .shop-first-product-actions { display: grid; justify-items: center; gap: .875rem; }
 .shop-first-product-actions .core-button { min-width: 12rem; }
 .shop-first-product-actions .text-link { font-size: .875rem; }
