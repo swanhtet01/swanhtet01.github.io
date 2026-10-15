@@ -255,6 +255,15 @@ class CommercePublicSqlTests(unittest.TestCase):
         cls.workspace_id = 'rehearsal-product'
         cls.owner = TrialPrincipal(cls.workspace_id, 'owner-product', 'human')
         with pg._connect(cls.admin_url) as connection:
+            # The shared rehearsal seed predates Ecommerce actor grants. Give
+            # this disposable fixture the owner authority used by managed
+            # workspaces; Shop-only fixtures retain their narrower grants.
+            updated = connection.execute("""update app_private.workspace_memberships
+                set capabilities = array_append(capabilities, 'company.write')
+                where workspace_id = %s and actor_id = %s""",
+                (cls.workspace_id, cls.owner.actor_id)).rowcount
+            if updated != 1:
+                raise AssertionError('commerce_public_owner_fixture_missing')
             connection.execute("""insert into app_private.workspace_state
                 (workspace_id,surface,version,state_json,updated_by)
                 values(%s,'commerce',1,%s::jsonb,%s)""",
