@@ -162,9 +162,11 @@
     "version": "17.10"
   },
   "implementation": {
-    "digest": "sha256:a2dbd85602fe806e1c4ef1992690760ae5104e03474d4dbba081e857d5967eff",
+    "digest": "sha256:3f8e8b100e9015bc52e094d5bd12bc573927acfa0cd85928f392767b71681eac",
     "paths": [
       "kernel/database-rehearsal-evidence.mjs",
+      "supabase/candidate-migrations/20261014103000_website_custom_domain_bindings.sql",
+      "supabase/candidate-migrations/20261014122400_website_domain_attempt_fencing.sql",
       "supabase/migrations/20260722004500_private_trial_backend_role_preflight.sql",
       "supabase/migrations/20260722005134_private_trial_backend_foundation.sql",
       "supabase/migrations/20260722142801_private_trial_backend_v2.sql",
@@ -192,8 +194,6 @@
       "supabase/migrations/20261010070000_website_published_hero_media.sql",
       "supabase/migrations/20261010120857_website_inquiry_followup.sql",
       "supabase/migrations/20261014090000_website_channel_stable_update.sql",
-      "supabase/migrations/20261014103000_website_custom_domain_bindings.sql",
-      "supabase/migrations/20261014122400_website_domain_attempt_fencing.sql",
       "supabase/rehearsal/20260804_public_browser_quarantine.sql",
       "supermega_runtime/billing_rail.py",
       "supermega_runtime/core_security_catalog.py",
@@ -291,15 +291,15 @@
   "recovery": {
     "backup_nonempty": true,
     "format": "pg_dump_custom",
-    "private_snapshot_after": "sha256:8a94e071e69a3cc0b79dec19d4dc5663049cc17412b6e26565dcb714e3789895",
-    "private_snapshot_before": "sha256:8a94e071e69a3cc0b79dec19d4dc5663049cc17412b6e26565dcb714e3789895",
+    "private_snapshot_after": "sha256:e14ef0c53797e4d2b438be161adb3ac2634e93292286a25675bda872bf1f5451",
+    "private_snapshot_before": "sha256:e14ef0c53797e4d2b438be161adb3ac2634e93292286a25675bda872bf1f5451",
     "restored_schema_version": 13
   },
   "secret_values_exposed": false,
   "source": {
-    "head": "774ce768dc8c34ecaf3b4046e804c0f3bf072a4f",
-    "implementation_digest": "sha256:a2dbd85602fe806e1c4ef1992690760ae5104e03474d4dbba081e857d5967eff",
-    "tree": "a6b366f21b1800daf6a6b3049a541550df3a5cf5"
+    "head": "31e323c3ecfc5afa3b2af38fd489e6c778fdf3da",
+    "implementation_digest": "sha256:3f8e8b100e9015bc52e094d5bd12bc573927acfa0cd85928f392767b71681eac",
+    "tree": "ae120920051e7adf3742b346b77db7339734ba28"
   },
   "status": "rehearsed",
   "storage": {
