@@ -3427,8 +3427,9 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   const catalogIsEmpty = commerce.items.length === 0
   const catalogImportRequested = commerceLocation.hash === '#shop-catalog-import'
   const catalogImportVisible = catalogImportOpen || catalogImportRequested
+  const commerceReturnRequested = commerceLocation.state === true
   function toggleCatalogImport() {
-    if (catalogImportRequested) navigate('/shop/?tab=inventory', { replace: true })
+    if (catalogImportRequested) navigate('/shop/?tab=inventory', { replace: true, state: commerceLocation.state })
     setCatalogImportOpen((open) => catalogImportRequested ? false : !open)
   }
   const shopCatalogOnboarding = <section aria-label="Shop catalog setup" className="catalog-onboarding-bridge" id="shop-catalog-import" tabIndex={-1}>
@@ -7856,6 +7857,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
         })}</div> : <p className="empty-state">No purchase orders yet. Use Order stock on an item when replenishment is needed.</p>}
       </details>
       {commerce.items.length ? shopCatalogOnboarding : null}
+      {commerceReturnRequested ? <Link className="text-link" to="/ecommerce/">Back to Commerce</Link> : null}
       <details className="compact-disclosure catalog-disclosure" id="shop-catalog-create" onToggle={(event) => setCatalogCreateOpen(event.currentTarget.open)} open={catalogCreateOpen}>
         <summary>{commerce.items.length ? 'Add product' : 'Add your first product'}</summary>
         <form className="core-form compact-form catalog-create-form" onSubmit={queueCatalogItem} ref={catalogCreateFormRef}>

@@ -2210,7 +2210,7 @@ export function EcommerceProduct() {
             <p>Commerce uses the products, prices, and stock you manage in Shop.</p></div>
         </header>
         <section className="core-panel" aria-label="Connect the Shop catalog">
-          <Link className="core-button primary" state={{ commerceReturn: true }} to="/shop/?tab=inventory#shop-catalog-import">Open Shop inventory</Link>
+          <Link className="core-button primary" state to="/shop/?tab=inventory#shop-catalog-import">Open Shop inventory</Link>
         </section>
       </div>
     )
@@ -2226,8 +2226,8 @@ export function EcommerceProduct() {
         </header>
         <section className="core-panel" aria-label="Add the first Shop product">
           <div className="form-actions">
-            <Link className="core-button primary" state={{ commerceReturn: true }} to="/shop/?tab=inventory#shop-catalog-create">Add first product</Link>
-            <Link className="text-link" state={{ commerceReturn: true }} to="/shop/?tab=inventory#shop-catalog-import">Import a CSV <span aria-hidden="true">→</span></Link>
+            <Link className="core-button primary" state to="/shop/?tab=inventory#shop-catalog-create">Add first product</Link>
+            <Link className="text-link" state to="/shop/?tab=inventory#shop-catalog-import">Import a CSV <span aria-hidden="true">→</span></Link>
           </div>
         </section>
       </div>
