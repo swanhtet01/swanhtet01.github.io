@@ -3399,12 +3399,17 @@ class CommerceRuntimeTests(unittest.TestCase):
         operator = TrialPrincipal("workspace-storefront", "operator-a", "human")
         other = TrialPrincipal("workspace-other", "operator-b", "human")
         agent = TrialPrincipal("workspace-storefront", "storefront-agent", "agent")
+        for workspace_id in (operator.workspace_id, other.workspace_id):
+            store.provision_product_entitlements(
+                workspace_id=workspace_id,
+                products=("commerce", "ecommerce"),
+            )
         for principal in (operator, other, agent):
             store.provision_membership(
                 workspace_id=principal.workspace_id,
                 actor_id=principal.actor_id,
                 actor_kind=principal.actor_kind,
-                capabilities=("commerce.write",),
+                capabilities=("commerce.write", "ecommerce.manage"),
             )
         initialized = store.apply_command(
             operator,
@@ -3495,11 +3500,15 @@ class CommerceRuntimeTests(unittest.TestCase):
         other = TrialPrincipal("workspace-b", "Other operator", "human")
         configured_states: dict[str, dict[str, object]] = {}
         for principal in (operator, other):
+            store.provision_product_entitlements(
+                workspace_id=principal.workspace_id,
+                products=("commerce", "ecommerce"),
+            )
             store.provision_membership(
                 workspace_id=principal.workspace_id,
                 actor_id=principal.actor_id,
                 actor_kind=principal.actor_kind,
-                capabilities=("commerce.write",),
+                capabilities=("commerce.write", "ecommerce.manage"),
             )
             initialized = store.apply_command(
                 principal,

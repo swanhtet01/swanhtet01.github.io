@@ -387,6 +387,43 @@ def capabilities_for_product_entitlements(
     )
 
 
+def _project_state_for_membership(
+    surface: str,
+    state: Mapping[str, Any],
+    capabilities: Sequence[str],
+) -> JsonObject:
+    """Keep internal Ecommerce drafts out of Shop's shared state response."""
+
+    projected = deepcopy(dict(state))
+    if surface == "commerce" and "ecommerce.manage" not in capabilities:
+        projected.pop("storefrontConfiguration", None)
+    return projected
+
+
+def _restore_internal_commerce_state_for_reducer(
+    surface: str,
+    payload: Mapping[str, Any],
+    current_state: Mapping[str, Any],
+    capabilities: Sequence[str],
+) -> JsonObject:
+    """Preserve an unseen storefront draft when Shop submits full-state work."""
+
+    if surface != "commerce" or "ecommerce.manage" in capabilities:
+        return deepcopy(dict(payload))
+    submitted_state = payload.get("state")
+    if not isinstance(submitted_state, Mapping):
+        return deepcopy(dict(payload))
+    if "storefrontConfiguration" in submitted_state:
+        raise TrialPermissionDenied("ecommerce.manage")
+    reducer_payload = deepcopy(dict(payload))
+    if "storefrontConfiguration" in current_state:
+        reducer_payload["state"] = {
+            **deepcopy(dict(submitted_state)),
+            "storefrontConfiguration": deepcopy(current_state["storefrontConfiguration"]),
+        }
+    return reducer_payload
+
+
 def require_ecommerce_management_authority(
     product_entitlements: Sequence[str] | None,
     capabilities: Sequence[str] = (),
@@ -4793,8 +4830,12 @@ class PostgresTrialStore:
             workspace_id=str(row["workspace_id"]),
             surface=str(row["surface"]),
             version=int(row["version"]),
-            state=_json_object(
-                state, field_name="state", max_bytes=_json_limit_for_surface(normalized_surface)
+            state=_project_state_for_membership(
+                normalized_surface,
+                _json_object(
+                    state, field_name="state", max_bytes=_json_limit_for_surface(normalized_surface)
+                ),
+                capabilities,
             ),
             updated_by=str(row.get("updated_by", "")),
             updated_at=str(row.get("updated_at", "")),
@@ -4930,8 +4971,10 @@ class PostgresTrialStore:
                     event_type=str(replay["event_type"]),
                     version=int(replay["version"]),
                     state=_json_object(
-                        replay.get("state", {}), field_name="state",
-                        max_bytes=_json_limit_for_surface(surface_value),
+                        _project_state_for_membership(
+                            surface_value, replay.get("state", {}), capabilities,
+                        ),
+                        field_name="state", max_bytes=_json_limit_for_surface(surface_value),
                     ),
                     idempotent_replay=True,
                 )
@@ -5016,12 +5059,15 @@ class PostgresTrialStore:
                 field_name="authoritative payload",
                 max_bytes=_json_limit_for_surface(surface_value),
             )
+            reducer_payload = _restore_internal_commerce_state_for_reducer(
+                surface_value, authoritative_payload, current_state, capabilities,
+            )
             next_state = _json_object(
                 self.reducer(
                     surface_value,
                     event_type_value,
                     deepcopy(current_state),
-                    deepcopy(authoritative_payload),
+                    reducer_payload,
                 ),
                 field_name="reduced state",
                 max_bytes=_json_limit_for_surface(surface_value),
@@ -5098,7 +5144,7 @@ class PostgresTrialStore:
             surface=surface_value,
             event_type=event_type_value,
             version=next_version,
-            state=next_state,
+            state=_project_state_for_membership(surface_value, next_state, capabilities),
         )
 
     def record_product_acceptance(
@@ -5732,7 +5778,9 @@ class InMemoryTrialStore:
             workspace_id=state.workspace_id,
             surface=state.surface,
             version=state.version,
-            state=deepcopy(state.state),
+            state=_project_state_for_membership(
+                surface_value, state.state, readiness.capabilities,
+            ),
             updated_by=state.updated_by,
             updated_at=state.updated_at,
         )
@@ -5854,8 +5902,10 @@ class InMemoryTrialStore:
                     event_type=str(replay["event_type"]),
                     version=int(replay["version"]),
                     state=_json_object(
-                        replay.get("state", {}), field_name="state",
-                        max_bytes=_json_limit_for_surface(surface_value),
+                        _project_state_for_membership(
+                            surface_value, replay.get("state", {}), readiness.capabilities,
+                        ),
+                        field_name="state", max_bytes=_json_limit_for_surface(surface_value),
                     ),
                     idempotent_replay=True,
                 )
@@ -5914,12 +5964,15 @@ class InMemoryTrialStore:
                 field_name="authoritative payload",
                 max_bytes=_json_limit_for_surface(surface_value),
             )
+            reducer_payload = _restore_internal_commerce_state_for_reducer(
+                surface_value, authoritative_payload, current.state, readiness.capabilities,
+            )
             next_state = _json_object(
                 self.reducer(
                     surface_value,
                     event_type_value,
                     deepcopy(current.state),
-                    deepcopy(authoritative_payload),
+                    reducer_payload,
                 ),
                 field_name="reduced state",
                 max_bytes=_json_limit_for_surface(surface_value),
@@ -5951,7 +6004,15 @@ class InMemoryTrialStore:
                 self._commerce_action_ids[
                     (normalized.workspace_id, commerce_action_id)
                 ] = command_id_value
-            return result
+            return CommandResult(
+                command_id=command_id_value,
+                surface=surface_value,
+                event_type=event_type_value,
+                version=next_version,
+                state=_project_state_for_membership(
+                    surface_value, next_state, readiness.capabilities,
+                ),
+            )
 
     def record_product_acceptance(
         self,

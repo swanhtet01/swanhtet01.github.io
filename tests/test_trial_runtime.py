@@ -464,6 +464,28 @@ class TrialRuntimeTests(unittest.TestCase):
     def test_storefront_request_command_is_revisioned_scoped_and_recoverable(self) -> None:
         store = InMemoryTrialStore(reducer=reduce_trial_state)
         self._provision(store)
+        for workspace_id, actor_id, capabilities in (
+            (
+                "workspace-a",
+                "actor-operator",
+                ("commerce.write", "website.write", "approvals.request", "ecommerce.manage"),
+            ),
+            (
+                "workspace-b",
+                "actor-other",
+                ("commerce.write", "approvals.request", "ecommerce.manage"),
+            ),
+        ):
+            store.provision_product_entitlements(
+                workspace_id=workspace_id,
+                products=("commerce", "ecommerce"),
+            )
+            store.provision_membership(
+                workspace_id=workspace_id,
+                actor_id=actor_id,
+                actor_kind="human",
+                capabilities=capabilities,
+            )
         client = self._client(store)
         request_uuid = "00000000-0000-4000-8000-000000000020"
         request_id = f"ECR-{request_uuid}"
