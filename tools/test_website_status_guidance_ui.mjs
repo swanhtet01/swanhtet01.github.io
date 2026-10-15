@@ -150,6 +150,41 @@ test('a published managed site keeps one visible verification path and a truthfu
   assert.ok(source.includes("hostedCurrent ? 'View publication' : 'Review & publish'"))
 })
 
+test('managed Pages presents a truthful address in the existing action bar', () => {
+  const start = source.indexOf('<div className="website-action-context">')
+  const end = source.indexOf('</div>', start)
+  assert.ok(start >= 0 && end > start)
+  const compiledAddress = ts.transpileModule(`export function Address(props) {
+    const { storageMode, hostedSiteUrl, selectedPage, canReview } = props
+    return (${source.slice(start, end + '</div>'.length)})
+  }`, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2022 } }).outputText
+  const addressModule = { exports: {} }
+  runInNewContext(compiledAddress, { exports: addressModule.exports, require: (name) => {
+    assert.equal(name, 'react/jsx-runtime')
+    return require(name)
+  } })
+  const base = {
+    storageMode: 'managed', hostedSiteUrl: '', canReview: false, selectedPage: { internalName: 'Home', slug: '/', stage: 'ready' },
+  }
+  const renderAddress = (overrides = {}) => renderToStaticMarkup(React.createElement(addressModule.exports.Address, { ...base, ...overrides }))
+  assert.match(renderAddress(), /Website address.*Finish page checks/s)
+  assert.match(renderAddress({ canReview: true }), /Website address.*Review to publish/s)
+  assert.doesNotMatch(renderAddress(), /<a\b/)
+  const urlExpression = source.match(/const hostedSiteUrl = ([^\n]+)/)?.[1]
+  assert.ok(urlExpression)
+  const hostedSiteUrl = runInNewContext(urlExpression, {
+    hostedStatus: { publicOrigin: 'https://example.test' }, hostedLive: { channelId: 'channel-1' },
+  })
+  assert.equal(hostedSiteUrl, 'https://example.test/sites/channel-1')
+  assert.equal(runInNewContext(urlExpression, { hostedStatus: null, hostedLive: null }), '')
+  const live = renderAddress({ hostedSiteUrl })
+  assert.match(live, /href="https:\/\/example\.test\/sites\/channel-1"/)
+  assert.match(renderAddress({ storageMode: 'browser-local' }), /Home.*ready/s)
+  assert.ok(source.includes("storageMode === 'managed' ? canReview && !portalViewOnly ? ("))
+  assert.match(css, /\.website-action-bar\[data-managed="true"\] \.website-action-context \{ display: grid;/)
+  assert.match(source, /const editingCopy = 'Edit pages, then review\.'/)
+})
+
 test('saved failures render actual check details in an initially collapsed disclosure', () => {
   assert.ok(failures.length > 0)
   const html = render({ failingContentChecks: failures })

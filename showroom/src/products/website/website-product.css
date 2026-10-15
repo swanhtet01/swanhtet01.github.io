@@ -4308,6 +4308,8 @@
   .website-action-context { display: none; }
   .website-save-state { grid-row: 1; }
   .website-primary-actions { grid-row: 2; }
+  .website-action-bar[data-managed="true"] { display: flex; flex-direction: column; align-items: stretch; }
+  .website-action-bar[data-managed="true"] .website-action-context { display: grid; }
   .website-editor-workbench, .website-editor-workbench:where([data-insights="false"]) { grid-template-columns: minmax(0, 1fr); }
   .website-page-rail { position: static; display: flex; align-items: flex-start; gap: .25rem; padding: .375rem; }
   .website-page-rail-head { padding: 0; border: 0; min-height: 2.75rem; }
