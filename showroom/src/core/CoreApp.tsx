@@ -2447,7 +2447,6 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
         setCatalogCreateOpen(true)
         const target = document.getElementById('shop-catalog-create')
         target?.scrollIntoView({ block: 'center' })
-        window.requestAnimationFrame(() => target?.querySelector<HTMLInputElement>('input[name="product-name"]')?.focus({ preventScroll: true }))
         return
       }
       if (commerceLocation.hash === '#shop-catalog-import') {
@@ -3427,14 +3426,16 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   const catalogIsEmpty = commerce.items.length === 0
   const catalogImportRequested = commerceLocation.hash === '#shop-catalog-import'
   const catalogImportVisible = catalogImportOpen || catalogImportRequested
+  const commerceReturnPath = '/ecommerce/'
+  const commerceReturnRequested = commerceLocation.state === true
   function toggleCatalogImport() {
-    if (catalogImportRequested) navigate('/shop/?tab=inventory', { replace: true })
+    if (catalogImportRequested) navigate('/shop/?tab=inventory', { replace: true, state: commerceLocation.state })
     setCatalogImportOpen((open) => catalogImportRequested ? false : !open)
   }
   const shopCatalogOnboarding = <section aria-label="Shop catalog setup" className="catalog-onboarding-bridge" id="shop-catalog-import" tabIndex={-1}>
-    <div><span className="core-eyebrow">{catalogIsEmpty ? 'First sale' : 'Catalog import'}</span><strong>{catalogIsEmpty ? 'Add one product or import a list' : 'Add products from a CSV'}</strong><p>{catalogIsEmpty ? 'Start with one item and its current stock. Import a spreadsheet when you are ready.' : 'Review a CSV before adding products in bulk.'}</p></div>
+    <div><span className="core-eyebrow">{catalogIsEmpty ? 'First sale' : 'Catalog import'}</span><strong>{catalogIsEmpty ? 'Add one product or import a list' : 'Add products from a CSV'}</strong><p>{catalogIsEmpty ? 'Add an item and its stock, or import a CSV.' : 'Review a CSV before adding products in bulk.'}</p></div>
     {catalogIsEmpty ? <div className="form-actions">
-      <Link className="core-button primary" to="/shop/?tab=inventory#shop-catalog-create">Add first product</Link>
+      <Link className="core-button primary" state={commerceReturnRequested} to="/shop/?tab=inventory#shop-catalog-create">Add first product</Link>
       <button aria-controls="shop-catalog-import-panel" aria-expanded={catalogImportVisible} className="core-button" disabled={commerceControlsDisabled} onClick={toggleCatalogImport} type="button">{catalogImportVisible ? 'Close import' : 'Import a CSV'}</button>
     </div> : <button aria-controls="shop-catalog-import-panel" aria-expanded={catalogImportVisible} className="core-button" disabled={commerceControlsDisabled} onClick={toggleCatalogImport} type="button">{catalogImportVisible ? 'Close import' : 'Import a CSV'}</button>}
     {catalogImportVisible ? <div id="shop-catalog-import-panel"><Suspense fallback={<p role="status">Loading import...</p>}><ProductDataImport managed={!confirmedLocalShop} product="commerce" /></Suspense></div> : null}
@@ -3742,7 +3743,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
         await mutateCommerce('commerce.item.created', action.commandId, proof, (current) => registerCommerceItem(current, item, proof))
         setItemDraft({ sku: '', name: '', onHand: '', reorderAt: '0', price: '' })
         setSku(item.sku)
-        if (isFirstProduct) navigate('/shop/?tab=counter')
+        if (isFirstProduct) navigate(commerceReturnRequested ? commerceReturnPath : '/shop/?tab=counter')
       },
     })
   }
@@ -7105,6 +7106,23 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     </div>
   }
 
+  const commerceReturnLink = commerceReturnRequested ? <Link className="text-link" to={commerceReturnPath}>Back</Link> : null
+  const catalogCreatePanel = <details className="compact-disclosure catalog-disclosure" id="shop-catalog-create" onToggle={(event) => {
+    const target = event.currentTarget
+    const open = target.open
+    setCatalogCreateOpen(open)
+    if (open && commerceLocation.hash === '#shop-catalog-create') window.setTimeout(() => target.querySelector<HTMLInputElement>('input[name="product-name"]')?.focus({ preventScroll: true }), 50)
+  }} open={catalogCreateOpen}>
+    <summary>{commerce.items.length ? 'Add product' : 'Add your first product'}</summary>
+    <form className="core-form compact-form catalog-create-form" onSubmit={queueCatalogItem} ref={catalogCreateFormRef}>
+      <div className="form-row"><label>Product name<input disabled={commerceControlsDisabled} maxLength={180} name="product-name" onChange={(event) => setItemDraft((current) => ({ ...current, name: event.target.value }))} placeholder="e.g. Drinking water" required value={itemDraft.name} /></label><label>Price (MMK)<input disabled={commerceControlsDisabled} min="1" onChange={(event) => setItemDraft((current) => ({ ...current, price: event.target.value }))} required step="1" type="number" value={itemDraft.price} /></label></div>
+      <div className="form-row"><label>Current stock<input disabled={commerceControlsDisabled} min="0" onChange={(event) => setItemDraft((current) => ({ ...current, onHand: event.target.value }))} required step="1" type="number" value={itemDraft.onHand} /></label><label>Low-stock alert (optional)<input disabled={commerceControlsDisabled} min="0" onChange={(event) => setItemDraft((current) => ({ ...current, reorderAt: event.target.value }))} step="1" type="number" value={itemDraft.reorderAt} /></label></div>
+      <label>Product code or barcode (optional)<span className="sku-scan-row"><input disabled={commerceControlsDisabled} maxLength={80} name="product-code" onChange={(event) => setItemDraft((current) => ({ ...current, sku: event.target.value }))} placeholder="Scan or type if you have one" value={itemDraft.sku} /><BarcodeScanButton disabled={commerceControlsDisabled} label="Scan a product code into the SKU field" onDetected={(value) => setItemDraft((current) => ({ ...current, sku: value }))} /></span></label>
+      <div className="form-actions"><button className={coreUi.q} disabled={commerceControlsDisabled} type="submit">Review and add product</button></div>
+      <p className="panel-copy">Leave the code blank and Shop will create one. You can change the stock alert later.</p>
+    </form>
+  </details>
+
   if (tab === 'today') return <div className="operation-module shop-today-module">
     {operatingBoundary}
     {shopOperatingEligible && (shopShiftRequired || Boolean(activeShift) || openShiftSessions.length > 1)
@@ -7641,7 +7659,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
 
   if (tab === 'inventory') return <div className="operation-module shop-stock-module">
     {commerceBoundary}
-    {!commerce.items.length ? shopCatalogOnboarding : null}
+    {shopCatalogOnboarding}
     <section aria-label="Shop stock workspace" className="core-panel inventory-panel shop-stock-workspace">
       <Suspense fallback={null}><ShopStocktakeDraftRecovery active={Boolean(stockCountDraft)} current={stockCountDraft} key={scheduleScopeKey} lines={stockCountBatchDrafts} onReady={setStocktakeRecoveryReadyScope} scopeKey={scheduleScopeKey} setCurrent={setStockCountDraft} setLines={setStockCountBatchDrafts} /></Suspense>
       <header className="shop-stock-heading"><div><h2>Count. Receive. Reorder.</h2></div><button aria-expanded={Boolean(stockCountDraft && stocktakeScopeReady)} className="core-button" disabled={commerceControlsDisabled || !commerce.items.length} onClick={openStockCount} ref={stockCountTriggerRef} type="button">{stockCountDraft ? 'Continue count' : commerce.items.length ? 'Count stock' : 'Add products first'}</button></header>
@@ -7855,17 +7873,8 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
           </article>
         })}</div> : <p className="empty-state">No purchase orders yet. Use Order stock on an item when replenishment is needed.</p>}
       </details>
-      {commerce.items.length ? shopCatalogOnboarding : null}
-      <details className="compact-disclosure catalog-disclosure" id="shop-catalog-create" onToggle={(event) => setCatalogCreateOpen(event.currentTarget.open)} open={catalogCreateOpen}>
-        <summary>{commerce.items.length ? 'Add product' : 'Add your first product'}</summary>
-        <form className="core-form compact-form catalog-create-form" onSubmit={queueCatalogItem} ref={catalogCreateFormRef}>
-          <div className="form-row"><label>Product name<input disabled={commerceControlsDisabled} maxLength={180} name="product-name" onChange={(event) => setItemDraft((current) => ({ ...current, name: event.target.value }))} placeholder="e.g. Drinking water" required value={itemDraft.name} /></label><label>Price (MMK)<input disabled={commerceControlsDisabled} min="1" onChange={(event) => setItemDraft((current) => ({ ...current, price: event.target.value }))} required step="1" type="number" value={itemDraft.price} /></label></div>
-          <div className="form-row"><label>Current stock<input disabled={commerceControlsDisabled} min="0" onChange={(event) => setItemDraft((current) => ({ ...current, onHand: event.target.value }))} required step="1" type="number" value={itemDraft.onHand} /></label><label>Low-stock alert (optional)<input disabled={commerceControlsDisabled} min="0" onChange={(event) => setItemDraft((current) => ({ ...current, reorderAt: event.target.value }))} step="1" type="number" value={itemDraft.reorderAt} /></label></div>
-          <label>Product code or barcode (optional)<span className="sku-scan-row"><input disabled={commerceControlsDisabled} maxLength={80} name="product-code" onChange={(event) => setItemDraft((current) => ({ ...current, sku: event.target.value }))} placeholder="Scan or type if you have one" value={itemDraft.sku} /><BarcodeScanButton disabled={commerceControlsDisabled} label="Scan a product code into the SKU field" onDetected={(value) => setItemDraft((current) => ({ ...current, sku: value }))} /></span></label>
-          <div className="form-actions"><button className={coreUi.q} disabled={commerceControlsDisabled} type="submit">Review and add product</button></div>
-          <p className="panel-copy">Leave the code blank and Shop will create one. You can change the stock alert later.</p>
-        </form>
-      </details>
+      {commerceReturnLink}
+      {catalogCreatePanel}
       <p className="form-notice" aria-live="polite">{commerceStorageError || 'Catalog values, counts, stock orders, receipts, and cancellations require attributable confirmation. Supplier contact, payment, and accounting remain outside this workflow.'}</p>
     </section>
     <StockMovementHistory actionHistory={actionHistory} movements={commerce.movements} />

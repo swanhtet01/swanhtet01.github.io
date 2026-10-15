@@ -143,6 +143,11 @@ jobs:
             --expected-head "$SUPERMEGA_CI_SOURCE_SHA" \
             --expected-scope auth-entry
 
+      - name: Verify Shop first-use with isolated synthetic components
+        env:
+          CHROMIUM_BIN: /usr/bin/google-chrome
+        run: node tools/test_shop_first_use_browser.mjs
+
       - name: Capture source-bound product gallery candidate
         env:
           CHROMIUM_BIN: /usr/bin/google-chrome
