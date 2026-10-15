@@ -360,6 +360,14 @@ export function EcommerceProduct() {
     return () => viewport.removeEventListener('change', syncDevice)
   }, [])
   const sampleCatalogPreview = catalog.source === 'sample'
+  const previousCatalogSourceRef = useRef(catalog.source)
+  useEffect(() => {
+    const previousSource = previousCatalogSourceRef.current
+    previousCatalogSourceRef.current = catalog.source
+    if (previousSource !== 'sample' || catalog.source === 'sample' || savedDraft) return
+    setSelectedSkus(defaultSelection(catalog.items))
+    setMerchandising(null)
+  }, [catalog.items, catalog.source, savedDraft])
   const workspaceView = sampleCatalogPreview ? 'preview' : ecommerceWorkspaceView(location.search, Boolean(savedDraft))
   const publicIdentityKey = managedIdentity ? `${managedIdentity.workspaceId}:${managedIdentity.userId}` : ''
   useEffect(() => {
@@ -544,12 +552,17 @@ export function EcommerceProduct() {
   }, [focusWorkspaceDestination, workspaceView])
 
   useEffect(() => {
-    if (catalogHydrating || !managedIdentity) return
+    if (catalogHydrating || (!sampleCatalogPreview && !managedIdentity)) return
     const params = new URLSearchParams(location.search)
-    if (params.get('workspace') === '1' && params.get('setup') !== '1') return
-    params.set('workspace', '1')
+    if (sampleCatalogPreview) {
+      if (params.get('view') === 'preview' && params.get('setup') !== '1') return
+      params.set('view', 'preview')
+    } else {
+      if (params.get('workspace') === '1' && params.get('setup') !== '1') return
+      params.set('workspace', '1')
+      params.set('view', ecommerceWorkspaceView(location.search, Boolean(savedDraft)))
+    }
     params.delete('setup')
-    params.set('view', sampleCatalogPreview ? 'preview' : ecommerceWorkspaceView(location.search, Boolean(savedDraft)))
     navigate({ pathname: location.pathname, search: `?${params.toString()}` }, { replace: true })
   }, [catalogHydrating, location.pathname, location.search, managedIdentity, navigate, sampleCatalogPreview, savedDraft])
 
@@ -2209,11 +2222,11 @@ export function EcommerceProduct() {
     return (
       <div className="workspace-screen ecommerce-product">
         <header className="ecommerce-heading">
-          <div><span className="core-eyebrow">Commerce</span><h1>Add products in Shop</h1>
-            <p>Your online store uses the same prices and stock.</p></div>
+          <div><span className="core-eyebrow">Commerce</span><h1>Add your first product</h1>
+            <p>Your store will use its price and stock from Shop.</p></div>
         </header>
         <section className="core-panel" aria-label="Open Shop inventory">
-          <Link className="core-button primary" state={{ commerceReturn: true }} to="/shop/?tab=inventory#shop-catalog-import">Add products</Link>
+          <Link className="core-button primary" state={{ commerceReturn: true }} to="/shop/?tab=inventory#shop-catalog-create">Add first product</Link>
         </section>
       </div>
     )
@@ -2674,7 +2687,7 @@ export function EcommerceProduct() {
                 <button
                   aria-controls={sampleCatalogPreview ? undefined : 'ecommerce-setup-panel'}
                   className={`core-button ${canSaveStorefront ? 'secondary' : 'primary'}`}
-                  onClick={sampleCatalogPreview ? () => navigate('/shop/?tab=inventory') : finishStorefrontSetup}
+                  onClick={sampleCatalogPreview ? () => navigate('/shop/?tab=inventory#shop-catalog-create', { state: { commerceReturn: true } }) : finishStorefrontSetup}
                   type="button"
                 >
                   {sampleCatalogPreview ? 'Add your products' : 'Edit store'}
