@@ -1706,8 +1706,7 @@ function CommercePage({ allowEcommerceShopHandoff, confirmedLocalShop, managedId
   const [recoveredEcommerceIntent, setRecoveredEcommerceIntent] = useState<{ scope: string; id: string; intents: EcommerceShopNavigationIntents } | null>(null)
   useEffect(() => {
     if (allowEcommerceShopHandoff || new URLSearchParams(commerceLocation.search).get('source') !== 'ecommerce-handoff') return
-    navigate('/shop/?tab=orders', { replace: true, state: null })
-    setNotice('This request is not available in your Shop workspace.')
+    navigate('/shop/?tab=orders', { replace: true, state: { blockedEcommerceHandoff: true } })
   }, [allowEcommerceShopHandoff, commerceLocation.search, navigate])
   useEffect(() => {
     if (!requestedEcommerceIntent || !confirmedLocalShop && (!managedIdentity || workspaceMode !== 'managed-ready')) return
@@ -3345,7 +3344,8 @@ function CommercePage({ allowEcommerceShopHandoff, confirmedLocalShop, managedId
       <Link to="/shop/?tab=inventory">Manage catalog</Link>
     </div>
     : null
-  const orderNotice = notice || commerceStorageError
+  const orderNotice = (commerceLocation.state?.blockedEcommerceHandoff === true
+    ? 'This request is not available in your Shop workspace.' : '') || notice || commerceStorageError
   const commerceControlsDisabled = !commerceCanWrite || Boolean(pendingAction)
   // The appointment book is NOT a commerce control. ShopServiceSchedule has its own storage
   // key and does not read commerce state at all, but it was gated on commerceCanWrite -- so a
