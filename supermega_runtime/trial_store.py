@@ -387,12 +387,11 @@ def capabilities_for_product_entitlements(
     )
 
 
-def require_command_product_entitlement(
-    event_type: str,
+def require_ecommerce_management_authority(
     product_entitlements: Sequence[str] | None,
     capabilities: Sequence[str] = (),
 ) -> None:
-    """Do not treat Shop's shared commerce surface as Commerce authority.
+    """Require both Ecommerce activation and a named internal actor grant.
 
     A ``None`` proof is reserved for legacy non-managed test stores. Hosted
     Postgres always supplies an activation-derived tuple, including an empty
@@ -401,15 +400,25 @@ def require_command_product_entitlement(
 
     if product_entitlements is None:
         return
+    if "ecommerce" not in product_entitlements:
+        raise TrialPermissionDenied("product.ecommerce")
+    # The founder owner can manage the internal product. Staff need an explicit
+    # Ecommerce grant; commerce.write alone is also used by Shop cashiers.
+    if not frozenset(capabilities).intersection({"ecommerce.manage", "company.write"}):
+        raise TrialPermissionDenied("ecommerce.manage")
+
+
+def require_command_product_entitlement(
+    event_type: str,
+    product_entitlements: Sequence[str] | None,
+    capabilities: Sequence[str] = (),
+) -> None:
+    """Do not treat Shop's shared commerce surface as Commerce authority."""
+
     # Receiving or closing a public request is Shop fulfilment work. Only
     # storefront setup and merchandising belong to internally managed Commerce.
     if event_type.startswith("commerce.storefront."):
-        if "ecommerce" not in product_entitlements:
-            raise TrialPermissionDenied("product.ecommerce")
-        # Shop and Ecommerce both use commerce.write. A staff member who can
-        # sell in Shop cannot configure or import the internal storefront.
-        if not frozenset(capabilities).intersection({"ecommerce.manage", "company.write"}):
-            raise TrialPermissionDenied("ecommerce.manage")
+        require_ecommerce_management_authority(product_entitlements, capabilities)
 
 
 _PRIVATE_HARDENING_TRIGGER_CONTRACT: dict[tuple[str, str], dict[str, Any]] = {

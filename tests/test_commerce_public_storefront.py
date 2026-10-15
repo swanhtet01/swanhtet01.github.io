@@ -44,6 +44,33 @@ def _body(request_id=None):
 
 
 class CommercePublicBoundaryTests(unittest.TestCase):
+    def test_shared_shop_permission_cannot_manage_an_internal_ecommerce_publication(self):
+        principal = TrialPrincipal('internal-workspace', 'shop-operator', 'human')
+        cursor = Mock()
+        store = Mock()
+
+        @contextmanager
+        def guarded_cursor(*_args, **_kwargs):
+            yield cursor, frozenset({'commerce.write'})
+
+        store._guarded_cursor.side_effect = guarded_cursor
+        store._product_entitlements.return_value = ('commerce', 'ecommerce')
+        adapter = CommercePublicStorefront(store)
+        for action in (
+            lambda: adapter.publish(principal, expected_version=1),
+            lambda: adapter.publications(principal),
+            lambda: adapter.revoke(principal, handle=str(uuid4()),
+                                   preview_digest='sha256:' + '0' * 64),
+        ):
+            with self.subTest(action=action), self.assertRaises(TrialPermissionDenied) as denied:
+                action()
+            self.assertEqual(denied.exception.required_capability, 'ecommerce.manage')
+        cursor.execute.assert_not_called()
+        adapter._require_ecommerce_entitlement(
+            cursor, principal, frozenset({'commerce.write', 'ecommerce.manage'}))
+        adapter._require_ecommerce_entitlement(
+            cursor, principal, frozenset({'commerce.write', 'company.write'}))
+
     def test_shop_only_cannot_read_or_change_internal_publications(self):
         principal = TrialPrincipal('shop-only-workspace', 'merchant-owner', 'human')
         cursor = Mock()

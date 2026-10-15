@@ -7,7 +7,7 @@ from .commerce_runtime import commerce_storefront_preview, commerce_storefront_p
 from hashlib import sha256
 from .ecommerce_customer_review import uuid, stamp
 from .website_customer_review import _text
-from .trial_store import TrialPermissionDenied, TrialNotReadyError, TrialValidationError, TrialInvalidTransition, TrialIdempotencyConflict
+from .trial_store import TrialPermissionDenied, TrialNotReadyError, TrialValidationError, TrialInvalidTransition, TrialIdempotencyConflict, require_ecommerce_management_authority
 
 # Reviewed local candidate bodies, LF-normalized and outer-trimmed only.
 FUNCTIONS = {
@@ -56,7 +56,10 @@ class EcommerceCustomerReviewStore:
         capability=capability or ('commerce.write' if write else 'ecommerce.review')
         actor=principal.normalized()
         if actor.actor_kind!='human': raise TrialPermissionDenied(capability)
-        with self.store._guarded_cursor(actor,write=write,capability=capability) as (cursor,_):
+        with self.store._guarded_cursor(actor,write=write,capability=capability) as (cursor,capabilities):
+            if capability=='commerce.write':
+                require_ecommerce_management_authority(
+                    self.store._product_entitlements(cursor,actor.workspace_id), capabilities)
             _assert_storage(cursor)
             cursor.execute("select current_setting('transaction_isolation') as isolation")
             if cursor.fetchone()['isolation']!='read committed':

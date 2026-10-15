@@ -1,11 +1,52 @@
 """Synthetic private catalog domain tests; no provider access."""
 import unittest
-from unittest.mock import patch
+from contextlib import contextmanager
+from unittest.mock import Mock, patch
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from supermega_runtime.ecommerce_customer_review import prepare_catalog_review, catalog_review_projection, build_catalog_acceptance, build_catalog_change_request
-from supermega_runtime.trial_store import TrialPrincipal, TrialReadiness, TrialValidationError
+from supermega_runtime.ecommerce_customer_review_store import EcommerceCustomerReviewStore
+from supermega_runtime.trial_store import TrialPermissionDenied, TrialPrincipal, TrialReadiness, TrialValidationError
 from tests.test_commerce_runtime import catalog_state, storefront_configuration
+
+
+class CatalogReviewManagementBoundaryTests(unittest.TestCase):
+    def test_shop_operator_cannot_prepare_internal_ecommerce_review(self):
+        principal = TrialPrincipal('internal-workspace', 'shop-operator', 'human')
+        cursor = Mock()
+        store = Mock()
+
+        @contextmanager
+        def guarded_cursor(*_args, **_kwargs):
+            yield cursor, frozenset({'commerce.write'})
+
+        store._guarded_cursor.side_effect = guarded_cursor
+        store._product_entitlements.return_value = ('commerce', 'ecommerce')
+        adapter = EcommerceCustomerReviewStore(store)
+        with patch('supermega_runtime.ecommerce_customer_review_store._assert_storage') as storage:
+            with self.assertRaises(TrialPermissionDenied) as denied:
+                adapter.preparation_preview(principal)
+        self.assertEqual(denied.exception.required_capability, 'ecommerce.manage')
+        storage.assert_not_called()
+        cursor.execute.assert_not_called()
+
+    def test_explicit_internal_grant_can_enter_the_review_transaction(self):
+        principal = TrialPrincipal('internal-workspace', 'ecommerce-operator', 'human')
+        cursor = Mock()
+        cursor.fetchone.return_value = {'isolation': 'read committed'}
+        store = Mock()
+
+        @contextmanager
+        def guarded_cursor(*_args, **_kwargs):
+            yield cursor, frozenset({'commerce.write', 'ecommerce.manage'})
+
+        store._guarded_cursor.side_effect = guarded_cursor
+        store._product_entitlements.return_value = ('commerce', 'ecommerce')
+        store._load_membership.return_value = frozenset({'commerce.write', 'ecommerce.manage'})
+        adapter = EcommerceCustomerReviewStore(store)
+        with patch('supermega_runtime.ecommerce_customer_review_store._assert_storage'):
+            with adapter._transaction(principal, capability='commerce.write') as (_, actor):
+                self.assertEqual(actor, principal)
 
 class CatalogReviewTests(unittest.TestCase):
     def setUp(self):
