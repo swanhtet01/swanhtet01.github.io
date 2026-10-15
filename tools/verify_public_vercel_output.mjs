@@ -290,7 +290,7 @@ if (publicObservability.indexOf("window.si('beforeSend'") > publicObservability.
 if (/(?:conversion|contact-form|customer|email|payment|proof_|window\.va\('event')/i.test(publicObservability)) fail('public_observability_private_or_custom_event_surface')
 
 const home = pages.get('/')?.html || ''
-const expectedHomeDescription = 'Explore tools for in-store sales, website pages and customer order requests with SuperMega.'
+const expectedHomeDescription = 'Shop is the SuperMega customer workspace for sales and stock. Our team manages Sites and Commerce.'
 if (homePage?.file !== 'index.html') fail('home_manifest_entry_invalid')
 if (homePage.title !== 'SuperMega | Run the business without the busywork') fail('home_manifest_title_drift')
 if (homePage.description !== expectedHomeDescription) fail('home_manifest_description_source_drift')
@@ -306,6 +306,7 @@ if (/\.brand-name\s*\{[^}]*display\s*:\s*none/i.test(home)) fail('mobile_brand_n
 for (const token of ['Run the business.<br>Without the busywork.', 'id="products"', 'class="platform-image"', 'href="https://app.supermega.dev/login"', 'href="/contact/">Contact SuperMega</a>']) {
   if (!home.includes(token)) fail('homepage_contract_missing', { token })
 }
+if (!home.includes('Shop is the customer workspace for sales and stock. Our team manages Sites and Commerce.')) fail('home_customer_access_scope_missing')
 for (const retiredToken of [
   'Four focused products',
   'Pick one product and try the working sample.',

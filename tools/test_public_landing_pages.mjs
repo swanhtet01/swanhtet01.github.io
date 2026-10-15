@@ -94,8 +94,8 @@ check(config.routes.at(-1)?.dest === '/404.html' && config.routes.at(-1)?.status
 // Page content markers, SEO metadata, and CTA wiring.
 const descriptions = []
 const expectedReviewDescriptions = {
-  '/website/': 'Edit business pages and services, check readiness, and review customer inquiries in one workspace.',
-  '/ecommerce/': 'Browse a Shop-backed catalog, save customer order requests, and review them before any order or payment is confirmed.',
+  '/website/': 'The SuperMega team manages business pages, readiness checks and customer inquiries in Sites.',
+  '/ecommerce/': 'The SuperMega team manages the Shop-backed catalog and reviews customer requests before any order or payment is confirmed.',
 }
 const productScreens = {
   shop: ['actual-shop-today.png', 'actual-shop-sell.png', 'actual-shop-orders.png'],
@@ -175,12 +175,14 @@ for (const page of landingPages) {
     check(!html.includes('captured 11 Oct 2026'), 'landing_shop_capture_date_not_claimed')
   }
   if (page.productId === 'ecommerce') {
+    check(html.includes('Our team reviews each catalog request before Shop records an order or payment.'), 'landing_commerce_team_managed_scope')
     check(html.includes('alt="Commerce catalog showing available products, local pricing and customer ordering"'), 'landing_commerce_catalog_capture_description')
     check(html.includes(`Commerce &middot; Store catalog and availability &middot; ${interfaceDisclosure('actual-commerce-catalog.png')}`), 'landing_commerce_catalog_capture_scope_truthful')
     check(html.includes('alt="Commerce Store showing a locally saved customer request awaiting Shop confirmation"'), 'landing_commerce_capture_matches_store_flow')
     check(html.includes(`Commerce &middot; Request saved locally &middot; ${interfaceDisclosure('actual-commerce-order-request.png')}`), 'landing_commerce_request_capture_scope_truthful')
   }
   if (page.productId === 'website') {
+    check(html.includes('Our team manages pages, readiness checks and customer inquiries in one workspace.'), 'landing_sites_team_managed_scope')
     check(html.includes('alt="Sites editor showing page navigation, focused content editing and readiness checks"'), 'landing_sites_editor_capture_description')
     check(html.includes('alt="Sites inquiry workspace showing a synthetic customer request, ownership and decision controls"'), 'landing_sites_inquiry_capture_description')
     check(html.includes(`Sites &middot; Page workspace and readiness &middot; ${interfaceDisclosure('actual-sites-editor.png')}`), 'landing_sites_editor_capture_scope_truthful')
@@ -269,10 +271,11 @@ for (const token of ['No action is needed now.', 'SuperMega will review your bri
 // Homepage links each product to its landing page without replacing the guided sample CTA.
 const home = readStatic('index.html')
 const homePage = manifest.pages.find((page) => page.route === '/')
-const expectedHomeDescription = 'Explore tools for in-store sales, website pages and customer order requests with SuperMega.'
+const expectedHomeDescription = 'Shop is the SuperMega customer workspace for sales and stock. Our team manages Sites and Commerce.'
 check(homePage?.file === 'index.html', 'home_manifest_entry_exact')
 check(homePage?.title === 'SuperMega | Run the business without the busywork', 'home_manifest_business_title_exact')
 check(homePage?.description === expectedHomeDescription, 'home_manifest_description_derived_from_supported_copy')
+check(home.includes('Shop is the customer workspace for sales and stock. Our team manages Sites and Commerce.'), 'home_customer_access_scope_visible')
 for (const token of [
   `<title>${homePage.title}</title>`,
   `<meta name="description" content="${homePage.description}" />`,
@@ -441,7 +444,7 @@ for (const id of activeIds) {
 
 const ecommerceLanding = readStatic('ecommerce/index.html')
 for (const token of [
-  'Your team reviews each request, payment and delivery step.',
+  'Our team reviews each catalog request before Shop records an order or payment.',
   'Review customer requests in Shop before recording an order or payment.',
 ]) {
   check(ecommerceLanding.includes(token), `ecommerce_delivery_boundary:${token}`)
