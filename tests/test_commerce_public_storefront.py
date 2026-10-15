@@ -10,7 +10,7 @@ from hashlib import sha256
 import hmac
 import os
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 from uuid import UUID, uuid4
 
 from fastapi import FastAPI
@@ -44,6 +44,43 @@ def _body(request_id=None):
 
 
 class CommercePublicBoundaryTests(unittest.TestCase):
+    def test_revoked_internal_grant_while_waiting_blocks_publication_changes(self):
+        principal = TrialPrincipal('internal-workspace', 'internal-operator', 'human')
+        cursor = Mock()
+        cursor.fetchone.return_value = {'version': 1, 'state_json': _state()}
+        store = Mock()
+        store._lock = Mock()
+
+        @contextmanager
+        def guarded_cursor(*_args, **_kwargs):
+            # The grant was present when the request entered its transaction.
+            yield cursor, frozenset({'commerce.write', 'ecommerce.manage'})
+
+        store._guarded_cursor.side_effect = guarded_cursor
+        store._product_entitlements.return_value = ('shop', 'ecommerce')
+        # Another administrator removes the grant before the publication lock
+        # is acquired. The fresh membership read must control the write.
+        store._load_membership.return_value = frozenset({'commerce.write'})
+        adapter = CommercePublicStorefront(store)
+        with patch('supermega_runtime.commerce_public_storefront._require_public_schema'):
+            for action in (
+                lambda: adapter.publish(principal, expected_version=1),
+                lambda: adapter.revoke(principal, handle=str(uuid4()),
+                                       preview_digest='sha256:' + '0' * 64),
+            ):
+                cursor.reset_mock()
+                with self.subTest(action=action), self.assertRaises(TrialPermissionDenied) as denied:
+                    action()
+                self.assertEqual(denied.exception.required_capability, 'ecommerce.manage')
+                self.assertFalse(any(
+                    'insert into app_private.commerce_public_storefronts' in str(call.args[0]).lower()
+                    or 'update app_private.commerce_public_storefronts' in str(call.args[0]).lower()
+                    for call in cursor.execute.call_args_list
+                ))
+        self.assertEqual(store._lock.call_count, 2)
+        self.assertEqual(store._load_membership.call_count, 2)
+        self.assertEqual(store._assert_active_identity_session.call_count, 2)
+
     def test_shared_shop_permission_cannot_manage_an_internal_ecommerce_publication(self):
         principal = TrialPrincipal('internal-workspace', 'shop-operator', 'human')
         cursor = Mock()

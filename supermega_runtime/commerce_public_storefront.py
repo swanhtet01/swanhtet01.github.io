@@ -255,6 +255,13 @@ class CommercePublicStorefront:
             configuration = state['storefrontConfiguration']
             digest = commerce_storefront_preview_digest(state)
             self.store._lock(cursor, f'{principal.workspace_id}:commerce-publication')
+            # The named operator grant can be revoked while this transaction
+            # waits for another publication. Recheck the active session and
+            # membership after the serialization point before changing rows.
+            self.store._assert_active_identity_session(cursor, principal)
+            self._require_ecommerce_entitlement(
+                cursor, principal, self.store._load_membership(cursor, principal),
+            )
             cursor.execute('select handle,preview_digest,source_action_id from app_private.commerce_public_storefronts where workspace_id=%s and enabled for update',
                            (principal.workspace_id,))
             previous = cursor.fetchone()
@@ -293,6 +300,11 @@ class CommercePublicStorefront:
         with self.store._guarded_cursor(principal, write=True, capability='commerce.write') as (cursor, capabilities):
             self._require_ecommerce_entitlement(cursor, principal, capabilities)
             _require_public_schema(cursor)
+            self.store._lock(cursor, f'{principal.workspace_id}:commerce-publication')
+            self.store._assert_active_identity_session(cursor, principal)
+            self._require_ecommerce_entitlement(
+                cursor, principal, self.store._load_membership(cursor, principal),
+            )
             cursor.execute("""update app_private.commerce_public_storefronts
                 set enabled=false,revoked_at=clock_timestamp()
                 where handle=%s and workspace_id=%s and enabled and preview_digest=%s
