@@ -15,7 +15,7 @@ const pause = (ms) => new Promise((resolvePause) => setTimeout(resolvePause, ms)
 const fixtureSource = `
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
+import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router';
 import { EcommerceProduct } from './src/products/ecommerce/EcommerceProduct';
 import { CommercePage } from './src/core/CoreApp';
 import { COMMERCE_KEY, createEmptyCommerce } from './src/core/commerce-workspace';
@@ -50,6 +50,14 @@ function RouteProbe() {
     data-return={location.state === true ? 'true' : 'false'} />;
 }
 
+function QaControls() {
+  const navigate = useNavigate();
+  return <button hidden id="qa-enter-shop-first-sale" onClick={() => {
+    localStorage.setItem(COMMERCE_KEY, JSON.stringify(createEmptyCommerce()));
+    navigate('/shop/?tab=inventory');
+  }} type="button" />;
+}
+
 function ShopRoute() {
   const location = useLocation();
   const tab = new URLSearchParams(location.search).get('tab') || 'today';
@@ -61,6 +69,7 @@ function ShopRoute() {
 createRoot(document.getElementById('root')).render(
   <MemoryRouter initialEntries={['/ecommerce/?workspace=1']}>
     <RouteProbe />
+    <QaControls />
     <Routes>
       <Route path="/ecommerce/*" element={<EcommerceProduct />} />
       <Route path="/shop/*" element={<ShopRoute />} />
@@ -310,11 +319,139 @@ async function verifyViewport(cdp, origin, viewport) {
     assert.equal(returned.products, 1, 'the synthetic owner-reviewed item should be saved exactly once')
     assert.equal(returned.productName, 'Synthetic tea')
 
+    await evaluate(cdp, sessionId, `document.querySelector('#qa-enter-shop-first-sale').click()`)
+    const shopEmpty = await waitFor(cdp, sessionId, `(() => {
+      const route = document.querySelector('#qa-route');
+      const state = JSON.parse(localStorage.getItem(window.__qaCommerceKey));
+      const add = [...document.querySelectorAll('a')].some((node) => node.textContent.trim() === 'Add first product');
+      return route?.dataset.path === '/shop/?tab=inventory' && state?.items?.length === 0 && add
+        ? { path: route.dataset.path, emptyCatalog: true, add }
+        : null;
+    })()`, 'fresh Shop inventory with an empty synthetic catalog')
+    assert.equal(shopEmpty.emptyCatalog, true, 'Shop-origin first-sale flow should start with empty local inventory')
+
+    await evaluate(cdp, sessionId, `([...document.querySelectorAll('a')].find((node) => node.textContent.trim() === 'Add first product')).click()`)
+    const shopFirstProduct = await waitFor(cdp, sessionId, `(() => {
+      const route = document.querySelector('#qa-route');
+      const details = document.querySelector('#shop-catalog-create');
+      const input = details?.querySelector('input[name="product-name"]');
+      return route?.dataset.path === '/shop/?tab=inventory#shop-catalog-create' && route.dataset.return === 'false'
+        && details?.open === true && input === document.activeElement
+        ? { path: route.dataset.path, focused: true }
+        : null;
+    })()`, 'first product from the Shop entry point')
+    assert.equal(shopFirstProduct.focused, true, 'Shop-origin first-product name field should receive focus')
+
+    await evaluate(cdp, sessionId, `(() => {
+      const form = document.querySelector('#shop-catalog-create form');
+      const setValue = (input, value) => {
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+        if (!input || !setter) throw new Error('Synthetic Shop first-product input was unavailable');
+        setter.call(input, value);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      };
+      if (!form) throw new Error('Shop first-product form was unavailable');
+      setValue(form.querySelector('input[name="product-name"]'), 'Synthetic first-sale tea');
+      const numbers = form.querySelectorAll('input[type="number"]');
+      setValue(numbers[0], '2500');
+      setValue(numbers[1], '12');
+      setValue(numbers[2], '0');
+      form.requestSubmit();
+      return true;
+    })()`)
+    const shopProductReview = await waitFor(cdp, sessionId, `(() => {
+      const dialog = document.querySelector('dialog.accountable-action-gate');
+      return dialog?.open && dialog.querySelector('#action-confirm-title')?.textContent.includes('Add SM-')
+        ? { open: true }
+        : null;
+    })()`, 'review gate for Shop-origin first product')
+    assert.equal(shopProductReview.open, true, 'Shop-origin first product must wait for explicit review')
+    await evaluate(cdp, sessionId, `(() => {
+      const form = document.querySelector('dialog.accountable-action-gate form');
+      const inputs = form?.querySelectorAll('input');
+      if (!form || !inputs || inputs.length < 3) throw new Error('Shop first-product review fields were unavailable');
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+      if (!setter) throw new Error('Synthetic Shop review input setter was unavailable');
+      ['Synthetic owner', 'Recorded synthetic opening stock', 'Synthetic Shop-origin test'].forEach((value, index) => {
+        setter.call(inputs[index], value);
+        inputs[index].dispatchEvent(new Event('input', { bubbles: true }));
+        inputs[index].dispatchEvent(new Event('change', { bubbles: true }));
+      });
+      form.requestSubmit();
+      return true;
+    })()`)
+    const firstSaleCounter = await waitFor(cdp, sessionId, `(() => {
+      const route = document.querySelector('#qa-route');
+      const state = JSON.parse(localStorage.getItem(window.__qaCommerceKey));
+      const tile = document.querySelector('.shop-product-tile');
+      return route?.dataset.path === '/shop/?tab=counter' && route.dataset.return === 'false'
+        && state?.items?.length === 1 && state.items[0].name === 'Synthetic first-sale tea' && tile
+        ? { path: route.dataset.path, productName: state.items[0].name, stock: state.items[0].onHand,
+            width: document.documentElement.scrollWidth, viewport: innerWidth }
+        : null;
+    })()`, 'Shop-origin first product should open the counter')
+    assert.equal(firstSaleCounter.path, '/shop/?tab=counter', 'Shop-origin product setup should continue to the counter')
+    assert.equal(firstSaleCounter.stock, 12, 'first-sale product should retain its synthetic opening stock')
+    assert.ok(firstSaleCounter.width <= firstSaleCounter.viewport, `first-sale counter overflows at ${viewport.width}px`)
+
+    await evaluate(cdp, sessionId, `document.querySelector('.shop-product-tile')?.click()`)
+    const saleReady = await waitFor(cdp, sessionId, `(() => {
+      const tile = document.querySelector('.shop-product-tile');
+      const review = document.querySelector('.shop-review-sale');
+      const quantity = tile?.querySelector('.shop-product-quantity');
+      return quantity?.textContent.trim() === '1' && review && !review.disabled
+        ? { itemAdded: true, reviewEnabled: true, width: document.documentElement.scrollWidth, viewport: innerWidth }
+        : null;
+    })()`, 'add one synthetic item to the counter sale')
+    assert.equal(saleReady.itemAdded, true, 'counter should add the first product to the sale')
+    assert.ok(saleReady.width <= saleReady.viewport, `counter sale overflows at ${viewport.width}px`)
+    if (viewport.mobile) {
+      await evaluate(cdp, sessionId, `document.querySelector('.shop-mobile-cart')?.click()`)
+      await waitFor(cdp, sessionId, `document.querySelector('.shop-mobile-cart')?.getAttribute('aria-expanded') === 'true'`, 'open the mobile sale cart')
+      const mobileCart = await evaluate(cdp, sessionId, `({ width: document.documentElement.scrollWidth, viewport: innerWidth })`)
+      assert.ok(mobileCart.width <= mobileCart.viewport, `mobile sale cart overflows at ${viewport.width}px`)
+    }
+    await evaluate(cdp, sessionId, `document.querySelector('.shop-review-sale')?.click()`)
+    const saleReview = await waitFor(cdp, sessionId, `(() => {
+      const dialog = document.querySelector('dialog.accountable-action-gate');
+      const heading = dialog?.querySelector('#action-confirm-title');
+      return dialog?.open && heading?.textContent.includes('Complete') && heading.textContent.includes('counter sale')
+        ? { open: true, summary: heading.textContent.trim() }
+        : null;
+    })()`, 'owner review for the synthetic cash sale')
+    assert.equal(saleReview.open, true, 'counter sale should pause for explicit owner review')
+    await evaluate(cdp, sessionId, `(() => {
+      const form = document.querySelector('dialog.accountable-action-gate form');
+      const input = form?.querySelector('input:not([readonly]):not([disabled])');
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+      if (!form || !input || !setter) throw new Error('Synthetic cashier confirmation field was unavailable');
+      setter.call(input, 'Synthetic cashier');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      form.requestSubmit();
+      return true;
+    })()`)
+    const completedSale = await waitFor(cdp, sessionId, `(() => {
+      const state = JSON.parse(localStorage.getItem(window.__qaCommerceKey));
+      const item = state?.items?.find((entry) => entry.name === 'Synthetic first-sale tea');
+      const order = state?.orders?.[0];
+      return state?.orders?.length === 1 && item?.onHand === 11 && order?.status === 'completed'
+        ? { orders: state.orders.length, stockRemaining: item.onHand, status: order.status, payment: order.payment }
+        : null;
+    })()`, 'complete the synthetic first sale and persist one order plus stock movement')
+    assert.equal(completedSale.orders, 1, 'synthetic first sale should create exactly one order')
+    assert.equal(completedSale.stockRemaining, 11, 'synthetic completed sale should decrement stock by one')
+    assert.equal(completedSale.status, 'completed', 'synthetic cash sale should record completed status')
+    assert.equal(completedSale.payment, 'Cash', 'synthetic first sale should use the local cash option')
+
     const fixtureState = await evaluate(cdp, sessionId, `({ fetchAttempts: window.__qaFetchAttempts.length,
       identityProbes: window.__qaIdentityProbes,
-      products: JSON.parse(localStorage.getItem(window.__qaCommerceKey)).items.length })`)
+      products: JSON.parse(localStorage.getItem(window.__qaCommerceKey)).items.length,
+      orders: JSON.parse(localStorage.getItem(window.__qaCommerceKey)).orders.length })`)
     assert.equal(fixtureState.fetchAttempts, 0, 'fixture should make no fetch or provider requests')
     assert.equal(fixtureState.products, 1, 'the reviewed synthetic setup should create exactly one product')
+    assert.equal(fixtureState.orders, 1, 'the Shop-origin journey should create exactly one synthetic order')
     assert.deepEqual([...externalOrigins], [], 'fixture should make no external HTTP requests')
     assert.deepEqual(errors, [], 'fixture should have no browser runtime errors')
 
@@ -327,10 +464,14 @@ async function verifyViewport(cdp, origin, viewport) {
       manualSetupAfterImportRetainsReturn: manualAfterImport.returnStatePreserved,
       reviewedProductReturnsToCommerce: returned.path === '/ecommerce/',
       syntheticProductCreated: returned.products === 1,
+      shopOriginFirstProductOpensCounter: firstSaleCounter.path === '/shop/?tab=counter',
+      syntheticCashSaleCompleted: completedSale.status === 'completed',
+      stockAfterSyntheticSale: completedSale.stockRemaining,
       overflow: false,
       externalRequests: externalOrigins.size,
       providerFetches: fixtureState.fetchAttempts,
       productsCreated: fixtureState.products,
+      ordersCreated: fixtureState.orders,
     }
   } finally {
     removeRuntime()
@@ -371,7 +512,7 @@ async function main() {
     ]) results.push(await verifyViewport(cdp, origin, viewport))
     console.log(JSON.stringify({
       ok: true,
-      classification: 'local-real-components_synthetic-empty-catalog_network-blocked_no-write',
+      classification: 'local-real-components_synthetic-empty-catalog_network-blocked_isolated-memory-only',
       managedEntryShellIncluded: false,
       results,
     }, null, 2))
