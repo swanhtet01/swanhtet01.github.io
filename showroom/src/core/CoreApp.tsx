@@ -1008,9 +1008,9 @@ function ActionHistory({ actions, domain }: { actions: AccountableAction[]; doma
 }
 
 export function OperationsPage({ product }: { product: ProductId }) {
-  const runtime = useOutletContext<RuntimeHealth & { ecommerceShopHandoffAllowed: boolean; websiteShopInboxAllowed: boolean }>()
+  const runtime = useOutletContext<RuntimeHealth & { ecommerceShopHandoffAllowed: boolean; shopInboundRequestsAllowed: boolean }>()
   const allowEcommerceShopHandoff = runtime.ecommerceShopHandoffAllowed
-  const allowWebsiteShopInbox = runtime.websiteShopInboxAllowed
+  const allowShopInboundRequests = runtime.shopInboundRequestsAllowed
   const location = useLocation()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -1082,7 +1082,7 @@ export function OperationsPage({ product }: { product: ProductId }) {
     <div className={`workspace-screen operations-screen${view === 'commerce' ? ' commerce-screen' : ''}`} data-active-tab={activeTab}>
       <PageHeading title={productDisplayName(view)} copy={productCopy} />
       <nav className="workspace-toolbar view-tabs product-task-tabs" aria-label={`${productDisplayName(view)} tasks`}>{tabs.map((tab) => <button aria-current={activeTab === tab.id ? 'page' : undefined} key={tab.id} onClick={() => setTab(tab.id)} type="button">{view === 'commerce' ? bi(tab.label) : tab.label}</button>)}</nav>
-      <div className="workspace-view">{view === 'commerce' ? <CommercePage allowEcommerceShopHandoff={allowEcommerceShopHandoff} allowWebsiteShopInbox={allowWebsiteShopInbox} confirmedLocalShop={confirmedLocalShop} key={managedIdentity ? JSON.stringify([managedIdentity.workspaceId, managedIdentity.userId, allowEcommerceShopHandoff, allowWebsiteShopInbox]) : confirmedLocalShop ? 'local' : 'checking'} managedIdentity={managedIdentity} requestedRequestId={requestedRequestId} requestedShopTemplate={requestedShopTemplate} requestedSource={requestedSource} shopCounterClientId={shopCounterClientId} shopCounterCustomer={shopCounterCustomer} shopCounterSearch={shopCounterSearch} tab={commerceTab} /> : <ProductionPage managedIdentity={managedIdentity} tab={productionTab} />}</div>
+      <div className="workspace-view">{view === 'commerce' ? <CommercePage allowEcommerceShopHandoff={allowEcommerceShopHandoff} allowShopInboundRequests={allowShopInboundRequests} confirmedLocalShop={confirmedLocalShop} key={managedIdentity ? JSON.stringify([managedIdentity.workspaceId, managedIdentity.userId, allowEcommerceShopHandoff, allowShopInboundRequests]) : confirmedLocalShop ? 'local' : 'checking'} managedIdentity={managedIdentity} requestedRequestId={requestedRequestId} requestedShopTemplate={requestedShopTemplate} requestedSource={requestedSource} shopCounterClientId={shopCounterClientId} shopCounterCustomer={shopCounterCustomer} shopCounterSearch={shopCounterSearch} tab={commerceTab} /> : <ProductionPage managedIdentity={managedIdentity} tab={productionTab} />}</div>
     </div>
   )
 }
@@ -1538,9 +1538,9 @@ function buildCommerceOrderRecoveryInput(
   }
 }
 
-function CommercePage({ allowEcommerceShopHandoff, allowWebsiteShopInbox, confirmedLocalShop, managedIdentity, requestedRequestId, requestedShopTemplate, requestedSource, shopCounterClientId, shopCounterCustomer, shopCounterSearch, tab }: {
+function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, confirmedLocalShop, managedIdentity, requestedRequestId, requestedShopTemplate, requestedSource, shopCounterClientId, shopCounterCustomer, shopCounterSearch, tab }: {
   allowEcommerceShopHandoff: boolean
-  allowWebsiteShopInbox: boolean
+  allowShopInboundRequests: boolean
   confirmedLocalShop: boolean
   managedIdentity: ManagedIdentity | null
   requestedRequestId: string | null
@@ -2090,13 +2090,14 @@ function CommercePage({ allowEcommerceShopHandoff, allowWebsiteShopInbox, confir
     }
   }, [commerce, purchaseOrderClock])
   const importedWebsiteOrderIds = commerce.orders.flatMap((order) => order.sourceRecordId ? [order.sourceRecordId] : [])
-  const websiteIntakes = allowWebsiteShopInbox ? commerceWebsiteIntakes(commerce) : []
+  // Incoming requests are Shop work even when Sites and Commerce editors are internal.
+  const websiteIntakes = allowShopInboundRequests ? commerceWebsiteIntakes(commerce) : []
   const localWebsiteIntake = localWebsiteIntakeRead.intake
   const legacyWebsiteWorkWaiting = managedIdentity
     ? websiteIntakes.some((intake) => intake.status === coreUi.p)
     : confirmedLocalShop && localWebsiteIntakeRead.status === 'ready'
       && Boolean(localWebsiteIntake && (!localWebsiteIntake.order || !importedWebsiteOrderIds.includes(localWebsiteIntake.order.id)))
-  const storefrontRequests = allowEcommerceShopHandoff ? commerceStorefrontRequests(commerce) : []
+  const storefrontRequests = allowShopInboundRequests ? commerceStorefrontRequests(commerce) : []
   const pendingStorefrontRequests = storefrontRequests.filter((request) => (
     !commerce.orders.some((order) => order.sourceRecordId === request.id)
   ))

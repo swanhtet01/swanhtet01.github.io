@@ -929,11 +929,11 @@ if (!coreSource.includes('export function shopInboxRequestWindow')
   || !coreSource.includes('const visiblePendingStorefrontRequests = shopInboxRequestWindow(pendingStorefrontRequests, activeEcommerceInboxRequestId)')
   || !coreSource.includes('visiblePendingStorefrontRequests.map((request) => {')
   || coreSource.includes('pendingStorefrontRequests.slice(0, 20).map((request) => {')) fail('shop_inbox_target_window_missing')
-if (!coreShellSource.includes("ecommerceShopHandoffAllowed: linkedShopInboxVisible(portalAccess.status, portalAccess.products, 'ecommerce')")
-  || !coreShellSource.includes("websiteShopInboxAllowed: linkedShopInboxVisible(portalAccess.status, portalAccess.products, 'website')")
-  || !coreSource.includes('const websiteIntakes = allowWebsiteShopInbox ? commerceWebsiteIntakes(commerce) : []')
-  || !coreSource.includes('const storefrontRequests = allowEcommerceShopHandoff ? commerceStorefrontRequests(commerce) : []')) {
-  fail('shop_linked_inbox_entitlement_missing')
+if (!coreShellSource.includes('ecommerceShopHandoffAllowed: ecommerceShopHandoffVisible(portalAccess.status, portalAccess.products)')
+  || !coreShellSource.includes('shopInboundRequestsAllowed: shopInboundRequestsVisible(portalAccess.status, portalAccess.products)')
+  || !coreSource.includes('const websiteIntakes = allowShopInboundRequests ? commerceWebsiteIntakes(commerce) : []')
+  || !coreSource.includes('const storefrontRequests = allowShopInboundRequests ? commerceStorefrontRequests(commerce) : []')) {
+  fail('shop_inbound_request_boundary_missing')
 }
 const ecommerceTodaySurfaceIndex = ecommerceSource.indexOf('<CommerceOrderDesk')
 const ecommerceOptionalToolsIndex = ecommerceSource.indexOf('className="ecommerce-business-controls"')
@@ -3835,7 +3835,7 @@ if (addToCartStart < 0
   || !coreSource.includes("!confirmedLocalShop && (!managedIdentity || workspaceMode !== 'managed-ready')")
   || !coreSource.includes('setRecoveredEcommerceIntent({ scope: ecommerceBuyingScope, id: requestedEcommerceIntent.id, intents })')
   || !coreSource.includes('recoveredEcommerceIntent?.scope === ecommerceBuyingScope')
-  || !coreSource.includes("key={managedIdentity ? JSON.stringify([managedIdentity.workspaceId, managedIdentity.userId, allowEcommerceShopHandoff, allowWebsiteShopInbox]) : confirmedLocalShop ? 'local' : 'checking'}")
+  || !coreSource.includes("key={managedIdentity ? JSON.stringify([managedIdentity.workspaceId, managedIdentity.userId, allowEcommerceShopHandoff, allowShopInboundRequests]) : confirmedLocalShop ? 'local' : 'checking'}")
   || !pendingHandoffReviewPreservesRoute
   || coreSource.includes('ecommerceReturnIntent?: EcommerceReturnIntent')
   || coreSource.includes('ecommerceShopDraft?: EcommerceShopDraft')
