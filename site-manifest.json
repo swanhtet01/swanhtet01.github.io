@@ -5,12 +5,12 @@
   "brand": {
     "name": "SuperMega",
     "domain": "supermega.dev",
-    "version": "indigo-v1-2026-09",
+    "version": "void-electric-blue-v1-2026-10",
     "mark": "terminal",
     "colors": {
-      "background": "#f6f7fb",
-      "accent": "#5b4ee8",
-      "ink": "#151521"
+      "background": "#07111f",
+      "accent": "#3b82f6",
+      "ink": "#0b0f17"
     }
   },
   "company": {
@@ -995,8 +995,8 @@
     {
       "route": "/",
       "file": "index.html",
-      "title": "SuperMega | Run the business without the busywork",
-      "description": "Shop is the SuperMega customer workspace for sales and stock. Our team manages Sites and Commerce."
+      "title": "SuperMega | Tools for everyday work",
+      "description": "Shop brings sales and stock into one operating view. Our team manages Sites and confirms Commerce availability for each setup."
     },
     {
       "route": "/shop/",

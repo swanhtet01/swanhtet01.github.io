@@ -34,6 +34,10 @@ function countOccurrences(value, token) {
   return value.split(token).length - 1
 }
 
+function hasClassToken(source, token) {
+  return [...source.matchAll(/\bclass="([^"]+)"/g)].some((match) => match[1].split(/\s+/).includes(token))
+}
+
 function walkFiles(directory) {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const fullPath = join(directory, entry.name)
@@ -95,6 +99,7 @@ const expectedStaticFiles = new Set([
   '404.html',
   '__release.json',
   'favicon.svg',
+  'shop-sample-demo.js',
   'fonts/noto-sans-latin.woff2',
   'fonts/noto-sans-latin-OFL.txt',
   'vercel-insights.js',
@@ -141,17 +146,21 @@ const sharedRequired = [
   '.skip-link { position: fixed; z-index: 60; top: 12px; left: 12px; min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; padding: 10px 14px; border-radius: 10px; background: var(--ink); color: #ffffff; font-size: 13px; font-weight: 720; text-decoration: none; transform: translateY(-160%); }',
   '.skip-link:focus { transform: translateY(0); }',
   'aria-label="SuperMega home"',
+  'href="https://app.supermega.dev/login"',
+  '<script src="/vercel-insights.js"></script>',
+  'href="/privacy/">Privacy</a>',
+  '--bg-raised: #f1f5f9;',
+  '--ink: #0b0f17;',
+  '--blue: #2563eb;',
+  'font-family: "SuperMega Noto Sans"',
+  '--font-latin: "SuperMega Noto Sans"',
+  '.platform-image {margin:0;padding:24px;background:#f1f5f9;border:1px solid #dbe3ee;',
+]
+
+const genericBrandRequired = [
   '<span class="brand-mark" aria-hidden="true">&gt;_</span>',
   '<span class="brand-name">SUPERMEGA</span>',
   '<a class="button compact header-cta" href="https://app.supermega.dev/login">Login</a>',
-  '<script src="/vercel-insights.js"></script>',
-  'href="/privacy/">Privacy</a>',
-  '--bg-raised: #f1f1fb;',
-  '--ink: #151521;',
-  '--blue: #5b4ee8;',
-  'font-family: "SuperMega Noto Sans"',
-  '--font-latin: "SuperMega Noto Sans"',
-  '.platform-image {margin:0;padding:24px;background:#f1f0fb;border:1px solid #dedbf4;',
 ]
 
 const forbiddenCopy = [
@@ -207,13 +216,21 @@ for (const [route, page] of pages) {
   for (const token of sharedRequired) {
     if (!page.html.includes(token)) fail('shared_brand_contract_missing', { route, token })
   }
+  if (route !== '/' && route !== '/shop/') {
+    for (const token of genericBrandRequired) {
+      if (!page.html.includes(token)) fail('shared_brand_contract_missing', { route, token })
+    }
+  }
   for (const token of forbiddenCopy) {
     if (page.html.toLowerCase().includes(token.toLowerCase())) fail('retired_public_context_present', { route, token })
   }
   for (const marker of encodingCorruption) {
     if (page.html.includes(marker)) fail('public_copy_encoding_corrupt', { route })
   }
-  if (/\b(?:USD|MMK)\b|\$\s*\d|\d[\d,]*\s*(?:MMK|kyat)/i.test(page.html)) fail('public_price_present', { route })
+  if (route === '/shop/') {
+    const subscription = page.html.match(/<section class="subscription-section"[\s\S]*?<\/section>/)?.[0] || ''
+    if (!subscription || /\b(?:USD|MMK)\b|\$\s*\d|\d[\d,]*\s*(?:MMK|kyat)/i.test(subscription)) fail('public_subscription_price_present', { route })
+  } else if (/\b(?:USD|MMK)\b|\$\s*\d|\d[\d,]*\s*(?:MMK|kyat)/i.test(page.html)) fail('public_price_present', { route })
   if (/target\s*=\s*["']?_blank/i.test(page.html) || page.html.includes('window.open(')) fail('new_tab_navigation_present', { route })
   if (page.html.includes('href="/solutions/"') || page.html.includes('href="/trust/"')) fail('retired_public_navigation_present', { route })
   if (!page.html.includes(`<link rel="canonical" href="${new URL(route, `${manifest.release.productionDomain}/`).href}"`)) fail('canonical_url_wrong', { route })
@@ -251,7 +268,7 @@ if (new Set(pageTitles).size !== pageTitles.length) fail('page_titles_not_unique
 const jsonLdBlocks = (html) => [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map((match) => match[1])
 const executableScriptCount = (html) => (html.match(/<script(?![^>]*type="application\/ld\+json")[\s>]/g) || []).length
 for (const [route, page] of pages) {
-  const expectedExecutable = route === '/contact/' ? 2 : page.html.includes('data-platform-carousel') ? 2 : 1
+  const expectedExecutable = route === '/contact/' || route === '/shop/' || page.html.includes('data-platform-carousel') ? 2 : 1
   if (executableScriptCount(page.html) !== expectedExecutable) fail('unexpected_executable_script_element', { route, expected: expectedExecutable })
   const blocks = jsonLdBlocks(page.html)
   const landingProduct = publicProducts.find((product) => `/${product.id}/` === route)
@@ -297,9 +314,9 @@ if (publicObservability.indexOf("window.si('beforeSend'") > publicObservability.
 if (/(?:conversion|contact-form|customer|email|payment|proof_|window\.va\('event')/i.test(publicObservability)) fail('public_observability_private_or_custom_event_surface')
 
 const home = pages.get('/')?.html || ''
-const expectedHomeDescription = 'Shop is the SuperMega customer workspace for sales and stock. Our team manages Sites and Commerce.'
+const expectedHomeDescription = 'Shop brings sales and stock into one operating view. Our team manages Sites and confirms Commerce availability for each setup.'
 if (homePage?.file !== 'index.html') fail('home_manifest_entry_invalid')
-if (homePage.title !== 'SuperMega | Run the business without the busywork') fail('home_manifest_title_drift')
+if (homePage.title !== 'SuperMega | Tools for everyday work') fail('home_manifest_title_drift')
 if (homePage.description !== expectedHomeDescription) fail('home_manifest_description_source_drift')
 for (const staleToken of [
   '<title>SuperMega | Four products</title>',
@@ -309,11 +326,12 @@ for (const staleToken of [
 ]) {
   if (home.includes(staleToken)) fail('stale_home_metadata_present', { token: staleToken })
 }
-if (/\.brand-name\s*\{[^}]*display\s*:\s*none/i.test(home)) fail('mobile_brand_name_hidden')
-for (const token of ['Run the business.<br>Without the busywork.', 'id="products"', 'class="platform-image"', 'href="https://app.supermega.dev/login"', 'href="/contact/">Contact SuperMega</a>']) {
+if (!hasClassToken(home, 'company-hero')) fail('homepage_contract_missing', { token: 'class token company-hero' })
+for (const token of ['id="products"', 'href="/shop/#shop-demo">See Shop in action', 'href="https://app.supermega.dev/login"']) {
   if (!home.includes(token)) fail('homepage_contract_missing', { token })
 }
-if (!home.includes('Shop is the customer workspace for sales and stock. Our team manages Sites and Commerce.')) fail('home_customer_access_scope_missing')
+if (!home.includes('Shop brings sales and stock into one operating view.')
+  || !home.includes('Our team manages Sites and confirms Commerce availability for each setup.')) fail('home_customer_access_scope_missing')
 for (const retiredToken of [
   'Four focused products',
   'Pick one product and try the working sample.',
@@ -335,22 +353,45 @@ for (const retiredLabel of ['>Open Commerce<', '>Open Production<']) {
   if (home.includes(retiredLabel)) fail('ambiguous_demo_cta_present', { retiredLabel })
 }
 if (home.includes('Commerce and Production carry real records and actions.')) fail('unsupported_live_record_claim_present')
-// Navigation is shared across all marketing pages: skip, home, header Contact,
-// Login, footer Contact and Privacy. The homepage adds one internal link for
-// each product and one closing Contact action.
-for (const [route, html] of [['/', home], ...publicProducts.map(product => [`/${product.id}/`, pages.get(`/${product.id}/`).html])]) {
+// Company and Shop use their focused header/footer, while the other product
+// landings retain the existing gallery navigation.
+for (const [route, html] of [['/', home], ['/shop/', pages.get('/shop/').html], ...publicProducts.filter(product => product.id !== 'shop').map(product => [`/${product.id}/`, pages.get(`/${product.id}/`).html])]) {
   const body = html.slice(html.indexOf('<body'))
   const routeProduct = publicProducts.find(product => route === `/${product.id}/`) || null
   const contactActionTarget = routeProduct?.status === 'available-in-app'
     ? `/contact/?product=${routeProduct.id}`
     : null
-  const galleryViews = { shop: 3, website: 2, ecommerce: 2 }
-  const expectedLinks = route === '/'
-    ? 7 + publicProducts.length + Object.values(galleryViews).reduce((total, count) => total + count, 0)
-    : 6 + Number(Boolean(contactActionTarget)) + (galleryViews[routeProduct?.id] || 0)
+  const galleryViews = { website: 2, ecommerce: 2 }
+  const expectedLinks = route === '/' ? 14 : route === '/shop/' ? 12 : 6 + Number(Boolean(contactActionTarget)) + (galleryViews[routeProduct?.id] || 0)
   if ((body.match(/<a\b/g) || []).length !== expectedLinks) fail('marketing_link_surface_drift', { route, expectedLinks })
   if (countOccurrences(body, 'href="https://app.supermega.dev/login"') !== 1) fail('single_login_missing', { route })
-  if (!body.includes('class="platform-image"') || !(route === '/' ? body.includes('class="product-card-flow"') : body.includes('class="feature-line"'))) fail('product_visual_missing', { route })
+  const hasGalleryNavigation = (galleryViews[routeProduct?.id] || 0) > 1
+  const expectedButtons = route === '/' ? 0 : route === '/shop/' ? 5 : Number(hasGalleryNavigation) * 2
+  if ((body.match(/<button\b/g) || []).length !== expectedButtons) fail('marketing_button_surface_drift', { route, expectedButtons })
+  const galleryControlAttributes = [...body.matchAll(/<button\b([^>]*)>/g)]
+    .map(match => match[1])
+    .filter(attributes => /\bdata-gallery-(?:previous|next)\b/.test(attributes))
+  const expectedGalleryButtons = Number(hasGalleryNavigation) * 2
+  if (galleryControlAttributes.length !== expectedGalleryButtons) fail('gallery_navigation_button_count_drift', { route, expectedGalleryButtons, actual: galleryControlAttributes.length })
+  if (hasGalleryNavigation) {
+    const previous = galleryControlAttributes.filter(attributes => /\bdata-gallery-previous\b/.test(attributes))
+    const next = galleryControlAttributes.filter(attributes => /\bdata-gallery-next\b/.test(attributes))
+    if (previous.length !== 1 || !/aria-label="Previous [^"]+ screenshot"/.test(previous[0] || '') || !/\bdisabled\b/.test(previous[0] || '')) {
+      fail('gallery_previous_control_accessibility_drift', { route })
+    }
+    if (next.length !== 1 || !/aria-label="Next [^"]+ screenshot"/.test(next[0] || '') || /\bdisabled\b/.test(next[0] || '')) {
+      fail('gallery_next_control_accessibility_drift', { route })
+    }
+    if (!/data-gallery-status\b[^>]*aria-live="polite"/.test(body) || !hasClassToken(body, 'platform-slides') || !/class="platform-slides"[^>]*tabindex="0"/.test(body)) {
+      fail('gallery_status_or_keyboard_accessibility_drift', { route })
+    }
+  }
+  const productVisualMissing = route === '/'
+    ? !hasClassToken(body, 'company-hero') || !hasClassToken(body, 'product-family')
+    : route === '/shop/'
+      ? !body.includes('class="pos-window"') || !body.includes('class="sample-label"') || !body.includes('Complete sample sale')
+      : !body.includes('class="platform-image"') || !body.includes('class="feature-line"')
+  if (productVisualMissing) fail('product_visual_missing', { route })
   const directAppTargets = [...body.matchAll(/href="(https:\/\/app\.supermega\.dev\/[^\"]+)"/g)]
     .map(match => match[1])
     .filter(target => target !== 'https://app.supermega.dev/login')
@@ -367,7 +408,7 @@ for (const [route, html] of [['/', home], ...publicProducts.map(product => [`/${
 }
 for (const product of publicProducts) {
   const productRoute = manifest.pages.find(page => page.productId === product.id)?.route
-  if (typeof productRoute !== 'string' || countOccurrences(home, `class="story-link" href="${productRoute}"`) !== 1) fail('homepage_product_link_missing', { product: product.id })
+  if (typeof productRoute !== 'string' || countOccurrences(home, `class="family-link" href="${productRoute}"`) !== 1) fail('homepage_product_link_missing', { product: product.id })
 }
 
 const shopPage = pages.get('/shop/')?.html || ''
@@ -375,6 +416,12 @@ for (const [route, html] of [['/', home], ['/shop/', shopPage]]) {
   if (!html.includes('<html lang="en">')) fail('marketing_page_not_english', { route })
   if (html.includes('data-language-toggle') || html.includes('src="/site-language.js"')) fail('marketing_language_control_present', { route })
   if (html.includes('data-i18n=') || /[\u1000-\u109f]/u.test(html)) fail('marketing_myanmar_copy_present', { route })
+}
+const shopSample = readStatic('shop-sample-demo.js')
+if (!shopSample.includes('lang="my"') || !/[\u1000-\u109f]/u.test(shopSample)) fail('shop_sample_burmese_item_missing')
+if (/fetch\s*\(|XMLHttpRequest|localStorage|sessionStorage|window\.print|navigator\.vibrate|window\.open|location\.(?:assign|replace)|setInterval/i.test(shopSample)) fail('shop_sample_external_or_persistent_action_present')
+for (const token of ['Interactive example', 'Shop is subscription-only, with no setup fee and no printer-sourcing markup.', 'Hardware costs are separate.', 'The SuperMega team manages Sites included in your subscription.', 'confirm ecommerce availability for your setup.']) {
+  if (!shopPage.includes(token)) fail('shop_page_scope_missing', { token })
 }
 
 const contact = pages.get('/contact/')?.html || ''
