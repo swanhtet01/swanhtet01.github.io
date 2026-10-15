@@ -15,6 +15,7 @@ import { formatShopProfitControlMetric } from './shop-profit-control'
 import type { ShopProfitControlBoard } from './shop-profit-control'
 import { projectShopTodaySalesPulse } from './shop-today-sales'
 import { selectShopTodayProducts } from './shop-today-products'
+import { bi } from './i18n-actions'
 import { ProductPhoto } from './ProductPhoto'
 
 export type ShopTodayMetric = {
@@ -361,7 +362,7 @@ export function ShopToday({ accountingExport = null, batchProfitControl = projec
         <div className="shop-operating-list shop-product-list">
           {visibleProducts.length ? visibleProducts.map((item) => <Link data-low-stock={item.onHand <= item.reorderAt} key={item.sku} to="/shop/?tab=inventory">
             <ProductPhoto className="shop-today-product-photo" fallback={<span aria-hidden="true" className="shop-today-product-fallback">{item.name.trim().slice(0, 1).toUpperCase()}</span>} scope={productImageScope} sku={item.sku} />
-            <span><strong>{item.name}</strong><small>{item.onHand} in stock{item.onHand <= item.reorderAt ? ' · reorder' : ''}</small></span>
+            <span><strong>{item.name}</strong><small>{item.onHand} in stock{item.onHand <= item.reorderAt ? <> · {bi('Reorder')}</> : null}</small></span>
             <span><b>{formatMmk(item.price)}</b></span>
           </Link>) : <p className="shop-operating-empty"><strong>No products yet</strong><span>Add a product to start selling.</span></p>}
         </div>
