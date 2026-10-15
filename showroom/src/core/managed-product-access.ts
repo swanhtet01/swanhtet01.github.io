@@ -27,13 +27,14 @@ export function managedProductIsVisible(
   return assignedProducts.includes(product)
 }
 
-export function ecommerceShopHandoffVisible(
+export function linkedShopInboxVisible(
   status: 'checking' | 'local' | 'ready' | 'reauthenticate' | 'error',
   assignedProducts: readonly ClientSolutionId[],
+  sourceProduct: 'website' | 'ecommerce',
 ) {
   return status === 'local' || status === 'ready'
     && managedProductIsVisible(assignedProducts, 'commerce')
-    && managedProductIsVisible(assignedProducts, 'ecommerce')
+    && managedProductIsVisible(assignedProducts, sourceProduct)
 }
 
 export function productSwitcherVisible(
