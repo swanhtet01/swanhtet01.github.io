@@ -252,7 +252,26 @@ test('managed product access requires explicit activation-derived entitlements f
   )
   assert.deepEqual(
     managedProductsFromBootstrap({ ...bootstrap, readiness: { productEntitlements: ['ecommerce'] } }, identity),
+    [],
+  )
+  assert.deepEqual(
+    managedProductsFromBootstrap({ ...bootstrap, readiness: {
+      productEntitlements: ['ecommerce'], capabilities: ['company.write'],
+    } }, identity),
     ['ecommerce'],
+  )
+  assert.deepEqual(
+    managedProductsFromBootstrap({ ...bootstrap, readiness: {
+      productEntitlements: ['commerce', 'ecommerce'], capabilities: ['commerce.read', 'commerce.write'],
+    } }, identity),
+    ['commerce'],
+  )
+  assert.deepEqual(
+    managedProductsFromBootstrap({ ...bootstrap, readiness: {
+      productEntitlements: ['commerce', 'ecommerce'],
+      capabilities: ['commerce.read', 'commerce.write', 'ecommerce.manage'],
+    } }, identity),
+    ['commerce', 'ecommerce'],
   )
   assert.deepEqual(
     managedProductsFromBootstrap({ ...bootstrap, readiness: { productEntitlements: ['production'] } }, identity),
