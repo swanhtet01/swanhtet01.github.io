@@ -8,6 +8,7 @@ const projectRef = String(packageState?.supermega?.productionSupabaseProjectRef 
 const runtimeRole = 'supermega_trial_login'
 const storageAuditRole = 'supermega_storage_audit'
 const managedSchemaVersion = '13'
+const databaseProfiles = new Set(['v13-self-serve', 'v13-inquiry'])
 
 const databaseTargetReadyForRole = (value, role) => {
   try {
@@ -31,7 +32,7 @@ const databaseTargetReadyForRole = (value, role) => {
   }
 }
 
-const evaluate = (environment, expectedMode) => {
+const evaluate = (environment, expectedMode, requiredProfile = '') => {
   const failures = []
   const addFailure = (value) => {
     if (!failures.includes(value)) failures.push(value)
@@ -41,6 +42,13 @@ const evaluate = (environment, expectedMode) => {
   const supabaseUrl = String(environment.VITE_SUPABASE_URL || '').trim()
   const publishableKey = String(environment.VITE_SUPABASE_PUBLISHABLE_KEY || '').trim()
   const schemaVersion = String(environment.SUPERMEGA_TRIAL_SCHEMA_VERSION || '').trim()
+  const schemaProfile = String(environment.SUPERMEGA_TRIAL_SCHEMA_PROFILE || '').trim()
+  // An absent value denotes existing self-serve deployments. New activation
+  // supplies an explicit profile and its exact expectation to this verifier.
+  const effectiveSchemaProfile = schemaProfile || 'v13-self-serve'
+  const websiteInquiriesEnabled = ['1', 'true', 'yes', 'on'].includes(
+    String(environment.SUPERMEGA_WEBSITE_INQUIRIES_ENABLED || '').trim().toLowerCase(),
+  )
   const billingSchemaVersion = String(environment.SUPERMEGA_BILLING_SCHEMA_VERSION || '').trim()
   const boundProjectRef = String(environment.SUPERMEGA_SUPABASE_PROJECT_REF || '').trim()
   const configuredReleaseCommit = String(environment.SUPERMEGA_RELEASE_COMMIT || '').trim()
@@ -62,6 +70,13 @@ const evaluate = (environment, expectedMode) => {
     addFailure('managed_browser_publishable_key_invalid')
   }
   if (schemaVersion !== managedSchemaVersion) addFailure('managed_schema_version_invalid')
+  if (!databaseProfiles.has(effectiveSchemaProfile)) addFailure('managed_schema_profile_invalid')
+  if (requiredProfile && (!databaseProfiles.has(requiredProfile) || schemaProfile !== requiredProfile)) {
+    addFailure('managed_schema_profile_binding_invalid')
+  }
+  if (websiteInquiriesEnabled && effectiveSchemaProfile !== 'v13-inquiry') {
+    addFailure('website_inquiries_require_inquiry_schema_profile')
+  }
   if (billingSchemaVersion !== managedSchemaVersion) addFailure('managed_billing_schema_version_invalid')
   if (boundProjectRef !== projectRef) addFailure('managed_project_binding_invalid')
   if (!/^[0-9a-f]{40}$/.test(releaseCommit)) addFailure('managed_release_commit_invalid')
@@ -76,7 +91,7 @@ const evaluate = (environment, expectedMode) => {
     addFailure('staged_environment_must_not_enable_writes')
   }
   if (expectedMode === 'isolated_demo') {
-    if ([databaseUrl, storageAuditDatabaseUrl, supabaseUrl, publishableKey, schemaVersion, billingSchemaVersion, boundProjectRef, configuredReleaseCommit, selfServeWindow, writesEnabled].some(Boolean)) {
+    if ([databaseUrl, storageAuditDatabaseUrl, supabaseUrl, publishableKey, schemaVersion, schemaProfile, billingSchemaVersion, boundProjectRef, configuredReleaseCommit, selfServeWindow, writesEnabled, websiteInquiriesEnabled].some(Boolean)) {
       addFailure('isolated_environment_contains_managed_runtime_values')
     } else {
       failures.splice(0, failures.length)
@@ -96,6 +111,9 @@ const evaluate = (environment, expectedMode) => {
     browserAuthReady: supabaseUrl === `https://${projectRef}.supabase.co`
       && /^sb_publishable_[A-Za-z0-9_-]{16,}$/.test(publishableKey),
     schemaVersionMatched: schemaVersion === managedSchemaVersion,
+    schemaProfile: effectiveSchemaProfile,
+    schemaProfileMatched: databaseProfiles.has(effectiveSchemaProfile)
+      && (!requiredProfile || schemaProfile === requiredProfile),
     billingSchemaVersionMatched: billingSchemaVersion === managedSchemaVersion,
     releaseCommitBound: /^[0-9a-f]{40}$/.test(releaseCommit),
     selfServeEnabled: selfServeWindow === 'open',
@@ -112,11 +130,19 @@ if (process.argv.includes('--self-test')) {
     VITE_SUPABASE_URL: `https://${projectRef}.supabase.co`,
     VITE_SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_1234567890abcdef',
     SUPERMEGA_TRIAL_SCHEMA_VERSION: managedSchemaVersion,
+    SUPERMEGA_TRIAL_SCHEMA_PROFILE: 'v13-self-serve',
     SUPERMEGA_BILLING_SCHEMA_VERSION: managedSchemaVersion,
     SUPERMEGA_SUPABASE_PROJECT_REF: projectRef,
     SUPERMEGA_RELEASE_COMMIT: 'a'.repeat(40),
   }
   assert.equal(evaluate(valid, 'staged').ok, true)
+  assert.equal(evaluate({ ...valid, SUPERMEGA_TRIAL_SCHEMA_PROFILE: 'v13-inquiry' }, 'staged', 'v13-inquiry').ok, true)
+  assert.equal(evaluate(valid, 'staged', 'v13-inquiry').failures.includes('managed_schema_profile_binding_invalid'), true)
+  assert.equal(evaluate({ ...valid, SUPERMEGA_TRIAL_SCHEMA_PROFILE: '' }, 'staged', 'v13-self-serve').failures.includes('managed_schema_profile_binding_invalid'), true)
+  assert.equal(evaluate({ ...valid, SUPERMEGA_TRIAL_SCHEMA_PROFILE: 'other' }, 'staged').failures.includes('managed_schema_profile_invalid'), true)
+  assert.equal(evaluate({ ...valid, SUPERMEGA_WEBSITE_INQUIRIES_ENABLED: 'true' }, 'managed_trial').failures.includes('website_inquiries_require_inquiry_schema_profile'), true)
+  assert.equal(evaluate({ ...valid, SUPERMEGA_WEBSITE_INQUIRIES_ENABLED: 'YES' }, 'staged').failures.includes('website_inquiries_require_inquiry_schema_profile'), true)
+  assert.equal(evaluate({ ...valid, SUPERMEGA_TRIAL_SCHEMA_PROFILE: 'v13-inquiry', SUPERMEGA_WEBSITE_INQUIRIES_ENABLED: 'true', SUPERMEGA_TRIAL_WRITES_ENABLED: 'true' }, 'managed_trial', 'v13-inquiry').ok, true)
   assert.equal(evaluate({ ...valid, SUPERMEGA_TRIAL_WRITES_ENABLED: 'true' }, 'managed_trial').ok, true)
   assert.equal(evaluate({ ...valid, SUPERMEGA_TRIAL_WRITES_ENABLED: 'true', SUPERMEGA_SELF_SERVE_ACTIVATION_WINDOW: 'open' }, 'self_serve').ok, true)
   assert.equal(evaluate(valid, 'managed_trial').failures.includes('managed_writes_flag_not_enabled'), true)
@@ -152,7 +178,7 @@ if (process.argv.includes('--self-test')) {
   additionalChecks++
   assert.equal(evaluate(valid, 'staged').billingSchemaVersionMatched, true)
   additionalChecks++
-  console.log(JSON.stringify({ ok: true, contract: 'supermega_managed_runtime_environment_values_self_test.v1', checks: 22 + additionalChecks }))
+  console.log(JSON.stringify({ ok: true, contract: 'supermega_managed_runtime_environment_values_self_test.v1', checks: 29 + additionalChecks }))
   process.exit(0)
 }
 
@@ -160,7 +186,11 @@ const expectedMode = String(process.argv[2] || '').trim()
 if (!['isolated_demo', 'staged', 'managed_trial', 'self_serve'].includes(expectedMode)) {
   throw new Error('expected_mode_must_be_isolated_demo_staged_managed_trial_or_self_serve')
 }
-const result = evaluate(process.env, expectedMode)
+const requiredProfile = String(process.argv[3] || '').trim()
+if (process.argv.length > 4 || (requiredProfile && !databaseProfiles.has(requiredProfile))) {
+  throw new Error('required_schema_profile_invalid')
+}
+const result = evaluate(process.env, expectedMode, requiredProfile)
 console.log(JSON.stringify(result))
 if (!result.ok) process.exit(1)
 

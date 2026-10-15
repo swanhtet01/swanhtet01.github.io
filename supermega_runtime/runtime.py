@@ -37,6 +37,8 @@ from supermega_runtime.trial_store import (
     TrialPrincipal,
     TrialValidationError,
 )
+from supermega_runtime.website_inquiry_api import create_website_inquiry_router
+from supermega_runtime.website_inquiry_store import WebsiteInquiryStore
 from supermega_runtime.website_runtime import reduce_website_state
 
 
@@ -137,6 +139,13 @@ def _flag(name: str, *, default: bool = False) -> bool:
     if not value:
         return default
     return value.casefold() in {"1", "true", "yes", "on"}
+
+
+def _website_inquiry_peer_address(request: Request) -> str:
+    """Return the ASGI transport peer without trusting caller-supplied headers."""
+    if request.client is None:
+        raise ValueError("website_inquiry_client_address_unavailable")
+    return request.client.host
 
 
 def _identity_secret_ready(value: object) -> bool:
@@ -1279,6 +1288,20 @@ def create_app() -> FastAPI:
             resolve_principal=resolve_trial_principal,
             resolve_signup_session=resolve_self_serve_signup_session,
             send_welcome_email=send_self_serve_welcome_email,
+        )
+    )
+    # Public intake stays fail-closed until the owner enables it and confirms
+    # the host places the verified caller address in ASGI's client field. This
+    # intentionally ignores X-Forwarded-For and other caller-supplied headers.
+    trusted_client_address = _flag("SUPERMEGA_WEBSITE_INQUIRY_CLIENT_ADDRESS_TRUSTED")
+    app.include_router(
+        create_website_inquiry_router(
+            store=WebsiteInquiryStore(store),
+            enabled=_flag("SUPERMEGA_WEBSITE_INQUIRIES_ENABLED"),
+            resolve_client_address=_website_inquiry_peer_address if trusted_client_address else None,
+            resolve_principal=resolve_trial_principal,
+            abuse_key=_text(os.getenv("SUPERMEGA_WEBSITE_INQUIRY_ABUSE_HMAC_KEY")).encode("utf-8"),
+            public_origin=_text(os.getenv("SUPERMEGA_WEBSITE_INQUIRY_PUBLIC_ORIGIN")),
         )
     )
     app.include_router(cloud_runtime_router)

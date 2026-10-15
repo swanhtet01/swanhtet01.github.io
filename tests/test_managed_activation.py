@@ -264,7 +264,7 @@ def managed_trial_request_for(product_slug: str = "shop") -> dict[str, object]:
     return request
 
 
-def activation_plan(product_slug: str = "shop") -> dict[str, object]:
+def activation_plan(product_slug: str = "shop", *, schema_profile: str = "v13-self-serve") -> dict[str, object]:
     request = managed_trial_request_for(product_slug)
     return compile_activation_plan(
         request,
@@ -276,6 +276,7 @@ def activation_plan(product_slug: str = "shop") -> dict[str, object]:
         project_ref=PROJECT_REF,
         release_commit=RELEASE_COMMIT,
         admin_ca_sha256=ADMIN_CA_SHA256,
+        schema_profile=schema_profile,
         now=NOW,
     )
 
@@ -513,6 +514,27 @@ class ManagedActivationPlanTests(unittest.TestCase):
         self.assertEqual(plan["target"].get("databaseContract"), CONTRACT)
         self.assertEqual(plan["operations"][0], "verify_postgres17_schema_v13_self_serve")
 
+    def test_inquiry_plan_binds_distinct_catalog_and_rejects_cross_profile_forgery(self) -> None:
+        from tools.private_trial_inquiry_contract import CONTRACT, PROFILE
+
+        plan = activation_plan("website", schema_profile=PROFILE)
+        self.assertEqual(plan["target"]["schemaProfile"], PROFILE)
+        self.assertEqual(plan["target"]["databaseContract"], CONTRACT)
+        self.assertEqual(plan["operations"][0], "verify_postgres17_schema_v13_inquiry")
+        self.assertNotEqual(plan["planDigest"], activation_plan("website")["planDigest"])
+        self.assertEqual(validate_activation_plan(plan), plan)
+
+        for field, value in (("databaseContract", "supermega_private_trial_database_v13_self_serve_v1"),
+                             ("schemaProfile", "v13-self-serve")):
+            forged = deepcopy(plan)
+            forged["target"][field] = value
+            body = {key: value for key, value in forged.items() if key != "planDigest"}
+            forged["planDigest"] = "sha256:" + sha256(
+                json.dumps(body, sort_keys=True, separators=(",", ":")).encode()
+            ).hexdigest()
+            with self.subTest(field=field), self.assertRaises(ManagedActivationError):
+                validate_activation_plan(forged)
+
     def test_recomputed_old_or_forged_profile_plan_is_denied_before_connection(self) -> None:
         for key, value in (
             ("schemaVersion", 11), ("schemaVersion", 12), ("schemaVersion", "13"),
@@ -721,6 +743,15 @@ class ManagedWorkspaceProvisionerTests(unittest.TestCase):
             self.provisioner.apply(self.plan)
         self.assertEqual(self.database.memberships, [])
         self.assertEqual(self.database.events, {})
+
+    def test_self_serve_authorization_cannot_activate_inquiry_profile(self) -> None:
+        self.authorize()
+        inquiry_plan = activation_plan(schema_profile="v13-inquiry")
+        self.assertNotEqual(inquiry_plan["planDigest"], self.plan["planDigest"])
+        self.assertFalse(self.provisioner.inspect(inquiry_plan)["authorizationReady"])
+        with self.assertRaises(ManagedActivationError):
+            self.provisioner.apply(inquiry_plan)
+        self.assertEqual(self.database.memberships, [])
 
     def test_multi_product_plan_applies_one_membership_with_union_capabilities(self) -> None:
         self.plan = compile_multi_product_activation_plan(
@@ -1170,6 +1201,8 @@ class ManagedActivationCliTests(unittest.TestCase):
                     RELEASE_COMMIT,
                     "--admin-ca-file",
                     str(certificate_path),
+                    "--schema-profile",
+                    "v13-inquiry",
                     "--output",
                     str(output_path),
                 ]
@@ -1177,6 +1210,7 @@ class ManagedActivationCliTests(unittest.TestCase):
             self.assertEqual(result, 0)
             plan = json.loads(output_path.read_text(encoding="utf-8"))
             self.assertEqual(plan["contract"], ACTIVATION_PLAN_CONTRACT)
+            self.assertEqual(plan["target"]["schemaProfile"], "v13-inquiry")
             self.assertFalse(plan["secretValuesExposed"])
 
     def test_prepare_command_accepts_four_reviewed_products_for_one_tenant(self) -> None:

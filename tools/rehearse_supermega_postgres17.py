@@ -52,8 +52,8 @@ MIGRATIONS = (
 VALIDATOR = ROOT / "tools" / "validate_supermega_database_url.py"
 CONTRACT = "supermega_postgres17_rehearsal_v2"
 CURRENT_SCHEMA_VERSION = 13
-CURRENT_PROFILE = "v13-self-serve"
-CURRENT_CATALOG_CONTRACT = "supermega_private_trial_database_v13_self_serve_v1"
+CURRENT_PROFILE = "v13-inquiry"
+CURRENT_CATALOG_CONTRACT = "supermega_private_trial_database_v13_inquiry_v1"
 # MIGRATIONS remains an explicit legacy baseline for isolated migration tests.
 # The release entrypoint below always passes this complete current chain.
 CURRENT_MIGRATIONS = (*MIGRATIONS,
@@ -68,6 +68,7 @@ CURRENT_MIGRATIONS = (*MIGRATIONS,
     "20260924231714_ecommerce_customer_decisions.sql",
     "20260929171000_ecommerce_decision_review_fk_index.sql",
     "20260930010000_app_rls_initplan_optimization.sql",
+    "20261014011202_website_inquiry_delivery.sql",
 )
 RUNTIME_ROLE = "supermega_trial_login"
 DATABASE_NAME = "supermega_rehearsal"
@@ -132,11 +133,15 @@ IMPLEMENTATION_PATHS = tuple(sorted(set((*IMPLEMENTATION_PATHS,
     *(f"supabase/migrations/{name}" for name in CURRENT_MIGRATIONS),
     "supermega_runtime/billing_rail.py", "tests/test_billing_rail.py",
     "supermega_runtime/website_customer_review.py", "supermega_runtime/website_customer_review_store.py",
+    "supermega_runtime/website_inquiry_api.py", "supermega_runtime/website_inquiry_store.py",
+    "supermega_runtime/website_public_page.py", "supabase/proposals/website_inquiry_delivery.sql",
+    "tests/test_website_inquiry_sql.py",
     "supermega_runtime/website_acceptance_schema.py",
     "supermega_runtime/ecommerce_decision_schema.py",
     "supermega_runtime/website_runtime.py", "supermega_runtime/website_release_foundation.py",
     "tests/test_website_runtime.py",
     "tools/rehearse_self_serve_v13.py", "tools/private_trial_v13_contract.py",
+    "tools/private_trial_inquiry_contract.py",
     "tools/run_postgres17_rehearsal.mjs", "tools/record_postgres17_rehearsal.mjs",
     "tools/record_postgres17_rehearsal.test.mjs", "tests/test_postgres17_rehearsal_contract.py",
 ))))
@@ -3627,6 +3632,33 @@ def _verify_restored_data(
         raise RehearsalFailure("restored_approval_authority_mismatch")
 
 
+def _seed_inquiry_recovery_fixture(admin_database_url: str) -> None:
+    """Retain one synthetic published channel and inquiry across dump/restore."""
+    with _connect(admin_database_url) as connection:
+        connection.execute(
+            """insert into app_private.website_inquiry_channels
+              (channel_id, workspace_id, page_id, source_version, source_digest,
+               site_name, source_page, allowed_origin, enabled, published_artifact,
+               artifact_digest, snapshot_id, published_by, published_at, created_by)
+            values (%s, %s, 'page-home', 1, %s, 'Synthetic Studio', '/',
+                    'https://synthetic.example', true, '{}'::jsonb, %s,
+                    'synthetic-recovery-snapshot', %s, pg_catalog.clock_timestamp(), %s)""",
+            ("00000000-0000-4000-8000-000000000647", JOURNEY_PRODUCT_WORKSPACE,
+             "sha256:" + "a" * 64, "sha256:" + "b" * 64,
+             JOURNEY_PRODUCT_ACTOR, JOURNEY_PRODUCT_ACTOR),
+        )
+        connection.execute(
+            """insert into app_private.website_inbox
+              (channel_id, request_id, workspace_id, name, contact, message,
+               consent_recorded, client_key)
+            values (%s, %s, %s, 'Synthetic Customer', 'synthetic@example.test',
+                    'Synthetic inquiry for recovery.', true, %s)""",
+            ("00000000-0000-4000-8000-000000000647",
+             "00000000-0000-4000-8000-000000000648",
+             JOURNEY_PRODUCT_WORKSPACE, "c" * 64),
+        )
+
+
 def _preflight(postgres_bin: Path, openssl: Path) -> dict[str, Any]:
     environment = _clean_environment(postgres_bin)
     required = ("postgres", "initdb", "pg_ctl", "pg_isready", "psql", "pg_dump", "pg_restore")
@@ -3806,10 +3838,12 @@ def _run_rehearsal(
             if str(ROOT) not in sys.path:
                 sys.path.insert(0, str(ROOT))
             from tools import rehearse_self_serve_v13 as account_proof
-            if account_proof.MIGRATIONS != CURRENT_MIGRATIONS:
+            if tuple(CURRENT_MIGRATIONS[:len(account_proof.MIGRATIONS)]) != tuple(account_proof.MIGRATIONS):
                 raise RehearsalFailure("account_migration_chain_mismatch")
             retained = account_proof.exercise(admin_database_url, runtime_database_url, source_identity["head"])
-            private_snapshot = account_proof.snapshot(admin_database_url)
+            _seed_inquiry_recovery_fixture(admin_database_url)
+            private_snapshot = account_proof.snapshot(
+                admin_database_url, additional_tables=account_proof.INQUIRY_TABLES)
             with _connect(admin_database_url) as conn:
                 conn.execute("set transaction read only")
                 row_counts = tuple(conn.execute(f"select count(*) from app_private.{table}").fetchone()[0]
@@ -3900,7 +3934,8 @@ def _run_rehearsal(
                 expected_row_counts=row_counts,
             )
             _verify_public_browser_quarantine(restore_admin_database_url)
-            restored_snapshot = account_proof.snapshot(restore_admin_database_url)
+            restored_snapshot = account_proof.snapshot(
+                restore_admin_database_url, additional_tables=account_proof.INQUIRY_TABLES)
             if restored_snapshot != private_snapshot:
                 raise RehearsalFailure("restored_private_rows_mismatch")
             account_proof.verify_customer_reviews(restored_runtime_url, retained)

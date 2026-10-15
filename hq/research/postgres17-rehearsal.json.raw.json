@@ -17,6 +17,10 @@
       "extension_functions_exact": true,
       "extension_policies_exact": true,
       "immutable_and_version_triggers_exact": true,
+      "inquiry_columns_exact": true,
+      "inquiry_constraints_exact": true,
+      "inquiry_functions_exact": true,
+      "inquiry_policies_exact": true,
       "metadata_table_rls": true,
       "policy_contract_exact": true,
       "postgres_major_supported": true,
@@ -52,6 +56,10 @@
       "extension_functions_exact": true,
       "extension_policies_exact": true,
       "immutable_and_version_triggers_exact": true,
+      "inquiry_columns_exact": true,
+      "inquiry_constraints_exact": true,
+      "inquiry_functions_exact": true,
+      "inquiry_policies_exact": true,
       "metadata_table_rls": true,
       "policy_contract_exact": true,
       "postgres_major_supported": true,
@@ -162,7 +170,7 @@
     "version": "17.10"
   },
   "implementation": {
-    "digest": "sha256:1adcc5a25cec50958800012118b608d188b8dcf91e370ea6830a69154651208f",
+    "digest": "sha256:9da3896fb52df84bb950738596c1a351a3a9789c4cb2508a0289fd239236251b",
     "paths": [
       "kernel/database-rehearsal-evidence.mjs",
       "supabase/migrations/20260722004500_private_trial_backend_role_preflight.sql",
@@ -188,6 +196,8 @@
       "supabase/migrations/20260924231714_ecommerce_customer_decisions.sql",
       "supabase/migrations/20260929171000_ecommerce_decision_review_fk_index.sql",
       "supabase/migrations/20260930010000_app_rls_initplan_optimization.sql",
+      "supabase/migrations/20261014011202_website_inquiry_delivery.sql",
+      "supabase/proposals/website_inquiry_delivery.sql",
       "supabase/rehearsal/20260804_public_browser_quarantine.sql",
       "supermega_runtime/billing_rail.py",
       "supermega_runtime/core_security_catalog.py",
@@ -200,12 +210,17 @@
       "supermega_runtime/website_acceptance_schema.py",
       "supermega_runtime/website_customer_review.py",
       "supermega_runtime/website_customer_review_store.py",
+      "supermega_runtime/website_inquiry_api.py",
+      "supermega_runtime/website_inquiry_store.py",
+      "supermega_runtime/website_public_page.py",
       "supermega_runtime/website_release_foundation.py",
       "supermega_runtime/website_runtime.py",
       "tests/test_billing_rail.py",
       "tests/test_postgres17_rehearsal_contract.py",
+      "tests/test_website_inquiry_sql.py",
       "tests/test_website_runtime.py",
       "tools/activate_supermega_database.ps1",
+      "tools/private_trial_inquiry_contract.py",
       "tools/private_trial_v13_contract.py",
       "tools/record_postgres17_rehearsal.mjs",
       "tools/record_postgres17_rehearsal.test.mjs",
@@ -218,8 +233,8 @@
     ]
   },
   "migrations": {
-    "catalog_contract": "supermega_private_trial_database_v13_self_serve_v1",
-    "count": 23,
+    "catalog_contract": "supermega_private_trial_database_v13_inquiry_v1",
+    "count": 24,
     "names": [
       "20260722004500_private_trial_backend_role_preflight.sql",
       "20260722005134_private_trial_backend_foundation.sql",
@@ -243,10 +258,11 @@
       "20260924194557_ecommerce_customer_review_storage.sql",
       "20260924231714_ecommerce_customer_decisions.sql",
       "20260929171000_ecommerce_decision_review_fk_index.sql",
-      "20260930010000_app_rls_initplan_optimization.sql"
+      "20260930010000_app_rls_initplan_optimization.sql",
+      "20261014011202_website_inquiry_delivery.sql"
     ],
     "production_validator_ready": true,
-    "schema_profile": "v13-self-serve",
+    "schema_profile": "v13-inquiry",
     "schema_version": 13
   },
   "ok": true,
@@ -255,15 +271,15 @@
   "recovery": {
     "backup_nonempty": true,
     "format": "pg_dump_custom",
-    "private_snapshot_after": "sha256:1aa108383b4f1240bf154799936dcc9370dbef2ab98f86f410b72961ae4a7253",
-    "private_snapshot_before": "sha256:1aa108383b4f1240bf154799936dcc9370dbef2ab98f86f410b72961ae4a7253",
+    "private_snapshot_after": "sha256:50ca12a7b8e1e1960057dee4f08702e281ad9e97e3b6b5d7885b63b4b4d9fb34",
+    "private_snapshot_before": "sha256:50ca12a7b8e1e1960057dee4f08702e281ad9e97e3b6b5d7885b63b4b4d9fb34",
     "restored_schema_version": 13
   },
   "secret_values_exposed": false,
   "source": {
-    "head": "d482e0d37f75e1584a2d425e9e77b39766450f15",
-    "implementation_digest": "sha256:1adcc5a25cec50958800012118b608d188b8dcf91e370ea6830a69154651208f",
-    "tree": "8ab8849a254a32ebcf4bdfe27e7d82c99089cc59"
+    "head": "b442a558e5e4f4942d44fa612239662cc814b53e",
+    "implementation_digest": "sha256:9da3896fb52df84bb950738596c1a351a3a9789c4cb2508a0289fd239236251b",
+    "tree": "041a5eb8ddd5180f0221bb0ef6df7e2bbf68ac51"
   },
   "status": "rehearsed",
   "storage": {

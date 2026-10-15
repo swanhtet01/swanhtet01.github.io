@@ -37,6 +37,10 @@ ACTIVATION_AUTHORIZATION_CONTRACT = "supermega.managed_workspace_activation_auth
 TRIAL_SCHEMA_VERSION = 13
 TRIAL_SCHEMA_PROFILE = "v13-self-serve"
 TRIAL_DATABASE_CONTRACT = "supermega_private_trial_database_v13_self_serve_v1"
+TRIAL_DATABASE_PROFILES = {
+    TRIAL_SCHEMA_PROFILE: (TRIAL_DATABASE_CONTRACT, "verify_postgres17_schema_v13_self_serve"),
+    "v13-inquiry": ("supermega_private_trial_database_v13_inquiry_v1", "verify_postgres17_schema_v13_inquiry"),
+}
 MAX_INPUT_BYTES = 1024 * 1024
 PLAN_TTL = timedelta(days=7)
 AUTOMATIC_COMPENSATION_REASON = "Activation compensation after a downstream release gate failure."
@@ -108,6 +112,12 @@ class ManagedActivationError(ValueError):
 
 class ManagedActivationConflict(ManagedActivationError):
     """Raised when durable workspace state conflicts with an activation plan."""
+
+
+def _database_profile(profile: object) -> tuple[str, str]:
+    if not isinstance(profile, str) or profile not in TRIAL_DATABASE_PROFILES:
+        raise ManagedActivationError("Activation target database profile is unsupported.")
+    return TRIAL_DATABASE_PROFILES[profile]
 
 
 def _canonical_json(value: object) -> str:
@@ -520,6 +530,7 @@ def compile_activation_plan(
     project_ref: str,
     release_commit: str,
     admin_ca_sha256: str,
+    schema_profile: str = TRIAL_SCHEMA_PROFILE,
     now: datetime | None = None,
 ) -> dict[str, Any]:
     """Bind browser evidence to one named user, target database, and release."""
@@ -539,6 +550,7 @@ def compile_activation_plan(
     ca_digest = _visible_text(admin_ca_sha256, "Administrative CA digest", 71).lower()
     if not _SHA256.fullmatch(ca_digest):
         raise ManagedActivationError("Administrative CA digest is invalid.")
+    database_contract, verification_operation = _database_profile(schema_profile)
     generated = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
     if approver.casefold() != str(source["ownerLabel"]).casefold():
         raise ManagedActivationError("Activation approver must match the named workspace owner.")
@@ -574,12 +586,12 @@ def compile_activation_plan(
             "releaseCommit": release,
             "adminCaSha256": ca_digest,
             "schemaVersion": TRIAL_SCHEMA_VERSION,
-            "schemaProfile": TRIAL_SCHEMA_PROFILE,
-            "databaseContract": TRIAL_DATABASE_CONTRACT,
+            "schemaProfile": schema_profile,
+            "databaseContract": database_contract,
         },
         "evidence": deepcopy(source["evidence"]),
         "operations": [
-            "verify_postgres17_schema_v13_self_serve",
+            verification_operation,
             "lock_workspace_identity",
             "verify_durable_owner_authorization",
             "insert_workspace_access_control",
@@ -613,6 +625,7 @@ def compile_multi_product_activation_plan(
     project_ref: str,
     release_commit: str,
     admin_ca_sha256: str,
+    schema_profile: str = TRIAL_SCHEMA_PROFILE,
     now: datetime | None = None,
 ) -> dict[str, Any]:
     """Bind several independently reviewed products to one atomic tenant activation."""
@@ -629,6 +642,7 @@ def compile_multi_product_activation_plan(
             project_ref=project_ref,
             release_commit=release_commit,
             admin_ca_sha256=admin_ca_sha256,
+            schema_profile=schema_profile,
             now=generated,
         )
         for request in requests
@@ -747,8 +761,8 @@ def validate_activation_plan(
         raise ManagedActivationError("Activation target administrative CA digest is invalid.")
     if type(target["schemaVersion"]) is not int or target["schemaVersion"] != TRIAL_SCHEMA_VERSION:
         raise ManagedActivationError("Activation target schema version is invalid.")
-    if (target["schemaProfile"] != TRIAL_SCHEMA_PROFILE
-            or target["databaseContract"] != TRIAL_DATABASE_CONTRACT):
+    database_contract, verification_operation = _database_profile(target["schemaProfile"])
+    if target["databaseContract"] != database_contract:
         raise ManagedActivationError("Activation target database profile contract is invalid.")
     evidence = _exact(
         plan["evidence"],
@@ -791,7 +805,7 @@ def validate_activation_plan(
     if evidence["pilotOutcomeStatus"] not in {"target_met", "improved"}:
         raise ManagedActivationError("Activation pilot outcome status is invalid.")
     if plan["operations"] != [
-        "verify_postgres17_schema_v13_self_serve",
+        verification_operation,
         "lock_workspace_identity",
         "verify_durable_owner_authorization",
         "insert_workspace_access_control",
@@ -2102,6 +2116,7 @@ def _parser() -> argparse.ArgumentParser:
     prepare.add_argument("--project-ref", required=True)
     prepare.add_argument("--release-commit", required=True)
     prepare.add_argument("--admin-ca-file", required=True)
+    prepare.add_argument("--schema-profile", choices=tuple(TRIAL_DATABASE_PROFILES), default=TRIAL_SCHEMA_PROFILE)
     prepare.add_argument("--output", required=True)
     prepare.add_argument("--replace", action="store_true")
     for command in ("validate", "requery", "authorize", "apply", "suspend"):
@@ -2145,6 +2160,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "project_ref": args.project_ref,
                 "release_commit": args.release_commit,
                 "admin_ca_sha256": _reviewed_ca_digest(args.admin_ca_file),
+                "schema_profile": args.schema_profile,
             }
             plan = (
                 compile_activation_plan(requests[0], **compile_arguments)

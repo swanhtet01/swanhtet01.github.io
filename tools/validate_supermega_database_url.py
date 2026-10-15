@@ -1208,8 +1208,14 @@ def schema_contract(profile: str) -> dict[str, Any]:
                            "CONTRACT", "SCHEMA_VERSION", "TENANT_TABLES"}})
     if profile == "legacy-v11":
         return values
-    if profile != "v13-self-serve":
+    if profile not in {"v13-self-serve", "v13-inquiry"}:
         raise AuditConfigurationError("schema_profile_invalid")
+    if profile == "v13-inquiry":
+        if __package__:
+            from .private_trial_inquiry_contract import extend_contract
+        else:
+            from private_trial_inquiry_contract import extend_contract
+        return extend_contract(values)
     if __package__:
         from .private_trial_v13_contract import extend_contract
     else:
@@ -1695,7 +1701,7 @@ def collect_snapshot(connection: Any, *, schema_profile: str = "legacy-v11") -> 
         )
 
         extension_snapshot = {}
-        if schema_profile == "v13-self-serve":
+        if "collect_extensions" in profile:
             extension_snapshot = profile["collect_extensions"](cursor, _execute_rows)
 
     return {
@@ -2151,12 +2157,17 @@ def evaluate_snapshot(snapshot: Mapping[str, Any], *, schema_profile: str = "leg
         "storage_public_buckets_absent": storage_public_buckets_absent,
         "storage_policy_surface_empty_until_allowlisted": storage_policy_surface_empty,
     }
-    if schema_profile == "v13-self-serve":
+    if "extension_checks" in profile:
         checks.update(profile["extension_checks"](snapshot))
     failed = [name for name, passed in checks.items() if not passed]
     diagnostics: dict[str, Any] = {}
-    if failed and schema_profile == "v13-self-serve":
-        if __package__:
+    if failed and schema_profile in {"v13-self-serve", "v13-inquiry"}:
+        if schema_profile == "v13-inquiry":
+            if __package__:
+                from .private_trial_inquiry_contract import observed_extension_digests
+            else:
+                from private_trial_inquiry_contract import observed_extension_digests
+        elif __package__:
             from .private_trial_v13_contract import observed_extension_digests
         else:
             from private_trial_v13_contract import observed_extension_digests
@@ -2399,7 +2410,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="Require the complete selected schema contract; this flag never applies migrations.",
     )
     parser.add_argument("--require-ready", action="store_true")
-    parser.add_argument("--schema-profile", choices=("legacy-v11", "v13-self-serve"),
+    parser.add_argument("--schema-profile", choices=("legacy-v11", "v13-self-serve", "v13-inquiry"),
                         default="legacy-v11",
                         help="Exact catalog contract; v13 includes the durable-admission capability.")
     parser.add_argument(
@@ -2436,7 +2447,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    if args.schema_profile == "v13-self-serve" and (args.self_test or args.rehearsal_preflight):
+    if args.schema_profile != "legacy-v11" and (args.self_test or args.rehearsal_preflight):
         print(json.dumps(_safe_failure("schema_profile_mode_conflict"), sort_keys=True))
         return 2
 
@@ -2450,8 +2461,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.rehearsal_preflight
         else ACTIVATION_TARGET_CONTRACT
         if args.activation_target
-        else (CONTRACT if args.schema_profile == "legacy-v11"
-              else "supermega_private_trial_database_v13_self_serve_v1")
+        else {
+            "legacy-v11": CONTRACT,
+            "v13-self-serve": "supermega_private_trial_database_v13_self_serve_v1",
+            "v13-inquiry": "supermega_private_trial_database_v13_inquiry_v1",
+        }[args.schema_profile]
     )
 
     environment_keys = [args.env_key]

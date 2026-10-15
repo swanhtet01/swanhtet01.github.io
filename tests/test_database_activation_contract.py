@@ -467,21 +467,28 @@ class MigrationSecurityEvidenceTests(unittest.TestCase):
 class ActivationWrapperContractTests(unittest.TestCase):
     def test_v13_profile_and_billing_values_are_bound_before_future_writes(self) -> None:
         source = _read(ACTIVATOR)
-        from supermega_runtime.managed_activation import TRIAL_SCHEMA_VERSION, TRIAL_SCHEMA_PROFILE, TRIAL_DATABASE_CONTRACT
+        from supermega_runtime.managed_activation import (
+            TRIAL_DATABASE_PROFILES, TRIAL_SCHEMA_VERSION, TRIAL_SCHEMA_PROFILE, TRIAL_DATABASE_CONTRACT,
+        )
         from tools.private_trial_v13_contract import PROFILE, CONTRACT
+        from tools.private_trial_inquiry_contract import PROFILE as INQUIRY_PROFILE, CONTRACT as INQUIRY_CONTRACT
 
         self.assertEqual((TRIAL_SCHEMA_VERSION, TRIAL_SCHEMA_PROFILE, TRIAL_DATABASE_CONTRACT), (13, PROFILE, CONTRACT))
+        self.assertEqual(TRIAL_DATABASE_PROFILES[INQUIRY_PROFILE][0], INQUIRY_CONTRACT)
         self.assertIn("if ($activationSchemaVersion -ne '13')", source)
-        self.assertIn(f"target.schemaProfile -cne '{PROFILE}'", source)
-        self.assertIn(f"target.databaseContract -cne '{CONTRACT}'", source)
-        self.assertLess(source.index("target.schemaProfile -cne"), source.index("$resolved = Resolve-SecretValue"))
-        self.assertIn(f"'--schema-profile', '{PROFILE}'", source)
+        self.assertIn(f"'{PROFILE}' {{ '{CONTRACT}' }}", source)
+        self.assertIn(f"'{INQUIRY_PROFILE}' {{ '{INQUIRY_CONTRACT}' }}", source)
+        self.assertIn("target.databaseContract -cne $expectedDatabaseContract", source)
+        self.assertLess(source.index("$expectedDatabaseContract = switch -CaseSensitive"), source.index("$resolved = Resolve-SecretValue"))
+        self.assertIn("'--schema-profile', $activationSchemaProfile", source)
         self.assertEqual(source.count("'--schema-profile'"), 1)
         self.assertNotIn("--schema-profile', 'legacy-v11'", source)
         billing = source.index("Add-ManagedEnvironmentValue -Key 'SUPERMEGA_BILLING_SCHEMA_VERSION' -Value $activationSchemaVersion")
+        profile = source.index("Add-ManagedEnvironmentValue -Key 'SUPERMEGA_TRIAL_SCHEMA_PROFILE' -Value $activationSchemaProfile")
         staged = source.index("$EnvironmentValueVerifier staged")
         apply = source.index("$ActivationModule apply", staged)
         enable = source.index("Add-ManagedEnvironmentValue -Key 'SUPERMEGA_TRIAL_WRITES_ENABLED'")
+        self.assertLess(profile, staged)
         self.assertLess(billing, staged)
         self.assertLess(staged, apply)
         self.assertLess(apply, enable)
@@ -495,8 +502,12 @@ class ActivationWrapperContractTests(unittest.TestCase):
         guard = source[source.index("$activationSchemaVersion ="):source.index("if ($activationReleaseCommit -notmatch")]
         profile = "v13-self-serve"
         contract = "supermega_private_trial_database_v13_self_serve_v1"
+        inquiry_profile = "v13-inquiry"
+        inquiry_contract = "supermega_private_trial_database_v13_inquiry_v1"
         cases = [
-            (13, profile, contract, True), (11, profile, contract, False),
+            (13, profile, contract, True), (13, inquiry_profile, inquiry_contract, True),
+            (13, inquiry_profile, contract, False), (13, profile, inquiry_contract, False),
+            (11, profile, contract, False),
             (12, profile, contract, False), (13, "legacy-v11", contract, False),
             (13, None, contract, False), (13, profile, None, False),
             (13, profile.upper(), contract, False), (13, profile, "unknown", False),

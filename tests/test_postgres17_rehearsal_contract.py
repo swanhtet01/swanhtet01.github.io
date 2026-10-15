@@ -70,7 +70,7 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
     def test_release_rehearsal_requires_current_complete_chain(self) -> None:
         module = _load_rehearsal()
         self.assertEqual(getattr(module, "CURRENT_SCHEMA_VERSION", None), 13)
-        self.assertEqual(module.CURRENT_PROFILE, "v13-self-serve")
+        self.assertEqual(module.CURRENT_PROFILE, "v13-inquiry")
         self.assertEqual(module.CURRENT_MIGRATIONS, (*module.MIGRATIONS,
             "20260817090000_private_trial_backend_v12_billing_rail.sql",
             "20260818090000_private_trial_backend_v13_billing_entitlement_read.sql",
@@ -82,7 +82,8 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
             "20260924194557_ecommerce_customer_review_storage.sql",
             "20260924231714_ecommerce_customer_decisions.sql",
             "20260929171000_ecommerce_decision_review_fk_index.sql",
-            "20260930010000_app_rls_initplan_optimization.sql"))
+            "20260930010000_app_rls_initplan_optimization.sql",
+            "20261014011202_website_inquiry_delivery.sql"))
         observed = tuple(sorted(path.name for path in (ROOT / "supabase/migrations").glob("*.sql")
                                 if path.name != "20260711081300_public_legacy_baseline.sql"))
         self.assertEqual(module.CURRENT_MIGRATIONS, observed)
@@ -90,15 +91,22 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
     def test_account_restore_inventory_includes_website_review_history(self) -> None:
         from tools import rehearse_self_serve_v13 as account
         module = _load_rehearsal()
-        self.assertEqual(account.MIGRATIONS, module.CURRENT_MIGRATIONS)
+        self.assertEqual(account.MIGRATIONS, module.CURRENT_MIGRATIONS[:len(account.MIGRATIONS)])
+        self.assertEqual(module.CURRENT_MIGRATIONS[-1], "20261014011202_website_inquiry_delivery.sql")
         self.assertEqual(account.TABLES, tuple(sorted(set(account.TABLES))))
         self.assertIn("ecommerce_customer_decisions", account.TABLES)
         self.assertIn("ecommerce_customer_reviews", account.TABLES)
         self.assertIn("website_customer_reviews", account.TABLES)
         self.assertIn("website_customer_feedback", account.TABLES)
         self.assertIn("website_customer_acceptances", account.TABLES)
+        self.assertEqual(account.INQUIRY_TABLES, ("website_inbox", "website_inquiry_channels"))
+        self.assertIn("tools/private_trial_inquiry_contract.py", module.IMPLEMENTATION_PATHS)
         self.assertIn("supermega_runtime/website_acceptance_schema.py", module.IMPLEMENTATION_PATHS)
         self.assertIn("supermega_runtime/ecommerce_decision_schema.py", module.IMPLEMENTATION_PATHS)
+        for path in ("supermega_runtime/website_inquiry_api.py", "supermega_runtime/website_inquiry_store.py",
+                     "supermega_runtime/website_public_page.py", "supabase/proposals/website_inquiry_delivery.sql",
+                     "tests/test_website_inquiry_sql.py"):
+            self.assertIn(path, module.IMPLEMENTATION_PATHS)
 
     def test_rehearsal_declares_the_complete_fail_closed_boundary(self) -> None:
         source = REHEARSAL.read_text(encoding="utf-8")
@@ -300,7 +308,7 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
         def run(payload):
             with patch.object(module, "_run", return_value=SimpleNamespace(returncode=0, stdout=json.dumps(payload))) as called:
                 result = module._run_validator("synthetic-runtime", "synthetic-storage", {}, schema_profile=module.CURRENT_PROFILE)
-                self.assertEqual(called.call_args.args[0][-2:], ["--schema-profile", "v13-self-serve"])
+                self.assertEqual(called.call_args.args[0][-2:], ["--schema-profile", "v13-inquiry"])
                 return result
         self.assertEqual(run(good), good)
         for delta in ({"contract": "old"}, {"checks": {}}, {"checks": {"x": False}}):
@@ -321,11 +329,13 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
             self.assertTrue(any(k.arg == "schema_profile" and isinstance(k.value, ast.Name)
                                 and k.value.id == "CURRENT_PROFILE" for k in call.keywords))
         self.assertEqual(len(named("_run_validator")), 2)
-        for pin in ('account_proof.exercise(', 'account_proof.snapshot(admin_database_url)',
-                    'account_proof.snapshot(restore_admin_database_url)', 'restored_snapshot != private_snapshot',
+        for pin in ('account_proof.exercise(', '_seed_inquiry_recovery_fixture(admin_database_url)',
+                    'account_proof.snapshot(', 'additional_tables=account_proof.INQUIRY_TABLES',
+                    'restored_snapshot != private_snapshot',
                     'not ready.write_ready or not ready.premium_unlocked', 'except TrialRateLimited:',
                     'expected_row_counts=row_counts', '_source_identity(source_identity["head"]) != source_identity'):
             self.assertIn(pin, source)
+        self.assertEqual(source.count('additional_tables=account_proof.INQUIRY_TABLES'), 2)
 
     def test_workspace_cleanup_requires_known_stopped_state(self):
         module = _load_rehearsal()

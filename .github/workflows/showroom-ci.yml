@@ -71,6 +71,12 @@ jobs:
           SUPERMEGA_TEST_DISPOSABLE_PG17: '1'
         run: python -m unittest tests.test_self_serve_durable_budget -v
 
+      - name: Verify candidate Sites inquiry delivery on disposable PostgreSQL
+        env:
+          SUPERMEGA_RUN_WEBSITE_INQUIRY_SQL: '1'
+          SUPERMEGA_TRIAL_SCHEMA_VERSION: '13'
+        run: python -m unittest tests.test_website_inquiry_sql -v
+
       - name: Install migration verifier
         run: npm ci --ignore-scripts
 

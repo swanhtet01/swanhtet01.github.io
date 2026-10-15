@@ -39,11 +39,13 @@ const expectedMigrations = [
   '20260924231714_ecommerce_customer_decisions.sql',
   '20260929171000_ecommerce_decision_review_fk_index.sql',
   '20260930010000_app_rls_initplan_optimization.sql',
+  '20261014011202_website_inquiry_delivery.sql',
 ]
 // Verify the original private catalog before all Website-review extensions, then
 // verify the complete extended catalog. Adding an extension must not shift the
 // baseline boundary and accidentally skip an earlier policy check.
 const websiteReviewStart = expectedMigrations.indexOf('20260915184728_website_customer_review_storage.sql')
+const websiteInquiryStart = expectedMigrations.indexOf('20261014011202_website_inquiry_delivery.sql')
 const expectedPolicyFingerprints = {
   approval_requests_access_gate: {
     command: 'ALL',
@@ -885,10 +887,26 @@ requireCheck(
 )
 
 await verifySelfServeAttemptBudget(database, requireCheck)
-await applyMigrations(database, expectedMigrations.slice(websiteReviewStart))
+// Preserve the exact Website-review catalog at its original migration boundary.
+// The inquiry extension has its own PostgreSQL 17 catalog profile; including it
+// here would make the historical digests reject a valid later private table.
+await applyMigrations(database, expectedMigrations.slice(websiteReviewStart, websiteInquiryStart))
 await verifyWebsiteReviewMigrationCatalog(database, requireCheck)
 await verifyCatalogEntitlementMutations(database, requireCheck)
 await verifyCatalogStorageMutations(database, requireCheck)
+await applyMigrations(database, expectedMigrations.slice(websiteInquiryStart))
+const inquiryRelations = await database.query(`
+  select c.relname, c.relrowsecurity, c.relforcerowsecurity
+  from pg_class c join pg_namespace n on n.oid = c.relnamespace
+  where n.nspname = 'app_private'
+    and c.relname in ('website_inquiry_channels', 'website_inbox')
+  order by c.relname
+`)
+requireCheck('Website inquiry migration adds two sealed private relations',
+  JSON.stringify(inquiryRelations.rows) === JSON.stringify([
+    { relname: 'website_inbox', relrowsecurity: true, relforcerowsecurity: true },
+    { relname: 'website_inquiry_channels', relrowsecurity: true, relforcerowsecurity: true },
+  ]))
 
 const unsafeRoleDatabase = new PGlite()
 await unsafeRoleDatabase.waitReady

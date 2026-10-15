@@ -292,6 +292,19 @@ test('rejects preview proposals that would allow production data or writes', () 
   )
 })
 
+test('refuses historical preview approval text without cost and inherited-history guards', () => {
+  const input = selfTestInput()
+  for (const [change, expected] of [
+    [proposal => { proposal.previewBranch.costConfirmed = true }, /release_owner_approval_supabase_preview_invalid/],
+    [proposal => { proposal.migrationPlan.fullChainReplayAllowed = true }, /release_owner_approval_supabase_migration_invalid/],
+    [proposal => { proposal.ownerApprovalTemplate = proposal.ownerApprovalTemplate.replace('replaying the full source chain is not approved', 'full chain approved') }, /release_owner_approval_supabase_template_invalid/],
+  ]) {
+    const proposal = structuredClone(input.supabaseProposal)
+    change(proposal)
+    assert.throws(() => buildReleaseOwnerApprovalPacket({ ...input, supabaseProposal: proposal }), expected)
+  }
+})
+
 test('rejects an unsafe GitHub protection snapshot before rendering exact commands', () => {
   const input = selfTestInput()
   const unsafe = {
