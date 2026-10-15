@@ -367,7 +367,7 @@ def capabilities_for_product_entitlements(
         capability
         for surface in ("commerce", "production", "website")
         for capability in (f"{surface}.read", f"{surface}.write")
-    } | {"website.review", "ecommerce.review"}
+    } | {"website.review", "ecommerce.review", "ecommerce.manage"}
     allowed_capabilities = {
         capability
         for surface in allowed_surfaces
@@ -379,6 +379,7 @@ def capabilities_for_product_entitlements(
     # an Ecommerce delivery capability, never implied by Shop activation.
     if "ecommerce" in products:
         allowed_capabilities.add("ecommerce.review")
+        allowed_capabilities.add("ecommerce.manage")
     return frozenset(
         capability
         for capability in granted
@@ -389,6 +390,7 @@ def capabilities_for_product_entitlements(
 def require_command_product_entitlement(
     event_type: str,
     product_entitlements: Sequence[str] | None,
+    capabilities: Sequence[str] = (),
 ) -> None:
     """Do not treat Shop's shared commerce surface as Commerce authority.
 
@@ -404,6 +406,10 @@ def require_command_product_entitlement(
     if event_type.startswith("commerce.storefront."):
         if "ecommerce" not in product_entitlements:
             raise TrialPermissionDenied("product.ecommerce")
+        # Shop and Ecommerce both use commerce.write. A staff member who can
+        # sell in Shop cannot configure or import the internal storefront.
+        if not frozenset(capabilities).intersection({"ecommerce.manage", "company.write"}):
+            raise TrialPermissionDenied("ecommerce.manage")
 
 
 _PRIVATE_HARDENING_TRIGGER_CONTRACT: dict[tuple[str, str], dict[str, Any]] = {
@@ -4896,6 +4902,7 @@ class PostgresTrialStore:
             require_command_product_entitlement(
                 event_type_value,
                 self._product_entitlements(cursor, normalized.workspace_id),
+                capabilities,
             )
             for related_surface in related_surface_values:
                 _require_surface_read_capability(capabilities, related_surface)
@@ -5811,7 +5818,7 @@ class InMemoryTrialStore:
                 capability=_required_surface_capability(surface_value),
             )
             require_command_product_entitlement(
-                event_type_value, readiness.product_entitlements
+                event_type_value, readiness.product_entitlements, readiness.capabilities
             )
             for related_surface in related_surface_values:
                 _require_surface_read_capability(readiness.capabilities, related_surface)

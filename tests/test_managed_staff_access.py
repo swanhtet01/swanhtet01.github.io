@@ -51,6 +51,22 @@ def staff_plan(activation, role_id: str = "product-operator"):
 
 
 class ManagedStaffAccessPlanTests(unittest.TestCase):
+    def test_ecommerce_operator_has_an_explicit_internal_management_grant(self) -> None:
+        activation = activation_plan("ecommerce")
+        plan = staff_plan(activation, "ecommerce-operator")
+        self.assertEqual(plan["products"], ["ecommerce"])
+        self.assertIn("ecommerce.manage", plan["capabilities"])
+        self.assertIn("commerce.write", plan["capabilities"])
+        self.assertNotIn("company.write", plan["capabilities"])
+        self.assertEqual(validate_staff_access_plan(plan, activation, now=NOW), plan)
+        for product in ("shop", "plant", "website"):
+            with self.subTest(product=product), self.assertRaises(ManagedStaffAccessError):
+                staff_plan(activation_plan(product), "ecommerce-operator")
+        altered = deepcopy(plan)
+        altered["capabilities"].remove("ecommerce.manage")
+        with self.assertRaises(ManagedStaffAccessError):
+            validate_staff_access_plan(altered, activation, now=NOW)
+
     def test_ecommerce_reviewer_requires_ecommerce_and_cannot_edit(self) -> None:
         activation = activation_plan("ecommerce")
         plan = staff_plan(activation, "ecommerce-reviewer")
