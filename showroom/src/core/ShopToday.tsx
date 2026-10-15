@@ -14,6 +14,7 @@ import { formatShopCostCoverage, formatShopMarginRate, projectShopCostCoverageAn
 import { formatShopProfitControlMetric } from './shop-profit-control'
 import type { ShopProfitControlBoard } from './shop-profit-control'
 import { projectShopTodaySalesPulse } from './shop-today-sales'
+import { selectShopTodayProducts } from './shop-today-products'
 import { ProductPhoto } from './ProductPhoto'
 
 export type ShopTodayMetric = {
@@ -276,7 +277,7 @@ export function ShopToday({ accountingExport = null, batchProfitControl = projec
     })
     .slice(0, 5), [commerce.orders])
   const openOrderCount = commerce.orders.filter((order) => order.status !== 'completed' && order.status !== 'cancelled').length
-  const visibleProducts = commerce.items.slice(0, 6)
+  const visibleProducts = useMemo(() => selectShopTodayProducts(commerce.items), [commerce.items])
   const [batchFirstUse, setBatchFirstUse] = useState<ShopBatchFirstUseModuleState>({ status: 'idle' })
   const [localBatchProjection, setLocalBatchProjection] = useState<ShopBatchFirstUseProjectionResult | null>(null)
   const batchFirstUseAttempt = useRef(0)
