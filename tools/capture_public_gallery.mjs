@@ -317,10 +317,15 @@ async function main() {
     await typeInto(cdp, sessionId, 'input[autocomplete="name"]', 'Ma Su')
     await typeInto(cdp, sessionId, 'input[autocomplete="tel"]', '09 123 456 789')
     await clickText(cdp, sessionId, 'Save request locally')
+    await waitForSelector(cdp, sessionId, '.ecommerce-quote-receipt[data-current="true"]')
     const requestPanelShown = await evaluate(cdp, sessionId, `(() => {
       const panel = document.getElementById('ecommerce-buying-workspace');
       if (!panel) return false;
-      panel.scrollIntoView({ block: 'start', behavior: 'instant' });
+      const receipt = document.querySelector('.ecommerce-quote-receipt[data-current="true"]');
+      if (!receipt) return false;
+      // Give the end-of-page receipt room to align without clipping catalog cards.
+      document.querySelector('.qa-shell').style.paddingBottom = '180px';
+      receipt.scrollIntoView({ block: 'start', behavior: 'instant' });
       return true;
     })()`)
     if (!requestPanelShown) throw new Error('commerce_request_panel_missing')
