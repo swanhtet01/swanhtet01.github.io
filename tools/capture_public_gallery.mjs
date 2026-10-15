@@ -146,13 +146,25 @@ async function capture(cdp, sessionId, output, name, expectedTexts, view) {
     return [...document.fonts].some(face => face.family === 'Noto Sans Myanmar' && face.status === 'loaded');
   })()`)
   if (!myanmarFontLoaded) throw new Error(`myanmar_font_missing:${name}`)
+  await evaluate(cdp, sessionId, `(() => {
+    const style = document.createElement('style');
+    style.textContent = '*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}';
+    document.head.append(style);
+  })()`)
   await evaluate(cdp, sessionId, 'document.activeElement?.blur()')
   const visibleQaChrome = await evaluate(cdp, sessionId, `(() => [...document.querySelectorAll('.qa-notice,.qa-nav,#root > p,#root > button,#root > output')]
     .some(node => getComputedStyle(node).display !== 'none' && node.getClientRects().length > 0))()`)
   if (visibleQaChrome) throw new Error(`qa_fixture_controls_visible:${name}`)
-  await new Promise(resolveWait => setTimeout(resolveWait, 250))
-  const raw = await cdp.send('Page.captureScreenshot', { format: 'png', fromSurface: true, captureBeyondViewport: false }, sessionId)
-  const bytes = Buffer.from(raw.data, 'base64')
+  let previous = null
+  let bytes = null
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    await evaluate(cdp, sessionId, 'new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
+    const raw = await cdp.send('Page.captureScreenshot', { format: 'png', fromSurface: true, captureBeyondViewport: false }, sessionId)
+    const current = Buffer.from(raw.data, 'base64')
+    if (previous?.equals(current)) { bytes = current; break }
+    previous = current
+  }
+  if (!bytes) throw new Error(`capture_pixels_unstable:${name}`)
   const width = bytes.readUInt32BE(16)
   const height = bytes.readUInt32BE(20)
   if (width !== 1440 || height !== 900) throw new Error(`capture_dimensions_invalid:${name}:${width}x${height}`)
@@ -308,7 +320,7 @@ async function main() {
     const requestPanelShown = await evaluate(cdp, sessionId, `(() => {
       const panel = document.getElementById('ecommerce-buying-workspace');
       if (!panel) return false;
-      panel.scrollIntoView({ block: 'start', behavior: 'auto' });
+      panel.scrollIntoView({ block: 'start', behavior: 'instant' });
       return true;
     })()`)
     if (!requestPanelShown) throw new Error('commerce_request_panel_missing')
