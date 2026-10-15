@@ -597,7 +597,9 @@ export function EcommerceProduct() {
           || confirmedIdentity.userId !== identity.userId) {
           throw new Error('The company account changed while loading. Reload to open the current company.')
         }
-        setManagedCanWrite(managedBootstrapHasCapability(bootstrap, identity, 'commerce.write'))
+        setManagedCanWrite(managedBootstrapHasCapability(bootstrap, identity, 'commerce.write')
+          && (managedBootstrapHasCapability(bootstrap, identity, 'ecommerce.manage')
+            || managedBootstrapHasCapability(bootstrap, identity, 'company.write')))
         setManagedCanDeliverReviews(canDeliverCatalogReviews(bootstrap, identity))
         const view = resolveManagedStorefront(
           identity,
