@@ -617,7 +617,7 @@ test('WEBSITE_SCHEMA, MAX_WEBSITE_PAGES, previewDevices, createId, isCurrentAppr
   // Constants have expected values.
   assert.equal(WEBSITE_SCHEMA, 'supermega.website.workspace.v2')
   assert.equal(WEBSITE_STORAGE_KEY, 'supermega.website.workspace.v2')
-  assert.equal(MAX_WEBSITE_PAGES, 4)
+  assert.equal(MAX_WEBSITE_PAGES, 6)
   assert.equal(MAX_WEBSITE_SECTIONS, 12)
 
   // previewDevices: three entries covering desktop, tablet, and mobile.

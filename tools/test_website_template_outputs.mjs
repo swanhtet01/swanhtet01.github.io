@@ -236,7 +236,7 @@ test('operator starter does not prefill an unrelated business contact', () => {
   assert.doesNotMatch(source, /https:\/\/m\.me\/mingalarfreshmart/)
   assert.ok(source.includes('What do you sell or provide?'))
   assert.ok(source.includes('Start your website'))
-  assert.ok(source.includes('Choose a starting point. See your pages update as you type. Add a fourth page later.'))
+  assert.ok(source.includes('Choose a starting point. See your pages update as you type. Add more pages later.'))
   assert.ok(source.includes('Create my website'))
   assert.ok(!source.includes('Choose business type'))
   assert.ok(!source.includes('View example'))

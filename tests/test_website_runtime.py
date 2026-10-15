@@ -539,22 +539,34 @@ class WebsiteRuntimeTests(unittest.TestCase):
                 _command(unchanged, action_id="content-2", reason="Website draft content saved", reference="website:content:1"),
             )
 
-    def test_four_twelve_section_pages_save_and_reload_above_the_old_json_bound(self) -> None:
+    def test_six_burmese_pages_save_reload_and_publish_projection(self) -> None:
         state = _state()
         pages = []
-        for page_index in range(4):
+        for page_index in range(6):
             page = _page("page-home" if page_index == 0 else f"page-{page_index}",
                          "/" if page_index == 0 else f"/page-{page_index}")
             page["sections"] = [
                 {"id": f"section-{page_index}-{section_index}", "eyebrow": "လုပ်ငန်း",
                  "title": f"ဝန်ဆောင်မှု {section_index}", "body": "က" * 360,
-                 "image": {"src": "https://example.com/" + "a" * 1000,
+                 "image": {"src": "https://example.com/" + "က" * 2028,
                            "alt": "Service", "decorative": False}}
                 for section_index in range(12)
             ]
             pages.append(page)
         state["pages"] = pages
-        self.assertGreater(len(json.dumps(state, ensure_ascii=False).encode("utf-8")), 64 * 1024)
+        encoded_size = len(json.dumps(state, ensure_ascii=False).encode("utf-8"))
+        self.assertGreater(encoded_size, 64 * 1024)
+        self.assertLess(encoded_size, 1024 * 1024)
+        self.assertEqual(len(_website_artifact(state)["pages"]), 6)
+        overfull = deepcopy(state)
+        extra = deepcopy(pages[-1])
+        extra["id"] = "page-seventh"
+        extra["slug"] = "/page-seventh"
+        extra["sections"] = [{**section, "id": f"seventh-{index}"}
+                             for index, section in enumerate(extra["sections"])]
+        overfull["pages"].append(extra)
+        with self.assertRaises(TrialValidationError):
+            validate_website_state(overfull)
 
         store = InMemoryTrialStore(
             reducer=lambda surface, event, current, payload: reduce_website_state(event, current, payload),
