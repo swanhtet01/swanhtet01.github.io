@@ -63,7 +63,14 @@ export function ShopMonthlyStatement({ statement, download = null }: ShopMonthly
       <div className="statement-rows">
         {balance.cashAndWallets.length ? balance.cashAndWallets.map((account) => (
           <span className="statement-row" key={account.accountCode}>
-            <small>{account.name}</small>
+            {/* account.nameMy is already computed onto every cash-and-wallet row
+                (shop-monthly-statement.ts:138) from the four confirmed Burmese
+                account names in shop-ledger-accounts.ts:64-67 -- and was being
+                thrown away here. These are data-layer nouns the app already
+                ships, not a new translation and not a bi() gate question, so
+                rendering them needs no sign-off. lang="my" so the Burmese gets
+                Burmese font selection and is announced as Burmese. */}
+            <small>{account.name}{account.nameMy ? <> · <span lang="my">{account.nameMy}</span></> : null}</small>
             <b>{formatMmk(account.balanceMmk)}</b>
           </span>
         )) : <span className="statement-row"><small>Cash and wallets</small><b>{formatMmk(0)}</b></span>}
