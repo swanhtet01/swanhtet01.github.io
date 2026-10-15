@@ -15,7 +15,10 @@ superseded.
   source and existing tests before changing code. This repo defends invariants
   twice, and at least one "obvious fix" per audit cycle turns out to be
   deliberate, tested behavior (see the shift-handoff quality-hold precedent in
-  `tools/verify_app_build.mjs` ~17579).
+  `tools/verify_app_build.mjs` ~2299-2302 — cited as ~17579 until 2026-08-31,
+  which had drifted onto an unrelated payment-decision assertion). The precedent
+  is the NEGATIVE pin at :2302 — `'Build shift handoff'` must NOT appear, because
+  the obvious-looking addition is deliberately refused.
 - Prefer proving risky changes on disposable infrastructure (Supabase preview
   branches, worktrees) before trunk; delete disposable branches after sealing
   evidence.
@@ -71,9 +74,35 @@ actor string — actor strings are display copy and will be rewritten.
   build that fails while its output is redirected leaves a stale `dist/` in
   place and the gate reports green over broken code. This has happened; do
   not repeat it. Run builds with their output visible and read it.
-- The artifact byte budget (`tools/verify_app_build.mjs` ~18858) only trips on
-  a FRESH `dist/` — local green + CI red on size changes is expected; raise the
-  documented allowance for real product value, never shrink product code.
+- **`verify_app_release_live.mjs` cannot run from an agent sandbox, and its
+  failure is NOT a production signal** (established 2026-09-02, after losing
+  time to it). It fetches `https://app.supermega.dev`, which is not on the
+  agent proxy's allowlist: `curl` returns `CONNECT tunnel failed, response 403`
+  — the proxy refusing the tunnel, not the origin answering. So from here it
+  always fails, and **no claim about live-site health can be made from an agent
+  session at all.** Ask the founder, or read CI.
+  `hq:verify:live` surfaces this as `live_app_product_contract_failed:exit_1`,
+  and **`exit_1` is by design — do not "fix" it.**
+  `verify_hq_live_state.mjs`'s `safeLiveVerifierFailure` only propagates
+  reasons matching a narrow allowlist (`^(?:missing_live_…|live_…|…_(missing|
+  wrong|invalid|mismatch|rejected))$`) and collapses everything else to
+  `exit_${status}`, so unvetted stderr — URLs, tokens, customer content — can
+  never reach a published receipt. The pattern is restrictive enough that most
+  of the live verifier's OWN errors also collapse; that is the control working,
+  not a gap. Both files are pin-read by `verify_app_build.mjs` (:169) and
+  `verify_app_security_contract.mjs` (:36), so edits there cost pin updates for
+  no gain.
+- The artifact byte budget only trips on a FRESH `dist/` — local green + CI red
+  on size changes is expected; raise the documented allowance for real product
+  value, never shrink product code. **Corrected 2026-08-31, and the SHAPE
+  changed, not just the line number:** the `~18858` citation had drifted onto a
+  production-state assertion, and the raw-total ceiling it pointed at has been
+  DEMOTED to a blowout backstop (`artifact_total_backstop`, 3_250_000,
+  ~20506-20514) that is deliberately far too loose to bind. The guard that
+  actually trips is the **Shop route first-paint closure** (~20563-20583):
+  ceiling **475_000 brotli q3** against 467_765 measured — **7_235 bytes of
+  headroom, 1.55%**. Budget a change against that, not against the raw total,
+  and note how little room there is.
 - Verifier pins in `tools/verify_app_build.mjs` match exact source strings.
   When a rename touches a pinned string, update the pin in the same commit.
   Prefer prefix pins over whole-signature pins so they survive ordinary
