@@ -244,6 +244,20 @@ async function verifyViewport(cdp, origin, viewport) {
     assert.equal(importer.acceptsCsv, true, 'CSV importer should expose a CSV file input')
     assert.ok(importer.width <= importer.viewport, `CSV importer overflows at ${viewport.width}px`)
 
+    await evaluate(cdp, sessionId, `([...document.querySelectorAll('a')].find((node) => node.textContent.trim() === 'Add first product')).click()`)
+    const manualAfterImport = await waitFor(cdp, sessionId, `(() => {
+      const route = document.querySelector('#qa-route');
+      const details = document.querySelector('#shop-catalog-create');
+      const input = details?.querySelector('input[name="product-name"]');
+      const back = [...document.querySelectorAll('a')].some((node) => node.textContent.trim() === 'Back to Commerce');
+      return route?.dataset.path === '/shop/?tab=inventory#shop-catalog-create' && route.dataset.return === 'true'
+        && details?.open === true && input === document.activeElement && back
+        ? { returnStatePreserved: true, back }
+        : null;
+    })()`, 'manual setup after opening CSV import')
+    assert.equal(manualAfterImport.returnStatePreserved, true, 'switching to manual setup should retain Commerce return state')
+    assert.equal(manualAfterImport.back, true, 'manual setup after CSV import should still offer a return to Commerce')
+
     const fixtureState = await evaluate(cdp, sessionId, `({ fetchAttempts: window.__qaFetchAttempts.length,
       identityProbes: window.__qaIdentityProbes,
       products: JSON.parse(localStorage.getItem(window.__qaCommerceKey)).items.length })`)
@@ -258,6 +272,7 @@ async function verifyViewport(cdp, origin, viewport) {
       returnToCommerce: product.back,
       csvImporterExpanded: importer.expanded,
       csvInputAvailable: importer.acceptsCsv,
+      manualSetupAfterImportRetainsReturn: manualAfterImport.returnStatePreserved,
       overflow: false,
       externalRequests: externalOrigins.size,
       providerFetches: fixtureState.fetchAttempts,

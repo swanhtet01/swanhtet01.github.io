@@ -3434,7 +3434,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   const shopCatalogOnboarding = <section aria-label="Shop catalog setup" className="catalog-onboarding-bridge" id="shop-catalog-import" tabIndex={-1}>
     <div><span className="core-eyebrow">{catalogIsEmpty ? 'First sale' : 'Catalog import'}</span><strong>{catalogIsEmpty ? 'Add one product or import a list' : 'Add products from a CSV'}</strong><p>{catalogIsEmpty ? 'Start with one item and its current stock. Import a spreadsheet when you are ready.' : 'Review a CSV before adding products in bulk.'}</p></div>
     {catalogIsEmpty ? <div className="form-actions">
-      <Link className="core-button primary" to="/shop/?tab=inventory#shop-catalog-create">Add first product</Link>
+      <Link className="core-button primary" state={commerceReturnRequested || undefined} to="/shop/?tab=inventory#shop-catalog-create">Add first product</Link>
       <button aria-controls="shop-catalog-import-panel" aria-expanded={catalogImportVisible} className="core-button" disabled={commerceControlsDisabled} onClick={toggleCatalogImport} type="button">{catalogImportVisible ? 'Close import' : 'Import a CSV'}</button>
     </div> : <button aria-controls="shop-catalog-import-panel" aria-expanded={catalogImportVisible} className="core-button" disabled={commerceControlsDisabled} onClick={toggleCatalogImport} type="button">{catalogImportVisible ? 'Close import' : 'Import a CSV'}</button>}
     {catalogImportVisible ? <div id="shop-catalog-import-panel"><Suspense fallback={<p role="status">Loading import...</p>}><ProductDataImport managed={!confirmedLocalShop} product="commerce" /></Suspense></div> : null}
