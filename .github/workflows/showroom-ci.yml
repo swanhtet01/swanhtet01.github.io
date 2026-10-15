@@ -167,14 +167,15 @@ jobs:
           assert evidence['customerReceiptVisible'] is False
           assert evidence['fulfilledSyntheticMedia'] == 3
           captures = evidence['captures']
-          assert len(captures) == 8
+          assert len(captures) == 9
           expected = {
-              'actual-shop-today.png', 'actual-shop-sell.png', 'actual-shop-order-record.png', 'actual-shop-orders.png',
+              'actual-shop-first-run.png', 'actual-shop-today.png', 'actual-shop-sell.png', 'actual-shop-order-record.png', 'actual-shop-orders.png',
               'actual-sites-editor.png', 'actual-sites-inquiries.png',
               'actual-commerce-catalog.png', 'actual-commerce-order-request.png',
           }
           assert {item['file'] for item in captures} == expected
           expected_states = {
+              'actual-shop-first-run.png': ('/shop/', 'today'),
               'actual-shop-today.png': ('/shop/', 'today'),
               'actual-shop-sell.png': ('/shop/', 'counter'),
               'actual-shop-order-record.png': ('/shop/', 'counter'),
