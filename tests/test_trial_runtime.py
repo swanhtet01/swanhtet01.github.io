@@ -9,6 +9,7 @@ from uuid import uuid4
 from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 
+import supermega_runtime.trial_store as trial_store_module
 from supermega_runtime.commerce_runtime import (
     commerce_catalog_digest,
     commerce_storefront_preview_digest,
@@ -43,6 +44,17 @@ def _decision_packet(release: str = "catalog-v1") -> dict[str, object]:
         "acceptance": "The release record and owner decision are preserved.",
         "artifact_reference": "artifact://catalog/release-v1",
     }
+
+
+def _acceptance_packet(product: str, release_commit: str) -> dict[str, object]:
+    packet = _decision_packet()
+    state_digest = "sha256:" + trial_store_module._canonical_fingerprint("product_state", {})
+    packet["subject"] = {
+        "kind": trial_store_module.PRODUCT_ACCEPTANCE_APPROVAL_SUBJECT_KIND,
+        "id": f"{product}:{release_commit}:{state_digest}",
+        "version": 1,
+    }
+    return packet
 
 
 class MergeReducer:
@@ -218,7 +230,16 @@ class TrialRuntimeTests(unittest.TestCase):
             products=("commerce",),
         )
         probe_id = str(uuid4())
-        owner_approval_id = str(uuid4())
+        approval = self.store.create_approval(
+            self.operator, command_id=str(uuid4()), title="Accept Shop release",
+            proposal=_acceptance_packet("commerce", "a" * 40),
+            evidence_refs=("review://catalog/1",),
+        )
+        self.store.decide_approval(
+            self.manager, approval_id=approval.approval_id, command_id=str(uuid4()),
+            decision="approved", note="Owner reviewed the hosted Shop snapshot.",
+        )
+        owner_approval_id = approval.approval_id
         body = {
             "probe_id": probe_id,
             "owner_approval_id": owner_approval_id,
@@ -299,13 +320,23 @@ class TrialRuntimeTests(unittest.TestCase):
             workspace_id="workspace-a",
             actor_id=internal_operator.actor_id,
             actor_kind="human",
-            capabilities=("commerce.read", "commerce.write", "ecommerce.manage"),
+            capabilities=("commerce.read", "commerce.write", "ecommerce.manage", "approvals.read"),
         )
         self.sessions["internal-commerce-session"] = internal_operator
         probe_id = str(uuid4())
+        ecommerce_approval = self.store.create_approval(
+            self.operator, command_id=str(uuid4()), title="Accept internal Commerce release",
+            proposal=_acceptance_packet("ecommerce", "a" * 40),
+            evidence_refs=("review://catalog/1",),
+        )
+        self.store.decide_approval(
+            self.manager, approval_id=ecommerce_approval.approval_id,
+            command_id=str(uuid4()), decision="approved",
+            note="Owner reviewed the internal Commerce snapshot.",
+        )
         body = {
             "probe_id": probe_id,
-            "owner_approval_id": str(uuid4()),
+            "owner_approval_id": ecommerce_approval.approval_id,
             "product": "ecommerce",
             "release_commit": "a" * 40,
             "confirmation": "RECORD HOSTED PRODUCT ACCEPTANCE",
@@ -333,10 +364,21 @@ class TrialRuntimeTests(unittest.TestCase):
         )
         self.assertEqual(internal_read.status_code, 200)
 
+        shop_approval = self.store.create_approval(
+            self.operator, command_id=str(uuid4()), title="Accept Shop release",
+            proposal=_acceptance_packet("commerce", "a" * 40),
+            evidence_refs=("review://catalog/1",),
+        )
+        self.store.decide_approval(
+            self.manager, approval_id=shop_approval.approval_id,
+            command_id=str(uuid4()), decision="approved",
+            note="Owner reviewed the Shop snapshot.",
+        )
         shop_acceptance = self.client.post(
             "/api/trial/v1/product-acceptance",
             headers=self._headers(),
-            json={**body, "probe_id": str(uuid4()), "product": "commerce"},
+            json={**body, "probe_id": str(uuid4()), "product": "commerce",
+                  "owner_approval_id": shop_approval.approval_id},
         )
         self.assertEqual(shop_acceptance.status_code, 200)
 

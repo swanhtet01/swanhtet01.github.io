@@ -141,6 +141,7 @@ PRODUCT_ACCEPTANCE_SURFACES = {
 }
 PRODUCT_ACCEPTANCE_CONTRACT = "supermega.hosted_product_acceptance.v1"
 PRODUCT_ACCEPTANCE_EVENT_TYPE = "client.product_acceptance.recorded"
+PRODUCT_ACCEPTANCE_APPROVAL_SUBJECT_KIND = "hosted.product_acceptance"
 # TLS transit is enforced by connection configuration (finding 6): psycopg refuses
 # to connect unless the DSN negotiates TLS under one of these sslmodes. This is the
 # authoritative client->server (or client->Supavisor-pooler) guarantee -- a
@@ -3381,6 +3382,53 @@ def _normalize_release_commit(value: object) -> str:
     return commit
 
 
+def _require_product_acceptance_approval(
+    approval: Mapping[str, Any] | ApprovalRecord | None,
+    *,
+    product: str,
+    release_commit: str,
+    state_digest: str,
+) -> None:
+    """Bind a recorded acceptance to a human decision on this exact snapshot."""
+    if approval is None:
+        raise TrialPermissionDenied("owner_approval_id")
+    if isinstance(approval, ApprovalRecord):
+        status = approval.status
+        proposal = approval.proposal
+        decided_by = approval.decided_by
+        decided_actor_kind = approval.decided_actor_kind
+        decided_at = approval.decided_at
+        contract_version = 2
+    else:
+        status = approval.get("status")
+        proposal = approval.get("proposal_json")
+        decided_by = approval.get("decided_by")
+        decided_actor_kind = approval.get("decided_actor_kind")
+        decided_at = approval.get("decided_at")
+        contract_version = approval.get("decision_contract_version")
+    if isinstance(proposal, str):
+        try:
+            proposal = json.loads(proposal)
+        except ValueError:
+            proposal = None
+    expected_subject = {
+        "kind": PRODUCT_ACCEPTANCE_APPROVAL_SUBJECT_KIND,
+        "id": f"{product}:{release_commit}:{state_digest}",
+        "version": 1,
+    }
+    if (
+        status != "approved"
+        or not decided_by
+        or decided_actor_kind != HUMAN_ACTOR_KIND
+        or not decided_at
+        or contract_version != 2
+        or not isinstance(proposal, Mapping)
+        or proposal.get("contract") != DECISION_PACKET_CONTRACT
+        or proposal.get("subject") != expected_subject
+    ):
+        raise TrialPermissionDenied("owner_approval_id")
+
+
 def _product_acceptance_record(
     value: Mapping[str, Any],
     *,
@@ -5173,6 +5221,7 @@ class PostgresTrialStore:
             "release_commit": release_commit_value,
         }
         fingerprint = _canonical_fingerprint("hosted_product_acceptance", payload)
+        _require_human_decider(normalized)
         with self._guarded_cursor(
             normalized,
             write=True,
@@ -5183,6 +5232,23 @@ class PostgresTrialStore:
                 raise TrialPermissionDenied(f"product.{product_value}")
             if product_value == "ecommerce":
                 require_ecommerce_management_authority(product_entitlements, capabilities)
+
+            def require_approved_snapshot(state_digest: str) -> None:
+                cursor.execute(
+                    """
+                    select status, proposal_json, decided_by, decided_actor_kind,
+                           decided_at, decision_contract_version
+                    from app_private.approval_requests
+                    where workspace_id = %s and approval_id = %s
+                    for share
+                    """,
+                    (normalized.workspace_id, owner_approval_id_value),
+                )
+                _require_product_acceptance_approval(
+                    cursor.fetchone(), product=product_value,
+                    release_commit=release_commit_value, state_digest=state_digest,
+                )
+
             self._lock(cursor, f"{normalized.workspace_id}:acceptance:{probe_id_value}")
             replay = self._load_event_replay(
                 cursor,
@@ -5191,7 +5257,11 @@ class PostgresTrialStore:
                 fingerprint=fingerprint,
             )
             if replay is not None:
-                return _product_acceptance_record(replay, idempotent_replay=True)
+                record = _product_acceptance_record(replay, idempotent_replay=True)
+                require_approved_snapshot(record.state_digest)
+                return record
+            # Serialize with workspace commands, including an initially absent state row.
+            self._lock(cursor, f"{normalized.workspace_id}:state:{surface}")
             cursor.execute(
                 """
                 select version, state_json
@@ -5213,6 +5283,7 @@ class PostgresTrialStore:
                 "product_state", state_value,
                 max_bytes=_json_limit_for_surface(surface),
             )
+            require_approved_snapshot(state_digest)
             recorded_at = _utc_now()
             result = ProductAcceptanceRecord(
                 probe_id=probe_id_value,
@@ -6045,6 +6116,7 @@ class InMemoryTrialStore:
         }
         fingerprint = _canonical_fingerprint("hosted_product_acceptance", payload)
         with self._lock:
+            _require_human_decider(principal.normalized())
             normalized, _readiness = self._guard(
                 principal,
                 write=True,
@@ -6067,7 +6139,13 @@ class InMemoryTrialStore:
                 fingerprint,
             )
             if replay is not None:
-                return _product_acceptance_record(replay, idempotent_replay=True)
+                record = _product_acceptance_record(replay, idempotent_replay=True)
+                _require_product_acceptance_approval(
+                    self._approvals.get((normalized.workspace_id, owner_approval_id_value)),
+                    product=product_value, release_commit=release_commit_value,
+                    state_digest=record.state_digest,
+                )
+                return record
             state = self._states.get(
                 (normalized.workspace_id, surface),
                 TrialState(normalized.workspace_id, surface, 0, {}),
@@ -6075,6 +6153,11 @@ class InMemoryTrialStore:
             state_digest = "sha256:" + _canonical_fingerprint(
                 "product_state", state.state,
                 max_bytes=_json_limit_for_surface(surface),
+            )
+            _require_product_acceptance_approval(
+                self._approvals.get((normalized.workspace_id, owner_approval_id_value)),
+                product=product_value, release_commit=release_commit_value,
+                state_digest=state_digest,
             )
             record = ProductAcceptanceRecord(
                 probe_id=probe_id_value,
