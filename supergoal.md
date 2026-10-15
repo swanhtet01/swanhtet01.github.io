@@ -1,12 +1,20 @@
 # SuperMega Supergoal
 
-Version: 1.4.24
+Version: 1.4.25
 Owner: Swan Htet, Founder
 Maintainer: CTO, sole integration writer
-Updated: 2026-10-14
+Updated: 2026-10-16
 Status: ACTIVE — implementation and acceptance in progress; not production-ready.
 
-## Current checkpoint — 14 October
+## Current checkpoint — 16 October
+
+Customer-managed launch access is **Shop only**. Sites and Commerce are internal workspaces; the guarded public storefront-request and customer-review routes remain available. [Integration PR #682](https://github.com/swanhtet01/swanhtet01.github.io/pull/682) binds the public gallery to 14 desktop/mobile captures of real product components with synthetic records. The product source through `82b849f5d8f2207e454d2bc6e3c80621ac323562` also hides retained Sites and Commerce inboxes in Shop unless the actor has both relevant product assignments. This is a UI containment measure, not proof of server-side actor isolation. Keep customer Shop workspaces separate from internal multi-product workspaces until that isolation is demonstrated.
+
+The [protected public preview](https://supermega-public-clzgakx9b-swanhtet01s-projects.vercel.app/) `dpl_DeJzzHkissmJFs2NfArGXL9M6E45` was READY at `82b849f5d8f2207e454d2bc6e3c80621ac323562`: release JSON, Home, Contact, and all 14 hosted image hashes matched the candidate. The Contact form has Name, Email and Message without the retired dropdown or preparation question. The gallery remains local component evidence with synthetic records (`publicationReady=false`); Commerce request presentation and authenticated managed journeys need more work. Exact-head App CI at `82b849f5` failed only a stale assertion for the shortened managed-catalog warning. Its corrected assertion passes the focused 24-test suite; a new exact-head CI run is required. The live domain is still on `5479c5d1ece3d697cf5c505e7feb431dc88baf75`.
+
+**Launch gates:** The three-product Supabase preview is `MIGRATIONS_FAILED` at the missing historical public baseline, and the approved three October Sites migrations cannot safely run yet. Managed sign-in, save/reload, recovery, tenant/actor isolation, Burmese/device/printer acceptance, eligible independent GitHub review, and production release remain open. The Oct 20 deadline is a go/no-go checkpoint, not evidence that these gates have passed. Use the [launch-control record](C:/Users/thesw/OneDrive%20-%20BDA/outputs/supermega-launch-control-20260924.md) for the latest exact-head evidence and owner decisions.
+
+## Prior checkpoint — 14 October
 
 **Preview recovery correction:** The application-code source at `870eeb2408bdc0db2d4229f16bbee1395d6a5751` on [PR #655](https://github.com/swanhtet01/swanhtet01.github.io/pull/655) restores the 85 public indexes missing from the source baseline. App CI, security audit, Kernel Console, and local HQ checks passed at that commit; the PR is ready for independent review but is unmerged and undeployed. Read-only Supabase preflight found that the three-product preview `twflgmlwfkykgzsxnegc` fails at production's first recorded RLS migration because the earlier public-table creation baseline is absent from production's recorded migration history. The founder's approval for three October Sites migrations does not include a production-history change, and those three files were not applied. A disposable PostgreSQL 17 replay of all 18 stored production migrations after the corrected baseline passed measured public-catalog parity. Pinned Supabase CLI `2.120.0` also passed a **synthetic local** out-of-order migration dry run and historical-statement insertion. Neither result is a project-specific production-target dry run or a successful managed preview. The exact recovery evidence and stop conditions are in `C:/Users/thesw/OneDrive - BDA/outputs/supermega-three-product-preview-diagnosis-20261014.md`.
 
