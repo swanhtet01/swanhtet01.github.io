@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { proofDigest } from './database-rehearsal-evidence.mjs'
+import { syntheticDatabaseRehearsalFixture } from './test-database-rehearsal-fixture.mjs'
 
 import { buildManagedPilotReadiness, readinessDigest, validateManagedPilotReadiness } from './managed-pilot-readiness.mjs'
 
@@ -19,7 +20,7 @@ const products = ['shop', 'plant', 'website', 'ecommerce'].map((id) => ({
   },
 }))
 const sourceReceipts = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'].map((path) => ({ path, digest: readinessDigest(path) }))
-const databaseFixture = JSON.parse(readFileSync(new URL('../hq/research/postgres17-rehearsal.json', import.meta.url), 'utf8'))
+const databaseFixture = syntheticDatabaseRehearsalFixture()
 // Unit-only time fixture; never written as operational evidence.
 databaseFixture.recordedAt = '2026-07-31T10:00:00.000Z'
 databaseFixture.receiptDigest = proofDigest(databaseFixture)
@@ -94,7 +95,7 @@ test('derives one blocked four-product ledger from current bounded evidence', ()
   assert.equal(ledger.liveProduction.localTargetVersion, 13)
   assert.equal(ledger.liveProduction.versionDrift, 6)
   assert.equal(ledger.localDatabase.schemaVersion, 13)
-  assert.equal(ledger.localDatabase.migrationCount, 27)
+  assert.equal(ledger.localDatabase.migrationCount, 28)
   assert.equal(ledger.localDatabase.hostedEvidenceCurrent, false)
   assert.equal(ledger.liveProduction.managedWritesEnabled, false)
   assert.equal(ledger.pilotEvidence.pilotMode, 'owner_named')
