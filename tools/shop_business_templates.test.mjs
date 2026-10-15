@@ -587,6 +587,15 @@ test('catalog setup destinations resolve to Stock rather than fallback Sell', as
   }
 })
 
+test('plain Shop opens Today while direct sale and stock links keep their task', async () => {
+  const { activeCommerceTab } = await import('../showroom/src/core/commerce-tabs.ts')
+  assert.equal(activeCommerceTab(null), 'today')
+  assert.equal(activeCommerceTab('unknown'), 'today')
+  assert.equal(activeCommerceTab('counter'), 'counter')
+  assert.equal(activeCommerceTab('inventory'), 'inventory')
+  assert.match(coreAppSource, /requestedShopTemplateId && requestedTab === null \? 'counter' : activeCommerceTab\(requestedTab\)/)
+})
+
 test('Ecommerce empty local catalog goes to Stock while managed setup remains separate', async () => {
   const source = await readFile(resolve(root, 'showroom/src/products/ecommerce/EcommerceProduct.tsx'), 'utf8')
   const { activeCommerceTab } = await import('../showroom/src/core/commerce-tabs.ts')

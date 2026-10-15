@@ -1340,7 +1340,7 @@ export function EcommerceBuyingWorkspace({
               ))}
               <div className="ecommerce-cart-total"><span>Products</span><strong>{formatMmk(cartTotal)}</strong></div>
             </div>
-          ) : (
+          ) : latestRequest ? null : (
             <div className="ecommerce-cart-empty">
               <strong>Your cart is empty</strong>
               <p>Add an available product above. Nothing goes to Shop until you review the exact quote.</p>

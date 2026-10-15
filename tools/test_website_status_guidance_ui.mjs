@@ -57,7 +57,7 @@ test('local file readiness waits for actual page checks and keeps one visible pr
     { starterAvailable: true },
     { storageMode: 'managed' },
   ]) assert.equal(runInNewContext(expression, { ...ready, ...blocked }), false)
-  assert.match(source, /content:\s*{\s*title: 'Pages'/)
+  assert.match(source, /content:\s*{\s*title: 'Edit page'/)
   assert.doesNotMatch(source, /website-heading-publish-action/)
   assert.ok(source.includes("localPreviewReady ? 'Ready to download' : 'After review'"))
   assert.ok(source.includes('need attention before the website file is ready.'))

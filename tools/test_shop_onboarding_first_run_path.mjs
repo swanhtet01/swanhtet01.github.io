@@ -13,13 +13,16 @@ function check(condition, label) {
 
 const requiredOnboardingCopy = [
   'Pick your business type',
-  'Load starter data or import your services/products',
+  'Add your products or services',
+  'import your catalog',
   'Take one sale',
   'Reconcile payment and close day',
   'Cash, KBZPay, WavePay, AYA Pay, or MMQR',
-  'Choose your trade to start with a matching catalog and workflow.',
+  'What kind of business?',
+  'Shops and trades',
+  'Service businesses',
   'Yangon Wellness Spa',
-  'Use the current starter sample',
+  'Add your own products, prices and opening stock.',
 ]
 
 for (const copy of requiredOnboardingCopy) {
@@ -47,7 +50,7 @@ check(
   'Shop pilot proof has dedicated compact styling',
 )
 check(
-  onboardingStyles.includes('grid-template-columns: 28px minmax(0,1fr)'),
+  onboardingStyles.includes('grid-template-columns: 1.75rem minmax(0,1fr)'),
   'first-run steps render as a compact numbered mobile-friendly list',
 )
 check(

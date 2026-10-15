@@ -18,6 +18,8 @@ export const commerceTabs: Array<{ id: CommerceTab; label: string }> = [
 // the URL with this resolution, so any surface highlighting the active task
 // must apply the same rule or its active state desyncs during the frame before
 // canonicalization runs (and while the lazy product chunk is still loading).
+// A plain Shop visit opens the daily overview; task-specific links still name
+// their tab explicitly, and trade links without a tab still open the counter.
 export function activeCommerceTab(requestedTab: string | null): CommerceTab {
-  return commerceTabs.some((tab) => tab.id === requestedTab) ? requestedTab as CommerceTab : 'counter'
+  return commerceTabs.some((tab) => tab.id === requestedTab) ? requestedTab as CommerceTab : 'today'
 }

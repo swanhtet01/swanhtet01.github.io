@@ -3256,8 +3256,10 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
       </form>
       return <section className="core-panel managed-commerce-boundary">
       <div className="panel-head"><div><span className="core-eyebrow">Shop</span><h2>Add your first product</h2></div></div>
-      <p className="panel-copy">Enter an item you sell. You can add more products afterward.</p>
       {catalogForm}
+      <details className="secondary-setup-path"><summary>Import existing CSV</summary>
+        <Suspense fallback={<p role="status">Loading import...</p>}><ProductDataImport managed managedIdentityOverride={managedIdentity} onOpenAppliedManagedImport={retryManagedCommerceLoad} product="commerce" /></Suspense>
+      </details>
       {managedTemplate ? <details className="secondary-setup-path"><summary>Use a business catalog</summary><form className="core-form compact-form managed-template-catalog-form" onSubmit={(formEvent) => void initializeManagedTemplateCatalog(formEvent)}>
         <div className="setup-choice-copy"><strong>{managedTemplate.name.en}</strong><span>{managedTemplate.catalog.length} items · prices and opening counts can be edited in Shop after setup</span></div>
         <details><summary>Review starter items</summary><div className="compact-list">{managedTemplate.catalog.map((item) => <span key={item.sku}><strong>{item.name}</strong> · {item.priceMmk.toLocaleString()} MMK · opening {item.openingStock}</span>)}</div></details>
@@ -3550,7 +3552,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   const shopCatalogOnboarding = <section aria-label="Shop catalog import helper" className="catalog-onboarding-bridge" id="shop-catalog-import" tabIndex={-1}>
     <div><span className="core-eyebrow">{catalogIsEmpty ? 'First sale' : 'Catalog import'}</span><strong>{catalogIsEmpty ? 'Bring your existing products into Shop' : 'Add products from a CSV'}</strong><p>{catalogIsEmpty ? 'Check the mapping and any row issues, confirm once, then open Counter.' : 'Review a CSV before adding products in bulk.'}</p></div>
     {catalogIsEmpty ? <div aria-label="Import to first sale" className="catalog-onboarding-status">{SHOP_CATALOG_IMPORT_STEPS.map((step, index) => <span key={step}><small>Step {index + 1}</small><strong>{step}</strong></span>)}</div> : <button aria-controls="shop-catalog-import-panel" aria-expanded={catalogImportVisible} className="core-button" disabled={commerceControlsDisabled} onClick={toggleCatalogImport} type="button">{catalogImportVisible ? 'Close import' : 'Bring existing products'}</button>}
-    {catalogImportVisible ? <div id="shop-catalog-import-panel"><Suspense fallback={<p role="status">Loading import...</p>}><ProductDataImport managed={!confirmedLocalShop} product="commerce" /></Suspense></div> : null}
+    <div hidden={!catalogImportVisible} id="shop-catalog-import-panel">{catalogImportVisible ? <Suspense fallback={<p role="status">Loading import...</p>}><ProductDataImport managed={!confirmedLocalShop} product="commerce" /></Suspense> : null}</div>
   </section>
   function runShopAutopilot() {
     recordBehaviorSignal(window.localStorage, {
@@ -7195,8 +7197,9 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
 
   if (tab === 'today') return <div className="operation-module shop-today-module">
     {operatingBoundary}
-    {shopOperatingEligible ? <ShopOperatingStrip {...shopOperatingView} /> : null}
-    <Suspense fallback={null}><ShopToday accountingExport={latestAccountingDownload ? { businessDate: latestAccountingDownload.artifact.businessDate, mappingReady: Boolean(latestAccountingDownload.artifact.accountMappingRevision), onDownload: downloadLatestAccountingHandoff, totalMmk: latestAccountingDownload.artifact.totalDebitMmk } : null} catalogReady={commerce.items.length > 0} closeQueue={shopCloseQueue} commerce={commerce} key={confirmedLocalShop ? 'confirmed-local' : 'managed-or-unconfirmed'} localBatchFirstUseAllowed={confirmedLocalShop} metrics={shopTodayMetrics} modules={shopTodayModules} nextAction={shopAgentJob} nextActionLabel={shopNextAction.nextAction} nextDetail={shopAgentReason} nextOwnerGate={shopNextAction.ownerGate} nextTo={shopAgentPath} nextTrack={shopNextAction.track} profitControl={shopProfitControl} recordStatus={shopRecordStatus} /></Suspense>
+    {shopOperatingEligible && (shopShiftRequired || Boolean(activeShift) || openShiftSessions.length > 1)
+      ? <ShopOperatingStrip {...shopOperatingView} /> : null}
+    <Suspense fallback={null}><ShopToday accountingExport={latestAccountingDownload ? { businessDate: latestAccountingDownload.artifact.businessDate, mappingReady: Boolean(latestAccountingDownload.artifact.accountMappingRevision), onDownload: downloadLatestAccountingHandoff, totalMmk: latestAccountingDownload.artifact.totalDebitMmk } : null} catalogReady={commerce.items.length > 0 && (!shopShiftRequired || Boolean(activeShift))} closeQueue={shopCloseQueue} commerce={commerce} key={confirmedLocalShop ? 'confirmed-local' : 'managed-or-unconfirmed'} localBatchFirstUseAllowed={confirmedLocalShop} metrics={shopTodayMetrics} modules={shopTodayModules} nextAction={shopAgentJob} nextActionLabel={shopNextAction.nextAction} nextDetail={shopAgentReason} nextOwnerGate={shopNextAction.ownerGate} nextTo={shopAgentPath} nextTrack={shopNextAction.track} productImageScope={productImageScope} profitControl={shopProfitControl} recordStatus={shopRecordStatus} /></Suspense>
     {actionGate}
   </div>
 

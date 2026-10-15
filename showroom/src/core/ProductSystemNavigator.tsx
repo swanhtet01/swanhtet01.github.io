@@ -8,6 +8,7 @@ import {
   type ClientCapability,
 } from './client-capability-plan'
 import { readPlantIndustryPackId, type PlantIndustryPackId } from './plant-industry-packs'
+import type { ManagedIdentity } from './managed-trial'
 import { clientSetupPath, productContracts, templateFor } from './product-setup'
 import {
   readShopServiceSchedule,
@@ -41,9 +42,10 @@ function readCurrentShopIndustryPackId(): ShopIndustryPackId {
   }
 }
 
-export function ProductDataImport({ product, managed, details = productDetails[product] }: { product: ClientSolutionId; managed: boolean; details?: ProductSystemDetail }) {
+export function ProductDataImport({ product, managed, details = productDetails[product], managedIdentityOverride, onOpenAppliedManagedImport }: { product: ClientSolutionId; managed: boolean; details?: ProductSystemDetail; managedIdentityOverride?: ManagedIdentity; onOpenAppliedManagedImport?: () => void }) {
   const [setup] = useSetupWorkspace()
-  const [managedIdentity, , identitySettled] = useManagedIdentity(managed)
+  const [probedIdentity, , identitySettled] = useManagedIdentity(managed && !managedIdentityOverride)
+  const managedIdentity = managedIdentityOverride ?? probedIdentity
   const [shopIndustryPackId] = useState<ShopIndustryPackId>(readCurrentShopIndustryPackId)
   const [plantIndustryPackId] = useState<PlantIndustryPackId>(() => readPlantIndustryPackId(typeof window === 'undefined' ? undefined : window.localStorage))
   const contract = productContracts[product]
@@ -59,7 +61,7 @@ export function ProductDataImport({ product, managed, details = productDetails[p
     return <p className="form-notice" role="status">{identitySettled ? <>Login to import data. <Link to={`/login?product=${contract.slug}`}>Login</Link></> : 'Loading your account...'}</p>
   }
 
-  return <Suspense fallback={<p className="form-notice" role="status">Loading {details.label} data tools...</p>}><ClientDataOnboarding initiallyOpen managedIdentity={managedIdentity} owner={owner} plantIndustryPackId={product === 'production' ? plantIndustryPackId : undefined} product={product} productName={details.label} productSlug={contract.slug} shopIndustryPackId={product === 'commerce' ? shopIndustryPackId : undefined} workflowTemplateId={selectedTemplate.id} workspace={workspace} /></Suspense>
+  return <Suspense fallback={<p className="form-notice" role="status">Loading {details.label} data tools...</p>}><ClientDataOnboarding initiallyOpen managedIdentity={managedIdentity} onOpenAppliedManagedImport={onOpenAppliedManagedImport} owner={owner} plantIndustryPackId={product === 'production' ? plantIndustryPackId : undefined} product={product} productName={details.label} productSlug={contract.slug} shopIndustryPackId={product === 'commerce' ? shopIndustryPackId : undefined} workflowTemplateId={selectedTemplate.id} workspace={workspace} /></Suspense>
 }
 
 function WorkflowLink({ capability, fallbackPath }: { capability: ClientCapability; fallbackPath: string }) {

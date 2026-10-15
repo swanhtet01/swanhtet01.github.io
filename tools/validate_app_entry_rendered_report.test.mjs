@@ -91,8 +91,8 @@ test('rendered CI route diagnostics expose only match booleans and text-miss cou
 
 test('rendered harness follows current direct Sites and Ecommerce entry actions', () => {
   assert.match(renderedVerifierSource, /submit\?\.textContent\.trim\(\) !== 'Save request locally'/)
-  assert.match(renderedVerifierSource, /'Tell us about the business'/)
-  assert.match(renderedVerifierSource, /'Create website'/)
+  assert.match(renderedVerifierSource, /'Start your website'/)
+  assert.match(renderedVerifierSource, /'Create my website'/)
   assert.doesNotMatch(renderedVerifierSource, /'Prepare private draft'/)
   assert.doesNotMatch(renderedVerifierSource, /'Start sample order'/)
   assert.doesNotMatch(renderedVerifierSource, /'The working sample stays unchanged until you choose Customize demo\.'/)
@@ -686,8 +686,8 @@ test('full visual cases pin visible product truth copy and Plant canonicalizatio
     readFile(join(rootDir, 'showroom', 'src', 'products', 'ecommerce', 'EcommerceBuyingWorkspace.tsx'), 'utf8'),
   ])
   const sourceBoundText = [
-    [websiteStarterSetup, 'Tell us about the business'],
-    [websiteStarterSetup, 'Create website'],
+    [websiteStarterSetup, 'Start your website'],
+    [websiteStarterSetup, 'Create my website'],
     [ecommerceWorkspace, 'Request saved locally for Shop review.'],
     [ecommerceWorkspace, 'Shop still confirms stock, promise, payment, and delivery.'],
   ]

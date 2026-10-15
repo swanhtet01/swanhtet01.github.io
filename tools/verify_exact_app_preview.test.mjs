@@ -68,9 +68,10 @@ test('Website exact preview requires the direct Sites brief', async () => {
     readFile(new URL('../showroom/src/products/website/WebsiteStarterSetup.tsx', import.meta.url), 'utf8'),
   ])).join('\n')
   for (const needle of needles) assert.ok(source.includes(needle), `Website source missing ${needle}`)
-  assert.ok(needles.includes('Tell us about the business'))
-  assert.ok(needles.includes('Create website'))
+  assert.ok(needles.includes('Start your website'))
+  assert.ok(needles.includes('Create my website'))
   assert.ok(needles.includes('What do you sell or provide?'))
+  assert.ok(needles.includes('How can customers reach you?'))
   assert.ok(!needles.includes('Request Website setup'))
   assert.ok(!needles.includes('Create preview'))
 })
@@ -84,6 +85,9 @@ test('Ecommerce checkout proof explicitly opens the workspace and requires local
   for (const needle of needles) assert.ok(source.includes(needle))
   assert.ok(needles.includes('Review customer requests on this device. Requests stay on this device until Shop review.'))
   assert.ok(needles.includes('Open customer ordering'))
+  assert.ok(!needles.includes('Get catalog help'))
+  const verifierSource = await readFile(new URL('./verify_exact_app_preview.mjs', import.meta.url), 'utf8')
+  assert.ok(verifierSource.includes('seed: spec.surface === \'ecommerce\' ? miniMartOwnedCatalogFixture() : {}'))
   assert.ok(!needles.some(needle => /sample|demo|preview options/i.test(needle)))
 })
 const reportGeneratedAt = '2026-08-28T12:05:00.000Z'
@@ -1035,8 +1039,8 @@ test('actual brief harness expression rejects unusable DOM controls', async () =
   assert.ok(source.includes('(${inspectBusinessBrief.toString()})(document)'))
   async function inspect(change = () => {}, website = false) {
     const field = required => ({ required, value: '', disabled: false, readOnly: false, tabIndex: 0, labels: [{ textContent: 'Field' }], getClientRects: () => [{}], visibility: 'visible' })
-    const data = { fields: website ? [field(true), field(true), field(false), field(true), field(true)] : [field(true), field(true), field(false)],
-      submit: { ...field(false), disabled: !website, textContent: website ? 'Create website' : 'Continue' }, absent: false, valid: false }
+    const data = { fields: [field(true), field(true), field(false)],
+      submit: { ...field(false), disabled: !website, textContent: website ? 'Create my website' : 'Continue' }, absent: false, valid: false }
     change(data)
     const form = { querySelectorAll: () => data.fields, querySelector: () => data.submit, checkValidity: () => data.valid }
     const document = { querySelector: selector => data.absent ? null : selector === '.website-starter-form' ? (website ? form : null) : (!website ? form : null) }
@@ -1045,7 +1049,7 @@ test('actual brief harness expression rejects unusable DOM controls', async () =
   }
   assert.ok(Object.values(await inspect()).every(value => value === true))
   assert.ok(Object.values(await inspect(() => {}, true)).every(value => value === true))
-  assert.equal((await inspect(d => { d.fields[4].required = false }, true)).essentialsRequired, false)
+  assert.equal((await inspect(d => { d.fields[1].required = false }, true)).essentialsRequired, false)
   assert.equal((await inspect(d => { d.valid = true }, true)).emptyContinueBlocked, false)
   for (const change of [
     d => { d.absent = true }, d => { d.fields.pop() }, d => { d.fields.push(d.fields[0]) },

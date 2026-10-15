@@ -96,6 +96,14 @@ check(
 // outvote a genuinely Burmese page, so the counter must not see them.
 const burmeseHtml = buildWebsiteHtml(burmesify(englishArtifact))
 check(
+  burmeseHtml.includes('"Noto Sans Myanmar", "Myanmar Text", Padauk, sans-serif'),
+  'Burmese exports include installed Myanmar font fallbacks without remote font requests',
+)
+check(
+  /:lang\(my\) h1, :lang\(my\) h2\s*\{\s*line-height:\s*1\.4;\s*letter-spacing:\s*0;\s*\}/.test(burmeseHtml),
+  'Burmese headings retain room for stacked marks and avoid Latin negative tracking',
+)
+check(
   /<style/i.test(burmeseHtml),
   'the export still ships a stylesheet, so the language counter must keep excluding stylesheet text',
 )

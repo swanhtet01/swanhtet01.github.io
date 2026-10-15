@@ -7,8 +7,8 @@ import * as starter from '../showroom/src/products/website/website-starter.ts'
 import * as trade from '../showroom/src/products/website/website-trade-brief.ts'
 import './test_website_shell_flow.mjs'
 
-// Exercise actual component handlers with deterministic hook state. This is not
-// a browser/layout test or evidence of customer usability.
+// Exercise the real starter handlers with deterministic hook state. Browser and
+// hosted acceptance are separate checks.
 const require = createRequire(new URL('../showroom/package.json', import.meta.url))
 const ts = require('typescript')
 const source = readFileSync(new URL('../showroom/src/products/website/WebsiteStarterSetup.tsx', import.meta.url), 'utf8')
@@ -35,87 +35,75 @@ function harness({ fillBusiness = true, initialTradeId = null, initialBusinessNa
     return [node, ...nodes(node.props.children ?? null)]
   }
   const find = predicate => { const found = nodes().find(predicate); assert.ok(found, 'expected rendered control'); return found }
-  function click(text) { find(node => node.type === 'button' && [node.props.children].flat().join('') === text).props.onClick(); render() }
-  function edit(index, name, details) {
-    let fieldset = nodes().filter(node => node.type === 'fieldset')[index]
-    nodes(fieldset).find(node => node.type === 'input').props.onChange({ target: { value: name } }); render()
-    fieldset = nodes().filter(node => node.type === 'fieldset')[index]
-    nodes(fieldset).find(node => node.type === 'textarea').props.onChange({ target: { value: details } }); render()
+  function setField(maxLength, value) {
+    find(node => ['input', 'textarea'].includes(node.type) && node.props.maxLength === maxLength).props.onChange({ target: { value } })
+    render()
+  }
+  function chooseTemplate(label) {
+    find(node => node.type === 'button' && node.props['aria-label']?.startsWith(`${label}.`)).props.onClick()
+    render()
   }
   function submit() { find(node => node.type === 'form').props.onSubmit({ preventDefault() {} }); render() }
   render()
-  // Offering tests supply their own business data; customer defaults stay empty.
   if (fillBusiness) {
-    for (const [maxLength, value] of [[50, 'Test Cafe'], [70, 'Local coffee customers'], [140, 'Coffee and pastries'], [360, 'Open weekdays from 8am to 4pm']]) {
-      find(node => ['input', 'textarea'].includes(node.type) && node.props.maxLength === maxLength).props.onChange({ target: { value } })
-      render()
-    }
+    setField(50, 'Test Cafe')
+    setField(140, 'Coffee and pastries for nearby customers')
   }
-  return { nodes, find, click, edit, submit, created, render }
+  return { nodes, find, setField, chooseTemplate, submit, created }
 }
 
-test('empty business details block creation', () => {
+test('two essential fields block an empty site and identify the errors', () => {
   const ui = harness({ fillBusiness: false })
   ui.submit()
   assert.equal(ui.created.length, 0)
-  assert.ok(ui.nodes().some(node => node.props['aria-invalid'] === true))
+  assert.equal(ui.nodes().filter(node => node.props['aria-invalid'] === true).length, 2)
 })
 
-test('existing Shop context chooses the layout without a customer selector', () => {
+test('a completed short brief creates a draft without requiring optional contact', () => {
+  const ui = harness()
+  ui.submit()
+  assert.equal(ui.created.length, 1)
+  assert.equal(ui.created[0].businessName, 'Test Cafe')
+  assert.equal(ui.created[0].offer, 'Coffee and pastries for nearby customers')
+  assert.equal(ui.created[0].contactHref, '')
+})
+
+test('saved Shop context selects its template and business name without a dropdown', () => {
   const businessType = trade.websiteTradeBriefOptions()[0].id
-  const ui = harness({ initialTradeId: businessType, initialBusinessName: 'Connected Cafe' })
+  const ui = harness({ fillBusiness: false, initialTradeId: businessType, initialBusinessName: 'Connected Cafe' })
   assert.equal(ui.nodes().some(node => node.type === 'select'), false)
   ui.submit()
   assert.equal(ui.created.length, 1)
   const brief = ui.created[0]
   const expected = trade.websiteTradeBrief({ tradeId: businessType, businessName: brief.businessName, contactHref: brief.contactHref })
   assert.equal(brief.templateId, expected.templateId)
+  assert.equal(brief.businessName, 'Connected Cafe')
 })
 
-test('offerings are optional and ordinary name/details edits reach the brief', () => {
+test('three direct starting points are selectable without a setup dropdown', () => {
   const ui = harness()
-  assert.equal(ui.find(node => node.type === 'details').props.open, undefined)
-  ui.click('Add featured entry')
-  ui.edit(0, 'လက်ဖက်ရည်', '2,000 MMK\nHot or iced')
+  assert.equal(ui.nodes().filter(node => node.props['aria-pressed'] === true).length, 1)
+  ui.chooseTemplate('Show products')
   ui.submit()
   assert.equal(ui.created.length, 1)
-  assert.equal(ui.created[0].offerings, 'လက်ဖက်ရည် | 2,000 MMK Hot or iced')
+  assert.equal(ui.created[0].templateId, 'catalog-showcase')
 })
 
-test('incomplete and delimiter-bearing names block creation and reveal the error', () => {
+test('an invalid optional contact is rejected before creating a site', () => {
   const ui = harness()
-  ui.click('Add featured entry'); ui.submit()
+  ui.setField(160, 'javascript:alert(1)')
+  ui.submit()
   assert.equal(ui.created.length, 0)
-  assert.equal(ui.find(node => node.type === 'details').props.open, true)
-  ui.edit(0, 'Bad | name', 'Details'); ui.submit()
-  assert.equal(ui.created.length, 0)
-  ui.edit(0, 'Valid name', 'Details'); ui.submit()
-  assert.equal(ui.created.length, 1)
-})
-
-test('Shop context retains reviewed offering details and the fourth entry disables add', () => {
-  const ui = harness({ initialTradeId: 'restaurant' })
-  for (let index = 0; index < 4; index++) { ui.click('Add featured entry'); ui.edit(index, 'Entry ' + index, 'Details ' + index) }
-  assert.equal(ui.find(node => node.type === 'button' && node.props.children === 'Add featured entry').props.disabled, true)
+  assert.ok(ui.nodes().some(node => node.props['aria-invalid'] === true))
+  ui.setField(160, 'https://example.com/contact')
   ui.submit()
   assert.equal(ui.created.length, 1)
-  assert.equal(ui.created[0].offerings, [0, 1, 2, 3].map(index => `Entry ${index} | Details ${index}`).join('\n'))
 })
 
-test('removing a middle entry preserves remaining content and removing all remains optional', () => {
+test('starter stays local and avoids file-import and legacy offerings controls', () => {
   const ui = harness()
-  for (let index = 0; index < 3; index++) { ui.click('Add featured entry'); ui.edit(index, 'Entry ' + index, 'Details ' + index) }
-  ui.click('Remove entry 2'); ui.submit()
-  assert.equal(ui.created[0].offerings, 'Entry 0 | Details 0\nEntry 2 | Details 2')
-  ui.click('Remove entry 1'); ui.click('Remove entry 1'); ui.submit()
-  assert.equal(ui.created[1].offerings, '')
-})
-
-test('first-run setup keeps direct offerings and exposes no file-preview workflow', () => {
-  const ui = harness()
-  ui.click('Add featured entry'); ui.edit(0, 'Owner service', 'Confirmed description')
   assert.equal(ui.nodes().some(node => node.type === 'input' && node.props.type === 'file'), false)
-  assert.equal(ui.nodes().some(node => node.type === 'button' && ['Add reviewed entries', 'Discard file', 'Cancel import'].includes(node.props.children)), false)
-  ui.submit()
-  assert.equal(ui.created[0].offerings, 'Owner service | Confirmed description')
+  assert.equal(ui.nodes().some(node => node.type === 'details' || node.type === 'select'), false)
+  assert.equal(ui.nodes().filter(node => node.type === 'button' && node.props.type === 'submit').length, 1)
+  assert.doesNotMatch(source, /fetch\(|XMLHttpRequest|localStorage|sessionStorage/)
 })

@@ -635,7 +635,9 @@ export function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = n
   }, [managedIdentity])
 
   const retryManagedLoad = useCallback(() => {
-    if (!identityRef.current || snapshotRef.current.mode !== 'managed-error') return
+    // A verified first-catalog import writes outside this hook. Reload its new
+    // revision when the owner opens Counter, as well as after a load error.
+    if (!identityRef.current || (snapshotRef.current.mode !== 'managed-error' && snapshotRef.current.mode !== 'managed-unprovisioned')) return
     const next = { ...snapshotRef.current, mode: 'managed-loading' as const, error: '', writeReady: false }
     snapshotRef.current = next
     setManagedSnapshot(next)
