@@ -308,11 +308,20 @@ def exercise(admin_url, runtime_url, head):
     internal_operator = TrialPrincipal(workspace_id=ecommerce, actor_id=operator_id,
         actor_kind="human", authenticated=True, session_id=operator_session,
         identity_provider="supabase")
+    with pg._connect(admin_url) as conn:
+        operator_membership = conn.execute(
+            "select capabilities from app_private.workspace_memberships "
+            "where workspace_id=%s and actor_id=%s and status='active'",
+            (ecommerce, operator_id)).fetchone()
+    require(operator_membership is not None
+            and "ecommerce.manage" in (operator_membership.get("capabilities") or []),
+            "ecommerce_internal_operator_grant_not_stored")
     operator_readiness = store.readiness(internal_operator)
     require(operator_readiness.write_ready, "ecommerce_internal_operator_not_ready")
-    require("ecommerce.manage" in operator_readiness.capabilities
-            and "ecommerce" in (operator_readiness.product_entitlements or ()),
-            "ecommerce_internal_operator_grant_missing")
+    require("ecommerce" in (operator_readiness.product_entitlements or ()),
+            "ecommerce_internal_operator_entitlement_missing")
+    require("ecommerce.manage" in operator_readiness.capabilities,
+            "ecommerce_internal_operator_capability_missing")
     try:
         catalog_review = catalog_adapter.prepare(internal_operator, review_id=str(uuid4()),
             recipient_actor_id=recipient_id, expected_version=1,
