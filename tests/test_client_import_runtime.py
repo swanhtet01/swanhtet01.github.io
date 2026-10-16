@@ -24,7 +24,12 @@ from supermega_runtime.client_import_runtime import (
 from supermega_runtime.commerce_runtime import commerce_catalog_digest, validate_commerce_state
 from supermega_runtime.runtime import reduce_trial_state
 from supermega_runtime.trial_runtime import create_trial_router
-from supermega_runtime.trial_store import InMemoryTrialStore, TrialPrincipal, TrialValidationError
+from supermega_runtime.trial_store import (
+    InMemoryTrialStore,
+    TrialPermissionDenied,
+    TrialPrincipal,
+    TrialValidationError,
+)
 from supermega_runtime.website_runtime import validate_website_state
 
 
@@ -583,11 +588,13 @@ class ClientImportRouteTests(unittest.TestCase):
         *,
         command_id: str,
         expected_version: int = 0,
+        session: str = "writer",
     ) -> dict[str, object]:
         validation = validate_client_import_staging_package(package)
         preflight = self._apply_preflight(
             package,
             expected_version=expected_version,
+            session=session,
         )
         return {
             "command_id": command_id,
@@ -1311,6 +1318,20 @@ class ClientImportRouteTests(unittest.TestCase):
         self.assertEqual(len(self.store._events), 1)
 
     def test_reviewed_ecommerce_import_updates_existing_storefront_once(self) -> None:
+        internal_ecommerce_operator = TrialPrincipal(
+            "workspace-b", "ecommerce-operator", "human"
+        )
+        self.store.provision_product_entitlements(
+            workspace_id="workspace-b", products=("commerce", "ecommerce")
+        )
+        self.store.provision_membership(
+            workspace_id="workspace-b",
+            actor_id=internal_ecommerce_operator.actor_id,
+            actor_kind="human",
+            capabilities=("setup.write", "commerce.write", "ecommerce.manage"),
+        )
+        self.sessions["internal-ecommerce"] = internal_ecommerce_operator
+
         shop_package = _package("commerce", "social-commerce")
         shop_applied = self.client.post(
             "/api/trial/v1/imports/apply",
@@ -1329,7 +1350,7 @@ class ClientImportRouteTests(unittest.TestCase):
         storefront_proof = {
             "actionId": storefront_action_id,
             "capturedAt": "2026-07-26T08:00:00.000Z",
-            "actor": "setup-writer",
+            "actor": internal_ecommerce_operator.actor_id,
             "reason": "Save the storefront identity before importing merchandising.",
             "evidenceReference": f"ECOMMERCE-STOREFRONT:{catalog_digest}:R1",
         }
@@ -1344,8 +1365,18 @@ class ClientImportRouteTests(unittest.TestCase):
             "selectedSkus": ["COFFEE-250"],
             "saved": storefront_proof,
         }
+        with self.assertRaises(TrialPermissionDenied) as denied:
+            self.store.apply_command(
+                self.setup_writer,
+                command_id="00000000-0000-4000-8000-000000000106",
+                surface="commerce",
+                event_type="commerce.storefront.configuration.saved",
+                expected_version=1,
+                payload={"state": configured_state, "evidence": storefront_proof},
+            )
+        self.assertEqual(denied.exception.required_capability, "ecommerce.manage")
         configured = self.store.apply_command(
-            self.setup_writer,
+            internal_ecommerce_operator,
             command_id="00000000-0000-4000-8000-000000000106",
             surface="commerce",
             event_type="commerce.storefront.configuration.saved",
@@ -1360,10 +1391,11 @@ class ClientImportRouteTests(unittest.TestCase):
             ecommerce_package,
             command_id="00000000-0000-4000-8000-000000000107",
             expected_version=2,
+            session="internal-ecommerce",
         )
         applied = self.client.post(
             "/api/trial/v1/imports/apply",
-            headers=self._headers("writer"),
+            headers=self._headers("internal-ecommerce"),
             json=body,
         )
         self.assertEqual(applied.status_code, 200, applied.text)
@@ -1426,7 +1458,9 @@ class ClientImportRouteTests(unittest.TestCase):
         tampered_activation["storefrontConfiguration"]["activation"]["skus"] = ["UNKNOWN-SKU"]
         with self.assertRaises(TrialValidationError):
             validate_commerce_state(tampered_activation)
-        self.assertEqual(configuration["saved"]["actor"], "setup-writer")
+        self.assertEqual(
+            configuration["saved"]["actor"], internal_ecommerce_operator.actor_id
+        )
         self.assertRegex(
             configuration["saved"]["capturedAt"],
             r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$",
@@ -1438,7 +1472,7 @@ class ClientImportRouteTests(unittest.TestCase):
 
         replay = self.client.post(
             "/api/trial/v1/imports/apply",
-            headers=self._headers("writer"),
+            headers=self._headers("internal-ecommerce"),
             json=body,
         )
         self.assertEqual(replay.status_code, 200, replay.text)
@@ -1449,7 +1483,7 @@ class ClientImportRouteTests(unittest.TestCase):
 
         stale = self.client.post(
             "/api/trial/v1/imports/apply",
-            headers=self._headers("writer"),
+            headers=self._headers("internal-ecommerce"),
             json={
                 **body,
                 "command_id": "00000000-0000-4000-8000-000000000108",
