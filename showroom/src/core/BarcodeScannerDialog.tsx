@@ -28,8 +28,9 @@ function cameraFailureMessage(cause: unknown) {
   return 'The camera could not be started. Close any other app using the camera, or type the code instead.'
 }
 
-export function BarcodeScannerDialog({ continuous = false, label, onDetected, onClose }: {
+export function BarcodeScannerDialog({ continuous = false, continuousMode = 'receiving', label, onDetected, onClose }: {
   continuous?: boolean
+  continuousMode?: 'sale' | 'receiving'
   label: string
   onDetected: (value: string) => boolean | void
   onClose: () => void
@@ -111,10 +112,16 @@ export function BarcodeScannerDialog({ continuous = false, label, onDetected, on
               const accepted = onDetectedRef.current(value)
               setScanCount((count) => count + 1)
               setScanFeedback(accepted === false
-                ? 'Not added. Check the item code and this receipt.'
+                ? continuousMode === 'sale'
+                  ? 'Not added. Check the product code and available stock.'
+                  : 'Not added. Check the item code and this receipt.'
                 : accepted === true
-                  ? 'Unit added to the receipt draft. Remove the label before scanning another unit.'
-                  : 'Code read. Remove the label before scanning another unit.')
+                  ? continuousMode === 'sale'
+                    ? 'Added to this sale. Remove the label before scanning it again.'
+                    : 'Unit added to the receipt draft. Remove the label before scanning another unit.'
+                  : continuousMode === 'sale'
+                    ? 'Code read. Remove the label before scanning it again.'
+                    : 'Code read. Remove the label before scanning another unit.')
               return
             }
             cancelled = true
@@ -153,7 +160,7 @@ export function BarcodeScannerDialog({ continuous = false, label, onDetected, on
   return <dialog aria-label={label} className="barcode-scan-dialog" onClose={requestClose} ref={dialogRef}>
     <header className="barcode-scan-head">
       <span className="core-eyebrow">Camera scan</span>
-      <h2>{continuous ? 'Scan accepted units' : 'Point the camera at the barcode'}</h2>
+      <h2>{continuous ? continuousMode === 'sale' ? 'Scan items into this sale' : 'Scan accepted units' : 'Point the camera at the barcode'}</h2>
     </header>
     {/* muted + playsInline keep mobile browsers rendering the preview inline without sound. */}
     <video className="barcode-scan-video" muted playsInline ref={videoRef} />

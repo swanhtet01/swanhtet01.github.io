@@ -18,8 +18,9 @@ class BarcodeScannerErrorBoundary extends Component<{ children: ReactNode; onDis
   }
 }
 
-export function BarcodeScanButton({ continuous = false, disabled, label, onDetected }: {
+export function BarcodeScanButton({ continuous = false, continuousMode = 'receiving', disabled, label, onDetected }: {
   continuous?: boolean
+  continuousMode?: 'sale' | 'receiving'
   disabled?: boolean
   label: string
   onDetected: (value: string) => boolean | void
@@ -53,7 +54,7 @@ export function BarcodeScanButton({ continuous = false, disabled, label, onDetec
       <Suspense fallback={<span className="barcode-scan-hint" role="status">
         Opening camera scanner… <button className="core-button compact" onClick={() => setOpen(false)} type="button">Cancel</button>
       </span>}>
-        <BarcodeScannerDialog continuous={continuous} label={label} onClose={() => setOpen(false)} onDetected={onDetected} />
+        <BarcodeScannerDialog continuous={continuous} continuousMode={continuousMode} label={label} onClose={() => setOpen(false)} onDetected={onDetected} />
       </Suspense>
     </BarcodeScannerErrorBoundary> : null}
   </>

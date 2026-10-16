@@ -91,6 +91,10 @@ check(scannerDialog.includes('barcodes.map((barcode) => barcode.rawValue.trim())
 check(scannerDialog.includes('nextCameraBarcodeScans(scanSessionRef.current, values.slice(0, 1), Date.now())'), 'continuous_camera_scan_must_count_a_label_once_per_presentation')
 check(scannerDialog.includes('onDetectedRef.current(value)') && scannerDialog.includes('onCloseRef.current()'), 'barcode_detected_value_must_close_dialog')
 check(scannerDialog.includes('onDetectedRef.current(value)') && scannerDialog.includes('Remove the label before scanning another unit.'), 'continuous_scan_feedback_must_explain_rearming')
+check(component.includes("continuousMode = 'receiving'")
+  && component.includes('<BarcodeScannerDialog continuous={continuous} continuousMode={continuousMode}')
+  && scannerDialog.includes("continuousMode === 'sale' ? 'Scan items into this sale'")
+  && scannerDialog.includes('Added to this sale. Remove the label before scanning it again.'), 'continuous_sale_scanner_must_keep_sale_and_receiving_copy_distinct')
 check(scannerDialog.includes('stream?.getTracks().forEach((track) => track.stop())'), 'barcode_stream_cleanup_missing')
 check(scannerDialog.includes('if (timer !== undefined) window.clearInterval(timer)'), 'barcode_interval_cleanup_missing')
 check(scannerDialog.includes('video.srcObject = null'), 'barcode_video_detach_missing')
@@ -116,7 +120,7 @@ check(count(coreApp, '{catalogForm}') === 1
   'barcode_shared_catalog_entry_must_precede_optional_template_setup')
 check(coreApp.includes('placeholder="Search, SKU or barcode"'), 'shop_counter_keyboard_wedge_placeholder_missing')
 check(coreApp.includes('onKeyDown={addSearchMatch}'), 'shop_counter_keyboard_wedge_handler_missing')
-check(coreApp.includes('label="Scan a barcode with the camera" onDetected={addCameraScan}'), 'shop_counter_camera_handler_missing')
+check(coreApp.includes('continuous continuousMode="sale" label="Scan products into this sale" onDetected={addCameraScan}'), 'shop_counter_camera_scanner_must_stay_open_for_repeated_sales_scans')
 check(coreApp.includes('onClick={() => onCreateFromBarcode(unmatchedBarcode)}'), 'unmatched_barcode_must_offer_an_explicit_add_action')
 check(count(coreApp, 'label="Scan the product barcode" onDetected=') >= 3,
   'shop_product_barcode_scan_controls_missing')
@@ -147,13 +151,13 @@ function runCounterScan(items, value) {
   return { matched, added, queries, feedback, createCandidates }
 }
 const counterItems = [
-  { sku: 'MUG-10', barcode: '00012345', name: 'Ceramic Mug', onHand: 4 },
+  { sku: 'MUG-10', barcode: '00012345', name: 'Ceramic Mug', nameMy: 'ကြွေခွက်', onHand: 4 },
   { sku: 'LAMP-02', name: 'Desk Lamp', onHand: 0 },
 ]
 const exactCounterScan = runCounterScan(counterItems, ' mug-10 ')
-check(exactCounterScan.matched && exactCounterScan.added.join() === 'MUG-10' && exactCounterScan.queries.join() === '' && exactCounterScan.feedback.join() === '', 'exact_case_insensitive_counter_scan_must_add_one_item_and_clear_search')
+check(exactCounterScan.matched && exactCounterScan.added.join() === 'MUG-10' && exactCounterScan.queries.join() === '' && exactCounterScan.feedback.at(-1)?.includes('ကြွေခွက် added to this sale'), 'exact_case_insensitive_counter_scan_must_confirm_the_burmese_item_name_and_clear_search')
 const exactBarcodeScan = runCounterScan(counterItems, '00012345')
-check(exactBarcodeScan.matched && exactBarcodeScan.added.join() === 'MUG-10' && exactBarcodeScan.queries.join() === '' && exactBarcodeScan.feedback.join() === '', 'barcode_scan_must_preserve_leading_zeroes_and_add_the_exact_item')
+check(exactBarcodeScan.matched && exactBarcodeScan.added.join() === 'MUG-10' && exactBarcodeScan.queries.join() === '' && exactBarcodeScan.feedback.at(-1)?.includes('ကြွေခွက် added to this sale'), 'barcode_scan_must_preserve_leading_zeroes_and_confirm_the_burmese_item_name')
 const duplicateCodeItems = [...counterItems, { sku: 'MUG-11', barcode: '00012345', name: 'Travel Mug', onHand: 6 }]
 const ambiguousBarcodeScan = runCounterScan(duplicateCodeItems, '00012345')
 check(!ambiguousBarcodeScan.matched && ambiguousBarcodeScan.added.length === 0 && ambiguousBarcodeScan.queries.length === 0

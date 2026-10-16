@@ -1295,6 +1295,7 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
       return false
     }
     if (!addItem(match)) return false
+    setScanFeedback(`${match.nameMy?.trim() || match.name} added to this sale.`)
     setQuery('')
     setUnmatchedBarcode('')
     return true
@@ -1312,7 +1313,7 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
     // exact code the camera read next to the "no matching item" state instead of nothing.
     setQuery(value)
     setCatalogPage(0)
-    addScannedValue(value, 'camera')
+    return addScannedValue(value, 'camera')
   }
 
   function clearSale() {
@@ -1364,7 +1365,7 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
               <span aria-label="Record safety" className="shop-next-compact shop-record-status-counter" title={recordStatus.detail}>{recordStatus.badge} · {recordStatus.label}<small className="sr-only">{recordStatus.detail} · {operatorLabel || 'Cashier set at review'}</small></span>
             </nav>
           </div>
-          <div className="shop-item-search-row"><label className="shop-item-search"><span className="sr-only">Find or scan an item</span><input ref={saleSearchRef} autoComplete="off" aria-keyshortcuts="/" onChange={(event) => { setQuery(event.target.value); setCatalogPage(0); setScanFeedback(''); setUnmatchedBarcode('') }} onKeyDown={addSearchMatch} placeholder="Search, SKU or barcode" type="search" value={query} /><kbd aria-hidden="true" className="shop-search-shortcut">/</kbd></label><BarcodeScanButton label="Scan a barcode with the camera" onDetected={addCameraScan} /></div>
+          <div className="shop-item-search-row"><label className="shop-item-search"><span className="sr-only">Find or scan an item</span><input ref={saleSearchRef} autoComplete="off" aria-keyshortcuts="/" onChange={(event) => { setQuery(event.target.value); setCatalogPage(0); setScanFeedback(''); setUnmatchedBarcode('') }} onKeyDown={addSearchMatch} placeholder="Search, SKU or barcode" type="search" value={query} /><kbd aria-hidden="true" className="shop-search-shortcut">/</kbd></label><BarcodeScanButton continuous continuousMode="sale" label="Scan products into this sale" onDetected={addCameraScan} /></div>
           {categories.length + Number(hasUncategorized) > 1 ? <nav aria-label="Product categories" className="shop-counter-category-filter">
             <button aria-pressed={categoryFilter.kind === 'all'} onClick={() => { setCategoryFilter({ kind: 'all' }); setCatalogPage(0) }} type="button">All items</button>
             {categories.map(([key, label]) => <button aria-pressed={categoryFilter.kind === 'category' && categoryFilter.value === key} key={key} onClick={() => { setCategoryFilter({ kind: 'category', value: key }); setCatalogPage(0) }} type="button">{label}</button>)}
