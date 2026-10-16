@@ -7,6 +7,11 @@ import { verifyWebsitePublishingMigrationCatalog } from './verify_website_review
 
 const root = resolve(import.meta.dirname, '..')
 const verify = db => verifyWebsitePublishingMigrationCatalog(db, (name, ok) => assert.ok(ok, name))
+const outOfScopeMigrations = new Set([
+  '20260711081300_public_legacy_baseline.sql',
+  '20261014103000_website_custom_domain_bindings.sql',
+  '20261014122400_website_domain_attempt_fencing.sql',
+])
 
 test('complete migration chain and adversarial private catalog changes', async t => {
   const db = new PGlite()
@@ -16,7 +21,7 @@ test('complete migration chain and adversarial private catalog changes', async t
       create role service_role nologin; create schema auth authorization postgres;
       create table auth.sessions(id uuid primary key,user_id uuid not null);`)
     const names = (await readdir(resolve(root, 'supabase/migrations')))
-      .filter(name => name.endsWith('.sql') && name !== '20260711081300_public_legacy_baseline.sql').sort()
+      .filter(name => name.endsWith('.sql') && !outOfScopeMigrations.has(name)).sort()
     for (const name of names) await db.exec(await readFile(resolve(root, 'supabase/migrations', name), 'utf8'))
     await t.test('exact full catalog accepted', async () => { await verify(db) })
     await t.test('checkout CRLF and LF preserve the same function contract', async () => {

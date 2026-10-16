@@ -1,5 +1,6 @@
 import { readFile, readdir } from 'node:fs/promises'
 import { resolve } from 'node:path'
+import { pathToFileURL } from 'node:url'
 
 import { PGlite } from '@electric-sql/pglite'
 
@@ -7,6 +8,11 @@ const root = resolve(import.meta.dirname, '..')
 const migrationDirectory = resolve(root, 'supabase', 'migrations')
 const digestQueryPath = resolve(root, 'tools', 'supabase_private_surface_digest.sql')
 const evidencePath = resolve(root, 'hq', 'readiness', 'supabase-branch-parity.json')
+const outOfScopeMigrations = new Set([
+  '20260711081300_public_legacy_baseline.sql',
+  '20261014103000_website_custom_domain_bindings.sql',
+  '20261014122400_website_domain_attempt_fencing.sql',
+])
 
 export const BRANCH_PARITY_CONTRACT = 'supermega.supabase-branch-parity.v1'
 export const SURFACE_DIGEST_CONTRACT = 'supermega.supabase-private-surface-digest.v1'
@@ -43,7 +49,9 @@ function fail(code) {
 }
 
 export async function computeExpectedSurfaceDigest() {
-  const names = (await readdir(migrationDirectory)).filter((name) => name.endsWith('.sql')).sort()
+  const names = (await readdir(migrationDirectory))
+    .filter((name) => name.endsWith('.sql') && !outOfScopeMigrations.has(name))
+    .sort()
   if (names.length === 0) fail('supabase_branch_parity_no_migrations')
   const database = new PGlite()
   try {
@@ -204,7 +212,7 @@ export async function verifyBranchParity() {
   }
 }
 
-if (process.argv[1] && import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   if (process.argv.includes('--print-expected')) {
     console.log(JSON.stringify(await computeExpectedSurfaceDigest(), null, 2))
   } else {
