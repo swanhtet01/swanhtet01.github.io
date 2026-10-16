@@ -314,7 +314,7 @@ def exercise(admin_url, runtime_url, head):
             "where workspace_id=%s and actor_id=%s and status='active'",
             (ecommerce, operator_id)).fetchone()
     require(operator_membership is not None
-            and "ecommerce.manage" in (operator_membership.get("capabilities") or []),
+            and "ecommerce.manage" in (operator_membership[0] or []),
             "ecommerce_internal_operator_grant_not_stored")
     operator_readiness = store.readiness(internal_operator)
     require(operator_readiness.write_ready, "ecommerce_internal_operator_not_ready")
