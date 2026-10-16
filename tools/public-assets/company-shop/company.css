@@ -510,8 +510,11 @@
       .product-card { padding: 10px; }
       .basket-panel { padding-inline: 18px; }
     }
+    @media (max-width: 980px) {
+      .hero-grid { grid-template-columns: minmax(0, 1fr); gap: 24px; min-height: 0; }
+      .hero-art { min-height: 0; }
+    }
     @media (max-width: 880px) {
-      .hero-grid { grid-template-columns: 1fr .68fr; min-height: 340px; }
       .company-section-head { align-items: start; flex-direction: column; gap: 15px; }
       .product-name { font-size: 1rem; }
       .product-name .myanmar { font-size: .875rem; }
