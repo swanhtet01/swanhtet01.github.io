@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PROFILE = "v13-self-serve"
 CONTRACT = "supermega_private_trial_database_v13_self_serve_v1"
 MIGRATION_PINS = {
+    "20261016143945_optimize_sites_inquiry_rls_initplans.sql": "0df6d0fee43f370eb6093431b71b422c7d8b777a7f08adef8447efd30dbc7519",
     "20261015202629_ecommerce_operator_review_grant.sql": "c37a78902bae3d04fcc38d2cf044f36da06fa636ac49be6fa4e98564679f45ee",
     "20261015091500_website_six_page_reviews.sql": "65472d2a57a787b1135bb362875e527caf84bbc83bfd00549c4191e3b4bb1e6e",
     "20261014090000_website_channel_stable_update.sql": "9ed6dc61a3ebc832db5ad54e4d7c91ad18e48d3a4f577ffb9a093baa52b3612a",
@@ -71,10 +72,10 @@ FUNCTIONS = {
     "mark_self_serve_claim_conflict": ("admitted_at timestamp with time zone", "boolean"),
 }
 WEBSITE_POLICIES = {
-    'website_inbox_read': ('website_inbox', 'SELECT', '67b3bc6f31d708f4fbae90df69ca85692ce1ab11959fa4598169fb1811bcb8e6', None),
-    'website_inquiry_actions_read': ('website_inquiry_actions', 'SELECT', '67b3bc6f31d708f4fbae90df69ca85692ce1ab11959fa4598169fb1811bcb8e6', None),
-    'website_inquiry_channel_create': ('website_inquiry_channels', 'INSERT', None, '85a4834fb043b710825c80f56b44ce17b82956c06d5d7b87237204e12a86700b'),
-    'website_inquiry_channel_read': ('website_inquiry_channels', 'SELECT', '67b3bc6f31d708f4fbae90df69ca85692ce1ab11959fa4598169fb1811bcb8e6', None),
+    'website_inbox_read': ('website_inbox', 'SELECT', '76646976533558b9556dd9cc703330b0fd4d4229ae0d0334e1d6d37a9d065743', None),
+    'website_inquiry_actions_read': ('website_inquiry_actions', 'SELECT', '76646976533558b9556dd9cc703330b0fd4d4229ae0d0334e1d6d37a9d065743', None),
+    'website_inquiry_channel_create': ('website_inquiry_channels', 'INSERT', None, 'dc4496c897e0d0f709d5332ba49ac7761093051a43ad0da8cd7d1b5dd90aba2f'),
+    'website_inquiry_channel_read': ('website_inquiry_channels', 'SELECT', '76646976533558b9556dd9cc703330b0fd4d4229ae0d0334e1d6d37a9d065743', None),
     "ecommerce_decisions_read": ("ecommerce_customer_decisions", "SELECT", "fa6ebfe157157ad6d5daf331058d4b8092da94f072e2758641d1c596776c9bdb", None),
     "ecommerce_decisions_insert": ("ecommerce_customer_decisions", "INSERT", None, "d452ac0c7fcc944fc931f4ae2b2a3533ff9bb63882af8dee7ef7b43b2419bc8c"),
     "ecommerce_reviews_read": ("ecommerce_customer_reviews", "SELECT", "e8b03e62dc2319a3798b075015f4b7e6ee20d6e78bd545941de0554befcd4423", None),
@@ -96,7 +97,7 @@ CATALOG_PINS = {
     "extension_columns_exact": "a4ff9d29472484ce891adb75e177e24887daafad3a7171f6a24c67ac9cfc0fd4",
     "extension_constraints_exact": "f003f0fc410fe3b14d0d1b77427a67ea7d2f5b7e381009312a8df437acdb0b94",
     "extension_functions_exact": "cca7bcd67f295f60576c4519c550e224780f8655bcc13f4c135c99f2e88815d1",
-    "extension_policies_exact": "9ebb7163b5e86d70fdddec40768d71fc3fff2284a4e2072a2d1a8a6d0ce76de5",
+    "extension_policies_exact": "5393311a9a54a9380e439de11586fde68813ad92cded621a89d606ab79f34101",
 }
 POLICY_PINS = {"billing_entitlements_self_read": "28369fc95fa5a46002daf06b67038c4c9c8695d9defe59a69014c7c40a44d5b5",
                "self_serve_attempt_budget_actor_only": "75f43c59c93c94637dad16ee262f552380b037c4d94c987c1ddeffc446d7875a"}

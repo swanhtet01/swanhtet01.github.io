@@ -277,7 +277,7 @@ class V13CatalogTests(unittest.TestCase):
             ("alter function app_private.read_website_published_media(uuid,text,text) set search_path to public",
              "alter function app_private.read_website_published_media(uuid,text,text) set search_path to pg_catalog, app_private"),
             ("alter policy website_inbox_read on app_private.website_inbox using (true)",
-             "alter policy website_inbox_read on app_private.website_inbox using (workspace_id=current_setting('app.workspace_id',true) and app_private.website_review_can('website.write'))"),
+             "alter policy website_inbox_read on app_private.website_inbox using (workspace_id=(select current_setting('app.workspace_id',true)) and (select app_private.website_review_can('website.write')))"),
             ("alter table app_private.ecommerce_customer_reviews no force row level security",
              "alter table app_private.ecommerce_customer_reviews force row level security"),
             ("grant delete on app_private.ecommerce_customer_reviews to supermega_trial_backend",

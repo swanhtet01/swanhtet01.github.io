@@ -74,6 +74,7 @@ CURRENT_MIGRATIONS = (*MIGRATIONS,
     "20261014090000_website_channel_stable_update.sql",
     "20261015091500_website_six_page_reviews.sql",
     "20261015202629_ecommerce_operator_review_grant.sql",
+    "20261016143945_optimize_sites_inquiry_rls_initplans.sql",
 )
 DOMAIN_CANDIDATE_MIGRATION = "20261014103000_website_custom_domain_bindings.sql"
 DOMAIN_CORRECTIVE_MIGRATION = "20261014122400_website_domain_attempt_fencing.sql"
