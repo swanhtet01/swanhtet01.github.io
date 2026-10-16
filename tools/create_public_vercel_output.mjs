@@ -715,7 +715,7 @@ assert(typeof homePage.title === 'string' && homePage.title.includes('SuperMega'
 assert(typeof homePage.description === 'string' && homePage.description.length >= 40, 'home_page_description_invalid')
 
 const stories = {
- shop: {title:'Sell at the counter. Keep stock and orders in view.', body:'Search or scan a product, build a sale, and see order and stock follow-up in the same Shop workspace.', screens:[['actual-shop-today.png','Shop Today showing sales, open orders and low-stock indicators','Today and priorities'],['actual-shop-sell.png','Shop counter with searchable products, visible stock levels, and Add controls for a new sale','Counter catalog and sale setup'],['actual-shop-orders.png','Shop order queue showing order status and the next follow-up','Orders and fulfilment']], proof:[['Today','Sales, open orders and low stock'],['Sale','Products, quantities and a reviewed total'],['Next','Order status and stock follow-up']]},
+ shop: {title:'Sell at the counter. Keep stock and orders in view.', body:'Search or scan a product, build a sale, and see order and stock follow-up in the same Shop workspace.', screens:[['actual-shop-sell.png','Shop counter with barcode search, stock-aware products, a three-item sale and Myanmar payment methods','Counter sale and live basket'],['actual-shop-today.png','Shop Today showing sales, open orders and low-stock indicators','Today and priorities'],['actual-shop-orders.png','Shop order queue showing order status and the next follow-up','Orders and fulfilment']], proof:[['Find','Search or scan the right product'],['Sell','Review each item and the MMK total'],['Follow up','See order status and stock needs']]},
  website: {title:'Build clear pages. Review inquiries in one place.', body:'Our team manages pages, readiness checks and customer inquiries in one workspace.', screens:[['actual-sites-editor.png','Sites editor showing page navigation, focused content editing and readiness checks','Page workspace and readiness'],['actual-sites-inquiries.png','Sites inquiry workspace showing a synthetic customer request, ownership and decision controls','Inquiry review and ownership']], proof:[['Record','Pages, services and metadata'],['Action','Edit, check and prepare to publish'],['Result','Qualified inquiries in one inbox']]},
  ecommerce: {title:'Show your catalog. Review each request.', body:'Our team reviews each catalog request before Shop records an order or payment.', screens:[['actual-commerce-catalog.png','Commerce catalog showing available products, local pricing and customer ordering','Store catalog and availability'],['actual-commerce-order-request.png','Commerce Store showing a locally saved customer request awaiting Shop confirmation','Request saved locally']], proof:[['Record','Catalog, customer and request'],['Action','Review before an order is confirmed'],['Result','A clear next step for fulfilment']]},
 }
@@ -815,7 +815,13 @@ function shopOnlyCompanyMarkup(source) {
   && !markup.includes('id="website"') && !markup.includes('id="ecommerce"'), "shop_only_inactive_product_link_remains")
  return markup
 }
-const publicHomeMarkup = shopOnlyCompanyMarkup(companyMarkup)
+function replaceHomeShopShowcase(source, galleryHtml) {
+ const marker = /<section class="shop-showcase" aria-label="Shop product screens">[\s\S]*?<\/section>/g
+ const matches = source.match(marker) || []
+ assert(matches.length === 1, 'home_shop_showcase_source_drift')
+ return source.replace(marker, `<section class="shop-showcase" aria-label="Shop product screens">${galleryHtml}</section>`)
+}
+const publicHomeMarkup = replaceHomeShopShowcase(shopOnlyCompanyMarkup(companyMarkup), productGallery('shop','Shop',true))
 const publicShopMarkup = shopMarkup
 
 function productCard(id) {
@@ -826,7 +832,7 @@ function productCard(id) {
 }
 const homeHtml = documentHtml({route:'/',title:homePage.title,description:homePage.description,
  schema:{'@type':'Organization',name:'SuperMega',url:canonical('/'),description:homePage.description},
- content:`<main id="content">${publicHomeMarkup}</main>`,
+ content:`<main id="content">${publicHomeMarkup}</main>${stories.shop.screens.length > 1 ? '<script src="/platform-carousel.js" defer></script>' : ''}`,
 })
 
 function productAction(product) {

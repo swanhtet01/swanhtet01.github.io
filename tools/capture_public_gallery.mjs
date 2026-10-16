@@ -331,8 +331,21 @@ async function main() {
     await typeInto(cdp, sessionId, '.receipt-profile-form input[autocomplete="organization"]', 'Example Corner Shop')
     await clickText(cdp, sessionId, 'Save details')
     await waitFor(cdp, sessionId, 'Receipt details')
-    const saleItemAdded = await evaluate(cdp, sessionId, "(() => { const tile=document.querySelector('button.shop-product-tile'); if (!tile) return false; tile.click(); return true })()")
-    if (!saleItemAdded) throw new Error('counter_product_tile_missing')
+    const saleBasket = await evaluate(cdp, sessionId, `(async () => {
+      const added = [];
+      for (let index = 0; index < 3; index += 1) {
+        const tile = [...document.querySelectorAll('button.shop-product-tile')]
+          .find(candidate => !candidate.querySelector('.shop-product-quantity'));
+        if (!tile) return { added, lines: document.querySelectorAll('.shop-cart-lines article').length };
+        added.push(tile.querySelector('.shop-product-name strong')?.textContent?.trim() || 'unnamed product');
+        tile.click();
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      return { added, lines: document.querySelectorAll('.shop-cart-lines article').length };
+    })()`)
+    if (saleBasket.added.length !== 3 || saleBasket.lines !== 3) {
+      throw new Error(`counter_multi_item_basket_missing:${JSON.stringify(saleBasket)}`)
+    }
     captures.push(await capture(cdp, sessionId, output, 'actual-shop-sell', ['Products', 'Current sale', 'Daily essentials basket'],
       { fixturePath: '/shop/', tab: 'counter', selector: '.shop-current-sale' }))
     captures.push(await captureMobile(cdp, sessionId, output, 'actual-shop-sell-mobile', ['Products', 'Current sale', 'Daily essentials basket'],
