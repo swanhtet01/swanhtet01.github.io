@@ -90,7 +90,7 @@ class FullChainProofContractTests(unittest.TestCase):
                 nested_failure("ecommerce_internal_operator_prepare_denied")),
             "ecommerce_internal_operator_prepare_denied")
         self.assertIsNone(proof.pg.safe_rehearsal_failure_code(
-            nested_failure("password=not-safe-to-print")))
+            nested_failure("diagnostic text must not be shown")))
         self.assertIsNone(proof.pg.safe_rehearsal_failure_code(
             ValueError("unrelated exception")))
 

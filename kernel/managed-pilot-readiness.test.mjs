@@ -94,7 +94,8 @@ test('derives one blocked four-product ledger from current bounded evidence', ()
   assert.equal(ledger.liveProduction.localTargetVersion, 13)
   assert.equal(ledger.liveProduction.versionDrift, 6)
   assert.equal(ledger.localDatabase.schemaVersion, 13)
-  assert.equal(ledger.localDatabase.migrationCount, 28)
+  assert.equal(ledger.localDatabase.migrationCount, databaseFixture.migration.count)
+  assert.equal(ledger.localDatabase.behaviorChecks, Object.keys(databaseFixture.checks).length)
   assert.equal(ledger.localDatabase.hostedEvidenceCurrent, false)
   assert.equal(ledger.liveProduction.managedWritesEnabled, false)
   assert.equal(ledger.pilotEvidence.pilotMode, 'owner_named')
@@ -251,7 +252,9 @@ test('changed implementation binding and local proof summaries cannot be called 
   changed.databaseImplementation = { paths: databaseFixture.implementation.paths,
     fileCount: databaseFixture.implementationFileCount, digest: `sha256:${'0'.repeat(64)}` }
   assert.throws(() => buildManagedPilotReadiness(changed), /managed_pilot_readiness_database_evidence_invalid/)
-  for (const mutate of [d => { d.migrationCount = 18 }, d => { d.behaviorChecks = 72 }, d => { d.migrationCount = 14 }, d => { d.migrationCount = 17 }, d => { d.catalogChecksAfter = 32 },
+  for (const mutate of [d => { d.migrationCount = 18 }, d => { d.behaviorChecks = 72 },
+    d => { d.migrationCount = 28 }, d => { d.behaviorChecks = 74 },
+    d => { d.migrationCount = 14 }, d => { d.migrationCount = 17 }, d => { d.catalogChecksAfter = 32 },
     d => { d.hostedEvidenceCurrent = true }, d => { d.implementationTree = '' }]) {
     const ledger = buildManagedPilotReadiness(input)
     mutate(ledger.localDatabase)
