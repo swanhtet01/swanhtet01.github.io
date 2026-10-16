@@ -72,10 +72,6 @@ const sourceGalleryAssetNames = [
   'actual-shop-today.png', 'actual-shop-today-mobile.png',
   'actual-shop-sell.png', 'actual-shop-sell-mobile.png',
   'actual-shop-orders.png', 'actual-shop-orders-mobile.png',
-  'actual-sites-editor.png', 'actual-sites-editor-mobile.png',
-  'actual-sites-inquiries.png', 'actual-sites-inquiries-mobile.png',
-  'actual-commerce-catalog.png', 'actual-commerce-catalog-mobile.png',
-  'actual-commerce-order-request.png', 'actual-commerce-order-request-mobile.png',
 ]
 // Keep the complete capture set and provenance available to internal review,
 // while exposing only the approved Shop customer surface in the public bundle.
@@ -797,7 +793,7 @@ function shopOnlyCompanyMarkup(source) {
   "Shop brings sales and stock into one operating view. Our team manages Sites and confirms Commerce availability for each setup.",
   "Keep sales, orders and stock together in one clear MMK workflow. See what needs attention without digging through settings.",
   "Keep sales, orders and stock together in one clear view. See what needs attention without digging through settings.",
- ], "Keep sales, orders and stock together in one clear view. See what needs attention without digging through settings.", "shop_only_hero_description")
+ ], "Know what sold, what is waiting and what needs attention. Keep sales, orders and stock together in one clear view.", "shop_only_hero_description")
  markup = replaceKnownCopyOnce(markup, ["Meet the product family", "Explore Shop"], "Explore Shop", "shop_only_hero_secondary_action")
  markup = replaceKnownCopyOnce(markup, ['href="/shop/#shop-demo">See Shop in action', 'href="/shop/#shop-demo">See Shop screens'], 'href="/shop/#shop-demo">See Shop in action', "shop_only_hero_primary_action")
  for (const id of ["website", "ecommerce"]) {
