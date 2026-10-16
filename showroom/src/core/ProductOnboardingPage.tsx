@@ -16,12 +16,14 @@ import {
   plantPackSaveAllowed,
   productContracts,
   managedTrialRequestUrl,
+  normalizeShopBusinessChoiceId,
   readProductSetup,
   rememberProductSetup,
   resolveSetupTemplateDoor,
   resolveSetupVariantDoor,
   seedSetupForProduct,
   setupDoorQueryAfterChoice,
+  setupHasProgress,
   setupVariantMatchesSource,
   templateFor,
   type SetupDoorDimension,
@@ -43,7 +45,6 @@ import {
   MANAGED_WEBSITE_ONBOARDING_INTRO,
   MANAGED_WEBSITE_ONBOARDING_JOURNEY,
   managedOnboardingAccountCheckPending,
-  managedShopOnboardingNotice,
   provisionLocalPlantWorkingSample,
   readLocalShopBusinessTemplateId,
   readLocalShopIndustryPackId,
@@ -51,12 +52,16 @@ import {
 import { plantBusinessTemplateForShopTemplateId } from '../products/plant/business-templates'
 import {
   shopBusinessTemplate,
-  shopBusinessChoiceFromIndustryPack,
   shopBusinessTemplateManagedCatalogPath,
   shopBusinessTemplateFromQuery,
   shopBusinessTemplates,
 } from '../products/shop/business-templates'
 import { signupBusinessChoices } from './signup-trial'
+import {
+  SHOP_BUSINESS_CHOICE_IDS,
+  requestedShopBusinessChoiceFromSearch,
+  shopIndustryPackIdForBusinessChoice,
+} from './shop-business-choice'
 import {
   plantIndustryPack,
   plantIndustryPackManagedPlanPath,
@@ -76,6 +81,18 @@ import {
   useProductionWorkspace,
   useSetupWorkspace,
 } from './workspace-runtime'
+
+function shopBusinessChoiceName(choiceId: string): string {
+  if (choiceId.startsWith('trade:')) {
+    const templateId = shopBusinessTemplateFromQuery(choiceId.slice('trade:'.length))
+    if (templateId) return shopBusinessTemplate(templateId).name.en
+  }
+  if (choiceId.startsWith('pack:')) {
+    const packId = choiceId.slice('pack:'.length)
+    return shopIndustryPacks.find((pack) => pack.id === packId)?.name ?? 'Shop setup'
+  }
+  return 'Shop setup'
+}
 
 type ProductOnboardingPageProps = {
   product: SetupProductId
@@ -170,18 +187,37 @@ function ActiveProductOnboardingPage({ product }: ProductOnboardingPageProps) {
   const pendingRequestedPlantIndustryPack = product === 'production' && plantPackDoorSelection.choiceRequired && plantPackDoorSelection.requestedId
     ? plantIndustryPack(plantPackDoorSelection.requestedId)
     : null
+  const [savedShopSetup] = useState<SetupState | null>(() => {
+    if (product !== 'commerce' || typeof window === 'undefined') return null
+    const registrySetup = readProductSetup(window.localStorage, 'commerce', SHOP_BUSINESS_CHOICE_IDS)
+    if (registrySetup && setupHasProgress(registrySetup)) return registrySetup
+    if (setup.product !== 'commerce') return null
+    const legacySetup = {
+      ...setup,
+      businessChoiceId: normalizeShopBusinessChoiceId(setup.businessChoiceId, SHOP_BUSINESS_CHOICE_IDS),
+    }
+    return setupHasProgress(legacySetup) ? legacySetup : null
+  })
+  const requestedShopBusinessChoiceId = useMemo(
+    () => product === 'commerce' ? requestedShopBusinessChoiceFromSearch(location.search) : null,
+    [location.search, product],
+  )
+  const savedShopBusinessChoiceId = normalizeShopBusinessChoiceId(savedShopSetup?.businessChoiceId, SHOP_BUSINESS_CHOICE_IDS) ?? ''
+  const shopBusinessChoiceDoorSelection = resolveSetupVariantDoor(
+    savedShopBusinessChoiceId,
+    requestedShopBusinessChoiceId,
+    Boolean(savedShopSetup),
+  )
   // One grouped picker, ported from the signup page so both doors ask the product's first
   // question the same way. A choice is either 'trade:<template>' or 'pack:<industry pack>';
   // the empty string keeps the standard sample on whatever pack this device already carries.
-  const [businessChoiceId, setBusinessChoiceId] = useState(() => {
-    if (product !== 'commerce') return ''
-    const query = new URLSearchParams(location.search)
-    const requestedTrade = shopBusinessTemplateFromQuery(query.get('template'))
-    if (requestedTrade) return `trade:${requestedTrade}`
-    const requestedPack = query.get('pack')?.trim().toLowerCase()
-    const pack = shopIndustryPacks.find((candidate) => candidate.id === requestedPack)
-    return pack ? shopBusinessChoiceFromIndustryPack(pack.id) : ''
-  })
+  const [businessChoiceId, setBusinessChoiceId] = useState(() => product === 'commerce' ? shopBusinessChoiceDoorSelection.activeId : '')
+  const [shopBusinessChoiceChangeSelected, setShopBusinessChoiceChangeSelected] = useState(false)
+  const pendingRequestedShopBusinessChoiceId = product === 'commerce'
+    && !shopBusinessChoiceChangeSelected
+    && shopBusinessChoiceDoorSelection.choiceRequired
+    ? shopBusinessChoiceDoorSelection.requestedId
+    : null
   const businessTemplateId = businessChoiceId.startsWith('trade:')
     ? shopBusinessTemplateFromQuery(businessChoiceId.slice('trade:'.length))
     : null
@@ -236,15 +272,17 @@ function ActiveProductOnboardingPage({ product }: ProductOnboardingPageProps) {
         : managedEcommerce
           ? { ...onboardingJourneys[product], ...MANAGED_ECOMMERCE_ONBOARDING_JOURNEY }
       : onboardingJourneys[product]
-  const selectedShopIndustryPack = shopIndustryPack(selectedBusinessTemplate?.industryPackId ?? shopIndustryPackId)
+  const selectedShopIndustryPack = shopIndustryPack(
+    shopIndustryPackIdForBusinessChoice(businessChoiceId) ?? shopIndustryPackId,
+  )
+  const pendingRequestedShopBusinessChoiceName = pendingRequestedShopBusinessChoiceId
+    ? shopBusinessChoiceName(pendingRequestedShopBusinessChoiceId)
+    : null
   const onboardingTemplate = product === 'commerce'
     ? setup.product === product
       ? templateFor(product, setup.templateId)
       : templateFor(product, selectedShopIndustryPack.workflowTemplateId)
     : templateDoorSelection.activeTemplate
-  // The trade, or the plant type, she actually picked -- named the way each picker names it, so
-  // the notice can carry her choice forward instead of dropping it.
-  const managedShopBusinessTypeName = selectedBusinessTemplate?.name.en ?? selectedShopIndustryPack.name
   const managedShopIntro = selectedBusinessTemplate
     ? `Name this workspace, then review the ${selectedBusinessTemplate.name.en} starter values before they become company records.`
     : MANAGED_SHOP_ONBOARDING_INTRO
@@ -281,6 +319,7 @@ function ActiveProductOnboardingPage({ product }: ProductOnboardingPageProps) {
     && Boolean(setup.workspace.trim())
     && !pendingRequestedWorkflowTemplate
     && !pendingRequestedPlantIndustryPack
+    && !pendingRequestedShopBusinessChoiceId
   const workspaceStarted = workflowReady && Boolean(setup.startedAt) && !(product === 'production' && plantPackChangeSelected)
   // A schedule that predates the current integrity contract is protected, so provisioning must
   // fail closed. The error used to be rendered as one sentence with no action, leaving a new owner
@@ -295,8 +334,8 @@ function ActiveProductOnboardingPage({ product }: ProductOnboardingPageProps) {
       ? templateFor(product, selectedShopIndustryPack.workflowTemplateId)
       : requestedWorkflowTemplate
     const selectionTimer = window.setTimeout(() => {
-      rememberProductSetup(window.localStorage, setup)
-      const saved = readProductSetup(window.localStorage, product)
+      rememberProductSetup(window.localStorage, setup, SHOP_BUSINESS_CHOICE_IDS)
+      const saved = readProductSetup(window.localStorage, product, SHOP_BUSINESS_CHOICE_IDS)
       setSetup(saved ?? seedSetupForProduct(product, template.id))
       setNotice(saved
         ? `Continue your saved ${onboardingProduct.name} workspace.`
@@ -307,7 +346,7 @@ function ActiveProductOnboardingPage({ product }: ProductOnboardingPageProps) {
 
   useEffect(() => {
     if (setup.product !== product) return
-    rememberProductSetup(window.localStorage, setup)
+    rememberProductSetup(window.localStorage, setup, SHOP_BUSINESS_CHOICE_IDS)
   }, [product, setup])
 
   useEffect(() => {
@@ -329,10 +368,45 @@ function ActiveProductOnboardingPage({ product }: ProductOnboardingPageProps) {
     return () => window.clearTimeout(packTimer)
   }, [product, selectedShopIndustryPack.entryPoint, selectedShopIndustryPack.workflowTemplateId, setSetup, setup.entryPoint, setup.product, setup.templateId])
 
+  function clearShopBusinessChoiceRequest() {
+    const query = new URLSearchParams(location.search)
+    query.delete('template')
+    query.delete('pack')
+    const search = query.toString()
+    navigate(`${location.pathname}${search ? `?${search}` : ''}${location.hash}`, { replace: true })
+  }
+
+  function continueSavedShopBusinessChoice() {
+    if (!pendingRequestedShopBusinessChoiceId) return
+    setBusinessChoiceId(savedShopBusinessChoiceId)
+    setShopBusinessChoiceChangeSelected(true)
+    clearShopBusinessChoiceRequest()
+    setNotice('Continuing the saved Shop setup. The requested business type was not applied.')
+  }
+
+  function useRequestedShopBusinessChoice() {
+    const requested = pendingRequestedShopBusinessChoiceId
+    if (!requested) return
+    setBusinessChoiceId(requested)
+    setShopBusinessChoiceChangeSelected(true)
+    if (requested.startsWith('pack:')) setShopIndustryPackId(requested.slice('pack:'.length) as ShopIndustryPackId)
+    setSetup((current) => (current.product === 'commerce'
+      ? { ...current, businessChoiceId: requested, startedAt: undefined, savedAt: undefined }
+      : current))
+    clearShopBusinessChoiceRequest()
+    setNotice(`${pendingRequestedShopBusinessChoiceName} is selected. Existing Shop records were not replaced.`)
+  }
+
   function changeBusinessChoice(value: string) {
-    setBusinessChoiceId(value)
-    if (value.startsWith('pack:')) setShopIndustryPackId(value.slice('pack:'.length) as ShopIndustryPackId)
-    setSetup((current) => (current.product === 'commerce' ? { ...current, startedAt: undefined, savedAt: undefined } : current))
+    const choiceId = normalizeShopBusinessChoiceId(value, SHOP_BUSINESS_CHOICE_IDS)
+    if (value && !choiceId) return
+    setBusinessChoiceId(choiceId ?? '')
+    setShopBusinessChoiceChangeSelected(true)
+    if (choiceId?.startsWith('pack:')) setShopIndustryPackId(choiceId.slice('pack:'.length) as ShopIndustryPackId)
+    setSetup((current) => (current.product === 'commerce'
+      ? { ...current, businessChoiceId: choiceId, startedAt: undefined, savedAt: undefined }
+      : current))
+    clearShopBusinessChoiceRequest()
   }
 
   function updateSetup(patch: Partial<SetupState>) {
@@ -408,7 +482,7 @@ function ActiveProductOnboardingPage({ product }: ProductOnboardingPageProps) {
 
   async function startGuidedWorkspace(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (pendingRequestedWorkflowTemplate || pendingRequestedPlantIndustryPack) {
+    if (pendingRequestedWorkflowTemplate || pendingRequestedPlantIndustryPack || pendingRequestedShopBusinessChoiceId) {
       setNotice('Choose the saved setup or the requested starting point before continuing.')
       return
     }
@@ -460,7 +534,16 @@ function ActiveProductOnboardingPage({ product }: ProductOnboardingPageProps) {
         setPlantPackChangeSelected(false)
       }
       const startedAt = new Date().toISOString()
-      setSetup((current) => ({ ...current, product, owner: workspaceOwner, startedAt, savedAt: undefined }))
+      setSetup((current) => ({
+        ...current,
+        product,
+        owner: workspaceOwner,
+        ...(product === 'commerce'
+          ? { businessChoiceId: normalizeShopBusinessChoiceId(businessChoiceId, SHOP_BUSINESS_CHOICE_IDS) }
+          : {}),
+        startedAt,
+        savedAt: undefined,
+      }))
       if (product === 'commerce' || product === 'production') {
         const currentPlantShiftClose = currentProductionShiftClose(production)
         const metric = product === 'commerce'
@@ -491,7 +574,7 @@ function ActiveProductOnboardingPage({ product }: ProductOnboardingPageProps) {
           navigate(shopBusinessTemplateManagedCatalogPath(selectedBusinessTemplate.id))
           return
         }
-        setNotice(managedShopOnboardingNotice(managedShopBusinessTypeName))
+        navigate(onboardingJourney.firstTaskPath)
         return
       }
       if (managedProduction) {
@@ -571,6 +654,20 @@ function ActiveProductOnboardingPage({ product }: ProductOnboardingPageProps) {
                 <button className="core-button primary" onClick={useRequestedTemplate} type="button">Use {pendingRequestedWorkflowTemplate.name} for reviewed setup</button>
               </div>
               <p>Both choices preserve existing product records. Loading different sample data still requires the reviewed setup action below and may fail closed when existing records cannot be replaced safely.</p>
+            </section>
+          ) : null}
+          {pendingRequestedShopBusinessChoiceId && pendingRequestedShopBusinessChoiceName ? (
+            <section aria-label="Shop business type choice" className="product-onboarding-proof">
+              <div>
+                <span className="core-eyebrow">Saved Shop setup protected</span>
+                <h3>Choose which Shop business type to continue</h3>
+                <p>This device has Shop setup saved. The public door requested {pendingRequestedShopBusinessChoiceName}. Nothing has changed yet.</p>
+              </div>
+              <div className="actions">
+                <button className="core-button" onClick={continueSavedShopBusinessChoice} type="button">Continue saved Shop setup</button>
+                <button className="core-button primary" onClick={useRequestedShopBusinessChoice} type="button">Use {pendingRequestedShopBusinessChoiceName} for this setup</button>
+              </div>
+              <p>Existing Shop items, prices and opening stock stay unchanged. A named starter catalog needs explicit review before records are added.</p>
             </section>
           ) : null}
           {pendingRequestedPlantIndustryPack ? (

@@ -41,6 +41,10 @@ export type SetupState = {
   targetOutcome: string
   authorityBoundary: string
   acceptanceEvidence: string
+  // Shop business choice is a device preference. It is optional so older setup
+  // records remain readable; callers provide the current source-owned id set
+  // when reading or normalizing it.
+  businessChoiceId?: string
   startedAt?: string
   savedAt?: string
 }
@@ -243,13 +247,37 @@ export function seedSetupForProduct(product: SetupProductId, templateId = ''): S
 
 export const seedSetup: SetupState = seedSetupForProduct('commerce')
 
+// Template and entry-point defaults exist on a fresh setup. Progress means the
+// owner has supplied or started a value, not that the seed record exists.
+export function setupHasProgress(setup: SetupState) {
+  return Boolean(
+    setup.businessChoiceId
+    || setup.workspace.trim()
+    || setup.owner.trim()
+    || setup.currentRecord.trim()
+    || setup.baseline.trim()
+    || setup.targetOutcome.trim()
+    || setup.authorityBoundary.trim()
+    || setup.acceptanceEvidence.trim()
+    || setup.startedAt
+    || setup.savedAt
+  )
+}
+
 const pilotRequiredFields = ['workspace', 'owner', 'entryPoint', 'currentRecord', 'baseline', 'targetOutcome', 'authorityBoundary', 'acceptanceEvidence'] as const
 const setupProductIds: SetupProductId[] = ['commerce', 'production', 'website', 'ecommerce']
 const PRODUCT_SETUP_REGISTRY_MAX_BYTES = 64 * 1024
 type ProductSetupStorage = Pick<Storage, 'getItem' | 'setItem'>
 type ProductSetupRegistry = Partial<Record<SetupProductId, SetupState>>
 
-export function normalizeSetup(value: SetupState) {
+export function normalizeShopBusinessChoiceId(
+  value: unknown,
+  validShopBusinessChoiceIds: ReadonlySet<string>,
+): string | undefined {
+  return typeof value === 'string' && validShopBusinessChoiceIds.has(value) ? value : undefined
+}
+
+export function normalizeSetup(value: SetupState, validShopBusinessChoiceIds?: ReadonlySet<string>) {
   const source = (value && typeof value === 'object' ? value : seedSetup) as Omit<Partial<SetupState>, 'product'> & { product?: string; template?: string }
   const product: SetupProductId = source.product === 'production' || source.product === 'plant'
     ? 'production'
@@ -260,6 +288,13 @@ export function normalizeSetup(value: SetupState) {
         : 'commerce'
   const template = templateFor(product, String(source.templateId || source.template || ''))
   const sourceEntryPoint = String(source.entryPoint || '')
+  const businessChoiceId = product !== 'commerce'
+    ? undefined
+    : validShopBusinessChoiceIds
+      ? normalizeShopBusinessChoiceId(source.businessChoiceId, validShopBusinessChoiceIds)
+      : typeof source.businessChoiceId === 'string' && source.businessChoiceId
+        ? source.businessChoiceId
+        : undefined
   const normalized: SetupState = {
     product,
     templateId: template.id,
@@ -271,13 +306,17 @@ export function normalizeSetup(value: SetupState) {
     targetOutcome: typeof source.targetOutcome === 'string' ? source.targetOutcome : '',
     authorityBoundary: typeof source.authorityBoundary === 'string' ? source.authorityBoundary : '',
     acceptanceEvidence: typeof source.acceptanceEvidence === 'string' ? source.acceptanceEvidence : '',
+    ...(businessChoiceId ? { businessChoiceId } : {}),
     ...(typeof source.startedAt === 'string' && source.startedAt ? { startedAt: source.startedAt } : {}),
     ...(typeof source.savedAt === 'string' && source.savedAt ? { savedAt: source.savedAt } : {}),
   }
   return JSON.stringify(normalized) === JSON.stringify(value) ? value : normalized
 }
 
-function readProductSetupRegistry(storage: Pick<ProductSetupStorage, 'getItem'>): ProductSetupRegistry {
+function readProductSetupRegistry(
+  storage: Pick<ProductSetupStorage, 'getItem'>,
+  validShopBusinessChoiceIds?: ReadonlySet<string>,
+): ProductSetupRegistry {
   try {
     const raw = storage.getItem(PRODUCT_SETUP_REGISTRY_KEY)
     if (!raw || raw.length > PRODUCT_SETUP_REGISTRY_MAX_BYTES) return {}
@@ -287,7 +326,7 @@ function readProductSetupRegistry(storage: Pick<ProductSetupStorage, 'getItem'>)
     for (const product of setupProductIds) {
       const candidate = (source as Record<string, unknown>)[product]
       if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) continue
-      const normalized = normalizeSetup(candidate as SetupState)
+      const normalized = normalizeSetup(candidate as SetupState, validShopBusinessChoiceIds)
       if (normalized.product === product) registry[product] = normalized
     }
     return registry
@@ -296,8 +335,12 @@ function readProductSetupRegistry(storage: Pick<ProductSetupStorage, 'getItem'>)
   }
 }
 
-export function readProductSetup(storage: Pick<ProductSetupStorage, 'getItem'>, product: SetupProductId) {
-  return readProductSetupRegistry(storage)[product] ?? null
+export function readProductSetup(
+  storage: Pick<ProductSetupStorage, 'getItem'>,
+  product: SetupProductId,
+  validShopBusinessChoiceIds?: ReadonlySet<string>,
+) {
+  return readProductSetupRegistry(storage, validShopBusinessChoiceIds)[product] ?? null
 }
 
 export type StartedProductOwner = { product: SetupProductId; owner: string }
@@ -314,10 +357,14 @@ export function conflictingOwnerRecord(
   return startedElsewhere.find((entry) => entry.owner.trim() && entry.owner.trim() !== owner) ?? null
 }
 
-export function rememberProductSetup(storage: ProductSetupStorage, setup: SetupState) {
+export function rememberProductSetup(
+  storage: ProductSetupStorage,
+  setup: SetupState,
+  validShopBusinessChoiceIds?: ReadonlySet<string>,
+) {
   try {
-    const normalized = normalizeSetup(setup)
-    const registry = readProductSetupRegistry(storage)
+    const normalized = normalizeSetup(setup, validShopBusinessChoiceIds)
+    const registry = readProductSetupRegistry(storage, validShopBusinessChoiceIds)
     registry[normalized.product] = normalized
     const encoded = JSON.stringify(registry)
     if (encoded.length > PRODUCT_SETUP_REGISTRY_MAX_BYTES) return false
