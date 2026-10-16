@@ -21,6 +21,8 @@ class FullChainProofContractTests(unittest.TestCase):
         source = Path(proof.__file__).read_text(encoding="utf-8")
         self.assertIn("ready.product_entitlements == (product,)", source)
         self.assertIn("ready.capabilities == self_serve_owner_capabilities(product)", source)
+        self.assertIn("self_serve_ecommerce_owner_granted_internal_work", source)
+        self.assertIn("ecommerce.manage", source)
 
     def test_exact_current_private_migration_chain(self):
         actual = sorted(p.name for p in (proof.ROOT / "supabase/migrations").glob("*.sql")
@@ -49,11 +51,12 @@ class FullChainProofContractTests(unittest.TestCase):
         ))
 
     def test_matrix_has_exact_unique_behavior_checks(self):
-        self.assertEqual(len(proof.CHECKS), 18)
-        self.assertEqual(len(set(proof.CHECKS)), 18)
+        self.assertEqual(len(proof.CHECKS), 19)
+        self.assertEqual(len(set(proof.CHECKS)), 19)
         for name in ("payment_confirmation_not_entitlement", "restored_budget_enforced",
                      "four_product_workspaces_created", "revoked_session_denied",
-                     "unwrapped_migration_failure_rolled_back"):
+                     "unwrapped_migration_failure_rolled_back",
+                     "ecommerce_internal_operator_boundary"):
             self.assertIn(name, proof.CHECKS)
 
     def test_invalid_head_fails_before_cluster(self):

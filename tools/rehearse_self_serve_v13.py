@@ -57,6 +57,7 @@ CHECKS = (
     "four_product_workspaces_created", "product_entitlements_exact",
     "exact_create_replay", "claim_conflict_without_takeover", "durable_budget_enforced",
     "actor_directory_isolated", "cross_actor_read_denied", "revoked_session_denied",
+    "ecommerce_internal_operator_boundary",
     "unpaid_invoice_not_entitled", "payment_confirmation_not_entitlement",
     "separate_entitlement_grant_visible", "runtime_billing_write_denied",
     "backup_restored_exactly", "restored_runtime_readable", "restored_budget_enforced",
@@ -149,7 +150,8 @@ def snapshot(admin_url):
 def exercise(admin_url, runtime_url, head):
     from supermega_runtime.trial_store import (
         PostgresTrialStore, TrialPrincipal, TrialClaimConflict, TrialRateLimited,
-        TrialNotReadyError, SELF_SERVE_PRODUCT_ACTIVATION_IDS, self_serve_owner_capabilities,
+        TrialNotReadyError, TrialPermissionDenied, SELF_SERVE_PRODUCT_ACTIVATION_IDS,
+        self_serve_owner_capabilities,
     )
     from supermega_runtime.billing_rail import BillingLedger, BillingRailError, _digest
     from tests.test_billing_rail import sample_packet
@@ -290,7 +292,25 @@ def exercise(admin_url, runtime_url, head):
         conn.execute("insert into app_private.workspace_state(workspace_id,surface,version,state_json,updated_by) values (%s,'commerce',1,%s::jsonb,%s)",
                      (ecommerce, json.dumps(catalog), actors[0]))
     catalog_adapter = EcommerceCustomerReviewStore(store)
-    catalog_review = catalog_adapter.prepare(principal(ecommerce), review_id=str(uuid4()),
+    operator_id, operator_session = str(uuid4()), str(uuid4())
+    try:
+        catalog_adapter.prepare(principal(ecommerce), review_id=str(uuid4()),
+            recipient_actor_id=recipient_id, expected_version=1,
+            expires_at=(datetime.now(timezone.utc)+timedelta(days=1)).isoformat())
+        raise pg.RehearsalFailure("self_serve_ecommerce_owner_granted_internal_work")
+    except TrialPermissionDenied:
+        pass
+    with pg._connect(admin_url) as conn:
+        conn.execute("insert into auth.sessions(id,user_id) values (%s::uuid,%s::uuid)",
+                     (operator_session, operator_id))
+        conn.execute("insert into app_private.workspace_memberships(workspace_id,actor_id,status,capabilities,actor_kind) values (%s,%s,'active',array['commerce.read','commerce.write','ecommerce.manage'],'human')",
+                     (ecommerce, operator_id))
+    internal_operator = TrialPrincipal(workspace_id=ecommerce, actor_id=operator_id,
+        actor_kind="human", authenticated=True, session_id=operator_session,
+        identity_provider="supabase")
+    require(store.readiness(internal_operator).write_ready,
+            "ecommerce_internal_operator_not_ready")
+    catalog_review = catalog_adapter.prepare(internal_operator, review_id=str(uuid4()),
         recipient_actor_id=recipient_id, expected_version=1,
         expires_at=(datetime.now(timezone.utc)+timedelta(days=1)).isoformat())
     require(catalog_review["persisted"] and not catalog_review["replayed"],
@@ -303,7 +323,7 @@ def exercise(admin_url, runtime_url, head):
     require(bool(retained["ecommerce"]["preview"]["preview"]["items"]), "ecommerce_preview_empty")
     retained['ecommerce']['decisionReviews'] = []
     for kind in ('acceptance', 'feedback'):
-        decision_review = catalog_adapter.prepare(principal(ecommerce), review_id=str(uuid4()),
+        decision_review = catalog_adapter.prepare(internal_operator, review_id=str(uuid4()),
             recipient_actor_id=recipient_id, expected_version=1,
             expires_at=(datetime.now(timezone.utc)+timedelta(days=1)).isoformat())
         payload = dict(commandId=str(uuid4()), reviewId=decision_review['reviewId'],

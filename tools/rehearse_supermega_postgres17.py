@@ -171,6 +171,7 @@ CURRENT_ACCOUNT_CHECKS = (
     "self_serve_exact_create_replay", "self_serve_claim_conflict_without_takeover",
     "self_serve_durable_budget_enforced", "self_serve_actor_directory_isolated",
     "self_serve_cross_actor_read_denied", "self_serve_revoked_session_denied",
+    "self_serve_ecommerce_internal_operator_boundary",
     "billing_unpaid_invoice_not_entitled", "billing_payment_confirmation_not_entitlement",
     "billing_separate_entitlement_grant_visible", "billing_runtime_write_denied",
 )
