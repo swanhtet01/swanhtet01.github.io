@@ -73,7 +73,7 @@ const domainCandidates = new Set([
 const migrationNames = implementation.paths
   .filter((path) => path.startsWith('supabase/migrations/') && !domainCandidates.has(path.split('/').at(-1)))
   .map((path) => path.split('/').at(-1))
-test('receipt inventory matches the actual PostgreSQL runner including Website acceptance', () => {
+test('receipt inventory matches the actual PostgreSQL runner including current Sites policy RLS', () => {
   const python = process.env.SUPERMEGA_PYTHON || (process.platform === 'win32' ? 'python' : 'python3')
   const result = spawnSync(python, ['-c', 'import json; from tools.rehearse_supermega_postgres17 import IMPLEMENTATION_PATHS, CURRENT_MIGRATIONS; print(json.dumps({"paths": list(IMPLEMENTATION_PATHS), "migrations": list(CURRENT_MIGRATIONS)}))'], {
     cwd: new URL('..', import.meta.url), encoding: 'utf8', timeout: 10000, windowsHide: true,
@@ -86,7 +86,7 @@ test('receipt inventory matches the actual PostgreSQL runner including Website a
   assert.ok(runner.paths.includes('supermega_runtime/website_domain.py'))
   assert.ok(runner.paths.includes('supermega_runtime/website_acceptance_schema.py'))
   assert.ok(runner.paths.includes('supermega_runtime/ecommerce_decision_schema.py'))
-  assert.equal(runner.migrations.at(-1), '20261015202629_ecommerce_operator_review_grant.sql')
+  assert.equal(runner.migrations.at(-1), '20261016143945_optimize_sites_inquiry_rls_initplans.sql')
 })
 const context = {
   recordedAt: '2026-07-31T10:00:00.000Z',
