@@ -1665,7 +1665,7 @@ if (!managedTrialSource.includes('export function managedProductsFromBootstrap('
   || managedTrialSource.includes("products.push('website')")
   || managedTrialSource.includes("products.push('ecommerce')")
   || !managedTrialSource.includes('bootstrap omits the immutable activation-derived entitlement list')
-  || !coreShellSource.includes("const portalAccess = useManagedPortalAccess(runtime.status !== 'checking', selectedManagedWorkspace, location.pathname)")
+  || !coreShellSource.includes("const portalAccess = useManagedPortalAccess(runtime.status, selectedManagedWorkspace, location.pathname)")
   || !coreShellSource.includes("void import('./managed-portal-client')")
   || coreShellSource.includes("import('./managed-trial')")
   || !coreShellSource.includes('currentManagedWorkspace()')

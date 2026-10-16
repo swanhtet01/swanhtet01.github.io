@@ -222,12 +222,13 @@ type ManagedPortalAccess =
 const localPortalAccess: ManagedPortalAccess = { status: 'local', products: [], workspaceId: '' }
 const ManagedPortalAccessContext = createContext<ManagedPortalAccess>(localPortalAccess)
 
-function useManagedPortalAccess(enabled: boolean, selectedWorkspace: string, refreshKey: string): ManagedPortalAccess {
-  const accessKey = enabled && selectedWorkspace ? `${selectedWorkspace}:${refreshKey}` : 'local'
+function useManagedPortalAccess(runtimeStatus: RuntimeStatus, selectedWorkspace: string, refreshKey: string): ManagedPortalAccess {
+  const managedRuntime = runtimeStatus === 'enterprise'
+  const accessKey = managedRuntime && selectedWorkspace ? `${selectedWorkspace}:${refreshKey}` : 'local'
   const [resolved, setResolved] = useState<{ key: string; access: ManagedPortalAccess }>({ key: 'local', access: localPortalAccess })
 
   useEffect(() => {
-    if (!enabled || !selectedWorkspace) return undefined
+    if (!managedRuntime || !selectedWorkspace) return undefined
     let active = true
     void import('./managed-portal-client')
       .then(async ({ currentManagedIdentity, discoverManagedWorkspacesForCurrentSession, loadManagedBootstrap, managedProductsFromBootstrap }) => {
@@ -271,10 +272,21 @@ function useManagedPortalAccess(enabled: boolean, selectedWorkspace: string, ref
         })
       })
     return () => { active = false }
-  }, [accessKey, enabled, selectedWorkspace])
+  }, [accessKey, managedRuntime, selectedWorkspace])
 
-  if (!selectedWorkspace) return localPortalAccess
-  if (!enabled) return { status: 'checking', products: [], workspaceId: '' }
+  if (runtimeStatus === 'checking') return { status: 'checking', products: [], workspaceId: selectedWorkspace }
+  if (runtimeStatus === 'demo') {
+    if (selectedWorkspace) {
+      return {
+        status: 'error',
+        products: [],
+        workspaceId: '',
+        message: 'Managed company access is unavailable while this service is offline. Try again when service is restored.',
+      }
+    }
+    return { status: 'reauthenticate', products: [], workspaceId: '' }
+  }
+  if (!selectedWorkspace) return { status: 'reauthenticate', products: [], workspaceId: '' }
   if (resolved.key !== accessKey) return { status: 'checking', products: [], workspaceId: '' }
   return resolved.access
 }
@@ -421,7 +433,7 @@ export function CoreLayout() {
   const settingsProduct = customerSettingsRoute ? setupProductFromQuery(new URLSearchParams(location.search).get('product')) : null
   const requestedProduct = routeProduct ?? settingsProduct
   const selectedManagedWorkspace = typeof window !== 'undefined' ? currentManagedWorkspace() : ''
-  const portalAccess = useManagedPortalAccess(runtime.status !== 'checking', selectedManagedWorkspace, location.pathname)
+  const portalAccess = useManagedPortalAccess(runtime.status, selectedManagedWorkspace, location.pathname)
   const storedSettingsSetup = customerSettingsRoute || internalBuilderRoute ? readLocalSetupReadiness() : null
   const sensitiveAccountRoute = location.pathname.startsWith('/account/')
   const loginRoute = location.pathname === '/login' || location.pathname === '/login/'
