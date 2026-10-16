@@ -535,6 +535,8 @@ const sharedStyle = `
   .editorial-hero h1 {font-size:clamp(40px,4.7vw,64px);line-height:1.04;letter-spacing:-.055em;margin:12px 0 14px;font-weight:650}
   .editorial-hero .lede {max-width:610px;font-size:17px;line-height:1.55;color:var(--muted)}
   .platform-gallery {display:grid;gap:12px;min-width:0}
+  .company-hero .shop-showcase-nav a[aria-current="true"] {border-color:#9387fa;background:#f2efff;color:#332a96}
+  .platform-home-caption {margin:12px 0 0;color:#5a6478;font-size:12px;line-height:1.45}
   .platform-slides {display:flex;align-items:stretch;min-width:0;overflow-x:auto;overscroll-behavior-inline:contain;scroll-snap-type:x mandatory;scrollbar-width:none;border-radius:24px}
   .platform-slides::-webkit-scrollbar {display:none}
   .platform-slides .platform-image {display:flex;flex:0 0 100%;flex-direction:column;box-sizing:border-box;scroll-snap-align:start}
@@ -715,7 +717,7 @@ assert(typeof homePage.title === 'string' && homePage.title.includes('SuperMega'
 assert(typeof homePage.description === 'string' && homePage.description.length >= 40, 'home_page_description_invalid')
 
 const stories = {
- shop: {title:'Sell at the counter. Keep stock and orders in view.', body:'Search or scan a product, build a sale, and see order and stock follow-up in the same Shop workspace.', screens:[['actual-shop-sell.png','Shop counter with barcode search, stock-aware products, a three-item sale and Myanmar payment methods','Counter sale and live basket'],['actual-shop-today.png','Shop Today showing sales, open orders and low-stock indicators','Today and priorities'],['actual-shop-orders.png','Shop order queue showing order status and the next follow-up','Orders and fulfilment']], proof:[['Find','Search or scan the right product'],['Sell','Review each item and the MMK total'],['Follow up','See order status and stock needs']]},
+ shop: {title:'Sell at the counter. Keep stock and orders in view.', body:'Search or scan a product, build a sale, and see order and stock follow-up in the same Shop workspace.', screens:[['actual-shop-sell.png','Shop counter with searchable products, visible stock levels, and Add controls for a new sale; barcode search, a three-item basket and Myanmar payment methods','Counter sale and live basket'],['actual-shop-today.png','Shop Today showing sales, open orders and low-stock indicators','Today and priorities'],['actual-shop-orders.png','Shop order queue showing order status and the next follow-up','Orders and fulfilment']], proof:[['Find','Search or scan the right product'],['Sell','Review each item and the MMK total'],['Follow up','See order status and stock needs']]},
  website: {title:'Build clear pages. Review inquiries in one place.', body:'Our team manages pages, readiness checks and customer inquiries in one workspace.', screens:[['actual-sites-editor.png','Sites editor showing page navigation, focused content editing and readiness checks','Page workspace and readiness'],['actual-sites-inquiries.png','Sites inquiry workspace showing a synthetic customer request, ownership and decision controls','Inquiry review and ownership']], proof:[['Record','Pages, services and metadata'],['Action','Edit, check and prepare to publish'],['Result','Qualified inquiries in one inbox']]},
  ecommerce: {title:'Show your catalog. Review each request.', body:'Our team reviews each catalog request before Shop records an order or payment.', screens:[['actual-commerce-catalog.png','Commerce catalog showing available products, local pricing and customer ordering','Store catalog and availability'],['actual-commerce-order-request.png','Commerce Store showing a locally saved customer request awaiting Shop confirmation','Request saved locally']], proof:[['Record','Catalog, customer and request'],['Action','Review before an order is confirmed'],['Result','A clear next step for fulfilment']]},
 }
@@ -751,6 +753,18 @@ function productGallery(id,label,eagerFirst=false) {
  }).join('')
  if (item.screens.length === 1) return `<div class="platform-gallery" data-product-gallery="${id}" data-single role="region" aria-roledescription="carousel" aria-label="${label} interface view"><div class="platform-slides">${slides}</div></div>`
  return `<div class="platform-gallery" data-product-gallery="${id}" data-platform-carousel role="region" aria-roledescription="carousel" aria-label="${label} interface views"><div class="platform-slides" tabindex="0">${slides}</div><div class="platform-gallery-controls"><button type="button" data-gallery-previous aria-label="Previous ${label} screenshot" disabled>&lsaquo;</button><span class="platform-gallery-status" data-gallery-status aria-live="polite">1 of ${item.screens.length}</span><button type="button" data-gallery-next aria-label="Next ${label} screenshot">&rsaquo;</button></div></div>`
+}
+function homeShopGallery() {
+ const item=stories.shop
+ const navigationLabels=['Counter sale','Today','Orders']
+ const navigation=item.screens.map(([, , caption],index)=>`<a href="#shop-home-slide-${index+1}" data-gallery-slide="${index}"${index===0?' aria-current="true"':''}>${navigationLabels[index] || escapeHtml(caption)}</a>`).join('')
+ const slides=item.screens.map(([image,alt,caption,width=1440,height=900],index)=>{
+  const mobileImage=image.replace(/\.png$/, '-mobile.png')
+  interfaceDisclosure(image)
+  interfaceDisclosure(mobileImage)
+  return `<div class="platform-image home-platform-image" id="shop-home-slide-${index+1}" role="group" aria-roledescription="slide" aria-label="${index+1} of ${item.screens.length}: ${escapeHtml(caption)}"><div class="platform-device-stage" role="group" aria-label="Shop desktop and mobile layouts"><span class="platform-device platform-device-desktop"><span class="platform-device-heading" aria-hidden="true">Desktop</span><img src="/images/${image}" alt="${escapeHtml(alt)}" width="${width}" height="${height}" loading="${index===0?'eager':'lazy'}"${index===0?' fetchpriority="high"':''} /></span><span class="platform-device platform-device-phone"><span class="platform-device-heading" aria-hidden="true">Mobile</span><img src="/images/${mobileImage}" alt="${escapeHtml(alt)} at mobile viewport size" width="390" height="844" loading="${index===0?'eager':'lazy'}" /></span></div><p class="platform-home-caption">Shop &middot; ${escapeHtml(caption)} &middot; Desktop and mobile captures · ${interfaceDisclosure(image)}</p></div>`
+ }).join('')
+ return `<div class="platform-gallery home-platform-gallery" data-product-gallery="shop" data-platform-carousel role="region" aria-roledescription="carousel" aria-label="Shop interface views"><nav class="shop-showcase-nav" aria-label="Choose a Shop screen">${navigation}</nav><div class="platform-slides" tabindex="0">${slides}</div></div>`
 }
 function productStory(id, standalone = false) {
  const item=stories[id], label=publicProducts.find(product=>product.id===id).name
@@ -819,9 +833,10 @@ function replaceHomeShopShowcase(source, galleryHtml) {
  const marker = /<section class="shop-showcase" aria-label="Shop product screens">[\s\S]*?<\/section>/g
  const matches = source.match(marker) || []
  assert(matches.length === 1, 'home_shop_showcase_source_drift')
- return source.replace(marker, `<section class="shop-showcase" aria-label="Shop product screens">${galleryHtml}</section>`)
+ const noScriptFallback = '<noscript><figure class="home-product-shot"><img src="/images/actual-shop-today.png" alt="Shop Today screen with sales, open orders, stock alerts and next actions" width="1440" height="900" /><figcaption><strong>Today</strong><span>See sales, open orders and the stock that needs attention.</span><small>Actual app capture · synthetic local records</small></figcaption></figure></noscript>'
+ return source.replace(marker, `<section class="shop-showcase" aria-label="Shop product screens">${galleryHtml}${noScriptFallback}</section>`)
 }
-const publicHomeMarkup = replaceHomeShopShowcase(shopOnlyCompanyMarkup(companyMarkup), productGallery('shop','Shop',true))
+const publicHomeMarkup = replaceHomeShopShowcase(shopOnlyCompanyMarkup(companyMarkup), homeShopGallery())
 const publicShopMarkup = shopMarkup
 
 function productCard(id) {
@@ -1579,10 +1594,10 @@ await writeStatic('platform-carousel.js', `(function(){
   function updateFullSizeLinks(){document.querySelectorAll('[data-mobile-image]').forEach(function(link){link.href=mobileMedia.matches?link.dataset.mobileImage:link.dataset.desktopImage})}
   mobileMedia.addEventListener('change',updateFullSizeLinks);updateFullSizeLinks();
   document.querySelectorAll('[data-platform-carousel]').forEach(function(carousel){
-    var track=carousel.querySelector('.platform-slides'),slides=Array.from(track.querySelectorAll('.platform-image')),previous=carousel.querySelector('[data-gallery-previous]'),next=carousel.querySelector('[data-gallery-next]'),status=carousel.querySelector('[data-gallery-status]'),active=0,timer;
-    function update(){var left=track.getBoundingClientRect().left;active=slides.reduce(function(best,slide,index){return Math.abs(slide.getBoundingClientRect().left-left)<Math.abs(slides[best].getBoundingClientRect().left-left)?index:best},0);status.textContent=(active+1)+' of '+slides.length;previous.disabled=active===0;next.disabled=active===slides.length-1;}
+    var track=carousel.querySelector('.platform-slides'),slides=Array.from(track.querySelectorAll('.platform-image')),previous=carousel.querySelector('[data-gallery-previous]'),next=carousel.querySelector('[data-gallery-next]'),status=carousel.querySelector('[data-gallery-status]'),slideLinks=Array.from(carousel.querySelectorAll('[data-gallery-slide]')),active=0,timer;
+    function update(){var left=track.getBoundingClientRect().left;active=slides.reduce(function(best,slide,index){return Math.abs(slide.getBoundingClientRect().left-left)<Math.abs(slides[best].getBoundingClientRect().left-left)?index:best},0);if(status)status.textContent=(active+1)+' of '+slides.length;if(previous)previous.disabled=active===0;if(next)next.disabled=active===slides.length-1;slideLinks.forEach(function(link,index){link.setAttribute('aria-current',String(index===active));});}
     function go(index){slides[Math.max(0,Math.min(index,slides.length-1))].scrollIntoView({behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'nearest',inline:'start'});}
-    previous.addEventListener('click',function(){go(active-1)});next.addEventListener('click',function(){go(active+1)});track.addEventListener('scroll',function(){clearTimeout(timer);timer=setTimeout(update,80)},{passive:true});track.addEventListener('keydown',function(event){if(event.target!==track)return;if(event.key==='ArrowLeft'||event.key==='ArrowRight'){event.preventDefault();go(active+(event.key==='ArrowRight'?1:-1))}});window.addEventListener('resize',update);update();
+    if(previous)previous.addEventListener('click',function(){go(active-1)});if(next)next.addEventListener('click',function(){go(active+1)});slideLinks.forEach(function(link,index){link.addEventListener('click',function(event){event.preventDefault();go(index);})});track.addEventListener('scroll',function(){clearTimeout(timer);timer=setTimeout(update,80)},{passive:true});track.addEventListener('keydown',function(event){if(event.target!==track)return;if(event.key==='ArrowLeft'||event.key==='ArrowRight'){event.preventDefault();go(active+(event.key==='ArrowRight'?1:-1))}});window.addEventListener('resize',update);update();
     carousel.refreshGallery=update;
   });
   var showcase=document.querySelector('[data-product-showcase]');
