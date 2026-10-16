@@ -685,6 +685,7 @@ label.checkbox-row input { width: 1.25rem; min-width: 1.25rem; min-height: 1.25r
 .inventory-tools-disclosure[open] > summary { border-bottom: 1px solid var(--core-line); }
 .inventory-tools-content { display: grid; gap: 12px; padding: 12px; }
 .stock-catalog-disclosure { margin-top: 10px; }
+.shop-stock-attention-card > .stock-catalog-disclosure { margin: .5rem 1rem 1rem; }
 .stock-catalog-disclosure > summary { min-height: 44px; padding-block: 6px; }
 .stock-catalog-content { max-height: min(420px,55vh); overflow: auto; padding: 0 12px 8px; scrollbar-color: rgba(36,84,230,.26) transparent; }
 .data-table { min-width: 680px; }
