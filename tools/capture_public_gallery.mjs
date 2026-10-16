@@ -377,6 +377,13 @@ async function main() {
       { fixturePath: '/shop/', tab: 'orders', selector: '.orders-module' }))
     captures.push(await captureMobile(cdp, sessionId, output, 'actual-shop-orders-mobile', ['Orders to finish', 'Payment pending'],
       { fixturePath: '/shop/', tab: 'orders', selector: '.orders-module' }))
+    await clickText(cdp, sessionId, 'Show Inventory')
+    await waitFor(cdp, sessionId, 'Count. Receive. Reorder.')
+    captures.push(await capture(cdp, sessionId, output, 'actual-shop-inventory', ['Count. Receive. Reorder.', 'Stock'],
+      { fixturePath: '/shop/', tab: 'inventory', selector: '.shop-stock-module' }))
+    captures.push(await captureMobile(cdp, sessionId, output, 'actual-shop-inventory-mobile', ['Count. Receive. Reorder.', 'Stock'],
+      { fixturePath: '/shop/', tab: 'inventory', selector: '.shop-stock-module' }))
+    await assertShopMobileFits(cdp, sessionId, '.shop-stock-module')
     await clickText(cdp, sessionId, 'Clean synthetic databases')
 
     await cdp.send('Page.navigate', { url: `${origin}/workspaces/` }, sessionId)

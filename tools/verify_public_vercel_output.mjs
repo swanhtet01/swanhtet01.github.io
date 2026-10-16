@@ -109,6 +109,8 @@ const expectedStaticFiles = new Set([
   'images/actual-shop-sell-mobile.png',
   'images/actual-shop-orders.png',
   'images/actual-shop-orders-mobile.png',
+  'images/actual-shop-inventory.png',
+  'images/actual-shop-inventory-mobile.png',
   'og-card.png',
   ...manifest.customerProducts.map((product) => `og-card-${product.id}.png`),
   'robots.txt',
@@ -421,6 +423,7 @@ for (const [desktop, mobile] of [
   ['actual-shop-today.png', 'actual-shop-today-mobile.png'],
   ['actual-shop-sell.png', 'actual-shop-sell-mobile.png'],
   ['actual-shop-orders.png', 'actual-shop-orders-mobile.png'],
+  ['actual-shop-inventory.png', 'actual-shop-inventory-mobile.png'],
 ]) {
   if (!shopPage.includes(`src="/images/${desktop}"`)
     || !shopPage.includes(`src="/images/${mobile}"`)
@@ -505,6 +508,7 @@ const publicGalleryFiles = [
   'actual-shop-today.png', 'actual-shop-today-mobile.png',
   'actual-shop-sell.png', 'actual-shop-sell-mobile.png',
   'actual-shop-orders.png', 'actual-shop-orders-mobile.png',
+  'actual-shop-inventory.png', 'actual-shop-inventory-mobile.png',
 ]
 const sourceGalleryByFile = new Map(publicGalleryProvenance.assets?.map(asset => [asset.file, asset]) ?? [])
 const expectedPublicGalleryEvidence = {

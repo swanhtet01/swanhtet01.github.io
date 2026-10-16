@@ -112,7 +112,7 @@ const expectedReviewDescriptions = {
   '/ecommerce/': 'The SuperMega team manages the Shop-backed catalog and reviews customer requests before any order or payment is confirmed.',
 }
 const productScreens = {
-  shop: ['actual-shop-today.png', 'actual-shop-sell.png', 'actual-shop-orders.png'],
+  shop: ['actual-shop-today.png', 'actual-shop-sell.png', 'actual-shop-orders.png', 'actual-shop-inventory.png'],
   website: ['actual-sites-editor.png', 'actual-sites-inquiries.png'],
   ecommerce: ['actual-commerce-catalog.png', 'actual-commerce-order-request.png'],
 }
@@ -164,7 +164,7 @@ for (const page of landingPages) {
     check(html.includes('class="shop-actual-showcase"') && html.includes('Actual Shop application screens at desktop and mobile sizes. All records shown are synthetic.'), 'landing_shop_actual_showcase_disclosed')
     check(!html.includes('class="pos-window"') && !html.includes('class="sample-label"') && !html.includes('Complete sample sale') && !html.includes('shop-sample-demo.js'), 'landing_shop_no_simulated_pos')
     check(html.includes('class="platform-gallery"') && html.includes('class="platform-image"'), 'landing_shop_actual_screens_visible')
-    check(countOccurrences(html, '<figure class="platform-image') === productScreens.shop.length, 'landing_shop_three_verified_product_screens')
+    check(countOccurrences(html, '<figure class="platform-image') === productScreens.shop.length, 'landing_shop_four_verified_product_screens')
     check(html.includes('See Shop on desktop and mobile.') && html.includes('Actual Shop application screens at desktop and mobile sizes. All records shown are synthetic.'), 'landing_shop_capture_disclosure')
     check(countOccurrences(html, 'data-gallery-previous') === 1 && countOccurrences(html, 'data-gallery-next') === 1, 'landing_shop_gallery_navigation')
     check(html.includes('<script src="/platform-carousel.js" defer></script>'), 'landing_shop_gallery_script')
