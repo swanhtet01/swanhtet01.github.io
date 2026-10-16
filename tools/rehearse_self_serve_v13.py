@@ -283,6 +283,7 @@ def exercise(admin_url, runtime_url, head):
             "acceptance": adapter.acceptance(recipient, accepted_review["reviewId"])}}
     from tests.test_commerce_runtime import catalog_state, storefront_configuration
     from supermega_runtime.ecommerce_customer_review_store import EcommerceCustomerReviewStore
+    from supermega_runtime.managed_staff_access import _role_capabilities
     ecommerce = created[PRODUCTS.index("ecommerce")].workspace_id
     catalog = catalog_state()
     catalog["storefrontConfiguration"] = storefront_configuration(catalog)
@@ -300,11 +301,17 @@ def exercise(admin_url, runtime_url, head):
         raise pg.RehearsalFailure("self_serve_ecommerce_owner_granted_internal_work")
     except TrialPermissionDenied:
         pass
+    operator_capabilities = _role_capabilities({
+        "products": ["ecommerce"],
+        "ownerCapabilities": sorted(self_serve_owner_capabilities("ecommerce")),
+    }, "ecommerce-operator")
     with pg._connect(admin_url) as conn:
         conn.execute("insert into auth.sessions(id,user_id) values (%s::uuid,%s::uuid)",
                      (operator_session, operator_id))
-        conn.execute("insert into app_private.workspace_memberships(workspace_id,actor_id,status,capabilities,actor_kind) values (%s,%s,'active',array['commerce.read','commerce.write','ecommerce.manage'],'human')",
-                     (ecommerce, operator_id))
+        conn.execute("insert into app_private.workspace_memberships "
+                     "(workspace_id,actor_id,status,capabilities,actor_kind) "
+                     "values (%s,%s,'active',%s,'human')",
+                     (ecommerce, operator_id, operator_capabilities))
     internal_operator = TrialPrincipal(workspace_id=ecommerce, actor_id=operator_id,
         actor_kind="human", authenticated=True, session_id=operator_session,
         identity_provider="supabase")

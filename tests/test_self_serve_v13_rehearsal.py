@@ -24,6 +24,18 @@ class FullChainProofContractTests(unittest.TestCase):
         self.assertIn("self_serve_ecommerce_owner_granted_internal_work", source)
         self.assertIn("ecommerce.manage", source)
 
+    def test_ecommerce_rehearsal_uses_internal_staff_role_capabilities(self):
+        from supermega_runtime.managed_staff_access import _role_capabilities
+        from supermega_runtime.trial_store import self_serve_owner_capabilities
+        capabilities = _role_capabilities({
+            "products": ["ecommerce"],
+            "ownerCapabilities": sorted(self_serve_owner_capabilities("ecommerce")),
+        }, "ecommerce-operator")
+        self.assertIn("company.read", capabilities)
+        self.assertIn("ecommerce.manage", capabilities)
+        self.assertNotIn("company.write", capabilities)
+        self.assertNotIn("approvals.decide", capabilities)
+
     def test_exact_current_private_migration_chain(self):
         actual = sorted(p.name for p in (proof.ROOT / "supabase/migrations").glob("*.sql")
                         if p.name not in ("20260711081300_public_legacy_baseline.sql",
