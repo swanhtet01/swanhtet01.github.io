@@ -329,6 +329,7 @@ for (const token of [
   'Shop Today showing sales, open orders and low-stock indicators',
   'Shop counter with searchable products, visible stock levels, and Add controls for a new sale',
   'Shop order queue showing order status and the next follow-up',
+  'Shop inventory workspace showing stock levels and the count, receive, and reorder workflow',
 ]) check(shopLanding.includes(token), `shop_gallery_describes_verified_view:${token}`)
 check(!shopLanding.includes('Shop setup / concept') && !shopLanding.includes('Concept only'), 'shop_no_unconnected_setup_concept')
 check(shopLanding.includes('id="shop-demo"') && shopLanding.includes('class="shop-actual-showcase"'), 'shop_actual_gallery_is_primary_showcase')
@@ -336,7 +337,7 @@ check(!shopLanding.includes('class="pos-window"') && !shopLanding.includes('clas
   && !shopLanding.includes('Complete sample sale') && !shopLanding.includes('Sample receipt')
   && !shopLanding.includes('shop-sample-demo.js'), 'shop_public_page_has_no_simulated_pos')
 check(shopLanding.includes('class="platform-gallery"') && shopLanding.includes('class="platform-image"')
-  && countOccurrences(shopLanding, '<figure class="platform-image') === 3, 'shop_three_real_views_in_gallery')
+  && countOccurrences(shopLanding, '<figure class="platform-image') === 4, 'shop_four_real_views_in_gallery')
 check(shopManifest?.status === 'release-candidate-local', 'shop_public_status_matches_unhosted_candidate')
 check(shopManifest?.primaryCta?.url === '/shop/#shop-demo', 'shop_primary_action_opens_real_screen_gallery')
 check(shopLanding.includes('Run the counter.') && shopLanding.includes('Know what’s next.'), 'shop_hero_matches_the_operating_job')
@@ -353,7 +354,7 @@ for (const [route, html] of [['/', home], ['/shop/', shopLanding], ...activeIds.
   const routeManifestProduct = routeProduct ? manifest.customerProducts.find(product => product.id === routeProduct) : null
   check(countOccurrences(body, 'href="https://app.supermega.dev/login"') === 1, `one_login:${route}`)
   const carouselCount = Number((productScreens[routeProduct]?.length || 0) > 1)
-  const expectedLinks = route === '/' ? 15 : route === '/shop/' ? 13 : 6 + Number(routeManifestProduct?.status === 'available-in-app') + (productScreens[routeProduct]?.length || 0)
+  const expectedLinks = route === '/' ? 16 : route === '/shop/' ? 14 : 6 + Number(routeManifestProduct?.status === 'available-in-app') + (productScreens[routeProduct]?.length || 0)
   check((body.match(/<a\b/g) || []).length === expectedLinks, `marketing_link_surface:${route}`)
   const expectedButtons = route === '/' ? 0 : carouselCount * 2
   check((body.match(/<button\b/g) || []).length === expectedButtons, `marketing_buttons:${route}`)

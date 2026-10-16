@@ -368,8 +368,8 @@ for (const [route, html] of [['/', home], ['/shop/', pages.get('/shop/').html], 
   const contactActionTarget = routeProduct?.status === 'available-in-app'
     ? `/contact/?product=${routeProduct.id}`
     : null
-  const galleryViews = { shop: 3, website: 2, ecommerce: 2 }
-  const expectedLinks = route === '/' ? 15 : route === '/shop/' ? 13 : 6 + Number(Boolean(contactActionTarget)) + (galleryViews[routeProduct?.id] || 0)
+  const galleryViews = { shop: 4, website: 2, ecommerce: 2 }
+  const expectedLinks = route === '/' ? 16 : route === '/shop/' ? 14 : 6 + Number(Boolean(contactActionTarget)) + (galleryViews[routeProduct?.id] || 0)
   if ((body.match(/<a\b/g) || []).length !== expectedLinks) fail('marketing_link_surface_drift', { route, expectedLinks })
   if (countOccurrences(body, 'href="https://app.supermega.dev/login"') !== 1) fail('single_login_missing', { route })
   const hasGalleryNavigation = (galleryViews[routeProduct?.id] || 0) > 1
