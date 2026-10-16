@@ -201,6 +201,16 @@ class RehearsalFailure(RuntimeError):
     """A fail-closed error with a safe, credential-free code."""
 
 
+def safe_rehearsal_failure_code(exc: BaseException) -> str | None:
+    """Preserve a nested runner's safe failure code without leaking exception text."""
+    if type(exc).__name__ != "RehearsalFailure" or type(exc).__module__ != (
+        "tools.rehearse_supermega_postgres17"
+    ):
+        return None
+    candidate = str(exc)
+    return candidate if re.fullmatch(r"[a-z0-9_]{1,120}", candidate) else None
+
+
 def _implementation_digest() -> str:
     digest = sha256()
     for relative_path in IMPLEMENTATION_PATHS:
@@ -4034,8 +4044,9 @@ def _run_rehearsal(
                 "_",
                 type(exc).__name__.casefold(),
             ).strip("_") or "unexpected"
+            safe_failure_code = safe_rehearsal_failure_code(exc)
             report = _safe_report(
-                f"{phase}_{safe_error_type}_failed",
+                safe_failure_code or f"{phase}_{safe_error_type}_failed",
                 cleanup_complete=False,
             )
         finally:

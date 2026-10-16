@@ -70,6 +70,18 @@ class FullChainProofContractTests(unittest.TestCase):
             with self.assertRaisesRegex(proof.pg.RehearsalFailure, "source_dirty"):
                 proof.source_identity("a" * 40)
 
+    def test_nested_runner_failure_codes_are_safe_and_bounded(self):
+        nested_failure = type("RehearsalFailure", (RuntimeError,), {
+            "__module__": "tools.rehearse_supermega_postgres17"})
+        self.assertEqual(
+            proof.pg.safe_rehearsal_failure_code(
+                nested_failure("ecommerce_internal_operator_prepare_denied")),
+            "ecommerce_internal_operator_prepare_denied")
+        self.assertIsNone(proof.pg.safe_rehearsal_failure_code(
+            nested_failure("password=not-safe-to-print")))
+        self.assertIsNone(proof.pg.safe_rehearsal_failure_code(
+            ValueError("unrelated exception")))
+
     def test_existing_output_causes_no_database_work(self):
         with tempfile.TemporaryDirectory(prefix="supermega-proof-contract-") as temp:
             target = Path(temp) / "receipt.json"
