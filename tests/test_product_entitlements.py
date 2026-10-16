@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import unittest
+from contextlib import contextmanager
 from pathlib import Path
+from unittest.mock import patch
+from uuid import uuid4
 
 from supermega_runtime.trial_store import (
     InMemoryTrialStore,
@@ -12,6 +15,7 @@ from supermega_runtime.trial_store import (
     TrialNotReadyError,
     activation_product_entitlements,
     capabilities_for_product_entitlements,
+    require_command_product_entitlement,
 )
 
 
@@ -117,6 +121,141 @@ class ActivationProductEntitlementTests(unittest.TestCase):
             capabilities_for_product_entitlements(capabilities, None),
             frozenset(capabilities),
         )
+
+    def test_ecommerce_management_grant_is_bound_to_ecommerce_activation(self) -> None:
+        granted = {"commerce.read", "commerce.write", "ecommerce.manage"}
+        self.assertEqual(
+            capabilities_for_product_entitlements(granted, ("commerce",)),
+            frozenset({"commerce.read", "commerce.write"}),
+        )
+        self.assertEqual(
+            capabilities_for_product_entitlements(granted, ("ecommerce",)),
+            frozenset(granted),
+        )
+
+    def test_shop_entitlement_cannot_write_commerce_storefront_events(self) -> None:
+        store = InMemoryTrialStore(
+            reducer=lambda _surface, _event, current, _payload: current,
+        )
+        principal = TrialPrincipal("shop-only-workspace", "merchant-owner", "human")
+        store.provision_membership(
+            workspace_id=principal.workspace_id,
+            actor_id=principal.actor_id,
+            actor_kind=principal.actor_kind,
+            capabilities=("commerce.read", "commerce.write"),
+        )
+        store.provision_product_entitlements(
+            workspace_id=principal.workspace_id,
+            products=("commerce",),
+        )
+        for event_type in (
+            "commerce.storefront.configuration.saved",
+            "commerce.storefront.merchandising.imported",
+        ):
+            with self.subTest(event_type=event_type):
+                with self.assertRaises(TrialPermissionDenied) as denied:
+                    store.apply_command(
+                        principal,
+                        command_id=uuid4(),
+                        surface="commerce",
+                        event_type=event_type,
+                        expected_version=0,
+                        payload={},
+                    )
+                self.assertEqual(denied.exception.required_capability, "product.ecommerce")
+        self.assertEqual(store.get_state(principal, "commerce").version, 0)
+        self.assertEqual(store._events, {})
+        require_command_product_entitlement("commerce.order.created", ("commerce",))
+        require_command_product_entitlement("commerce.storefront_request.received", ("commerce",))
+        require_command_product_entitlement("commerce.storefront_request.closed", ("commerce",))
+        with self.assertRaises(TrialPermissionDenied) as missing_actor_grant:
+            require_command_product_entitlement(
+                "commerce.storefront.configuration.saved", ("ecommerce",), ("commerce.write",)
+            )
+        self.assertEqual(missing_actor_grant.exception.required_capability, "ecommerce.manage")
+        require_command_product_entitlement(
+            "commerce.storefront.configuration.saved", ("ecommerce",),
+            ("commerce.write", "ecommerce.manage"),
+        )
+        with self.assertRaises(TrialPermissionDenied) as company_owner_only:
+            require_command_product_entitlement(
+                "commerce.storefront.merchandising.imported", ("commerce", "ecommerce"),
+                ("commerce.write", "company.write"),
+            )
+        self.assertEqual(company_owner_only.exception.required_capability, "ecommerce.manage")
+
+    def test_ecommerce_activation_does_not_make_a_shop_owner_a_storefront_editor(self) -> None:
+        store = InMemoryTrialStore(reducer=lambda _surface, _event, current, _payload: current)
+        principal = TrialPrincipal("internal-workspace", "shop-owner", "human")
+        store.provision_membership(
+            workspace_id=principal.workspace_id, actor_id=principal.actor_id,
+            actor_kind=principal.actor_kind,
+            capabilities=("commerce.read", "commerce.write", "company.write"),
+        )
+        store.provision_product_entitlements(
+            workspace_id=principal.workspace_id, products=("commerce", "ecommerce"),
+        )
+        with self.assertRaises(TrialPermissionDenied) as denied:
+            store.apply_command(
+                principal, command_id=uuid4(), surface="commerce",
+                event_type="commerce.storefront.configuration.saved",
+                expected_version=0, payload={},
+            )
+        self.assertEqual(denied.exception.required_capability, "ecommerce.manage")
+        self.assertEqual(store._events, {})
+        store.provision_membership(
+            workspace_id=principal.workspace_id, actor_id=principal.actor_id,
+            actor_kind=principal.actor_kind,
+            capabilities=("commerce.read", "commerce.write", "ecommerce.manage"),
+        )
+        result = store.apply_command(
+            principal, command_id=uuid4(), surface="commerce",
+            event_type="commerce.storefront.configuration.saved",
+            expected_version=0, payload={},
+        )
+        self.assertEqual(result.version, 1)
+
+    def test_postgres_store_denies_shop_storefront_command_before_state_or_event_write(self) -> None:
+        principal = TrialPrincipal("shop-only-workspace", "merchant-owner", "human")
+        store = object.__new__(PostgresTrialStore)
+
+        @contextmanager
+        def permitted_cursor(*_args, **_kwargs):
+            yield object(), frozenset({"commerce.write"})
+
+        with patch.object(store, "_guarded_cursor", permitted_cursor), patch.object(
+            store, "_product_entitlements", return_value=("commerce",)
+        ) as entitlements:
+            with self.assertRaises(TrialPermissionDenied) as denied:
+                store.apply_command(
+                    principal,
+                    command_id=uuid4(),
+                    surface="commerce",
+                    event_type="commerce.storefront.configuration.saved",
+                    expected_version=0,
+                    payload={},
+                )
+        self.assertEqual(denied.exception.required_capability, "product.ecommerce")
+        entitlements.assert_called_once()
+
+    def test_postgres_store_denies_mixed_workspace_shop_staff_storefront_command(self) -> None:
+        principal = TrialPrincipal("internal-workspace", "shop-operator", "human")
+        store = object.__new__(PostgresTrialStore)
+
+        @contextmanager
+        def permitted_cursor(*_args, **_kwargs):
+            yield object(), frozenset({"commerce.read", "commerce.write"})
+
+        with patch.object(store, "_guarded_cursor", permitted_cursor), patch.object(
+            store, "_product_entitlements", return_value=("commerce", "ecommerce")
+        ):
+            with self.assertRaises(TrialPermissionDenied) as denied:
+                store.apply_command(
+                    principal, command_id=uuid4(), surface="commerce",
+                    event_type="commerce.storefront.configuration.saved",
+                    expected_version=0, payload={},
+                )
+        self.assertEqual(denied.exception.required_capability, "ecommerce.manage")
 
     def test_website_review_requires_website_entitlement_without_granting_editor(self) -> None:
         for products in ((), ("commerce",), ("ecommerce",), ("website", "commerce")):

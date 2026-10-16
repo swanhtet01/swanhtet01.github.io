@@ -5,12 +5,12 @@
   "brand": {
     "name": "SuperMega",
     "domain": "supermega.dev",
-    "version": "indigo-v1-2026-09",
+    "version": "void-electric-blue-v1-2026-10",
     "mark": "terminal",
     "colors": {
-      "background": "#f6f7fb",
-      "accent": "#5b4ee8",
-      "ink": "#151521"
+      "background": "#07111f",
+      "accent": "#3b82f6",
+      "ink": "#0b0f17"
     }
   },
   "company": {
@@ -995,8 +995,8 @@
     {
       "route": "/",
       "file": "index.html",
-      "title": "SuperMega | Run the business without the busywork",
-      "description": "Explore tools for in-store sales, website pages and customer order requests with SuperMega."
+      "title": "SuperMega | Tools for everyday work",
+      "description": "Shop brings sales and stock into one operating view. Our team manages Sites and confirms Commerce availability for each setup."
     },
     {
       "route": "/shop/",
@@ -1019,7 +1019,7 @@
       "title": "Sites | Your business online | SuperMega",
       "productId": "website",
       "liveGate": "post-release",
-      "description": "Edit business pages and services, check readiness, and review customer inquiries in one workspace."
+      "description": "The SuperMega team manages business pages, readiness checks and customer inquiries in Sites."
     },
     {
       "route": "/ecommerce/",
@@ -1027,7 +1027,7 @@
       "title": "Commerce | Your product catalog | SuperMega",
       "productId": "ecommerce",
       "liveGate": "post-release",
-      "description": "Browse a Shop-backed catalog, save customer order requests, and review them before any order or payment is confirmed."
+      "description": "The SuperMega team manages the Shop-backed catalog and reviews customer requests before any order or payment is confirmed."
     },
     {
       "route": "/contact/",

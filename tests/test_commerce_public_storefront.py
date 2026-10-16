@@ -5,11 +5,12 @@ SUPERMEGA_TRIAL_SCHEMA_VERSION=13. It never accepts a hosted database URL.
 """
 
 from copy import deepcopy
+from contextlib import contextmanager
 from hashlib import sha256
 import hmac
 import os
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 from uuid import UUID, uuid4
 
 from fastapi import FastAPI
@@ -25,7 +26,7 @@ from supermega_runtime.commerce_runtime import (
 )
 from supermega_runtime.runtime import reduce_trial_state
 from supermega_runtime.trial_store import (
-    PostgresTrialStore, TrialPrincipal, TrialValidationError,
+    PostgresTrialStore, TrialPermissionDenied, TrialPrincipal, TrialValidationError,
 )
 from tests.test_commerce_runtime import catalog_state, storefront_configuration
 
@@ -43,6 +44,97 @@ def _body(request_id=None):
 
 
 class CommercePublicBoundaryTests(unittest.TestCase):
+    def test_revoked_internal_grant_while_waiting_blocks_publication_changes(self):
+        principal = TrialPrincipal('internal-workspace', 'internal-operator', 'human')
+        cursor = Mock()
+        cursor.fetchone.return_value = {'version': 1, 'state_json': _state()}
+        store = Mock()
+        store._lock = Mock()
+
+        @contextmanager
+        def guarded_cursor(*_args, **_kwargs):
+            # The grant was present when the request entered its transaction.
+            yield cursor, frozenset({'commerce.write', 'ecommerce.manage'})
+
+        store._guarded_cursor.side_effect = guarded_cursor
+        store._product_entitlements.return_value = ('shop', 'ecommerce')
+        # Another administrator removes the grant before the publication lock
+        # is acquired. The fresh membership read must control the write.
+        store._load_membership.return_value = frozenset({'commerce.write'})
+        adapter = CommercePublicStorefront(store)
+        with patch('supermega_runtime.commerce_public_storefront._require_public_schema'):
+            for action in (
+                lambda: adapter.publish(principal, expected_version=1),
+                lambda: adapter.revoke(principal, handle=str(uuid4()),
+                                       preview_digest='sha256:' + '0' * 64),
+            ):
+                cursor.reset_mock()
+                with self.subTest(action=action), self.assertRaises(TrialPermissionDenied) as denied:
+                    action()
+                self.assertEqual(denied.exception.required_capability, 'ecommerce.manage')
+                self.assertFalse(any(
+                    'insert into app_private.commerce_public_storefronts' in str(call.args[0]).lower()
+                    or 'update app_private.commerce_public_storefronts' in str(call.args[0]).lower()
+                    for call in cursor.execute.call_args_list
+                ))
+        self.assertEqual(store._lock.call_count, 2)
+        self.assertEqual(store._load_membership.call_count, 2)
+        self.assertEqual(store._assert_active_identity_session.call_count, 2)
+
+    def test_shared_shop_permission_cannot_manage_an_internal_ecommerce_publication(self):
+        principal = TrialPrincipal('internal-workspace', 'shop-operator', 'human')
+        cursor = Mock()
+        store = Mock()
+
+        @contextmanager
+        def guarded_cursor(*_args, **_kwargs):
+            yield cursor, frozenset({'commerce.write'})
+
+        store._guarded_cursor.side_effect = guarded_cursor
+        store._product_entitlements.return_value = ('commerce', 'ecommerce')
+        adapter = CommercePublicStorefront(store)
+        for action in (
+            lambda: adapter.publish(principal, expected_version=1),
+            lambda: adapter.publications(principal),
+            lambda: adapter.revoke(principal, handle=str(uuid4()),
+                                   preview_digest='sha256:' + '0' * 64),
+        ):
+            with self.subTest(action=action), self.assertRaises(TrialPermissionDenied) as denied:
+                action()
+            self.assertEqual(denied.exception.required_capability, 'ecommerce.manage')
+        cursor.execute.assert_not_called()
+        adapter._require_ecommerce_entitlement(
+            cursor, principal, frozenset({'commerce.write', 'ecommerce.manage'}))
+        with self.assertRaises(TrialPermissionDenied) as company_owner_only:
+            adapter._require_ecommerce_entitlement(
+                cursor, principal, frozenset({'commerce.write', 'company.write'}))
+        self.assertEqual(company_owner_only.exception.required_capability, 'ecommerce.manage')
+
+    def test_shop_only_cannot_read_or_change_internal_publications(self):
+        principal = TrialPrincipal('shop-only-workspace', 'merchant-owner', 'human')
+        cursor = Mock()
+        store = Mock()
+
+        @contextmanager
+        def guarded_cursor(*_args, **_kwargs):
+            yield cursor, frozenset({'commerce.write'})
+
+        store._guarded_cursor.side_effect = guarded_cursor
+        store._product_entitlements.return_value = ('commerce',)
+        adapter = CommercePublicStorefront(store)
+        actions = (
+            lambda: adapter.publish(principal, expected_version=1),
+            lambda: adapter.publications(principal),
+            lambda: adapter.revoke(principal, handle=str(uuid4()),
+                                   preview_digest='sha256:' + '0' * 64),
+        )
+        for action in actions:
+            with self.subTest(action=action), self.assertRaises(TrialPermissionDenied) as denied:
+                action()
+            self.assertEqual(denied.exception.required_capability, 'product.ecommerce')
+        self.assertEqual(store._product_entitlements.call_count, len(actions))
+        cursor.execute.assert_not_called()
+
     def test_page_cursor_is_canonical_and_shop_queue_releases_only_converted_requests(self):
         from datetime import datetime, timezone
         row = {'received_at': datetime.now(timezone.utc), 'handle': str(uuid4()),
@@ -197,10 +289,20 @@ class CommercePublicSqlTests(unittest.TestCase):
         ], environment={**cls.environment, 'PGPASSWORD': password},
             failure_code='commerce_public_rehearsal_migration_failed', timeout=120)
         pg._provision_runtime(cls.admin_url, runtime_password)
-        pg._seed_rehearsal_data(cls.admin_url)
+        pg._seed_rehearsal_data(
+            cls.admin_url, product_workspace_products=('shop', 'website', 'ecommerce'))
         cls.workspace_id = 'rehearsal-product'
         cls.owner = TrialPrincipal(cls.workspace_id, 'owner-product', 'human')
         with pg._connect(cls.admin_url) as connection:
+            # The shared rehearsal seed predates Ecommerce actor grants. Give
+            # this disposable fixture the explicit internal operator grant;
+            # Shop-only fixtures retain their narrower grants.
+            updated = connection.execute("""update app_private.workspace_memberships
+                set capabilities = array_append(capabilities, 'ecommerce.manage')
+                where workspace_id = %s and actor_id = %s""",
+                (cls.workspace_id, cls.owner.actor_id)).rowcount
+            if updated != 1:
+                raise AssertionError('commerce_public_owner_fixture_missing')
             connection.execute("""insert into app_private.workspace_state
                 (workspace_id,surface,version,state_json,updated_by)
                 values(%s,'commerce',1,%s::jsonb,%s)""",
@@ -227,6 +329,22 @@ class CommercePublicSqlTests(unittest.TestCase):
                 (self.workspace_id, self.json.dumps(_state()), self.owner.actor_id))
         self.adapter = CommercePublicStorefront(PostgresTrialStore(
             self.runtime_url, reducer=reduce_trial_state, write_enabled=True))
+
+    def test_shop_only_member_cannot_manage_internal_publications(self):
+        publication = self.adapter.publish(self.owner, expected_version=1)
+        shop_only = TrialPrincipal('rehearsal-a', 'owner-a', 'human')
+        actions = (
+            lambda: self.adapter.publish(shop_only, expected_version=1),
+            lambda: self.adapter.publications(shop_only),
+            lambda: self.adapter.revoke(
+                shop_only, handle=publication['handle'],
+                preview_digest=publication['previewDigest']),
+        )
+        for action in actions:
+            with self.subTest(action=action), self.assertRaises(TrialPermissionDenied) as denied:
+                action()
+            self.assertEqual(denied.exception.required_capability, 'product.ecommerce')
+        self.assertTrue(self.adapter.publications(self.owner)['publications'][0]['enabled'])
 
     def test_buyer_request_arrives_once_in_private_operator_inbox_and_revocation_closes_it(self):
         publication = self.adapter.publish(self.owner, expected_version=1)

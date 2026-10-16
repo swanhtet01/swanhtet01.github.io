@@ -1008,7 +1008,9 @@ function ActionHistory({ actions, domain }: { actions: AccountableAction[]; doma
 }
 
 export function OperationsPage({ product }: { product: ProductId }) {
-  const runtime = useOutletContext<RuntimeHealth>()
+  const runtime = useOutletContext<RuntimeHealth & { ecommerceShopHandoffAllowed: boolean; shopInboundRequestsAllowed: boolean }>()
+  const allowEcommerceShopHandoff = runtime.ecommerceShopHandoffAllowed
+  const allowShopInboundRequests = runtime.shopInboundRequestsAllowed
   const location = useLocation()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -1080,7 +1082,7 @@ export function OperationsPage({ product }: { product: ProductId }) {
     <div className={`workspace-screen operations-screen${view === 'commerce' ? ' commerce-screen' : ''}`} data-active-tab={activeTab}>
       <PageHeading title={productDisplayName(view)} copy={productCopy} />
       <nav className="workspace-toolbar view-tabs product-task-tabs" aria-label={`${productDisplayName(view)} tasks`}>{tabs.map((tab) => <button aria-current={activeTab === tab.id ? 'page' : undefined} key={tab.id} onClick={() => setTab(tab.id)} type="button">{view === 'commerce' ? bi(tab.label) : tab.label}</button>)}</nav>
-      <div className="workspace-view">{view === 'commerce' ? <CommercePage confirmedLocalShop={confirmedLocalShop} key={managedIdentity ? JSON.stringify([managedIdentity.workspaceId, managedIdentity.userId]) : confirmedLocalShop ? 'local' : 'checking'} managedIdentity={managedIdentity} requestedRequestId={requestedRequestId} requestedShopTemplate={requestedShopTemplate} requestedSource={requestedSource} shopCounterClientId={shopCounterClientId} shopCounterCustomer={shopCounterCustomer} shopCounterSearch={shopCounterSearch} tab={commerceTab} /> : <ProductionPage managedIdentity={managedIdentity} tab={productionTab} />}</div>
+      <div className="workspace-view">{view === 'commerce' ? <CommercePage allowEcommerceShopHandoff={allowEcommerceShopHandoff} allowShopInboundRequests={allowShopInboundRequests} confirmedLocalShop={confirmedLocalShop} key={managedIdentity ? JSON.stringify([managedIdentity.workspaceId, managedIdentity.userId, allowEcommerceShopHandoff, allowShopInboundRequests]) : confirmedLocalShop ? 'local' : 'checking'} managedIdentity={managedIdentity} requestedRequestId={requestedRequestId} requestedShopTemplate={requestedShopTemplate} requestedSource={requestedSource} shopCounterClientId={shopCounterClientId} shopCounterCustomer={shopCounterCustomer} shopCounterSearch={shopCounterSearch} tab={commerceTab} /> : <ProductionPage managedIdentity={managedIdentity} tab={productionTab} />}</div>
     </div>
   )
 }
@@ -1536,7 +1538,9 @@ function buildCommerceOrderRecoveryInput(
   }
 }
 
-function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId, requestedShopTemplate, requestedSource, shopCounterClientId, shopCounterCustomer, shopCounterSearch, tab }: {
+function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, confirmedLocalShop, managedIdentity, requestedRequestId, requestedShopTemplate, requestedSource, shopCounterClientId, shopCounterCustomer, shopCounterSearch, tab }: {
+  allowEcommerceShopHandoff: boolean
+  allowShopInboundRequests: boolean
   confirmedLocalShop: boolean
   managedIdentity: ManagedIdentity | null
   requestedRequestId: string | null
@@ -1550,8 +1554,8 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   const navigate = useNavigate()
   const commerceLocation = useLocation()
   const requestedEcommerceIntent = useMemo(
-    () => ecommerceShopIntentReference(new URLSearchParams(commerceLocation.search)),
-    [commerceLocation.search],
+    () => allowEcommerceShopHandoff ? ecommerceShopIntentReference(new URLSearchParams(commerceLocation.search)) : null,
+    [allowEcommerceShopHandoff, commerceLocation.search],
   )
   const purchaseOrderClock = useMinuteClock()
   const counterDraftContext = shopCounterDraftContext(confirmedLocalShop, managedIdentity)
@@ -1702,6 +1706,10 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   const [actionTrigger, setActionTrigger] = useState<HTMLElement | null>(null)
   const [notice, setNotice] = useState('')
   const [recoveredEcommerceIntent, setRecoveredEcommerceIntent] = useState<{ scope: string; id: string; intents: EcommerceShopNavigationIntents } | null>(null)
+  useEffect(() => {
+    if (allowEcommerceShopHandoff || new URLSearchParams(commerceLocation.search).get('source') !== 'ecommerce-handoff') return
+    navigate('/shop/?tab=orders', { replace: true, state: { blockedEcommerceHandoff: true } })
+  }, [allowEcommerceShopHandoff, commerceLocation.search, navigate])
   useEffect(() => {
     if (!requestedEcommerceIntent || !confirmedLocalShop && (!managedIdentity || workspaceMode !== 'managed-ready')) return
     let current = true
@@ -2082,13 +2090,14 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     }
   }, [commerce, purchaseOrderClock])
   const importedWebsiteOrderIds = commerce.orders.flatMap((order) => order.sourceRecordId ? [order.sourceRecordId] : [])
-  const websiteIntakes = commerceWebsiteIntakes(commerce)
+  // Incoming requests are Shop work even when Sites and Commerce editors are internal.
+  const websiteIntakes = allowShopInboundRequests ? commerceWebsiteIntakes(commerce) : []
   const localWebsiteIntake = localWebsiteIntakeRead.intake
   const legacyWebsiteWorkWaiting = managedIdentity
     ? websiteIntakes.some((intake) => intake.status === coreUi.p)
     : confirmedLocalShop && localWebsiteIntakeRead.status === 'ready'
       && Boolean(localWebsiteIntake && (!localWebsiteIntake.order || !importedWebsiteOrderIds.includes(localWebsiteIntake.order.id)))
-  const storefrontRequests = commerceStorefrontRequests(commerce)
+  const storefrontRequests = allowShopInboundRequests ? commerceStorefrontRequests(commerce) : []
   const pendingStorefrontRequests = storefrontRequests.filter((request) => (
     !commerce.orders.some((order) => order.sourceRecordId === request.id)
   ))
@@ -2770,7 +2779,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
         if (!ecommerceCancellationMatchesCurrentShop(commerce, intent)) {
           navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
           setCancellationDraft(null)
-          setNotice('The cancellation request no longer matches the current Shop order, payment, refund, or reserved stock. Nothing was prepared.')
+          setNotice('Cancellation details changed. Reopen the request; nothing was prepared.')
           return
         }
         setReturnDraft(null)
@@ -2981,7 +2990,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
           || expectation.currentBalanceMmk !== intent.originalBalanceMmk) {
           navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
           setCorrectionDraft(null)
-          setNotice('The Ecommerce balance request no longer matches the current Shop calculation, payment, refund, or correction history. Nothing was prepared.')
+          setNotice('Balance details changed. Reopen the request; nothing was prepared.')
           return
         }
         setReturnDraft(null)
@@ -3118,8 +3127,8 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   const managedTemplateRequestBlocked = managedTemplateDoorRequiresReview(Boolean(managedIdentity), effectiveMode, managedTemplateId)
   const managedCommerceBoundary: ReactNode = managedTemplateRequestBlocked && managedIdentity && managedTemplate ? <section className="core-panel managed-commerce-boundary" data-template-request="blocked">
     <div className="panel-head"><div><span className="core-eyebrow">Managed catalog review required</span><h2>{managedTemplate.name.en} was requested, not applied</h2></div><span className="status-pill pending">Blocked</span></div>
-    <p className="panel-copy">This company already has a managed Shop catalog. The public trade link did not replace, merge, or relabel it, and no starter item, sale, customer, payment, or stock record was created.</p>
-    <p className="authority-note">Continue only with the existing company catalog, or ask the workspace owner to review a separate catalog migration.</p>
+    <p className="panel-copy">The managed Shop catalog is unchanged. This public link created no product, sale, customer, payment, or stock record.</p>
+    <p className="authority-note">Use the existing catalog, or ask the owner to review a separate migration.</p>
     <div className="form-actions"><Link className="core-button primary" to="/shop/?tab=counter">Continue existing managed Shop</Link><Link className="text-link" to="/settings/#controls">Open workspace controls</Link></div>
   </section> : managedIdentity && effectiveMode !== coreUi.m ? (() => {
     const unprovisioned = effectiveMode === 'managed-unprovisioned'
@@ -3338,7 +3347,8 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
       <Link to="/shop/?tab=inventory">Manage catalog</Link>
     </div>
     : null
-  const orderNotice = notice || commerceStorageError
+  const orderNotice = (commerceLocation.state?.blockedEcommerceHandoff === true
+    ? 'This request is not available in your Shop workspace.' : '') || notice || commerceStorageError
   const commerceControlsDisabled = !commerceCanWrite || Boolean(pendingAction)
   // The appointment book is NOT a commerce control. ShopServiceSchedule has its own storage
   // key and does not read commerce state at all, but it was gated on commerceCanWrite -- so a
@@ -3386,7 +3396,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     ['Gate', pendingAction ? 'Pending approval' : commerceCanWrite ? 'Two-person' : 'Locked'],
   ] as const
   const supplierControl = <section className="shop-order-control supplier-control" aria-label="Supplier control">
-    <div><span className="core-eyebrow">Procurement control</span><strong>{supplierControlNext}</strong><small>AI combines demand, stock, Plant materials, approved-vendor evidence, comparable quotes, delivery, quality, and exposure. Budget, sourcing, requisition, and independent PO approval stay separate. Nothing contacts or pays a supplier here.</small><button className="text-link" disabled={commerceControlsDisabled || (Boolean(activePurchaseBudget) && !openPurchaseRequisitions.length && !procurementReviews.length)} onClick={startSupplierRequest} type="button">{openPurchaseRequisitions.length ? 'Create with second operator' : !activePurchaseBudget ? 'Set buying limits' : openSupplierSourcingDecisions.length ? 'Approve quoted requisition' : 'Compare supplier quotes'}</button></div>
+    <div><span className="core-eyebrow">Procurement control</span><strong>{supplierControlNext}</strong><small>Budget, sourcing, requisition, and independent PO approval stay separate. AI compares stock and quotes; no supplier is contacted or paid here.</small><button className="text-link" disabled={commerceControlsDisabled || (Boolean(activePurchaseBudget) && !openPurchaseRequisitions.length && !procurementReviews.length)} onClick={startSupplierRequest} type="button">{openPurchaseRequisitions.length ? 'Create with second operator' : !activePurchaseBudget ? 'Set buying limits' : openSupplierSourcingDecisions.length ? 'Approve quoted requisition' : 'Compare supplier quotes'}</button></div>
     <div className="shop-order-control-rows">{supplierControlRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
     {/* A Plant material's Shop SKU is free text on its BOM row, never checked against
         a real Shop item. A typo or a since-renamed/deleted item means Plant believes
@@ -3457,7 +3467,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     <div>
       <span className="core-eyebrow">Shop next step</span>
       <h2>{shopAutopilotStage}</h2>
-      <p>Open the next useful Shop task. SuperMega brings together online requests, orders, payments, purchasing, and stock so the manager can review one clear step at a time.</p>
+      <p>Start with the next sale, order or stock task.</p>
     </div>
     <div className="shop-command-center-rows">{shopAutopilotRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
     <button className={coreUi.q} onClick={runShopAutopilot} type="button">Open next step</button>
@@ -3688,7 +3698,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     returnFocus?: HTMLElement | null,
   ): boolean {
     if (!commerceCanWrite) {
-      setNotice('Shop changes are paused because this workspace cannot confirm writes. Reload or open Settings before retrying.')
+      setNotice('Shop cannot confirm writes. Reload or open Settings before retrying.')
       return false
     }
     if (pendingAction) {
@@ -3758,7 +3768,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     }
     if (purchaseOrderDraft) {
       requestAnimationFrame(() => purchaseOrderEditorRef.current?.querySelector<HTMLInputElement>('input:not(:disabled)')?.focus())
-      setNotice('Finish or cancel the stock order before editing catalog values. Your stock-order draft was preserved.')
+      setNotice('Finish or cancel the stock order first. Your draft is saved.')
       return
     }
     const alreadyEditingCurrent = catalogEditDraft?.sku === item.sku
@@ -3894,7 +3904,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     const reviewEpoch = ++publicContactReviewEpoch.current
     setPublicShopContact(null)
     if (!commerceCanWrite || pendingAction) {
-      setNotice('Finish the current Shop action before reviewing an Ecommerce request.')
+      setNotice('Finish the current Shop action first.')
       return
     }
     const request = pendingStorefrontRequests.find((candidate) => candidate.id === requestId)
@@ -4240,7 +4250,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     }
     if (sourceDraft && orderLines.length !== 1) {
       detachPreparedOrderSources({ ecommerce: false })
-      setNotice('This channel source contains one reviewed item. Its source link was removed; review the multi-item order manually.')
+      setNotice('This source has one item. Its link was removed; review a multi-item order manually.')
       return
     }
     if (sourceDraft && (customer.trim() !== sourceDraft.customer
@@ -4249,7 +4259,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
       || selectedLine.quantity !== sourceDraft.quantity
       || payment !== sourceDraft.payment)) {
       detachPreparedOrderSources({ ecommerce: false })
-      setNotice('The structured order changed after source review. Review the channel mapping again or continue as a manual order.')
+      setNotice('The source changed. Review its mapping again or enter a manual order.')
       return
     }
     const ecommerceLines = ecommerceDraft
@@ -4330,7 +4340,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
       })
       || pricedOrderTotal !== ecommerceDraft.totalMmk)) {
       detachPreparedOrderSources({ channel: false })
-      setNotice('The Ecommerce request changed after confirmation. Return to Ecommerce or continue as a manual order.')
+      setNotice('The request changed. Reopen it or enter a manual order.')
       return
     }
     const sourceRecordId = sourceDraft?.sourceRecordId ?? ecommerceDraft?.sourceRequestId
@@ -4566,7 +4576,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     const intake = websiteIntakes.find((candidate) => candidate.id === intakeId && candidate.status === coreUi.p)
     const item = intake ? commerce.items.find((candidate) => candidate.sku === intake.sku) : null
     if (!intake || !item || item.onHand < intake.quantity || item.price !== intake.unitPrice) {
-      setNotice('Managed Website intake failed closed. Recheck the retained intake, catalog price, and available stock.')
+      setNotice('Website intake changed. Check its price, quantity and stock.')
       return false
     }
     const orderId = `ORD-WEB-${intake.id.slice(5)}`
@@ -5787,13 +5797,13 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     }
     if (catalogEditDraft) {
       requestAnimationFrame(() => catalogEditEditorRef.current?.querySelector<HTMLInputElement>('input:not(:disabled)')?.focus())
-      setNotice('Finish or cancel the catalog edit before starting a supplier request. Your catalog draft was preserved.')
+      setNotice('Finish the catalog edit first. Your draft is saved.')
       return
     }
     if (stockCountDraft) {
       const selector = stockCountTargetSelected ? '#stock-count-quantity' : '#stock-count-sku'
       requestAnimationFrame(() => stockCountEditorRef.current?.querySelector<HTMLElement>(selector)?.focus())
-      setNotice('Finish or cancel the stock count before starting a supplier request. Your count draft was preserved.')
+      setNotice('Finish the stock count first. Your draft is saved.')
       return
     }
     const recommendedOption = decision?.supplierOptions.find((option) => option.supplier === decision.recommendedSupplier)

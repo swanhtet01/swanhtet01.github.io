@@ -27,6 +27,25 @@ export function managedProductIsVisible(
   return assignedProducts.includes(product)
 }
 
+export function ecommerceShopHandoffVisible(
+  status: 'checking' | 'local' | 'ready' | 'reauthenticate' | 'error',
+  assignedProducts: readonly ClientSolutionId[],
+) {
+  return status === 'local' || status === 'ready'
+    && managedProductIsVisible(assignedProducts, 'commerce')
+    && managedProductIsVisible(assignedProducts, 'ecommerce')
+}
+
+export function shopInboundRequestsVisible(
+  status: 'checking' | 'local' | 'ready' | 'reauthenticate' | 'error',
+  assignedProducts: readonly ClientSolutionId[],
+) {
+  // Website and Ecommerce are managed internally, but their submitted requests
+  // are Shop fulfilment work. Shop access must not depend on editor access.
+  return status === 'local' || status === 'ready'
+    && managedProductIsVisible(assignedProducts, 'commerce')
+}
+
 export function productSwitcherVisible(
   status: 'checking' | 'local' | 'ready' | 'reauthenticate' | 'error',
   assignedProducts: readonly ClientSolutionId[],

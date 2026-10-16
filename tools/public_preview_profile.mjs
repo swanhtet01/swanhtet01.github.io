@@ -41,9 +41,13 @@ export function validatePreviewLinks(html, policy, products, options = {}) {
   // Full-size gallery links are static, local PNGs. Keep this exact allowlist
   // separate from page routes so previews cannot turn an image into an escape.
   const galleryPaths = new Set([
-    '/images/actual-shop-today.png', '/images/actual-shop-sell.png', '/images/actual-shop-orders.png',
-    '/images/actual-sites-editor.png', '/images/actual-sites-inquiries.png',
-    '/images/actual-commerce-catalog.png', '/images/actual-commerce-order-request.png',
+    '/images/actual-shop-today.png', '/images/actual-shop-today-mobile.png',
+    '/images/actual-shop-sell.png', '/images/actual-shop-sell-mobile.png',
+    '/images/actual-shop-orders.png', '/images/actual-shop-orders-mobile.png',
+    '/images/actual-sites-editor.png', '/images/actual-sites-editor-mobile.png',
+    '/images/actual-sites-inquiries.png', '/images/actual-sites-inquiries-mobile.png',
+    '/images/actual-commerce-catalog.png', '/images/actual-commerce-catalog-mobile.png',
+    '/images/actual-commerce-order-request.png', '/images/actual-commerce-order-request-mobile.png',
   ])
   const publicOrigin = options.publicOrigin || 'https://supermega.dev'
   for (const href of hrefs) {

@@ -562,6 +562,9 @@ export function EcommerceBuyingWorkspace({
     return statuses
   }, [])
   const pendingRescheduleIntents = rescheduleStatuses.filter((status) => status.state !== 'replacement_created')
+  const pendingHelpCount = pendingAmendmentIntents.length + pendingRescheduleIntents.length
+    + pendingCancellationIntents.length + pendingReturnIntents.length
+    + pendingSupportIntents.length + pendingCorrectionIntents.length
   const cartItems = useMemo(() => cart.map((line) => ({
     ...line,
     item: preview.items.find((item) => item.sku === line.sku),
@@ -783,7 +786,7 @@ export function EcommerceBuyingWorkspace({
       deliveryInstructions: request.deliveryAddress?.instructions ?? '',
       reason: '',
     })
-    setNotice('Correct contact, delivery, or item details. Shop replaces the accepted order only after revalidating the exact original and current policies; the replacement still needs human confirmation.')
+    setNotice('Update the details. Shop will review the original order and confirm any replacement.')
   }
 
   function openRescheduleRequest(entry: CommerceStorefrontOrderTimelineEntry) {
@@ -1304,7 +1307,7 @@ export function EcommerceBuyingWorkspace({
         setNotice(`${latestRequest.id} is ready in the Company Shop inbox. Payment remains unauthorized.`)
         onOpenManagedRequest(latestRequest.id)
       } else {
-        setNotice(`${draft.id} is ready for Shop review at ${formatMmk(draft.totalMmk)}. ${draft.pricing.promotion.status === 'approved' ? `${formatMmk(draft.pricing.promotion.discountMmk)} promotion approved.` : draft.pricing.promotion.status === 'rejected' ? 'The promotion code was rejected by Shop policy.' : 'No promotion requested.'} ${draft.pricing.tax.status === 'configured' ? `${formatMmk(draft.pricing.tax.taxMmk)} tax uses ${draft.pricing.tax.taxCode} revision ${draft.pricing.tax.taxConfigurationRevision}.` : 'No Shop tax schedule is configured.'} Payment remains unauthorized.`)
+        setNotice(`${draft.id} is ready for Shop review at ${formatMmk(draft.totalMmk)}. Review discounts and tax before confirming. Payment remains unauthorized.`)
         emitMetric({ product: 'ecommerce', capability: 'ecommerce-storefront', action: 'shop.handoff.reached', ts: Date.now() })
         onDraft(draft)
       }
@@ -1492,7 +1495,7 @@ export function EcommerceBuyingWorkspace({
                   </article>
                 ))}
               </div>
-            ) : <p>Use the same name and phone as checkout to see request, fulfilment, and payment status here.</p>}
+            ) : <p>Enter your checkout name and phone to see your orders.</p>}
           </section>
 
         </div>
@@ -1505,9 +1508,9 @@ export function EcommerceBuyingWorkspace({
       </details>
 
       <details className="ecommerce-after-purchase" open={Boolean(amendmentDraft || rescheduleDraft || cancellationDraft || returnDraft || supportDraft || correctionDraft) || undefined}>
-        <summary><span><strong>Order help</strong><small>Change active orders or resolve completed-order issues</small></span><b>{pendingAmendmentIntents.length + pendingRescheduleIntents.length + pendingCancellationIntents.length + pendingReturnIntents.length + pendingSupportIntents.length + pendingCorrectionIntents.length ? `${pendingAmendmentIntents.length + pendingRescheduleIntents.length + pendingCancellationIntents.length + pendingReturnIntents.length + pendingSupportIntents.length + pendingCorrectionIntents.length} waiting` : 'Shop review'}</b></summary>
+        <summary><span><strong>Order help</strong><small>Changes, returns and support</small></span><b>{pendingHelpCount ? `${pendingHelpCount} waiting` : 'Shop review'}</b></summary>
         <div className="ecommerce-return-workspace">
-          <p>Shop reviews every change, cancellation, return, and help request. Nothing here changes an order, stock, payment, refund, delivery, provider, or customer message by itself.</p>
+          <p>Shop reviews each request before an order, payment or delivery changes.</p>
           {pendingAmendmentIntents.map(({ intent, state }) => <article className="ecommerce-return-status" key={intent.id}>
             <span><strong>{state === 'replacement_needed' ? 'Replacement needs confirmation' : state === 'review_required' ? 'Change needs fresh review' : 'Order change waiting'}</strong><small>{intent.orderId} / {intent.lineChanges.map((line) => `${line.sku} ${line.fromQuantity}→${line.toQuantity}`).join(', ') || `${intent.fromFulfilment}→${intent.toFulfilment}`}</small></span>
             <button className="core-button secondary" disabled={disabled} onClick={() => void openAmendmentInShop(intent)} type="button">Continue in Shop</button>
@@ -1620,7 +1623,7 @@ export function EcommerceBuyingWorkspace({
             <label className="ecommerce-return-reason">What is wrong?<textarea disabled={disabled || correctionBusy} maxLength={300} onChange={(event) => setCorrectionDraft((current) => current ? { ...current, reason: event.target.value } : current)} placeholder="One clear reason for Shop review" required rows={2} value={correctionDraft.reason} /></label>
             <div className="ecommerce-return-actions"><button className="core-button primary" disabled={disabled || correctionBusy} type="submit">{correctionBusy ? 'Saving...' : 'Send balance review'}</button><button className="core-button secondary" disabled={disabled || correctionBusy} onClick={() => { setCorrectionDraft(null); setNotice('Balance review closed. Nothing changed.') }} type="button">Cancel</button></div>
           </form> : null}
-          {!activeCustomerOrders.length && !completedCustomerOrders.length && !pendingAmendmentIntents.length && !pendingRescheduleIntents.length && !pendingCancellationIntents.length && !pendingReturnIntents.length && !pendingSupportIntents.length && !pendingCorrectionIntents.length ? <p>Active and completed orders for this exact contact will appear here.</p> : null}
+          {!activeCustomerOrders.length && !completedCustomerOrders.length && !pendingHelpCount ? <p>Orders for this contact will appear here.</p> : null}
         </div>
       </details>
     </>

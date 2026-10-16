@@ -10,8 +10,10 @@ import { recordBehaviorSignal } from './behavior-trail'
 import { activeCommerceTab, commerceTabs } from './commerce-tabs'
 import type { ClientSolutionId } from './client-onboarding'
 import {
+  ecommerceShopHandoffVisible,
   managedProductIsVisible,
   productSwitcherVisible,
+  shopInboundRequestsVisible,
   resolveManagedProductHome,
   resolveManagedProductRoute,
 } from './managed-product-access'
@@ -573,7 +575,7 @@ export function CoreLayout() {
                         ? managedRouteDecision.kind === 'redirect'
                           ? <Navigate replace to={managedRouteDecision.path} />
                       : <PortalAccessPanel action={<a className="core-button primary" href="https://supermega.dev/contact/?product=guide&amp;source=company-no-products" target="_blank" rel="noopener noreferrer">Contact support</a>} copy="Your company has no active products yet. SuperMega can help you get started." title="No products yet" />
-                        : <Outlet context={runtime} />}
+                        : <Outlet context={{ ...runtime, ecommerceShopHandoffAllowed: ecommerceShopHandoffVisible(portalAccess.status, portalAccess.products), shopInboundRequestsAllowed: shopInboundRequestsVisible(portalAccess.status, portalAccess.products) }} />}
               </RouteErrorBoundary>
             </ManagedPortalAccessContext.Provider>
           </div>

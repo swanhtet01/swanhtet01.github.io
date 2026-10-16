@@ -255,21 +255,25 @@ class SelfServeWorkspaceTests(unittest.TestCase):
             first = self._post(product="commerce")
             conflicting = self._post(product="website")
         self.assertEqual(first.status_code, 200)
-        self.assertEqual(conflicting.status_code, 409)
+        self.assertEqual(conflicting.status_code, 422)
         self.assertEqual(
-            conflicting.json()["detail"]["code"], "trial_idempotency_conflict"
+            conflicting.json()["detail"]["code"], "self_serve_request_invalid"
+        )
+        self.assertEqual(
+            self._owner_readiness(self_serve_workspace_id(CLAIM_CODE)).product_entitlements,
+            ("commerce",),
         )
 
-    def test_website_activation_grants_only_website_product_access(self) -> None:
+    def test_non_shop_products_require_managed_activation(self) -> None:
         with activation_window("open"):
-            response = self._post(claim_code="SM-WXYZ-7890", product="website")
-        self.assertEqual(response.status_code, 200)
-        workspace_id = self_serve_workspace_id("SM-WXYZ-7890")
-        readiness = self._owner_readiness(workspace_id)
-        self.assertEqual(readiness.product_entitlements, ("website",))
-        self.assertIn("website.write", readiness.capabilities)
-        self.assertNotIn("commerce.write", readiness.capabilities)
-        self.assertNotIn("production.write", readiness.capabilities)
+            for product in ("website", "ecommerce", "production"):
+                with self.subTest(product=product):
+                    response = self._post(claim_code="SM-WXYZ-7890", product=product)
+                    self.assertEqual(response.status_code, 422)
+                    self.assertEqual(response.json()["detail"]["code"], "self_serve_request_invalid")
+        self.assertEqual(self.store._self_serve_links, {})
+        self.assertEqual(self.store._memberships, {})
+        self.assertEqual(self.store._events, {})
 
     def test_unknown_product_is_rejected_without_creating_a_tenant(self) -> None:
         with activation_window("open"):

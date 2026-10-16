@@ -1,17 +1,23 @@
 # >_ SuperMega managed-trial database activation
 
-`app.supermega.dev` is an isolated, browser-local product demo until every managed-trial gate below passes. It does not use SQLite and it must not be represented as a customer system of record. The canonical managed backend is the private `app_private` schema in Supabase Postgres; browser code never receives its connection string or a service-role key.
+The founder's launch scope is Shop-only customer access, with Sites and Commerce managed internally. Preserve the supported public storefront and customer review. Customer product routes require managed sign-in; isolated synthetic fixtures are engineering tools. Managed launch is not accepted until the applicable gates below pass. The canonical managed backend is the private `app_private` schema in Supabase Postgres; browser code never receives its connection string or a service-role key.
 
 The validator is intentionally read-only. It does not apply migrations, create users, provision workspaces, or enable writes.
 
-## Current full-candidate rehearsal packet (v3)
+## Current reviewed preview rehearsal packet (v3)
 
-The rehearsal packet now binds all 28 committed migrations: the legacy public baseline,
-the 14 private-core migrations through schema v13, and thirteen later migrations for durable
+There are 30 migrations in the reviewed packet: the legacy public baseline,
+the 14 private-core migrations through schema v13, and fifteen later migrations for durable
 signup attempts, Website and Ecommerce review storage, entitlement proof, customer decisions,
-RLS optimization, and Sites publishing, private media, inquiry follow-up and stable updates.
+RLS optimization, Sites publishing, private media, inquiry follow-up, stable updates,
+six-page reviews, and the internal Ecommerce operator review grant.
 Core schema version 13 alone does not prove those later features exist. Historical local
 rehearsal descriptions below retain their original scope; they are not full-candidate proof.
+The source directory contains 32 SQL files. The two custom-domain migrations,
+`20261014103000_website_custom_domain_bindings.sql` and
+`20261014122400_website_domain_attempt_fencing.sql`, are outside this 29-file packet and
+the observed 29-private-migration rehearsal chain. Do not infer domain lifecycle support
+or add those files to an apply operation without a separately reviewed inventory and proof.
 
 Before any schema apply, inspect the exact non-production target, health, verified TLS,
 catalog and migration history using metadata only. Supabase branch creation can replay
@@ -40,6 +46,8 @@ npm run database:postgres17:record:verify
 ```
 
 The runner accepts only executable paths, never database credentials. It creates disposable PostgreSQL 17 clusters with generated in-memory secrets, TLS, and a loopback listener. The current profile is `v13-self-serve`; inspect the runner and its resulting receipt for the exact migration inventory and checks. It verifies runtime-role restrictions, tenant isolation, session revocation, immutable events, rollback, backup/restore and cleanup. This local rehearsal is distinct from the full hosted packet, whose inventory also includes the public baseline and later feature extensions. Neither receipt substitutes for the other. Do not use historical v10 or eleven-migration instructions to initialize the current candidate.
+
+This existing profile exercises multi-product initialization and self-serve journeys. It does not prove the newly confirmed Shop-only customer boundary. Keep its schema/TLS/restore evidence within that tested scope while the accountable Shop lane supplies a current receipt for Shop access plus denial of internal builders. Do not reopen customer Sites/Commerce initialization or add migrations to make an old journey pass.
 
 The current sanitized proof is `hq/research/postgres17-rehearsal.json`. `database:postgres17:record` requires a clean worktree, reruns the complete disposable rehearsal, hashes the exact migrations, validator, runner, and managed Python runtime files, verifies the observed PostgreSQL archive, and atomically replaces the proof only after every check and cleanup gate passes. `hq:verify` fails when the recorded implementation digest becomes stale. The receipt records PostgreSQL 17.10, all passing checks, complete cleanup, and zero Supabase, Vercel, or production mutation without storing a URL or credential. This remains a repeatable local release gate, not hosted activation. It explicitly retains the isolated Supabase, Security Advisor, private Storage, transaction-mode pooler, and provider backup/recovery gates. PostgreSQL documents the [Windows binary distribution](https://www.postgresql.org/download/windows/), and Supabase documents its separate [local-development boundary](https://supabase.com/docs/guides/local-development/overview).
 

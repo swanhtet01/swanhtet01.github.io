@@ -49,6 +49,8 @@ const expectedMigrations = [
   '20261010070000_website_published_hero_media.sql',
   '20261010120857_website_inquiry_followup.sql',
   '20261014090000_website_channel_stable_update.sql',
+  '20261015091500_website_six_page_reviews.sql',
+  '20261015202629_ecommerce_operator_review_grant.sql',
 ]
 // Verify the original private catalog before all Website-review extensions, then
 // verify the complete extended catalog. Adding an extension must not shift the

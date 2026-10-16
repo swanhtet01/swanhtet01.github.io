@@ -1,13 +1,13 @@
 {
   "schemaVersion": "supermega.hq.database-rehearsal.v3",
-  "recordedAt": "2026-10-14T13:58:45.200Z",
+  "recordedAt": "2026-10-16T00:33:28.383Z",
   "runner": "tools/rehearse_supermega_postgres17.py",
-  "implementationCommit": "774ce768dc8c34ecaf3b4046e804c0f3bf072a4f",
-  "implementationTree": "a6b366f21b1800daf6a6b3049a541550df3a5cf5",
+  "implementationCommit": "ec6713ff969637e9ff3f3cac45048880a5f1c7b0",
+  "implementationTree": "623d9eba76fd9a4c4ed2f3a8477f03d3ddae35fd",
   "sourceCleanBeforeAndAfter": true,
-  "rawReportDigest": "sha256:7b3979cc93101e0a61aa4878df09950fd280fdd311ceeea00512e652acc03476",
+  "rawReportDigest": "sha256:fe03374e2c42158f04dcbbc41a0c7e72f4d4381f8c162a1d9644c1dc9ad6ff3c",
   "implementation": {
-    "digest": "sha256:a2dbd85602fe806e1c4ef1992690760ae5104e03474d4dbba081e857d5967eff",
+    "digest": "sha256:4799d7fdfd446fd6eb2c8bd3318ad084dd774ac07708c641f5698fa29f68b0c9",
     "paths": [
       "kernel/database-rehearsal-evidence.mjs",
       "supabase/migrations/20260722004500_private_trial_backend_role_preflight.sql",
@@ -39,6 +39,8 @@
       "supabase/migrations/20261014090000_website_channel_stable_update.sql",
       "supabase/migrations/20261014103000_website_custom_domain_bindings.sql",
       "supabase/migrations/20261014122400_website_domain_attempt_fencing.sql",
+      "supabase/migrations/20261015091500_website_six_page_reviews.sql",
+      "supabase/migrations/20261015202629_ecommerce_operator_review_grant.sql",
       "supabase/rehearsal/20260804_public_browser_quarantine.sql",
       "supermega_runtime/billing_rail.py",
       "supermega_runtime/core_security_catalog.py",
@@ -94,8 +96,8 @@
       "tools/verify_public_browser_quarantine.mjs"
     ]
   },
-  "implementationDigest": "sha256:a2dbd85602fe806e1c4ef1992690760ae5104e03474d4dbba081e857d5967eff",
-  "implementationFileCount": 83,
+  "implementationDigest": "sha256:4799d7fdfd446fd6eb2c8bd3318ad084dd774ac07708c641f5698fa29f68b0c9",
+  "implementationFileCount": 85,
   "localVerification": {
     "command": "npm run database:postgres17:record",
     "conclusion": "success",
@@ -121,7 +123,7 @@
     "startMode": "pg_ctl_restricted_token"
   },
   "migration": {
-    "count": 27,
+    "count": 29,
     "schemaVersion": 13,
     "names": [
       "20260722004500_private_trial_backend_role_preflight.sql",
@@ -150,7 +152,9 @@
       "20261010063000_website_publishing_and_inquiries.sql",
       "20261010070000_website_published_hero_media.sql",
       "20261010120857_website_inquiry_followup.sql",
-      "20261014090000_website_channel_stable_update.sql"
+      "20261014090000_website_channel_stable_update.sql",
+      "20261015091500_website_six_page_reviews.sql",
+      "20261015202629_ecommerce_operator_review_grant.sql"
     ],
     "schemaProfile": "v13-self-serve",
     "catalogContract": "supermega_private_trial_database_v13_self_serve_v1",
@@ -231,6 +235,7 @@
     "selfServeActorDirectoryIsolated": true,
     "selfServeCrossActorReadDenied": true,
     "selfServeRevokedSessionDenied": true,
+    "selfServeEcommerceInternalOperatorBoundary": true,
     "billingUnpaidInvoiceNotEntitled": true,
     "billingPaymentConfirmationNotEntitlement": true,
     "billingSeparateEntitlementGrantVisible": true,
@@ -316,8 +321,8 @@
     "backupNonempty": true,
     "format": "pg_dump_custom",
     "restoredSchemaVersion": 13,
-    "privateSnapshotBefore": "sha256:8a94e071e69a3cc0b79dec19d4dc5663049cc17412b6e26565dcb714e3789895",
-    "privateSnapshotAfter": "sha256:8a94e071e69a3cc0b79dec19d4dc5663049cc17412b6e26565dcb714e3789895"
+    "privateSnapshotBefore": "sha256:cc77dd57fe2f4fcfc84d5bd62ffcc4f15e8caf674b01ae4b6ab795679c8094cb",
+    "privateSnapshotAfter": "sha256:cc77dd57fe2f4fcfc84d5bd62ffcc4f15e8caf674b01ae4b6ab795679c8094cb"
   },
   "storage": {
     "catalogMode": "local_private_fixture",
@@ -341,5 +346,5 @@
     "Prove real Auth signup, verified email, account recovery, admin MFA and revocation on the hosted target.",
     "Keep production writes disabled until founder approval."
   ],
-  "receiptDigest": "sha256:83b258259abc162bd5fe53ddd0a992763ede2c66cc0d1ad2e32fbf07b814498f"
+  "receiptDigest": "sha256:2959b9aa263d1a5d963472d81baba9d39f17258f51060c75db31e44293ace2dc"
 }

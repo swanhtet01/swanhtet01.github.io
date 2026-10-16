@@ -2319,7 +2319,7 @@ const MANAGED_CAPABILITY_PATTERN = /^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$/
 export function managedBootstrapHasCapability(
   bootstrap: unknown,
   expectedIdentity: ManagedIdentity,
-  capability: 'commerce.write' | 'production.write' | 'website.write' | 'company.write' | 'approvals.decide',
+  capability: 'commerce.write' | 'production.write' | 'website.write' | 'company.write' | 'ecommerce.manage' | 'approvals.decide',
 ): boolean {
   const verified = assertManagedBootstrapIdentity(bootstrap, expectedIdentity)
   const capabilities = verified.readiness.capabilities
@@ -2350,7 +2350,9 @@ export function managedProductsFromBootstrap(
       throw new ManagedTrialError('The company account returned invalid product entitlements.', { code: 'managed_bootstrap_invalid' })
     }
     return explicit.filter((product) => {
-      if (product === 'commerce' || product === 'ecommerce') return Boolean(verified.states.commerce)
+      if (product === 'commerce') return Boolean(verified.states.commerce)
+      if (product === 'ecommerce') return Boolean(verified.states.commerce)
+        && managedBootstrapHasCapability(verified, expectedIdentity, 'ecommerce.manage')
       if (product === 'production') return Boolean(verified.states.production)
       return Boolean(verified.states.website)
     })
@@ -2904,6 +2906,9 @@ export async function requestSelfServeWorkspace(
   businessName: string,
   product: ClientSolutionId = 'commerce',
 ): Promise<ManagedSelfServeWorkspace> {
+  if (product !== 'commerce') {
+    throw errorSelfServeWorkspaceInvalid('Shop is the only customer-managed product at launch.')
+  }
   const claim = normalizeSelfServeClaimCode(claimCode)
   const name = normalizeSelfServeBusinessName(businessName)
   const response = await fetch('/api/trial/v1/workspaces', {

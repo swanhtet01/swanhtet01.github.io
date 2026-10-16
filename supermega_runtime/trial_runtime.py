@@ -202,11 +202,15 @@ class TrialProductAcceptanceRequest(_StrictRequest):
 
 
 class TrialSelfServeWorkspaceRequest(_StrictRequest):
-    """One named company and one explicit first-product entitlement."""
+    """Launch admission creates Shop customer tenants only.
+
+    Sites and Commerce are activated through the separately reviewed,
+    owner-authorized managed activation path.
+    """
 
     claimCode: str = Field(min_length=1, max_length=40)
     businessName: str = Field(min_length=1, max_length=120)
-    product: Literal["commerce", "production", "website", "ecommerce"]
+    product: Literal["commerce"]
 
 
 class TrialClientImportApplyRequest(_StrictRequest):

@@ -9,6 +9,7 @@ import { promisify } from 'node:util'
 import { bindPreviewNavigation, parsePreviewAppBinding } from './public_preview_navigation.mjs'
 
 import { activeProductContracts } from '../showroom/src/core/product-visibility.ts'
+import { companyMarkup, companyShopFooterHtml, companyShopHeaderHtml, companyShopStyle, shopDemoScript, shopMarkup } from './public_company_shop_design.mjs'
 
 
 const run = promisify(execFile)
@@ -68,9 +69,13 @@ async function checkedOutShowroomTree(directory, atRoot = true) {
   return createHash('sha1').update(`tree ${tree.length}\0`).update(tree).digest()
 }
 const publicGalleryAssetNames = [
-  'actual-shop-today.png', 'actual-shop-sell.png', 'actual-shop-orders.png',
-  'actual-sites-editor.png', 'actual-sites-inquiries.png',
-  'actual-commerce-catalog.png', 'actual-commerce-order-request.png',
+  'actual-shop-today.png', 'actual-shop-today-mobile.png',
+  'actual-shop-sell.png', 'actual-shop-sell-mobile.png',
+  'actual-shop-orders.png', 'actual-shop-orders-mobile.png',
+  'actual-sites-editor.png', 'actual-sites-editor-mobile.png',
+  'actual-sites-inquiries.png', 'actual-sites-inquiries-mobile.png',
+  'actual-commerce-catalog.png', 'actual-commerce-catalog-mobile.png',
+  'actual-commerce-order-request.png', 'actual-commerce-order-request-mobile.png',
 ]
 assert(publicGalleryProvenance.schemaVersion === 'supermega.public-gallery-provenance.v1', 'public_gallery_provenance_schema_unsupported')
 assert(publicGalleryProvenance.status === 'local_component_capture' && publicGalleryProvenance.records === 'synthetic'
@@ -101,7 +106,9 @@ const publicGalleryAssetEvidence = await Promise.all(publicGalleryProvenance.ass
     && reportCapture.sha256 === sha256, `public_gallery_capture_report_asset_mismatch:${file}`)
   const bytes = await readFile(resolve(root, 'tools', 'public-assets', file))
   assert(bytes.subarray(0, 8).equals(OG_CARD_PNG_SIGNATURE), `public_gallery_asset_not_png:${file}`)
-  assert(Number.isInteger(width) && Number.isInteger(height) && width >= 1000 && height >= 700,
+  const expectedDimensions = file.endsWith('-mobile.png') ? [390, 844] : [1440, 900]
+  assert(Number.isInteger(width) && Number.isInteger(height)
+    && width === expectedDimensions[0] && height === expectedDimensions[1],
     `public_gallery_asset_dimensions_invalid:${file}`)
   assert(bytes.readUInt32BE(16) === width && bytes.readUInt32BE(20) === height,
     `public_gallery_asset_dimensions_mismatch:${file}`)
@@ -214,21 +221,21 @@ const sharedStyle = `
   :root {
     color-scheme: light;
     --bg: #ffffff;
-    --bg-raised: #f1f1fb;
+    --bg-raised: #f1f5f9;
     --panel: rgba(255, 255, 255, .92);
     --panel-solid: #ffffff;
-    --panel-soft: #f2f1fb;
-    --ink: #151521;
-    --muted: #5f5d70;
-    --quiet: #5f5d70;
-    --line: rgba(28,26,48, .12);
-    --line-strong: rgba(28,26,48, .2);
-    --blue: #5b4ee8;
-    --blue-strong: #4538c8;
-    --green: #5b4ee8;
-    --green-soft: rgba(91,78,232, .1);
-    --blue-soft: rgba(91,78,232, .1);
-    --shadow: 0 22px 65px rgba(28,26,48, .1);
+    --panel-soft: #f3f6fa;
+    --ink: #0b0f17;
+    --muted: #5a6478;
+    --quiet: #5a6478;
+    --line: rgba(11,15,23, .12);
+    --line-strong: rgba(11,15,23, .2);
+    --blue: #2563eb;
+    --blue-strong: #1d4ed8;
+    --green: #2563eb;
+    --green-soft: rgba(37,99,235, .1);
+    --blue-soft: rgba(37,99,235, .1);
+    --shadow: 0 22px 65px rgba(11,15,23, .1);
     --radius: 16px;
     --font-latin: "SuperMega Noto Sans", "Noto Sans", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI";
   }
@@ -254,7 +261,7 @@ const sharedStyle = `
   .nav-link:hover, .nav-link[aria-current="page"] { background: var(--green-soft); color: var(--ink); }
   .button { min-height: 48px; display: inline-flex; align-items: center; justify-content: center; gap: 9px; border: 1px solid var(--line-strong); border-radius: 12px; padding: 0 18px; background: #fff; color: var(--ink); font-size: 13px; font-weight: 780; text-decoration: none; transition: transform 160ms ease, border-color 160ms ease, background 160ms ease; }
   .button:hover { transform: translateY(-1px); border-color: var(--green); background: var(--green-soft); }
-  .button.primary { border-color: var(--green); background: var(--green); color: #fff; box-shadow: 0 12px 28px rgba(91,78,232,.2); }
+  .button.primary { border-color: var(--green); background: var(--green); color: #fff; box-shadow: 0 12px 28px rgba(37,99,235,.2); }
   .button.primary:hover { background: var(--blue-strong); }
   .button.compact { min-height: 44px; padding-inline: 15px; }
   .eyebrow { display: inline-flex; align-items: center; gap: 9px; color: var(--green); font-family: "SFMono-Regular", Consolas, monospace; font-size: 12px; font-weight: 760; letter-spacing: .04em; text-transform: uppercase; }
@@ -284,7 +291,7 @@ const sharedStyle = `
   .workspace-title { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 22px; }
   .workspace-title strong { font-size: 18px; }
   .workspace-title small { display: block; margin-top: 4px; color: var(--quiet); }
-  .live-pill, .status-pill { display: inline-flex; min-height: 28px; align-items: center; gap: 7px; border: 1px solid rgba(91,78,232,.2); border-radius: 999px; padding: 0 10px; background: var(--green-soft); color: var(--green); font-size: 10px; font-weight: 760; text-transform: uppercase; }
+  .live-pill, .status-pill { display: inline-flex; min-height: 28px; align-items: center; gap: 7px; border: 1px solid rgba(37,99,235,.2); border-radius: 999px; padding: 0 10px; background: var(--green-soft); color: var(--green); font-size: 10px; font-weight: 760; text-transform: uppercase; }
   .live-pill::before, .status-pill::before { width: 6px; height: 6px; border-radius: 50%; background: currentColor; content: ""; }
   .metric-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
   .metric { min-height: 94px; border: 1px solid var(--line); border-radius: 13px; padding: 14px; background: var(--panel-soft); }
@@ -300,13 +307,13 @@ const sharedStyle = `
   .section-head h2 { margin-top: 17px; }
   .section-head p { color: var(--muted); font-size: 18px; }
   .surface-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
-  .surface-card { min-height: 260px; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: var(--radius); padding: 28px; background: var(--panel-solid); box-shadow: 0 12px 34px rgba(28,26,48,.055); }
+  .surface-card { min-height: 260px; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: var(--radius); padding: 28px; background: var(--panel-solid); box-shadow: 0 12px 34px rgba(11,15,23,.055); }
   .surface-card > span { color: var(--green); font-family: "SFMono-Regular", Consolas, monospace; font-size: 10px; }
   .surface-card h3 { margin-top: 46px; font-size: 31px; }
   .surface-card p { margin: 0; color: var(--muted); }
   .surface-card small { margin-top: auto; padding-top: 24px; color: var(--quiet); font-size: 11px; }
   .product-grid, .template-grid, .principle-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
-  .product-card, .template-card, .principle-card, .module-card, .case-card { position: relative; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius); padding: 30px; background: var(--panel-solid); box-shadow: 0 12px 34px rgba(28,26,48,.055); }
+  .product-card, .template-card, .principle-card, .module-card, .case-card { position: relative; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius); padding: 30px; background: var(--panel-solid); box-shadow: 0 12px 34px rgba(11,15,23,.055); }
   .product-card::after { position: absolute; width: 220px; height: 220px; top: -130px; right: -80px; border-radius: 50%; background: var(--blue); opacity: .12; filter: blur(2px); content: ""; }
   .product-card.production::after { background: var(--green); }
   .card-index { color: var(--quiet); font-family: "SFMono-Regular", Consolas, monospace; font-size: 11px; }
@@ -324,7 +331,7 @@ const sharedStyle = `
   .template-card p { color: var(--muted); }
   .template-card .card-link { margin-top: auto; }
   .product-label { display: inline-flex; min-height: 30px; align-items: center; border: 1px solid var(--line); border-radius: 999px; padding: 0 10px; color: var(--muted); font-size: 11px; font-weight: 760; }
-  .callout { display: grid; grid-template-columns: 1fr auto; gap: 34px; align-items: center; border: 1px solid rgba(91,78,232,.2); border-radius: var(--radius); padding: 36px; background: linear-gradient(120deg, rgba(91,78,232,.1), rgba(255,255,255,.76)); }
+  .callout { display: grid; grid-template-columns: 1fr auto; gap: 34px; align-items: center; border: 1px solid rgba(37,99,235,.2); border-radius: var(--radius); padding: 36px; background: linear-gradient(120deg, rgba(37,99,235,.1), rgba(255,255,255,.76)); }
   .callout p { max-width: 700px; margin: 0; color: var(--muted); }
   .steps { counter-reset: step; display: grid; gap: 0; border-top: 1px solid var(--line); }
   .step { counter-increment: step; display: grid; grid-template-columns: 54px 1fr; gap: 22px; border-bottom: 1px solid var(--line); padding: 25px 0; }
@@ -345,15 +352,15 @@ const sharedStyle = `
   .contact-copy p { color: var(--muted); font-size: 18px; }
   .contact-page { display:grid; grid-template-columns:minmax(0,.82fr) minmax(0,1fr); align-items:start; gap:clamp(32px,5vw,84px); max-width:1160px; padding:clamp(44px,7vw,88px) 0 86px; }
   .contact-page .page-hero { max-width:none; padding:36px 0 0; position:sticky; top:100px; }
-  .contact-page .page-hero::after { content:""; display:block; width:min(100%,340px); height:1px; margin-top:36px; background:linear-gradient(90deg,var(--blue),#e8e5f7); }
+  .contact-page .page-hero::after { content:""; display:block; width:min(100%,340px); height:1px; margin-top:36px; background:linear-gradient(90deg,var(--blue),#e8f0ff); }
   .contact-page .page-hero h1 { max-width:480px; font-size:clamp(46px,5vw,66px); line-height:1.03; letter-spacing:-.055em; }
   .contact-page .page-hero .lede { max-width:430px; font-size:18px; line-height:1.62; }
   .contact-page .contact-layout { display:block; padding:0; }
-  .contact-page .contact-form { width:100%; padding:clamp(24px,3vw,40px); gap:18px; border-color:#dedce9; border-radius:28px; background:linear-gradient(160deg,#fff,#fbfaff); box-shadow:0 24px 70px rgba(28,26,48,.08); }
+  .contact-page .contact-form { width:100%; padding:clamp(24px,3vw,40px); gap:18px; border-color:#dbe3ee; border-radius:28px; background:linear-gradient(160deg,#fff,#f7f9fc); box-shadow:0 24px 70px rgba(11,15,23,.08); }
   .contact-page .field-grid { gap:20px 16px; }
   .contact-page .field-grid label { display: block; color: var(--ink); font-size: 13px; font-weight: 650; }
   .contact-page .field-grid label span[lang="my"] { color: var(--muted); font-weight: 500; }
-  .contact-page .field-grid input, .contact-page .field-grid select, .contact-page .field-grid textarea { display: block; margin-top: 9px; min-height: 52px; border-color: #dedce9; border-radius: 12px; background: #fff; font-size: 15px; }
+  .contact-page .field-grid input, .contact-page .field-grid select, .contact-page .field-grid textarea { display: block; margin-top: 9px; min-height: 52px; border-color: #dbe3ee; border-radius: 12px; background: #fff; font-size: 15px; }
   .contact-page .field-grid textarea { min-height: 122px; line-height: 1.55; }
   .contact-page .contact-form .button { min-height:56px; width:100%; justify-content:center; padding-inline:26px; }
   .contact-page .contact-copy summary { cursor: pointer; min-height: 44px; align-content: center; color: var(--muted); }
@@ -377,7 +384,7 @@ const sharedStyle = `
   label.wide { grid-column: 1/-1; }
   .contact-service { grid-column: 1/-1; }
   input, select, textarea { width: 100%; min-width: 0; border: 1px solid var(--line); border-radius: 11px; padding: 13px 14px; background: #fff; color: var(--ink); outline: none; }
-  input:focus, select:focus, textarea:focus { border-color: var(--green); box-shadow: 0 0 0 3px rgba(91,78,232,.1); }
+  input:focus, select:focus, textarea:focus { border-color: var(--green); box-shadow: 0 0 0 3px rgba(37,99,235,.1); }
   textarea { min-height: 150px; resize: vertical; }
   .form-note, .form-status { margin: 0; color: var(--quiet); font-size: 12px; }
   .form-status { min-height: 1.5em; color: var(--green); }
@@ -428,7 +435,7 @@ const sharedStyle = `
   .trust-compact { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .trust-compact .principle-card { min-height: 210px; }
   .trust-strip { padding-bottom: 24px; }
-  .control-line { grid-column: 1/-1; display: flex; align-items: center; justify-content: space-between; gap: 22px; border: 1px solid rgba(91,78,232,.2); border-radius: var(--radius); padding: 18px 22px; background: var(--green-soft); }
+  .control-line { grid-column: 1/-1; display: flex; align-items: center; justify-content: space-between; gap: 22px; border: 1px solid rgba(37,99,235,.2); border-radius: var(--radius); padding: 18px 22px; background: var(--green-soft); }
   .control-line p { max-width: 760px; margin: 0; color: var(--muted); font-size: 12px; }
   .compact-solutions { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 20px; }
   .delivery-steps { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 20px; padding: 0; list-style: none; counter-reset: delivery; }
@@ -440,7 +447,7 @@ const sharedStyle = `
   .delivery-boundary summary { min-height: 44px; align-content: center; cursor: pointer; font-weight: 650; }
   .delivery-boundary p { font-size: 14px; margin-block: 12px; }
   @media (max-width: 760px) { .delivery-steps { grid-template-columns: 1fr; } }
-  .compact-solution { min-width: 0; min-height: 270px; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: var(--radius); padding: 28px; background: var(--panel-solid); box-shadow: 0 12px 34px rgba(28,26,48,.045); }
+  .compact-solution { min-width: 0; min-height: 270px; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: var(--radius); padding: 28px; background: var(--panel-solid); box-shadow: 0 12px 34px rgba(11,15,23,.045); }
   .compact-solution h3 { margin: 20px 0 9px; font-size: 30px; }
   .compact-solution > p { min-height: 44px; color: var(--muted); font-size: 16px; }
   .compact-first { display: grid; gap: 4px; margin-top: 14px; border-left: 2px solid var(--green); padding-left: 10px; color: var(--muted); font-size: 14px; line-height: 1.5; }
@@ -456,7 +463,7 @@ const sharedStyle = `
   .roadmap-solution > p { min-height: 0; }
   .roadmap-solution .card-link, .roadmap-solution .status-note { margin-top: auto; }
   .status-note { display: inline-flex; min-height: 44px; align-items: center; color: var(--quiet); font-size: 11px; font-weight: 760; }
-  .shared-capability { display: grid; grid-template-columns: minmax(0,.35fr) minmax(0,1fr) auto; gap: 22px; align-items: center; margin-top: 14px; border: 1px solid rgba(91,78,232,.2); border-radius: var(--radius); padding: 20px 24px; background: var(--green-soft); scroll-margin-top: 92px; }
+  .shared-capability { display: grid; grid-template-columns: minmax(0,.35fr) minmax(0,1fr) auto; gap: 22px; align-items: center; margin-top: 14px; border: 1px solid rgba(37,99,235,.2); border-radius: var(--radius); padding: 20px 24px; background: var(--green-soft); scroll-margin-top: 92px; }
   .shared-capability h3, .shared-capability p { margin: 0; }
   .shared-capability h3 { font-size: 22px; }
   .shared-capability p { color: var(--muted); font-size: 12px; }
@@ -471,7 +478,7 @@ const sharedStyle = `
   .detail-disclosure[open] > summary::after { content: "−"; }
   .disclosure-body { padding-top: 4px; }
   .boundary-note { margin: 0; border-left: 2px solid var(--green); padding: 2px 0 2px 12px; color: var(--quiet); font-size: 10px; }
-  .closing-strip { display: grid; grid-template-columns: 1fr auto; gap: 30px; align-items: center; margin-top: 14px; border: 1px solid rgba(91,78,232,.2); border-radius: var(--radius); padding: 24px 28px; background: var(--panel-soft); }
+  .closing-strip { display: grid; grid-template-columns: 1fr auto; gap: 30px; align-items: center; margin-top: 14px; border: 1px solid rgba(37,99,235,.2); border-radius: var(--radius); padding: 24px 28px; background: var(--panel-soft); }
   .closing-strip h2 { margin-bottom: 6px; font-size: 27px; }
   .closing-strip p { margin: 0; color: var(--muted); font-size: 12px; }
   .offer-model-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); border-block: 1px solid var(--line-strong); }
@@ -484,7 +491,7 @@ const sharedStyle = `
   .offer-model-list li::before { margin-right: 10px; color: var(--green); content: ">"; font-family: "SFMono-Regular", Consolas, monospace; font-weight: 800; }
   .offer-model-action { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-top: 24px; }
   .offer-model-action p { max-width: 720px; margin: 0; color: var(--quiet); font-size: 11px; }
-  :focus-visible { outline: 3px solid rgba(91,78,232,.34); outline-offset: 3px; }
+  :focus-visible { outline: 3px solid rgba(37,99,235,.34); outline-offset: 3px; }
   @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } *, *::before, *::after { transition-duration: .01ms !important; } }
   .home-hero { display: grid; grid-template-columns: 1fr; align-items: center; gap: 64px; padding-block: 88px; }
   .home-hero h1 { font-size: clamp(44px, 5.4vw, 76px); line-height: 1.05; letter-spacing: -.055em; }
@@ -527,16 +534,17 @@ const sharedStyle = `
   .platform-gallery[data-single] .platform-slides {overflow:hidden}
   .platform-gallery-controls {display:flex;align-items:center;justify-content:flex-end;gap:12px;min-height:40px}
   .platform-gallery-controls button {display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border:1px solid var(--line-strong);border-radius:50%;color:var(--ink);background:#fff;font-size:20px;cursor:pointer}
-  .platform-gallery-controls button:hover:not(:disabled) {border-color:var(--blue);color:var(--blue);background:#f7f6ff}
+  .platform-gallery-controls button:hover:not(:disabled) {border-color:var(--blue);color:var(--blue);background:#eff6ff}
   .platform-gallery-controls button:focus-visible {outline:2px solid var(--blue);outline-offset:3px}
   .platform-gallery-controls button:disabled {opacity:.4;cursor:default}
   .platform-gallery-status {min-width:48px;color:var(--muted);font-size:13px;font-variant-numeric:tabular-nums;text-align:center}
-  .platform-image {margin:0;padding:24px;background:#f1f0fb;border:1px solid #dedbf4;border-radius:24px;overflow:hidden}
-  .platform-image img {display:block;width:100%;height:auto;max-width:1440px;margin-inline:auto;border-radius:12px;box-shadow:0 16px 48px rgba(28,26,48,.08);background:#fff}
+  .platform-image {margin:0;padding:24px;background:#f1f5f9;border:1px solid #dbe3ee;border-radius:24px;overflow:hidden}
+  .platform-image img {display:block;width:100%;height:auto;max-width:1440px;margin-inline:auto;border-radius:12px;box-shadow:0 16px 48px rgba(11,15,23,.08);background:#fff}
+  .platform-image picture {display:block}
   .platform-image-open {position:relative;display:block;min-width:0;color:var(--ink);text-decoration:none}
-  .platform-image-open span {position:absolute;right:12px;bottom:12px;display:inline-flex;align-items:center;min-height:32px;padding:6px 10px;border:1px solid #dedbf4;border-radius:8px;background:rgba(255,255,255,.96);font-size:11px;font-weight:700;box-shadow:0 5px 18px rgba(28,26,48,.08)}
+  .platform-image-open span {position:absolute;right:12px;bottom:12px;display:inline-flex;align-items:center;min-height:32px;padding:6px 10px;border:1px solid #dbe3ee;border-radius:8px;background:rgba(255,255,255,.96);font-size:11px;font-weight:700;box-shadow:0 5px 18px rgba(11,15,23,.08)}
   .platform-image-open:hover span,.platform-image-open:focus-visible span {color:var(--blue);border-color:var(--blue)}
-  .platform-image figcaption {margin-top:auto;padding:16px 0 0;color:#615f73;font-size:12px}
+  .platform-image figcaption {margin-top:auto;padding:16px 0 0;color:#5a6478;font-size:12px}
   .product-proof {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));margin-top:18px;border:1px solid var(--line);border-radius:16px;background:var(--panel-solid);overflow:hidden;list-style:none;padding:0}
   .product-proof li {min-width:0;padding:18px 20px}
   .product-proof li+li {border-left:1px solid var(--line)}
@@ -547,7 +555,7 @@ const sharedStyle = `
   .story-heading {display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:end;margin-bottom:32px}
   .story-heading h2 {font-size:clamp(32px,4vw,52px);letter-spacing:-.045em;line-height:1.12;margin:12px 0 0}
   .story-heading p {font-size:18px;line-height:1.65;color:var(--muted);margin:0;max-width:500px}
-  .feature-line {display:flex;flex-wrap:wrap;gap:12px 30px;list-style:none;padding:24px 0 0;margin:0;font-size:14px;color:#49465f}
+  .feature-line {display:flex;flex-wrap:wrap;gap:12px 30px;list-style:none;padding:24px 0 0;margin:0;font-size:14px;color:#344054}
   .feature-line > li {flex:1 1 240px;min-width:0;padding:12px 0}
   .feature-line h2, .feature-line h3 {margin:0 0 10px;font-size:18px;letter-spacing:-.025em;color:var(--ink)}
   .feature-line p {margin:0;max-width:34ch;font-size:15px;line-height:1.7;color:var(--muted)}
@@ -562,7 +570,7 @@ const sharedStyle = `
   .product-tabs button {min-width:120px;min-height:48px;padding:10px 22px;border:0;border-bottom:3px solid transparent;background:transparent;color:var(--muted);font:inherit;font-size:15px;font-weight:700;cursor:pointer}
   .product-tabs button:hover,.product-tabs button[aria-selected="true"] {color:var(--ink);border-bottom-color:var(--blue)}
   .product-cards {display:grid;gap:18px;padding:0 0 48px}
-  .product-card-compact {min-width:0;display:grid;grid-template-columns:minmax(0,1.42fr) minmax(290px,.58fr);gap:26px;padding:16px;border:1px solid var(--line-strong);border-radius:24px;background:var(--panel-solid);box-shadow:0 18px 60px rgba(28,26,48,.06)}
+  .product-card-compact {min-width:0;display:grid;grid-template-columns:minmax(0,1.42fr) minmax(290px,.58fr);gap:26px;padding:16px;border:1px solid var(--line-strong);border-radius:24px;background:var(--panel-solid);box-shadow:0 18px 60px rgba(11,15,23,.06)}
   .product-card-compact[hidden] {display:none}
   .product-card-media {min-width:0}
   .product-card-compact .platform-image {padding:12px;border-radius:14px}
@@ -571,16 +579,16 @@ const sharedStyle = `
   .product-card-copy h2 {margin:12px 0;font-size:clamp(30px,3vw,44px);line-height:1.08;letter-spacing:-.045em}
   .product-card-copy > p {margin:0;color:var(--muted);font-size:16px;line-height:1.6}
   .product-card-flow {display:grid;gap:10px;margin:24px 0;padding:0;list-style:none}
-  .product-card-flow li {display:flex;align-items:center;gap:10px;color:#49465f;font-size:14px;line-height:1.35}
+  .product-card-flow li {display:flex;align-items:center;gap:10px;color:#344054;font-size:14px;line-height:1.35}
   .product-card-flow li::before {content:"";flex:0 0 5px;width:5px;height:5px;border-radius:50%;background:var(--blue)}
   .product-card-copy .story-link {margin-top:auto;padding-top:8px;font-size:14px;font-weight:700}
-  .home-contact {display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:28px;margin:0 0 80px;padding:34px 36px;border:1px solid #d9d5fb;border-radius:24px;background:linear-gradient(135deg,#f6f5ff,#eeecff)}
+  .home-contact {display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:28px;margin:0 0 80px;padding:34px 36px;border:1px solid #cbdaf0;border-radius:24px;background:linear-gradient(135deg,#eff6ff,#eaf2ff)}
   .home-contact h2 {margin:0 0 8px;font-size:clamp(28px,3vw,42px);line-height:1.1;letter-spacing:-.04em}
   .home-contact p {max-width:650px;margin:0;color:var(--muted);font-size:16px;line-height:1.6}
   .site-header {background:#fff}
   .header-actions{display:flex;align-items:center;gap:8px}
   @media(max-width:980px){.product-card-compact{grid-template-columns:minmax(0,1fr) minmax(230px,.8fr);gap:12px}.product-card-copy{padding:16px}}
-  @media(max-width:760px){.editorial-hero{padding:28px 0 20px}.editorial-hero h1{font-size:clamp(38px,11vw,52px)}.editorial-hero .lede{font-size:16px}.story-heading{grid-template-columns:1fr;gap:18px}.product-story{padding:48px 0}.product-story-standalone{padding:0 0 44px}.platform-gallery{grid-template-columns:1fr;gap:12px}.platform-image{padding:10px;border-radius:14px}.platform-image img{border-radius:8px}.product-proof{grid-template-columns:1fr}.product-proof li+li{border-top:1px solid var(--line);border-left:0}.feature-line{gap:12px 20px}.product-cards{gap:14px;padding-bottom:48px}.product-card-compact{display:flex;flex-direction:column;gap:0}.product-card-copy{padding:18px 8px 12px}.product-card-copy h2{font-size:30px}.product-card-flow{margin:18px 0}.product-tabs button{flex:1;min-width:0;padding:10px 6px;font-size:14px}.platform-image-open span{right:6px;bottom:6px;font-size:10px}.home-contact{grid-template-columns:1fr;margin-bottom:52px;padding:26px 24px}.home-contact .button{width:100%}}
+  @media(max-width:760px){.editorial-hero{padding:28px 0 20px}.editorial-hero h1{font-size:clamp(38px,11vw,52px)}.editorial-hero .lede{font-size:16px}.story-heading{grid-template-columns:1fr;gap:18px}.product-story{padding:48px 0}.product-story-standalone{padding:0 0 44px}.platform-gallery{grid-template-columns:1fr;gap:12px}.platform-image{padding:10px;border-radius:14px}.platform-image img{border-radius:8px}.platform-image picture img{height:clamp(300px,112vw,500px);object-fit:cover;object-position:center top}.platform-gallery[data-product-gallery="ecommerce"] picture img{object-position:center 25%}.product-proof{grid-template-columns:1fr}.product-proof li+li{border-top:1px solid var(--line);border-left:0}.feature-line{gap:12px 20px}.product-cards{gap:14px;padding-bottom:48px}.product-card-compact{display:flex;flex-direction:column;gap:0}.product-card-copy{padding:18px 8px 12px}.product-card-copy h2{font-size:30px}.product-card-flow{margin:18px 0}.product-tabs button{flex:1;min-width:0;padding:10px 6px;font-size:14px}.platform-image-open span{right:6px;bottom:6px;font-size:10px}.home-contact{grid-template-columns:1fr;margin-bottom:52px;padding:26px 24px}.home-contact .button{width:100%}}
   @media(max-width:980px){.contact-page{grid-template-columns:1fr;gap:24px;max-width:760px;padding:42px 0 70px}.contact-page .page-hero{position:static;padding:0}.contact-page .page-hero::after{display:none}.contact-page .page-hero h1{font-size:clamp(36px,7vw,52px)}}
   @media(max-width:760px){.contact-page{padding:28px 0 52px}.contact-page .page-hero h1{font-size:clamp(36px,9vw,48px)}.contact-page .contact-form{padding:20px;border-radius:20px}}
 
@@ -591,12 +599,15 @@ function brandHtml() {
 }
 
 function headerHtml(route) {
+  if (route === '/' || route === '/shop/') return companyShopHeaderHtml(route)
   return `<header class="site-header"><div class="frame header-inner">${brandHtml()}<div class="header-actions"><a class="nav-link" href="/contact/">Contact</a><a class="button compact header-cta" href="https://app.supermega.dev/login">Login</a></div></div></header>`
 }
 
 function footerHtml(route) {
+  const year = new Date().getUTCFullYear()
+  if (route === '/' || route === '/shop/') return companyShopFooterHtml(route, year)
   const contactLink = '<a href="/contact/">Contact</a>'
-  return `<footer class="site-footer"><div class="frame footer-inner"><span>© ${new Date().getUTCFullYear()} SuperMega</span><span class="footer-links">${contactLink}<a href="/privacy/">Privacy</a></span></div></footer>`
+  return `<footer class="site-footer"><div class="frame footer-inner"><span>© ${year} SuperMega</span><span class="footer-links">${contactLink}<a href="/privacy/">Privacy</a></span></div></footer>`
 }
 
 // JSON-LD structured data ships as <script type="application/ld+json"> blocks.
@@ -647,13 +658,17 @@ const publicObservabilityScript = `(function () {
 function documentHtml({ route, title, description, content, schema = null, robots = 'index,follow', shareImage = '/og-card.png' }) {
   const url = canonical(route)
   const shareImageUrl = canonical(shareImage)
+  const view = route === '/' ? 'company' : route === '/shop/' ? 'shop' : null
+  const themeColor = view === 'company' ? '#07111f' : view === 'shop' ? '#f7f9fc' : '#ffffff'
+  const pageStyle = view ? `<style>${companyShopStyle}</style>` : ''
+  const viewAttribute = view ? ` data-view="${view}"` : ''
   return `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <meta name="robots" content="${robots}" />
-    <meta name="theme-color" content="#ffffff" />
+    <meta name="theme-color" content="${themeColor}" />
     <meta name="supermega-brand-version" content="${escapeHtml(brand.version)}" />
     <meta name="supermega-context-version" content="${escapeHtml(manifest.contextVersion)}" />
     <title>${escapeHtml(title)}</title>
@@ -671,9 +686,9 @@ function documentHtml({ route, title, description, content, schema = null, robot
     <meta property="og:image:height" content="${OG_CARD_HEIGHT}" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:image" content="${escapeHtml(shareImageUrl)}" />${structuredDataHtml(schema)}
-    <style>${sharedStyle}</style>
+    <style>${sharedStyle}</style>${pageStyle}
   </head>
-  <body data-brand-version="${escapeHtml(brand.version)}" data-context-version="${escapeHtml(manifest.contextVersion)}">
+  <body data-brand-version="${escapeHtml(brand.version)}" data-context-version="${escapeHtml(manifest.contextVersion)}"${viewAttribute}>
     <a class="skip-link" href="#content">Skip to content</a>
     <div class="shell">${headerHtml(route)}${content}${footerHtml(route)}</div>
     <script src="/vercel-insights.js"></script>
@@ -688,8 +703,8 @@ assert(typeof homePage.description === 'string' && homePage.description.length >
 
 const stories = {
  shop: {title:'Know what sold. Know what happens next.', body:'Run the counter, orders, stock and daily close from one operating view.', screens:[['actual-shop-today.png','Shop operating view showing fulfilment priorities, stock alerts and money awaiting collection','Today and priorities'],['actual-shop-sell.png','Shop counter with searchable products, visible stock levels, and Add controls for a new sale','Counter catalog and sale setup'],['actual-shop-orders.png','Shop order queue showing payment handoff, the next action and queue health','Orders and fulfilment']], proof:[['Record','Sale, payment and receipt'],['Action','Reorder, fulfil or follow up'],['Result','A close your team can explain']]},
- website: {title:'Build clear pages. Review inquiries in one place.', body:'Manage pages, readiness checks and customer inquiries without assembling a separate toolchain.', screens:[['actual-sites-editor.png','Sites editor showing page navigation, focused content editing and readiness checks','Page workspace and readiness'],['actual-sites-inquiries.png','Sites inquiry workspace showing a synthetic customer request, ownership and decision controls','Inquiry review and ownership']], proof:[['Record','Pages, services and metadata'],['Action','Edit, check and prepare to publish'],['Result','Qualified inquiries in one inbox']]},
- ecommerce: {title:'Show your catalog. Review each request.', body:'See your catalog and customer order requests. Your team reviews each request, payment and delivery step.', screens:[['actual-commerce-catalog.png','Commerce catalog showing available products, local pricing and customer ordering','Store catalog and availability'],['actual-commerce-order-request.png','Commerce Store showing a locally saved customer request awaiting Shop confirmation','Request saved locally']], proof:[['Record','Catalog, customer and request'],['Action','Review before an order is confirmed'],['Result','A clear next step for fulfilment']]},
+ website: {title:'Build clear pages. Review inquiries in one place.', body:'Our team manages pages, readiness checks and customer inquiries in one workspace.', screens:[['actual-sites-editor.png','Sites editor showing page navigation, focused content editing and readiness checks','Page workspace and readiness'],['actual-sites-inquiries.png','Sites inquiry workspace showing a synthetic customer request, ownership and decision controls','Inquiry review and ownership']], proof:[['Record','Pages, services and metadata'],['Action','Edit, check and prepare to publish'],['Result','Qualified inquiries in one inbox']]},
+ ecommerce: {title:'Show your catalog. Review each request.', body:'Our team reviews each catalog request before Shop records an order or payment.', screens:[['actual-commerce-catalog.png','Commerce catalog showing available products, local pricing and customer ordering','Store catalog and availability'],['actual-commerce-order-request.png','Commerce Store showing a locally saved customer request awaiting Shop confirmation','Request saved locally']], proof:[['Record','Catalog, customer and request'],['Action','Review before an order is confirmed'],['Result','A clear next step for fulfilment']]},
 }
 const productOutcomes = {
  shop: [
@@ -714,9 +729,13 @@ function interfaceDisclosure(image) {
 }
 function productGallery(id,label,eagerFirst=false) {
  const item=stories[id]
- const slides=item.screens.map(([image,alt,caption,width=1440,height=900],index)=>`<figure class="platform-image" role="group" aria-roledescription="slide" aria-label="${index+1} of ${item.screens.length}: ${escapeHtml(caption)}"><a class="platform-image-open" href="/images/${image}" aria-label="Open full-size ${escapeHtml(label)} ${escapeHtml(caption)} local product view"><img src="/images/${image}" alt="${escapeHtml(alt)}" width="${width}" height="${height}" loading="${eagerFirst && index === 0 ? 'eager' : 'lazy'}"${eagerFirst && index === 0 ? ' fetchpriority="high"' : ''} /><span aria-hidden="true">View full size &rarr;</span></a><figcaption>${label} &middot; ${escapeHtml(caption)} &middot; ${interfaceDisclosure(image)}</figcaption></figure>`).join('')
- if (item.screens.length === 1) return `<div class="platform-gallery" data-single role="region" aria-roledescription="carousel" aria-label="${label} interface view"><div class="platform-slides">${slides}</div></div>`
- return `<div class="platform-gallery" data-platform-carousel role="region" aria-roledescription="carousel" aria-label="${label} interface views"><div class="platform-slides" tabindex="0">${slides}</div><div class="platform-gallery-controls"><button type="button" data-gallery-previous aria-label="Previous ${label} screenshot" disabled>&lsaquo;</button><span class="platform-gallery-status" data-gallery-status aria-live="polite">1 of ${item.screens.length}</span><button type="button" data-gallery-next aria-label="Next ${label} screenshot">&rsaquo;</button></div></div>`
+ const slides=item.screens.map(([image,alt,caption,width=1440,height=900],index)=>{
+  const mobileImage=image.replace(/\.png$/, '-mobile.png')
+  interfaceDisclosure(mobileImage)
+  return `<figure class="platform-image" role="group" aria-roledescription="slide" aria-label="${index+1} of ${item.screens.length}: ${escapeHtml(caption)}"><a class="platform-image-open" href="/images/${image}" data-desktop-image="/images/${image}" data-mobile-image="/images/${mobileImage}" aria-label="Open full-size ${escapeHtml(label)} ${escapeHtml(caption)} local product view"><picture><source media="(max-width: 760px)" srcset="/images/${mobileImage}" /><img src="/images/${image}" alt="${escapeHtml(alt)}" width="${width}" height="${height}" loading="${eagerFirst && index === 0 ? 'eager' : 'lazy'}"${eagerFirst && index === 0 ? ' fetchpriority="high"' : ''} /></picture><span aria-hidden="true">View full size &rarr;</span></a><figcaption>${label} &middot; ${escapeHtml(caption)} &middot; ${interfaceDisclosure(image)}</figcaption></figure>`
+ }).join('')
+ if (item.screens.length === 1) return `<div class="platform-gallery" data-product-gallery="${id}" data-single role="region" aria-roledescription="carousel" aria-label="${label} interface view"><div class="platform-slides">${slides}</div></div>`
+ return `<div class="platform-gallery" data-product-gallery="${id}" data-platform-carousel role="region" aria-roledescription="carousel" aria-label="${label} interface views"><div class="platform-slides" tabindex="0">${slides}</div><div class="platform-gallery-controls"><button type="button" data-gallery-previous aria-label="Previous ${label} screenshot" disabled>&lsaquo;</button><span class="platform-gallery-status" data-gallery-status aria-live="polite">1 of ${item.screens.length}</span><button type="button" data-gallery-next aria-label="Next ${label} screenshot">&rsaquo;</button></div></div>`
 }
 function productStory(id, standalone = false) {
  const item=stories[id], label=publicProducts.find(product=>product.id===id).name
@@ -733,7 +752,7 @@ function productCard(id) {
 }
 const homeHtml = documentHtml({route:'/',title:homePage.title,description:homePage.description,
  schema:{'@type':'Organization',name:'SuperMega',url:canonical('/'),description:homePage.description},
- content:`<main class="frame" id="content"><section class="editorial-hero"><span class="eyebrow">SuperMega platform</span><h1>Run the business.<br>Without the busywork.</h1><p class="lede">Explore tools for in-store sales, website pages and online order requests.</p></section><section class="product-showcase" id="products" data-product-showcase aria-label="Explore SuperMega products"><div class="product-tabs" data-product-tabs></div><div class="product-cards">${['shop','website','ecommerce'].map(id => productCard(id)).join('')}</div></section><section class="home-contact" aria-labelledby="home-contact-title"><div><h2 id="home-contact-title">Not sure where to start?</h2><p>Tell us how your business works today. We’ll help you choose the right product.</p></div><a class="button" href="/contact/">Contact SuperMega</a></section></main><script src="/platform-carousel.js" defer></script>`,
+ content:`<main id="content">${companyMarkup}</main>`,
 })
 
 function productAction(product) {
@@ -741,7 +760,15 @@ function productAction(product) {
  return `<section class="home-contact product-action" aria-labelledby="product-action-title"><div><h2 id="product-action-title">Need help with ${escapeHtml(product.name)}?</h2><p>Tell us what your business needs.</p></div><a class="button" href="/contact/?product=${escapeHtml(product.id)}">Contact SuperMega</a></section>`
 }
 
+function shopLandingHtml(product, page) {
+ const description = page.description || product.description
+ return documentHtml({route:page.route,title:page.title,description,shareImage:`/og-card-${product.id}.png`,
+  schema:{'@type':'Product',name:product.name,description,url:canonical(page.route)},
+  content:`<main id="content">${shopMarkup}</main>${productAction(product)}<script src="/shop-sample-demo.js" defer></script>`})
+}
+
 function productLandingHtml(product,page) {
+ if (product.id === 'shop') return shopLandingHtml(product, page)
  const description=page.description||product.description
  const storyBody=escapeHtml(stories[product.id].body)
  return documentHtml({route:page.route,title:page.title,description,shareImage:`/og-card-${product.id}.png`,
@@ -1456,12 +1483,16 @@ await mkdir(staticDir, { recursive: true })
 await mkdir(functionsDir, { recursive: true })
 
 for (const [relativePath, content] of pageFiles) await writeStatic(relativePath, content)
-for (const image of [...new Set(Object.values(stories).flatMap((story) => story.screens.map(([file]) => file)))]) await writeStatic(`images/${image}`, await readFile(resolve(root,'tools/public-assets',image)))
+for (const image of publicGalleryAssetNames) await writeStatic(`images/${image}`, await readFile(resolve(root,'tools/public-assets',image)))
+await writeStatic('shop-sample-demo.js', shopDemoScript)
 await writeStatic('fonts/noto-sans-latin.woff2', await readFile(resolve(root,'tools/public-assets/noto-sans-latin.woff2')))
 await writeStatic('fonts/noto-sans-latin-OFL.txt', await readFile(resolve(root,'tools/public-assets/noto-sans-latin-OFL.txt')))
 await writeStatic('favicon.svg', faviconSvg)
 await writeStatic('vercel-insights.js', publicObservabilityScript)
 await writeStatic('platform-carousel.js', `(function(){
+  var mobileMedia=window.matchMedia('(max-width: 760px)');
+  function updateFullSizeLinks(){document.querySelectorAll('[data-mobile-image]').forEach(function(link){link.href=mobileMedia.matches?link.dataset.mobileImage:link.dataset.desktopImage})}
+  mobileMedia.addEventListener('change',updateFullSizeLinks);updateFullSizeLinks();
   document.querySelectorAll('[data-platform-carousel]').forEach(function(carousel){
     var track=carousel.querySelector('.platform-slides'),slides=Array.from(track.querySelectorAll('.platform-image')),previous=carousel.querySelector('[data-gallery-previous]'),next=carousel.querySelector('[data-gallery-next]'),status=carousel.querySelector('[data-gallery-status]'),active=0,timer;
     function update(){var left=track.getBoundingClientRect().left;active=slides.reduce(function(best,slide,index){return Math.abs(slide.getBoundingClientRect().left-left)<Math.abs(slides[best].getBoundingClientRect().left-left)?index:best},0);status.textContent=(active+1)+' of '+slides.length;previous.disabled=active===0;next.disabled=active===slides.length-1;}

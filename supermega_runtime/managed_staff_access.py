@@ -44,7 +44,7 @@ STAFF_ACCESS_AUTHORIZATION_CONTRACT = "supermega.workspace_staff_access_authoriz
 STAFF_ACCESS_RECEIPT_CONTRACT = "supermega.workspace_staff_access_receipt.v1"
 STAFF_ACCESS_EVENT_CONTRACT = "supermega.workspace_staff_access_event.v1"
 STAFF_ACCESS_REVOCATION_RECEIPT_CONTRACT = "supermega.workspace_staff_access_revocation_receipt.v1"
-_ROLES = ("product-viewer", "product-operator", "workspace-manager", "website-reviewer", "ecommerce-reviewer")
+_ROLES = ("product-viewer", "product-operator", "workspace-manager", "ecommerce-operator", "website-reviewer", "ecommerce-reviewer")
 _PRODUCT_SURFACES = {
     "shop": "commerce",
     "ecommerce": "commerce",
@@ -88,6 +88,20 @@ def _role_capabilities(activation: Mapping[str, Any], role_id: str) -> list[str]
         if "website" not in _activation_products(activation) or "website.write" not in owner_capabilities:
             raise ManagedStaffAccessError("Website reviewer access requires an activated Website owner.")
         return ["website.review"]
+    if role_id == "ecommerce-operator":
+        # Ecommerce administration needs its own actor grant because Shop and
+        # Ecommerce intentionally share the commerce data surface. This role
+        # is for an internal operator, never a Shop-only customer assignment.
+        if (
+            "ecommerce" not in _activation_products(activation)
+            or not {"commerce.read", "commerce.write"}.issubset(owner_capabilities)
+        ):
+            raise ManagedStaffAccessError("Ecommerce operator access requires an activated Ecommerce owner.")
+        capabilities = {"commerce.read", "commerce.write", "ecommerce.manage"}
+        for capability in ("company.read", "approvals.request"):
+            if capability in owner_capabilities:
+                capabilities.add(capability)
+        return sorted(capabilities)
     surfaces = {_PRODUCT_SURFACES[product] for product in _activation_products(activation)}
     capabilities = {
         f"{surface}.read"
@@ -170,7 +184,7 @@ def compile_staff_access_plan(
         "memberLabel": member_name,
         "roleId": role,
         "products": (["website"] if role == "website-reviewer" else ["ecommerce"]
-                     if role == "ecommerce-reviewer" else _activation_products(activation)),
+                     if role in {"ecommerce-reviewer", "ecommerce-operator"} else _activation_products(activation)),
         "capabilities": capabilities,
         "approval": {
             "approvalId": approval,

@@ -1,22 +1,22 @@
 {
   "contract": "supermega.managed-pilot-readiness.v5",
-  "asOf": "2026-10-14T13:58:45.200Z",
+  "asOf": "2026-10-15T19:40:10.639Z",
   "pilotMode": "owner_named",
   "localDatabase": {
     "contract": "supermega.hq.database-rehearsal.v3",
     "schemaVersion": 13,
     "schemaProfile": "v13-self-serve",
-    "migrationCount": 27,
-    "implementationCommit": "774ce768dc8c34ecaf3b4046e804c0f3bf072a4f",
-    "implementationTree": "a6b366f21b1800daf6a6b3049a541550df3a5cf5",
-    "implementationDigest": "sha256:a2dbd85602fe806e1c4ef1992690760ae5104e03474d4dbba081e857d5967eff",
-    "receiptDigest": "sha256:83b258259abc162bd5fe53ddd0a992763ede2c66cc0d1ad2e32fbf07b814498f",
+    "migrationCount": 28,
+    "implementationCommit": "417b2ca329d39f40d8311fdeac4eb84d215a753c",
+    "implementationTree": "ecf563edb032622dfda16bd6b83850048a385999",
+    "implementationDigest": "sha256:12678d185c8e4a90849644877258a973652008acd8bb7661e4f8b60507b12785",
+    "receiptDigest": "sha256:f1fe39ac9576aa0a29c73c837436a979a8d9d2c02a0d3dd51b40d8558fb0a959",
     "behaviorChecks": 74,
     "catalogChecksBefore": 33,
     "catalogChecksAfter": 33,
     "hostedEvidenceCurrent": false
   },
-  "sourceDigest": "sha256:eb9e2a6928b64fe3c87dc572cf5d82b4a3f9479cbb71b6748055fa70cfc46166",
+  "sourceDigest": "sha256:0bc67fc495c4661043d9b1ceae0c6c61c552afca4f84ca05fbb88257dfe48df1",
   "overall": {
     "status": "blocked",
     "localDatabaseProofReady": true,
@@ -282,7 +282,7 @@
     },
     {
       "path": "hq/research/postgres17-rehearsal.json",
-      "digest": "sha256:57dc64e57fcb9b8182553d01bd3a1ee5dd12fd4063dfbd09f5023828237a683d"
+      "digest": "sha256:05b8cb396860b7263c03c307e1d7aa6e9151e6b85b1251ab1d86e7da79a7c3d0"
     },
     {
       "path": "hq/pilots/private-storage-privacy-audit.md",
@@ -314,7 +314,7 @@
     },
     {
       "path": "kernel/managed-pilot-readiness.mjs",
-      "digest": "sha256:98cad0f02b5b18717d88268ae0fce888d01e92158d4cda5961077c1e323f8b83"
+      "digest": "sha256:6292110757ea7aa8cc7ae4962addc796cfd5526c3dead605caf65ae45ff2238c"
     }
   ]
 }

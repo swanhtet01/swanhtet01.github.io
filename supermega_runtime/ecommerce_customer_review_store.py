@@ -7,15 +7,15 @@ from .commerce_runtime import commerce_storefront_preview, commerce_storefront_p
 from hashlib import sha256
 from .ecommerce_customer_review import uuid, stamp
 from .website_customer_review import _text
-from .trial_store import TrialPermissionDenied, TrialNotReadyError, TrialValidationError, TrialInvalidTransition, TrialIdempotencyConflict
+from .trial_store import TrialPermissionDenied, TrialNotReadyError, TrialValidationError, TrialInvalidTransition, TrialIdempotencyConflict, require_ecommerce_management_authority
 
 # Reviewed local candidate bodies, LF-normalized and outer-trimmed only.
 FUNCTIONS = {
     "ecommerce_review_text_length": (1, "bigint", "sql", False, "i", "789f685f8ef315e66146b9bd853f4f68e40e3de2e4e022a506ff4679c3a0579f"),
     "ecommerce_review_projection": (1, "jsonb", "plpgsql", False, "i", "958a3fea1726d57a4e833a0888102edb2a3d1105cd7f3c5f84d4741c2294c976"),
     "ecommerce_review_preview_digest": (1, "text", "plpgsql", False, "i", "fba073c4a638ca22f7a267cd8c2912999b89c245b7f0df895142f98fed8f726d"),
-    "ecommerce_review_operator_entitled": (0, "boolean", "sql", True, "s", "e955a42c7af14d7f0c67299a53439452f40d1e17c3db2d466e02d112f5c27c9c"),
-    "ecommerce_review_recipient_ready": (1, "boolean", "sql", True, "s", "1f551f0ba4b8b7fa9f87e3f70cb8211c0d10268461a5a80ee5ca670f7dd13611"),
+    "ecommerce_review_operator_entitled": (0, "boolean", "sql", True, "s", "4cca9c52c01f834f292c0d421a36f8ba9cdf9bea215db8b5a7f1a83a7d63e8f9"),
+    "ecommerce_review_recipient_ready": (1, "boolean", "sql", True, "s", "245b24cd05826522a9825a618fb48e786fe4225f6483936634a4557555b18794"),
     "guard_ecommerce_review": (0, "trigger", "plpgsql", False, "v", "41583ca2889b54fcf7c77c68d307f55ec127b218b27f3bc001cf05418e4776d9"),
     "invalidate_ecommerce_reviews": (0, "trigger", "plpgsql", False, "v", "2f8e3905cd867d3a118d4fd6eaf9963248cee9ea14cfd7df0160d073f2167959"),
 }
@@ -56,7 +56,10 @@ class EcommerceCustomerReviewStore:
         capability=capability or ('commerce.write' if write else 'ecommerce.review')
         actor=principal.normalized()
         if actor.actor_kind!='human': raise TrialPermissionDenied(capability)
-        with self.store._guarded_cursor(actor,write=write,capability=capability) as (cursor,_):
+        with self.store._guarded_cursor(actor,write=write,capability=capability) as (cursor,capabilities):
+            if capability=='commerce.write':
+                require_ecommerce_management_authority(
+                    self.store._product_entitlements(cursor,actor.workspace_id), capabilities)
             _assert_storage(cursor)
             cursor.execute("select current_setting('transaction_isolation') as isolation")
             if cursor.fetchone()['isolation']!='read committed':
@@ -66,9 +69,13 @@ class EcommerceCustomerReviewStore:
                 if cursor.fetchone() is None: raise TrialValidationError('ecommerce_review_source_missing')
             cursor.execute("select pg_advisory_xact_lock(hashtextextended('ecommerce-review:' || %s,0))",(actor.workspace_id,))
             self.store._assert_active_identity_session(cursor,actor)
-            if (capability not in self.store._load_membership(cursor,actor)
-                or 'ecommerce' not in self.store._product_entitlements(cursor,actor.workspace_id)):
+            latest_capabilities = self.store._load_membership(cursor,actor)
+            latest_products = self.store._product_entitlements(cursor,actor.workspace_id)
+            if capability not in latest_capabilities or 'ecommerce' not in latest_products:
                 raise TrialPermissionDenied(capability)
+            if capability == 'commerce.write':
+                # A grant can be revoked while the review lock is contested.
+                require_ecommerce_management_authority(latest_products, latest_capabilities)
             yield cursor,actor
 
     def preparation_preview(self,principal):

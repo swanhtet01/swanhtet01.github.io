@@ -5,7 +5,7 @@
 Current public page:
 
 - `Sites | Your business online | SuperMega`
-- `Edit business pages and services, check readiness, and review customer inquiries in one workspace.`
+- `The SuperMega team manages business pages, readiness checks and customer inquiries in Sites.`
 
 The public website shows interface screenshots and one Login. Contact is in the footer. It has no sample, trial, setup or product-launch buttons.
 
@@ -13,16 +13,16 @@ Use this as a service walkthrough. The product route is not proof of a provision
 
 ## 2. Pre-demo setup
 
-Use an isolated browser profile and synthetic business details. Customer entry starts at `/website/` or `Login`; it does not require customers to configure a sample workspace. Internal legacy setup routes are retained for rehearsals only. Never reset existing customer work for a presentation.
+Use an isolated browser profile and synthetic business details. The public product page is `/website/`; `Login` is the customer entry for Shop. An authorized SuperMega operator runs the Sites workspace internally. Internal legacy setup routes are retained for rehearsals only. Never reset existing customer work for a presentation.
 
 ## 3. Demo script
 
-1. Open `/website/` without a saved workspace override. Verify the business brief is shown for an unsigned visitor.
-2. Enter a fictional business name and concise requirements. Use only facts supplied for the exercise; leave unknown details unresolved.
-3. Use the optional reference field when there is a relevant source. Check that entered facts remain intact before continuing.
-4. Choose `Continue` and verify that the handoff preserves the product and brief. Stop before sending customer details unless that submission is authorized.
-5. For an existing local workspace, return through app home and open its saved product card. The `Local workspace` label means device storage, not managed persistence. Check saved content rather than creating another sample.
-6. For a managed delivery, verify the assigned account, durable saved content and review outcome separately. Record the exact release tested; do not turn a local walkthrough into a hosted acceptance claim.
+1. Open `/website/` as an unsigned visitor. Show the current product description and distinct editor and inquiry screenshots without claiming that the public page is a customer builder.
+2. In an authorized internal test workspace, open the actual Sites page editor with fictional business details. Show the page list and a short content edit.
+3. Review page checks and the publishing step. Keep publication disabled unless the specific site and address are authorized.
+4. Open the inquiry view with a synthetic request. Show its next decision without messaging a customer.
+5. Reopen the saved local page. The `Local workspace` label means device storage, not managed persistence; check the saved content rather than creating another sample.
+6. For a managed delivery, verify assigned operator access, durable saved content, the customer review path and the published address separately. Record the exact release tested; do not turn a local walkthrough into a hosted acceptance claim.
 
 ## 4. Objection handling: the boundary
 

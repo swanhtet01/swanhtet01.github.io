@@ -14,10 +14,97 @@ WORKSPACE, OWNER, RECIPIENT = fixture.WORKSPACE, fixture.OWNER, fixture.RECIPIEN
 @unittest.skipUnless(os.environ.get('SUPERMEGA_RUN_WEBSITE_REVIEW_SQL') == '1', 'explicit local SQL rehearsal only')
 class CatalogReviewSqlTests(unittest.TestCase):
     # Reuse lifecycle helpers, never inherit the Website test cases or database.
-    setUpClass = classmethod(fixture.WebsiteReviewSqlTests.setUpClass.__func__)
+    @classmethod
+    def setUpClass(cls):
+        fixture.WebsiteReviewSqlTests.setUpClass.__func__(cls)
+        # Only this isolated Ecommerce fixture receives the internal operator
+        # grant; the shared Shop/Website seed remains unchanged.
+        with pg._connect(cls.admin_url) as connection:
+            connection.execute(
+                "update app_private.workspace_memberships "
+                "set capabilities=array_append(capabilities,'ecommerce.manage') "
+                "where workspace_id=%s and actor_id=%s",
+                (WORKSPACE, OWNER),
+            )
     stop = classmethod(fixture.WebsiteReviewSqlTests.stop.__func__)
     context = fixture.WebsiteReviewSqlTests.context
     transaction = fixture.WebsiteReviewSqlTests.transaction
+
+    def test_revoked_operator_grant_denies_private_review_functions(self):
+        from tests.test_commerce_runtime import catalog_state, storefront_configuration
+        from supermega_runtime.commerce_runtime import (
+            commerce_storefront_preview, commerce_storefront_preview_digest,
+        )
+        source = catalog_state()
+        source['storefrontConfiguration'] = storefront_configuration(source)
+        review_id = uuid4()
+        with pg._connect(self.admin_url) as connection:
+            try:
+                connection.execute("""insert into app_private.workspace_events
+                    (event_id,workspace_id,command_id,command_fingerprint,surface,event_type,
+                     actor_id,actor_kind,payload_json,result_json)
+                    values (%s,%s,%s,%s,'company','company.workspace.activated',%s,'human',
+                      '{"products":["ecommerce"]}'::jsonb,'{}'::jsonb)""",
+                    (uuid4(), WORKSPACE, uuid4(), 'a' * 64, OWNER))
+                connection.execute(
+                    "update app_private.workspace_memberships "
+                    "set capabilities=array['ecommerce.review'] "
+                    "where workspace_id=%s and actor_id=%s",
+                    (WORKSPACE, RECIPIENT),
+                )
+                connection.execute(
+                    "insert into app_private.workspace_state"
+                    "(workspace_id,surface,version,state_json,updated_by) "
+                    "values (%s,'commerce',1,%s::jsonb,%s) "
+                    "on conflict(workspace_id,surface) do update "
+                    "set state_json=excluded.state_json,"
+                    "version=app_private.workspace_state.version+1",
+                    (WORKSPACE, json.dumps(source), OWNER),
+                )
+                version = connection.execute(
+                    "select version from app_private.workspace_state "
+                    "where workspace_id=%s and surface='commerce'",
+                    (WORKSPACE,),
+                ).fetchone()[0]
+                self.context(connection, OWNER)
+                connection.execute('set local role supermega_trial_backend')
+                self.assertTrue(connection.execute(
+                    'select app_private.ecommerce_review_operator_entitled()').fetchone()[0])
+                self.assertTrue(connection.execute(
+                    'select app_private.ecommerce_review_recipient_ready(%s)', (RECIPIENT,)).fetchone()[0])
+                connection.execute(
+                    """insert into app_private.ecommerce_customer_reviews
+                    (review_id,workspace_id,recipient_actor_id,prepared_by,source_version,
+                     preview,preview_digest,expires_at)
+                    values (%s,%s,%s,%s,%s,%s::jsonb,%s,clock_timestamp()+interval '1 day')""",
+                    (review_id, WORKSPACE, RECIPIENT, OWNER, version,
+                     json.dumps(commerce_storefront_preview(source)),
+                     commerce_storefront_preview_digest(source)),
+                )
+                self.assertEqual(connection.execute(
+                    "select count(*) from app_private.ecommerce_customer_reviews "
+                    "where review_id=%s", (review_id,)).fetchone()[0], 1)
+                connection.execute('reset role')
+                connection.execute(
+                    "update app_private.workspace_memberships "
+                    "set capabilities=array_remove(capabilities,'ecommerce.manage') "
+                    "where workspace_id=%s and actor_id=%s",
+                    (WORKSPACE, OWNER),
+                )
+                connection.execute('set local role supermega_trial_backend')
+                self.assertFalse(connection.execute(
+                    'select app_private.ecommerce_review_operator_entitled()').fetchone()[0])
+                self.assertFalse(connection.execute(
+                    'select app_private.ecommerce_review_recipient_ready(%s)', (RECIPIENT,)).fetchone()[0])
+                self.assertEqual(connection.execute(
+                    "select count(*) from app_private.ecommerce_customer_reviews "
+                    "where review_id=%s", (review_id,)).fetchone()[0], 0)
+                self.assertEqual(connection.execute(
+                    "update app_private.ecommerce_customer_reviews "
+                    "set status='revoked' where review_id=%s",
+                    (review_id,)).rowcount, 0)
+            finally:
+                connection.rollback()
 
     def test_reviewer_cannot_read_or_lock_private_commerce_source(self):
         from tests.test_commerce_runtime import catalog_state, storefront_configuration
