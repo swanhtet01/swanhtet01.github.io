@@ -2377,7 +2377,7 @@ label.checkbox-row input { width: 1.25rem; min-width: 1.25rem; min-height: 1.25r
 .shop-stock-metrics dd { margin: 0; overflow-wrap: anywhere; color: var(--core-ink); font-family: var(--core-mono); font-size: clamp(1.15rem,2vw,1.65rem); font-weight: var(--font-weight-black); letter-spacing: -.045em; }
 .shop-stock-metrics > div[data-tone="attention"] dd { color: var(--core-warning); }
 .shop-stock-metrics small { color: var(--core-muted); font-size: .5625rem; line-height: 1.4; }
-.shop-stock-grid { min-width: 0; display: grid; grid-template-columns: minmax(0,1.5fr) minmax(18.5rem,.72fr); gap: 1rem; align-items: stretch; }
+.shop-stock-grid { min-width: 0; display: grid; grid-template-columns: minmax(0,1.5fr) minmax(18.5rem,.72fr); gap: 1rem; align-items: start; }
 .shop-stock-attention-card, .shop-stock-next-action { min-width: 0; border: 1px solid var(--core-line); border-radius: 1.125rem; background: var(--core-panel); box-shadow: 0 .75rem 2rem rgba(20,22,40,.04); overflow: hidden; }
 .shop-stock-attention-card > header, .shop-stock-next-action > header { min-height: 4.75rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; border-bottom: 1px solid var(--core-line); padding: .875rem 1rem; }
 .shop-stock-attention-card > header > span, .shop-stock-next-action > header > span { min-width: 0; display: grid; gap: .1875rem; }
