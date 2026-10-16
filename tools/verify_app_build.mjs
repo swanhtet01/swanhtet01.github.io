@@ -68,7 +68,7 @@ let shopProcurementDecisionRuntimeChecks = 0
 let behaviorTrailRuntimeChecks = 0
 const fail = (reason) => failures.push(reason)
 if (normalizeSourceText('line one\r\nline two\rline three') !== 'line one\nline two\nline three') fail('source_line_ending_normalization_failed')
-const [manifestText, appPackageText, appSource, coreSource, coreShellSource, premiumWorkspaceChromeSource, productSystemNavigatorSource, behaviorTrailSource, catalogImportSource, clientOnboardingSource, clientOnboardingUiSource, commerceSource, commerceOrderDraftSource, channelOrderSource, managedTrialSource, managedCommerceRuntime, managedTrialStoreRuntime, managedProductionRuntime, productionSource, teamSource, agentTeamsSource, teamModel, websiteSource, contentSource, publishSource, publishCssSource, sitePreviewSource, websiteModelSource, websiteExportSource, websiteWorkspaceSource, managedWebsiteSource, websiteCssSource, commerceIntakeSource, handoffSource, ecommerceSource, ecommerceActivationSource, ecommerceOrderReviewSource, managedStorefrontSource, storefrontSource, storefrontDraftSource, storefrontRequestSource, ecommerceConfirmSource, ecommerceHandoffSource, ecommerceCssSource, coreCssSource, schedulerSource, commerceTabsSource, i18nActionsSource] = await Promise.all([
+const [manifestText, appPackageText, appSource, coreSource, coreShellSource, premiumWorkspaceChromeSource, productSystemNavigatorSource, behaviorTrailSource, catalogImportSource, clientOnboardingSource, clientOnboardingUiSource, commerceSource, commerceOrderDraftSource, channelOrderSource, managedTrialSource, managedCommerceRuntime, managedTrialStoreRuntime, managedProductionRuntime, productionSource, teamSource, agentTeamsSource, teamModel, websiteSource, contentSource, publishSource, publishCssSource, sitePreviewSource, websiteModelSource, websiteExportSource, websiteWorkspaceSource, managedWebsiteSource, websiteCssSource, commerceIntakeSource, handoffSource, ecommerceSource, ecommerceActivationSource, ecommerceOrderReviewSource, managedStorefrontSource, storefrontSource, storefrontDraftSource, storefrontRequestSource, ecommerceConfirmSource, ecommerceHandoffSource, ecommerceCssSource, coreCssSource, schedulerSource, commerceTabsSource, i18nActionsSource, shopBusinessChoiceSource] = await Promise.all([
   readFile(resolve(root, 'site-manifest.json'), 'utf8'),
   readFile(resolve(root, 'showroom', 'package.json'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'App.tsx'), 'utf8'),
@@ -117,6 +117,7 @@ const [manifestText, appPackageText, appSource, coreSource, coreShellSource, pre
   readFile(resolve(root, 'tools', 'ensure_supermega_scheduler.ps1'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'core', 'commerce-tabs.ts'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'core', 'i18n-actions.ts'), 'utf8'),
+  readFile(resolve(root, 'showroom', 'src', 'core', 'shop-business-choice.ts'), 'utf8'),
 ])
 const manifest = JSON.parse(manifestText)
 const stocktakeRecoverySource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ShopStocktakeDraftRecovery.tsx'), 'utf8')
@@ -2350,7 +2351,8 @@ if (!settingsPageSource.includes('aria-label="Premium pilot"')
   || !coreCssSource.includes('.premium-pilot-rows')
   || !coreCssSource.includes('.premium-pilot-login')
   || !coreCssSource.includes('.managed-recovery-login')) fail('premium_pilot_activation_missing')
-if (!coreSource.includes('export function OperationsPage({ product }: { product: ProductId })')
+if (!coreSource.includes('export function OperationsPage()')
+  || !coreSource.includes('workspace-screen operations-screen commerce-screen')
   || coreSource.includes('product?: ProductId')
   || coreSource.includes("const routeModule = location.pathname.split('/').filter(Boolean)[1]")
   || coreSource.includes("const requestedView = searchParams.get('view')")
@@ -3101,7 +3103,7 @@ if (coreLayoutRouteStart < 0
 if (!appSource.includes("lazy(() => import('./products/ecommerce/EcommerceProduct')")
   || !appSource.includes('<EcommerceProduct />')
   || !appSource.includes('path="ecommerce/*"')
-  || !appSource.includes('<OperationsPage product="commerce" />')
+  || !appSource.includes('<OperationsPage />')
   || !appSource.includes('path="shop/*"')
   || appSource.includes('<OperationsPage product="production" />')
   || !appSource.includes('<Route element={<Navigate replace to="/?choose=1" />} path="plant/*" />')
@@ -3123,7 +3125,7 @@ if (!appSource.includes("} from './core/CoreShell'")
   || operationsPageRouteSource.includes('TeamWorkspace')
   || !appSource.includes('<ProductLoading name="Shop" />')
   || appSource.includes('<ProductLoading name="Plant" />')
-  || !appSource.includes('<Suspense fallback={<ProductLoading name="Shop" />}><OperationsPage product="commerce" /></Suspense>} path="shop/*"')
+  || !appSource.includes('<Suspense fallback={<ProductLoading name="Shop" />}><OperationsPage /></Suspense>} path="shop/*"')
   || !coreShellSource.includes('export function CoreLayout()')
   || !coreShellSource.includes('export function ProductHomePage()')
   || !coreShellSource.includes("fetch('/api/health'")
@@ -5396,7 +5398,9 @@ if (!commerceSource.includes('registerCommerceItem')
   || !coreSource.includes('required value={itemDraft.name}')
   || !coreSource.includes('required step="1" type="number" value={itemDraft.onHand}')
   || !coreSource.includes('required step="1" type="number" value={itemDraft.price}')
-  || !coreSource.includes('Product code or barcode (optional)')
+  || !coreSource.includes('name="product-sku"')
+  || !coreSource.includes('name="product-barcode"')
+  || !coreSource.includes('commerceItemBarcodeConflicts(commerce.items, itemSku, barcode)')
   || !coreSource.includes('Low-stock alert (optional)')
   || !coreSource.includes('const suppliedSku = itemDraft.sku.trim().toUpperCase()')
   || !coreSource.includes('const itemSku = suppliedSku || `SM-${commandUuid().slice(0, 8).toUpperCase()}`')
@@ -5412,10 +5416,13 @@ if (!commerceSource.includes('export type CommerceCatalogChange')
   || !commerceSource.includes('has no anchored baseline')
   || !commerceSource.includes('catalogChanges: [change, ...changes]')
   || !commerceSource.includes('item.price !== change.nextPrice || item.reorderAt !== change.nextReorderAt')
+  || !commerceSource.includes('(hasBarcodeHistory && (item.barcode ?? null) !== change.nextBarcode)')
+  || !commerceSource.includes('commerceItemBarcodeConflicts(current.items, update.sku, update.nextBarcode ?? null)')
   || !coreSource.includes("kind: 'catalog_item_update'")
   || !coreSource.includes("'commerce.item.updated'")
   || !coreSource.includes('Edit item')
-  || !coreSource.includes('Only price and reorder level change')
+  || !coreSource.includes('Edit the price, reorder level, or barcode')
+  || !coreSource.includes('Stock and prior orders stay unchanged.')
   || !managedCommerceRuntime.includes('def _validate_item_updated')
   || !managedCommerceRuntime.includes('commerce_catalog_baseline_digest')
   || !managedCommerceRuntime.includes('"commerce.item.updated"')) fail('commerce_catalog_update_contract_missing')
@@ -6156,7 +6163,7 @@ if (!productSetupSource.includes('templateId: string')
   || !productOnboardingPageSource.includes("managedIdentity ? 'Uses this company account. Nothing is published or sent externally.'")
   || !productSetupSource.includes("if (product === 'commerce') return '/shop/'")
   || !productSetupSource.includes("if (product === 'production') return '/plant/'")
-  || !productOnboardingPageSource.includes('rememberProductSetup(window.localStorage, setup)')
+  || !productOnboardingPageSource.includes('rememberProductSetup(window.localStorage, setup, SHOP_BUSINESS_CHOICE_IDS)')
   || !productOnboardingPageSource.includes('setSetup(saved ?? seedSetupForProduct(product, template.id))')
   || !localWorkspaceStorageSource.includes("'supermega.product_setups.v1'")
   || !companyBackupSource.includes("'supermega.product_setups.v1'")
@@ -6254,7 +6261,9 @@ if (!productSetupSource.includes('templateId: string')
   || !productOnboardingWorkflowReadyContract.includes('&& !pendingRequestedWorkflowTemplate')
   || !productOnboardingWorkflowReadyContract.includes('&& !pendingRequestedPlantIndustryPack')
   || productOnboardingPageSource.includes('<summary><span>Choose business type</span><small>Optional</small></summary>')
-  || !productOnboardingPageSource.includes('owner: workspaceOwner, startedAt')
+  || !productOnboardingPageSource.includes('owner: workspaceOwner,')
+  || !productOnboardingPageSource.includes('businessChoiceId: normalizeShopBusinessChoiceId(businessChoiceId, SHOP_BUSINESS_CHOICE_IDS)')
+  || !productOnboardingPageSource.includes('startedAt,')
   || productOnboardingPageSource.includes('product-onboarding-step')
   || productOnboardingPageSource.includes('product-onboarding-sample')
   || productOnboardingPageSource.includes('onboarding choices')
@@ -6532,11 +6541,12 @@ if (!shopCounterContract.includes('<h2>Products</h2>')
   || shopCounterContract.includes('Reject bad redemption')
   || !shopCounterContract.includes('function addSearchMatch(event: KeyboardEvent<HTMLInputElement>)')
   || !shopCounterContract.includes("event.key !== 'Enter' || !normalizedQuery")
-  || !shopCounterContract.includes('item.sku.toLocaleLowerCase() === normalizedQuery')
-  || !shopCounterContract.includes('const match = matches.length === 1 ? matches[0] : null')
+  || !shopCounterContract.includes('const resolution = resolveCommerceItemByScanCode(items, normalizedQuery)')
+  || !shopCounterContract.includes("if (resolution.kind === 'ambiguous')")
+  || !shopCounterContract.includes("if (addScannedValue(query, 'keyboard')) setCatalogPage(0)")
   || shopCounterContract.includes('exactSku ?? (visibleItems.length === 1 ? visibleItems[0] : null)')
   || !shopCounterContract.includes('onKeyDown={addSearchMatch}')
-  || !shopCounterContract.includes('placeholder="Search or scan SKU"')
+  || !shopCounterContract.includes('placeholder="Search, SKU or barcode"')
   || !shopCounterContract.includes('aria-keyshortcuts="/"')
   || !shopCounterContract.includes("document.addEventListener('keydown', focusCounterSearch)")
   || !shopCounterContract.includes("document.removeEventListener('keydown', focusCounterSearch)")
@@ -6668,7 +6678,7 @@ if (!i18nActionsSource.includes("return entry?.status === 'confirmed' ? entry.my
   // keeps the four Plant/Shop-shared tab ids out of this exact-match table's blast
   // radius: a later batch confirming a 'Jobs' or 'Problems' entry for some other
   // surface must not silently make Plant's tabs bilingual without a Plant decision.
-  || !coreSource.includes("type=\"button\">{view === 'commerce' ? bi(tab.label) : tab.label}</button>")
+  || !coreSource.includes('type="button">{bi(tab.label)}</button>')
   // The merchant payment QR dialog opens from the counter's own sale details, and
   // its Close is the same CONFIRMED key the receipt uses -- unwired, one non-cash
   // sale would show a Burmese Close and an English Close side by side.
@@ -7199,7 +7209,7 @@ if ((commerceInventoryContract.match(/'Count stock'/g) || []).length !== 2
   || !commerceInventoryContract.includes("max={stockCountBalance?.tracking === 'serial' ? 1 : Number.MAX_SAFE_INTEGER}")
   || !commerceInventoryContract.includes('Choose location and lot')
   || !commercePageContract.includes('function selectStockCountBarcode(rawValue: string)')
-  || !commercePageContract.includes('candidate.sku.toLowerCase() === code.toLowerCase()')
+  || !commercePageContract.includes('findCommerceItemByScanCode(commerce.items, code)')
   || !commercePageContract.includes('balances.length === 1')
   || !commercePageContract.includes('balances.find((candidate) => candidate.stockUnitId === stockCountDraft?.stockUnitId')
   || !commerceInventoryContract.includes('Scan item code · press Enter')
@@ -7805,9 +7815,11 @@ if (!coreCssSource.includes('.plant-today[data-state="blocked"]')
 if (!coreCssSource.includes('.action-history summary { min-height: 44px; }')) fail('production_mobile_history_touch_target_missing')
 if (!coreSource.includes("const commerceTab = requestedShopTemplateId && requestedTab === null ? 'counter' : activeCommerceTab(requestedTab)")
   || !commerceTabsSource.includes("return commerceTabs.some((tab) => tab.id === requestedTab) ? requestedTab as CommerceTab : 'today'")
-  || !coreSource.includes("const productionTab = productionTabs.some((tab) => tab.id === requestedTab) ? requestedTab as ProductionTab : 'production'")
+  || !coreSource.includes("const activeTab = commerceTab")
+  || !coreSource.includes("const canonicalPath = '/shop/'")
   || !coreSource.includes("const requestedTabIsCanonical = requestedTab === activeTab")
-  || !coreSource.includes("if (view === 'commerce' && requestedShopTemplateId) canonicalParams.set('template', requestedShopTemplateId)")
+  || !coreSource.includes("if (requestedShopTemplateId) canonicalParams.set('template', requestedShopTemplateId)")
+  || !coreSource.includes("navigate(`/shop/?${params}`, { replace: true })")
   || !coreSource.includes("!requestedTabIsCanonical")) fail('product_default_tab_not_canonicalized')
 // Keep the compact cart action in English so it does not wrap beside the close
 // control on narrow screens. Its handler and conditional rendering remain protected,
@@ -7836,11 +7848,13 @@ if (shopPackIds.join(',') !== 'retail,cafe,restaurant,spa,gym,school'
   || shopProductContract?.internalTemplatePacks?.some((pack) => pack.status !== 'core-compatible' || !pack.availableNow?.some((capability) => /schedule|reservation|appointment/i.test(capability)))
   || shopProductContract?.internalTemplatePacks?.some((pack) => !shopProductContract.templates?.some((template) => template.id === pack.workflowTemplateId && template.entryPoints?.includes(pack.entryPoint)))
   || shopProductContract?.internalTemplatePacks?.some((pack) => pack.plannedNext?.includes('Appointments') || pack.plannedNext?.includes('Classes'))) fail('shop_industry_pack_manifest_not_operationally_aligned')
-if (websiteProductContract?.status !== 'available-in-app'
+if (manifest.productVisibility?.activeProductIds?.join(',') !== 'shop'
+  || !manifest.productVisibility?.retainedOnlyProductIds?.includes('website')
+  || !manifest.productVisibility?.retainedOnlyProductIds?.includes('ecommerce')
   || websiteProductContract?.views?.join(',') !== 'Start,Edit,Preview,Download'
   || websiteProductContract?.templates?.some((template) => template.workflow?.at(-1) !== 'Download website')
   || manifestText.includes('Approve site file')
-  || manifestText.includes('content approval time')) fail('website_trial_catalog_not_aligned_with_download_outcome')
+  || manifestText.includes('content approval time')) fail('shop_only_visibility_or_website_trial_catalog_mismatch')
 for (const product of solutionProducts) {
   if (product.templates?.length !== 3) fail(`wrong_template_count:${product.id}`)
   for (const template of product.templates || []) {
@@ -8823,9 +8837,10 @@ async function verifyShopBusinessTemplateRuntime() {
     || ['Date.now', 'Math.random', 'new Date()', 'crypto.randomUUID', 'performance.now', 'fetch(', 'XMLHttpRequest', 'WebSocket(', 'EventSource(', 'localStorage'].some((marker) => shopBusinessTemplatesSource.includes(marker))
     || !productOnboardingRuntimeSource.includes('export async function provisionLocalShopBusinessTemplateSample')
     || productOnboardingPageSource.includes('provisionLocalShopBusinessTemplateSample(selectedBusinessTemplate.id)')
-    || !productOnboardingPageSource.includes("shopBusinessTemplateFromQuery(query.get('template'))")
-    || !productOnboardingPageSource.includes("shopBusinessChoiceFromIndustryPack(pack.id)")
-    || !shopBusinessTemplatesSource.includes('export function shopIndustryPackSetupPath(')
+    || !productOnboardingPageSource.includes("const businessTemplateId = businessChoiceId.startsWith('trade:')")
+    || !shopBusinessChoiceSource.includes('export function requestedShopBusinessChoiceFromSearch(')
+    || !shopBusinessChoiceSource.includes('shopBusinessChoiceFromIndustryPack(pack.id)')
+    || !shopBusinessChoiceSource.includes('export function shopIndustryPackIdForBusinessChoice(')
     || !productOnboardingPageSource.includes('className="compact-disclosure product-onboarding-business-type"')
     || !productOnboardingPageSource.includes('shopBusinessTemplates.map((template)')
     || !productOnboardingPageSource.includes('Choose a business type')
@@ -10163,8 +10178,10 @@ async function verifyCatalogImportRuntime() {
     const aliasCsv = '\uFEFFStock Code,Product Name,Available Stock,Reorder Level,Selling Price\r\nTEA-001,"Green, tea",24,8,4500\r\nCOFFEE-002,မြန်မာ ကော်ဖီ,12,5,7000\r\n'
     const aliasPreview = await model.createShopCatalogImportPreview(aliasCsv, existing, undefined, 'alias.csv')
     assert(aliasPreview.schema === model.SHOP_CATALOG_IMPORT_SCHEMA, 'catalog_import_schema_missing')
-    assert(JSON.stringify(aliasPreview.mapping) === JSON.stringify({ sku: 'Stock Code', name: 'Product Name', onHand: 'Available Stock', reorderAt: 'Reorder Level', price: 'Selling Price' }), 'catalog_import_alias_mapping_wrong')
-    assert(aliasPreview.suggestions.every((suggestion) => suggestion.basis === 'alias'), 'catalog_import_alias_suggestions_not_explicit')
+    assert(JSON.stringify(aliasPreview.mapping) === JSON.stringify({ sku: 'Stock Code', barcode: '', name: 'Product Name', category: '', onHand: 'Available Stock', reorderAt: 'Reorder Level', price: 'Selling Price' }), 'catalog_import_alias_mapping_wrong')
+    assert(aliasPreview.suggestions.filter((suggestion) => !['barcode', 'category'].includes(suggestion.field)).every((suggestion) => suggestion.basis === 'alias')
+      && aliasPreview.suggestions.find((suggestion) => suggestion.field === 'barcode')?.basis === 'unmapped'
+      && aliasPreview.suggestions.find((suggestion) => suggestion.field === 'category')?.basis === 'unmapped', 'catalog_import_alias_suggestions_not_explicit')
     assert(aliasPreview.totals.rows === 2 && aliasPreview.totals.ready === 2 && aliasPreview.totals.issueRows === 0, 'catalog_import_valid_totals_wrong')
     assert(aliasPreview.rows[0].item?.name === 'Green, tea', 'catalog_import_quoted_comma_lost')
     assert(aliasPreview.rows[1].item?.name === 'မြန်မာ ကော်ဖီ', 'catalog_import_unicode_lost')
@@ -10175,7 +10192,8 @@ async function verifyCatalogImportRuntime() {
     assert(model.shopCatalogImportCatalogSignature([...existing, aliasPreview.rows[0].item].filter(Boolean)) === model.shopCatalogImportCatalogSignature([aliasPreview.rows[0].item, ...existing].filter(Boolean)), 'catalog_import_catalog_signature_depends_on_order')
 
     const templatePreview = await model.createShopCatalogImportPreview(model.SHOP_CATALOG_IMPORT_TEMPLATE, [])
-    assert(templatePreview.totals.ready === 2 && templatePreview.headers.join(',') === 'sku,item_name,opening_stock,reorder_at,price_mmk', 'catalog_import_template_not_ready')
+    assert(templatePreview.totals.ready === 2 && templatePreview.headers.join(',') === 'sku,barcode,item_name,category,opening_stock,reorder_at,price_mmk', 'catalog_import_template_not_ready')
+    assert(templatePreview.mapping.category === 'category' && templatePreview.rows.every((row) => row.item?.category === undefined), 'catalog_import_category_must_remain_optional')
     assert(templatePreview.suggestions.every((suggestion) => suggestion.basis === 'exact'), 'catalog_import_template_headers_not_exact')
 
     const manualCsv = 'Code,Label,Qty,Minimum,MMK\nSKU-100,One,1,0,1000\n'
@@ -10183,7 +10201,13 @@ async function verifyCatalogImportRuntime() {
     assert(unmapped.fileIssues.length === 4 && unmapped.mapping.onHand === 'Qty' && unmapped.totals.invalid === 1, 'catalog_import_unmapped_columns_did_not_fail_closed')
     const manualMapping = { sku: 'Code', name: 'Label', onHand: 'Qty', reorderAt: 'Minimum', price: 'MMK' }
     const manuallyMapped = await model.createShopCatalogImportPreview(manualCsv, [], manualMapping)
-    assert(manuallyMapped.totals.ready === 1 && JSON.stringify(manuallyMapped.mapping) === JSON.stringify(manualMapping), 'catalog_import_manual_mapping_not_respected')
+    assert(manuallyMapped.totals.ready === 1
+      && manuallyMapped.mapping.sku === manualMapping.sku
+      && manuallyMapped.mapping.barcode === ''
+      && manuallyMapped.mapping.name === manualMapping.name
+      && manuallyMapped.mapping.onHand === manualMapping.onHand
+      && manuallyMapped.mapping.reorderAt === manualMapping.reorderAt
+      && manuallyMapped.mapping.price === manualMapping.price, 'catalog_import_manual_mapping_not_respected')
 
     const duplicatePreview = await model.createShopCatalogImportPreview('sku,item_name,opening_stock,reorder_at,price_mmk\nDUP-1,One,1,0,100\nDUP-1,Two,2,1,200\n', [])
     assert(duplicatePreview.totals.duplicates === 2 && duplicatePreview.rows.every((row) => row.issues.some((issue) => issue.code === 'duplicate_file_sku' && issue.field === 'sku')), 'catalog_import_file_duplicates_not_all_flagged')
@@ -10356,7 +10380,10 @@ async function verifyClientOnboardingRuntime() {
       const product = productProfile.runtimeId
       const object = model.clientImportObject(product)
       objectIds.add(object.id)
-      assert(object.fields.length === 5 && object.fields.some((field) => !field.required) === (product === 'website' || product === 'ecommerce'), `client_import_${product}_field_contract_wrong`)
+      assert(object.fields.length === (product === 'commerce' ? 7 : 5)
+        && object.fields.some((field) => !field.required) === (product === 'website' || product === 'ecommerce' || product === 'commerce')
+        && (product !== 'commerce' || (object.fields.find((field) => field.id === 'barcode')?.required === false
+          && object.fields.find((field) => field.id === 'category')?.required === false)), `client_import_${product}_field_contract_wrong`)
       const profileIds = model.clientImportWorkflowTemplateIds(product)
       assert(JSON.stringify(profileIds) === JSON.stringify(productProfile.templates.map((template) => template.id)), `client_import_${product}_workflow_profiles_drifted`)
       const previewDigests = new Set()
@@ -10497,7 +10524,7 @@ async function verifyClientOnboardingRuntime() {
         && blueprint.topology.recordAuthorities.length === blueprint.products.length
         && blueprint.topology.recordAuthorities.every((authority) => authority.locationIds.join(',') === 'LOC-MAIN' && authority.owns.length >= 4 && authority.writePolicy === 'human_review_required')
         && blueprint.topology.controls.unmanagedWritesAllowed === false, `client_demo_${preset.id}_topology_wrong`)
-      assert(blueprint.products.length === preset.selections.length && blueprint.products.every((product) => product.sampleCsv && product.checklist.length === 5), `client_demo_${preset.id}_data_plan_incomplete`)
+      assert(blueprint.products.length === preset.selections.length && blueprint.products.every((product) => product.sampleCsv && product.checklist.length === (product.product === 'commerce' ? 7 : 5)), `client_demo_${preset.id}_data_plan_incomplete`)
       assert(blueprint.controls.localDemoOnly === true && blueprint.controls.humanReviewRequired === true && blueprint.controls.externalWritesPerformed === false, `client_demo_${preset.id}_controls_weakened`)
     }
     const manufacturingPreset = model.clientDemoPresets.find((preset) => preset.id === 'manufacturing')

@@ -21,6 +21,15 @@ export type ShopTodaySalesPulse = {
   points: ShopTodaySalesPulsePoint[]
 }
 
+const MIN_COMPLETED_SALES_FOR_PATTERN = 3
+const MIN_ACTIVE_PERIODS_FOR_PATTERN = 2
+
+export function hasShopTodaySalesPattern(pulse: ShopTodaySalesPulse) {
+  const activePeriods = pulse.points.filter((point) => point.count > 0).length
+  return pulse.today.count >= MIN_COMPLETED_SALES_FOR_PATTERN
+    && activePeriods >= MIN_ACTIVE_PERIODS_FOR_PATTERN
+}
+
 function isSampleMarker(value: string | undefined) {
   const marker = String(value ?? '').toUpperCase()
   return marker.startsWith('ACT-DEMO-') || marker.startsWith('SETUP-') || marker.startsWith('SEED-')

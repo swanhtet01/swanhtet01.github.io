@@ -8,9 +8,9 @@ import { reviewCatalogMappingProposal } from '../showroom/src/core/catalog-mappi
 const csv = 'sku,name,stock,reorder_at,amount\nSYN-1,Synthetic item,5,1,1200'
 test('company Shop onboarding stages and verifies a detected variant', async () => {
   const source = [
-    'sku,item_name,opening_stock,reorder_at,price_mmk,color',
-    'QA-TEA-001,Myanmar milk tea,5,2,2500,Black',
-    'QA-TEA-002,Mohinga,4,1,1800,',
+    'sku,item_name,category,opening_stock,reorder_at,price_mmk,color',
+    'QA-TEA-001,Myanmar milk tea,Beverages,5,2,2500,Black',
+    'QA-TEA-002,Mohinga,Meals,4,1,1800,',
   ].join('\n')
   const base = await createClientImportPreview(source, 'commerce', undefined, 'synthetic-shop.csv', 'retail-wholesale')
   const detected = await addShopVariantColumnToClientImportPreview(base)
@@ -23,27 +23,70 @@ test('company Shop onboarding stages and verifies a detected variant', async () 
   assert.equal(staging.mapping.variant, 'color')
   assert.equal(staging.rows[0].values.variant, 'Black')
   assert.equal(staging.rows[1].values.variant, '')
+  assert.equal(staging.rows[0].values.category, 'Beverages')
+  assert.equal(staging.rows[1].values.category, 'Meals')
   const savedState = {
     schema: 'supermega.commerce.workspace.v2',
     items: [
-      { sku: 'QA-TEA-001', name: 'Myanmar milk tea', variant: 'Black', onHand: 5, reorderAt: 2, price: 2500 },
-      { sku: 'QA-TEA-002', name: 'Mohinga', onHand: 4, reorderAt: 1, price: 1800 },
+      { sku: 'QA-TEA-001', name: 'Myanmar milk tea', category: 'Beverages', variant: 'Black', onHand: 5, reorderAt: 2, price: 2500 },
+      { sku: 'QA-TEA-002', name: 'Mohinga', category: 'Meals', onHand: 4, reorderAt: 1, price: 1800 },
     ],
     orders: [],
     movements: [],
     closes: [],
   }
   assert.equal(assertManagedShopImportState(savedState, staging), savedState)
+  const changedCategory = structuredClone(savedState)
+  changedCategory.items[0].category = 'Other category'
+  assert.throws(() => assertManagedShopImportState(changedCategory, staging), /does not match the checked rows/)
 })
 async function proposalFor(source = csv) {
   const base = await createShopCatalogImportPreview(source, [])
-  return { sourceDigest: base.sourceDigest, mapping: { sku: 'sku', name: 'name', onHand: 'stock', reorderAt: 'reorder_at', price: 'amount' } }
+  const mapping = { ...base.mapping, barcode: '' }
+  if (!mapping.price && base.headers.includes('amount')) mapping.price = 'amount'
+  return { sourceDigest: base.sourceDigest, mapping }
 }
 test('mapping suggestion preserves exact values and grants no write authority', async () => {
   const result = await reviewCatalogMappingProposal(csv, [], await proposalFor())
   assert.equal(result.status, 'review_required')
   assert.equal(result.importAuthorized, false)
   assert.deepEqual(result.preview.rows[0].item, { sku: 'SYN-1', name: 'Synthetic item', onHand: 5, reorderAt: 1, price: 1200 })
+})
+
+test('AI mapping can propose an optional barcode column while preserving leading zeroes', async () => {
+  const source = 'sku,item_name,opening_stock,reorder_at,price_mmk,code_value\nWATER-1,Drinking water,24,6,800,0000123456789'
+  const base = await createShopCatalogImportPreview(source, [])
+  assert.equal(base.mapping.barcode, '')
+  const result = await reviewCatalogMappingProposal(source, [], {
+    sourceDigest: base.sourceDigest,
+    mapping: { ...base.mapping, barcode: 'code_value' },
+  })
+  assert.equal(result.status, 'review_required')
+  assert.equal(result.importAuthorized, false)
+  assert.equal(result.preview.mapping.barcode, 'code_value')
+  assert.equal(result.preview.rows[0].item.barcode, '0000123456789')
+})
+
+test('barcode proposal remains optional and cannot reuse another source column', async () => {
+  const source = 'sku,item_name,opening_stock,reorder_at,price_mmk\nWATER-1,Drinking water,24,6,800'
+  const proposal = await proposalFor(source)
+  const accepted = await reviewCatalogMappingProposal(source, [], proposal)
+  assert.equal(accepted.status, 'review_required')
+  assert.equal(accepted.preview.rows[0].item.barcode, undefined)
+  assert.equal((await reviewCatalogMappingProposal(source, [], {
+    ...proposal,
+    mapping: { ...proposal.mapping, barcode: 'sku' },
+  })).reason, 'reused_source_header')
+})
+
+test('older AI mapping proposals without the optional category remain reviewable', async () => {
+  const proposal = await proposalFor()
+  delete proposal.mapping.category
+  const result = await reviewCatalogMappingProposal(csv, [], proposal)
+  assert.equal(result.status, 'review_required')
+  assert.equal(result.importAuthorized, false)
+  assert.equal(result.preview.mapping.category, '')
+  assert.equal(result.preview.rows[0].item.category, undefined)
 })
 test('stale source and added values are rejected', async () => {
   const p = await proposalFor()
@@ -116,20 +159,55 @@ test('Shop review preserves an omitted variant and reports the exact stock discr
   assert.match(blankWithoutSavedVariant.message, /Already current/)
 })
 
-test('Shop catalog preview detects a variant change without widening the shared onboarding contract', async () => {
+test('Shop catalog preview detects variant and barcode changes and includes optional barcode setup', async () => {
   const [{ createShopCatalogImportPreview }, { createClientImportPreview }] = await Promise.all([
     import('../showroom/src/core/shop-catalog-import.ts'),
     import('../showroom/src/core/client-onboarding.ts'),
   ])
-  const existing = { sku: 'CAFE-1', name: 'မြန်မာ လက်ဖက်ရည်', variant: 'Large', onHand: 12, reorderAt: 3, price: 1800 }
+  const existing = { sku: 'CAFE-1', barcode: '0000123456789', name: 'မြန်မာ လက်ဖက်ရည်', variant: 'Large', onHand: 12, reorderAt: 3, price: 1800 }
   const source =
     'sku,item_name,variant,opening_stock,reorder_at,price_mmk\nCAFE-1,မြန်မာ လက်ဖက်ရည်,Small,12,3,1800'
   const preview = await createShopCatalogImportPreview(source, [existing])
   const genericPreview = await createClientImportPreview(source, 'commerce')
-  assert.equal(genericPreview.fields.length, 5)
+  assert.equal(genericPreview.fields.length, 7)
   assert.equal(preview.rows[0].item.variant, 'Small')
   assert.equal(preview.rows[0].status, 'conflict')
   assert.match(preview.rows[0].issues.map((issue) => issue.message).join(' '), /variant/)
+  const changedBarcode = await createShopCatalogImportPreview(source, [{ ...existing, barcode: '0000987654321' }])
+  assert.notEqual(changedBarcode.catalogDigest, preview.catalogDigest)
+})
+
+test('Shop onboarding maps barcode headers as text and blocks scan-code collisions', async () => {
+  const barcode = '0000123456789'
+  const preview = await createClientImportPreview(
+    `sku,item_name,ean,opening_stock,reorder_at,price_mmk\nWATER-1,Drinking water,${barcode},24,6,800`,
+    'commerce',
+  )
+  assert.equal(preview.mapping.barcode, 'ean')
+  assert.equal(preview.rows[0].values.barcode, barcode)
+  assert.equal(preview.fields.find((field) => field.id === 'barcode')?.required, false)
+  const staging = buildClientImportStagingPackage(preview, {
+    workflowTemplateId: preview.workflowTemplateId,
+    workspace: 'Synthetic Myanmar shop',
+    owner: 'Synthetic reviewer',
+  })
+  assert.equal(staging.mapping.barcode, 'ean')
+  assert.equal(staging.rows[0].values.barcode, barcode)
+
+  const duplicate = await createClientImportPreview(
+    'sku,item_name,barcode,opening_stock,reorder_at,price_mmk\nWATER-1,Drinking water,0000123456789,24,6,800\nSOAP-1,Soap,0000123456789,8,2,1300',
+    'commerce',
+  )
+  assert.equal(duplicate.readyForStaging, false)
+  assert.equal(duplicate.rows.every((row) => row.status === 'invalid'), true)
+  assert.equal(duplicate.rows.every((row) => row.issues.some((issue) => issue.field === 'barcode')), true)
+
+  const skuCollision = await createClientImportPreview(
+    'sku,item_name,barcode,opening_stock,reorder_at,price_mmk\nWATER-1,Drinking water,SOAP-1,24,6,800\nSOAP-1,Soap,,8,2,1300',
+    'commerce',
+  )
+  assert.equal(skuCollision.readyForStaging, false)
+  assert.equal(skuCollision.rows[0].issues.some((issue) => issue.field === 'barcode'), true)
 })
 
 test('standalone Shop catalog import preserves optional variants and blocks a changed existing variant', async () => {
@@ -266,7 +344,7 @@ test('Shop variant mapping can be changed or excluded before staging', async () 
   assert.equal(explicitlyOmitted.preview.readyForStaging, true)
 })
 
-test('local Shop replay preserves variants from the Shop-only preview extension', async () => {
+test('local Shop replay preserves imported categories, variants and barcodes', async () => {
   const [{ createClientImportPreview, buildClientImportStagingPackage }, commerce, importer, shopImport] = await Promise.all([
     import('../showroom/src/core/client-onboarding.ts'),
     import('../showroom/src/core/commerce-workspace.ts'),
@@ -274,7 +352,7 @@ test('local Shop replay preserves variants from the Shop-only preview extension'
     import('../showroom/src/core/shop-catalog-import.ts'),
   ])
   const sourceDigest = `sha256:${'a'.repeat(64)}`
-  const existing = { sku: 'CAFE-1', name: 'မြန်မာ လက်ဖက်ရည်', variant: 'Large', onHand: 12, reorderAt: 3, price: 1800 }
+  const existing = { sku: 'CAFE-1', name: 'မြန်မာ လက်ဖက်ရည်', variant: 'Large', barcode: '0000123456789', onHand: 12, reorderAt: 3, price: 1800 }
   const seed = commerce.importCommerceCatalog(commerce.createEmptyCommerce(), {
     items: [existing],
     sourceDigest,
@@ -315,14 +393,17 @@ test('local Shop replay preserves variants from the Shop-only preview extension'
     const savedItem = JSON.parse(storageValues.get(commerce.COMMERCE_KEY)).items[0]
     assert.equal(savedItem.name, 'မြန်မာ လက်ဖက်ရည်')
     assert.equal(savedItem.variant, 'Large')
+    assert.equal(savedItem.barcode, '0000123456789')
 
     const rawVariantPreview = await createClientImportPreview(
-      'sku,item_name,size,opening_stock,reorder_at,price_mmk\nCAFE-2,လက်ဖက်စိမ်း,Small,8,2,2200',
+      'sku,item_name,ean,size,category,opening_stock,reorder_at,price_mmk\nCAFE-2,လက်ဖက်စိမ်း,0000987654321,Small,အဖျော်ယမကာ,8,2,2200',
       'commerce',
     )
     const { preview: variantPreview, variantHeader } = await shopImport.addShopVariantColumnToClientImportPreview(rawVariantPreview)
-    assert.equal(rawVariantPreview.fields.length, 5)
+    assert.equal(rawVariantPreview.fields.length, 7)
     assert.equal(variantHeader, 'size')
+    assert.equal(rawVariantPreview.mapping.barcode, 'ean')
+    assert.equal(rawVariantPreview.rows[0].values.barcode, '0000987654321')
     assert.equal(variantPreview.mapping.variant, 'size')
     assert.equal(variantPreview.rows[0].values.variant, 'Small')
     const variantPackage = buildClientImportStagingPackage(variantPreview, {
@@ -334,6 +415,8 @@ test('local Shop replay preserves variants from the Shop-only preview extension'
     assert.equal(variantResult.created, 1)
     const savedVariant = JSON.parse(storageValues.get(commerce.COMMERCE_KEY)).items.find((item) => item.sku === 'CAFE-2')
     assert.equal(savedVariant.variant, 'Small')
+    assert.equal(savedVariant.barcode, '0000987654321')
+    assert.equal(savedVariant.category, 'အဖျော်ယမကာ')
 
     const beforeConflict = storageValues.get(commerce.COMMERCE_KEY)
     const conflictPreview = await createClientImportPreview(

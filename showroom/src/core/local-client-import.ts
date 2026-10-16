@@ -68,11 +68,18 @@ export async function activateLocalStagingPackage(
     const result = await mutateCommerceWorkspace((current) => {
       const existingBySku = new Map(current.items.map((item) => [item.sku, item]))
       const items: CommerceItem[] = stagingPackage.rows.map((row) => {
-        const variant = row.values.variant || existingBySku.get(row.values.sku)?.variant
+        const existing = existingBySku.get(row.values.sku)
+        const variant = row.values.variant || existing?.variant
+        const barcode = row.values.barcode || existing?.barcode
+        const nameMy = row.values.nameMy || existing?.nameMy
+        const category = row.values.category || existing?.category
         return {
           sku: row.values.sku,
           name: row.values.name,
+          ...(nameMy ? { nameMy } : {}),
+          ...(category ? { category } : {}),
           ...(variant ? { variant } : {}),
+          ...(barcode ? { barcode } : {}),
           onHand: Number(row.values.onHand),
           reorderAt: Number(row.values.reorderAt),
           price: Number(row.values.price),

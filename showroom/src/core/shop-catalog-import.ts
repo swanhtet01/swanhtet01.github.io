@@ -3,7 +3,6 @@ import {
   CLIENT_IMPORT_MAX_BYTES,
   CLIENT_IMPORT_MAX_ROWS,
   clientImportSha256,
-  clientImportTemplate,
   createClientImportPreview,
   normalizeClientImportHeader,
   validateClientImportFieldValue,
@@ -16,17 +15,19 @@ import {
 export const SHOP_CATALOG_IMPORT_SCHEMA = 'supermega.shop.catalog_import.v1' as const
 export const SHOP_CATALOG_IMPORT_MAX_BYTES = CLIENT_IMPORT_MAX_BYTES
 export const SHOP_CATALOG_IMPORT_MAX_ROWS = CLIENT_IMPORT_MAX_ROWS
-export const SHOP_CATALOG_IMPORT_TEMPLATE = clientImportTemplate('commerce', 'social-commerce')
+// Keep the compact, backwards-compatible Shop download stable. The guided
+// client-onboarding template adds the optional name_my column for Myanmar catalogs.
+export const SHOP_CATALOG_IMPORT_TEMPLATE = 'sku,barcode,item_name,category,opening_stock,reorder_at,price_mmk\r\nCOFFEE-250,,Myanmar coffee 250g,,24,8,7000\r\nTEA-20,,Green tea 20 pack,,36,12,4500\r\n'
 
-export const shopCatalogImportFields = ['sku', 'name', 'onHand', 'reorderAt', 'price'] as const
+export const shopCatalogImportFields = ['sku', 'barcode', 'name', 'category', 'onHand', 'reorderAt', 'price'] as const
 
 export type ShopCatalogImportField = typeof shopCatalogImportFields[number]
-export type ShopCatalogImportMapping = Record<ShopCatalogImportField, string>
+export type ShopCatalogImportMapping = Record<ShopCatalogImportField, string> & { nameMy?: string }
 export type ShopCatalogImportRowStatus = 'ready' | 'invalid' | 'duplicate' | 'conflict' | 'already_exists'
 
 export type ShopCatalogImportIssue = {
   code: string
-  field: ShopCatalogImportField | 'variant' | 'file' | 'row'
+  field: ShopCatalogImportField | 'nameMy' | 'variant' | 'file' | 'row'
   message: string
 }
 
@@ -86,8 +87,8 @@ export type ShopCatalogImportPreview = {
 }
 
 const formulaPrefix = /^[=+\-@]/
-const shopFieldSet = new Set<string>(shopCatalogImportFields)
-const shopVariantAliases = new Set(['variant', 'product_variant', 'size', 'product_size', 'flavor', 'option', 'color', 'colour', 'product_color', 'product_colour', 'အမျိုးအစား', 'အရောင်', 'အရွယ်အစား'].map(normalizeClientImportHeader))
+const shopFieldSet = new Set<string>([...shopCatalogImportFields, 'nameMy'])
+const shopVariantAliases = new Set(['variant', 'product_variant', 'size', 'product_size', 'flavor', 'option', 'color', 'colour', 'product_color', 'product_colour', 'အရောင်', 'အရွယ်အစား'].map(normalizeClientImportHeader))
 const shopVariantField: ClientImportField = { id: 'variant', label: 'Variant', required: false, kind: 'text', aliases: [], maximum: 120 }
 
 function shopVariantCandidates(headers: string[]) {
@@ -131,7 +132,10 @@ function shopVariantIssue(value: string): ShopCatalogImportIssue | null {
 export function shopCatalogImportFieldLabel(field: ShopCatalogImportField) {
   return {
     sku: 'SKU',
+    barcode: 'Barcode (optional)',
     name: 'Item name',
+    nameMy: 'Myanmar item name (optional)',
+    category: 'Category (optional)',
     onHand: 'Opening stock',
     reorderAt: 'Reorder at',
     price: 'Price (MMK)',
@@ -139,7 +143,7 @@ export function shopCatalogImportFieldLabel(field: ShopCatalogImportField) {
 }
 
 export function emptyShopCatalogImportMapping(): ShopCatalogImportMapping {
-  return { sku: '', name: '', onHand: '', reorderAt: '', price: '' }
+  return { sku: '', barcode: '', name: '', category: '', onHand: '', reorderAt: '', price: '' }
 }
 
 function compareCodePoints(left: string, right: string) {
@@ -156,7 +160,10 @@ export function shopCatalogImportCatalogSignature(catalog: CommerceItem[]) {
   return JSON.stringify([...catalog]
     .map((item) => ({
       sku: item.sku,
+      barcode: item.barcode ?? null,
       name: item.name,
+      nameMy: item.nameMy ?? null,
+      category: item.category ?? null,
       variant: item.variant ?? null,
       onHand: item.onHand,
       reorderAt: item.reorderAt,
@@ -174,7 +181,7 @@ async function sha256(value: string) {
 function shopIssue(issue: ClientImportIssue): ShopCatalogImportIssue {
   const field = issue.code === 'duplicate_object_key'
     ? 'sku'
-    : shopFieldSet.has(issue.field) ? issue.field as ShopCatalogImportField : issue.field === 'row' ? 'row' : 'file'
+    : shopFieldSet.has(issue.field) ? issue.field as ShopCatalogImportIssue['field'] : issue.field === 'row' ? 'row' : 'file'
   const fieldCodes: Record<string, string> = field === 'file' || field === 'row' ? {} : {
     value_required: `${field}_required`,
     value_not_canonical: `${field}_not_canonical`,
@@ -199,7 +206,10 @@ function itemFromValues(values: Record<string, string>): CommerceItem {
   return {
     sku: values.sku,
     name: values.name,
+    ...(values.nameMy ? { nameMy: values.nameMy } : {}),
+    ...(values.category ? { category: values.category } : {}),
     ...(values.variant ? { variant: values.variant } : {}),
+    ...(values.barcode ? { barcode: values.barcode } : {}),
     onHand: Number(values.onHand),
     reorderAt: Number(values.reorderAt),
     price: Number(values.price),
@@ -209,7 +219,10 @@ function itemFromValues(values: Record<string, string>): CommerceItem {
 function sameImportedValues(existing: CommerceItem, item: CommerceItem) {
   return existing.sku === item.sku
     && existing.name === item.name
+    && existing.nameMy === (item.nameMy || existing.nameMy)
+    && existing.category === (item.category || existing.category)
     && existing.variant === (item.variant || existing.variant)
+    && existing.barcode === (item.barcode || existing.barcode)
     && existing.onHand === item.onHand
     && existing.reorderAt === item.reorderAt
     && existing.price === item.price
@@ -227,7 +240,10 @@ function existingCatalogConflictIssues(existing: CommerceItem, item: CommerceIte
 
   const changedCatalogFields = [
     existing.name !== item.name ? 'item name' : '',
+    item.nameMy && existing.nameMy !== item.nameMy ? 'Myanmar item name' : '',
+    item.category && existing.category !== item.category ? 'category' : '',
     item.variant && existing.variant !== item.variant ? 'variant' : '',
+    item.barcode && existing.barcode !== item.barcode ? 'barcode' : '',
     existing.reorderAt !== item.reorderAt ? 'reorder level' : '',
     existing.price !== item.price ? 'price' : '',
   ].filter(Boolean)
@@ -242,19 +258,34 @@ function existingCatalogConflictIssues(existing: CommerceItem, item: CommerceIte
 }
 
 export function commerceCatalogImportReview(existing: CommerceItem, incoming: CommerceItem) {
+  const existingNameMy = existing.nameMy?.trim() || undefined
+  const incomingNameMy = incoming.nameMy?.trim() || undefined
+  const preserveExistingNameMy = !incomingNameMy && Boolean(existingNameMy)
   const existingVariant = existing.variant?.trim() || undefined
   const incomingVariant = incoming.variant?.trim() ? incoming.variant : undefined
   const preserveExistingVariant = !incomingVariant && Boolean(existingVariant)
-  const current = { ...existing, variant: existingVariant }
-  const comparable = { ...incoming, variant: incomingVariant ?? existingVariant }
-  const differences = commerceCatalogImportDifferences(current, comparable)
-  const labels: Record<(typeof shopCatalogImportFields)[number] | 'variant', string> = {
+  const existingBarcode = existing.barcode?.trim() || undefined
+  const incomingBarcode = incoming.barcode?.trim() ? incoming.barcode : undefined
+  const preserveExistingBarcode = !incomingBarcode && Boolean(existingBarcode)
+  const existingCategory = existing.category?.trim() || undefined
+  const incomingCategory = incoming.category?.trim() ? incoming.category : undefined
+  const preserveExistingCategory = !incomingCategory && Boolean(existingCategory)
+  const current = { ...existing, nameMy: existingNameMy, category: existingCategory, variant: existingVariant, barcode: existingBarcode }
+  const comparable = { ...incoming, nameMy: incomingNameMy ?? existingNameMy, category: incomingCategory ?? existingCategory, variant: incomingVariant ?? existingVariant, barcode: incomingBarcode ?? existingBarcode }
+  const differences = [
+    ...commerceCatalogImportDifferences(current, comparable),
+    ...(current.nameMy !== comparable.nameMy ? ['nameMy' as const] : []),
+  ]
+  const labels: Record<ShopCatalogImportField | 'nameMy' | 'variant' | 'barcode', string> = {
     sku: 'SKU',
     name: 'name',
+    nameMy: 'Myanmar item name',
+    category: 'category',
     onHand: 'stock',
     reorderAt: 'reorder level',
     price: 'price',
     variant: 'variant',
+    barcode: 'barcode',
   }
   const details = differences.map((field) => {
     if (field === 'onHand') return `stock (Shop has ${existing.onHand} on hand; file says ${incoming.onHand})`
@@ -268,7 +299,13 @@ export function commerceCatalogImportReview(existing: CommerceItem, incoming: Co
       ? `Already exists with different ${details.join(', ')}. Update the existing product separately.`
       : preserveExistingVariant
         ? 'Already current. The saved variant is preserved because this file does not provide one.'
-        : 'Already current. No change needed.',
+        : preserveExistingBarcode
+          ? 'Already current. The saved barcode is preserved because this file does not provide one.'
+          : preserveExistingCategory
+            ? 'Already current. The saved category is preserved because this file does not provide one.'
+            : preserveExistingNameMy
+              ? 'Already current. The saved Myanmar name is preserved because this file does not provide one.'
+              : 'Already current. No change needed.',
   }
 }
 
@@ -326,13 +363,22 @@ export async function addShopVariantColumnToClientImportPreview(preview: ClientI
     workflowTemplateId: preview.workflowTemplateId,
     sourceDigest: preview.sourceDigest,
     mapping,
-    variantCandidates: variantChoiceRequired ? variantCandidates : [],
   }))
   return {
     variantHeader,
     variantChoiceRequired,
     preview: {
       ...preview,
+      fields: preview.fields.some((field) => field.id === 'nameMy')
+        ? preview.fields
+        : [...preview.fields.slice(0, 3), {
+          id: 'nameMy',
+          label: 'Myanmar item name (optional)',
+          required: false,
+          kind: 'text' as const,
+          aliases: ['name_my', 'item_name_my', 'product_name_my', 'myanmar_name', 'burmese_name', 'name_burmese', 'my_name', 'mm_name', 'မြန်မာအမည်', 'ပစ္စည်းအမည်မြန်မာ'],
+          maximum: 180,
+        }, ...preview.fields.slice(3)],
       mapping,
       fileIssues,
       rows,
@@ -447,7 +493,9 @@ export async function createShopCatalogImportPreview(
     variantHeader,
     mapping: {
       sku: shared.mapping.sku,
+      barcode: shared.mapping.barcode ?? '',
       name: shared.mapping.name,
+      category: shared.mapping.category ?? '',
       onHand: shared.mapping.onHand,
       reorderAt: shared.mapping.reorderAt,
       price: shared.mapping.price,

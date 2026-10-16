@@ -82,7 +82,7 @@ async function readPage(route) {
     `meta name="supermega-brand-version" content="${manifest.brand.version}"`,
     `meta name="supermega-context-version" content="${manifest.contextVersion}"`,
     'aria-label="SuperMega home"',
-    '<span class="brand-mark" aria-hidden="true">&gt;_</span>',
+    'class="brand-icon" aria-hidden="true"',
     'href="https://app.supermega.dev/login">Login</a>',
     'href="/privacy/">Privacy</a>',
   ]) assert(html.includes(token), 'page_shared_contract_missing', { route, token })
@@ -127,13 +127,14 @@ async function verifyOnce() {
   const pendingRoutes = new Set()
   const pageResults = await Promise.all(manifest.pages.map(async (page) => readPageOrPending(page, pendingRoutes)))
   const pages = new Map(pageResults)
-  assert(pages.get('/')?.includes('Run the business.<br>Without the busywork.'), 'homepage_headline_wrong')
+  assert(pages.get('/')?.includes('<h1 id="hero-title">Know what sold.<br><span>Know what needs action.</span></h1>'), 'homepage_headline_wrong')
   assert(pages.get('/')?.includes('href="https://app.supermega.dev/login">Login</a>'), 'homepage_product_cta_missing')
   assert(pages.get('/')?.includes('id="products"'), 'product_portfolio_missing')
   const homepage = pages.get('/') || ''
-  for (const token of ['class="platform-image"', 'id="website"', 'id="ecommerce"']) {
+  for (const token of ['class="home-product-shot"']) {
     assert(homepage.includes(token), 'homepage_offer_contract_missing', { token })
   }
+  assert(!/\bSites\b|\bCommerce\b/.test(homepage), 'internal_products_exposed_on_homepage')
   const shop = publicProducts.find(product => product.id === 'shop')
   const shopAction = `href="${shop.primaryCta.url}">${shop.primaryCta.label}</a>`
   assert(homepage.includes('id="shop"'), 'homepage_shop_action_missing')
@@ -237,17 +238,17 @@ async function verifyOnce() {
 
   // The screenshots are part of the release, not optional decoration. Verify
   // their actual response bytes; a 200 HTML fallback must never pass as an image.
+  assert(publicProducts.map(product => product.id).join(',') === 'shop', 'public_product_scope_not_shop_only')
   const interfaceImages = {
     shop: ['actual-shop-today.png', 'actual-shop-sell.png', 'actual-shop-orders.png'],
-    website: ['actual-sites-editor.png'],
-    ecommerce: ['actual-commerce-catalog.png', 'actual-commerce-order-request.png'],
   }
   for (const product of publicProducts) {
     const filenames = interfaceImages[product.id]
     assert(filenames?.length >= 1, 'interface_image_mapping_missing', { product: product.id })
     for (const [index, filename] of filenames.entries()) {
       const path = `/images/${filename}`
-      for (const route of index === 0 ? ['/', `/${product.id}/`] : [`/${product.id}/`]) {
+      const routes = product.id === 'shop' && index === 0 ? ['/', `/${product.id}/`] : [`/${product.id}/`]
+      for (const route of routes) {
         const html = pages.get(route)
         if (html != null) assert(html.includes(`src="${path}"`), 'interface_image_reference_missing', { route, path })
       }
@@ -293,7 +294,7 @@ async function verifyOnce() {
   await Promise.all([
     verifyRedirect('/products/shop/', '/#shop'),
     verifyRedirect('/products/factory/', '/plant/'),
-    verifyRedirect('/products/ecommerce/', '/#ecommerce'),
+    verifyRedirect('/products/ecommerce/', publicProducts.some(product => product.id === 'ecommerce') ? '/#ecommerce' : '/ecommerce/'),
     verifyRedirect('/ai-agent-solutions/', '/#products'),
     verifyRedirect('/offers/', '/#products'),
     verifyRedirect('/solutions/', '/#products'),
@@ -304,7 +305,7 @@ async function verifyOnce() {
   const www = await fetch('https://www.supermega.dev/', { redirect: 'follow', cache: 'no-store', headers: { 'user-agent': 'SuperMegaVerifiedRelease/2.0' }, signal: AbortSignal.timeout(timeoutMs) })
   assert(www.status === 200, 'www_http_error', { status: www.status })
   const wwwHtml = await www.text()
-  assert(wwwHtml.includes('Run the business.<br>Without the busywork.'), 'www_release_drift')
+  assert(wwwHtml.includes('<h1 id="hero-title">Know what sold.<br><span>Know what needs action.</span></h1>'), 'www_release_drift')
 
   return {
     pages: manifest.pages.map((page) => page.route).filter((route) => !pendingRoutes.has(route)),

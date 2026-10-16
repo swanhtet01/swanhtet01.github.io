@@ -364,6 +364,15 @@ export type ClientImportField = {
   minimum?: number
 }
 
+const shopMyanmarNameField: ClientImportField = {
+  id: 'nameMy',
+  label: 'Myanmar item name (optional)',
+  required: false,
+  kind: 'text',
+  aliases: ['name_my', 'item_name_my', 'product_name_my', 'myanmar_name', 'burmese_name', 'name_burmese', 'my_name', 'mm_name', 'မြန်မာအမည်', 'ပစ္စည်းအမည်မြန်မာ'],
+  maximum: 180,
+}
+
 export type ClientImportObject = {
   id: string
   label: string
@@ -445,13 +454,15 @@ const objects: Record<ClientSolutionId, ClientImportObject> = {
     maximumRows: CLIENT_IMPORT_MAX_ROWS,
     activationBoundary: 'A named Shop operator must separately confirm an accountable catalog import.',
     workflowTemplates: {
-      'social-commerce': 'sku,item_name,opening_stock,reorder_at,price_mmk\r\nCOFFEE-250,Myanmar coffee 250g,24,8,7000\r\nTEA-20,Green tea 20 pack,36,12,4500\r\n',
-      'retail-wholesale': 'sku,item_name,opening_stock,reorder_at,price_mmk\r\nRICE-25KG,Premium rice 25kg,18,6,72000\r\nOIL-1L,Cooking oil 1L,48,16,9500\r\n',
-      'restaurant-ordering': 'sku,item_name,opening_stock,reorder_at,price_mmk\r\nMENU-MOHINGA,Mohinga,80,20,3500\r\nMENU-TEA,Myanmar milk tea,120,30,1800\r\n',
+      'social-commerce': 'sku,barcode,item_name,category,opening_stock,reorder_at,price_mmk\r\nCOFFEE-250,,Myanmar coffee 250g,,24,8,7000\r\nTEA-20,,Green tea 20 pack,,36,12,4500\r\n',
+      'retail-wholesale': 'sku,barcode,item_name,category,opening_stock,reorder_at,price_mmk\r\nRICE-25KG,,Premium rice 25kg,,18,6,72000\r\nOIL-1L,,Cooking oil 1L,,48,16,9500\r\n',
+      'restaurant-ordering': 'sku,barcode,item_name,category,opening_stock,reorder_at,price_mmk\r\nMENU-MOHINGA,,Mohinga,,80,20,3500\r\nMENU-TEA,,Myanmar milk tea,,120,30,1800\r\n',
     },
     fields: [
       { id: 'sku', label: 'SKU', required: true, kind: 'sku', aliases: ['sku', 'item_sku', 'product_sku', 'stock_code', 'item_code', 'product_code', 'ပစ္စည်းကုဒ်'], maximum: 80 },
+      { id: 'barcode', label: 'Barcode', required: false, kind: 'text', aliases: ['barcode', 'bar_code', 'barcode_value', 'product_barcode', 'item_barcode', 'scan_code', 'gtin', 'ean', 'ean_13', 'upc', 'upc_a', 'ဘားကုဒ်', 'ဘားကုဒ်နံပါတ်'], maximum: 80 },
       { id: 'name', label: 'Item name', required: true, kind: 'text', aliases: ['item_name', 'name', 'product_name', 'item', 'menu_item', 'title', 'description', 'ပစ္စည်းအမည်'], maximum: 180 },
+      { id: 'category', label: 'Category (optional)', required: false, kind: 'text', aliases: ['category', 'product_category', 'item_category', 'group', 'catalog_section', 'department', 'အမျိုးအစား', 'ကုန်ပစ္စည်းအမျိုးအစား'], maximum: 80 },
       { id: 'onHand', label: 'Opening stock', required: true, kind: 'integer', aliases: ['opening_stock', 'on_hand', 'stock_on_hand', 'available_stock', 'stock', 'quantity', 'qty', 'opening_quantity', 'လက်ကျန်'], minimum: 0 },
       { id: 'reorderAt', label: 'Reorder at', required: true, kind: 'integer', aliases: ['reorder_at', 'reorder_level', 'reorder_point', 'low_stock_at', 'minimum_stock', 'min_stock', 'အနည်းဆုံးလက်ကျန်', 'ပြန်မှာယူရန်အဆင့်'], minimum: 0 },
       { id: 'price', label: 'Price (MMK)', required: true, kind: 'integer', aliases: ['price_mmk', 'price', 'unit_price', 'selling_price', 'unit_price_mmk', 'selling_price_mmk', 'mmk_price', 'စျေးနှုန်း'], minimum: 1 },
@@ -905,6 +916,10 @@ function mappingIssues(object: ClientImportObject, headers: string[], mapping: C
     else if (header && !headers.includes(header)) issues.push({ code: 'mapping_unknown_header', field: field.id, message: `${field.label} is mapped to a missing column.` })
     else if (header) selected.push(header)
   }
+  if (object.id === 'shop_catalog' && mapping.nameMy) {
+    if (!headers.includes(mapping.nameMy)) issues.push({ code: 'mapping_unknown_header', field: 'nameMy', message: `${shopMyanmarNameField.label} is mapped to a missing column.` })
+    else selected.push(mapping.nameMy)
+  }
   const duplicates = selected.filter((header, index) => selected.indexOf(header) !== index)
   for (const header of [...new Set(duplicates)]) issues.push({ code: 'mapping_reused_header', field: 'file', message: `${header} cannot supply more than one target field.` })
   return issues
@@ -953,10 +968,17 @@ function rowFromMapping(parsed: ParsedCsvRow, object: ClientImportObject, header
   if (parsed.cells.length !== headers.length) issues.push({ code: 'column_count', field: 'row', message: `Expected ${headers.length} columns but found ${parsed.cells.length}.` })
   if (parsed.cells.every((cell) => !cell)) issues.push({ code: 'empty_row', field: 'row', message: 'Remove the empty CSV row.' })
   if (fileIssues.length) issues.push({ code: 'mapping_incomplete', field: 'row', message: 'Complete the column mapping before this row can be checked.' })
-  const values = Object.fromEntries(object.fields.map((field) => [field.id, mapping[field.id] ? source[mapping[field.id]] ?? '' : '']))
+  const valueFields = object.id === 'shop_catalog'
+    ? ['sku', 'barcode', 'name', 'nameMy', 'category', 'onHand', 'reorderAt', 'price']
+    : object.fields.map((field) => field.id)
+  const values = Object.fromEntries(valueFields.map((fieldId) => [fieldId, mapping[fieldId] ? source[mapping[fieldId]] ?? '' : '']))
   if (!issues.length) {
     for (const field of object.fields) {
       const issue = fieldIssue(field, values[field.id] ?? '', minimumProductionDueDate)
+      if (issue) issues.push(issue)
+    }
+    if (object.id === 'shop_catalog') {
+      const issue = fieldIssue(shopMyanmarNameField, values.nameMy ?? '', minimumProductionDueDate)
       if (issue) issues.push(issue)
     }
   }
@@ -983,6 +1005,39 @@ function classifyDuplicates(rows: ClientImportRow[]) {
     for (const row of matches) {
       row.status = 'duplicate'
       row.issues.push({ code: 'duplicate_object_key', field: 'row', message: `${key} appears ${matches.length} times in this file.` })
+    }
+  }
+}
+
+function classifyCommerceBarcodeConflicts(rows: ClientImportRow[]) {
+  const skuOwnersByCode = new Map<string, Set<string>>()
+  const barcodeRowsByCode = new Map<string, ClientImportRow[]>()
+  for (const row of rows) {
+    if (row.status !== 'ready') continue
+    const skuCode = row.values.sku.toLowerCase()
+    const skuOwners = skuOwnersByCode.get(skuCode) ?? new Set<string>()
+    skuOwners.add(row.values.sku)
+    skuOwnersByCode.set(skuCode, skuOwners)
+    const barcode = row.values.barcode
+    if (!barcode) continue
+    const code = barcode.toLowerCase()
+    const matches = barcodeRowsByCode.get(code) ?? []
+    matches.push(row)
+    barcodeRowsByCode.set(code, matches)
+  }
+  for (const [code, barcodeRows] of barcodeRowsByCode) {
+    const owners = new Set([
+      ...barcodeRows.map((row) => row.values.sku.toLowerCase()),
+      ...(skuOwnersByCode.get(code) ?? []),
+    ])
+    if (owners.size < 2) continue
+    for (const row of barcodeRows) {
+      row.status = 'invalid'
+      row.issues.push({
+        code: 'barcode_code_conflict',
+        field: 'barcode',
+        message: 'This barcode is also assigned to another item code in the file. Give each item a unique scan code.',
+      })
     }
   }
 }
@@ -1132,12 +1187,13 @@ export function clientImportTemplate(product: ClientSolutionId, workflowTemplate
   }
   if (context.shopIndustryPackId) {
     const industryPackId = shopIndustryPack(context.shopIndustryPackId).id
-    if (product === 'commerce') return shopIndustrySampleCsv[industryPackId]
+    if (product === 'commerce') return withShopMyanmarNameColumn(shopIndustrySampleCsv[industryPackId])
     if (product === 'website') return websiteIndustrySampleCsv[industryPackId]
     if (product === 'ecommerce') return ecommerceIndustrySampleCsv[industryPackId]
   }
   const source = objects[product].workflowTemplates[resolvedWorkflowTemplateId]
-  return product === 'production' ? materializePlantTemplate(source, context.planningDate) : source
+  const template = product === 'production' ? materializePlantTemplate(source, context.planningDate) : source
+  return product === 'commerce' ? withShopMyanmarNameColumn(template) : template
 }
 
 function exampleRows(product: ClientSolutionId, workflowTemplateId?: string, context: ClientImportTemplateContext = {}) {
@@ -1193,6 +1249,19 @@ export async function createClientImportPreview(
   const normalizedHeaders = inspectHeaders(headers)
   const suggested = suggestMapping(object, headers, normalizedHeaders)
   const mapping = selectedMapping ? { ...selectedMapping } : suggested.mapping
+  if (product === 'commerce') {
+    const aliases = shopMyanmarNameField.aliases.map(normalizeHeader)
+    const matches = normalizedHeaders.flatMap((header, index) => {
+      const rank = aliases.indexOf(header)
+      return rank < 0 ? [] : [{ header: headers[index], rank }]
+    }).sort((left, right) => left.rank - right.rank || compareCodePoints(left.header, right.header))
+    const canonical = matches.find((candidate) => normalizeHeader(candidate.header) === normalizeHeader('name_my'))
+    const best = canonical ?? matches[0]
+    const ambiguous = !canonical && matches.length > 1
+    mapping.nameMy = selectedMapping && Object.hasOwn(selectedMapping, 'nameMy')
+      ? selectedMapping.nameMy ?? ''
+      : ambiguous ? '' : best?.header ?? ''
+  }
   const fileIssues = mappingIssues(object, headers, mapping)
   const minimumProductionDueDate = product === 'production' ? clientImportPlanningDate(planningDate) : undefined
   const rows = parsed.rows.slice(1).map((row) => rowFromMapping(row, object, headers, mapping, fileIssues, minimumProductionDueDate))
@@ -1212,8 +1281,12 @@ export async function createClientImportPreview(
   if (!rows.length) fileIssues.push({ code: 'data_rows_required', field: 'file', message: 'Add at least one data row below the header.' })
   if (rows.length > object.maximumRows) fileIssues.push({ code: 'object_row_limit', field: 'file', message: `${object.label} accepts at most ${object.maximumRows} rows in one accountable import.` })
   classifyDuplicates(rows)
+  if (product === 'commerce') classifyCommerceBarcodeConflicts(rows)
   const totals = totalsFor(rows)
-  const normalizedMapping = Object.fromEntries(object.fields.map((field) => [field.id, mapping[field.id] ?? '']))
+  const normalizedFieldIds = product === 'commerce'
+    ? ['sku', 'barcode', 'name', 'nameMy', 'category', 'onHand', 'reorderAt', 'price']
+    : object.fields.map((field) => field.id)
+  const normalizedMapping = Object.fromEntries(normalizedFieldIds.map((fieldId) => [fieldId, mapping[fieldId] ?? '']))
   const sourceDigest = await sha256(parsed.source)
   const previewDigest = await sha256(JSON.stringify({ schema: CLIENT_IMPORT_SCHEMA, product, object: object.id, workflowTemplateId: resolvedWorkflowTemplateId, sourceDigest, mapping: normalizedMapping }))
   return {
@@ -1260,6 +1333,14 @@ const operatingUnitKindByPreset: Readonly<Record<ClientDemoPresetId, ClientOpera
 
 function clientCsvField(value: string) {
   return `"${value.replaceAll('"', '""')}"`
+}
+
+function withShopMyanmarNameColumn(source: string) {
+  const parsed = parseCsv(source)
+  const headers = parsed.rows[0]?.cells ?? []
+  if (headers.some((header) => shopMyanmarNameField.aliases.map(normalizeHeader).includes(normalizeHeader(header)))) return source
+  const lines = parsed.rows.map((row, index) => [...row.cells, index === 0 ? 'name_my' : ''].map(clientCsvField).join(','))
+  return `${lines.join('\r\n')}\r\n`
 }
 
 function businessTemplateWebsiteCsv(template: ShopBusinessTemplate, businessName: string) {
@@ -1794,6 +1875,9 @@ export async function restoreClientDemoPreparationArtifact(value: unknown): Prom
       || !stagingPackage || typeof stagingPackage !== 'object' || Array.isArray(stagingPackage)) return null
 
     const object = clientImportObject(productId)
+    const packageFieldIds = productId === 'commerce'
+      ? ['sku', 'barcode', 'name', ...(Object.hasOwn(stagingPackage.mapping ?? {}, 'nameMy') ? ['nameMy'] : []), 'category', 'onHand', 'reorderAt', 'price']
+      : object.fields.map((field) => field.id)
     const stagingKeys = ['contract', 'product', 'object', 'workflowTemplateId', 'workspace', 'owner', 'source', 'mapping', 'rows', 'controls']
     if (productId === 'production') stagingKeys.push('plantIndustryPackId')
     if (!hasExactKeys(stagingPackage, stagingKeys)
@@ -1811,7 +1895,7 @@ export async function restoreClientDemoPreparationArtifact(value: unknown): Prom
       || !sha256Pattern.test(stagingPackage.source.digest)
       || stagingPackage.source.previewDigest !== product.previewDigest
       || !stagingPackage.mapping || typeof stagingPackage.mapping !== 'object' || Array.isArray(stagingPackage.mapping)
-      || !hasExactKeys(stagingPackage.mapping, object.fields.map((field) => field.id))
+      || !hasExactKeys(stagingPackage.mapping, packageFieldIds)
       || !Array.isArray(stagingPackage.rows) || stagingPackage.rows.length !== product.rowCount
       || product.rowCount > object.maximumRows
       || !stagingPackage.controls || typeof stagingPackage.controls !== 'object' || Array.isArray(stagingPackage.controls)
@@ -1821,9 +1905,9 @@ export async function restoreClientDemoPreparationArtifact(value: unknown): Prom
       || stagingPackage.controls.externalWritesPerformed !== false
       || stagingPackage.controls.activationStatus !== 'staged_not_applied') return null
 
-    const mappedHeaders = object.fields.map((field) => stagingPackage.mapping[field.id])
+    const mappedHeaders = packageFieldIds.map((fieldId) => stagingPackage.mapping[fieldId])
     if (mappedHeaders.some((header, fieldIndex) => typeof header !== 'string'
-      || (object.fields[fieldIndex].required && !header)
+      || (object.fields.find((field) => field.id === packageFieldIds[fieldIndex])?.required && !header)
       || Boolean(header && (header !== header.trim() || hasControlCharacter(header))))
       || new Set(mappedHeaders.filter(Boolean)).size !== mappedHeaders.filter(Boolean).length) return null
 
@@ -1834,10 +1918,11 @@ export async function restoreClientDemoPreparationArtifact(value: unknown): Prom
         || !hasExactKeys(row, ['sourceRow', 'key', 'values'])
         || row.sourceRow !== rowIndex + 2
         || !row.values || typeof row.values !== 'object' || Array.isArray(row.values)
-        || !hasExactKeys(row.values, object.fields.map((field) => field.id))
+        || !hasExactKeys(row.values, packageFieldIds)
         || row.key !== row.values[object.keyField] || seenKeys.has(row.key)) return null
       seenKeys.add(row.key)
       if (object.fields.some((field) => typeof row.values[field.id] !== 'string' || fieldIssue(field, row.values[field.id]) !== null)) return null
+      if (productId === 'commerce' && typeof row.values.nameMy === 'string' && fieldIssue(shopMyanmarNameField, row.values.nameMy) !== null) return null
     }
     const expectedPreviewDigest = await sha256(JSON.stringify({
       schema: CLIENT_IMPORT_SCHEMA,

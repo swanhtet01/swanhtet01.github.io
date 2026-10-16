@@ -48,7 +48,11 @@ export const COMMERCE_LOCK = 'supermega-commerce-workspace-v2'
 
 export type CommerceItem = {
   sku: string
+  /** Optional scanner identity, stored as text so leading zeroes survive CSV, camera and HID scans. */
+  barcode?: string
   name: string
+  /** Owner-defined label for fast counter filtering; absent on older catalogs and uncategorized items. */
+  category?: string
   // Burmese display name, carried alongside `name` rather than widening `name` to {en, my}:
   // `name` is snapshotted onto every order line and printed on receipts, so changing its type
   // would invalidate saved workspaces and stored orders.
@@ -58,14 +62,70 @@ export type CommerceItem = {
   // catalog an owner imports from her own CSV, which has no column for one. Requiring it would
   // turn an ordinary existing workspace into an unreadable one.
   //
-  // Only rows that sell a bookable service ever receive it, from the pack's own translations via
-  // withShopServiceMyanmarNames. Retail goods have no Myanmar name anywhere in this codebase and
-  // must not be given machine-made ones.
+  // Service rows may receive the pack's own translations; Shop owners may also enter the name
+  // customers use for a retail item. Never invent a Burmese translation for them.
   nameMy?: string
   variant?: string
   onHand: number
   reorderAt: number
   price: number
+}
+
+function normalizedScanCode(value: string | null | undefined) {
+  const normalized = value?.trim().toLowerCase() ?? ''
+  return normalized || null
+}
+
+/** Resolve a SKU or barcode only when it identifies exactly one catalog item. */
+export function findCommerceItemByScanCode(items: readonly CommerceItem[], rawCode: string): CommerceItem | null {
+  const resolution = resolveCommerceItemByScanCode(items, rawCode)
+  return resolution.kind === 'matched' ? resolution.item : null
+}
+
+export type CommerceItemScanResolution =
+  | { kind: 'matched'; item: CommerceItem }
+  | { kind: 'not_found' }
+  | { kind: 'ambiguous' }
+
+/** Resolve an exact SKU/barcode and report duplicate-code ambiguity separately from a miss. */
+export function resolveCommerceItemByScanCode(items: readonly CommerceItem[], rawCode: string): CommerceItemScanResolution {
+  const code = normalizedScanCode(rawCode)
+  if (!code) return { kind: 'not_found' }
+  const matches = items.filter((item) => normalizedScanCode(item.sku) === code || normalizedScanCode(item.barcode) === code)
+  if (matches.length > 1) return { kind: 'ambiguous' }
+  return matches.length === 1 ? { kind: 'matched', item: matches[0] } : { kind: 'not_found' }
+}
+
+export type PurchaseOrderReceiveScanResult =
+  | { ok: true; acceptedUnits: number }
+  | { ok: false; reason: 'item_not_found' | 'wrong_purchase_order_item' | 'invalid_count' | 'receipt_limit_reached' }
+
+/** Count one exactly matched catalog unit into the current receipt draft; never writes stock. */
+export function incrementPurchaseOrderReceiveFromScan(input: {
+  items: readonly CommerceItem[]
+  purchaseOrderItem: CommerceItem
+  rawCode: string
+  acceptedUnits: number
+  maximumAcceptedUnits: number
+}): PurchaseOrderReceiveScanResult {
+  const item = findCommerceItemByScanCode(input.items, input.rawCode)
+  if (!item) return { ok: false, reason: 'item_not_found' }
+  if (item.sku !== input.purchaseOrderItem.sku) return { ok: false, reason: 'wrong_purchase_order_item' }
+  if (!Number.isSafeInteger(input.acceptedUnits) || input.acceptedUnits < 0
+    || !Number.isSafeInteger(input.maximumAcceptedUnits) || input.maximumAcceptedUnits < 0
+    || input.acceptedUnits > input.maximumAcceptedUnits) {
+    return { ok: false, reason: 'invalid_count' }
+  }
+  if (input.acceptedUnits >= input.maximumAcceptedUnits) return { ok: false, reason: 'receipt_limit_reached' }
+  return { ok: true, acceptedUnits: input.acceptedUnits + 1 }
+}
+
+/** Prevent a new barcode from silently identifying a different existing catalog item. */
+export function commerceItemBarcodeConflicts(items: readonly CommerceItem[], sku: string, barcode: string | null) {
+  const code = normalizedScanCode(barcode)
+  if (!code) return false
+  return items.some((item) => item.sku !== sku
+    && (normalizedScanCode(item.sku) === code || normalizedScanCode(item.barcode) === code))
 }
 
 export type CommerceOrderStatus = 'confirmed' | 'preparing' | 'ready' | 'completed' | 'cancelled'
@@ -78,6 +138,9 @@ export type CommerceCorrectionReasonCode = 'pricing_error' | 'service_recovery' 
 export type CommerceOrderLine = {
   sku: string
   name: string
+  // Owner-entered Myanmar display name, captured with the order so later catalog edits do not
+  // rewrite a customer's historical item description.
+  nameMy?: string
   variant?: string
   quantity: number
   unitPriceMmk: number
@@ -1283,6 +1346,12 @@ export type CommerceCatalogChange = {
   nextPrice: number
   previousReorderAt: number
   nextReorderAt: number
+  previousBarcode?: string | null
+  nextBarcode?: string | null
+  previousNameMy?: string | null
+  nextNameMy?: string | null
+  previousCategory?: string | null
+  nextCategory?: string | null
   proof: CommerceActionProof
 }
 
@@ -1348,6 +1417,12 @@ export type CommerceItemUpdate = {
   nextPrice: number
   expectedReorderAt: number
   nextReorderAt: number
+  expectedBarcode?: string | null
+  nextBarcode?: string | null
+  expectedNameMy?: string | null
+  nextNameMy?: string | null
+  expectedCategory?: string | null
+  nextCategory?: string | null
 }
 
 export type CommerceOrderReturnInput = {
@@ -2484,6 +2559,8 @@ export function validateCommerceState(value: unknown): CommerceState {
     || shiftSessions.length > maxShiftSessions) rejectInvalid(operatingIntegrityError)
   const itemSkus: string[] = []
   const itemBySku = new Map<string, Record<string, unknown>>()
+  const skuOwnersByCode = new Map<string, Set<string>>()
+  const barcodeOwners = new Map<string, string>()
   const orderIds: string[] = []
   const orderById = new Map<string, Record<string, unknown>>()
   const sourceRecordIds: string[] = []
@@ -2588,7 +2665,19 @@ export function validateCommerceState(value: unknown): CommerceState {
     const sku = canonicalText(candidate.sku, `items[${index}].sku`, 80)
     itemSkus.push(sku)
     itemBySku.set(sku, candidate)
+    const normalizedSku = sku.toLowerCase()
+    const matchingSkuOwners = skuOwnersByCode.get(normalizedSku) ?? new Set<string>()
+    matchingSkuOwners.add(sku)
+    skuOwnersByCode.set(normalizedSku, matchingSkuOwners)
+    if (candidate.barcode !== undefined) {
+      const barcode = canonicalText(candidate.barcode, `items[${index}].barcode`, 80)
+      const normalizedBarcode = barcode.toLowerCase()
+      const existingOwner = barcodeOwners.get(normalizedBarcode)
+      if (existingOwner && existingOwner !== sku) rejectInvalid(`items[${index}].barcode is already assigned to another item.`)
+      barcodeOwners.set(normalizedBarcode, sku)
+    }
     canonicalText(candidate.name, `items[${index}].name`)
+    if (candidate.category !== undefined) canonicalText(candidate.category, `items[${index}].category`, 80)
     if (candidate.nameMy !== undefined) canonicalText(candidate.nameMy, `items[${index}].nameMy`)
     if (candidate.variant !== undefined) canonicalText(candidate.variant, `items[${index}].variant`)
     assertSafeInteger(candidate.onHand, `items[${index}].onHand`)
@@ -2596,6 +2685,12 @@ export function validateCommerceState(value: unknown): CommerceState {
     assertSafeInteger(candidate.price, `items[${index}].price`, 1)
   }
   assertUnique(itemSkus, 'Item SKU')
+  for (const [barcode, ownerSku] of barcodeOwners) {
+    const matchingSkuOwners = skuOwnersByCode.get(barcode)
+    if (matchingSkuOwners && [...matchingSkuOwners].some((sku) => sku !== ownerSku)) {
+      rejectInvalid(`Barcode for ${ownerSku} conflicts with another item code.`)
+    }
+  }
 
   const catalogBaselineSkus: string[] = []
   const catalogBaselineBySku = new Map<string, CommerceCatalogBaseline>()
@@ -2642,10 +2737,30 @@ export function validateCommerceState(value: unknown): CommerceState {
 
   const newerCatalogChangeBySku = new Map<string, CommerceCatalogChange>()
   for (const [index, candidate] of catalogChanges.entries()) {
-    if (!isRecord(candidate) || !hasExactKeys(
-      candidate,
-      ['sku', 'previousPrice', 'nextPrice', 'previousReorderAt', 'nextReorderAt', 'proof'],
-    )) rejectInvalid(`catalogChanges[${index}] is invalid.`)
+    const catalogChangeFields = ['sku', 'previousPrice', 'nextPrice', 'previousReorderAt', 'nextReorderAt', 'proof']
+    const hasBarcodeHistory = isRecord(candidate)
+      && Object.prototype.hasOwnProperty.call(candidate, 'previousBarcode')
+      && Object.prototype.hasOwnProperty.call(candidate, 'nextBarcode')
+    const hasMyanmarNameHistory = isRecord(candidate)
+      && Object.prototype.hasOwnProperty.call(candidate, 'previousNameMy')
+      && Object.prototype.hasOwnProperty.call(candidate, 'nextNameMy')
+    const hasCategoryHistory = isRecord(candidate)
+      && Object.prototype.hasOwnProperty.call(candidate, 'previousCategory')
+      && Object.prototype.hasOwnProperty.call(candidate, 'nextCategory')
+    const hasBarcodeHistoryField = isRecord(candidate)
+      && (Object.prototype.hasOwnProperty.call(candidate, 'previousBarcode')
+        || Object.prototype.hasOwnProperty.call(candidate, 'nextBarcode'))
+    const hasMyanmarNameHistoryField = isRecord(candidate)
+      && (Object.prototype.hasOwnProperty.call(candidate, 'previousNameMy')
+        || Object.prototype.hasOwnProperty.call(candidate, 'nextNameMy'))
+    const hasCategoryHistoryField = isRecord(candidate)
+      && (Object.prototype.hasOwnProperty.call(candidate, 'previousCategory')
+        || Object.prototype.hasOwnProperty.call(candidate, 'nextCategory'))
+    if (!isRecord(candidate)
+      || !hasExactKeys(candidate, catalogChangeFields, ['previousBarcode', 'nextBarcode', 'previousNameMy', 'nextNameMy', 'previousCategory', 'nextCategory'])
+      || (hasBarcodeHistoryField && !hasBarcodeHistory)
+      || (hasMyanmarNameHistoryField && !hasMyanmarNameHistory)
+      || (hasCategoryHistoryField && !hasCategoryHistory)) rejectInvalid(`catalogChanges[${index}] is invalid.`)
     const sku = canonicalText(candidate.sku, `catalogChanges[${index}].sku`, 80)
     const item = itemBySku.get(sku)
     if (!item) rejectInvalid(`catalogChanges[${index}].sku is unknown.`)
@@ -2653,8 +2768,29 @@ export function validateCommerceState(value: unknown): CommerceState {
     assertSafeInteger(candidate.nextPrice, `catalogChanges[${index}].nextPrice`, 1)
     assertSafeInteger(candidate.previousReorderAt, `catalogChanges[${index}].previousReorderAt`)
     assertSafeInteger(candidate.nextReorderAt, `catalogChanges[${index}].nextReorderAt`)
+    if (hasBarcodeHistory) {
+      for (const field of ['previousBarcode', 'nextBarcode'] as const) {
+        const barcode = candidate[field]
+        if (barcode !== null) canonicalText(barcode, `catalogChanges[${index}].${field}`, 80)
+      }
+    }
+    if (hasMyanmarNameHistory) {
+      for (const field of ['previousNameMy', 'nextNameMy'] as const) {
+        const nameMy = candidate[field]
+        if (nameMy !== null) canonicalText(nameMy, `catalogChanges[${index}].${field}`, 180)
+      }
+    }
+    if (hasCategoryHistory) {
+      for (const field of ['previousCategory', 'nextCategory'] as const) {
+        const category = candidate[field]
+        if (category !== null) canonicalText(category, `catalogChanges[${index}].${field}`, 80)
+      }
+    }
     if (candidate.previousPrice === candidate.nextPrice
-      && candidate.previousReorderAt === candidate.nextReorderAt) {
+      && candidate.previousReorderAt === candidate.nextReorderAt
+      && (!hasBarcodeHistory || candidate.previousBarcode === candidate.nextBarcode)
+      && (!hasMyanmarNameHistory || candidate.previousNameMy === candidate.nextNameMy)
+      && (!hasCategoryHistory || candidate.previousCategory === candidate.nextCategory)) {
       rejectInvalid(`catalogChanges[${index}] cannot record an unchanged item.`)
     }
     if (!isRecord(candidate.proof)
@@ -2669,11 +2805,17 @@ export function validateCommerceState(value: unknown): CommerceState {
     const change = candidate as unknown as CommerceCatalogChange
     const newer = newerCatalogChangeBySku.get(sku)
     if (!newer) {
-      if (item.price !== change.nextPrice || item.reorderAt !== change.nextReorderAt) {
+      if (item.price !== change.nextPrice || item.reorderAt !== change.nextReorderAt
+        || (hasBarcodeHistory && (item.barcode ?? null) !== change.nextBarcode)
+        || (hasMyanmarNameHistory && (item.nameMy ?? null) !== change.nextNameMy)
+        || (hasCategoryHistory && (item.category ?? null) !== change.nextCategory)) {
         rejectInvalid(`catalogChanges[${index}] does not match the current catalog item.`)
       }
     } else if (newer.previousPrice !== change.nextPrice
       || newer.previousReorderAt !== change.nextReorderAt
+      || (newer.previousBarcode !== undefined && change.nextBarcode !== undefined && newer.previousBarcode !== change.nextBarcode)
+      || (newer.previousNameMy !== undefined && change.nextNameMy !== undefined && newer.previousNameMy !== change.nextNameMy)
+      || (newer.previousCategory !== undefined && change.nextCategory !== undefined && newer.previousCategory !== change.nextCategory)
       || (timestampMicros(newer.proof.capturedAt) as bigint) < (timestampMicros(change.proof.capturedAt) as bigint)) {
       rejectInvalid(`catalogChanges[${index}] breaks the newest-first item history.`)
     }
@@ -3402,10 +3544,11 @@ export function validateCommerceState(value: unknown): CommerceState {
       let capturedQuantity = 0
       let capturedTotal = 0
       for (const [lineIndex, lineCandidate] of candidate.lines.entries()) {
-        if (!isRecord(lineCandidate) || !hasExactKeys(lineCandidate, ['sku', 'name', 'quantity', 'unitPriceMmk'], ['variant'])) rejectInvalid(`orders[${index}].lines[${lineIndex}] is invalid.`)
+        if (!isRecord(lineCandidate) || !hasExactKeys(lineCandidate, ['sku', 'name', 'quantity', 'unitPriceMmk'], ['variant', 'nameMy'])) rejectInvalid(`orders[${index}].lines[${lineIndex}] is invalid.`)
         const lineSku = canonicalText(lineCandidate.sku, `orders[${index}].lines[${lineIndex}].sku`, 80)
         if (!itemSkus.includes(lineSku)) rejectInvalid(`orders[${index}].lines[${lineIndex}].sku is unknown.`)
         canonicalText(lineCandidate.name, `orders[${index}].lines[${lineIndex}].name`)
+        if (lineCandidate.nameMy !== undefined) canonicalText(lineCandidate.nameMy, `orders[${index}].lines[${lineIndex}].nameMy`, 180)
         if (lineCandidate.variant !== undefined) canonicalText(lineCandidate.variant, `orders[${index}].lines[${lineIndex}].variant`)
         assertSafeInteger(lineCandidate.quantity, `orders[${index}].lines[${lineIndex}].quantity`, 1)
         assertSafeInteger(lineCandidate.unitPriceMmk, `orders[${index}].lines[${lineIndex}].unitPriceMmk`, 1)
@@ -5045,6 +5188,12 @@ function sameCatalogChange(left: CommerceCatalogChange, right: CommerceCatalogCh
     && left.nextPrice === right.nextPrice
     && left.previousReorderAt === right.previousReorderAt
     && left.nextReorderAt === right.nextReorderAt
+    && left.previousBarcode === right.previousBarcode
+    && left.nextBarcode === right.nextBarcode
+    && left.previousNameMy === right.previousNameMy
+    && left.nextNameMy === right.nextNameMy
+    && left.previousCategory === right.previousCategory
+    && left.nextCategory === right.nextCategory
     && sameActionProof(left.proof, right.proof)
 }
 
@@ -5627,6 +5776,7 @@ function commerceOrderAcknowledgementProjection(
     artifact.lines.map((line) => [
       line.sku,
       line.name,
+      ...(line.nameMy === undefined ? [] : [line.nameMy]),
       line.variant ?? null,
       line.quantity,
       line.unitPriceMmk,
@@ -6913,7 +7063,7 @@ export function installCommerceWorkingSampleActivity(stateValue: CommerceState, 
       if (!Number.isSafeInteger(lineTotal) || !Number.isSafeInteger(nextQty) || !Number.isSafeInteger(nextTotal)) return null
       orderQuantity = nextQty
       orderTotal = nextTotal
-      orderLines.push({ sku: item.sku, name: item.name, ...(item.variant ? { variant: item.variant } : {}), quantity: line.quantity, unitPriceMmk: item.price })
+    orderLines.push({ sku: item.sku, name: item.name, ...(item.nameMy ? { nameMy: item.nameMy } : {}), ...(item.variant ? { variant: item.variant } : {}), quantity: line.quantity, unitPriceMmk: item.price })
       const reservedSoFar = safeBalance(reservedQuantityBySku.get(item.sku) ?? 0, line.quantity)
       if (reservedSoFar === null || reservedSoFar > item.onHand) return null
       reservedQuantityBySku.set(item.sku, reservedSoFar)
@@ -6980,7 +7130,7 @@ export function installCommerceWorkingSampleActivity(stateValue: CommerceState, 
     if (!Number.isSafeInteger(lineTotal) || !Number.isSafeInteger(nextQty) || !Number.isSafeInteger(nextTotal)) return null
     pendingQuantity = nextQty
     pendingTotal = nextTotal
-    pendingOrderLines.push({ sku: item.sku, name: item.name, ...(item.variant ? { variant: item.variant } : {}), quantity: line.quantity, unitPriceMmk: item.price })
+    pendingOrderLines.push({ sku: item.sku, name: item.name, ...(item.nameMy ? { nameMy: item.nameMy } : {}), ...(item.variant ? { variant: item.variant } : {}), quantity: line.quantity, unitPriceMmk: item.price })
     const reservedSoFar = safeBalance(reservedQuantityBySku.get(item.sku) ?? 0, line.quantity)
     if (reservedSoFar === null || reservedSoFar > item.onHand) return null
     reservedQuantityBySku.set(item.sku, reservedSoFar)
@@ -7051,7 +7201,7 @@ export function commerceWorkingSampleSkus(stateValue: CommerceState) {
   return [...skus].sort((left, right) => left.localeCompare(right, 'en'))
 }
 
-export const commerceCatalogImportFields = ['name', 'variant', 'onHand', 'reorderAt', 'price'] as const
+export const commerceCatalogImportFields = ['name', 'category', 'variant', 'barcode', 'onHand', 'reorderAt', 'price'] as const
 
 export function commerceCatalogImportDifferences(existing: CommerceItem, incoming: CommerceItem): (typeof commerceCatalogImportFields)[number][] {
   return commerceCatalogImportFields.filter((field) => existing[field] !== incoming[field])
@@ -7097,6 +7247,24 @@ export function importCommerceCatalog(stateValue: CommerceState, input: {
 }
 
 export function updateCommerceItem(state: CommerceState, update: CommerceItemUpdate, proof: CommerceActionProof) {
+  const hasExpectedBarcode = Object.prototype.hasOwnProperty.call(update ?? {}, 'expectedBarcode')
+  const hasNextBarcode = Object.prototype.hasOwnProperty.call(update ?? {}, 'nextBarcode')
+  const hasBarcodeUpdate = hasExpectedBarcode && hasNextBarcode
+  const hasExpectedNameMy = Object.prototype.hasOwnProperty.call(update ?? {}, 'expectedNameMy')
+  const hasNextNameMy = Object.prototype.hasOwnProperty.call(update ?? {}, 'nextNameMy')
+  const hasNameMyUpdate = hasExpectedNameMy && hasNextNameMy
+  const hasExpectedCategory = Object.prototype.hasOwnProperty.call(update ?? {}, 'expectedCategory')
+  const hasNextCategory = Object.prototype.hasOwnProperty.call(update ?? {}, 'nextCategory')
+  const hasCategoryUpdate = hasExpectedCategory && hasNextCategory
+  const barcodeUpdateMalformed = hasExpectedBarcode !== hasNextBarcode
+    || (hasBarcodeUpdate && (![update.expectedBarcode, update.nextBarcode].every((barcode) => barcode === null
+      || (typeof barcode === 'string' && barcode.length > 0 && barcode === barcode.trim() && barcode.length <= 80))))
+  const nameMyUpdateMalformed = hasExpectedNameMy !== hasNextNameMy
+    || (hasNameMyUpdate && ![update.expectedNameMy, update.nextNameMy].every((nameMy) => nameMy === null
+      || (typeof nameMy === 'string' && nameMy.length > 0 && nameMy === nameMy.trim() && nameMy.length <= 180 && !/[\u0000-\u001f\u007f]/.test(nameMy))))
+  const categoryUpdateMalformed = hasExpectedCategory !== hasNextCategory
+    || (hasCategoryUpdate && ![update.expectedCategory, update.nextCategory].every((category) => category === null
+      || (typeof category === 'string' && category.length > 0 && category === category.trim() && category.length <= 80 && !/[\u0000-\u001f\u007f]/.test(category))))
   if (!validProof(proof)
     || typeof update?.sku !== 'string'
     || !update.sku
@@ -7110,8 +7278,14 @@ export function updateCommerceItem(state: CommerceState, update: CommerceItemUpd
     || update.expectedReorderAt < 0
     || !Number.isSafeInteger(update.nextReorderAt)
     || update.nextReorderAt < 0
+    || barcodeUpdateMalformed
+    || nameMyUpdateMalformed
+    || categoryUpdateMalformed
     || (update.expectedPrice === update.nextPrice
-      && update.expectedReorderAt === update.nextReorderAt)) return null
+      && update.expectedReorderAt === update.nextReorderAt
+      && (!hasBarcodeUpdate || update.expectedBarcode === update.nextBarcode)
+      && (!hasNameMyUpdate || update.expectedNameMy === update.nextNameMy)
+      && (!hasCategoryUpdate || update.expectedCategory === update.nextCategory))) return null
   const current = validateCommerceState(state)
   const change: CommerceCatalogChange = {
     sku: update.sku,
@@ -7119,6 +7293,9 @@ export function updateCommerceItem(state: CommerceState, update: CommerceItemUpd
     nextPrice: update.nextPrice,
     previousReorderAt: update.expectedReorderAt,
     nextReorderAt: update.nextReorderAt,
+    ...(hasBarcodeUpdate ? { previousBarcode: update.expectedBarcode, nextBarcode: update.nextBarcode } : {}),
+    ...(hasNameMyUpdate ? { previousNameMy: update.expectedNameMy, nextNameMy: update.nextNameMy } : {}),
+    ...(hasCategoryUpdate ? { previousCategory: update.expectedCategory, nextCategory: update.nextCategory } : {}),
     proof: { ...proof },
   }
   const changes = commerceCatalogChanges(current)
@@ -7132,14 +7309,25 @@ export function updateCommerceItem(state: CommerceState, update: CommerceItemUpd
   const items = current.items.filter((item) => item.sku === update.sku)
   if (items.length !== 1
     || items[0].price !== update.expectedPrice
-    || items[0].reorderAt !== update.expectedReorderAt) return null
+    || items[0].reorderAt !== update.expectedReorderAt
+    || (hasBarcodeUpdate && (items[0].barcode ?? null) !== update.expectedBarcode)
+    || (hasNameMyUpdate && (items[0].nameMy ?? null) !== update.expectedNameMy)
+    || (hasCategoryUpdate && (items[0].category ?? null) !== update.expectedCategory)
+    || (hasBarcodeUpdate && commerceItemBarcodeConflicts(current.items, update.sku, update.nextBarcode ?? null))) return null
   const nextBaselines = existingBaseline
     ? baselines
     : [createCommerceCatalogBaseline(items[0], proof), ...baselines]
   return validateCommerceState({
     ...current,
     items: current.items.map((item) => item.sku === update.sku
-      ? { ...item, price: update.nextPrice, reorderAt: update.nextReorderAt }
+      ? {
+          ...item,
+          price: update.nextPrice,
+          reorderAt: update.nextReorderAt,
+          ...(hasBarcodeUpdate ? { barcode: update.nextBarcode ?? undefined } : {}),
+          ...(hasNameMyUpdate ? { nameMy: update.nextNameMy ?? undefined } : {}),
+          ...(hasCategoryUpdate ? { category: update.nextCategory ?? undefined } : {}),
+        }
       : item),
     catalogBaselines: nextBaselines,
     catalogChanges: [change, ...changes],
@@ -7452,9 +7640,10 @@ function validatedOrderLineSnapshots(order: CommerceOrder): CommerceOrderLine[] 
   let total = 0
   for (const line of order.lines) {
     if (!isRecord(line)
-      || !hasExactKeys(line, ['sku', 'name', 'quantity', 'unitPriceMmk'], ['variant'])
+      || !hasExactKeys(line, ['sku', 'name', 'quantity', 'unitPriceMmk'], ['variant', 'nameMy'])
       || typeof line.sku !== 'string' || line.sku !== line.sku.trim() || !line.sku
       || typeof line.name !== 'string' || line.name !== line.name.trim() || !line.name
+      || (line.nameMy !== undefined && (typeof line.nameMy !== 'string' || line.nameMy !== line.nameMy.trim() || !line.nameMy || line.nameMy.length > 180 || /[\u0000-\u001f\u007f]/.test(line.nameMy)))
       || (line.variant !== undefined && (typeof line.variant !== 'string' || line.variant !== line.variant.trim() || !line.variant))
       || !Number.isSafeInteger(line.quantity) || line.quantity < 1
       || !Number.isSafeInteger(line.unitPriceMmk) || line.unitPriceMmk < 1

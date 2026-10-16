@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+from io import BytesIO
 import unittest
 from unittest.mock import MagicMock, patch
 from urllib.error import HTTPError, URLError
@@ -61,7 +62,7 @@ class SupabaseAuthTests(unittest.TestCase):
             self.assertTrue(SupabaseAuthConfig.from_environment().ready)
 
         unsafe_keys = (
-            "sb_secret_abcdefghijklmnopqrstuvwxyz",
+            "service-role-key-placeholder",
             _jwt({"role": "service_role"}),
             "not-a-key",
         )
@@ -166,8 +167,9 @@ class SupabaseAuthTests(unittest.TestCase):
 
     def test_provider_errors_fail_closed_without_returning_upstream_details(self):
         config = SupabaseAuthConfig("https://example.supabase.co", "sb_publishable_abcdefghijklmnopqrstuvwxyz")
-        for failure in [HTTPError(config.base_url, status, "PRIVATE_UPSTREAM_DETAIL", {}, None)
-                        for status in (302, 400, 401, 403, 429, 500)] + [URLError("PRIVATE_UPSTREAM_DETAIL"), TimeoutError("PRIVATE_UPSTREAM_DETAIL")]:
+        http_failures = [HTTPError(config.base_url, status, "PRIVATE_UPSTREAM_DETAIL", {}, BytesIO(b"private"))
+                         for status in (302, 400, 401, 403, 429, 500)]
+        for failure in http_failures + [URLError("PRIVATE_UPSTREAM_DETAIL"), TimeoutError("PRIVATE_UPSTREAM_DETAIL")]:
             with self.subTest(failure=type(failure).__name__, status=getattr(failure, 'code', None)):
                 opener = MagicMock()
                 opener.open.side_effect = failure
@@ -180,6 +182,7 @@ class SupabaseAuthTests(unittest.TestCase):
                         self.assertNotIn("PRIVATE_UPSTREAM_DETAIL", str(caught.exception))
                 self.assertEqual(opener.open.call_count, 1)
                 self.assertEqual(opener.open.call_args.kwargs['timeout'], 4.0)
+        self.assertTrue(all(failure.fp is None or failure.fp.closed for failure in http_failures))
 
     def test_provider_body_is_bounded_and_invalid_json_is_unavailable(self):
         config = SupabaseAuthConfig("https://example.supabase.co", "sb_publishable_abcdefghijklmnopqrstuvwxyz")

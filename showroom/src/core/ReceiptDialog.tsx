@@ -4,18 +4,7 @@ import { type CommerceMerchantProfile, type CommerceMerchantProfileInput, type C
 import { bi } from './i18n-actions'
 import { PaymentQrButton } from './PaymentQr'
 import { copyOrderRecordText } from './copy-order-record'
-import { shopCustomerReceiptDocument } from './shop-customer-receipt'
-
-function formatReceiptDate(iso: string) {
-  try {
-    return new Date(iso).toLocaleString('en-GB', {
-      day: 'numeric', month: 'short', year: 'numeric',
-      hour: '2-digit', minute: '2-digit',
-    })
-  } catch {
-    return iso
-  }
-}
+import { formatShopBusinessDate, shopCustomerReceiptDocument, shopCustomerReceiptTestDocument } from './shop-customer-receipt'
 
 function mmk(amount: number) {
   return `${amount.toLocaleString()} MMK`
@@ -198,9 +187,7 @@ export function ReceiptDialog({ ack, loyalty, onClose, paymentQrScope, merchantP
     }
   }
 
-  function printCustomerReceipt() {
-    if (!ack || !merchantProfile) return
-    setPrintNotice('')
+  function openCustomerReceiptPrint(documentHtml: string, successMessage: string) {
     try {
       const win = window.open('', '_blank')
       if (!win) {
@@ -211,17 +198,29 @@ export function ReceiptDialog({ ack, loyalty, onClose, paymentQrScope, merchantP
         try {
           win.focus()
           win.print()
-          setPrintNotice('Print dialog opened. Choose a printer or Save as PDF.')
+          setPrintNotice(successMessage)
         } catch {
           setPrintNotice('The browser could not open its print dialog. Use the browser menu to print this receipt.')
         }
       }, { once: true })
       win.document.open()
-      win.document.write(shopCustomerReceiptDocument(ack, merchantProfile))
+      win.document.write(documentHtml)
       win.document.close()
     } catch {
       setPrintNotice('The receipt could not be opened. Try the browser menu to print it.')
     }
+  }
+
+  function printCustomerReceipt() {
+    if (!ack || !merchantProfile || disabled) return
+    setPrintNotice('')
+    openCustomerReceiptPrint(shopCustomerReceiptDocument(ack, merchantProfile), 'Print dialog opened. Choose a printer or Save as PDF.')
+  }
+
+  function printTestReceipt() {
+    if (!merchantProfile || disabled) return
+    setPrintNotice('')
+    openCustomerReceiptPrint(shopCustomerReceiptTestDocument(merchantProfile), 'Test slip opened. Choose your receipt printer; no sale was recorded.')
   }
 
   const [copyResult, setCopyResult] = useState<{ record: CommerceOrderAcknowledgement; notice: string } | null>(null)
@@ -252,7 +251,7 @@ export function ReceiptDialog({ ack, loyalty, onClose, paymentQrScope, merchantP
         <header className="receipt-dialog-header">
           <span className="core-eyebrow">{bi('Order record')}</span>
           <h2 id="receipt-dialog-title">{ack.customer}</h2>
-          <p>{formatReceiptDate(ack.createdAt)} · {ack.channel}</p>
+          <p>{formatShopBusinessDate(ack.createdAt)} · {ack.channel}</p>
           <small>{ack.orderId}</small>
         </header>
         <table className="receipt-dialog-lines">
@@ -281,7 +280,7 @@ export function ReceiptDialog({ ack, loyalty, onClose, paymentQrScope, merchantP
             {ack.payment.status === 'reconciled' ? bi('Paid') : bi('Payment pending')}
           </span>
           {ack.payment.status !== 'reconciled' && ack.payment.dueAt
-            ? <small>Due {formatReceiptDate(ack.payment.dueAt)}</small>
+            ? <small>Due {formatShopBusinessDate(ack.payment.dueAt)}</small>
             : null}
           {/* S2 merchant payment QR: while payment is still pending, the cashier can show
               the owner's stored merchant QR for this method with the amount due (display
@@ -291,17 +290,18 @@ export function ReceiptDialog({ ack, loyalty, onClose, paymentQrScope, merchantP
         {ack.delivery?.fulfilment ? <div className="receipt-dialog-delivery">
           <strong>{ack.delivery.fulfilment}</strong>
           {ack.delivery.reference ? <span>{ack.delivery.reference}</span> : null}
-          {ack.delivery.promisedAt ? <small>Promised {formatReceiptDate(ack.delivery.promisedAt)}</small> : null}
+          {ack.delivery.promisedAt ? <small>Promised {formatShopBusinessDate(ack.delivery.promisedAt)}</small> : null}
         </div> : null}
         <p className="receipt-dialog-notice">{ack.notice}</p>
         <p className="receipt-dialog-notice" aria-live="polite" role="status">{copyResult?.record === ack ? copyResult.notice : ''}</p>
         <p className="receipt-dialog-notice" aria-live="polite" role="status">{printNotice}</p>
         <details className="receipt-dialog-more"><summary>More options</summary><div>
-          <button className="core-button compact" onClick={() => openPrintWindow(ack)} type="button">{bi('Print order record')}</button>
-          <button className="core-button compact" onClick={() => void copyReceiptText()} type="button">{bi('Copy text')}</button>
+          <button className="core-button compact" disabled={disabled} onClick={() => openPrintWindow(ack)} type="button">{bi('Print order record')}</button>
+          <button className="core-button compact" disabled={disabled} onClick={() => void copyReceiptText()} type="button">{bi('Copy text')}</button>
+          {merchantProfile ? <button className="core-button compact" disabled={disabled} onClick={printTestReceipt} type="button">Print test slip</button> : null}
         </div></details>
         <div className="receipt-dialog-actions">
-          {merchantProfile ? <button className="core-button primary compact" onClick={printCustomerReceipt} type="button">Print receipt</button> : <button className="core-button primary compact" onClick={openMerchantProfileSetup} type="button">Set up receipt</button>}
+          {merchantProfile ? <button className="core-button primary compact" disabled={disabled} onClick={printCustomerReceipt} type="button">Print receipt</button> : <button className="core-button primary compact" disabled={disabled} onClick={openMerchantProfileSetup} type="button">Set up receipt</button>}
           <button className="core-button compact" onClick={onClose} type="button">{bi('Close')}</button>
         </div>
       </> : null}

@@ -972,7 +972,65 @@ class ClientImportRouteTests(unittest.TestCase):
         self.assertEqual(self.reducer.calls, 1)
         self.assertEqual(len(self.store._events), 1)
 
-    def test_reviewed_shop_import_preserves_optional_variant(self) -> None:
+    def test_optional_shop_barcode_is_text_and_cannot_collide_with_another_item(self) -> None:
+        package = _package("commerce", "retail-wholesale")
+        package["mapping"]["barcode"] = "ean"
+        package["rows"][0]["values"]["barcode"] = "0000123456789"
+        package["mapping"] = {
+            "sku": package["mapping"]["sku"],
+            "barcode": package["mapping"]["barcode"],
+            **{key: value for key, value in package["mapping"].items() if key not in {"sku", "barcode"}},
+        }
+        package["rows"][0]["values"] = {
+            "sku": package["rows"][0]["values"]["sku"],
+            "barcode": package["rows"][0]["values"]["barcode"],
+            **{key: value for key, value in package["rows"][0]["values"].items() if key not in {"sku", "barcode"}},
+        }
+        valid = validate_client_import_staging_package(_resign(package))
+        self.assertEqual(valid.product, "commerce")
+        self.assertEqual(valid.row_count, 1)
+
+        unsafe = deepcopy(package)
+        unsafe["rows"][0]["values"]["barcode"] = "=1+1"
+        with self.assertRaises(ClientImportValidationError):
+            validate_client_import_staging_package(_resign(unsafe))
+
+        duplicate = deepcopy(package)
+        second_row = deepcopy(duplicate["rows"][0])
+        second_row["sourceRow"] = 3
+        second_row["key"] = "TEA-100"
+        second_row["values"] = {
+            "sku": "TEA-100",
+            "name": "Myanmar green tea",
+            "onHand": "12",
+            "reorderAt": "4",
+            "price": "4500",
+            "barcode": "0000123456789",
+        }
+        duplicate["rows"].append(second_row)
+        duplicate["controls"]["rowCount"] = 2
+        with self.assertRaisesRegex(ClientImportValidationError, "barcode must identify only one"):
+            validate_client_import_staging_package(_resign(duplicate))
+
+        sku_collision = deepcopy(package)
+        sku_collision["rows"][0]["values"]["barcode"] = "TEA-100"
+        second_row = deepcopy(sku_collision["rows"][0])
+        second_row["sourceRow"] = 3
+        second_row["key"] = "TEA-100"
+        second_row["values"] = {
+            "sku": "TEA-100",
+            "name": "Myanmar green tea",
+            "onHand": "12",
+            "reorderAt": "4",
+            "price": "4500",
+            "barcode": "",
+        }
+        sku_collision["rows"].append(second_row)
+        sku_collision["controls"]["rowCount"] = 2
+        with self.assertRaisesRegex(ClientImportValidationError, "cannot match a different"):
+            validate_client_import_staging_package(_resign(sku_collision))
+
+    def test_reviewed_shop_import_preserves_optional_category_variant_and_barcode(self) -> None:
         omitted_variant = _package("commerce", "retail-wholesale")
         omitted_variant["mapping"]["variant"] = ""
         omitted_variant["rows"][0]["values"]["variant"] = ""
@@ -989,7 +1047,31 @@ class ClientImportRouteTests(unittest.TestCase):
 
         package = _package("commerce", "retail-wholesale")
         package["mapping"]["variant"] = "product_variant"
+        package["mapping"]["barcode"] = "ean"
+        package["mapping"]["category"] = "category"
         package["rows"][0]["values"]["variant"] = "Large"
+        package["rows"][0]["values"]["barcode"] = "0000123456789"
+        package["rows"][0]["values"]["category"] = "အဖျော်ယမကာ"
+        package["mapping"] = {
+            "sku": package["mapping"]["sku"],
+            "barcode": package["mapping"]["barcode"],
+            "name": package["mapping"]["name"],
+            "category": package["mapping"]["category"],
+            "onHand": package["mapping"]["onHand"],
+            "reorderAt": package["mapping"]["reorderAt"],
+            "price": package["mapping"]["price"],
+            "variant": package["mapping"]["variant"],
+        }
+        package["rows"][0]["values"] = {
+            "sku": package["rows"][0]["values"]["sku"],
+            "barcode": package["rows"][0]["values"]["barcode"],
+            "name": package["rows"][0]["values"]["name"],
+            "category": package["rows"][0]["values"]["category"],
+            "onHand": package["rows"][0]["values"]["onHand"],
+            "reorderAt": package["rows"][0]["values"]["reorderAt"],
+            "price": package["rows"][0]["values"]["price"],
+            "variant": package["rows"][0]["values"]["variant"],
+        }
         package = _resign(package)
 
         unsafe_variant = deepcopy(package)
@@ -1007,6 +1089,8 @@ class ClientImportRouteTests(unittest.TestCase):
             "reorderAt": "4",
             "price": "4500",
             "variant": "",
+            "barcode": "",
+            "category": "",
         }
         package["rows"].append(second_row)
         package["controls"]["rowCount"] = 2
@@ -1037,7 +1121,9 @@ class ClientImportRouteTests(unittest.TestCase):
                 {
                     "sku": "COFFEE-250",
                     "name": "Myanmar coffee 250g",
+                    "category": "အဖျော်ယမကာ",
                     "variant": "Large",
+                    "barcode": "0000123456789",
                     "onHand": 24,
                     "reorderAt": 8,
                     "price": 7000,

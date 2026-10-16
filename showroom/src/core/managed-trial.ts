@@ -1565,12 +1565,21 @@ export function assertManagedShopImportState(
   }
   for (const [index, row] of stagingPackage.rows.entries()) {
     const item = state.items[index]
+    const category = row.values.category || undefined
     const variant = row.values.variant
-    const itemKeys = variant ? [...baseItemKeys, 'variant'] : baseItemKeys
+    const barcode = row.values.barcode || undefined
+    const itemKeys = [
+      ...baseItemKeys,
+      ...(category ? ['category'] : []),
+      ...(variant ? ['variant'] : []),
+      ...(barcode ? ['barcode'] : []),
+    ].sort()
     const expected = {
       sku: row.values.sku,
       name: row.values.name,
+      ...(category ? { category } : {}),
       ...(variant ? { variant } : {}),
+      ...(barcode ? { barcode } : {}),
       onHand: Number(row.values.onHand),
       reorderAt: Number(row.values.reorderAt),
       price: Number(row.values.price),
@@ -1582,6 +1591,9 @@ export function assertManagedShopImportState(
       || !Number.isSafeInteger(expected.price)
       || item.sku !== expected.sku
       || item.name !== expected.name
+      || item.category !== expected.category
+      || item.variant !== expected.variant
+      || item.barcode !== expected.barcode
       || item.onHand !== expected.onHand
       || item.reorderAt !== expected.reorderAt
       || item.price !== expected.price) {

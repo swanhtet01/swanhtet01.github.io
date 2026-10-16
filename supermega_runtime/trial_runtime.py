@@ -661,7 +661,10 @@ def _shop_catalog_import_payload(
                 {
                     "sku": values["sku"],
                     "name": values["name"],
+                    **({"nameMy": values["nameMy"]} if values.get("nameMy") else {}),
+                    **({"category": values["category"]} if values.get("category") else {}),
                     **({"variant": values["variant"]} if values.get("variant") else {}),
+                    **({"barcode": values["barcode"]} if values.get("barcode") else {}),
                     "onHand": int(values["onHand"]),
                     "reorderAt": int(values["reorderAt"]),
                     "price": int(values["price"]),

@@ -2760,6 +2760,11 @@ input, select, textarea,
 .shop-item-search-row { width: min(260px, 38%); display: flex; align-items: center; gap: var(--space-2); }
 .shop-item-search-row .shop-item-search { width: auto; flex: 1; min-width: 0; }
 @media (max-width: 1120px) { .shop-item-search-row { width: 100%; } }
+.shop-counter-category-filter { display: flex; gap: .4rem; overflow-x: auto; overscroll-behavior-inline: contain; padding: .25rem 0 .5rem; scrollbar-width: thin; }
+.shop-counter-category-filter button { flex: 0 0 auto; min-height: 2.35rem; border: 1px solid var(--core-line-strong); border-radius: 999px; padding: 0 .85rem; background: var(--core-panel); color: var(--core-muted); font: inherit; font-size: .75rem; font-weight: 650; white-space: nowrap; cursor: pointer; }
+.shop-counter-category-filter button:hover { background: var(--core-surface-soft); color: var(--core-ink); }
+.shop-counter-category-filter button[aria-pressed="true"] { border-color: var(--core-green); background: var(--core-green-soft); color: var(--core-green); }
+.shop-counter-category-filter button:focus-visible { outline: 2px solid var(--core-focus); outline-offset: 2px; }
 .sku-scan-row { display: flex; align-items: center; gap: var(--space-2); }
 .sku-scan-row > label { flex: 1; min-width: 0; }
 .sku-scan-row input { flex: 1; min-width: 0; }
@@ -3237,3 +3242,45 @@ input, select, textarea,
 }
 
 .shop-task-list > button.shop-task-row { width: 100%; min-height: 3.5rem; border: 0; border-bottom: 1px solid var(--core-line); padding: .75rem 1rem; background: var(--core-panel); box-shadow: none; font: inherit; text-align: left; cursor: pointer; }
+
+/* Counter benchmark pass: make the catalog a visual picker and give the live
+   basket enough space to stay readable. Keep the established scan/search and
+   checkout behavior; this is a presentation change over the real catalog. */
+.shop-counter-grid { grid-template-columns: minmax(0, 1.22fr) minmax(19rem, .9fr); gap: .875rem; }
+.shop-counter-column-head { display: none; }
+.shop-item-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 10.5rem), 1fr)); gap: .625rem; overflow: visible; }
+.shop-product-tile { min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: 5.5rem auto; align-content: start; gap: .625rem; border: 1px solid var(--core-line); border-radius: .875rem; padding: .625rem; background: var(--core-panel); transition: border-color .16s ease, background-color .16s ease, transform .16s ease; }
+.shop-product-tile:hover:not(:disabled) { border-color: color-mix(in srgb, var(--core-accent) 44%, var(--core-line)); background: var(--core-surface-soft); transform: translateY(-1px); }
+.shop-product-tile:disabled { opacity: .58; }
+.shop-product-art { width: 100%; height: 5.5rem; border-radius: .625rem; }
+.shop-product-copy { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-content: start; align-items: start; gap: .3rem .5rem; }
+.shop-product-name { grid-column: 1 / -1; min-height: 2.4rem; }
+.shop-product-copy strong { font-size: .8125rem; line-height: 1.4; }
+.shop-product-copy b { grid-column: 1; align-self: end; font-size: .8125rem; text-align: left; }
+.shop-product-copy > small { grid-column: 2; align-self: end; font-size: .6875rem; text-align: right; }
+.shop-product-add, .shop-product-quantity { position: absolute; top: .875rem; right: .875rem; width: auto; min-width: 2.75rem; min-height: 2.75rem; border: 1px solid color-mix(in srgb, var(--core-accent) 24%, var(--core-line)); border-radius: 999px; padding: 0 .55rem; background: var(--core-panel); box-shadow: 0 .125rem .5rem rgba(20,22,40,.08); color: var(--core-accent); font-size: .6875rem; font-weight: 700; }
+.shop-product-quantity { min-width: 1.875rem; background: var(--core-accent); color: var(--core-on-accent); }
+@media (max-width: 1080px) and (min-width: 841px) {
+  .shop-counter-grid { grid-template-columns: minmax(0, 1fr); }
+  .shop-item-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 11rem), 1fr)); }
+}
+@media (max-width: 840px) {
+  .shop-item-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .shop-product-tile { min-height: 0; grid-template-columns: minmax(0, 1fr); grid-template-rows: 4.5rem auto; gap: .5rem; padding: .5rem; }
+  .shop-product-art { width: 100%; height: 4.5rem; }
+  .shop-product-name { min-height: 2.4rem; }
+  .shop-product-copy strong { font-size: .75rem; }
+  .shop-product-copy > small { font-size: .625rem; }
+  .shop-product-add, .shop-product-quantity { top: .75rem; right: .75rem; }
+}
+@media (max-width: 480px) {
+  .shop-item-grid { grid-template-columns: minmax(0, 1fr); }
+  .shop-product-tile { grid-template-columns: 3.25rem minmax(0, 1fr); grid-template-rows: auto; align-items: center; }
+  .shop-product-art { width: 3.25rem; height: 3.25rem; }
+  .shop-product-name { min-height: 0; }
+  .shop-product-add, .shop-product-quantity { top: .875rem; right: .875rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .shop-product-tile { transition: none; }
+  .shop-product-tile:hover:not(:disabled) { transform: none; }
+}

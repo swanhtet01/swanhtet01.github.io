@@ -4,7 +4,7 @@ import type { CommerceState } from './commerce-workspace'
 import type { ShopProfitControlBoard } from './shop-profit-control'
 import type { ShopBatchProfitControlView } from './ShopTodayAdvanced'
 import { bi } from './i18n-actions'
-import { projectShopTodaySalesPulse } from './shop-today-sales'
+import { hasShopTodaySalesPattern, projectShopTodaySalesPulse } from './shop-today-sales'
 import { prioritizeShopTodayProducts } from './shop-today-priority'
 import { ProductPhoto } from './ProductPhoto'
 import { shopOrderLink } from './shop-order-target'
@@ -136,6 +136,7 @@ export function ShopToday({ accountingExport = null, batchProfitControl, catalog
     ? undefined
     : profitControl.priorities.find((priority) => priority.id !== 'close_ready')
   const maximumPulseMmk = Math.max(1, ...salesPulse.points.map((point) => point.grossMmk))
+  const salesPatternReady = hasShopTodaySalesPattern(salesPulse)
 
   const isNewShop = !commerce.items.length && !commerce.orders.length && !commerce.movements.length
     && !commerce.closes.length && !commerce.websiteIntakes?.length && !commerce.storefrontRequests?.length
@@ -204,8 +205,8 @@ export function ShopToday({ accountingExport = null, batchProfitControl, catalog
 
       <aside className="shop-operations-rail">
         <article aria-label="Sales insight" className="shop-sales-pulse">
-          <header><span><small>Sales insight</small><strong>{formatMmk(salesPulse.today.grossMmk)}</strong></span>{salesPulse.today.count ? <b data-direction={salesPulse.deltaBasisPoints === null ? 'neutral' : salesPulse.deltaBasisPoints >= 0 ? 'up' : 'down'}>{formatSalesComparison(salesPulse.deltaBasisPoints, salesPulse.previous.grossMmk)}</b> : null}</header>
-          {salesPulse.today.count ? <>
+          <header><span><small>{salesPatternReady ? 'Sales insight' : 'Sales activity'}</small><strong>{formatMmk(salesPulse.today.grossMmk)}</strong></span>{salesPulse.today.count ? <b data-direction={salesPatternReady && salesPulse.deltaBasisPoints !== null ? salesPulse.deltaBasisPoints >= 0 ? 'up' : 'down' : 'neutral'}>{salesPatternReady ? formatSalesComparison(salesPulse.deltaBasisPoints, salesPulse.previous.grossMmk) : `${salesPulse.today.count} completed ${salesPulse.today.count === 1 ? 'sale' : 'sales'}`}</b> : null}</header>
+          {salesPatternReady ? <>
             <div aria-label="Retained completed sales by three-hour Yangon period" className="shop-sales-bars">
             {salesPulse.points.map((point) => <span aria-label={`${point.label}: ${formatMmk(point.grossMmk)}`} key={point.hour}>
               <i aria-hidden="true" style={{ height: `${Math.max(point.grossMmk ? 12 : 2, Math.round((point.grossMmk / maximumPulseMmk) * 100))}%` }} />
@@ -213,7 +214,8 @@ export function ShopToday({ accountingExport = null, batchProfitControl, catalog
             </span>)}
             </div>
             <p>{salesPulse.today.count} completed {salesPulse.today.count === 1 ? 'sale' : 'sales'} today</p>
-          </> : <div className="shop-sales-empty"><strong>No sales yet today</strong><span>Completed counter sales will appear here.</span></div>}
+          </> : salesPulse.today.count ? <div className="shop-sales-empty" role="status"><strong>Building a useful sales pattern</strong><span>Complete a few more sales across the day to reveal when sales happen.</span></div>
+            : <div className="shop-sales-empty"><strong>No sales yet today</strong><span>Completed counter sales will appear here.</span></div>}
         </article>
 
         <section aria-label="Quick tasks" className="shop-next-focus">

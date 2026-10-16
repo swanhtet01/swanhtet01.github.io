@@ -12,21 +12,52 @@ import { Cdp, findBrowser, launchBrowser } from './verify_app_entry_rendered.mjs
 
 const root = fileURLToPath(new URL('..', import.meta.url))
 const outputRoot = resolve(root, '.tmp')
-const fixtures = {
-  shop: resolve(root, '.tmp', 'qa-shop'),
-  workspaces: resolve(root, '.tmp', 'qa-workspaces'),
-}
+const captureInputPaths = [
+  'showroom',
+  'tools/capture_public_gallery.mjs',
+  'tools/build_shop_browser_fixture.mjs',
+  'tools/build_product_clarity_fixture.mjs',
+  'tools/verify_app_entry_rendered.mjs',
+  'tools/public-assets/noto-sans-myanmar.woff2',
+  'tools/qa-assets',
+  '.github/workflows/showroom-ci.yml',
+]
+const captureHarnessPaths = captureInputPaths.filter(path => path !== 'showroom' && path !== 'tools/capture_public_gallery.mjs')
 const samplePhotoFiles = ['sites-studio-sample.jpg', 'sites-studio-materials.jpg', 'sites-studio-entrance.jpg']
 const mime = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.woff2': 'font/woff2' }
 
-function buildFixture(script, args = []) {
+async function captureInputsDigest() {
+  const tracked = spawnSync('git', ['ls-files', '-z', '--', ...captureInputPaths], { cwd: root, encoding: 'buffer', windowsHide: true })
+  const untracked = spawnSync('git', ['ls-files', '--others', '--exclude-standard', '-z', '--', ...captureInputPaths], { cwd: root, encoding: 'buffer', windowsHide: true })
+  if (tracked.status !== 0 || untracked.status !== 0) throw new Error('capture_input_inventory_unavailable')
+  const paths = new Set(`${tracked.stdout.toString('utf8')}${untracked.stdout.toString('utf8')}`.split('\0').filter(Boolean))
+  const digest = createHash('sha256')
+  for (const path of [...paths].sort()) {
+    digest.update(path)
+    digest.update('\0')
+    try {
+      const bytes = await readFile(resolve(root, path))
+      digest.update(String(bytes.length))
+      digest.update('\0')
+      digest.update(bytes)
+    } catch (cause) {
+      if (cause?.code !== 'ENOENT') throw cause
+      digest.update('<deleted>')
+    }
+    digest.update('\0')
+  }
+  return digest.digest('hex')
+}
+
+function buildFixture(script, outputDirectory, args = []) {
   const result = spawnSync(process.execPath, [resolve(root, 'tools', script), ...args], {
     cwd: root, encoding: 'utf8', windowsHide: true, timeout: 120_000,
+    env: { ...process.env, SUPERMEGA_QA_FIXTURE_OUTPUT_DIR: outputDirectory },
   })
   if (result.status !== 0) throw new Error(`fixture_build_failed:${script}:${result.stderr.slice(-1000)}`)
 }
 
-async function serveFixture() {
+async function serveFixture(fixtures) {
   const server = createServer(async (request, response) => {
     try {
       const url = new URL(request.url || '/', 'http://127.0.0.1')
@@ -221,22 +252,26 @@ async function assertShopMobileFits(cdp, sessionId, selector) {
 async function main() {
   const head = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8', windowsHide: true })
   const showroomTree = spawnSync('git', ['rev-parse', 'HEAD:showroom'], { cwd: root, encoding: 'utf8', windowsHide: true })
-  const captureChanges = spawnSync('git', ['status', '--porcelain', '--', 'showroom',
-    'tools/capture_public_gallery.mjs', 'tools/build_shop_browser_fixture.mjs',
-    'tools/build_product_clarity_fixture.mjs', 'tools/verify_app_entry_rendered.mjs',
-    'tools/public-assets/noto-sans-myanmar.woff2', 'tools/qa-assets',
-    '.github/workflows/showroom-ci.yml'], { cwd: root, encoding: 'utf8', windowsHide: true })
-  if (head.status !== 0 || showroomTree.status !== 0 || captureChanges.status !== 0 || captureChanges.stdout.trim())
+  const reviewDirtyCapture = process.env.SUPERMEGA_GALLERY_REVIEW_DIRTY_SOURCE === '1'
+  const sourceChanges = spawnSync('git', ['status', '--porcelain', '--untracked-files=all', '--', 'showroom'], { cwd: root, encoding: 'utf8', windowsHide: true })
+  const captureScriptChanges = spawnSync('git', ['status', '--porcelain', '--untracked-files=all', '--', 'tools/capture_public_gallery.mjs'], { cwd: root, encoding: 'utf8', windowsHide: true })
+  const captureChanges = spawnSync('git', ['status', '--porcelain', '--untracked-files=all', '--', ...captureHarnessPaths], { cwd: root, encoding: 'utf8', windowsHide: true })
+  const captureInputsBefore = await captureInputsDigest()
+  if (head.status !== 0 || showroomTree.status !== 0 || sourceChanges.status !== 0
+    || captureScriptChanges.status !== 0 || captureChanges.status !== 0
+    || (!reviewDirtyCapture && (sourceChanges.stdout.trim() || captureScriptChanges.stdout.trim() || captureChanges.stdout.trim())))
     throw new Error('clean_capture_source_commit_required')
-  buildFixture('build_shop_browser_fixture.mjs', ['--today'])
-  buildFixture('build_product_clarity_fixture.mjs', ['--gallery'])
   await mkdir(outputRoot, { recursive: true })
   const output = await mkdtemp(join(outputRoot, 'gallery-candidate-'))
+  const fixtureRoot = await mkdtemp(join(outputRoot, 'gallery-fixtures-'))
+  const fixtures = { shop: join(fixtureRoot, 'shop'), workspaces: join(fixtureRoot, 'workspaces') }
+  buildFixture('build_shop_browser_fixture.mjs', fixtures.shop, ['--today', '--gallery'])
+  buildFixture('build_product_clarity_fixture.mjs', fixtures.workspaces, ['--gallery'])
   const sampleMedia = new Map(await Promise.all(samplePhotoFiles.map(async file =>
     [`https://gallery-fixture.example/media/${file}`, await readFile(resolve(root, 'tools', 'qa-assets', file))])))
   const sampleMediaDigests = [...sampleMedia].map(([url, bytes]) => ({ file: basename(url),
     sha256: createHash('sha256').update(bytes).digest('hex'), evidence: 'synthetic_sample_photo' }))
-  const server = await serveFixture()
+  const server = await serveFixture(fixtures)
   const origin = `http://127.0.0.1:${server.address().port}`
   const profile = await mkdtemp(join(tmpdir(), 'supermega-gallery-capture-'))
   let browser
@@ -379,11 +414,17 @@ async function main() {
       ['Request saved on this device', 'No order or payment was confirmed.'],
       { fixturePath: '/workspaces/', route: '/ecommerce/?view=preview', selector: '.ecommerce-quote-receipt[data-current="true"]' }))
     const sourceTreeAfter = spawnSync('git', ['rev-parse', 'HEAD:showroom'], { cwd: root, encoding: 'utf8', windowsHide: true })
-    if (sourceTreeAfter.status !== 0 || sourceTreeAfter.stdout.trim() !== showroomTree.stdout.trim())
+    const captureInputsAfter = await captureInputsDigest()
+    if (sourceTreeAfter.status !== 0 || sourceTreeAfter.stdout.trim() !== showroomTree.stdout.trim()
+      || captureInputsAfter !== captureInputsBefore)
       throw new Error('product_source_changed_during_capture')
     if (deniedExternal !== 0 || fulfilledSampleMedia.size !== sampleMedia.size)
       throw new Error(`sample_media_or_external_request_mismatch:${fulfilledSampleMedia.size}:${deniedExternal}`)
     console.log(JSON.stringify({ ok: true, classification: 'candidate_only_local_real_component_synthetic', publicationReady: false,
+      captureMode: reviewDirtyCapture ? 'dirty-working-tree-review' : 'clean-commit-review',
+      captureInputsSha256: captureInputsAfter,
+      sourceHasLocalChanges: Boolean(sourceChanges.stdout.trim() || captureScriptChanges.stdout.trim() || captureChanges.stdout.trim()),
+      captureHarnessHasLocalChanges: Boolean(captureChanges.stdout.trim()),
       sourceCommit: head.stdout.trim(), showroomTree: showroomTree.stdout.trim(), deniedExternal,
       fulfilledSyntheticMedia: fulfilledSampleMedia.size, sampleMediaDigests, completedSale,
       customerReceiptVisible: false, output, captures }, null, 2))

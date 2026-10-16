@@ -28,6 +28,7 @@ import { emitMetric } from '../analytics/metrics-collector'
 import { BarcodeScanButton } from './BarcodeScanButton'
 import { prepareManagedFirstCatalog } from './shop-managed-first-catalog'
 import { applyStockCountScan } from './shop-stock-count-scan'
+import { unmatchedBarcodeForCreation } from './shop-unmatched-scan'
 const ClosedOrderHistory = lazy(() => import('./ShopOrderHistory').then((module) => ({ default: module.ClosedOrderHistory })))
 const ShopProductPhotoControl = lazy(() => import('./ShopProductPhotoControl').then((module) => ({ default: module.ShopProductPhotoControl })))
 const ShopStocktakeDraftRecovery = lazy(() => import('./ShopStocktakeDraftRecovery').then((module) => ({ default: module.ShopStocktakeDraftRecovery })))
@@ -156,6 +157,7 @@ import {
   recordCommerceSupplierInvoice,
   recordCommerceSupplierCreditNote,
   receiveCommercePurchaseOrder,
+  incrementPurchaseOrderReceiveFromScan,
   reconcileCommercePayment,
   recordCommerceCollectionAction,
   recordCommerceOrderReturn,
@@ -165,6 +167,9 @@ import {
   resolveCommerceOrderSupportCase,
   recordCommerceOrderCorrection,
   registerCommerceItem,
+  commerceItemBarcodeConflicts,
+  findCommerceItemByScanCode,
+  resolveCommerceItemByScanCode,
   reserveCommerceOrder,
   saveCommerceClose,
   saveCommerceMerchantProfile,
@@ -447,13 +452,17 @@ type CatalogItemEditDraft = {
   sku: string
   expectedPrice: number
   expectedReorderAt: number
+  expectedBarcode: string | null
+  expectedNameMy: string | null
+  expectedCategory: string | null
   price: string
   reorderAt: string
+  barcode: string
+  nameMy: string
+  category: string
 }
 
 const commerceSupportPriorityOrder: CommerceSupportPriority[] = ['urgent', 'high', 'normal', 'low']
-
-type ProductId = 'commerce' | 'production'
 
 // Hand-maintained duplicate of the canonical ecommerceCancellationMatchesCurrentShop
 // export in ecommerce-buying-lifecycle.ts (kept local rather than statically imported
@@ -541,10 +550,6 @@ export function shopInboxRequestWindow<T extends { id: string }>(requests: reado
   return target ? [target, ...visible.slice(0, limit - 1)] : visible
 }
 
-function productCanonicalPath(product: ProductId) {
-  return product === 'commerce' ? '/shop/' : '/plant/'
-}
-
 type ProductionTab = 'production' | 'control'
 
 export type ManagedTrialRequestPrefill = {
@@ -604,7 +609,7 @@ export function managedTrialRequestUrl(product: SetupProductId, templateId: stri
 
 // commerceTabs lives in ./commerce-tabs so the CoreShell mobile bottom bar can
 // render the same task list without importing this chunk-isolated module.
-const productionTabs: Array<{ id: ProductionTab; label: string }> = [
+export const productionTabs: Array<{ id: ProductionTab; label: string }> = [
   { id: 'production', label: 'Jobs' },
   { id: 'control', label: 'Problems' },
 ]
@@ -1007,7 +1012,12 @@ function ActionHistory({ actions, domain }: { actions: AccountableAction[]; doma
   </details>
 }
 
-export function OperationsPage({ product }: { product: ProductId }) {
+// The customer-facing workspace has one product route: Shop. Plant remains an
+// internal product surface and its old customer routes redirect at the router.
+// Keeping this entry concrete lets Rollup omit the dormant Plant application
+// from Shop's first-load chunk without removing its implementation or the
+// Shop replenishment handoff.
+export function OperationsPage() {
   const runtime = useOutletContext<RuntimeHealth & { ecommerceShopHandoffAllowed: boolean; shopInboundRequestsAllowed: boolean }>()
   const allowEcommerceShopHandoff = runtime.ecommerceShopHandoffAllowed
   const allowShopInboundRequests = runtime.shopInboundRequestsAllowed
@@ -1029,60 +1039,52 @@ export function OperationsPage({ product }: { product: ProductId }) {
   const shopCounterClientId = (location.state as { shopCounterClientId?: string } | null)?.shopCounterClientId?.trim().slice(0, 80) ?? ''
   const requestedSource = searchParams.get('source')
   const requestedRequestId = searchParams.get('request')
-  const view = product
   const requestedTab = searchParams.get('tab')
-  const requestedShopTemplateId = view === 'commerce' ? shopBusinessTemplateFromQuery(searchParams.get('template')) : null
+  const requestedShopTemplateId = shopBusinessTemplateFromQuery(searchParams.get('template'))
   const requestedShopTemplate = requestedShopTemplateId ? shopBusinessTemplate(requestedShopTemplateId) : null
   // A trade link is a counter door, not a setup detour. An explicit tab still wins so an
   // operator can move through Today, Orders, and Stock without losing the trade context.
   const commerceTab = requestedShopTemplateId && requestedTab === null ? 'counter' : activeCommerceTab(requestedTab)
-  const productionTab = productionTabs.some((tab) => tab.id === requestedTab) ? requestedTab as ProductionTab : 'production'
-  const activeTab = view === 'commerce' ? commerceTab : productionTab
+  const activeTab = commerceTab
   const requestedTabIsCanonical = requestedTab === activeTab
-  const canonicalPath = productCanonicalPath(view)
+  const canonicalPath = '/shop/'
   const canonicalParams = new URLSearchParams({ tab: activeTab })
-  if (view === 'commerce' && requestedShopTemplateId) canonicalParams.set('template', requestedShopTemplateId)
+  if (requestedShopTemplateId) canonicalParams.set('template', requestedShopTemplateId)
   const canonicalTabPath = `${canonicalPath}?${canonicalParams}`
 
   useEffect(() => {
     if (location.pathname !== canonicalPath || !requestedTabIsCanonical) navigate(canonicalTabPath, { replace: true })
   }, [canonicalPath, canonicalTabPath, location.pathname, navigate, requestedTabIsCanonical])
 
-  function setTab(tab: CommerceTab | ProductionTab) {
+  function setTab(tab: CommerceTab) {
     const params = new URLSearchParams({ tab })
-    if (view === 'commerce' && requestedShopTemplateId) params.set('template', requestedShopTemplateId)
-    navigate(`${productCanonicalPath(view)}?${params}`, { replace: true })
+    if (requestedShopTemplateId) params.set('template', requestedShopTemplateId)
+    navigate(`/shop/?${params}`, { replace: true })
   }
 
   const entryDecision = operationsEntryDecision(runtime.status, managedIdentitySettled, managedIdentity)
   if (entryDecision === 'checking') return <div aria-live="polite" className="product-route-loading" role="status"><span>&gt;_</span><p>Checking company access…</p></div>
-  if (entryDecision === 'login') return <Navigate replace to={managedAccountPath('/login', view, location.search)} />
+  if (entryDecision === 'login') return <Navigate replace to={managedAccountPath('/login', 'commerce', location.search)} />
 
-  const tabs = view === 'commerce' ? commerceTabs : productionTabs
   const requestedShopTemplateState = shopTemplateDoorState(requestedShopTemplateId, confirmedLocalShop, Boolean(managedIdentity))
-  const productCopy = view === 'commerce'
-    ? requestedShopTemplateState === 'managed-unapplied' && requestedShopTemplate
-      ? `The ${requestedShopTemplate.name.en} public request is not applied to this company catalog until a separate managed review.`
-      : requestedShopTemplateState === 'checking' && requestedShopTemplate
-        ? `Checking workspace access. Your catalog has not been changed.`
+  const productCopy = requestedShopTemplateState === 'managed-unapplied' && requestedShopTemplate
+    ? `The ${requestedShopTemplate.name.en} public request is not applied to this company catalog until a separate managed review.`
+    : requestedShopTemplateState === 'checking' && requestedShopTemplate
+      ? 'Checking workspace access. Your catalog has not been changed.'
       : requestedShopTemplateState === 'local-active' && requestedShopTemplate && commerceTab === 'counter'
-      ? `${requestedShopTemplate.name.en}: choose an item, select a local payment method, and review the sale.`
-      : {
-        today: 'See today’s next job and key numbers.',
-        counter: 'Tap an item, choose payment, and confirm the sale.',
-        orders: 'Finish fulfilment, follow up payment, and handle exceptions.',
-        inventory: 'Count stock, replenish items, and review location availability.',
-      }[commerceTab]
-    : {
-        production: 'Plan jobs, record output, and track the materials each shift used.',
-        control: 'Contain quality, equipment, downtime, and maintenance problems.',
-      }[productionTab]
+        ? `${requestedShopTemplate.name.en}: choose an item, select a local payment method, and review the sale.`
+        : {
+          today: 'See today’s next job and key numbers.',
+          counter: 'Tap an item, choose payment, and confirm the sale.',
+          orders: 'Finish fulfilment, follow up payment, and handle exceptions.',
+          inventory: 'Count stock, replenish items, and review location availability.',
+        }[commerceTab]
 
   return (
-    <div className={`workspace-screen operations-screen${view === 'commerce' ? ' commerce-screen' : ''}`} data-active-tab={activeTab}>
-      <PageHeading title={productDisplayName(view)} copy={productCopy} />
-      <nav className="workspace-toolbar view-tabs product-task-tabs" aria-label={`${productDisplayName(view)} tasks`}>{tabs.map((tab) => <button aria-current={activeTab === tab.id ? 'page' : undefined} key={tab.id} onClick={() => setTab(tab.id)} type="button">{view === 'commerce' ? bi(tab.label) : tab.label}</button>)}</nav>
-      <div className="workspace-view">{view === 'commerce' ? <CommercePage allowEcommerceShopHandoff={allowEcommerceShopHandoff} allowShopInboundRequests={allowShopInboundRequests} confirmedLocalShop={confirmedLocalShop} key={managedIdentity ? JSON.stringify([managedIdentity.workspaceId, managedIdentity.userId, allowEcommerceShopHandoff, allowShopInboundRequests]) : confirmedLocalShop ? 'local' : 'checking'} managedIdentity={managedIdentity} requestedRequestId={requestedRequestId} requestedShopTemplate={requestedShopTemplate} requestedSource={requestedSource} shopCounterClientId={shopCounterClientId} shopCounterCustomer={shopCounterCustomer} shopCounterSearch={shopCounterSearch} tab={commerceTab} /> : <ProductionPage managedIdentity={managedIdentity} tab={productionTab} />}</div>
+    <div className="workspace-screen operations-screen commerce-screen" data-active-tab={activeTab}>
+      <PageHeading title="Shop" copy={productCopy} />
+      <nav className="workspace-toolbar view-tabs product-task-tabs" aria-label="Shop tasks">{commerceTabs.map((tab) => <button aria-current={activeTab === tab.id ? 'page' : undefined} key={tab.id} onClick={() => setTab(tab.id)} type="button">{bi(tab.label)}</button>)}</nav>
+      <div className="workspace-view"><CommercePage allowEcommerceShopHandoff={allowEcommerceShopHandoff} allowShopInboundRequests={allowShopInboundRequests} confirmedLocalShop={confirmedLocalShop} key={managedIdentity ? JSON.stringify([managedIdentity.workspaceId, managedIdentity.userId, allowEcommerceShopHandoff, allowShopInboundRequests]) : confirmedLocalShop ? 'local' : 'checking'} managedIdentity={managedIdentity} requestedRequestId={requestedRequestId} requestedShopTemplate={requestedShopTemplate} requestedSource={requestedSource} shopCounterClientId={shopCounterClientId} shopCounterCustomer={shopCounterCustomer} shopCounterSearch={shopCounterSearch} tab={commerceTab} /></div>
     </div>
   )
 }
@@ -1148,7 +1150,7 @@ function ShopOperatingStrip({ actionLabel, choice, detail, disabled, onAction, o
   </section>
 }
 
-function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = null, initialCustomer, initialQuery, items, lowStockCount, loyaltyPoints, onReview, openOrderCount, operatorLabel, operatingContext, paymentQrScope, persistLocalDraft, productImageScope, recordStatus, recordedOrderIds }: {
+function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = null, initialCustomer, initialQuery, items, lowStockCount, loyaltyPoints, onCreateFromBarcode, onReview, openOrderCount, operatorLabel, operatingContext, paymentQrScope, persistLocalDraft, productImageScope, recordStatus, recordedOrderIds }: {
   canCompleteInOneReview: boolean
   disabled: boolean
   draftStorageScope?: CounterTicketStorageScope | null
@@ -1157,6 +1159,7 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
   items: CommerceItem[]
   lowStockCount: number
   loyaltyPoints: ReadonlyMap<string, number> | null
+  onCreateFromBarcode: (barcode: string) => void
   onReview: (review: ShopCounterReview, returnFocus: HTMLElement) => void
   openOrderCount: number
   operatorLabel: string
@@ -1190,7 +1193,9 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
   const setOutcome = (value: CounterBasket['outcome']) => updateBasket({ outcome: value })
   const [query, setQuery] = useState(initialQuery)
   const [catalogPage, setCatalogPage] = useState(0)
+  const [categoryFilter, setCategoryFilter] = useState<{ kind: 'all' } | { kind: 'category'; value: string } | { kind: 'uncategorized' }>({ kind: 'all' })
   const [scanFeedback, setScanFeedback] = useState('')
+  const [unmatchedBarcode, setUnmatchedBarcode] = useState('')
   const [cartOpen, setCartOpen] = useState(false)
   const salePanelRef = useRef<HTMLElement>(null)
   const saleSearchRef = useRef<HTMLInputElement>(null)
@@ -1211,7 +1216,21 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
   }, [cartOpen])
 
   const normalizedQuery = query.trim().toLocaleLowerCase()
-  const catalog = useMemo(() => projectShopCounterCatalog(items, query, catalogPage), [items, query, catalogPage])
+  const categories = useMemo(() => {
+    const labels = new Map<string, string>()
+    for (const item of items) {
+      const category = item.category?.trim() ?? ''
+      if (category && !labels.has(category.toLocaleLowerCase())) labels.set(category.toLocaleLowerCase(), category)
+    }
+    return [...labels.entries()].sort((left, right) => left[1].localeCompare(right[1]))
+  }, [items])
+  const hasUncategorized = items.some((item) => !item.category?.trim())
+  const categoryFilteredItems = useMemo(() => {
+    if (categoryFilter.kind === 'all') return items
+    if (categoryFilter.kind === 'uncategorized') return items.filter((item) => !item.category?.trim())
+    return items.filter((item) => item.category?.trim().toLocaleLowerCase() === categoryFilter.value)
+  }, [categoryFilter, items])
+  const catalog = useMemo(() => projectShopCounterCatalog(categoryFilteredItems, query, catalogPage), [categoryFilteredItems, query, catalogPage])
   const visibleItems = catalog.rows
   const lines = items.flatMap((item) => {
     const quantity = cart[item.sku] ?? 0
@@ -1254,25 +1273,37 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
 
   // Single resolution path for every scan source. The Enter key (keyboard-wedge USB/BT
   // scanners type the code and send Enter) and the camera scanner below both land here,
-  // so exact-SKU matching can never drift between the two.
-  function addScannedValue(value: string) {
+  // so exact SKU/barcode resolution cannot drift between the two.
+  function addScannedValue(value: string, source: 'camera' | 'keyboard') {
     const normalizedQuery = value.trim().toLocaleLowerCase()
     if (!normalizedQuery) return false
-    const matches = items.filter((item) => item.sku.toLocaleLowerCase() === normalizedQuery)
-    const match = matches.length === 1 ? matches[0] : null
-    if (!match || match.onHand < 1) {
-      setScanFeedback('Enter adds an in-stock item by exact SKU. Choose a product below or check its code.')
+    const resolution = resolveCommerceItemByScanCode(items, normalizedQuery)
+    if (resolution.kind === 'ambiguous') {
+      setScanFeedback('This SKU or barcode matches more than one product. Correct the duplicate product codes before scanning again.')
+      setUnmatchedBarcode('')
+      return false
+    }
+    if (resolution.kind === 'not_found') {
+      setScanFeedback('No product matches this SKU or barcode. Check the code or add the product.')
+      setUnmatchedBarcode(unmatchedBarcodeForCreation(value, source) ?? '')
+      return false
+    }
+    const match = resolution.item
+    setUnmatchedBarcode('')
+    if (match.onHand < 1) {
+      setScanFeedback('This product is out of stock. Review stock before selling it.')
       return false
     }
     if (!addItem(match)) return false
     setQuery('')
+    setUnmatchedBarcode('')
     return true
   }
 
   function addSearchMatch(event: KeyboardEvent<HTMLInputElement>) {
     if (event.key !== 'Enter' || !normalizedQuery) return
     event.preventDefault()
-    if (addScannedValue(query)) setCatalogPage(0)
+    if (addScannedValue(query, 'keyboard')) setCatalogPage(0)
   }
 
   function addCameraScan(value: string) {
@@ -1281,7 +1312,7 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
     // exact code the camera read next to the "no matching item" state instead of nothing.
     setQuery(value)
     setCatalogPage(0)
-    addScannedValue(value)
+    addScannedValue(value, 'camera')
   }
 
   function clearSale() {
@@ -1333,8 +1364,13 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
               <span aria-label="Record safety" className="shop-next-compact shop-record-status-counter" title={recordStatus.detail}>{recordStatus.badge} · {recordStatus.label}<small className="sr-only">{recordStatus.detail} · {operatorLabel || 'Cashier set at review'}</small></span>
             </nav>
           </div>
-          <div className="shop-item-search-row"><label className="shop-item-search"><span className="sr-only">Find or scan an item</span><input ref={saleSearchRef} autoComplete="off" aria-keyshortcuts="/" onChange={(event) => { setQuery(event.target.value); setCatalogPage(0); setScanFeedback('') }} onKeyDown={addSearchMatch} placeholder="Search or scan SKU" type="search" value={query} /><kbd aria-hidden="true" className="shop-search-shortcut">/</kbd></label><BarcodeScanButton label="Scan a barcode with the camera" onDetected={addCameraScan} /></div>
-          {scanFeedback ? <p className="form-notice" role="status">{scanFeedback}</p> : null}
+          <div className="shop-item-search-row"><label className="shop-item-search"><span className="sr-only">Find or scan an item</span><input ref={saleSearchRef} autoComplete="off" aria-keyshortcuts="/" onChange={(event) => { setQuery(event.target.value); setCatalogPage(0); setScanFeedback(''); setUnmatchedBarcode('') }} onKeyDown={addSearchMatch} placeholder="Search, SKU or barcode" type="search" value={query} /><kbd aria-hidden="true" className="shop-search-shortcut">/</kbd></label><BarcodeScanButton label="Scan a barcode with the camera" onDetected={addCameraScan} /></div>
+          {categories.length + Number(hasUncategorized) > 1 ? <nav aria-label="Product categories" className="shop-counter-category-filter">
+            <button aria-pressed={categoryFilter.kind === 'all'} onClick={() => { setCategoryFilter({ kind: 'all' }); setCatalogPage(0) }} type="button">All items</button>
+            {categories.map(([key, label]) => <button aria-pressed={categoryFilter.kind === 'category' && categoryFilter.value === key} key={key} onClick={() => { setCategoryFilter({ kind: 'category', value: key }); setCatalogPage(0) }} type="button">{label}</button>)}
+            {hasUncategorized ? <button aria-pressed={categoryFilter.kind === 'uncategorized'} onClick={() => { setCategoryFilter({ kind: 'uncategorized' }); setCatalogPage(0) }} type="button">Uncategorized</button> : null}
+          </nav> : null}
+          {scanFeedback ? <p className="form-notice" role="status">{scanFeedback}{unmatchedBarcode ? <> <button className="text-link" onClick={() => onCreateFromBarcode(unmatchedBarcode)} type="button">Add product with this barcode</button></> : null}</p> : null}
         </header>
         {catalog.pageCount > 1 ? <nav aria-label="Catalog pages" className="shop-catalog-pages">
           <span aria-live="polite">{catalog.start + 1}–{Math.min(catalog.start + visibleItems.length, catalog.total)} of {catalog.total} products</span>
@@ -1737,14 +1773,16 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
     && recoveredEcommerceIntent.id === requestedEcommerceIntent.id
     ? recoveredEcommerceIntent.intents
     : {} as Partial<EcommerceShopNavigationIntents>
-  const [catalogDraft, setCatalogDraft] = useState({ sku: '', name: '', onHand: '', reorderAt: '0', price: '', reason: '', evidenceReference: '' })
+  const [catalogDraft, setCatalogDraft] = useState({ sku: '', barcode: '', name: '', nameMy: '', category: '', onHand: '', reorderAt: '0', price: '', reason: '', evidenceReference: '' })
   const [managedTemplateDraft, setManagedTemplateDraft] = useState({ reviewed: false, reason: '', evidenceReference: '' })
-  const [itemDraft, setItemDraft] = useState({ sku: '', name: '', onHand: '', reorderAt: '0', price: '' })
+  const [itemDraft, setItemDraft] = useState({ sku: '', barcode: '', name: '', nameMy: '', category: '', onHand: '', reorderAt: '0', price: '' })
+  const shopCategoryOptions = useMemo(() => [...new Set(commerce.items.map((item) => item.category?.trim()).filter((category): category is string => Boolean(category)))].sort((left, right) => left.localeCompare(right)), [commerce.items])
   const [catalogCreateOpen, setCatalogCreateOpen] = useState(false)
   const [catalogEditDraft, setCatalogEditDraft] = useState<CatalogItemEditDraft | null>(null)
   const [purchaseBudgetDraft, setPurchaseBudgetDraft] = useState<PurchaseBudgetDraft | null>(null)
   const [supplierSourcingDraft, setSupplierSourcingDraft] = useState<SupplierSourcingDraft | null>(null)
   const [purchaseOrderDraft, setPurchaseOrderDraft] = useState<PurchaseOrderDraft | null>(null)
+  const [purchaseOrderScanCode, setPurchaseOrderScanCode] = useState('')
   const [supplierInvoiceDraft, setSupplierInvoiceDraft] = useState<SupplierInvoiceDraft | null>(null)
   const [supplierReturnDraft, setSupplierReturnDraft] = useState<SupplierReturnDraft | null>(null)
   const [supplierCreditDraft, setSupplierCreditDraft] = useState<SupplierCreditDraft | null>(null)
@@ -2345,14 +2383,32 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
   const catalogEditReorderResult = Number.isSafeInteger(catalogEditReorder) && catalogEditReorder >= 0
     ? catalogEditReorder
     : null
+  const catalogEditBarcodeText = catalogEditDraft?.barcode.trim() ?? ''
+  const catalogEditBarcode = catalogEditBarcodeText || null
+  const catalogEditBarcodeValid = catalogEditBarcodeText.length <= 80 && !/[\u0000-\u001f\u007f]/.test(catalogEditBarcodeText)
+  const catalogEditNameMyText = catalogEditDraft?.nameMy.trim() ?? ''
+  const catalogEditNameMy = catalogEditNameMyText || null
+  const catalogEditNameMyValid = catalogEditNameMyText.length <= 180 && !/[\u0000-\u001f\u007f]/.test(catalogEditNameMyText)
+  const catalogEditCategoryText = catalogEditDraft?.category.trim() ?? ''
+  const catalogEditCategory = catalogEditCategoryText || null
+  const catalogEditCategoryValid = catalogEditCategoryText.length <= 80 && !/[\u0000-\u001f\u007f]/.test(catalogEditCategoryText)
   const catalogEditStale = Boolean(catalogEditDraft && (!catalogEditItem
     || catalogEditItem.price !== catalogEditDraft.expectedPrice
-    || catalogEditItem.reorderAt !== catalogEditDraft.expectedReorderAt))
+    || catalogEditItem.reorderAt !== catalogEditDraft.expectedReorderAt
+    || (catalogEditItem.barcode ?? null) !== catalogEditDraft.expectedBarcode
+    || (catalogEditItem.nameMy ?? null) !== catalogEditDraft.expectedNameMy
+    || (catalogEditItem.category ?? null) !== catalogEditDraft.expectedCategory))
   const catalogEditChanged = Boolean(catalogEditDraft
     && catalogEditPriceResult !== null
     && catalogEditReorderResult !== null
+    && catalogEditBarcodeValid
+    && catalogEditNameMyValid
+    && catalogEditCategoryValid
     && (catalogEditPriceResult !== catalogEditDraft.expectedPrice
-      || catalogEditReorderResult !== catalogEditDraft.expectedReorderAt))
+      || catalogEditReorderResult !== catalogEditDraft.expectedReorderAt
+      || catalogEditBarcode !== catalogEditDraft.expectedBarcode
+      || catalogEditNameMy !== catalogEditDraft.expectedNameMy
+      || catalogEditCategory !== catalogEditDraft.expectedCategory))
   const stockCountBalance = stockCountDraft && managedInventoryProjection
     ? managedInventoryProjection.balances.find((balance) => (
         balance.stockUnitId === stockCountDraft.stockUnitId
@@ -3062,7 +3118,12 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
       setCatalogError(prepared.error)
       return
     }
-    const { product } = prepared
+    const categoryText = catalogDraft.category.trim()
+    if (categoryText.length > 80 || /[\u0000-\u001f\u007f]/.test(categoryText)) {
+      setCatalogError('Category labels must be 80 characters or fewer.')
+      return
+    }
+    const product: CommerceItem = { ...prepared.product, ...(categoryText ? { category: categoryText } : {}) }
     const proof: CommerceActionProof = {
       actionId: uid('ACT'),
       capturedAt: new Date().toISOString(),
@@ -3135,8 +3196,10 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
     if (unprovisioned) {
       const catalogForm = <form className="core-form compact-form shop-first-product-form" onSubmit={(formEvent) => void initializeManagedCatalog(formEvent)}>
         <fieldset><legend>Product</legend>
-        <div className="form-row"><label>Barcode or product code (optional)<span className="sku-scan-row"><input maxLength={80} onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, sku: inputEvent.target.value }))} placeholder="Leave blank for an assigned code" value={catalogDraft.sku} /><BarcodeScanButton label="Scan the product barcode into the SKU field" onDetected={(value) => setCatalogDraft((current) => ({ ...current, sku: value }))} /></span></label><label>Product name<input maxLength={180} onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, name: inputEvent.target.value }))} placeholder="Product name" required value={catalogDraft.name} /></label></div>
-        <label>Price (MMK)<input min="1" onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, price: inputEvent.target.value }))} required step="1" type="number" value={catalogDraft.price} /></label>
+        <div className="form-row"><label>Product name<input maxLength={180} onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, name: inputEvent.target.value }))} placeholder="Product name" required value={catalogDraft.name} /></label><label>Price (MMK)<input min="1" onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, price: inputEvent.target.value }))} required step="1" type="number" value={catalogDraft.price} /></label></div>
+        <label>Burmese name (optional)<input lang="my" maxLength={180} onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, nameMy: inputEvent.target.value }))} placeholder="Use the name your customers know" value={catalogDraft.nameMy} /></label>
+        <label>Category (optional)<input list="shop-product-category-options" maxLength={80} onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, category: inputEvent.target.value }))} placeholder="Type a category or choose an existing one" value={catalogDraft.category} /></label>
+        <div className="form-row"><label>SKU / item code (optional)<input maxLength={80} onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, sku: inputEvent.target.value }))} placeholder="Leave blank for an assigned code" value={catalogDraft.sku} /></label><label>Barcode (optional)<span className="sku-scan-row"><input autoComplete="off" maxLength={80} onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, barcode: inputEvent.target.value }))} placeholder="Scan or type the label code" value={catalogDraft.barcode} /><BarcodeScanButton label="Scan the product barcode" onDetected={(value) => setCatalogDraft((current) => ({ ...current, barcode: value }))} /></span></label></div>
         </fieldset>
         <fieldset><legend>Opening stock</legend>
         <div className="form-row"><label>Opening stock<input min="0" onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, onHand: inputEvent.target.value }))} required step="1" type="number" value={catalogDraft.onHand} /></label><label>Low-stock alert at<input min="0" onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, reorderAt: inputEvent.target.value }))} step="1" type="number" value={catalogDraft.reorderAt} /></label></div>
@@ -3720,18 +3783,32 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
     return true
   }
 
+  function openCatalogCreateFromBarcode(barcode: string) {
+    setItemDraft({ sku: '', barcode, name: '', nameMy: '', category: '', onHand: '', reorderAt: '0', price: '' })
+    setCatalogCreateOpen(true)
+    navigate('/shop/?tab=inventory#shop-catalog-create')
+  }
+
   function queueCatalogItem(event: FormEvent) {
     event.preventDefault()
     const suppliedSku = itemDraft.sku.trim().toUpperCase()
     const itemSku = suppliedSku || `SM-${commandUuid().slice(0, 8).toUpperCase()}`
     const name = itemDraft.name.trim()
+    const nameMy = itemDraft.nameMy.trim()
+    const categoryText = itemDraft.category.trim()
+    const category = categoryText || null
+    const barcodeText = itemDraft.barcode.trim()
+    const barcode = barcodeText || null
     const onHand = Number(itemDraft.onHand)
     const reorderAt = Number(itemDraft.reorderAt || '0')
     const price = Number(itemDraft.price)
     if (!name
       || !Number.isSafeInteger(onHand) || onHand < 0
       || !Number.isSafeInteger(reorderAt) || reorderAt < 0
-      || !Number.isSafeInteger(price) || price < 1) {
+      || !Number.isSafeInteger(price) || price < 1
+      || barcodeText.length > 80 || /[\u0000-\u001f\u007f]/.test(barcodeText)
+      || nameMy.length > 180 || /[\u0000-\u001f\u007f]/.test(nameMy)
+      || categoryText.length > 80 || /[\u0000-\u001f\u007f]/.test(categoryText)) {
       setNotice('Enter the item name, current stock, and a whole-MMK price.')
       return
     }
@@ -3739,7 +3816,11 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
       setNotice(`${itemSku} already exists. No catalog item was queued.`)
       return
     }
-    const item: CommerceItem = { sku: itemSku, name, onHand, reorderAt, price }
+    if (commerceItemBarcodeConflicts(commerce.items, itemSku, barcode)) {
+      setNotice('That barcode already identifies another product. Check the label or edit the existing item.')
+      return
+    }
+    const item: CommerceItem = { sku: itemSku, ...(barcode ? { barcode } : {}), name, ...(nameMy ? { nameMy } : {}), ...(category ? { category } : {}), onHand, reorderAt, price }
     const isFirstProduct = commerce.items.length === 0
     queueAction({
       kind: 'catalog_item_create',
@@ -3750,7 +3831,7 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
       apply: async (action) => {
         const proof = commerceActionProof(action)
         await mutateCommerce('commerce.item.created', action.commandId, proof, (current) => registerCommerceItem(current, item, proof))
-        setItemDraft({ sku: '', name: '', onHand: '', reorderAt: '0', price: '' })
+        setItemDraft({ sku: '', barcode: '', name: '', nameMy: '', category: '', onHand: '', reorderAt: '0', price: '' })
         setSku(item.sku)
         if (isFirstProduct) navigate('/shop/?tab=counter')
       },
@@ -3774,6 +3855,9 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
     const alreadyEditingCurrent = catalogEditDraft?.sku === item.sku
       && catalogEditDraft.expectedPrice === item.price
       && catalogEditDraft.expectedReorderAt === item.reorderAt
+      && catalogEditDraft.expectedBarcode === (item.barcode ?? null)
+      && catalogEditDraft.expectedNameMy === (item.nameMy ?? null)
+      && catalogEditDraft.expectedCategory === (item.category ?? null)
     if (alreadyEditingCurrent) {
       requestAnimationFrame(() => catalogEditEditorRef.current?.querySelector<HTMLInputElement>('#catalog-edit-price')?.focus())
       setNotice(`Continue editing ${item.sku} below. Your draft was preserved.`)
@@ -3783,10 +3867,16 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
       sku: item.sku,
       expectedPrice: item.price,
       expectedReorderAt: item.reorderAt,
+      expectedBarcode: item.barcode ?? null,
+      expectedNameMy: item.nameMy ?? null,
+      expectedCategory: item.category ?? null,
       price: String(item.price),
       reorderAt: String(item.reorderAt),
+      barcode: item.barcode ?? '',
+      nameMy: item.nameMy ?? '',
+      category: item.category ?? '',
     })
-    setNotice(`Edit only the current price and reorder level for ${item.name}. Stock and prior orders stay unchanged.`)
+    setNotice(`Edit the price, reorder level, or barcode for ${item.name}, and update its Burmese name or category if needed. Stock and prior orders stay unchanged.`)
     requestAnimationFrame(() => catalogEditEditorRef.current?.querySelector<HTMLInputElement>('#catalog-edit-price')?.focus())
   }
 
@@ -3802,8 +3892,8 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
   function reviewCatalogItemUpdate(event: FormEvent) {
     event.preventDefault()
     if (!catalogEditDraft || !catalogEditItem
-      || catalogEditPriceResult === null || catalogEditReorderResult === null) {
-      setNotice('Enter a whole-MMK price of at least 1 and a non-negative whole reorder level.')
+      || catalogEditPriceResult === null || catalogEditReorderResult === null || !catalogEditBarcodeValid || !catalogEditNameMyValid || !catalogEditCategoryValid) {
+      setNotice('Check the category, price, reorder level, barcode, and Burmese name. Category labels can contain up to 80 characters.')
       return
     }
     if (catalogEditStale) {
@@ -3811,23 +3901,33 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
       return
     }
     if (!catalogEditChanged) {
-      setNotice('Change the price or reorder level before review. Nothing was queued.')
+      setNotice('Change a catalog value before review. Nothing was queued.')
       return
     }
     const item = catalogEditItem
+    if (commerceItemBarcodeConflicts(commerce.items, item.sku, catalogEditBarcode)) {
+      setNotice('That barcode already identifies another product. Check the label before review.')
+      return
+    }
     const update: CommerceItemUpdate = {
       sku: item.sku,
       expectedPrice: catalogEditDraft.expectedPrice,
       nextPrice: catalogEditPriceResult,
       expectedReorderAt: catalogEditDraft.expectedReorderAt,
       nextReorderAt: catalogEditReorderResult,
+      expectedBarcode: catalogEditDraft.expectedBarcode,
+      nextBarcode: catalogEditBarcode,
+      expectedNameMy: catalogEditDraft.expectedNameMy,
+      nextNameMy: catalogEditNameMy,
+      expectedCategory: catalogEditDraft.expectedCategory,
+      nextCategory: catalogEditCategory,
     }
     queueAction({
       kind: 'catalog_item_update',
       subjectId: item.sku,
       summary: `Update catalog values for ${item.name}`,
-      before: `${item.sku} · ${formatMoney(update.expectedPrice)} · reorder at ${update.expectedReorderAt.toLocaleString()}`,
-      after: `${item.sku} · ${formatMoney(update.nextPrice)} · reorder at ${update.nextReorderAt.toLocaleString()} · stock unchanged`,
+      before: `${item.sku} · ${formatMoney(update.expectedPrice)} · reorder at ${update.expectedReorderAt.toLocaleString()} · category ${update.expectedCategory ?? 'not set'} · barcode ${update.expectedBarcode ?? 'not set'} · Burmese name ${update.expectedNameMy ?? 'not set'}`,
+      after: `${item.sku} · ${formatMoney(update.nextPrice)} · reorder at ${update.nextReorderAt.toLocaleString()} · category ${update.nextCategory ?? 'not set'} · barcode ${update.nextBarcode ?? 'not set'} · Burmese name ${update.nextNameMy ?? 'not set'} · stock unchanged`,
       apply: async (action) => {
         const proof = commerceActionProof(action)
         let reviewRequired = false
@@ -4077,7 +4177,7 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
       seenSkus.add(line.sku)
       orderQuantity = nextQuantity
       orderTotal = nextTotal
-      orderLines.push({ sku: item.sku, name: item.name, ...(item.variant ? { variant: item.variant } : {}), quantity: line.quantity, unitPriceMmk: item.price })
+      orderLines.push({ sku: item.sku, name: item.name, ...(item.nameMy ? { nameMy: item.nameMy } : {}), ...(item.variant ? { variant: item.variant } : {}), quantity: line.quantity, unitPriceMmk: item.price })
     }
     const orderId = uid('ORD')
     const promisedAt = new Date(reviewedAt.getTime() + 30 * 60 * 1000).toISOString()
@@ -4237,6 +4337,7 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
       orderLines.push({
         sku: line.item.sku,
         name: line.item.name,
+        ...(line.item.nameMy ? { nameMy: line.item.nameMy } : {}),
         ...(line.item.variant ? { variant: line.item.variant } : {}),
         quantity: line.quantity,
         unitPriceMmk: line.item.price,
@@ -5642,6 +5743,7 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
       setNotice(`Continue the ${active ? 'receipt' : 'stock order'} below. Your draft was preserved.`)
       return
     }
+    setPurchaseOrderScanCode('')
     const receiptDate = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Yangon' }).format(new Date()).replaceAll('-', '')
     setPurchaseOrderDraft(active
       ? { mode: 'receive', purchaseOrderId: active.purchaseOrder.id, quantity: '', rejectedQuantity: '0', discrepancyCode: 'damaged', locationId: defaultReceiptLocationId, trackingCode: `IN-${receiptDate}-${commandUuid().slice(0, 8).toUpperCase()}` }
@@ -5649,6 +5751,43 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
     setNotice(active
       ? `Record only units counted against ${active.purchaseOrder.id}. Nothing changes until confirmation.`
       : `Create an internal order for ${item.name}. This does not contact a supplier or create a payment.`)
+  }
+
+  function scanPurchaseOrderReceivedUnit(rawCode: string): boolean {
+    const draft = purchaseOrderDraft
+    const item = purchaseOrderDraftItem
+    if (draft?.mode !== 'receive' || !item) return false
+    const acceptedText = draft.quantity.trim()
+    const acceptedUnits = acceptedText === '' ? 0 : Number(acceptedText)
+    const result = incrementPurchaseOrderReceiveFromScan({
+      items: commerce.items,
+      purchaseOrderItem: item,
+      rawCode,
+      acceptedUnits,
+      maximumAcceptedUnits: purchaseOrderQuantityLimit,
+    })
+    setPurchaseOrderScanCode('')
+    if (!result.ok) {
+      setNotice(result.reason === 'wrong_purchase_order_item'
+        ? `That barcode belongs to another product. The ${item.name} receipt count did not change.`
+        : result.reason === 'receipt_limit_reached'
+          ? `The ordered quantity for ${item.name} is already counted. Review the receipt before accepting more.`
+          : result.reason === 'invalid_count'
+            ? 'Correct the accepted-unit count before scanning another item. The receipt count did not change.'
+            : 'No Shop product matches that code. Check the label; the receipt count did not change.')
+      return false
+    }
+    setPurchaseOrderDraft((current) => current?.mode === 'receive'
+      ? { ...current, quantity: String(result.acceptedUnits) }
+      : current)
+    setNotice(`${result.acceptedUnits.toLocaleString()} accepted ${result.acceptedUnits === 1 ? 'unit' : 'units'} counted for ${item.name}. Review the receipt before stock changes.`)
+    return true
+  }
+
+  function handlePurchaseOrderScanKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key !== 'Enter') return
+    event.preventDefault()
+    scanPurchaseOrderReceivedUnit(purchaseOrderScanCode)
   }
 
   function openPurchaseBudgetEditor() {
@@ -5859,6 +5998,7 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
       ? purchaseOrderDraft.sku
       : purchaseOrderDraftOrder?.purchaseOrder.sku
     setPurchaseOrderDraft(null)
+    setPurchaseOrderScanCode('')
     setNotice('Stock order editing closed. Shop data was not modified.')
     requestAnimationFrame(() => {
       if (itemSku) purchaseOrderTriggerRefs.current.get(itemSku)?.focus()
@@ -6010,6 +6150,7 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
           return receiveCommercePurchaseOrder(current, purchaseOrder.id, receiptQuantity, proof, locationReceipt, discrepancy)
         })
         setPurchaseOrderDraft((current) => current?.mode === 'receive' && current.purchaseOrderId === purchaseOrder.id ? null : current)
+        setPurchaseOrderScanCode('')
       },
     }, purchaseOrderTriggerRefs.current.get(item.sku))
   }
@@ -6177,7 +6318,7 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
   function selectStockCountBarcode(rawValue: string) {
     const code = rawValue.trim()
     if (!code) return
-    const item = commerce.items.find((candidate) => candidate.sku.toLowerCase() === code.toLowerCase())
+    const item = findCommerceItemByScanCode(commerce.items, code)
     if (!item) {
       setNotice('No Shop product matches that barcode. Check the code or choose the product below.')
       return
@@ -7126,7 +7267,7 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
   if (tab === 'counter') return <div className="operation-module shop-counter-module">
     {counterBoundary}
     {shopCatalogSetupNotice}
-    <ShopCounter key={counterDraftContext.key} persistLocalDraft={counterDraftContext.persistLocalDraft} canCompleteInOneReview={confirmedLocalShop || Boolean(managedIdentity)} disabled={commerceControlsDisabled || (!confirmedLocalShop && !managedIdentity) || (shopShiftRequired && !activeShift)} draftStorageScope={counterDraftContext.storageScope} initialCustomer={shopCounterCustomer} initialQuery={shopCounterSearch} items={commerce.items} lowStockCount={lowStock.length} loyaltyPoints={shopLoyaltyPoints} onReview={reviewCounterSale} openOrderCount={openOrders.length} operatorLabel={managedIdentity?.email || readLastOperator()} operatingContext={shopOperatingEligible && shopShiftRequired ? <ShopOperatingStrip {...shopOperatingView} /> : null} paymentQrScope={paymentQrScope} productImageScope={productImageScope} recordStatus={shopRecordStatus} recordedOrderIds={commerce.orders.map(order => order.id)} />
+    <ShopCounter key={counterDraftContext.key} persistLocalDraft={counterDraftContext.persistLocalDraft} canCompleteInOneReview={confirmedLocalShop || Boolean(managedIdentity)} disabled={commerceControlsDisabled || (!confirmedLocalShop && !managedIdentity) || (shopShiftRequired && !activeShift)} draftStorageScope={counterDraftContext.storageScope} initialCustomer={shopCounterCustomer} initialQuery={shopCounterSearch} items={commerce.items} lowStockCount={lowStock.length} loyaltyPoints={shopLoyaltyPoints} onCreateFromBarcode={openCatalogCreateFromBarcode} onReview={reviewCounterSale} openOrderCount={openOrders.length} operatorLabel={managedIdentity?.email || readLastOperator()} operatingContext={shopOperatingEligible && shopShiftRequired ? <ShopOperatingStrip {...shopOperatingView} /> : null} paymentQrScope={paymentQrScope} productImageScope={productImageScope} recordStatus={shopRecordStatus} recordedOrderIds={commerce.orders.map(order => order.id)} />
     <Suspense fallback={null}><ReceiptDialog ack={activeReceiptAck} disabled={commerceControlsDisabled} loyalty={receiptLoyalty} merchantProfile={commerce.merchantProfile} onSaveMerchantProfile={saveCustomerReceiptProfile} onClose={() => { setReceiptAck(null); setCounterReceiptOrderId('') }} paymentQrScope={paymentQrScope} /></Suspense>
     {actionGate}
   </div>
@@ -7744,10 +7885,13 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
         <div className="stock-receipt-copy">
           <span className="core-eyebrow">Edit item</span>
           <h3 id="catalog-item-editor-title">{catalogEditItem.name}</h3>
-          <small>{catalogEditItem.sku} · Only price and reorder level change{catalogEditStale ? ' · reload current values' : ''}</small>
+          <small>{catalogEditItem.sku} · Burmese name, price, reorder alert, and barcode{catalogEditStale ? ' · reload current values' : ''}</small>
         </div>
+        <label>Burmese name (optional)<input aria-invalid={!catalogEditNameMyValid} disabled={commerceControlsDisabled || catalogEditStale} lang="my" maxLength={180} onChange={(event) => setCatalogEditDraft((current) => current ? { ...current, nameMy: event.target.value } : current)} placeholder="Use the name your customers know" value={catalogEditDraft.nameMy} /></label>
+        <label>Category (optional)<input aria-invalid={!catalogEditCategoryValid} disabled={commerceControlsDisabled || catalogEditStale} list="shop-product-category-options" maxLength={80} onChange={(event) => setCatalogEditDraft((current) => current ? { ...current, category: event.target.value } : current)} placeholder="Type a category or choose an existing one" value={catalogEditDraft.category} /></label>
         <label>Price (MMK)<input aria-invalid={Boolean(catalogEditPriceText) && catalogEditPriceResult === null} disabled={commerceControlsDisabled || catalogEditStale} id="catalog-edit-price" inputMode="numeric" max={Number.MAX_SAFE_INTEGER} min="1" onChange={(event) => setCatalogEditDraft((current) => current ? { ...current, price: event.target.value } : current)} required step="1" type="number" value={catalogEditDraft.price} /></label>
         <label>Reorder at<input aria-invalid={Boolean(catalogEditReorderText) && catalogEditReorderResult === null} disabled={commerceControlsDisabled || catalogEditStale} inputMode="numeric" max={Number.MAX_SAFE_INTEGER} min="0" onChange={(event) => setCatalogEditDraft((current) => current ? { ...current, reorderAt: event.target.value } : current)} required step="1" type="number" value={catalogEditDraft.reorderAt} /></label>
+        <label>Barcode (optional)<span className="sku-scan-row"><input aria-invalid={!catalogEditBarcodeValid} disabled={commerceControlsDisabled || catalogEditStale} autoComplete="off" maxLength={80} onChange={(event) => setCatalogEditDraft((current) => current ? { ...current, barcode: event.target.value } : current)} placeholder="Scan or type the label code" value={catalogEditDraft.barcode} /><BarcodeScanButton disabled={commerceControlsDisabled || catalogEditStale} label="Scan the product barcode" onDetected={(value) => setCatalogEditDraft((current) => current ? { ...current, barcode: value } : current)} /></span></label>
         <div className="form-actions"><button className="core-button" disabled={Boolean(pendingAction)} onClick={cancelCatalogItemEditor} type="button">Cancel</button><button className="core-button primary" disabled={catalogEditStale ? Boolean(pendingAction) || !commerceCanWrite : commerceControlsDisabled || !catalogEditChanged} onClick={catalogEditStale ? () => openCatalogItemEditor(catalogEditItem.sku) : undefined} type={catalogEditStale ? 'button' : 'submit'}>{catalogEditStale ? 'Reload values' : 'Review changes'}</button></div>
       </form> : null}
       <details className="inventory-tools-disclosure">
@@ -7782,6 +7926,7 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
         </div>
         {purchaseOrderDraft.mode === 'create' ? <label>Supplier reference{managedInventoryProjection ? <select disabled={commerceControlsDisabled} onChange={(event) => setPurchaseOrderDraft((current) => current?.mode === 'create' ? { ...current, supplier: event.target.value } : current)} required value={purchaseOrderDraft.supplier}><option value="">Choose supplier</option>{managedInventoryProjection.vendors.map((vendor) => <option key={vendor.id} value={vendor.name}>{vendor.name}</option>)}</select> : <input disabled={commerceControlsDisabled} maxLength={120} onChange={(event) => setPurchaseOrderDraft((current) => current?.mode === 'create' ? { ...current, supplier: event.target.value } : current)} placeholder="Supplier name" required value={purchaseOrderDraft.supplier} />}</label> : null}
         {purchaseOrderDraft.mode === 'create' ? <label>Expected arrival<input autoComplete="off" disabled={commerceControlsDisabled} min={localDateTimeInputValue(new Date())} onChange={(event) => setPurchaseOrderDraft((current) => current?.mode === 'create' ? { ...current, expectedAt: event.target.value } : current)} required type={coreUi.d} value={purchaseOrderDraft.expectedAt} /></label> : null}
+        {purchaseOrderDraft.mode === 'receive' ? <label>Scan accepted units<span className="sku-scan-row"><input autoComplete="off" disabled={commerceControlsDisabled} id="purchase-order-scan-code" maxLength={80} onChange={(event) => setPurchaseOrderScanCode(event.target.value)} onKeyDown={handlePurchaseOrderScanKeyDown} placeholder="Scan barcode or type SKU" value={purchaseOrderScanCode} /><BarcodeScanButton continuous disabled={commerceControlsDisabled} label="Scan items for this purchase receipt" onDetected={scanPurchaseOrderReceivedUnit} /></span></label> : null}
         <label>{purchaseOrderDraft.mode === 'create' ? 'Quantity to order' : 'Accepted units'}<input aria-describedby="stock-receipt-preview" disabled={commerceControlsDisabled} inputMode="numeric" max={purchaseOrderQuantityLimit} min="1" onChange={(event) => setPurchaseOrderDraft((current) => current ? { ...current, quantity: event.target.value } : current)} placeholder="10" required step="1" type="number" value={purchaseOrderDraft.quantity} /></label>
         {purchaseOrderDraft.mode === 'create' ? <label>Unit cost (MMK)<input aria-describedby="stock-receipt-preview" disabled={commerceControlsDisabled} inputMode="numeric" min="1" onChange={(event) => setPurchaseOrderDraft((current) => current?.mode === 'create' ? { ...current, unitCostMmk: event.target.value } : current)} placeholder="5000" required step="1" type="number" value={purchaseOrderDraft.unitCostMmk} /></label> : null}
         {purchaseOrderDraft.mode === 'receive' ? <div className="form-row"><label>Rejected units<input aria-describedby="stock-receipt-preview" disabled={commerceControlsDisabled} inputMode="numeric" max={Math.max(0, (purchaseOrderDraftOrder?.progress.remaining ?? 0) - (purchaseOrderQuantityResult ?? 0))} min="0" onChange={(event) => setPurchaseOrderDraft((current) => current?.mode === 'receive' ? { ...current, rejectedQuantity: event.target.value } : current)} required step="1" type="number" value={purchaseOrderDraft.rejectedQuantity} /></label><label>Discrepancy reason<select disabled={commerceControlsDisabled || purchaseOrderRejectedResult === 0} onChange={(event) => setPurchaseOrderDraft((current) => current?.mode === 'receive' ? { ...current, discrepancyCode: event.target.value as CommercePurchaseOrderDiscrepancyCode } : current)} required={Boolean(purchaseOrderRejectedResult)} value={purchaseOrderDraft.discrepancyCode}><option value="damaged">Damaged</option><option value="wrong_item">Wrong item</option><option value="quality_failed">Quality failed</option></select></label></div> : null}
@@ -7866,12 +8011,15 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
         })}</div> : <p className="empty-state">No purchase orders yet. Use Order stock on an item when replenishment is needed.</p>}
       </details>
       {commerce.items.length ? shopCatalogOnboarding : null}
+      <datalist id="shop-product-category-options">{shopCategoryOptions.map((category) => <option key={category} value={category} />)}</datalist>
       <details className="compact-disclosure catalog-disclosure" id="shop-catalog-create" onToggle={(event) => setCatalogCreateOpen(event.currentTarget.open)} open={catalogCreateOpen}>
         <summary>{commerce.items.length ? 'Add product' : 'Add your first product'}</summary>
         <form className="core-form compact-form catalog-create-form" onSubmit={queueCatalogItem} ref={catalogCreateFormRef}>
           <div className="form-row"><label>Product name<input disabled={commerceControlsDisabled} maxLength={180} name="product-name" onChange={(event) => setItemDraft((current) => ({ ...current, name: event.target.value }))} placeholder="e.g. Drinking water" required value={itemDraft.name} /></label><label>Price (MMK)<input disabled={commerceControlsDisabled} min="1" onChange={(event) => setItemDraft((current) => ({ ...current, price: event.target.value }))} required step="1" type="number" value={itemDraft.price} /></label></div>
+          <label>Burmese name (optional)<input disabled={commerceControlsDisabled} lang="my" maxLength={180} onChange={(event) => setItemDraft((current) => ({ ...current, nameMy: event.target.value }))} placeholder="Use the name your customers know" value={itemDraft.nameMy} /></label>
+          <label>Category (optional)<input disabled={commerceControlsDisabled} list="shop-product-category-options" maxLength={80} onChange={(event) => setItemDraft((current) => ({ ...current, category: event.target.value }))} placeholder="Type a category or choose an existing one" value={itemDraft.category} /></label>
           <div className="form-row"><label>Current stock<input disabled={commerceControlsDisabled} min="0" onChange={(event) => setItemDraft((current) => ({ ...current, onHand: event.target.value }))} required step="1" type="number" value={itemDraft.onHand} /></label><label>Low-stock alert (optional)<input disabled={commerceControlsDisabled} min="0" onChange={(event) => setItemDraft((current) => ({ ...current, reorderAt: event.target.value }))} step="1" type="number" value={itemDraft.reorderAt} /></label></div>
-          <label>Product code or barcode (optional)<span className="sku-scan-row"><input disabled={commerceControlsDisabled} maxLength={80} name="product-code" onChange={(event) => setItemDraft((current) => ({ ...current, sku: event.target.value }))} placeholder="Scan or type if you have one" value={itemDraft.sku} /><BarcodeScanButton disabled={commerceControlsDisabled} label="Scan a product code into the SKU field" onDetected={(value) => setItemDraft((current) => ({ ...current, sku: value }))} /></span></label>
+          <div className="form-row"><label>SKU / item code (optional)<input disabled={commerceControlsDisabled} maxLength={80} name="product-sku" onChange={(event) => setItemDraft((current) => ({ ...current, sku: event.target.value }))} placeholder="Leave blank to assign one" value={itemDraft.sku} /></label><label>Barcode (optional)<span className="sku-scan-row"><input disabled={commerceControlsDisabled} autoComplete="off" maxLength={80} name="product-barcode" onChange={(event) => setItemDraft((current) => ({ ...current, barcode: event.target.value }))} placeholder="Scan or type the label code" value={itemDraft.barcode} /><BarcodeScanButton disabled={commerceControlsDisabled} label="Scan the product barcode" onDetected={(value) => setItemDraft((current) => ({ ...current, barcode: value }))} /></span></label></div>
           <div className="form-actions"><button className={coreUi.q} disabled={commerceControlsDisabled} type="submit">Review and add product</button></div>
           <p className="panel-copy">Leave the code blank and Shop will create one. You can change the stock alert later.</p>
         </form>
@@ -8155,7 +8303,9 @@ function ProductionEventHistory({ events }: { events: ProductionEvent[] }) {
   </details>
 }
 
-function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIdentity | null; tab: ProductionTab }) {
+// Kept as an internal product module export so the customer Shop entry can be
+// tree-shaken independently while Plant remains available to internal entrypoints.
+export function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIdentity | null; tab: ProductionTab }) {
   const productionLocation = useLocation()
   const navigate = useNavigate()
   const [production, mutateProduction, productionStorageError, workspaceMode, managedVersion, managedWorkspaceId, productionCanWrite, retryManagedProductionLoad] = useProductionWorkspace(managedIdentity)

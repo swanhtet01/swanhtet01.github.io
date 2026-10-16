@@ -58,7 +58,7 @@ const publicProductNames = publicProducts.map(product => product.name).join(', '
 const discoverablePages = manifest.pages.filter(page => !page.productId || publicProducts.some(product => product.id === page.productId))
 const shop = publicProducts.find((product) => product.id === 'shop')
 if (operatingProducts.map((product) => product.id).join(',') !== 'shop,plant') fail('operating_product_portfolio_drift')
-if (makerProducts.map((product) => `${product.id}:${product.status}`).join(',') !== 'website:available-in-app,ecommerce:release-candidate-local') fail('maker_product_portfolio_drift')
+if (makerProducts.map((product) => `${product.id}:${product.status}`).join(',') !== 'website:release-candidate-local,ecommerce:release-candidate-local') fail('maker_product_portfolio_drift')
 const website = manifest.customerProducts?.find((product) => product.id === 'website')
 if (website?.views?.join(',') !== 'Start,Edit,Preview,Download'
   || website?.templates?.some((template) => template.workflow?.at(-1) !== 'Download website')
@@ -99,7 +99,6 @@ const expectedStaticFiles = new Set([
   '404.html',
   '__release.json',
   'favicon.svg',
-  'shop-sample-demo.js',
   'fonts/noto-sans-latin.woff2',
   'fonts/noto-sans-latin-OFL.txt',
   'vercel-insights.js',
@@ -110,14 +109,6 @@ const expectedStaticFiles = new Set([
   'images/actual-shop-sell-mobile.png',
   'images/actual-shop-orders.png',
   'images/actual-shop-orders-mobile.png',
-  'images/actual-sites-editor.png',
-  'images/actual-sites-editor-mobile.png',
-  'images/actual-sites-inquiries.png',
-  'images/actual-sites-inquiries-mobile.png',
-  'images/actual-commerce-catalog.png',
-  'images/actual-commerce-catalog-mobile.png',
-  'images/actual-commerce-order-request.png',
-  'images/actual-commerce-order-request-mobile.png',
   'og-card.png',
   ...manifest.customerProducts.map((product) => `og-card-${product.id}.png`),
   'robots.txt',
@@ -126,14 +117,23 @@ const expectedStaticFiles = new Set([
 ])
 const actualStaticFiles = walkFiles(staticDir)
 for (const path of actualStaticFiles) {
+  if (/^images\/actual-(?:sites|commerce)-/.test(path)) fail('internal_product_capture_in_public_output', { path })
+}
+for (const path of actualStaticFiles) {
   if (!expectedStaticFiles.has(path)) fail('unapproved_public_artifact', { path })
 }
 for (const path of expectedStaticFiles) {
   if (!actualStaticFiles.includes(path)) fail('expected_public_artifact_missing', { path })
 }
-const ecommercePage = readStatic('ecommerce/index.html')
-for (const path of ['/images/actual-commerce-catalog.png', '/images/actual-commerce-order-request.png']) {
-  if (!ecommercePage.includes(`src="${path}"`)) fail('commerce_showcase_capture_missing', { path })
+for (const id of ['website', 'ecommerce']) {
+  const page = readStatic(`${id}/index.html`)
+  if (!publicProducts.some((product) => product.id === id)
+    && (!page.includes('name="robots" content="noindex,follow"')
+      || !page.includes('not offered for new setup')
+      || page.includes('class="platform-image')
+      || page.includes(`/images/actual-${id === 'website' ? 'sites' : 'commerce'}-`))) {
+    fail('internal_product_page_exposed', { id })
+  }
 }
 
 const sharedRequired = [
@@ -154,12 +154,16 @@ const sharedRequired = [
   '--blue: #2563eb;',
   'font-family: "SuperMega Noto Sans"',
   '--font-latin: "SuperMega Noto Sans"',
-  '.platform-image {margin:0;padding:24px;background:#f1f5f9;border:1px solid #dbe3ee;',
+  '.platform-image {margin:0;padding:18px;background:#f1f0ff;border:1px solid #dedbff;',
+  '.platform-device-stage {display:grid;grid-template-columns:minmax(0,1fr) clamp(150px,20%,220px);',
+  '.platform-device-desktop {padding:8px;border:1px solid #d9ddea;border-radius:17px}',
+  '.platform-device-phone {width:100%;max-width:220px;',
 ]
 
 const genericBrandRequired = [
-  '<span class="brand-mark" aria-hidden="true">&gt;_</span>',
-  '<span class="brand-name">SUPERMEGA</span>',
+  'class="brand-icon" aria-hidden="true"',
+  '<span class="brand-word">SuperMega</span>',
+  '<span class="brand-domain">Operating software</span>',
   '<a class="button compact header-cta" href="https://app.supermega.dev/login">Login</a>',
 ]
 
@@ -228,8 +232,8 @@ for (const [route, page] of pages) {
     if (page.html.includes(marker)) fail('public_copy_encoding_corrupt', { route })
   }
   if (route === '/shop/') {
-    const subscription = page.html.match(/<section class="subscription-section"[\s\S]*?<\/section>/)?.[0] || ''
-    if (!subscription || /\b(?:USD|MMK)\b|\$\s*\d|\d[\d,]*\s*(?:MMK|kyat)/i.test(subscription)) fail('public_subscription_price_present', { route })
+    if (/<section\b[^>]*class="[^"]*\bsubscription-section\b/.test(page.html)) fail('unverified_shop_subscription_section_present', { route })
+    if (/\b(?:USD|MMK)\b|\$\s*\d|\d[\d,]*\s*(?:MMK|kyat)/i.test(page.html)) fail('public_price_present', { route })
   } else if (/\b(?:USD|MMK)\b|\$\s*\d|\d[\d,]*\s*(?:MMK|kyat)/i.test(page.html)) fail('public_price_present', { route })
   if (/target\s*=\s*["']?_blank/i.test(page.html) || page.html.includes('window.open(')) fail('new_tab_navigation_present', { route })
   if (page.html.includes('href="/solutions/"') || page.html.includes('href="/trust/"')) fail('retired_public_navigation_present', { route })
@@ -268,7 +272,7 @@ if (new Set(pageTitles).size !== pageTitles.length) fail('page_titles_not_unique
 const jsonLdBlocks = (html) => [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map((match) => match[1])
 const executableScriptCount = (html) => (html.match(/<script(?![^>]*type="application\/ld\+json")[\s>]/g) || []).length
 for (const [route, page] of pages) {
-  const expectedExecutable = route === '/contact/' || route === '/shop/' || page.html.includes('data-platform-carousel') ? 2 : 1
+  const expectedExecutable = route === '/contact/' || page.html.includes('data-platform-carousel') ? 2 : 1
   if (executableScriptCount(page.html) !== expectedExecutable) fail('unexpected_executable_script_element', { route, expected: expectedExecutable })
   const blocks = jsonLdBlocks(page.html)
   const landingProduct = publicProducts.find((product) => `/${product.id}/` === route)
@@ -314,9 +318,9 @@ if (publicObservability.indexOf("window.si('beforeSend'") > publicObservability.
 if (/(?:conversion|contact-form|customer|email|payment|proof_|window\.va\('event')/i.test(publicObservability)) fail('public_observability_private_or_custom_event_surface')
 
 const home = pages.get('/')?.html || ''
-const expectedHomeDescription = 'Shop brings sales and stock into one operating view. Our team manages Sites and confirms Commerce availability for each setup.'
+const expectedHomeDescription = 'Shop brings sales, orders and stock into one clear workspace for Myanmar businesses.'
 if (homePage?.file !== 'index.html') fail('home_manifest_entry_invalid')
-if (homePage.title !== 'SuperMega | Tools for everyday work') fail('home_manifest_title_drift')
+if (homePage.title !== 'SuperMega | Shop for Myanmar businesses') fail('home_manifest_title_drift')
 if (homePage.description !== expectedHomeDescription) fail('home_manifest_description_source_drift')
 for (const staleToken of [
   '<title>SuperMega | Four products</title>',
@@ -330,8 +334,9 @@ if (!hasClassToken(home, 'company-hero')) fail('homepage_contract_missing', { to
 for (const token of ['id="products"', 'href="/shop/#shop-demo">See Shop in action', 'href="https://app.supermega.dev/login"']) {
   if (!home.includes(token)) fail('homepage_contract_missing', { token })
 }
-if (!home.includes('Shop brings sales and stock into one operating view.')
-  || !home.includes('Our team manages Sites and confirms Commerce availability for each setup.')) fail('home_customer_access_scope_missing')
+if (!home.includes('Keep sales, orders and stock together in one clear view.')
+  || /href="\/(?:website|ecommerce)\//.test(home)
+  || /\bSites\b|\bCommerce\b/.test(home)) fail('home_customer_access_scope_missing')
 for (const retiredToken of [
   'Four focused products',
   'Pick one product and try the working sample.',
@@ -361,12 +366,12 @@ for (const [route, html] of [['/', home], ['/shop/', pages.get('/shop/').html], 
   const contactActionTarget = routeProduct?.status === 'available-in-app'
     ? `/contact/?product=${routeProduct.id}`
     : null
-  const galleryViews = { website: 2, ecommerce: 2 }
-  const expectedLinks = route === '/' ? 14 : route === '/shop/' ? 12 : 6 + Number(Boolean(contactActionTarget)) + (galleryViews[routeProduct?.id] || 0)
+  const galleryViews = { shop: 3, website: 2, ecommerce: 2 }
+  const expectedLinks = route === '/' ? 15 : route === '/shop/' ? 13 : 6 + Number(Boolean(contactActionTarget)) + (galleryViews[routeProduct?.id] || 0)
   if ((body.match(/<a\b/g) || []).length !== expectedLinks) fail('marketing_link_surface_drift', { route, expectedLinks })
   if (countOccurrences(body, 'href="https://app.supermega.dev/login"') !== 1) fail('single_login_missing', { route })
   const hasGalleryNavigation = (galleryViews[routeProduct?.id] || 0) > 1
-  const expectedButtons = route === '/' ? 0 : route === '/shop/' ? 5 : Number(hasGalleryNavigation) * 2
+  const expectedButtons = route === '/' ? 0 : Number(hasGalleryNavigation) * 2
   if ((body.match(/<button\b/g) || []).length !== expectedButtons) fail('marketing_button_surface_drift', { route, expectedButtons })
   const galleryControlAttributes = [...body.matchAll(/<button\b([^>]*)>/g)]
     .map(match => match[1])
@@ -389,7 +394,7 @@ for (const [route, html] of [['/', home], ['/shop/', pages.get('/shop/').html], 
   const productVisualMissing = route === '/'
     ? !hasClassToken(body, 'company-hero') || !hasClassToken(body, 'product-family')
     : route === '/shop/'
-      ? !body.includes('class="pos-window"') || !body.includes('class="sample-label"') || !body.includes('Complete sample sale')
+      ? !body.includes('class="shop-actual-showcase"') || !body.includes('See Shop on desktop and mobile.') || !body.includes('Actual Shop application screens at desktop and mobile sizes. All records shown are synthetic.') || body.includes('class="pos-window"') || body.includes('class="sample-label"') || body.includes('Complete sample sale') || body.includes('shop-sample-demo.js') || !body.includes('class="platform-gallery"') || countOccurrences(body, '<figure class="platform-image') !== galleryViews.shop || countOccurrences(body, 'class="platform-device platform-device-desktop"') !== galleryViews.shop || countOccurrences(body, 'class="platform-device platform-device-phone"') !== galleryViews.shop
       : !body.includes('class="platform-image"') || !body.includes('class="feature-line"')
   if (productVisualMissing) fail('product_visual_missing', { route })
   const directAppTargets = [...body.matchAll(/href="(https:\/\/app\.supermega\.dev\/[^\"]+)"/g)]
@@ -412,17 +417,29 @@ for (const product of publicProducts) {
 }
 
 const shopPage = pages.get('/shop/')?.html || ''
+for (const [desktop, mobile] of [
+  ['actual-shop-today.png', 'actual-shop-today-mobile.png'],
+  ['actual-shop-sell.png', 'actual-shop-sell-mobile.png'],
+  ['actual-shop-orders.png', 'actual-shop-orders-mobile.png'],
+]) {
+  if (!shopPage.includes(`src="/images/${desktop}"`)
+    || !shopPage.includes(`src="/images/${mobile}"`)
+    || !shopPage.includes(`data-desktop-image="/images/${desktop}"`)
+    || !shopPage.includes(`data-mobile-image="/images/${mobile}"`)) {
+    fail('shop_device_capture_pair_missing', { desktop, mobile })
+  }
+}
 for (const [route, html] of [['/', home], ['/shop/', shopPage]]) {
   if (!html.includes('<html lang="en">')) fail('marketing_page_not_english', { route })
   if (html.includes('data-language-toggle') || html.includes('src="/site-language.js"')) fail('marketing_language_control_present', { route })
   if (html.includes('data-i18n=') || /[\u1000-\u109f]/u.test(html)) fail('marketing_myanmar_copy_present', { route })
 }
-const shopSample = readStatic('shop-sample-demo.js')
-if (!shopSample.includes('lang="my"') || !/[\u1000-\u109f]/u.test(shopSample)) fail('shop_sample_burmese_item_missing')
-if (/fetch\s*\(|XMLHttpRequest|localStorage|sessionStorage|window\.print|navigator\.vibrate|window\.open|location\.(?:assign|replace)|setInterval/i.test(shopSample)) fail('shop_sample_external_or_persistent_action_present')
-for (const token of ['Interactive example', 'Shop is subscription-only, with no setup fee and no printer-sourcing markup.', 'Hardware costs are separate.', 'The SuperMega team manages Sites included in your subscription.', 'confirm ecommerce availability for your setup.']) {
+for (const token of ['Actual Shop application screens at desktop and mobile sizes. All records shown are synthetic.', 'Actual application UI capture · synthetic local records', 'Desktop and mobile captures', 'Run the counter.', 'Know what’s next.', 'Search the catalog, review the basket and keep open orders and stock in view.']) {
   if (!shopPage.includes(token)) fail('shop_page_scope_missing', { token })
 }
+if (/<section\b[^>]*class="[^"]*\bsubscription-section\b/.test(shopPage)
+  || /no setup fee|printer-sourcing markup|Shop is subscription-only/i.test(shopPage)) fail('unverified_shop_offer_copy_present')
+if (publicProducts.map(product => product.id).join(',') !== 'shop') fail('shop_customer_access_scope_missing')
 
 const contact = pages.get('/contact/')?.html || ''
 const contactMain = contact.match(/<main\b[\s\S]*?<\/main>/)?.[0] || ''
@@ -488,11 +505,17 @@ const publicGalleryFiles = [
   'actual-shop-today.png', 'actual-shop-today-mobile.png',
   'actual-shop-sell.png', 'actual-shop-sell-mobile.png',
   'actual-shop-orders.png', 'actual-shop-orders-mobile.png',
-  'actual-sites-editor.png', 'actual-sites-editor-mobile.png',
-  'actual-sites-inquiries.png', 'actual-sites-inquiries-mobile.png',
-  'actual-commerce-catalog.png', 'actual-commerce-catalog-mobile.png',
-  'actual-commerce-order-request.png', 'actual-commerce-order-request-mobile.png',
 ]
+const sourceGalleryByFile = new Map(publicGalleryProvenance.assets?.map(asset => [asset.file, asset]) ?? [])
+const expectedPublicGalleryEvidence = {
+  schemaVersion: publicGalleryProvenance.schemaVersion,
+  status: publicGalleryProvenance.status,
+  records: publicGalleryProvenance.records,
+  captureSourceCommit: publicGalleryProvenance.captureSourceCommit,
+  captureSourceTree: publicGalleryProvenance.captureSourceTree,
+  capturedAt: publicGalleryProvenance.capturedAt,
+  assets: publicGalleryFiles.map(file => sourceGalleryByFile.get(file)),
+}
 if (publicGalleryEvidence?.schemaVersion !== 'supermega.public-gallery-provenance.v1'
   || publicGalleryEvidence.status !== 'local_component_capture'
   || publicGalleryEvidence.records !== 'synthetic'
@@ -500,7 +523,8 @@ if (publicGalleryEvidence?.schemaVersion !== 'supermega.public-gallery-provenanc
   || !/^[0-9a-f]{40}$/.test(publicGalleryEvidence.captureSourceTree)
   || publicGalleryEvidence.capturedAt !== null
   || publicGalleryEvidence.assets?.map((asset) => asset.file).join(',') !== publicGalleryFiles.join(',')
-  || JSON.stringify(publicGalleryEvidence) !== JSON.stringify(publicGalleryProvenance)) {
+  || expectedPublicGalleryEvidence.assets.some(asset => asset === undefined)
+  || JSON.stringify(publicGalleryEvidence) !== JSON.stringify(expectedPublicGalleryEvidence)) {
   fail('public_gallery_provenance_drift')
 }
 for (const asset of publicGalleryEvidence.assets) {

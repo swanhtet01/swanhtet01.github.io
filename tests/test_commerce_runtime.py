@@ -2286,10 +2286,40 @@ class CommerceRuntimeTests(unittest.TestCase):
         initialized = apply_event({}, "commerce.workspace.initialized", catalog_state())
         self.assertEqual(initialized, catalog_state())
 
+        bilingual_catalog = catalog_state()
+        bilingual_catalog["items"][0].update(  # type: ignore[index]
+            {"barcode": "0123456789012", "nameMy": "ရေသန့်", "category": "အဖျော်ယမကာ"}
+        )
+        self.assertEqual(
+            apply_event({}, "commerce.workspace.initialized", bilingual_catalog),
+            bilingual_catalog,
+        )
+
         with self.assertRaises(TrialValidationError):
             apply_event({}, "commerce.workspace.initialized", created_state())
         with self.assertRaises(TrialValidationError):
             apply_event(catalog_state(), "commerce.workspace.initialized", catalog_state())
+
+    def test_managed_counter_order_freezes_owner_entered_burmese_item_name(self) -> None:
+        current = catalog_state()
+        current["items"][0]["barcode"] = "0123456789012"  # type: ignore[index]
+        current["items"][0]["nameMy"] = "ရေသန့်"  # type: ignore[index]
+        current = validate_commerce_state(current)
+
+        accepted = create_commerce_order_from_intent(
+            current,
+            counter_order_intent(),
+            action_evidence(
+                "ACT-BILINGUAL-COUNTER-SALE",
+                captured_at=CONVERTED_AT,
+            ),
+        )
+
+        order = accepted["orders"][0]  # type: ignore[index]
+        line = order["lines"][0]
+        self.assertEqual(line["name"], "Test item")
+        self.assertEqual(line["nameMy"], "ရေသန့်")
+        self.assertEqual(accepted["items"][0]["onHand"], 8)  # type: ignore[index]
 
     def test_legacy_v2_state_and_empty_intake_collection_are_backward_compatible(self) -> None:
         legacy = catalog_state()
@@ -2385,6 +2415,61 @@ class CommerceRuntimeTests(unittest.TestCase):
         wrong_next["catalogChanges"][0]["nextPrice"] = 126  # type: ignore[index]
         with self.assertRaises(TrialValidationError):
             validate_commerce_state(wrong_next)
+
+    def test_catalog_update_tracks_barcode_and_burmese_name_with_review_evidence(self) -> None:
+        current = catalog_state()
+        current["items"][0].update(  # type: ignore[index]
+            {"barcode": "0123456789012", "nameMy": "ရေသန့်", "category": "အစားအသောက်"}
+        )
+        current = validate_commerce_state(current)
+        next_state = catalog_update_state(
+            current,
+            next_price=None,
+            next_reorder_at=None,
+            action_id="ACT-CATALOG-BILINGUAL-UPDATE",
+        )
+        next_state["items"][0].update(  # type: ignore[index]
+            {"barcode": "0123456789013", "nameMy": "သောက်ရေ", "category": "အဖျော်ယမကာ"}
+        )
+        next_state["catalogChanges"][0].update(  # type: ignore[index]
+            {
+                "previousBarcode": "0123456789012",
+                "nextBarcode": "0123456789013",
+                "previousNameMy": "ရေသန့်",
+                "nextNameMy": "သောက်ရေ",
+                "previousCategory": "အစားအသောက်",
+                "nextCategory": "အဖျော်ယမကာ",
+            }
+        )
+
+        accepted = apply_event(current, "commerce.item.updated", next_state)
+        self.assertEqual(accepted["items"][0]["barcode"], "0123456789013")  # type: ignore[index]
+        self.assertEqual(accepted["items"][0]["nameMy"], "သောက်ရေ")  # type: ignore[index]
+        self.assertEqual(accepted["items"][0]["category"], "အဖျော်ယမကာ")  # type: ignore[index]
+        self.assertEqual(accepted["items"][0]["onHand"], 10)  # type: ignore[index]
+        self.assertEqual(
+            accepted["catalogChanges"][0]["previousNameMy"],  # type: ignore[index]
+            "ရေသန့်",
+        )
+        self.assertEqual(
+            accepted["catalogChanges"][0]["previousCategory"],  # type: ignore[index]
+            "အစားအသောက်",
+        )
+
+        tampered = deepcopy(next_state)
+        tampered["catalogChanges"][0]["previousNameMy"] = "မတူညီသောအမည်"  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            apply_event(current, "commerce.item.updated", tampered)
+
+        incomplete_history = deepcopy(next_state)
+        del incomplete_history["catalogChanges"][0]["nextBarcode"]  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            validate_commerce_state(incomplete_history)
+
+        incomplete_category_history = deepcopy(next_state)
+        del incomplete_category_history["catalogChanges"][0]["nextCategory"]  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            validate_commerce_state(incomplete_category_history)
 
     def test_catalog_update_rejects_forbidden_item_and_collection_changes(self) -> None:
         current = catalog_state()

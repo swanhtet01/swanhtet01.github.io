@@ -9,7 +9,7 @@ import { promisify } from 'node:util'
 import { bindPreviewNavigation, parsePreviewAppBinding } from './public_preview_navigation.mjs'
 
 import { activeProductContracts } from '../showroom/src/core/product-visibility.ts'
-import { companyMarkup, companyShopFooterHtml, companyShopHeaderHtml, companyShopStyle, shopDemoScript, shopMarkup } from './public_company_shop_design.mjs'
+import { companyMarkup, companyShopFooterHtml, companyShopHeaderHtml, companyShopStyle, shopMarkup } from './public_company_shop_design.mjs'
 
 
 const run = promisify(execFile)
@@ -68,7 +68,7 @@ async function checkedOutShowroomTree(directory, atRoot = true) {
   const tree = Buffer.concat(body)
   return createHash('sha1').update(`tree ${tree.length}\0`).update(tree).digest()
 }
-const publicGalleryAssetNames = [
+const sourceGalleryAssetNames = [
   'actual-shop-today.png', 'actual-shop-today-mobile.png',
   'actual-shop-sell.png', 'actual-shop-sell-mobile.png',
   'actual-shop-orders.png', 'actual-shop-orders-mobile.png',
@@ -76,6 +76,13 @@ const publicGalleryAssetNames = [
   'actual-sites-inquiries.png', 'actual-sites-inquiries-mobile.png',
   'actual-commerce-catalog.png', 'actual-commerce-catalog-mobile.png',
   'actual-commerce-order-request.png', 'actual-commerce-order-request-mobile.png',
+]
+// Keep the complete capture set and provenance available to internal review,
+// while exposing only the approved Shop customer surface in the public bundle.
+const publicGalleryAssetNames = [
+  'actual-shop-today.png', 'actual-shop-today-mobile.png',
+  'actual-shop-sell.png', 'actual-shop-sell-mobile.png',
+  'actual-shop-orders.png', 'actual-shop-orders-mobile.png',
 ]
 assert(publicGalleryProvenance.schemaVersion === 'supermega.public-gallery-provenance.v1', 'public_gallery_provenance_schema_unsupported')
 assert(publicGalleryProvenance.status === 'local_component_capture' && publicGalleryProvenance.records === 'synthetic'
@@ -97,10 +104,11 @@ try {
 }
 assert(currentShowroomTree === publicGalleryCapture.showroomTree,
   `public_gallery_capture_source_tree_drift:${currentShowroomTree}:${publicGalleryCapture.showroomTree}`)
-assert(publicGalleryProvenance.assets?.map(asset => asset.file).join(',') === publicGalleryAssetNames.join(','), 'public_gallery_asset_set_changed')
+assert(publicGalleryProvenance.assets?.map(asset => asset.file).join(',') === sourceGalleryAssetNames.join(','), 'public_gallery_source_asset_set_changed')
+assert(publicGalleryAssetNames.every(file => sourceGalleryAssetNames.includes(file)), 'public_gallery_customer_asset_missing_from_source')
 const galleryCaptureByFile = new Map(publicGalleryCapture.captures?.map(capture => [capture.file, capture]))
 assert(galleryCaptureByFile.size === publicGalleryCapture.captures?.length, 'public_gallery_capture_files_not_unique')
-const publicGalleryAssetEvidence = await Promise.all(publicGalleryProvenance.assets.map(async ({ file, width, height, sha256, capture }) => {
+const sourceGalleryAssetEvidence = await Promise.all(publicGalleryProvenance.assets.map(async ({ file, width, height, sha256, capture }) => {
   const reportCapture = galleryCaptureByFile.get(file)
   assert(reportCapture && reportCapture.width === width && reportCapture.height === height
     && reportCapture.sha256 === sha256, `public_gallery_capture_report_asset_mismatch:${file}`)
@@ -128,6 +136,7 @@ const publicGalleryAssetEvidence = await Promise.all(publicGalleryProvenance.ass
     `public_gallery_capture_receipt_invalid:${file}`)
   return { file, width, height, sha256, capture }
 }))
+const publicGalleryAssetEvidence = sourceGalleryAssetEvidence.filter(asset => publicGalleryAssetNames.includes(asset.file))
 
 assert(manifest.schemaVersion === 'supermega.site-context.v2', 'unsupported_site_manifest')
 assert(manifest.brand?.version && manifest.contextVersion && manifest.catalogVersion, 'site_manifest_versions_missing')
@@ -253,9 +262,11 @@ const sharedStyle = `
   .frame { width: min(calc(100% - 48px), 1200px); margin-inline: auto; }
   .site-header { position: sticky; top: 0; z-index: 40; border-bottom: 1px solid var(--line); background: rgba(255,255,255,.96); backdrop-filter: blur(18px); }
   .header-inner { min-height: 72px; display: flex; align-items: center; justify-content: space-between; gap: 18px; }
-  .brand { display: inline-flex; min-height: 44px; align-items: center; gap: 12px; text-decoration: none; font-size: 13px; font-weight: 820; letter-spacing: .08em; }
-  .brand-mark { color: var(--green); font-family: "SFMono-Regular", Consolas, monospace; font-size: 20px; letter-spacing: -.12em; }
-  .brand-name { color: var(--ink); }
+  .brand { display: inline-flex; min-height: 44px; align-items: center; gap: 10px; text-decoration: none; font-size: 13px; font-weight: 820; letter-spacing: .08em; }
+  .brand-icon { display: block; width: 34px; height: 34px; flex: none; border: 1px solid rgba(169,184,199,.28); border-radius: 7px; }
+  .brand-icon svg { display: block; width: 100%; height: 100%; }
+  .brand-word { color: var(--ink); font-size: 14px; font-weight: 820; letter-spacing: .03em; }
+  .brand-domain { color: var(--quiet); font-size: 11px; font-weight: 600; letter-spacing: 0; }
   .nav { display: flex; min-width: 0; align-items: center; justify-content: flex-end; gap: 4px; }
   .nav-link { min-height: 44px; display: inline-flex; align-items: center; border-radius: 10px; padding: 0 11px; color: var(--muted); font-size: 13px; font-weight: 720; text-decoration: none; }
   .nav-link:hover, .nav-link[aria-current="page"] { background: var(--green-soft); color: var(--ink); }
@@ -538,12 +549,18 @@ const sharedStyle = `
   .platform-gallery-controls button:focus-visible {outline:2px solid var(--blue);outline-offset:3px}
   .platform-gallery-controls button:disabled {opacity:.4;cursor:default}
   .platform-gallery-status {min-width:48px;color:var(--muted);font-size:13px;font-variant-numeric:tabular-nums;text-align:center}
-  .platform-image {margin:0;padding:24px;background:#f1f5f9;border:1px solid #dbe3ee;border-radius:24px;overflow:hidden}
-  .platform-image img {display:block;width:100%;height:auto;max-width:1440px;margin-inline:auto;border-radius:12px;box-shadow:0 16px 48px rgba(11,15,23,.08);background:#fff}
-  .platform-image picture {display:block}
-  .platform-image-open {position:relative;display:block;min-width:0;color:var(--ink);text-decoration:none}
-  .platform-image-open span {position:absolute;right:12px;bottom:12px;display:inline-flex;align-items:center;min-height:32px;padding:6px 10px;border:1px solid #dbe3ee;border-radius:8px;background:rgba(255,255,255,.96);font-size:11px;font-weight:700;box-shadow:0 5px 18px rgba(11,15,23,.08)}
-  .platform-image-open:hover span,.platform-image-open:focus-visible span {color:var(--blue);border-color:var(--blue)}
+  .platform-image {margin:0;padding:18px;background:#f1f0ff;border:1px solid #dedbff;border-radius:26px;overflow:hidden}
+  .platform-device-stage {display:grid;grid-template-columns:minmax(0,1fr) clamp(150px,20%,220px);align-items:center;gap:clamp(14px,2.4vw,28px);padding:clamp(14px,2.6vw,30px);border:1px solid #e4e4f3;border-radius:20px;background:radial-gradient(ellipse at 70% 0%,#fff 0%,#f5f4ff 58%,#eeedfa 100%)}
+  .platform-device {min-width:0;overflow:hidden;background:#fff;box-shadow:0 18px 48px rgba(24,27,58,.14)}
+  .platform-device-desktop {padding:8px;border:1px solid #d9ddea;border-radius:17px}
+  .platform-device-phone {width:100%;max-width:220px;justify-self:center;padding:6px;border:7px solid #181b25;border-radius:30px;background:#181b25}
+  .platform-device-heading {display:block;padding:0 0 8px;color:#667085;font-size:11px;font-weight:750;letter-spacing:.06em;text-transform:uppercase}
+  .platform-device-phone .platform-device-heading {padding:0 0 8px;color:#f8f8ff;text-align:center}
+  .platform-device img {display:block;width:100%;height:auto;margin:0;border-radius:8px;background:#fff}
+  .platform-device-phone img {border-radius:19px}
+  .platform-image-open {display:block;min-width:0;color:var(--ink);text-decoration:none}
+  .platform-open-label {display:inline-flex;align-items:center;min-height:32px;margin-top:10px;padding:6px 10px;border:1px solid #dbe3ee;border-radius:9px;background:rgba(255,255,255,.96);font-size:11px;font-weight:700}
+  .platform-image-open:hover .platform-open-label,.platform-image-open:focus-visible .platform-open-label {color:var(--blue);border-color:var(--blue)}
   .platform-image figcaption {margin-top:auto;padding:16px 0 0;color:#5a6478;font-size:12px}
   .product-proof {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));margin-top:18px;border:1px solid var(--line);border-radius:16px;background:var(--panel-solid);overflow:hidden;list-style:none;padding:0}
   .product-proof li {min-width:0;padding:18px 20px}
@@ -588,14 +605,14 @@ const sharedStyle = `
   .site-header {background:#fff}
   .header-actions{display:flex;align-items:center;gap:8px}
   @media(max-width:980px){.product-card-compact{grid-template-columns:minmax(0,1fr) minmax(230px,.8fr);gap:12px}.product-card-copy{padding:16px}}
-  @media(max-width:760px){.editorial-hero{padding:28px 0 20px}.editorial-hero h1{font-size:clamp(38px,11vw,52px)}.editorial-hero .lede{font-size:16px}.story-heading{grid-template-columns:1fr;gap:18px}.product-story{padding:48px 0}.product-story-standalone{padding:0 0 44px}.platform-gallery{grid-template-columns:1fr;gap:12px}.platform-image{padding:10px;border-radius:14px}.platform-image img{border-radius:8px}.platform-image picture img{height:clamp(300px,112vw,500px);object-fit:cover;object-position:center top}.platform-gallery[data-product-gallery="ecommerce"] picture img{object-position:center 25%}.product-proof{grid-template-columns:1fr}.product-proof li+li{border-top:1px solid var(--line);border-left:0}.feature-line{gap:12px 20px}.product-cards{gap:14px;padding-bottom:48px}.product-card-compact{display:flex;flex-direction:column;gap:0}.product-card-copy{padding:18px 8px 12px}.product-card-copy h2{font-size:30px}.product-card-flow{margin:18px 0}.product-tabs button{flex:1;min-width:0;padding:10px 6px;font-size:14px}.platform-image-open span{right:6px;bottom:6px;font-size:10px}.home-contact{grid-template-columns:1fr;margin-bottom:52px;padding:26px 24px}.home-contact .button{width:100%}}
+ @media(max-width:760px){.editorial-hero{padding:28px 0 20px}.editorial-hero h1{font-size:clamp(38px,11vw,52px)}.editorial-hero .lede{font-size:16px}.story-heading{grid-template-columns:1fr;gap:18px}.product-story{padding:48px 0}.product-story-standalone{padding:0 0 44px}.platform-gallery{grid-template-columns:1fr;gap:12px}.platform-image{padding:10px;border-radius:14px}.platform-device-stage{grid-template-columns:1fr;gap:0;padding:14px;border-radius:12px}.platform-device-desktop{display:none}.platform-device-phone{width:min(68%,260px);max-width:260px}.platform-open-label{min-height:32px}.product-proof{grid-template-columns:1fr}.product-proof li+li{border-top:1px solid var(--line);border-left:0}.feature-line{gap:12px 20px}.product-cards{gap:14px;padding-bottom:48px}.product-card-compact{display:flex;flex-direction:column;gap:0}.product-card-copy{padding:18px 8px 12px}.product-card-copy h2{font-size:30px}.product-card-flow{margin:18px 0}.product-tabs button{flex:1;min-width:0;padding:10px 6px;font-size:14px}.home-contact{grid-template-columns:1fr;margin-bottom:52px;padding:26px 24px}.home-contact .button{width:100%}}
   @media(max-width:980px){.contact-page{grid-template-columns:1fr;gap:24px;max-width:760px;padding:42px 0 70px}.contact-page .page-hero{position:static;padding:0}.contact-page .page-hero::after{display:none}.contact-page .page-hero h1{font-size:clamp(36px,7vw,52px)}}
-  @media(max-width:760px){.contact-page{padding:28px 0 52px}.contact-page .page-hero h1{font-size:clamp(36px,9vw,48px)}.contact-page .contact-form{padding:20px;border-radius:20px}}
+  @media(max-width:760px){.contact-page{padding:28px 0 52px}.contact-page .page-hero h1{font-size:clamp(36px,9vw,48px)}.contact-page .contact-form{padding:20px;border-radius:20px}.brand-domain{display:none}}
 
 `
 
 function brandHtml() {
-  return `<a class="brand" href="/" aria-label="SuperMega home"><span class="brand-mark" aria-hidden="true">&gt;_</span><span class="brand-name">SUPERMEGA</span></a>`
+  return `<a class="brand" href="/" aria-label="SuperMega home"><span class="brand-icon" aria-hidden="true"><svg viewBox="0 0 40 40"><rect x="1" y="1" width="38" height="38" rx="7" fill="#07111f"/><path d="m12 13 8 7-8 7m10-1h7" fill="none" stroke="#3b82f6" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="brand-word">SuperMega</span><span class="brand-domain">Operating software</span></a>`
 }
 
 function headerHtml(route) {
@@ -702,15 +719,15 @@ assert(typeof homePage.title === 'string' && homePage.title.includes('SuperMega'
 assert(typeof homePage.description === 'string' && homePage.description.length >= 40, 'home_page_description_invalid')
 
 const stories = {
- shop: {title:'Know what sold. Know what happens next.', body:'Run the counter, orders, stock and daily close from one operating view.', screens:[['actual-shop-today.png','Shop operating view showing fulfilment priorities, stock alerts and money awaiting collection','Today and priorities'],['actual-shop-sell.png','Shop counter with searchable products, visible stock levels, and Add controls for a new sale','Counter catalog and sale setup'],['actual-shop-orders.png','Shop order queue showing payment handoff, the next action and queue health','Orders and fulfilment']], proof:[['Record','Sale, payment and receipt'],['Action','Reorder, fulfil or follow up'],['Result','A close your team can explain']]},
+ shop: {title:'Sell at the counter. Keep stock and orders in view.', body:'Search or scan a product, build a sale, and see order and stock follow-up in the same Shop workspace.', screens:[['actual-shop-today.png','Shop Today showing sales, open orders and low-stock indicators','Today and priorities'],['actual-shop-sell.png','Shop counter with searchable products, visible stock levels, and Add controls for a new sale','Counter catalog and sale setup'],['actual-shop-orders.png','Shop order queue showing order status and the next follow-up','Orders and fulfilment']], proof:[['Today','Sales, open orders and low stock'],['Sale','Products, quantities and a reviewed total'],['Next','Order status and stock follow-up']]},
  website: {title:'Build clear pages. Review inquiries in one place.', body:'Our team manages pages, readiness checks and customer inquiries in one workspace.', screens:[['actual-sites-editor.png','Sites editor showing page navigation, focused content editing and readiness checks','Page workspace and readiness'],['actual-sites-inquiries.png','Sites inquiry workspace showing a synthetic customer request, ownership and decision controls','Inquiry review and ownership']], proof:[['Record','Pages, services and metadata'],['Action','Edit, check and prepare to publish'],['Result','Qualified inquiries in one inbox']]},
  ecommerce: {title:'Show your catalog. Review each request.', body:'Our team reviews each catalog request before Shop records an order or payment.', screens:[['actual-commerce-catalog.png','Commerce catalog showing available products, local pricing and customer ordering','Store catalog and availability'],['actual-commerce-order-request.png','Commerce Store showing a locally saved customer request awaiting Shop confirmation','Request saved locally']], proof:[['Record','Catalog, customer and request'],['Action','Review before an order is confirmed'],['Result','A clear next step for fulfilment']]},
 }
 const productOutcomes = {
  shop: [
-  ['Serve the next customer', 'Find products, build a sale and record payment from the counter. Keep the order available for receipts and follow-up.'],
-  ['Know what needs restocking', 'Review stock levels, purchasing and demand together. Move from a shortage to the items that need attention.'],
-  ['Close with clear records', 'Follow open orders, review payment exceptions and prepare a daily close with accounting exports.'],
+  ['Sell with confidence', 'Search the catalog by name, SKU or barcode; review the basket and total before recording the sale.'],
+  ['Keep stock in view', 'See on-hand quantities and reorder thresholds, then start with the items that need attention.'],
+  ['Follow each order', 'Review recorded status and the next fulfilment or payment follow-up without leaving Shop.'],
  ],
  website: [
   ['Start with your business', 'Bring your services, contact details and business information into one place. Build your pages around what customers need to know.'],
@@ -725,14 +742,16 @@ const productOutcomes = {
 }
 function interfaceDisclosure(image) {
  assert(publicGalleryAssetNames.includes(image), `interface_gallery_asset_unverified:${image}`)
- return 'Product UI capture · synthetic local records'
+ return 'Actual application UI capture · synthetic local records'
 }
 function productGallery(id,label,eagerFirst=false) {
  const item=stories[id]
  const slides=item.screens.map(([image,alt,caption,width=1440,height=900],index)=>{
   const mobileImage=image.replace(/\.png$/, '-mobile.png')
   interfaceDisclosure(mobileImage)
-  return `<figure class="platform-image" role="group" aria-roledescription="slide" aria-label="${index+1} of ${item.screens.length}: ${escapeHtml(caption)}"><a class="platform-image-open" href="/images/${image}" data-desktop-image="/images/${image}" data-mobile-image="/images/${mobileImage}" aria-label="Open full-size ${escapeHtml(label)} ${escapeHtml(caption)} local product view"><picture><source media="(max-width: 760px)" srcset="/images/${mobileImage}" /><img src="/images/${image}" alt="${escapeHtml(alt)}" width="${width}" height="${height}" loading="${eagerFirst && index === 0 ? 'eager' : 'lazy'}"${eagerFirst && index === 0 ? ' fetchpriority="high"' : ''} /></picture><span aria-hidden="true">View full size &rarr;</span></a><figcaption>${label} &middot; ${escapeHtml(caption)} &middot; ${interfaceDisclosure(image)}</figcaption></figure>`
+  const loading=eagerFirst && index===0?'eager':'lazy'
+  const fetchPriority=eagerFirst && index===0?' fetchpriority="high"':''
+  return `<figure class="platform-image" role="group" aria-roledescription="slide" aria-label="${index+1} of ${item.screens.length}: ${escapeHtml(caption)}"><a class="platform-image-open platform-device-view" href="/images/${image}" data-desktop-image="/images/${image}" data-mobile-image="/images/${mobileImage}" aria-label="Open full-size ${escapeHtml(label)} ${escapeHtml(caption)} desktop or mobile capture"><span class="platform-device-stage" role="group" aria-label="${escapeHtml(label)} desktop and mobile layouts"><span class="platform-device platform-device-desktop"><span class="platform-device-heading" aria-hidden="true">Desktop</span><img src="/images/${image}" alt="${escapeHtml(alt)}" width="${width}" height="${height}" loading="${loading}"${fetchPriority} /></span><span class="platform-device platform-device-phone"><span class="platform-device-heading" aria-hidden="true">Mobile</span><img src="/images/${mobileImage}" alt="${escapeHtml(alt)} at mobile viewport size" width="390" height="844" loading="${loading}" /></span></span><span class="platform-open-label" aria-hidden="true">Open full-size view &rarr;</span></a><figcaption>${label} &middot; ${escapeHtml(caption)} &middot; Desktop and mobile captures · ${interfaceDisclosure(image)}</figcaption></figure>`
  }).join('')
  if (item.screens.length === 1) return `<div class="platform-gallery" data-product-gallery="${id}" data-single role="region" aria-roledescription="carousel" aria-label="${label} interface view"><div class="platform-slides">${slides}</div></div>`
  return `<div class="platform-gallery" data-product-gallery="${id}" data-platform-carousel role="region" aria-roledescription="carousel" aria-label="${label} interface views"><div class="platform-slides" tabindex="0">${slides}</div><div class="platform-gallery-controls"><button type="button" data-gallery-previous aria-label="Previous ${label} screenshot" disabled>&lsaquo;</button><span class="platform-gallery-status" data-gallery-status aria-live="polite">1 of ${item.screens.length}</span><button type="button" data-gallery-next aria-label="Next ${label} screenshot">&rsaquo;</button></div></div>`
@@ -744,6 +763,65 @@ function productStory(id, standalone = false) {
  const galleryHtml=productGallery(id,label,standalone)
   return `<section class="product-story${standalone ? ' product-story-standalone' : ''}" id="${id}">${standalone ? '' : `<div class="story-heading"><div><a class="eyebrow story-link" href="${escapeHtml(route)}">${label}<span aria-hidden="true">&rarr;</span></a><h2>${item.title}</h2></div><p>${item.body}</p></div>`}${galleryHtml}<ol class="product-proof" aria-label="${label} operating flow">${item.proof.map(([stage, value])=>`<li><span>${escapeHtml(stage)}</span><strong>${escapeHtml(value)}</strong></li>`).join('')}</ol><ul class="feature-line">${productOutcomes[id].map(([title, description])=>`<li><${standalone ? 'h2' : 'h3'}>${escapeHtml(title)}</${standalone ? 'h2' : 'h3'}><p>${escapeHtml(description)}</p></li>`).join('')}</ul></section>`
 }
+function replaceOnce(source, before, after, code) {
+ assert(source.split(before).length === 2, code + "_source_drift")
+ return source.replace(before, after)
+}
+function replaceKnownCopyOnce(source, accepted, after, code) {
+ const legacy = accepted.filter(before => before !== after && source.split(before).length === 2)
+ if (legacy.length === 1) return replaceOnce(source, legacy[0], after, code)
+ const hasLegacyCopy = accepted.some(before => before !== after && source.includes(before))
+ if (legacy.length === 0 && !hasLegacyCopy && source.includes(after)) return source
+ assert(false, code + "_source_drift")
+ return source
+}
+function removeSectionByClass(source, className, code) {
+ const openingTag = new RegExp(`<section\\b[^>]*class="[^"]*\\b${className}\\b[^"]*"[^>]*>`, 'g')
+ const start = openingTag.exec(source)
+ assert(start && openingTag.exec(source) === null, code + "_section_count_drift")
+ const sectionTags = /<\/?section\b[^>]*>/g
+ sectionTags.lastIndex = start.index
+ let depth = 0
+ let tag
+ while ((tag = sectionTags.exec(source)) !== null) {
+  depth += tag[0].startsWith('</') ? -1 : 1
+  if (depth === 0) return source.slice(0, start.index) + source.slice(sectionTags.lastIndex)
+ }
+ assert.fail(code + "_section_not_closed")
+}
+function shopOnlyCompanyMarkup(source) {
+ let markup = source
+ markup = replaceKnownCopyOnce(markup, ["Operating software for Myanmar companies", "Shop software for Myanmar businesses"], "Shop software for Myanmar businesses", "shop_only_hero_kicker")
+ markup = replaceKnownCopyOnce(markup, ["Tools for<br><span>everyday work.</span>", "Run your shop.<br><span>See what’s next.</span>"], "Run your shop.<br><span>See what’s next.</span>", "shop_only_hero_heading")
+ markup = replaceKnownCopyOnce(markup, [
+  "Shop brings sales and stock into one operating view. Our team manages Sites and confirms Commerce availability for each setup.",
+  "Keep sales, orders and stock together in one clear MMK workflow. See what needs attention without digging through settings.",
+  "Keep sales, orders and stock together in one clear view. See what needs attention without digging through settings.",
+ ], "Keep sales, orders and stock together in one clear view. See what needs attention without digging through settings.", "shop_only_hero_description")
+ markup = replaceKnownCopyOnce(markup, ["Meet the product family", "Explore Shop"], "Explore Shop", "shop_only_hero_secondary_action")
+ markup = replaceKnownCopyOnce(markup, ['href="/shop/#shop-demo">See Shop in action', 'href="/shop/#shop-demo">See Shop screens'], 'href="/shop/#shop-demo">See Shop in action', "shop_only_hero_primary_action")
+ for (const id of ["website", "ecommerce"]) {
+  const marker = '<article class="family-card" id="' + id + '">'
+  const start = markup.indexOf(marker)
+  const end = markup.indexOf("</article>", start)
+  assert(start >= 0 && end > start && markup.indexOf(marker, start + marker.length) < 0, "shop_only_family_card_drift:" + id)
+  markup = markup.slice(0, start) + markup.slice(end + "</article>".length)
+ }
+ markup = replaceKnownCopyOnce(markup, ["The SuperMega product family", "Shop for local businesses"], "Shop for local businesses", "shop_only_family_eyebrow")
+ markup = replaceKnownCopyOnce(markup, ["Software for the work at hand.", "Start simple. Grow with your business."], "Start with Shop. Grow with your business.", "shop_only_family_heading")
+ markup = replaceKnownCopyOnce(markup, [
+  "Shop keeps counter work together. Sites and Commerce extend the customer experience with the SuperMega team.",
+  "Start with Shop. Our team can scope a business website or online ordering when you are ready for the next step.",
+ ], "Start with Shop. Our team can scope a business website or online ordering when you are ready for the next step.", "shop_only_family_description")
+ markup = replaceOnce(markup, '<div class="product-family">', '<div class="product-family shop-only-family">', "shop_only_family_layout")
+ markup = replaceKnownCopyOnce(markup, ["One company identity, with each workflow shaped around the work."], "One clear workspace for daily shop work.", "shop_only_company_principle")
+ assert(!markup.includes('href="/website/') && !markup.includes('href="/ecommerce/')
+  && !markup.includes('id="website"') && !markup.includes('id="ecommerce"'), "shop_only_inactive_product_link_remains")
+ return markup
+}
+const publicHomeMarkup = shopOnlyCompanyMarkup(companyMarkup)
+const publicShopMarkup = shopMarkup
+
 function productCard(id) {
  const item=stories[id], label=publicProducts.find(product=>product.id===id).name
  const route=manifest.pages.find(page=>page.productId===id)?.route
@@ -752,7 +830,7 @@ function productCard(id) {
 }
 const homeHtml = documentHtml({route:'/',title:homePage.title,description:homePage.description,
  schema:{'@type':'Organization',name:'SuperMega',url:canonical('/'),description:homePage.description},
- content:`<main id="content">${companyMarkup}</main>`,
+ content:`<main id="content">${publicHomeMarkup}</main>`,
 })
 
 function productAction(product) {
@@ -762,9 +840,15 @@ function productAction(product) {
 
 function shopLandingHtml(product, page) {
  const description = page.description || product.description
+ const shopShowcase = `<section class="shop-actual-showcase" id="shop-demo" aria-labelledby="shop-actual-showcase-title"><div class="wrap"><div class="story-heading"><div><span class="eyebrow">Shop / Product screens</span><h2 id="shop-actual-showcase-title">See Shop on desktop and mobile.</h2></div><p>Actual Shop application screens at desktop and mobile sizes. All records shown are synthetic.</p></div>${productGallery('shop','Shop',true)}</div></section>`
+ let shopContent = publicShopMarkup
+ const showcaseAnchor = /<\/section>(\r?\n)([ \t]*)<section class="demo-section"/g
+ assert((shopContent.match(showcaseAnchor) || []).length === 1, 'shop_showcase_insertion_point_missing')
+ const shopWithActualShowcase = shopContent.replace(showcaseAnchor, (_, newline, indent) => `</section>${newline}${indent}${shopShowcase}${newline}${indent}<section class="demo-section"`)
+ const shopWithRemovedMocks = removeSectionByClass(removeSectionByClass(shopWithActualShowcase, 'demo-section', 'shop_interactive_mock'), 'benefits-section', 'shop_mock_benefits')
  return documentHtml({route:page.route,title:page.title,description,shareImage:`/og-card-${product.id}.png`,
   schema:{'@type':'Product',name:product.name,description,url:canonical(page.route)},
-  content:`<main id="content">${shopMarkup}</main>${productAction(product)}<script src="/shop-sample-demo.js" defer></script>`})
+  content:`<main id="content">${shopWithRemovedMocks}</main>${productAction(product)}${stories.shop.screens.length > 1 ? '<script src="/platform-carousel.js" defer></script>' : ''}`})
 }
 
 function productLandingHtml(product,page) {
@@ -871,7 +955,7 @@ const notFoundHtml = documentHtml({
   title: 'Page not found | SuperMega',
   description: 'The requested SuperMega route does not exist.',
   robots: 'noindex,nofollow',
-  content: `<main class="frame" id="content"><section class="page-hero"><span class="eyebrow">Page not found</span><h1>We couldn’t find that page.</h1><p class="lede">Find Shop, Sites and Commerce on the home page.</p><div class="actions"><a class="button primary" href="/">Return home</a></div></section></main>`,
+  content: `<main class="frame" id="content"><section class="page-hero"><span class="eyebrow">Page not found</span><h1>We couldn’t find that page.</h1><p class="lede">Find Shop on the home page.</p><div class="actions"><a class="button primary" href="/">Return home</a></div></section></main>`,
 })
 
 const healthFunction = `'use strict'
@@ -1484,7 +1568,6 @@ await mkdir(functionsDir, { recursive: true })
 
 for (const [relativePath, content] of pageFiles) await writeStatic(relativePath, content)
 for (const image of publicGalleryAssetNames) await writeStatic(`images/${image}`, await readFile(resolve(root,'tools/public-assets',image)))
-await writeStatic('shop-sample-demo.js', shopDemoScript)
 await writeStatic('fonts/noto-sans-latin.woff2', await readFile(resolve(root,'tools/public-assets/noto-sans-latin.woff2')))
 await writeStatic('fonts/noto-sans-latin-OFL.txt', await readFile(resolve(root,'tools/public-assets/noto-sans-latin-OFL.txt')))
 await writeStatic('favicon.svg', faviconSvg)

@@ -76,7 +76,7 @@ export default function App() {
         <Route path="website/review/:reviewId" element={<Suspense fallback={<ProductLoading name="Website review" />}><WebsiteCustomerReview /></Suspense>} />
         <Route element={<CoreLayout />}>
           <Route element={<ProductHomeEntry />} index />
-          <Route element={<Suspense fallback={<ProductLoading name="Shop" />}><OperationsPage product="commerce" /></Suspense>} path="shop/*" />
+          <Route element={<Suspense fallback={<ProductLoading name="Shop" />}><OperationsPage /></Suspense>} path="shop/*" />
           <Route element={<Navigate replace to="/?choose=1" />} path="plant/*" />
           <Route element={<Suspense fallback={<ProductLoading name="Website" />}><WebsiteProduct /></Suspense>} path="website/*" />
           <Route element={<Suspense fallback={<ProductLoading name="Ecommerce" />}><EcommerceProduct /></Suspense>} path="ecommerce/*" />

@@ -380,7 +380,7 @@ _SERVICE_SCHEDULE_FIELDS = frozenset(
         "events",
     }
 )
-_ITEM_FIELDS = frozenset({"sku", "name", "variant", "onHand", "reorderAt", "price"})
+_ITEM_FIELDS = frozenset({"sku", "name", "variant", "barcode", "nameMy", "category", "onHand", "reorderAt", "price"})
 _CATALOG_CHANGE_FIELDS = frozenset(
     {
         "sku",
@@ -390,6 +390,9 @@ _CATALOG_CHANGE_FIELDS = frozenset(
         "nextReorderAt",
         "proof",
     }
+)
+_CATALOG_CHANGE_OPTIONAL_FIELDS = frozenset(
+    {"previousBarcode", "nextBarcode", "previousNameMy", "nextNameMy", "previousCategory", "nextCategory"}
 )
 _CATALOG_BASELINE_FIELDS = frozenset(
     {"sku", "price", "reorderAt", "proof", "anchorDigest"}
@@ -469,7 +472,7 @@ _ORDER_OPTIONAL_FIELDS = frozenset(
     }
 )
 _ORDER_LINE_REQUIRED_FIELDS = frozenset({"sku", "name", "quantity", "unitPriceMmk"})
-_ORDER_LINE_OPTIONAL_FIELDS = frozenset({"variant"})
+_ORDER_LINE_OPTIONAL_FIELDS = frozenset({"variant", "nameMy"})
 _COLLECTION_ACTION_FIELDS = frozenset({"kind", "proof"})
 _ORDER_CALCULATION_SCHEMA = "supermega.commerce.order-calculation.v1"
 _ORDER_CALCULATION_V2_SCHEMA = "supermega.commerce.order-calculation.v2"
@@ -1911,20 +1914,44 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
         )
 
     item_skus: list[str] = []
+    sku_owners_by_code: dict[str, set[str]] = {}
+    barcode_owners_by_code: dict[str, str] = {}
     item_by_sku: dict[str, dict[str, Any]] = {}
     for index, candidate in enumerate(items):
         item = _object(candidate, f"items[{index}]")
-        _exact_fields(item, f"items[{index}]", required=_ITEM_FIELDS - {"variant"}, optional=frozenset({"variant"}))
+        _exact_fields(
+            item,
+            f"items[{index}]",
+            required=_ITEM_FIELDS - {"variant", "barcode", "nameMy", "category"},
+            optional=frozenset({"variant", "barcode", "nameMy", "category"}),
+        )
         sku = _text(item["sku"], f"items[{index}].sku", maximum=80)
         _text(item["name"], f"items[{index}].name")
         if "variant" in item:
             _text(item["variant"], f"items[{index}].variant")
+        sku_code = sku.lower()
+        sku_owners_by_code.setdefault(sku_code, set()).add(sku)
+        if "barcode" in item:
+            barcode = _text(item["barcode"], f"items[{index}].barcode", maximum=80)
+            barcode_code = barcode.lower()
+            existing_owner = barcode_owners_by_code.get(barcode_code)
+            if existing_owner is not None and existing_owner != sku:
+                raise TrialValidationError("A Shop barcode must identify only one catalog item.")
+            barcode_owners_by_code[barcode_code] = sku
+        if "nameMy" in item:
+            _text(item["nameMy"], f"items[{index}].nameMy", maximum=180)
+        if "category" in item:
+            _text(item["category"], f"items[{index}].category", maximum=80)
         _integer(item["onHand"], f"items[{index}].onHand")
         _integer(item["reorderAt"], f"items[{index}].reorderAt")
         _integer(item["price"], f"items[{index}].price", minimum=1)
         item_skus.append(sku)
         item_by_sku[sku] = item
     _unique(item_skus, "Item SKU")
+    for barcode_code, barcode_owner in barcode_owners_by_code.items():
+        sku_owners = sku_owners_by_code.get(barcode_code, set())
+        if any(sku != barcode_owner for sku in sku_owners):
+            raise TrialValidationError("A Shop barcode cannot match a different item's SKU.")
     if "inventoryFoundation" in state:
         try:
             validate_shop_inventory_state(state["inventoryFoundation"], item_skus)
@@ -1973,7 +2000,25 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
     for index, candidate in enumerate(catalog_changes):
         field = f"catalogChanges[{index}]"
         change = _object(candidate, field)
-        _exact_fields(change, field, required=_CATALOG_CHANGE_FIELDS)
+        _exact_fields(
+            change,
+            field,
+            required=_CATALOG_CHANGE_FIELDS,
+            optional=_CATALOG_CHANGE_OPTIONAL_FIELDS,
+        )
+        has_previous_barcode = "previousBarcode" in change
+        has_next_barcode = "nextBarcode" in change
+        has_previous_name_my = "previousNameMy" in change
+        has_next_name_my = "nextNameMy" in change
+        has_previous_category = "previousCategory" in change
+        has_next_category = "nextCategory" in change
+        if (has_previous_barcode != has_next_barcode
+                or has_previous_name_my != has_next_name_my
+                or has_previous_category != has_next_category):
+            raise TrialValidationError(f"{field} must include both prior and next values for optional catalog fields.")
+        has_barcode_history = has_previous_barcode and has_next_barcode
+        has_name_my_history = has_previous_name_my and has_next_name_my
+        has_category_history = has_previous_category and has_next_category
         sku = _text(change["sku"], f"{field}.sku", maximum=80)
         item = item_by_sku.get(sku)
         if item is None:
@@ -1996,12 +2041,27 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
             change["nextReorderAt"],
             f"{field}.nextReorderAt",
         )
+        if has_barcode_history:
+            for key in ("previousBarcode", "nextBarcode"):
+                if change[key] is not None:
+                    _text(change[key], f"{field}.{key}", maximum=80)
+        if has_name_my_history:
+            for key in ("previousNameMy", "nextNameMy"):
+                if change[key] is not None:
+                    _text(change[key], f"{field}.{key}", maximum=180)
+        if has_category_history:
+            for key in ("previousCategory", "nextCategory"):
+                if change[key] is not None:
+                    _text(change[key], f"{field}.{key}", maximum=80)
         if (
             previous_price == next_price
             and previous_reorder_at == next_reorder_at
+            and (not has_barcode_history or change["previousBarcode"] == change["nextBarcode"])
+            and (not has_name_my_history or change["previousNameMy"] == change["nextNameMy"])
+            and (not has_category_history or change["previousCategory"] == change["nextCategory"])
         ):
             raise TrialValidationError(
-                f"{field} must change price or reorder point."
+                f"{field} must change a catalog value."
             )
         proof = _action_proof(change["proof"], f"{field}.proof")
         newer_change = newest_change_by_sku.get(sku)
@@ -2009,6 +2069,9 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
             if (
                 item["price"] != next_price
                 or item["reorderAt"] != next_reorder_at
+                or (has_barcode_history and item.get("barcode") != change["nextBarcode"])
+                or (has_name_my_history and item.get("nameMy") != change["nextNameMy"])
+                or (has_category_history and item.get("category") != change["nextCategory"])
             ):
                 raise TrialValidationError(
                     f"{field} newest values must match the current catalog item."
@@ -2017,6 +2080,9 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
             if (
                 newer_change["previousPrice"] != next_price
                 or newer_change["previousReorderAt"] != next_reorder_at
+                or ("previousBarcode" in newer_change and has_barcode_history and newer_change["previousBarcode"] != change["nextBarcode"])
+                or ("previousNameMy" in newer_change and has_name_my_history and newer_change["previousNameMy"] != change["nextNameMy"])
+                or ("previousCategory" in newer_change and has_category_history and newer_change["previousCategory"] != change["nextCategory"])
             ):
                 raise TrialValidationError(
                     f"{field} does not continue the newest-first catalog change chain."
@@ -3053,6 +3119,8 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 _text(line["name"], f"{line_field}.name")
                 if "variant" in line:
                     _text(line["variant"], f"{line_field}.variant")
+                if "nameMy" in line:
+                    _text(line["nameMy"], f"{line_field}.nameMy", maximum=180)
                 line_quantity = _integer(
                     line["quantity"],
                     f"{line_field}.quantity",
@@ -6897,6 +6965,7 @@ def create_commerce_order_from_intent(
             {
                 "sku": sku,
                 "name": item["name"],
+                **({"nameMy": item["nameMy"]} if "nameMy" in item else {}),
                 **({"variant": item["variant"]} if "variant" in item else {}),
                 "quantity": line_quantity,
                 "unitPriceMmk": item["price"],
@@ -9116,11 +9185,12 @@ def _validate_new_order_and_reservation(
         captured_line = captured_lines.get(line["sku"])
         if captured_line is not None and (
             captured_line["name"] != before_item["name"]
+            or captured_line.get("nameMy") != before_item.get("nameMy")
             or captured_line.get("variant") != before_item.get("variant")
             or captured_line["unitPriceMmk"] != before_item["price"]
         ):
             raise TrialValidationError(
-                "a new order line must freeze the current item name, variant, and MMK price."
+                "a new order line must freeze the current item name, variant, and MMK price, and retain its owner-entered Burmese name."
             )
         if captured_line is None and (
             len(lines) != 1
@@ -9428,10 +9498,10 @@ def _validate_item_updated(current: Mapping[str, Any], next_state: Mapping[str, 
     _require_unchanged(current, next_state, "orders", "movements", "closes")
     _require_website_intakes_unchanged(current, next_state)
     before, after = _one_changed(current["items"], next_state["items"], "items")
-    mutable_fields = frozenset({"price", "reorderAt"})
+    mutable_fields = frozenset({"price", "reorderAt", "barcode", "nameMy", "category"})
     if _without(before, mutable_fields) != _without(after, mutable_fields):
         raise TrialValidationError(
-            "commerce.item.updated may change only price and reorderAt."
+            "commerce.item.updated may change only price, reorderAt, barcode, Burmese name, and category."
         )
 
     current_changes = _catalog_changes(current)
@@ -9450,6 +9520,15 @@ def _validate_item_updated(current: Mapping[str, Any], next_state: Mapping[str, 
         or change["nextPrice"] != after["price"]
         or change["previousReorderAt"] != before["reorderAt"]
         or change["nextReorderAt"] != after["reorderAt"]
+        or ("previousBarcode" in change and change["previousBarcode"] != before.get("barcode"))
+        or ("nextBarcode" in change and change["nextBarcode"] != after.get("barcode"))
+        or ("previousBarcode" not in change and before.get("barcode") != after.get("barcode"))
+        or ("previousNameMy" in change and change["previousNameMy"] != before.get("nameMy"))
+        or ("nextNameMy" in change and change["nextNameMy"] != after.get("nameMy"))
+        or ("previousNameMy" not in change and before.get("nameMy") != after.get("nameMy"))
+        or ("previousCategory" in change and change["previousCategory"] != before.get("category"))
+        or ("nextCategory" in change and change["nextCategory"] != after.get("category"))
+        or ("previousCategory" not in change and before.get("category") != after.get("category"))
     ):
         raise TrialValidationError(
             "catalog change values must match the exact item transition."

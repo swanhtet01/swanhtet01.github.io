@@ -78,10 +78,14 @@ test('unauthenticated launcher preserves managed-only access and hides browser-l
   }
 })
 
-test('one source policy declares exactly three active acquisition doors', () => {
+test('one source policy exposes Shop only and retains internal workspaces', () => {
   const before = JSON.stringify(manifest)
-  assert.deepEqual(activeProductContracts(manifest).map(p => p.id), ['shop', 'ecommerce', 'website'])
-  assert.deepEqual(activeSetupProductContracts.map(p => p.id), ['commerce', 'ecommerce', 'website'])
+  assert.deepEqual(manifest.productVisibility.activeProductIds, ['shop'])
+  assert.deepEqual(manifest.productVisibility.retainedOnlyProductIds, ['plant', 'website', 'ecommerce'])
+  assert.equal(manifest.productVisibility.retainedWorkspaceAccess, true)
+  assert.equal(manifest.productVisibility.deleteRetainedData, false)
+  assert.deepEqual(activeProductContracts(manifest).map(p => p.id), ['shop'])
+  assert.deepEqual(activeSetupProductContracts.map(p => p.id), ['commerce'])
   assert.equal(JSON.stringify(manifest), before)
   assert.deepEqual(Object.keys(productContracts), ['commerce', 'production', 'website', 'ecommerce'])
 })
@@ -115,10 +119,15 @@ test('saved Plant setup survives visibility projection byte-for-byte', () => {
 })
 
 test('generated public home and contact offer only active products', async () => {
-  const home = main(await html('index.html')), contact = main(await html('contact/index.html'))
-  assert.equal((home.match(/class="product-card-compact"/g)??[]).length, 3)
-  assert.equal((home.match(/class="product-card-flow"/g)??[]).length, 3)
-  assert.match(home, /Contact SuperMega/)
+  const homeDocument = await html('index.html')
+  const home = main(homeDocument), contact = main(await html('contact/index.html'))
+  assert.equal((home.match(/class="family-card/g)??[]).length, 1)
+  assert.equal((home.match(/class="family-link"/g)??[]).length, 1)
+  assert.match(home, /Shop for local businesses/)
+  assert.match(home, /Know what sold/)
+  assert.match(homeDocument, /href="\/contact\/">Contact<\/a>/)
+  assert.doesNotMatch(home, /\bSites\b|\bCommerce\b/)
+  assert.doesNotMatch(home, /Explore Sites|Explore Commerce|href="\/(?:website|ecommerce)\//)
   assert.doesNotMatch(home, /Plant|all four|href="[^\"]*(?:\/plant\/|product=plant)/)
   assert.match(contact, /<input type="hidden" name="product" value="guide" \/>/)
   assert.doesNotMatch(contact, /<select[^>]*name="product"/)
@@ -135,6 +144,16 @@ test('generated public home and contact offer only active products', async () =>
       assert.doesNotMatch(page, /class="home-contact product-action"/)
     }
     assert.doesNotMatch(page, /product=plant|href="\/plant\//)
+  }
+})
+
+test('internal Sites and Commerce routes preserve records without product capture or setup CTA', async () => {
+  for (const id of ['website', 'ecommerce']) {
+    const page = await html(id + '/index.html')
+    assert.match(page, /name="robots" content="noindex,follow"/)
+    assert.match(page, /not offered for new setup/)
+    assert.match(page, /Existing workspace records are preserved/)
+    assert.doesNotMatch(page, /class="platform-image|class="trade-card|Request assisted setup|Open (?:Website|Ecommerce)/)
   }
 })
 

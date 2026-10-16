@@ -1,12 +1,18 @@
 // Real product components with synthetic records and memory-only storage. Never publish this fixture.
 import { createRequire } from 'node:module'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { dirname, resolve } from 'node:path'
+import { dirname, isAbsolute, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const fromProject = (path) => resolve(projectRoot, path)
 const { build } = createRequire(fromProject('showroom/package.json'))('esbuild')
-const out = fromProject('.tmp/qa-workspaces')
+const requestedOutput = process.env.SUPERMEGA_QA_FIXTURE_OUTPUT_DIR
+const out = requestedOutput ? resolve(requestedOutput) : fromProject('.tmp/qa-workspaces')
+if (requestedOutput) {
+  const fromTemporaryRoot = relative(fromProject('.tmp'), out)
+  if (!fromTemporaryRoot || fromTemporaryRoot === '..' || fromTemporaryRoot.startsWith(`..${sep}`) || isAbsolute(fromTemporaryRoot))
+    throw new Error('qa_fixture_output_must_be_inside_tmp')
+}
 const galleryMode = process.argv.includes('--gallery')
 const sampleMode = process.argv.includes('--sample')
 const emptyMode = process.argv.includes('--empty')

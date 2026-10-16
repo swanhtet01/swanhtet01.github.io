@@ -225,7 +225,7 @@ test('UI persists checkout identity before commerce and only offers recorded-ord
   const source = readFileSync(new URL('../showroom/src/core/CoreApp.tsx', import.meta.url), 'utf8')
   const start = source.indexOf('function reviewCounterSale('), end = source.indexOf('function recordOrder(', start)
   const flow = source.slice(start, end)
-  assert.ok(flow.indexOf('await review.beforeCommit(order.id)') < flow.indexOf("await mutateCommerce('commerce.order.created'"))
+  assert.ok(flow.indexOf('await review.beforeCommit(order.id)') < flow.indexOf('await mutateCommerce(coreUi.o, action.commandId, proof,') )
   assert.ok(flow.includes('review.onCommitted(order.id)'))
   assert.ok(source.includes('recordedOrderIds.includes(checkoutOrderId)'))
   assert.ok(source.includes('await tickets.settled()'))

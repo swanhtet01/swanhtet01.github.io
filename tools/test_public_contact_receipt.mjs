@@ -90,13 +90,18 @@ function harness(responses, search = '', hash = '') {
   return { invalid: field => events.get('form:invalid')({ target: form.querySelector('[name="' + field + '"]') }), reset: () => form.reset(), fields, headings, calls, timers, windowEvents, historyCalls, location, changeProduct: value => { form.querySelector('[name="product"]').value = value; events.get('[name="product"]:change')() }, expire: () => { for (const callback of [...timers.values()]) callback() }, submit: () => handler({ preventDefault() {} }), resets: () => resets }
 }
 
-test('product-specific links prefill a private route value without a visible product selector', () => {
+test('only active public product links set product context; internal routes fall back to the general brief', () => {
   assert.doesNotMatch(html, /<select name="product"/)
+  const shop = harness([], '?product=shop&source=shop-brief', '#company=Example&goal=Prepare%20our%20shop')
+  assert.equal(shop.fields.get('[name="product"]').value, 'shop')
+  assert.equal(shop.headings.get('[data-contact-heading]').textContent, 'Ask us about Shop.')
+  assert.equal(shop.fields.get('[name="goal"]').value, 'Prepare our shop')
+  assert.equal(shop.calls.length, 0)
   for (const product of ['website', 'ecommerce']) {
     const state = harness([], `?product=${product}&source=${product}-brief`, '#company=Example&goal=Prepare%20our%20site')
-    assert.equal(state.fields.get('[name="product"]').value, product)
-    assert.equal(state.fields.get('[name="product"]').value, product)
-    assert.equal(state.headings.get('[data-contact-heading]').textContent, product === 'website' ? 'Ask us about Sites.' : 'Ask us about Commerce.')
+    assert.equal(state.fields.get('[name="product"]').value, 'guide')
+    assert.equal(state.fields.get('[name="template"]').value, '')
+    assert.equal(state.headings.get('[data-contact-heading]').textContent, 'Tell us what you need.')
     assert.equal(state.fields.get('[name="goal"]').value, 'Prepare our site')
     assert.equal(state.calls.length, 0)
   }
@@ -104,24 +109,28 @@ test('product-specific links prefill a private route value without a visible pro
 })
 
 test('prefilled message stays editable and does not claim setup is complete', () => {
-  const state = harness([], '?product=website', '#company=Example&goal=Prepare%20our%20website')
-  assert.equal(state.headings.get('[data-contact-heading]').textContent, 'Ask us about Sites.')
+  const state = harness([], '?product=shop', '#company=Example&goal=Prepare%20our%20shop')
+  assert.equal(state.headings.get('[data-contact-heading]').textContent, 'Ask us about Shop.')
   assert.equal(state.fields.get('[name="company"]').value, 'Example')
   assert.equal(state.calls.length, 0)
   assert.doesNotMatch(script, /Your setup is ready\./)
 })
 
-test('product handoffs prefill hidden context and product changes discard stale templates only', () => {
-  for (const product of ['shop', 'ecommerce', 'website']) {
-    const state = harness([], '?product=' + product + '&template=example-template')
-    assert.equal(state.fields.get('[name="product"]').value, product)
-    assert.equal(state.fields.get('[name="template"]').value, 'example-template')
-    state.fields.get('[name="company"]').value = 'Example business'
-    state.changeProduct(product === 'shop' ? 'website' : 'shop')
-    assert.equal(state.fields.get('[name="template"]').value, '')
-    assert.equal(state.fields.get('[name="company"]').value, 'Example business')
-    assert.equal(state.fields.get('[name="goal"]').value, 'Please build my business website')
-    assert.equal(state.calls.length, 0)
+test('Shop handoffs preserve valid context and unsupported internal routes cannot set product or template', () => {
+  const state = harness([], '?product=shop&template=example-template')
+  assert.equal(state.fields.get('[name="product"]').value, 'shop')
+  assert.equal(state.fields.get('[name="template"]').value, 'example-template')
+  state.fields.get('[name="company"]').value = 'Example business'
+  state.changeProduct('guide')
+  assert.equal(state.fields.get('[name="template"]').value, '')
+  assert.equal(state.fields.get('[name="company"]').value, 'Example business')
+  assert.equal(state.fields.get('[name="goal"]').value, 'Please build my business website')
+  assert.equal(state.calls.length, 0)
+  for (const product of ['website', 'ecommerce']) {
+    const internal = harness([], `?product=${product}&template=example-template`)
+    assert.equal(internal.fields.get('[name="product"]').value, 'guide')
+    assert.equal(internal.fields.get('[name="template"]').value, '')
+    assert.equal(internal.headings.get('[data-contact-heading]').textContent, 'Tell us what you need.')
   }
   for (const search of ['?product=unknown&template=example', '?product=guide&template=example', '?product=website&template=' + 'a'.repeat(121), '?product=website&template=%3Cbad%3E']) {
     assert.equal(harness([], search).fields.get('[name="template"]').value, '')
@@ -171,8 +180,8 @@ test('navigation warning exists only during pending or unconfirmed delivery', as
   await rejected.submit()
   assert.equal(rejected.windowEvents.size, 0)
 })
-test('three service-first doors retain product identity through uncertain delivery and confirmation', async () => {
-  for (const product of ['website', 'ecommerce', 'shop']) {
+test('Shop handoff retains identity through uncertain delivery and confirmation', async () => {
+  for (const product of ['shop']) {
     const state = harness([new Error('connection lost'), { body: receipt }], '?product=' + product + '&source=' + product + '-preview')
     assert.equal(state.calls.length, 0, 'opening a door does not send a brief')
     state.fields.get('[name="company"]').value = 'Synthetic service business'
@@ -348,7 +357,7 @@ test('ambiguous and rejected responses retain brief and reuse the exact retry ke
 })
 
 
-test('actual business brief handoff preserves Myanmar text and reference through contact retry', async () => {
+test('legacy internal product brief handoff preserves Myanmar text while contact stays on the general route', async () => {
   const source = readFileSync('showroom/src/products/AssistedDeliveryScope.tsx', 'utf8')
   const submit = source.match(/<form onSubmit=\{event => \{([\s\S]*?)\n    \}\}>/)?.[1]
   assert.ok(submit, 'actual business brief submit handler found')
@@ -368,12 +377,12 @@ test('actual business brief handoff preserves Myanmar text and reference through
     assert.equal(state.calls.length, 0)
     assert.equal(state.fields.get('[name="company"]').value, company.trim())
     assert.equal(state.fields.get('[name="goal"]').value, goal)
-    assert.equal(state.fields.get('[name="product"]').value, product)
+    assert.equal(state.fields.get('[name="product"]').value, 'guide')
     await state.submit()
     const payload = JSON.parse(state.calls[0].body)
     assert.equal(payload.company, company.trim())
     assert.equal(payload.goal, goal)
-    assert.equal(payload.product, product)
+    assert.equal(payload.product, 'guide')
     await state.submit()
     assert.equal(state.calls[1].body, state.calls[0].body)
     assert.equal(state.resets(), 1)
