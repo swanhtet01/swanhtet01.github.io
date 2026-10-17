@@ -26,6 +26,8 @@ import { recordBehaviorSignal } from './behavior-trail'
 import { downloadBlob } from './download-file'
 import { emitMetric } from '../analytics/metrics-collector'
 import { BarcodeScanButton } from './BarcodeScanButton'
+import { ShopMmkCashCount } from './ShopMmkCashCount'
+import { isShopCashSettlementMethod } from './shop-mmk-cash-count'
 import { prepareManagedFirstCatalog } from './shop-managed-first-catalog'
 import { applyStockCountScan } from './shop-stock-count-scan'
 import { unmatchedBarcodeForCreation } from './shop-unmatched-scan'
@@ -7786,6 +7788,7 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
               <label>Variance owner<input disabled={commerceControlsDisabled} maxLength={80} onChange={(event) => update({ varianceOwner: event.target.value })} placeholder="Responsible person" required value={line.varianceOwner} /></label>
               <label>Review reason<input disabled={commerceControlsDisabled} maxLength={240} onChange={(event) => update({ varianceReason: event.target.value })} placeholder="Why the count differs and what happens next" required value={line.varianceReason} /></label>
             </div> : null}
+            {isShopCashSettlementMethod(line.paymentMethod) ? <ShopMmkCashCount disabled={commerceControlsDisabled} onApply={(totalMmk) => update({ countedMmk: String(totalMmk), ...(totalMmk === expectedMmk ? { varianceOwner: '', varianceReason: '' } : {}) })} /> : null}
           </div>
         }) : <p className="form-notice">No reconciled payments are waiting. Save a zero-value close only if the business date still needs an accountable snapshot.</p>}
         <p className="panel-copy">Expected amounts come from completed, reconciled orders. Counted amounts come from the cashier. A variance is retained with its owner and reason; SuperMega does not move money or post externally.</p>
