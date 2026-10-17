@@ -1098,6 +1098,10 @@ type ShopCounterReview = {
   onCommitted: (orderId: string) => void
 }
 
+const SHOP_COUNTER_PAYMENT_METHODS = ['Cash', 'KBZPay', 'WavePay', 'AYA Pay', 'MMQR'] as const
+const SHOP_COUNTER_QUICK_PAYMENTS = [SHOP_COUNTER_PAYMENT_METHODS[0], SHOP_COUNTER_PAYMENT_METHODS[1]] as const
+const SHOP_COUNTER_OTHER_PAYMENTS = [SHOP_COUNTER_PAYMENT_METHODS[2], SHOP_COUNTER_PAYMENT_METHODS[3], SHOP_COUNTER_PAYMENT_METHODS[4]] as const
+
 type ShopRecordStatus = {
   actionLabel: string | null
   badge: string
@@ -1179,6 +1183,7 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
   })
   const ticketSnapshot = useSyncExternalStore(tickets.subscribe, tickets.getSnapshot)
   const { cart, customer, payment, outcome, parked, activeLabel, checkoutOrderId } = ticketSnapshot.state
+  const [morePaymentOptions, setMorePaymentOptions] = useState(() => SHOP_COUNTER_OTHER_PAYMENTS.includes(payment as typeof SHOP_COUNTER_OTHER_PAYMENTS[number]))
   const [ticketLabel, setTicketLabel] = useState('')
   const [ticketsOpen, setTicketsOpen] = useState(false)
   useEffect(() => { tickets.activate(); return () => tickets.deactivate() }, [tickets])
@@ -1190,6 +1195,10 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
   }
   const setCustomer = (value: string) => updateBasket({ customer: value })
   const setPayment = (value: string) => updateBasket({ payment: value })
+  function choosePaymentMethod(value: string) {
+    setPayment(value)
+    setMorePaymentOptions(SHOP_COUNTER_OTHER_PAYMENTS.some((method) => method === value))
+  }
   const setOutcome = (value: CounterBasket['outcome']) => updateBasket({ outcome: value })
   const [query, setQuery] = useState(initialQuery)
   const [catalogPage, setCatalogPage] = useState(0)
@@ -1304,6 +1313,31 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
   function addSearchMatch(event: KeyboardEvent<HTMLInputElement>) {
     if (event.key !== 'Enter' || !normalizedQuery) return
     event.preventDefault()
+    const codeMatch = resolveCommerceItemByScanCode(items, normalizedQuery)
+    if (codeMatch.kind === 'ambiguous') {
+      addScannedValue(query, 'keyboard')
+      return
+    }
+    if (codeMatch.kind === 'matched') {
+      if (addScannedValue(query, 'keyboard')) setCatalogPage(0)
+      return
+    }
+    const exactNameMatches = items.filter((item) => [item.name, item.nameMy, item.variant]
+      .some((label) => label?.trim().toLocaleLowerCase() === normalizedQuery))
+    if (exactNameMatches.length === 1) {
+      const match = exactNameMatches[0]
+      if (!addItem(match)) return
+      setScanFeedback(`${match.nameMy?.trim() || match.name} added to this sale.`)
+      setQuery('')
+      setUnmatchedBarcode('')
+      setCatalogPage(0)
+      return
+    }
+    if (exactNameMatches.length > 1) {
+      setScanFeedback('More than one product has this name. Choose one from the list.')
+      setUnmatchedBarcode('')
+      return
+    }
     if (addScannedValue(query, 'keyboard')) setCatalogPage(0)
   }
 
@@ -1319,6 +1353,7 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
   function clearSale() {
     tickets.dispatch({ kind: 'save', basket: emptyCounterBasket() })
     setCartOpen(false)
+    setMorePaymentOptions(false)
   }
 
   function reviewSale(event: MouseEvent<HTMLButtonElement>) {
@@ -1365,7 +1400,7 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
               <span aria-label="Record safety" className="shop-next-compact shop-record-status-counter" title={recordStatus.detail}>{recordStatus.badge} · {recordStatus.label}<small className="sr-only">{recordStatus.detail} · {operatorLabel || 'Cashier set at review'}</small></span>
             </nav>
           </div>
-          <div className="shop-item-search-row"><label className="shop-item-search"><span className="sr-only">Find or scan an item</span><input ref={saleSearchRef} autoComplete="off" aria-keyshortcuts="/" onChange={(event) => { setQuery(event.target.value); setCatalogPage(0); setScanFeedback(''); setUnmatchedBarcode('') }} onKeyDown={addSearchMatch} placeholder="Search, SKU or barcode" type="search" value={query} /><kbd aria-hidden="true" className="shop-search-shortcut">/</kbd></label><BarcodeScanButton continuous continuousMode="sale" label="Scan products into this sale" onDetected={addCameraScan} /></div>
+          <div className="shop-item-search-row"><label className="shop-item-search"><span className="sr-only">Find or scan an item</span><input ref={saleSearchRef} autoComplete="off" aria-keyshortcuts="/" onChange={(event) => { setQuery(event.target.value); setCatalogPage(0); setScanFeedback(''); setUnmatchedBarcode('') }} onKeyDown={addSearchMatch} placeholder="Search products or scan barcode" type="search" value={query} /><kbd aria-hidden="true" className="shop-search-shortcut">/</kbd></label><BarcodeScanButton continuous continuousMode="sale" label="Scan products into this sale" onDetected={addCameraScan} /></div>
           {categories.length + Number(hasUncategorized) > 1 ? <nav aria-label="Product categories" className="shop-counter-category-filter">
             <button aria-pressed={categoryFilter.kind === 'all'} onClick={() => { setCategoryFilter({ kind: 'all' }); setCatalogPage(0) }} type="button">All items</button>
             {categories.map(([key, label]) => <button aria-pressed={categoryFilter.kind === 'category' && categoryFilter.value === key} key={key} onClick={() => { setCategoryFilter({ kind: 'category', value: key }); setCatalogPage(0) }} type="button">{label}</button>)}
@@ -1405,7 +1440,7 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
             hidden all compute the identical name and description, and only the plain
             one leaves a traversable StaticText behind. */}
         <span aria-hidden="true" className="sr-only" id="shop-tile-action">{bi('Add to this sale')}</span>
-        {visibleItems.length ? <><div aria-hidden="true" className="shop-counter-column-head"><span>Product</span><span>Price</span><span>Stock</span><span>Sale</span></div><div className="shop-item-grid">
+        {visibleItems.length ? <div className="shop-item-grid">
           {visibleItems.map(({ item, index }, tileIndex) => {
             const quantity = cart[item.sku] ?? 0
             const artKind = index % 5
@@ -1423,10 +1458,10 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
             return <button aria-describedby={describedBy} aria-labelledby={labelledBy} className="shop-product-tile" data-art={String(artKind)} data-empty={item.onHand < 1 ? 'true' : 'false'} disabled={item.onHand < 1 || quantity >= item.onHand} key={item.sku} onClick={() => addItem(item)} type="button">
               <ProductPhoto className="shop-product-art shop-product-photo" fallback={<ShopProductArtwork kind={artKind} />} scope={productImageScope} sku={item.sku} />
               <span className="shop-product-copy"><span className="shop-product-name"><strong id={nameId}>{item.name}</strong>{item.nameMy ? <small className="shop-product-my" id={myId} lang="my">{item.nameMy}</small> : null}{item.variant ? <small id={variantId}>{item.variant}</small> : null}</span><b id={priceId}>{formatMoney(item.price)}</b><small className={item.onHand <= item.reorderAt ? 'is-low' : ''} id={stockId}>{item.onHand ? `${item.onHand} in stock` : bi('Out of stock')}</small></span>
-              {quantity ? <span className="shop-product-quantity" aria-label={`${quantity} in sale`} id={quantityId}>{quantity}</span> : <span aria-hidden="true" className="shop-product-add">Add</span>}
+              {quantity ? <span className="shop-product-quantity" aria-label={`${quantity} in sale`} id={quantityId}>{quantity}</span> : null}
             </button>
           })}
-        </div></> : <Empty>{items.length
+        </div> : <Empty>{items.length
           ? bi('No matching item. Search by name or SKU.')
           : <>Your catalog is empty. <Link className="text-link" to="/shop/?tab=inventory#shop-catalog-create">Add a product</Link> or <Link className="text-link" to="/shop/?tab=inventory#shop-catalog-import">import a CSV</Link>.</>}</Empty>}
       </section>
@@ -1465,7 +1500,7 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
               never opted in sees nothing here. Balance is the pure projection in
               shop-loyalty.ts; showing it changes no record. */}
           {loyaltyPoints?.has(customer.trim()) && customer.trim() !== 'Guest' ? <p className="shop-loyalty-chip">{customer.trim()} · {shopLoyaltyDisplayPoints(loyaltyPoints.get(customer.trim()) ?? 0).toLocaleString()} pts</p> : null}
-          <fieldset><legend>{bi('Payment')}</legend><div className="shop-payment-options">{['Cash', 'KBZPay', 'WavePay', 'AYA Pay', 'MMQR'].map((method) => <button aria-pressed={payment === method} key={method} onClick={() => setPayment(method)} type="button">{method}</button>)}</div></fieldset>
+          <fieldset><legend>{bi('Payment')}</legend><div className="shop-payment-options">{SHOP_COUNTER_QUICK_PAYMENTS.map((method) => <button aria-pressed={payment === method} key={method} onClick={() => choosePaymentMethod(method)} type="button">{method}</button>)}<button aria-controls="shop-payment-more" aria-expanded={morePaymentOptions} className={SHOP_COUNTER_OTHER_PAYMENTS.some((method) => method === payment) ? 'shop-payment-more has-selected-payment' : 'shop-payment-more'} onClick={() => setMorePaymentOptions((current) => !current)} type="button">{SHOP_COUNTER_OTHER_PAYMENTS.find((method) => method === payment) ?? bi('More')}</button></div>{morePaymentOptions ? <div className="shop-payment-more-options" id="shop-payment-more">{SHOP_COUNTER_OTHER_PAYMENTS.map((method) => <button aria-pressed={payment === method} key={method} onClick={() => choosePaymentMethod(method)} type="button">{method}</button>)}</div> : null}</fieldset>
           {/* S2 merchant payment QR: display-only (see payment-qr-store.ts). At a Myanmar
               counter the customer pays a non-cash sale by scanning the owner's static
               merchant QR and typing the amount, so the affordance lives exactly here —

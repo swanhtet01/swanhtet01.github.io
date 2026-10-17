@@ -15,10 +15,10 @@ test('base counter quantity controls support tablet touch without a phone breakp
   assert.match(buttons, /min-height: 44px;/)
   assert.match(css, /\.shop-quantity-stepper button:disabled \{[^}]*cursor: not-allowed;/)
   assert.doesNotMatch(css, /\.shop-quantity-stepper button \{[^}]*(?:width: 28px|min-height: 30px)/)
-  assert.match(app, /className="shop-product-add">Add<\/span>/)
-  const addCue = css.match(/\.shop-product-add \{([^}]+)\}/)?.[1]
-  assert.match(addCue, /min-width: 44px;/)
-  assert.match(addCue, /text-transform: uppercase;/)
+  assert.doesNotMatch(app, /className="shop-product-add">Add<\/span>/)
+  const productTiles = css.match(/\.shop-product-tile \{[^}]+\}/g) ?? []
+  assert.ok(productTiles.some(rule => /min-height: 11\.25rem;/.test(rule)), 'the full product card remains a generous touch target')
+  assert.match(app, /className="shop-product-tile"[^\n]*onClick=\{\(\) => addItem\(item\)\}/)
   const paymentButtons = css.match(/\.shop-payment-options button \{([^}]+)\}/)?.[1]
   const customerInput = css.match(/\.shop-sale-details label input \{([^}]+)\}/)?.[1]
   assert.match(paymentButtons, /min-height: 44px;/)
