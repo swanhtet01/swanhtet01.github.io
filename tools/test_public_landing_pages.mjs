@@ -354,7 +354,7 @@ for (const [route, html] of [['/', home], ['/shop/', shopLanding], ...activeIds.
   const routeManifestProduct = routeProduct ? manifest.customerProducts.find(product => product.id === routeProduct) : null
   check(countOccurrences(body, 'href="https://app.supermega.dev/login"') === 1, `one_login:${route}`)
   const carouselCount = Number((productScreens[routeProduct]?.length || 0) > 1)
-  const expectedLinks = route === '/' ? 16 : route === '/shop/' ? 14 : 6 + Number(routeManifestProduct?.status === 'available-in-app') + (productScreens[routeProduct]?.length || 0)
+  const expectedLinks = route === '/' ? 20 : route === '/shop/' ? 14 : 6 + Number(routeManifestProduct?.status === 'available-in-app') + (productScreens[routeProduct]?.length || 0)
   check((body.match(/<a\b/g) || []).length === expectedLinks, `marketing_link_surface:${route}`)
   const expectedButtons = route === '/' ? 0 : carouselCount * 2
   check((body.match(/<button\b/g) || []).length === expectedButtons, `marketing_buttons:${route}`)
