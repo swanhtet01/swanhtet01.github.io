@@ -24,6 +24,10 @@ const stockCountScanSource = readFileSync(resolve(root, 'showroom', 'src', 'core
 const strippedStockCountScan = stripTypeScriptTypes(stockCountScanSource, { mode: 'strip' })
 const stockCountScanModule = await import(`data:text/javascript;base64,${Buffer.from(strippedStockCountScan).toString('base64')}`)
 const { applyStockCountScan } = stockCountScanModule
+const purchaseReceiptScanSource = readFileSync(resolve(root, 'showroom', 'src', 'core', 'shop-purchase-receipt-scan.ts'), 'utf8')
+const strippedPurchaseReceiptScan = stripTypeScriptTypes(purchaseReceiptScanSource, { mode: 'strip' })
+const purchaseReceiptScanModule = await import(`data:text/javascript;base64,${Buffer.from(strippedPurchaseReceiptScan).toString('base64')}`)
+const { applyPurchaseReceiptScan } = purchaseReceiptScanModule
 
 let checks = 0
 
@@ -91,8 +95,8 @@ for (const forbidden of ['fetch(', 'XMLHttpRequest', 'sendBeacon', 'localStorage
 
 check(coreApp.includes("import { BarcodeScanButton } from './BarcodeScanButton'"), 'core_app_barcode_import_missing')
 // Managed setup always renders the same catalogForm; optional template setup follows it.
-// Six source sites cover the catalog, sale, stock count, and Plant workflows.
-check(count(coreApp, '<BarcodeScanButton') === 6, 'barcode_call_site_count_changed')
+// Seven source sites cover catalog, sale, supplier receipt, stock count, and Plant workflows.
+check(count(coreApp, '<BarcodeScanButton') === 7, 'barcode_call_site_count_changed')
 const catalogFormStart = coreApp.indexOf('const catalogForm = <form')
 const catalogFormEnd = coreApp.indexOf('</form>', catalogFormStart)
 check(catalogFormStart >= 0 && catalogFormEnd > catalogFormStart, 'barcode_shared_catalog_form_missing')
@@ -188,6 +192,23 @@ const overflowStockScan = applyStockCountScan({ sku: 'RICE-01', stockUnitId: '',
 check(overflowStockScan.status === 'count-overflow', 'unsafe_count_overflow_must_fail_closed')
 check(!/fetch\(|XMLHttpRequest|mutateCommerce|countCommerceStock|queueAction\(/.test(stockCountScanSource), 'stock_count_scan_helper_must_not_write_or_call_network')
 check(coreApp.includes('label="Scan a product barcode for this stock count" onDetected={selectStockCountBarcode}'), 'stock_count_scanner_call_site_missing')
+check(coreApp.includes('label="Scan a received item with the camera" onDetected={selectPurchaseReceiptBarcode}'), 'purchase_receipt_camera_scanner_call_site_missing')
+check(coreApp.includes("event.key !== 'Enter'") && coreApp.includes('selectPurchaseReceiptBarcode(event.currentTarget.value)'), 'purchase_receipt_keyboard_wedge_handler_missing')
+check(coreApp.includes("current.purchaseOrderId === purchaseOrderDraft.purchaseOrderId") && coreApp.includes('quantity: String(result.quantity)'), 'purchase_receipt_scan_must_only_update_current_receipt_draft')
+check(coreApp.includes('Review the receipt before stock changes.'), 'purchase_receipt_scan_must_not_apply_stock_before_review')
+const receiptItems = [{ sku: 'RICE-01', name: 'Rice 25 kg' }, { sku: 'SOAP-02', name: 'Soap bar' }]
+const receiptScan = (rawValue, currentQuantity = '', maxQuantity = 4, items = receiptItems) => applyPurchaseReceiptScan({
+  rawValue, selectedSku: 'RICE-01', currentQuantity, maxQuantity, items,
+})
+check(receiptScan(' rice-01 ').status === 'added' && receiptScan('rice-01').quantity === 1, 'purchase_receipt_scan_must_exact_match_case_insensitive_sku')
+check(receiptScan('RICE-01', '3', 4).status === 'added' && receiptScan('RICE-01', '3', 4).quantity === 4, 'purchase_receipt_scan_must_add_last_ordered_unit')
+check(receiptScan('RICE-01', '4', 4).status === 'at-limit' && receiptScan('RICE-01', '4', 4).quantity === undefined, 'purchase_receipt_scan_must_not_overreceive')
+check(receiptScan('SOAP-02').status === 'wrong-item', 'purchase_receipt_scan_must_reject_other_order_item')
+check(receiptScan('UNKNOWN').status === 'not-found' && receiptScan('   ').status === 'empty', 'purchase_receipt_scan_must_handle_unknown_and_empty_codes')
+check(receiptScan('RICE-01', '2x').status === 'invalid-quantity', 'purchase_receipt_scan_must_preserve_invalid_manual_quantity')
+check(receiptScan('RICE-01', '', 0).status === 'at-limit', 'purchase_receipt_scan_must_block_when_no_units_remain')
+check(receiptScan('RICE-01', '', 4, [...receiptItems, { sku: 'rice-01', name: 'Duplicate code' }]).status === 'ambiguous', 'purchase_receipt_scan_must_fail_closed_on_duplicate_sku')
+check(!/fetch\(|XMLHttpRequest|mutateCommerce|receiveCommercePurchaseOrder|queueAction\(/.test(purchaseReceiptScanSource), 'purchase_receipt_scan_helper_must_not_write_or_call_network')
 check(selectStockCountBarcode.includes('candidate.sku.toLowerCase() === code.toLowerCase()')
   && selectStockCountBarcode.includes('balances.length === 1')
   && selectStockCountBarcode.includes('balances.find((candidate) => candidate.stockUnitId === stockCountDraft?.stockUnitId')
