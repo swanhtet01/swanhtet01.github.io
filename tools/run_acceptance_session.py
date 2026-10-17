@@ -43,7 +43,7 @@ def run():
     registrations = []
     alphabet = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
     claims = ['SM-' + ''.join(secrets.choice(alphabet) for _ in range(4)) + '-' +
-              ''.join(secrets.choice(alphabet) for _ in range(4)) for _ in range(3)]
+              ''.join(secrets.choice(alphabet) for _ in range(4)) for _ in range(2)]
     with temporary_users(api, project=PROJECT, approved=True, run_id=run_id) as users:
         actors = [user['id'] for user in users]
         try:

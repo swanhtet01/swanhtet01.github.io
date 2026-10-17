@@ -12,12 +12,16 @@ from uuid import UUID, uuid4
 from tools.acceptance_auth_fixture import PROJECT, require_authority
 from supermega_runtime.runtime import reduce_trial_state
 from supermega_runtime.trial_store import (
-    PostgresTrialStore, TrialPrincipal, TrialNotReadyError, self_serve_workspace_id,
+    ACTIVATION_PRODUCT_ENTITLEMENTS, PostgresTrialStore, TrialPrincipal,
+    TrialNotReadyError, self_serve_workspace_id,
 )
 from tests.test_commerce_runtime import catalog_state, action_evidence
 from tests.test_website_runtime import _state as website_state, _command as website_command
 
-PRODUCTS = ('commerce', 'website', 'ecommerce')
+# Customer acceptance is intentionally Shop-only. Shop is the customer
+# entitlement backed by the shared commerce surface; Website and Ecommerce are
+# not provisioned by this launch fixture.
+PRODUCTS = ('shop',)
 
 
 def require_runtime_target(runtime_url):
@@ -56,7 +60,7 @@ def exercise_workspaces(api, users, runtime_url, claims, *, project, approved,
                         register_cleanup, store_factory=PostgresTrialStore):
     require_authority(project, approved)
     require_runtime_target(runtime_url)
-    if len(users) != 2 or len(claims) != 3 or len(set(claims)) != 3:
+    if len(users) != 2 or len(claims) != len(users) or len(set(claims)) != len(claims):
         raise ValueError('acceptance_fixture_count_invalid')
     if users[0]['id'] == users[1]['id']:
         raise ValueError('acceptance_distinct_users_required')
@@ -67,41 +71,51 @@ def exercise_workspaces(api, users, runtime_url, claims, *, project, approved,
     def principal(workspace, index=0):
         return TrialPrincipal(workspace_id=workspace, actor_id=users[index]['id'],
             actor_kind='human', authenticated=True, session_id=sessions[index], identity_provider='supabase')
-    for product, claim in zip(PRODUCTS, claims):
+    workspaces = set()
+    for owner_index, claim in enumerate(claims):
         require_authority(project, approved)
+        product = PRODUCTS[0]
+        self_serve_product = ACTIVATION_PRODUCT_ENTITLEMENTS[product]
         workspace = self_serve_workspace_id(claim)
-        # Register deterministic ID BEFORE any write, including ambiguous commits.
-        register_cleanup(workspace, users[0]['id'])
-        created = store().create_self_serve_workspace(actor_id=users[0]['id'],
-            claim_code=claim, business_name='Synthetic acceptance ' + product,
-            product=product, session_id=sessions[0], identity_provider='supabase')
+        if workspace in workspaces:
+            raise ValueError('acceptance_distinct_workspaces_required')
+        workspaces.add(workspace)
+        owner = users[owner_index]
+        # Register the deterministic ID and its actual owner BEFORE any write,
+        # including an ambiguous commit.
+        register_cleanup(workspace, owner['id'])
+        created = store().create_self_serve_workspace(actor_id=owner['id'],
+            claim_code=claim, business_name='Synthetic acceptance Shop',
+            product=self_serve_product, session_id=sessions[owner_index], identity_provider='supabase')
         if created.workspace_id != workspace:
             raise RuntimeError('acceptance_workspace_identity_mismatch')
-        surface = 'website' if product == 'website' else 'commerce'
-        payload = payload_for(product)
+        surface = self_serve_product
+        payload = payload_for(self_serve_product)
         command = dict(command_id=str(uuid4()), surface=surface,
             event_type=surface + '.workspace.initialized', expected_version=0, payload=payload)
-        written = store().apply_command(principal(workspace), **command)
-        reloaded = store().get_state(principal(workspace), surface)
+        written = store().apply_command(principal(workspace, owner_index), **command)
+        reloaded = store().get_state(principal(workspace, owner_index), surface)
         if reloaded.version != written.version or reloaded.state != payload['state']:
             raise RuntimeError('acceptance_reload_mismatch')
-        replay = store().apply_command(principal(workspace), **command)
+        replay = store().apply_command(principal(workspace, owner_index), **command)
         if not replay.idempotent_replay or replay.version != written.version:
             raise RuntimeError('acceptance_retry_not_idempotent')
+        other_index = 1 - owner_index
         for operation in ('read', 'write'):
             try:
                 if operation == 'read':
-                    store().get_state(principal(workspace, 1), surface)
+                    store().get_state(principal(workspace, other_index), surface)
                 else:
-                    store().apply_command(principal(workspace, 1), **command)
+                    store().apply_command(principal(workspace, other_index), **command)
             except TrialNotReadyError as error:
                 if error.reasons != ('membership_ready',):
                     raise RuntimeError('acceptance_denial_not_proven') from None
             else:
-                raise RuntimeError('acceptance_cross_user_' + operation + '_allowed')
-        unchanged = store().get_state(principal(workspace), surface)
+                raise RuntimeError('acceptance_cross_tenant_' + operation + '_allowed')
+        unchanged = store().get_state(principal(workspace, owner_index), surface)
         if unchanged.state != reloaded.state or unchanged.version != reloaded.version:
             raise RuntimeError('acceptance_denial_changed_state')
-        results.append({'product': product, 'save_reload': True, 'idempotent_retry': True,
-                        'cross_user_read_denied': True, 'cross_user_write_denied': True})
+        results.append({'product': product, 'surface': surface, 'save_reload': True,
+                        'idempotent_retry': True, 'cross_tenant_read_denied': True,
+                        'cross_tenant_write_denied': True})
     return {'scope': 'hosted_database_runtime', 'browser_acceptance': False, 'products': results}
