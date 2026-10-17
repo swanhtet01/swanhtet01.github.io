@@ -3,11 +3,11 @@
   "classification": "candidate_only_local_real_component_synthetic",
   "publicationReady": false,
   "captureMode": "clean-commit-review",
-  "captureInputsSha256": "6857e1de3c937a18f895f78bd29458da222fd4db367228d06e66a12794a533a6",
+  "captureInputsSha256": "99d005a8fff3d15418f1c8aa559bce494804cf2044d4d0e705506de176568af3",
   "sourceHasLocalChanges": false,
   "captureHarnessHasLocalChanges": false,
-  "sourceCommit": "e46981d7657b7b57a7a1945df7afa0ffa5ca0699",
-  "showroomTree": "d9daefc1976325885dd4dc6cbdf0ab1bddb8ceae",
+  "sourceCommit": "38506346c207a57475f3a3390186f0141913c8ae",
+  "showroomTree": "d8ec715b4544da21e5d21d8c0a7e96ac3a77a9c4",
   "deniedExternal": 0,
   "fulfilledSyntheticMedia": 3,
   "sampleMediaDigests": [
@@ -41,13 +41,13 @@
       "loadedImages": 0
     },
     {
-      "file": "actual-shop-first-run.png",
-      "width": 1440,
-      "height": 900,
-      "sha256": "dace4df3647e55143be66e4b40cf76144ed8250e993fa4ca453aca4e773664ad",
+      "file": "actual-shop-today-mobile.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "359b81c0605c14e154c34579745a37e2c9252beab873ddf448dc8d03cc3f2455",
       "fixturePath": "/shop/",
       "routeState": "today",
-      "visibleSelector": ".shop-first-product-card",
+      "visibleSelector": ".shop-today-module",
       "loadedImages": 0
     },
     {
@@ -68,27 +68,6 @@
       "fixturePath": "/shop/",
       "routeState": "counter",
       "visibleSelector": ".shop-current-sale",
-      "loadedImages": 0
-    },
-    {
-      "file": "actual-shop-order-record.png",
-      "width": 1440,
-      "height": 900,
-      "sha256": "6425bf8577e2d9e5ed06aa6aafd6cdde82f85828dd9a7cebad271fc421071f62",
-      "fixturePath": "/shop/",
-      "routeState": "counter",
-      "visibleSelector": "dialog.receipt-dialog[open]",
-      "loadedImages": 0,
-      "recordKind": "paid_order_record_not_customer_receipt"
-    },
-    {
-      "file": "actual-shop-today-mobile.png",
-      "width": 390,
-      "height": 844,
-      "sha256": "359b81c0605c14e154c34579745a37e2c9252beab873ddf448dc8d03cc3f2455",
-      "fixturePath": "/shop/",
-      "routeState": "today",
-      "visibleSelector": ".shop-today-module",
       "loadedImages": 0
     },
     {
@@ -129,86 +108,6 @@
       "fixturePath": "/shop/",
       "routeState": "inventory",
       "visibleSelector": ".shop-stock-module",
-      "loadedImages": 0
-    },
-    {
-      "file": "actual-sites-editor.png",
-      "width": 1440,
-      "height": 900,
-      "sha256": "ab6ba8e1a3d307e7521c30b06566d472e2e1ac3bf0a9fbf907a3697170d2c2c9",
-      "fixturePath": "/workspaces/",
-      "routeState": "/website/",
-      "visibleSelector": "[data-content-section=\"hero\"]",
-      "loadedImages": 3
-    },
-    {
-      "file": "actual-sites-editor-mobile.png",
-      "width": 390,
-      "height": 844,
-      "sha256": "5bc211b50e254e33bb8a16f2621930307c4b44bc6de6f06c3982dc451fc150de",
-      "fixturePath": "/workspaces/",
-      "routeState": "/website/",
-      "visibleSelector": "[data-content-section=\"hero\"]",
-      "loadedImages": 3
-    },
-    {
-      "file": "actual-sites-inquiries.png",
-      "width": 1440,
-      "height": 900,
-      "sha256": "ace434c1d6e743df559f15a9f9c77bafc0d3681cd0d148dbdc2fb17bbbd95c8d",
-      "fixturePath": "/workspaces/",
-      "routeState": "/website/?view=inquiries",
-      "visibleSelector": ".website-inquiry-detail",
-      "loadedImages": 0
-    },
-    {
-      "file": "actual-sites-inquiries-mobile.png",
-      "width": 390,
-      "height": 844,
-      "sha256": "00795847e06788dc2f9dfbed8dc80ef60ecd00d226b0b1c636c5fb2f7cd66e85",
-      "fixturePath": "/workspaces/",
-      "routeState": "/website/?view=inquiries",
-      "visibleSelector": ".website-inquiry-detail",
-      "loadedImages": 0
-    },
-    {
-      "file": "actual-commerce-catalog.png",
-      "width": 1440,
-      "height": 900,
-      "sha256": "0f8e9c99e437fdd69d05bc47f7b5bccc1a04713fff64317b5b85a290e5d43c76",
-      "fixturePath": "/workspaces/",
-      "routeState": "/ecommerce/?view=preview&workspace=1",
-      "visibleSelector": ".storefront-grid",
-      "loadedImages": 3
-    },
-    {
-      "file": "actual-commerce-catalog-mobile.png",
-      "width": 390,
-      "height": 844,
-      "sha256": "bfb7098c1abeab99a9f4cba027662349b600219b3861406d210d456a9a3fd677",
-      "fixturePath": "/workspaces/",
-      "routeState": "/ecommerce/?view=preview&workspace=1",
-      "visibleSelector": ".storefront-grid",
-      "loadedImages": 3
-    },
-    {
-      "file": "actual-commerce-order-request.png",
-      "width": 1440,
-      "height": 900,
-      "sha256": "7ee68de4c88b99ebce0555bf99a7fd1704439a31e5513aff5b9e759a612a6b43",
-      "fixturePath": "/workspaces/",
-      "routeState": "/ecommerce/?view=preview&workspace=1",
-      "visibleSelector": ".ecommerce-quote-receipt[data-current=\"true\"]",
-      "loadedImages": 0
-    },
-    {
-      "file": "actual-commerce-order-request-mobile.png",
-      "width": 390,
-      "height": 844,
-      "sha256": "e9083b292ec4b2f586d1218ab91042ddc4cd2da6282dd2fc61b02033fa1eaf18",
-      "fixturePath": "/workspaces/",
-      "routeState": "/ecommerce/?view=preview&workspace=1",
-      "visibleSelector": ".ecommerce-quote-receipt[data-current=\"true\"]",
       "loadedImages": 0
     }
   ]
