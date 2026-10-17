@@ -1,12 +1,12 @@
 # SuperMega Supergoal
 
-Version: 1.4.27
+Version: 1.4.28
 Owner: Swan Htet, Founder
 Maintainer: CTO, sole integration writer
-Updated: 2026-10-16
+Updated: 2026-10-17
 Status: ACTIVE — implementation and acceptance in progress; not production-ready.
 
-## Current checkpoint — 16 October
+## Current checkpoint — 17 October
 
 Customer-managed launch access is **Shop only**. Sites and Commerce are managed internally, while submitted requests must arrive automatically in Shop for fulfilment. [Integration PR #682](https://github.com/swanhtet01/swanhtet01.github.io/pull/682) binds the public gallery to 14 desktop/mobile captures of real product components with synthetic records. The product source through `b9b90726c044b05462d6ca4f693a9dd509acd9b3` now shows Shop-facing Website and Commerce requests to a Shop-only operator; direct navigation from the internal Commerce editor to Shop still requires both assignments. This corrects the prior overbroad UI filter that hid useful incoming orders.
 
@@ -17,6 +17,12 @@ Customer-managed launch access is **Shop only**. Sites and Commerce are managed 
 The [previous protected preview](https://supermega-public-6f2sejr58-swanhtet01s-projects.vercel.app/) `dpl_2NJBHQRsCjW6VQj2Th4Z9T6hdxZR` was READY at `c9997538a1f1721689ff8a52133515f0a9a13531`: release JSON, Home, Contact, and all 14 hosted image hashes matched that candidate, and exact-head App CI passed. That preview predates the corrected incoming-request boundary above. The Contact form has Name, Email and Message without the retired dropdown or preparation question. The gallery remains local component evidence with synthetic records (`publicationReady=false`); visual quality, Commerce request presentation, and authenticated managed journeys need more work. The live domain was last confirmed on `5479c5d1ece3d697cf5c505e7feb431dc88baf75`.
 
 **Launch gates:** The corrected source requires a fresh exact-head CI run and protected preview. The three-product Supabase preview is `MIGRATIONS_FAILED` at the missing historical public baseline, and the approved three October Sites migrations cannot safely run yet. Managed sign-in, save/reload, recovery, tenant/actor isolation, Burmese/device/printer acceptance, eligible independent GitHub review, and production release remain open. The Oct 20 deadline is a go/no-go checkpoint, not evidence that these gates have passed. Use the [launch-control record](C:/Users/thesw/OneDrive%20-%20BDA/outputs/supermega-launch-control-20260924.md) for the latest exact-head evidence and owner decisions.
+
+**17 October REA-informed Shop and website iteration:** Local candidate commit `e46981d7657b7b57a7a1945df7afa0ffa5ca0699` removes the redundant Add badge from each already-clickable product card, lets Enter add one exact English or Burmese product-name match, keeps partial and duplicate-name results as operator choices, and puts WavePay, AYA Pay and MMQR behind a single secondary-payment control. Exact SKU/barcode scanning, stock caps, cashier confirmation and local-write boundaries remain intact. Product cards, search targets and payment actions are responsive and touch-sized.
+
+Competitor inputs are separated by evidence level: the supplied KMO screenshot shows a product/category grid, barcode search, current ticket and cross-device POS layout; the public [ZayTap feature page](https://www.hextechsoftware.com/zaytap.php) describes sales, inventory, reports, multi-user access and receipt handling; [Square's scanner guide](https://squareup.com/help/us/en/article/5143-bar-code-scanners-with-square-point-of-sale) and [printer guide](https://squareup.com/help/us/en/article/8246-connect-a-printer-to-square) document concrete device paths. These informed the interaction baseline, not copied code, assets or branding. Hands-on KMO/ZayTap/Square operation, Android runtime behavior, and SuperMega physical scanner/printer compatibility remain **NOT RUN**. REA identified the 40,210,587-byte KMO installer as PE32 x86 with no managed metadata; the local Authenticode check reports it unsigned. No binary was executed. The supplied APK SHA-256 is `324fd956faf36efbacf612b139478a5b45fc204891e49320d7a61424971d2f7f`; REA's archive check stopped on the case-colliding `res/9n.9.png` / `res/9N.9.png` paths, and Android decompilation is unavailable without a supplied JADX MCP JAR. This is an analysis limit, not a security verdict.
+
+The clean-source capture bound 18 real component screens to commit `e46981d7657b7b57a7a1945df7afa0ffa5ca0699` and showroom tree `d9daefc1976325885dd4dc6cbdf0ab1bddb8ceae`; the website candidate uses the four Shop views in desktop/mobile sizes, with synthetic records and `publicationReady:false`. A local seven-route public-site artifact passed gallery hash/provenance, artifact-budget, output and 302 landing-page checks. The candidate is local only; the live domain was **NOT** changed. Shop barcode/catalog/touch tests passed (144, 13, and 17 checks), the full app build contract passed, and the production app build transformed 328 modules. Targeted ESLint exhausted Node's 2 GB heap; it was not retried. Launch decision remains **NO-GO** until the managed-preview, tenant isolation, hardware, VPS, independent review and exact-head release gates are resolved.
 
 ## Prior checkpoint — 14 October
 
