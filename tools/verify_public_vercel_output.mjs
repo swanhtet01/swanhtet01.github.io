@@ -333,7 +333,7 @@ for (const staleToken of [
   if (home.includes(staleToken)) fail('stale_home_metadata_present', { token: staleToken })
 }
 if (!hasClassToken(home, 'company-hero')) fail('homepage_contract_missing', { token: 'class token company-hero' })
-for (const token of ['id="products"', 'href="/shop/#shop-demo">See Shop in action', 'href="https://app.supermega.dev/login"']) {
+for (const token of ['id="products"', 'href="/shop/#shop-demo">See Shop on desktop and mobile', 'href="https://app.supermega.dev/login"']) {
   if (!home.includes(token)) fail('homepage_contract_missing', { token })
 }
 if (!home.includes('Keep sales, orders and stock together in one clear view.')

@@ -558,6 +558,13 @@ const sharedStyle = `
   .platform-device-phone .platform-device-heading {padding:0 0 8px;color:#f8f8ff;text-align:center}
   .platform-device img {display:block;width:100%;height:auto;margin:0;border-radius:8px;background:#fff}
   .platform-device-phone img {border-radius:19px}
+  .home-platform-image .platform-device-stage {position:relative;display:block;min-height:clamp(350px,34vw,470px);padding:clamp(18px,2.6vw,32px);overflow:hidden;isolation:isolate;background:radial-gradient(ellipse at 74% 14%,#fff 0%,#f8f7ff 48%,#eeedfa 100%)}
+  .home-platform-image .platform-device-desktop {width:calc(100% - clamp(76px,13vw,154px));margin:0;border-radius:18px;box-shadow:0 24px 56px rgba(24,27,58,.18)}
+  .home-platform-image .platform-device-phone {position:absolute;z-index:2;right:clamp(18px,3.2vw,42px);bottom:clamp(16px,2.8vw,34px);width:clamp(126px,20%,214px);max-width:none;justify-self:auto;transform:rotate(1deg);box-shadow:0 26px 58px rgba(10,12,30,.28)}
+  .home-platform-image .platform-device-heading {padding:0 0 7px 2px;color:#657085;font-size:9px;letter-spacing:.1em}
+  .home-platform-image .platform-device-phone .platform-device-heading {color:#f8f8ff;text-align:center}
+  .home-platform-image .platform-device-desktop img {border-radius:7px}
+  .home-platform-image .platform-device-phone img {border-radius:19px}
   .platform-image-open {display:block;min-width:0;color:var(--ink);text-decoration:none}
   .platform-open-label {display:inline-flex;align-items:center;min-height:32px;margin-top:10px;padding:6px 10px;border:1px solid #dbe3ee;border-radius:9px;background:rgba(255,255,255,.96);font-size:11px;font-weight:700}
   .platform-image-open:hover .platform-open-label,.platform-image-open:focus-visible .platform-open-label {color:var(--blue);border-color:var(--blue)}
@@ -605,7 +612,7 @@ const sharedStyle = `
   .site-header {background:#fff}
   .header-actions{display:flex;align-items:center;gap:8px}
   @media(max-width:980px){.product-card-compact{grid-template-columns:minmax(0,1fr) minmax(230px,.8fr);gap:12px}.product-card-copy{padding:16px}}
- @media(max-width:760px){.editorial-hero{padding:28px 0 20px}.editorial-hero h1{font-size:clamp(38px,11vw,52px)}.editorial-hero .lede{font-size:16px}.story-heading{grid-template-columns:1fr;gap:18px}.product-story{padding:48px 0}.product-story-standalone{padding:0 0 44px}.platform-gallery{grid-template-columns:1fr;gap:12px}.platform-image{padding:10px;border-radius:14px}.platform-device-stage{grid-template-columns:1fr;gap:0;padding:14px;border-radius:12px}.platform-device-desktop{display:none}.platform-device-phone{width:min(68%,260px);max-width:260px}.platform-open-label{min-height:32px}.product-proof{grid-template-columns:1fr}.product-proof li+li{border-top:1px solid var(--line);border-left:0}.feature-line{gap:12px 20px}.product-cards{gap:14px;padding-bottom:48px}.product-card-compact{display:flex;flex-direction:column;gap:0}.product-card-copy{padding:18px 8px 12px}.product-card-copy h2{font-size:30px}.product-card-flow{margin:18px 0}.product-tabs button{flex:1;min-width:0;padding:10px 6px;font-size:14px}.home-contact{grid-template-columns:1fr;margin-bottom:52px;padding:26px 24px}.home-contact .button{width:100%}}
+ @media(max-width:760px){.editorial-hero{padding:28px 0 20px}.editorial-hero h1{font-size:clamp(38px,11vw,52px)}.editorial-hero .lede{font-size:16px}.story-heading{grid-template-columns:1fr;gap:18px}.product-story{padding:48px 0}.product-story-standalone{padding:0 0 44px}.platform-gallery{grid-template-columns:1fr;gap:12px}.platform-image{padding:10px;border-radius:14px}.platform-device-stage{grid-template-columns:1fr;gap:0;padding:14px;border-radius:12px}.platform-device-desktop{display:none}.platform-device-phone{width:min(68%,260px);max-width:260px}.home-platform-image .platform-device-stage{display:grid;min-height:0;min-height:clamp(330px,92vw,430px);place-items:center;padding:16px}.home-platform-image .platform-device-phone{position:relative;right:auto;bottom:auto;width:min(68%,260px);max-width:260px;justify-self:center;margin:0;transform:none}.platform-open-label{min-height:32px}.product-proof{grid-template-columns:1fr}.product-proof li+li{border-top:1px solid var(--line);border-left:0}.feature-line{gap:12px 20px}.product-cards{gap:14px;padding-bottom:48px}.product-card-compact{display:flex;flex-direction:column;gap:0}.product-card-copy{padding:18px 8px 12px}.product-card-copy h2{font-size:30px}.product-card-flow{margin:18px 0}.product-tabs button{flex:1;min-width:0;padding:10px 6px;font-size:14px}.home-contact{grid-template-columns:1fr;margin-bottom:52px;padding:26px 24px}.home-contact .button{width:100%}}
   @media(max-width:980px){.contact-page{grid-template-columns:1fr;gap:24px;max-width:760px;padding:42px 0 70px}.contact-page .page-hero{position:static;padding:0}.contact-page .page-hero::after{display:none}.contact-page .page-hero h1{font-size:clamp(36px,7vw,52px)}}
   @media(max-width:760px){.contact-page{padding:28px 0 52px}.contact-page .page-hero h1{font-size:clamp(36px,9vw,48px)}.contact-page .contact-form{padding:20px;border-radius:20px}.brand-domain{display:none}}
 
@@ -804,14 +811,14 @@ function removeSectionByClass(source, className, code) {
 function shopOnlyCompanyMarkup(source) {
  let markup = source
  markup = replaceKnownCopyOnce(markup, ["Operating software for Myanmar companies", "Shop software for Myanmar businesses"], "Shop software for Myanmar businesses", "shop_only_hero_kicker")
- markup = replaceKnownCopyOnce(markup, ["Tools for<br><span>everyday work.</span>", "Run your shop.<br><span>See what’s next.</span>"], "Run your shop.<br><span>See what’s next.</span>", "shop_only_hero_heading")
+ markup = replaceKnownCopyOnce(markup, ["Tools for<br><span>everyday work.</span>", "Run your shop.<br><span>See what’s next.</span>", "Sell faster.<br><span>Stay in control.</span>"], "Sell faster.<br><span>Stay in control.</span>", "shop_only_hero_heading")
  markup = replaceKnownCopyOnce(markup, [
   "Shop brings sales and stock into one operating view. Our team manages Sites and confirms Commerce availability for each setup.",
   "Keep sales, orders and stock together in one clear MMK workflow. See what needs attention without digging through settings.",
   "Keep sales, orders and stock together in one clear view. See what needs attention without digging through settings.",
  ], "Know what sold, what is waiting and what needs attention. Keep sales, orders and stock together in one clear view.", "shop_only_hero_description")
  markup = replaceKnownCopyOnce(markup, ["Meet the product family", "Explore Shop"], "Explore Shop", "shop_only_hero_secondary_action")
- markup = replaceKnownCopyOnce(markup, ['href="/shop/#shop-demo">See Shop in action', 'href="/shop/#shop-demo">See Shop screens'], 'href="/shop/#shop-demo">See Shop in action', "shop_only_hero_primary_action")
+ markup = replaceKnownCopyOnce(markup, ['href="/shop/#shop-demo">See Shop in action', 'href="/shop/#shop-demo">See Shop screens', 'href="/shop/#shop-demo">See Shop on desktop and mobile'], 'href="/shop/#shop-demo">See Shop on desktop and mobile', "shop_only_hero_primary_action")
  for (const id of ["website", "ecommerce"]) {
   const marker = '<article class="family-card" id="' + id + '">'
   const start = markup.indexOf(marker)
@@ -1598,7 +1605,7 @@ await writeStatic('platform-carousel.js', `(function(){
   document.querySelectorAll('[data-platform-carousel]').forEach(function(carousel){
     var track=carousel.querySelector('.platform-slides'),slides=Array.from(track.querySelectorAll('.platform-image')),previous=carousel.querySelector('[data-gallery-previous]'),next=carousel.querySelector('[data-gallery-next]'),status=carousel.querySelector('[data-gallery-status]'),slideLinks=Array.from(carousel.querySelectorAll('[data-gallery-slide]')),active=0,timer;
     function update(){var left=track.getBoundingClientRect().left;active=slides.reduce(function(best,slide,index){return Math.abs(slide.getBoundingClientRect().left-left)<Math.abs(slides[best].getBoundingClientRect().left-left)?index:best},0);if(status)status.textContent=(active+1)+' of '+slides.length;if(previous)previous.disabled=active===0;if(next)next.disabled=active===slides.length-1;slideLinks.forEach(function(link,index){link.setAttribute('aria-current',String(index===active));});}
-    function go(index){slides[Math.max(0,Math.min(index,slides.length-1))].scrollIntoView({behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'nearest',inline:'start'});}
+    function go(index){var target=slides[Math.max(0,Math.min(index,slides.length-1))];target.querySelectorAll('img[loading="lazy"]').forEach(function(image){image.loading='eager'});target.scrollIntoView({behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'nearest',inline:'start'});}
     if(previous)previous.addEventListener('click',function(){go(active-1)});if(next)next.addEventListener('click',function(){go(active+1)});slideLinks.forEach(function(link,index){link.addEventListener('click',function(event){event.preventDefault();go(index);})});track.addEventListener('scroll',function(){clearTimeout(timer);timer=setTimeout(update,80)},{passive:true});track.addEventListener('keydown',function(event){if(event.target!==track)return;if(event.key==='ArrowLeft'||event.key==='ArrowRight'){event.preventDefault();go(active+(event.key==='ArrowRight'?1:-1))}});window.addEventListener('resize',update);update();
     carousel.refreshGallery=update;
   });
