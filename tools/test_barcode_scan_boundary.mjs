@@ -103,7 +103,8 @@ check(count(coreApp, '{catalogForm}') === 1
   && coreApp.indexOf('{catalogForm}') < coreApp.indexOf('{managedTemplate ? <details className="secondary-setup-path">')
   && !coreApp.includes('</details> : catalogForm}'),
   'barcode_shared_catalog_entry_must_precede_optional_template_setup')
-check(coreApp.includes('placeholder="Search or scan SKU"'), 'shop_counter_keyboard_wedge_placeholder_missing')
+check(coreApp.includes('placeholder="Search name, barcode or SKU"'), 'shop_counter_keyboard_wedge_placeholder_missing')
+check(coreApp.includes("bi('No match. Check the barcode or SKU, or search by item name.')"), 'shop_counter_unmatched_scan_recovery_missing')
 check(coreApp.includes('onKeyDown={addSearchMatch}'), 'shop_counter_keyboard_wedge_handler_missing')
 check(coreApp.includes('label="Scan a barcode with the camera" onDetected={addCameraScan}'), 'shop_counter_camera_handler_missing')
 check(count(coreApp, 'label="Scan the product barcode into the SKU field" onDetected=') === 1

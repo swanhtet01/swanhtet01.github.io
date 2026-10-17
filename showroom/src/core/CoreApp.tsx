@@ -1331,7 +1331,7 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
               <span aria-label="Record safety" className="shop-next-compact shop-record-status-counter" title={recordStatus.detail}>{recordStatus.badge} · {recordStatus.label}<small className="sr-only">{recordStatus.detail} · {operatorLabel || 'Cashier set at review'}</small></span>
             </nav>
           </div>
-          <div className="shop-item-search-row"><label className="shop-item-search"><span className="sr-only">Find or scan an item</span><input ref={saleSearchRef} autoComplete="off" aria-keyshortcuts="/" onChange={(event) => { setQuery(event.target.value); setCatalogPage(0); setScanFeedback('') }} onKeyDown={addSearchMatch} placeholder="Search or scan SKU" type="search" value={query} /><kbd aria-hidden="true" className="shop-search-shortcut">/</kbd></label><BarcodeScanButton label="Scan a barcode with the camera" onDetected={addCameraScan} /></div>
+          <div className="shop-item-search-row"><label className="shop-item-search"><span className="sr-only">Search products by name, barcode or SKU</span><input ref={saleSearchRef} autoComplete="off" aria-keyshortcuts="/" onChange={(event) => { setQuery(event.target.value); setCatalogPage(0); setScanFeedback('') }} onKeyDown={addSearchMatch} placeholder="Search name, barcode or SKU" type="search" value={query} /><kbd aria-hidden="true" className="shop-search-shortcut">/</kbd></label><BarcodeScanButton label="Scan a barcode with the camera" onDetected={addCameraScan} /></div>
           {scanFeedback ? <p className="form-notice" role="status">{scanFeedback}</p> : null}
         </header>
         {catalog.pageCount > 1 ? <nav aria-label="Catalog pages" className="shop-catalog-pages">
@@ -1388,7 +1388,7 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
             </button>
           })}
         </div></> : <Empty>{items.length
-          ? bi('No matching item. Search by name or SKU.')
+          ? bi('No match. Check the barcode or SKU, or search by item name.')
           : <>Your catalog is empty. <Link className="text-link" to="/shop/?tab=inventory#shop-catalog-create">Add a product</Link> or <Link className="text-link" to="/shop/?tab=inventory#shop-catalog-import">import a CSV</Link>.</>}</Empty>}
       </section>
 
@@ -1915,6 +1915,8 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   const openOrders = commerce.orders.filter((order) => order.status !== 'completed' && order.status !== 'cancelled')
   const closedOrderIds = new Set(commerce.closes.flatMap((close) => close.orderIds ?? []))
   const legacyOperatingOrders = operatingActivated ? [] : commerce.orders.filter((order) => order.status !== 'cancelled' && !closedOrderIds.has(order.id))
+  const legacyReviewCount = legacyOperatingOrders.length
+  const legacyReviewLabel = `Review ${legacyReviewCount} ${legacyReviewCount === 1 ? 'order' : 'orders'}`
   const currentOperator = activeShift?.opening.actor || managedIdentity?.email || readLastOperator() || 'Cashier set at review'
   const shopOperatingView: ShopOperatingView = {
     unit: activeOperatingUnit?.name ?? (openShiftSessions.length > 1 ? 'Choose below' : 'Main shop'),
@@ -1925,13 +1927,13 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
       ? `Open since ${formatTime(activeShift.opening.capturedAt)}`
         : openShiftSessions.length > 1
           ? 'Select one shift.'
-        : legacyOperatingOrders.length
-          ? 'Review orders first.'
+        : legacyReviewCount
+          ? `${legacyReviewCount} existing ${legacyReviewCount === 1 ? 'order needs' : 'orders need'} review before starting the Shop day.`
           : 'Start before selling.',
     actionLabel: shopOperatingEligible
       ? operatingActivated
         ? activeShift || openShiftSessions.length > 1 ? undefined : 'Open shift'
-        : legacyOperatingOrders.length ? 'Review orders' : 'Start Shop day'
+        : legacyReviewCount ? legacyReviewLabel : 'Start Shop day'
       : undefined,
     disabled: !commerceCanWrite || Boolean(pendingAction),
     onAction: reviewShopOperatingSession,
