@@ -29,39 +29,24 @@ test('local entry uses an honest order-request flow without sample language', ()
   const product = readFileSync(new URL('../showroom/src/products/ecommerce/EcommerceProduct.tsx', import.meta.url), 'utf8')
   assert.ok(product.includes("'Open customer ordering'"))
 })
-test('assisted catalog setup stays available in both local views and preserves the explicit workspace', () => {
+test('sample catalog opens one customer preview instead of a dead-end setup page', () => {
   const product = readFileSync(new URL('../showroom/src/products/ecommerce/EcommerceProduct.tsx', import.meta.url), 'utf8')
-  const expression = product.match(/const showAssistedCatalogSetup = ([\s\S]*?)\n\s*const assistedCatalogEntry/)?.[1]
-  assert.ok(expression)
-  const ready = { catalogHydrating: false, managedIdentity: null, catalog: { source: 'sample' }, draftIssue: '', draftBusy: false, workspaceView: 'preview' }
-  assert.equal(vm.runInNewContext(expression, { ...ready, URLSearchParams, location: { search: '' } }), true)
-  assert.equal(vm.runInNewContext(expression, {...ready,workspaceView:'setup', URLSearchParams, location: { search: '' }}), true)
-  for (const workspaceView of ['preview','setup']) {
-    for (const blocked of [{catalogHydrating:true}, {managedIdentity:{}}, {catalog:{source:'unavailable'}}, {draftIssue:'read failed'}, {draftBusy:true}]) {
-      assert.equal(vm.runInNewContext(expression, {...ready,workspaceView,...blocked, URLSearchParams, location: { search: '' }}), false)
-    }
-  }
-  assert.ok(product.includes('href="/ecommerce/?setup=1"'))
-  assert.ok(product.includes("new URLSearchParams(location.search).get('workspace') !== '1'"))
+  assert.ok(product.includes("const workspaceView = sampleCatalogPreview ? 'preview' : ecommerceWorkspaceView"))
+  assert.doesNotMatch(product, /if \(!catalogHydrating && sampleCatalogPreview\)\s*\{\s*return/)
+  assert.ok(product.includes("sampleCatalogPreview ? 'Sample customer view'"))
+  assert.ok(product.includes("sampleCatalogPreview ? 'STORE PREVIEW' : 'BROWSE & BUY'"))
+  assert.ok(product.includes("sampleCatalogPreview ? 'Example product'"))
   assert.match(product, /Requests stay on this device until Shop review/)
-  assert.ok(product.includes('headline={ecommerceTodayHeadline}'))
 })
 
-test('the assisted entry only appears before an explicit workspace route', () => {
+test('sample preview hides order and editing controls while guiding product setup', () => {
   const product = readFileSync(new URL('../showroom/src/products/ecommerce/EcommerceProduct.tsx', import.meta.url), 'utf8')
-  const expression = product.match(/const assistedCatalogEntry = ([\s\S]*?)\n\s*const workspaceCopy/)?.[1]
-  assert.ok(expression)
-  const ready = { showAssistedCatalogSetup: true, URLSearchParams, location: { search: '' } }
-  assert.equal(vm.runInNewContext(expression, ready), true)
-  assert.equal(vm.runInNewContext(expression, { ...ready, location: { search: '?workspace=1' } }), false)
-  assert.equal(vm.runInNewContext(expression, { ...ready, showAssistedCatalogSetup: false }), false)
-  assert.ok(product.includes('{!assistedCatalogEntry ? <nav aria-label="Commerce workspace"'))
-  assert.ok(product.includes("sampleCatalogPreview ? 'Replace sample products' : 'Edit store'"))
-  assert.ok(!product.includes('aria-label="Storefront view"'))
-  assert.ok(product.includes('return <BusinessBrief product="ecommerce" />'))
-  assert.ok(!product.includes('Explore the catalog'))
-  assert.ok(!product.includes('Let SuperMega prepare your catalog'))
-  assert.ok(!product.includes('Review your catalog before launch.'))
+  assert.ok(product.includes('{!sampleCatalogPreview ? <nav aria-label="Commerce workspace"'))
+  assert.ok(product.includes('{!sampleCatalogPreview ? <section className="core-panel ecommerce-setup"'))
+  assert.ok(product.includes("sampleCatalogPreview ? 'Add your products' : 'Edit store'"))
+  assert.ok(product.includes("!sampleCatalogPreview && managedIdentity && managedCanWrite && publicStatus === 'ready'"))
+  assert.ok(product.includes("sampleCatalogPreview ? 'Example only. This preview cannot accept orders.'"))
+  assert.ok(product.includes("const buyingReady = storefrontBuyingReady({"))
 })
 
 test('orders use one real-record operating desk instead of a duplicate status hero', () => {

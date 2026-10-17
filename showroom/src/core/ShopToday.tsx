@@ -137,6 +137,26 @@ export function ShopToday({ accountingExport = null, batchProfitControl, catalog
     : profitControl.priorities.find((priority) => priority.id !== 'close_ready')
   const maximumPulseMmk = Math.max(1, ...salesPulse.points.map((point) => point.grossMmk))
 
+  const isNewShop = !commerce.items.length && !commerce.orders.length && !commerce.movements.length
+    && !commerce.closes.length && !commerce.websiteIntakes?.length && !commerce.storefrontRequests?.length
+  const setupBlocked = recordStatus.badge === 'Paused' || recordStatus.badge === 'Checking'
+
+  if (isNewShop) return <section aria-labelledby="shop-first-product-title" className="shop-today shop-today-first-run">
+    <div className="shop-first-product-card">
+      <span aria-hidden="true" className="shop-first-product-mark"><svg fill="none" viewBox="0 0 24 24"><path d="M3 8.5 12 4l9 4.5v10L12 23l-9-4.5zM3 8.5 12 13l9-4.5M12 13v10" /></svg></span>
+      <div>
+        <span className="shop-first-product-eyebrow">Shop setup</span>
+        <h2 id="shop-first-product-title">{bi('No products to sell yet')}</h2>
+        <p>{bi('Add one item to start, or import a catalog.')}</p>
+      </div>
+      {setupBlocked ? <p className="shop-first-product-note" role="status">{recordStatus.detail}</p> : <div className="shop-first-product-actions">
+        <Link className="core-button primary" to="/shop/?tab=inventory#shop-catalog-create">{bi('Add first product')}</Link>
+        <Link className="text-link" to="/shop/?tab=inventory#shop-catalog-import">{bi('Import a CSV')} <span aria-hidden="true">→</span></Link>
+      </div>}
+      {setupBlocked && recordStatus.target && recordStatus.actionLabel ? <Link className="core-button" to={recordStatus.target}>{recordStatus.actionLabel}</Link> : null}
+    </div>
+  </section>
+
   return <div className="shop-today">
     <section aria-labelledby="shop-today-title" className="shop-today-overview">
       <header className="shop-today-heading">
@@ -164,7 +184,7 @@ export function ShopToday({ accountingExport = null, batchProfitControl, catalog
         <div className="shop-operating-list shop-product-list">
           {visibleProducts.length ? visibleProducts.map((item) => <Link aria-label={`${item.name}: ${item.onHand} in stock, ${formatMmk(item.price)}`} data-low-stock={item.onHand <= item.reorderAt} key={item.sku} to="/shop/?tab=inventory">
             <span className="shop-product-identity"><ProductPhoto className="shop-today-product-photo" fallback={<span aria-hidden="true" className="shop-today-product-fallback">{item.name.trim().slice(0, 1).toUpperCase()}</span>} scope={productImageScope} sku={item.sku} /><span><strong>{item.name}</strong><small>{item.onHand} in stock{item.onHand <= item.reorderAt ? ' · reorder' : ''}</small></span></span>
-            <span className="shop-product-stock">{item.onHand}</span>
+            <span className="shop-product-stock">{item.onHand}{item.onHand <= item.reorderAt ? <small>Reorder</small> : null}</span>
             <span className="shop-product-price"><b>{formatMmk(item.price)}</b></span>
           </Link>) : <div className="shop-operating-empty"><strong>{bi('No products to sell yet')}</strong><span>{bi('Add one item to start, or import a catalog.')}</span><Link className="core-button primary" to="/shop/?tab=inventory#shop-catalog-create">{bi('Add first product')}</Link><Link className="text-link" to="/shop/?tab=inventory#shop-catalog-import">{bi('Import a CSV')} <span aria-hidden="true">→</span></Link></div>}
         </div>
@@ -176,7 +196,7 @@ export function ShopToday({ accountingExport = null, batchProfitControl, catalog
         <div className="shop-operating-list">
           {activeOrders.length ? activeOrders.map((order) => <Link key={order.id} to={shopOrderLink(order.id)}>
             <span><strong>{order.item}</strong><small>{privacySafeQueueCustomer(order.customer)} · {order.quantity} item{order.quantity === 1 ? '' : 's'}</small></span>
-            <span><b>{formatMmk(order.total)}</b><small>{order.status} · {order.paymentStatus === 'pending' ? 'payment due' : 'paid'}</small></span>
+            <span className="shop-order-queue-meta"><b>{formatMmk(order.total)}</b><small>{order.status} <em data-payment-due={order.paymentStatus === 'pending'}>{order.paymentStatus === 'pending' ? 'Payment due' : 'Paid'}</em></small></span>
           </Link>) : <p className="shop-operating-empty"><strong>Queue clear</strong><span>No open orders need fulfilment.</span></p>}
         </div>
         <footer><Link to="/shop/?tab=orders#shop-order-queue">Open all orders <span aria-hidden="true">→</span></Link></footer>

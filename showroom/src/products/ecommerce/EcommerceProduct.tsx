@@ -359,7 +359,16 @@ export function EcommerceProduct() {
     syncDevice()
     return () => viewport.removeEventListener('change', syncDevice)
   }, [])
-  const workspaceView = ecommerceWorkspaceView(location.search, Boolean(savedDraft))
+  const sampleCatalogPreview = catalog.source === 'sample'
+  const previousCatalogSourceRef = useRef(catalog.source)
+  useEffect(() => {
+    const previousSource = previousCatalogSourceRef.current
+    previousCatalogSourceRef.current = catalog.source
+    if (previousSource !== 'sample' || catalog.source === 'sample' || savedDraft) return
+    setSelectedSkus(defaultSelection(catalog.items))
+    setMerchandising(null)
+  }, [catalog.items, catalog.source, savedDraft])
+  const workspaceView = sampleCatalogPreview ? 'preview' : ecommerceWorkspaceView(location.search, Boolean(savedDraft))
   const publicIdentityKey = managedIdentity ? `${managedIdentity.workspaceId}:${managedIdentity.userId}` : ''
   useEffect(() => {
     if (!managedIdentity || !managedCanWrite) return
@@ -543,14 +552,20 @@ export function EcommerceProduct() {
   }, [focusWorkspaceDestination, workspaceView])
 
   useEffect(() => {
-    if (catalogHydrating || !managedIdentity) return
+    if (catalogHydrating || (!sampleCatalogPreview && !managedIdentity)) return
     const params = new URLSearchParams(location.search)
-    if (params.get('workspace') === '1' && params.get('setup') !== '1') return
-    params.set('workspace', '1')
+    if (sampleCatalogPreview) {
+      if (params.get('view') === 'preview' && params.get('setup') !== '1' && !params.has('workspace')) return
+      params.set('view', 'preview')
+      params.delete('workspace')
+    } else {
+      if (params.get('workspace') === '1' && params.get('setup') !== '1') return
+      params.set('workspace', '1')
+      params.set('view', ecommerceWorkspaceView(location.search, Boolean(savedDraft)))
+    }
     params.delete('setup')
-    params.set('view', ecommerceWorkspaceView(location.search, Boolean(savedDraft)))
     navigate({ pathname: location.pathname, search: `?${params.toString()}` }, { replace: true })
-  }, [catalogHydrating, location.pathname, location.search, managedIdentity, navigate, savedDraft])
+  }, [catalogHydrating, location.pathname, location.search, managedIdentity, navigate, sampleCatalogPreview, savedDraft])
 
   useEffect(() => {
     let current = true
@@ -745,7 +760,6 @@ export function EcommerceProduct() {
       && digest
       && savedDraft.localPreviewDigest === digest)
   const savedDraftIsCurrent = savedFieldsAreCurrent && savedCatalogIsCurrent
-  const sampleCatalogPreview = catalog.source === 'sample'
   const storefrontSetupRequired = !sampleCatalogPreview && !savedDraftIsCurrent
   const buyingReady = storefrontBuyingReady({
     source: catalog.source,
@@ -2187,7 +2201,9 @@ export function EcommerceProduct() {
     })
   }, [aiAgentJob, location.pathname, location.search])
 
-  const workspaceCopy = workspaceView === 'orders'
+  const workspaceCopy = sampleCatalogPreview
+    ? { title: 'See a sample store', copy: 'Preview how your store could look. Add your own products in Shop to get started.' }
+    : workspaceView === 'orders'
     ? {
         title: 'Orders',
         copy: managedIdentity
@@ -2202,30 +2218,16 @@ export function EcommerceProduct() {
   const openPublicRequests = publicRequests
   const publicStoreIsCurrent = Boolean(publicPublication?.enabled && publicPublication.previewDigest === digest)
 
-  if (!catalogHydrating && sampleCatalogPreview) {
-    return (
-      <div className="workspace-screen ecommerce-product">
-        <header className="ecommerce-heading">
-          <div><span className="core-eyebrow">Commerce</span><h1>Add your products to Shop</h1>
-            <p>Commerce uses the products, prices, and stock you manage in Shop.</p></div>
-        </header>
-        <section className="core-panel" aria-label="Connect the Shop catalog">
-          <Link className="core-button primary" state={{ commerceReturn: true }} to="/shop/?tab=inventory#shop-catalog-import">Open Shop inventory</Link>
-        </section>
-      </div>
-    )
-  }
-
   if (!catalogHydrating && !managedIdentity && catalog.source === 'shop-local'
     && catalog.items.length === 0 && !draftIssue && !draftBusy) {
     return (
       <div className="workspace-screen ecommerce-product">
         <header className="ecommerce-heading">
-          <div><span className="core-eyebrow">Commerce</span><h1>Add products in Shop</h1>
-            <p>Your online store uses the same prices and stock.</p></div>
+          <div><span className="core-eyebrow">Commerce</span><h1>Add your first product</h1>
+            <p>Your store will use its price and stock from Shop.</p></div>
         </header>
         <section className="core-panel" aria-label="Open Shop inventory">
-          <Link className="core-button primary" state={{ commerceReturn: true }} to="/shop/?tab=inventory#shop-catalog-import">Add products</Link>
+          <Link className="core-button primary" state={{ commerceReturn: true }} to="/shop/?tab=inventory#shop-catalog-create">Add first product</Link>
         </section>
       </div>
     )
@@ -2233,26 +2235,27 @@ export function EcommerceProduct() {
 
   return (
     <div className="workspace-screen ecommerce-product">
-      {managedIdentity && managedCanDeliverReviews ? <details className="compact-disclosure">
+      {!sampleCatalogPreview && managedIdentity && managedCanDeliverReviews ? <details className="compact-disclosure">
         <summary>Customer catalog review</summary>
         <Suspense fallback={<p role="status">Opening review tools…</p>}>
           <CatalogReviewPreparation key={JSON.stringify([managedIdentity.workspaceId, managedIdentity.userId])}
             workspaceId={managedIdentity.workspaceId} actorId={managedIdentity.userId} />
         </Suspense>
       </details> : null}
-      {cartSessionUnavailable ? <p role="status">This browser cannot keep your cart after a refresh.</p> : null}
+      {!sampleCatalogPreview && cartSessionUnavailable ? <p role="status">This browser cannot keep your cart after a refresh.</p> : null}
       <header className="ecommerce-heading">
         <div>
           <h1 ref={workspaceHeadingRef} tabIndex={-1}>{workspaceCopy.title}</h1>
           <p>{workspaceCopy.copy}</p>
+          {sampleCatalogPreview ? <p lang="my">နမူနာဆိုင်ကို ကြည့်ပြီး Shop တွင် ကိုယ့်ကုန်ပစ္စည်းများကို ထည့်ပါ။</p> : null}
         </div>
-        {workspaceView === 'preview' ? <button className="core-button secondary" onClick={() => showWorkspace('setup')} type="button">Edit store</button> : null}
+        {workspaceView === 'preview' && !sampleCatalogPreview ? <button className="core-button secondary" onClick={() => showWorkspace('setup')} type="button">Edit store</button> : null}
       </header>
 
-      <nav aria-label="Commerce workspace" className="ecommerce-mode-nav" id="ecommerce-workspace-nav">
+      {!sampleCatalogPreview ? <nav aria-label="Commerce workspace" className="ecommerce-mode-nav" id="ecommerce-workspace-nav">
         <Link aria-current={workspaceView === 'orders' ? 'page' : undefined} to={ecommerceWorkspacePath(location.pathname, location.search, 'orders')}>Orders</Link>
         <Link aria-current={workspaceView !== 'orders' ? 'page' : undefined} to={ecommerceWorkspacePath(location.pathname, location.search, 'preview')}>Online store</Link>
-      </nav>
+      </nav> : null}
 
       {workspaceView === 'orders' ? <div className="ecommerce-orders-workspace" id="ecommerce-orders-panel">
       <CommerceOrderDesk
@@ -2516,7 +2519,7 @@ export function EcommerceProduct() {
       </div> : null}
 
       {workspaceView !== 'orders' ? <div className="ecommerce-workspace" data-view={workspaceView}>
-        <section className="core-panel ecommerce-setup" aria-busy={catalogHydrating || draftBusy} aria-labelledby="ecommerce-setup-title" id="ecommerce-setup-panel">
+        {!sampleCatalogPreview ? <section className="core-panel ecommerce-setup" aria-busy={catalogHydrating || draftBusy} aria-labelledby="ecommerce-setup-title" id="ecommerce-setup-panel">
           <div className="panel-head">
             <div><h2 id="ecommerce-setup-title">Store details</h2></div>
           </div>
@@ -2663,19 +2666,19 @@ export function EcommerceProduct() {
             </div> : null}
           </div>
           <p className="ecommerce-save-notice" aria-live="polite">{draftNotice}</p>
-        </section>
+        </section> : null}
 
         <section className="core-panel ecommerce-preview-panel" aria-labelledby="ecommerce-preview-title" id="ecommerce-preview-panel">
           <div className="panel-head ecommerce-preview-head">
-            <div><h2 id="ecommerce-preview-title" ref={storefrontPreviewHeadingRef} tabIndex={-1}>{workspaceView === 'setup' ? 'Customer view' : 'Your store'}</h2>{workspaceView === 'setup' ? <p>Updates as you edit. Save to keep your changes.</p> : null}</div>
+            <div><h2 id="ecommerce-preview-title" ref={storefrontPreviewHeadingRef} tabIndex={-1}>{sampleCatalogPreview ? 'Sample customer view' : workspaceView === 'setup' ? 'Customer view' : 'Your store'}</h2>{workspaceView === 'setup' ? <p>Updates as you edit. Save to keep your changes.</p> : null}</div>
           </div>
 
           {workspaceView !== 'setup' && !buyingReady && !catalogHydrating ? (
             <div className="ecommerce-preview-gate">
               <span>
-                <strong>{sampleCatalogPreview ? 'Sample storefront is preview-only' : 'Store not saved'}</strong>
+                <strong>{sampleCatalogPreview ? 'Example store · preview only' : 'Store not saved'}</strong>
                 <small>{sampleCatalogPreview
-                  ? 'Example products cannot accept customer requests. Replace them in Shop, then review and save the customer view.'
+                  ? 'Add your products in Shop to use your own prices and stock. This example cannot receive orders.'
                   : canSaveStorefront
                     ? 'These products and prices come from Shop. Save this store to accept customer requests.'
                     : 'Review the product selection and prices before saving your store.'}</small>
@@ -2685,17 +2688,17 @@ export function EcommerceProduct() {
                 <button
                   aria-controls={sampleCatalogPreview ? undefined : 'ecommerce-setup-panel'}
                   className={`core-button ${canSaveStorefront ? 'secondary' : 'primary'}`}
-                  onClick={sampleCatalogPreview ? () => navigate('/shop/?tab=inventory') : finishStorefrontSetup}
+                  onClick={sampleCatalogPreview ? () => navigate('/shop/?tab=inventory#shop-catalog-create', { state: { commerceReturn: true } }) : finishStorefrontSetup}
                   type="button"
                 >
-                  {sampleCatalogPreview ? 'Replace sample products' : 'Edit store'}
+                  {sampleCatalogPreview ? 'Add your products' : 'Edit store'}
                 </button>
               </div>
             </div>
           ) : null}
           {draftNotice ? <p className="ecommerce-save-notice" role="status">{draftNotice}</p> : null}
 
-          {workspaceView !== 'setup' && managedIdentity && managedCanWrite && publicStatus === 'ready' && publicDataIdentity === publicIdentityKey ? <div className="ecommerce-public-sharing">
+          {workspaceView !== 'setup' && !sampleCatalogPreview && managedIdentity && managedCanWrite && publicStatus === 'ready' && publicDataIdentity === publicIdentityKey ? <div className="ecommerce-public-sharing">
             <div>
               <h3>{publicStoreIsCurrent ? 'Your customer store is live' : publicPublication ? 'Store changes are not live yet' : 'Share your store with customers'}</h3>
               <p>{publicStoreIsCurrent ? 'Customers can browse and send requests from this link.' : 'Publish the saved store when you are ready to receive customer requests.'}</p>
@@ -2716,7 +2719,7 @@ export function EcommerceProduct() {
                   <b>{previewResult.preview.items.length} products</b>
                 </header>
                 <section className="storefront-hero">
-                  <small>BROWSE &amp; BUY</small>
+                  <small>{sampleCatalogPreview ? 'STORE PREVIEW' : 'BROWSE & BUY'}</small>
                   <h3>{previewResult.preview.storeName}</h3>
                   <p>{previewResult.preview.summary}</p>
                 </section>
@@ -2735,7 +2738,7 @@ export function EcommerceProduct() {
                       <small>{item.merchandising ? `${item.merchandising.featured ? 'Featured · ' : ''}${item.merchandising.collection}` : item.variant || item.sku}</small>
                       <strong>{displayName}</strong>
                       <span>{formatMmk(item.unitPriceMmk)}</span>
-                      <b>{available ? 'Available' : 'Sold out'}</b>
+                      <b>{sampleCatalogPreview ? 'Example product' : available ? 'Available' : 'Sold out'}</b>
                       {workspaceView !== 'setup' && available && buyingReady && cartSessionReady ? (
                         <button
                           aria-controls="ecommerce-buying-workspace"
@@ -2752,7 +2755,7 @@ export function EcommerceProduct() {
                     )
                   })}
                 </div>
-                <footer>Review one quote. Shop confirms the order, stock, delivery, and payment.</footer>
+                <footer>{sampleCatalogPreview ? 'Example only. This preview cannot accept orders.' : 'Review one quote. Shop confirms the order, stock, delivery, and payment.'}</footer>
               </div>
             ) : (
               <div className="ecommerce-preview-empty">

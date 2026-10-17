@@ -28,6 +28,7 @@ import { emitMetric } from '../analytics/metrics-collector'
 import { BarcodeScanButton } from './BarcodeScanButton'
 import { prepareManagedFirstCatalog } from './shop-managed-first-catalog'
 import { applyStockCountScan } from './shop-stock-count-scan'
+import { applyPurchaseReceiptScan } from './shop-purchase-receipt-scan'
 const ClosedOrderHistory = lazy(() => import('./ShopOrderHistory').then((module) => ({ default: module.ClosedOrderHistory })))
 const ShopProductPhotoControl = lazy(() => import('./ShopProductPhotoControl').then((module) => ({ default: module.ShopProductPhotoControl })))
 const ShopStocktakeDraftRecovery = lazy(() => import('./ShopStocktakeDraftRecovery').then((module) => ({ default: module.ShopStocktakeDraftRecovery })))
@@ -1331,7 +1332,7 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
               <span aria-label="Record safety" className="shop-next-compact shop-record-status-counter" title={recordStatus.detail}>{recordStatus.badge} · {recordStatus.label}<small className="sr-only">{recordStatus.detail} · {operatorLabel || 'Cashier set at review'}</small></span>
             </nav>
           </div>
-          <div className="shop-item-search-row"><label className="shop-item-search"><span className="sr-only">Find or scan an item</span><input ref={saleSearchRef} autoComplete="off" aria-keyshortcuts="/" onChange={(event) => { setQuery(event.target.value); setCatalogPage(0); setScanFeedback('') }} onKeyDown={addSearchMatch} placeholder="Search or scan SKU" type="search" value={query} /><kbd aria-hidden="true" className="shop-search-shortcut">/</kbd></label><BarcodeScanButton label="Scan a barcode with the camera" onDetected={addCameraScan} /></div>
+          <div className="shop-item-search-row"><label className="shop-item-search"><span className="sr-only">Search products by name, barcode or SKU</span><input ref={saleSearchRef} autoComplete="off" aria-keyshortcuts="/" onChange={(event) => { setQuery(event.target.value); setCatalogPage(0); setScanFeedback('') }} onKeyDown={addSearchMatch} placeholder="Search name, barcode or SKU" type="search" value={query} /><kbd aria-hidden="true" className="shop-search-shortcut">/</kbd></label><BarcodeScanButton label="Scan a barcode with the camera" onDetected={addCameraScan} /></div>
           {scanFeedback ? <p className="form-notice" role="status">{scanFeedback}</p> : null}
         </header>
         {catalog.pageCount > 1 ? <nav aria-label="Catalog pages" className="shop-catalog-pages">
@@ -1388,7 +1389,7 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
             </button>
           })}
         </div></> : <Empty>{items.length
-          ? bi('No matching item. Search by name or SKU.')
+          ? bi('No match. Check the barcode or SKU, or search by item name.')
           : <>Your catalog is empty. <Link className="text-link" to="/shop/?tab=inventory#shop-catalog-create">Add a product</Link> or <Link className="text-link" to="/shop/?tab=inventory#shop-catalog-import">import a CSV</Link>.</>}</Empty>}
       </section>
 
@@ -1737,6 +1738,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   const [purchaseBudgetDraft, setPurchaseBudgetDraft] = useState<PurchaseBudgetDraft | null>(null)
   const [supplierSourcingDraft, setSupplierSourcingDraft] = useState<SupplierSourcingDraft | null>(null)
   const [purchaseOrderDraft, setPurchaseOrderDraft] = useState<PurchaseOrderDraft | null>(null)
+  const [purchaseReceiptScanFeedback, setPurchaseReceiptScanFeedback] = useState<ReactNode>(null)
   const [supplierInvoiceDraft, setSupplierInvoiceDraft] = useState<SupplierInvoiceDraft | null>(null)
   const [supplierReturnDraft, setSupplierReturnDraft] = useState<SupplierReturnDraft | null>(null)
   const [supplierCreditDraft, setSupplierCreditDraft] = useState<SupplierCreditDraft | null>(null)
@@ -1915,6 +1917,8 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   const openOrders = commerce.orders.filter((order) => order.status !== 'completed' && order.status !== 'cancelled')
   const closedOrderIds = new Set(commerce.closes.flatMap((close) => close.orderIds ?? []))
   const legacyOperatingOrders = operatingActivated ? [] : commerce.orders.filter((order) => order.status !== 'cancelled' && !closedOrderIds.has(order.id))
+  const legacyReviewCount = legacyOperatingOrders.length
+  const legacyReviewLabel = `Review ${legacyReviewCount} ${legacyReviewCount === 1 ? 'order' : 'orders'}`
   const currentOperator = activeShift?.opening.actor || managedIdentity?.email || readLastOperator() || 'Cashier set at review'
   const shopOperatingView: ShopOperatingView = {
     unit: activeOperatingUnit?.name ?? (openShiftSessions.length > 1 ? 'Choose below' : 'Main shop'),
@@ -1925,13 +1929,13 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
       ? `Open since ${formatTime(activeShift.opening.capturedAt)}`
         : openShiftSessions.length > 1
           ? 'Select one shift.'
-        : legacyOperatingOrders.length
-          ? 'Review orders first.'
+        : legacyReviewCount
+          ? `${legacyReviewCount} existing ${legacyReviewCount === 1 ? 'order needs' : 'orders need'} review before starting the Shop day.`
           : 'Start before selling.',
     actionLabel: shopOperatingEligible
       ? operatingActivated
         ? activeShift || openShiftSessions.length > 1 ? undefined : 'Open shift'
-        : legacyOperatingOrders.length ? 'Review orders' : 'Start Shop day'
+        : legacyReviewCount ? legacyReviewLabel : 'Start Shop day'
       : undefined,
     disabled: !commerceCanWrite || Boolean(pendingAction),
     onAction: reviewShopOperatingSession,
@@ -5633,6 +5637,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
       return
     }
     const receiptDate = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Yangon' }).format(new Date()).replaceAll('-', '')
+    setPurchaseReceiptScanFeedback(null)
     setPurchaseOrderDraft(active
       ? { mode: 'receive', purchaseOrderId: active.purchaseOrder.id, quantity: '', rejectedQuantity: '0', discrepancyCode: 'damaged', locationId: defaultReceiptLocationId, trackingCode: `IN-${receiptDate}-${commandUuid().slice(0, 8).toUpperCase()}` }
       : { mode: 'create', sku: itemSku, supplier: '', expectedAt: defaultPurchaseOrderExpectedInput(), quantity: '', unitCostMmk: '' })
@@ -5849,10 +5854,39 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
       ? purchaseOrderDraft.sku
       : purchaseOrderDraftOrder?.purchaseOrder.sku
     setPurchaseOrderDraft(null)
+    setPurchaseReceiptScanFeedback(null)
     setNotice('Stock order editing closed. Shop data was not modified.')
     requestAnimationFrame(() => {
       if (itemSku) purchaseOrderTriggerRefs.current.get(itemSku)?.focus()
     })
+  }
+
+  function selectPurchaseReceiptBarcode(rawValue: string) {
+    if (purchaseOrderDraft?.mode !== 'receive' || !purchaseOrderDraftItem) return
+    const result = applyPurchaseReceiptScan({
+      rawValue,
+      selectedSku: purchaseOrderDraftItem.sku,
+      currentQuantity: purchaseOrderDraft.quantity,
+      maxQuantity: purchaseOrderQuantityLimit,
+      items: commerce.items,
+    })
+    if (result.status === 'added') {
+      setPurchaseOrderDraft((current) => current?.mode === 'receive'
+        && current.purchaseOrderId === purchaseOrderDraft.purchaseOrderId
+        ? { ...current, quantity: String(result.quantity) }
+        : current)
+      setPurchaseReceiptScanFeedback(bi(`${result.itemName} matched · ${result.quantity} accepted. Review the receipt before stock changes.`))
+      return
+    }
+    const messages = {
+      empty: '',
+      'not-found': 'No product matches this code. Check the barcode or SKU.',
+      ambiguous: 'This code matches more than one product. Fix duplicate product codes before receiving.',
+      'wrong-item': 'This product is not on the selected purchase order. Open its matching order to receive it.',
+      'invalid-quantity': 'Finish entering a whole accepted-unit quantity before scanning.',
+      'at-limit': 'The order has no accepted units left. Review the remaining quantity and rejected units.',
+    } as const
+    setPurchaseReceiptScanFeedback(result.status === 'empty' ? null : bi(messages[result.status]))
   }
 
   function reviewPurchaseOrder(event: FormEvent) {
@@ -7772,7 +7806,16 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
         </div>
         {purchaseOrderDraft.mode === 'create' ? <label>Supplier reference{managedInventoryProjection ? <select disabled={commerceControlsDisabled} onChange={(event) => setPurchaseOrderDraft((current) => current?.mode === 'create' ? { ...current, supplier: event.target.value } : current)} required value={purchaseOrderDraft.supplier}><option value="">Choose supplier</option>{managedInventoryProjection.vendors.map((vendor) => <option key={vendor.id} value={vendor.name}>{vendor.name}</option>)}</select> : <input disabled={commerceControlsDisabled} maxLength={120} onChange={(event) => setPurchaseOrderDraft((current) => current?.mode === 'create' ? { ...current, supplier: event.target.value } : current)} placeholder="Supplier name" required value={purchaseOrderDraft.supplier} />}</label> : null}
         {purchaseOrderDraft.mode === 'create' ? <label>Expected arrival<input autoComplete="off" disabled={commerceControlsDisabled} min={localDateTimeInputValue(new Date())} onChange={(event) => setPurchaseOrderDraft((current) => current?.mode === 'create' ? { ...current, expectedAt: event.target.value } : current)} required type={coreUi.d} value={purchaseOrderDraft.expectedAt} /></label> : null}
-        <label>{purchaseOrderDraft.mode === 'create' ? 'Quantity to order' : 'Accepted units'}<input aria-describedby="stock-receipt-preview" disabled={commerceControlsDisabled} inputMode="numeric" max={purchaseOrderQuantityLimit} min="1" onChange={(event) => setPurchaseOrderDraft((current) => current ? { ...current, quantity: event.target.value } : current)} placeholder="10" required step="1" type="number" value={purchaseOrderDraft.quantity} /></label>
+        <label>{purchaseOrderDraft.mode === 'create' ? 'Quantity to order' : 'Accepted units'}<input aria-describedby="stock-receipt-preview" disabled={commerceControlsDisabled} inputMode="numeric" max={purchaseOrderQuantityLimit} min="1" onChange={(event) => { setPurchaseReceiptScanFeedback(null); setPurchaseOrderDraft((current) => current ? { ...current, quantity: event.target.value } : current) }} placeholder="10" required step="1" type="number" value={purchaseOrderDraft.quantity} /></label>
+        {purchaseOrderDraft.mode === 'receive' ? <div className="purchase-receipt-scan">
+          <div className="sku-scan-row"><label>Scan received item<input autoComplete="off" disabled={commerceControlsDisabled} maxLength={80} onChange={() => setPurchaseReceiptScanFeedback(null)} onKeyDown={(event) => {
+            if (event.key !== 'Enter') return
+            event.preventDefault()
+            selectPurchaseReceiptBarcode(event.currentTarget.value)
+            event.currentTarget.value = ''
+          }} placeholder="Scan barcode or type SKU" /></label><BarcodeScanButton disabled={commerceControlsDisabled} label="Scan a received item with the camera" onDetected={selectPurchaseReceiptBarcode} /></div>
+          {purchaseReceiptScanFeedback ? <p className="form-notice" aria-live="polite" role="status">{purchaseReceiptScanFeedback}</p> : null}
+        </div> : null}
         {purchaseOrderDraft.mode === 'create' ? <label>Unit cost (MMK)<input aria-describedby="stock-receipt-preview" disabled={commerceControlsDisabled} inputMode="numeric" min="1" onChange={(event) => setPurchaseOrderDraft((current) => current?.mode === 'create' ? { ...current, unitCostMmk: event.target.value } : current)} placeholder="5000" required step="1" type="number" value={purchaseOrderDraft.unitCostMmk} /></label> : null}
         {purchaseOrderDraft.mode === 'receive' ? <div className="form-row"><label>Rejected units<input aria-describedby="stock-receipt-preview" disabled={commerceControlsDisabled} inputMode="numeric" max={Math.max(0, (purchaseOrderDraftOrder?.progress.remaining ?? 0) - (purchaseOrderQuantityResult ?? 0))} min="0" onChange={(event) => setPurchaseOrderDraft((current) => current?.mode === 'receive' ? { ...current, rejectedQuantity: event.target.value } : current)} required step="1" type="number" value={purchaseOrderDraft.rejectedQuantity} /></label><label>Discrepancy reason<select disabled={commerceControlsDisabled || purchaseOrderRejectedResult === 0} onChange={(event) => setPurchaseOrderDraft((current) => current?.mode === 'receive' ? { ...current, discrepancyCode: event.target.value as CommercePurchaseOrderDiscrepancyCode } : current)} required={Boolean(purchaseOrderRejectedResult)} value={purchaseOrderDraft.discrepancyCode}><option value="damaged">Damaged</option><option value="wrong_item">Wrong item</option><option value="quality_failed">Quality failed</option></select></label></div> : null}
         {purchaseOrderDraft.mode === 'receive' && commerce.inventoryFoundation ? <label>Receive into<select disabled={commerceControlsDisabled || !managedInventoryProjection} onChange={(event) => setPurchaseOrderDraft((current) => current?.mode === 'receive' ? { ...current, locationId: event.target.value } : current)} required value={purchaseOrderDraft.locationId}><option value="">Choose location</option>{managedInventoryProjection?.locations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}</select></label> : null}
