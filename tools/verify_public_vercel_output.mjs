@@ -336,7 +336,10 @@ for (const [route, html] of [['/', home], ...publicProducts.map(product => [`/${
   const contactActionTarget = routeProduct?.status === 'available-in-app'
     ? `/contact/?product=${routeProduct.id}`
     : null
-  const expectedLinks = route === '/' ? 7 + publicProducts.length : 6 + Number(Boolean(contactActionTarget))
+  const galleryViews = { shop: 3, website: 2, ecommerce: 2 }
+  const expectedLinks = route === '/'
+    ? 7 + publicProducts.length + Object.values(galleryViews).reduce((total, count) => total + count, 0)
+    : 6 + Number(Boolean(contactActionTarget)) + (galleryViews[routeProduct?.id] || 0)
   if ((body.match(/<a\b/g) || []).length !== expectedLinks) fail('marketing_link_surface_drift', { route, expectedLinks })
   if (countOccurrences(body, 'href="https://app.supermega.dev/login"') !== 1) fail('single_login_missing', { route })
   if (!body.includes('class="platform-image"') || !(route === '/' ? body.includes('class="product-card-flow"') : body.includes('class="feature-line"'))) fail('product_visual_missing', { route })
@@ -432,10 +435,10 @@ const publicGalleryFiles = [
   'actual-commerce-catalog.png', 'actual-commerce-order-request.png',
 ]
 if (publicGalleryEvidence?.schemaVersion !== 'supermega.public-gallery-provenance.v1'
-  || publicGalleryEvidence.status !== 'illustrative_only'
+  || publicGalleryEvidence.status !== 'local_component_capture'
   || publicGalleryEvidence.records !== 'synthetic'
-  || publicGalleryEvidence.captureSourceCommit !== null
-  || publicGalleryEvidence.captureSourceTree !== null
+  || !/^[0-9a-f]{40}$/.test(publicGalleryEvidence.captureSourceCommit)
+  || !/^[0-9a-f]{40}$/.test(publicGalleryEvidence.captureSourceTree)
   || publicGalleryEvidence.capturedAt !== null
   || publicGalleryEvidence.assets?.map((asset) => asset.file).join(',') !== publicGalleryFiles.join(',')
   || JSON.stringify(publicGalleryEvidence) !== JSON.stringify(publicGalleryProvenance)) {

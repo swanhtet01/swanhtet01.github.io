@@ -61,6 +61,17 @@ test('all-page mode permits informational tombstone but not a retired tool actio
   validatePreviewLinks('<a href="mailto:swanhtet@supermega.dev">Contact</a>', policy, products, options)
 })
 
+test('full-size gallery links stay on exact static public PNGs', () => {
+  const options = { publicOrigin: 'https://public-preview.example' }
+  for (const path of ['/images/actual-shop-today.png', '/images/actual-sites-inquiries.png', '/images/actual-commerce-order-request.png']) {
+    assert.equal(validatePreviewLinks(html + `<a href="${path}">View full size</a>`, policy, products, options).pairedOrigin, app.origin)
+  }
+  for (const path of ['/images/actual-shop-today.svg', '/images/actual-shop-today.png?download=1',
+    '/images/actual-shop-today.png#other', '/images/unreviewed.png', 'https://supermega.dev/images/actual-shop-today.png']) {
+    assert.throws(() => validatePreviewLinks(html + `<a href="${path}">View full size</a>`, policy, products, options), undefined, path)
+  }
+})
+
 
 test('public site rejects product pickers, setup routes and duplicate Login actions', () => {
   for (const suffix of ['/?choose=1', '/shop/?tab=today', '/settings/?product=website', '/login?product=shop', '/login']) {
