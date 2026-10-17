@@ -30,3 +30,27 @@ The public site candidate already presents four distinct real Shop application c
 ## Gate status
 
 This benchmark and cash-count improvement raise local/source readiness only. Preview auth and tenant isolation, hosted website acceptance, physical hardware, offline reliability, KBZPay gateway status, and production release remain separate evidence gates.
+
+## Expanded Myanmar and global workflow benchmark — 17 October 2026
+
+These are product-page or help-center observations, not hands-on acceptance tests. REA could fingerprint the supplied KMO Windows package and inventory its APK container, but could not disassemble the installer or inspect APK bytecode in this host; those binaries were not executed. No competitor account, customer data, app installation, or payment was used.
+
+| Reference | Published workflow evidence | SuperMega decision |
+| --- | --- | --- |
+| [KMO POS](https://kmopos.com/) | Vendor claims Burmese receipt output, offline storage, barcode labels, alternate units, cash reconciliation and local-device backup. | Treat as Myanmar workflow leads. Do not claim those behaviors are verified from REA; installer analysis and Android decompilation remain blocked. |
+| [ZayTap](https://www.hextechsoftware.com/zaytap.php) | Vendor markets a short add-stock → sell → report workflow, Myanmar/English controls, roles, receipts and setup help. | Keep first-run and daily work shallow; defer policy and advanced tools until needed. Validate Burmese copy with a native reviewer. |
+| [IrraTech](https://irratechmyanmar.com/en) | Vendor lists barcode-ready SKUs, stock in/out, daily cash summaries, order tracking and multi-branch inventory. | Preserve one stock/order record and accountable daily close; prove branch access and sync before advertising it as live. |
+| [Ayar POS](https://pos.ayarmm.com/) | Vendor markets web and Android workflows for sales, barcode/labels, customer due, purchasing and reports, with Burmese/English content. | Keep the same workflow understandable on phone and desktop; measure the small-shop setup path before expanding the app shell. |
+| [ESoft Retail](https://www.ethersoft-mm.com/solutions/retail) | Vendor claims high-volume scanning, multi-branch stock, expiry/batch control and an offline outbox. | Treat throughput and offline claims as test targets. Do not reproduce numeric performance claims without SuperMega device evidence. |
+| [Square Retail](https://squareup.com/us/en/point-of-sale/retail-system) and its [inventory guide](https://squareup.com/help/us/en/article/6110-manage-inventory-with-the-retail-pos-app) | Official material describes barcode label printing, stock conversion units, reasoned adjustment, bulk receiving, stocktake and location-aware inventory. | Keep every quantity tied to a clear stock action and base unit. Existing Shop label printing was receipt-only, so a catalog reprint path was a concrete gap. |
+| [Shopify POS hardware guide](https://help.shopify.com/en/manual/sell-in-person/hardware/pos-go/using-pos-hardware) | Official guide describes integrated scanning into cart and a supported Wi-Fi receipt printer path. | Separate device setup from checkout tasks and make unsupported peripherals visible. Named-device compatibility still requires testing. |
+
+### Applied: print a label from a saved catalog item
+
+Shop now exposes **Print labels** inside the existing product editor, rather than adding a repeated action to every inventory row. It prints the item's saved barcode, falling back to its SKU, starts at one label, and caps each print at 50. The action is disabled while product edits are unsaved or stale. It opens only the browser print dialog and changes no catalog, stock, payment, or purchase record. Existing receiving labels remain capped by accepted receipt quantity.
+
+Focused helper checks cover barcode validation, the per-print ceiling, receipt limits, saved-barcode preference and SKU fallback. This remains **browser-print behavior only**: scanner decode, printer compatibility, label stock size and Burmese thermal glyph rendering are **NOT RUN** on physical hardware. KBZPay remains a payment-method label and is not a gateway integration.
+
+### Evidence still needed before claiming competitive readiness
+
+The next comparison must be task-based on supported physical devices: create/import an item, scan it twice at checkout, receive stock in alternate units, print a Burmese customer receipt and product label, lose/recover connectivity, restore a backup, and close a cash drawer. Record exact device, OS/browser, scanner/printer model, latency, failures, operator steps and data recovery. A vendor claim, static REA result, synthetic screenshot or passing local unit test cannot substitute for that trial.

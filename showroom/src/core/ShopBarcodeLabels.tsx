@@ -1,14 +1,21 @@
-import { useMemo, useRef, useState } from 'react'
+import { useId, useRef, useState } from 'react'
+import {
+  acceptedReceiptLabelTarget,
+  cappedShopBarcodeLabelCopies,
+  catalogProductLabelTarget,
+  isPrintableShopBarcode,
+  MAX_SHOP_BARCODE_LABELS_PER_PRINT,
+  type AcceptedStockReceiptLabel,
+  type CatalogProductLabel,
+} from './shop-barcode-labels'
 
-export type AcceptedStockReceiptLabel = {
-  id: string
-  purchaseOrderId: string
-  sku: string
-  itemName: string
-  acceptedQuantity: number
-}
+export type { AcceptedStockReceiptLabel, CatalogProductLabel } from './shop-barcode-labels'
 
-const MAX_LABELS_PER_PRINT = 50
+type ShopBarcodeLabelsProps = { disabled?: boolean } & (
+  | { receipt: AcceptedStockReceiptLabel; product?: never }
+  | { product: CatalogProductLabel; receipt?: never }
+)
+
 // Code 128 symbol patterns adapted from JsBarcode 3.12.3 (MIT, Johan Lindell).
 // This Code Set B subset keeps other symbologies out of the Shop runtime bundle.
 const CODE128_BARS = [
@@ -24,16 +31,6 @@ const CODE128_BARS = [
   '11011110110', '11110110110', '10101111000', '10100011110', '10001011110', '10111101000', '10111100010', '11110101000', '11110100010', '10111011110',
   '10111101110', '11101011110', '11110101110', '11010000100', '11010010000', '11010011100', '1100011101011',
 ]
-
-function isPrintableCode128(value: string) {
-  return value.length > 0 && value.length <= 80 && value.trim() === value && /^[\x20-\x7e]+$/.test(value)
-}
-
-function cappedBarcodeCopies(acceptedQuantity: number, requestedCopies: number) {
-  if (!Number.isSafeInteger(acceptedQuantity) || acceptedQuantity < 1) return 0
-  const safeRequested = Number.isSafeInteger(requestedCopies) ? requestedCopies : 1
-  return Math.max(1, Math.min(acceptedQuantity, MAX_LABELS_PER_PRINT, safeRequested))
-}
 
 function code128BPath(value: string) {
   const symbols = [104, ...Array.from(value, (character) => character.charCodeAt(0) - 32)]
@@ -53,29 +50,33 @@ function code128BPath(value: string) {
   return { modules: modules.length, path }
 }
 
-export function ShopBarcodeLabels({ receipt }: { receipt: AcceptedStockReceiptLabel }) {
-  const [copies, setCopies] = useState(() => cappedBarcodeCopies(receipt.acceptedQuantity, receipt.acceptedQuantity))
+export function ShopBarcodeLabels(props: ShopBarcodeLabelsProps) {
+  const target = props.receipt
+    ? acceptedReceiptLabelTarget(props.receipt)
+    : props.product ? catalogProductLabelTarget(props.product) : null
+  const [copies, setCopies] = useState(() => target?.initialCopies ?? 1)
   const dialogRef = useRef<HTMLDialogElement>(null)
-  const skuIsPrintable = isPrintableCode128(receipt.sku)
-  const barcode = useMemo(() => skuIsPrintable ? code128BPath(receipt.sku) : null, [receipt.sku, skuIsPrintable])
+  const titleId = `shop-barcode-label-title-${useId()}`
+  const codeIsPrintable = Boolean(target && isPrintableShopBarcode(target.code))
+  const barcode = target && codeIsPrintable ? code128BPath(target.code) : null
 
   function openLabelPreview() {
-    if (!Number.isSafeInteger(receipt.acceptedQuantity) || receipt.acceptedQuantity < 1) return
+    if (props.disabled || !target) return
     dialogRef.current?.showModal()
   }
 
   function printLabels() {
-    if (!barcode || !copies || copies > receipt.acceptedQuantity) return
+    if (props.disabled || !barcode || !copies || !target || copies > target.maxCopies) return
     window.print()
   }
 
-  if (!Number.isSafeInteger(receipt.acceptedQuantity) || receipt.acceptedQuantity < 1) return null
+  if (!target) return null
 
   return <>
-    <button aria-label={`Print labels for ${receipt.itemName}, ${receipt.acceptedQuantity} units accepted`} className="core-button compact shop-barcode-label-trigger" onClick={openLabelPreview} type="button">
-      Print labels <span>{receipt.acceptedQuantity} accepted</span>
+    <button aria-label={`Print labels for ${target.itemName}`} className="core-button compact shop-barcode-label-trigger" disabled={props.disabled} onClick={openLabelPreview} type="button">
+      Print labels {target.buttonDescription ? <span>{target.buttonDescription}</span> : null}
     </button>
-    <dialog aria-labelledby={`barcode-label-title-${receipt.id}`} className="shop-barcode-label-dialog" ref={dialogRef}>
+    <dialog aria-labelledby={titleId} className="shop-barcode-label-dialog" ref={dialogRef}>
       <style>{`
         .shop-barcode-label-dialog { width:min(560px,calc(100vw - 32px)); max-width:560px; max-height:min(86vh,760px); padding:0; border:1px solid #e3e5eb; border-radius:20px; color:#111827; box-shadow:0 28px 90px #11182735; }
         .shop-barcode-label-dialog::backdrop { background:#12182775; backdrop-filter:blur(3px); }
@@ -112,22 +113,22 @@ export function ShopBarcodeLabels({ receipt }: { receipt: AcceptedStockReceiptLa
       `}</style>
       <div className="shop-barcode-label-shell">
         <header className="shop-barcode-label-heading">
-          <div><span className="shop-barcode-label-eyebrow">Received stock</span><h2 id={`barcode-label-title-${receipt.id}`}>Print product labels</h2><p>{receipt.itemName} · {receipt.acceptedQuantity.toLocaleString()} units accepted</p></div>
+          <div><span className="shop-barcode-label-eyebrow">{target.sourceLabel}</span><h2 id={titleId}>Print product labels</h2><p>{target.itemName} · {target.description}</p></div>
           <button aria-label="Close label preview" className="shop-barcode-label-close" onClick={() => dialogRef.current?.close()} type="button">×</button>
         </header>
-        {!skuIsPrintable ? <p className="shop-barcode-label-error" role="alert">This SKU can’t be printed as CODE128. Use a short, printable ASCII SKU.</p> : null}
+        {!codeIsPrintable ? <p className="shop-barcode-label-error" role="alert">This saved code can’t be printed as CODE128. Use a short, printable ASCII barcode or SKU.</p> : null}
         <div className="shop-barcode-label-controls">
-          <label>Label quantity<input disabled={!skuIsPrintable} max={Math.min(receipt.acceptedQuantity, MAX_LABELS_PER_PRINT)} min="1" onChange={(event) => setCopies(cappedBarcodeCopies(receipt.acceptedQuantity, Number(event.target.value)))} type="number" value={copies} /></label>
-          <p className="shop-barcode-label-note">One label per accepted unit. Print up to {MAX_LABELS_PER_PRINT} at a time; repeat for larger receipts.</p>
+          <label>Label quantity<input disabled={!codeIsPrintable || props.disabled} max={Math.min(target.maxCopies, MAX_SHOP_BARCODE_LABELS_PER_PRINT)} min="1" onChange={(event) => setCopies(cappedShopBarcodeLabelCopies(target.maxCopies, Number(event.target.value)))} type="number" value={copies} /></label>
+          <p className="shop-barcode-label-note">Up to {Math.min(target.maxCopies, MAX_SHOP_BARCODE_LABELS_PER_PRINT)} per print. Printing does not change stock or the saved product.</p>
         </div>
         <div aria-label="Product label preview" className="shop-barcode-label-preview">
-          <div className="shop-barcode-label-preview-card"><strong>{receipt.itemName}</strong>{barcode ? <svg aria-label={`Barcode for ${receipt.sku}`} role="img" viewBox={`0 0 ${barcode.modules} 40`}><path d={barcode.path} /></svg> : <small>{receipt.sku}</small>}<small>Receipt {receipt.purchaseOrderId}</small></div>
+          <div className="shop-barcode-label-preview-card"><strong>{target.itemName}</strong>{barcode ? <svg aria-label={`Barcode for ${target.code}`} role="img" viewBox={`0 0 ${barcode.modules} 40`}><path d={barcode.path} /></svg> : <small>{target.code}</small>}<small>{target.detail}</small></div>
           <small className="shop-barcode-label-note">50 × 30 mm · CODE128 · print dialog opens on this device</small>
         </div>
         <div aria-hidden="true" className="shop-barcode-label-print-host">
-          {barcode ? Array.from({ length: copies }, (_, index) => <div className="shop-barcode-label-print" key={`${receipt.id}:${index}`}><strong>{receipt.itemName}</strong><small>{receipt.sku}</small><svg aria-hidden="true" preserveAspectRatio="none" viewBox={`0 0 ${barcode.modules} 40`}><path d={barcode.path} /></svg><small>{receipt.purchaseOrderId}</small></div>) : null}
+          {barcode ? Array.from({ length: copies }, (_, index) => <div className="shop-barcode-label-print" key={`${target.id}:${index}`}><strong>{target.itemName}</strong><small>{target.code}</small><svg aria-hidden="true" preserveAspectRatio="none" viewBox={`0 0 ${barcode.modules} 40`}><path d={barcode.path} /></svg><small>{target.detail}</small></div>) : null}
         </div>
-        <div className="shop-barcode-label-actions"><button className="core-button" onClick={() => dialogRef.current?.close()} type="button">Cancel</button><button className="core-button primary" disabled={!barcode || copies < 1 || copies > receipt.acceptedQuantity} onClick={printLabels} type="button">Print {copies} {copies === 1 ? 'label' : 'labels'}</button></div>
+        <div className="shop-barcode-label-actions"><button className="core-button" onClick={() => dialogRef.current?.close()} type="button">Cancel</button><button className="core-button primary" disabled={props.disabled || !barcode || copies < 1 || copies > target.maxCopies} onClick={printLabels} type="button">Print {copies} {copies === 1 ? 'label' : 'labels'}</button></div>
       </div>
     </dialog>
   </>
