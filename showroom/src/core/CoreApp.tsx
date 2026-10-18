@@ -1173,7 +1173,7 @@ function ShopOperatingStrip({ actionLabel, choice, detail, disabled, onAction, o
   </section>
 }
 
-function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = null, initialCustomer, initialQuery, items, lowStockCount, loyaltyPoints, onCreateFromBarcode, onReview, openOrderCount, operatingContext, paymentQrScope, persistLocalDraft, productImageScope, recordStatus, recordedOrderIds }: {
+function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = null, initialCustomer, initialQuery, items, lowStockCount, loyaltyPoints, onCreateFromBarcode, onReview, openOrderCount, operatingContext, paymentQrScope, persistLocalDraft, productImageScope, receiptTools, recordStatus, recordedOrderIds }: {
   canCompleteInOneReview: boolean
   disabled: boolean
   draftStorageScope?: CounterTicketStorageScope | null
@@ -1189,6 +1189,7 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
   paymentQrScope: string
   persistLocalDraft: boolean
   productImageScope: string
+  receiptTools: ReactNode
   recordStatus: ShopRecordStatus
   recordedOrderIds: string[]
 }) {
@@ -1497,6 +1498,7 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
         {catalogChanged ? <p className="authority-note" role="alert">Saved quantities exceed current stock, or an item was removed. Review quantities or clear this basket; it has not been silently reduced.</p> : null}
         {!persistLocalDraft && unitCount > 0 ? <p className="authority-note">Unsubmitted basket is kept in this tab only. Review it before leaving or switching company.</p> : null}
         <header><div><h2>{uiText('Current sale')}</h2><p>{unitCount ? `${unitCount} ${uiText(unitCount === 1 ? 'item' : 'items')} ${uiText('selected')}` : uiText('Choose a product to start')}</p></div><div className="shop-cart-actions">
+          {receiptTools}
           {persistLocalDraft && unitCount > 0 && !recoveryPaused && !checkoutOrderId ? <button className="text-link" onClick={() => {
             const customerLabel = customer.trim() && customer.trim() !== 'Guest' ? customer.trim() : 'Sale'
             const label = activeLabel || `${customerLabel} · ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
@@ -7455,8 +7457,7 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
   if (tab === 'counter') return <div className="operation-module shop-counter-module">
     {counterBoundary}
     {shopCatalogSetupNotice}
-    <ShopCounter key={counterDraftContext.key} persistLocalDraft={counterDraftContext.persistLocalDraft} canCompleteInOneReview={confirmedLocalShop || Boolean(managedIdentity)} disabled={commerceControlsDisabled || (!confirmedLocalShop && !managedIdentity) || (shopShiftRequired && !activeShift)} draftStorageScope={counterDraftContext.storageScope} initialCustomer={shopCounterCustomer} initialQuery={shopCounterSearch} items={commerce.items} lowStockCount={lowStock.length} loyaltyPoints={shopLoyaltyPoints} onCreateFromBarcode={openCatalogCreateFromBarcode} onReview={reviewCounterSale} openOrderCount={openOrders.length} operatingContext={shopOperatingEligible && shopShiftRequired ? <ShopOperatingStrip {...shopOperatingView} /> : null} paymentQrScope={paymentQrScope} productImageScope={productImageScope} recordStatus={shopRecordStatus} recordedOrderIds={commerce.orders.map(order => order.id)} />
-    <Suspense fallback={null}><ReceiptDialog ack={activeReceiptAck} disabled={commerceControlsDisabled} loyalty={receiptLoyalty} merchantProfile={commerce.merchantProfile} onSaveMerchantProfile={saveCustomerReceiptProfile} onClose={() => { setReceiptAck(null); setCounterReceiptOrderId('') }} paymentQrScope={paymentQrScope} showSetupTrigger /></Suspense>
+    <ShopCounter key={counterDraftContext.key} persistLocalDraft={counterDraftContext.persistLocalDraft} canCompleteInOneReview={confirmedLocalShop || Boolean(managedIdentity)} disabled={commerceControlsDisabled || (!confirmedLocalShop && !managedIdentity) || (shopShiftRequired && !activeShift)} draftStorageScope={counterDraftContext.storageScope} initialCustomer={shopCounterCustomer} initialQuery={shopCounterSearch} items={commerce.items} lowStockCount={lowStock.length} loyaltyPoints={shopLoyaltyPoints} onCreateFromBarcode={openCatalogCreateFromBarcode} onReview={reviewCounterSale} openOrderCount={openOrders.length} operatingContext={shopOperatingEligible && shopShiftRequired ? <ShopOperatingStrip {...shopOperatingView} /> : null} paymentQrScope={paymentQrScope} productImageScope={productImageScope} receiptTools={<Suspense fallback={null}><ReceiptDialog ack={activeReceiptAck} disabled={commerceControlsDisabled} loyalty={receiptLoyalty} merchantProfile={commerce.merchantProfile} onSaveMerchantProfile={saveCustomerReceiptProfile} onClose={() => { setReceiptAck(null); setCounterReceiptOrderId('') }} paymentQrScope={paymentQrScope} showSetupTrigger /></Suspense>} recordStatus={shopRecordStatus} recordedOrderIds={commerce.orders.map(order => order.id)} />
     {actionGate}
   </div>
 
@@ -8339,7 +8340,7 @@ function OrderList({
             <small>{commerceOrderDisplayReference(order.id)} · {order.owner ? `${uiText('owner')} ${order.owner}` : uiText('owner not recorded')} · {uiText(order.channel)} · {order.payment}{order.paymentDueAt ? ` · ${uiText('payment due')} ${formatTime(order.paymentDueAt)}` : ''}{order.fulfilment ? ` · ${uiText(fulfilmentLabel(order.fulfilment))}` : ''}{order.fulfilmentReference ? ` · ${order.fulfilmentReference}` : ''} · {order.promisedAt ? `${uiText('promised')} ${formatTime(order.promisedAt)}` : uiText('promise not recorded')} · ${uiText('created')} ${formatTime(order.createdAt)}</small>
           </div>
         </details>
-        {order.refundStatus === 'due' ? <small role="note">Record a refund already completed with the external payment provider. This does not send money.</small> : null}
+        {order.refundStatus === 'due' ? <small role="note">{uiText('Record a refund already completed with the external payment provider. This does not send money.')}</small> : null}
       </div>
       <div className="order-row-actions">
         <b>{formatMoney(order.total)}</b>
@@ -8350,10 +8351,10 @@ function OrderList({
         {hasSecondaryActions ? <details className="order-row-more">
           <summary aria-label={readUiLocale() === 'my' ? `${order.id} ${uiText('More options')}` : `More options for ${order.id}`}>{uiText('More')}</summary>
           <div>
-            {needsPayment && !reconcileIsPrimary ? <button className="text-link" disabled={disabled} onClick={() => onReconcilePayment(order.id)} type="button">Record payment only</button> : null}
-            {order.refundStatus === 'due' && !settleRefundIsPrimary ? <button className="text-link" disabled={disabled} onClick={() => onSettleRefund(order.id)} type="button">Record settled refund</button> : null}
+            {needsPayment && !reconcileIsPrimary ? <button className="text-link" disabled={disabled} onClick={() => onReconcilePayment(order.id)} type="button">{uiText('Record payment only')}</button> : null}
+            {order.refundStatus === 'due' && !settleRefundIsPrimary ? <button className="text-link" disabled={disabled} onClick={() => onSettleRefund(order.id)} type="button">{uiText('Record settled refund')}</button> : null}
             <OrderReceiptActions acknowledgement={acknowledgement} onViewReceipt={onViewReceipt} />
-            {canCancelOrder ? <button className="text-link subtle" disabled={disabled} onClick={() => onCancel(order.id)} type="button">Cancel order</button> : null}
+            {canCancelOrder ? <button className="text-link subtle" disabled={disabled} onClick={() => onCancel(order.id)} type="button">{uiText('Cancel order')}</button> : null}
           </div>
         </details> : null}
       </div>

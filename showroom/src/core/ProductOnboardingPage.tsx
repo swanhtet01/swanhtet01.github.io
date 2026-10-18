@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react'
+import { type FormEvent, useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useNavigate, useOutletContext } from 'react-router'
 
 import { recordBehaviorSignal } from './behavior-trail'
@@ -212,18 +212,17 @@ function ActiveProductOnboardingPage({ product }: ProductOnboardingPageProps) {
   // One grouped picker, ported from the signup page so both doors ask the product's first
   // question the same way. A choice is either 'trade:<template>' or 'pack:<industry pack>';
   // the empty string keeps the standard sample on whatever pack this device already carries.
-  const [businessChoiceId, setBusinessChoiceId] = useState(() => product === 'commerce' ? shopBusinessChoiceDoorSelection.activeId : '')
-  const [shopBusinessChoiceChangeSelected, setShopBusinessChoiceChangeSelected] = useState(false)
-  const previousRequestedShopBusinessChoiceId = useRef(requestedShopBusinessChoiceId)
-  useEffect(() => {
-    if (product !== 'commerce' || previousRequestedShopBusinessChoiceId.current === requestedShopBusinessChoiceId) return
-    previousRequestedShopBusinessChoiceId.current = requestedShopBusinessChoiceId
-    // Clearing the query after an explicit in-page choice must not undo it.
-    if (!requestedShopBusinessChoiceId) return
-    const selection = resolveSetupVariantDoor(savedShopBusinessChoiceId, requestedShopBusinessChoiceId, Boolean(savedShopSetup))
-    setBusinessChoiceId(selection.activeId)
-    setShopBusinessChoiceChangeSelected(false)
-  }, [product, requestedShopBusinessChoiceId, savedShopBusinessChoiceId, savedShopSetup])
+  const requestVersion = `${location.key}:${requestedShopBusinessChoiceId ?? ''}`
+  const [businessChoiceSelection, setBusinessChoiceSelection] = useState(() => ({
+    activeId: product === 'commerce' ? shopBusinessChoiceDoorSelection.activeId : '',
+    requestVersion,
+    changeSelected: false,
+  }))
+  // A fresh deep link takes effect during render, including browser back/forward. Clearing
+  // the query after an explicit picker choice leaves that choice intact.
+  const freshRequestedChoice = Boolean(requestedShopBusinessChoiceId && businessChoiceSelection.requestVersion !== requestVersion)
+  const businessChoiceId = freshRequestedChoice ? shopBusinessChoiceDoorSelection.activeId : businessChoiceSelection.activeId
+  const shopBusinessChoiceChangeSelected = freshRequestedChoice ? false : businessChoiceSelection.changeSelected
   const pendingRequestedShopBusinessChoiceId = product === 'commerce'
     && !shopBusinessChoiceChangeSelected
     && shopBusinessChoiceDoorSelection.choiceRequired
@@ -389,8 +388,7 @@ function ActiveProductOnboardingPage({ product }: ProductOnboardingPageProps) {
 
   function continueSavedShopBusinessChoice() {
     if (!pendingRequestedShopBusinessChoiceId) return
-    setBusinessChoiceId(savedShopBusinessChoiceId)
-    setShopBusinessChoiceChangeSelected(true)
+    setBusinessChoiceSelection({ activeId: savedShopBusinessChoiceId, requestVersion, changeSelected: true })
     clearShopBusinessChoiceRequest()
     setNotice('Continuing the saved Shop setup. The requested business type was not applied.')
   }
@@ -398,8 +396,7 @@ function ActiveProductOnboardingPage({ product }: ProductOnboardingPageProps) {
   function useRequestedShopBusinessChoice() {
     const requested = pendingRequestedShopBusinessChoiceId
     if (!requested) return
-    setBusinessChoiceId(requested)
-    setShopBusinessChoiceChangeSelected(true)
+    setBusinessChoiceSelection({ activeId: requested, requestVersion, changeSelected: true })
     if (requested.startsWith('pack:')) setShopIndustryPackId(requested.slice('pack:'.length) as ShopIndustryPackId)
     setSetup((current) => (current.product === 'commerce'
       ? { ...current, businessChoiceId: requested, startedAt: undefined, savedAt: undefined }
@@ -411,8 +408,7 @@ function ActiveProductOnboardingPage({ product }: ProductOnboardingPageProps) {
   function changeBusinessChoice(value: string) {
     const choiceId = normalizeShopBusinessChoiceId(value, SHOP_BUSINESS_CHOICE_IDS)
     if (value && !choiceId) return
-    setBusinessChoiceId(choiceId ?? '')
-    setShopBusinessChoiceChangeSelected(true)
+    setBusinessChoiceSelection({ activeId: choiceId ?? '', requestVersion, changeSelected: true })
     if (choiceId?.startsWith('pack:')) setShopIndustryPackId(choiceId.slice('pack:'.length) as ShopIndustryPackId)
     setSetup((current) => (current.product === 'commerce'
       ? { ...current, businessChoiceId: choiceId, startedAt: undefined, savedAt: undefined }

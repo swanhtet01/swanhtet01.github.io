@@ -4950,7 +4950,7 @@ if (!orderListContract.includes("const settleRefundIsPrimary = !reconcileIsPrima
   || !orderListContract.includes('className="order-row-more"')
   || !orderListContract.includes("readUiLocale() === 'my' ? `${order.id} ${uiText('More options')}` : `More options for ${order.id}`")
   || (orderListContract.match(/className="core-button primary compact"/g) || []).length !== 4
-  || !orderListContract.includes('>Cancel order</button>')
+  || !orderListContract.includes("{uiText('Cancel order')}</button>")
   || !coreCssSource.includes('.order-row-more > summary {')
   || !coreCssSource.includes('.order-row-more > div .text-link { min-height: 44px;')) fail('shop_order_action_hierarchy_missing')
 if (!coreSource.includes('id="commerce-manual-order-form"')
