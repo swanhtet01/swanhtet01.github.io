@@ -1,5 +1,17 @@
 export const SHOP_COUNTER_PAGE_SIZE = 8
 
+export type ShopCounterCategoryFilter = { kind: 'all' } | { kind: 'category'; value: string } | { kind: 'uncategorized' }
+
+export function activeShopCounterCategoryFilter(
+  requested: ShopCounterCategoryFilter,
+  categories: readonly (readonly [string, string])[],
+  hasUncategorized: boolean,
+): ShopCounterCategoryFilter {
+  if (requested.kind === 'category' && !categories.some(([key]) => key === requested.value)) return { kind: 'all' }
+  if (requested.kind === 'uncategorized' && !hasUncategorized) return { kind: 'all' }
+  return requested
+}
+
 type CounterCatalogSearchItem = {
   sku: string
   name: string

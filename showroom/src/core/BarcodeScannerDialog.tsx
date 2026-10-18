@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { createCameraBarcodeScanSession, nextCameraBarcodeScans, type CameraBarcodeScanSession } from './shop-camera-scan-session'
+import { createCameraBarcodeScanSession, nextCameraBarcodeScan, type CameraBarcodeScanSession } from './shop-camera-scan-session'
+import { uiText, useUiLocale } from './ui-locale'
 
 type DetectedBarcode = { rawValue: string }
 
@@ -38,6 +39,7 @@ export function BarcodeScannerDialog({ continuous = false, continuousMode = 'rec
   const [error, setError] = useState('')
   const [scanCount, setScanCount] = useState(0)
   const [scanFeedback, setScanFeedback] = useState('')
+  const locale = useUiLocale()
   const dialogRef = useRef<HTMLDialogElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
   const onDetectedRef = useRef(onDetected)
@@ -105,12 +107,12 @@ export function BarcodeScannerDialog({ continuous = false, continuousMode = 'rec
             if (cancelled) return
             const values = barcodes.map((barcode) => barcode.rawValue.trim()).filter(Boolean)
             const value = continuous
-              ? nextCameraBarcodeScans(scanSessionRef.current, values.slice(0, 1), Date.now())[0]
+              ? nextCameraBarcodeScan(scanSessionRef.current, values, Date.now())
               : values[0]
             if (!value) return
             if (continuous) {
               const accepted = onDetectedRef.current(value)
-              setScanCount((count) => count + 1)
+              if (accepted !== false) setScanCount((count) => count + 1)
               setScanFeedback(accepted === false
                 ? continuousMode === 'sale'
                   ? 'Not added. Check the product code and available stock.'
@@ -151,7 +153,7 @@ export function BarcodeScannerDialog({ continuous = false, continuousMode = 'rec
       video.srcObject = null
       if (dialog.open) dialog.close()
     }
-  }, [continuous])
+  }, [continuous, continuousMode])
 
   function requestClose() {
     if (!cancelledRef.current) onCloseRef.current()
@@ -159,18 +161,18 @@ export function BarcodeScannerDialog({ continuous = false, continuousMode = 'rec
 
   return <dialog aria-label={label} className="barcode-scan-dialog" onClose={requestClose} ref={dialogRef}>
     <header className="barcode-scan-head">
-      <span className="core-eyebrow">Camera scan</span>
-      <h2>{continuous ? continuousMode === 'sale' ? 'Scan items into this sale' : 'Scan accepted units' : 'Point the camera at the barcode'}</h2>
+      <span className="core-eyebrow">{uiText('Camera scan')}</span>
+      <h2>{uiText(continuous ? continuousMode === 'sale' ? 'Scan items into this sale' : 'Scan accepted units' : 'Point the camera at the barcode')}</h2>
     </header>
     {/* muted + playsInline keep mobile browsers rendering the preview inline without sound. */}
     <video className="barcode-scan-video" muted playsInline ref={videoRef} />
     {error
-      ? <p className="barcode-scan-error" role="alert">{error}</p>
+      ? <p className="barcode-scan-error" role="alert">{uiText(error)}</p>
       : continuous
-        ? <p aria-live="polite" className="barcode-scan-hint" role="status">{scanFeedback || 'Each label is counted once per camera presentation.'}{scanCount ? ` · ${scanCount} scan${scanCount === 1 ? '' : 's'}` : ''}</p>
-        : <p className="barcode-scan-hint">The code is added when recognized. The camera reads locally and does not record video.</p>}
+        ? <p aria-live="polite" className="barcode-scan-hint" role="status">{uiText(scanFeedback || 'Each label is counted once per camera presentation.')}{scanCount ? locale === 'my' ? ` · ${scanCount} ကြိမ် ဖတ်ပြီး` : ` · ${scanCount} scan${scanCount === 1 ? '' : 's'}` : ''}</p>
+        : <p className="barcode-scan-hint">{uiText('The code is added when recognized. The camera reads locally and does not record video.')}</p>}
     <div className="barcode-scan-actions">
-      <button className="core-button compact" onClick={requestClose} type="button">{continuous ? 'Finish scanning' : 'Cancel'}</button>
+      <button className="core-button compact" onClick={requestClose} type="button">{uiText(continuous ? 'Finish scanning' : 'Cancel')}</button>
     </div>
   </dialog>
 }

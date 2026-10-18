@@ -1,11 +1,25 @@
 export type CameraBarcodeScanSession = {
   visibleCodes: Map<string, { absentSince: number | null }>
+  pendingCodes: string[]
 }
 
 export const CAMERA_BARCODE_REARM_ABSENCE_MS = 1200
 
 export function createCameraBarcodeScanSession(): CameraBarcodeScanSession {
-  return { visibleCodes: new Map() }
+  return { visibleCodes: new Map(), pendingCodes: [] }
+}
+
+/** Keep every visible label present, but offer one new code per camera frame. */
+export function nextCameraBarcodeScan(
+  session: CameraBarcodeScanSession,
+  observedValues: readonly string[],
+  now: number,
+): string | undefined {
+  const observed = new Set(observedValues.map((value) => value.trim()).filter(Boolean))
+  const newlyVisible = nextCameraBarcodeScans(session, observedValues, now)
+  session.pendingCodes = session.pendingCodes.filter((code) => observed.has(code))
+  session.pendingCodes.push(...newlyVisible)
+  return session.pendingCodes.shift()
 }
 
 /** Return each code once per camera presentation, re-arming only after it leaves view. */

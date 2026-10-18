@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs'
 import { stripTypeScriptTypes } from 'node:module'
 import { resolve } from 'node:path'
 import { findCommerceItemByScanCode, incrementPurchaseOrderReceiveFromScan, resolveCommerceItemByScanCode } from '../showroom/src/core/commerce-workspace.ts'
-import { CAMERA_BARCODE_REARM_ABSENCE_MS, createCameraBarcodeScanSession, nextCameraBarcodeScans } from '../showroom/src/core/shop-camera-scan-session.ts'
+import { CAMERA_BARCODE_REARM_ABSENCE_MS, createCameraBarcodeScanSession, nextCameraBarcodeScan, nextCameraBarcodeScans } from '../showroom/src/core/shop-camera-scan-session.ts'
 import { cappedShopBarcodeLabelCopies, isPrintableShopBarcode, MAX_SHOP_BARCODE_LABELS_PER_PRINT } from '../showroom/src/core/shop-barcode-labels.ts'
 import { unmatchedBarcodeForCreation } from '../showroom/src/core/shop-unmatched-scan.ts'
 
@@ -89,7 +89,7 @@ const permissionsPolicy = vercel.routes?.find((route) => route.src === '/(.*)')?
 check(permissionsPolicy === 'camera=(self), geolocation=(), microphone=(), payment=(), usb=()', 'barcode_camera_blocked_by_deployment_policy')
 check(scannerDialog.includes('if (detecting || cancelled || activeVideo.readyState < 2) return'), 'barcode_in_flight_or_not_ready_guard_missing')
 check(scannerDialog.includes('barcodes.map((barcode) => barcode.rawValue.trim()).filter(Boolean)'), 'barcode_raw_value_trim_missing')
-check(scannerDialog.includes('nextCameraBarcodeScans(scanSessionRef.current, values.slice(0, 1), Date.now())'), 'continuous_camera_scan_must_count_a_label_once_per_presentation')
+check(scannerDialog.includes('nextCameraBarcodeScan(scanSessionRef.current, values, Date.now())'), 'continuous_camera_scan_must_track_every_visible_label_and_count_once_per_presentation')
 check(scannerDialog.includes('onDetectedRef.current(value)') && scannerDialog.includes('onCloseRef.current()'), 'barcode_detected_value_must_close_dialog')
 check(scannerDialog.includes('onDetectedRef.current(value)') && scannerDialog.includes('Remove the label before scanning another unit.'), 'continuous_scan_feedback_must_explain_rearming')
 check(component.includes("continuousMode = 'receiving'")
@@ -303,6 +303,11 @@ const unstableCameraSession = createCameraBarcodeScanSession()
 nextCameraBarcodeScans(unstableCameraSession, ['SKU-1'], 1000)
 nextCameraBarcodeScans(unstableCameraSession, [], 1400)
 check(nextCameraBarcodeScans(unstableCameraSession, ['SKU-1'], 2400).length === 0, 'camera_scan_must_not_rearm_after_a_brief_detection_gap')
+const multiLabelSession = createCameraBarcodeScanSession()
+check(nextCameraBarcodeScan(multiLabelSession, ['SKU-A', 'SKU-B'], 1000) === 'SKU-A', 'camera_scan_must_emit_only_one_of_two_new_labels_per_frame')
+check(nextCameraBarcodeScan(multiLabelSession, ['SKU-B', 'SKU-A'], 1400) === 'SKU-B', 'camera_scan_must_offer_second_label_without_rearming_first_on_detector_reorder')
+check(nextCameraBarcodeScan(multiLabelSession, ['SKU-A', 'SKU-B'], 1800) === undefined, 'camera_scan_must_not_repeat_held_labels_after_detector_reorder')
+check(nextCameraBarcodeScan(multiLabelSession, ['SKU-A'], 2200) === undefined, 'camera_scan_must_not_rearm_first_label_when_second_leaves')
 
 const recordOutput = functionBody(coreApp, 'recordOutput')
 const closeSelectedJobShort = functionBody(coreApp, 'closeSelectedJobShort')

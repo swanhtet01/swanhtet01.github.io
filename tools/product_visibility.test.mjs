@@ -39,8 +39,11 @@ test('new trial choices consume active products and reject retired query selecti
 
 test('unavailable sign-in offers saved work and assisted setup without demo entry', async () => {
   const source = await readFile(resolve(root, 'showroom/src/core/ManagedLoginPage.tsx'), 'utf8')
-  const unavailable = source.slice(source.indexOf('<section className="managed-login-panel" aria-label="Login unavailable">'))
-  assert.match(unavailable, /to="\/\?choose=1">Saved work on this device/)
+  const unavailableStart = source.indexOf('<section className="managed-login-panel"')
+  assert.ok(unavailableStart >= 0)
+  const unavailable = source.slice(unavailableStart)
+  assert.match(unavailable, /aria-label=\{uiText\('Login unavailable'\)\}/)
+  assert.match(unavailable, /to="\/\?choose=1">\{uiText\('Saved work on this device'\)\}/)
   assert.match(unavailable, /Contact support/)
   assert.doesNotMatch(unavailable, /Free trial|Try free demo|Try a sample/)
   assert.match(source, /Date\.now\(\) < cooldownUntil/)
@@ -71,11 +74,11 @@ test('release assets require the current login choices and local workspace bound
 
 test('unauthenticated launcher preserves managed-only access and hides browser-local workspace detail', async () => {
   const source = await readFile(resolve(root, 'showroom/src/core/CoreShell.tsx'), 'utf8')
-  assert.match(source, /!emptyCompany && managedPortal \? <nav aria-label="Your workspace"/)
+  assert.match(source, /!emptyCompany && managedPortal \? <nav aria-label=\{uiText\('Your workspace'\)\}/)
   assert.match(source, /customerProducts\.filter\(\(\[name\]\) => managedProductIsVisible/)
   assert.match(source, /if \(!managedProductIsVisible\(portalAccess\.products, setupKey\)\) return null/)
-  assert.match(source, /Sign in to your business\./)
-  assert.match(source, /to=\{managedLoginPath\(null\)\}>Login<\/Link>/)
+  assert.match(source, /uiText\('Sign in to your business\.'\)/)
+  assert.match(source, /to=\{managedLoginPath\(null\)\}>\{uiText\('Login'\)\}<\/Link>/)
   for (const retiredBrowserDetail of ['localProductSetups', "readProductSetup(window.localStorage, 'production')", 'setSetupLoadFailed', 'Workspace unavailable', 'On this device']) {
     assert.ok(!source.includes(retiredBrowserDetail), `unauthenticated root must not expose ${retiredBrowserDetail}`)
   }

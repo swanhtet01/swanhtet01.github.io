@@ -26,6 +26,15 @@ export function shopPublicInboxBacklogCursor(previousCursor: string | null, firs
   return retrying ? null : previousCursor ?? firstPageNextCursor
 }
 
+export function shopPublicInboxPrunedRequestIds(
+  requests: ReadonlyMap<string, ShopPublicInboxRequest>,
+  observedRequestIds: ReadonlySet<string>,
+  completeSweep: boolean,
+): string[] {
+  if (!completeSweep) return []
+  return [...requests.keys()].filter((requestId) => !observedRequestIds.has(requestId))
+}
+
 function shopInboxSummary(request: ManagedCommercePublicRequest): ShopPublicInboxRequest {
   return {
     handle: request.handle,

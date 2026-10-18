@@ -14,11 +14,6 @@ export type ManagedCommercePublicRequest = {
   shopRequestId: string
   status: 'new' | 'reviewing' | 'in_shop'
   receivedAt: string
-  contact: {
-    name: string
-    phone: string
-    address: null | { line1: string; township: string; city: string; instructions: string | null }
-  }
   request: {
     id: string
     customerReference: string
@@ -28,7 +23,13 @@ export type ManagedCommercePublicRequest = {
   }
 }
 
-export type ManagedCommercePublicContact = Pick<ManagedCommercePublicRequest, 'shopRequestId' | 'contact'>
+export type ManagedCommercePublicContact = Pick<ManagedCommercePublicRequest, 'shopRequestId'> & {
+  contact: {
+    name: string
+    phone: string
+    address: null | { line1: string; township: string; city: string; instructions: string | null }
+  }
+}
 
 export async function loadManagedCommercePublications(identity: ManagedIdentity) {
   return authorizedRequest<{ publications: ManagedCommercePublicPublication[] }>(

@@ -390,7 +390,7 @@ class CommercePublicStorefront:
         cursor_key = _parse_page_cursor(after) if after is not None else None
         with self.store._guarded_cursor(principal, write=False, capability='commerce.write') as (cursor, _):
             _require_public_schema(cursor)
-            cursor.execute("""select handle,request_id,shop_request_id,request_json,contact_json,received_at,status
+            cursor.execute("""select handle,request_id,shop_request_id,request_json,received_at,status
                 from app_private.commerce_public_requests where workspace_id=%s
                 and status <> 'closed'
                 and (%s::timestamptz is null or (received_at,handle,request_id) < (%s::timestamptz,%s::uuid,%s::uuid))
@@ -408,7 +408,6 @@ class CommercePublicStorefront:
                 if order.get('sourceRecordId')} if state else set()
             return {'requests': [{'handle': str(row['handle']), 'requestId': str(row['request_id']),
                 'request': row['request_json'],
-                'contact': row['contact_json'],
                 'shopRequestId': row['shop_request_id'],
                 'status': ('in_shop' if row['status'] == 'in_shop'
                     or row['shop_request_id'] in retained

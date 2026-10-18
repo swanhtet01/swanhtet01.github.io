@@ -4,7 +4,7 @@ import { spaCounterFields } from './shop-spa-counter-fields'
 import { lazy, Suspense, type ChangeEvent, type FormEvent, type KeyboardEvent, type MouseEvent, type ReactNode, useCallback, useEffect, useEffectEvent, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { shopCounterDraftContext } from './shop-counter-draft-context'
 import { installShopSaleFocus } from './shop-sale-focus'
-import { projectShopCounterCatalog } from './shop-counter-catalog-window'
+import { activeShopCounterCategoryFilter, projectShopCounterCatalog, type ShopCounterCategoryFilter } from './shop-counter-catalog-window'
 import { shopOrderTargetId } from './shop-order-target'
 import { createCounterTicketSession, emptyCounterBasket, type CounterBasket, type CounterTicketStorageScope } from './shop-parked-tickets'
 import {
@@ -18,7 +18,7 @@ import { Link, Navigate, useLocation, useNavigate, useOutletContext, useSearchPa
 import './core-app.css'
 import type { EcommerceShopDraft } from '../products/ecommerce/ecommerce-shop-handoff'
 import { claimManagedCommercePublicRequest, loadManagedCommercePublicInbox, loadManagedCommercePublicShopContact, type ManagedCommercePublicContact } from '../products/ecommerce/managed-commerce-public'
-import { shopPublicInboxBacklogCursor, syncShopPublicInbox, type ShopPublicInboxRequest } from './shop-public-inbox-sync'
+import { shopPublicInboxBacklogCursor, shopPublicInboxPrunedRequestIds, syncShopPublicInbox, type ShopPublicInboxRequest } from './shop-public-inbox-sync'
 import type { EcommerceCancellationIntent, EcommerceOrderAmendmentIntent, EcommerceOrderRequestV2, EcommerceOrderRescheduleIntent, EcommerceShopDraftV2 } from '../products/ecommerce/ecommerce-buying-lifecycle'
 import { ecommerceShopIntentReference, type EcommerceShopNavigationIntents } from '../products/ecommerce/ecommerce-shop-intent-route'
 import type { WebsiteEcommerceHandoffContext, WebsiteOrderRecord } from '../products/product-handoff'
@@ -1220,7 +1220,7 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
   const setOutcome = (value: CounterBasket['outcome']) => updateBasket({ outcome: value })
   const [query, setQuery] = useState(initialQuery)
   const [catalogPage, setCatalogPage] = useState(0)
-  const [categoryFilter, setCategoryFilter] = useState<{ kind: 'all' } | { kind: 'category'; value: string } | { kind: 'uncategorized' }>({ kind: 'all' })
+  const [categoryFilter, setCategoryFilter] = useState<ShopCounterCategoryFilter>({ kind: 'all' })
   const [scanFeedback, setScanFeedback] = useState('')
   const [unmatchedBarcode, setUnmatchedBarcode] = useState('')
   const [cartOpen, setCartOpen] = useState(false)
@@ -1252,11 +1252,12 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
     return [...labels.entries()].sort((left, right) => left[1].localeCompare(right[1]))
   }, [items])
   const hasUncategorized = items.some((item) => !item.category?.trim())
+  const activeCategoryFilter = activeShopCounterCategoryFilter(categoryFilter, categories, hasUncategorized)
   const categoryFilteredItems = useMemo(() => {
-    if (categoryFilter.kind === 'all') return items
-    if (categoryFilter.kind === 'uncategorized') return items.filter((item) => !item.category?.trim())
-    return items.filter((item) => item.category?.trim().toLocaleLowerCase() === categoryFilter.value)
-  }, [categoryFilter, items])
+    if (activeCategoryFilter.kind === 'all') return items
+    if (activeCategoryFilter.kind === 'uncategorized') return items.filter((item) => !item.category?.trim())
+    return items.filter((item) => item.category?.trim().toLocaleLowerCase() === activeCategoryFilter.value)
+  }, [activeCategoryFilter, items])
   const catalog = useMemo(() => projectShopCounterCatalog(categoryFilteredItems, query, catalogPage), [categoryFilteredItems, query, catalogPage])
   const visibleItems = catalog.rows
   const lines = items.flatMap((item) => {
@@ -1422,9 +1423,9 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
           </div>
           <div className="shop-item-search-row"><label className="shop-item-search"><span className="sr-only">{uiText('Find or scan an item')}</span><input ref={saleSearchRef} autoComplete="off" aria-keyshortcuts="/" onChange={(event) => { setQuery(event.target.value); setCatalogPage(0); setScanFeedback(''); setUnmatchedBarcode('') }} onKeyDown={addSearchMatch} placeholder={uiText('Search products or scan barcode')} type="search" value={query} /><kbd aria-hidden="true" className="shop-search-shortcut">/</kbd></label><BarcodeScanButton continuous continuousMode="sale" label={uiText('Find or scan an item')} onDetected={addCameraScan} /></div>
           {categories.length + Number(hasUncategorized) > 1 ? <nav aria-label={uiText('Product categories')} className="shop-counter-category-filter">
-            <button aria-pressed={categoryFilter.kind === 'all'} onClick={() => { setCategoryFilter({ kind: 'all' }); setCatalogPage(0) }} type="button">{uiText('All items')}</button>
-            {categories.map(([key, label]) => <button aria-pressed={categoryFilter.kind === 'category' && categoryFilter.value === key} key={key} onClick={() => { setCategoryFilter({ kind: 'category', value: key }); setCatalogPage(0) }} type="button">{label}</button>)}
-            {hasUncategorized ? <button aria-pressed={categoryFilter.kind === 'uncategorized'} onClick={() => { setCategoryFilter({ kind: 'uncategorized' }); setCatalogPage(0) }} type="button">{uiText('Uncategorized')}</button> : null}
+            <button aria-pressed={activeCategoryFilter.kind === 'all'} onClick={() => { setCategoryFilter({ kind: 'all' }); setCatalogPage(0) }} type="button">{uiText('All items')}</button>
+            {categories.map(([key, label]) => <button aria-pressed={activeCategoryFilter.kind === 'category' && activeCategoryFilter.value === key} key={key} onClick={() => { setCategoryFilter({ kind: 'category', value: key }); setCatalogPage(0) }} type="button">{label}</button>)}
+            {hasUncategorized ? <button aria-pressed={activeCategoryFilter.kind === 'uncategorized'} onClick={() => { setCategoryFilter({ kind: 'uncategorized' }); setCatalogPage(0) }} type="button">{uiText('Uncategorized')}</button> : null}
           </nav> : null}
           {scanFeedback ? <p className="form-notice" role="status">{uiText(scanFeedback)}{unmatchedBarcode ? <> <button className="text-link" onClick={() => onCreateFromBarcode(unmatchedBarcode)} type="button">{uiText('Add product with this barcode')}</button></> : null}</p> : null}
         </header>
@@ -1684,6 +1685,7 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
   const managedPublicInboxRef = useRef(managedPublicInbox)
   const managedPublicInboxAttempts = useRef(new Map<string, Set<string>>())
   const managedPublicInboxRequestCursors = useRef(new Map<string, string | undefined>())
+  const managedPublicInboxSeenDuringSweep = useRef(new Set<string>())
   const managedPublicInboxInFlight = useRef(false)
   const managedPublicInboxIdentityRef = useRef('')
   const managedPublicInboxIdentityKey = managedIdentity
@@ -1693,6 +1695,7 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
   useEffect(() => {
     managedPublicInboxAttempts.current.clear()
     managedPublicInboxRequestCursors.current.clear()
+    managedPublicInboxSeenDuringSweep.current.clear()
   }, [managedPublicInboxIdentityKey])
   const syncManagedPublicInbox = useCallback(async (retryRequestId?: string) => {
     if (!managedIdentity || !allowShopInboundRequests || !commerceCanWrite || workspaceMode !== coreUi.m) return
@@ -1749,11 +1752,14 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
         }
       }
       if (!isCurrent()) return
+      const seenDuringSweep = managedPublicInboxSeenDuringSweep.current
+      if (!retryRequestId && previous.cursor === null) seenDuringSweep.clear()
       for (const [pageIndex, page] of pageResults.entries()) {
         const pageCursor = pageIndex === 0
           ? retryRequestId ? retryAfter : undefined
           : backlogCursor ?? undefined
         for (const request of [...page.requests, ...page.claimedRequests, ...page.alreadyInShopRequests]) {
+          if (!retryRequestId) seenDuringSweep.add(request.requestId)
           managedPublicInboxRequestCursors.current.set(`${identityKey}\u0000${request.requestId}`, pageCursor)
         }
       }
@@ -1775,6 +1781,13 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
         attempted.delete(requestId)
         managedPublicInboxRequestCursors.current.delete(`${identityKey}\u0000${requestId}`)
       }
+      const completeSweep = !retryRequestId && nextCursor === null && !backlogLoadError && refreshed
+      for (const requestId of shopPublicInboxPrunedRequestIds(nextRequests, seenDuringSweep, completeSweep)) {
+        nextRequests.delete(requestId)
+        attempted.delete(requestId)
+        managedPublicInboxRequestCursors.current.delete(`${identityKey}\u0000${requestId}`)
+      }
+      if (completeSweep) seenDuringSweep.clear()
       const requests = [...nextRequests.values()]
       const error = failedRequestIds.length
         ? 'Some online orders could not be added to Shop yet. Retry them below.'

@@ -393,8 +393,8 @@ for (const [route, html] of [['/', home], ['/shop/', pages.get('/shop/').html], 
   const expectedLogin = route === '/shop/'
     ? 'href="https://app.supermega.dev/login?product=shop"'
     : 'href="https://app.supermega.dev/login"'
-  if (countOccurrences(body, expectedLogin) !== (route === '/shop/' ? 2 : 1)) fail('login_action_count_invalid', { route, expectedLogin })
-  if (route === '/shop/' && !body.includes(`class="button button-primary" ${expectedLogin}>Sign in to Shop`)) fail('shop_primary_product_action_missing')
+  if (countOccurrences(body, expectedLogin) !== 1) fail('login_action_count_invalid', { route, expectedLogin })
+  if (route === '/shop/' && !body.includes('class="button button-primary" href="/contact/?product=shop">Ask about Shop')) fail('shop_primary_product_action_missing')
   const hasGalleryNavigation = route !== '/shop/' && (galleryViews[routeProduct?.id] || 0) > 1
   const expectedButtons = Number(hasGalleryNavigation) * 2
   if ((body.match(/<button\b/g) || []).length !== expectedButtons) fail('marketing_button_surface_drift', { route, expectedButtons })

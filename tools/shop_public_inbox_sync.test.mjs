@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { shopPublicInboxBacklogCursor, syncShopPublicInbox } from '../showroom/src/core/shop-public-inbox-sync.ts'
+import { shopPublicInboxBacklogCursor, shopPublicInboxPrunedRequestIds, syncShopPublicInbox } from '../showroom/src/core/shop-public-inbox-sync.ts'
 
 const identity = { workspaceId: 'workspace-1', userId: 'user-1', email: 'operator@example.com' }
 
@@ -137,4 +137,14 @@ test('a completed sweep still discovers new orders beyond the next first page', 
   assert.equal(backlog.claimedRequests[0].shopRequestId, 'shop-new-after-first-page')
   assert.equal(shopPublicInboxBacklogCursor('unfinished-page', first.nextCursor), 'unfinished-page')
   assert.equal(shopPublicInboxBacklogCursor('unfinished-page', first.nextCursor, true), null)
+})
+
+test('closed requests disappear only after a complete inbox sweep', () => {
+  const displayed = new Map([
+    ['still-open', request('still-open')],
+    ['closed', request('closed')],
+  ])
+  const seen = new Set(['still-open'])
+  assert.deepEqual(shopPublicInboxPrunedRequestIds(displayed, seen, false), [])
+  assert.deepEqual(shopPublicInboxPrunedRequestIds(displayed, seen, true), ['closed'])
 })

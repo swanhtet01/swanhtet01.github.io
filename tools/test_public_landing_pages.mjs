@@ -254,8 +254,8 @@ for (const page of landingPages) {
   const expectedLoginHref = page.route === '/shop/'
     ? 'href="https://app.supermega.dev/login?product=shop"'
     : 'href="https://app.supermega.dev/login"'
-  check(countOccurrences(html, expectedLoginHref) === (page.route === '/shop/' ? 2 : 1), `landing_login_actions:${page.route}`)
-  if (page.route === '/shop/') check(html.includes(`class="button button-primary" ${expectedLoginHref}>Sign in to Shop`), 'shop_primary_action_preserves_login_intent')
+  check(countOccurrences(html, expectedLoginHref) === 1, `landing_login_actions:${page.route}`)
+  if (page.route === '/shop/') check(html.includes('class="button button-primary" href="/contact/?product=shop">Ask about Shop'), 'shop_primary_action_opens_contact')
   check(!html.includes('Request assisted setup') && !html.includes('id="first-loop"'), `landing_no_setup_funnel:${page.route}`)
   for (const unsupportedClaim of ['AI may help prepare drafts', 'AI assisted', 'Ranked next actions', 'approved AI context']) {
     check(!html.includes(unsupportedClaim), `landing_unverified_ai_offer_absent:${page.route}:${unsupportedClaim}`)
@@ -399,7 +399,7 @@ for (const [route, html] of [['/', home], ['/shop/', shopLanding], ...activeIds.
   const expectedLoginHref = route === '/shop/'
     ? 'href="https://app.supermega.dev/login?product=shop"'
     : 'href="https://app.supermega.dev/login"'
-  check(countOccurrences(body, expectedLoginHref) === (route === '/shop/' ? 2 : 1), `login_action_count:${route}`)
+  check(countOccurrences(body, expectedLoginHref) === 1, `login_action_count:${route}`)
   const carouselCount = Number(route !== '/shop/' && (productScreens[routeProduct]?.length || 0) > 1)
   const expectedLinks = route === '/' ? 16 : route === '/shop/' ? 11 : 6 + Number(routeManifestProduct?.status === 'available-in-app')
   check((body.match(/<a\b/g) || []).length === expectedLinks, `marketing_link_surface:${route}`)
@@ -425,7 +425,7 @@ for (const [route, html] of [['/', home], ['/shop/', shopLanding], ...activeIds.
   }
   const expectedContactTarget = routeManifestProduct?.status === 'available-in-app' ? `/contact/?product=${routeManifestProduct.id}` : null
   const directAppLinks = [...body.matchAll(/href="(https:\/\/app\.supermega\.dev\/[^\"]+)"/g)].map(match => match[1]).filter(target => target !== 'https://app.supermega.dev/login')
-  check(directAppLinks.length === 0 || (route === '/shop/' && directAppLinks.length === 2 && directAppLinks.every(target => target === 'https://app.supermega.dev/login?product=shop')), `app_actions_match_release_state:${route}`)
+  check(directAppLinks.length === 0 || (route === '/shop/' && directAppLinks.length === 1 && directAppLinks[0] === 'https://app.supermega.dev/login?product=shop'), `app_actions_match_release_state:${route}`)
   if (expectedContactTarget) check(body.includes(`href="${expectedContactTarget}">Contact SuperMega</a>`), `product_contact_action_matches_release_state:${route}`)
 }
 for (const id of activeIds) check(home.includes(`id="${id}"`), `home_product_family_item:${id}`)

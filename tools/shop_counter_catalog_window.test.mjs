@@ -1,7 +1,14 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { projectShopCounterCatalog, SHOP_COUNTER_PAGE_SIZE } from '../showroom/src/core/shop-counter-catalog-window.ts'
+import { activeShopCounterCategoryFilter, projectShopCounterCatalog, SHOP_COUNTER_PAGE_SIZE } from '../showroom/src/core/shop-counter-catalog-window.ts'
+
+test('removed category choices fall back to all products after a managed refresh', () => {
+  const categories = [['drinks', 'Drinks']]
+  assert.deepEqual(activeShopCounterCategoryFilter({ kind: 'category', value: 'food' }, categories, false), { kind: 'all' })
+  assert.deepEqual(activeShopCounterCategoryFilter({ kind: 'uncategorized' }, categories, false), { kind: 'all' })
+  assert.deepEqual(activeShopCounterCategoryFilter({ kind: 'category', value: 'drinks' }, categories, false), { kind: 'category', value: 'drinks' })
+})
 
 const catalog = Array.from({ length: 101 }, (_, index) => ({
   sku: `SKU-${String(index + 1).padStart(3, '0')}`,

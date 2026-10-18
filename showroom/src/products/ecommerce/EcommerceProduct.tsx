@@ -2290,7 +2290,7 @@ export function EcommerceProduct() {
         </div>
         {openPublicRequests.length ? <div className="ecommerce-public-intake-list">
           {openPublicRequests.slice(0, publicVisibleCount).map((entry) => <div className="ecommerce-public-intake-row" key={`${entry.handle}:${entry.requestId}`}>
-            <div><strong>{entry.contact.name}</strong><small>{entry.request.lines.map((line) => `${line.quantity} × ${line.name}`).join(' · ')}</small><small>{entry.request.fulfilment === 'delivery' ? 'Delivery' : 'Pick up'} · {formatMmk(entry.request.totalMmk)} · {new Date(entry.receivedAt).toLocaleString()}</small><small>{entry.contact.phone}{entry.contact.address ? ` · ${entry.contact.address.line1}, ${entry.contact.address.township}, ${entry.contact.address.city}` : ''}</small></div>
+            <div><strong>Request {entry.requestId.slice(0, 8)}</strong><small>{entry.request.lines.map((line) => `${line.quantity} × ${line.name}`).join(' · ')}</small><small>{entry.request.fulfilment === 'delivery' ? 'Delivery' : 'Pick up'} · {formatMmk(entry.request.totalMmk)} · {new Date(entry.receivedAt).toLocaleString()}</small></div>
             <div>
               {entry.status === 'in_shop'
                 ? <Link className="core-button secondary" to={`/shop/?tab=orders&source=ecommerce-inbox&request=${encodeURIComponent(entry.shopRequestId)}`}>Open in Shop</Link>

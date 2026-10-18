@@ -6,6 +6,7 @@ SUPERMEGA_TRIAL_SCHEMA_VERSION=13. It never accepts a hosted database URL.
 
 from copy import deepcopy
 from contextlib import contextmanager
+from datetime import datetime, timezone
 from hashlib import sha256
 import hmac
 import os
@@ -44,6 +45,31 @@ def _body(request_id=None):
 
 
 class CommercePublicBoundaryTests(unittest.TestCase):
+    def test_inbox_response_omits_contact_before_network_delivery(self):
+        principal = TrialPrincipal('internal-workspace', 'shop-operator', 'human')
+        cursor = Mock()
+        cursor.fetchall.return_value = [{
+            'handle': uuid4(), 'request_id': uuid4(), 'shop_request_id': 'ECR-TEST',
+            'request_json': {'totalMmk': 8000, 'lines': []},
+            'contact_json': {'name': 'Private name', 'phone': '+95900000000'},
+            'received_at': datetime(2026, 10, 18, tzinfo=timezone.utc),
+            'status': 'new',
+        }]
+        cursor.fetchone.return_value = None
+        store = Mock()
+
+        @contextmanager
+        def guarded_cursor(*_args, **_kwargs):
+            yield cursor, frozenset({'commerce.write'})
+
+        store._guarded_cursor.side_effect = guarded_cursor
+        with patch('supermega_runtime.commerce_public_storefront._require_public_schema'):
+            inbox = CommercePublicStorefront(store).inbox(principal)
+        self.assertNotIn('contact_json', cursor.execute.call_args_list[0].args[0].lower())
+        self.assertNotIn('contact', inbox['requests'][0])
+        self.assertNotIn('Private name', str(inbox))
+        self.assertNotIn('+95900000000', str(inbox))
+
     def test_revoked_internal_grant_while_waiting_blocks_publication_changes(self):
         principal = TrialPrincipal('internal-workspace', 'internal-operator', 'human')
         cursor = Mock()
@@ -359,8 +385,7 @@ class CommercePublicSqlTests(unittest.TestCase):
         inbox = self.adapter.inbox(self.owner)['requests']
         self.assertEqual(len(inbox), 1)
         self.assertEqual(inbox[0]['request']['totalMmk'], 200)
-        self.assertEqual(inbox[0]['contact']['phone'], body['phone'])
-        self.assertEqual(inbox[0]['contact']['name'], body['name'])
+        self.assertNotIn('contact', inbox[0])
         self.assertNotIn('customerProfile', inbox[0]['request'])
         self.assertEqual(inbox[0]['status'], 'new')
         with self.assertRaises(TrialValidationError):
