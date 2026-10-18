@@ -46,6 +46,14 @@ export const COMMERCE_KEY = 'supermega.commerce.workspace.v2'
 export const LEGACY_COMMERCE_KEYS = ['supermega.commerce.workspace.v1', 'supermega.shop.workspace.v2']
 export const COMMERCE_LOCK = 'supermega-commerce-workspace-v2'
 
+function hasDisallowedControlCharacters(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index)
+    if (code <= 0x1f || code === 0x7f) return true
+  }
+  return false
+}
+
 export type CommerceItem = {
   sku: string
   /** Optional scanner identity, stored as text so leading zeroes survive CSV, camera and HID scans. */
@@ -7261,10 +7269,10 @@ export function updateCommerceItem(state: CommerceState, update: CommerceItemUpd
       || (typeof barcode === 'string' && barcode.length > 0 && barcode === barcode.trim() && barcode.length <= 80))))
   const nameMyUpdateMalformed = hasExpectedNameMy !== hasNextNameMy
     || (hasNameMyUpdate && ![update.expectedNameMy, update.nextNameMy].every((nameMy) => nameMy === null
-      || (typeof nameMy === 'string' && nameMy.length > 0 && nameMy === nameMy.trim() && nameMy.length <= 180 && !/[\u0000-\u001f\u007f]/.test(nameMy))))
+      || (typeof nameMy === 'string' && nameMy.length > 0 && nameMy === nameMy.trim() && nameMy.length <= 180 && !hasDisallowedControlCharacters(nameMy)))
   const categoryUpdateMalformed = hasExpectedCategory !== hasNextCategory
     || (hasCategoryUpdate && ![update.expectedCategory, update.nextCategory].every((category) => category === null
-      || (typeof category === 'string' && category.length > 0 && category === category.trim() && category.length <= 80 && !/[\u0000-\u001f\u007f]/.test(category))))
+      || (typeof category === 'string' && category.length > 0 && category === category.trim() && category.length <= 80 && !hasDisallowedControlCharacters(category)))
   if (!validProof(proof)
     || typeof update?.sku !== 'string'
     || !update.sku
@@ -7643,7 +7651,7 @@ function validatedOrderLineSnapshots(order: CommerceOrder): CommerceOrderLine[] 
       || !hasExactKeys(line, ['sku', 'name', 'quantity', 'unitPriceMmk'], ['variant', 'nameMy'])
       || typeof line.sku !== 'string' || line.sku !== line.sku.trim() || !line.sku
       || typeof line.name !== 'string' || line.name !== line.name.trim() || !line.name
-      || (line.nameMy !== undefined && (typeof line.nameMy !== 'string' || line.nameMy !== line.nameMy.trim() || !line.nameMy || line.nameMy.length > 180 || /[\u0000-\u001f\u007f]/.test(line.nameMy)))
+      || (line.nameMy !== undefined && (typeof line.nameMy !== 'string' || line.nameMy !== line.nameMy.trim() || !line.nameMy || line.nameMy.length > 180 || hasDisallowedControlCharacters(line.nameMy)))
       || (line.variant !== undefined && (typeof line.variant !== 'string' || line.variant !== line.variant.trim() || !line.variant))
       || !Number.isSafeInteger(line.quantity) || line.quantity < 1
       || !Number.isSafeInteger(line.unitPriceMmk) || line.unitPriceMmk < 1

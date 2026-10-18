@@ -31,6 +31,15 @@ import { isShopCashSettlementMethod } from './shop-mmk-cash-count'
 import { prepareManagedFirstCatalog } from './shop-managed-first-catalog'
 import { applyStockCountScan } from './shop-stock-count-scan'
 import { unmatchedBarcodeForCreation } from './shop-unmatched-scan'
+
+function hasDisallowedControlCharacters(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index)
+    if (code <= 0x1f || code === 0x7f) return true
+  }
+  return false
+}
+
 const ClosedOrderHistory = lazy(() => import('./ShopOrderHistory').then((module) => ({ default: module.ClosedOrderHistory })))
 const ShopProductPhotoControl = lazy(() => import('./ShopProductPhotoControl').then((module) => ({ default: module.ShopProductPhotoControl })))
 const ShopStocktakeDraftRecovery = lazy(() => import('./ShopStocktakeDraftRecovery').then((module) => ({ default: module.ShopStocktakeDraftRecovery })))
@@ -2423,13 +2432,13 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
     : null
   const catalogEditBarcodeText = catalogEditDraft?.barcode.trim() ?? ''
   const catalogEditBarcode = catalogEditBarcodeText || null
-  const catalogEditBarcodeValid = catalogEditBarcodeText.length <= 80 && !/[\u0000-\u001f\u007f]/.test(catalogEditBarcodeText)
+  const catalogEditBarcodeValid = catalogEditBarcodeText.length <= 80 && !hasDisallowedControlCharacters(catalogEditBarcodeText)
   const catalogEditNameMyText = catalogEditDraft?.nameMy.trim() ?? ''
   const catalogEditNameMy = catalogEditNameMyText || null
-  const catalogEditNameMyValid = catalogEditNameMyText.length <= 180 && !/[\u0000-\u001f\u007f]/.test(catalogEditNameMyText)
+  const catalogEditNameMyValid = catalogEditNameMyText.length <= 180 && !hasDisallowedControlCharacters(catalogEditNameMyText)
   const catalogEditCategoryText = catalogEditDraft?.category.trim() ?? ''
   const catalogEditCategory = catalogEditCategoryText || null
-  const catalogEditCategoryValid = catalogEditCategoryText.length <= 80 && !/[\u0000-\u001f\u007f]/.test(catalogEditCategoryText)
+  const catalogEditCategoryValid = catalogEditCategoryText.length <= 80 && !hasDisallowedControlCharacters(catalogEditCategoryText)
   const catalogEditStale = Boolean(catalogEditDraft && (!catalogEditItem
     || catalogEditItem.price !== catalogEditDraft.expectedPrice
     || catalogEditItem.reorderAt !== catalogEditDraft.expectedReorderAt
@@ -3157,7 +3166,7 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
       return
     }
     const categoryText = catalogDraft.category.trim()
-    if (categoryText.length > 80 || /[\u0000-\u001f\u007f]/.test(categoryText)) {
+    if (categoryText.length > 80 || hasDisallowedControlCharacters(categoryText)) {
       setCatalogError('Category labels must be 80 characters or fewer.')
       return
     }
@@ -3844,9 +3853,9 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
       || !Number.isSafeInteger(onHand) || onHand < 0
       || !Number.isSafeInteger(reorderAt) || reorderAt < 0
       || !Number.isSafeInteger(price) || price < 1
-      || barcodeText.length > 80 || /[\u0000-\u001f\u007f]/.test(barcodeText)
-      || nameMy.length > 180 || /[\u0000-\u001f\u007f]/.test(nameMy)
-      || categoryText.length > 80 || /[\u0000-\u001f\u007f]/.test(categoryText)) {
+      || barcodeText.length > 80 || hasDisallowedControlCharacters(barcodeText)
+      || nameMy.length > 180 || hasDisallowedControlCharacters(nameMy)
+      || categoryText.length > 80 || hasDisallowedControlCharacters(categoryText)) {
       setNotice('Enter the item name, current stock, and a whole-MMK price.')
       return
     }
