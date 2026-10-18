@@ -48,7 +48,8 @@ const ShopBarcodeLabels = lazy(() => import('./ShopBarcodeLabels').then((module)
 import { Empty, PageHeading, type RuntimeHealth } from './CoreShell'
 import { activeCommerceTab, commerceTabs, type CommerceTab } from './commerce-tabs'
 import { bi } from './i18n-actions'
-import { readUiLocale, uiText } from './ui-locale'
+import { readUiLocale, uiText, useUiLocale } from './ui-locale'
+import { shopRouteCopy, shopRouteTasksLabel, shopRouteTemplateNotice } from './shop-route-copy'
 import { Cookie, Droplets, Package, Soup, WashingMachine, Wheat } from 'lucide-react'
 import { managedTrialProofFragmentFields, type ManagedTrialProof } from './managed-trial-proof'
 import {
@@ -1030,6 +1031,7 @@ function ActionHistory({ actions, domain }: { actions: AccountableAction[]; doma
 // from Shop's first-load chunk without removing its implementation or the
 // Shop replenishment handoff.
 export function OperationsPage() {
+  const uiLocale = useUiLocale()
   const runtime = useOutletContext<RuntimeHealth & { ecommerceShopHandoffAllowed: boolean; shopInboundRequestsAllowed: boolean }>()
   const allowEcommerceShopHandoff = runtime.ecommerceShopHandoffAllowed
   const allowShopInboundRequests = runtime.shopInboundRequestsAllowed
@@ -1079,23 +1081,19 @@ export function OperationsPage() {
   if (entryDecision === 'login') return <Navigate replace to={managedAccountPath('/login', 'commerce', location.search)} />
 
   const requestedShopTemplateState = shopTemplateDoorState(requestedShopTemplateId, confirmedLocalShop, Boolean(managedIdentity))
-  const productCopy = requestedShopTemplateState === 'managed-unapplied' && requestedShopTemplate
-    ? `The ${requestedShopTemplate.name.en} public request is not applied to this company catalog until a separate managed review.`
+  const templateName = requestedShopTemplate && (uiLocale === 'my' ? requestedShopTemplate.name.my : requestedShopTemplate.name.en)
+  const productCopy = requestedShopTemplateState === 'managed-unapplied' && templateName
+    ? shopRouteTemplateNotice(uiLocale, 'managed-unapplied', templateName)
     : requestedShopTemplateState === 'checking' && requestedShopTemplate
-      ? 'Checking workspace access. Your catalog has not been changed.'
-      : requestedShopTemplateState === 'local-active' && requestedShopTemplate && commerceTab === 'counter'
-        ? `${requestedShopTemplate.name.en}: choose an item, select a local payment method, and review the sale.`
-        : {
-          today: 'See today’s next job and key numbers.',
-          counter: 'Tap an item, choose payment, and confirm the sale.',
-          orders: 'Finish fulfilment, follow up payment, and handle exceptions.',
-          inventory: 'Count stock, replenish items, and review location availability.',
-        }[commerceTab]
+      ? shopRouteTemplateNotice(uiLocale, 'checking')
+      : requestedShopTemplateState === 'local-active' && templateName && commerceTab === 'counter'
+        ? shopRouteTemplateNotice(uiLocale, 'local-active', templateName)
+        : shopRouteCopy(uiLocale, commerceTab)
 
   return (
     <div className="workspace-screen operations-screen commerce-screen" data-active-tab={activeTab}>
-      <PageHeading title="Shop" copy={productCopy} />
-      <nav className="workspace-toolbar view-tabs product-task-tabs" aria-label="Shop tasks">{commerceTabs.map((tab) => <button aria-current={activeTab === tab.id ? 'page' : undefined} key={tab.id} onClick={() => setTab(tab.id)} type="button">{bi(tab.label)}</button>)}</nav>
+      <PageHeading title={uiText('Shop')} copy={productCopy} />
+      <nav className="workspace-toolbar view-tabs product-task-tabs" aria-label={shopRouteTasksLabel(uiLocale)}>{commerceTabs.map((tab) => <button aria-current={activeTab === tab.id ? 'page' : undefined} key={tab.id} onClick={() => setTab(tab.id)} type="button">{bi(tab.label)}</button>)}</nav>
       <div className="workspace-view"><CommercePage allowEcommerceShopHandoff={allowEcommerceShopHandoff} allowShopInboundRequests={allowShopInboundRequests} confirmedLocalShop={confirmedLocalShop} key={managedIdentity ? JSON.stringify([managedIdentity.workspaceId, managedIdentity.userId, allowEcommerceShopHandoff, allowShopInboundRequests]) : confirmedLocalShop ? 'local' : 'checking'} managedIdentity={managedIdentity} requestedRequestId={requestedRequestId} requestedShopTemplate={requestedShopTemplate} requestedSource={requestedSource} shopCounterClientId={shopCounterClientId} shopCounterCustomer={shopCounterCustomer} shopCounterSearch={shopCounterSearch} tab={commerceTab} /></div>
     </div>
   )

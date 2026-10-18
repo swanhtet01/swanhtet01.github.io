@@ -292,6 +292,7 @@ const managedEcommerceBuyingLifecycleSource = await readFile(resolve(root, 'supe
 const shopOperatingFlowSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'shop-operating-flow.ts'), 'utf8')
 const shopOperatingFlowUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ShopOperatingFlow.tsx'), 'utf8')
 const shopTodayUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ShopToday.tsx'), 'utf8')
+const shopRouteCopySource = await readFile(resolve(root, 'showroom', 'src', 'core', 'shop-route-copy.ts'), 'utf8')
 const shopOrderHistorySource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ShopOrderHistory.tsx'), 'utf8')
 const orderReceiptActionsSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'OrderReceiptActions.tsx'), 'utf8')
 const shopOrderPresentationSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'shop-order-presentation.ts'), 'utf8')
@@ -2843,7 +2844,8 @@ if (websiteTodaySurfaceIndex < 0
   || websiteTodaySurfaceIndex < websiteWorkspaceSurfaceIndex
   || websiteTodaySurfaceIndex < websiteInquiryWorkspaceIndex
   || websiteSource.includes("websiteTodayState !== 'ready' ? <section aria-labelledby=\"website-today-title\"")) fail('website_content_first_hierarchy_missing')
-if (!coreSource.includes('See today’s next job and key numbers.')
+if (!coreSource.includes('shopRouteCopy(uiLocale, commerceTab)')
+  || !shopRouteCopySource.includes('See today’s next job and key numbers.')
   || !shopNextActionSource.includes('need fulfilment or payment review.')
   || coreSource.includes('const shopAgentRows = [')
   || coreSource.includes('const shopOwnerGate =')
