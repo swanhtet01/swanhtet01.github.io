@@ -361,6 +361,7 @@ export function ManagedLoginPage() {
           <div className="managed-login-actions"><a className="core-button primary" href={managedAccountRequestUrl(productIntent)}>Contact support</a>{!publicApp ? <Link className="account-inline-link" to="/?choose=1">Saved work on this device</Link> : null}{signupPolicy ? <button className="core-button" onClick={() => chooseAccountMode(true)} type="button">Create an account</button> : null}</div>
         </>}
       </section>}
+      {!reviewReturnPath ? <div className="managed-login-actions"><a className="account-inline-link" href="https://supermega.dev/shop/#shop-demo">View Shop sample screens</a></div> : null}
     </div>
   )
 }

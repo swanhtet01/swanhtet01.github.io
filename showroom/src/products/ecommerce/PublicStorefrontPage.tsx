@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { useParams } from 'react-router'
+import { superMegaBrandMark } from '../../core/brand-mark'
 import './public-storefront.css'
 
 type PublicItem = {
@@ -140,7 +141,17 @@ export default function PublicStorefrontPage() {
   }
 
   return <main className="public-storefront">
-    <header className="public-storefront-bar"><span className="public-storefront-mark" aria-hidden="true">›_</span><span>SUPERMEGA</span><small>Secure store request</small></header>
+    <header className="public-storefront-bar">
+      <span className="public-storefront-brand">
+        <span className="public-storefront-mark" aria-hidden="true">
+          <svg viewBox={superMegaBrandMark.viewBox} width={superMegaBrandMark.width} height={superMegaBrandMark.height} focusable={false}>
+            <path d={superMegaBrandMark.path} fill="none" stroke="currentColor" strokeWidth={superMegaBrandMark.strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </span>
+        <span className="public-storefront-name">SuperMega</span>
+      </span>
+      <small>Secure store request</small>
+    </header>
     {loading || (catalog?.handle !== handle && !loadError) ? <div className="public-storefront-state" role="status">Opening store…</div> : loadError || !catalog
       ? <div className="public-storefront-state" role="alert"><h1>Store unavailable</h1><p>{loadError || messageForStatus(404)}</p></div>
       : <div className="public-storefront-layout">

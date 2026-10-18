@@ -153,10 +153,11 @@ const onboardingFirstRunSteps: Record<SetupProductId, readonly { title: string; 
 }
 
 export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
+  const retainedProduct = productContracts[product]
   if (!activeSetupProductContracts.some(contract => contract.id === product)) {
     return <div className="workspace-screen">
-      <PageHeading eyebrow="Retained product" title="Plant is not available for new setup." copy="Existing records are unchanged. Open the retained workspace to continue existing work, or choose a current product." />
-      <div className="managed-login-actions"><Link className="core-button" to="/plant/">Open retained Plant workspace</Link><Link className="core-button primary" to="/?choose=1">Choose Shop, Ecommerce or Website</Link></div>
+      <PageHeading eyebrow="Retained workspace" title={`${retainedProduct.name} is not available for new setup.`} copy="Existing records are unchanged. Choose Shop for new customer setup." />
+      <div className="managed-login-actions"><Link className="core-button" to={`/${retainedProduct.slug}/`}>Open retained {retainedProduct.name} workspace</Link><Link className="core-button primary" to="/?choose=1">Choose Shop</Link></div>
     </div>
   }
   return <ActiveProductOnboardingPage key={product} product={product} />
