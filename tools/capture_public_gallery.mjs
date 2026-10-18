@@ -227,6 +227,9 @@ async function captureMobile(cdp, sessionId, output, name, expectedTexts, view) 
       return { viewport: innerWidth, page: document.documentElement.scrollWidth };
     })()`)
     if (mobileLayout.page > mobileLayout.viewport + 1) throw new Error(`mobile_capture_horizontal_overflow:${name}:${JSON.stringify(mobileLayout)}`)
+    // Opening the mobile basket intentionally focuses its first action for keyboard users.
+    // A gallery still should not freeze that transient focus ring into the product image.
+    if (name === 'actual-shop-sell-mobile') await evaluate(cdp, sessionId, 'document.activeElement instanceof HTMLElement && document.activeElement.blur()')
     return await capture(cdp, sessionId, output, name, expectedTexts, { ...view, width: 390, height: 844 })
   } finally {
     if (name === 'actual-shop-sell-mobile') await clickSelector(cdp, sessionId, '.shop-cart-close')
