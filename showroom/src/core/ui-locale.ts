@@ -17,11 +17,13 @@ if (typeof window !== 'undefined') {
   } catch {
     // Language remains usable when browser storage is unavailable.
   }
+  if (typeof document !== 'undefined') document.documentElement.lang = currentLocale
   window.addEventListener('storage', (event) => {
     if (event.key !== STORAGE_KEY) return
     const next = isUiLocale(event.newValue) ? event.newValue : 'en'
     if (next === currentLocale) return
     currentLocale = next
+    if (typeof document !== 'undefined') document.documentElement.lang = next
     listeners.forEach((listener) => listener())
   })
 }

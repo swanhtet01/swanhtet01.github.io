@@ -119,9 +119,9 @@ check(count(coreApp, '{catalogForm}') === 1
   && coreApp.indexOf('{catalogForm}') < coreApp.indexOf('{managedTemplate ? <details className="secondary-setup-path">')
   && !coreApp.includes('</details> : catalogForm}'),
   'barcode_shared_catalog_entry_must_precede_optional_template_setup')
-check(coreApp.includes('placeholder="Search products or scan barcode"'), 'shop_counter_keyboard_wedge_placeholder_missing')
+check(coreApp.includes("placeholder={uiText('Search products or scan barcode')}"), 'shop_counter_keyboard_wedge_placeholder_missing')
 check(coreApp.includes('onKeyDown={addSearchMatch}'), 'shop_counter_keyboard_wedge_handler_missing')
-check(coreApp.includes('continuous continuousMode="sale" label="Scan products into this sale" onDetected={addCameraScan}'), 'shop_counter_camera_scanner_must_stay_open_for_repeated_sales_scans')
+check(coreApp.includes("continuous continuousMode=\"sale\" label={uiText('Find or scan an item')} onDetected={addCameraScan}"), 'shop_counter_camera_scanner_must_stay_open_for_repeated_sales_scans')
 check(coreApp.includes('onClick={() => onCreateFromBarcode(unmatchedBarcode)}'), 'unmatched_barcode_must_offer_an_explicit_add_action')
 check(count(coreApp, 'label="Scan the product barcode" onDetected=') >= 3,
   'shop_product_barcode_scan_controls_missing')
@@ -133,9 +133,13 @@ check(coreApp.includes('label="Scan the material label into the material field" 
 const addSearchMatch = functionBody(coreApp, 'addSearchMatch')
 const addCameraScan = functionBody(coreApp, 'addCameraScan')
 const openCatalogCreateFromBarcode = functionBody(coreApp, 'openCatalogCreateFromBarcode')
-const addScannedValue = new Function('items', 'resolveCommerceItemByScanCode', 'addItem', 'setQuery', 'setScanFeedback', 'setUnmatchedBarcode', 'unmatchedBarcodeForCreation', 'value', 'source', functionBody(coreApp, 'addScannedValue'))
+let testLocale = 'en'
+const testUiLocale = () => testLocale
+const testUiText = (english) => testLocale === 'my' && english === 'added to this sale.'
+  ? 'ဤအရောင်းထဲ ထည့်ပြီးပါပြီ။' : english
+const addScannedValue = new Function('items', 'resolveCommerceItemByScanCode', 'addItem', 'setQuery', 'setScanFeedback', 'setUnmatchedBarcode', 'unmatchedBarcodeForCreation', 'readUiLocale', 'uiText', 'value', 'source', functionBody(coreApp, 'addScannedValue'))
 const addCounterItem = new Function('tickets', 'setCart', 'setScanFeedback', 'item', functionBody(coreApp, 'addItem'))
-const searchHandler = new Function('event', 'items', 'normalizedQuery', 'query', 'resolveCommerceItemByScanCode', 'addItem', 'addScannedValue', 'setCatalogPage', 'setScanFeedback', 'setUnmatchedBarcode', 'setQuery', addSearchMatch)
+const searchHandler = new Function('event', 'items', 'normalizedQuery', 'query', 'resolveCommerceItemByScanCode', 'addItem', 'addScannedValue', 'setCatalogPage', 'setScanFeedback', 'setUnmatchedBarcode', 'setQuery', 'readUiLocale', 'uiText', addSearchMatch)
 check(openCatalogCreateFromBarcode.includes("setItemDraft({ sku: '', barcode, name: '', nameMy: '', category: '', onHand: '', reorderAt: '0', price: '' })")
   && openCatalogCreateFromBarcode.includes('setCatalogCreateOpen(true)')
   && openCatalogCreateFromBarcode.includes("navigate('/shop/?tab=inventory#shop-catalog-create')"),
@@ -149,7 +153,7 @@ function runCounterScan(items, value) {
   const queries = []
   const feedback = []
   const createCandidates = []
-  const matched = addScannedValue(items, resolveCommerceItemByScanCode, (item) => { added.push(item.sku); feedback.push(''); return true }, (query) => queries.push(query), (message) => feedback.push(message), (code) => createCandidates.push(code), unmatchedBarcodeForCreation, value, 'keyboard')
+  const matched = addScannedValue(items, resolveCommerceItemByScanCode, (item) => { added.push(item.sku); feedback.push(''); return true }, (query) => queries.push(query), (message) => feedback.push(message), (code) => createCandidates.push(code), unmatchedBarcodeForCreation, testUiLocale, testUiText, value, 'keyboard')
   return { matched, added, queries, feedback, createCandidates }
 }
 const counterItems = [
@@ -164,12 +168,12 @@ function runCounterSearch(query, items = counterItems) {
   const pages = []
   searchHandler({ key: 'Enter', preventDefault() {} }, items, query.trim().toLocaleLowerCase(), query, resolveCommerceItemByScanCode,
     item => { added.push(item.sku); return true }, value => { scanQueries.push(value); return false },
-    page => pages.push(page), message => feedback.push(message), () => {}, value => resetQueries.push(value))
+    page => pages.push(page), message => feedback.push(message), () => {}, value => resetQueries.push(value), testUiLocale, testUiText)
   return { added, feedback, resetQueries, scanQueries, pages }
 }
 const exactNameSearch = runCounterSearch('Ceramic Mug')
 check(exactNameSearch.added.join() === 'MUG-10' && exactNameSearch.resetQueries.join() === ''
-  && exactNameSearch.feedback.at(-1)?.includes('ကြွေခွက် added to this sale'), 'enter_exact_product_name_must_add_one_item_and_confirm_the_burmese_name')
+  && exactNameSearch.feedback.at(-1)?.includes('Ceramic Mug added to this sale.'), 'enter_exact_product_name_must_add_one_item_and_confirm_the_english_name')
 const exactBurmeseNameSearch = runCounterSearch('ကြွေခွက်')
 check(exactBurmeseNameSearch.added.join() === 'MUG-10', 'enter_exact_burmese_product_name_must_add_one_item')
 const duplicateNameSearch = runCounterSearch('Ceramic Mug', [...counterItems, { sku: 'MUG-12', name: 'Ceramic Mug', onHand: 2 }])
@@ -177,9 +181,13 @@ check(duplicateNameSearch.added.length === 0 && duplicateNameSearch.feedback.at(
 const partialNameSearch = runCounterSearch('Ceramic')
 check(partialNameSearch.added.length === 0 && partialNameSearch.scanQueries.join() === 'Ceramic', 'partial_product_search_must_remain_a_choice_not_an_automatic_sale')
 const exactCounterScan = runCounterScan(counterItems, ' mug-10 ')
-check(exactCounterScan.matched && exactCounterScan.added.join() === 'MUG-10' && exactCounterScan.queries.join() === '' && exactCounterScan.feedback.at(-1)?.includes('ကြွေခွက် added to this sale'), 'exact_case_insensitive_counter_scan_must_confirm_the_burmese_item_name_and_clear_search')
+check(exactCounterScan.matched && exactCounterScan.added.join() === 'MUG-10' && exactCounterScan.queries.join() === '' && exactCounterScan.feedback.at(-1)?.includes('Ceramic Mug added to this sale.'), 'exact_case_insensitive_counter_scan_must_confirm_the_english_item_name_and_clear_search')
 const exactBarcodeScan = runCounterScan(counterItems, '00012345')
-check(exactBarcodeScan.matched && exactBarcodeScan.added.join() === 'MUG-10' && exactBarcodeScan.queries.join() === '' && exactBarcodeScan.feedback.at(-1)?.includes('ကြွေခွက် added to this sale'), 'barcode_scan_must_preserve_leading_zeroes_and_confirm_the_burmese_item_name')
+check(exactBarcodeScan.matched && exactBarcodeScan.added.join() === 'MUG-10' && exactBarcodeScan.queries.join() === '' && exactBarcodeScan.feedback.at(-1)?.includes('Ceramic Mug added to this sale.'), 'barcode_scan_must_preserve_leading_zeroes_and_confirm_the_english_item_name')
+testLocale = 'my'
+const burmeseCounterScan = runCounterScan(counterItems, '00012345')
+check(burmeseCounterScan.matched && burmeseCounterScan.feedback.at(-1)?.includes('ကြွေခွက် ဤအရောင်းထဲ ထည့်ပြီးပါပြီ။'), 'burmese_mode_scan_confirms_burmese_name_without_english_copy')
+testLocale = 'en'
 const duplicateCodeItems = [...counterItems, { sku: 'MUG-11', barcode: '00012345', name: 'Travel Mug', onHand: 6 }]
 const ambiguousBarcodeScan = runCounterScan(duplicateCodeItems, '00012345')
 check(!ambiguousBarcodeScan.matched && ambiguousBarcodeScan.added.length === 0 && ambiguousBarcodeScan.queries.length === 0
@@ -211,7 +219,7 @@ function runRealCounterScan(initialQuantity, saveAccepted = true) {
   }
   const scan = (value) => addScannedValue(counterItems, resolveCommerceItemByScanCode,
     (item) => addCounterItem(tickets, setCart, (message) => feedback.push(message), item),
-    (query) => queries.push(query), (message) => feedback.push(message), () => {}, unmatchedBarcodeForCreation, value, 'keyboard')
+    (query) => queries.push(query), (message) => feedback.push(message), () => {}, unmatchedBarcodeForCreation, testUiLocale, testUiText, value, 'keyboard')
   return { scan, cart: () => cart, queries, feedback }
 }
 const cappedCounter = runRealCounterScan(3)

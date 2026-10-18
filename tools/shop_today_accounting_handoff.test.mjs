@@ -13,7 +13,7 @@ test('Shop Today exposes the real reviewed accounting handoff after close', () =
   assert.match(core, /accountingExport=\{latestAccountingDownload \? \{ businessDate:/)
   assert.match(today, /data-shop-accounting-export="accounting-csv-v1"/)
   assert.ok(today.includes("accountingExport.mappingReady ? 'Mapped' : 'Unmapped'"))
-  assert.match(today, /<strong>Export<\/strong>/)
+  assert.match(today, /data-shop-accounting-export="accounting-csv-v1"[\s\S]*?<strong>CSV<\/strong>/)
 })
 
 test('accounting CSV bytes are created only when the operator downloads', () => {

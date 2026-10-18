@@ -1,5 +1,5 @@
 import { createElement, type ReactNode } from 'react'
-import { readUiLocale, uiText } from './ui-locale'
+import { readUiLocale, uiText } from './ui-locale.ts'
 
 // Shared action translations. Rendering uses exactly one language at a time.
 //

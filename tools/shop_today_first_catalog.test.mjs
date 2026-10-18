@@ -122,7 +122,7 @@ test('Shop barcode identity stays separate from SKU, preserves leading zeroes, a
   assert.match(core, /resolution\.kind === 'ambiguous'[\s\S]*Correct the duplicate product codes/)
   assert.match(core, /resolution\.kind === 'not_found'[\s\S]*unmatchedBarcodeForCreation\(value, source\)/)
   assert.match(core, /function selectStockCountBarcode[\s\S]*findCommerceItemByScanCode\(commerce\.items, code\)/)
-  assert.match(core, /placeholder="Search products or scan barcode"/)
+  assert.match(core, /placeholder=\{uiText\('Search products or scan barcode'\)\}/)
   assert.match(core, /name="product-barcode"/)
   assert.match(core, /label>SKU \/ item code \(optional\)/)
 })
@@ -357,5 +357,5 @@ test('a managed first product can complete a counter sale and leave a receipt-re
 })
 
 test('the empty catalog state does not show a duplicate generic products link', () => {
-  assert.match(today, /\{commerce\.items\.length \? <footer><Link to="\/shop\/\?tab=inventory">View products/)
+  assert.match(today, /\{commerce\.items\.length \? <footer><Link to="\/shop\/\?tab=inventory">\{uiText\('View products'\)\}/)
 })

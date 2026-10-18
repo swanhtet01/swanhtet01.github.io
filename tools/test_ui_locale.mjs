@@ -18,6 +18,7 @@ test('language choice survives refresh and follows another tab without mixing la
     const locale = await import('../showroom/src/core/ui-locale.ts')
 
     assert.equal(locale.readUiLocale(), 'my', 'the saved choice loads before a route renders')
+    assert.equal(globalThis.document.documentElement.lang, 'my', 'a saved choice restores the document language on load')
     assert.equal(locale.uiText('Today'), 'ယနေ့')
     assert.equal(locale.uiText('Products'), 'ကုန်ပစ္စည်းများ')
     locale.setUiLocale('en')
@@ -27,9 +28,11 @@ test('language choice survives refresh and follows another tab without mixing la
 
     events.get('storage')?.({ key: 'supermega.ui-locale.v1', newValue: 'my' })
     assert.equal(locale.readUiLocale(), 'my', 'a choice in another tab reaches this tab')
+    assert.equal(globalThis.document.documentElement.lang, 'my', 'a choice in another tab updates the document language')
     assert.equal(locale.uiText('Today'), 'ယနေ့')
     events.get('storage')?.({ key: 'supermega.ui-locale.v1', newValue: 'invalid' })
     assert.equal(locale.readUiLocale(), 'en', 'an invalid saved value fails back to English')
+    assert.equal(globalThis.document.documentElement.lang, 'en')
   } finally {
     globalThis.window = originalWindow
     globalThis.document = originalDocument
