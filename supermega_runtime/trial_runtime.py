@@ -2394,6 +2394,7 @@ def create_trial_router(
         readiness = _readiness(store, principal)
         _require_write_ready(readiness, SURFACE_WRITE_CAPABILITIES[body.surface])
         related_surfaces: tuple[str, ...] = ()
+        server_verified_related_surfaces: tuple[str, ...] = ()
         state_precondition: StatePrecondition | None = None
         if body.surface == "commerce" and body.event_type == "commerce.website_intake.created":
             next_state = body.payload.get("state")
@@ -2412,6 +2413,7 @@ def create_trial_router(
                     validate_website_snapshot_source(related_states.get("website", {}), source)
 
             related_surfaces = ("website",)
+            server_verified_related_surfaces = ("website",)
             state_precondition = require_website_source
         elif (
             body.surface == "commerce"
@@ -2582,6 +2584,7 @@ def create_trial_router(
                 expected_version=body.expected_version,
                 payload=body.payload,
                 related_surfaces=related_surfaces,
+                server_verified_related_surfaces=server_verified_related_surfaces,
                 state_precondition=state_precondition,
             )
 

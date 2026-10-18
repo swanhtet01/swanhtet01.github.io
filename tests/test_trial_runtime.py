@@ -1487,6 +1487,14 @@ class TrialRuntimeTests(unittest.TestCase):
             client.close()
 
     def test_retained_website_source_preserves_exact_command_replay_only(self) -> None:
+        shop_only = TrialPrincipal("workspace-a", "actor-shop-only", "human")
+        self.sessions["shop-only-session"] = shop_only
+        self.store.provision_membership(
+            workspace_id="workspace-a",
+            actor_id="actor-shop-only",
+            actor_kind="human",
+            capabilities=("commerce.write",),
+        )
         source = {
             "fingerprint": "web-1234abcd",
             "approvalId": "approval-1",
@@ -1508,6 +1516,12 @@ class TrialRuntimeTests(unittest.TestCase):
             ).status_code,
             200,
         )
+        shop_bootstrap = self.client.get(
+            "/api/trial/v1/bootstrap",
+            headers=self._headers("shop-only-session"),
+        )
+        self.assertEqual(shop_bootstrap.status_code, 200, shop_bootstrap.text)
+        self.assertNotIn("website", shop_bootstrap.json()["states"])
 
         command_id = str(uuid4())
         replayable = self._command_body(
@@ -1517,16 +1531,16 @@ class TrialRuntimeTests(unittest.TestCase):
         )
         replayable["payload"] = {
             "state": {"websiteIntakes": [{"source": source}]},
-            "evidence": {"actor": "actor-operator"},
+            "evidence": {"actor": "actor-shop-only"},
         }
         first = self.client.post(
             "/api/trial/v1/commands",
-            headers=self._headers(),
+            headers=self._headers("shop-only-session"),
             json=replayable,
         )
         replay = self.client.post(
             "/api/trial/v1/commands",
-            headers=self._headers(),
+            headers=self._headers("shop-only-session"),
             json=replayable,
         )
         self.assertEqual(first.status_code, 200)

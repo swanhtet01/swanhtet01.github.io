@@ -319,6 +319,61 @@ class TrialStoreTests(unittest.TestCase):
         self.assertEqual(self.reducer.calls, calls_before_rejection)
         self.assertEqual(self.store.get_state(self.operator, "commerce").version, 0)
 
+    def test_shop_only_can_validate_website_source_without_sites_read_access(self) -> None:
+        shop_only = TrialPrincipal("workspace-a", "actor-shop-only", "human")
+        self.store.provision_membership(
+            workspace_id="workspace-a",
+            actor_id="actor-shop-only",
+            actor_kind="human",
+            capabilities=("commerce.write",),
+        )
+        self.store.apply_command(
+            self.operator,
+            command_id=str(uuid4()),
+            surface="website",
+            event_type="website.content.saved",
+            expected_version=0,
+            payload={"changes": {"fingerprint": "web-verified"}},
+        )
+        verified_state: list[dict[str, object]] = []
+
+        def verify_published_source(
+            _current: Mapping[str, object],
+            related: Mapping[str, Mapping[str, object]],
+        ) -> None:
+            verified_state.append(dict(related["website"]))
+            if related["website"].get("fingerprint") != "web-verified":
+                raise TrialValidationError("Website source proof changed.")
+
+        def command(*, verified: bool, event_type: str = "commerce.website_intake.created"):
+            kwargs: dict[str, object] = {
+                "principal": shop_only,
+                "command_id": str(uuid4()),
+                "surface": "commerce",
+                "event_type": event_type,
+                "expected_version": 0,
+                "payload": {"changes": {"intake": "accepted"}},
+                "related_surfaces": ("website",),
+                "state_precondition": verify_published_source,
+            }
+            if verified:
+                kwargs["server_verified_related_surfaces"] = ("website",)
+            return self.store.apply_command(**kwargs)  # type: ignore[arg-type]
+
+        with self.assertRaises(TrialPermissionDenied):
+            command(verified=False)
+        with self.assertRaises(TrialPermissionDenied):
+            self.store.get_state(shop_only, "website")
+
+        created = command(verified=True)
+        self.assertEqual(created.version, 1)
+        self.assertEqual(verified_state, [{"fingerprint": "web-verified", "last_surface": "website", "last_event_type": "website.content.saved"}])
+        with self.assertRaises(TrialPermissionDenied):
+            self.store.get_state(shop_only, "website")
+
+        with self.assertRaises(TrialValidationError):
+            command(verified=True, event_type="commerce.order.saved")
+
     def test_store_enforces_human_only_consequential_commerce_events(self) -> None:
         self.store.provision_membership(
             workspace_id="workspace-a",

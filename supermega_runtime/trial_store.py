@@ -1049,6 +1049,7 @@ class TrialStore(Protocol):
         related_surfaces: Sequence[str] = (),
         expected_related_versions: Mapping[str, int] | None = None,
         state_precondition: StatePrecondition | None = None,
+        server_verified_related_surfaces: Sequence[str] = (),
     ) -> CommandResult: ...
 
     def create_approval(
@@ -3569,6 +3570,35 @@ def _require_surface_read_capability(capabilities: Sequence[str], surface: str) 
         raise TrialPermissionDenied(SURFACE_READ_CAPABILITIES[surface_value])
 
 
+def _server_verified_related_surface_access(
+    *,
+    surface: str,
+    event_type: str,
+    related_surfaces: Sequence[str],
+    verified_surfaces: Sequence[str],
+    state_precondition: StatePrecondition | None,
+) -> frozenset[str]:
+    """Allow one server-side proof check without granting a customer surface read.
+
+    The public API never accepts ``verified_surfaces`` from a request. The runtime
+    uses it only when a Shop intake is checked against a retained Website publish
+    record; the callback consumes the Website state without returning it.
+    """
+
+    verified = tuple(verified_surfaces)
+    if not verified:
+        return frozenset()
+    if (
+        surface != "commerce"
+        or event_type != "commerce.website_intake.created"
+        or tuple(related_surfaces) != ("website",)
+        or verified != ("website",)
+        or state_precondition is None
+    ):
+        raise TrialValidationError("Server-verified Website access is limited to intake source checks.")
+    return frozenset(verified)
+
+
 def _require_approval_read_capability(capabilities: Sequence[str]) -> None:
     if not has_approval_read_capability(capabilities):
         raise TrialPermissionDenied(APPROVAL_READ_CAPABILITY)
@@ -4913,6 +4943,41 @@ class PostgresTrialStore:
     def _lock(cursor: Any, key: str) -> None:
         cursor.execute("select pg_advisory_xact_lock(hashtextextended(%s, 0))", (key,))
 
+    def _refresh_command_authority(
+        self,
+        cursor: Any,
+        principal: TrialPrincipal,
+        *,
+        surface: str,
+        event_type: str,
+        related_surfaces: Sequence[str],
+        server_verified_related_surfaces: Sequence[str] = (),
+    ) -> frozenset[str]:
+        """Recheck mutable authority after lock waits using a fresh READ COMMITTED snapshot."""
+
+        try:
+            cursor.execute("show transaction_isolation")
+            isolation = str((cursor.fetchone() or {}).get("transaction_isolation", "")).strip().lower()
+            if isolation != "read committed":
+                raise TrialNotReadyError(("command_authority_requires_read_committed",))
+            self._assert_active_identity_session(cursor, principal)
+            capabilities = self._load_membership(cursor, principal)
+            product_entitlements = self._product_entitlements(cursor, principal.workspace_id)
+            capabilities = capabilities_for_product_entitlements(capabilities, product_entitlements)
+        except TrialStoreError:
+            raise
+        except Exception as exc:
+            raise TrialNotReadyError(("command_authority_ready",)) from exc
+
+        required_capability = _required_surface_capability(surface)
+        if required_capability not in capabilities:
+            raise TrialPermissionDenied(required_capability)
+        require_command_product_entitlement(event_type, product_entitlements, capabilities)
+        for related_surface in related_surfaces:
+            if related_surface not in server_verified_related_surfaces:
+                _require_surface_read_capability(capabilities, related_surface)
+        return capabilities
+
     @staticmethod
     def _load_event_replay(
         cursor: Any,
@@ -4949,6 +5014,7 @@ class PostgresTrialStore:
         related_surfaces: Sequence[str] = (),
         expected_related_versions: Mapping[str, int] | None = None,
         state_precondition: StatePrecondition | None = None,
+        server_verified_related_surfaces: Sequence[str] = (),
     ) -> CommandResult:
         command_id_value = _normalize_uuid(command_id, field_name="command_id")
         surface_value = _normalize_surface(surface)
@@ -4962,6 +5028,13 @@ class PostgresTrialStore:
             raise TrialValidationError("expected_version must be non-negative.")
         if related_surface_values and state_precondition is None:
             raise TrialValidationError("related surfaces require a state precondition.")
+        server_verified_surface_values = _server_verified_related_surface_access(
+            surface=surface_value,
+            event_type=event_type_value,
+            related_surfaces=related_surface_values,
+            verified_surfaces=server_verified_related_surfaces,
+            state_precondition=state_precondition,
+        )
         payload_value = _json_object(
             payload, field_name="payload", max_bytes=_json_limit_for_surface(surface_value)
         )
@@ -5004,8 +5077,17 @@ class PostgresTrialStore:
                 capabilities,
             )
             for related_surface in related_surface_values:
-                _require_surface_read_capability(capabilities, related_surface)
+                if related_surface not in server_verified_surface_values:
+                    _require_surface_read_capability(capabilities, related_surface)
             self._lock(cursor, f"{normalized.workspace_id}:command:{command_id_value}")
+            capabilities = self._refresh_command_authority(
+                cursor,
+                normalized,
+                surface=surface_value,
+                event_type=event_type_value,
+                related_surfaces=related_surface_values,
+                server_verified_related_surfaces=server_verified_surface_values,
+            )
             replay = self._load_event_replay(
                 cursor,
                 workspace_id=normalized.workspace_id,
@@ -5087,6 +5169,14 @@ class PostgresTrialStore:
                     raise TrialValidationError(
                         "Commerce actionId was already used by an earlier command."
                     )
+            capabilities = self._refresh_command_authority(
+                cursor,
+                normalized,
+                surface=surface_value,
+                event_type=event_type_value,
+                related_surfaces=related_surface_values,
+                server_verified_related_surfaces=server_verified_surface_values,
+            )
             if state_precondition is not None:
                 state_precondition(
                     deepcopy(current_state),
@@ -5910,6 +6000,7 @@ class InMemoryTrialStore:
         related_surfaces: Sequence[str] = (),
         expected_related_versions: Mapping[str, int] | None = None,
         state_precondition: StatePrecondition | None = None,
+        server_verified_related_surfaces: Sequence[str] = (),
     ) -> CommandResult:
         command_id_value = _normalize_uuid(command_id, field_name="command_id")
         surface_value = _normalize_surface(surface)
@@ -5923,6 +6014,13 @@ class InMemoryTrialStore:
             raise TrialValidationError("expected_version must be non-negative.")
         if related_surface_values and state_precondition is None:
             raise TrialValidationError("related surfaces require a state precondition.")
+        server_verified_surface_values = _server_verified_related_surface_access(
+            surface=surface_value,
+            event_type=event_type_value,
+            related_surfaces=related_surface_values,
+            verified_surfaces=server_verified_related_surfaces,
+            state_precondition=state_precondition,
+        )
         payload_value = _json_object(
             payload, field_name="payload", max_bytes=_json_limit_for_surface(surface_value)
         )
@@ -5955,7 +6053,8 @@ class InMemoryTrialStore:
                 event_type_value, readiness.product_entitlements, readiness.capabilities
             )
             for related_surface in related_surface_values:
-                _require_surface_read_capability(readiness.capabilities, related_surface)
+                if related_surface not in server_verified_surface_values:
+                    _require_surface_read_capability(readiness.capabilities, related_surface)
             if event_type_value in HUMAN_COMMAND_EVENTS and normalized.actor_kind != HUMAN_ACTOR_KIND:
                 raise TrialHumanApprovalRequired()
             _require_command_evidence_actor(
