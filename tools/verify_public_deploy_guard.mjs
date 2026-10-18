@@ -65,7 +65,7 @@ for (const token of ['public_preview_action_missing', 'public_preview_app_route_
   'hasShopSignIn && !loginLinks.every(href => href === `${origin}/login?product=shop`)']) {
   requireToken(previewProfile, token, 'preview_navigation_policy_missing')
 }
-for (const token of ['landing_guided_product_route_missing', 'shop_signin_action_missing',
+for (const token of ['landing_login_route_missing', 'shop_contact_action_missing',
   'homepage_shop_action_missing', 'retired_shop_action_present', 'landing_contact_route_missing',
   'retired_product_marketed', 'retired_product_boundary_missing',
   'interface_image_reference_missing', 'interface_image_http_error',
