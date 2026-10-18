@@ -26,7 +26,8 @@ test('base counter quantity controls support tablet touch without a phone breakp
   assert.match(app, /aria-keyshortcuts="\/"/)
   assert.match(app, /document\.addEventListener\('keydown', focusCounterSearch\)/)
   assert.match(app, /document\.removeEventListener\('keydown', focusCounterSearch\)/)
-  assert.match(app, /parked\.length \? `Parked sales \(\$\{parked\.length\}\)` : 'Save sale for later'/)
+  assert.match(app, /persistLocalDraft && parked\.length > 0 \? <button aria-controls="shop-parked-tickets"/)
+  assert.match(app, />Parked · \{parked\.length\}<\/button> : null/)
   assert.doesNotMatch(app, /Parked tickets \(\{parked\.length\}\) · this device/)
   // Layout is covered by the source-bound browser capture; these checks guard
   // the cashier's actual touch and keyboard controls across layout revisions.

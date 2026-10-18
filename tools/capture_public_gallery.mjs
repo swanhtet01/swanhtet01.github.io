@@ -235,6 +235,29 @@ async function captureMobile(cdp, sessionId, output, name, expectedTexts, view) 
   }
 }
 
+async function captureTablet(cdp, sessionId, output, name, expectedTexts, view) {
+  // iPad-sized portrait viewport: the Shop switches to its tablet layout while
+  // retaining touch targets and opening the sale as a compact review sheet.
+  await cdp.send('Emulation.setDeviceMetricsOverride', { width: 768, height: 1024, deviceScaleFactor: 1, mobile: true }, sessionId)
+  await cdp.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 }, sessionId)
+  try {
+    if (view.openSale) await clickSelector(cdp, sessionId, '.shop-mobile-cart')
+    const layout = await evaluate(cdp, sessionId, `(() => {
+      const node = document.querySelector(${JSON.stringify(view.selector)});
+      const top = node?.getBoundingClientRect().top ?? 0;
+      window.scrollTo({top:${view.scrollToTop ? '0' : "window.scrollY + top - 80"}, behavior:'instant'});
+      return { viewport: innerWidth, page: document.documentElement.scrollWidth };
+    })()`)
+    if (layout.page > layout.viewport + 1) throw new Error(`tablet_capture_horizontal_overflow:${name}:${JSON.stringify(layout)}`)
+    return await capture(cdp, sessionId, output, name, expectedTexts, { ...view, width: 768, height: 1024 })
+  } finally {
+    if (view.openSale) await clickSelector(cdp, sessionId, '.shop-cart-close')
+    await cdp.send('Emulation.setTouchEmulationEnabled', { enabled: false }, sessionId)
+    await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false }, sessionId)
+    await evaluate(cdp, sessionId, 'window.scrollTo(0,0)')
+  }
+}
+
 async function assertShopMobileFits(cdp, sessionId, selector) {
   await cdp.send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true }, sessionId)
   try {
@@ -346,9 +369,11 @@ async function main() {
     if (saleBasket.added.length !== 3 || saleBasket.lines !== 3) {
       throw new Error(`counter_multi_item_basket_missing:${JSON.stringify(saleBasket)}`)
     }
-    captures.push(await capture(cdp, sessionId, output, 'actual-shop-sell', ['Products', 'Current sale', 'Daily essentials basket'],
+    captures.push(await capture(cdp, sessionId, output, 'actual-shop-sell', ['Products', 'Current sale', 'KAUNG 90 Days Rice'],
       { fixturePath: '/shop/', tab: 'counter', selector: '.shop-current-sale' }))
-    captures.push(await captureMobile(cdp, sessionId, output, 'actual-shop-sell-mobile', ['Products', 'Current sale', 'Daily essentials basket'],
+    captures.push(await captureTablet(cdp, sessionId, output, 'actual-shop-sell-tablet', ['Products', 'Current sale', 'KAUNG 90 Days Rice'],
+      { fixturePath: '/shop/', tab: 'counter', selector: '.shop-counter-grid', scrollToTop: true, openSale: true }))
+    captures.push(await captureMobile(cdp, sessionId, output, 'actual-shop-sell-mobile', ['Products', 'Current sale', 'KAUNG 90 Days Rice'],
       { fixturePath: '/shop/', tab: 'counter', selector: '.shop-current-sale' }))
     await clickSelector(cdp, sessionId, '.shop-review-sale')
     await waitFor(cdp, sessionId, 'Review counter sale')
@@ -369,19 +394,25 @@ async function main() {
     await clickText(cdp, sessionId, 'Show Today')
     captures.unshift(await capture(cdp, sessionId, output, 'actual-shop-today', ['Today', 'Quick tasks', 'Order queue', '1 completed'],
       { fixturePath: '/shop/', tab: 'today', selector: '.shop-today-module' }))
+    captures.push(await captureTablet(cdp, sessionId, output, 'actual-shop-today-tablet', ['Today', 'Quick tasks', 'Order queue', '1 completed'],
+      { fixturePath: '/shop/', tab: 'today', selector: '.shop-today-module' }))
     captures.push(await captureMobile(cdp, sessionId, output, 'actual-shop-today-mobile', ['Today', 'Quick tasks', 'Order queue', '1 completed'],
       { fixturePath: '/shop/', tab: 'today', selector: '.shop-today-module' }))
     await assertShopMobileFits(cdp, sessionId, '.shop-operations-board')
     await clickText(cdp, sessionId, 'Show Orders')
-    captures.push(await capture(cdp, sessionId, output, 'actual-shop-orders', ['Orders to finish', 'Payment pending'],
+    captures.push(await capture(cdp, sessionId, output, 'actual-shop-orders', ['Needs attention', 'New order'],
       { fixturePath: '/shop/', tab: 'orders', selector: '.orders-module' }))
-    captures.push(await captureMobile(cdp, sessionId, output, 'actual-shop-orders-mobile', ['Orders to finish', 'Payment pending'],
+    captures.push(await captureTablet(cdp, sessionId, output, 'actual-shop-orders-tablet', ['Needs attention', 'New order'],
+      { fixturePath: '/shop/', tab: 'orders', selector: '.orders-module' }))
+    captures.push(await captureMobile(cdp, sessionId, output, 'actual-shop-orders-mobile', ['Needs attention', 'New order'],
       { fixturePath: '/shop/', tab: 'orders', selector: '.orders-module' }))
     await clickText(cdp, sessionId, 'Show Inventory')
     await waitFor(cdp, sessionId, 'Inventory')
     await clickSelector(cdp, sessionId, '.stock-catalog-disclosure summary')
     await waitForSelector(cdp, sessionId, '.stock-catalog-disclosure[open]')
-    captures.push(await capture(cdp, sessionId, output, 'actual-shop-inventory', ['Inventory', 'Stock', 'Other products', 'Household refill'],
+    captures.push(await capture(cdp, sessionId, output, 'actual-shop-inventory', ['Inventory', 'Stock', 'Other products', 'BAYDAR Laundry Detergent'],
+      { fixturePath: '/shop/', tab: 'inventory', selector: '.shop-stock-module' }))
+    captures.push(await captureTablet(cdp, sessionId, output, 'actual-shop-inventory-tablet', ['Inventory', 'Stock', 'Other products', 'BAYDAR Laundry Detergent'],
       { fixturePath: '/shop/', tab: 'inventory', selector: '.shop-stock-module' }))
     await clickSelector(cdp, sessionId, '.stock-catalog-disclosure summary')
     await waitForSelector(cdp, sessionId, '.stock-catalog-disclosure:not([open])')

@@ -4,7 +4,6 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 const { build } = createRequire(resolve('showroom/package.json'))('esbuild')
 const managed = process.argv.includes('--managed')
 const today = process.argv.includes('--today')
-const gallery = process.argv.includes('--gallery')
 const requestedOutput = process.env.SUPERMEGA_QA_FIXTURE_OUTPUT_DIR
 const out = resolve(requestedOutput || (managed ? '.tmp/qa-managed-shop' : '.tmp/qa-shop'))
 if (requestedOutput) {
@@ -21,7 +20,6 @@ let fail=false;let rejectedWrites=0;let ledgerWrites=0;window.__qaFailAck=false;
 const memory=(map)=>({getItem:k=>map.get(k)??null,setItem:(k,v)=>{if(fail&&k===COMMERCE_KEY){rejectedWrites++;throw new DOMException('Synthetic quota','QuotaExceededError')};if(k===COMMERCE_KEY)ledgerWrites++;map.set(k,String(v))},removeItem:k=>map.delete(k),key:i=>[...map.keys()][i]??null,get length(){return map.size}});
 Object.defineProperty(window,'localStorage',{value:memory(values)});Object.defineProperty(window,'sessionStorage',{value:memory(new Map())});
 const seed=createSeedCommerce();
-if (${gallery}) for (const [index,category] of ['Groceries','Drinks','Household','Personal care','Family care'].entries()) seed.items[index].category=category;
 localStorage.setItem(COMMERCE_KEY,JSON.stringify(seed));
 const baseline=localStorage.getItem(COMMERCE_KEY);
 const syntheticIdentity={workspaceId:'11111111-1111-4111-8111-111111111111',userId:'22222222-2222-4222-8222-222222222222'};
