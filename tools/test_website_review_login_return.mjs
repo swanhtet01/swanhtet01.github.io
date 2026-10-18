@@ -55,7 +55,7 @@ test('rendered login offers no local workspace, sample, trial activation or self
       'react-router': { Link: 'a', useNavigate: () => () => {},
         useLocation: () => ({ search: reviewing ? `?product=website&review=${id}` : '?product=shop' }),
         useOutletContext: () => ({ status: ready ? 'enterprise' : 'checking', signupPolicy: { termsVersion: 'test' } }) },
-      './CoreShell': { PageHeading: 'heading' }, './i18n-actions': { bi: value => value },
+      './CoreShell': { PageHeading: 'heading' }, './i18n-actions': { bi: value => value }, './ui-locale': { uiText: value => value },
       './production-entry': productionEntry, './account-routes': routes, './managed-trial': { managedTrialAuthConfigured: () => true },
       './signup-trial': { readTrialSignup: () => null, trialSignupProductChoice: () => ({ slug: 'shop' }) },
     }

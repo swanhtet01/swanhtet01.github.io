@@ -139,7 +139,7 @@ const shapeOf = (classes, attributes = {}, tag = 'div', ancestors = []) => ({
 })
 const subjectOf = (selector) => parseSelector(selector).subject
 
-const banner = shapeOf('production-mode-banner storage-durability-banner', { 'data-durability': ['full', 'evictable'] })
+const banner = shapeOf('production-mode-banner storage-durability-banner', { 'data-durability': ['full', 'device-only'] })
 check(matchCompounds([subjectOf('.theme-dark .production-mode-banner')], banner) === MATCH_YES, 'the theme rule matches the banner by its shared class')
 check(matchCompounds([subjectOf('.storage-durability-banner[data-durability="full"]')], banner) === MATCH_YES, 'a state-scoped tint matches the branch that renders it')
 check(
@@ -222,8 +222,8 @@ const REGRESSIONS = [
     expected: [
       '.production-mode-banner[data-write="blocked"] background',
       '.production-mode-banner[data-write="blocked"] border-color',
-      '.storage-durability-banner[data-durability="evictable"] background',
-      '.storage-durability-banner[data-durability="evictable"] border-color',
+      '.storage-durability-banner[data-durability="device-only"] background',
+      '.storage-durability-banner[data-durability="device-only"] border-color',
       '.storage-durability-banner[data-durability="full"] background',
       '.storage-durability-banner[data-durability="full"] border-color',
     ],
