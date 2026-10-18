@@ -167,6 +167,18 @@ ENV_ACTOR_B = "SUPERMEGA_MANAGED_PERSISTENCE_ACTOR_B"
 ENV_DATABASE_URL = "SUPERMEGA_MANAGED_PERSISTENCE_DATABASE_URL"
 ENV_RECOVERY_DATABASE_URL = "SUPERMEGA_MANAGED_PERSISTENCE_RECOVERY_DATABASE_URL"
 ENV_POOLER_HOST = "SUPERMEGA_MANAGED_PERSISTENCE_POOLER_HOST"
+REQUIRED_ENVIRONMENT = (
+    ENV_ADAPTER,
+    ENV_ALLOWED_HOST,
+    ENV_OWNER_APPROVAL_ID,
+    ENV_WORKSPACE_A,
+    ENV_WORKSPACE_B,
+    ENV_RESTORE_WORKSPACE,
+    ENV_ACTOR_A,
+    ENV_ACTOR_B,
+    ENV_DATABASE_URL,
+    ENV_RECOVERY_DATABASE_URL,
+)
 
 _DB_HOST_PATTERN = re.compile(r"db\.([a-z0-9]{20})\.supabase\.co\Z")
 _POOLER_HOST_PATTERN = re.compile(r"aws-\d+-[a-z0-9-]+\.pooler\.supabase\.com\Z")
@@ -1127,6 +1139,33 @@ def configuration_preflight(
     return {"ok": True, **evidence, "evidence_digest": _digest_text(_canonical_json(evidence))}
 
 
+def configuration_preflight_from_environment(
+    environment: dict[str, str] | None = None,
+    *,
+    captured_at: datetime | None = None,
+) -> dict[str, Any]:
+    values = dict(os.environ if environment is None else environment)
+    missing = [key for key in REQUIRED_ENVIRONMENT if not str(values.get(key, "")).strip()]
+    if missing:
+        now = (captured_at or datetime.now(timezone.utc)).astimezone(timezone.utc)
+        return {
+            "contract": CONTRACT,
+            "mode": "offline_configuration_preflight",
+            "ok": False,
+            "error": "persistence_environment_incomplete",
+            "missing_environment_variables": missing,
+            "captured_at": now.replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+            "network_requests_performed": 0,
+            "database_connections_performed": 0,
+            "persistent_mutations_performed": 0,
+            "credential_shapes_validated_locally": False,
+            "provider_credentials_verified": False,
+            "secrets_exposed": False,
+            "tenant_rows_exposed": False,
+        }
+    return configuration_preflight(load_config(values), captured_at=captured_at)
+
+
 # --------------------------------------------------------------------------
 # Offline adversarial self-test fixtures. The fixture database simulates the
 # v10 app_private semantics per statement tag; each named defect models one
@@ -1861,12 +1900,32 @@ def run_self_test() -> dict[str, Any]:
     ):
         raise PersistenceProofError("self_test_preflight_failed")
 
+    # Case: incomplete offline configuration names only missing keys; partial
+    # connection strings or other configured values must never enter output.
+    cases += 1
+    partial_secret = "postgresql://fixture-secret@db.preview.supabase.co:5432/postgres?sslmode=require"
+    incomplete_preflight = configuration_preflight_from_environment(
+        {ENV_DATABASE_URL: partial_secret}, captured_at=frozen_now
+    )
+    if (
+        incomplete_preflight["ok"] is not False
+        or incomplete_preflight["error"] != "persistence_environment_incomplete"
+        or incomplete_preflight["missing_environment_variables"]
+        != [key for key in REQUIRED_ENVIRONMENT if key != ENV_DATABASE_URL]
+        or incomplete_preflight["database_connections_performed"] != 0
+        or incomplete_preflight["persistent_mutations_performed"] != 0
+        or incomplete_preflight["secrets_exposed"] is not False
+        or partial_secret in json.dumps(incomplete_preflight, sort_keys=True)
+        or "fixture-secret" in json.dumps(incomplete_preflight, sort_keys=True)
+    ):
+        raise PersistenceProofError("self_test_preflight_missing_names_failed")
+
     # Case: evidence, preflight, and failure reports never leak configured
     # values, connection strings, or raw error text.
     cases += 1
     failure_report = _failure_report(leak_error, sessions=1, statements=4)
     serialized = json.dumps(
-        [report, pooler_report, preflight, failure_report], sort_keys=True
+        [report, pooler_report, preflight, incomplete_preflight, failure_report], sort_keys=True
     )
     forbidden_values = [
         environment[ENV_DATABASE_URL],
@@ -1940,7 +1999,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.self_test:
             result = run_self_test()
         elif args.preflight:
-            result = configuration_preflight(load_config())
+            result = configuration_preflight_from_environment()
         else:
             if not args.confirm_hosted_persistence_audit:
                 raise PersistenceProofError("owner_approval_confirmation_required")
@@ -1949,7 +2008,11 @@ def main(argv: list[str] | None = None) -> int:
                 raise PersistenceProofError("owner_approval_confirmation_mismatch")
             audit = ManagedPersistenceAudit(config, NetworkSessionFactory(config))
             result = audit.run()
-        print(json.dumps(result, ensure_ascii=True, indent=2, sort_keys=True))
+        output = json.dumps(result, ensure_ascii=True, indent=2, sort_keys=True)
+        if result.get("ok") is not True:
+            print(output, file=sys.stderr)
+            return 1
+        print(output)
         return 0
     except PersistenceProofError as exc:
         print(
