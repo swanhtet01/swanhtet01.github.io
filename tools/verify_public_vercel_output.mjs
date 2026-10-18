@@ -562,7 +562,9 @@ if (publicGalleryEvidence?.schemaVersion !== 'supermega.public-gallery-provenanc
   || publicGalleryEvidence.records !== 'synthetic'
   || !/^[0-9a-f]{40}$/.test(publicGalleryEvidence.captureSourceCommit)
   || !/^[0-9a-f]{40}$/.test(publicGalleryEvidence.captureSourceTree)
-  || publicGalleryEvidence.capturedAt !== null
+  || typeof publicGalleryEvidence.capturedAt !== 'string'
+  || !Number.isFinite(Date.parse(publicGalleryEvidence.capturedAt))
+  || new Date(publicGalleryEvidence.capturedAt).toISOString() !== publicGalleryEvidence.capturedAt
   || publicGalleryEvidence.assets?.map((asset) => asset.file).join(',') !== publicGalleryFiles.join(',')
   || expectedPublicGalleryEvidence.assets.some(asset => asset === undefined)
   || JSON.stringify(publicGalleryEvidence) !== JSON.stringify(expectedPublicGalleryEvidence)) {

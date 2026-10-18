@@ -348,12 +348,6 @@ async function main() {
     await clickText(cdp, sessionId, 'Reopen synthetic Shop')
     await waitFor(cdp, sessionId, 'Order queue')
     await clickText(cdp, sessionId, 'Show Counter')
-    await waitFor(cdp, sessionId, 'Set up customer receipt')
-    await clickText(cdp, sessionId, 'Set up customer receipt')
-    await waitForSelector(cdp, sessionId, '.receipt-profile-form input[autocomplete="organization"]')
-    await typeInto(cdp, sessionId, '.receipt-profile-form input[autocomplete="organization"]', 'Example Corner Shop')
-    await clickText(cdp, sessionId, 'Save details')
-    await waitFor(cdp, sessionId, 'Receipt details')
     const saleBasket = await evaluate(cdp, sessionId, `(async () => {
       const added = [];
       for (let index = 0; index < 3; index += 1) {
@@ -379,6 +373,11 @@ async function main() {
     await waitFor(cdp, sessionId, 'Review counter sale')
     await typeInto(cdp, sessionId, '.accountable-action-gate input', 'Synthetic cashier')
     await clickText(cdp, sessionId, 'Complete sale')
+    await waitForPaidOrderRecord(cdp, sessionId)
+    await clickText(cdp, sessionId, 'Set up receipt')
+    await waitForSelector(cdp, sessionId, '.receipt-profile-form input[autocomplete="organization"]')
+    await typeInto(cdp, sessionId, '.receipt-profile-form input[autocomplete="organization"]', 'Example Corner Shop')
+    await clickText(cdp, sessionId, 'Save details')
     await waitForPaidOrderRecord(cdp, sessionId)
     const completedSale = await evaluate(cdp, sessionId, `(() => {
       const state = JSON.parse(localStorage.getItem('supermega.commerce.workspace.v2') || '{}');
@@ -476,6 +475,7 @@ async function main() {
     if (deniedExternal !== 0 || fulfilledSampleMedia.size !== sampleMedia.size)
       throw new Error(`sample_media_or_external_request_mismatch:${fulfilledSampleMedia.size}:${deniedExternal}`)
     console.log(JSON.stringify({ ok: true, classification: 'candidate_only_local_real_component_synthetic', publicationReady: false,
+      capturedAt: new Date().toISOString(),
       captureMode: reviewDirtyCapture ? 'dirty-working-tree-review' : 'clean-commit-review',
       captureInputsSha256: captureInputsAfter,
       sourceHasLocalChanges: Boolean(sourceChanges.stdout.trim() || captureScriptChanges.stdout.trim() || captureChanges.stdout.trim()),

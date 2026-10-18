@@ -231,7 +231,6 @@ export function ReceiptDialog({ ack, loyalty, onClose, paymentQrScope, merchantP
   const showSubtotalLine = hasPromotion || hasTax || hasDeliveryFee
 
   return <>
-    <button className="text-link receipt-profile-trigger" disabled={disabled} onClick={openMerchantProfileSetup} type="button">{merchantProfile ? 'Receipt details' : 'Set up customer receipt'}</button>
     <dialog aria-labelledby="receipt-dialog-title" className="receipt-dialog" onClose={() => { setSetupOpen(false); onClose() }} ref={ref}>
       {setupOpen ? <form className="receipt-profile-form" onSubmit={(event) => void saveMerchantProfile(event)} style={{ display: 'grid', gap: 12, padding: 16 }}>
         <header className="receipt-dialog-header"><span className="core-eyebrow">Customer receipt</span><h2 id="receipt-dialog-title">Set up your receipt</h2><p>Add your business name in Burmese or English.</p></header>
@@ -298,6 +297,7 @@ export function ReceiptDialog({ ack, loyalty, onClose, paymentQrScope, merchantP
         <details className="receipt-dialog-more"><summary>More options</summary><div>
           <button className="core-button compact" disabled={disabled} onClick={() => openPrintWindow(ack)} type="button">{bi('Print order record')}</button>
           <button className="core-button compact" disabled={disabled} onClick={() => void copyReceiptText()} type="button">{bi('Copy text')}</button>
+          {merchantProfile ? <button className="core-button compact" disabled={disabled} onClick={openMerchantProfileSetup} type="button">Receipt details</button> : null}
           {merchantProfile ? <button className="core-button compact" disabled={disabled} onClick={printTestReceipt} type="button">Print test slip</button> : null}
         </div></details>
         <div className="receipt-dialog-actions">

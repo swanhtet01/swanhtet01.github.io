@@ -84,7 +84,10 @@ const publicGalleryAssetNames = [
 ]
 assert(publicGalleryProvenance.schemaVersion === 'supermega.public-gallery-provenance.v1', 'public_gallery_provenance_schema_unsupported')
 assert(publicGalleryProvenance.status === 'local_component_capture' && publicGalleryProvenance.records === 'synthetic'
-  && publicGalleryProvenance.capturedAt === null, 'public_gallery_provenance_status_invalid')
+  && typeof publicGalleryProvenance.capturedAt === 'string'
+  && Number.isFinite(Date.parse(publicGalleryProvenance.capturedAt))
+  && new Date(publicGalleryProvenance.capturedAt).toISOString() === publicGalleryProvenance.capturedAt
+  && publicGalleryProvenance.capturedAt === publicGalleryCapture.capturedAt, 'public_gallery_provenance_status_invalid')
 assert(publicGalleryCapture.ok === true && publicGalleryCapture.classification === 'candidate_only_local_real_component_synthetic'
   && publicGalleryCapture.publicationReady === false && publicGalleryCapture.deniedExternal === 0,
   'public_gallery_capture_report_invalid')
