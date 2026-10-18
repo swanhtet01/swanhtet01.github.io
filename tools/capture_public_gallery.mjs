@@ -227,9 +227,19 @@ async function captureMobile(cdp, sessionId, output, name, expectedTexts, view) 
       return { viewport: innerWidth, page: document.documentElement.scrollWidth };
     })()`)
     if (mobileLayout.page > mobileLayout.viewport + 1) throw new Error(`mobile_capture_horizontal_overflow:${name}:${JSON.stringify(mobileLayout)}`)
-    // Opening the mobile basket intentionally focuses its first action for keyboard users.
-    // A gallery still should not freeze that transient focus ring into the product image.
-    if (name === 'actual-shop-sell-mobile') await evaluate(cdp, sessionId, 'document.activeElement instanceof HTMLElement && document.activeElement.blur()')
+    // The fixture opens the basket with HTMLElement.click(), which does not set
+    // pointer modality. Tap a static heading so this frame reflects touch use;
+    // keyboard focus styling in the application remains intact.
+    if (name === 'actual-shop-sell-mobile') {
+      const point = await evaluate(cdp, sessionId, `(() => {
+        const heading = document.querySelector('.shop-current-sale h2');
+        const box = heading?.getBoundingClientRect();
+        return box ? { x: box.left + box.width / 2, y: box.top + box.height / 2 } : null;
+      })()`)
+      if (!point) throw new Error('mobile_sale_heading_missing')
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [point] }, sessionId)
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] }, sessionId)
+    }
     return await capture(cdp, sessionId, output, name, expectedTexts, { ...view, width: 390, height: 844 })
   } finally {
     if (name === 'actual-shop-sell-mobile') await clickSelector(cdp, sessionId, '.shop-cart-close')
@@ -452,7 +462,17 @@ async function main() {
     await typeInto(cdp, sessionId, 'input[autocomplete="name"]', 'Ma Su')
     await typeInto(cdp, sessionId, 'input[autocomplete="tel"]', '09 123 456 789')
     await clickText(cdp, sessionId, 'Save request locally')
-    await waitForSelector(cdp, sessionId, '.ecommerce-quote-receipt[data-current="true"]')
+    try {
+      await waitForSelector(cdp, sessionId, '.ecommerce-quote-receipt[data-current="true"]')
+    } catch (cause) {
+      const checkout = await evaluate(cdp, sessionId, `(() => ({
+        notice: document.querySelector('.ecommerce-buying-notice')?.textContent?.slice(0, 240) ?? '',
+        buttonDisabled: document.querySelector('button[data-request-mode="local"]')?.disabled ?? null,
+        formValid: document.querySelector('#ecommerce-buying-workspace form')?.checkValidity() ?? null,
+        receiptCount: document.querySelectorAll('.ecommerce-quote-receipt').length,
+      }))()`)
+      throw new Error(`${cause.message}:${JSON.stringify(checkout)}`)
+    }
     const requestPanelShown = await evaluate(cdp, sessionId, `(() => {
       const panel = document.getElementById('ecommerce-buying-workspace');
       if (!panel) return false;
