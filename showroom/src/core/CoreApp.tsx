@@ -6,6 +6,7 @@ import { shopCounterDraftContext } from './shop-counter-draft-context'
 import { installShopSaleFocus } from './shop-sale-focus'
 import { activeShopCounterCategoryFilter, projectShopCounterCatalog, type ShopCounterCategoryFilter } from './shop-counter-catalog-window'
 import { shopOrderTargetId } from './shop-order-target'
+import { shopOrderAttentionLabels } from './shop-order-attention'
 import { createCounterTicketSession, emptyCounterBasket, type CounterBasket, type CounterTicketStorageScope } from './shop-parked-tickets'
 import {
   shopBusinessTemplate,
@@ -8327,11 +8328,7 @@ function OrderList({
     const hasSecondaryActions = Boolean(acknowledgement) || canCancelOrder || (order.refundStatus === 'due' && !settleRefundIsPrimary) || (needsPayment && !reconcileIsPrimary)
     const primaryActionLabel = shopOrderPrimaryActionLabel(order)
     const targetId = shopOrderTargetId(order.id)
-    const attentionLabels = [
-      needsPayment ? 'payment due' : '',
-      order.refundStatus === 'due' ? 'refund due' : '',
-      promiseUrgency === 'late' ? 'late' : promiseUrgency === 'due_soon' ? 'due soon' : promiseUrgency === 'unrecorded' ? 'promise missing' : '',
-    ].filter(Boolean)
+    const attentionLabels = shopOrderAttentionLabels(order, promiseUrgency)
     return <article data-highlighted={highlightedTargetId === targetId ? 'true' : undefined} id={targetId} key={order.id} tabIndex={-1}>
       <div>
         <strong>{order.customer} · {order.lines
@@ -8341,7 +8338,7 @@ function OrderList({
           : `${order.item} × ${order.quantity}`}</strong>
         <div className="order-statuses">
           <span className={`status-pill ${order.status === 'completed' ? 'approved' : order.status === 'cancelled' ? 'cancelled' : 'bounded'}`}>{uiText(order.status)}</span>
-          {attentionLabels.length ? <span className={`status-pill ${promiseUrgency === 'late' ? 'late' : 'pending'}`}>{attentionLabels.map(uiText).join(' · ')}</span> : null}
+          {attentionLabels.map((attention) => <span className={`status-pill ${attention.tone}`} data-order-attention={attention.kind} key={attention.kind}>{uiText(attention.text)}</span>)}
         </div>
         <details className="order-record-details">
           <summary><span>{commerceOrderDisplayReference(order.id)} · {order.promisedAt ? `${uiText('promised')} ${formatTime(order.promisedAt)}` : uiText('promise missing')}</span><small>{uiText('Details')}</small></summary>

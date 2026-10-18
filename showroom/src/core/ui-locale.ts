@@ -104,6 +104,7 @@ const UI_TRANSLATIONS: Readonly<Record<string, string>> = {
   'At least 3 sales across 2 time blocks show your busiest hours.': 'အချိန်ပိုင်း နှစ်ပိုင်းတွင် အနည်းဆုံး အရောင်းသုံးခုရှိလျှင် အလုပ်အများဆုံးအချိန်ကို ပြပါမည်။',
   'Advanced controls': 'အဆင့်မြင့် စီမံမှု', 'Costs, trends and operations': 'ကုန်ကျစရိတ်၊ အရောင်းလမ်းကြောင်းနှင့် လုပ်ငန်းများ',
   'Explore': 'ကြည့်ရန်', 'Reorder': 'ထပ်မှာရန်', 'Payment due': 'ငွေပေးရန် ကျန်',
+  'Order late': 'အော်ဒါ နောက်ကျနေ',
   'Paid': 'ငွေပေးပြီး', 'Customer': 'ဖောက်သည်', 'Walk-in': 'ဆိုင်လာဝယ်သူ',
   'No sales yesterday': 'မနေ့က အရောင်းမရှိပါ', 'Level with yesterday': 'မနေ့ကနှင့် တူညီပါသည်',
   'Up': 'တိုး', 'Down': 'လျော့', 'vs yesterday': 'မနေ့ကထက်',
