@@ -2269,12 +2269,17 @@ export function createSeedCommerce(now = deterministicSeedNow): CommerceState {
   const purchaseOrderAt = new Date(now - 2 * 60 * 60 * 1000).toISOString()
   const firstOrderAt = new Date(now - 54 * 60 * 1000).toISOString()
   const secondOrderAt = new Date(now - 29 * 60 * 1000).toISOString()
+  // Yangon retail examples from Makro PRO listings checked 2026-10-17. These remain
+  // synthetic demo stock and must be replaced with each merchant's own catalog/prices.
+  // Sources: makropro.com.mm/en/c/dry-grocery/grains-rice-cereal,
+  // /en/c/dry-grocery/pasta-noodles, /en/c/beverages/drinking-water,
+  // /en/c/household-supplies/laundry-supplies, /en/p/ETuOUnrc-858707669623079.
   const items: CommerceItem[] = [
-    { sku: 'SM-1001', name: 'Daily essentials basket', onHand: 34, reorderAt: 10, price: 18500 },
-    { sku: 'SM-1002', name: 'Cold drink pack', onHand: 8, reorderAt: 12, price: 6500 },
-    { sku: 'SM-1003', name: 'Household refill', onHand: 21, reorderAt: 8, price: 12000 },
-    { sku: 'SM-1004', name: 'Personal care set', onHand: 13, reorderAt: 6, price: 22500 },
-    { sku: 'SM-CARE-01', name: 'Family care set', variant: 'Standard bundle', onHand: 14, reorderAt: 6, price: 31000 },
+    { sku: 'SM-1001', name: 'KAUNG 90 Days Rice', nameMy: 'ကောင်း ၉၀ ရက် ဆန်', variant: '6 kg', category: 'Pantry', onHand: 34, reorderAt: 10, price: 12450 },
+    { sku: 'SM-1002', name: 'MAMA Chicken Instant Noodles', nameMy: 'မာမား ကြက်သားအရသာ ခေါက်ဆွဲခြောက်', variant: '55 g × 5', category: 'Pantry', onHand: 8, reorderAt: 12, price: 2950 },
+    { sku: 'SM-1003', name: 'ALPINE Drinking Water', nameMy: 'အယ်လ်ပင်း သောက်ရေ', variant: '1 L × 6', category: 'Drinks', onHand: 21, reorderAt: 8, price: 5700 },
+    { sku: 'SM-1004', name: 'BAYDAR Laundry Detergent', nameMy: 'ဘေဒါ အဝတ်လျှော်ဆပ်ပြာမှုန့်', variant: '700 g', category: 'Home care', onHand: 13, reorderAt: 6, price: 5900 },
+    { sku: 'SM-CARE-01', name: 'ZESS Sugar Crackers', nameMy: 'ဇက်စ် သကြားဘီစကစ်', variant: '192 g', category: 'Pantry', onHand: 14, reorderAt: 6, price: 8000 },
   ]
   const baselineProof: CommerceActionProof = {
     actionId: 'ACT-DEMO-CATALOG-BASELINE',
@@ -2287,15 +2292,15 @@ export function createSeedCommerce(now = deterministicSeedNow): CommerceState {
     schema: COMMERCE_WORKSPACE_SCHEMA,
     items,
     orders: [
-      { id: 'ORD-1042', createdAt: firstOrderAt, customer: 'May', owner: 'Counter operator', channel: 'Messenger', item: 'Daily essentials basket', itemSku: 'SM-1001', quantity: 2, payment: 'KBZPay', paymentStatus: 'pending', refundStatus: 'none', fulfilment: 'delivery', fulfilmentReference: 'Messenger delivery review #1042', promisedAt: new Date(now + 60 * 60 * 1000).toISOString(), lines: [{ sku: 'SM-1001', name: 'Daily essentials basket', quantity: 2, unitPriceMmk: 18500 }], calculation: { schema: COMMERCE_ORDER_CALCULATION_SCHEMA, currency: 'MMK', catalogRevision: 0, subtotalMmk: 37000, taxMode: 'not_configured', taxMmk: 0, totalMmk: 37000 }, total: 37000, status: 'preparing' },
-      { id: 'ORD-1041', createdAt: secondOrderAt, customer: 'Ko Aung', owner: 'Counter operator', channel: 'Phone', item: 'Household refill', itemSku: 'SM-1003', quantity: 1, payment: 'Cash on delivery', paymentStatus: 'pending', refundStatus: 'none', fulfilment: 'delivery', fulfilmentReference: 'Phone delivery review #1041', promisedAt: new Date(now + 90 * 60 * 1000).toISOString(), lines: [{ sku: 'SM-1003', name: 'Household refill', quantity: 1, unitPriceMmk: 12000 }], calculation: { schema: COMMERCE_ORDER_CALCULATION_SCHEMA, currency: 'MMK', catalogRevision: 0, subtotalMmk: 12000, taxMode: 'not_configured', taxMmk: 0, totalMmk: 12000 }, total: 12000, status: 'ready' },
+      { id: 'ORD-1042', createdAt: firstOrderAt, customer: 'May', owner: 'Counter operator', channel: 'Messenger', item: 'KAUNG 90 Days Rice', itemSku: 'SM-1001', quantity: 2, payment: 'KBZPay', paymentStatus: 'pending', refundStatus: 'none', fulfilment: 'delivery', fulfilmentReference: 'Messenger delivery review #1042', promisedAt: new Date(now + 60 * 60 * 1000).toISOString(), lines: [{ sku: 'SM-1001', name: 'KAUNG 90 Days Rice', quantity: 2, unitPriceMmk: 12450 }], calculation: { schema: COMMERCE_ORDER_CALCULATION_SCHEMA, currency: 'MMK', catalogRevision: 0, subtotalMmk: 24900, taxMode: 'not_configured', taxMmk: 0, totalMmk: 24900 }, total: 24900, status: 'preparing' },
+      { id: 'ORD-1041', createdAt: secondOrderAt, customer: 'Ko Aung', owner: 'Counter operator', channel: 'Phone', item: 'ALPINE Drinking Water', itemSku: 'SM-1003', quantity: 1, payment: 'Cash on delivery', paymentStatus: 'pending', refundStatus: 'none', fulfilment: 'delivery', fulfilmentReference: 'Phone delivery review #1041', promisedAt: new Date(now + 90 * 60 * 1000).toISOString(), lines: [{ sku: 'SM-1003', name: 'ALPINE Drinking Water', quantity: 1, unitPriceMmk: 5700 }], calculation: { schema: COMMERCE_ORDER_CALCULATION_SCHEMA, currency: 'MMK', catalogRevision: 0, subtotalMmk: 5700, taxMode: 'not_configured', taxMmk: 0, totalMmk: 5700 }, total: 5700, status: 'ready' },
       {
         id: 'ORD-1039',
         createdAt: completedOrderAt,
         customer: 'Daw Mya',
         owner: 'Counter operator',
         channel: 'Counter',
-        item: 'Personal care set',
+        item: 'BAYDAR Laundry Detergent',
         itemSku: 'SM-1004',
         quantity: 1,
         payment: 'Cash',
@@ -2309,9 +2314,9 @@ export function createSeedCommerce(now = deterministicSeedNow): CommerceState {
         fulfilment: 'pickup',
         fulfilmentReference: 'Counter handoff #1039',
         promisedAt: new Date(now - 2 * 60 * 60 * 1000).toISOString(),
-        lines: [{ sku: 'SM-1004', name: 'Personal care set', quantity: 1, unitPriceMmk: 22500 }],
-        calculation: { schema: COMMERCE_ORDER_CALCULATION_SCHEMA, currency: 'MMK', catalogRevision: 0, subtotalMmk: 22500, taxMode: 'not_configured', taxMmk: 0, totalMmk: 22500 },
-        total: 22500,
+        lines: [{ sku: 'SM-1004', name: 'BAYDAR Laundry Detergent', quantity: 1, unitPriceMmk: 5900 }],
+        calculation: { schema: COMMERCE_ORDER_CALCULATION_SCHEMA, currency: 'MMK', catalogRevision: 0, subtotalMmk: 5900, taxMode: 'not_configured', taxMmk: 0, totalMmk: 5900 },
+        total: 5900,
         status: 'completed',
         completion: {
           actionId: 'ACT-DEMO-COMPLETE-1039',
@@ -2413,15 +2418,16 @@ export function createSeedCommerce(now = deterministicSeedNow): CommerceState {
       id: 'PO-11111111-1111-4111-8111-111111111111',
       createdAt: purchaseOrderAt,
       expectedAt: new Date(now + 24 * 60 * 60 * 1000).toISOString(),
-      supplier: 'Myanmar Beverage Supply',
+      supplier: 'Sample wholesale supplier',
       sku: 'SM-1002',
       quantityOrdered: 40,
-      unitCostMmk: 4_200,
+      // No wholesale quote is part of the public retail-price references; keep
+      // acquisition cost unset instead of inventing a margin for the demo.
       creation: {
         actionId: 'ACT-DEMO-PO-1001',
         capturedAt: purchaseOrderAt,
         actor: 'Purchasing lead',
-        reason: 'Replenish the low-stock cold drink pack.',
+        reason: 'Replenish the low-stock MAMA noodle multipack.',
         evidenceReference: 'SEED-PO-1001',
       },
     }],

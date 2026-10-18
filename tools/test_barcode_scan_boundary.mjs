@@ -5,6 +5,7 @@ import { stripTypeScriptTypes } from 'node:module'
 import { resolve } from 'node:path'
 import { findCommerceItemByScanCode, incrementPurchaseOrderReceiveFromScan, resolveCommerceItemByScanCode } from '../showroom/src/core/commerce-workspace.ts'
 import { CAMERA_BARCODE_REARM_ABSENCE_MS, createCameraBarcodeScanSession, nextCameraBarcodeScans } from '../showroom/src/core/shop-camera-scan-session.ts'
+import { cappedShopBarcodeLabelCopies, isPrintableShopBarcode, MAX_SHOP_BARCODE_LABELS_PER_PRINT } from '../showroom/src/core/shop-barcode-labels.ts'
 import { unmatchedBarcodeForCreation } from '../showroom/src/core/shop-unmatched-scan.ts'
 
 const root = resolve(import.meta.dirname, '..')
@@ -323,11 +324,13 @@ const code128TableSource = labels.match(/const CODE128_BARS = (\[[\s\S]*?\n\])/)
 if (!code128TableSource) throw new Error('code128_symbol_table_missing')
 const code128Bars = new Function(`return ${code128TableSource[1]}`)()
 const code128Path = new Function('CODE128_BARS', 'value', functionBody(labels, 'code128BPath'))
-const printableSku = new Function('value', functionBody(labels, 'isPrintableCode128'))
-const barcodeCopies = new Function('MAX_LABELS_PER_PRINT', `return function (acceptedQuantity, requestedCopies) { ${functionBody(labels, 'cappedBarcodeCopies')} }`)(50)
+const printableSku = isPrintableShopBarcode
+const barcodeCopies = cappedShopBarcodeLabelCopies
 check(code128Bars.length === 107 && code128Bars.every((pattern, index) => pattern.length === (index === 106 ? 13 : 11)), 'code128_symbol_table_shape_invalid')
+check(MAX_SHOP_BARCODE_LABELS_PER_PRINT === 50, 'shop_barcode_label_batch_cap_changed')
 check(printableSku('SKU-014') && printableSku('rice 25kg'), 'valid_ascii_skus_must_use_code128b')
 check(!printableSku('') && !printableSku(' leading') && !printableSku('trailing ') && !printableSku('tea\nbox') && !printableSku('茶'), 'invalid_code128b_skus_must_be_rejected')
+check(printableSku('x'.repeat(80)) && !printableSku('x'.repeat(81)), 'barcode_input_length_limit_changed')
 const encodedHello = code128Path(code128Bars, 'HELLO')
 const helloModules = Array(encodedHello.modules).fill('0')
 for (const match of encodedHello.path.matchAll(/M(\d+) 0h(\d+)v40h-\d+z/g)) {

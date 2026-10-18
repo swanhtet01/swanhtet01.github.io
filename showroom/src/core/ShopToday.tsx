@@ -214,7 +214,7 @@ export function ShopToday({ accountingExport = null, batchProfitControl, catalog
             </span>)}
             </div>
             <p>{salesPulse.today.count} completed {salesPulse.today.count === 1 ? 'sale' : 'sales'} today</p>
-          </> : salesPulse.today.count ? <div className="shop-sales-empty" role="status"><strong>Building a useful sales pattern</strong><span>Complete a few more sales across the day to reveal when sales happen.</span></div>
+          </> : salesPulse.today.count ? <div className="shop-sales-empty" role="status"><strong>Sales by time</strong><span>At least 3 sales across 2 time blocks show your busiest hours.</span></div>
             : <div className="shop-sales-empty"><strong>No sales yet today</strong><span>Completed counter sales will appear here.</span></div>}
         </article>
 
@@ -228,7 +228,7 @@ export function ShopToday({ accountingExport = null, batchProfitControl, catalog
             {financeModule && (accountingExport || closeQueue.orderCount || closeQueue.exceptionCount) ? accountingExport ? <button className="shop-task-row shop-finance-task" data-shop-accounting-export="accounting-csv-v1" onClick={accountingExport.onDownload} type="button">
               <span><strong>Export</strong><small>Accountant CSV · {accountingExport.businessDate} · {accountingExport.mappingReady ? 'Mapped' : 'Unmapped'}</small></span>
             </button> : <Link aria-label="Cash and wallet close queue" aria-description="Not reconciled. Expected from completed, reconciled Shop orders. Wallet and bank settlement is not independently confirmed." to={closeQueue.target}>
-              <span><strong>Close payments</strong><small>{closeQueue.paymentMethods.length
+              <span><strong>Review payments</strong><small>{closeQueue.paymentMethods.length
                 ? closeQueue.paymentMethods.map((method) => `${method.paymentMethod} ${formatMmk(method.totalMmk)}`).join(' · ')
                 : closeQueue.exceptionCount ? `${closeQueue.exceptionCount} exceptions`
                   : closeQueue.orderCount ? `${closeQueue.orderCount} ready · ${formatMmk(closeQueue.totalMmk)}`

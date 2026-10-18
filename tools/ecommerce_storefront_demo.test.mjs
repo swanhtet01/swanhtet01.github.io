@@ -209,7 +209,7 @@ test('storefront provenance and buying readiness fail closed for sample data', a
   assert.equal(seedSnapshot.items.length, seed.items.length)
   const mutatedSeed = updateCommerceItem(seed, {
     sku: 'SM-1001',
-    expectedPrice: 18500,
+    expectedPrice: 12450,
     nextPrice: 19000,
     expectedReorderAt: 10,
     nextReorderAt: 10,
@@ -660,14 +660,14 @@ test('receivables aging buckets pending orders and excludes reconciled orders', 
   assert.equal(atSeedTime.rows.length, 2, 'aging must include both pending orders')
   assert.equal(atSeedTime.overdueOrders, 0, 'no orders are overdue at seed time')
   assert.equal(atSeedTime.overdueMmk, 0)
-  assert.equal(atSeedTime.totalOutstandingMmk, 37000 + 12000)
+  assert.equal(atSeedTime.totalOutstandingMmk, 24900 + 5700)
   assert.ok(atSeedTime.rows.every((row) => row.bucket === 'current'), 'all rows must be current at seed time')
 
   // Ten days later both orders are overdue (~10 days past due → '8_30' bucket).
   const tenDaysLaterMs = SEED_NOW_MS + 10 * 24 * 60 * 60 * 1000
   const at10Days = commerceReceivablesAging(state, tenDaysLaterMs)
   assert.equal(at10Days.overdueOrders, 2)
-  assert.equal(at10Days.overdueMmk, 37000 + 12000)
+  assert.equal(at10Days.overdueMmk, 24900 + 5700)
   assert.ok(at10Days.rows.every((row) => row.bucket === '8_30'), 'rows must be in 8_30 bucket at 10 days past due')
 
   // The reconciled order (ORD-1039) must never appear in aging.
@@ -743,10 +743,10 @@ test('commerceOrderCalculation, commerceOrderPaymentTermsDays, and commerceCusto
   }), null)
 
   // commerceCustomerCreditExposure: sums pending non-cancelled order totals per customer.
-  // ORD-1042 (May, 37 000 MMK, pending) and ORD-1041 (Ko Aung, 12 000 MMK, pending)
-  // ORD-1039 (Daw Mya, 22 500 MMK, reconciled) is excluded.
-  assert.equal(commerceCustomerCreditExposure(state, 'May'), 37000)
-  assert.equal(commerceCustomerCreditExposure(state, 'Ko Aung'), 12000)
+  // ORD-1042 (May, 24 900 MMK, pending) and ORD-1041 (Ko Aung, 5 700 MMK, pending)
+  // ORD-1039 (Daw Mya, 5 900 MMK, reconciled) is excluded.
+  assert.equal(commerceCustomerCreditExposure(state, 'May'), 24900)
+  assert.equal(commerceCustomerCreditExposure(state, 'Ko Aung'), 5700)
   assert.equal(commerceCustomerCreditExposure(state, 'Daw Mya'), 0)
   assert.equal(commerceCustomerCreditExposure(state, 'Unknown customer'), 0)
 })
@@ -1063,7 +1063,7 @@ test('commerceCustomerCreditReview, commerceOrderCalculationDigest, commerceStor
   assert.ok(closeExp !== null)
   // Only ORD-1039 is completed and reconciled.
   assert.deepEqual(closeExp.orderIds, ['ORD-1039'])
-  assert.equal(closeExp.total, 22500)
+  assert.equal(closeExp.total, 5900)
   // SM-1002 is below reorderAt (onHand: 8, reorderAt: 12).
   assert.ok(closeExp.stockExceptionSkus.includes('SM-1002'))
   // ORD-1041 and ORD-1042 have pending payment.
@@ -1280,7 +1280,7 @@ test('support expectation queries return null for seed state and order acknowled
   assert.ok(ack !== null, 'ORD-1039 must produce an order acknowledgement')
   assert.equal(ack.schema, COMMERCE_ORDER_ACKNOWLEDGEMENT_SCHEMA)
   assert.equal(ack.orderId, 'ORD-1039')
-  assert.equal(ack.totalMmk, 22500)
+  assert.equal(ack.totalMmk, 5900)
 
   // commerceOrderAcknowledgementText formats the acknowledgement as a string report.
   const text = commerceOrderAcknowledgementText(ack)
@@ -1293,6 +1293,7 @@ test('commerceSupplierInvoiceMatch, commerceSupplierPerformance, commerceSupport
   const seed = createSeedCommerce()
   const seedPO = commercePurchaseOrders(seed)[0]
   assert.ok(seedPO, 'seed must have a purchase order')
+  assert.equal(seedPO.unitCostMmk, undefined, 'retail price references must not invent a supplier quote')
 
   // commerceSupplierInvoiceMatch throws when the PO has no supplier invoice.
   assert.throws(() => commerceSupplierInvoiceMatch(seed, seedPO))
@@ -1301,7 +1302,7 @@ test('commerceSupplierInvoiceMatch, commerceSupplierPerformance, commerceSupport
   const performance = commerceSupplierPerformance(seed, Date.parse('2026-07-23T08:00:00.000Z'))
   assert.ok(Array.isArray(performance))
   assert.ok(performance.length >= 1)
-  assert.equal(performance[0].supplier, 'Myanmar Beverage Supply')
+  assert.equal(performance[0].supplier, 'Sample wholesale supplier')
   assert.equal(performance[0].totalOrders, 1)
 
   // commerceSupportCheckpointState returns null for both checkpoints when no events exist.
@@ -1329,7 +1330,7 @@ test('commerceOrderCorrectionExpectation, commerceSupplierPayablesHandoff, comme
   const correctionExpectation = commerceOrderCorrectionExpectation(seed, 'ORD-1039')
   assert.ok(correctionExpectation !== null)
   assert.equal(correctionExpectation.orderId, 'ORD-1039')
-  assert.equal(correctionExpectation.currentBalanceMmk, 22500)
+  assert.equal(correctionExpectation.currentBalanceMmk, 5900)
   assert.equal(correctionExpectation.correctionCount, 0)
 
   // Non-completed orders and unknown IDs return null.
@@ -1401,9 +1402,9 @@ test('createCommerceCatalogBaseline, upgradeCommerceSeedPolicies, commerceSuppor
     source,
     sku: 'SM-1001',
     quantity: 2,
-    itemName: 'Daily essentials basket',
-    unitPrice: 18500,
-    total: 37000,
+    itemName: 'KAUNG 90 Days Rice',
+    unitPrice: 12450,
+    total: 24900,
     creation: proof,
   }
   const snapshotDigest = commerceWebsiteIntakeSnapshotDigest(intakeSnapshot)
@@ -1420,7 +1421,7 @@ test('createCommerceCatalogBaseline, upgradeCommerceSeedPolicies, commerceSuppor
   assert.equal(intakes[0].id, 'WINT-TESTID01')
   assert.equal(intakes[0].sku, 'SM-1001')
   assert.equal(intakes[0].quantity, 2)
-  assert.equal(intakes[0].total, 37000)
+  assert.equal(intakes[0].total, 24900)
   assert.equal(intakes[0].status, 'pending_confirmation')
   assert.ok(intakes[0].snapshotDigest?.startsWith('sha256:'))
   // Idempotent replay: same id + same fields returns the state unchanged.
@@ -1434,20 +1435,20 @@ test('createCommerceCatalogBaseline, upgradeCommerceSeedPolicies, commerceSuppor
   // Quantity 0 → null.
   assert.equal(createCommerceWebsiteIntake(seed, { ...intakeInput, quantity: 0 }, proof), null)
 
-  // commerceCloseSettlementReview: matched settlement for ORD-1039 (Cash, 22500 MMK).
+  // commerceCloseSettlementReview: matched settlement for ORD-1039 (Cash, 5900 MMK).
   const closeExp = commerceCloseExpectation(seed, seedNowIso)
   assert.ok(closeExp !== null)
   const matchedSettlement = commerceCloseSettlementReview(seed, closeExp, [
-    { paymentMethod: 'Cash', countedMmk: 22500, varianceOwner: '', varianceReason: '' },
+    { paymentMethod: 'Cash', countedMmk: 5900, varianceOwner: '', varianceReason: '' },
   ])
   assert.ok(matchedSettlement !== null)
   assert.equal(matchedSettlement.schema, COMMERCE_CLOSE_SETTLEMENT_SCHEMA)
   assert.equal(matchedSettlement.status, 'matched')
-  assert.equal(matchedSettlement.totalExpectedMmk, 22500)
-  assert.equal(matchedSettlement.totalCountedMmk, 22500)
+  assert.equal(matchedSettlement.totalExpectedMmk, 5900)
+  assert.equal(matchedSettlement.totalCountedMmk, 5900)
   // Variance settlement when count differs.
   const varianceSettlement = commerceCloseSettlementReview(seed, closeExp, [
-    { paymentMethod: 'Cash', countedMmk: 20000, varianceOwner: 'Manager', varianceReason: 'Short count' },
+    { paymentMethod: 'Cash', countedMmk: 3400, varianceOwner: 'Manager', varianceReason: 'Short count' },
   ])
   assert.ok(varianceSettlement !== null)
   assert.equal(varianceSettlement.status, 'variance_review')
@@ -1475,16 +1476,16 @@ test('registerCommerceItem, updateCommerceItem, reconcileCommercePayment, record
   // Invalid price → null.
   assert.equal(registerCommerceItem(seed, { ...newItem, price: 0, sku: 'SM-1006' }, regProof), null)
 
-  // updateCommerceItem: changes the price of SM-1001 (seed price = 18500, reorderAt = 10).
+  // updateCommerceItem: changes the price of SM-1001 (seed price = 12450, reorderAt = 10).
   const updateProof = { actionId: 'ACT-UPD-SM1001', capturedAt: seedNowIso, actor: 'Store manager', reason: 'Price update.', evidenceReference: 'UPD-REF-001' }
-  const update = { sku: 'SM-1001', expectedPrice: 18500, nextPrice: 19000, expectedReorderAt: 10, nextReorderAt: 10 }
+  const update = { sku: 'SM-1001', expectedPrice: 12450, nextPrice: 19000, expectedReorderAt: 10, nextReorderAt: 10 }
   const withUpdate = updateCommerceItem(seed, update, updateProof)
   assert.ok(withUpdate !== null, 'valid price update must succeed')
   assert.equal(withUpdate.items.find((item) => item.sku === 'SM-1001')?.price, 19000)
   // Wrong expectedPrice → null.
   assert.equal(updateCommerceItem(seed, { ...update, expectedPrice: 99999 }, updateProof), null)
   // No actual change (price and reorderAt both match next values) → null.
-  assert.equal(updateCommerceItem(seed, { ...update, nextPrice: 18500 }, updateProof), null)
+  assert.equal(updateCommerceItem(seed, { ...update, nextPrice: 12450 }, updateProof), null)
 
   // reconcileCommercePayment: marks pending ORD-1041 as reconciled.
   const payProof = { actionId: 'ACT-PAY-1041', capturedAt: seedNowIso, actor: 'Counter operator', reason: 'Payment collected.', evidenceReference: 'PAY-REF-1041' }
@@ -1603,14 +1604,14 @@ test('advanceCommerceOrder, saveCommerceClose, commerceDailyCloseExport, and com
   const closeExp = commerceCloseExpectation(seed, seedNowIso)
   assert.ok(closeExp !== null, 'seed must produce a valid close expectation')
   assert.ok(closeExp.orderIds.includes('ORD-1039'), 'ORD-1039 must be in the close')
-  assert.equal(closeExp.total, 22500, 'ORD-1039 total is 22500 MMK')
+  assert.equal(closeExp.total, 5900, 'ORD-1039 total is 5900 MMK')
   const closeId = 'CLOSE-11111111-1111-4111-8111-111111111111'
   const closeProof = { actionId: 'ACT-11111111-1111-4111-8111-111111111111', capturedAt: seedNowIso, actor: 'Counter operator', reason: 'End-of-day close.', evidenceReference: 'T028-CLOSE-REF' }
   const withClose = saveCommerceClose(seed, closeId, closeProof, closeExp)
   assert.ok(withClose !== null, 'daily close must be saved')
   assert.equal(withClose.closes.length, 1)
   assert.equal(withClose.closes[0].id, closeId)
-  assert.equal(withClose.closes[0].total, 22500)
+  assert.equal(withClose.closes[0].total, 5900)
   // Replay with same proof and closeId → returns unchanged state (not null).
   assert.ok(saveCommerceClose(withClose, closeId, closeProof, closeExp) !== null)
   // Bad closeId pattern → null.
@@ -1620,7 +1621,7 @@ test('advanceCommerceOrder, saveCommerceClose, commerceDailyCloseExport, and com
   const dailyExport = commerceDailyCloseExport(withClose, closeId)
   assert.ok(dailyExport !== null, 'daily close export must be generated')
   assert.equal(dailyExport.schema, COMMERCE_DAILY_CLOSE_EXPORT_SCHEMA)
-  assert.equal(dailyExport.totalMmk, 22500)
+  assert.equal(dailyExport.totalMmk, 5900)
   assert.equal(dailyExport.orderCount, 1)
   assert.ok(dailyExport.orders.some((o) => o.orderId === 'ORD-1039'))
   // Unknown closeId → null.
@@ -1797,7 +1798,7 @@ test('recordCommerceOrderCorrection records a post-completion order correction',
   assert.ok(correctionExp !== null, 'ORD-1039 must be eligible for correction')
   assert.equal(correctionExp.orderId, 'ORD-1039')
   assert.equal(correctionExp.correctionCount, 0)
-  assert.equal(correctionExp.currentBalanceMmk, 22500)
+  assert.equal(correctionExp.currentBalanceMmk, 5900)
 
   // Record a credit correction for a pricing error on ORD-1039.
   const proof = { actionId: 'ACT-TEST-T032-CREDIT', capturedAt: seedNowIso, actor: 'Store manager', reason: 'Price was listed incorrectly.', evidenceReference: 'T032-CREDIT-REF' }
@@ -1829,13 +1830,14 @@ test('recordCommerceSupplierInvoice, markCommerceSupplierInvoicePayableReady, co
   const seed = createSeedCommerce()
   const seedNowIso = '2026-07-23T08:00:00.000Z'
   const seedPoId = 'PO-11111111-1111-4111-8111-111111111111'
+  const pricedSeed = { ...seed, purchaseOrders: seed.purchaseOrders.map((purchaseOrder) => purchaseOrder.id === seedPoId ? { ...purchaseOrder, unitCostMmk: 2100 } : purchaseOrder) }
 
   // No invoiced POs with payableReview in seed → commerceSupplierPayablesHandoff returns null.
   assert.equal(commerceSupplierPayablesHandoff(seed), null)
 
-  // Receive all 40 units so the invoice can match (quantity_ordered=40, unit_cost=4200).
+  // Receive all 40 units so the invoice can match (quantity_ordered=40, unit_cost=2100).
   const receiveProof = { actionId: 'ACT-TEST-T033-RECV', capturedAt: seedNowIso, actor: 'Warehouse staff', reason: 'Full delivery received.', evidenceReference: 'T033-RECV-REF' }
-  const withReceipt = receiveCommercePurchaseOrder(seed, seedPoId, 40, receiveProof)
+  const withReceipt = receiveCommercePurchaseOrder(pricedSeed, seedPoId, 40, receiveProof)
   assert.ok(withReceipt !== null, 'receiving 40 units on PO-11111111 must succeed')
 
   // Record a supplier invoice for the full delivery.
@@ -1846,7 +1848,7 @@ test('recordCommerceSupplierInvoice, markCommerceSupplierInvoicePayableReady, co
     issuedAt: seedNowIso,
     dueAt: '2026-08-06T08:00:00.000Z',
     quantityInvoiced: 40,
-    unitCostMmk: 4200,
+    unitCostMmk: 2100,
   }
   const invoiceProof = { actionId: 'ACT-TEST-T033-INV', capturedAt: seedNowIso, actor: 'Finance officer', reason: 'Supplier invoice received.', evidenceReference: 'T033-INV-REF' }
   const withInvoice = recordCommerceSupplierInvoice(withReceipt, seedPoId, invoiceInput, invoiceProof)
@@ -1854,7 +1856,7 @@ test('recordCommerceSupplierInvoice, markCommerceSupplierInvoicePayableReady, co
   const po = commercePurchaseOrders(withInvoice).find((p) => p.id === seedPoId)
   assert.ok(po?.supplierInvoice?.id === invoiceId)
   assert.equal(po?.supplierInvoice?.quantityInvoiced, 40)
-  assert.equal(po?.supplierInvoice?.totalMmk, 40 * 4200)
+  assert.equal(po?.supplierInvoice?.totalMmk, 40 * 2100)
   // Replay (same actionId) → unchanged state.
   assert.ok(recordCommerceSupplierInvoice(withInvoice, seedPoId, invoiceInput, invoiceProof) !== null)
   // Invalid invoice ID format → null.
@@ -1864,7 +1866,7 @@ test('recordCommerceSupplierInvoice, markCommerceSupplierInvoicePayableReady, co
   const priceVarianceInvoice = recordCommerceSupplierInvoice(withReceipt, seedPoId, { ...invoiceInput, id: 'PINV-66666666-6666-4666-8666-666666666666', unitCostMmk: 3900 }, invoiceProof)
   assert.ok(priceVarianceInvoice !== null, 'invoice with price variance still records')
 
-  // markCommerceSupplierInvoicePayableReady — invoice matches (qty=40, cost=4200); status → 'matched'.
+  // markCommerceSupplierInvoicePayableReady — invoice matches (qty=40, cost=2100); status → 'matched'.
   const payableProof = { actionId: 'ACT-TEST-T033-PAYABLE', capturedAt: seedNowIso, actor: 'Finance officer', reason: 'Invoice verified against delivery.', evidenceReference: 'T033-PAYABLE-REF' }
   const withPayable = markCommerceSupplierInvoicePayableReady(withInvoice, seedPoId, payableProof)
   assert.ok(withPayable !== null, 'marking matched invoice as payable-ready must succeed')
@@ -1880,8 +1882,8 @@ test('recordCommerceSupplierInvoice, markCommerceSupplierInvoicePayableReady, co
   assert.equal(handoff.schema, COMMERCE_SUPPLIER_PAYABLES_HANDOFF_SCHEMA)
   assert.equal(handoff.readyInvoiceCount, 1)
   assert.equal(handoff.rows[0].purchaseOrderId, seedPoId)
-  assert.equal(handoff.rows[0].grossInvoiceMmk, 40 * 4200)
-  assert.equal(handoff.netPayableTotalMmk, 40 * 4200)
+  assert.equal(handoff.rows[0].grossInvoiceMmk, 40 * 2100)
+  assert.equal(handoff.netPayableTotalMmk, 40 * 2100)
 
   // commerceSupplierPayablesHandoffCsv — produces CRLF-terminated CSV.
   const csv = commerceSupplierPayablesHandoffCsv(handoff)
@@ -2146,8 +2148,9 @@ test('importCommerceCatalog imports new catalog items and handles conflicts and 
 })
 
 test('authorizeCommerceSupplierReturn and recordCommerceSupplierCreditNote process a supplier return and credit note', () => {
-  const seed = createSeedCommerce()
+  const unpricedSeed = createSeedCommerce()
   const SEED_PO_ID = 'PO-11111111-1111-4111-8111-111111111111'
+  const seed = { ...unpricedSeed, purchaseOrders: unpricedSeed.purchaseOrders.map((purchaseOrder) => purchaseOrder.id === SEED_PO_ID ? { ...purchaseOrder, unitCostMmk: 2100 } : purchaseOrder) }
 
   // Receive the seed PO with 38 accepted and 2 damaged (returned to vendor).
   const receiveProof = {
@@ -2189,7 +2192,7 @@ test('authorizeCommerceSupplierReturn and recordCommerceSupplierCreditNote proce
   assert.equal(returnClaims.length, 1)
   assert.equal(returnClaims[0].id, RETURN_ID)
   assert.equal(returnClaims[0].quantityRejected, 2)
-  assert.equal(returnClaims[0].claimAmountMmk, 8400)
+  assert.equal(returnClaims[0].claimAmountMmk, 4200)
 
   // Idempotent: same return claim → returns current (not null).
   assert.ok(authorizeCommerceSupplierReturn(withReturn, SEED_PO_ID,
@@ -2208,7 +2211,7 @@ test('authorizeCommerceSupplierReturn and recordCommerceSupplierCreditNote proce
     id: CREDIT_ID,
     supplierReference: 'SUPP-CN-2026-001',
     issuedAt: CAPTURED_AT,
-    amountMmk: 8400,
+    amountMmk: 4200,
   }
   const withCredit = recordCommerceSupplierCreditNote(withReturn, SEED_PO_ID, RETURN_ID, creditInput, creditProof)
   assert.ok(withCredit !== null, 'recordCommerceSupplierCreditNote must succeed')
@@ -2217,7 +2220,7 @@ test('authorizeCommerceSupplierReturn and recordCommerceSupplierCreditNote proce
   const creditedClaims = commerceSupplierReturnClaims(creditedPo)
   assert.equal(creditedClaims[0].creditNotes.length, 1)
   assert.equal(creditedClaims[0].creditNotes[0].id, CREDIT_ID)
-  assert.equal(creditedClaims[0].creditNotes[0].amountMmk, 8400)
+  assert.equal(creditedClaims[0].creditNotes[0].amountMmk, 4200)
   assert.equal(commerceSupplierReturnClaimStatus(creditedClaims[0]), 'credited')
 
   // Idempotent: same credit note → returns current (not null).
@@ -2260,10 +2263,10 @@ test('recordCommerceOrderSupportCase and recordCommerceOrderSupportServiceEvent 
     customer: 'Ko Test',
     owner: 'Store operator',
     channel: 'Website',
-    item: 'Daily essentials basket',
+    item: 'KAUNG 90 Days Rice',
     itemSku: 'SM-1001',
     quantity: 1,
-    total: 18500,
+    total: 12450,
     payment: 'Cash',
     paymentStatus: 'pending',
     refundStatus: 'none',
@@ -2395,7 +2398,7 @@ test('resolveCommerceOrderSupportCase and reopenCommerceOrderSupportCase close a
 
   // Build the completed ECR-sourced order (same pattern as test 39, different IDs).
   const reserveProof = { actionId: 'ACT-TEST-T040-RESERVE', capturedAt: CAPTURED_AT, actor: 'Store operator', reason: 'Reserved', evidenceReference: 'EVT-T040-RESERVE' }
-  const ecrOrder = { id: ORDER_ID, createdAt: CAPTURED_AT, customer: 'Ko Test', owner: 'Store operator', channel: 'Website', item: 'Daily essentials basket', itemSku: 'SM-1001', quantity: 1, total: 18500, payment: 'Cash', paymentStatus: 'pending', refundStatus: 'none', fulfilment: 'pickup', fulfilmentReference: 'Store counter T040', promisedAt: CASE_DUE_AT, status: 'confirmed', sourceRecordId: ECR_ID, evidenceReference: 'EVT-T040-RESERVE' }
+  const ecrOrder = { id: ORDER_ID, createdAt: CAPTURED_AT, customer: 'Ko Test', owner: 'Store operator', channel: 'Website', item: 'KAUNG 90 Days Rice', itemSku: 'SM-1001', quantity: 1, total: 12450, payment: 'Cash', paymentStatus: 'pending', refundStatus: 'none', fulfilment: 'pickup', fulfilmentReference: 'Store counter T040', promisedAt: CASE_DUE_AT, status: 'confirmed', sourceRecordId: ECR_ID, evidenceReference: 'EVT-T040-RESERVE' }
   const s1 = reserveCommerceOrder(seed, ecrOrder, reserveProof)
   assert.ok(s1 !== null)
   const s2 = advanceCommerceOrder(s1, ORDER_ID, 'confirmed', { actionId: 'ACT-TEST-T040-ADV1', capturedAt: CAPTURED_AT, actor: 'Op', reason: 'r', evidenceReference: 'EVT-T040-A1' })
