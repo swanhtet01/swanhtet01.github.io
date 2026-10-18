@@ -174,7 +174,7 @@ export const APP_SHELL_REQUIREMENTS = [
       "routeProduct ? ' has-system-navigator' : ''",
       'export function ProductHomeEntry',
       'export function ProductHomePage',
-      '<nav aria-label="Your workspace" className="product-track-grid">',
+      "<nav aria-label={uiText('Your workspace')} className=\"product-track-grid\">",
     ],
   },
   {
