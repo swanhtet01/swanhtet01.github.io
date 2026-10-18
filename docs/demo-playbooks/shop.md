@@ -29,7 +29,7 @@ Shop trade links may include a reviewed `template` query parameter, such as ?pro
 ## 3. Demo script
 
 1. Start on the `Sell` tab (`/shop/?tab=counter`). On a phone, point to the bottom task bar — `Today`, `Sell`, `Orders`, and `Stock` are the working modes, not setup pages. Read the heading: `Tap an item to add it`.
-2. Show the item-finding paths before touching the cart: tap a tile, type into `Search products or scan barcode`, and on Android Chrome tap `Scan products into this sale` if the button appears. If the button is absent, say the app fell back to the keyboard-wedge/search path rather than pretending every browser has camera scanning.
+2. Show the item-finding paths before touching the cart: tap a tile, type into `Search products or scan barcode`, and on Android Chrome use the scan control labelled `Find or scan an item`. If the camera is unavailable, use the keyboard-wedge/search path; do not imply every browser supports camera scanning.
 3. Open `Stock` (`/shop/?tab=inventory`) and point at the product-photo control on a catalog row. If you have a non-private test image, attach it and return to `Sell` to show the same SKU as a photo tile; otherwise say product photos are device-local and skip the upload.
 4. Add two or three items. The `Current sale` panel fills; on a phone the cart sits at the bottom so the cashier never leaves the counter flow.
 5. In the sale panel, use a named customer if you are demonstrating points; otherwise leave Customer as `Guest`. If loyalty is enabled and the customer has a projected balance, point at the points chip only as a reviewed balance — do not call it a campaign, membership, or automated promotion.

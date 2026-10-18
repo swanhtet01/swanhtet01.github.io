@@ -21,6 +21,8 @@
 
 The current `uiText` phrase table is an engineering draft with English fallback. It is not a translation certification. A missing key must be captured by a coverage audit and fixed before the Burmese release gate. Merchant-authored product names are data: show the owner's Burmese name when present, and explicitly handle missing Burmese names during onboarding rather than inventing translations. Use plain Unicode Myanmar text and test printer fonts with an actual device.
 
+`node tools/audit_shop_locale_surface.mjs` now gives a repeatable lower-bound inventory. On this source it finds **1,281 raw English JSX/accessibility fragments, 1,018 distinct**, in six Shop/shell files; `CoreApp.tsx` accounts for 1,051 occurrences. This scan deliberately does not certify route coverage: it omits strings assembled in JavaScript, other child modules, server responses, and public pages. The next translation pass must reduce the work queue with documented brand/SKU exceptions, then verify actual browser routes and printer output with a native Burmese reviewer. Do not expose the draft mode as a complete Burmese product.
+
 ## Where the product still misses the market
 
 1. **First-use and speed:** ZayTap's marketed add → stock → sell → report path is easy to explain. Shop has more controls but still needs a measured first-run test: create/import five real MMK items, enter opening stock, scan and sell, find the receipt, restock, and read the daily result. Acceptance: an untrained Myanmar operator completes it without staff intervention; record time, clicks, errors and recovery. Keep advanced policy/accounting behind a deliberate entry.
