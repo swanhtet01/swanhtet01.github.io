@@ -21,7 +21,10 @@ class Cursor:
         if 'select distinct' in sql:
             self.rows = [{"asset_id": asset} for asset in self.events.get(params[0], set()) if asset in params[1]]
     def fetchall(self): return self.rows
-    def fetchone(self): return None
+    def fetchone(self):
+        if self.executions[-1][0] == 'show transaction_isolation':
+            return {'transaction_isolation': 'read committed'}
+        return None
 
 
 class MediaReferenceTests(unittest.TestCase):
@@ -43,6 +46,11 @@ class MediaReferenceTests(unittest.TestCase):
         class Store(PostgresTrialStore):
             @contextmanager
             def _guarded_cursor(self, *args, **kwargs): yield cursor, {'website.write'}
+            # This media-ordering fixture models one active Website owner;
+            # authority refresh itself still executes on the command path.
+            def _assert_active_identity_session(self, *args): return None
+            def _load_membership(self, *args): return frozenset({'website.write'})
+            def _product_entitlements(self, *args): return ('website',)
         store = Store('', reducer=lambda *args: STATE, write_enabled=True)
         def command(workspace):
             return store.apply_command(TrialPrincipal(workspace, 'operator', 'human'), command_id=str(uuid4()),
@@ -54,6 +62,7 @@ class MediaReferenceTests(unittest.TestCase):
         cursor.executions.clear()
         self.assertEqual(command('workspace-a').version, 1)
         queries = [sql for sql, _ in cursor.executions]
+        self.assertEqual(queries.count('show transaction_isolation'), 2)
         checked = next(i for i, sql in enumerate(queries) if 'select distinct' in sql)
         written = next(i for i, sql in enumerate(queries) if 'insert into app_private.workspace_state' in sql)
         self.assertLess(checked, written)
