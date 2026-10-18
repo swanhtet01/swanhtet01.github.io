@@ -4,6 +4,7 @@ import { Link, useLocation, useNavigate, useOutletContext } from 'react-router'
 
 import { PageHeading, type RuntimeHealth } from './CoreShell'
 import { bi } from './i18n-actions'
+import { uiText } from './ui-locale'
 import {
   alternateManagedWorkspaceId,
   managedAccountPath,
@@ -293,7 +294,7 @@ export function ManagedLoginPage() {
 
   return (
     <div className={`workspace-screen managed-login-screen${creatingAccount ? ' signup-entry-screen' : ''}`}>
-      <PageHeading eyebrow={reviewReturnPath ? 'Private customer review' : 'Account'} title={reviewReturnPath ? 'Open your prepared review.' : creatingAccount ? 'Create your account.' : 'Login'} copy={reviewReturnPath ? 'Sign in with the account assigned to this review.' : creatingAccount ? 'Confirm your email first. Company access is a separate step.' : managedReady ? 'Sign in to your workspace.' : ''} />
+      <PageHeading eyebrow={uiText(reviewReturnPath ? 'Private customer review' : 'Account')} title={uiText(reviewReturnPath ? 'Open your prepared review.' : creatingAccount ? 'Create your account.' : 'Login')} copy={uiText(reviewReturnPath ? 'Sign in with the account assigned to this review.' : creatingAccount ? 'Confirm your email first. Company access is a separate step.' : managedReady ? 'Sign in to your workspace.' : '')} />
       {existingIdentity ? <section className="managed-login-panel" aria-label="Current managed account">
         <div><span className="core-eyebrow">Connected</span><h2>{existingIdentity.email}</h2><p>Your company account is ready.</p></div>
         <div className="managed-login-actions">
@@ -355,13 +356,13 @@ export function ManagedLoginPage() {
         </>}
         <button className="core-button primary" disabled={busy} type="submit">{busy ? 'Checking...' : reviewReturnPath ? 'Continue to review' : directory ? bi('Open company') : bi('Login')}</button>
         <p className="form-notice" data-tone={noticeTone} id="managed-login-notice" role="status">{notice}</p>
-      </form> : <section className="managed-login-panel" aria-label="Login unavailable">
-        {reviewReturnPath ? <div><h2>Review sign-in is unavailable here.</h2><p>Keep your original review link and ask SuperMega in your existing setup conversation to restore access. Use the account associated with this review.</p></div> : <>
-          <div><h2>Login is currently unavailable.</h2><p>{publicApp ? 'Contact support for account access.' : 'Contact support for account access. Your saved work is still available on this device.'}</p></div>
-          <div className="managed-login-actions"><a className="core-button primary" href={managedAccountRequestUrl(productIntent)}>Contact support</a>{!publicApp ? <Link className="account-inline-link" to="/?choose=1">Saved work on this device</Link> : null}{signupPolicy ? <button className="core-button" onClick={() => chooseAccountMode(true)} type="button">Create an account</button> : null}</div>
+      </form> : <section className="managed-login-panel" aria-label={uiText('Login unavailable')}>
+        {reviewReturnPath ? <div><h2>{uiText('Review sign-in is unavailable here.')}</h2><p>{uiText('Keep your original review link and ask SuperMega in your existing setup conversation to restore access. Use the account associated with this review.')}</p></div> : <>
+          <div><h2>{uiText('Login is currently unavailable.')}</h2><p>{uiText(publicApp ? 'Contact support for account access.' : 'Contact support for account access. Your saved work is still available on this device.')}</p></div>
+          <div className="managed-login-actions"><a className="core-button primary" href={managedAccountRequestUrl(productIntent)}>{uiText('Contact support')}</a>{!publicApp ? <Link className="account-inline-link" to="/?choose=1">{uiText('Saved work on this device')}</Link> : null}{signupPolicy ? <button className="core-button" onClick={() => chooseAccountMode(true)} type="button">{uiText('Create an account')}</button> : null}</div>
         </>}
       </section>}
-      {!reviewReturnPath ? <div className="managed-login-actions"><a className="account-inline-link" href="https://supermega.dev/shop/#shop-demo">View Shop sample screens</a></div> : null}
+      {!reviewReturnPath ? <div className="managed-login-actions"><a className="account-inline-link" href="https://supermega.dev/shop/#shop-demo">{uiText('View Shop sample screens')}</a></div> : null}
     </div>
   )
 }

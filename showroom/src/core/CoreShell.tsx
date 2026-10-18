@@ -7,6 +7,7 @@ import { managedAccountPath } from './account-routes'
 import './core-app.css'
 import { RouteErrorBoundary } from './RouteErrorBoundary'
 import { bi } from './i18n-actions'
+import { setUiLocale, uiText, useUiLocale } from './ui-locale'
 import { recordBehaviorSignal } from './behavior-trail'
 import { activeCommerceTab, commerceTabs } from './commerce-tabs'
 import type { ClientSolutionId } from './client-onboarding'
@@ -428,6 +429,7 @@ export function Empty({ children }: { children: ReactNode }) {
 }
 
 export function CoreLayout() {
+  const uiLocale = useUiLocale()
   const [sessionChanged, setSessionChanged] = useState(false)
   useEffect(() => watchManagedSessionStorage(window, () => setSessionChanged(true)), [])
   const location = useLocation()
@@ -491,9 +493,9 @@ export function CoreLayout() {
       : internalBuilderRoute
         ? 'Client builder'
       : customerSettingsRoute
-        ? (settingsProduct ? `${productDisplayName(settingsProduct)} setup` : 'Recovery')
+        ? (settingsProduct ? `${productDisplayName(settingsProduct)} setup` : new URLSearchParams(location.search).get('view') === 'language' ? uiText('Language') : 'Recovery')
         : location.pathname.startsWith('/shop/')
-          ? 'Shop'
+          ? uiText('Shop')
           : location.pathname.startsWith('/plant/')
             ? 'Plant'
             : 'Products'
@@ -509,9 +511,13 @@ export function CoreLayout() {
   const managedWorkspace = portalAccess.status === 'ready' ? portalAccess : null
 
   useEffect(() => {
-    document.title = `${routeName} | SuperMega`
+    document.documentElement.lang = uiLocale
+    document.title = `${uiText(routeName)} | SuperMega`
+  }, [routeName, uiLocale])
+
+  useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'instant' })
-  }, [location.hash, location.pathname, location.search, routeName])
+  }, [location.pathname])
 
   useEffect(() => {
     if (location.pathname.startsWith('/vision/')) return
@@ -565,10 +571,10 @@ export function CoreLayout() {
         {routeProduct === 'commerce' && mobileCommerceTab ? <Suspense fallback={null}><DesktopShopNavigation activeTab={mobileCommerceTab} /></Suspense> : routeProduct === 'website' ? <Suspense fallback={null}><DesktopSitesNavigation activeView={desktopSitesView} /></Suspense> : commerceWorkspaceEntry ? <Suspense fallback={null}><DesktopCommerceNavigation activeView={desktopCommerceView} /></Suspense> : activeNavigation.length ? <nav className="core-nav" aria-label="Application">
           {activeNavigation.map((item) => <NavLink className={({ isActive }) => navigationClass(item.to, isActive)} end={item.end} key={item.to} to={item.to}>{item.label}</NavLink>)}
         </nav> : null}
-        <div className="sidebar-foot">{routeProduct && canSwitchProduct ? <Link className="product-switch-shell-link" to="/?choose=1"><span className="shell-nav-icon" aria-hidden="true" data-icon="products" /><span>All products</span></Link> : null}</div>
+        <div className="sidebar-foot">{routeProduct && canSwitchProduct ? <Link className="product-switch-shell-link" to="/?choose=1"><span className="shell-nav-icon" aria-hidden="true" data-icon="products" /><span>{uiText('All products')}</span></Link> : null}{!accountEntryRoute ? <Link className="product-switch-shell-link" to="/settings/?view=language#controls"><span className="shell-nav-icon" aria-hidden="true" data-icon="settings" /><span>{uiText('Settings')}</span></Link> : null}</div>
       </aside>
       <div className="core-stage">
-        <header className="core-topbar"><div className="mobile-brand"><Brand /></div><div className="topbar-title"><strong>{routeName}</strong><span>{managedWorkspace ? managedWorkspace.companyName : 'SuperMega workspace'}</span></div><div className="topbar-meta">{!accountEntryRoute ? <Suspense fallback={<Link aria-label="Login" className="account-shell-link mobile-account-link" to={companyLoginPath}>Login</Link>}><WorkspaceAccount companyLoginPath={companyLoginPath} companyName={managedWorkspace?.companyName} companyRole={managedWorkspace?.companyRole} /></Suspense> : null}</div></header>
+        <header className="core-topbar"><div className="mobile-brand"><Brand /></div><div className="topbar-title"><strong>{uiText(routeName)}</strong><span>{managedWorkspace ? managedWorkspace.companyName : uiText('Workspace')}</span></div><div className="topbar-meta"><button aria-label={uiText(uiLocale === 'my' ? 'Switch to English' : 'Switch to Burmese')} className="account-shell-link locale-toggle" onClick={() => setUiLocale(uiLocale === 'my' ? 'en' : 'my')} type="button">{uiLocale === 'my' ? 'EN' : 'မြန်မာ'}</button>{!accountEntryRoute ? <Suspense fallback={<Link aria-label={uiText('Login')} className="account-shell-link mobile-account-link" to={companyLoginPath}>{uiText('Login')}</Link>}><WorkspaceAccount companyLoginPath={companyLoginPath} companyName={managedWorkspace?.companyName} companyRole={managedWorkspace?.companyRole} /></Suspense> : null}</div></header>
         {/* Shop's bottom bar is task navigation (all four links share the /shop/
             pathname, so NavLink's pathname-based isActive would mark every tab
             active — the highlight must come from the ?tab= param instead). Every
@@ -579,7 +585,7 @@ export function CoreLayout() {
             users inside one product. It is a plain Link with no active state:
             on /?choose=1 routeProduct is null and this bar never renders. */}
         {routeProduct === 'commerce'
-          ? <nav className={`mobile-nav mobile-task-nav${canSwitchProduct ? ' has-switch' : ''}`} aria-label="Shop task shortcuts">{commerceTabs.map((tab) => <Link aria-current={mobileCommerceTab === tab.id ? 'page' : undefined} className={mobileCommerceTab === tab.id ? 'active' : ''} key={tab.id} replace to={`/shop/?tab=${tab.id}`}>{bi(tab.label)}</Link>)}{canSwitchProduct ? <Link to="/?choose=1">Switch</Link> : null}</nav>
+          ? <nav className={`mobile-nav mobile-task-nav${canSwitchProduct ? ' has-switch' : ''}`} aria-label="Shop task shortcuts">{commerceTabs.map((tab) => <Link aria-current={mobileCommerceTab === tab.id ? 'page' : undefined} className={mobileCommerceTab === tab.id ? 'active' : ''} key={tab.id} replace to={`/shop/?tab=${tab.id}`}>{bi(tab.label)}</Link>)}{canSwitchProduct ? <Link to="/?choose=1">{uiText('Switch')}</Link> : null}</nav>
           : mobileNavigation.length > 0 ? <nav className="mobile-nav" aria-label="Current product navigation">{mobileNavigation.map((item) => <NavLink className={({ isActive }) => navigationClass(item.to, isActive)} end={item.end} key={item.to} to={item.to}>{item.label}</NavLink>)}</nav> : null}
         <main id="workspace-main" className={`core-main${routeProduct ? ' has-system-navigator' : ''}${routeProduct === 'ecommerce' || routeProduct === 'website' ? ' natural-scroll' : ''}`} ref={workspaceMainRef} tabIndex={-1}>
           <div className="core-route-content">
@@ -597,7 +603,7 @@ export function CoreLayout() {
                         ? managedRouteDecision.kind === 'redirect'
                           ? <Navigate replace to={managedRouteDecision.path} />
                       : <PortalAccessPanel action={<a className="core-button primary" href="https://supermega.dev/contact/?product=guide&amp;source=company-no-products" target="_blank" rel="noopener noreferrer">Contact support</a>} copy="Your company has no active products yet. SuperMega can help you get started." title="No products yet" />
-                        : <Outlet context={{ ...runtime, ecommerceShopHandoffAllowed: ecommerceShopHandoffVisible(portalAccess.status, portalAccess.products), shopInboundRequestsAllowed: shopInboundRequestsVisible(portalAccess.status, portalAccess.products) }} />}
+                        : <Outlet context={{ ...runtime, uiLocale, ecommerceShopHandoffAllowed: ecommerceShopHandoffVisible(portalAccess.status, portalAccess.products), shopInboundRequestsAllowed: shopInboundRequestsVisible(portalAccess.status, portalAccess.products) }} />}
               </RouteErrorBoundary>
             </ManagedPortalAccessContext.Provider>
           </div>
@@ -606,7 +612,7 @@ export function CoreLayout() {
               the entire shell — the exact blank page the boundary exists to prevent, reached
               by a different door. It is secondary furniture, so its own boundary is enough:
               the route content beside it keeps working. */}
-          {routeProduct && managedProductAllowed ? <details className="product-tools-disclosure"><summary>More</summary><RouteErrorBoundary resetKey={`nav:${location.pathname}`}><Suspense fallback={null}><ProductSystemNavigator key={`${location.pathname}${location.search}`} managed={runtime.status === 'enterprise'} product={routeProduct} /></Suspense></RouteErrorBoundary></details> : null}
+          {routeProduct && managedProductAllowed ? <details className="product-tools-disclosure"><summary>{uiText('More')}</summary><Link to="/settings/?view=language#controls">{uiText('Language')}</Link><RouteErrorBoundary resetKey={`nav:${location.pathname}`}><Suspense fallback={null}><ProductSystemNavigator key={`${location.pathname}${location.search}`} managed={runtime.status === 'enterprise'} product={routeProduct} /></Suspense></RouteErrorBoundary></details> : null}
         </main>
       </div>
     </div>

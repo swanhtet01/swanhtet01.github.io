@@ -320,24 +320,24 @@ if (!shopOperatingFlowSource.includes("export type ShopOperatingStageId = 'intak
   || !coreSource.includes('id="shop-close-controls"')
   || !coreCssSource.includes('.shop-flow-stages')) fail('shop_operating_flow_contract_missing')
 if (['fetch(', 'localStorage', 'sessionStorage', 'supabase', 'openai', 'anthropic'].some((marker) => shopOperatingFlowSource.toLowerCase().includes(marker.toLowerCase()))) fail('shop_operating_flow_side_effect_added')
-if (!shopTodayUiSource.includes('aria-label="Shop operating view"')
+if (!shopTodayUiSource.includes("aria-label={uiText('Shop operating view')}")
   || shopTodayUiSource.includes('const guidedJobs =')
   || shopTodayUiSource.includes('aria-label="Shop guided jobs"')
   || shopTodayUiSource.includes('Use Shop in 3 steps.')
   || !shopTodayUiSource.includes('catalogReady: boolean')
   || !shopTodayUiSource.includes('className="shop-today-overview"')
-  || !shopTodayUiSource.includes('aria-label="Order queue"')
-  || !shopTodayUiSource.includes('aria-label="Product list"')
+  || !shopTodayUiSource.includes("aria-label={uiText('Order queue')}")
+  || !shopTodayUiSource.includes("aria-label={uiText('Product list')}")
   || !shopTodayUiSource.includes('scope={productImageScope} sku={item.sku}')
-  || !shopTodayUiSource.includes('<article aria-label="Sales insight" className="shop-sales-pulse">')
+  || !shopTodayUiSource.includes("<article aria-label={uiText('Sales insight')} className=\"shop-sales-pulse\">")
   || !shopTodayUiSource.includes('No sales yet today')
   || !shopTodayUiSource.includes('className="shop-sales-empty"')
   || !shopTodayUiSource.includes('Not reconciled.')
   || !shopTodayUiSource.includes('data-shop-accounting-export="accounting-csv-v1"')
-  || !shopTodayUiSource.includes('Accountant CSV ·')
-  || !shopTodayUiSource.includes('accountingExport.mappingReady ? \'Mapped\' : \'Unmapped\'')
+  || !shopTodayUiSource.includes('<strong>CSV</strong>')
+  || !shopTodayUiSource.includes("uiText(accountingExport.mappingReady ? 'Mapped' : 'Unmapped')")
   || !shopTodayUiSource.includes('closeQueue: ShopTodayCloseQueue')
-  || !shopTodayUiSource.includes('aria-label="Advanced Shop controls"')
+  || !shopTodayUiSource.includes("aria-label={uiText('Advanced controls')}")
   || !shopTodayAdvancedUiSource.includes('className="shop-today-advanced-stack"')
   || !shopTodayUiSource.includes("lazy(() => import('./ShopTodayAdvanced')")
   || !shopTodayUiSource.includes('onToggle={(event) => { if (event.currentTarget.open) setAdvancedControlsLoaded(true) }}')
@@ -353,13 +353,13 @@ if (!shopTodayUiSource.includes('aria-label="Shop operating view"')
   || !coreSource.includes('id="shop-payment-review" open={Boolean(paymentReview.length)}')
   || !shopTodayAdvancedUiSource.includes('localBatchFirstUseAllowed ? <section aria-label="Open local Batch Profit Control workflow"')
   || !shopTodayAdvancedUiSource.includes('<ShopBatchProfitControlPanel batchProfitControl={activeBatchProfitControl} />')
-  || !shopTodayUiSource.includes('aria-label="Quick tasks"')
+  || !shopTodayUiSource.includes("aria-label={uiText('Quick tasks')}")
   || !shopTodayUiSource.includes('className="shop-operating-list shop-task-list"')
   || !shopTodayUiSource.includes('taskLink(primaryTask.title, primaryTask.detail, primaryTask.action, primaryTask.target, primaryTask.ownerGate)')
   || !shopTodayUiSource.includes('aria-description={ownerGate}')
-  || !shopTodayUiSource.includes('<h2 id="shop-today-title">Today</h2>')
+  || !shopTodayUiSource.includes("<h2 id=\"shop-today-title\">{uiText('Today')}</h2>")
   || shopTodayUiSource.includes('>Open task</Link>')
-  || !shopTodayUiSource.includes('<b>{action}</b>')
+  || !shopTodayUiSource.includes('<b>{uiText(action)}</b>')
   || !shopTodayAdvancedUiSource.includes('id="shop-operations-title">Operations</strong>')
   || !shopTodayAdvancedUiSource.includes('Customers, finance, channels and purchasing')
   || !shopTodayAdvancedUiSource.includes('{modules.length} areas')
@@ -1425,8 +1425,8 @@ if (!coreShellSource.includes('function managedLoginPath(product: string | null)
   || !coreShellSource.includes('const companyLoginPath = managedLoginPath(routeProduct ?? settingsProduct ?? (storedSettingsSetup?.workspace && storedSettingsSetup.hasCanonicalProduct ? storedSettingsSetup.product : null))')
   || !coreShellSource.includes('const accountEntryRoute = loginRoute || sensitiveAccountRoute')
   // Keep the concise account entry visible in the desktop and mobile topbar.
-  || !coreShellSource.includes("to={companyLoginPath}>Login</Link>")
-  || !coreShellSource.includes('aria-label="Login"')
+  || !coreShellSource.includes("to={companyLoginPath}>{uiText('Login')}</Link>")
+  || !coreShellSource.includes("aria-label={uiText('Login')}")
   || coreShellSource.includes('to={companyLoginPath}>Company sign in</Link>')
   || coreShellSource.includes('aria-label="Company sign in"')
   || coreShellSource.includes('<div className="sidebar-foot">{routeProduct || setupRoute ? <RuntimeBadge')
@@ -1444,7 +1444,7 @@ if (!coreShellSource.includes("if (product === 'website') return 'Sites'")
   || !coreShellSource.includes("location.pathname.startsWith('/ecommerce/')\n      ? (commerceWorkspaceEntry ? `${commerceWorkspaceName} · Commerce` : 'Commerce')")
   || !websiteSource.includes("document.title = 'Sites | SuperMega'")) fail('customer_product_names_not_aligned')
 if (coreShellSource.includes("{ to: '/settings/', label: 'Settings' }")) fail('internal_setup_exposed_in_primary_navigation')
-if (!coreShellSource.includes("? (settingsProduct ? `${productDisplayName(settingsProduct)} setup` : 'Recovery')")
+if (!coreShellSource.includes("? (settingsProduct ? `${productDisplayName(settingsProduct)} setup` : new URLSearchParams(location.search).get('view') === 'language' ? uiText('Language') : 'Recovery')")
   || !coreShellSource.includes("? { to: `${location.pathname}${location.search}`, label: `${productDisplayName(settingsProduct)} setup` }")
   || !coreShellSource.includes("{ to: '/settings/#controls', label: 'Recovery' }")
   || !coreShellSource.includes('const setupRoute = customerSettingsRoute || internalBuilderRoute')
@@ -1454,7 +1454,7 @@ if (!coreShellSource.includes("? (settingsProduct ? `${productDisplayName(settin
   || !coreShellSource.includes('activeNavigation.map((item)')
   || !coreShellSource.includes('mobileNavigation.map((item)')
   || coreShellSource.includes('>Setup help</a>')
-  || !coreShellSource.includes("{canSwitchProduct ? <Link to=\"/?choose=1\">Switch</Link> : null}")
+  || !coreShellSource.includes("{canSwitchProduct ? <Link to=\"/?choose=1\">{uiText('Switch')}</Link> : null}")
   || !coreCssSource.includes('grid-template-columns: repeat(auto-fit,minmax(0,1fr)); overflow: hidden; border-top: 1px solid var(--core-line);')
   || !coreCssSource.includes('overflow: hidden; border-top: 1px solid var(--core-line);')
   || coreShellSource.includes('aria-label="Mobile product navigation"')
@@ -1476,7 +1476,7 @@ if (!coreShellSource.includes("import { activeCommerceTab, commerceTabs } from '
   || !coreShellSource.includes("<nav className={`mobile-nav mobile-task-nav${canSwitchProduct ? ' has-switch' : ''}`} aria-label=\"Shop task shortcuts\">")
   || !coreShellSource.includes('{commerceTabs.map((tab) => <Link aria-current={mobileCommerceTab === tab.id ? \'page\' : undefined}')
   || !coreShellSource.includes('to={`/shop/?tab=${tab.id}`}')
-  || !coreShellSource.includes('{canSwitchProduct ? <Link to="/?choose=1">Switch</Link> : null}</nav>')
+  || !coreShellSource.includes("{canSwitchProduct ? <Link to=\"/?choose=1\">{uiText('Switch')}</Link> : null}</nav>")
   || coreShellSource.includes('mobile-task-nav" aria-label="Shop task shortcuts">{commerceTabs.map((tab) => <NavLink')
   || !coreCssSource.includes('.mobile-nav.mobile-task-nav { grid-template-columns: repeat(4,minmax(0,1fr)); }')
   || !coreCssSource.includes('.mobile-nav.mobile-task-nav.has-switch { grid-template-columns: repeat(5,minmax(0,1fr)); }')
@@ -2739,10 +2739,10 @@ if (!coreSource.includes('const plantTodayMetrics = [')
   || !coreCssSource.includes('.plant-compliance-dossier')
   || !coreCssSource.includes('.plant-control-rows')) fail('plant_mes_status_strip_missing')
 if (!coreSource.includes('operation-module shop-counter-module')
-  || !coreSource.includes('aria-label="Current sale"')
+  || !coreSource.includes("aria-label={uiText('Current sale')}")
   || !coreSource.includes('className="shop-cart-stock-risk" role="status"')
   || !coreSource.includes('className="shop-cart-column-head"')
-  || !coreSource.includes('<span>Item</span><span>Price</span><span>Quantity</span><span>Total</span>')
+  || !coreSource.includes("<span>{uiText('Item')}</span><span>{uiText('Price')}</span><span>{uiText('Quantity')}</span><span>{uiText('Total')}</span>")
   || coreSource.includes('aria-label="Sale follow-up"')
   || coreSource.includes('className="shop-counter-outcomes"')
   || !coreCssSource.includes('.shop-counter-module { overflow-y: auto; scrollbar-gutter: stable; }')
@@ -3248,7 +3248,7 @@ if (!appSource.includes("lazy(() => import('./core/ManagedLoginPage')")
   || appSource.includes("lazy(() => import('./core/SignupPage')")
   || !appSource.includes('<AccountEntryRedirect />} path="signup"')
   || !appSource.includes("managedAccountPath('/login', product, location.search)")
-  || !managedLoginPageSource.includes("title={reviewReturnPath ? 'Open your prepared review.' : creatingAccount ? 'Create your account.' : 'Login'}")
+  || !managedLoginPageSource.includes("title={uiText(reviewReturnPath ? 'Open your prepared review.' : creatingAccount ? 'Create your account.' : 'Login')}")
   || !managedLoginPageSource.includes('creatingAccount && !reviewReturnPath')
   || !managedLoginPageSource.includes('managedReady && activating && !reviewReturnPath')
   || !managedLoginPageSource.includes('if (!managedReady || publicApp || reviewReturnPath || busy || accountRequestPending.current) return')
@@ -3263,13 +3263,13 @@ if (!appSource.includes("lazy(() => import('./core/ManagedLoginPage')")
   || !managedLoginPageSource.includes('Company setup is a separate step after sign-in.')
   || !managedLoginPageSource.includes('aria-label="Login"')
   || !managedLoginPageSource.includes('Only active companies assigned to this account are shown.')
-  || !managedLoginPageSource.includes('>Contact support</a>')
+  || !managedLoginPageSource.includes("{uiText('Contact support')}</a>")
   || !managedLoginPageSource.includes('Login is currently unavailable.')
   || !managedLoginPageSource.includes('Contact support for account access. Your saved work is still available on this device.')
   || managedLoginPageSource.includes('Request managed activation')
   || managedLoginPageSource.includes('Premium activation')
   || managedLoginPageSource.includes('Managed access is not active in this release.')
-  || !managedLoginPageSource.includes('to="/?choose=1">Saved work on this device')
+  || !managedLoginPageSource.includes("to=\"/?choose=1\">{uiText('Saved work on this device')}")
   || !managedLoginPageSource.includes("new URLSearchParams(location.search).get('product')")
   || !managedLoginPageSource.includes("managedAccountPath('/account/recovery', productIntent, location.search)")
   || !managedLoginPageSource.includes('managedAccountRequestUrl(productIntent)')
@@ -4816,7 +4816,7 @@ if (!shopOrderPresentationSource.includes('function orderAcknowledgementFileText
   || !orderReceiptActionsSource.includes('downloadBlob(acknowledgement.filename, new Blob([orderAcknowledgementFileText(acknowledgement.artifact)]')
   || coreSource.includes('data:text/plain')
   || coreSource.includes('href={acknowledgement.href}')) fail('order_acknowledgement_download_eager_again')
-if (!coreSource.includes('aria-label="Counter context"')
+if (!coreSource.includes("aria-label={uiText('Counter context')}")
   || !coreSource.includes('to="/shop/?tab=inventory"')
   || coreSource.includes("useState<'manual' | 'message' | 'online'>('manual')")
   || coreSource.includes('aria-label="Order source" className="order-entry-methods"')
@@ -6531,7 +6531,7 @@ if (!shopRecordStatusContract.includes("'Writes paused'")
   || !shopRecordStatusContract.includes('localHeadroomNeedsAttention')
   || /\b(?:cloud|synced)\b/i.test(shopRecordStatusContract)
   || !shopTodayUiSource.includes('const primaryTask = (recordStatus.badge === \'Paused\' || recordStatus.badge === \'Backup advised\') && recordStatus.target && recordStatus.actionLabel')) fail('shop_record_status_contract_missing')
-if (!shopCounterContract.includes('<h2>Products</h2>')
+if (!shopCounterContract.includes("<h2>{uiText('Products')}</h2>")
   || shopCounterContract.includes('sampleCatalogActive')
   || shopCounterContract.includes('`${industryPack.name} · Counter`')
   || shopCounterContract.includes('appointment schedule is separate')
@@ -6551,7 +6551,7 @@ if (!shopCounterContract.includes('<h2>Products</h2>')
   || !shopCounterContract.includes("if (addScannedValue(query, 'keyboard')) setCatalogPage(0)")
   || shopCounterContract.includes('exactSku ?? (visibleItems.length === 1 ? visibleItems[0] : null)')
   || !shopCounterContract.includes('onKeyDown={addSearchMatch}')
-  || !shopCounterContract.includes('placeholder="Search products or scan barcode"')
+  || !shopCounterContract.includes("placeholder={uiText('Search products or scan barcode')}")
   || !shopCounterContract.includes('aria-keyshortcuts="/"')
   || !shopCounterContract.includes("document.addEventListener('keydown', focusCounterSearch)")
   || !shopCounterContract.includes("document.removeEventListener('keydown', focusCounterSearch)")
@@ -6559,17 +6559,17 @@ if (!shopCounterContract.includes('<h2>Products</h2>')
   || !shopCounterContract.includes("outcome: effectiveOutcome")
   || !shopCounterContract.includes("outcome === 'open_order'")
   || !shopCounterContract.includes('Leave unpaid')
-  || !shopCounterContract.includes('Review &amp; complete sale')
-  || !shopCounterContract.includes('aria-label="Counter context"')
-  || !shopCounterContract.includes('aria-label="Checking record safety"')
+  || !shopCounterContract.includes("uiText('Review & complete sale')")
+  || !shopCounterContract.includes("aria-label={uiText('Counter context')}")
+  || !shopCounterContract.includes("aria-label={uiText('Checking')}")
   || !shopCounterContract.includes('className="shop-record-status-counter"')
   || !shopCounterContract.includes("recordStatus.badge === 'Checking'")
-  || !shopCounterContract.includes('{recordStatus.detail}')
+  || !shopCounterContract.includes('uiText(recordStatus.detail)')
   || shopCounterContract.includes('localDemoStatus')
   || shopCounterContract.includes('shop-counter-device-boundary')
   || shopCounterContract.includes("persistLocalDraft ? ' · this device' : ''")
   || !shopCounterContract.includes('persistLocalDraft && parked.length > 0 ? <button aria-controls="shop-parked-tickets"')
-  || !shopCounterContract.includes('Parked · {parked.length}')
+  || !shopCounterContract.includes("{uiText('Parked')} · {parked.length}")
   || !shopCounterContract.includes("bi('Ready for the next sale')")
   || !shopCounterContract.includes("bi('Search, scan or choose a product.')")
   || shopCounterContract.includes('Local records · backup needed')
@@ -6643,28 +6643,23 @@ if (!coreSource.includes("const [selectedShopShift, setSelectedShopShift] = useS
   || !coreCssSource.includes('.shop-shift-choices')
   || !coreCssSource.includes('.shop-payment-options .shop-shift-choice')) fail('shop_shift_selection_missing')
 if (!shopCounterRouteContract.includes('<ShopCounter') || shopCounterRouteContract.includes('{shopGuidance}')) fail('shop_counter_first_action_not_focused')
-// ERP-COMPETITIVE-ROADMAP G1 — the counter slice is wired for Burmese.
-//
-// WHAT IS ACTUALLY AT RISK HERE, and why these are not decorative pins. The whole
-// batch is safe to ship ahead of native review for exactly one reason: bi() renders
-// English for anything not 'confirmed' (showroom/src/core/i18n-actions.ts rule 1).
-// That single line is the difference between "not translated yet" and an unreviewed
-// guess on a real till, and until now nothing in the belt held it. Losing the gate
-// would not fail any other check, and it would not look like a regression: the
-// surface would simply start rendering ~30 drafted strings nobody signed off.
+// One-language presentation contract. The language preference survives reload,
+// while action labels render one language at a time. This is a candidate UI;
+// native review and full-route coverage are separate release checks.
 const paymentQrSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'PaymentQr.tsx'), 'utf8')
+const uiLocaleSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ui-locale.ts'), 'utf8')
 const i18nActionsTable = i18nActionsSource.slice(i18nActionsSource.indexOf('const ACTION_TRANSLATIONS'), i18nActionsSource.indexOf('export function confirmedBurmese('))
 if (!i18nActionsSource.includes("return entry?.status === 'confirmed' ? entry.my : null")
-  || !i18nActionsSource.includes('const my = confirmedBurmese(en)')
-  || !i18nActionsSource.includes('if (!my) return en')
-  // Lockstep pair: bi() emits the class and core-app.css styles it. Split them and the
-  // phone bottom bar silently goes back to ellipsising away the Burmese half of a
-  // five-across work-mode label -- invisible to every other check in this file.
-  || !i18nActionsSource.includes("createElement('span', { className: 'bi-label' }")
+  || !i18nActionsSource.includes("if (readUiLocale() === 'en') return en")
+  || !i18nActionsSource.includes('const my = confirmedBurmese(en) ?? uiText(en)')
+  || !i18nActionsSource.includes('if (my === en) return en')
+  || !i18nActionsSource.includes("createElement('span', { className: 'bi-label', lang: 'my' }, my)")
+  || !uiLocaleSource.includes("const STORAGE_KEY = 'supermega.ui-locale.v1'")
+  || !uiLocaleSource.includes("return value === 'en' || value === 'my'")
+  || !uiLocaleSource.includes("window.addEventListener('storage'")
+  || !uiLocaleSource.includes('useSyncExternalStore(')
   || !coreCssSource.includes('.mobile-nav a .bi-label')
   || !coreCssSource.includes('.product-task-tabs button .bi-label')
-  // The four Shop work modes and the counter/receipt labels have table entries, so a
-  // native reviewer's sign-off is a one-line status flip with zero call-site churn.
   || !i18nActionsTable.includes("'Today':")
   || !i18nActionsTable.includes("'Sell':")
   || !i18nActionsTable.includes("'Orders':")
@@ -6672,33 +6667,19 @@ if (!i18nActionsSource.includes("return entry?.status === 'confirmed' ? entry.my
   || !i18nActionsTable.includes("'Review order':")
   || !i18nActionsTable.includes("'Create order':")
   || !i18nActionsTable.includes("'Print order record':")
-  // The documented refusal. 'Products' in the phone bottom bar opens the SuperMega
-  // product chooser, NOT the shop's goods, one cell away from the Stock tab. The
-  // refusal is recorded in i18n-actions.ts; this is what keeps someone from closing
-  // the "gap" later by adding the obvious wrong word.
+  // The product chooser and the Shop catalog are distinct actions.
   || i18nActionsTable.includes("'Products':")
-  // Call sites, both navigations and the counter's own controls.
   || !coreShellSource.includes('>{bi(tab.label)}</Link>')
-  // Plant's task strip renders from the SAME <nav>, so the commerce guard is what
-  // keeps the four Plant/Shop-shared tab ids out of this exact-match table's blast
-  // radius: a later batch confirming a 'Jobs' or 'Problems' entry for some other
-  // surface must not silently make Plant's tabs bilingual without a Plant decision.
   || !coreSource.includes('type="button">{bi(tab.label)}</button>')
-  // The merchant payment QR dialog opens from the counter's own sale details, and
-  // its Close is the same CONFIRMED key the receipt uses -- unwired, one non-cash
-  // sale would show a Burmese Close and an English Close side by side.
   || !paymentQrSource.includes("{bi('Scan to pay')}")
   || !paymentQrSource.includes("{bi('Amount due')}")
   || !paymentQrSource.includes("{bi('Close')}")
   || !i18nActionsTable.includes("'Scan to pay':")
-  || !shopCounterContract.includes('<h2>Products</h2>')
+  || !shopCounterContract.includes("<h2>{uiText('Products')}</h2>")
   || !shopCounterContract.includes("{bi('Current sale')}")
-  || !shopCounterContract.includes('type="button">Clear</button>')
+  || !shopCounterContract.includes("type=\"button\">{uiText('Clear')}</button>")
   || !shopCounterContract.includes("{bi('Total')}")
-  || !coreSource.includes("const CASHIER_COMPLETE_MY = confirmedBurmese('Complete')")
-  || !coreSource.includes("const CASHIER_SAVE_MY = confirmedBurmese('Save')")
-  || !shopCounterContract.includes('<span>Review &amp; complete sale</span>{CASHIER_COMPLETE_MY ? <small lang="my">{CASHIER_COMPLETE_MY}</small> : null}')
-  || !coreCssSource.includes('.cashier-action-label > small[lang="my"]')) fail('shop_counter_bilingual_wiring_missing')
+  || !shopCounterContract.includes("<span className=\"cashier-action-label\">{uiText('Review & complete sale')}</span>")) fail('shop_counter_language_mode_wiring_missing')
 // The product tile's accessible NAME is assembled by REFERENCE -- aria-labelledby
 // for the identifying nodes, aria-describedby for the numeric ones -- because an
 // aria-label on a button replaces its whole subtree, which is how the tile came to
@@ -6723,10 +6704,9 @@ const shopTileReferenced = [shopTileLabelledBy?.[1] ?? '', shopTileDescribedBy?.
   .flatMap((list) => [...list.matchAll(/\b([a-z][A-Za-z]*Id)\b/g)].map((m) => m[1]))
 const shopTileUnique = [...new Set(shopTileReferenced)]
 if (!shopTileLabelledBy || !shopTileDescribedBy
-  // Floor: the six ids the tile actually references. Fewer means an id list was
-  // emptied or the destructuring shape changed, and the checks below would then be
-  // asserting over nothing.
-  || shopTileUnique.length < 6
+  // Five dynamic ids plus the literal action id checked below. Fewer means a
+  // referenced field was dropped and the checks would become vacuous.
+  || shopTileUnique.length < 5
   // Every referenced id must be BOTH declared and placed on a rendered node.
   || shopTileUnique.some((id) => !shopCounterContract.includes(`const ${id} = \`shop-tile-`))
   || shopTileUnique.some((id) => !shopCounterContract.includes(`id={${id}}`))
@@ -6746,7 +6726,7 @@ if (!shopTileLabelledBy || !shopTileDescribedBy
   || !shopTileButton.includes('aria-describedby={describedBy}')
   // The quantity badge keeps its own aria-label: it is what aria-describedby resolves
   // to for the "N in sale" half of the description.
-  || !shopCounterContract.includes('aria-label={`${quantity} in sale`}')) fail('shop_tile_accessible_name_not_referenced')
+  || !shopCounterContract.includes("aria-label={`${quantity} ${uiText('in sale')}`}")) fail('shop_tile_accessible_name_not_referenced')
 // Roadmap S3 PR1 — customer loyalty points, accrual only (shop-loyalty.ts).
 // Pins the boundaries that make a points ledger safe in this codebase:
 //   - balances stay a pure projection over the DEVICE-LOCAL key (the managed
@@ -7829,7 +7809,7 @@ if (!coreSource.includes("const commerceTab = requestedShopTemplateId && request
 // Keep the compact cart action in English so it does not wrap beside the close
 // control on narrow screens. Its handler and conditional rendering remain protected,
 // including unavailable saved SKUs.
-if (!coreSource.includes('{Object.keys(cart).length ? <button className="text-link" onClick={clearSale} type="button">Clear</button> : null}')
+if (!coreSource.includes("{Object.keys(cart).length ? <button className=\"text-link\" onClick={clearSale} type=\"button\">{uiText('Clear')}</button> : null}")
   || !coreSource.includes('{unitCount ? <><div className="shop-sale-details">')
   || !coreSource.includes('disabled={disabled || recoveryPaused || catalogChanged} onClick={reviewSale}')
   || !coreSource.includes('!tickets.checkpoint()')) fail('shop_counter_recovery_gate_missing')

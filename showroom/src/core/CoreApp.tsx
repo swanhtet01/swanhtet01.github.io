@@ -47,7 +47,8 @@ const ShopStocktakeDraftRecovery = lazy(() => import('./ShopStocktakeDraftRecove
 const ShopBarcodeLabels = lazy(() => import('./ShopBarcodeLabels').then((module) => ({ default: module.ShopBarcodeLabels })))
 import { Empty, PageHeading, type RuntimeHealth } from './CoreShell'
 import { activeCommerceTab, commerceTabs, type CommerceTab } from './commerce-tabs'
-import { bi, confirmedBurmese } from './i18n-actions'
+import { bi } from './i18n-actions'
+import { readUiLocale, uiText } from './ui-locale'
 import { Cookie, Droplets, Package, Soup, WashingMachine, Wheat } from 'lucide-react'
 import { managedTrialProofFragmentFields, type ManagedTrialProof } from './managed-trial-proof'
 import {
@@ -322,8 +323,6 @@ const ShopToday = lazy(() => import('./ShopToday').then((module) => ({ default: 
 const ShopMonthlyStatement = lazy(() => import('./ShopMonthlyStatement').then((module) => ({ default: module.ShopMonthlyStatement })))
 const PlantOrderFoundation = lazy(() => import('./PlantOrderFoundation').then((module) => ({ default: module.PlantOrderFoundation })))
 const ReceiptDialog = lazy(() => import('./ReceiptDialog').then((module) => ({ default: module.ReceiptDialog })))
-const CASHIER_COMPLETE_MY = confirmedBurmese('Complete')
-const CASHIER_SAVE_MY = confirmedBurmese('Save')
 const coreUi = Object.freeze({
   d: 'datetime-local',
   q: 'core-button primary compact',
@@ -1168,9 +1167,9 @@ type ShopOperatingView = {
 }
 
 function ShopOperatingStrip({ actionLabel, choice, detail, disabled, onAction, operator, status, unit }: ShopOperatingView) {
-  return <section aria-label="Shift" className="summary-strip compact-summary shop-operating-strip">
-    <span className="shop-operating-status"><span><small>Shift</small><strong aria-live="polite">{status}</strong></span>{choice ?? (actionLabel ? <button className="core-button compact" disabled={disabled} onClick={onAction} title={detail} type="button">{actionLabel}</button> : <small>{detail}</small>)}</span>
-    <span><small>Operating unit</small><strong>{unit}</strong></span><span><small>Operator</small><strong>{operator}</strong></span>
+  return <section aria-label={uiText('Shift')} className="summary-strip compact-summary shop-operating-strip">
+    <span className="shop-operating-status"><span><small>{uiText('Shift')}</small><strong aria-live="polite">{uiText(status)}</strong></span>{choice ?? (actionLabel ? <button className="core-button compact" disabled={disabled} onClick={onAction} title={uiText(detail)} type="button">{uiText(actionLabel)}</button> : <small>{uiText(detail)}</small>)}</span>
+    <span><small>{uiText('Operating unit')}</small><strong>{unit}</strong></span><span><small>{uiText('Operator')}</small><strong>{operator}</strong></span>
   </section>
 }
 
@@ -1322,7 +1321,7 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
       return false
     }
     if (!addItem(match)) return false
-    setScanFeedback(`${match.nameMy?.trim() || match.name} added to this sale.`)
+    setScanFeedback(readUiLocale() === 'my' ? `${match.nameMy?.trim() || match.name} ${uiText('added to this sale.')}` : `${match.name} added to this sale.`)
     setQuery('')
     setUnmatchedBarcode('')
     return true
@@ -1345,7 +1344,7 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
     if (exactNameMatches.length === 1) {
       const match = exactNameMatches[0]
       if (!addItem(match)) return
-      setScanFeedback(`${match.nameMy?.trim() || match.name} added to this sale.`)
+      setScanFeedback(readUiLocale() === 'my' ? `${match.nameMy?.trim() || match.name} ${uiText('added to this sale.')}` : `${match.name} added to this sale.`)
       setQuery('')
       setUnmatchedBarcode('')
       setCatalogPage(0)
@@ -1403,34 +1402,34 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
     }, event.currentTarget)
   }
 
-  return <section aria-label="Sales counter" className="shop-counter-surface">
+  return <section aria-label={uiText('Sales counter')} className="shop-counter-surface">
     <div className="shop-counter-grid">
       <section className="shop-catalog-panel">
         <header className="shop-catalog-head">
           <div>
-            <h2>Products</h2>
+            <h2>{uiText('Products')}</h2>
             {operatingContext}
-            <nav aria-label="Counter context" className="shop-counter-summary">
-              {openOrderCount > 0 ? <Link to="/shop/?tab=orders">{openOrderCount} orders to finish</Link> : null}
-              {lowStockCount > 0 ? <Link to="/shop/?tab=inventory">{lowStockCount} low stock</Link> : null}
+            <nav aria-label={uiText('Counter context')} className="shop-counter-summary">
+              {openOrderCount > 0 ? <Link to="/shop/?tab=orders">{openOrderCount} {uiText('orders to finish')}</Link> : null}
+              {lowStockCount > 0 ? <Link to="/shop/?tab=inventory">{lowStockCount} {uiText('low stock')}</Link> : null}
               {recordStatus.badge === 'Paused' && recordStatus.target
-                  ? <Link aria-label={`Sales paused. ${recordStatus.detail}`} className="shop-record-status-counter is-danger" title={recordStatus.detail} to={recordStatus.target}>Sales paused · Review</Link>
+                  ? <Link aria-label={`${uiText('Sales paused')}. ${uiText(recordStatus.detail)}`} className="shop-record-status-counter is-danger" title={uiText(recordStatus.detail)} to={recordStatus.target}>{uiText('Sales paused · Review')}</Link>
                   : recordStatus.badge === 'Checking'
-                    ? <span aria-label="Checking record safety" className="shop-record-status-counter" title={recordStatus.detail}>Checking</span>
+                    ? <span aria-label={uiText('Checking')} className="shop-record-status-counter" title={uiText(recordStatus.detail)}>{uiText('Checking')}</span>
                     : null}
             </nav>
           </div>
-          <div className="shop-item-search-row"><label className="shop-item-search"><span className="sr-only">Find or scan an item</span><input ref={saleSearchRef} autoComplete="off" aria-keyshortcuts="/" onChange={(event) => { setQuery(event.target.value); setCatalogPage(0); setScanFeedback(''); setUnmatchedBarcode('') }} onKeyDown={addSearchMatch} placeholder="Search products or scan barcode" type="search" value={query} /><kbd aria-hidden="true" className="shop-search-shortcut">/</kbd></label><BarcodeScanButton continuous continuousMode="sale" label="Scan products into this sale" onDetected={addCameraScan} /></div>
-          {categories.length + Number(hasUncategorized) > 1 ? <nav aria-label="Product categories" className="shop-counter-category-filter">
-            <button aria-pressed={categoryFilter.kind === 'all'} onClick={() => { setCategoryFilter({ kind: 'all' }); setCatalogPage(0) }} type="button">All items</button>
+          <div className="shop-item-search-row"><label className="shop-item-search"><span className="sr-only">{uiText('Find or scan an item')}</span><input ref={saleSearchRef} autoComplete="off" aria-keyshortcuts="/" onChange={(event) => { setQuery(event.target.value); setCatalogPage(0); setScanFeedback(''); setUnmatchedBarcode('') }} onKeyDown={addSearchMatch} placeholder={uiText('Search products or scan barcode')} type="search" value={query} /><kbd aria-hidden="true" className="shop-search-shortcut">/</kbd></label><BarcodeScanButton continuous continuousMode="sale" label={uiText('Find or scan an item')} onDetected={addCameraScan} /></div>
+          {categories.length + Number(hasUncategorized) > 1 ? <nav aria-label={uiText('Product categories')} className="shop-counter-category-filter">
+            <button aria-pressed={categoryFilter.kind === 'all'} onClick={() => { setCategoryFilter({ kind: 'all' }); setCatalogPage(0) }} type="button">{uiText('All items')}</button>
             {categories.map(([key, label]) => <button aria-pressed={categoryFilter.kind === 'category' && categoryFilter.value === key} key={key} onClick={() => { setCategoryFilter({ kind: 'category', value: key }); setCatalogPage(0) }} type="button">{label}</button>)}
-            {hasUncategorized ? <button aria-pressed={categoryFilter.kind === 'uncategorized'} onClick={() => { setCategoryFilter({ kind: 'uncategorized' }); setCatalogPage(0) }} type="button">Uncategorized</button> : null}
+            {hasUncategorized ? <button aria-pressed={categoryFilter.kind === 'uncategorized'} onClick={() => { setCategoryFilter({ kind: 'uncategorized' }); setCatalogPage(0) }} type="button">{uiText('Uncategorized')}</button> : null}
           </nav> : null}
-          {scanFeedback ? <p className="form-notice" role="status">{scanFeedback}{unmatchedBarcode ? <> <button className="text-link" onClick={() => onCreateFromBarcode(unmatchedBarcode)} type="button">Add product with this barcode</button></> : null}</p> : null}
+          {scanFeedback ? <p className="form-notice" role="status">{uiText(scanFeedback)}{unmatchedBarcode ? <> <button className="text-link" onClick={() => onCreateFromBarcode(unmatchedBarcode)} type="button">{uiText('Add product with this barcode')}</button></> : null}</p> : null}
         </header>
         {catalog.pageCount > 1 ? <nav aria-label="Catalog pages" className="shop-catalog-pages">
-          <span aria-live="polite">{catalog.start + 1}–{Math.min(catalog.start + visibleItems.length, catalog.total)} of {catalog.total} products</span>
-          <div><button disabled={catalog.page === 0} onClick={() => setCatalogPage(catalog.page - 1)} type="button">Previous</button><span>Page {catalog.page + 1} of {catalog.pageCount}</span><button disabled={catalog.page >= catalog.pageCount - 1} onClick={() => setCatalogPage(catalog.page + 1)} type="button">Next</button></div>
+          <span aria-live="polite">{catalog.start + 1}–{Math.min(catalog.start + visibleItems.length, catalog.total)} {uiText('of')} {catalog.total} {uiText('Products')}</span>
+          <div><button disabled={catalog.page === 0} onClick={() => setCatalogPage(catalog.page - 1)} type="button">{uiText('Previous')}</button><span>{uiText('Page')} {catalog.page + 1} {uiText('of')} {catalog.pageCount}</span><button disabled={catalog.page >= catalog.pageCount - 1} onClick={() => setCatalogPage(catalog.page + 1)} type="button">{uiText('Next')}</button></div>
         </nav> : null}
         {/* The tile is named by REFERENCE, not by aria-label. An aria-label on a
             button replaces its whole subtree in the accessibility tree, so the
@@ -1468,28 +1467,27 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
             // SPACE-separated id list and a SKU is operator-typed, so a SKU with a
             // space in it would silently split into two broken references.
             const nameId = `shop-tile-name-${tileIndex}`
-            const myId = `shop-tile-my-${tileIndex}`
             const variantId = `shop-tile-variant-${tileIndex}`
             const priceId = `shop-tile-price-${tileIndex}`
             const stockId = `shop-tile-stock-${tileIndex}`
             const quantityId = `shop-tile-quantity-${tileIndex}`
-            const labelledBy = ['shop-tile-action', nameId, item.nameMy ? myId : '', item.variant ? variantId : ''].filter(Boolean).join(' ')
+            const labelledBy = ['shop-tile-action', nameId, item.variant ? variantId : ''].filter(Boolean).join(' ')
             const describedBy = [priceId, stockId, quantity ? quantityId : ''].filter(Boolean).join(' ')
             return <button aria-describedby={describedBy} aria-labelledby={labelledBy} className="shop-product-tile" data-art={String(artKind)} data-empty={item.onHand < 1 ? 'true' : 'false'} disabled={item.onHand < 1 || quantity >= item.onHand} key={item.sku} onClick={() => addItem(item)} type="button">
               <ProductPhoto className="shop-product-art shop-product-photo" fallback={<ShopProductArtwork kind={artKind} />} scope={productImageScope} sku={item.sku} />
-              <span className="shop-product-copy"><span className="shop-product-name"><strong id={nameId}>{item.name}</strong>{item.nameMy ? <small className="shop-product-my" id={myId} lang="my">{item.nameMy}</small> : null}{item.variant ? <small id={variantId}>{item.variant}</small> : null}</span><b id={priceId}>{formatMoney(item.price)}</b><small className={item.onHand <= item.reorderAt ? 'is-low' : ''} id={stockId}>{item.onHand ? `${item.onHand} in stock` : bi('Out of stock')}</small></span>
+              <span className="shop-product-copy"><span className="shop-product-name"><strong id={nameId} lang={readUiLocale() === 'my' && item.nameMy ? 'my' : undefined}>{readUiLocale() === 'my' && item.nameMy ? item.nameMy : item.name}</strong>{item.variant ? <small id={variantId}>{item.variant}</small> : null}</span><b id={priceId}>{formatMoney(item.price)}</b><small className={item.onHand <= item.reorderAt ? 'is-low' : ''} id={stockId}>{item.onHand ? `${item.onHand} ${uiText('in stock')}` : bi('Out of stock')}</small></span>
               {quantity
-                ? <span className="shop-product-quantity" aria-label={`${quantity} in sale`} id={quantityId}>{quantity}</span>
-                : item.onHand > 0 ? <span aria-hidden="true" className="shop-product-add-hint">+ Add</span> : null}
+                ? <span className="shop-product-quantity" aria-label={`${quantity} ${uiText('in sale')}`} id={quantityId}>{quantity}</span>
+                : item.onHand > 0 ? <span aria-hidden="true" className="shop-product-add-hint">+ {uiText('Add')}</span> : null}
             </button>
           })}
         </div> : <Empty>{items.length
           ? bi('No matching item. Search by name or SKU.')
-          : <>Your catalog is empty. <Link className="text-link" to="/shop/?tab=inventory#shop-catalog-create">Add a product</Link> or <Link className="text-link" to="/shop/?tab=inventory#shop-catalog-import">import a CSV</Link>.</>}</Empty>}
+          : <>{uiText('Your catalog is empty.')} <Link className="text-link" to="/shop/?tab=inventory#shop-catalog-create">{uiText('Add a product')}</Link> {uiText('or')} <Link className="text-link" to="/shop/?tab=inventory#shop-catalog-import">{uiText('import a CSV')}</Link>.</>}</Empty>}
       </section>
 
-      <button aria-label="Close current sale" className={`shop-cart-backdrop${cartOpen ? ' is-open' : ''}`} onClick={() => setCartOpen(false)} type="button" />
-      <aside aria-label="Current sale" className={`shop-current-sale${cartOpen ? ' is-open' : ''}`} id="shop-current-sale" ref={salePanelRef} tabIndex={-1}>
+      <button aria-label={uiText('Close current sale')} className={`shop-cart-backdrop${cartOpen ? ' is-open' : ''}`} onClick={() => setCartOpen(false)} type="button" />
+      <aside aria-label={uiText('Current sale')} className={`shop-current-sale${cartOpen ? ' is-open' : ''}`} id="shop-current-sale" ref={salePanelRef} tabIndex={-1}>
         {ticketSnapshot.error ? <p className="authority-note" role="alert">{ticketSnapshot.error}</p> : null}
         {checkoutOrderId ? <div className="authority-note" role="alert"><p>This basket is locked to checkout {checkoutOrderId}. Do not record it again.</p>
           {recordedOrderIds.includes(checkoutOrderId)
@@ -1498,27 +1496,27 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
           <Link to="/shop/?tab=orders">Review recorded orders</Link></div> : null}
         {catalogChanged ? <p className="authority-note" role="alert">Saved quantities exceed current stock, or an item was removed. Review quantities or clear this basket; it has not been silently reduced.</p> : null}
         {!persistLocalDraft && unitCount > 0 ? <p className="authority-note">Unsubmitted basket is kept in this tab only. Review it before leaving or switching company.</p> : null}
-        <header><div><h2>Current sale</h2><p>{unitCount ? `${unitCount} ${unitCount === 1 ? 'item' : 'items'} selected` : 'Choose a product to start'}</p></div><div className="shop-cart-actions">
+        <header><div><h2>{uiText('Current sale')}</h2><p>{unitCount ? `${unitCount} ${uiText(unitCount === 1 ? 'item' : 'items')} ${uiText('selected')}` : uiText('Choose a product to start')}</p></div><div className="shop-cart-actions">
           {persistLocalDraft && unitCount > 0 && !recoveryPaused && !checkoutOrderId ? <button className="text-link" onClick={() => {
             const customerLabel = customer.trim() && customer.trim() !== 'Guest' ? customer.trim() : 'Sale'
             const label = activeLabel || `${customerLabel} · ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
             if (tickets.dispatch({ kind: 'park', id: crypto.randomUUID(), label })) setCartOpen(false)
-          }} type="button">Park sale</button> : null}
-          {persistLocalDraft && parked.length > 0 ? <button aria-controls="shop-parked-tickets" aria-expanded={parkedSalesOpen} className="text-link" onClick={() => setParkedSalesOpen(open => !open)} type="button">Parked · {parked.length}</button> : null}
-          {Object.keys(cart).length ? <button className="text-link" onClick={clearSale} type="button">Clear</button> : null}
-          <button aria-label="Close current sale" className="shop-cart-close" onClick={() => setCartOpen(false)} type="button">×</button>
+          }} type="button">{uiText('Park sale')}</button> : null}
+          {persistLocalDraft && parked.length > 0 ? <button aria-controls="shop-parked-tickets" aria-expanded={parkedSalesOpen} className="text-link" onClick={() => setParkedSalesOpen(open => !open)} type="button">{uiText('Parked')} · {parked.length}</button> : null}
+          {Object.keys(cart).length ? <button className="text-link" onClick={clearSale} type="button">{uiText('Clear')}</button> : null}
+          <button aria-label={uiText('Close current sale')} className="shop-cart-close" onClick={() => setCartOpen(false)} type="button">×</button>
         </div></header>
         {persistLocalDraft && parked.length > 0 && parkedSalesOpen ? <div aria-label="Parked sales on this device" className="shop-parked-tickets" id="shop-parked-tickets">
           {parked.map(ticket => <button type="button" key={ticket.id} disabled={Object.keys(cart).length > 0 || recoveryPaused} onClick={() => {
             if (tickets.dispatch({ kind: 'resume', id: ticket.id })) { setParkedSalesOpen(false); setCartOpen(true) }
-          }}><span>{ticket.label}</span><small>{Object.values(ticket.cart).reduce((sum, qty) => sum + qty, 0)} {Object.values(ticket.cart).reduce((sum, qty) => sum + qty, 0) === 1 ? 'item' : 'items'}</small><b>Resume</b></button>)}
+          }}><span>{ticket.label}</span><small>{Object.values(ticket.cart).reduce((sum, qty) => sum + qty, 0)} {uiText(Object.values(ticket.cart).reduce((sum, qty) => sum + qty, 0) === 1 ? 'item' : 'items')}</small><b>{uiText('Resume')}</b></button>)}
         </div> : null}
-        {lines.length ? <div aria-hidden="true" className="shop-cart-column-head"><span>Item</span><span>Price</span><span>Quantity</span><span>Total</span></div> : null}
-        <div aria-label="Current sale items" className="shop-cart-lines">
-          {lines.length ? lines.map(({ item, quantity }) => <article key={item.sku}><div className="shop-cart-item"><strong>{item.name}</strong>{item.nameMy ? <small className="shop-product-my" lang="my">{item.nameMy}</small> : null}</div><span className="shop-cart-unit-price">{formatMoney(item.price)}</span><div className="shop-quantity-stepper"><button aria-label={`Remove one ${item.name}`} onClick={() => changeQuantity(item, quantity - 1)} type="button">−</button><strong>{quantity}</strong><button aria-label={`Add one ${item.name}`} disabled={quantity >= item.onHand} onClick={() => changeQuantity(item, quantity + 1)} type="button">+</button></div><b className="shop-cart-line-total">{formatMoney(item.price * quantity)}</b></article>) : <div className="shop-empty-cart"><span aria-hidden="true">01</span><strong>{bi('Ready for the next sale')}</strong><small>{bi('Search, scan or choose a product.')}</small></div>}
+        {lines.length ? <div aria-hidden="true" className="shop-cart-column-head"><span>{uiText('Item')}</span><span>{uiText('Price')}</span><span>{uiText('Quantity')}</span><span>{uiText('Total')}</span></div> : null}
+        <div aria-label={uiText('Current sale items')} className="shop-cart-lines">
+          {lines.length ? lines.map(({ item, quantity }) => <article key={item.sku}><div className="shop-cart-item"><strong lang={readUiLocale() === 'my' && item.nameMy ? 'my' : undefined}>{readUiLocale() === 'my' && item.nameMy ? item.nameMy : item.name}</strong></div><span className="shop-cart-unit-price">{formatMoney(item.price)}</span><div className="shop-quantity-stepper"><button aria-label={`${uiText('Remove')} ${readUiLocale() === 'my' && item.nameMy ? item.nameMy : item.name}`} onClick={() => changeQuantity(item, quantity - 1)} type="button">−</button><strong>{quantity}</strong><button aria-label={`${uiText('Add')} ${readUiLocale() === 'my' && item.nameMy ? item.nameMy : item.name}`} disabled={quantity >= item.onHand} onClick={() => changeQuantity(item, quantity + 1)} type="button">+</button></div><b className="shop-cart-line-total">{formatMoney(item.price * quantity)}</b></article>) : <div className="shop-empty-cart"><span aria-hidden="true">01</span><strong>{bi('Ready for the next sale')}</strong><small>{bi('Search, scan or choose a product.')}</small></div>}
         </div>
         {unitCount ? <><div className="shop-sale-details">
-          <label>{bi('Customer')} <small>optional</small><input maxLength={80} onChange={(event) => setCustomer(event.target.value)} placeholder="Guest" value={customer} /></label>
+          <label>{bi('Customer')} <small>{uiText('optional')}</small><input maxLength={80} onChange={(event) => setCustomer(event.target.value)} placeholder={uiText('Guest')} value={customer} /></label>
           {/* S3 PR1 loyalty balance chip. Renders ONLY for an exact match against a known
               customer (a projected balance or a client-master name) while points are on —
               loyaltyPoints is null when the device-local setting is off, so a shop that
@@ -1532,13 +1530,13 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
               non-cash method chosen, amount due on screen. No payment API, no status
               write; the cashier still confirms money received in the reviewed sale. */}
           {payment !== 'Cash' ? <PaymentQrButton amountDue={formatMoney(total)} method={payment} scope={paymentQrScope} settingsHint /> : null}
-          {canCompleteInOneReview ? <label className="shop-open-order-choice"><input checked={outcome === 'open_order'} onChange={(event) => setOutcome(event.target.checked ? 'open_order' : 'paid_handoff')} type="checkbox" /><span><strong>Leave unpaid</strong><small>Track it in Orders and finish later.</small></span></label> : null}
+          {canCompleteInOneReview ? <label className="shop-open-order-choice"><input checked={outcome === 'open_order'} onChange={(event) => setOutcome(event.target.checked ? 'open_order' : 'paid_handoff')} type="checkbox" /><span><strong>{uiText('Leave unpaid')}</strong><small>{uiText('Track it in Orders and finish later.')}</small></span></label> : null}
         </div>
-        {cartLowStockLines.length ? <p className="shop-cart-stock-risk" role="status">After this sale, {cartLowStockLines.length} {cartLowStockLines.length === 1 ? 'item reaches its' : 'items reach their'} reorder level. <Link to="/shop/?tab=inventory">Review stock</Link></p> : null}
-        <footer><div><span>{bi('Total')}</span><strong>{formatMoney(total)}</strong></div><button className="shop-review-sale" disabled={disabled || recoveryPaused || catalogChanged} onClick={reviewSale} type="button">{disabled ? bi('Sales paused') : effectiveOutcome === 'paid_handoff' ? <span className="cashier-action-label"><span>Review &amp; complete sale</span>{CASHIER_COMPLETE_MY ? <small lang="my">{CASHIER_COMPLETE_MY}</small> : null}</span> : bi('Review order')}<span aria-hidden="true">→</span></button></footer></> : null}
+        {cartLowStockLines.length ? <p className="shop-cart-stock-risk" role="status">{readUiLocale() === 'my' ? `ဤအရောင်းပြီးနောက် ပစ္စည်း ${cartLowStockLines.length} မျိုး ပြန်မှာရန် သတ်မှတ်ချက်သို့ ရောက်ပါမည်။` : `After this sale, ${cartLowStockLines.length} ${cartLowStockLines.length === 1 ? 'item reaches its' : 'items reach their'} reorder level.`} <Link to="/shop/?tab=inventory">{uiText('Review stock')}</Link></p> : null}
+        <footer><div><span>{bi('Total')}</span><strong>{formatMoney(total)}</strong></div><button className="shop-review-sale" disabled={disabled || recoveryPaused || catalogChanged} onClick={reviewSale} type="button">{disabled ? bi('Sales paused') : effectiveOutcome === 'paid_handoff' ? <span className="cashier-action-label">{uiText('Review & complete sale')}</span> : bi('Review order')}<span aria-hidden="true">→</span></button></footer></> : null}
       </aside>
     </div>
-    {unitCount ? <button aria-controls="shop-current-sale" aria-expanded={cartOpen} className="shop-mobile-cart" onClick={() => setCartOpen(true)} type="button"><span><small>{bi('Current sale')}</small><strong>{unitCount} {unitCount === 1 ? 'item' : 'items'}</strong></span><b>{formatMoney(total)}</b></button> : null}
+    {unitCount ? <button aria-controls="shop-current-sale" aria-expanded={cartOpen} className="shop-mobile-cart" onClick={() => setCartOpen(true)} type="button"><span><small>{bi('Current sale')}</small><strong>{unitCount} {uiText(unitCount === 1 ? 'item' : 'items')}</strong></span><b>{formatMoney(total)}</b></button> : null}
   </section>
 }
 
@@ -7935,7 +7933,7 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
         <p className="panel-copy">Expected amounts come from completed, reconciled orders. Counted amounts come from the cashier. A variance is retained with its owner and reason; SuperMega does not move money or post externally.</p>
       </section>
     </details>
-    <button className="core-button" disabled={commerceControlsDisabled || !closePreview || !closeSettlement} onClick={closeDay} type="button">{closePreview ? <span className="cashier-action-label"><span>Review and save close</span>{CASHIER_SAVE_MY ? <small lang="my">{CASHIER_SAVE_MY}</small> : null}</span> : legacyCloseNeedsMigration ? 'Close history needs migration' : 'Today is closed'}</button>
+    <button className="core-button" disabled={commerceControlsDisabled || !closePreview || !closeSettlement} onClick={closeDay} type="button">{closePreview ? <span className="cashier-action-label">{uiText('Review and save close')}</span> : legacyCloseNeedsMigration ? 'Close history needs migration' : 'Today is closed'}</button>
     <p className="form-notice" aria-live="polite">{`${closableOrders.length} completed, reconciled orders · ${formatMoney(reconciledValue)} ready to close.`}</p>
     {/* Roadmap §2 item 5 — what was unusual about the day just closed, read from
         the closes already saved. Nothing here is a finding about money owed or
@@ -8345,7 +8343,7 @@ function OrderList({
       </div>
       <div className="order-row-actions">
         <b>{formatMoney(order.total)}</b>
-        {settleSaleIsPrimary ? <button className="core-button primary compact" disabled={disabled} onClick={() => onSettleSale(order.id)} type="button"><span className="cashier-action-label"><span>{primaryActionLabel}</span>{CASHIER_COMPLETE_MY ? <small lang="my">{CASHIER_COMPLETE_MY}</small> : null}</span></button> : null}
+        {settleSaleIsPrimary ? <button className="core-button primary compact" disabled={disabled} onClick={() => onSettleSale(order.id)} type="button"><span className="cashier-action-label">{uiText(primaryActionLabel)}</span></button> : null}
         {reconcileIsPrimary ? <button className="core-button primary compact" disabled={disabled} onClick={() => onReconcilePayment(order.id)} type="button">{primaryActionLabel}</button> : null}
         {settleRefundIsPrimary ? <button className="core-button primary compact" disabled={disabled} onClick={() => onSettleRefund(order.id)} type="button">{primaryActionLabel}</button> : null}
         {canAdvance ? <button className="core-button primary compact" disabled={disabled} onClick={() => onAdvance(order.id)} type="button">{primaryActionLabel}</button> : null}

@@ -1,18 +1,12 @@
 import { createElement, type ReactNode } from 'react'
+import { readUiLocale, uiText } from './ui-locale'
 
-// DESIGN-PROGRAM phase 2 item 6. Every existing bilingual string in this app is a
-// data-layer noun (a product name, a service name, a ledger account) -- nothing
-// operator-facing on a button or dialog action has ever carried a Burmese
-// counterpart. This table is the start of that: shared action verbs used across
-// Shop, Plant, Website, and Ecommerce.
+// Shared action translations. Rendering uses exactly one language at a time.
 //
 // Two safety rules, both load-bearing:
-// 1. 'confirmed' entries are common, unambiguous business verbs. 'pending_native_
-//    review' entries have a draft translation recorded for a future pass but are
-//    NOT rendered -- bi() below falls back to English-only for anything not
-//    'confirmed', so adding a pending draft here can never surface an unverified
-//    guess to a real operator. Flip status to 'confirmed' only after a native
-//    Burmese speaker has actually checked the string.
+// 1. 'confirmed' entries are common business verbs. 'pending_native_review'
+//    entries are not rendered from this table. The separate UI phrase catalog
+//    remains a draft and must be reviewed before Burmese release acceptance.
 // 2. DRAFTING SOURCES, and nothing else. Batches 1 and 2 were entirely new text,
 //    because no existing Burmese string in the app was an action VERB (confirmed by
 //    a full Unicode sweep of every product surface). Batch 3 adds a second source
@@ -194,26 +188,15 @@ const ACTION_TRANSLATIONS: Record<string, ActionTranslation> = {
   //     different KIND of button rather than a translated one.
 }
 
-// The bilingual pattern already used everywhere in this app (SettingsPage.tsx,
-// ProductOnboardingPage.tsx): English, a middle dot, Burmese. lang="my" on just the
-// Burmese half activates the :lang(my) line-height rule already shipped in
-// core-app.css, ecommerce-product.css, and website-product.css -- CSS that has had
-// nothing to apply to until now, since no JSX anywhere actually set the attribute.
-// The className is the one addition batch 3 makes to the mechanism itself, and it
-// exists because of a measured problem, not for tidiness: .mobile-nav a has carried
-// `white-space: nowrap; overflow: hidden; text-overflow: ellipsis` since the bar
-// shipped, so a composed label in a 5-across 375px bar would ellipsise away exactly
-// the Burmese half a Burmese-first cashier is reading. Nothing can address that from
-// inside the nav's own rule without also constraining every other label there. The
-// class ships now, wired and styled, so that flipping a work-mode entry to
-// 'confirmed' after review stays the one-line table edit batch 2 established.
+// Keep the language span for glyph line height and narrow navigation wrapping.
 export function confirmedBurmese(en: string): string | null {
   const entry = ACTION_TRANSLATIONS[en]
   return entry?.status === 'confirmed' ? entry.my : null
 }
 
 export function bi(en: string): ReactNode {
-  const my = confirmedBurmese(en)
-  if (!my) return en
-  return createElement('span', { className: 'bi-label' }, `${en} · `, createElement('span', { lang: 'my' }, my))
+  if (readUiLocale() === 'en') return en
+  const my = confirmedBurmese(en) ?? uiText(en)
+  if (my === en) return en
+  return createElement('span', { className: 'bi-label', lang: 'my' }, my)
 }
