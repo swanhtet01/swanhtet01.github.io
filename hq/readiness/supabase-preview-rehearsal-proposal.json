@@ -4,7 +4,7 @@
   "repository": "swanhtet01/swanhtet01.github.io",
   "mode": "owner_approval_required",
   "state": "prepared-not-executed",
-  "generatedAt": "2026-10-18T17:19:49.942Z",
+  "generatedAt": "2026-10-18T23:30:08.477Z",
   "purpose": "Record a source-bound Supabase preview plan that requires a known creation mode, actual branch catalog and migration-history reconciliation, and a reviewed delta; do not create a branch or approve managed activation.",
   "productionBaseline": {
     "projectRef": "zvtzwcimpvvtkowflhda",
@@ -319,7 +319,7 @@
   "sourceReceipts": [
     {
       "path": "package.json",
-      "digest": "sha256:fdc28a33d06a6d5f3c8d83832055a691cc31aff6d2ef7dbabf43bd0f37349aee"
+      "digest": "sha256:1da4d0acd7e161e943b11c489f5a47ec827b2c6406a933b1daab888a454117f7"
     },
     {
       "path": "tools/prepare_supabase_preview_rehearsal_proposal.mjs",
@@ -343,16 +343,16 @@
     },
     {
       "path": "hq/readiness/managed-pilot-readiness.json",
-      "digest": "sha256:0ba50e4489190e57869feb6babaca5be9797648f42f7247ecd1641ccab03f14d"
+      "digest": "sha256:4cf462aea90cb1fd15912cc2e33d7c5dbd0ae0bab1e5960358fc120e0a2c7017"
     },
     {
       "path": "hq/readiness/github-main-protection-proposal.json",
-      "digest": "sha256:af8882f736fc8c0db64f656f67b579bb1a891adb84645556b4c5bb70ff4ee563"
+      "digest": "sha256:aa1e218d51b03d76e08946ed56fe82eac9f3831351c25a6dd772ab634b212b05"
     },
     {
       "path": "supabase/rehearsal/20260804_public_browser_quarantine.sql",
       "digest": "sha256:5c1e1c1e220467b0731911a5a7ed7bbca18023c7f62f040393f9868ea79a2981"
     }
   ],
-  "digest": "sha256:6aa1c36e08d2bd72af8f00d4ad4c5e4ebfa6c41eabae0e00475a9a146620940b"
+  "digest": "sha256:a19d47c49b558534319dc38e572f1c4072e4a371b455aa73c6c03840016fb1a9"
 }
