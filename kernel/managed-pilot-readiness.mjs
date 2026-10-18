@@ -119,11 +119,22 @@ function pilotEvidence(complete, shopNextGate) {
     : `Owner-named Shop pilot proof is absent. Required proof remains: ${shopNextGate}`
 }
 
-function securityGateEvidenceV5(audit, database) {
-  if (securityGateReady(audit) && hostedGateReady(audit) && database.checks?.publicBrowserQuarantineEnforced === true) {
-    return `Protected production is at managed schema v${audit.liveSchemaVersion}, zero drift from local target v${audit.localTargetVersion}, browser roles denied, public-browser quarantine recorded, and Security Advisor clear.`
+function securityGateEvidenceV5(audit) {
+  if (!hostedGateReady(audit)) {
+    return `Historical ${audit.advisorStatus} audit (${audit.findingCount} findings) observed managed schema v${audit.liveSchemaVersion} against its then-target v${audit.localTargetVersion}. Current schema v${CURRENT_DATABASE_SCHEMA} and this candidate require new hosted security evidence; older findings and local quarantine tests are not current production proof.`
   }
-  return `Historical ${audit.advisorStatus} audit (${audit.findingCount} findings) observed managed schema v${audit.liveSchemaVersion} against its then-target v${audit.localTargetVersion}. Current schema v${CURRENT_DATABASE_SCHEMA} and this candidate require new hosted security evidence; older findings and local quarantine tests are not current production proof.`
+  if (!securityGateReady(audit)) {
+    return `The recorded schema v${audit.liveSchemaVersion} audit has ${audit.findingCount} Security Advisor findings and metadata RLS ${audit.metadataRlsEnabled ? 'enabled' : 'disabled'}. Resolve any findings and RLS gaps; current production state and public-browser quarantine remain unverified.`
+  }
+  return `The recorded schema v${audit.liveSchemaVersion} audit reports zero drift, browser roles denied, metadata RLS enabled, and Security Advisor clear. Current production state, public-browser quarantine, and this candidate's access remain unverified.`
+}
+
+function securityGateNextAction(audit) {
+  if (!hostedGateReady(audit)) return CURRENT_SECURITY_NEXT_ACTION
+  if (!securityGateReady(audit)) {
+    return 'Resolve recorded Security Advisor findings or metadata RLS gaps, then obtain a fresh schema v13 hosted audit for this candidate.'
+  }
+  return 'Revalidate current production state, public-browser quarantine, and candidate access on an owner-approved isolated target; keep activation blocked until every other hosted gate and approval passes.'
 }
 
 function localDatabaseSummary(database, implementation) {
@@ -231,9 +242,9 @@ export function buildManagedPilotReadiness(input = {}) {
   const selfServePilotProofComplete = selfServeProof !== null
   if (!isRecord(packageManifest?.supermega) || packageManifest.supermega.productionSupabaseTargetStatus !== 'protected-unapproved') fail('managed_pilot_readiness_production_boundary_invalid')
   // v4: the audit is read as STATE, not pinned to the blocked snapshot. Schema version may sit
-  // anywhere on the approved v7 -> v10 path, drift must be arithmetically consistent, and the
-  // advisor may be 'blocked' (findings remain) or 'clear' (zero findings) -- the gates below
-  // compute their status from these values instead of assuming them.
+  // anywhere from v7 through the current local target, drift must be arithmetically consistent,
+  // and the advisor may be 'blocked' (findings remain) or 'clear' (zero findings) -- the gates
+  // below compute their status from these values instead of assuming them.
   if (!isRecord(securityAudit)
     || securityAudit.contract !== SECURITY_AUDIT_CONTRACT
     || securityAudit.targetClassification !== 'protected-production'
@@ -244,8 +255,10 @@ export function buildManagedPilotReadiness(input = {}) {
     || (securityAudit.advisor.status === 'blocked' ? securityAudit.advisor.findingCount < 1 : securityAudit.advisor.findingCount !== 0)
     || !Number.isInteger(securityAudit.managedBackend?.liveSchemaVersion)
     || securityAudit.managedBackend.liveSchemaVersion < 7
-    || securityAudit.managedBackend.liveSchemaVersion > 11
-    || securityAudit.managedBackend?.localTargetVersion !== 11
+    || securityAudit.managedBackend.liveSchemaVersion > CURRENT_DATABASE_SCHEMA
+    || !Number.isInteger(securityAudit.managedBackend?.localTargetVersion)
+    || securityAudit.managedBackend.localTargetVersion < 7
+    || securityAudit.managedBackend.localTargetVersion > CURRENT_DATABASE_SCHEMA
     || securityAudit.managedBackend?.versionDrift !== securityAudit.managedBackend.localTargetVersion - securityAudit.managedBackend.liveSchemaVersion
     || securityAudit.managedBackend?.browserRolesDenied !== true
     || typeof securityAudit.managedBackend?.metadataRlsEnabled !== 'boolean'
@@ -316,7 +329,7 @@ export function buildManagedPilotReadiness(input = {}) {
       'Prove current durable commands, billing, attempt limits, recovery and tenant isolation on an owner-approved isolated target.'),
     gate('storage_privacy', 'blocked', storageGateEvidence(storageProofComplete),
       'Prove current private access plus object export/restore on an owner-approved isolated target.'),
-    gate('security', (securityGateReady(auditSummary) && hostedGateReady(auditSummary)) ? 'ready-hosted' : 'blocked', securityGateEvidenceV5(auditSummary, database), CURRENT_SECURITY_NEXT_ACTION),
+    gate('security', (securityGateReady(auditSummary) && hostedGateReady(auditSummary)) ? 'ready-hosted' : 'blocked', securityGateEvidenceV5(auditSummary), securityGateNextAction(auditSummary)),
     gate('pilot_evidence', pilotEvidenceComplete ? 'ready-pilot' : 'blocked', pilotEvidence(pilotEvidenceComplete, products[0].requiredProof), pilotEvidenceComplete
       ? 'Prepare the exact activation decision packet without exposing private identity.'
       : 'Complete the private owner-named Shop pilot sequence and retain identity only in the private workspace.'),
@@ -459,7 +472,7 @@ export function validateManagedPilotReadiness(value) {
   const localDatabase = value.localDatabase
   if (!isRecord(localDatabase) || localDatabase.contract !== 'supermega.hq.database-rehearsal.v3'
     || localDatabase.schemaVersion !== CURRENT_DATABASE_SCHEMA || localDatabase.schemaProfile !== 'v13-self-serve'
-    || localDatabase.migrationCount !== 29 || localDatabase.behaviorChecks !== 75
+    || localDatabase.migrationCount !== 30 || localDatabase.behaviorChecks !== 75
     || localDatabase.catalogChecksBefore !== 33 || localDatabase.catalogChecksAfter !== 33
     || !/^[0-9a-f]{40}$/.test(localDatabase.implementationCommit || '')
     || !/^[0-9a-f]{40}$/.test(localDatabase.implementationTree || '')
@@ -516,8 +529,10 @@ export function validateManagedPilotReadiness(value) {
     || (audit.advisorStatus === 'blocked' ? audit.findingCount < 1 : audit.findingCount !== 0)
     || !Number.isInteger(audit.liveSchemaVersion)
     || audit.liveSchemaVersion < 7
-    || audit.liveSchemaVersion > 11
-    || audit.localTargetVersion !== 11
+    || audit.liveSchemaVersion > CURRENT_DATABASE_SCHEMA
+    || !Number.isInteger(audit.localTargetVersion)
+    || audit.localTargetVersion < 7
+    || audit.localTargetVersion > CURRENT_DATABASE_SCHEMA
     || audit.versionDrift !== audit.localTargetVersion - audit.liveSchemaVersion
     || audit.browserRolesDenied !== true
     || typeof audit.metadataRlsEnabled !== 'boolean'
@@ -621,8 +636,8 @@ export function validateManagedPilotReadiness(value) {
   if (value.gates.find((entry) => entry.id === 'preview_rehearsal')?.evidence !== previewRehearsalEvidence(previewRehearsal.proofComplete)
     || value.gates.find((entry) => entry.id === 'managed_persistence')?.evidence !== persistenceGateEvidence(managedPersistence.proofComplete)
     || value.gates.find((entry) => entry.id === 'storage_privacy')?.evidence !== storageGateEvidence(storagePrivacy.proofComplete)
-    || value.gates.find((entry) => entry.id === 'security')?.evidence !== securityGateEvidenceV5(audit, { checks: { publicBrowserQuarantineEnforced: liveProduction.publicBrowserQuarantine } })
-    || value.gates.find((entry) => entry.id === 'security')?.nextAction !== CURRENT_SECURITY_NEXT_ACTION
+    || value.gates.find((entry) => entry.id === 'security')?.evidence !== securityGateEvidenceV5(audit)
+    || value.gates.find((entry) => entry.id === 'security')?.nextAction !== securityGateNextAction(audit)
     || value.gates.find((entry) => entry.id === 'pilot_evidence')?.evidence !== pilotEvidence(pilot.proofComplete, value.products?.[0]?.requiredProof)) fail('managed_pilot_readiness_gate_evidence_invalid')
   if (!Array.isArray(value.products) || value.products.map((product) => product.productId).join(',') !== PRODUCT_IDS.join(',') || value.products.some((product) => product.managedPilotStatus !== 'blocked' || product.automationStatus !== 'owner-gated')) fail('managed_pilot_readiness_products_invalid')
   if (value.controls?.externalWritesPerformed !== false || value.controls?.connectorRequestsPerformed !== 0 || value.controls?.modelCallsRequiredToBuild !== 0 || value.controls?.productionWritesEnabled !== false || value.controls?.ownerApprovalRequired !== true) fail('managed_pilot_readiness_controls_invalid')

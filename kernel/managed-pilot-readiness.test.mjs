@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { proofDigest } from './database-rehearsal-evidence.mjs'
+import { implementationPaths, proofDigest, sha256, validateSanitizedProof } from './database-rehearsal-evidence.mjs'
 
 import { buildManagedPilotReadiness, readinessDigest, validateManagedPilotReadiness } from './managed-pilot-readiness.mjs'
 
@@ -19,9 +19,28 @@ const products = ['shop', 'plant', 'website', 'ecommerce'].map((id) => ({
   },
 }))
 const sourceReceipts = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'].map((path) => ({ path, digest: readinessDigest(path) }))
-const databaseFixture = JSON.parse(readFileSync(new URL('../hq/research/postgres17-rehearsal.json', import.meta.url), 'utf8'))
-// Unit-only time fixture; never written as operational evidence.
+const historicalDatabaseFixture = JSON.parse(readFileSync(new URL('../hq/research/postgres17-rehearsal.json', import.meta.url), 'utf8'))
+// Build a synthetic current-shape proof for unit tests from either an older 29-migration receipt
+// or a refreshed 30-migration receipt, without duplicating the current RLS optimization.
+const databaseFixture = structuredClone(historicalDatabaseFixture)
+databaseFixture.runner = 'unit-test-only-synthetic-proof'
 databaseFixture.recordedAt = '2026-07-31T10:00:00.000Z'
+databaseFixture.implementationCommit = '0'.repeat(40)
+databaseFixture.implementationTree = '1'.repeat(40)
+const sitesInquiryRlsOptimization = '20261016143945_optimize_sites_inquiry_rls_initplans.sql'
+const currentDatabaseMigrations = databaseFixture.migration.names.includes(sitesInquiryRlsOptimization)
+  ? [...databaseFixture.migration.names]
+  : [...databaseFixture.migration.names, sitesInquiryRlsOptimization]
+assert.equal(currentDatabaseMigrations.length, 30)
+const databaseFixtureImplementationDigest = sha256(JSON.stringify({
+  purpose: 'managed-pilot-readiness-unit-fixture', implementationPaths, currentDatabaseMigrations,
+  checkNames: Object.keys(databaseFixture.checks).sort(),
+}))
+databaseFixture.implementationDigest = databaseFixtureImplementationDigest
+databaseFixture.implementationFileCount = implementationPaths.length
+databaseFixture.implementation = { ...databaseFixture.implementation, digest: databaseFixtureImplementationDigest, paths: [...implementationPaths] }
+databaseFixture.migration.count = currentDatabaseMigrations.length
+databaseFixture.migration.names = currentDatabaseMigrations
 databaseFixture.receiptDigest = proofDigest(databaseFixture)
 const selfServePilotProof = {
   contract: 'supermega.self-serve-pilot-proof.v1',
@@ -70,6 +89,15 @@ const input = {
   packageManifest: { supermega: { productionSupabaseTargetStatus: 'protected-unapproved', productionSupabaseProjectRef: 'abcdefghijklmnopqrst' } },
   sourceReceipts,
 }
+
+test('historical local rehearsal evidence cannot be silently rebound to a newer implementation', () => {
+  const currentImplementation = {
+    digest: databaseFixtureImplementationDigest,
+    fileCount: implementationPaths.length,
+    paths: [...implementationPaths],
+  }
+  assert.throws(() => validateSanitizedProof(historicalDatabaseFixture, currentImplementation), /database_rehearsal_evidence_stale/)
+})
 
 test('derives one blocked four-product ledger from current bounded evidence', () => {
   const ledger = buildManagedPilotReadiness(input)
@@ -225,6 +253,55 @@ test('historical clean hosted audit cannot satisfy current schema or self-serve 
   const staleInstruction = structuredClone(ledger)
   staleInstruction.gates.find(g => g.id === 'security').nextAction = historical.securityAudit.conclusion.nextAction
   assert.throws(() => validateManagedPilotReadiness(staleInstruction), /managed_pilot_readiness_gate_evidence_invalid/)
+})
+
+test('accepts current schema v13 audit evidence without opening unrelated launch gates', () => {
+  const current = structuredClone(input)
+  current.securityAudit.asOf = '2026-10-18T00:00:00.000Z'
+  current.securityAudit.advisor = { status: 'clear', findingCount: 0 }
+  current.securityAudit.managedBackend = { ...current.securityAudit.managedBackend,
+    liveSchemaVersion: 13, localTargetVersion: 13, versionDrift: 0, metadataRlsEnabled: true }
+
+  const ledger = buildManagedPilotReadiness(current)
+  assert.equal(ledger.securityAudit.liveSchemaVersion, 13)
+  assert.equal(ledger.securityAudit.localTargetVersion, 13)
+  assert.equal(ledger.liveProduction.versionDrift, 0)
+  assert.equal(ledger.gates.find(g => g.id === 'security').status, 'ready-hosted')
+  assert.match(ledger.gates.find(g => g.id === 'security').evidence, /Current production state, public-browser quarantine, and this candidate's access remain unverified/)
+  assert.match(ledger.gates.find(g => g.id === 'security').nextAction, /Revalidate current production state, public-browser quarantine, and candidate access/)
+  assert.equal(ledger.liveProduction.managedWritesEnabled, false)
+  assert.equal(ledger.liveProduction.publicBrowserQuarantine, false)
+  assert.equal(ledger.liveProduction.productionMutationAuthorized, false)
+  assert.ok(ledger.overall.blockingGateCount > 0)
+
+  for (const mutate of [
+    audit => { audit.managedBackend.liveSchemaVersion = 14 },
+    audit => { audit.managedBackend.localTargetVersion = 14 },
+  ]) {
+    const invalid = structuredClone(current)
+    mutate(invalid.securityAudit)
+    assert.throws(() => buildManagedPilotReadiness(invalid), /managed_pilot_readiness_security_audit_invalid/)
+  }
+})
+
+test('keeps a current v13 audit blocked when findings or metadata RLS gaps remain', () => {
+  const withFinding = structuredClone(input)
+  withFinding.securityAudit.asOf = '2026-10-18T00:00:00.000Z'
+  withFinding.securityAudit.advisor = { status: 'blocked', findingCount: 1 }
+  withFinding.securityAudit.managedBackend = { ...withFinding.securityAudit.managedBackend,
+    liveSchemaVersion: 13, localTargetVersion: 13, versionDrift: 0, metadataRlsEnabled: true }
+  const findingsLedger = buildManagedPilotReadiness(withFinding)
+  assert.equal(findingsLedger.gates.find(g => g.id === 'security').status, 'blocked')
+  assert.match(findingsLedger.gates.find(g => g.id === 'security').evidence, /1 Security Advisor findings/)
+  assert.match(findingsLedger.gates.find(g => g.id === 'security').nextAction, /Resolve recorded Security Advisor findings/)
+
+  const withRlsGap = structuredClone(withFinding)
+  withRlsGap.securityAudit.advisor = { status: 'clear', findingCount: 0 }
+  withRlsGap.securityAudit.managedBackend.metadataRlsEnabled = false
+  const rlsLedger = buildManagedPilotReadiness(withRlsGap)
+  assert.equal(rlsLedger.gates.find(g => g.id === 'security').status, 'blocked')
+  assert.match(rlsLedger.gates.find(g => g.id === 'security').evidence, /metadata RLS disabled/)
+  assert.match(rlsLedger.gates.find(g => g.id === 'security').nextAction, /metadata RLS gaps/)
 })
 
 test('completed historical persistence and Storage proofs stay retained but cannot clear current gates', () => {

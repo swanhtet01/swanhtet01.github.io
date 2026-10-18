@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { readFileSync } from 'node:fs'
 
+import { implementationPaths, proofDigest, sha256 } from './database-rehearsal-evidence.mjs'
 import { buildAllyCeoCompanyPlan } from './ally-ceo-company-plan.mjs'
 import { buildManagedPilotReadiness, readinessDigest } from './managed-pilot-readiness.mjs'
 
@@ -64,7 +65,26 @@ function portfolio(overrides = {}, automationOverrides = {}) {
 }
 
 function managedReadiness() {
-  const database = JSON.parse(readFileSync(new URL('../hq/research/postgres17-rehearsal.json', import.meta.url), 'utf8'))
+  const database = structuredClone(JSON.parse(readFileSync(new URL('../hq/research/postgres17-rehearsal.json', import.meta.url), 'utf8')))
+  const sitesInquiryRlsOptimization = '20261016143945_optimize_sites_inquiry_rls_initplans.sql'
+  const currentDatabaseMigrations = database.migration.names.includes(sitesInquiryRlsOptimization)
+    ? [...database.migration.names]
+    : [...database.migration.names, sitesInquiryRlsOptimization]
+  assert.equal(currentDatabaseMigrations.length, 30)
+  const implementationDigest = sha256(JSON.stringify({
+    purpose: 'ally-ceo-unit-fixture', implementationPaths, currentDatabaseMigrations,
+    checkNames: Object.keys(database.checks).sort(),
+  }))
+  database.runner = 'unit-test-only-synthetic-proof'
+  database.recordedAt = '2026-07-31T10:00:00.000Z'
+  database.implementationCommit = '0'.repeat(40)
+  database.implementationTree = '1'.repeat(40)
+  database.implementationDigest = implementationDigest
+  database.implementationFileCount = implementationPaths.length
+  database.implementation = { ...database.implementation, digest: implementationDigest, paths: [...implementationPaths] }
+  database.migration.count = currentDatabaseMigrations.length
+  database.migration.names = currentDatabaseMigrations
+  database.receiptDigest = proofDigest(database)
   const sourceReceipts = ['portfolio', 'database', 'storage', 'security', 'storageproof', 'persistenceproof', 'selfserveproof', 'now', 'package', 'kernel']
     .map((path) => ({ path, digest: readinessDigest(path) }))
   return JSON.stringify(buildManagedPilotReadiness({
