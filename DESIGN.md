@@ -53,6 +53,12 @@ customer product or an unaccountable actor.
 - The canonical application ramps are the custom properties in
   `showroom/src/core/core-app.css`. Typed Website brand packages remain in
   `showroom/src/products/website/website-release-foundation.ts`.
+- The public Company, Shop, Contact, and app lockup uses the unboxed cobalt
+  `>_` mark beside the title-case `SuperMega` wordmark. Its source is
+  `showroom/src/core/brand-mark.ts`; `BRAND.md` defines the name, color, and
+  lockup rules. Do not add a tile, descriptor, all-caps wordmark, or alternate
+  purple treatment. Keep one light shared public header and let each page's
+  content establish its own identity.
 - Reuse existing color, type, spacing, radius, weight, and shadow tokens. Do
   not add a hex or pixel literal when a matching token exists.
 - Text on the accent uses `--core-on-accent`; every new root token needs a

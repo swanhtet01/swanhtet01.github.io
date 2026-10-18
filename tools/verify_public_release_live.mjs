@@ -3,6 +3,7 @@ import { execFileSync } from 'node:child_process'
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { activeProductContracts } from '../showroom/src/core/product-visibility.ts'
+import { brandMarkHtml } from './public_company_shop_design.mjs'
 
 const verifyCurrentHead = process.argv.includes('--current-head')
 const configuredExpectedCommit = String(process.env.EXPECTED_RELEASE_COMMIT || '').trim().toLowerCase()
@@ -38,6 +39,12 @@ const timeoutMs = Number(process.env.PUBLIC_VERIFY_TIMEOUT_MS || 15000)
 
 function assert(condition, code, detail = {}) {
   if (!condition) throw new Error(`${code}:${JSON.stringify(detail)}`)
+}
+
+function verifyCompanyHeadline(html, code) {
+  const heading = html.match(/<h1 id="hero-title">([\s\S]*?)<\/h1>/)?.[1] ?? ''
+  const text = heading.replace(/<br\s*\/?>/gi, ' ').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
+  assert(text === manifest.company.headline, code)
 }
 
 function sleep(ms) {
@@ -82,8 +89,10 @@ async function readPage(route) {
     `meta name="supermega-brand-version" content="${manifest.brand.version}"`,
     `meta name="supermega-context-version" content="${manifest.contextVersion}"`,
     'aria-label="SuperMega home"',
-    'class="brand-icon" aria-hidden="true"',
-    'href="https://app.supermega.dev/login">Login</a>',
+    `class="brand-mark" aria-hidden="true">${brandMarkHtml}</span>`,
+    route === '/shop/'
+      ? 'href="https://app.supermega.dev/login?product=shop">Login</a>'
+      : 'href="https://app.supermega.dev/login">Login</a>',
     'href="/privacy/">Privacy</a>',
   ]) assert(html.includes(token), 'page_shared_contract_missing', { route, token })
   const contactRouteToken = 'href="/contact/">Contact</a>'
@@ -127,7 +136,7 @@ async function verifyOnce() {
   const pendingRoutes = new Set()
   const pageResults = await Promise.all(manifest.pages.map(async (page) => readPageOrPending(page, pendingRoutes)))
   const pages = new Map(pageResults)
-  assert(pages.get('/')?.includes('<h1 id="hero-title">Know what sold.<br><span>Know what needs action.</span></h1>'), 'homepage_headline_wrong')
+  verifyCompanyHeadline(pages.get('/') || '', 'homepage_headline_wrong')
   assert(pages.get('/')?.includes('href="https://app.supermega.dev/login">Login</a>'), 'homepage_product_cta_missing')
   assert(pages.get('/')?.includes('id="products"'), 'product_portfolio_missing')
   const homepage = pages.get('/') || ''
@@ -139,13 +148,12 @@ async function verifyOnce() {
   const shopAction = `href="${shop.primaryCta.url}">${shop.primaryCta.label}</a>`
   assert(homepage.includes('id="shop"'), 'homepage_shop_action_missing')
   for (const product of publicProducts) {
-    const guidedSampleRoute = 'https://app.supermega.dev/login'
-    assert(homepage.includes(`href="${guidedSampleRoute}"`), 'guided_product_route_missing', { product: product.id, guidedSampleRoute })
-    const guidedLabel = 'Login'
-    assert(homepage.includes(`href="${guidedSampleRoute}">${guidedLabel}</a>`), 'guided_product_label_wrong', { product: product.id })
     const landingRoute = `/${product.id}/`
     const landing = pages.get(landingRoute)
     if (pendingRoutes.has(landingRoute) || landing == null) continue
+    const guidedSampleRoute = product.id === 'shop'
+      ? 'https://app.supermega.dev/login?product=shop'
+      : 'https://app.supermega.dev/login'
     assert(landing.includes('class="platform-image"'), 'landing_headline_missing', { product: product.id })
     assert(landing.includes(`href="${guidedSampleRoute}"`), 'landing_guided_product_route_missing', { product: product.id })
     assert(!landing.includes(shopAction), 'retired_shop_action_present')
@@ -305,7 +313,7 @@ async function verifyOnce() {
   const www = await fetch('https://www.supermega.dev/', { redirect: 'follow', cache: 'no-store', headers: { 'user-agent': 'SuperMegaVerifiedRelease/2.0' }, signal: AbortSignal.timeout(timeoutMs) })
   assert(www.status === 200, 'www_http_error', { status: www.status })
   const wwwHtml = await www.text()
-  assert(wwwHtml.includes('<h1 id="hero-title">Know what sold.<br><span>Know what needs action.</span></h1>'), 'www_release_drift')
+  verifyCompanyHeadline(wwwHtml, 'www_release_drift')
 
   return {
     pages: manifest.pages.map((page) => page.route).filter((route) => !pendingRoutes.has(route)),
