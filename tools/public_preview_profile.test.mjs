@@ -54,6 +54,13 @@ test('rejects extra escape links even when all good actions remain', () => {
       { publicOrigin: 'https://public-preview.example' }), undefined, href)
   }
 })
+test('rejects all external retail-price links from the public preview', () => {
+  const options = { publicOrigin: 'https://public-preview.example' }
+  for (const href of ['https://www.makropro.com.mm/en', 'https://www.makropro.com.mm/en?next=/',
+    'https://www.makropro.com.mm/products', 'https://makropro.com.mm/en', 'https://evil.example/en']) {
+    assert.throws(() => validatePreviewLinks(html + `<a href="${href}">External</a>`, policy, products, options), undefined, href)
+  }
+})
 test('all-page mode permits informational tombstone but not a retired tool action', () => {
   const options = { requireActions: false, publicOrigin: 'https://public-preview.example' }
   validatePreviewLinks('<h1>Plant retained records</h1><a href="/#products">View current products</a>', policy, products, options)
@@ -63,22 +70,27 @@ test('all-page mode permits informational tombstone but not a retired tool actio
 
 test('full-size gallery links stay on exact static public PNGs', () => {
   const options = { publicOrigin: 'https://public-preview.example' }
-  for (const path of ['/images/actual-shop-today.png', '/images/actual-shop-today-mobile.png',
+  for (const path of ['/images/actual-shop-today.png', '/images/actual-shop-today-tablet.png', '/images/actual-shop-today-mobile.png',
+    '/images/actual-shop-sell-tablet.png', '/images/actual-shop-orders-tablet.png', '/images/actual-shop-inventory-tablet.png',
+    '/images/actual-shop-inventory.png', '/images/actual-shop-inventory-mobile.png',
     '/images/actual-sites-inquiries.png', '/images/actual-sites-inquiries-mobile.png',
     '/images/actual-commerce-order-request.png', '/images/actual-commerce-order-request-mobile.png']) {
     assert.equal(validatePreviewLinks(html + `<a href="${path}">View full size</a>`, policy, products, options).pairedOrigin, app.origin)
   }
   for (const path of ['/images/actual-shop-today.svg', '/images/actual-shop-today.png?download=1',
-    '/images/actual-shop-today.png#other', '/images/unreviewed.png', 'https://supermega.dev/images/actual-shop-today.png']) {
+    '/images/actual-shop-today.png#other', '/images/actual-shop-inventory.png?download=1',
+    '/images/unreviewed.png', 'https://supermega.dev/images/actual-shop-today.png']) {
     assert.throws(() => validatePreviewLinks(html + `<a href="${path}">View full size</a>`, policy, products, options), undefined, path)
   }
 })
 
 
-test('public site rejects product pickers, setup routes and duplicate Login actions', () => {
-  for (const suffix of ['/?choose=1', '/shop/?tab=today', '/settings/?product=website', '/login?product=shop', '/login']) {
+test('public site rejects product pickers and setup routes but keeps Shop login intent', () => {
+  validatePreviewLinks(html.replace('/login', '/login?product=shop'), policy, products)
+  for (const suffix of ['/?choose=1', '/shop/?tab=today', '/settings/?product=website', '/login?product=website', '/login?product=shop&next=/shop/']) {
     assert.throws(() => validatePreviewLinks(html + `<a href="${app.origin}${suffix}">Open</a>`, policy, products))
   }
+  assert.throws(() => validatePreviewLinks(html + `<a href="${app.origin}/login">Open</a>`, policy, products), /action_missing/)
   assert.throws(() => validatePreviewLinks('<h1>Products</h1>', policy, products), /action_missing/)
 })
 
