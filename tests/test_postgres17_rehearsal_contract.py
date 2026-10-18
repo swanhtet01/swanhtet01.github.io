@@ -88,7 +88,8 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
             "20261010120857_website_inquiry_followup.sql",
             "20261014090000_website_channel_stable_update.sql",
             "20261015091500_website_six_page_reviews.sql",
-            "20261015202629_ecommerce_operator_review_grant.sql"))
+            "20261015202629_ecommerce_operator_review_grant.sql",
+            "20261016143945_optimize_sites_inquiry_rls_initplans.sql"))
         observed = tuple(sorted(path.name for path in (ROOT / "supabase/migrations").glob("*.sql")
                                 if path.name not in ("20260711081300_public_legacy_baseline.sql",
                                                      *module.DOMAIN_CANDIDATE_MIGRATIONS)))
