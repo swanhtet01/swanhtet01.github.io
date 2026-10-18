@@ -3103,6 +3103,11 @@ input, select, textarea,
 .order-workspace .order-row-actions .core-button { min-height: 2.75rem; }
 .order-workspace > .shop-business-controls { margin-top: 1rem; border-radius: .875rem; background: color-mix(in srgb,var(--core-surface-soft) 74%,var(--core-panel)); }
 @media (max-width: 560px) {
+  .shop-current-sale > header { position: relative; display: grid; grid-template-columns: minmax(0,1fr) 44px; gap: .25rem .5rem; }
+  .shop-current-sale > header > div:first-child { grid-column: 1; grid-row: 1; }
+  .shop-current-sale > header h2 { white-space: nowrap; }
+  .shop-cart-actions { grid-column: 1 / -1; grid-row: 2; justify-content: flex-start; }
+  .shop-cart-close { position: absolute; top: 0; right: 0; }
   .order-workspace { border-radius: 1rem; box-shadow: none; }
   .order-workspace .panel-head { align-items: start; }
   .order-workspace .panel-head h2 { font-size: 1.75rem; }
