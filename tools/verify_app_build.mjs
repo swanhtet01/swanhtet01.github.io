@@ -659,7 +659,7 @@ const manifestPath = resolve(dist, 'site.webmanifest')
 if (!await exists(faviconPath)) fail('missing_terminal_favicon')
 else {
   const favicon = await readFile(faviconPath, 'utf8')
-  if (!favicon.includes('SuperMega terminal mark') || !favicon.includes(manifest.brand.colors.accent) || !favicon.includes(manifest.brand.colors.ink)) fail('wrong_terminal_favicon')
+  if (!favicon.includes('SuperMega terminal mark') || !favicon.includes(manifest.brand.colors.accent) || !favicon.includes('M10 9 26 22 10 35M35 35h27') || /<rect\b/i.test(favicon)) fail('wrong_terminal_favicon')
 }
 if (!await exists(manifestPath)) fail('missing_app_webmanifest')
 else {
@@ -679,9 +679,9 @@ else {
     if (!await exists(resolve(dist, icon.src.replace(/^\//, '')))) fail(`missing_manifest_icon_file:${icon.src}`)
   }
 }
-if (!indexSource.includes('<link rel="apple-touch-icon" href="/apple-touch-icon.png" />')
+if (!/<link rel="apple-touch-icon" href="\/apple-touch-icon\.png(?:\?v=[^"]+)?" \/>/.test(indexSource)
   || !await exists(resolve(dist, 'apple-touch-icon.png'))) fail('missing_apple_touch_icon')
-if (!indexSource.includes('<title>SuperMega</title>')
+if (!indexSource.includes('<title>SuperMega Shop</title>')
   || !indexSource.includes(APP_DESCRIPTION)
   || indexSource.includes('SuperMega Company OS')
   || indexSource.includes('Run Product, Commerce, and Production')) fail('stale_app_metadata')
@@ -720,7 +720,7 @@ for (const hasMeta of [true, false]) {
       querySelector: () => hasMeta ? { setAttribute: (_name, value) => { themeColor = value } } : null,
     },
   }, { timeout: 1000 })
-  if (dataset.supermegaTheme !== 'light' || storageTouched || (hasMeta && themeColor !== '#f6f4ee')) fail('fixed_light_startup_theme_invalid')
+  if (dataset.supermegaTheme !== 'light' || storageTouched || (hasMeta && themeColor !== '#f8f9fc')) fail('fixed_light_startup_theme_invalid')
 }
 const insightsBootstrapSource = await readFile(resolve(dist, 'vercel-insights.js'), 'utf8').catch(() => '')
 if (!insightsBootstrapSource.includes("/(^|\\.)supermega\\.dev$/.test(location.hostname)")
@@ -842,7 +842,7 @@ if (files.some((path) => /shop-batch-profit-control-first-use-[^/]+\.js$/.test(p
 }
 const textFiles = files.filter((path) => /\.(?:html|js|css|json|svg)$/.test(path))
 const corpus = (await Promise.all(textFiles.map((path) => readFile(path, 'utf8')))).join('\n')
-for (const required of ['SUPERMEGA', 'Shop', 'Plant', 'Website', 'Ecommerce', 'Sell', 'Orders', 'Stock', 'Purchase orders', 'Jobs', 'Quality', 'Maintenance', 'Content', 'Preview', 'Publish', 'Catalog', 'Storefront', 'Requests', 'Local workspace', 'Name your workspace', 'Request managed activation', 'Confirm change', 'Action history', 'actorKind', 'evidenceReference', 'accountableActions', 'Mode', 'Writes', manifest.brand.colors.accent, manifest.brand.colors.ink]) {
+for (const required of [manifest.brand.name, 'Shop', 'Plant', 'Website', 'Ecommerce', 'Sell', 'Orders', 'Stock', 'Purchase orders', 'Jobs', 'Quality', 'Maintenance', 'Content', 'Preview', 'Publish', 'Catalog', 'Storefront', 'Requests', 'Local workspace', 'Name your workspace', 'Request managed activation', 'Confirm change', 'Action history', 'actorKind', 'evidenceReference', 'accountableActions', 'Mode', 'Writes', manifest.brand.colors.accent, manifest.brand.colors.ink]) {
   if (!corpus.includes(required)) fail(`missing_context:${required}`)
 }
 // A storefront with no saved draft opens under the owner's own business name. Pinned because
