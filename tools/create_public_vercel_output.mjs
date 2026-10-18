@@ -91,6 +91,10 @@ assert(publicGalleryProvenance.status === 'local_component_capture' && publicGal
 assert(publicGalleryCapture.ok === true && publicGalleryCapture.classification === 'candidate_only_local_real_component_synthetic'
   && publicGalleryCapture.publicationReady === false && publicGalleryCapture.deniedExternal === 0,
   'public_gallery_capture_report_invalid')
+assert(publicGalleryCapture.captureMode === 'clean-commit-review'
+  && publicGalleryCapture.sourceHasLocalChanges === false
+  && publicGalleryCapture.captureHarnessHasLocalChanges === false,
+  'public_gallery_clean_capture_required')
 assert(publicGalleryProvenance.captureSourceCommit === publicGalleryCapture.sourceCommit
   && publicGalleryProvenance.captureSourceTree === publicGalleryCapture.showroomTree
   && /^[0-9a-f]{40}$/.test(publicGalleryCapture.sourceCommit)
@@ -134,6 +138,8 @@ const sourceGalleryAssetEvidence = await Promise.all(publicGalleryProvenance.ass
     && capture.routeState === reportCapture.routeState
     && capture.visibleSelector === reportCapture.visibleSelector
     && capture.loadedImages === reportCapture.loadedImages
+    && capture.captureMode === 'clean-commit-review'
+    && capture.captureInputsSha256 === publicGalleryCapture.captureInputsSha256
     && capture.deniedExternal === publicGalleryCapture.deniedExternal,
     `public_gallery_capture_receipt_invalid:${file}`)
   return { file, width, height, sha256, capture }
@@ -270,7 +276,7 @@ const sharedStyle = `
   .frame { width: min(calc(100% - 48px), 1200px); margin-inline: auto; }
   .wrap { width: min(1260px, calc(100% - 64px)); margin-inline: auto; }
   .site-header { position: sticky; top: 0; z-index: 40; min-height: 76px; border-bottom: 1px solid var(--brand-line); background: rgba(255,255,255,.96); backdrop-filter: blur(18px); }
-  .header-inner { width: 100%; min-height: 76px; display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+  .header-inner { min-height: 76px; display: flex; align-items: center; justify-content: space-between; gap: 24px; }
   .brand { display: inline-flex; min-height: 48px; align-items: center; gap: .625rem; text-decoration: none; font-family: Geist, Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Myanmar Text", "Noto Sans Myanmar", sans-serif; font-size: 1rem; font-weight: 650; letter-spacing: -.02em; }
   .brand-mark { width: 30px; height: 18px; display: inline-flex; flex: none; align-items: center; justify-content: center; border: 0; border-radius: 0; padding: 0; background: transparent; box-shadow: none; color: var(--brand-accent); }
   .brand-mark svg { display: block; width: 100%; height: 100%; }

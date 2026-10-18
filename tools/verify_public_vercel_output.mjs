@@ -153,7 +153,7 @@ const sharedRequired = [
   '.skip-link:focus { transform: translateY(0); }',
   '.wrap { width: min(1260px, calc(100% - 64px)); margin-inline: auto; }',
   '.site-header { position: sticky; top: 0; z-index: 40; min-height: 76px; border-bottom: 1px solid var(--brand-line); background: rgba(255,255,255,.96); backdrop-filter: blur(18px); }',
-  '.header-inner { width: 100%; min-height: 76px; display: flex; align-items: center; justify-content: space-between; gap: 24px; }',
+  '.header-inner { min-height: 76px; display: flex; align-items: center; justify-content: space-between; gap: 24px; }',
   '.nav-links { display: flex; min-width: 0; align-items: center; justify-content: flex-end; gap: 10px; }',
   '.nav-links a { min-height: 48px; display: inline-flex; align-items: center; border: 1px solid transparent; border-radius: 8px; padding: 0 15px; color: var(--brand-muted); font-size: .9rem; font-weight: 600; text-decoration: none; transition: color 160ms ease, background-color 160ms ease, border-color 160ms ease; }',
   'aria-label="SuperMega home"',
@@ -388,12 +388,13 @@ for (const [route, html] of [['/', home], ['/shop/', pages.get('/shop/').html], 
     ? `/contact/?product=${routeProduct.id}`
     : null
   const galleryViews = { shop: 4, website: 2, ecommerce: 2 }
-  const expectedLinks = route === '/' ? 16 : route === '/shop/' ? 10 : 6 + Number(Boolean(contactActionTarget))
+  const expectedLinks = route === '/' ? 16 : route === '/shop/' ? 11 : 6 + Number(Boolean(contactActionTarget))
   if ((body.match(/<a\b/g) || []).length !== expectedLinks) fail('marketing_link_surface_drift', { route, expectedLinks })
   const expectedLogin = route === '/shop/'
     ? 'href="https://app.supermega.dev/login?product=shop"'
     : 'href="https://app.supermega.dev/login"'
-  if (countOccurrences(body, expectedLogin) !== 1) fail('single_login_missing', { route, expectedLogin })
+  if (countOccurrences(body, expectedLogin) !== (route === '/shop/' ? 2 : 1)) fail('login_action_count_invalid', { route, expectedLogin })
+  if (route === '/shop/' && !body.includes(`class="button button-primary" ${expectedLogin}>Sign in to Shop`)) fail('shop_primary_product_action_missing')
   const hasGalleryNavigation = (galleryViews[routeProduct?.id] || 0) > 1
   const expectedButtons = Number(hasGalleryNavigation) * 2
   if ((body.match(/<button\b/g) || []).length !== expectedButtons) fail('marketing_button_surface_drift', { route, expectedButtons })
