@@ -5,19 +5,19 @@
   "brand": {
     "name": "SuperMega",
     "domain": "supermega.dev",
-    "version": "void-electric-blue-v1-2026-10",
+    "version": "cobalt-unboxed-v14-2026-10",
     "mark": "terminal",
     "colors": {
-      "background": "#07111f",
-      "accent": "#3b82f6",
-      "ink": "#0b0f17"
+      "background": "#ffffff",
+      "accent": "#2563eb",
+      "ink": "#151521"
     }
   },
   "company": {
-    "positioning": "POS-independent Shop Profit Control for Myanmar operators.",
-    "statement": "Sell at the counter, follow orders and keep stock in view from one Shop workspace.",
-    "headline": "A clearer view of sales, orders and stock.",
-    "supporting": "Shop's local release candidate combines the daily sales view, product catalog, recorded orders and stock attention. Payment processing, social-message ingestion and hosted merchant acceptance remain explicit launch gates.",
+    "positioning": "Business software for Myanmar.",
+    "statement": "Record counter sales, check stock and follow open orders in SuperMega Shop.",
+    "headline": "See what sold. Know what needs action.",
+    "supporting": "Record counter sales, check stock and follow open orders in SuperMega Shop.",
     "publicPricing": false
   },
   "productVisibility": {
@@ -986,8 +986,8 @@
     {
       "route": "/",
       "file": "index.html",
-      "title": "SuperMega | Shop for Myanmar businesses",
-      "description": "Shop brings sales, orders and stock into one clear workspace for Myanmar businesses."
+      "title": "SuperMega | Business software for Myanmar",
+      "description": "Record counter sales, check stock and follow open orders in SuperMega Shop."
     },
     {
       "route": "/shop/",
