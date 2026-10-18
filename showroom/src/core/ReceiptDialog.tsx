@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 
 import { type CommerceMerchantProfile, type CommerceMerchantProfileInput, type CommerceOrderAcknowledgement, commerceOrderAcknowledgementText } from './commerce-workspace'
 import { bi } from './i18n-actions'
-import { readUiLocale, uiText } from './ui-locale'
+import { uiText, useUiLocale } from './ui-locale'
 import { PaymentQrButton } from './PaymentQr'
 import { copyOrderRecordText } from './copy-order-record'
 import { formatShopBusinessDate, shopCustomerReceiptDocument, shopCustomerReceiptTestDocument } from './shop-customer-receipt'
@@ -139,6 +139,7 @@ export function ReceiptDialog({ ack, loyalty, onClose, paymentQrScope, merchantP
   onSaveMerchantProfile?: (input: CommerceMerchantProfileInput) => Promise<void>
   disabled?: boolean
 }) {
+  const locale = useUiLocale()
   const ref = useRef<HTMLDialogElement>(null)
   const [setupOpen, setSetupOpen] = useState(false)
   const [optionalOpen, setOptionalOpen] = useState(false)
@@ -182,7 +183,7 @@ export function ReceiptDialog({ ack, loyalty, onClose, paymentQrScope, merchantP
       await onSaveMerchantProfile(profileDraft)
       setSetupOpen(false)
     } catch (error) {
-      setProfileError(error instanceof Error ? error.message : 'Receipt details could not be saved.')
+      setProfileError(error instanceof Error ? error.message : uiText('Receipt details could not be saved.'))
     } finally {
       setProfileBusy(false)
     }
@@ -201,7 +202,7 @@ export function ReceiptDialog({ ack, loyalty, onClose, paymentQrScope, merchantP
           win.print()
           setPrintNotice(successMessage)
         } catch {
-          setPrintNotice('The browser could not open its print dialog. Use the browser menu to print this receipt.')
+          setPrintNotice(uiText('The browser could not open its print dialog. Use the browser menu to print this receipt.'))
         }
       }, { once: true })
       win.document.open()
@@ -215,13 +216,13 @@ export function ReceiptDialog({ ack, loyalty, onClose, paymentQrScope, merchantP
   function printCustomerReceipt() {
     if (!ack || !merchantProfile || disabled) return
     setPrintNotice('')
-    openCustomerReceiptPrint(shopCustomerReceiptDocument(ack, merchantProfile, readUiLocale()), uiText('Print dialog opened. Choose a printer or Save as PDF.'))
+    openCustomerReceiptPrint(shopCustomerReceiptDocument(ack, merchantProfile, locale), uiText('Print dialog opened. Choose a printer or Save as PDF.'))
   }
 
   function printTestReceipt() {
     if (!merchantProfile || disabled) return
     setPrintNotice('')
-    openCustomerReceiptPrint(shopCustomerReceiptTestDocument(merchantProfile, readUiLocale()), uiText('Test slip opened. Choose your receipt printer; no sale was recorded.'))
+    openCustomerReceiptPrint(shopCustomerReceiptTestDocument(merchantProfile, locale), uiText('Test slip opened. Choose your receipt printer; no sale was recorded.'))
   }
 
   const [copyResult, setCopyResult] = useState<{ record: CommerceOrderAcknowledgement; notice: string } | null>(null)
@@ -234,31 +235,31 @@ export function ReceiptDialog({ ack, loyalty, onClose, paymentQrScope, merchantP
   return <>
     <dialog aria-labelledby="receipt-dialog-title" className="receipt-dialog" onClose={() => { setSetupOpen(false); onClose() }} ref={ref}>
       {setupOpen ? <form className="receipt-profile-form" onSubmit={(event) => void saveMerchantProfile(event)} style={{ display: 'grid', gap: 12, padding: 16 }}>
-        <header className="receipt-dialog-header"><span className="core-eyebrow">Customer receipt</span><h2 id="receipt-dialog-title">Set up your receipt</h2><p>Add your business name in Burmese or English.</p></header>
-        <label>Burmese business name<input autoComplete="organization" maxLength={80} onChange={(event) => setProfileDraft((draft) => ({ ...draft, nameMyanmar: event.target.value }))} value={profileDraft.nameMyanmar} /></label>
+        <header className="receipt-dialog-header"><span className="core-eyebrow">{uiText('Customer receipt')}</span><h2 id="receipt-dialog-title">{uiText('Set up your receipt')}</h2><p>{uiText('Add the business name to print on receipts.')}</p></header>
+        <label>{uiText('Burmese business name')}<input autoComplete="organization" maxLength={80} onChange={(event) => setProfileDraft((draft) => ({ ...draft, nameMyanmar: event.target.value }))} value={profileDraft.nameMyanmar} /></label>
         <details className="receipt-profile-optional" onToggle={(event) => setOptionalOpen(event.currentTarget.open)} open={optionalOpen}>
-          <summary>English name, phone and address <small>optional</small></summary>
+          <summary>{uiText('English name, phone and address')} <small>{uiText('optional')}</small></summary>
           <div>
-            <label>English business name<input autoComplete="organization" maxLength={80} onChange={(event) => setProfileDraft((draft) => ({ ...draft, nameEnglish: event.target.value }))} value={profileDraft.nameEnglish} /></label>
-            <label>Phone<input autoComplete="tel" maxLength={40} onChange={(event) => setProfileDraft((draft) => ({ ...draft, phone: event.target.value }))} value={profileDraft.phone} /></label>
-            <label>Burmese address<textarea autoComplete="street-address" maxLength={180} onChange={(event) => setProfileDraft((draft) => ({ ...draft, addressMyanmar: event.target.value }))} rows={2} value={profileDraft.addressMyanmar} /></label>
-            <label>English address<textarea maxLength={180} onChange={(event) => setProfileDraft((draft) => ({ ...draft, addressEnglish: event.target.value }))} rows={2} value={profileDraft.addressEnglish} /></label>
+            <label>{uiText('English business name')}<input autoComplete="organization" maxLength={80} onChange={(event) => setProfileDraft((draft) => ({ ...draft, nameEnglish: event.target.value }))} value={profileDraft.nameEnglish} /></label>
+            <label>{uiText('Phone')}<input autoComplete="tel" maxLength={40} onChange={(event) => setProfileDraft((draft) => ({ ...draft, phone: event.target.value }))} value={profileDraft.phone} /></label>
+            <label>{uiText('Burmese address')}<textarea autoComplete="street-address" maxLength={180} onChange={(event) => setProfileDraft((draft) => ({ ...draft, addressMyanmar: event.target.value }))} rows={2} value={profileDraft.addressMyanmar} /></label>
+            <label>{uiText('English address')}<textarea maxLength={180} onChange={(event) => setProfileDraft((draft) => ({ ...draft, addressEnglish: event.target.value }))} rows={2} value={profileDraft.addressEnglish} /></label>
           </div>
         </details>
         <p aria-live="polite" role="status">{profileError}</p>
-        <div className="receipt-dialog-actions"><button className="core-button compact" disabled={profileBusy} onClick={() => setSetupOpen(false)} type="button">Cancel</button><button className="core-button primary compact" disabled={disabled || profileBusy || !profileDraft.nameMyanmar.trim() && !profileDraft.nameEnglish.trim()} type="submit">{profileBusy ? 'Saving…' : 'Save details'}</button></div>
+        <div className="receipt-dialog-actions"><button className="core-button compact" disabled={profileBusy} onClick={() => setSetupOpen(false)} type="button">{uiText('Cancel')}</button><button className="core-button primary compact" disabled={disabled || profileBusy || !profileDraft.nameMyanmar.trim() && !profileDraft.nameEnglish.trim()} type="submit">{uiText(profileBusy ? 'Saving…' : 'Save details')}</button></div>
       </form> : ack ? <>
         <header className="receipt-dialog-header">
           <span className="core-eyebrow">{bi('Order record')}</span>
           <h2 id="receipt-dialog-title">{ack.customer}</h2>
-          <p>{formatShopBusinessDate(ack.createdAt)} · {ack.channel}</p>
+          <p>{formatShopBusinessDate(ack.createdAt, locale)} · {uiText(ack.channel)}</p>
           <small>{ack.orderId}</small>
         </header>
         <table className="receipt-dialog-lines">
           <tbody>
             {ack.lines.map((line) => (
               <tr key={line.sku}>
-                <td>{line.name}{line.variant ? <> · <em>{line.variant}</em></> : null}</td>
+                <td>{locale === 'my' && line.nameMy ? line.nameMy : line.name}{line.variant ? <> · <em>{line.variant}</em></> : null}</td>
                 <td className="receipt-num">×{line.quantity}</td>
                 <td className="receipt-num">{mmk(line.lineTotalMmk)}</td>
               </tr>
@@ -275,12 +276,12 @@ export function ReceiptDialog({ ack, loyalty, onClose, paymentQrScope, merchantP
           {loyalty ? <div><span>{bi('Points balance')}</span><span>{loyalty.balancePoints.toLocaleString()}</span></div> : null}
         </div>
         <div className="receipt-dialog-payment">
-          <strong>{ack.payment.method}</strong>
+          <strong>{uiText(ack.payment.method)}</strong>
           <span className={`status-pill ${ack.payment.status === 'reconciled' ? 'approved' : 'pending'}`}>
             {ack.payment.status === 'reconciled' ? bi('Paid') : bi('Payment pending')}
           </span>
           {ack.payment.status !== 'reconciled' && ack.payment.dueAt
-            ? <small>Due {formatShopBusinessDate(ack.payment.dueAt)}</small>
+            ? <small>{uiText('Due')} {formatShopBusinessDate(ack.payment.dueAt, locale)}</small>
             : null}
           {/* S2 merchant payment QR: while payment is still pending, the cashier can show
               the owner's stored merchant QR for this method with the amount due (display
@@ -288,21 +289,21 @@ export function ReceiptDialog({ ack, loyalty, onClose, paymentQrScope, merchantP
           {ack.payment.status !== 'reconciled' ? <PaymentQrButton amountDue={mmk(ack.totalMmk)} method={ack.payment.method} scope={paymentQrScope} /> : null}
         </div>
         {ack.delivery?.fulfilment ? <div className="receipt-dialog-delivery">
-          <strong>{ack.delivery.fulfilment}</strong>
+          <strong>{uiText(ack.delivery.fulfilment)}</strong>
           {ack.delivery.reference ? <span>{ack.delivery.reference}</span> : null}
-          {ack.delivery.promisedAt ? <small>Promised {formatShopBusinessDate(ack.delivery.promisedAt)}</small> : null}
+          {ack.delivery.promisedAt ? <small>{uiText('Promised')} {formatShopBusinessDate(ack.delivery.promisedAt, locale)}</small> : null}
         </div> : null}
-        <p className="receipt-dialog-notice">{ack.notice}</p>
+        <p className="receipt-dialog-notice">{uiText(ack.notice)}</p>
         <p className="receipt-dialog-notice" aria-live="polite" role="status">{copyResult?.record === ack ? copyResult.notice : ''}</p>
         <p className="receipt-dialog-notice" aria-live="polite" role="status">{printNotice}</p>
-        <details className="receipt-dialog-more"><summary>More options</summary><div>
+        <details className="receipt-dialog-more"><summary>{uiText('More options')}</summary><div>
           <button className="core-button compact" disabled={disabled} onClick={() => openPrintWindow(ack)} type="button">{bi('Print order record')}</button>
           <button className="core-button compact" disabled={disabled} onClick={() => void copyReceiptText()} type="button">{bi('Copy text')}</button>
-          {merchantProfile ? <button className="core-button compact" disabled={disabled} onClick={openMerchantProfileSetup} type="button">Receipt details</button> : null}
-          {merchantProfile ? <button className="core-button compact" disabled={disabled} onClick={printTestReceipt} type="button">Print test slip</button> : null}
+          {merchantProfile ? <button className="core-button compact" disabled={disabled} onClick={openMerchantProfileSetup} type="button">{uiText('Receipt details')}</button> : null}
+          {merchantProfile ? <button className="core-button compact" disabled={disabled} onClick={printTestReceipt} type="button">{uiText('Print test slip')}</button> : null}
         </div></details>
         <div className="receipt-dialog-actions">
-          {merchantProfile ? <button className="core-button primary compact" disabled={disabled} onClick={printCustomerReceipt} type="button">Print receipt</button> : <button className="core-button primary compact" disabled={disabled} onClick={openMerchantProfileSetup} type="button">Set up receipt</button>}
+          {merchantProfile ? <button className="core-button primary compact" disabled={disabled} onClick={printCustomerReceipt} type="button">{uiText('Print receipt')}</button> : <button className="core-button primary compact" disabled={disabled} onClick={openMerchantProfileSetup} type="button">{uiText('Set up receipt')}</button>}
           <button className="core-button compact" onClick={onClose} type="button">{bi('Close')}</button>
         </div>
       </> : null}
