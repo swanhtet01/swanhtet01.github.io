@@ -642,6 +642,31 @@ export function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = n
     setManagedLoadAttempt((attempt) => attempt + 1)
   }, [])
 
+  const refreshManagedCommerceSnapshot = useCallback(async () => {
+    const identity = identityRef.current
+    if (!identity) return false
+    try {
+      const bootstrap = await loadManagedBootstrap(identity)
+      if (!identityRef.current || !sameManagedIdentity(identityRef.current, identity)) return false
+      const next = managedCommerceView(
+        requireManagedSurfaceState(bootstrap, 'commerce', 'Shop'),
+        identity.workspaceId,
+        managedBootstrapHasCapability(bootstrap, identity, 'commerce.write'),
+      )
+      const current = snapshotRef.current
+      if (current.workspaceId === next.workspaceId
+        && current.version !== null
+        && next.version !== null
+        && next.version < current.version) return false
+      snapshotRef.current = next
+      setManagedSnapshot(next)
+      return true
+    } catch (error) {
+      reportManagedPersistenceFailure('shop.load', error, 'Shop could not refresh incoming online orders.')
+      return false
+    }
+  }, [])
+
   // Load the stuck change's evidence as soon as the till freezes, so the recovery
   // control can show what it would discard before the operator commits to discarding it.
   const stuck = !managedIdentity && (syncStatus.status === 'conflict' || syncStatus.status === 'unavailable')
@@ -914,7 +939,7 @@ export function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = n
   const canWrite = managedIdentity
     ? visible.mode === 'managed-ready' && visible.version !== null && !visible.error && visible.writeReady
     : visible.mode === 'local' && !visible.error && visible.writeReady && syncStatus.status === 'ready'
-  return [visible.state, mutate, visible.error, visible.mode, visible.version, visible.workspaceId, canWrite, syncStatus, stuckRecovery, discardStuckChange, retryManagedLoad] as const
+  return [visible.state, mutate, visible.error, visible.mode, visible.version, visible.workspaceId, canWrite, syncStatus, stuckRecovery, discardStuckChange, retryManagedLoad, refreshManagedCommerceSnapshot] as const
 }
 
 type ProductionWorkspaceMode = 'local' | 'managed-loading' | 'managed-ready' | 'managed-unprovisioned' | 'managed-error'

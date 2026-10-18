@@ -1,7 +1,7 @@
 import { OrderCalculationNote, OrderReceiptActions } from './OrderReceiptActions'
 import { type CommerceReturnDraft, type CommerceSupportResolutionDraft, type CommerceSupportOpenDraft, type CommerceSupportReopenDraft, type CommerceSupportServiceDraft, type CommerceCorrectionDraft, type OrderAcknowledgementLookup, useMinuteClock, commerceOrderReturnLines, commerceOrderDisplayReference, fulfilmentLabel, formatMoney, formatTaxRate, formatCommerceCalculation, localDateTimeInputValue, orderAcknowledgementDownload } from './shop-order-presentation'
 import { spaCounterFields } from './shop-spa-counter-fields'
-import { lazy, Suspense, type ChangeEvent, type FormEvent, type KeyboardEvent, type MouseEvent, type ReactNode, useEffect, useEffectEvent, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { lazy, Suspense, type ChangeEvent, type FormEvent, type KeyboardEvent, type MouseEvent, type ReactNode, useCallback, useEffect, useEffectEvent, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { shopCounterDraftContext } from './shop-counter-draft-context'
 import { installShopSaleFocus } from './shop-sale-focus'
 import { projectShopCounterCatalog } from './shop-counter-catalog-window'
@@ -17,7 +17,8 @@ import { Link, Navigate, useLocation, useNavigate, useOutletContext, useSearchPa
 
 import './core-app.css'
 import type { EcommerceShopDraft } from '../products/ecommerce/ecommerce-shop-handoff'
-import { loadManagedCommercePublicShopContact, type ManagedCommercePublicContact } from '../products/ecommerce/managed-commerce-public'
+import { claimManagedCommercePublicRequest, loadManagedCommercePublicInbox, loadManagedCommercePublicShopContact, type ManagedCommercePublicContact } from '../products/ecommerce/managed-commerce-public'
+import { shopPublicInboxBacklogCursor, syncShopPublicInbox, type ShopPublicInboxRequest } from './shop-public-inbox-sync'
 import type { EcommerceCancellationIntent, EcommerceOrderAmendmentIntent, EcommerceOrderRequestV2, EcommerceOrderRescheduleIntent, EcommerceShopDraftV2 } from '../products/ecommerce/ecommerce-buying-lifecycle'
 import { ecommerceShopIntentReference, type EcommerceShopNavigationIntents } from '../products/ecommerce/ecommerce-shop-intent-route'
 import type { WebsiteEcommerceHandoffContext, WebsiteOrderRecord } from '../products/product-handoff'
@@ -47,6 +48,7 @@ const ShopBarcodeLabels = lazy(() => import('./ShopBarcodeLabels').then((module)
 import { Empty, PageHeading, type RuntimeHealth } from './CoreShell'
 import { activeCommerceTab, commerceTabs, type CommerceTab } from './commerce-tabs'
 import { bi, confirmedBurmese } from './i18n-actions'
+import { Cookie, Droplets, Package, Soup, WashingMachine, Wheat } from 'lucide-react'
 import { managedTrialProofFragmentFields, type ManagedTrialProof } from './managed-trial-proof'
 import {
   ACTION_KEY,
@@ -1139,12 +1141,19 @@ function readLocalShopServiceSchedule(): ShopServiceScheduleState | null {
   }
 }
 
+function shopProductArtworkKind(name: string, sku: string, category: string, fallback: number) {
+  const product = `${name} ${sku} ${category}`.toLocaleLowerCase()
+  if (/rice|grain|ဆန်/.test(product)) return 0
+  if (/noodle|pasta|ခေါက်ဆွဲ/.test(product)) return 1
+  if (/water|drink|သောက်ရေ/.test(product)) return 2
+  if (/detergent|laundry|ဆပ်ပြာ/.test(product)) return 3
+  if (/cracker|biscuit|snack|ဘီစကစ်/.test(product)) return 4
+  return fallback
+}
+
 function ShopProductArtwork({ kind }: { kind: number }) {
-  if (kind === 1) return <svg aria-hidden="true" className="shop-product-art" focusable="false" viewBox="0 0 100 100"><rect className="art-soft" height="88" rx="18" width="88" x="6" y="6" /><rect className="art-main" height="48" rx="7" width="18" x="20" y="34" /><rect className="art-main" height="58" rx="7" width="18" x="41" y="24" /><rect className="art-main" height="44" rx="7" width="18" x="62" y="38" /><path className="art-highlight" d="M24 42h10M45 33h10M66 46h10" /></svg>
-  if (kind === 2) return <svg aria-hidden="true" className="shop-product-art" focusable="false" viewBox="0 0 100 100"><rect className="art-soft" height="88" rx="18" width="88" x="6" y="6" /><path className="art-main" d="M27 23h46l7 58H20z" /><path className="art-highlight" d="M32 39h36M39 57h22" /><circle className="art-detail" cx="50" cy="69" r="6" /></svg>
-  if (kind === 3) return <svg aria-hidden="true" className="shop-product-art" focusable="false" viewBox="0 0 100 100"><rect className="art-soft" height="88" rx="18" width="88" x="6" y="6" /><rect className="art-main" height="48" rx="9" width="28" x="22" y="35" /><rect className="art-main" height="55" rx="9" width="26" x="55" y="28" /><path className="art-highlight" d="M29 28h15v8M62 20h13v9M30 54h12M62 49h12" /></svg>
-  if (kind === 4) return <svg aria-hidden="true" className="shop-product-art" focusable="false" viewBox="0 0 100 100"><rect className="art-soft" height="88" rx="18" width="88" x="6" y="6" /><rect className="art-main" height="58" rx="10" width="62" x="19" y="23" /><path className="art-detail" d="M50 67 34 53c-9-9 4-21 16-8 12-13 25-1 16 8z" /><path className="art-highlight" d="M27 32h46" /></svg>
-  return <svg aria-hidden="true" className="shop-product-art" focusable="false" viewBox="0 0 100 100"><rect className="art-soft" height="88" rx="18" width="88" x="6" y="6" /><path className="art-highlight" d="M30 41c2-18 38-18 40 0" /><path className="art-main" d="M18 42h64l-8 39H26z" /><rect className="art-detail" height="21" rx="4" width="15" x="31" y="50" /><circle className="art-detail" cx="59" cy="60" r="10" /></svg>
+  const Icon = [Wheat, Soup, Droplets, WashingMachine, Cookie][kind] ?? Package
+  return <span aria-hidden="true" className="shop-product-art shop-product-icon"><Icon aria-hidden="true" focusable="false" strokeWidth={1.8} /></span>
 }
 
 type ShopOperatingView = {
@@ -1165,7 +1174,7 @@ function ShopOperatingStrip({ actionLabel, choice, detail, disabled, onAction, o
   </section>
 }
 
-function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = null, initialCustomer, initialQuery, items, lowStockCount, loyaltyPoints, onCreateFromBarcode, onReview, openOrderCount, operatorLabel, operatingContext, paymentQrScope, persistLocalDraft, productImageScope, recordStatus, recordedOrderIds }: {
+function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = null, initialCustomer, initialQuery, items, lowStockCount, loyaltyPoints, onCreateFromBarcode, onReview, openOrderCount, operatingContext, paymentQrScope, persistLocalDraft, productImageScope, recordStatus, recordedOrderIds }: {
   canCompleteInOneReview: boolean
   disabled: boolean
   draftStorageScope?: CounterTicketStorageScope | null
@@ -1177,7 +1186,6 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
   onCreateFromBarcode: (barcode: string) => void
   onReview: (review: ShopCounterReview, returnFocus: HTMLElement) => void
   openOrderCount: number
-  operatorLabel: string
   operatingContext: ReactNode
   paymentQrScope: string
   persistLocalDraft: boolean
@@ -1195,8 +1203,7 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
   const ticketSnapshot = useSyncExternalStore(tickets.subscribe, tickets.getSnapshot)
   const { cart, customer, payment, outcome, parked, activeLabel, checkoutOrderId } = ticketSnapshot.state
   const [morePaymentOptions, setMorePaymentOptions] = useState(() => SHOP_COUNTER_OTHER_PAYMENTS.includes(payment as typeof SHOP_COUNTER_OTHER_PAYMENTS[number]))
-  const [ticketLabel, setTicketLabel] = useState('')
-  const [ticketsOpen, setTicketsOpen] = useState(false)
+  const [parkedSalesOpen, setParkedSalesOpen] = useState(false)
   useEffect(() => { tickets.activate(); return () => tickets.deactivate() }, [tickets])
   function updateBasket(patch: Partial<CounterBasket>) {
     return tickets.dispatch({ kind: 'save', basket: { ...tickets.getSnapshot().state, ...patch } })
@@ -1401,14 +1408,16 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
       <section className="shop-catalog-panel">
         <header className="shop-catalog-head">
           <div>
-            <span className="core-eyebrow">Counter</span>
             <h2>Products</h2>
             {operatingContext}
-            {persistLocalDraft && parked.length > 0 ? <button className="text-link" type="button" onClick={() => { setCartOpen(true); setTicketsOpen(true) }}>Parked sales ({parked.length})</button> : null}
             <nav aria-label="Counter context" className="shop-counter-summary">
-              {openOrderCount > 0 ? <Link to="/shop/?tab=orders">{openOrderCount} open orders</Link> : null}
+              {openOrderCount > 0 ? <Link to="/shop/?tab=orders">{openOrderCount} orders to finish</Link> : null}
               {lowStockCount > 0 ? <Link to="/shop/?tab=inventory">{lowStockCount} low stock</Link> : null}
-              <span aria-label="Record safety" className="shop-next-compact shop-record-status-counter" title={recordStatus.detail}>{recordStatus.badge} · {recordStatus.label}<small className="sr-only">{recordStatus.detail} · {operatorLabel || 'Cashier set at review'}</small></span>
+              {recordStatus.badge === 'Paused' && recordStatus.target
+                  ? <Link aria-label={`Sales paused. ${recordStatus.detail}`} className="shop-record-status-counter is-danger" title={recordStatus.detail} to={recordStatus.target}>Sales paused · Review</Link>
+                  : recordStatus.badge === 'Checking'
+                    ? <span aria-label="Checking record safety" className="shop-record-status-counter" title={recordStatus.detail}>Checking</span>
+                    : null}
             </nav>
           </div>
           <div className="shop-item-search-row"><label className="shop-item-search"><span className="sr-only">Find or scan an item</span><input ref={saleSearchRef} autoComplete="off" aria-keyshortcuts="/" onChange={(event) => { setQuery(event.target.value); setCatalogPage(0); setScanFeedback(''); setUnmatchedBarcode('') }} onKeyDown={addSearchMatch} placeholder="Search products or scan barcode" type="search" value={query} /><kbd aria-hidden="true" className="shop-search-shortcut">/</kbd></label><BarcodeScanButton continuous continuousMode="sale" label="Scan products into this sale" onDetected={addCameraScan} /></div>
@@ -1454,7 +1463,7 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
         {visibleItems.length ? <div className="shop-item-grid">
           {visibleItems.map(({ item, index }, tileIndex) => {
             const quantity = cart[item.sku] ?? 0
-            const artKind = index % 5
+            const artKind = shopProductArtworkKind(item.name, item.sku, item.category ?? '', index % 5)
             // Ids are keyed by render position, not by SKU: aria-labelledby takes a
             // SPACE-separated id list and a SKU is operator-typed, so a SKU with a
             // space in it would silently split into two broken references.
@@ -1469,7 +1478,9 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
             return <button aria-describedby={describedBy} aria-labelledby={labelledBy} className="shop-product-tile" data-art={String(artKind)} data-empty={item.onHand < 1 ? 'true' : 'false'} disabled={item.onHand < 1 || quantity >= item.onHand} key={item.sku} onClick={() => addItem(item)} type="button">
               <ProductPhoto className="shop-product-art shop-product-photo" fallback={<ShopProductArtwork kind={artKind} />} scope={productImageScope} sku={item.sku} />
               <span className="shop-product-copy"><span className="shop-product-name"><strong id={nameId}>{item.name}</strong>{item.nameMy ? <small className="shop-product-my" id={myId} lang="my">{item.nameMy}</small> : null}{item.variant ? <small id={variantId}>{item.variant}</small> : null}</span><b id={priceId}>{formatMoney(item.price)}</b><small className={item.onHand <= item.reorderAt ? 'is-low' : ''} id={stockId}>{item.onHand ? `${item.onHand} in stock` : bi('Out of stock')}</small></span>
-              {quantity ? <span className="shop-product-quantity" aria-label={`${quantity} in sale`} id={quantityId}>{quantity}</span> : null}
+              {quantity
+                ? <span className="shop-product-quantity" aria-label={`${quantity} in sale`} id={quantityId}>{quantity}</span>
+                : item.onHand > 0 ? <span aria-hidden="true" className="shop-product-add-hint">+ Add</span> : null}
             </button>
           })}
         </div> : <Empty>{items.length
@@ -1487,18 +1498,21 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
           <Link to="/shop/?tab=orders">Review recorded orders</Link></div> : null}
         {catalogChanged ? <p className="authority-note" role="alert">Saved quantities exceed current stock, or an item was removed. Review quantities or clear this basket; it has not been silently reduced.</p> : null}
         {!persistLocalDraft && unitCount > 0 ? <p className="authority-note">Unsubmitted basket is kept in this tab only. Review it before leaving or switching company.</p> : null}
-        <header><div><span className="core-eyebrow">{activeLabel || bi('Current sale')}</span><h2>Current sale</h2><p>{unitCount ? `${unitCount} ${unitCount === 1 ? 'item' : 'items'} selected` : 'Choose a product to start'}</p></div><div className="shop-cart-actions">{Object.keys(cart).length ? <button className="text-link" onClick={clearSale} type="button">Clear</button> : null}<button aria-label="Close current sale" className="shop-cart-close" onClick={() => setCartOpen(false)} type="button">×</button></div></header>
-        {persistLocalDraft && (parked.length > 0 || unitCount > 0 || recoveryPaused) ? <details className="shop-sale-details shop-parked-tickets" open={ticketsOpen} onToggle={event => setTicketsOpen(event.currentTarget.open)}><summary>{parked.length ? `Parked sales (${parked.length})` : 'Save sale for later'}</summary>
-          <p>Name and park this sale to serve someone else. Resume it on this device later.</p>
-          <label>Sale name<input maxLength={40} placeholder={activeLabel || 'Table 1'} value={ticketLabel} onChange={event => setTicketLabel(event.target.value)} /></label>
-          <button type="button" disabled={!Object.keys(cart).length || recoveryPaused || !(ticketLabel.trim() || activeLabel)} onClick={() => {
-            if (tickets.dispatch({ kind: 'park', id: crypto.randomUUID(), label: ticketLabel.trim() || activeLabel })) { setTicketLabel(''); setCartOpen(false) }
-          }}>Park sale</button>
+        <header><div><h2>Current sale</h2><p>{unitCount ? `${unitCount} ${unitCount === 1 ? 'item' : 'items'} selected` : 'Choose a product to start'}</p></div><div className="shop-cart-actions">
+          {persistLocalDraft && unitCount > 0 && !recoveryPaused && !checkoutOrderId ? <button className="text-link" onClick={() => {
+            const customerLabel = customer.trim() && customer.trim() !== 'Guest' ? customer.trim() : 'Sale'
+            const label = activeLabel || `${customerLabel} · ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+            if (tickets.dispatch({ kind: 'park', id: crypto.randomUUID(), label })) setCartOpen(false)
+          }} type="button">Park sale</button> : null}
+          {persistLocalDraft && parked.length > 0 ? <button aria-controls="shop-parked-tickets" aria-expanded={parkedSalesOpen} className="text-link" onClick={() => setParkedSalesOpen(open => !open)} type="button">Parked · {parked.length}</button> : null}
+          {Object.keys(cart).length ? <button className="text-link" onClick={clearSale} type="button">Clear</button> : null}
+          <button aria-label="Close current sale" className="shop-cart-close" onClick={() => setCartOpen(false)} type="button">×</button>
+        </div></header>
+        {persistLocalDraft && parked.length > 0 && parkedSalesOpen ? <div aria-label="Parked sales on this device" className="shop-parked-tickets" id="shop-parked-tickets">
           {parked.map(ticket => <button type="button" key={ticket.id} disabled={Object.keys(cart).length > 0 || recoveryPaused} onClick={() => {
-            if (tickets.dispatch({ kind: 'resume', id: ticket.id })) { setTicketLabel(''); setTicketsOpen(false); setCartOpen(true) }
-          }}>Resume {ticket.label} · {Object.values(ticket.cart).reduce((sum, qty) => sum + qty, 0)} {Object.values(ticket.cart).reduce((sum, qty) => sum + qty, 0) === 1 ? 'item' : 'items'}</button>)}
-          {ticketSnapshot.pending ? <p role="status">Saving on this device…</p> : null}
-        </details> : null}
+            if (tickets.dispatch({ kind: 'resume', id: ticket.id })) { setParkedSalesOpen(false); setCartOpen(true) }
+          }}><span>{ticket.label}</span><small>{Object.values(ticket.cart).reduce((sum, qty) => sum + qty, 0)} {Object.values(ticket.cart).reduce((sum, qty) => sum + qty, 0) === 1 ? 'item' : 'items'}</small><b>Resume</b></button>)}
+        </div> : null}
         {lines.length ? <div aria-hidden="true" className="shop-cart-column-head"><span>Item</span><span>Price</span><span>Quantity</span><span>Total</span></div> : null}
         <div aria-label="Current sale items" className="shop-cart-lines">
           {lines.length ? lines.map(({ item, quantity }) => <article key={item.sku}><div className="shop-cart-item"><strong>{item.name}</strong>{item.nameMy ? <small className="shop-product-my" lang="my">{item.nameMy}</small> : null}</div><span className="shop-cart-unit-price">{formatMoney(item.price)}</span><div className="shop-quantity-stepper"><button aria-label={`Remove one ${item.name}`} onClick={() => changeQuantity(item, quantity - 1)} type="button">−</button><strong>{quantity}</strong><button aria-label={`Add one ${item.name}`} disabled={quantity >= item.onHand} onClick={() => changeQuantity(item, quantity + 1)} type="button">+</button></div><b className="shop-cart-line-total">{formatMoney(item.price * quantity)}</b></article>) : <div className="shop-empty-cart"><span aria-hidden="true">01</span><strong>{bi('Ready for the next sale')}</strong><small>{bi('Search, scan or choose a product.')}</small></div>}
@@ -1518,9 +1532,9 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
               non-cash method chosen, amount due on screen. No payment API, no status
               write; the cashier still confirms money received in the reviewed sale. */}
           {payment !== 'Cash' ? <PaymentQrButton amountDue={formatMoney(total)} method={payment} scope={paymentQrScope} settingsHint /> : null}
-          {canCompleteInOneReview ? <label className="shop-open-order-choice"><input checked={outcome === 'open_order'} onChange={(event) => setOutcome(event.target.checked ? 'open_order' : 'paid_handoff')} type="checkbox" /><span><strong>Keep as open order</strong><small>Use for pay-later or later handoff. Otherwise this sale completes now.</small></span></label> : null}
+          {canCompleteInOneReview ? <label className="shop-open-order-choice"><input checked={outcome === 'open_order'} onChange={(event) => setOutcome(event.target.checked ? 'open_order' : 'paid_handoff')} type="checkbox" /><span><strong>Leave unpaid</strong><small>Track it in Orders and finish later.</small></span></label> : null}
         </div>
-        {cartLowStockLines.length ? <div className="shop-cart-stock-risk" role="status"><strong>Stock needs attention after this sale</strong><span>{cartLowStockLines.length} {cartLowStockLines.length === 1 ? 'item reaches its' : 'items reach their'} reorder level. <Link to="/shop/?tab=inventory">Review stock</Link></span></div> : null}
+        {cartLowStockLines.length ? <p className="shop-cart-stock-risk" role="status">After this sale, {cartLowStockLines.length} {cartLowStockLines.length === 1 ? 'item reaches its' : 'items reach their'} reorder level. <Link to="/shop/?tab=inventory">Review stock</Link></p> : null}
         <footer><div><span>{bi('Total')}</span><strong>{formatMoney(total)}</strong></div><button className="shop-review-sale" disabled={disabled || recoveryPaused || catalogChanged} onClick={reviewSale} type="button">{disabled ? bi('Sales paused') : effectiveOutcome === 'paid_handoff' ? <span className="cashier-action-label"><span>Review &amp; complete sale</span>{CASHIER_COMPLETE_MY ? <small lang="my">{CASHIER_COMPLETE_MY}</small> : null}</span> : bi('Review order')}<span aria-hidden="true">→</span></button></footer></> : null}
       </aside>
     </div>
@@ -1659,7 +1673,142 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
     status: 'checking' | 'ready' | 'error'
     intake: WebsiteEcommerceHandoffContext | null
   }>({ status: 'checking', intake: null })
-  const [commerce, mutateCommerce, commerceStorageError, workspaceMode, managedVersion, managedWorkspaceId, commerceCanWrite, commerceSync, commerceStuckRecovery, discardStuckCommerceChange, retryManagedCommerceLoad] = useCommerceWorkspace(managedIdentity)
+  const [commerce, mutateCommerce, commerceStorageError, workspaceMode, managedVersion, managedWorkspaceId, commerceCanWrite, commerceSync, commerceStuckRecovery, discardStuckCommerceChange, retryManagedCommerceLoad, refreshManagedCommerceSnapshot] = useCommerceWorkspace(managedIdentity)
+  const [managedPublicInbox, setManagedPublicInbox] = useState<{
+    identityKey: string
+    requests: ShopPublicInboxRequest[]
+    cursor: string | null
+    checking: boolean
+    error: string
+  }>({ identityKey: '', requests: [], cursor: null, checking: false, error: '' })
+  const managedPublicInboxRef = useRef(managedPublicInbox)
+  const managedPublicInboxAttempts = useRef(new Map<string, Set<string>>())
+  const managedPublicInboxRequestCursors = useRef(new Map<string, string | undefined>())
+  const managedPublicInboxInFlight = useRef(false)
+  const managedPublicInboxIdentityRef = useRef('')
+  const managedPublicInboxIdentityKey = managedIdentity
+    ? `${managedIdentity.workspaceId}\u0000${managedIdentity.userId}\u0000${managedIdentity.email}`
+    : ''
+  managedPublicInboxIdentityRef.current = managedPublicInboxIdentityKey
+  useEffect(() => {
+    managedPublicInboxAttempts.current.clear()
+    managedPublicInboxRequestCursors.current.clear()
+  }, [managedPublicInboxIdentityKey])
+  const syncManagedPublicInbox = useCallback(async (retryRequestId?: string) => {
+    if (!managedIdentity || !allowShopInboundRequests || !commerceCanWrite || workspaceMode !== coreUi.m) return
+    const identityKey = `${managedIdentity.workspaceId}\u0000${managedIdentity.userId}\u0000${managedIdentity.email}`
+    if (managedPublicInboxIdentityRef.current !== identityKey || managedPublicInboxInFlight.current) return
+
+    let attempted = managedPublicInboxAttempts.current.get(identityKey)
+    if (!attempted) {
+      attempted = new Set<string>()
+      managedPublicInboxAttempts.current.set(identityKey, attempted)
+    }
+    const requestCursorKey = retryRequestId ? `${identityKey}\u0000${retryRequestId}` : ''
+    const retryAfter = retryRequestId && managedPublicInboxRequestCursors.current.has(requestCursorKey)
+      ? managedPublicInboxRequestCursors.current.get(requestCursorKey)
+      : undefined
+    if (retryRequestId) attempted.delete(retryRequestId)
+    managedPublicInboxInFlight.current = true
+
+    const previous = managedPublicInboxRef.current
+    const previousRequests = previous.identityKey === identityKey ? previous.requests : []
+    const waitingForShopRefresh = previousRequests.filter((request) => request.status === 'in_shop')
+    const commit = (next: typeof managedPublicInbox) => {
+      managedPublicInboxRef.current = next
+      setManagedPublicInbox(next)
+    }
+    commit({ identityKey, requests: previousRequests, cursor: previous.identityKey === identityKey ? previous.cursor : null, checking: true, error: '' })
+
+    try {
+      const api = { loadInbox: loadManagedCommercePublicInbox, claimRequest: claimManagedCommercePublicRequest }
+      const isCurrent = () => managedPublicInboxIdentityRef.current === identityKey
+      const firstPage = await syncShopPublicInbox(
+        managedIdentity,
+        attempted,
+        api,
+        isCurrent,
+        retryRequestId ? retryAfter : undefined,
+      )
+      const pageResults = [firstPage]
+      const backlogCursor = shopPublicInboxBacklogCursor(
+        previous.identityKey === identityKey ? previous.cursor : null,
+        firstPage.nextCursor,
+        Boolean(retryRequestId),
+      )
+      let nextCursor = previous.identityKey === identityKey ? previous.cursor : firstPage.nextCursor
+      let backlogLoadError = ''
+      if (backlogCursor && isCurrent()) {
+        try {
+          const backlogPage = await syncShopPublicInbox(managedIdentity, attempted, api, isCurrent, backlogCursor)
+          pageResults.push(backlogPage)
+          nextCursor = backlogPage.nextCursor
+        } catch {
+          backlogLoadError = 'Retry shortly to continue checking older orders.'
+          nextCursor = backlogCursor
+        }
+      }
+      if (!isCurrent()) return
+      for (const [pageIndex, page] of pageResults.entries()) {
+        const pageCursor = pageIndex === 0
+          ? retryRequestId ? retryAfter : undefined
+          : backlogCursor ?? undefined
+        for (const request of [...page.requests, ...page.claimedRequests, ...page.alreadyInShopRequests]) {
+          managedPublicInboxRequestCursors.current.set(`${identityKey}\u0000${request.requestId}`, pageCursor)
+        }
+      }
+      const claimedRequests = pageResults.flatMap((page) => page.claimedRequests)
+      const alreadyInShopRequests = pageResults.flatMap((page) => page.alreadyInShopRequests)
+      const failedRequestIds = pageResults.flatMap((page) => page.failedRequestIds)
+      const needsShopRefresh = claimedRequests.length > 0 || alreadyInShopRequests.length > 0 || waitingForShopRefresh.length > 0
+      const refreshed = needsShopRefresh ? await refreshManagedCommerceSnapshot() : true
+      const nextRequests = new Map(previousRequests.map((request) => [request.requestId, request]))
+      for (const request of alreadyInShopRequests) nextRequests.set(request.requestId, request)
+      for (const request of pageResults.flatMap((page) => page.requests)) nextRequests.set(request.requestId, request)
+      for (const request of claimedRequests) nextRequests.set(request.requestId, { ...request, status: 'in_shop' })
+      const resolvedRequestIds = new Set([
+        ...alreadyInShopRequests.map((request) => request.requestId),
+        ...claimedRequests.map((request) => request.requestId),
+      ])
+      if (refreshed) for (const requestId of resolvedRequestIds) {
+        nextRequests.delete(requestId)
+        attempted.delete(requestId)
+        managedPublicInboxRequestCursors.current.delete(`${identityKey}\u0000${requestId}`)
+      }
+      const requests = [...nextRequests.values()]
+      const error = failedRequestIds.length
+        ? 'Some online orders could not be added to Shop yet. Retry them below.'
+        : !refreshed
+          ? 'Online orders are waiting for Shop to refresh. Retry below.'
+          : backlogLoadError ? `Older online orders could not be checked. ${backlogLoadError}` : ''
+      if (isCurrent()) commit({ identityKey, requests, cursor: nextCursor, checking: false, error })
+    } catch (error) {
+      if (managedPublicInboxIdentityRef.current === identityKey) commit({
+        identityKey,
+        requests: previousRequests,
+        cursor: previous.identityKey === identityKey ? previous.cursor : null,
+        checking: false,
+        error: error instanceof Error ? error.message : 'Online orders could not be checked. Retry below.',
+      })
+    } finally {
+      managedPublicInboxInFlight.current = false
+    }
+  }, [allowShopInboundRequests, commerceCanWrite, managedIdentity, refreshManagedCommerceSnapshot, workspaceMode])
+  useEffect(() => {
+    if (!managedIdentity || !allowShopInboundRequests || !commerceCanWrite || workspaceMode !== coreUi.m) return undefined
+    const poll = () => {
+      if (document.visibilityState === 'visible') void syncManagedPublicInbox()
+    }
+    poll()
+    const timer = window.setInterval(poll, 20_000)
+    window.addEventListener('focus', poll)
+    document.addEventListener('visibilitychange', poll)
+    return () => {
+      window.clearInterval(timer)
+      window.removeEventListener('focus', poll)
+      document.removeEventListener('visibilitychange', poll)
+    }
+  }, [allowShopInboundRequests, commerceCanWrite, managedIdentity, syncManagedPublicInbox, workspaceMode])
   async function saveCustomerReceiptProfile(input: CommerceMerchantProfileInput) {
     const revision = (commerce.merchantProfile?.revision ?? 0) + 1
     const proof: CommerceActionProof = {
@@ -2186,6 +2335,9 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
   const pendingStorefrontRequests = storefrontRequests.filter((request) => (
     !commerce.orders.some((order) => order.sourceRecordId === request.id)
   ))
+  const managedPublicInboxRequests = managedPublicInbox.identityKey === managedPublicInboxIdentityKey
+    ? managedPublicInbox.requests
+    : []
   const pendingStorefrontStockConflicts = new Map(pendingStorefrontRequests.flatMap((request) => {
     const conflict = commerceStockConflict(commerce.items, commerceStorefrontRequestLines(request))
     return conflict ? [[request.id, conflict] as const] : []
@@ -3316,14 +3468,14 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
   // still being asked.
   const storageDurabilityNotice = managedIdentity || !(storageDurability.quotaExceeded || storageDurability.state === 'denied')
     ? null
-    : <div className="production-mode-banner storage-durability-banner" data-durability={storageDurability.quotaExceeded ? 'full' : 'evictable'} role="alert">
-      <span className="status-pill pending">{storageDurability.quotaExceeded ? 'Storage full' : 'Records at risk'}</span>
+    : <div className="production-mode-banner storage-durability-banner" data-durability={storageDurability.quotaExceeded ? 'full' : 'device-only'} role={storageDurability.quotaExceeded ? 'alert' : 'status'}>
+      <span className={`status-pill${storageDurability.quotaExceeded ? ' pending' : ''}`}>{storageDurability.quotaExceeded ? 'Storage full' : 'Device-only data'}</span>
       <p>{storageDurability.quotaExceeded
-        ? 'This device has run out of storage space. New Shop entries may not be saved until space is freed up on the device.'
-        : 'This browser may clear local Shop records when storage is low.'}</p>
+        ? 'Free space on this device before saving more Shop data.'
+        : 'Saved on this device only.'}</p>
       {storageDurability.quotaExceeded
         ? <button type="button" onClick={() => window.location.reload()}>Reload Shop</button>
-        : <Link to="/settings/#workspace-recovery">Back up records</Link>}
+        : <Link to="/settings/#workspace-recovery">Set up backup</Link>}
     </div>
 
   // Stuck-till escape hatch. 'conflict' and 'unavailable' both hold canWrite false with
@@ -3428,14 +3580,14 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
         )
         : makeShopRecordStatus(
           'Saved on this device',
-          storageDurability.state === 'denied' || localHeadroomNeedsAttention ? 'Backup advised' : 'Device record',
+          'Device record',
           storageDurability.state === 'denied'
             ? 'Saved here. This browser may clear Shop records when storage is low.'
             : localHeadroomNeedsAttention
               ? 'Saved here. Back up before this device runs out of Shop record space.'
               : 'This Shop record stays on this device. Back up before changing devices.',
           '/settings/#workspace-recovery',
-          'Back up records',
+          'Set up backup',
         )
   const operatingBoundary = <>
     {commerceStorageError || commerceSyncBlocked || commerceSync.status === 'checking' || !commerceCanWrite ? commerceWriteBanner : null}
@@ -3529,7 +3681,7 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
     inventoryReady: Boolean(commerce.inventoryFoundation && managedInventoryProjection),
     lowStockCount: lowStock.length,
     pendingAction: Boolean(pendingAction),
-    pendingOnlineRequestCount: pendingStorefrontRequests.length + (legacyWebsiteWorkWaiting ? 1 : 0),
+    pendingOnlineRequestCount: pendingStorefrontRequests.length + managedPublicInboxRequests.length + (legacyWebsiteWorkWaiting ? 1 : 0),
   })
   const shopAgentJob = shopNextAction.job
   const shopAgentReason = shopNextAction.reason
@@ -7137,7 +7289,7 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
   const afterSalesCount = commerce.orders.reduce((total, order) => (
     total + (order.returns?.length ?? 0) + (order.supportCases?.length ?? 0)
   ), 0)
-  const incomingRequestCount = pendingStorefrontRequests.length + (legacyWebsiteWorkWaiting ? 1 : 0)
+  const incomingRequestCount = pendingStorefrontRequests.length + managedPublicInboxRequests.length + (legacyWebsiteWorkWaiting ? 1 : 0)
   const completedSalesToday = projectShopTodayCompletedSales(commerce, purchaseOrderClock)
   const shopTodayMetrics = [
     { label: 'Open orders', value: String(openOrders.length), detail: actionOrders.length ? `${actionOrders.length} need action` : 'Awaiting fulfilment', tone: actionOrders.length ? 'attention' as const : 'ready' as const },
@@ -7269,15 +7421,6 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
           : stockNextActionKind === 'restore'
             ? 'Access'
             : 'Review'
-  const nextOrder = actionOrders[0]
-  const nextOrderAction = nextOrder ? shopOrderPrimaryActionLabel(nextOrder) : 'The queue is clear'
-  const nextOrderDetail = nextOrder
-    ? `${nextOrder.customer} · ${commerceOrderDisplayReference(nextOrder.id)} · ${formatMoney(nextOrder.total)}`
-    : 'No payment, fulfilment or refund action is waiting.'
-  const urgentOrderCount = actionOrders.filter((order) => {
-    const urgency = commerceOrderPromiseUrgency(order, purchaseOrderClock)
-    return urgency === 'late' || urgency === 'due_soon' || urgency === 'unrecorded'
-  }).length
 
   function renderStockRow({ item }: (typeof stockRows)[number]) {
     const active = activePurchaseOrderBySku.get(item.sku)
@@ -7314,7 +7457,7 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
   if (tab === 'counter') return <div className="operation-module shop-counter-module">
     {counterBoundary}
     {shopCatalogSetupNotice}
-    <ShopCounter key={counterDraftContext.key} persistLocalDraft={counterDraftContext.persistLocalDraft} canCompleteInOneReview={confirmedLocalShop || Boolean(managedIdentity)} disabled={commerceControlsDisabled || (!confirmedLocalShop && !managedIdentity) || (shopShiftRequired && !activeShift)} draftStorageScope={counterDraftContext.storageScope} initialCustomer={shopCounterCustomer} initialQuery={shopCounterSearch} items={commerce.items} lowStockCount={lowStock.length} loyaltyPoints={shopLoyaltyPoints} onCreateFromBarcode={openCatalogCreateFromBarcode} onReview={reviewCounterSale} openOrderCount={openOrders.length} operatorLabel={managedIdentity?.email || readLastOperator()} operatingContext={shopOperatingEligible && shopShiftRequired ? <ShopOperatingStrip {...shopOperatingView} /> : null} paymentQrScope={paymentQrScope} productImageScope={productImageScope} recordStatus={shopRecordStatus} recordedOrderIds={commerce.orders.map(order => order.id)} />
+    <ShopCounter key={counterDraftContext.key} persistLocalDraft={counterDraftContext.persistLocalDraft} canCompleteInOneReview={confirmedLocalShop || Boolean(managedIdentity)} disabled={commerceControlsDisabled || (!confirmedLocalShop && !managedIdentity) || (shopShiftRequired && !activeShift)} draftStorageScope={counterDraftContext.storageScope} initialCustomer={shopCounterCustomer} initialQuery={shopCounterSearch} items={commerce.items} lowStockCount={lowStock.length} loyaltyPoints={shopLoyaltyPoints} onCreateFromBarcode={openCatalogCreateFromBarcode} onReview={reviewCounterSale} openOrderCount={openOrders.length} operatingContext={shopOperatingEligible && shopShiftRequired ? <ShopOperatingStrip {...shopOperatingView} /> : null} paymentQrScope={paymentQrScope} productImageScope={productImageScope} recordStatus={shopRecordStatus} recordedOrderIds={commerce.orders.map(order => order.id)} />
     <Suspense fallback={null}><ReceiptDialog ack={activeReceiptAck} disabled={commerceControlsDisabled} loyalty={receiptLoyalty} merchantProfile={commerce.merchantProfile} onSaveMerchantProfile={saveCustomerReceiptProfile} onClose={() => { setReceiptAck(null); setCounterReceiptOrderId('') }} paymentQrScope={paymentQrScope} /></Suspense>
     {actionGate}
   </div>
@@ -7322,8 +7465,7 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
   if (tab === 'orders') return <div className={`operation-module orders-module${returnDraft && selectedReturnLine || supportDraft || supportReopenDraft || supportServiceDraft || supportResolutionDraft || correctionDraft ? ' has-return-draft' : ''}`}>
     {commerceBoundary}
     <section className="core-panel order-queue-panel order-workspace" id="shop-order-queue">
-      <div className="panel-head"><div><span className="core-eyebrow">Orders</span><h2>Keep every order moving.</h2><p className="order-source-note">Website and Commerce requests appear automatically. Messenger and Viber are not connected yet.</p></div><div className="order-queue-actions">{!orderDraftRecoveryVisible ? <button className={coreUi.q} disabled={!commerceCanWrite || Boolean(pendingAction) || !orderDraftInitialized || orderDraftRecoveryBlocked} onClick={() => openOrderComposer()} ref={orderComposerTriggerRef} type="button">{!orderDraftInitialized ? 'Loading orders' : orderDraftRead.status === 'unavailable' ? 'Recovery unavailable' : 'Record phone or walk-in'}</button> : null}</div></div>
-      <dl className="order-queue-summary" aria-label="Order status"><div><dt>Need action</dt><dd>{actionOrders.length}</dd></div><div><dt>In fulfilment</dt><dd>{openOrders.length}</dd></div><div><dt>Payment pending</dt><dd>{pendingPaymentOrders.length}</dd></div></dl>
+      <div className="panel-head"><div><span className="core-eyebrow">Shop</span><h2>Orders</h2><p className="order-source-note">Review requests and move active orders forward.</p></div><div className="order-queue-actions">{!orderDraftRecoveryVisible ? <button className={coreUi.q} disabled={!commerceCanWrite || Boolean(pendingAction) || !orderDraftInitialized || orderDraftRecoveryBlocked} onClick={() => openOrderComposer()} ref={orderComposerTriggerRef} type="button">{!orderDraftInitialized ? 'Loading orders' : orderDraftRead.status === 'unavailable' ? 'Recovery unavailable' : 'New order'}</button> : null}</div></div>
       {orderDraftRecoveryVisible ? <div className={`order-draft-recovery ${orderDraftRecoveryBlocked || orderDraftRecoveryWarning ? 'is-blocked' : ''}`} role={orderDraftRecoveryBlocked || orderDraftRecoveryWarning ? 'alert' : 'status'}>
         <div>
           <strong>{orderDraftRecoveryWarning
@@ -7381,8 +7523,8 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
           <button className="core-button compact" disabled={Boolean(pendingAction)} onClick={keepOrderFromCancellation} type="button">Keep order</button>
         </div>
       </section> : null}
-      {managedIdentity && pendingStorefrontRequests.length ? <section aria-label="Incoming Ecommerce orders" className="incoming-order-inbox">
-        <div className="incoming-order-inbox-head"><div><span className="core-eyebrow">Ecommerce</span><h3>New online orders</h3><p>Orders arrive here automatically. Check stock, delivery and payment before adding one to Shop.</p></div><strong aria-label={`${pendingStorefrontRequests.length} orders waiting`}>{pendingStorefrontRequests.length}</strong></div>
+      {managedIdentity && (pendingStorefrontRequests.length || managedPublicInboxRequests.length || managedPublicInbox.checking || managedPublicInbox.error) ? <section aria-label="Incoming online orders" className="incoming-order-inbox">
+        <div className="incoming-order-inbox-head"><div><span className="core-eyebrow">Online orders</span><h3>New orders</h3><p>Orders appear here automatically. Review stock, delivery and payment before confirming.</p></div><strong aria-label={`${pendingStorefrontRequests.length + managedPublicInboxRequests.length} orders need review`}>{pendingStorefrontRequests.length + managedPublicInboxRequests.length}</strong></div>
         <div className="incoming-order-list">
           {visiblePendingStorefrontRequests.map((request) => {
             const lines = commerceStorefrontRequestLines(request)
@@ -7390,7 +7532,15 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
             const itemSummary = lines.length === 1 ? `${lines[0].name} × ${lines[0].quantity}` : `${lines.length} items · ${lines.reduce((total, line) => total + line.quantity, 0)} units`
             return <article key={request.id}><div><strong>{request.customerReference} · {itemSummary}</strong><small>{formatMoney(request.totalMmk)} · {request.fulfilment}{stockConflict ? ` · ${stockConflict.sku} needs stock review` : ''}</small></div><button className="core-button compact" disabled={commerceControlsDisabled} onClick={() => { openOrderComposer(); void reviewStorefrontRequest(request.id) }} ref={request.id === activeEcommerceInboxRequestId ? ecommerceInboxTargetRef : undefined} type="button">Check order</button></article>
           })}
+          {managedPublicInboxRequests.map((request) => {
+            const lines = request.request.lines
+            const itemSummary = lines.length === 1 ? `${lines[0].name} × ${lines[0].quantity}` : `${lines.length} items · ${lines.reduce((total, line) => total + line.quantity, 0)} units`
+            const awaitingShopRefresh = request.status === 'in_shop'
+            return <article key={request.requestId}><div><strong>{itemSummary}</strong><small>{formatMoney(request.request.totalMmk)} · {request.request.fulfilment} · {awaitingShopRefresh ? 'Added to Shop; refreshing' : 'Waiting to add to Shop'}</small></div><button className="core-button compact" disabled={managedPublicInbox.checking} onClick={() => void syncManagedPublicInbox(request.requestId)} type="button">{awaitingShopRefresh ? 'Refresh Shop' : 'Retry'}</button></article>
+          })}
         </div>
+        {managedPublicInbox.checking && !managedPublicInboxRequests.length ? <p className="form-notice" role="status">Checking for new online orders…</p> : null}
+        {managedPublicInbox.error ? <p className="form-notice" role="alert">{managedPublicInbox.error}</p> : null}
       </section> : null}
       {legacyWebsiteWorkWaiting ? <section aria-label="Incoming Website orders" className="incoming-order-inbox">
         <div className="incoming-order-inbox-head"><div><span className="core-eyebrow">Incoming</span><h3>Website requests waiting for review</h3></div><strong>{managedIdentity ? websiteIntakes.filter((intake) => intake.status === coreUi.p).length : 1}</strong></div>
@@ -7398,28 +7548,10 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
           <WebsiteCommerceIntake catalog={commerce.items} disabled={commerceControlsDisabled} importedSourceIds={importedWebsiteOrderIds} key={`${managedIdentity ? 'managed' : 'local'}:${websiteIntakes.find((intake) => intake.status === coreUi.p)?.id ?? 'local'}`} managedIntakes={websiteIntakes} mode={managedIdentity ? 'managed' : 'local'} onQueueManagedIntake={queueManagedWebsiteIntake} onQueueReadyOrder={queueWebsiteOrder} />
         </Suspense>
       </section> : null}
-      <div className="order-workspace-grid">
-        <section aria-labelledby="shop-order-list-heading" className="order-queue-main">
-          <div className="order-queue-section-head"><div><span className="core-eyebrow">Live queue</span><h3 id="shop-order-list-heading">Orders to finish</h3></div><small>{actionOrders.length ? `${actionOrders.length} active` : 'All caught up'}</small></div>
-          <OrderList acknowledgementDownloads={orderAcknowledgementDownloads} canCancel={(orderId) => commerceOrderHasReleasableReservation(commerce, orderId)} disabled={commerceControlsDisabled} highlightedTargetId={commerceLocation.hash.startsWith('#shop-order-') ? commerceLocation.hash.slice(1) : ''} onAdvance={advanceOrder} onCancel={cancelOrder} onReconcilePayment={reconcilePayment} onSettleRefund={settleRefund} onSettleSale={settleSale} onViewReceipt={setReceiptAck} orders={actionOrders} />
-        </section>
-        <aside aria-label="Order insights" className="order-insight-rail">
-          <section className="order-insight-card is-primary">
-            <span className="core-eyebrow">Next action</span>
-            <h3>{nextOrderAction}</h3>
-            <p>{nextOrderDetail}</p>
-            {nextOrder ? <a className={coreUi.q} href={`#${shopOrderTargetId(nextOrder.id)}`}>Open next order</a> : <Link className="core-button compact" to="/shop/?tab=counter">Open the counter</Link>}
-          </section>
-          <section className="order-insight-card">
-            <div className="order-insight-heading"><span className="core-eyebrow">Queue health</span><strong>What needs attention</strong></div>
-            <dl className="order-health-list">
-              <div><dt>Payment pending</dt><dd>{pendingPaymentOrders.length}</dd></div>
-              <div><dt>Promise attention</dt><dd>{urgentOrderCount}</dd></div>
-              <div><dt>Refunds due</dt><dd>{refundExposureOrders.length}</dd></div>
-            </dl>
-          </section>
-        </aside>
-      </div>
+      <section aria-labelledby="shop-order-list-heading" className="order-queue-main">
+        <div className="order-queue-section-head"><div><span className="core-eyebrow">Order queue</span><h3 id="shop-order-list-heading">Needs attention</h3></div><small>{actionOrders.length ? `${actionOrders.length} to finish` : 'All caught up'}</small></div>
+        <OrderList acknowledgementDownloads={orderAcknowledgementDownloads} canCancel={(orderId) => commerceOrderHasReleasableReservation(commerce, orderId)} disabled={commerceControlsDisabled} highlightedTargetId={commerceLocation.hash.startsWith('#shop-order-') ? commerceLocation.hash.slice(1) : ''} onAdvance={advanceOrder} onCancel={cancelOrder} onReconcilePayment={reconcilePayment} onSettleRefund={settleRefund} onSettleSale={settleSale} onViewReceipt={setReceiptAck} orders={actionOrders} />
+      </section>
       <details className="shop-business-controls">
         <summary><span>Daily tools</span><small>Reports and setup when needed</small></summary>
         <div className="shop-business-controls-content">
@@ -7437,7 +7569,7 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
           closeReady={closableOrders.length}
           confirmed={commerce.orders.filter((order) => order.status === 'confirmed').length}
           disabled={commerceControlsDisabled || !orderDraftInitialized || orderDraftRecoveryBlocked}
-          incomingOnline={pendingStorefrontRequests.length}
+          incomingOnline={pendingStorefrontRequests.length + managedPublicInboxRequests.length}
           incomingWebsite={managedIdentity ? websiteIntakes.filter((intake) => intake.status === coreUi.p).length : Number(legacyWebsiteWorkWaiting)}
           stockConflicts={pendingStockConflictCount}
           onOpenOrder={openOrderComposer}
@@ -8185,6 +8317,11 @@ function OrderList({
     const hasSecondaryActions = Boolean(acknowledgement) || canCancelOrder || (order.refundStatus === 'due' && !settleRefundIsPrimary) || (needsPayment && !reconcileIsPrimary)
     const primaryActionLabel = shopOrderPrimaryActionLabel(order)
     const targetId = shopOrderTargetId(order.id)
+    const attentionLabels = [
+      needsPayment ? 'payment due' : '',
+      order.refundStatus === 'due' ? 'refund due' : '',
+      promiseUrgency === 'late' ? 'late' : promiseUrgency === 'due_soon' ? 'due soon' : promiseUrgency === 'unrecorded' ? 'promise missing' : '',
+    ].filter(Boolean)
     return <article data-highlighted={highlightedTargetId === targetId ? 'true' : undefined} id={targetId} key={order.id} tabIndex={-1}>
       <div>
         <strong>{order.customer} · {order.lines
@@ -8194,11 +8331,7 @@ function OrderList({
           : `${order.item} × ${order.quantity}`}</strong>
         <div className="order-statuses">
           <span className={`status-pill ${order.status === 'completed' ? 'approved' : order.status === 'cancelled' ? 'cancelled' : 'bounded'}`}>{order.status}</span>
-          <span className={`status-pill ${order.paymentStatus === 'reconciled' ? 'approved' : 'pending'}`}>payment {order.paymentStatus}</span>
-          {order.refundStatus === 'due' ? <span className="status-pill pending">refund due</span> : null}
-          {promiseUrgency === 'late' ? <span className="status-pill late">late</span> : null}
-          {promiseUrgency === 'due_soon' ? <span className="status-pill pending">due soon</span> : null}
-          {promiseUrgency === 'unrecorded' ? <span className="status-pill pending">promise missing</span> : null}
+          {attentionLabels.length ? <span className={`status-pill ${promiseUrgency === 'late' ? 'late' : 'pending'}`}>{attentionLabels.join(' · ')}</span> : null}
         </div>
         <details className="order-record-details">
           <summary><span>{commerceOrderDisplayReference(order.id)} · {order.promisedAt ? `promised ${formatTime(order.promisedAt)}` : 'promise missing'}</span><small>Details</small></summary>
