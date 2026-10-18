@@ -8292,7 +8292,7 @@ function OrderList({
   onViewReceipt: (ack: CommerceOrderAcknowledgement) => void
 }) {
   const promiseNow = useMinuteClock()
-  if (!orders.length) return <Empty>No orders need action.</Empty>
+  if (!orders.length) return <Empty>{uiText('No orders need action.')}</Empty>
   return <div className="order-list">{orders.map((order) => {
     const active = order.status === 'confirmed' || order.status === 'preparing' || order.status === 'ready'
     const needsPayment = order.paymentStatus === 'pending'
@@ -8325,18 +8325,18 @@ function OrderList({
         <strong>{order.customer} · {order.lines
           ? order.lines.length === 1
             ? `${order.lines[0].name} × ${order.quantity}`
-            : `${order.lines.length} items · ${order.quantity} units`
+            : `${order.lines.length} ${uiText('items')} · ${order.quantity} ${uiText('units')}`
           : `${order.item} × ${order.quantity}`}</strong>
         <div className="order-statuses">
-          <span className={`status-pill ${order.status === 'completed' ? 'approved' : order.status === 'cancelled' ? 'cancelled' : 'bounded'}`}>{order.status}</span>
-          {attentionLabels.length ? <span className={`status-pill ${promiseUrgency === 'late' ? 'late' : 'pending'}`}>{attentionLabels.join(' · ')}</span> : null}
+          <span className={`status-pill ${order.status === 'completed' ? 'approved' : order.status === 'cancelled' ? 'cancelled' : 'bounded'}`}>{uiText(order.status)}</span>
+          {attentionLabels.length ? <span className={`status-pill ${promiseUrgency === 'late' ? 'late' : 'pending'}`}>{attentionLabels.map(uiText).join(' · ')}</span> : null}
         </div>
         <details className="order-record-details">
-          <summary><span>{commerceOrderDisplayReference(order.id)} · {order.promisedAt ? `promised ${formatTime(order.promisedAt)}` : 'promise missing'}</span><small>Details</small></summary>
+          <summary><span>{commerceOrderDisplayReference(order.id)} · {order.promisedAt ? `${uiText('promised')} ${formatTime(order.promisedAt)}` : uiText('promise missing')}</span><small>{uiText('Details')}</small></summary>
           <div>
             {order.lines ? <small>{order.lines.map((line) => `${line.name} × ${line.quantity} @ ${line.unitPriceMmk.toLocaleString()} MMK`).join(' · ')}</small> : null}
             <OrderCalculationNote order={order} />
-            <small>{commerceOrderDisplayReference(order.id)} · {order.owner ? `owner ${order.owner}` : 'owner not recorded'} · {order.channel} · {order.payment}{order.paymentDueAt ? ` · payment due ${formatTime(order.paymentDueAt)}` : ''}{order.fulfilment ? ` · ${fulfilmentLabel(order.fulfilment)}` : ''}{order.fulfilmentReference ? ` · ${order.fulfilmentReference}` : ''} · {order.promisedAt ? `promised ${formatTime(order.promisedAt)}` : 'promise not recorded'} · created {formatTime(order.createdAt)}</small>
+            <small>{commerceOrderDisplayReference(order.id)} · {order.owner ? `${uiText('owner')} ${order.owner}` : uiText('owner not recorded')} · {uiText(order.channel)} · {order.payment}{order.paymentDueAt ? ` · ${uiText('payment due')} ${formatTime(order.paymentDueAt)}` : ''}{order.fulfilment ? ` · ${uiText(fulfilmentLabel(order.fulfilment))}` : ''}{order.fulfilmentReference ? ` · ${order.fulfilmentReference}` : ''} · {order.promisedAt ? `${uiText('promised')} ${formatTime(order.promisedAt)}` : uiText('promise not recorded')} · ${uiText('created')} ${formatTime(order.createdAt)}</small>
           </div>
         </details>
         {order.refundStatus === 'due' ? <small role="note">Record a refund already completed with the external payment provider. This does not send money.</small> : null}
@@ -8348,7 +8348,7 @@ function OrderList({
         {settleRefundIsPrimary ? <button className="core-button primary compact" disabled={disabled} onClick={() => onSettleRefund(order.id)} type="button">{primaryActionLabel}</button> : null}
         {canAdvance ? <button className="core-button primary compact" disabled={disabled} onClick={() => onAdvance(order.id)} type="button">{primaryActionLabel}</button> : null}
         {hasSecondaryActions ? <details className="order-row-more">
-          <summary aria-label={`More options for ${order.id}`}>More</summary>
+          <summary aria-label={readUiLocale() === 'my' ? `${order.id} ${uiText('More options')}` : `More options for ${order.id}`}>{uiText('More')}</summary>
           <div>
             {needsPayment && !reconcileIsPrimary ? <button className="text-link" disabled={disabled} onClick={() => onReconcilePayment(order.id)} type="button">Record payment only</button> : null}
             {order.refundStatus === 'due' && !settleRefundIsPrimary ? <button className="text-link" disabled={disabled} onClick={() => onSettleRefund(order.id)} type="button">Record settled refund</button> : null}
