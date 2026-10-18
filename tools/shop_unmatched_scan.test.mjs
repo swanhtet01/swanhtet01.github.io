@@ -17,6 +17,8 @@ test('offers keyboard-wedge creation for code-like input but not ordinary search
 test('rejects empty, unsafe, malformed, and overlong scanner values', () => {
   assert.equal(unmatchedBarcodeForCreation('  ', 'camera'), null)
   assert.equal(unmatchedBarcodeForCreation('1234\n5678', 'camera'), null)
+  assert.equal(unmatchedBarcodeForCreation('1234\u00015678', 'camera'), null)
+  assert.equal(unmatchedBarcodeForCreation('1234\u007f5678', 'camera'), null)
   assert.equal(unmatchedBarcodeForCreation('ABC?1234', 'camera'), null)
   assert.equal(unmatchedBarcodeForCreation('1'.repeat(81), 'camera'), null)
 })

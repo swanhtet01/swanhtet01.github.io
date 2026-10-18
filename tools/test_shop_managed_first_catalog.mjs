@@ -44,7 +44,7 @@ test('first-product setup accepts a missing Burmese name and rejects malformed o
   assert.equal(withoutMyanmar.ok, true)
   if (withoutMyanmar.ok) assert.equal('nameMy' in withoutMyanmar.product, false)
 
-  for (const nameMy of ['က'.repeat(181), 'က\u0000']) {
+  for (const nameMy of ['က'.repeat(181), 'က\u0000', 'က\u001f', 'က\u007f']) {
     const result = prepareManagedFirstCatalog({ ...validDraft, nameMy }, () => 'ab12cd34-0000-0000-0000-000000000000')
     assert.equal(result.ok, false)
     if (!result.ok) assert.match(result.error, /Burmese product name/u)
@@ -52,7 +52,7 @@ test('first-product setup accepts a missing Burmese name and rejects malformed o
 })
 
 test('first-product setup rejects invalid scanned barcode text', () => {
-  for (const barcode of ['x'.repeat(81), '123\u0000']) {
+  for (const barcode of ['x'.repeat(81), '123\u0000', '123\u001f', '123\u007f']) {
     const result = prepareManagedFirstCatalog({ ...validDraft, barcode }, () => 'ab12cd34-0000-0000-0000-000000000000')
     assert.equal(result.ok, false)
     if (!result.ok) assert.match(result.error, /Barcode must be 80 characters or fewer/u)

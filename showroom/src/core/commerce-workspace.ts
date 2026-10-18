@@ -7269,10 +7269,10 @@ export function updateCommerceItem(state: CommerceState, update: CommerceItemUpd
       || (typeof barcode === 'string' && barcode.length > 0 && barcode === barcode.trim() && barcode.length <= 80))))
   const nameMyUpdateMalformed = hasExpectedNameMy !== hasNextNameMy
     || (hasNameMyUpdate && ![update.expectedNameMy, update.nextNameMy].every((nameMy) => nameMy === null
-      || (typeof nameMy === 'string' && nameMy.length > 0 && nameMy === nameMy.trim() && nameMy.length <= 180 && !hasDisallowedControlCharacters(nameMy)))
+      || (typeof nameMy === 'string' && nameMy.length > 0 && nameMy === nameMy.trim() && nameMy.length <= 180 && !hasDisallowedControlCharacters(nameMy))))
   const categoryUpdateMalformed = hasExpectedCategory !== hasNextCategory
     || (hasCategoryUpdate && ![update.expectedCategory, update.nextCategory].every((category) => category === null
-      || (typeof category === 'string' && category.length > 0 && category === category.trim() && category.length <= 80 && !hasDisallowedControlCharacters(category)))
+      || (typeof category === 'string' && category.length > 0 && category === category.trim() && category.length <= 80 && !hasDisallowedControlCharacters(category))))
   if (!validProof(proof)
     || typeof update?.sku !== 'string'
     || !update.sku

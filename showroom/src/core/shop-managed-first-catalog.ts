@@ -1,3 +1,5 @@
+import { hasDisallowedControlCharacters } from './shop-unmatched-scan.ts'
+
 export type ManagedFirstCatalogDraft = {
   sku: string
   barcode?: string
@@ -57,11 +59,11 @@ export function prepareManagedFirstCatalog(
     return { ok: false, error: 'Enter a product name, whole-number opening stock, and positive whole-number MMK price.' }
   }
 
-  if (enteredBarcode.length > 80 || /[\u0000-\u001f\u007f]/u.test(enteredBarcode)) {
+  if (enteredBarcode.length > 80 || hasDisallowedControlCharacters(enteredBarcode)) {
     return { ok: false, error: 'Barcode must be 80 characters or fewer and cannot contain control characters.' }
   }
 
-  if (nameMy.length > 180 || /[\u0000-\u001f\u007f]/u.test(nameMy)) {
+  if (nameMy.length > 180 || hasDisallowedControlCharacters(nameMy)) {
     return { ok: false, error: 'Burmese product name must be 180 characters or fewer and cannot contain control characters.' }
   }
 
