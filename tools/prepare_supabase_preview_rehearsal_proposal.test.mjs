@@ -75,6 +75,7 @@ test('builds a data-less preview proposal with branch mode and schema unverified
   assert.equal(built.migrationPlan.publicBaseline, '20260711081300_public_legacy_baseline.sql')
   assert.equal(built.migrationPlan.finalMigration, '20261015202629_ecommerce_operator_review_grant.sql')
   assert.ok(!built.migrationPlan.migrations.some(entry => entry.name === '20261014103000_website_custom_domain_bindings.sql'))
+  assert.ok(!built.migrationPlan.migrations.some(entry => entry.name === '20261016143945_optimize_sites_inquiry_rls_initplans.sql'))
   assert.equal(built.productionBaseline.schemaVersionAtAudit, 11)
   assert.equal(built.migrationPlan.historicalAuditSchemaVersion, 11)
   assert.equal(built.migrationPlan.sourceAheadOfHistoricalAudit, true)

@@ -54,6 +54,7 @@ const expectedMigrationNames = [
 const dormantCandidateNames = new Set([
   '20261014103000_website_custom_domain_bindings.sql',
   '20261014122400_website_domain_attempt_fencing.sql',
+  '20261016143945_optimize_sites_inquiry_rls_initplans.sql',
 ])
 
 export function validateRehearsalMigrationNames(names) {
