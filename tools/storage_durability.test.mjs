@@ -1141,7 +1141,7 @@ test('eviction warning leads directly to the existing backup panel', async () =>
   const core = await readFile(new URL('../showroom/src/core/CoreApp.tsx', import.meta.url), 'utf8')
   const page = await readFile(new URL('../showroom/src/core/WorkspaceControlsPage.tsx', import.meta.url), 'utf8')
   const notice = core.slice(core.indexOf('const storageDurabilityNotice ='), core.indexOf('// Stuck-till escape hatch.'))
-  assert.ok(notice.includes('<Link to="/settings/#workspace-recovery">Set up backup</Link>'))
+  assert.ok(notice.includes('<Link to="/settings/#workspace-recovery">{uiText(\'Set up backup\')}</Link>'))
   assert.ok(notice.includes('Saved on this device only.'))
   assert.ok(notice.includes("role={storageDurability.quotaExceeded ? 'alert' : 'status'}"))
   assert.ok(notice.includes('Free space on this device before saving more Shop data.'))
