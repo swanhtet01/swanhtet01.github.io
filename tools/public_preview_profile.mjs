@@ -66,8 +66,12 @@ export function validatePreviewLinks(html, policy, products, options = {}) {
       && !(galleryPaths.has(url.pathname) && !url.search && !url.hash)) throw new Error('public_preview_public_route_invalid')
   }
   const loginPaths = new Set([`${origin}/login`, `${origin}/login?product=shop`])
-  if (options.requireActions !== false && hrefs.filter(href => loginPaths.has(href)).length !== 1) {
-    throw new Error('public_preview_action_missing:single_login')
+  const loginLinks = hrefs.filter(href => loginPaths.has(href))
+  const hasShopSignIn = html.includes(`<a class="button button-primary" href="${origin}/login?product=shop">Sign in to Shop`)
+  const expectedLoginCount = hasShopSignIn ? 2 : 1
+  if (options.requireActions !== false && (loginLinks.length !== expectedLoginCount
+    || (hasShopSignIn && !loginLinks.every(href => href === `${origin}/login?product=shop`)))) {
+    throw new Error('public_preview_action_missing:login_actions')
   }
   return { activeProducts: active.map(product => product.id), pairedOrigin: origin }
 }

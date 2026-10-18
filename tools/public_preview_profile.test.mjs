@@ -94,7 +94,19 @@ test('public site rejects product pickers and setup routes but keeps Shop login 
   assert.throws(() => validatePreviewLinks('<h1>Products</h1>', policy, products), /action_missing/)
 })
 
-test('current generated pages bind to one isolated Login without production escapes', () => {
+test('Shop primary sign-in stays exact and cannot permit duplicate or mixed login actions', () => {
+  const shopLogin = html.replace('/login', '/login?product=shop')
+  const primary = `<a class="button button-primary" href="${app.origin}/login?product=shop">Sign in to Shop</a>`
+  validatePreviewLinks(shopLogin + primary, policy, products)
+  for (const wrong of [html + primary, shopLogin + primary + primary,
+    shopLogin + primary.replace('button-primary', 'button-secondary'),
+    shopLogin + primary.replace('Sign in to Shop', 'Open Shop'),
+    shopLogin + primary.replace('product=shop', 'product=website')]) {
+    assert.throws(() => validatePreviewLinks(wrong, policy, products))
+  }
+})
+
+test('current generated pages bind isolated Login actions without production escapes', () => {
   for (const path of ['index.html', 'shop/index.html', 'website/index.html', 'ecommerce/index.html', 'contact/index.html', 'privacy/index.html']) {
     const source = readFileSync(resolve(staticDir, path), 'utf8')
     const bound = bindPreviewNavigation(source, app)
