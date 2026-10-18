@@ -21,10 +21,13 @@ test('language choice survives refresh and follows another tab without mixing la
     assert.equal(globalThis.document.documentElement.lang, 'my', 'a saved choice restores the document language on load')
     assert.equal(locale.uiText('Today'), 'ယနေ့')
     assert.equal(locale.uiText('Products'), 'ကုန်ပစ္စည်းများ')
+    assert.equal(locale.uiText('Account changed in another tab'), 'အခြားတဘ်တွင် အကောင့် ပြောင်းထားသည်')
+    assert.equal(locale.uiText('Shop task shortcuts'), 'ဆိုင်လုပ်ငန်း အမြန်လမ်းကြောင်းများ')
     locale.setUiLocale('en')
     assert.equal(values.get('supermega.ui-locale.v1'), 'en')
     assert.equal(globalThis.document.documentElement.lang, 'en')
     assert.equal(locale.uiText('Today'), 'Today')
+    assert.equal(locale.uiText('Account changed in another tab'), 'Account changed in another tab')
 
     events.get('storage')?.({ key: 'supermega.ui-locale.v1', newValue: 'my' })
     assert.equal(locale.readUiLocale(), 'my', 'a choice in another tab reaches this tab')

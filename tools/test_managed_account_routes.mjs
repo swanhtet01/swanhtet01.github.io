@@ -68,7 +68,7 @@ for (const required of [
   'discoverManagedWorkspacesForCurrentSession()',
   'directory.workspaces.find((workspace) => workspace.workspaceId === selectedWorkspace)',
   "directory.userId !== identity.userId",
-  'aria-label="Active company"',
+  "aria-label={uiText('Active company')}",
   '{portalAccess.companyName}',
   '{portalAccess.accountEmail}',
   '{portalAccess.companyRole}',
