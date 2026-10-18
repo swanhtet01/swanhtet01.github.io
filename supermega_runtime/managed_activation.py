@@ -77,7 +77,10 @@ _PRODUCT_CAPABILITIES = {
     "shop": frozenset({"commerce.read", "commerce.write"}),
     "plant": frozenset({"production.read", "production.write"}),
     "website": frozenset({"website.read", "website.write"}),
-    "ecommerce": frozenset({"commerce.read", "commerce.write"}),
+    # The managed Ecommerce owner prepares and delivers customer catalog
+    # reviews. Keep this capability product-scoped; Shop self-serve owners and
+    # delegated Ecommerce operators do not inherit it from this map.
+    "ecommerce": frozenset({"commerce.read", "commerce.write", "ecommerce.manage"}),
 }
 _REQUIRED_PROVISIONING_CONTROLS = frozenset(
     {

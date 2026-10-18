@@ -606,6 +606,17 @@ class ManagedActivationPlanTests(unittest.TestCase):
         self.assertNotIn("commerce.write", plan["ownerCapabilities"])
         self.assertNotIn("website.write", plan["ownerCapabilities"])
 
+        ecommerce = activation_plan("ecommerce")
+        ecommerce_capabilities = set(ecommerce["ownerCapabilities"])
+        self.assertTrue({"commerce.write", "ecommerce.manage", "approvals.decide", "company.write"}
+                        .issubset(ecommerce_capabilities))
+        for internal_or_customer_product in ("shop", "plant", "website"):
+            with self.subTest(product=internal_or_customer_product):
+                self.assertNotIn(
+                    "ecommerce.manage",
+                    activation_plan(internal_or_customer_product)["ownerCapabilities"],
+                )
+
     def test_plan_rejects_missing_evidence_secrets_and_tampering(self) -> None:
         for label, mutate in (
             ("no records", lambda value: value.__setitem__("localRecords", 0)),
