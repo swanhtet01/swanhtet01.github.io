@@ -805,7 +805,9 @@ test('invalid or oversized client data and tampered data-bearing kits fail befor
     await mkdir(dataDirectory)
     const commerce = source.blueprint.products.find((product) => product.product === 'commerce')
     assert.ok(commerce)
-    await writeFile(resolve(dataDirectory, 'commerce.csv'), commerce.sampleCsv.replace(',18,', ',-1,'), 'utf8')
+    const invalidStockCsv = commerce.sampleCsv.replace(',"18","6","72000",', ',"-1","6","72000",')
+    assert.notEqual(invalidStockCsv, commerce.sampleCsv)
+    await writeFile(resolve(dataDirectory, 'commerce.csv'), invalidStockCsv, 'utf8')
     await assert.rejects(
       prepareClientDemo({ kitPath: source.kitPath, dataDirectory, preparedAt: PREPARED_AT }),
       /client_demo_source_not_ready_commerce/,
