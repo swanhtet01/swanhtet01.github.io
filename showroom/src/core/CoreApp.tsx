@@ -3467,13 +3467,13 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
   const storageDurabilityNotice = managedIdentity || !(storageDurability.quotaExceeded || storageDurability.state === 'denied')
     ? null
     : <div className="production-mode-banner storage-durability-banner" data-durability={storageDurability.quotaExceeded ? 'full' : 'device-only'} role={storageDurability.quotaExceeded ? 'alert' : 'status'}>
-      <span className={`status-pill${storageDurability.quotaExceeded ? ' pending' : ''}`}>{storageDurability.quotaExceeded ? 'Storage full' : 'Device-only data'}</span>
+      <span className={`status-pill${storageDurability.quotaExceeded ? ' pending' : ''}`}>{uiText(storageDurability.quotaExceeded ? 'Storage full' : 'Device-only data')}</span>
       <p>{storageDurability.quotaExceeded
-        ? 'Free space on this device before saving more Shop data.'
-        : 'Saved on this device only.'}</p>
+        ? uiText('Free space on this device before saving more Shop data.')
+        : uiText('Saved on this device only.')}</p>
       {storageDurability.quotaExceeded
-        ? <button type="button" onClick={() => window.location.reload()}>Reload Shop</button>
-        : <Link to="/settings/#workspace-recovery">Set up backup</Link>}
+        ? <button type="button" onClick={() => window.location.reload()}>{uiText('Reload Shop')}</button>
+        : <Link to="/settings/#workspace-recovery">{uiText('Set up backup')}</Link>}
     </div>
 
   // Stuck-till escape hatch. 'conflict' and 'unavailable' both hold canWrite false with
