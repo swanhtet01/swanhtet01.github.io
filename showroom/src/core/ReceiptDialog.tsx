@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 
 import { type CommerceMerchantProfile, type CommerceMerchantProfileInput, type CommerceOrderAcknowledgement, commerceOrderAcknowledgementText } from './commerce-workspace'
 import { bi } from './i18n-actions'
+import { readUiLocale, uiText } from './ui-locale'
 import { PaymentQrButton } from './PaymentQr'
 import { copyOrderRecordText } from './copy-order-record'
 import { formatShopBusinessDate, shopCustomerReceiptDocument, shopCustomerReceiptTestDocument } from './shop-customer-receipt'
@@ -12,7 +13,7 @@ function mmk(amount: number) {
 
 // Customer print and internal evidence are separate artifacts. The customer copy
 // is built from the immutable order acknowledgement plus the saved merchant profile;
-// it includes Burmese/English business details and omits command IDs and evidence
+// it prints the selected language and omits command IDs and evidence
 // metadata. "Print order record" and "Copy text" retain the internal acknowledgement
 // vocabulary for support. CSS adapts to reported print-media width; a real printer
 // and Burmese operator test are still required before claiming device support.
@@ -191,7 +192,7 @@ export function ReceiptDialog({ ack, loyalty, onClose, paymentQrScope, merchantP
     try {
       const win = window.open('', '_blank')
       if (!win) {
-        setPrintNotice('Printing was blocked. Allow pop-ups for this site, then try again.')
+        setPrintNotice(uiText('Printing was blocked. Allow pop-ups for this site, then try again.'))
         return
       }
       win.addEventListener('load', () => {
@@ -207,20 +208,20 @@ export function ReceiptDialog({ ack, loyalty, onClose, paymentQrScope, merchantP
       win.document.write(documentHtml)
       win.document.close()
     } catch {
-      setPrintNotice('The receipt could not be opened. Try the browser menu to print it.')
+      setPrintNotice(uiText('The receipt could not be opened. Try the browser menu to print it.'))
     }
   }
 
   function printCustomerReceipt() {
     if (!ack || !merchantProfile || disabled) return
     setPrintNotice('')
-    openCustomerReceiptPrint(shopCustomerReceiptDocument(ack, merchantProfile), 'Print dialog opened. Choose a printer or Save as PDF.')
+    openCustomerReceiptPrint(shopCustomerReceiptDocument(ack, merchantProfile, readUiLocale()), uiText('Print dialog opened. Choose a printer or Save as PDF.'))
   }
 
   function printTestReceipt() {
     if (!merchantProfile || disabled) return
     setPrintNotice('')
-    openCustomerReceiptPrint(shopCustomerReceiptTestDocument(merchantProfile), 'Test slip opened. Choose your receipt printer; no sale was recorded.')
+    openCustomerReceiptPrint(shopCustomerReceiptTestDocument(merchantProfile, readUiLocale()), uiText('Test slip opened. Choose your receipt printer; no sale was recorded.'))
   }
 
   const [copyResult, setCopyResult] = useState<{ record: CommerceOrderAcknowledgement; notice: string } | null>(null)

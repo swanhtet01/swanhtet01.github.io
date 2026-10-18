@@ -200,8 +200,8 @@ test('Burmese product names are editable, versioned, replay-safe, and retained a
   assert.match(core, /name: item\.name, \.\.\.\(item\.nameMy \? \{ nameMy: item\.nameMy \} : \{\}\)/)
 })
 
-test('customer receipts show the owner-entered Myanmar name next to the stable English name', () => {
-  const receipt = shopCustomerReceiptText({
+test('customer receipts use the selected language for owner-entered product names', () => {
+  const acknowledgement = {
     orderId: 'ORD-SYNTHETIC-MY',
     createdAt: '2026-10-16T00:00:00.000Z',
     channel: 'Walk-in',
@@ -212,8 +212,14 @@ test('customer receipts show the owner-entered Myanmar name next to the stable E
     delivery: null,
     totalMmk: 2500,
     payment: { method: 'Cash', status: 'reconciled' },
-  }, { nameMyanmar: 'ဆိုင်', nameEnglish: 'Shop', phone: '', addressMyanmar: '', addressEnglish: '' })
-  assert.match(receipt, /လက်ဖက်ရည် · Green tea  ×1  2,500 MMK/)
+  }
+  const profile = { nameMyanmar: 'ဆိုင်', nameEnglish: 'Shop', phone: '', addressMyanmar: '', addressEnglish: '' }
+  const english = shopCustomerReceiptText(acknowledgement, profile, 'en')
+  const burmese = shopCustomerReceiptText(acknowledgement, profile, 'my')
+  assert.match(english, /Green tea  ×1  2,500 MMK/)
+  assert.doesNotMatch(english, /လက်ဖက်ရည်|အရောင်းပြေစာ/)
+  assert.match(burmese, /လက်ဖက်ရည်  ×1  2,500 MMK/)
+  assert.doesNotMatch(burmese, /Green tea|Sales receipt/)
 })
 
 test('first product setup keeps required data minimal and continues to Counter after review', () => {

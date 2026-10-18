@@ -140,6 +140,10 @@ const UI_TRANSLATIONS: Readonly<Record<string, string>> = {
   'This product is out of stock. Review stock before selling it.': 'ဤပစ္စည်း ကုန်သွားပါပြီ။ မရောင်းမီ ကုန်လက်ကျန်ကို စစ်ဆေးပါ။',
   'More than one product has this name. Choose one from the list.': 'ဤအမည်ဖြင့် ပစ္စည်းတစ်မျိုးထက်ပိုရှိသည်။ စာရင်းမှ တစ်မျိုးရွေးပါ။',
   'added to this sale.': 'ဤအရောင်းထဲ ထည့်ပြီးပါပြီ။',
+  'Printing was blocked. Allow pop-ups for this site, then try again.': 'ပုံနှိပ်ရန် ဖွင့်မရပါ။ ဤဆိုက်အတွက် ပေါ့ပ်အပ်များကို ခွင့်ပြုပြီး ပြန်ကြိုးစားပါ။',
+  'The receipt could not be opened. Try the browser menu to print it.': 'ပြေစာကို ဖွင့်မရပါ။ ဘရောက်ဇာမီနူးမှ ပုံနှိပ်ကြည့်ပါ။',
+  'Print dialog opened. Choose a printer or Save as PDF.': 'ပုံနှိပ်ရန် ပြတင်းပေါက် ဖွင့်ထားပါသည်။ ပရင်တာကို ရွေးပါ၊ သို့မဟုတ် PDF အဖြစ် သိမ်းပါ။',
+  'Test slip opened. Choose your receipt printer; no sale was recorded.': 'စမ်းသပ်စာရွက် ဖွင့်ထားပါသည်။ ပြေစာပရင်တာကို ရွေးပါ။ အရောင်းမှတ်တမ်း မဖန်တီးထားပါ။',
   'ready': 'အဆင်သင့်', 'preparing': 'ပြင်ဆင်နေ', 'pending': 'စောင့်ဆိုင်းနေ',
 }
 

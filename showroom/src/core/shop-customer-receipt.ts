@@ -1,40 +1,40 @@
 import type { CommerceMerchantProfile, CommerceOrderAcknowledgement } from './commerce-workspace'
+import type { UiLocale } from './ui-locale'
 
 function formatMmk(amount: number) {
   return `${amount.toLocaleString('en-US')} MMK`
 }
 
-export function formatShopBusinessDate(value: string) {
+export function formatShopBusinessDate(value: string, locale: UiLocale = 'en') {
   const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString('en-GB', {
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString(locale === 'my' ? 'my-MM' : 'en-GB', {
     timeZone: 'Asia/Yangon',
     day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
   })
 }
 
 /** Customer copy only. Deliberately excludes command IDs, evidence references and internal notes. */
-export function shopCustomerReceiptText(ack: CommerceOrderAcknowledgement, profile: CommerceMerchantProfile) {
+export function shopCustomerReceiptText(ack: CommerceOrderAcknowledgement, profile: CommerceMerchantProfile, locale: UiLocale = 'en') {
+  const my = locale === 'my'
   const lines = [
-    profile.nameMyanmar || profile.nameEnglish,
-    profile.nameMyanmar && profile.nameEnglish ? profile.nameEnglish : '',
+    my ? (profile.nameMyanmar || profile.nameEnglish) : (profile.nameEnglish || profile.nameMyanmar),
     profile.phone,
-    profile.addressMyanmar,
-    profile.addressEnglish,
+    my ? (profile.addressMyanmar || profile.addressEnglish) : (profile.addressEnglish || profile.addressMyanmar),
     '',
-    'အရောင်းပြေစာ · SALES RECEIPT',
-    formatShopBusinessDate(ack.createdAt),
-    `Order · ${ack.orderId}`,
+    my ? 'အရောင်းပြေစာ' : 'Sales receipt',
+    formatShopBusinessDate(ack.createdAt, locale),
+    `${my ? 'အော်ဒါ' : 'Order'} · ${ack.orderId}`,
     '',
-    'ပစ္စည်း / ITEM',
-    ...ack.lines.map((line) => `${line.nameMy ? `${line.nameMy} · ` : ''}${line.name}${line.variant ? ` · ${line.variant}` : ''}  ×${line.quantity}  ${formatMmk(line.lineTotalMmk)}`),
+    my ? 'ပစ္စည်း' : 'Item',
+    ...ack.lines.map((line) => `${my ? (line.nameMy || line.name) : line.name}${line.variant ? ` · ${line.variant}` : ''}  ×${line.quantity}  ${formatMmk(line.lineTotalMmk)}`),
     '',
-    ...(ack.tax.taxMmk ? [`Tax · အခွန်  ${formatMmk(ack.tax.taxMmk)}`] : []),
-    ...(ack.promotion.discountMmk ? [`Discount · လျှော့ဈေး  −${formatMmk(ack.promotion.discountMmk)}`] : []),
-    ...(ack.delivery?.feeMmk ? [`Delivery · ပို့ဆောင်ခ  ${formatMmk(ack.delivery.feeMmk)}`] : []),
-    `စုစုပေါင်း / TOTAL  ${formatMmk(ack.totalMmk)}`,
-    `Payment · ငွေပေးချေမှု  ${ack.payment.status === 'reconciled' ? 'Paid · ပေးချေပြီး' : 'Pending · ပေးချေရန်ကျန်'}`,
+    ...(ack.tax.taxMmk ? [`${my ? 'အခွန်' : 'Tax'}  ${formatMmk(ack.tax.taxMmk)}`] : []),
+    ...(ack.promotion.discountMmk ? [`${my ? 'လျှော့ဈေး' : 'Discount'}  −${formatMmk(ack.promotion.discountMmk)}`] : []),
+    ...(ack.delivery?.feeMmk ? [`${my ? 'ပို့ဆောင်ခ' : 'Delivery'}  ${formatMmk(ack.delivery.feeMmk)}`] : []),
+    `${my ? 'စုစုပေါင်း' : 'Total'}  ${formatMmk(ack.totalMmk)}`,
+    `${my ? 'ငွေပေးချေမှု' : 'Payment'}  ${ack.payment.status === 'reconciled' ? (my ? 'ပေးချေပြီး' : 'Paid') : (my ? 'ပေးချေရန်ကျန်' : 'Pending')}`,
     '',
-    'ကျေးဇူးတင်ပါသည် · Thank you',
+    my ? 'ကျေးဇူးတင်ပါသည်' : 'Thank you',
   ]
   return lines.filter((line, index) => line || (index > 0 && lines[index - 1] !== '')).join('\n')
 }
@@ -63,26 +63,25 @@ const CUSTOMER_RECEIPT_PRINT_STYLES = `
       body { margin: 0.5rem; padding: 1rem 2rem; font-size: 0.9rem; line-height: 1.5; }
     }`
 
-function merchantHeader(profile: CommerceMerchantProfile) {
+function merchantHeader(profile: CommerceMerchantProfile, locale: UiLocale) {
+  const my = locale === 'my'
   return [
-    profile.nameMyanmar || profile.nameEnglish,
-    profile.nameMyanmar && profile.nameEnglish ? profile.nameEnglish : '',
+    my ? (profile.nameMyanmar || profile.nameEnglish) : (profile.nameEnglish || profile.nameMyanmar),
     profile.phone,
-    profile.addressMyanmar,
-    profile.addressEnglish,
+    my ? (profile.addressMyanmar || profile.addressEnglish) : (profile.addressEnglish || profile.addressMyanmar),
   ].filter(Boolean).map(escapeHtml).join('<br>')
 }
 
 /** Standalone browser-print document for the customer copy; no internal evidence is added. */
-export function shopCustomerReceiptDocument(ack: CommerceOrderAcknowledgement, profile: CommerceMerchantProfile) {
+export function shopCustomerReceiptDocument(ack: CommerceOrderAcknowledgement, profile: CommerceMerchantProfile, locale: UiLocale = 'en') {
   const title = escapeHtml(ack.orderId)
-  const receipt = escapeHtml(shopCustomerReceiptText(ack, profile))
+  const receipt = escapeHtml(shopCustomerReceiptText(ack, profile, locale))
   return `<!doctype html>
-<html lang="my">
+<html lang="${locale}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Sales receipt ${title}</title>
+  <title>${locale === 'my' ? 'အရောင်းပြေစာ' : 'Sales receipt'} ${title}</title>
   <style>${CUSTOMER_RECEIPT_PRINT_STYLES}</style>
 </head>
 <body>${receipt}</body>
@@ -90,15 +89,16 @@ export function shopCustomerReceiptDocument(ack: CommerceOrderAcknowledgement, p
 }
 
 /** Printer check only: no order, customer, payment, or inventory record is created. */
-export function shopCustomerReceiptTestDocument(profile: CommerceMerchantProfile) {
-  const header = merchantHeader(profile)
-  const title = escapeHtml(profile.nameMyanmar || profile.nameEnglish || 'Shop')
+export function shopCustomerReceiptTestDocument(profile: CommerceMerchantProfile, locale: UiLocale = 'en') {
+  const my = locale === 'my'
+  const header = merchantHeader(profile, locale)
+  const title = escapeHtml((my ? profile.nameMyanmar || profile.nameEnglish : profile.nameEnglish || profile.nameMyanmar) || 'Shop')
   return `<!doctype html>
-<html lang="my">
+<html lang="${locale}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Printer test · ${title}</title>
+  <title>${my ? 'ပရင်တာ စမ်းသပ်မှု' : 'Printer test'} · ${title}</title>
   <style>${CUSTOMER_RECEIPT_PRINT_STYLES}
     body { display: grid; gap: 3mm; }
     h1, p { margin: 0; }
@@ -110,13 +110,13 @@ export function shopCustomerReceiptTestDocument(profile: CommerceMerchantProfile
 <body>
   <header>${header}</header>
   <hr class="divider">
-  <h1>အရောင်းပြေစာ · SALES RECEIPT</h1>
-  <p class="test-mark">စမ်းသပ်စာရွက် · PRINTER TEST ONLY</p>
-  <p>ဤစာရွက်သည် စမ်းသပ်ရန်သာဖြစ်ပြီး အရောင်းမဟုတ်ပါ။<br>This test slip is not a sale. No payment is due.</p>
-  <p>စာလုံးဖတ်ရှုနိုင်မှု · Text and alignment</p>
-  <p>၁၂၃၄၅၆၇၈၉၀ · 1234567890 · 5,000 MMK</p>
+  <h1>${my ? 'အရောင်းပြေစာ' : 'Sales receipt'}</h1>
+  <p class="test-mark">${my ? 'စမ်းသပ်စာရွက်' : 'Printer test only'}</p>
+  <p>${my ? 'ဤစာရွက်သည် စမ်းသပ်ရန်သာဖြစ်ပြီး အရောင်းမဟုတ်ပါ။ ငွေပေးချေရန် မလိုပါ။' : 'This test slip is not a sale. No payment is due.'}</p>
+  <p>${my ? 'စာလုံးဖတ်ရှုနိုင်မှု' : 'Text and alignment'}</p>
+  <p>${my ? '၁၂၃၄၅၆၇၈၉၀' : '1234567890'} · 5,000 MMK</p>
   <hr class="divider">
-  <p>ကျေးဇူးတင်ပါသည် · Thank you</p>
+  <p>${my ? 'ကျေးဇူးတင်ပါသည်' : 'Thank you'}</p>
 </body>
 </html>`
 }
