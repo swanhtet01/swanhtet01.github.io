@@ -30,6 +30,8 @@ The current `uiText` phrase table is an engineering draft with English fallback.
 5. **Managed trust:** Local screenshots and green typechecks do not prove managed account isolation, migration health, durable order writes, backup restore, or safe recovery after interrupted checkout. Run two-tenant hosted acceptance and a disconnection/retry test on the exact candidate. Keep commercial access closed until those pass.
 6. **Website proof:** Distinguish the company story from Shop conversion. Show legible real application captures, tested feature claims, Myanmar use cases, pricing/support/terms and a clear trial path. The production domain must match the actual shipped UI and Shop-only access; review-only captures and vendor-inspired artwork cannot substitute.
 
+The website candidate's twelve public Shop captures were refreshed from clean source commit `336a7b3d23c7df49543e24814260c73bc57d8d5f` (showroom tree `0fd35b2853febef9c2ab38600bd440de3ecab353`). The capture harness generated 22 desktop/tablet/phone and internal-workspace frames; only Shop images enter the public build. It completed one synthetic counter sale and blocked every external request. `publicationReady:false` remains in the receipt: these images prove what the local components drew with sample data, not deployed behavior or customer value. The gallery CI inventory and exact-text release guards were re-baselined to current source; a local isolated Python runtime probe still cannot run because Pillow is absent from the workstation interpreter. Hosted CI and reviewer approval remain separate gates.
+
 ## Sequenced work to the 20 October decision
 
 | Order | Deliverable | Verification and owner |

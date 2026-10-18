@@ -175,12 +175,16 @@ jobs:
           assert evidence['customerReceiptVisible'] is False
           assert evidence['fulfilledSyntheticMedia'] == 3
           captures = evidence['captures']
-          assert len(captures) == 16
+          assert len(captures) == 22
           expected = {
               'actual-shop-first-run.png', 'actual-shop-today.png', 'actual-shop-sell.png', 'actual-shop-order-record.png', 'actual-shop-orders.png',
+              'actual-shop-inventory.png',
               'actual-sites-editor.png', 'actual-sites-inquiries.png',
               'actual-commerce-catalog.png', 'actual-commerce-order-request.png',
-              'actual-shop-today-mobile.png', 'actual-shop-sell-mobile.png', 'actual-shop-orders-mobile.png',
+              'actual-shop-today-tablet.png', 'actual-shop-today-mobile.png',
+              'actual-shop-sell-tablet.png', 'actual-shop-sell-mobile.png',
+              'actual-shop-orders-tablet.png', 'actual-shop-orders-mobile.png',
+              'actual-shop-inventory-tablet.png', 'actual-shop-inventory-mobile.png',
               'actual-sites-editor-mobile.png', 'actual-sites-inquiries-mobile.png',
               'actual-commerce-catalog-mobile.png', 'actual-commerce-order-request-mobile.png',
           }
@@ -191,9 +195,15 @@ jobs:
               'actual-shop-sell.png': ('/shop/', 'counter'),
               'actual-shop-order-record.png': ('/shop/', 'counter'),
               'actual-shop-orders.png': ('/shop/', 'orders'),
+              'actual-shop-inventory.png': ('/shop/', 'inventory'),
+              'actual-shop-today-tablet.png': ('/shop/', 'today'),
               'actual-shop-today-mobile.png': ('/shop/', 'today'),
+              'actual-shop-sell-tablet.png': ('/shop/', 'counter'),
               'actual-shop-sell-mobile.png': ('/shop/', 'counter'),
+              'actual-shop-orders-tablet.png': ('/shop/', 'orders'),
               'actual-shop-orders-mobile.png': ('/shop/', 'orders'),
+              'actual-shop-inventory-tablet.png': ('/shop/', 'inventory'),
+              'actual-shop-inventory-mobile.png': ('/shop/', 'inventory'),
               'actual-sites-editor.png': ('/workspaces/', '/website/'),
               'actual-sites-inquiries.png': ('/workspaces/', '/website/?view=inquiries'),
               'actual-sites-editor-mobile.png': ('/workspaces/', '/website/'),
@@ -205,7 +215,7 @@ jobs:
           }
           for item in captures:
               expected_path, expected_route = expected_states[item['file']]
-              expected_size = (390, 844) if item['file'].endswith('-mobile.png') else (1440, 900)
+              expected_size = (390, 844) if item['file'].endswith('-mobile.png') else (768, 1024) if item['file'].endswith('-tablet.png') else (1440, 900)
               assert (item['width'], item['height']) == expected_size
               assert item['fixturePath'] == expected_path
               if item['file'].startswith('actual-commerce-'):

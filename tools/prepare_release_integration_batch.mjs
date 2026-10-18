@@ -132,7 +132,7 @@ export const APP_SHELL_REQUIREMENTS = [
       "const sensitiveAccountRoute = location.pathname.startsWith('/account/')",
       'const accountEntryRoute = loginRoute || sensitiveAccountRoute',
       'Login',
-      'aria-label="Login"',
+      "aria-label={uiText('Login')}",
       'mobile-account-link',
     ],
   },
@@ -336,7 +336,7 @@ export const RELEASE_SECURITY_HQ_REQUIREMENTS = [
   },
   {
     id: 'candidate-four-product-build-depth', authority: 'candidate', file: 'tools/verify_app_build.mjs', tokens: [
-      'aria-label="Shop operating view"', 'Services and resources', 'aria-label="Commerce operating status"', 'Order lifecycle queue',
+      "aria-label={uiText('Shop operating view')}", 'Services and resources', 'aria-label="Commerce operating status"', 'Order lifecycle queue',
       'Review one quote. Shop confirms the order, stock, delivery, and payment.',
     ],
   },

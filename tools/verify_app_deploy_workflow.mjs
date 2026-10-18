@@ -444,7 +444,7 @@ requireContract('CI product screenshots are synthetic, source-bound and narrowly
   && ciWorkflow.includes("evidence['publicationReady'] is False")
   && ciWorkflow.includes("evidence['sourceCommit'] == os.environ['SUPERMEGA_CI_SOURCE_SHA']")
   && ciWorkflow.includes("evidence['deniedExternal'] == 0")
-  && ciWorkflow.includes("assert len(captures) == 16")
+  && ciWorkflow.includes("assert len(captures) == 22")
   && ciWorkflow.includes("'actual-shop-first-run.png': ('/shop/', 'today')")
   && ciWorkflow.includes("'actual-shop-today-mobile.png': ('/shop/', 'today')")
   && ciWorkflow.includes("'actual-sites-editor-mobile.png': ('/workspaces/', '/website/')")
