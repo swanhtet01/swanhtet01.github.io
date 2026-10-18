@@ -30,7 +30,7 @@ test('a trade URL cannot relabel or operate an existing managed catalog', () => 
     'to="/shop/?tab=counter"',
   ]) assert.ok(coreAppSource.includes(token), `managed trade boundary missing: ${token}`)
   assert.ok(coreAppSource.includes('shopTemplateDoorState(requestedShopTemplateId, confirmedLocalShop, Boolean(managedIdentity))'))
-  assert.ok(coreAppSource.includes('Checking workspace access. Your catalog has not been changed.'))
+  assert.ok(coreAppSource.includes('Managed catalog review required'))
   assert.match(coreAppSource, /requestedShopTemplateState === 'managed-unapplied' && requestedShopTemplate\s*\? `The \$\{requestedShopTemplate\.name\.en\} public request is not applied/)
 })
 
