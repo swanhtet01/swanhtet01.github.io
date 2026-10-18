@@ -89,6 +89,14 @@ jobs:
           OTEL_SDK_DISABLED: 'true'
         run: python -m unittest tests.test_commerce_public_storefront tests.test_commerce_public_retention_runner -v
 
+      - name: Verify permission revocation during command lock waits
+        env:
+          SUPERMEGA_RUN_WEBSITE_REVIEW_SQL: '1'
+          SUPERMEGA_TRIAL_SCHEMA_VERSION: '13'
+          SUPERMEGA_BILLING_SCHEMA_VERSION: '13'
+          OTEL_SDK_DISABLED: 'true'
+        run: python -m unittest tests.test_ecommerce_review_sql.CatalogReviewSqlTests.test_apply_command_rechecks_authority_after_command_and_state_lock_waits -v
+
       - name: Verify source runtime and packaged import guards
         run: |
           python tools/test_app_runtime_bundle.py
