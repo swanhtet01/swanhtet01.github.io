@@ -4946,9 +4946,9 @@ if (ordersTabStart < 0
   || !coreCssSource.includes('.order-workspace .order-list article {')
   || !coreCssSource.includes('.order-record-details > summary { min-height: 44px;')) fail('shop_orders_task_first_layout_missing')
 if (!orderListContract.includes("const settleRefundIsPrimary = !reconcileIsPrimary && order.refundStatus === 'due'")
-  || !orderListContract.includes('const hasSecondaryActions = Boolean(acknowledgement) || canCancelOrder')
+  || !orderListContract.includes('const hasSecondaryActions = Boolean(acknowledgement) || canCancelOrder ||')
   || !orderListContract.includes('className="order-row-more"')
-  || !orderListContract.includes('aria-label={`More options for ${order.id}`}')
+  || !orderListContract.includes("readUiLocale() === 'my' ? `${order.id} ${uiText('More options')}` : `More options for ${order.id}`")
   || (orderListContract.match(/className="core-button primary compact"/g) || []).length !== 4
   || !orderListContract.includes('>Cancel order</button>')
   || !coreCssSource.includes('.order-row-more > summary {')
