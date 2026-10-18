@@ -502,6 +502,15 @@ type CommerceWorkspaceView = {
   writeReady: boolean
 }
 
+// A command acknowledgement and an inbox refresh can finish out of order. Never
+// replace a newer revision for the same company with an older response (or a
+// late load error without a revision).
+function shouldPublishManagedCommerceSnapshot(current: CommerceWorkspaceView, next: CommerceWorkspaceView): boolean {
+  return current.workspaceId !== next.workspaceId
+    || current.version === null
+    || next.version !== null && next.version >= current.version
+}
+
 function managedCommerceView(record: ManagedStateRecord, workspaceId: string, writeReady: boolean): CommerceWorkspaceView {
   if (record.surface !== 'commerce' || !Number.isSafeInteger(record.version) || record.version < 0) throw new Error('Managed Shop returned an invalid state envelope.')
   if (record.version === 0) {
@@ -653,11 +662,7 @@ export function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = n
         identity.workspaceId,
         managedBootstrapHasCapability(bootstrap, identity, 'commerce.write'),
       )
-      const current = snapshotRef.current
-      if (current.workspaceId === next.workspaceId
-        && current.version !== null
-        && next.version !== null
-        && next.version < current.version) return false
+      if (!shouldPublishManagedCommerceSnapshot(snapshotRef.current, next)) return false
       snapshotRef.current = next
       setManagedSnapshot(next)
       return true
@@ -742,15 +747,19 @@ export function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = n
         if (!active || !identityRef.current || !sameManagedIdentity(identityRef.current, managedIdentity)) return
         const record = requireManagedSurfaceState(bootstrap, 'commerce', 'Shop')
         const next = managedCommerceView(record, managedIdentity.workspaceId, managedBootstrapHasCapability(bootstrap, managedIdentity, 'commerce.write'))
-        snapshotRef.current = next
-        setManagedSnapshot(next)
+        if (shouldPublishManagedCommerceSnapshot(snapshotRef.current, next)) {
+          snapshotRef.current = next
+          setManagedSnapshot(next)
+        }
       })
       .catch((error) => {
         if (!active || !identityRef.current || !sameManagedIdentity(identityRef.current, managedIdentity)) return
         reportManagedPersistenceFailure('shop.load', error, 'Managed Shop could not be loaded.')
         const next = { state: createEmptyCommerce(), mode: 'managed-error' as const, workspaceId: managedIdentity.workspaceId, version: null, error: error instanceof Error ? error.message : 'Managed Shop could not be loaded.', writeReady: false }
-        snapshotRef.current = next
-        setManagedSnapshot(next)
+        if (shouldPublishManagedCommerceSnapshot(snapshotRef.current, next)) {
+          snapshotRef.current = next
+          setManagedSnapshot(next)
+        }
       })
     return () => { active = false }
   }, [managedIdentity, managedLoadAttempt])
@@ -899,8 +908,10 @@ export function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = n
         }
         nextSnapshot = { ...refreshed, error: '' }
       }
-      snapshotRef.current = nextSnapshot
-      setManagedSnapshot(nextSnapshot)
+      if (shouldPublishManagedCommerceSnapshot(snapshotRef.current, nextSnapshot)) {
+        snapshotRef.current = nextSnapshot
+        setManagedSnapshot(nextSnapshot)
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'The managed Shop write was not confirmed.'
       if (error instanceof ManagedTrialError && error.code === 'trial_version_conflict') {
@@ -913,8 +924,10 @@ export function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = n
             managedBootstrapHasCapability(bootstrap, managedIdentity, 'commerce.write'),
           )
           const conflict = { ...refreshed, error: '' }
-          snapshotRef.current = conflict
-          setManagedSnapshot(conflict)
+          if (shouldPublishManagedCommerceSnapshot(snapshotRef.current, conflict)) {
+            snapshotRef.current = conflict
+            setManagedSnapshot(conflict)
+          }
         } catch (refreshError) {
           reportManagedPersistenceFailure('shop.reconcile', refreshError, 'Shop changed and the latest revision could not be loaded.')
           const refreshMessage = refreshError instanceof Error ? refreshError.message : 'Shop changed and the latest revision could not be loaded.'

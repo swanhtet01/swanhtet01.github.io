@@ -395,7 +395,7 @@ for (const [route, html] of [['/', home], ['/shop/', pages.get('/shop/').html], 
     : 'href="https://app.supermega.dev/login"'
   if (countOccurrences(body, expectedLogin) !== (route === '/shop/' ? 2 : 1)) fail('login_action_count_invalid', { route, expectedLogin })
   if (route === '/shop/' && !body.includes(`class="button button-primary" ${expectedLogin}>Sign in to Shop`)) fail('shop_primary_product_action_missing')
-  const hasGalleryNavigation = (galleryViews[routeProduct?.id] || 0) > 1
+  const hasGalleryNavigation = route !== '/shop/' && (galleryViews[routeProduct?.id] || 0) > 1
   const expectedButtons = Number(hasGalleryNavigation) * 2
   if ((body.match(/<button\b/g) || []).length !== expectedButtons) fail('marketing_button_surface_drift', { route, expectedButtons })
   const galleryControlAttributes = [...body.matchAll(/<button\b([^>]*)>/g)]
@@ -419,7 +419,7 @@ for (const [route, html] of [['/', home], ['/shop/', pages.get('/shop/').html], 
   const productVisualMissing = route === '/'
     ? !hasClassToken(body, 'company-hero') || !hasClassToken(body, 'product-family') || !body.includes('See what sold.<br><span>Know what needs action.</span>') || !body.includes('class="company-operating-overview"') || !body.includes('class="company-product-visual"') || !body.includes('class="company-product-evidence"') || !body.includes('One workflow. Every screen.') || body.includes('Sell faster.') || countOccurrences(body, 'class="platform-device-set has-tablet"') !== galleryViews.shop || body.includes('data-device-choice')
     : route === '/shop/'
-      ? !body.includes('class="shop-actual-showcase"') || !body.includes('Sales, stock and orders.') || !body.includes('Real Shop screens with sample records. The catalog and prices shown are examples, not a live retail feed.') || body.includes('Makro PRO') || body.includes('17 October 2026') || body.includes('class="pos-window"') || body.includes('class="sample-label"') || body.includes('Complete sample sale') || body.includes('shop-sample-demo.js') || !body.includes('class="platform-gallery"') || countOccurrences(body, '<figure class="platform-image') !== galleryViews.shop || countOccurrences(body, 'class="platform-device-set has-tablet"') !== galleryViews.shop || body.includes('data-device-choice') || body.includes('data-device-frame') || /<a\b[^>]*>\s*<img\b[^>]*src="\/images\/actual-shop-/i.test(body)
+      ? !body.includes('class="shop-actual-showcase"') || !body.includes('Sales, stock and orders.') || !body.includes('Real Shop screens with sample records. The catalog and prices shown are examples, not a live retail feed.') || body.includes('Makro PRO') || body.includes('17 October 2026') || body.includes('class="pos-window"') || body.includes('class="sample-label"') || body.includes('Complete sample sale') || body.includes('shop-sample-demo.js') || !body.includes('class="platform-gallery shop-gallery-all"') || countOccurrences(body, '<figure class="platform-image') !== galleryViews.shop || countOccurrences(body, 'class="platform-device-set has-tablet"') !== galleryViews.shop || body.includes('data-platform-carousel') || body.includes('data-device-choice') || body.includes('data-device-frame') || /<a\b[^>]*>\s*<img\b[^>]*src="\/images\/actual-shop-/i.test(body)
       : !body.includes('class="platform-image"') || !body.includes('class="feature-line"')
   if (productVisualMissing) fail('product_visual_missing', { route })
   if (route === '/') {

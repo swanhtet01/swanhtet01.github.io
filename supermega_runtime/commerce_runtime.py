@@ -7207,6 +7207,7 @@ def commerce_order_acknowledgement(
         {
             "sku": line["sku"],
             "name": line["name"],
+            **({"nameMy": line["nameMy"]} if "nameMy" in line else {}),
             **({"variant": line["variant"]} if "variant" in line else {}),
             "quantity": line["quantity"],
             "unitPriceMmk": line["unitPriceMmk"],
@@ -7330,7 +7331,7 @@ def commerce_order_acknowledgement(
             artifact["schema"], artifact["documentType"], artifact["notice"],
             artifact["orderId"], artifact["createdAt"], artifact["customer"],
             artifact["channel"], artifact["status"], artifact["currency"],
-            [[line["sku"], line["name"], line.get("variant"), line["quantity"], line["unitPriceMmk"], line["lineTotalMmk"]] for line in artifact["lines"]],
+            [[line["sku"], line["name"], *([line["nameMy"]] if "nameMy" in line else []), line.get("variant"), line["quantity"], line["unitPriceMmk"], line["lineTotalMmk"]] for line in artifact["lines"]],
             artifact["grossSubtotalMmk"],
             [artifact["promotion"][field] for field in ("status", "code", "reason", "discountMmk", "netSubtotalMmk")],
             [artifact["delivery"][field] for field in ("fulfilment", "reference", "township", "status", "feeMmk", "promisedAt")],

@@ -287,7 +287,7 @@ function useManagedPortalAccess(runtimeStatus: RuntimeStatus, selectedWorkspace:
         message: 'Managed company access is unavailable while this service is offline. Try again when service is restored.',
       }
     }
-    return { status: 'reauthenticate', products: [], workspaceId: '' }
+    return localPortalAccess
   }
   if (!selectedWorkspace) return { status: 'reauthenticate', products: [], workspaceId: '' }
   if (resolved.key !== accessKey) return { status: 'checking', products: [], workspaceId: '' }

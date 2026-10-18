@@ -191,12 +191,12 @@ for (const page of landingPages) {
     const captureDisclosure = 'Real Shop screens with sample records. The catalog and prices shown are examples, not a live retail feed.'
     check(html.includes('class="shop-actual-showcase"') && html.includes(captureDisclosure), 'landing_shop_actual_showcase_disclosed')
     check(!html.includes('class="pos-window"') && !html.includes('class="sample-label"') && !html.includes('Complete sample sale') && !html.includes('shop-sample-demo.js'), 'landing_shop_no_simulated_pos')
-    check(html.includes('class="platform-gallery"') && html.includes('class="platform-image"'), 'landing_shop_actual_screens_visible')
+    check(html.includes('class="platform-gallery shop-gallery-all"') && html.includes('class="platform-image"'), 'landing_shop_actual_screens_visible')
     check(countOccurrences(html, '<figure class="platform-image') === productScreens.shop.length, 'landing_shop_four_verified_product_screens')
     check(html.includes('Sales, stock and orders.') && html.includes(captureDisclosure), 'landing_shop_capture_disclosure')
     check(html.includes('platform-device-capture-desktop') && html.includes('platform-device-capture-tablet') && html.includes('platform-device-capture-phone') && !html.includes('data-device-choice'), 'landing_shop_all_device_captures_together')
-    check(countOccurrences(html, 'data-gallery-previous') === 1 && countOccurrences(html, 'data-gallery-next') === 1, 'landing_shop_gallery_navigation')
-    check(html.includes('<script src="/platform-carousel.js" defer></script>'), 'landing_shop_gallery_script')
+    check(!html.includes('data-gallery-previous') && !html.includes('data-gallery-next') && !html.includes('data-platform-carousel'), 'landing_shop_all_views_without_carousel')
+    check(!html.includes('<script src="/platform-carousel.js" defer></script>'), 'landing_shop_needs_no_gallery_script')
     check(!/<a\b[^>]*>\s*<img\b[^>]*src="\/images\/actual-shop-/i.test(html), 'landing_shop_screens_are_not_raw_image_links')
     check(!html.includes('Makro PRO') && !html.includes('17 October 2026'), 'landing_shop_no_dated_retail_price_claim')
     for (const screen of productScreens.shop) {
@@ -380,7 +380,7 @@ check(shopLanding.includes('id="shop-demo"') && shopLanding.includes('class="sho
 check(!shopLanding.includes('class="pos-window"') && !shopLanding.includes('class="sample-label"')
   && !shopLanding.includes('Complete sample sale') && !shopLanding.includes('Sample receipt')
   && !shopLanding.includes('shop-sample-demo.js'), 'shop_public_page_has_no_simulated_pos')
-check(shopLanding.includes('class="platform-gallery"') && shopLanding.includes('class="platform-image"')
+check(shopLanding.includes('class="platform-gallery shop-gallery-all"') && shopLanding.includes('class="platform-image"')
   && countOccurrences(shopLanding, '<figure class="platform-image') === 4, 'shop_four_real_views_in_gallery')
 check(shopManifest?.status === 'release-candidate-local', 'shop_public_status_matches_unhosted_candidate')
 check(shopManifest?.primaryCta?.url === '/shop/#shop-demo', 'shop_primary_action_opens_real_screen_gallery')
@@ -400,7 +400,7 @@ for (const [route, html] of [['/', home], ['/shop/', shopLanding], ...activeIds.
     ? 'href="https://app.supermega.dev/login?product=shop"'
     : 'href="https://app.supermega.dev/login"'
   check(countOccurrences(body, expectedLoginHref) === (route === '/shop/' ? 2 : 1), `login_action_count:${route}`)
-  const carouselCount = Number((productScreens[routeProduct]?.length || 0) > 1)
+  const carouselCount = Number(route !== '/shop/' && (productScreens[routeProduct]?.length || 0) > 1)
   const expectedLinks = route === '/' ? 16 : route === '/shop/' ? 11 : 6 + Number(routeManifestProduct?.status === 'available-in-app')
   check((body.match(/<a\b/g) || []).length === expectedLinks, `marketing_link_surface:${route}`)
   const viewportGalleryCount = countOccurrences(body, 'data-viewport-gallery')

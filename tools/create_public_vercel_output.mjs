@@ -567,8 +567,10 @@ const sharedStyle = `
   .platform-home-caption {margin:12px 0 0;color:#5a6478;font-size:12px;line-height:1.45}
   .platform-slides {display:flex;align-items:stretch;min-width:0;overflow-x:auto;overscroll-behavior-inline:contain;scroll-snap-type:x mandatory;scrollbar-width:none;border-radius:24px}
   .platform-slides::-webkit-scrollbar {display:none}
-  .platform-slides .platform-image {display:flex;flex:0 0 100%;flex-direction:column;box-sizing:border-box;scroll-snap-align:start}
+  .platform-slides .platform-image {display:flex;flex:0 0 100%;flex-direction:column;box-sizing:border-box;margin:0;scroll-snap-align:start}
   .platform-gallery[data-single] .platform-slides {overflow:hidden}
+  .shop-gallery-all .platform-slides {display:grid;gap:28px;overflow:visible;scroll-snap-type:none;border-radius:0}
+  .shop-gallery-all .platform-slides .platform-image {min-width:0;scroll-snap-align:none}
   .platform-gallery-controls {display:flex;align-items:center;justify-content:flex-end;gap:12px;min-height:40px}
   .platform-gallery-controls button {display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border:1px solid var(--line-strong);border-radius:50%;color:var(--ink);background:#fff;font-size:20px;cursor:pointer}
   .platform-gallery-controls button:hover:not(:disabled) {border-color:var(--blue);color:var(--blue);background:#eff6ff}
@@ -803,7 +805,7 @@ function deviceCaptureSet(label,image,mobileImage,tabletImage,alt,width,height,l
  captures.push(deviceCapture('Phone',mobileImage,alt,390,844,'lazy'))
  return `<div class="platform-device-set${tabletImage?' has-tablet':''}" role="group" aria-label="${escapeHtml(label)} on desktop${tabletImage?', tablet':''} and phone">${captures.join('')}</div>`
 }
-function productGallery(id,label,eagerFirst=false) {
+function productGallery(id,label,eagerFirst=false,showAll=false) {
  const item=stories[id]
  const slides=item.screens.map(([image,alt,caption,width=1440,height=900],index)=>{
   const mobileImage=image.replace(/\.png$/, '-mobile.png')
@@ -812,8 +814,9 @@ function productGallery(id,label,eagerFirst=false) {
   if(tabletImage) interfaceDisclosure(tabletImage)
   const loading=eagerFirst && index===0?'eager':'lazy'
   const fetchPriority=eagerFirst && index===0?' fetchpriority="high"':''
-  return `<figure class="platform-image" role="group" aria-roledescription="slide" aria-label="${index+1} of ${item.screens.length}: ${escapeHtml(caption)}"><div class="platform-device-stage">${deviceCaptureSet(label,image,mobileImage,tabletImage,alt,width,height,loading,fetchPriority)}</div><figcaption>${escapeHtml(label)} &middot; ${escapeHtml(caption)}<small>${interfaceDisclosure(image)}</small></figcaption></figure>`
+  return `<figure class="platform-image" role="group"${showAll?'':` aria-roledescription="slide" aria-label="${index+1} of ${item.screens.length}: ${escapeHtml(caption)}"`}><div class="platform-device-stage">${deviceCaptureSet(label,image,mobileImage,tabletImage,alt,width,height,loading,fetchPriority)}</div><figcaption>${escapeHtml(label)} &middot; ${escapeHtml(caption)}<small>${interfaceDisclosure(image)}</small></figcaption></figure>`
  }).join('')
+ if (showAll) return `<div class="platform-gallery shop-gallery-all" data-product-gallery="${id}" role="region" aria-label="${label} interface views"><div class="platform-slides">${slides}</div></div>`
  if (item.screens.length === 1) return `<div class="platform-gallery" data-product-gallery="${id}" data-single role="region" aria-label="${label} interface view"><div class="platform-slides">${slides}</div></div>`
  return `<div class="platform-gallery" data-product-gallery="${id}" data-platform-carousel role="region" aria-roledescription="carousel" aria-label="${label} interface views"><div class="platform-slides" tabindex="0">${slides}</div><div class="platform-gallery-controls"><button type="button" data-gallery-previous aria-label="Previous ${label} screen" disabled>&lsaquo;</button><span class="platform-gallery-status" data-gallery-status aria-live="polite">1 of ${item.screens.length}</span><button type="button" data-gallery-next aria-label="Next ${label} screen">&rsaquo;</button></div></div>`
 }
@@ -964,7 +967,7 @@ function productAction(product) {
 
 function shopLandingHtml(product, page) {
  const description = page.description || product.description
- const shopShowcase = `<section class="shop-actual-showcase" id="shop-demo" aria-labelledby="shop-actual-showcase-title"><div class="wrap"><div class="story-heading"><div><span class="eyebrow">Shop</span><h2 id="shop-actual-showcase-title">Sales, stock and orders.</h2></div><p>Real Shop screens with sample records. The catalog and prices shown are examples, not a live retail feed.</p></div>${productGallery('shop','Shop',true)}</div></section>`
+ const shopShowcase = `<section class="shop-actual-showcase" id="shop-demo" aria-labelledby="shop-actual-showcase-title"><div class="wrap"><div class="story-heading"><div><span class="eyebrow">Shop</span><h2 id="shop-actual-showcase-title">Sales, stock and orders.</h2></div><p>Real Shop screens with sample records. The catalog and prices shown are examples, not a live retail feed.</p></div>${productGallery('shop','Shop',true,true)}</div></section>`
  let shopContent = publicShopMarkup
  const showcaseAnchor = /<\/section>(\r?\n)([ \t]*)<section class="demo-section"/g
  assert((shopContent.match(showcaseAnchor) || []).length === 1, 'shop_showcase_insertion_point_missing')
@@ -972,7 +975,7 @@ function shopLandingHtml(product, page) {
  const shopWithRemovedMocks = removeSectionByClass(removeSectionByClass(shopWithActualShowcase, 'demo-section', 'shop_interactive_mock'), 'benefits-section', 'shop_mock_benefits')
  return documentHtml({route:page.route,title:page.title,description,shareImage:`/og-card-${product.id}.png`,
   schema:{'@type':'Product',name:product.name,description,url:canonical(page.route)},
-  content:`<main id="content">${shopWithRemovedMocks}</main>${productAction(product)}${stories.shop.screens.length > 1 ? '<script src="/platform-carousel.js" defer></script>' : ''}`})
+  content:`<main id="content">${shopWithRemovedMocks}</main>${productAction(product)}`})
 }
 
 function productLandingHtml(product,page) {

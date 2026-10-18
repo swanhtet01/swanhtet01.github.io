@@ -35,9 +35,9 @@ test('only a matching resolved company can expose assigned products', () => {
   assert.equal(render('enterprise', 'synthetic-company', { key: 'synthetic-company:/', access }), access)
 })
 
-test('managed and offline runtimes never fall back to an unassigned local workspace', () => {
+test('managed and offline company runtimes stay gated while an isolated local demo can open', () => {
   assert.equal(render('enterprise', '').status, 'reauthenticate')
-  assert.equal(render('demo', '').status, 'reauthenticate')
+  assert.equal(render('demo', '').status, 'local')
   assert.equal(render('demo', 'stale-workspace').status, 'error')
 })
 

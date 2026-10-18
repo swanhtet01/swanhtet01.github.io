@@ -124,7 +124,7 @@ function openPrintWindow(ack: CommerceOrderAcknowledgement) {
   }
 }
 
-export function ReceiptDialog({ ack, loyalty, onClose, paymentQrScope, merchantProfile, onSaveMerchantProfile, disabled = false }: {
+export function ReceiptDialog({ ack, loyalty, onClose, paymentQrScope, merchantProfile, onSaveMerchantProfile, showSetupTrigger = false, disabled = false }: {
   ack: CommerceOrderAcknowledgement | null
   /**
    * S3 PR2 customer points, display-only: the named customer's current balance
@@ -137,6 +137,7 @@ export function ReceiptDialog({ ack, loyalty, onClose, paymentQrScope, merchantP
   paymentQrScope: string
   merchantProfile?: CommerceMerchantProfile
   onSaveMerchantProfile?: (input: CommerceMerchantProfileInput) => Promise<void>
+  showSetupTrigger?: boolean
   disabled?: boolean
 }) {
   const locale = useUiLocale()
@@ -233,6 +234,11 @@ export function ReceiptDialog({ ack, loyalty, onClose, paymentQrScope, merchantP
   const showSubtotalLine = hasPromotion || hasTax || hasDeliveryFee
 
   return <>
+    {showSetupTrigger && !ack ? <div className="shop-receipt-tools">
+      <button className="text-link" disabled={disabled} onClick={openMerchantProfileSetup} type="button">{uiText(merchantProfile ? 'Receipt details' : 'Set up receipt')}</button>
+      {merchantProfile ? <button className="text-link" disabled={disabled} onClick={printTestReceipt} type="button">{uiText('Print test slip')}</button> : null}
+      <span aria-live="polite" role="status">{printNotice}</span>
+    </div> : null}
     <dialog aria-labelledby="receipt-dialog-title" className="receipt-dialog" onClose={() => { setSetupOpen(false); onClose() }} ref={ref}>
       {setupOpen ? <form className="receipt-profile-form" onSubmit={(event) => void saveMerchantProfile(event)} style={{ display: 'grid', gap: 12, padding: 16 }}>
         <header className="receipt-dialog-header"><span className="core-eyebrow">{uiText('Customer receipt')}</span><h2 id="receipt-dialog-title">{uiText('Set up your receipt')}</h2><p>{uiText('Add the business name to print on receipts.')}</p></header>

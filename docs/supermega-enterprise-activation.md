@@ -13,11 +13,13 @@ RLS optimization, Sites publishing, private media, inquiry follow-up, stable upd
 six-page reviews, and the internal Ecommerce operator review grant.
 Core schema version 13 alone does not prove those later features exist. Historical local
 rehearsal descriptions below retain their original scope; they are not full-candidate proof.
-The source directory contains 32 SQL files. The two custom-domain migrations,
+The source directory contains 33 SQL files. The two custom-domain migrations,
 `20261014103000_website_custom_domain_bindings.sql` and
 `20261014122400_website_domain_attempt_fencing.sql`, are outside this 29-file packet and
 the observed 29-private-migration rehearsal chain. Do not infer domain lifecycle support
 or add those files to an apply operation without a separately reviewed inventory and proof.
+The additional `20261016143945_optimize_sites_inquiry_rls_initplans.sql` is also outside
+this packet; its presence in source does not authorize applying it to a preview.
 
 Before any schema apply, inspect the exact non-production target, health, verified TLS,
 catalog and migration history using metadata only. Supabase branch creation can replay

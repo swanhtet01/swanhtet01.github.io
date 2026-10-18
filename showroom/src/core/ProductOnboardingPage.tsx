@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useMemo, useState } from 'react'
+import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useOutletContext } from 'react-router'
 
 import { recordBehaviorSignal } from './behavior-trail'
@@ -214,6 +214,16 @@ function ActiveProductOnboardingPage({ product }: ProductOnboardingPageProps) {
   // the empty string keeps the standard sample on whatever pack this device already carries.
   const [businessChoiceId, setBusinessChoiceId] = useState(() => product === 'commerce' ? shopBusinessChoiceDoorSelection.activeId : '')
   const [shopBusinessChoiceChangeSelected, setShopBusinessChoiceChangeSelected] = useState(false)
+  const previousRequestedShopBusinessChoiceId = useRef(requestedShopBusinessChoiceId)
+  useEffect(() => {
+    if (product !== 'commerce' || previousRequestedShopBusinessChoiceId.current === requestedShopBusinessChoiceId) return
+    previousRequestedShopBusinessChoiceId.current = requestedShopBusinessChoiceId
+    // Clearing the query after an explicit in-page choice must not undo it.
+    if (!requestedShopBusinessChoiceId) return
+    const selection = resolveSetupVariantDoor(savedShopBusinessChoiceId, requestedShopBusinessChoiceId, Boolean(savedShopSetup))
+    setBusinessChoiceId(selection.activeId)
+    setShopBusinessChoiceChangeSelected(false)
+  }, [product, requestedShopBusinessChoiceId, savedShopBusinessChoiceId, savedShopSetup])
   const pendingRequestedShopBusinessChoiceId = product === 'commerce'
     && !shopBusinessChoiceChangeSelected
     && shopBusinessChoiceDoorSelection.choiceRequired
