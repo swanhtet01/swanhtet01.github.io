@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { readFileSync } from 'node:fs'
 
 import {
   ecommerceShopHandoffVisible,
+  hostedProductRouteRequiresLogin,
   managedProductIsVisible,
   managedProductPath,
   productSwitcherVisible,
@@ -14,6 +16,18 @@ import { managedProductConnections } from '../showroom/src/core/managed-product-
 
 const products = ['commerce', 'production', 'website', 'ecommerce']
 const paths = ['/shop/', '/plant/', '/website/', '/ecommerce/']
+const coreShell = readFileSync(new URL('../showroom/src/core/CoreShell.tsx', import.meta.url), 'utf8')
+
+test('hosted product routes require managed access when the portal falls back to local mode', () => {
+  assert.equal(hostedProductRouteRequiresLogin(true, 'local'), true)
+  assert.equal(hostedProductRouteRequiresLogin(true, 'checking'), false)
+  assert.equal(hostedProductRouteRequiresLogin(true, 'ready'), false)
+  assert.equal(hostedProductRouteRequiresLogin(true, 'reauthenticate'), false)
+  assert.equal(hostedProductRouteRequiresLogin(true, 'error'), false)
+  assert.equal(hostedProductRouteRequiresLogin(false, 'local'), false)
+  assert.match(coreShell, /hostedProductRouteRequiresLogin\(import\.meta\.env\.PROD, portalAccess\.status\)/)
+  assert.match(coreShell, /requestedProduct && hostedProductLoginRequired[\s\S]{0,100}<Navigate replace to=\{companyLoginPath\}/)
+})
 
 test('maps every client product to its canonical workspace route', () => {
   assert.deepEqual(products.map(managedProductPath), paths)

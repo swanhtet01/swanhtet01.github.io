@@ -16,6 +16,15 @@ export type ManagedProductHomeDecision =
   | { kind: 'launcher' }
   | { kind: 'redirect'; product: ClientSolutionId; path: string }
 
+export type ManagedPortalAccessStatus = 'checking' | 'local' | 'reauthenticate' | 'ready' | 'error'
+
+export function hostedProductRouteRequiresLogin(
+  productionBuild: boolean,
+  portalStatus: ManagedPortalAccessStatus,
+) {
+  return productionBuild && portalStatus === 'local'
+}
+
 export function managedProductPath(product: ClientSolutionId) {
   return PRODUCT_PATHS[product]
 }

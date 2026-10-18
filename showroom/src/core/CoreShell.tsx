@@ -11,6 +11,7 @@ import { activeCommerceTab, commerceTabs } from './commerce-tabs'
 import type { ClientSolutionId } from './client-onboarding'
 import {
   ecommerceShopHandoffVisible,
+  hostedProductRouteRequiresLogin,
   managedProductIsVisible,
   productSwitcherVisible,
   shopInboundRequestsVisible,
@@ -495,8 +496,10 @@ export function CoreLayout() {
   const managedRouteDecision = portalAccess.status === 'ready'
     ? resolveManagedProductRoute(requestedProduct, portalAccess.products)
     : { kind: 'allow' as const }
+  const hostedProductLoginRequired = Boolean(requestedProduct)
+    && hostedProductRouteRequiresLogin(import.meta.env.PROD, portalAccess.status)
   const managedProductAllowed = !requestedProduct
-    || portalAccess.status === 'local'
+    || (!hostedProductLoginRequired && portalAccess.status === 'local')
     || (portalAccess.status === 'ready' && managedRouteDecision.kind === 'allow')
   const managedWorkspace = portalAccess.status === 'ready' ? portalAccess : null
 
@@ -577,7 +580,9 @@ export function CoreLayout() {
           <div className="core-route-content">
             <ManagedPortalAccessContext.Provider value={portalAccess}>
               <RouteErrorBoundary resetKey={`${location.pathname}${location.search}`}>
-                {requestedProduct && portalAccess.status === 'checking'
+                {requestedProduct && hostedProductLoginRequired
+                  ? <Navigate replace to={companyLoginPath} />
+                  : requestedProduct && portalAccess.status === 'checking'
                   ? <PortalAccessPanel copy="Verifying this company and its assigned products." title="Opening company portal…" />
                   : requestedProduct && portalAccess.status === 'reauthenticate'
                     ? <Navigate replace to={companyLoginPath} />
