@@ -152,6 +152,10 @@ TRUSTED_IDENTITY_PROVIDERS = frozenset({"gateway", "supabase"})
 HUMAN_ACTOR_KIND = "human"
 _MAX_SAFE_INTEGER = 9_007_199_254_740_991
 _ORDER_CALCULATION_SCHEMA = "supermega.commerce.order-calculation.v1"
+ECOMMERCE_PUBLIC_REQUEST_EVENTS = frozenset({
+    "commerce.storefront_request.received",
+    "commerce.storefront_request.closed",
+})
 HUMAN_COMMAND_EVENTS = frozenset(
     {
         "commerce.workspace.initialized",
@@ -192,6 +196,7 @@ HUMAN_COMMAND_EVENTS = frozenset(
         "commerce.close.saved",
         "commerce.website_intake.converted",
         "commerce.storefront.configuration.saved",
+        "commerce.storefront_request.received",
         "commerce.storefront_request.closed",
         "commerce.merchant_profile.saved",
         "commerce.storefront.merchandising.imported",
@@ -454,7 +459,7 @@ def require_command_product_entitlement(
 ) -> None:
     """Keep Shop writes and internal Ecommerce writes on separate grants."""
 
-    if event_type.startswith("commerce.storefront."):
+    if event_type.startswith("commerce.storefront.") or event_type in ECOMMERCE_PUBLIC_REQUEST_EVENTS:
         require_ecommerce_management_authority(product_entitlements, capabilities)
     elif event_type.startswith("commerce.") and product_entitlements is not None:
         # Ecommerce shares Shop's storage surface, but that must not make an
@@ -3551,7 +3556,10 @@ def _required_command_capability(surface: str, event_type: str) -> str | None:
 
     if (
         _normalize_surface(surface) == "commerce"
-        and _normalize_event_type(event_type).startswith("commerce.storefront.")
+        and (
+            _normalize_event_type(event_type).startswith("commerce.storefront.")
+            or _normalize_event_type(event_type) in ECOMMERCE_PUBLIC_REQUEST_EVENTS
+        )
     ):
         # The event-level Ecommerce gate checks both activation and actor grant;
         # skip the broader Shop write check for this internally managed path.

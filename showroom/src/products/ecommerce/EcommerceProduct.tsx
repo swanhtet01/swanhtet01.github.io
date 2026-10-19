@@ -597,8 +597,7 @@ export function EcommerceProduct() {
           || confirmedIdentity.userId !== identity.userId) {
           throw new Error('The company account changed while loading. Reload to open the current company.')
         }
-        setManagedCanWrite(managedBootstrapHasCapability(bootstrap, identity, 'commerce.write')
-          && managedBootstrapHasCapability(bootstrap, identity, 'ecommerce.manage'))
+        setManagedCanWrite(managedBootstrapHasCapability(bootstrap, identity, 'ecommerce.manage'))
         setManagedCanDeliverReviews(canDeliverCatalogReviews(bootstrap, identity))
         const view = resolveManagedStorefront(
           identity,
@@ -1053,7 +1052,7 @@ export function EcommerceProduct() {
       throw new Error('The company account changed. Reload before saving.')
     }
     const bootstrap = await loadManagedBootstrap(identity)
-    const writeAllowed = managedBootstrapHasCapability(bootstrap, identity, 'commerce.write')
+    const writeAllowed = managedBootstrapHasCapability(bootstrap, identity, 'ecommerce.manage')
     setManagedCanWrite(writeAllowed)
     setManagedCanDeliverReviews(canDeliverCatalogReviews(bootstrap, identity))
     if (!writeAllowed) throw new Error('View only — ask a company owner to assign Ecommerce operator access.')
@@ -1377,7 +1376,7 @@ export function EcommerceProduct() {
     }
     const bootstrap = await loadManagedBootstrap(identity)
     await assertCurrentRequestIdentity()
-    const writeAllowed = managedBootstrapHasCapability(bootstrap, identity, 'commerce.write')
+    const writeAllowed = managedBootstrapHasCapability(bootstrap, identity, 'ecommerce.manage')
     setManagedCanWrite(writeAllowed)
     setManagedCanDeliverReviews(canDeliverCatalogReviews(bootstrap, identity))
     if (!writeAllowed) throw new Error('View only — ask a company owner to assign Ecommerce operator access.')

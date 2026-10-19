@@ -60,11 +60,13 @@ class CommercePublicBoundaryTests(unittest.TestCase):
 
         @contextmanager
         def guarded_cursor(*_args, **_kwargs):
-            yield cursor, frozenset({'commerce.write'})
+            yield cursor, frozenset({'ecommerce.manage'})
 
         store._guarded_cursor.side_effect = guarded_cursor
         with patch('supermega_runtime.commerce_public_storefront._require_public_schema'):
             inbox = CommercePublicStorefront(store).inbox(principal)
+        store._guarded_cursor.assert_called_once_with(
+            principal, write=False, capability='ecommerce.manage')
         self.assertNotIn('contact_json', cursor.execute.call_args_list[0].args[0].lower())
         self.assertNotIn('contact', inbox['requests'][0])
         self.assertNotIn('Private name', str(inbox))
@@ -80,7 +82,7 @@ class CommercePublicBoundaryTests(unittest.TestCase):
         @contextmanager
         def guarded_cursor(*_args, **_kwargs):
             # The grant was present when the request entered its transaction.
-            yield cursor, frozenset({'commerce.write', 'ecommerce.manage'})
+            yield cursor, frozenset({'ecommerce.manage'})
 
         store._guarded_cursor.side_effect = guarded_cursor
         store._product_entitlements.return_value = ('shop', 'ecommerce')
@@ -135,6 +137,43 @@ class CommercePublicBoundaryTests(unittest.TestCase):
             adapter._require_ecommerce_entitlement(
                 cursor, principal, frozenset({'commerce.write', 'company.write'}))
         self.assertEqual(company_owner_only.exception.required_capability, 'ecommerce.manage')
+
+    def test_ecommerce_operator_scoped_grant_cannot_create_shop_orders(self):
+        from supermega_runtime.managed_staff_access import _role_capabilities
+        from supermega_runtime.trial_store import (
+            InMemoryTrialStore, _required_command_capability,
+            require_command_product_entitlement, self_serve_owner_capabilities,
+        )
+        capabilities = _role_capabilities({
+            'products': ['ecommerce'],
+            'ownerCapabilities': sorted(self_serve_owner_capabilities('ecommerce')),
+        }, 'ecommerce-operator')
+        self.assertIn('ecommerce.manage', capabilities)
+        self.assertNotIn('commerce.write', capabilities)
+        self.assertIsNone(_required_command_capability(
+            'commerce', 'commerce.storefront_request.received'))
+        self.assertEqual(_required_command_capability(
+            'commerce', 'commerce.order.created'), 'commerce.write')
+        require_command_product_entitlement(
+            'commerce.storefront_request.received', ('commerce', 'ecommerce'), capabilities)
+        with self.assertRaises(TrialPermissionDenied) as missing_product:
+            require_command_product_entitlement(
+                'commerce.storefront_request.received', ('commerce',), capabilities)
+        self.assertEqual(missing_product.exception.required_capability, 'product.ecommerce')
+
+        principal = TrialPrincipal('internal-workspace', 'ecommerce-operator', 'human')
+        store = InMemoryTrialStore(reducer=lambda *_: {})
+        store.provision_product_entitlements(
+            workspace_id=principal.workspace_id, products=('commerce', 'ecommerce'))
+        store.provision_membership(
+            workspace_id=principal.workspace_id, actor_id=principal.actor_id,
+            actor_kind=principal.actor_kind, capabilities=capabilities)
+        with self.assertRaises(TrialPermissionDenied) as shop_order_denied:
+            store.apply_command(
+                principal, command_id='00000000-0000-4000-8000-000000000001',
+                surface='commerce', event_type='commerce.order.created',
+                expected_version=0, payload={})
+        self.assertEqual(shop_order_denied.exception.required_capability, 'commerce.write')
 
     def test_shop_only_cannot_read_or_change_internal_publications(self):
         principal = TrialPrincipal('shop-only-workspace', 'merchant-owner', 'human')
