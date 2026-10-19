@@ -14,6 +14,7 @@ type MyanmarLocaleModule = typeof import('./ui-locale-my.ts')
 let myLocaleModule: MyanmarLocaleModule | null = null
 let myLocaleLoad: Promise<MyanmarLocaleModule> | null = null
 let myLocaleLoadError: unknown = null
+let localeRequestVersion = 0
 
 function loadMyLocaleModule(): Promise<MyanmarLocaleModule> {
   if (myLocaleModule) return Promise.resolve(myLocaleModule)
@@ -30,15 +31,20 @@ function loadMyLocaleModule(): Promise<MyanmarLocaleModule> {
 }
 
 function applyUiLocale(next: UiLocale, persist: boolean): Promise<void> {
+  const requestVersion = ++localeRequestVersion
   if (next === 'my' && !myLocaleModule) {
     return loadMyLocaleModule().then(() => {
+      if (requestVersion !== localeRequestVersion) return
       myLocaleLoadError = null
       return commitUiLocale(next, persist)
     }).catch((error: unknown) => {
+      if (requestVersion !== localeRequestVersion) return
       myLocaleLoadError = error
-      throw error
+      // Keep the application usable if a deployment no longer has this chunk.
+      commitUiLocale('en', persist)
     })
   }
+  myLocaleLoadError = null
   commitUiLocale(next, persist)
   return Promise.resolve()
 }
@@ -55,8 +61,17 @@ function commitUiLocale(next: UiLocale, persist: boolean): void {
 
 export function ensureUiLocaleReady(): Promise<void> {
   if (currentLocale !== 'my') return Promise.resolve()
-  if (myLocaleLoadError) return Promise.reject(myLocaleLoadError)
-  return loadMyLocaleModule().then(() => undefined)
+  if (myLocaleLoadError) {
+    commitUiLocale('en', true)
+    return Promise.resolve()
+  }
+  const requestVersion = localeRequestVersion
+  return loadMyLocaleModule().then(() => undefined).catch((error: unknown) => {
+    myLocaleLoadError = error
+    if (currentLocale === 'my' && requestVersion === localeRequestVersion) {
+      commitUiLocale('en', true)
+    }
+  })
 }
 
 if (typeof window !== 'undefined') {
@@ -81,6 +96,7 @@ if (currentLocale === 'my') {
     await loadMyLocaleModule()
   } catch (error: unknown) {
     myLocaleLoadError = error
+    commitUiLocale('en', true)
   }
 }
 
