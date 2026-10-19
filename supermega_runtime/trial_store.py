@@ -3694,7 +3694,7 @@ def _without_verified_website_review_triggers(rows: Sequence[Mapping[str, Any]])
 
 
 _ECOMMERCE_REVIEW_TRIGGERS = {
-    ("ecommerce_customer_reviews", "ecommerce_review_guard"): (31, "guard_ecommerce_review", "41583ca2889b54fcf7c77c68d307f55ec127b218b27f3bc001cf05418e4776d9"),
+    ("ecommerce_customer_reviews", "ecommerce_review_guard"): (31, "guard_ecommerce_review", "e7858e577b22e4fcf3243ed05c377ff4ac4a89bc0028d69d9afa45112ba12d26"),
     ("workspace_state", "ecommerce_reviews_invalidate"): (25, "invalidate_ecommerce_reviews", "2f8e3905cd867d3a118d4fd6eaf9963248cee9ea14cfd7df0160d073f2167959"),
 }
 

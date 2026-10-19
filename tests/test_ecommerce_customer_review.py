@@ -9,7 +9,7 @@ from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from supermega_runtime.ecommerce_customer_review import prepare_catalog_review, catalog_review_projection, build_catalog_acceptance, build_catalog_change_request
 from supermega_runtime.ecommerce_customer_review_store import EcommerceCustomerReviewStore, FUNCTIONS
-from supermega_runtime.trial_store import TrialPermissionDenied, TrialPrincipal, TrialReadiness, TrialValidationError
+from supermega_runtime.trial_store import TrialPermissionDenied, TrialPrincipal, TrialReadiness, TrialValidationError, _ECOMMERCE_REVIEW_TRIGGERS
 from tests.test_commerce_runtime import catalog_state, storefront_configuration
 
 
@@ -25,6 +25,19 @@ class CatalogReviewManagementBoundaryTests(unittest.TestCase):
                 self.assertIsNotNone(match)
                 digest = hashlib.sha256(match.group(1).replace("\r\n", "\n").strip().encode()).hexdigest()
                 self.assertEqual(FUNCTIONS[name][-1], digest)
+
+    def test_runtime_review_trigger_pin_matches_shared_lock_migration(self):
+        migration = Path(__file__).resolve().parents[1] / "supabase/migrations/20261019103000_ecommerce_review_shared_state_lock.sql"
+        source = migration.read_text(encoding="utf-8")
+        match = re.search(
+            r"create or replace function app_private\.guard_ecommerce_review\(\).*?as \$\$(.*?)\$\$;",
+            source, re.IGNORECASE | re.DOTALL)
+        self.assertIsNotNone(match)
+        body = match.group(1).replace("\r\n", "\n").strip()
+        digest = hashlib.sha256(body.encode()).hexdigest()
+        self.assertEqual(_ECOMMERCE_REVIEW_TRIGGERS[("ecommerce_customer_reviews", "ecommerce_review_guard")][-1], digest)
+        self.assertIn("new.workspace_id::text || ':state:commerce'", body)
+        self.assertNotRegex(body, r"\bfor\s+update\b")
 
     def test_internal_operator_can_read_approved_reviewer_choices_without_shop_write(self):
         principal = TrialPrincipal('internal-workspace', 'ecommerce-operator', 'human')
