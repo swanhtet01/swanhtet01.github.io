@@ -1016,7 +1016,7 @@ function classifyCommerceBarcodeConflicts(rows: ClientImportRow[]) {
     if (row.status !== 'ready') continue
     const skuCode = row.values.sku.toLowerCase()
     const skuOwners = skuOwnersByCode.get(skuCode) ?? new Set<string>()
-    skuOwners.add(row.values.sku)
+    skuOwners.add(skuCode)
     skuOwnersByCode.set(skuCode, skuOwners)
     const barcode = row.values.barcode
     if (!barcode) continue

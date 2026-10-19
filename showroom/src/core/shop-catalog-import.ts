@@ -257,6 +257,41 @@ function existingCatalogConflictIssues(existing: CommerceItem, item: CommerceIte
   return issues
 }
 
+function normalizedCatalogCode(value: string | undefined) {
+  return value?.trim().toLowerCase() ?? ''
+}
+
+function catalogScanCodeConflictIssues(item: CommerceItem, existingCatalog: CommerceItem[]): ShopCatalogImportIssue[] {
+  const itemCode = normalizedCatalogCode(item.sku)
+  const barcode = normalizedCatalogCode(item.barcode)
+  const issues: ShopCatalogImportIssue[] = []
+  for (const existing of existingCatalog) {
+    if (existing.sku === item.sku) continue
+    if (barcode && barcode === normalizedCatalogCode(existing.sku)) {
+      issues.push({
+        code: 'catalog_scan_code_conflict',
+        field: 'barcode',
+        message: `Barcode ${item.barcode} is already used as the item code for ${existing.sku}. Choose a different barcode.`,
+      })
+    }
+    if (barcode && barcode === normalizedCatalogCode(existing.barcode)) {
+      issues.push({
+        code: 'catalog_scan_code_conflict',
+        field: 'barcode',
+        message: `Barcode ${item.barcode} is already assigned to ${existing.sku}. Choose a different barcode.`,
+      })
+    }
+    if (itemCode && itemCode === normalizedCatalogCode(existing.barcode)) {
+      issues.push({
+        code: 'catalog_scan_code_conflict',
+        field: 'sku',
+        message: `Item code ${item.sku} is already used as a barcode for ${existing.sku}. Choose a different item code.`,
+      })
+    }
+  }
+  return issues
+}
+
 export function commerceCatalogImportReview(existing: CommerceItem, incoming: CommerceItem) {
   const existingNameMy = existing.nameMy?.trim() || undefined
   const incomingNameMy = incoming.nameMy?.trim() || undefined
@@ -393,6 +428,12 @@ function classifyAgainstCatalog(rows: ShopCatalogImportRow[], existingCatalog: C
   const existingBySku = new Map(existingCatalog.map((item) => [item.sku, item]))
   for (const row of rows) {
     if (!row.item || row.status !== 'ready') continue
+    const scanCodeConflicts = catalogScanCodeConflictIssues(row.item, existingCatalog)
+    if (scanCodeConflicts.length) {
+      row.status = 'conflict'
+      row.issues.push(...scanCodeConflicts)
+      continue
+    }
     const existing = existingBySku.get(row.item.sku)
     if (!existing) continue
     if (sameImportedValues(existing, row.item)) {

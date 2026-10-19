@@ -177,6 +177,24 @@ test('Shop catalog preview detects variant and barcode changes and includes opti
   assert.notEqual(changedBarcode.catalogDigest, preview.catalogDigest)
 })
 
+test('Shop catalog preview blocks barcodes and item codes already assigned to another product', async () => {
+  const { createShopCatalogImportPreview } = await import('../showroom/src/core/shop-catalog-import.ts')
+  const existing = { sku: 'EXISTING-1', barcode: '0000123456789', name: 'Existing tea', onHand: 12, reorderAt: 3, price: 1800 }
+  const barcodeCollision = await createShopCatalogImportPreview(
+    'sku,barcode,item_name,opening_stock,reorder_at,price_mmk\nNEW-1,0000123456789,New coffee,4,1,2500',
+    [existing],
+  )
+  assert.equal(barcodeCollision.rows[0].status, 'conflict')
+  assert.ok(barcodeCollision.rows[0].issues.some(issue => issue.code === 'catalog_scan_code_conflict' && issue.field === 'barcode'))
+
+  const itemCodeCollision = await createShopCatalogImportPreview(
+    'sku,item_name,opening_stock,reorder_at,price_mmk\n0000123456789,New coffee,4,1,2500',
+    [existing],
+  )
+  assert.equal(itemCodeCollision.rows[0].status, 'conflict')
+  assert.ok(itemCodeCollision.rows[0].issues.some(issue => issue.code === 'catalog_scan_code_conflict' && issue.field === 'sku'))
+})
+
 test('Shop onboarding maps barcode headers as text and blocks scan-code collisions', async () => {
   const barcode = '0000123456789'
   const preview = await createClientImportPreview(
@@ -208,6 +226,13 @@ test('Shop onboarding maps barcode headers as text and blocks scan-code collisio
   )
   assert.equal(skuCollision.readyForStaging, false)
   assert.equal(skuCollision.rows[0].issues.some((issue) => issue.field === 'barcode'), true)
+
+  const sameCodeDifferentCase = await createClientImportPreview(
+    'sku,item_name,barcode,opening_stock,reorder_at,price_mmk\nABC1,Tea,abc1,4,1,1000',
+    'commerce',
+  )
+  assert.equal(sameCodeDifferentCase.readyForStaging, true)
+  assert.equal(sameCodeDifferentCase.rows[0].status, 'ready')
 })
 
 test('standalone Shop catalog import preserves optional variants and blocks a changed existing variant', async () => {
