@@ -185,21 +185,32 @@ function makeState(orders = []) {
   check(r.byBucket['1_7'].orders === 1, 'paymentDueAt takes priority over promisedAt')
 }
 
-// 17. promisedAt used when paymentDueAt absent
+// 17. a late fulfilment promise does not make pay-at-handoff balance overdue
 {
-  const order = { ...makeOrder({ promisedAt: daysAgo(15) }), id: 'ORD-0', paymentDueAt: undefined }
+  const order = { ...makeOrder({ promisedAt: daysAgo(15) }), id: 'ORD-0', paymentDueAt: undefined, status: 'preparing' }
   const r = projectShopArAgingSummary(makeState([order]), ASOF)
-  check(r.byBucket['8_30'].orders === 1, 'promisedAt used when paymentDueAt absent')
+  check(r.outstandingOrders === 1, 'unpaid balance remains outstanding without a due date')
+  check(r.byBucket.current.orders === 1, 'pay-at-handoff balance remains current before handoff')
+  check(r.overdueOrders === 0, 'fulfilment promise does not make payment overdue')
 }
 
-// 18. createdAt used when both paymentDueAt and promisedAt absent
+// 18. createdAt is not a payment deadline
 {
   const order = { ...makeOrder({ createdAt: daysAgo(35) }), id: 'ORD-0', paymentDueAt: undefined, promisedAt: undefined }
   const r = projectShopArAgingSummary(makeState([order]), ASOF)
-  check(r.byBucket['31_60'].orders === 1, 'createdAt used when paymentDueAt and promisedAt both absent')
+  check(r.byBucket.current.orders === 1, 'balance without a recorded due date remains current')
+  check(r.overdueOrders === 0, 'order creation date does not make payment overdue')
 }
 
-// 19. totalOutstandingMmk = sum across all buckets
+// 19. completed unpaid orders age from actual handoff evidence
+{
+  const order = { ...makeOrder({ createdAt: daysAgo(35) }), id: 'ORD-0', paymentDueAt: undefined, promisedAt: daysFromNow(2), status: 'completed', completion: { capturedAt: daysAgo(5) } }
+  const r = projectShopArAgingSummary(makeState([order]), ASOF)
+  check(r.byBucket['1_7'].orders === 1, 'completed unpaid order ages from handoff time')
+  check(r.overdueOrders === 1, 'completed unpaid order is overdue after handoff')
+}
+
+// 20. totalOutstandingMmk = sum across all buckets
 {
   const orders = [
     { ...makeOrder({ paymentDueAt: daysFromNow(1), total: 5000 }), id: 'ORD-0' },

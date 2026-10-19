@@ -12,10 +12,10 @@ export function shopOrderAttentionLabels(
 ): ShopOrderAttentionLabel[] {
   const labels: ShopOrderAttentionLabel[] = []
 
-  if (order.paymentStatus === 'pending') labels.push({ kind: 'payment', text: 'payment due', tone: 'pending' })
+  if (order.paymentStatus === 'pending') labels.push({ kind: 'payment', text: 'Payment pending', tone: 'pending' })
   if (order.refundStatus === 'due') labels.push({ kind: 'refund', text: 'refund due', tone: 'pending' })
 
-  if (promiseUrgency === 'late') labels.push({ kind: 'promise', text: 'Order late', tone: 'late' })
+  if (promiseUrgency === 'late') labels.push({ kind: 'promise', text: 'Fulfilment late', tone: 'late' })
   else if (promiseUrgency === 'due_soon') labels.push({ kind: 'promise', text: 'due soon', tone: 'pending' })
   else if (promiseUrgency === 'unrecorded') labels.push({ kind: 'promise', text: 'promise missing', tone: 'pending' })
 

@@ -138,6 +138,7 @@ import {
   commerceOrderHasReleasableReservation,
   commerceOrderPromiseUrgency,
   commerceReceivablesAging,
+  commerceOrderPaymentDueAt,
   compareCommercePurchaseOrderAttention,
   commercePurchaseOrderArrivalUrgency,
   commercePurchaseOrderProgress,
@@ -5018,12 +5019,12 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
       setNotice('Only a pending, active customer balance can receive a collection note.')
       return
     }
-    const dueAt = order.paymentDueAt ?? order.promisedAt ?? order.createdAt
+    const dueAt = commerceOrderPaymentDueAt(order)
     queueAction({
       kind: 'collection_contact',
       subjectId: orderId,
       summary: `Record customer follow-up for ${order.id}`,
-      before: `${order.customer} · ${formatMoney(order.total)} pending · due ${formatTime(dueAt)} · ${order.collectionActions?.length ?? 0} prior notes`,
+      before: `${order.customer} · ${formatMoney(order.total)} pending · ${dueAt ? `due ${formatTime(dueAt)}` : 'payment due at handoff'} · ${order.collectionActions?.length ?? 0} prior notes`,
       after: 'Append an attributable contact note · no message sent · no payment changed',
       reasonSuggestion: 'Customer payment follow-up recorded.',
       apply: (action) => mutateCommerce(
@@ -8251,11 +8252,11 @@ function ReceivablesAging({ aging, disabled, onRecordContact }: {
     </div>
     <div className="receivables-aging-list">
       {aging.rows.slice(0, 5).map((row) => <div key={row.orderId}>
-        <span><strong>{row.customer}</strong><small>{row.orderId} · {row.paymentMethod} · due {formatTime(row.dueAt)}</small>{row.lastCollectionAction ? <small>Last contact {formatTime(row.lastCollectionAction.capturedAt)} by {row.lastCollectionAction.actor} · {row.collectionActionCount} total</small> : <small>No customer contact recorded</small>}</span>
+        <span><strong>{row.customer}</strong><small>{row.orderId} · {row.paymentMethod} · {row.dueAt ? `due ${formatTime(row.dueAt)}` : 'payment due at handoff'}</small>{row.lastCollectionAction ? <small>Last contact {formatTime(row.lastCollectionAction.capturedAt)} by {row.lastCollectionAction.actor} · {row.collectionActionCount} total</small> : <small>No customer contact recorded</small>}</span>
         <span><strong>{formatMoney(row.balanceMmk)}</strong><small>{row.daysPastDue ? `${row.daysPastDue} days overdue` : 'not overdue'}</small><button className="text-link" disabled={disabled} onClick={() => onRecordContact(row.orderId)} type="button">Record contact</button></span>
       </div>)}
     </div>
-    <p className="form-notice">New orders retain an immutable payment-due snapshot. Older orders fall back to their fulfilment promise. Contact notes are append-only evidence; recording one does not send a message or change payment.</p>
+    <p className="form-notice">Only a recorded payment deadline or completed handoff can make an unpaid balance overdue. Fulfilment promises do not set payment due dates. Contact notes are append-only evidence; recording one does not send a message or change payment.</p>
   </details>
 }
 

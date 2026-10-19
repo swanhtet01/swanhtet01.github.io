@@ -36,7 +36,7 @@ export const COMMERCE_DAILY_CLOSE_EXPORT_SCHEMA = 'supermega.commerce.daily-clos
 export const COMMERCE_ACCOUNTING_HANDOFF_SCHEMA = 'supermega.commerce.accounting-handoff.v3' as const
 export const COMMERCE_ACCOUNTING_HANDOFF_V4_SCHEMA = 'supermega.commerce.accounting-handoff.v4' as const
 export const COMMERCE_SUPPLIER_PAYABLES_HANDOFF_SCHEMA = 'supermega.commerce.supplier-payables-handoff.v1' as const
-export const COMMERCE_CUSTOMER_RECEIVABLES_HANDOFF_SCHEMA = 'supermega.commerce.customer-receivables-handoff.v1' as const
+export const COMMERCE_CUSTOMER_RECEIVABLES_HANDOFF_SCHEMA = 'supermega.commerce.customer-receivables-handoff.v2' as const
 export const COMMERCE_CLOSE_SETTLEMENT_SCHEMA = 'supermega.commerce.close-settlement.v1' as const
 export const COMMERCE_SUPPORT_WORKLOAD_EXPORT_SCHEMA = 'supermega.commerce.support-workload.v1' as const
 export const COMMERCE_ORDER_ACKNOWLEDGEMENT_SCHEMA = 'supermega.commerce.order-acknowledgement.v1' as const
@@ -598,7 +598,7 @@ export type CommerceReceivableAgingRow = {
   orderId: string
   customer: string
   paymentMethod: string
-  dueAt: string
+  dueAt: string | null
   balanceMmk: number
   daysPastDue: number
   bucket: CommerceReceivableAgingBucket
@@ -618,6 +618,11 @@ export type CommerceReceivablesAging = {
 const receivableBuckets: CommerceReceivableAgingBucket[] = ['current', '1_7', '8_30', '31_60', 'over_60']
 const dayMilliseconds = 24 * 60 * 60 * 1000
 
+// Fulfilment promises and order creation timestamps are not payment terms.
+export function commerceOrderPaymentDueAt(order: Pick<CommerceOrder, 'paymentDueAt' | 'status' | 'completion'>) {
+  return order.paymentDueAt ?? (order.status === 'completed' ? order.completion?.capturedAt ?? null : null)
+}
+
 function receivableBucket(daysPastDue: number): CommerceReceivableAgingBucket {
   if (daysPastDue <= 0) return 'current'
   if (daysPastDue <= 7) return '1_7'
@@ -631,10 +636,10 @@ export function commerceReceivablesAging(state: CommerceState, now: number): Com
   const rows = state.orders
     .filter((order) => order.status !== 'cancelled' && order.paymentStatus === 'pending')
     .flatMap((order): CommerceReceivableAgingRow[] => {
-      const dueAt = order.paymentDueAt ?? order.promisedAt ?? order.createdAt
-      const dueTime = Date.parse(dueAt)
-      if (!Number.isFinite(dueTime) || !Number.isSafeInteger(order.total) || order.total < 0) return []
-      const daysPastDue = safeNow > dueTime ? Math.ceil((safeNow - dueTime) / dayMilliseconds) : 0
+      const dueAt = commerceOrderPaymentDueAt(order)
+      const dueTime = dueAt === null ? Number.NaN : Date.parse(dueAt)
+      if ((dueAt !== null && !Number.isFinite(dueTime)) || !Number.isSafeInteger(order.total) || order.total < 0) return []
+      const daysPastDue = Number.isFinite(dueTime) && safeNow > dueTime ? Math.ceil((safeNow - dueTime) / dayMilliseconds) : 0
       return [{
         orderId: order.id,
         customer: order.customer,
@@ -647,7 +652,7 @@ export function commerceReceivablesAging(state: CommerceState, now: number): Com
         ...(order.collectionActions?.[0] ? { lastCollectionAction: order.collectionActions[0].proof } : {}),
       }]
     })
-    .sort((left, right) => right.daysPastDue - left.daysPastDue || left.dueAt.localeCompare(right.dueAt) || left.orderId.localeCompare(right.orderId))
+    .sort((left, right) => right.daysPastDue - left.daysPastDue || (left.dueAt ?? '').localeCompare(right.dueAt ?? '') || left.orderId.localeCompare(right.orderId))
   const totalsMmk = Object.fromEntries(receivableBuckets.map((bucket) => [
     bucket,
     rows.filter((row) => row.bucket === bucket).reduce((sum, row) => sum + row.balanceMmk, 0),
@@ -957,7 +962,7 @@ export type CommerceCustomerReceivablesHandoffRow = {
   customer: string
   paymentMethod: string
   createdAt: string
-  dueAt: string
+  dueAt: string | null
   balanceMmk: number
   daysPastDue: number
   bucket: CommerceReceivableAgingBucket
@@ -11563,7 +11568,7 @@ export function commerceCustomerReceivablesHandoff(state: CommerceState, now: nu
       orderId: agingRow.orderId,
       customer: agingRow.customer,
       paymentMethod: agingRow.paymentMethod,
-      createdAt: order?.createdAt ?? agingRow.dueAt,
+      createdAt: order?.createdAt ?? aging.asOf,
       dueAt: agingRow.dueAt,
       balanceMmk: agingRow.balanceMmk,
       daysPastDue: agingRow.daysPastDue,
