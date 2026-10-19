@@ -201,7 +201,7 @@ const UI_TRANSLATIONS: Readonly<Record<string, string>> = {
   'confirmed': 'အတည်ပြုပြီး', 'cancelled': 'ပယ်ဖျက်ပြီး',
   'payment due': 'ငွေပေးရန် ကျန်', 'refund due': 'ငွေပြန်အမ်းရန် ကျန်',
   'late': 'နောက်ကျနေ', 'due soon': 'မကြာမီ ရောက်မည်',
-  'Payment pending': 'ငွေပေးရန် ကျန်', 'Unpaid': 'ငွေမပေးရသေး', 'Promise missed': 'ကတိပြုချိန် ကျော်လွန်နေ',
+  'Payment pending': 'ငွေပေးရန် ကျန်', 'Unpaid': 'ငွေမပေးရသေး',
   'promise not recorded': 'ကတိပြုထားသည့်အချိန် မမှတ်တမ်းတင်ရသေး',
   'promised': 'ကတိပြုထားသည့်အချိန်', 'created': 'ဖန်တီးချိန်',
   'owner': 'တာဝန်ခံ', 'owner not recorded': 'တာဝန်ခံ မမှတ်တမ်းတင်ရသေး',

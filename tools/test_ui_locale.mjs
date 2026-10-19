@@ -28,7 +28,7 @@ test('language choice survives refresh and follows another tab without mixing la
     assert.equal(locale.uiText('Customer receipt'), 'ဖောက်သည်ပြေစာ')
     assert.equal(locale.uiText('Print receipt'), 'ပြေစာ ပုံနှိပ်ရန်')
     assert.equal(locale.uiText('Payment pending'), 'ငွေပေးရန် ကျန်')
-    assert.equal(locale.uiText('Promise missed'), 'ကတိပြုချိန် ကျော်လွန်နေ')
+    assert.equal(locale.uiText('Order late'), 'အော်ဒါ နောက်ကျနေ')
     assert.equal(locale.uiText('Record payment only'), 'ငွေပေးချေမှုကိုသာ မှတ်တမ်းတင်ရန်')
     assert.equal(locale.uiText('Record settled refund'), 'ပြီးစီးသော ငွေပြန်အမ်းမှုကို မှတ်တမ်းတင်ရန်')
     assert.equal(locale.uiText('Cancel order'), 'အော်ဒါ ပယ်ဖျက်ရန်')
