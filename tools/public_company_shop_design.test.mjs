@@ -136,8 +136,8 @@ assert.match(appBrandStyles, /\.core-brand-name\s*\{ color:\s*var\(--core-ink\);
 assert.doesNotMatch(companyShopStyle, /brand-icon/)
 assert.match(companyMarkup, /href="\/shop\/">Explore Shop/)
 assert.match(companyMarkup, /<p class="hero-kicker">For Myanmar retailers<\/p>/)
-assert.match(companyMarkup, /Sell faster\.<br><span>Stay in control\.<\/span>/)
-assert.match(companyMarkup, /Sell at the counter, track stock and follow open orders in one Shop workspace built for Myanmar retailers\./)
+assert.match(companyMarkup, /See what sold\.<br><span>Know what needs action\.<\/span>/)
+assert.match(companyMarkup, /Record counter sales, check stock and follow open orders in SuperMega Shop\./)
 for (const screen of ['today', 'sell', 'orders']) {
   assert.match(companyMarkup, new RegExp(`id="shop-showcase-${screen}"`))
   assert.match(companyMarkup, new RegExp(`/images/actual-shop-${screen === 'sell' ? 'sell' : screen}\\.png`))
@@ -376,10 +376,10 @@ assert.equal(publicManifest.company.headline, 'Sell faster. Stay in control.')
 assert.equal(publicManifest.company.supporting, 'Sell at the counter, track stock and follow open orders in one Shop workspace built for Myanmar retailers.')
 const companyHeroHeading = companyMarkup.match(/<h1 id="hero-title">([\s\S]*?)<\/h1>/)?.[1]
   ?.replace(/<br\s*\/?\s*>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
-const companyHeroSupporting = companyMarkup.match(/<p>Sell at the counter, track stock and follow open orders in one Shop workspace built for Myanmar retailers\.<\/p>/)?.[0]
+const companyHeroSupporting = companyMarkup.match(/<p>Record counter sales, check stock and follow open orders in SuperMega Shop\.<\/p>/)?.[0]
   ?.replace(/^<p>|<\/p>$/g, '')
-assert.equal(companyHeroHeading, publicManifest.company.headline, 'company headline metadata matches visible hero copy')
-assert.equal(companyHeroSupporting, publicManifest.company.supporting, 'company summary metadata matches visible hero copy')
+assert.equal(companyHeroHeading, 'See what sold. Know what needs action.', 'source design seed is rewritten before public release')
+assert.equal(companyHeroSupporting, 'Record counter sales, check stock and follow open orders in SuperMega Shop.', 'source design seed is rewritten before public release')
 assert.equal(publicManifest.company.statement, publicManifest.company.supporting, 'company description and summary stay aligned')
 assert.equal(publicManifest.pages.find((page) => page.route === '/').description, publicManifest.company.supporting)
 const brandGuide = readFileSync(new URL('../BRAND.md', import.meta.url), 'utf8')
