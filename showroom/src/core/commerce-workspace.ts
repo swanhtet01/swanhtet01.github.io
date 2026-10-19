@@ -2760,6 +2760,11 @@ export function validateCommerceState(value: unknown): CommerceState {
   assertUnique(catalogBaselineSkus, 'Catalog baseline SKU')
 
   const newerCatalogChangeBySku = new Map<string, CommerceCatalogChange>()
+  const expectedOptionalCatalogValuesBySku = new Map<string, {
+    barcode: string | null
+    nameMy: string | null
+    category: string | null
+  }>()
   for (const [index, candidate] of catalogChanges.entries()) {
     const catalogChangeFields = ['sku', 'previousPrice', 'nextPrice', 'previousReorderAt', 'nextReorderAt', 'proof']
     const hasBarcodeHistory = isRecord(candidate)
@@ -2828,6 +2833,30 @@ export function validateCommerceState(value: unknown): CommerceState {
     }
     const change = candidate as unknown as CommerceCatalogChange
     const newer = newerCatalogChangeBySku.get(sku)
+    const expectedOptionalValues = expectedOptionalCatalogValuesBySku.get(sku) ?? {
+      barcode: (item.barcode as string | null | undefined) ?? null,
+      nameMy: (item.nameMy as string | null | undefined) ?? null,
+      category: (item.category as string | null | undefined) ?? null,
+    }
+    if (hasBarcodeHistory) {
+      if (change.nextBarcode !== expectedOptionalValues.barcode) {
+        rejectInvalid(`catalogChanges[${index}] breaks the barcode history for ${sku}.`)
+      }
+      expectedOptionalValues.barcode = change.previousBarcode ?? null
+    }
+    if (hasMyanmarNameHistory) {
+      if (change.nextNameMy !== expectedOptionalValues.nameMy) {
+        rejectInvalid(`catalogChanges[${index}] breaks the Myanmar name history for ${sku}.`)
+      }
+      expectedOptionalValues.nameMy = change.previousNameMy ?? null
+    }
+    if (hasCategoryHistory) {
+      if (change.nextCategory !== expectedOptionalValues.category) {
+        rejectInvalid(`catalogChanges[${index}] breaks the category history for ${sku}.`)
+      }
+      expectedOptionalValues.category = change.previousCategory ?? null
+    }
+    expectedOptionalCatalogValuesBySku.set(sku, expectedOptionalValues)
     if (!newer) {
       if (item.price !== change.nextPrice || item.reorderAt !== change.nextReorderAt
         || (hasBarcodeHistory && (item.barcode ?? null) !== change.nextBarcode)
