@@ -659,7 +659,7 @@ const sharedStyle = `
   .shop-actual-showcase .story-heading h2{font-size:clamp(30px,4vw,48px);letter-spacing:-.045em;line-height:1.08}
   .shop-actual-showcase .story-heading p{max-width:36ch;font-size:15px;line-height:1.55}
   body[data-view="company"] .company-hero::before{opacity:0;background-image:none}
-  @media(min-width:1051px){body[data-view="company"] .company-hero .hero-grid{grid-template-columns:minmax(0,.88fr) minmax(420px,1.12fr);gap:clamp(36px,5vw,72px)}}
+  @media(min-width:1051px){body[data-view="company"] .company-hero .hero-grid{grid-template-columns:minmax(0,.76fr) minmax(520px,1.24fr);gap:clamp(28px,3.5vw,56px)}}
   body[data-view="company"] .company-hero .hero-art{min-height:0}
   body[data-view="company"] .company-hero .company-product-visual{display:grid;min-width:0;gap:10px;margin:0;padding:10px;border:1px solid #e1e5ed;border-radius:12px;background:#fff;box-shadow:0 18px 40px rgba(17,24,39,.08)}
   .company-product-visual img{display:block;width:100%;height:auto;border:1px solid #e5e8ef;border-radius:7px;background:#f7f8fb;pointer-events:none;user-select:none}
@@ -766,14 +766,26 @@ body[data-view="shop"] .shop-hero .button-primary:hover { border-color: #343b4e;
 .button:focus-visible, .button-primary:focus-visible, .nav-links a:focus-visible { outline: 3px solid rgba(37,99,235,.28); outline-offset: 3px; }
 body[data-view="company"] .company-hero { background: #f6f5f1; }
 body[data-view="company"] .company-hero::before { display: none; }
-body[data-view="company"] .company-hero .hero-grid { min-height: 540px; padding-block: clamp(44px,6vw,76px); }
+body[data-view="company"] .company-hero .hero-grid { min-height: 500px; align-items: start; padding-block: clamp(32px,4vw,54px); }
 body[data-view="company"] .company-hero .hero-copy { max-width: 590px; }
-body[data-view="company"] .company-hero h1 { max-width: 10.5ch; font-size: clamp(42px,5.1vw,66px); line-height: .99; letter-spacing: -.055em; }
-body[data-view="company"] .company-hero .hero-copy > p:not(.hero-kicker) { max-width: 43ch; font-size: 18px; line-height: 1.6; }
+body[data-view="company"] .company-hero h1 { max-width: 13ch; font-size: clamp(42px,4.8vw,62px); line-height: 1.02; letter-spacing: -.052em; }
+body[data-view="company"] .company-hero .hero-copy > p:not(.hero-kicker) { max-width: 44ch; font-size: 17px; line-height: 1.55; }
 body[data-view="company"] .company-product-visual { gap: 10px; padding: 12px; border-color: #dfded8; border-radius: 14px; background: #fff; box-shadow: 0 24px 58px rgba(25,28,38,.09); }
 body[data-view="company"] .company-product-visual img { border-color: #e4e4e1; border-radius: 8px; }
 body[data-view="shop"] .shop-hero { padding-block: clamp(44px,6vw,68px); background: #f3f5f9; }
 body[data-view="shop"] .shop-hero h1 { max-width: 13ch; font-size: clamp(42px,5vw,64px); line-height: 1.02; }
+body[data-view="shop"] .shop-hero-preview { margin: 24px 0 0; padding: 12px; border: 1px solid #e1e5ed; border-radius: 14px; background: #fff; box-shadow: 0 18px 40px rgba(17,24,39,.08); }
+body[data-view="shop"] .shop-hero-preview img { display: block; width: 100%; height: auto; border: 1px solid #eef0f3; border-radius: 8px; }
+body[data-view="shop"] .shop-hero-preview figcaption { display: flex; justify-content: space-between; gap: 16px; margin: 10px 2px 0; color: #596579; font-size: 12px; }
+body[data-view="shop"] .shop-hero-preview figcaption strong { color: #202432; }
+@media (min-width: 1051px) {
+  body[data-view="shop"] .shop-hero .wrap { display: grid; grid-template-columns: minmax(0,.76fr) minmax(520px,1.24fr); gap: clamp(28px,3.5vw,56px); align-items: center; }
+  body[data-view="shop"] .shop-hero .wrap > .eyebrow { grid-column: 1; grid-row: 1; }
+  body[data-view="shop"] .shop-hero .wrap > h1 { grid-column: 1; grid-row: 2; }
+  body[data-view="shop"] .shop-hero .wrap > p:not(.eyebrow) { grid-column: 1; grid-row: 3; }
+  body[data-view="shop"] .shop-hero .wrap > .button-primary { grid-column: 1; grid-row: 4; }
+  body[data-view="shop"] .shop-hero-preview { grid-column: 2; grid-row: 1 / 5; margin: 0; }
+}
 body[data-view="shop"] .shop-actual-showcase { background: #fff; }
 body[data-view="contact"] .contact-page { padding-block: clamp(48px,6vw,78px); }
 body[data-view="contact"] .contact-page .contact-form { gap: 16px; padding: 26px; border-color: #e1e3e8; border-radius: 12px; background: #fafbfc; box-shadow: none; }
@@ -836,7 +848,7 @@ assert(typeof homePage.title === 'string' && homePage.title.includes('SuperMega'
 assert(typeof homePage.description === 'string' && homePage.description.length >= 40, 'home_page_description_invalid')
 
 const stories = {
- shop: {title:'Sell at the counter. Keep stock and orders in view.', body:'Search or scan a product, build a sale, and see order and stock follow-up in the same Shop workspace.', screens:[['actual-shop-orders.png','Shop order queue showing order status and the next follow-up','Orders and fulfilment'],['actual-shop-inventory.png','Shop inventory workspace showing stock levels and the count, receive, and reorder workflow','Inventory and replenishment']], proof:[['Find','Search or scan the right product'],['Sell','Review each item and the MMK total'],['Follow up','See order status and stock needs']]},
+ shop: {title:'Sell at the counter. Keep stock and orders in view.', body:'Search or scan a product, build a sale, and see order and stock follow-up in the same Shop workspace.', screens:[['actual-shop-sell.png','Shop counter sale with product search and a live basket','Counter sale'],['actual-shop-orders.png','Shop order queue showing order status and the next follow-up','Orders and fulfilment'],['actual-shop-inventory.png','Shop inventory workspace showing stock levels and the count, receive, and reorder workflow','Inventory and replenishment']], proof:[['Find','Search or scan the right product'],['Sell','Review each item and the MMK total'],['Follow up','See order status and stock needs']]},
  website: {title:'Build clear pages. Review inquiries in one place.', body:'Our team manages pages, readiness checks and customer inquiries in one workspace.', screens:[['actual-sites-editor.png','Sites editor showing page navigation, focused content editing and readiness checks','Page workspace and readiness'],['actual-sites-inquiries.png','Sites inquiry workspace showing a synthetic customer request, ownership and decision controls','Inquiry review and ownership']], proof:[['Record','Pages, services and metadata'],['Action','Edit, check and prepare to publish'],['Result','Qualified inquiries in one inbox']]},
  ecommerce: {title:'Show your catalog. Review each request.', body:'Our team reviews each catalog request before Shop records an order or payment.', screens:[['actual-commerce-catalog.png','Commerce catalog showing available products, local pricing and customer ordering','Store catalog and availability'],['actual-commerce-order-request.png','Commerce Store showing a locally saved customer request awaiting Shop confirmation','Request saved locally']], proof:[['Record','Catalog, customer and request'],['Action','Review before an order is confirmed'],['Result','A clear next step for fulfilment']]},
 }
@@ -923,7 +935,7 @@ function removeSectionByClass(source, className, code) {
 function shopOnlyCompanyMarkup(source) {
  let markup = source
  markup = replaceKnownCopyOnce(markup, ["Operating software · Myanmar", "Operating software for Myanmar companies", "Shop software for Myanmar businesses", "Shop software for Myanmar retailers", "For shops in Myanmar", "For Myanmar retailers", "Business software for Myanmar retailers", "Shop for Myanmar retailers", "Made for Myanmar retailers", "SuperMega · Operating software for Myanmar", "SUPERMEGA · MYANMAR", "SuperMega · Myanmar", "Business software for Myanmar", "Business software"], "For Myanmar retailers", "shop_only_hero_kicker")
- markup = replaceKnownCopyOnce(markup, ["Tools for<br><span>everyday work.</span>", "Run your shop.<br><span>See what’s next.</span>", "Sell faster.<br><span>Stay in control.</span>", "Clearer systems for<br><span>everyday business.</span>", "Sales. Stock. Orders.<br><span>Under control.</span>", "Software for<br><span>Myanmar businesses.</span>", "Sales, stock, and orders<br><span>for Myanmar shops.</span>", "Sales, stock, and orders<br><span>in one place.</span>", "Sales, stock and orders<br><span>in one place.</span>", "See what sold.<br><span>Know what needs action.</span>", "Business software<br><span>built for Myanmar.</span>", "Operating software<br><span>for Myanmar businesses.</span>", "Run your counter.<br><span>Stay ahead of stock.</span>", "Know what sold.<br><span>See what needs attention.</span>", "For Myanmar<br><span>retailers.</span>"], "Run the counter.<br><span>See what needs attention.</span>", "shop_only_hero_heading")
+ markup = replaceKnownCopyOnce(markup, ["Tools for<br><span>everyday work.</span>", "Run your shop.<br><span>See what’s next.</span>", "Run the counter.<br><span>See what needs attention.</span>", "Clearer systems for<br><span>everyday business.</span>", "Sales. Stock. Orders.<br><span>Under control.</span>", "Software for<br><span>Myanmar businesses.</span>", "Sales, stock, and orders<br><span>for Myanmar shops.</span>", "Sales, stock, and orders<br><span>in one place.</span>", "Sales, stock and orders<br><span>in one place.</span>", "See what sold.<br><span>Know what needs action.</span>", "Business software<br><span>built for Myanmar.</span>", "Operating software<br><span>for Myanmar businesses.</span>", "Run your counter.<br><span>Stay ahead of stock.</span>", "Know what sold.<br><span>See what needs attention.</span>", "For Myanmar<br><span>retailers.</span>"], "Sell faster.<br><span>Stay in control.</span>", "shop_only_hero_heading")
  markup = replaceKnownCopyOnce(markup, [
   "Shop brings sales and stock into one operating view. Our team manages Sites and confirms Commerce availability for each setup.",
   "Keep sales, orders and stock together in one clear MMK workflow. See what needs attention without digging through settings.",
@@ -977,18 +989,15 @@ function shopOnlyCompanyMarkup(source) {
  return markup
 }
 function companyOperatingGraphic() {
- return `<div class="company-operating-overview" aria-label="Shop workflow preview"><figure class="company-product-visual"><img src="/images/actual-shop-today.png" alt="Actual SuperMega Shop Today screen showing sales, orders and stock alerts with synthetic sample records." width="1440" height="900" loading="eager" fetchpriority="high" /><figcaption><strong>Today</strong><span>Sales, orders and stock at a glance</span></figcaption></figure><div class="company-operating-details"><figure class="company-product-visual"><img src="/images/actual-shop-sell.png" alt="Actual SuperMega Shop counter sale screen with product search and current sale basket. Synthetic sample records." width="1440" height="900" loading="lazy" /><figcaption><strong>Counter sale</strong><span>Find items and complete a sale</span></figcaption></figure><figure class="company-product-visual"><img src="/images/actual-shop-orders.png" alt="Actual SuperMega Shop orders screen with fulfilment and payment follow-up. Synthetic sample records." width="1440" height="900" loading="lazy" /><figcaption><strong>Orders</strong><span>See what needs follow-up</span></figcaption></figure></div><p class="company-operating-proof">Actual Shop screens · synthetic sample records</p></div>`
+ return `<div class="company-operating-overview" aria-label="Shop workflow preview"><figure class="company-product-visual"><img src="/images/actual-shop-sell.png" alt="Actual SuperMega Shop counter sale screen with product search and current sale basket. Synthetic sample records." width="1440" height="900" loading="eager" fetchpriority="high" /><figcaption><strong>Counter sale</strong><span>Find items and complete a sale</span></figcaption></figure><div class="company-operating-details"><figure class="company-product-visual"><img src="/images/actual-shop-orders.png" alt="Actual SuperMega Shop orders screen with fulfilment and payment follow-up. Synthetic sample records." width="1440" height="900" loading="lazy" /><figcaption><strong>Orders</strong><span>See what needs follow-up</span></figcaption></figure><figure class="company-product-visual"><img src="/images/actual-shop-inventory.png" alt="Actual SuperMega Shop inventory screen with stock levels and replenishment. Synthetic sample records." width="1440" height="900" loading="lazy" /><figcaption><strong>Inventory</strong><span>Keep product quantities current</span></figcaption></figure></div><p class="company-operating-proof">Actual Shop screens · synthetic sample records</p></div>`
 }
 function replaceHomeShopShowcase(source) {
  const marker = /<section class="shop-showcase" aria-label="Shop product screens">[\s\S]*?<\/section>/g
  const matches = source.match(marker) || []
  assert(matches.length === 1, 'home_shop_showcase_source_drift')
  const companyVisual = companyOperatingGraphic()
- let markup = source.replace(marker, companyVisual)
- const contactAction = /[ \t]*<a class="text-link hero-note" href="\/contact\/">Contact us<\/a>/g
- const contactActions = [...markup.matchAll(contactAction)]
- assert.equal(contactActions.length, 1, 'home_duplicate_contact_action_source_drift')
- markup = markup.replace(contactAction, '')
+ const markup = source.replace(marker, companyVisual)
+ assert(!markup.includes('<a class="text-link hero-note" href="/contact/">Contact us</a>'), 'home_duplicate_contact_action_remains')
  return removeSectionByClass(markup, 'company-portfolio', 'home_duplicate_shop_details')
 }
 const publicHomeMarkup = replaceHomeShopShowcase(shopOnlyCompanyMarkup(companyMarkup))
@@ -999,7 +1008,14 @@ function simplifyShopHeroActions(source) {
  assert(matches.length === 1, 'shop_duplicate_screen_action_source_drift')
  return markup.replace(secondaryAction, '')
 }
-const publicShopMarkup = simplifyShopHeroActions(shopMarkup)
+function addShopHeroPreview(source) {
+ const heroWrap = /(<section class="shop-hero"[^>]*>\s*<div class="wrap">)([\s\S]*?)(\s*<\/div>\s*<\/section>)/g
+ const matches = [...source.matchAll(heroWrap)]
+ assert(matches.length === 1, 'shop_hero_preview_insertion_point_source_drift')
+ const preview = '<figure class="shop-hero-preview"><img src="/images/actual-shop-sell.png" alt="Shop counter sale with product search and a live basket · synthetic sample records" width="1440" height="900" loading="eager" fetchpriority="high" /><figcaption><strong>Counter sale</strong><span>Synthetic sample records</span></figcaption></figure>'
+ return source.replace(heroWrap, (_match, opening, copy, closing) => opening + copy + preview + closing)
+}
+const publicShopMarkup = addShopHeroPreview(simplifyShopHeroActions(shopMarkup))
 
 function productCard(id) {
  const item=stories[id], label=publicProducts.find(product=>product.id===id).name

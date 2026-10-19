@@ -249,7 +249,7 @@ for (const page of landingPages) {
     ? 'href="https://app.supermega.dev/login?product=shop"'
     : 'href="https://app.supermega.dev/login"'
   check(countOccurrences(html, expectedLoginHref) === 1, `landing_login_actions:${page.route}`)
-  if (page.route === '/shop/') check(html.includes('class="button button-primary" href="/contact/?product=shop">Contact SuperMega'), 'shop_primary_action_contacts_team')
+  if (page.route === '/shop/') check(html.includes('class="button button-primary" href="/contact/?product=shop">Request a walkthrough'), 'shop_primary_action_requests_walkthrough')
   if (page.route === '/') check(html.includes('.company-hero .hero-actions .button-primary') && html.includes('white-space:nowrap'), 'company_primary_action_stays_compact')
   check(!html.includes('Request assisted setup') && !html.includes('id="first-loop"'), `landing_no_setup_funnel:${page.route}`)
   for (const unsupportedClaim of ['AI may help prepare drafts', 'AI assisted', 'Ranked next actions', 'approved AI context']) {
@@ -324,7 +324,7 @@ for (const token of ['Site measurement', 'seven public page paths', 'removes que
 }
 
 const contact = readStatic('contact/index.html')
-for (const token of ['Message received:', 'Keep this reference if you need to follow up.', 'SuperMega builds business software for Myanmar. Shop brings counter sales, stock and order follow-up together for retailers.']) {
+for (const token of ['Message received:', 'Keep this reference if you need to follow up.', 'SuperMega builds practical business software for Myanmar. Shop helps retailers manage counter sales, stock and open orders.']) {
   check(contact.includes(token), `contact_confirmed_receipt_guidance:${token}`)
 }
 for (const token of ['No action is needed now.', 'SuperMega will review your brief and reply with one scoped next step.', 'We’ll reply by email', 'We’ll follow up by email']) {
@@ -344,7 +344,7 @@ check(hasClassToken(home, 'company-hero') && !home.includes('id="products"'), 'h
 check(home.includes('href="/shop/">Explore Shop') && home.includes('href="/contact/">Contact</a>')
   && !home.includes('>View every screen size') && !home.includes('>See Shop on desktop and mobile'), 'home_actions_prioritize_product_and_human_contact')
 check(home.includes('<p class="hero-kicker">For Myanmar retailers</p>')
-  && home.includes('Run the counter.<br><span>See what needs attention.</span>')
+  && home.includes('Sell faster.<br><span>Stay in control.</span>')
   && home.includes('SuperMega Shop brings sales, open orders and stock checks into one workspace for Myanmar retailers.')
   && home.includes('class="company-operating-overview"') && home.includes('class="company-product-visual"')
   && !home.includes('class="company-product-evidence"')
@@ -363,13 +363,16 @@ for (const token of [
   `<meta property="og:description" content="${homePage.description}" />`,
 ]) check(home.includes(token), `home_metadata_manifest_bound:${token}`)
 check(home.includes('<figure class="company-product-visual"') && home.includes('src="/images/actual-shop-sell.png"')
-  && home.includes('Shop · Counter sale') && home.includes('Actual Shop screen · synthetic sample records'), 'home_provenance_checked_shop_capture_visible')
+  && home.includes('<strong>Counter sale</strong>') && home.includes('Actual Shop screens · synthetic sample records')
+  && home.includes('src="/images/actual-shop-orders.png"') && home.includes('src="/images/actual-shop-inventory.png"'), 'home_provenance_checked_shop_capture_visible')
 const shopLanding = readStatic('shop/index.html')
 const shopProduct = manifest.customerProducts.find(product => product.id === 'shop')
+check(shopLanding.includes('class="shop-hero-preview"') && shopLanding.includes('src="/images/actual-shop-sell.png"')
+  && shopLanding.includes('Counter sale') && shopLanding.includes('Synthetic sample records'), 'shop_hero_shows_actual_sample_screenshot')
 for (const token of [
   'Sell, follow orders, restock.',
   'Real Shop screens. Synthetic sample records.',
-  'Shop counter with searchable products, visible stock levels, and Add controls for a new sale',
+  'Shop counter sale with product search and a live basket',
   'Shop order queue showing order status and the next follow-up',
   'Shop inventory workspace showing stock levels and the count, receive, and reorder workflow',
 ]) check(shopLanding.includes(token), `shop_gallery_describes_verified_view:${token}`)
