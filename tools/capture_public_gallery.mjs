@@ -183,7 +183,7 @@ async function capture(cdp, sessionId, output, name, expectedTexts, view) {
   if (!myanmarFontLoaded) throw new Error(`myanmar_font_missing:${name}`)
   await evaluate(cdp, sessionId, `(() => {
     const style = document.createElement('style');
-    style.textContent = '*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}';
+    style.textContent = '*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}.qa-notice,.qa-nav,#root > p,#root > button,#root > output{display:none!important}';
     document.head.append(style);
   })()`)
   await evaluate(cdp, sessionId, 'document.activeElement?.blur()')
