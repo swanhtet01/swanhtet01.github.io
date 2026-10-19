@@ -1,16 +1,20 @@
 # SuperMega Supergoal
 
-Version: 1.4.28
+Version: 1.4.29
 Owner: Swan Htet, Founder
 Maintainer: CTO, sole integration writer
-Updated: 2026-10-19
+Updated: 2026-10-19 (13:24 UTC)
 Status: ACTIVE — implementation and acceptance in progress; not production-ready.
 
-## Current launch state — 19 October
+## Current launch state — 19 October, 13:24 UTC
 
-Customer-managed access remains **Shop only**; Sites and Commerce stay internal. The live [supermega.dev](https://supermega.dev/) page still lists all three products and labels the images “illustrative records,” so production website alignment is **NO-GO**. A local review candidate at `a4fa5a89fe7d730468654cfd616ae12449dfe9a1` now builds the Shop-only offer and uses twelve hash-bound captures from the actual Shop components across Today, Counter, Orders, and Inventory at desktop, tablet, and mobile sizes. The records are synthetic, the capture is local-only, and `publicationReady` remains false; nothing was deployed.
+Customer-managed access remains **Shop only**; Sites and Commerce stay internal. The live [supermega.dev](https://supermega.dev/) page still lists all three products and labels their images “illustrative records,” so production website alignment remains **NO-GO**. I refreshed the isolated candidate with twelve desktop, tablet, and mobile screenshots captured from the actual Shop components at clean source commit `c9ad8a4b9a4b49fe2f85e27baf45a30e31e8c315`. The local seven-route build and its 345 landing-page checks pass; it shows Shop-only customer messaging and visibly labels the synthetic records “Sample data.” The capture manifest still correctly says `publicationReady=false`, and nothing was deployed.
 
-The preview branch approved for this rehearsal is `MIGRATIONS_FAILED` because dashboard branching replays production migration history, which omits the repository's `20260711081300_public_legacy_baseline.sql`. Production remains untouched. Managed Auth, cross-tenant denial, hosted reload, device compatibility, and paid-VPS worker acceptance are not proven. The active launch decision remains **NO-GO** pending a source-correct preview, exact-head review, and the remaining acceptance gates.
+Shop online requests now appear automatically in the private Shop review queue without being claimed. Operators explicitly select **Review order** to claim one request; inbox polling excludes contact details, and linked order contact remains on-demand and private. The refreshed-gallery commit `3cd707c8d84afe6ee635bc4d118258d7c6f0a49a` is pushed to PR [#683](https://github.com/swanhtet01/swanhtet01.github.io/pull/683). Exact-head App CI passed in 11m29s, and audit, dependency, GitGuardian, and owner-gated release checks passed. Codex's code review completed with no findings; the separate security review is still running. Neither is independent GitHub approval. PR #683 remains stacked on open PR #682 and neither is merged.
+
+Preview branches `twflgmlwfkykgzsxnegc` and `rvuutlqxdjaflovozsma` remain `MIGRATIONS_FAILED`; their read-only ledgers show the approved review branch migrations through `20261019111816` and the fresh branch baseline only. Do not infer working hosted auth from their schema or ledger. Read-only checks on `twflg` confirmed `supermega_trial_login` is a login role without `BYPASSRLS`, and public Supabase roles have no direct `app_private` table grants. They did **not** prove sign-in, save/reload, or cross-tenant denial. Advisors still report leaked-password protection disabled and several Sites RLS warnings. Production remains untouched.
+
+The current overall decision remains **NO-GO**. A fresh read of [supermega.dev](https://supermega.dev/) still shows Shop, Sites, and Commerce with “illustrative records”; the refreshed Shop-only site is local candidate output only. No eligible independent GitHub reviewer is available; full Burmese coverage, authenticated tenant-isolation tests, scanner/printer hardware, paid-VPS worker acceptance, and launch support readiness remain unproven. The latest static Shop language audit still finds 1,168 raw English fragments (930 unique) in six source files. No customer, commercial, production database, deployment, or billing action was performed.
 
 ### 17 October checkpoint (historical)
 
