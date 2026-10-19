@@ -393,7 +393,7 @@ export type ManagedClientImportValidation = {
   activation: {
     status: 'not_applied'
     target_surface: 'commerce' | 'production' | 'website'
-    required_capability: 'commerce.write' | 'production.write' | 'website.write'
+    required_capability: 'commerce.write' | 'ecommerce.manage' | 'production.write' | 'website.write'
     human_approval_required: true
     atomic_adapter_ready: boolean
     external_writes_performed: false
@@ -419,7 +419,7 @@ export type ManagedClientImportApplyPreflight = {
   object: string
   workflow_template_id: string
   target_surface: 'commerce' | 'production' | 'website'
-  required_capability: 'commerce.write' | 'production.write' | 'website.write'
+  required_capability: 'commerce.write' | 'ecommerce.manage' | 'production.write' | 'website.write'
   package_digest: string
   row_count: number
   expected_version: number
@@ -1057,7 +1057,7 @@ const CLIENT_IMPORT_ACTIVATION = {
   commerce: { target: 'commerce', capability: 'commerce.write' },
   production: { target: 'production', capability: 'production.write' },
   website: { target: 'website', capability: 'website.write' },
-  ecommerce: { target: 'commerce', capability: 'commerce.write' },
+  ecommerce: { target: 'commerce', capability: 'ecommerce.manage' },
 } as const
 
 const CLIENT_IMPORT_COMMAND_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i

@@ -11205,6 +11205,64 @@ async function verifyManagedClientImportRuntime() {
       identity,
       0,
     ) === applyPreflight, 'managed_client_import_apply_preflight_rejected')
+    const preflightEcommercePreview = await onboarding.createClientImportPreview(
+      onboarding.clientImportTemplate('ecommerce', 'social-storefront'),
+      'ecommerce',
+      undefined,
+      'storefront.csv',
+      'social-storefront',
+    )
+    const preflightEcommerceStaged = onboarding.buildClientImportStagingPackage(preflightEcommercePreview, {
+      workflowTemplateId: 'social-storefront',
+      workspace: 'Example Storefront',
+      owner: 'Ecommerce operator',
+    })
+    const preflightEcommercePackageDigest = await managedTrial.managedClientImportPackageDigest(preflightEcommerceStaged)
+    const preflightEcommerceReceipt = {
+      ...receipt,
+      product: preflightEcommerceStaged.product,
+      object: preflightEcommerceStaged.object,
+      workflow_template_id: preflightEcommerceStaged.workflowTemplateId,
+      preview_digest: preflightEcommerceStaged.source.previewDigest,
+      package_digest: preflightEcommercePackageDigest,
+      row_count: preflightEcommerceStaged.rows.length,
+      activation: { ...receipt.activation, required_capability: 'ecommerce.manage' },
+    }
+    const preflightEcommerceAccepted = managedTrial.assertManagedClientImportValidation(
+      { validation: preflightEcommerceReceipt }, preflightEcommerceStaged, identity, preflightEcommercePackageDigest,
+    )
+    assert(preflightEcommerceAccepted.activation.required_capability === 'ecommerce.manage',
+      'managed_client_import_ecommerce_scoped_grant_rejected')
+    rejects(
+      () => managedTrial.assertManagedClientImportValidation(
+        { validation: { ...preflightEcommerceReceipt, activation: { ...preflightEcommerceReceipt.activation, required_capability: 'commerce.write' } } },
+        preflightEcommerceStaged, identity, preflightEcommercePackageDigest,
+      ),
+      'managed_client_import_ecommerce_shop_write_grant_accepted',
+    )
+    const preflightEcommerceDigest = await managedTrial.managedClientImportApplyPreflightDigest({
+      expectedVersion: 1,
+      identity,
+      validation: preflightEcommerceAccepted,
+    })
+    const preflightEcommerceApplyReceipt = {
+      ...applyPreflight,
+      product: 'ecommerce',
+      object: preflightEcommerceStaged.object,
+      workflow_template_id: preflightEcommerceStaged.workflowTemplateId,
+      required_capability: 'ecommerce.manage',
+      package_digest: preflightEcommercePackageDigest,
+      row_count: preflightEcommerceStaged.rows.length,
+      expected_version: 1,
+      current_version: 1,
+      preflight_digest: preflightEcommerceDigest,
+      confirmation: `APPLY ${preflightEcommercePackageDigest}`,
+    }
+    assert(await managedTrial.assertManagedClientImportApplyPreflight(
+      { preflight: preflightEcommerceApplyReceipt, identity_authority: 'trusted_managed_identity',
+        external_writes_performed: false, secret_values_exposed: false },
+      preflightEcommerceStaged, preflightEcommerceAccepted, identity, 1,
+    ) === preflightEcommerceApplyReceipt, 'managed_client_import_ecommerce_scoped_preflight_rejected')
     await rejectsAsync(
       () => managedTrial.assertManagedClientImportApplyPreflight(
         {
@@ -11827,7 +11885,7 @@ async function verifyManagedClientImportRuntime() {
       activation: {
         status: 'not_applied',
         target_surface: 'commerce',
-        required_capability: 'commerce.write',
+        required_capability: 'ecommerce.manage',
         human_approval_required: true,
         atomic_adapter_ready: true,
         external_writes_performed: false,
