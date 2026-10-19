@@ -16,9 +16,18 @@ export type ShopPublicInboxSyncResult = {
   nextCursor: string | null
 }
 
+export function acquireShopPublicInboxFlight(activeIdentityKeys: Set<string>, identityKey: string): boolean {
+  if (activeIdentityKeys.has(identityKey)) return false
+  activeIdentityKeys.add(identityKey)
+  return true
+}
+
+export function releaseShopPublicInboxFlight(activeIdentityKeys: Set<string>, identityKey: string): void {
+  activeIdentityKeys.delete(identityKey)
+}
+
 type ShopPublicInboxApi = {
   loadInbox: (identity: ManagedIdentity, after?: string) => ReturnType<typeof import('../products/ecommerce/managed-commerce-public').loadManagedCommercePublicInbox>
-  claimRequest: (identity: ManagedIdentity, handle: string, requestId: string) => ReturnType<typeof import('../products/ecommerce/managed-commerce-public').claimManagedCommercePublicRequest>
 }
 
 export function shopPublicInboxBacklogCursor(
@@ -62,50 +71,40 @@ function shopInboxSummary(request: ManagedCommercePublicRequest): ShopPublicInbo
 }
 
 /**
- * Import new public orders into Shop's pending review queue. Claiming an online
- * request does not confirm a sale, reserve stock, or take payment; a Shop operator
- * still opens and confirms each order. Contact details are deliberately omitted
- * until the operator opens that specific request for review.
+ * Read new public orders into Shop's privacy-minimal incoming queue. Polling never
+ * claims customer requests or changes Shop state. The operator explicitly claims
+ * one request when choosing Review order; contact stays private until then.
  */
 export async function syncShopPublicInbox(
   identity: ManagedIdentity,
-  attemptedRequestIds: Set<string>,
   api: ShopPublicInboxApi,
   isCurrent: () => boolean = () => true,
   after?: string,
 ): Promise<ShopPublicInboxSyncResult> {
   const inbox = await api.loadInbox(identity, after)
-  const claimedRequestIds = new Set<string>()
-  const failedRequestIds: string[] = []
+  if (!isCurrent()) return { requests: [], claimedRequests: [], failedRequestIds: [], alreadyInShopRequests: [], nextCursor: inbox.nextCursor }
   const alreadyInShopRequests: ShopPublicInboxRequest[] = []
 
   for (const request of inbox.requests) {
-    if (!isCurrent()) break
     if (request.status === 'in_shop') {
       alreadyInShopRequests.push(shopInboxSummary(request))
-      continue
-    }
-    if (attemptedRequestIds.has(request.requestId)) continue
-
-    // Remember the attempt before the request leaves the current turn. The claim
-    // endpoint is idempotent; an explicit Retry clears this guard for that request.
-    attemptedRequestIds.add(request.requestId)
-    try {
-      const result = await api.claimRequest(identity, request.handle, request.requestId)
-      if (result.status === 'in_shop') claimedRequestIds.add(request.requestId)
-      else failedRequestIds.push(request.requestId)
-    } catch {
-      failedRequestIds.push(request.requestId)
     }
   }
 
-  const claimedRequests = inbox.requests
-    .filter((request) => claimedRequestIds.has(request.requestId))
-    .map(shopInboxSummary)
-    .map((request) => ({ ...request, status: 'in_shop' as const }))
   const requests = inbox.requests
-    .filter((request) => request.status !== 'in_shop' && !claimedRequestIds.has(request.requestId))
+    .filter((request) => request.status !== 'in_shop')
     .map(shopInboxSummary)
 
-  return { requests, claimedRequests, failedRequestIds, alreadyInShopRequests, nextCursor: inbox.nextCursor }
+  return { requests, claimedRequests: [], failedRequestIds: [], alreadyInShopRequests, nextCursor: inbox.nextCursor }
+}
+
+export async function claimShopPublicInboxRequest(
+  identity: ManagedIdentity,
+  request: ShopPublicInboxRequest,
+  claimRequest: (identity: ManagedIdentity, handle: string, requestId: string) => ReturnType<typeof import('../products/ecommerce/managed-commerce-public').claimManagedCommercePublicRequest>,
+): Promise<ShopPublicInboxRequest | null> {
+  if (request.status === 'in_shop') return request
+  const result = await claimRequest(identity, request.handle, request.requestId)
+  if (result.status !== 'in_shop') return null
+  return { ...request, shopRequestId: result.shopRequestId, status: 'in_shop' }
 }

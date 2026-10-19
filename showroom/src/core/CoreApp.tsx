@@ -19,7 +19,7 @@ import { Link, Navigate, useLocation, useNavigate, useOutletContext, useSearchPa
 import './core-app.css'
 import type { EcommerceShopDraft } from '../products/ecommerce/ecommerce-shop-handoff'
 import { claimManagedCommercePublicRequest, loadManagedCommercePublicInbox, loadManagedCommercePublicShopContact, type ManagedCommercePublicContact } from '../products/ecommerce/managed-commerce-public'
-import { shopPublicInboxBacklogCursor, shopPublicInboxPrunedRequestIds, syncShopPublicInbox, type ShopPublicInboxRequest } from './shop-public-inbox-sync'
+import { acquireShopPublicInboxFlight, claimShopPublicInboxRequest, releaseShopPublicInboxFlight, shopPublicInboxBacklogCursor, shopPublicInboxPrunedRequestIds, syncShopPublicInbox, type ShopPublicInboxRequest } from './shop-public-inbox-sync'
 import type { EcommerceCancellationIntent, EcommerceOrderAmendmentIntent, EcommerceOrderRequestV2, EcommerceOrderRescheduleIntent, EcommerceShopDraftV2 } from '../products/ecommerce/ecommerce-buying-lifecycle'
 import { ecommerceShopIntentReference, type EcommerceShopNavigationIntents } from '../products/ecommerce/ecommerce-shop-intent-route'
 import type { WebsiteEcommerceHandoffContext, WebsiteOrderRecord } from '../products/product-handoff'
@@ -33,6 +33,10 @@ import { isShopCashSettlementMethod } from './shop-mmk-cash-count'
 import { prepareManagedFirstCatalog } from './shop-managed-first-catalog'
 import { applyStockCountScan } from './shop-stock-count-scan'
 import { unmatchedBarcodeForCreation } from './shop-unmatched-scan'
+
+type ShopOrderBuyerContactPanel =
+  | { identityKey: string; orderId: string; status: 'loading' | 'unavailable' }
+  | { identityKey: string; orderId: string; status: 'ready'; contact: ManagedCommercePublicContact }
 
 function hasDisallowedControlCharacters(value: string): boolean {
   for (let index = 0; index < value.length; index += 1) {
@@ -1684,37 +1688,27 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
     error: string
   }>({ identityKey: '', requests: [], cursor: null, scanAnchor: null, checking: false, error: '' })
   const managedPublicInboxRef = useRef(managedPublicInbox)
-  const managedPublicInboxAttempts = useRef(new Map<string, Set<string>>())
   const managedPublicInboxRequestCursors = useRef(new Map<string, string | undefined>())
   const managedPublicInboxSeenDuringSweep = useRef(new Set<string>())
-  const managedPublicInboxInFlight = useRef(false)
+  const managedPublicInboxFlights = useRef(new Set<string>())
   const managedPublicInboxIdentityRef = useRef('')
   const managedPublicInboxIdentityKey = managedIdentity
     ? `${managedIdentity.workspaceId}\u0000${managedIdentity.userId}\u0000${managedIdentity.email}`
     : ''
   managedPublicInboxIdentityRef.current = managedPublicInboxIdentityKey
   useEffect(() => {
-    managedPublicInboxAttempts.current.clear()
     managedPublicInboxRequestCursors.current.clear()
     managedPublicInboxSeenDuringSweep.current.clear()
   }, [managedPublicInboxIdentityKey])
   const syncManagedPublicInbox = useCallback(async (retryRequestId?: string) => {
     if (!managedIdentity || !allowShopInboundRequests || !commerceCanWrite || workspaceMode !== coreUi.m) return
     const identityKey = `${managedIdentity.workspaceId}\u0000${managedIdentity.userId}\u0000${managedIdentity.email}`
-    if (managedPublicInboxIdentityRef.current !== identityKey || managedPublicInboxInFlight.current) return
+    if (managedPublicInboxIdentityRef.current !== identityKey || !acquireShopPublicInboxFlight(managedPublicInboxFlights.current, identityKey)) return
 
-    let attempted = managedPublicInboxAttempts.current.get(identityKey)
-    if (!attempted) {
-      attempted = new Set<string>()
-      managedPublicInboxAttempts.current.set(identityKey, attempted)
-    }
     const requestCursorKey = retryRequestId ? `${identityKey}\u0000${retryRequestId}` : ''
     const retryAfter = retryRequestId && managedPublicInboxRequestCursors.current.has(requestCursorKey)
       ? managedPublicInboxRequestCursors.current.get(requestCursorKey)
       : undefined
-    if (retryRequestId) attempted.delete(retryRequestId)
-    managedPublicInboxInFlight.current = true
-
     const previous = managedPublicInboxRef.current
     const previousRequests = previous.identityKey === identityKey ? previous.requests : []
     const waitingForShopRefresh = previousRequests.filter((request) => request.status === 'in_shop')
@@ -1727,15 +1721,25 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
       scanAnchor: sameIdentity ? previous.scanAnchor : null, checking: true, error: '' })
 
     try {
-      const api = { loadInbox: loadManagedCommercePublicInbox, claimRequest: claimManagedCommercePublicRequest }
+      const api = { loadInbox: loadManagedCommercePublicInbox }
       const isCurrent = () => managedPublicInboxIdentityRef.current === identityKey
-      const firstPage = await syncShopPublicInbox(
-        managedIdentity,
-        attempted,
-        api,
-        isCurrent,
-        retryRequestId ? retryAfter : undefined,
-      )
+      const firstPage = await syncShopPublicInbox(managedIdentity, api, isCurrent, retryRequestId ? retryAfter : undefined)
+      if (retryRequestId && isCurrent()) {
+        const selectedRequest = [...firstPage.requests, ...firstPage.alreadyInShopRequests]
+          .find((request) => request.requestId === retryRequestId)
+        if (!selectedRequest) firstPage.failedRequestIds.push(retryRequestId)
+        else if (selectedRequest.status !== 'in_shop') {
+          try {
+            const claimedRequest = await claimShopPublicInboxRequest(managedIdentity, selectedRequest, claimManagedCommercePublicRequest)
+            if (claimedRequest) {
+              firstPage.claimedRequests.push(claimedRequest)
+              firstPage.requests = firstPage.requests.filter((request) => request.requestId !== retryRequestId)
+            } else firstPage.failedRequestIds.push(retryRequestId)
+          } catch {
+            firstPage.failedRequestIds.push(retryRequestId)
+          }
+        }
+      }
       const pageResults = [firstPage]
       const previousCursor = sameIdentity ? previous.cursor : null
       const previousAnchor = sameIdentity ? previous.scanAnchor : null
@@ -1753,7 +1757,7 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
       let backlogLoadError = ''
       if (backlogCursor && isCurrent()) {
         try {
-          const backlogPage = await syncShopPublicInbox(managedIdentity, attempted, api, isCurrent, backlogCursor)
+          const backlogPage = await syncShopPublicInbox(managedIdentity, api, isCurrent, backlogCursor)
           pageResults.push(backlogPage)
           nextCursor = backlogPage.nextCursor
         } catch {
@@ -1788,19 +1792,17 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
       ])
       if (refreshed) for (const requestId of resolvedRequestIds) {
         nextRequests.delete(requestId)
-        attempted.delete(requestId)
         managedPublicInboxRequestCursors.current.delete(`${identityKey}\u0000${requestId}`)
       }
       const completeSweep = !retryRequestId && nextCursor === null && !backlogLoadError && refreshed
       for (const requestId of shopPublicInboxPrunedRequestIds(nextRequests, seenDuringSweep, completeSweep)) {
         nextRequests.delete(requestId)
-        attempted.delete(requestId)
         managedPublicInboxRequestCursors.current.delete(`${identityKey}\u0000${requestId}`)
       }
       if (completeSweep) seenDuringSweep.clear()
       const requests = [...nextRequests.values()]
       const error = failedRequestIds.length
-        ? 'Some online orders could not be added to Shop yet. Retry them below.'
+        ? 'That online order could not be prepared in Shop yet. You can review it again.'
         : !refreshed
           ? 'Online orders are waiting for Shop to refresh. Retry below.'
           : backlogLoadError ? `Older online orders could not be checked. ${backlogLoadError}` : ''
@@ -1815,7 +1817,7 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
         error: error instanceof Error ? error.message : 'Online orders could not be checked. Retry below.',
       })
     } finally {
-      managedPublicInboxInFlight.current = false
+      releaseShopPublicInboxFlight(managedPublicInboxFlights.current, identityKey)
     }
   }, [allowShopInboundRequests, commerceCanWrite, managedIdentity, refreshManagedCommerceSnapshot, workspaceMode])
   useEffect(() => {
@@ -1914,6 +1916,12 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
   const [preparedEcommerceDraft, setPreparedEcommerceDraft] = useState<EcommerceShopDraft | null>(null)
   const [publicShopContact, setPublicShopContact] = useState<ManagedCommercePublicContact | null>(null)
   const publicContactReviewEpoch = useRef(0)
+  const [shopOrderBuyerContact, setShopOrderBuyerContact] = useState<ShopOrderBuyerContactPanel | null>(null)
+  const shopOrderBuyerContactEpoch = useRef(0)
+  useEffect(() => {
+    shopOrderBuyerContactEpoch.current += 1
+    setShopOrderBuyerContact(null)
+  }, [managedPublicInboxIdentityKey])
   const [orderDraftRead, setOrderDraftRead] = useState<CommerceOrderDraftReadResult>({ status: 'empty', draft: null, error: '' })
   const [orderDraftActive, setOrderDraftActive] = useState(false)
   const [resumedOrderDraft, setResumedOrderDraft] = useState<CommerceOrderDraft | null>(null)
@@ -3576,7 +3584,11 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
 
   const commerceBoundary = <>
     {commerceWriteBanner}
-    {storageDurabilityNotice}
+    {/* The device-only reminder belongs beside its backup controls in Settings. Repeating it
+        above routine order and inventory work adds a warning-shaped banner without an action
+        in that context. Keep the workspace interruption for a real quota failure, when writes
+        may stop and the operator needs to act immediately. */}
+    {storageDurability.quotaExceeded ? storageDurabilityNotice : null}
     {storageHeadroomNotice}
     {commerceStuckRecoveryPanel}
   </>
@@ -4221,6 +4233,41 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
       : `${pendingAction.summary} ${managedIdentity ? 'confirmed.' : 'completed.'}`)
     setPendingAction(null)
     if (pendingAction.presentation === 'counter' && !counterSettlement) navigate(`/shop/?tab=orders#${shopOrderTargetId(pendingAction.subjectId)}`)
+  }
+
+  async function toggleShopOrderBuyerContact(orderId: string, shopRequestId: string, open: boolean) {
+    if (!open) {
+      if (shopOrderBuyerContact?.orderId === orderId) {
+        shopOrderBuyerContactEpoch.current += 1
+        setShopOrderBuyerContact(null)
+      }
+      return
+    }
+    if (!/^ECR-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/.test(shopRequestId)) return
+    const identity = managedIdentity
+    const identityKey = managedPublicInboxIdentityKey
+    if (!identity || !commerceCanWrite || !identityKey) {
+      setShopOrderBuyerContact({ identityKey, orderId, status: 'unavailable' })
+      return
+    }
+    if (shopOrderBuyerContact?.identityKey === identityKey
+      && shopOrderBuyerContact.orderId === orderId
+      && (shopOrderBuyerContact.status === 'loading' || shopOrderBuyerContact.status === 'ready')) return
+
+    const requestEpoch = ++shopOrderBuyerContactEpoch.current
+    setShopOrderBuyerContact({ identityKey, orderId, status: 'loading' })
+    try {
+      const contact = await loadManagedCommercePublicShopContact(identity, shopRequestId)
+      if (requestEpoch !== shopOrderBuyerContactEpoch.current
+        || managedPublicInboxIdentityRef.current !== identityKey) return
+      if (contact.shopRequestId !== shopRequestId) throw new Error('Buyer contact does not match this order.')
+      setShopOrderBuyerContact({ identityKey, orderId, status: 'ready', contact })
+    } catch {
+      if (requestEpoch === shopOrderBuyerContactEpoch.current
+        && managedPublicInboxIdentityRef.current === identityKey) {
+        setShopOrderBuyerContact({ identityKey, orderId, status: 'unavailable' })
+      }
+    }
   }
 
   async function reviewStorefrontRequest(requestId: string) {
@@ -7559,7 +7606,7 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
             const lines = request.request.lines
             const itemSummary = lines.length === 1 ? `${lines[0].name} × ${lines[0].quantity}` : `${lines.length} items · ${lines.reduce((total, line) => total + line.quantity, 0)} units`
             const awaitingShopRefresh = request.status === 'in_shop'
-            return <article key={request.requestId}><div><strong>{itemSummary}</strong><small>{formatMoney(request.request.totalMmk)} · {request.request.fulfilment} · {awaitingShopRefresh ? 'Added to Shop; refreshing' : 'Waiting to add to Shop'}</small></div><button className="core-button compact" disabled={managedPublicInbox.checking} onClick={() => void syncManagedPublicInbox(request.requestId)} type="button">{awaitingShopRefresh ? 'Refresh Shop' : 'Retry'}</button></article>
+            return <article key={request.requestId}><div><strong>{itemSummary}</strong><small>{formatMoney(request.request.totalMmk)} · {request.request.fulfilment} · {awaitingShopRefresh ? 'In Shop · refreshing' : 'New online order'}</small></div><button className="core-button compact" disabled={managedPublicInbox.checking} onClick={() => void syncManagedPublicInbox(request.requestId)} type="button">{awaitingShopRefresh ? 'Refresh Shop' : 'Review order'}</button></article>
           })}
         </div>
         {managedPublicInbox.checking && !managedPublicInboxRequests.length ? <p className="form-notice" role="status">Checking for new online orders…</p> : null}
@@ -7573,7 +7620,7 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
       </section> : null}
       <section aria-labelledby="shop-order-list-heading" className="order-queue-main">
         <div className="order-queue-section-head"><div><span className="core-eyebrow">Order queue</span><h3 id="shop-order-list-heading">Needs attention</h3></div><small>{actionOrders.length ? `${actionOrders.length} to finish` : 'All caught up'}</small></div>
-        <OrderList acknowledgementDownloads={orderAcknowledgementDownloads} canCancel={(orderId) => commerceOrderHasReleasableReservation(commerce, orderId)} disabled={commerceControlsDisabled} highlightedTargetId={commerceLocation.hash.startsWith('#shop-order-') ? commerceLocation.hash.slice(1) : ''} onAdvance={advanceOrder} onCancel={cancelOrder} onReconcilePayment={reconcilePayment} onSettleRefund={settleRefund} onSettleSale={settleSale} onViewReceipt={setReceiptAck} orders={actionOrders} />
+        <OrderList acknowledgementDownloads={orderAcknowledgementDownloads} buyerContact={shopOrderBuyerContact?.identityKey === managedPublicInboxIdentityKey ? shopOrderBuyerContact : null} canCancel={(orderId) => commerceOrderHasReleasableReservation(commerce, orderId)} disabled={commerceControlsDisabled} highlightedTargetId={commerceLocation.hash.startsWith('#shop-order-') ? commerceLocation.hash.slice(1) : ''} onAdvance={advanceOrder} onCancel={cancelOrder} onReconcilePayment={reconcilePayment} onSettleRefund={settleRefund} onSettleSale={settleSale} onToggleBuyerContact={toggleShopOrderBuyerContact} onViewReceipt={setReceiptAck} orders={actionOrders} />
       </section>
       <details className="shop-business-controls">
         <summary><span>Daily tools</span><small>Reports and setup when needed</small></summary>
@@ -8293,6 +8340,7 @@ function orderAcknowledgementLookup(commerce: CommerceState): OrderAcknowledgeme
 
 function OrderList({
   acknowledgementDownloads,
+  buyerContact,
   orders,
   canCancel,
   disabled,
@@ -8302,9 +8350,11 @@ function OrderList({
   onReconcilePayment,
   onSettleRefund,
   onSettleSale,
+  onToggleBuyerContact,
   onViewReceipt,
 }: {
   acknowledgementDownloads: OrderAcknowledgementLookup
+  buyerContact: ShopOrderBuyerContactPanel | null
   orders: CommerceOrder[]
   canCancel: (id: string) => boolean
   disabled: boolean
@@ -8314,6 +8364,7 @@ function OrderList({
   onReconcilePayment: (id: string) => void
   onSettleRefund: (id: string) => void
   onSettleSale: (id: string) => void
+  onToggleBuyerContact: (orderId: string, shopRequestId: string, open: boolean) => void
   onViewReceipt: (ack: CommerceOrderAcknowledgement) => void
 }) {
   const promiseNow = useMinuteClock()
@@ -8341,6 +8392,9 @@ function OrderList({
     const primaryActionLabel = uiText(shopOrderPrimaryActionLabel(order))
     const targetId = shopOrderTargetId(order.id)
     const attentionLabels = shopOrderAttentionLabels(order, promiseUrgency)
+    const shopRequestId = order.sourceRecordId ?? ''
+    const hasShopPublicSource = /^ECR-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/.test(shopRequestId)
+    const orderBuyerContact = buyerContact?.orderId === order.id ? buyerContact : null
     return <article data-highlighted={highlightedTargetId === targetId ? 'true' : undefined} id={targetId} key={order.id} tabIndex={-1}>
       <div>
         <strong>{order.customer} · {order.lines
@@ -8357,6 +8411,14 @@ function OrderList({
           <div>
             {order.lines ? <small>{order.lines.map((line) => `${line.name} × ${line.quantity} @ ${line.unitPriceMmk.toLocaleString()} MMK`).join(' · ')}</small> : null}
             <OrderCalculationNote order={order} />
+            {hasShopPublicSource ? <details className="order-record-details" onToggle={(event) => onToggleBuyerContact(order.id, shopRequestId, event.currentTarget.open)}>
+              <summary><span>{uiText('Contact')}</span><small>{uiText('Details')}</small></summary>
+              <div>
+                {orderBuyerContact?.status === 'loading' ? <small role="status">…</small> : null}
+                {orderBuyerContact?.status === 'unavailable' ? <small role="alert">{readUiLocale() === 'my' ? 'ဝယ်သူ၏ ဆက်သွယ်ရန်အချက်အလက် မရနိုင်ပါ။' : 'Buyer contact is unavailable or has expired.'}</small> : null}
+                {orderBuyerContact?.status === 'ready' ? <><strong>{orderBuyerContact.contact.contact.name}</strong><small>{uiText('Phone')}: {orderBuyerContact.contact.contact.phone}</small>{orderBuyerContact.contact.contact.address ? <small>{orderBuyerContact.contact.contact.address.line1} · {orderBuyerContact.contact.contact.address.township} · {orderBuyerContact.contact.contact.address.city}{orderBuyerContact.contact.contact.address.instructions ? ` · ${orderBuyerContact.contact.contact.address.instructions}` : ''}</small> : null}</> : null}
+              </div>
+            </details> : null}
             <small>{commerceOrderDisplayReference(order.id)} · {order.owner ? `${uiText('owner')} ${order.owner}` : uiText('owner not recorded')} · {uiText(order.channel)} · {order.payment}{order.paymentDueAt ? ` · ${uiText('payment due')} ${formatTime(order.paymentDueAt)}` : ''}{order.fulfilment ? ` · ${uiText(fulfilmentLabel(order.fulfilment))}` : ''}{order.fulfilmentReference ? ` · ${order.fulfilmentReference}` : ''} · {order.promisedAt ? `${uiText('promised')} ${formatTime(order.promisedAt)}` : uiText('promise not recorded')} · ${uiText('created')} ${formatTime(order.createdAt)}</small>
           </div>
         </details>

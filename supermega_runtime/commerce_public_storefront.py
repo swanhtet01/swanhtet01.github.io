@@ -442,7 +442,7 @@ class CommercePublicStorefront:
                 'nextCursor': _page_cursor(rows[49]) if len(rows) > 50 else None}
 
     def shop_contact(self, principal: TrialPrincipal, *, shop_request_id: str) -> dict[str, Any]:
-        """Show contact only while its unconverted request is in this Shop queue."""
+        """Show contact for an active Shop request or its linked order only."""
         if not re.fullmatch(r'ECR-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}',
                             shop_request_id):
             raise TrialValidationError('commerce_public_invalid')
@@ -460,8 +460,9 @@ class CommercePublicStorefront:
             if state_row is None:
                 raise TrialValidationError('commerce_public_unavailable')
             state = validate_commerce_state(state_row['state_json'])
-            if (not any(item['id'] == shop_request_id for item in state['storefrontRequests'])
-                    or any(order.get('sourceRecordId') == shop_request_id for order in state['orders'])):
+            request_is_available = any(item['id'] == shop_request_id for item in state['storefrontRequests'])
+            order_is_linked = any(order.get('sourceRecordId') == shop_request_id for order in state['orders'])
+            if not request_is_available and not order_is_linked:
                 raise TrialValidationError('commerce_public_unavailable')
             return {'shopRequestId': shop_request_id, 'contact': contact_row['contact_json']}
 
