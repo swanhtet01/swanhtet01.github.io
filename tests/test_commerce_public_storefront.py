@@ -408,7 +408,7 @@ class CommercePublicSqlTests(unittest.TestCase):
         for action in actions:
             with self.subTest(action=action), self.assertRaises(TrialPermissionDenied) as denied:
                 action()
-            self.assertEqual(denied.exception.required_capability, 'product.ecommerce')
+            self.assertEqual(denied.exception.required_capability, 'ecommerce.manage')
         self.assertTrue(self.adapter.publications(self.owner)['publications'][0]['enabled'])
 
     def test_buyer_request_arrives_once_in_private_operator_inbox_and_revocation_closes_it(self):
