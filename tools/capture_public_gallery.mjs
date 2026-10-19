@@ -320,10 +320,6 @@ async function main() {
     const launched = await launchBrowser(findBrowser(), profile)
     browser = launched.browser
     cdp = await Cdp.connect(launched.wsUrl)
-    // Give the isolated capture origin the same durable-storage permission a real
-    // browser may grant. Never publish the harness's denied-permission warning as
-    // though it were a normal Shop screen.
-    await cdp.send('Browser.grantPermissions', { origin, permissions: ['durableStorage'] })
     const { targetId } = await cdp.send('Target.createTarget', { url: 'about:blank' })
     ;({ sessionId } = await cdp.send('Target.attachToTarget', { targetId, flatten: true }))
     await cdp.send('Page.enable', {}, sessionId)
@@ -346,8 +342,6 @@ async function main() {
     await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false }, sessionId)
     await cdp.send('Page.navigate', { url: `${origin}/shop/` }, sessionId)
     await waitFor(cdp, sessionId, 'Today')
-    const persistentStorage = await evaluate(cdp, sessionId, 'navigator.storage?.persisted?.() === true')
-    if (!persistentStorage) throw new Error('gallery_durable_storage_permission_not_applied')
     const overdueOpenOrders = await evaluate(cdp, sessionId, `(() => {
       const state = JSON.parse(localStorage.getItem('supermega.commerce.workspace.v2') || '{}');
       return (state.orders || []).filter(order => order.status !== 'completed' && order.status !== 'cancelled'

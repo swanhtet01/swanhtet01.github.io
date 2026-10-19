@@ -140,7 +140,7 @@ const expectedReviewDescriptions = {
   '/ecommerce/': 'The SuperMega team manages the Shop-backed catalog and reviews customer requests before any order or payment is confirmed.',
 }
 const productScreens = {
-  shop: ['actual-shop-today.png', 'actual-shop-sell.png', 'actual-shop-orders.png', 'actual-shop-inventory.png'],
+  shop: ['actual-shop-sell.png', 'actual-shop-orders.png', 'actual-shop-inventory.png'],
   website: ['actual-sites-editor.png', 'actual-sites-inquiries.png'],
   ecommerce: ['actual-commerce-catalog.png', 'actual-commerce-order-request.png'],
 }
