@@ -26,6 +26,14 @@ export function releaseShopPublicInboxFlight(activeIdentityKeys: Set<string>, id
   activeIdentityKeys.delete(identityKey)
 }
 
+export function shopPublicInboxSweepSet(sweeps: Map<string, Set<string>>, identityKey: string): Set<string> {
+  const existing = sweeps.get(identityKey)
+  if (existing) return existing
+  const observedRequestIds = new Set<string>()
+  sweeps.set(identityKey, observedRequestIds)
+  return observedRequestIds
+}
+
 type ShopPublicInboxApi = {
   loadInbox: (identity: ManagedIdentity, after?: string) => ReturnType<typeof import('../products/ecommerce/managed-commerce-public').loadManagedCommercePublicInbox>
 }

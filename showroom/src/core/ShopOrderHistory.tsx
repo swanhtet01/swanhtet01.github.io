@@ -3,6 +3,8 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { commerceCorrectionCalculation, commerceSupportWorkloadExport, commerceSupportQueue, commerceSupportSlaSummary, commerceOrderAdjustedTotal, commerceSupportCaseUrgency, commerceSupportServiceState, commerceSupportCheckpointState, type CommerceSupportServiceEventKind, type CommerceOrderAcknowledgement, type CommerceOrder, type CommerceReturnDisposition, type CommerceSupportPriority, type CommerceSupportResolutionOutcome, type CommerceCorrectionKind, type CommerceCorrectionReasonCode } from './commerce-workspace'
 import { formatTime } from './team-work'
 import { shopLoyaltyDisplayPoints } from './shop-loyalty'
+import { ShopBuyerContactDisclosure } from './ShopBuyerContactDisclosure'
+import type { ManagedCommercePublicContact } from '../products/ecommerce/managed-commerce-public'
 import { type OrderAcknowledgementLookup, type CommerceCorrectionDraft, type CommerceReturnDraft, type CommerceSupportOpenDraft, type CommerceSupportReopenDraft, type CommerceSupportServiceDraft, type CommerceSupportResolutionDraft, useMinuteClock, commerceOrderReturnLines, commerceOrderDisplayReference, fulfilmentLabel, formatMoney, localDateTimeInputValue } from './shop-order-presentation'
 
 const coreUi = { q: 'core-button primary compact', d: 'datetime-local' } as const
@@ -22,6 +24,8 @@ export function ClosedOrderHistory({
   correctionCalculation,
   correctionDraft,
   disabled,
+  loadBuyerContact,
+  workspaceIdentityKey,
   onCancelCorrection,
   onCancelReturn,
   loyaltyPoints,
@@ -67,6 +71,8 @@ export function ClosedOrderHistory({
   correctionCalculation: ReturnType<typeof commerceCorrectionCalculation>
   correctionDraft: CommerceCorrectionDraft | null
   disabled: boolean
+  loadBuyerContact: ((shopRequestId: string) => Promise<ManagedCommercePublicContact>) | null
+  workspaceIdentityKey: string
   onCancelCorrection: () => void
   onCancelReturn: () => void
   loyaltyPoints: ReadonlyMap<string, number> | null
@@ -210,6 +216,7 @@ export function ClosedOrderHistory({
       const redeemable = correctable && order.customer.trim() !== 'Guest' && loyaltyBalance > 0
       const adjustedTotal = commerceOrderAdjustedTotal(order) ?? order.total
       const acknowledgement = acknowledgementDownloads.get(order.id)
+      const shopRequestId = order.sourceRecordId ?? ''
       return <article className={editing || correcting ? 'is-returning' : undefined} key={order.id}>
       <div className="order-archive-main">
         <strong>{order.customer} · {order.lines
@@ -219,6 +226,7 @@ export function ClosedOrderHistory({
           : `${order.item} × ${order.quantity}`}</strong>
         {order.lines ? <small>{order.lines.map((line) => `${line.name} × ${line.quantity} @ ${line.unitPriceMmk.toLocaleString()} MMK`).join(' · ')}</small> : null}
         <OrderCalculationNote order={order} />
+        {/^ECR-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/.test(shopRequestId) ? <ShopBuyerContactDisclosure key={order.id + '|' + workspaceIdentityKey} loadBuyerContact={loadBuyerContact} shopRequestId={shopRequestId} workspaceIdentityKey={workspaceIdentityKey} /> : null}
         <small>{commerceOrderDisplayReference(order.id)} · {order.owner ? `owner ${order.owner}` : 'owner not recorded'} · {order.status} · payment {order.paymentStatus}{order.refundStatus !== 'none' ? ` · refund ${order.refundStatus}` : ''}{order.fulfilment ? ` · ${fulfilmentLabel(order.fulfilment)}` : ''}{order.fulfilmentReference ? ` · ${order.fulfilmentReference}` : ''} · {order.promisedAt ? `promised ${formatTime(order.promisedAt)}` : 'promise not recorded'} · created {formatTime(order.createdAt)}</small>
         {order.refundStatus === 'settled' && order.refundSettledAt && order.refundSettledBy && order.refundEvidenceReference ? <small role="note">{order.refundSettledBy} · {formatTime(order.refundSettledAt)} · evidence {order.refundEvidenceReference}</small> : null}
         {order.status === 'completed' && order.completion ? <small role="note">Completed by {order.completion.actor} · {formatTime(order.completion.capturedAt)} · evidence {order.completion.evidenceReference}</small> : null}
