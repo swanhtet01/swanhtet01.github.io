@@ -342,6 +342,12 @@ async function main() {
     await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false }, sessionId)
     await cdp.send('Page.navigate', { url: `${origin}/shop/` }, sessionId)
     await waitFor(cdp, sessionId, 'Today')
+    const overdueOpenOrders = await evaluate(cdp, sessionId, `(() => {
+      const state = JSON.parse(localStorage.getItem('supermega.commerce.workspace.v2') || '{}');
+      return (state.orders || []).filter(order => order.status !== 'completed' && order.status !== 'cancelled'
+        && order.promisedAt && Date.parse(order.promisedAt) <= Date.now()).map(order => order.id);
+    })()`)
+    if (overdueOpenOrders.length) throw new Error(`shop_gallery_seed_has_overdue_open_orders:${overdueOpenOrders.join(',')}`)
     await evaluate(cdp, sessionId, `(() => { const s=document.createElement('style');s.textContent='#root > p,#root > button,#root > output{display:none!important}body{margin:0!important}';document.head.append(s) })()`)
     const stockedShop = await evaluate(cdp, sessionId, "localStorage.getItem('supermega.commerce.workspace.v2')")
     if (!stockedShop) throw new Error('synthetic_shop_seed_missing')
