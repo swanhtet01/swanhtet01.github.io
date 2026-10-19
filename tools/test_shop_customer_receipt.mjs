@@ -35,9 +35,10 @@ const profile = validateCommerceState(JSON.parse(JSON.stringify(savedWorkspace))
 assert.ok(profile)
 const acknowledgement = {
   orderId: 'ORD-1001', createdAt: '2026-10-07T08:00:00.000Z', channel: 'counter', customer: 'Guest',
+  status: 'confirmed', cancellation: { state: 'not_cancelled', cancelledAt: null, actionId: null, evidenceReference: null },
   lines: [{ sku: 'RICE-1', name: 'Premium rice', nameMy: 'ဆန်မွှေး', quantity: 2, lineTotalMmk: 150000 }],
   promotion: { discountMmk: 0 }, tax: { taxMmk: 0 }, delivery: null, totalMmk: 150000,
-  payment: { method: 'KBZPay', status: 'pending' },
+  payment: { method: 'KBZPay', status: 'pending', refundStatus: 'none' },
 }
 
 const text = shopCustomerReceiptText(acknowledgement, profile)
@@ -55,6 +56,37 @@ assert.doesNotMatch(burmeseText, /Corner Shop|Sales receipt|Premium rice|Payment
 assert.match(burmeseText, /အရောင်းပြေစာ/)
 assert.match(burmeseText, /ဆန်မွှေး  ×2  150,000 MMK/)
 assert.match(burmeseText, /ငွေပေးချေမှု  ပေးချေရန်ကျန်/)
+
+const cancelledRefundDue = {
+  ...acknowledgement,
+  status: 'cancelled',
+  cancellation: { state: 'cancelled', cancelledAt: acknowledgement.createdAt, actionId: 'ACT-CANCEL-1', evidenceReference: 'CANCEL-1' },
+  payment: { method: 'KBZPay', status: 'reconciled', refundStatus: 'due' },
+}
+const refundDueText = shopCustomerReceiptText(cancelledRefundDue, profile)
+assert.match(refundDueText, /Order status  Cancelled/)
+assert.match(refundDueText, /Payment  Refund due/)
+assert.doesNotMatch(refundDueText, /Payment  Paid/)
+const refundSettledText = shopCustomerReceiptText({
+  ...cancelledRefundDue,
+  payment: { ...cancelledRefundDue.payment, refundStatus: 'settled' },
+}, profile)
+assert.match(refundSettledText, /Payment  Refunded/)
+assert.doesNotMatch(refundSettledText, /Payment  Paid/)
+const refundDueBurmese = shopCustomerReceiptText(cancelledRefundDue, profile, 'my')
+assert.match(refundDueBurmese, /အော်ဒါအခြေအနေ  ပယ်ဖျက်ပြီး/)
+assert.match(refundDueBurmese, /ငွေပေးချေမှု  ပြန်အမ်းရန်ကျန်/)
+assert.doesNotMatch(refundDueBurmese, /Cancelled|Refund due|Paid/)
+const cancelledUnpaid = shopCustomerReceiptText({
+  ...cancelledRefundDue,
+  payment: { method: 'KBZPay', status: 'pending', refundStatus: 'none' },
+}, profile)
+assert.match(cancelledUnpaid, /Payment  Not collected/)
+assert.doesNotMatch(cancelledUnpaid, /Payment  Paid/)
+const legacyAcknowledgement = { ...acknowledgement }
+delete legacyAcknowledgement.cancellation
+delete legacyAcknowledgement.payment.refundStatus
+assert.match(shopCustomerReceiptText(legacyAcknowledgement, profile), /Payment  Pending/)
 
 const reconciledAcknowledgement = {
   ...acknowledgement,

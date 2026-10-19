@@ -13,6 +13,17 @@ export function formatShopBusinessDate(value: string, locale: UiLocale = 'en') {
   })
 }
 
+function customerPaymentStatus(ack: CommerceOrderAcknowledgement, my: boolean) {
+  if (ack.cancellation?.state === 'cancelled') {
+    const refundStatus = ack.payment.refundStatus ?? 'none'
+    if (refundStatus === 'due') return my ? 'ပြန်အမ်းရန်ကျန်' : 'Refund due'
+    if (refundStatus === 'settled') return my ? 'ပြန်အမ်းပြီး' : 'Refunded'
+    if (ack.payment.status === 'reconciled') return my ? 'ပြန်အမ်းမှု အခြေအနေ မမှတ်တမ်းတင်ရသေး' : 'Refund status not recorded'
+    return my ? 'မကောက်ခံရသေး' : 'Not collected'
+  }
+  return ack.payment.status === 'reconciled' ? (my ? 'ပေးချေပြီး' : 'Paid') : (my ? 'ပေးချေရန်ကျန်' : 'Pending')
+}
+
 /** Customer copy only. Deliberately excludes command IDs, evidence references and internal notes. */
 export function shopCustomerReceiptText(ack: CommerceOrderAcknowledgement, profile: CommerceMerchantProfile, locale: UiLocale = 'en') {
   const my = locale === 'my'
@@ -32,7 +43,8 @@ export function shopCustomerReceiptText(ack: CommerceOrderAcknowledgement, profi
     ...(ack.promotion.discountMmk ? [`${my ? 'လျှော့ဈေး' : 'Discount'}  −${formatMmk(ack.promotion.discountMmk)}`] : []),
     ...(ack.delivery?.feeMmk ? [`${my ? 'ပို့ဆောင်ခ' : 'Delivery'}  ${formatMmk(ack.delivery.feeMmk)}`] : []),
     `${my ? 'စုစုပေါင်း' : 'Total'}  ${formatMmk(ack.totalMmk)}`,
-    `${my ? 'ငွေပေးချေမှု' : 'Payment'}  ${ack.payment.status === 'reconciled' ? (my ? 'ပေးချေပြီး' : 'Paid') : (my ? 'ပေးချေရန်ကျန်' : 'Pending')}`,
+    ...(ack.cancellation?.state === 'cancelled' ? [`${my ? 'အော်ဒါအခြေအနေ' : 'Order status'}  ${my ? 'ပယ်ဖျက်ပြီး' : 'Cancelled'}`] : []),
+    `${my ? 'ငွေပေးချေမှု' : 'Payment'}  ${customerPaymentStatus(ack, my)}`,
     '',
     my ? 'ကျေးဇူးတင်ပါသည်' : 'Thank you',
   ]
