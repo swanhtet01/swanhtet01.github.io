@@ -235,7 +235,7 @@ for (const [route, page] of pages) {
     ? '<a href="https://app.supermega.dev/login?product=shop">Login</a>'
     : '<a href="https://app.supermega.dev/login">Login</a>'
   if (countOccurrences(page.html, expectedLogin) !== 1) fail('shared_login_destination_missing', { route, expectedLogin })
-  const expectedActive = route === '/' ? 'Company' : route === '/shop/' ? 'Shop' : route === '/contact/' ? 'Contact' : null
+  const expectedActive = route === '/shop/' ? 'Shop' : route === '/contact/' ? 'Contact' : null
   const activeLinks = [...page.html.matchAll(/<a\b[^>]*aria-current="page"[^>]*>([^<]+)<\/a>/g)].map(match => match[1])
   if (activeLinks.join(',') !== (expectedActive || '')) fail('shared_navigation_active_state_drift', { route, expectedActive, activeLinks })
   for (const token of forbiddenCopy) {
@@ -388,13 +388,14 @@ for (const [route, html] of [['/', home], ['/shop/', pages.get('/shop/').html], 
     ? `/contact/?product=${routeProduct.id}`
     : null
   const galleryViews = { shop: 4, website: 2, ecommerce: 2 }
-  const expectedLinks = route === '/' ? 16 : route === '/shop/' ? 11 : 6 + Number(Boolean(contactActionTarget))
+  const expectedLinks = route === '/' ? 15 : route === '/shop/' ? 9 : 5 + Number(Boolean(contactActionTarget))
   if ((body.match(/<a\b/g) || []).length !== expectedLinks) fail('marketing_link_surface_drift', { route, expectedLinks })
   const expectedLogin = route === '/shop/'
     ? 'href="https://app.supermega.dev/login?product=shop"'
     : 'href="https://app.supermega.dev/login"'
   if (countOccurrences(body, expectedLogin) !== 1) fail('login_action_count_invalid', { route, expectedLogin })
-  if (route === '/shop/' && !body.includes('class="button button-primary" href="/contact/?product=shop">Ask about Shop')) fail('shop_primary_product_action_missing')
+  if (route === '/shop/' && (!body.includes('class="button button-primary" href="/contact/?product=shop">Talk about Shop') || body.includes('See Shop screens'))) fail('shop_primary_product_action_missing')
+  if (body.includes('>Company</a>')) fail('company_page_navigation_not_consolidated')
   const hasGalleryNavigation = route !== '/shop/' && (galleryViews[routeProduct?.id] || 0) > 1
   const expectedButtons = Number(hasGalleryNavigation) * 2
   if ((body.match(/<button\b/g) || []).length !== expectedButtons) fail('marketing_button_surface_drift', { route, expectedButtons })
@@ -486,7 +487,7 @@ for (const token of [
   'data-contact-form', 'action="/api/contact-submissions"', 'name="name"', 'name="email"',
   'name="company"', 'name="product"', 'value="guide"', 'name="template"', 'name="goal"',
   'name="idempotency_key"', 'name="proof_contract"', 'name="proof_digest"', 'class="contact-honeypot"',
-  'x-idempotency-key', 'Tell us what you need.', 'English and Burmese are both welcome.',
+  'x-idempotency-key', 'Tell us what you need.', 'We build practical operating software for Myanmar businesses, starting with Shop.',
   'placeholder="Share a few details about your request."', 'Company (optional)', '>Send message</button>',
   'Message received:', 'Keep this reference if you need to follow up.',
   "shop:'Shop'", "website:'Sites'", "ecommerce:'Commerce'",

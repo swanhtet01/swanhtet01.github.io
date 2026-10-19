@@ -18,11 +18,12 @@ assert.ok(script, 'actual generated contact script exists')
 
 test('contact form stays concise and does not make customers classify the request', () => {
   assert.match(page, /Tell us what you need\./)
-  assert.match(page, /English and Burmese are both welcome/)
+  assert.match(page, /We build practical operating software for Myanmar businesses, starting with Shop\./)
+  assert.doesNotMatch(page, /English and Burmese are both welcome|lang="my"|[\u1000-\u109f]/u)
   assert.doesNotMatch(formHtml, /Your reference number confirms receipt/)
-  assert.match(formHtml, /<label>Email \/ <span lang="my">အီးမေးလ်<\/span><input name="email"/)
+  assert.match(formHtml, /<label>Email<input name="email"/)
   assert.match(formHtml, /Company \(optional\)/)
-  assert.match(formHtml, /Message \/ <span lang="my">မက်ဆေ့ချ်<\/span>/)
+  assert.match(formHtml, /<label class="wide">Message<textarea/)
   assert.match(formHtml, /placeholder="Share a few details about your request\."/)
   assert.match(formHtml, /<input type="hidden" name="product" value="guide"/)
   assert.doesNotMatch(page, /<select\b|trial-proof-summary|Attached request details|What to include|Readiness|Behavior|Decisions|Reply email|What would you like us to prepare\?|Do not paste|Brief tips|Your brief|request summary/)
@@ -57,7 +58,7 @@ function harness(responses, search = '', hash = '') {
     document: { querySelector: selector => {
       if (selector === '[data-contact-form]') return form
       if (['[data-contact-heading]', '[data-contact-lede]'].includes(selector)) {
-        if (!headings.has(selector)) headings.set(selector, { textContent: selector === '[data-contact-heading]' ? 'Tell us what you need.' : 'Tell us about your business or question. English and Burmese are both welcome.' })
+        if (!headings.has(selector)) headings.set(selector, { textContent: selector === '[data-contact-heading]' ? 'Tell us what you need.' : 'We build practical operating software for Myanmar businesses, starting with Shop.' })
         return headings.get(selector)
       }
       return null
@@ -452,7 +453,7 @@ test('a failed second request cannot retain the earlier success heading', async 
 })
 
 test('product links preserve prefilled business details as editable fields', () => {
-  assert.match(formHtml, /<label class="wide">Company \(optional\) \/ <span lang="my">လုပ်ငန်းအမည်<\/span><input/)
+  assert.match(formHtml, /<label class="wide">Company \(optional\)<input/)
   for (const product of ['shop', 'website', 'ecommerce']) {
     const state = harness([], `?product=${product}`, '#company=Example&goal=Prepare%20our%20business')
     assert.equal(state.fields.get('[name="company"]').value, 'Example')

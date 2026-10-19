@@ -120,10 +120,11 @@ for (const page of sharedShellPages) {
   const header = html.match(/<header\b[\s\S]*?<\/header>/)?.[0] || ''
   const brandMarkup = header.match(/<a class="brand"[\s\S]*?<\/a>/)?.[0] || ''
   check(header.includes('<nav class="nav-links" aria-label="Main navigation">'), `shared_public_navigation:${page.route}`)
-  for (const label of ['Company', 'Shop', 'Contact', 'Login']) {
+  for (const label of ['Shop', 'Contact', 'Login']) {
     check(header.includes(`>${label}</a>`), `shared_navigation_label:${page.route}:${label}`)
   }
-  const activeLabel = page.route === '/' ? 'Company' : page.route === '/shop/' ? 'Shop' : page.route === '/contact/' ? 'Contact' : null
+  check(!header.includes('>Company</a>'), `company_navigation_removed:${page.route}`)
+  const activeLabel = page.route === '/shop/' ? 'Shop' : page.route === '/contact/' ? 'Contact' : null
   const activeLinks = [...header.matchAll(/<a\b[^>]*aria-current="page"[^>]*>([^<]+)<\/a>/g)].map((match) => match[1])
   check(activeLinks.join(',') === (activeLabel || ''), `shared_navigation_active_state:${page.route}`)
   if (page.route === '/shop/') check(header.includes('https://app.supermega.dev/login?product=shop'), 'shop_navigation_preserves_login_intent')
@@ -255,7 +256,7 @@ for (const page of landingPages) {
     ? 'href="https://app.supermega.dev/login?product=shop"'
     : 'href="https://app.supermega.dev/login"'
   check(countOccurrences(html, expectedLoginHref) === 1, `landing_login_actions:${page.route}`)
-  if (page.route === '/shop/') check(html.includes('class="button button-primary" href="/contact/?product=shop">Ask about Shop'), 'shop_primary_action_opens_contact')
+  if (page.route === '/shop/') check(html.includes('class="button button-primary" href="/contact/?product=shop">Talk about Shop'), 'shop_primary_action_opens_contact')
   check(!html.includes('Request assisted setup') && !html.includes('id="first-loop"'), `landing_no_setup_funnel:${page.route}`)
   for (const unsupportedClaim of ['AI may help prepare drafts', 'AI assisted', 'Ranked next actions', 'approved AI context']) {
     check(!html.includes(unsupportedClaim), `landing_unverified_ai_offer_absent:${page.route}:${unsupportedClaim}`)
@@ -328,7 +329,7 @@ for (const token of ['Site measurement', 'seven public page paths', 'removes que
 }
 
 const contact = readStatic('contact/index.html')
-for (const token of ['Message received:', 'Keep this reference if you need to follow up.', 'English and Burmese are both welcome.']) {
+for (const token of ['Message received:', 'Keep this reference if you need to follow up.', 'We build practical operating software for Myanmar businesses, starting with Shop.']) {
   check(contact.includes(token), `contact_confirmed_receipt_guidance:${token}`)
 }
 for (const token of ['No action is needed now.', 'SuperMega will review your brief and reply with one scoped next step.', 'We’ll reply by email', 'We’ll follow up by email']) {
@@ -401,7 +402,7 @@ for (const [route, html] of [['/', home], ['/shop/', shopLanding], ...activeIds.
     : 'href="https://app.supermega.dev/login"'
   check(countOccurrences(body, expectedLoginHref) === 1, `login_action_count:${route}`)
   const carouselCount = Number(route !== '/shop/' && (productScreens[routeProduct]?.length || 0) > 1)
-  const expectedLinks = route === '/' ? 16 : route === '/shop/' ? 11 : 6 + Number(routeManifestProduct?.status === 'available-in-app')
+  const expectedLinks = route === '/' ? 15 : route === '/shop/' ? 9 : 5 + Number(routeManifestProduct?.status === 'available-in-app')
   check((body.match(/<a\b/g) || []).length === expectedLinks, `marketing_link_surface:${route}`)
   const viewportGalleryCount = countOccurrences(body, 'data-viewport-gallery')
   const expectedButtons = viewportGalleryCount * 3 + carouselCount * 2

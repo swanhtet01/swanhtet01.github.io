@@ -156,7 +156,7 @@ async function verifyOnce() {
       : 'https://app.supermega.dev/login'
     assert(landing.includes('class="platform-image"'), 'landing_headline_missing', { product: product.id })
     assert(landing.includes(`href="${guidedSampleRoute}"`), 'landing_login_route_missing', { product: product.id })
-    if (product.id === 'shop') assert(landing.includes('class="button button-primary" href="/contact/?product=shop">Ask about Shop'), 'shop_contact_action_missing')
+    if (product.id === 'shop') assert(landing.includes('class="button button-primary" href="/contact/?product=shop">Talk about Shop'), 'shop_contact_action_missing')
     assert(!landing.includes(shopAction), 'retired_shop_action_present')
     assert(landing.includes('href="/contact/">Contact</a>'), 'landing_contact_route_missing', { product: product.id })
     assert(homepage.includes(`id="${product.id}"`), 'landing_route_link_missing_on_home', { product: product.id })
