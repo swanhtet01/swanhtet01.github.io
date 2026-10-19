@@ -605,6 +605,9 @@ export function WorkspaceControlsPage() {
   async function loadBackupFile(file: File | null) {
     if (!file || localWorkspaceOperation.current) return
     const sequence = ++restoreLoadSequence.current
+    // A new selection ends the previous confirmation intent even if this file is rejected.
+    // Keep the verified snapshot staged until a replacement passes validation.
+    setReviewedRestorePoint(null)
     try {
       if (file.size < 1 || file.size > LOCAL_WORKSPACE_BACKUP_MAX_BYTES) throw new Error('Choose a SuperMega backup smaller than 5 MB.')
       const text = await file.text()

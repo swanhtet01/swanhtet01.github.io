@@ -172,6 +172,10 @@ async function capture(cdp, sessionId, output, name, expectedTexts, view) {
     await new Promise(resolveWait => setTimeout(resolveWait, 200))
   }
   if (!viewVerified) throw new Error(`capture_view_or_images_missing:${name}:${JSON.stringify(lastState)}`)
+  for (const text of view.forbiddenText || []) {
+    const found = await evaluate(cdp, sessionId, `document.body?.innerText.includes(${JSON.stringify(text)}) === true`)
+    if (found) throw new Error(`capture_contains_transient_or_forbidden_text:${name}:${text}`)
+  }
   const myanmarFontLoaded = await evaluate(cdp, sessionId, `(async () => {
     await document.fonts.load('16px "Noto Sans Myanmar"', 'မင်္ဂလာပါ');
     return [...document.fonts].some(face => face.family === 'Noto Sans Myanmar' && face.status === 'loaded');
@@ -396,6 +400,11 @@ async function main() {
       recordKind: 'paid_order_record_not_customer_receipt',
     })
     await clickSelector(cdp, sessionId, '.receipt-dialog-actions button:last-child')
+    // Reset transient success feedback before capturing the next views; the synthetic sale
+    // remains in browser storage and is still visible in the Today and Orders totals.
+    await cdp.send('Page.navigate', { url: `${origin}/shop/` }, sessionId)
+    await waitFor(cdp, sessionId, 'Today')
+    await waitFor(cdp, sessionId, 'Order queue')
     await clickText(cdp, sessionId, 'Show Today')
     captures.unshift(await capture(cdp, sessionId, output, 'actual-shop-today', ['Today', 'Quick tasks', 'Order queue', '1 completed'],
       { fixturePath: '/shop/', tab: 'today', selector: '.shop-today-module' }))
@@ -406,23 +415,23 @@ async function main() {
     await assertShopMobileFits(cdp, sessionId, '.shop-operations-board')
     await clickText(cdp, sessionId, 'Show Orders')
     captures.push(await capture(cdp, sessionId, output, 'actual-shop-orders', ['Needs attention', 'New order'],
-      { fixturePath: '/shop/', tab: 'orders', selector: '.orders-module' }))
+      { fixturePath: '/shop/', tab: 'orders', selector: '.orders-module', forbiddenText: ['Payment and handoff recorded'] }))
     captures.push(await captureTablet(cdp, sessionId, output, 'actual-shop-orders-tablet', ['Needs attention', 'New order'],
-      { fixturePath: '/shop/', tab: 'orders', selector: '.orders-module' }))
+      { fixturePath: '/shop/', tab: 'orders', selector: '.orders-module', forbiddenText: ['Payment and handoff recorded'] }))
     captures.push(await captureMobile(cdp, sessionId, output, 'actual-shop-orders-mobile', ['Needs attention', 'New order'],
-      { fixturePath: '/shop/', tab: 'orders', selector: '.orders-module' }))
+      { fixturePath: '/shop/', tab: 'orders', selector: '.orders-module', forbiddenText: ['Payment and handoff recorded'] }))
     await clickText(cdp, sessionId, 'Show Inventory')
     await waitFor(cdp, sessionId, 'Inventory')
     await clickSelector(cdp, sessionId, '.stock-catalog-disclosure summary')
     await waitForSelector(cdp, sessionId, '.stock-catalog-disclosure[open]')
     captures.push(await capture(cdp, sessionId, output, 'actual-shop-inventory', ['Inventory', 'Stock', 'Other products', 'BAYDAR Laundry Detergent'],
-      { fixturePath: '/shop/', tab: 'inventory', selector: '.shop-stock-module' }))
+      { fixturePath: '/shop/', tab: 'inventory', selector: '.shop-stock-module', forbiddenText: ['Payment and handoff recorded'] }))
     captures.push(await captureTablet(cdp, sessionId, output, 'actual-shop-inventory-tablet', ['Inventory', 'Stock', 'Other products', 'BAYDAR Laundry Detergent'],
-      { fixturePath: '/shop/', tab: 'inventory', selector: '.shop-stock-module' }))
+      { fixturePath: '/shop/', tab: 'inventory', selector: '.shop-stock-module', forbiddenText: ['Payment and handoff recorded'] }))
     await clickSelector(cdp, sessionId, '.stock-catalog-disclosure summary')
     await waitForSelector(cdp, sessionId, '.stock-catalog-disclosure:not([open])')
     captures.push(await captureMobile(cdp, sessionId, output, 'actual-shop-inventory-mobile', ['Inventory', 'Stock'],
-      { fixturePath: '/shop/', tab: 'inventory', selector: '.shop-stock-module' }))
+      { fixturePath: '/shop/', tab: 'inventory', selector: '.shop-stock-module', forbiddenText: ['Payment and handoff recorded'] }))
     await assertShopMobileFits(cdp, sessionId, '.shop-stock-module')
     await clickText(cdp, sessionId, 'Clean synthetic databases')
 

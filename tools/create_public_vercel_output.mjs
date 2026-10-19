@@ -739,12 +739,51 @@ const publicObservabilityScript = `(function () {
 })()
 `
 
-const publicMarketingStyle = companyShopStyle + '\nbody[data-view="company"] .button,\nbody[data-view="shop"] .button { border-radius: 9px; }\nbody[data-view="shop"] .shop-showcase-nav a { border-radius: 8px; }'
+const publicMarketingStyle = companyShopStyle + `
+/* One quiet, consistent public identity. The company page is editorial; Shop is product-led. */
+.nav-links a { min-height: 44px; border-radius: 6px; padding-inline: 13px; transition: color 160ms ease, border-color 160ms ease; }
+.nav-links a[aria-current="page"] { border-bottom: 2px solid var(--brand-accent); border-radius: 0; color: var(--ink); background: transparent; }
+.nav-links a:hover:not([aria-current="page"]) { border-color: transparent; color: var(--brand-accent-strong); background: transparent; }
+body[data-view="shop"] .shop-showcase-nav a { border-radius: 8px; }
+.button, .button.primary, .button-primary { min-height: 48px; border: 1px solid #202432; border-radius: 8px; padding-inline: 18px; box-shadow: none; font-size: 14px; font-weight: 680; transition: background-color 150ms ease, border-color 150ms ease, transform 150ms ease; }
+.button.primary, .button-primary { border-color: #202432; color: #fff; background: #202432; }
+.button.primary:hover, .button-primary:hover { border-color: #343b4e; color: #fff; background: #343b4e; transform: translateY(-1px); }
+body[data-view="company"] .company-hero .hero-actions .button-primary,
+body[data-view="shop"] .shop-hero .button-primary { border-color: #202432; color: #fff; background: #202432; box-shadow: none; }
+body[data-view="company"] .company-hero .hero-actions .button-primary:hover,
+body[data-view="shop"] .shop-hero .button-primary:hover { border-color: #343b4e; color: #fff; background: #343b4e; box-shadow: none; }
+.button-secondary { border-color: #d5d8df; color: #252a36; background: transparent; box-shadow: none; }
+.button-secondary:hover { border-color: #aeb4c1; color: #151922; background: #f6f7f9; }
+.button:focus-visible, .button-primary:focus-visible, .nav-links a:focus-visible { outline: 3px solid rgba(37,99,235,.28); outline-offset: 3px; }
+body[data-view="company"] .company-hero { background: #f6f5f1; }
+body[data-view="company"] .company-hero::before { display: none; }
+body[data-view="company"] .company-hero .hero-grid { min-height: 540px; padding-block: clamp(44px,6vw,76px); }
+body[data-view="company"] .company-hero .hero-copy { max-width: 590px; }
+body[data-view="company"] .company-hero h1 { max-width: 10.5ch; font-size: clamp(42px,5.1vw,66px); line-height: .99; letter-spacing: -.055em; }
+body[data-view="company"] .company-hero .hero-copy > p:not(.hero-kicker) { max-width: 43ch; font-size: 18px; line-height: 1.6; }
+body[data-view="company"] .company-product-visual { gap: 10px; padding: 12px; border-color: #dfded8; border-radius: 14px; background: #fff; box-shadow: 0 24px 58px rgba(25,28,38,.09); }
+body[data-view="company"] .company-product-visual img { border-color: #e4e4e1; border-radius: 8px; }
+body[data-view="shop"] .shop-hero { padding-block: clamp(44px,6vw,68px); background: #f3f5f9; }
+body[data-view="shop"] .shop-hero h1 { max-width: 13ch; font-size: clamp(42px,5vw,64px); line-height: 1.02; }
+body[data-view="shop"] .shop-actual-showcase { background: #fff; }
+body[data-view="contact"] .contact-page { padding-block: clamp(48px,6vw,78px); }
+body[data-view="contact"] .contact-page .contact-form { gap: 16px; padding: 26px; border-color: #e1e3e8; border-radius: 12px; background: #fafbfc; box-shadow: none; }
+body[data-view="contact"] .contact-page .field-grid input, body[data-view="contact"] .contact-page .field-grid textarea { border-radius: 7px; }
+body[data-view="contact"] .contact-page .contact-form .button { width: max-content; min-width: 176px; min-height: 48px; justify-self: start; }
+@media (max-width: 760px) {
+  body[data-view="company"] .company-hero .hero-grid { min-height: 0; padding-block: 32px; }
+  body[data-view="company"] .company-hero h1 { max-width: 12ch; font-size: clamp(38px,10vw,52px); }
+  body[data-view="shop"] .shop-hero { padding-block: 34px; }
+  body[data-view="contact"] .contact-page { padding-block: 32px 52px; }
+  body[data-view="contact"] .contact-page .contact-form { padding: 20px; }
+  body[data-view="contact"] .contact-page .contact-form .button { width: 100%; }
+}
+`
 
 function documentHtml({ route, title, description, content, schema = null, robots = 'index,follow', shareImage = '/og-card.png' }) {
   const url = canonical(route)
   const shareImageUrl = canonical(shareImage)
-  const view = route === '/' ? 'company' : route === '/shop/' ? 'shop' : null
+  const view = route === '/' ? 'company' : route === '/shop/' ? 'shop' : route === '/contact/' ? 'contact' : null
   const themeColor = view === 'shop' ? '#f7f9fc' : '#ffffff'
   const pageStyle = view ? `<style>${publicMarketingStyle}</style>` : ''
   const viewAttribute = view ? ` data-view="${view}"` : ''
@@ -788,7 +827,7 @@ assert(typeof homePage.title === 'string' && homePage.title.includes('SuperMega'
 assert(typeof homePage.description === 'string' && homePage.description.length >= 40, 'home_page_description_invalid')
 
 const stories = {
- shop: {title:'Sell at the counter. Keep stock and orders in view.', body:'Search or scan a product, build a sale, and see order and stock follow-up in the same Shop workspace.', screens:[['actual-shop-sell.png','Shop counter with searchable products, visible stock levels, and Add controls for a new sale; barcode search, a three-item basket, and payment method recording. Wallet transfers are confirmed separately.','Counter sale and live basket'],['actual-shop-orders.png','Shop order queue showing order status and the next follow-up','Orders and fulfilment'],['actual-shop-inventory.png','Shop inventory workspace showing stock levels and the count, receive, and reorder workflow','Inventory and replenishment']], proof:[['Find','Search or scan the right product'],['Sell','Review each item and the MMK total'],['Follow up','See order status and stock needs']]},
+ shop: {title:'Sell at the counter. Keep stock and orders in view.', body:'Search or scan a product, build a sale, and see order and stock follow-up in the same Shop workspace.', screens:[['actual-shop-orders.png','Shop order queue showing order status and the next follow-up','Orders and fulfilment'],['actual-shop-inventory.png','Shop inventory workspace showing stock levels and the count, receive, and reorder workflow','Inventory and replenishment']], proof:[['Find','Search or scan the right product'],['Sell','Review each item and the MMK total'],['Follow up','See order status and stock needs']]},
  website: {title:'Build clear pages. Review inquiries in one place.', body:'Our team manages pages, readiness checks and customer inquiries in one workspace.', screens:[['actual-sites-editor.png','Sites editor showing page navigation, focused content editing and readiness checks','Page workspace and readiness'],['actual-sites-inquiries.png','Sites inquiry workspace showing a synthetic customer request, ownership and decision controls','Inquiry review and ownership']], proof:[['Record','Pages, services and metadata'],['Action','Edit, check and prepare to publish'],['Result','Qualified inquiries in one inbox']]},
  ecommerce: {title:'Show your catalog. Review each request.', body:'Our team reviews each catalog request before Shop records an order or payment.', screens:[['actual-commerce-catalog.png','Commerce catalog showing available products, local pricing and customer ordering','Store catalog and availability'],['actual-commerce-order-request.png','Commerce Store showing a locally saved customer request awaiting Shop confirmation','Request saved locally']], proof:[['Record','Catalog, customer and request'],['Action','Review before an order is confirmed'],['Result','A clear next step for fulfilment']]},
 }
@@ -929,7 +968,7 @@ function shopOnlyCompanyMarkup(source) {
  return markup
 }
 function companyOperatingGraphic() {
- return `<figure class="company-product-visual"><img src="/images/actual-shop-sell.png" alt="SuperMega Shop counter sale with searchable products, stock counts and payment method recording. Wallet transfers are confirmed separately. Synthetic sample records." width="1440" height="900" loading="eager" fetchpriority="high" /><figcaption>Shop · Counter sale <span>Actual Shop screen · synthetic sample records</span></figcaption></figure>`
+ return `<figure class="company-product-visual"><img src="/images/actual-shop-sell.png" alt="SuperMega Shop counter screen with product search, barcode scan, a sale basket and MMK total. Synthetic sample records." width="1440" height="900" loading="eager" fetchpriority="high" /><figcaption>Shop · Counter sale <span>Actual Shop screen · synthetic sample records</span></figcaption></figure>`
 }
 function replaceHomeShopShowcase(source) {
  const marker = /<section class="shop-showcase" aria-label="Shop product screens">[\s\S]*?<\/section>/g

@@ -41,6 +41,7 @@ function harness({ draft = async () => {}, apply = async () => {}, frozen = fals
     ${handlers}
     return { save: saveRestorePoint, load: loadBackupFile, restore: restoreWorkspace, reset: resetWorkspace,
       point: () => restorePoint, reviewed: () => reviewedRestorePoint, label: () => restorePointLabel,
+      review: () => setReviewedRestorePoint(restorePoint),
       operation: () => localWorkspaceOperation.current, calls, records };
   `)(records, calls, draft, apply, frozen)
 }
@@ -86,15 +87,19 @@ test('invalid or oversized file preserves the last verified restore point', asyn
   const h = harness()
   await h.load(file({ valid: true, records: { previous: 'keep' } }))
   const point = h.point(), stored = h.records.get('restore'), label = h.label()
+  h.review()
   await h.load(file({ valid: false }))
   assert.equal(h.point(), point)
   assert.equal(h.records.get('restore'), stored)
   assert.equal(h.label(), label)
+  assert.equal(h.reviewed(), null)
+  h.review()
   const tooLarge = { size: 5000001, name: 'too-large.json', text: async () => { throw new Error('must not read') } }
   await h.load(tooLarge)
   assert.equal(h.point(), point)
   assert.equal(h.records.get('restore'), stored)
   assert.equal(h.label(), label)
+  assert.equal(h.reviewed(), null)
 })
 test('valid file replaces restore point; older reads cannot replace newer ones', async () => {
   const h = harness(), read = deferred()
