@@ -69,11 +69,11 @@ test('builds a data-less preview proposal with branch mode and schema unverified
   assert.equal(built.previewBranch.productionRefsAllowed, false)
   assert.equal(built.previewBranch.privilegedRuntimeCredentialsAllowed, false)
   assert.equal(built.previewBranch.deleteAfterEvidence, true)
-  assert.equal(built.migrationPlan.migrationCount, 31)
-  assert.equal(built.migrationPlan.privateMigrationCount, 30)
+  assert.equal(built.migrationPlan.migrationCount, 32)
+  assert.equal(built.migrationPlan.privateMigrationCount, 31)
   assert.equal(built.migrationPlan.schemaVersion, 13)
   assert.equal(built.migrationPlan.publicBaseline, '20260711081300_public_legacy_baseline.sql')
-  assert.equal(built.migrationPlan.finalMigration, '20261019070000_ecommerce_operator_management_boundary.sql')
+  assert.equal(built.migrationPlan.finalMigration, '20261019103000_ecommerce_review_shared_state_lock.sql')
   assert.ok(!built.migrationPlan.migrations.some(entry => entry.name === '20261014103000_website_custom_domain_bindings.sql'))
   assert.ok(!built.migrationPlan.migrations.some(entry => entry.name === '20261016143945_optimize_sites_inquiry_rls_initplans.sql'))
   assert.equal(built.productionBaseline.schemaVersionAtAudit, 11)
@@ -121,11 +121,10 @@ test('records generation time and rejects malformed or backdated source packets'
   }
 })
 
-test('binds exact ordered public baseline and thirty private migrations through Ecommerce operator capability correction', async () => {
+test('binds exact ordered public baseline and thirty-one private migrations through Ecommerce operator capability correction', async () => {
   const built = await proposal()
   const entries = built.migrationPlan.migrations
   assert.deepEqual(entries.slice(-16).map(entry => entry.name), [
-    '20260907024457_self_serve_durable_attempt_budget.sql',
     '20260915184728_website_customer_review_storage.sql',
     '20260915191528_website_review_entitlement_proof.sql',
     '20260918011500_website_customer_acceptance.sql',
@@ -141,6 +140,7 @@ test('binds exact ordered public baseline and thirty private migrations through 
     '20261015091500_website_six_page_reviews.sql',
     '20261015202629_ecommerce_operator_review_grant.sql',
     '20261019070000_ecommerce_operator_management_boundary.sql',
+    '20261019103000_ecommerce_review_shared_state_lock.sql',
   ])
   assert.equal(validatePreviewMigrationEntries(entries), entries)
   for (const mutate of [list => list.pop(), list => list.push({ ...list.at(-1) }),

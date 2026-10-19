@@ -1,22 +1,22 @@
 {
   "contract": "supermega.managed-pilot-readiness.v5",
-  "asOf": "2026-10-18T17:16:44.713Z",
+  "asOf": "2026-10-19T10:38:43.881Z",
   "pilotMode": "owner_named",
   "localDatabase": {
     "contract": "supermega.hq.database-rehearsal.v3",
     "schemaVersion": 13,
     "schemaProfile": "v13-self-serve",
-    "migrationCount": 30,
-    "implementationCommit": "6726038e0a9f0b582edb421d5e00bbe30ceb6579",
-    "implementationTree": "18eff734e2c32f617d92c31180f5380b4a808394",
-    "implementationDigest": "sha256:3744dce1cbeaf83cf4c7dc30cdf72798b85efc1f6ae4e497247f432d3e7f0dbc",
-    "receiptDigest": "sha256:55844842d899f01a267402d9794e75373956f0ac24d3e5543d42da46f57960e7",
+    "migrationCount": 31,
+    "implementationCommit": "b666819a7abf1fb1cc09cab2859781725a83f9cc",
+    "implementationTree": "bb8b3629339b184232bbbf09343dabbb890c1376",
+    "implementationDigest": "sha256:57eb71427790c08e3dec3f749a53776088518d05d25797a9fc0b26d5b74faa08",
+    "receiptDigest": "sha256:5b46c87440cff9e153f4573e09c6b72bd345167e0d1aab9360a622d9014f69a7",
     "behaviorChecks": 75,
     "catalogChecksBefore": 33,
     "catalogChecksAfter": 33,
     "hostedEvidenceCurrent": false
   },
-  "sourceDigest": "sha256:66b9a83ec8c9d5b74f05b12140361da3043e3325d43d9290c8b41c75dd85db36",
+  "sourceDigest": "sha256:0eb6e5a95724d9d82f492cbb30e69a081a891101bafd70f7744e872f4dbc08c5",
   "overall": {
     "status": "blocked",
     "localDatabaseProofReady": true,
@@ -282,7 +282,7 @@
     },
     {
       "path": "hq/research/postgres17-rehearsal.json",
-      "digest": "sha256:9a5fa1b642faa70cd6561162a49fc6380a19db452af78e99256b57b7ed7949ff"
+      "digest": "sha256:b449db54a42fc25e5418b94cf2a4293d8bf99464f5e8d6ba5a89120ba36de0a5"
     },
     {
       "path": "hq/pilots/private-storage-privacy-audit.md",
@@ -314,7 +314,7 @@
     },
     {
       "path": "kernel/managed-pilot-readiness.mjs",
-      "digest": "sha256:be424472b268bdbad73d1fc5c9203cea2294c00887290cdf67140bd8c3b00dd5"
+      "digest": "sha256:5f09fba486016a48c6ba5f66973e8a18be46ce27d79da66d2b869982960f39aa"
     }
   ]
 }

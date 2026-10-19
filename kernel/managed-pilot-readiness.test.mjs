@@ -20,7 +20,7 @@ const products = ['shop', 'plant', 'website', 'ecommerce'].map((id) => ({
 }))
 const sourceReceipts = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'].map((path) => ({ path, digest: readinessDigest(path) }))
 const historicalDatabaseFixture = JSON.parse(readFileSync(new URL('../hq/research/postgres17-rehearsal.json', import.meta.url), 'utf8'))
-// Build a synthetic 30-migration current-shape proof while keeping the dormant
+// Build a synthetic 31-migration current-shape proof while keeping the dormant
 // Sites inquiry RLS optimization out of the canonical rehearsal chain.
 const databaseFixture = structuredClone(historicalDatabaseFixture)
 databaseFixture.runner = 'unit-test-only-synthetic-proof'
@@ -33,7 +33,10 @@ const currentDatabaseMigrations = databaseFixture.migration.names
 if (!currentDatabaseMigrations.includes('20261019070000_ecommerce_operator_management_boundary.sql')) {
   currentDatabaseMigrations.push('20261019070000_ecommerce_operator_management_boundary.sql')
 }
-assert.equal(currentDatabaseMigrations.length, 30)
+if (!currentDatabaseMigrations.includes('20261019103000_ecommerce_review_shared_state_lock.sql')) {
+  currentDatabaseMigrations.push('20261019103000_ecommerce_review_shared_state_lock.sql')
+}
+assert.equal(currentDatabaseMigrations.length, 31)
 const databaseFixtureImplementationDigest = sha256(JSON.stringify({
   purpose: 'managed-pilot-readiness-unit-fixture', implementationPaths, currentDatabaseMigrations,
   checkNames: Object.keys(databaseFixture.checks).sort(),
@@ -332,7 +335,7 @@ test('changed implementation binding and local proof summaries cannot be called 
     fileCount: databaseFixture.implementationFileCount, digest: `sha256:${'0'.repeat(64)}` }
   assert.throws(() => buildManagedPilotReadiness(changed), /managed_pilot_readiness_database_evidence_invalid/)
   for (const mutate of [d => { d.migrationCount = 18 }, d => { d.behaviorChecks = 72 },
-    d => { d.migrationCount = 28 }, d => { d.behaviorChecks = 74 },
+    d => { d.migrationCount = 28 }, d => { d.migrationCount = 30 }, d => { d.behaviorChecks = 74 },
     d => { d.migrationCount = 14 }, d => { d.migrationCount = 17 }, d => { d.catalogChecksAfter = 32 },
     d => { d.hostedEvidenceCurrent = true }, d => { d.implementationTree = '' }]) {
     const ledger = buildManagedPilotReadiness(input)
