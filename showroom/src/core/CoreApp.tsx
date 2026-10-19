@@ -3482,13 +3482,14 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
   // for something a re-open repairs. Quota outranks eviction risk -- "writes are failing
   // now" beats "writes may be cleared later" -- and neither is shown while the browser is
   // still being asked.
-  // Keep the non-blocking local-storage reminder on Today, where operators can
-  // see it once. A full quota is a live write risk and remains visible everywhere.
+  // Keep the storage-mode reminder on Today only. The label describes where this
+  // workspace lives; backup management remains available in Settings. A full quota
+  // is a live write risk and remains visible everywhere.
   const storageDurabilityNotice = managedIdentity
     || !(storageDurability.quotaExceeded || (storageDurability.state === 'denied' && tab === 'today'))
     ? null
     : <div className="production-mode-banner storage-durability-banner" data-durability={storageDurability.quotaExceeded ? 'full' : 'device-only'} role={storageDurability.quotaExceeded ? 'alert' : 'status'}>
-      <span className={`status-pill${storageDurability.quotaExceeded ? ' pending' : ''}`}>{uiText(storageDurability.quotaExceeded ? 'Storage full' : 'Device-only data')}</span>
+      <span className={`status-pill${storageDurability.quotaExceeded ? ' pending' : ''}`}>{uiText(storageDurability.quotaExceeded ? 'Storage full' : 'Local workspace')}</span>
       {storageDurability.quotaExceeded
         ? <p>{uiText('Free space on this device before saving more Shop data.')}</p>
         : null}

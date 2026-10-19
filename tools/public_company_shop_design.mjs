@@ -22,7 +22,6 @@ export function brandFaviconSvg(accent) {
 }
 
 export function companyShopHeaderHtml(route) {
-  const companyActive = route === '/';
   const shopActive = route === '/shop/';
   const contactActive = route === '/contact/';
   const loginHref = shopActive ? 'https://app.supermega.dev/login?product=shop' : 'https://app.supermega.dev/login';
@@ -32,7 +31,6 @@ export function companyShopHeaderHtml(route) {
       <span class="brand-word">${superMegaBrandIdentity.name}</span>
     </a>
     <nav class="nav-links" aria-label="Main navigation">
-      <a href="/" ${companyActive ? 'aria-current="page"' : ''}>Company</a>
       <a href="/shop/" ${shopActive ? 'aria-current="page"' : ''}>Shop</a>
       <a href="/contact/" ${contactActive ? 'aria-current="page"' : ''}>Contact</a>
       <a href="${loginHref}">Login</a>

@@ -175,7 +175,7 @@ export const UI_TRANSLATIONS: Readonly<Record<string, string>> = {
   'Cancel order': 'အော်ဒါ ပယ်ဖျက်ရန်',
   'Record a refund already completed with the external payment provider. This does not send money.': 'ပြင်ပငွေပေးချေမှုဝန်ဆောင်မှုတွင် ပြန်အမ်းပြီးသား ငွေကိုသာ ဤနေရာတွင် မှတ်တမ်းတင်ပါ။ ဤလုပ်ဆောင်ချက်က ငွေမလွှဲပို့ပါ။',
   'Storage full': 'သိုလှောင်နေရာ ပြည့်နေသည်',
-  'Device-only data': 'ဤစက်ပေါ်တွင်သာ သိမ်းထားသော မှတ်တမ်း',
+  'Local workspace': 'စက်ပေါ်က အလုပ်နေရာ',
   'Free space on this device before saving more Shop data.': 'ဆိုင်မှတ်တမ်းများ ထပ်မသိမ်းမီ ဤစက်ပေါ်တွင် နေရာလွတ် ပြုလုပ်ပါ။',
   'Saved on this device only.': 'ဤစက်ပေါ်တွင်သာ သိမ်းထားသည်။',
   'Reload Shop': 'ဆိုင်ကို ပြန်ဖွင့်ရန်', 'Export backup': 'အရန်မိတ္တူ ထုတ်ယူရန်',

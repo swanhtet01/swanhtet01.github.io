@@ -651,7 +651,7 @@ const sharedStyle = `
   .button.primary:hover{background:#1d4ed8}
   .company-hero{background:radial-gradient(ellipse at 84% 18%,rgba(37,99,235,.10),transparent 32%),linear-gradient(180deg,#f5f8ff,#fff 68%)}
   body[data-view="company"] .company-hero{background:linear-gradient(180deg,#f8fbff,#fff 72%)}
-  .company-hero .hero-actions .button-primary,.shop-hero .button-primary{box-sizing:border-box;display:inline-flex;width:max-content;max-width:100%;min-height:52px;flex:0 1 auto;align-items:center;justify-content:center;gap:10px;border:1px solid #1d4ed8;border-radius:9px;padding:0 18px;color:#fff;background:#2563eb;font-size:14px;font-weight:720;line-height:1.2;text-decoration:none;white-space:nowrap;box-shadow:0 8px 20px rgba(37,99,235,.16)}
+  .company-hero .hero-actions .button-primary,.shop-hero .button-primary{box-sizing:border-box;display:inline-flex;width:max-content;max-width:100%;min-height:50px;flex:0 1 auto;align-items:center;justify-content:center;gap:10px;border:1px solid #1d4ed8;border-radius:8px;padding:0 18px;color:#fff;background:#2563eb;font-size:14px;font-weight:650;line-height:1.2;text-decoration:none;white-space:nowrap;box-shadow:none}
   .company-hero .hero-actions .button-primary:hover,.shop-hero .button-primary:hover{border-color:#1d4ed8;color:#fff;background:#1d4ed8}
   .company-hero .hero-actions .button-primary svg,.shop-hero .button-primary svg{display:block;width:18px;height:18px;max-width:none;flex:0 0 18px}
   .shop-actual-showcase{padding-block:clamp(46px,6vw,78px);border-bottom:1px solid #e4e7ec;background:#fff}
@@ -665,6 +665,15 @@ const sharedStyle = `
   .company-product-visual img{display:block;width:100%;height:auto;border:1px solid #e5e8ef;border-radius:7px;background:#f7f8fb;pointer-events:none;user-select:none}
   .company-product-visual figcaption{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:2px 5px;color:#3d4655;font-size:12px;font-weight:700}
   .company-product-visual figcaption span{color:#70798a;font-size:11px;font-weight:500}
+  .company-operating-overview{display:grid;min-width:0;gap:12px}
+  .company-operating-overview .company-product-visual{gap:8px;padding:8px;border-radius:8px;box-shadow:0 10px 28px rgba(17,24,39,.07)}
+  .company-operating-overview .company-product-visual img{aspect-ratio:16/10;object-fit:contain;border-radius:5px}
+  .company-operating-details{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+  .company-operating-details .company-product-visual{padding:7px}
+  .company-operating-details .company-product-visual figcaption{display:block}
+  .company-operating-details .company-product-visual figcaption span{display:block;margin-top:3px}
+  .company-operating-proof{margin:0;color:#70798a;font-size:11px;line-height:1.45}
+  @media(max-width:760px){.company-operating-details{grid-template-columns:minmax(0,1fr)}}
   body[data-view="company"] .company-product-evidence{margin-top:clamp(40px,6vw,72px);padding-top:clamp(28px,4vw,48px);border-top:1px solid #e5e4ed}
   .company-product-evidence-head{display:flex;align-items:end;justify-content:space-between;gap:24px;margin-bottom:22px}
   .company-product-evidence-head h2{margin:8px 0 0;font-size:clamp(25px,3vw,38px);letter-spacing:-.045em;line-height:1.12}
@@ -686,7 +695,7 @@ const sharedStyle = `
 `
 
 function headerHtml(route) {
-  return companyShopHeaderHtml(route).replace(/<a href="\/"[^>]*>Company<\/a>/, '')
+  return companyShopHeaderHtml(route)
 }
 
 function footerHtml(route) {
@@ -968,19 +977,23 @@ function shopOnlyCompanyMarkup(source) {
  return markup
 }
 function companyOperatingGraphic() {
- return `<figure class="company-product-visual"><img src="/images/actual-shop-sell.png" alt="SuperMega Shop counter screen with product search, barcode scan, a sale basket and MMK total. Synthetic sample records." width="1440" height="900" loading="eager" fetchpriority="high" /><figcaption>Shop · Counter sale <span>Actual Shop screen · synthetic sample records</span></figcaption></figure>`
+ return `<div class="company-operating-overview" aria-label="Shop workflow preview"><figure class="company-product-visual"><img src="/images/actual-shop-today.png" alt="Actual SuperMega Shop Today screen showing sales, orders and stock alerts with synthetic sample records." width="1440" height="900" loading="eager" fetchpriority="high" /><figcaption><strong>Today</strong><span>Sales, orders and stock at a glance</span></figcaption></figure><div class="company-operating-details"><figure class="company-product-visual"><img src="/images/actual-shop-sell.png" alt="Actual SuperMega Shop counter sale screen with product search and current sale basket. Synthetic sample records." width="1440" height="900" loading="lazy" /><figcaption><strong>Counter sale</strong><span>Find items and complete a sale</span></figcaption></figure><figure class="company-product-visual"><img src="/images/actual-shop-orders.png" alt="Actual SuperMega Shop orders screen with fulfilment and payment follow-up. Synthetic sample records." width="1440" height="900" loading="lazy" /><figcaption><strong>Orders</strong><span>See what needs follow-up</span></figcaption></figure></div><p class="company-operating-proof">Actual Shop screens · synthetic sample records</p></div>`
 }
 function replaceHomeShopShowcase(source) {
  const marker = /<section class="shop-showcase" aria-label="Shop product screens">[\s\S]*?<\/section>/g
  const matches = source.match(marker) || []
  assert(matches.length === 1, 'home_shop_showcase_source_drift')
- const companyVisual = `<div class="company-operating-overview" aria-label="SuperMega company overview">${companyOperatingGraphic()}</div>`
- const markup = source.replace(marker, companyVisual)
+ const companyVisual = companyOperatingGraphic()
+ let markup = source.replace(marker, companyVisual)
+ const contactAction = /[ \t]*<a class="text-link hero-note" href="\/contact\/">Contact us<\/a>/g
+ const contactActions = [...markup.matchAll(contactAction)]
+ assert.equal(contactActions.length, 1, 'home_duplicate_contact_action_source_drift')
+ markup = markup.replace(contactAction, '')
  return removeSectionByClass(markup, 'company-portfolio', 'home_duplicate_shop_details')
 }
 const publicHomeMarkup = replaceHomeShopShowcase(shopOnlyCompanyMarkup(companyMarkup))
 function simplifyShopHeroActions(source) {
- let markup = replaceOnce(source, 'Ask about Shop', 'Contact SuperMega', 'shop_primary_action_copy')
+ let markup = replaceOnce(source, 'Ask about Shop', 'Request a walkthrough', 'shop_primary_action_copy')
  const secondaryAction = /[ \t]*<a class="button button-secondary" href="#shop-demo">See Shop screens<\/a>/g
  const matches = [...markup.matchAll(secondaryAction)]
  assert(matches.length === 1, 'shop_duplicate_screen_action_source_drift')
@@ -1063,13 +1076,13 @@ const contactScript = `<script>(function(){
   function updateServiceSummary(){
     if(!heading)return;
     var serviceName=product&&({website:'Sites',ecommerce:'Commerce',shop:'Shop'})[product.value];
-    heading.textContent=serviceName?'Contact our '+serviceName+' team.':'Contact SuperMega.';
+    heading.textContent=serviceName?(serviceName==='Shop'?'Request a Shop walkthrough':'Contact our '+serviceName+' team.'):'Contact';
   }
   updateServiceSummary();
   if(product)product.addEventListener('change',function(){if(template)template.value='';detachProofIfChanged();updateServiceSummary()});
   if(template)template.addEventListener('input',detachProofIfChanged);
   if(handoff.toString()){
-    if(lede)lede.textContent='SuperMega builds business software for Myanmar. Shop brings counter sales, stock and order follow-up together for retailers.';
+    if(lede)lede.textContent='SuperMega builds practical business software for Myanmar. Shop helps retailers manage counter sales, stock and open orders.';
     if(proof)status.textContent='Helpful context attached. Nothing has been sent.';
     else if(proofResult.attempted)status.textContent='Attached context could not be verified and was left out.';
     history.replaceState(null,'',location.pathname+location.search);
@@ -1103,12 +1116,15 @@ const publicSecurityHeaders = {
   'x-content-type-options': 'nosniff',
   'x-frame-options': 'DENY',
 }
-const contactHtml = documentHtml({
+let contactHtml = documentHtml({
   route: '/contact/',
   title: 'Contact | SuperMega',
   description: 'Tell SuperMega which company workflow should run better.',
   content: `<main class="frame contact-page" id="content"><section class="page-hero"><span class="eyebrow">SuperMega · Myanmar</span><h1 data-contact-heading>Contact SuperMega.</h1><p class="lede" data-contact-lede>SuperMega builds business software for Myanmar. Shop brings counter sales, stock and order follow-up together for retailers.</p></section><section class="contact-layout"><form class="contact-form" action="/api/contact-submissions" method="post" data-contact-form><div class="field-grid"><label>Name<input name="name" autocomplete="name" required maxlength="120" /></label><label>Email<input name="email" type="email" autocomplete="email" required maxlength="180" /></label><label class="wide">Company (optional)<input name="company" autocomplete="organization" maxlength="180" /></label><input type="hidden" name="product" value="guide" /><input type="hidden" name="template" maxlength="120" /><label class="wide">Message<textarea name="goal" required maxlength="4000" placeholder="Share a few details about your request."></textarea></label></div><input type="hidden" name="source_url" /><input type="hidden" name="referrer" /><input type="hidden" name="idempotency_key" /><input type="hidden" name="trial_claim_code" /><input type="hidden" name="proof_contract" /><input type="hidden" name="proof_version" /><input type="hidden" name="proof_digest" /><input type="hidden" name="proof_product" /><input type="hidden" name="proof_template" /><input type="hidden" name="proof_readiness" /><input type="hidden" name="proof_sources" /><input type="hidden" name="proof_behavior" /><input type="hidden" name="proof_decisions" /><input type="hidden" name="proof_raw_records" /><input type="hidden" name="proof_context_contract" /><input type="hidden" name="proof_context_digest" /><input type="hidden" name="proof_context_outcome_digest" /><input type="hidden" name="proof_context_approved" /><input type="hidden" name="proof_context_raw_records" /><input class="contact-honeypot" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" inert /><button class="button primary" type="submit">Send message</button><p class="form-status" data-form-status aria-live="polite"></p></form></section></main>${contactScript}`,
 })
+contactHtml = replaceOnce(contactHtml, 'Contact SuperMega.', 'Contact', 'contact_heading_copy')
+contactHtml = replaceOnce(contactHtml, 'SuperMega builds business software for Myanmar. Shop brings counter sales, stock and order follow-up together for retailers.', 'SuperMega builds practical business software for Myanmar. Shop helps retailers manage counter sales, stock and open orders.', 'contact_company_intro_copy')
+contactHtml = replaceOnce(contactHtml, 'Share a few details about your request.', 'Tell us what your business needs.', 'contact_message_placeholder_copy')
 
 const privacyHtml = documentHtml({
   route: '/privacy/',
