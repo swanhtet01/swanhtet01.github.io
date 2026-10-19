@@ -14,6 +14,7 @@ import {
   createEmptyCommerce,
   commerceItemBarcodeConflicts,
   findCommerceItemByScanCode,
+  resolveCommerceItemByScanCode,
   reconcileCommercePayment,
   reserveCommerceOrder,
   updateCommerceItem,
@@ -117,8 +118,10 @@ test('Shop barcode identity stays separate from SKU, preserves leading zeroes, a
     ...createEmptyCommerce(),
     items: [{ ...product, sku: 'tea-01' }, { ...product, sku: 'TEA-01' }],
   })
-  assert.equal(findCommerceItemByScanCode(ambiguous.items, 'TEA-01'), null)
-  assert.match(core, /function addScannedValue[\s\S]*resolveCommerceItemByScanCode\(items, normalizedQuery\)/)
+  assert.equal(resolveCommerceItemByScanCode(ambiguous.items, 'TEA-01').item?.sku, 'TEA-01')
+  assert.equal(resolveCommerceItemByScanCode(ambiguous.items, 'tea-01').item?.sku, 'tea-01')
+  assert.equal(resolveCommerceItemByScanCode(ambiguous.items, 'Tea-01').kind, 'ambiguous')
+  assert.match(core, /function addScannedValue[\s\S]*resolveCommerceItemByScanCode\(items, scanCode\)/)
   assert.match(core, /resolution\.kind === 'ambiguous'[\s\S]*Correct the duplicate product codes/)
   assert.match(core, /resolution\.kind === 'not_found'[\s\S]*unmatchedBarcodeForCreation\(value, source\)/)
   assert.match(core, /function selectStockCountBarcode[\s\S]*findCommerceItemByScanCode\(commerce\.items, code\)/)

@@ -205,8 +205,15 @@ for (const value of ['MUG', 'UG-10', 'Ceramic Mug', 'MUG-1', 'UNKNOWN']) {
 }
 const outOfStockCounterScan = runCounterScan(counterItems, 'LAMP-02')
 check(!outOfStockCounterScan.matched && outOfStockCounterScan.added.length === 0, 'out_of_stock_counter_scan_must_not_add_item')
-const ambiguousCounterScan = runCounterScan([{ sku: 'MUG-10', onHand: 4 }, { sku: 'mug-10', onHand: 4 }], 'MUG-10')
-check(!ambiguousCounterScan.matched && ambiguousCounterScan.added.length === 0, 'duplicate_counter_skus_must_fail_closed')
+const caseVariantCounterItems = [{ sku: 'MUG-10', onHand: 4 }, { sku: 'mug-10', onHand: 4 }]
+const exactUpperCounterScan = runCounterScan(caseVariantCounterItems, 'MUG-10')
+const exactLowerCounterScan = runCounterScan(caseVariantCounterItems, 'mug-10')
+const ambiguousCounterScan = runCounterScan(caseVariantCounterItems, 'Mug-10')
+check(exactUpperCounterScan.matched && exactUpperCounterScan.added.join() === 'MUG-10'
+  && exactLowerCounterScan.matched && exactLowerCounterScan.added.join() === 'mug-10'
+  && !ambiguousCounterScan.matched && ambiguousCounterScan.added.length === 0
+  && ambiguousCounterScan.feedback[0]?.includes('more than one product'),
+'case_sensitive_sku_scans_match_exact_codes_and_fail_closed_for_case_folds')
 function runRealCounterScan(initialQuantity, saveAccepted = true) {
   let cart = initialQuantity ? { 'MUG-10': initialQuantity } : {}
   const queries = []

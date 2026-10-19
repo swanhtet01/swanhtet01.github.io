@@ -97,6 +97,11 @@ export type CommerceItemScanResolution =
 
 /** Resolve an exact SKU/barcode and report duplicate-code ambiguity separately from a miss. */
 export function resolveCommerceItemByScanCode(items: readonly CommerceItem[], rawCode: string): CommerceItemScanResolution {
+  const exactCode = rawCode.trim()
+  if (!exactCode) return { kind: 'not_found' }
+  const exactMatches = items.filter((item) => item.sku.trim() === exactCode || item.barcode?.trim() === exactCode)
+  if (exactMatches.length > 1) return { kind: 'ambiguous' }
+  if (exactMatches.length === 1) return { kind: 'matched', item: exactMatches[0] }
   const code = normalizedScanCode(rawCode)
   if (!code) return { kind: 'not_found' }
   const matches = items.filter((item) => normalizedScanCode(item.sku) === code || normalizedScanCode(item.barcode) === code)

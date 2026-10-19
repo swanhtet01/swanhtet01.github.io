@@ -1303,9 +1303,9 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
   // scanners type the code and send Enter) and the camera scanner below both land here,
   // so exact SKU/barcode resolution cannot drift between the two.
   function addScannedValue(value: string, source: 'camera' | 'keyboard') {
-    const normalizedQuery = value.trim().toLocaleLowerCase()
-    if (!normalizedQuery) return false
-    const resolution = resolveCommerceItemByScanCode(items, normalizedQuery)
+    const scanCode = value.trim()
+    if (!scanCode) return false
+    const resolution = resolveCommerceItemByScanCode(items, scanCode)
     if (resolution.kind === 'ambiguous') {
       setScanFeedback('This SKU or barcode matches more than one product. Correct the duplicate product codes before scanning again.')
       setUnmatchedBarcode('')
@@ -1332,7 +1332,7 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
   function addSearchMatch(event: KeyboardEvent<HTMLInputElement>) {
     if (event.key !== 'Enter' || !normalizedQuery) return
     event.preventDefault()
-    const codeMatch = resolveCommerceItemByScanCode(items, normalizedQuery)
+    const codeMatch = resolveCommerceItemByScanCode(items, query.trim())
     if (codeMatch.kind === 'ambiguous') {
       addScannedValue(query, 'keyboard')
       return
