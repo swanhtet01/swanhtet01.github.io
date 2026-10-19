@@ -19,6 +19,7 @@ test('language choice survives refresh and follows another tab without mixing la
 
     assert.equal(locale.readUiLocale(), 'my', 'the saved choice loads before a route renders')
     assert.equal(globalThis.document.documentElement.lang, 'my', 'a saved choice restores the document language on load')
+    await locale.ensureUiLocaleReady()
     assert.equal(locale.uiText('Today'), 'ယနေ့')
     assert.equal(locale.uiText('Products'), 'ကုန်ပစ္စည်းများ')
     assert.equal(locale.uiText('Unpaid'), 'ငွေမပေးရသေး')
@@ -37,17 +38,17 @@ test('language choice survives refresh and follows another tab without mixing la
     assert.equal(locale.uiText('Not added. Check the product code and available stock.'), 'မထည့်နိုင်ပါ။ ကုန်ပစ္စည်းကုဒ်နှင့် လက်ကျန်ကို စစ်ဆေးပါ။')
     assert.equal(locale.uiText('Record a refund already completed with the external payment provider. This does not send money.'), 'ပြင်ပငွေပေးချေမှုဝန်ဆောင်မှုတွင် ပြန်အမ်းပြီးသား ငွေကိုသာ ဤနေရာတွင် မှတ်တမ်းတင်ပါ။ ဤလုပ်ဆောင်ချက်က ငွေမလွှဲပို့ပါ။')
     assert.equal(locale.uiText('Not a tax invoice, receipt, or payment confirmation.'), 'ဤမှတ်တမ်းသည် အခွန်ပြေစာ၊ အရောင်းပြေစာ သို့မဟုတ် ငွေပေးချေမှု အတည်ပြုချက် မဟုတ်ပါ။')
-    locale.setUiLocale('en')
+    await locale.setUiLocale('en')
     assert.equal(values.get('supermega.ui-locale.v1'), 'en')
     assert.equal(globalThis.document.documentElement.lang, 'en')
     assert.equal(locale.uiText('Today'), 'Today')
     assert.equal(locale.uiText('Account changed in another tab'), 'Account changed in another tab')
 
-    events.get('storage')?.({ key: 'supermega.ui-locale.v1', newValue: 'my' })
+    await events.get('storage')?.({ key: 'supermega.ui-locale.v1', newValue: 'my' })
     assert.equal(locale.readUiLocale(), 'my', 'a choice in another tab reaches this tab')
     assert.equal(globalThis.document.documentElement.lang, 'my', 'a choice in another tab updates the document language')
     assert.equal(locale.uiText('Today'), 'ယနေ့')
-    events.get('storage')?.({ key: 'supermega.ui-locale.v1', newValue: 'invalid' })
+    await events.get('storage')?.({ key: 'supermega.ui-locale.v1', newValue: 'invalid' })
     assert.equal(locale.readUiLocale(), 'en', 'an invalid saved value fails back to English')
     assert.equal(globalThis.document.documentElement.lang, 'en')
   } finally {
