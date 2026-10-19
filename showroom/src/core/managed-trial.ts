@@ -1570,6 +1570,7 @@ export function assertManagedShopImportState(
     const barcode = row.values.barcode || undefined
     const itemKeys = [
       ...baseItemKeys,
+      ...(row.values.nameMy ? ['nameMy'] : []),
       ...(category ? ['category'] : []),
       ...(variant ? ['variant'] : []),
       ...(barcode ? ['barcode'] : []),
@@ -1577,6 +1578,7 @@ export function assertManagedShopImportState(
     const expected = {
       sku: row.values.sku,
       name: row.values.name,
+      ...(row.values.nameMy ? { nameMy: row.values.nameMy } : {}),
       ...(category ? { category } : {}),
       ...(variant ? { variant } : {}),
       ...(barcode ? { barcode } : {}),
@@ -1591,6 +1593,7 @@ export function assertManagedShopImportState(
       || !Number.isSafeInteger(expected.price)
       || item.sku !== expected.sku
       || item.name !== expected.name
+      || item.nameMy !== expected.nameMy
       || item.category !== expected.category
       || item.variant !== expected.variant
       || item.barcode !== expected.barcode

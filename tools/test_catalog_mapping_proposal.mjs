@@ -8,9 +8,9 @@ import { reviewCatalogMappingProposal } from '../showroom/src/core/catalog-mappi
 const csv = 'sku,name,stock,reorder_at,amount\nSYN-1,Synthetic item,5,1,1200'
 test('company Shop onboarding stages and verifies a detected variant', async () => {
   const source = [
-    'sku,item_name,category,opening_stock,reorder_at,price_mmk,color',
-    'QA-TEA-001,Myanmar milk tea,Beverages,5,2,2500,Black',
-    'QA-TEA-002,Mohinga,Meals,4,1,1800,',
+    'sku,item_name,name_my,category,opening_stock,reorder_at,price_mmk,color',
+    'QA-TEA-001,Myanmar milk tea,နို့လက်ဖက်ရည်,Beverages,5,2,2500,Black',
+    'QA-TEA-002,Mohinga,မုန့်ဟင်းခါး,Meals,4,1,1800,',
   ].join('\n')
   const base = await createClientImportPreview(source, 'commerce', undefined, 'synthetic-shop.csv', 'retail-wholesale')
   const detected = await addShopVariantColumnToClientImportPreview(base)
@@ -23,13 +23,14 @@ test('company Shop onboarding stages and verifies a detected variant', async () 
   assert.equal(staging.mapping.variant, 'color')
   assert.equal(staging.rows[0].values.variant, 'Black')
   assert.equal(staging.rows[1].values.variant, '')
+  assert.equal(staging.rows[0].values.nameMy, 'နို့လက်ဖက်ရည်')
   assert.equal(staging.rows[0].values.category, 'Beverages')
   assert.equal(staging.rows[1].values.category, 'Meals')
   const savedState = {
     schema: 'supermega.commerce.workspace.v2',
     items: [
-      { sku: 'QA-TEA-001', name: 'Myanmar milk tea', category: 'Beverages', variant: 'Black', onHand: 5, reorderAt: 2, price: 2500 },
-      { sku: 'QA-TEA-002', name: 'Mohinga', category: 'Meals', onHand: 4, reorderAt: 1, price: 1800 },
+      { sku: 'QA-TEA-001', name: 'Myanmar milk tea', nameMy: 'နို့လက်ဖက်ရည်', category: 'Beverages', variant: 'Black', onHand: 5, reorderAt: 2, price: 2500 },
+      { sku: 'QA-TEA-002', name: 'Mohinga', nameMy: 'မုန့်ဟင်းခါး', category: 'Meals', onHand: 4, reorderAt: 1, price: 1800 },
     ],
     orders: [],
     movements: [],
@@ -82,11 +83,24 @@ test('barcode proposal remains optional and cannot reuse another source column',
 test('older AI mapping proposals without the optional category remain reviewable', async () => {
   const proposal = await proposalFor()
   delete proposal.mapping.category
+  delete proposal.mapping.barcode
   const result = await reviewCatalogMappingProposal(csv, [], proposal)
   assert.equal(result.status, 'review_required')
   assert.equal(result.importAuthorized, false)
   assert.equal(result.preview.mapping.category, '')
   assert.equal(result.preview.rows[0].item.category, undefined)
+})
+test('AI mapping can recover a custom Burmese-name column without replacing detected values', async () => {
+  const source = 'sku,item_name,myanmar_label,opening_stock,reorder_at,price_mmk\nTEA-1,Tea,လက်ဖက်ရည်,8,2,1600'
+  const base = await createShopCatalogImportPreview(source, [])
+  const result = await reviewCatalogMappingProposal(source, [], {
+    sourceDigest: base.sourceDigest,
+    mapping: { ...base.mapping, nameMy: 'myanmar_label' },
+  })
+  assert.equal(result.status, 'review_required')
+  assert.equal(result.importAuthorized, false)
+  assert.equal(result.preview.mapping.nameMy, 'myanmar_label')
+  assert.equal(result.preview.rows[0].item.nameMy, 'လက်ဖက်ရည်')
 })
 test('stale source and added values are rejected', async () => {
   const p = await proposalFor()

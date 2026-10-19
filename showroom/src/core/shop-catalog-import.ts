@@ -536,6 +536,7 @@ export async function createShopCatalogImportPreview(
       sku: shared.mapping.sku,
       barcode: shared.mapping.barcode ?? '',
       name: shared.mapping.name,
+      ...(shared.mapping.nameMy ? { nameMy: shared.mapping.nameMy } : {}),
       category: shared.mapping.category ?? '',
       onHand: shared.mapping.onHand,
       reorderAt: shared.mapping.reorderAt,
