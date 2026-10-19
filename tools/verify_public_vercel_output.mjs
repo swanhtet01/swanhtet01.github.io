@@ -351,6 +351,9 @@ for (const token of ['body[data-view="company"] .company-hero::before{opacity:0;
   if (!home.includes(token)) fail('home_visual_contract_missing', { token })
 }
 if (home.includes('body[data-view="company"] .site-header .brand-word { color: var(--text); }')) fail('company_wordmark_light_on_light_override')
+if (!home.includes('.company-hero .hero-actions .button-primary') || !home.includes('white-space:nowrap')) fail('company_primary_action_layout_missing')
+const shopPageHtml = pages.get('/shop/').html
+if (!shopPageHtml.includes('.shop-hero .button-primary') || !shopPageHtml.includes('white-space:nowrap')) fail('shop_primary_action_layout_missing')
 if (!home.includes('<p class="hero-kicker">For Myanmar retailers</p>')
   || !home.includes('See what sold.<br><span>Know what needs action.</span>')
   || !home.includes('Record counter sales, check stock and follow open orders in SuperMega Shop.')
@@ -419,7 +422,7 @@ for (const [route, html] of [['/', home], ['/shop/', pages.get('/shop/').html], 
   const productVisualMissing = route === '/'
     ? !hasClassToken(body, 'company-hero') || hasClassToken(body, 'product-family') || !body.includes('See what sold.<br><span>Know what needs action.</span>') || !body.includes('class="company-operating-overview"') || !body.includes('class="company-product-visual"') || body.includes('class="company-product-evidence"') || body.includes('class="company-portfolio"') || body.includes('data-platform-carousel') || body.includes('Choose a Shop screen') || body.includes('Sell faster.') || body.includes('data-device-choice')
     : route === '/shop/'
-      ? !body.includes('class="shop-actual-showcase"') || !body.includes('Sales, stock and orders.') || !body.includes('Real Shop screens with sample records. The catalog and prices shown are examples, not a live retail feed.') || body.includes('Makro PRO') || body.includes('17 October 2026') || body.includes('class="pos-window"') || body.includes('class="sample-label"') || body.includes('Complete sample sale') || body.includes('shop-sample-demo.js') || !body.includes('class="platform-gallery shop-gallery-all"') || countOccurrences(body, '<figure class="platform-image') !== galleryViews.shop || countOccurrences(body, 'class="platform-device-set has-tablet"') !== galleryViews.shop || body.includes('data-platform-carousel') || body.includes('data-device-choice') || body.includes('data-device-frame') || /<a\b[^>]*>\s*<img\b[^>]*src="\/images\/actual-shop-/i.test(body)
+      ? !body.includes('class="shop-actual-showcase"') || !body.includes('See the daily workflow.') || !body.includes('Shop interface. Sample records.') || body.includes('Makro PRO') || body.includes('17 October 2026') || body.includes('class="pos-window"') || body.includes('class="sample-label"') || body.includes('Complete sample sale') || body.includes('shop-sample-demo.js') || !body.includes('class="platform-gallery shop-gallery-all"') || countOccurrences(body, '<figure class="platform-image') !== galleryViews.shop || countOccurrences(body, 'class="platform-device-set has-tablet"') !== galleryViews.shop || body.includes('data-platform-carousel') || body.includes('data-device-choice') || body.includes('data-device-frame') || /<a\b[^>]*>\s*<img\b[^>]*src="\/images\/actual-shop-/i.test(body)
       : !body.includes('class="platform-image"') || !body.includes('class="feature-line"')
   if (productVisualMissing) fail('product_visual_missing', { route })
   if (route === '/') {
@@ -468,7 +471,7 @@ for (const [route, html] of [['/', home], ['/shop/', shopPage]]) {
   if (html.includes('data-language-toggle') || html.includes('src="/site-language.js"')) fail('marketing_language_control_present', { route })
   if (html.includes('data-i18n=') || /[\u1000-\u109f]/u.test(html)) fail('marketing_myanmar_copy_present', { route })
 }
-for (const token of ['Actual app interface · sample data', 'Sales, stock and orders.', 'One clear view.', 'Search products, build the basket and complete a sale. Keep open orders and stock levels close at hand.']) {
+for (const token of ['Actual app interface · sample data', 'Sales, stock and orders.', 'One clear view.', 'See the daily workflow.', 'Shop interface. Sample records.', 'Search products, build the basket and complete a sale. Keep open orders and stock levels close at hand.']) {
   if (!shopPage.includes(token)) fail('shop_page_scope_missing', { token })
 }
 if (/<section\b[^>]*class="[^"]*\bsubscription-section\b/.test(shopPage)

@@ -652,6 +652,13 @@ const sharedStyle = `
   .button.primary:hover{background:#1d4ed8}
   .company-hero{background:radial-gradient(ellipse at 84% 18%,rgba(37,99,235,.10),transparent 32%),linear-gradient(180deg,#f5f8ff,#fff 68%)}
   body[data-view="company"] .company-hero{background:linear-gradient(180deg,#f8fbff,#fff 72%)}
+  .company-hero .hero-actions .button-primary,.shop-hero .button-primary{box-sizing:border-box;display:inline-flex;width:max-content;max-width:100%;min-height:52px;flex:0 1 auto;align-items:center;justify-content:center;gap:10px;border:1px solid #1d4ed8;border-radius:9px;padding:0 18px;color:#fff;background:#2563eb;font-size:14px;font-weight:720;line-height:1.2;text-decoration:none;white-space:nowrap;box-shadow:0 8px 20px rgba(37,99,235,.16)}
+  .company-hero .hero-actions .button-primary:hover,.shop-hero .button-primary:hover{border-color:#1d4ed8;color:#fff;background:#1d4ed8}
+  .company-hero .hero-actions .button-primary svg,.shop-hero .button-primary svg{display:block;width:18px;height:18px;max-width:none;flex:0 0 18px}
+  .shop-actual-showcase{padding-block:clamp(46px,6vw,78px);border-bottom:1px solid #e4e7ec;background:#fff}
+  .shop-actual-showcase .story-heading{margin-bottom:26px}
+  .shop-actual-showcase .story-heading h2{font-size:clamp(30px,4vw,48px);letter-spacing:-.045em;line-height:1.08}
+  .shop-actual-showcase .story-heading p{max-width:36ch;font-size:15px;line-height:1.55}
   body[data-view="company"] .company-hero::before{opacity:0;background-image:none}
   @media(min-width:1051px){body[data-view="company"] .company-hero .hero-grid{grid-template-columns:minmax(0,.88fr) minmax(420px,1.12fr);gap:clamp(36px,5vw,72px)}}
   body[data-view="company"] .company-hero .hero-art{min-height:0}
@@ -959,7 +966,7 @@ function productAction(product) {
 
 function shopLandingHtml(product, page) {
  const description = page.description || product.description
- const shopShowcase = `<section class="shop-actual-showcase" id="shop-demo" aria-labelledby="shop-actual-showcase-title"><div class="wrap"><div class="story-heading"><div><span class="eyebrow">Shop</span><h2 id="shop-actual-showcase-title">Sales, stock and orders.</h2></div><p>Real Shop screens with sample records. The catalog and prices shown are examples, not a live retail feed.</p></div>${productGallery('shop','Shop',true,true)}</div></section>`
+ const shopShowcase = `<section class="shop-actual-showcase" id="shop-demo" aria-labelledby="shop-actual-showcase-title"><div class="wrap"><div class="story-heading"><div><span class="eyebrow">Shop workspace</span><h2 id="shop-actual-showcase-title">See the daily workflow.</h2></div><p>Shop interface. Sample records.</p></div>${productGallery('shop','Shop',true,true)}</div></section>`
  let shopContent = publicShopMarkup
  const showcaseAnchor = /<\/section>(\r?\n)([ \t]*)<section class="demo-section"/g
  assert((shopContent.match(showcaseAnchor) || []).length === 1, 'shop_showcase_insertion_point_missing')

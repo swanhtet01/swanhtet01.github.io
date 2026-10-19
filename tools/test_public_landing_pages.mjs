@@ -189,7 +189,7 @@ for (const page of landingPages) {
   check(html.includes('<meta name="robots" content="index,follow" />'), `landing_indexable:${page.route}`)
   check((html.match(/<h1\b/g) || []).length === 1, `landing_single_headline:${page.route}`)
   if (page.productId === 'shop') {
-    const captureDisclosure = 'Real Shop screens with sample records. The catalog and prices shown are examples, not a live retail feed.'
+    const captureDisclosure = 'Shop interface. Sample records.'
     check(html.includes('class="shop-actual-showcase"') && html.includes(captureDisclosure), 'landing_shop_actual_showcase_disclosed')
     check(!html.includes('class="pos-window"') && !html.includes('class="sample-label"') && !html.includes('Complete sample sale') && !html.includes('shop-sample-demo.js'), 'landing_shop_no_simulated_pos')
     check(html.includes('class="platform-gallery shop-gallery-all"') && html.includes('class="platform-image"'), 'landing_shop_actual_screens_visible')
@@ -257,6 +257,7 @@ for (const page of landingPages) {
     : 'href="https://app.supermega.dev/login"'
   check(countOccurrences(html, expectedLoginHref) === 1, `landing_login_actions:${page.route}`)
   if (page.route === '/shop/') check(html.includes('class="button button-primary" href="/contact/?product=shop">Request Shop setup'), 'shop_primary_action_requests_setup')
+  if (page.route === '/') check(html.includes('.company-hero .hero-actions .button-primary') && html.includes('white-space:nowrap'), 'company_primary_action_stays_compact')
   check(!html.includes('Request assisted setup') && !html.includes('id="first-loop"'), `landing_no_setup_funnel:${page.route}`)
   for (const unsupportedClaim of ['AI may help prepare drafts', 'AI assisted', 'Ranked next actions', 'approved AI context']) {
     check(!html.includes(unsupportedClaim), `landing_unverified_ai_offer_absent:${page.route}:${unsupportedClaim}`)
@@ -372,8 +373,8 @@ check(home.includes('<figure class="company-product-visual"') && home.includes('
 const shopLanding = readStatic('shop/index.html')
 const shopProduct = manifest.customerProducts.find(product => product.id === 'shop')
 for (const token of [
-  'Sales, stock and orders.',
-  'Real Shop screens with sample records. The catalog and prices shown are examples, not a live retail feed.',
+  'See the daily workflow.',
+  'Shop interface. Sample records.',
   'Shop Today showing sales, open orders and low-stock indicators',
   'Shop counter with searchable products, visible stock levels, and Add controls for a new sale',
   'Shop order queue showing order status and the next follow-up',
@@ -395,6 +396,7 @@ check(shopLanding.includes('class="platform-gallery shop-gallery-all"') && shopL
 check(shopManifest?.status === 'release-candidate-local', 'shop_public_status_matches_unhosted_candidate')
 check(shopManifest?.primaryCta?.url === '/shop/#shop-demo', 'shop_primary_action_opens_real_screen_gallery')
 check(shopLanding.includes('Sales, stock and orders.') && shopLanding.includes('One clear view.'), 'shop_hero_matches_the_operating_job')
+check(shopLanding.includes('.shop-hero .button-primary') && shopLanding.includes('white-space:nowrap'), 'shop_primary_action_stays_compact')
 check(shopLanding.includes('Search products, build the basket and complete a sale. Keep open orders and stock levels close at hand.'), 'shop_hero_copy_matches_visible_features')
 check(!/<section\b[^>]*class="[^"]*\bsubscription-section\b/.test(shopLanding)
   && !shopLanding.includes('no setup fee') && !shopLanding.includes('printer-sourcing markup'), 'shop_page_omits_unverified_pricing_and_hardware_promises')
