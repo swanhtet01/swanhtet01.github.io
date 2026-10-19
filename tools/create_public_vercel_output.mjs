@@ -76,15 +76,14 @@ const sourceGalleryAssetNames = [
   'actual-shop-today-tablet.png', 'actual-shop-today-mobile.png',
   'actual-shop-orders.png', 'actual-shop-orders-tablet.png', 'actual-shop-orders-mobile.png',
   'actual-shop-inventory.png', 'actual-shop-inventory-tablet.png', 'actual-shop-inventory-mobile.png',
-  'actual-sites-editor.png', 'actual-sites-editor-mobile.png',
-  'actual-sites-inquiries.png', 'actual-sites-inquiries-mobile.png',
-  'actual-commerce-catalog.png', 'actual-commerce-catalog-mobile.png',
-  'actual-commerce-order-request.png', 'actual-commerce-order-request-mobile.png',
+  'actual-sites-editor.png', 'actual-sites-editor-tablet.png', 'actual-sites-editor-mobile.png',
+  'actual-sites-inquiries.png', 'actual-sites-inquiries-tablet.png', 'actual-sites-inquiries-mobile.png',
+  'actual-commerce-catalog.png', 'actual-commerce-catalog-tablet.png', 'actual-commerce-catalog-mobile.png',
+  'actual-commerce-order-request.png', 'actual-commerce-order-request-tablet.png', 'actual-commerce-order-request-mobile.png',
 ]
 // Keep the complete capture set and provenance available to internal review,
 // while exposing only the approved Shop customer surface in the public bundle.
 const publicGalleryAssetNames = [
-  'actual-shop-today.png', 'actual-shop-today-tablet.png', 'actual-shop-today-mobile.png',
   'actual-shop-sell.png', 'actual-shop-sell-tablet.png', 'actual-shop-sell-mobile.png',
   'actual-shop-orders.png', 'actual-shop-orders-tablet.png', 'actual-shop-orders-mobile.png',
   'actual-shop-inventory.png', 'actual-shop-inventory-tablet.png', 'actual-shop-inventory-mobile.png',
@@ -591,7 +590,7 @@ const sharedStyle = `
   .platform-device-capture img {display:block;width:100%;height:auto;border:1px solid #dfe2ea;border-radius:5px;background:#fff;box-shadow:0 10px 24px rgba(16,24,40,.09);pointer-events:none;user-select:none}
   .platform-image figcaption {margin-top:auto;padding:12px 2px 0;color:#596579;font-size:12px;line-height:1.45}
   .platform-image figcaption small {display:block;margin-top:3px;color:#778196;font-size:11px}
-  .platform-device-set {display:grid;grid-template-columns:minmax(0,2.45fr) minmax(0,1.1fr) minmax(0,.78fr);align-items:end;gap:clamp(8px,1.4vw,16px);min-width:0}
+  .platform-device-set {display:grid;grid-template-columns:minmax(0,1.75fr) minmax(0,1.25fr) minmax(0,.95fr);align-items:end;gap:clamp(8px,1.4vw,16px);min-width:0}
   .platform-device-set:not(.has-tablet) {grid-template-columns:minmax(0,1fr) minmax(0,.48fr)}
   .platform-device-capture {display:flex;flex-direction:column;min-width:0;margin:0}
   .platform-device-capture figcaption {margin:7px 0 0;color:#657087;font-size:10px;font-weight:650;line-height:1.25;text-align:center}
@@ -965,7 +964,7 @@ function productAction(product) {
 
 function shopLandingHtml(product, page) {
  const description = page.description || product.description
- const shopShowcase = `<section class="shop-actual-showcase" id="shop-demo" aria-labelledby="shop-actual-showcase-title"><div class="wrap"><div class="story-heading"><div><span class="eyebrow">Shop workspace</span><h2 id="shop-actual-showcase-title">See the daily workflow.</h2></div><p>Shop interface. Sample records.</p></div>${productGallery('shop','Shop',true,true)}</div></section>`
+ const shopShowcase = `<section class="shop-actual-showcase" id="shop-demo" aria-labelledby="shop-actual-showcase-title"><div class="wrap"><div class="story-heading"><div><span class="eyebrow">Shop</span><h2 id="shop-actual-showcase-title">Sell, follow orders, restock.</h2></div><p>Real app screens. Sample records.</p></div>${productGallery('shop','Shop',true,true)}</div></section>`
  let shopContent = publicShopMarkup
  const showcaseAnchor = /<\/section>(\r?\n)([ \t]*)<section class="demo-section"/g
  assert((shopContent.match(showcaseAnchor) || []).length === 1, 'shop_showcase_insertion_point_missing')

@@ -189,12 +189,13 @@ for (const page of landingPages) {
   check(html.includes('<meta name="robots" content="index,follow" />'), `landing_indexable:${page.route}`)
   check((html.match(/<h1\b/g) || []).length === 1, `landing_single_headline:${page.route}`)
   if (page.productId === 'shop') {
-    const captureDisclosure = 'Shop interface. Sample records.'
+    const captureDisclosure = 'Real app screens. Sample records.'
     check(html.includes('class="shop-actual-showcase"') && html.includes(captureDisclosure), 'landing_shop_actual_showcase_disclosed')
     check(!html.includes('class="pos-window"') && !html.includes('class="sample-label"') && !html.includes('Complete sample sale') && !html.includes('shop-sample-demo.js'), 'landing_shop_no_simulated_pos')
     check(html.includes('class="platform-gallery shop-gallery-all"') && html.includes('class="platform-image"'), 'landing_shop_actual_screens_visible')
-    check(countOccurrences(html, '<figure class="platform-image') === productScreens.shop.length, 'landing_shop_four_verified_product_screens')
-    check(html.includes('Sales, stock and orders.') && html.includes(captureDisclosure), 'landing_shop_capture_disclosure')
+    check(countOccurrences(html, '<figure class="platform-image') === productScreens.shop.length, 'landing_shop_three_verified_product_screens')
+    check(html.includes('Sell, follow orders, restock.') && html.includes(captureDisclosure), 'landing_shop_capture_disclosure')
+    check(!html.includes('actual-shop-today') && !html.includes('DEVICE-ONLY DATA') && !html.includes('Export backup'), 'landing_shop_gallery_omits_storage_warning')
     check(html.includes('platform-device-capture-desktop') && html.includes('platform-device-capture-tablet') && html.includes('platform-device-capture-phone') && !html.includes('data-device-choice'), 'landing_shop_all_device_captures_together')
     check(!html.includes('data-gallery-previous') && !html.includes('data-gallery-next') && !html.includes('data-platform-carousel'), 'landing_shop_all_views_without_carousel')
     check(!html.includes('<script src="/platform-carousel.js" defer></script>'), 'landing_shop_needs_no_gallery_script')
@@ -365,9 +366,8 @@ check(home.includes('<figure class="company-product-visual"') && home.includes('
 const shopLanding = readStatic('shop/index.html')
 const shopProduct = manifest.customerProducts.find(product => product.id === 'shop')
 for (const token of [
-  'See the daily workflow.',
-  'Shop interface. Sample records.',
-  'Shop Today showing sales, open orders and low-stock indicators',
+  'Sell, follow orders, restock.',
+  'Real app screens. Sample records.',
   'Shop counter with searchable products, visible stock levels, and Add controls for a new sale',
   'Shop order queue showing order status and the next follow-up',
   'Shop inventory workspace showing stock levels and the count, receive, and reorder workflow',
@@ -384,7 +384,7 @@ check(!shopLanding.includes('class="pos-window"') && !shopLanding.includes('clas
   && !shopLanding.includes('Complete sample sale') && !shopLanding.includes('Sample receipt')
   && !shopLanding.includes('shop-sample-demo.js'), 'shop_public_page_has_no_simulated_pos')
 check(shopLanding.includes('class="platform-gallery shop-gallery-all"') && shopLanding.includes('class="platform-image"')
-  && countOccurrences(shopLanding, '<figure class="platform-image') === 4, 'shop_four_real_views_in_gallery')
+  && countOccurrences(shopLanding, '<figure class="platform-image') === 3, 'shop_three_real_views_in_gallery')
 check(shopManifest?.status === 'release-candidate-local', 'shop_public_status_matches_unhosted_candidate')
 check(shopManifest?.primaryCta?.url === '/shop/#shop-demo', 'shop_primary_action_opens_real_screen_gallery')
 check(shopLanding.includes('Sales, stock and orders.') && shopLanding.includes('One clear view.'), 'shop_hero_matches_the_operating_job')

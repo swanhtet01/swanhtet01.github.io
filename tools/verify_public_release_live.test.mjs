@@ -36,7 +36,7 @@ globalThis.fetch=async input=>{
   if(mode==='image-missing') return new Response('missing',{status:404});
   if(mode==='image-html') return new Response('<html>fallback</html>',{headers:{'content-type':'text/html'}});
   if(mode==='image-corrupt') return new Response('broken',{headers:{'content-type':'image/png'}});
-  const path=mode==='image-stale'?'/images/actual-shop-today.png':u.pathname;
+  const path=mode==='image-stale'?'/images/actual-shop-sell.png':u.pathname;
   return new Response(fs.readFileSync(outputDir+'/static'+path),{headers:{'content-type':'image/png'}});
  }
  if(u.pathname.endsWith('.png')) return new Response(fs.readFileSync(outputDir+'/static'+u.pathname),{headers:{'content-type':'image/png'}});

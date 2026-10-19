@@ -18,13 +18,12 @@ const captureFiles = [
   'actual-shop-today-tablet.png', 'actual-shop-today-mobile.png',
   'actual-shop-orders.png', 'actual-shop-orders-tablet.png', 'actual-shop-orders-mobile.png',
   'actual-shop-inventory.png', 'actual-shop-inventory-tablet.png', 'actual-shop-inventory-mobile.png',
-  'actual-sites-editor.png', 'actual-sites-editor-mobile.png',
-  'actual-sites-inquiries.png', 'actual-sites-inquiries-mobile.png',
-  'actual-commerce-catalog.png', 'actual-commerce-catalog-mobile.png',
-  'actual-commerce-order-request.png', 'actual-commerce-order-request-mobile.png',
+  'actual-sites-editor.png', 'actual-sites-editor-tablet.png', 'actual-sites-editor-mobile.png',
+  'actual-sites-inquiries.png', 'actual-sites-inquiries-tablet.png', 'actual-sites-inquiries-mobile.png',
+  'actual-commerce-catalog.png', 'actual-commerce-catalog-tablet.png', 'actual-commerce-catalog-mobile.png',
+  'actual-commerce-order-request.png', 'actual-commerce-order-request-tablet.png', 'actual-commerce-order-request-mobile.png',
 ]
 const publicFiles = [
-  'actual-shop-today.png', 'actual-shop-today-tablet.png', 'actual-shop-today-mobile.png',
   'actual-shop-sell.png', 'actual-shop-sell-tablet.png', 'actual-shop-sell-mobile.png',
   'actual-shop-orders.png', 'actual-shop-orders-tablet.png', 'actual-shop-orders-mobile.png',
   'actual-shop-inventory.png', 'actual-shop-inventory-tablet.png', 'actual-shop-inventory-mobile.png',
@@ -52,7 +51,7 @@ assert.equal(report.deniedExternal, 0)
 assert.equal(report.fulfilledSyntheticMedia, 3)
 assert.equal(report.completedSale, true)
 assert.equal(report.customerReceiptVisible, false)
-assert.equal(report.captures?.length, 22, 'review the capture inventory before promotion')
+assert.equal(report.captures?.length, 26, 'review the capture inventory before promotion')
 assert.deepEqual(report.captures.map(capture => capture.file), captureFiles, 'capture inventory changed')
 assert(/^[0-9a-f]{64}$/.test(report.captureInputsSha256))
 const byFile = new Map(report.captures.map(capture => [capture.file, capture]))

@@ -209,6 +209,7 @@ async function capture(cdp, sessionId, output, name, expectedTexts, view) {
 
 async function captureMobile(cdp, sessionId, output, name, expectedTexts, view) {
   await cdp.send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true }, sessionId)
+  await cdp.send('Emulation.setScrollbarsHidden', { hidden: true }, sessionId)
   try {
     if (name === 'actual-commerce-catalog-mobile' || name === 'actual-commerce-order-request-mobile') {
       let phonePreview = false
@@ -243,6 +244,7 @@ async function captureMobile(cdp, sessionId, output, name, expectedTexts, view) 
     return await capture(cdp, sessionId, output, name, expectedTexts, { ...view, width: 390, height: 844 })
   } finally {
     if (name === 'actual-shop-sell-mobile') await clickSelector(cdp, sessionId, '.shop-cart-close')
+    await cdp.send('Emulation.setScrollbarsHidden', { hidden: false }, sessionId)
     await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false }, sessionId)
     await evaluate(cdp, sessionId, 'window.scrollTo(0,0)')
   }

@@ -248,7 +248,7 @@ async function verifyOnce() {
   // their actual response bytes; a 200 HTML fallback must never pass as an image.
   assert(publicProducts.map(product => product.id).join(',') === 'shop', 'public_product_scope_not_shop_only')
   const interfaceImages = {
-    shop: ['actual-shop-today.png', 'actual-shop-sell.png', 'actual-shop-orders.png'],
+    shop: ['actual-shop-sell.png', 'actual-shop-orders.png', 'actual-shop-inventory.png'],
   }
   for (const product of publicProducts) {
     const filenames = interfaceImages[product.id]
