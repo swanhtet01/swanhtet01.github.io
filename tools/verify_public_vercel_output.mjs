@@ -340,7 +340,7 @@ for (const staleToken of [
   if (home.includes(staleToken)) fail('stale_home_metadata_present', { token: staleToken })
 }
 if (!hasClassToken(home, 'company-hero')) fail('homepage_contract_missing', { token: 'class token company-hero' })
-for (const token of ['class="company-operating-overview"', 'href="/shop/">Explore Shop', 'href="/contact/">Contact us', 'href="https://app.supermega.dev/login"']) {
+for (const token of ['class="company-operating-overview"', 'href="/shop/">Explore Shop', 'href="/contact/">Contact</a>', 'href="https://app.supermega.dev/login"']) {
   if (!home.includes(token)) fail('homepage_contract_missing', { token })
 }
 if (home.includes('>View every screen size') || home.includes('>See Shop on desktop and mobile')) fail('home_action_must_not_be_a_device_tour')
@@ -352,8 +352,8 @@ if (!home.includes('.company-hero .hero-actions .button-primary') || !home.inclu
 const shopPageHtml = pages.get('/shop/').html
 if (!shopPageHtml.includes('.shop-hero .button-primary') || !shopPageHtml.includes('white-space:nowrap')) fail('shop_primary_action_layout_missing')
 if (!home.includes('<p class="hero-kicker">For Myanmar retailers</p>')
-  || !home.includes('Sell faster.<br><span>Stay in control.</span>')
-  || !home.includes('Sell at the counter, track stock and follow open orders in one Shop workspace built for Myanmar retailers.')
+  || !home.includes('Run the counter.<br><span>See what needs attention.</span>')
+  || !home.includes('SuperMega Shop brings sales, open orders and stock checks into one workspace for Myanmar retailers.')
   || !home.includes('class="company-operating-overview"')
   || home.includes('class="company-product-evidence"')
   || /href="\/(?:website|ecommerce)\//.test(home)
@@ -383,17 +383,17 @@ if (home.includes('Commerce and Production carry real records and actions.')) fa
 for (const [route, html] of [['/', home], ['/shop/', pages.get('/shop/').html], ...publicProducts.filter(product => product.id !== 'shop').map(product => [`/${product.id}/`, pages.get(`/${product.id}/`).html])]) {
   const body = html.slice(html.indexOf('<body'))
   const routeProduct = publicProducts.find(product => route === `/${product.id}/`) || null
-  const contactActionTarget = routeProduct?.status === 'available-in-app'
+  const contactActionTarget = routeProduct?.status === 'available-in-app' && route !== '/shop/'
     ? `/contact/?product=${routeProduct.id}`
     : null
   const galleryViews = { shop: 3, website: 2, ecommerce: 2 }
-  const expectedLinks = route === '/' ? 10 : route === '/shop/' ? 9 : 5 + Number(Boolean(contactActionTarget))
+  const expectedLinks = route === '/' ? 9 : route === '/shop/' ? 9 : 5 + Number(Boolean(contactActionTarget))
   if ((body.match(/<a\b/g) || []).length !== expectedLinks) fail('marketing_link_surface_drift', { route, expectedLinks })
   const expectedLogin = route === '/shop/'
     ? 'href="https://app.supermega.dev/login?product=shop"'
     : 'href="https://app.supermega.dev/login"'
   if (countOccurrences(body, expectedLogin) !== 1) fail('login_action_count_invalid', { route, expectedLogin })
-  if (route === '/shop/' && (!body.includes('class="button button-primary" href="/contact/?product=shop">Contact SuperMega') || body.includes('See Shop screens'))) fail('shop_primary_product_action_missing')
+  if (route === '/shop/' && (!body.includes('class="button button-primary" href="/contact/?product=shop">Contact SuperMega') || body.includes('See Shop screens') || body.includes('Need help with Shop?'))) fail('shop_primary_product_action_missing')
   if (body.includes('>Company</a>')) fail('company_page_navigation_not_consolidated')
   const hasGalleryNavigation = route !== '/shop/' && (galleryViews[routeProduct?.id] || 0) > 1
   const expectedButtons = Number(hasGalleryNavigation) * 2
@@ -417,9 +417,9 @@ for (const [route, html] of [['/', home], ['/shop/', pages.get('/shop/').html], 
     }
   }
   const productVisualMissing = route === '/'
-    ? !hasClassToken(body, 'company-hero') || hasClassToken(body, 'product-family') || !body.includes('Sell faster.<br><span>Stay in control.</span>') || !body.includes('class="company-operating-overview"') || !body.includes('class="company-product-visual"') || body.includes('class="company-product-evidence"') || body.includes('class="company-portfolio"') || body.includes('data-platform-carousel') || body.includes('Choose a Shop screen') || !body.includes('src="/images/actual-shop-sell.png"') || body.includes('data-device-choice')
+    ? !hasClassToken(body, 'company-hero') || hasClassToken(body, 'product-family') || !body.includes('Run the counter.<br><span>See what needs attention.</span>') || !body.includes('class="company-operating-overview"') || !body.includes('class="company-product-visual"') || body.includes('class="company-product-evidence"') || body.includes('class="company-portfolio"') || body.includes('data-platform-carousel') || body.includes('Choose a Shop screen') || !body.includes('src="/images/actual-shop-sell.png"') || body.includes('data-device-choice')
     : route === '/shop/'
-      ? !body.includes('class="shop-actual-showcase"') || !body.includes('Sell, follow orders, restock.') || !body.includes('Real app screens. Sample records.') || body.includes('Makro PRO') || body.includes('17 October 2026') || body.includes('class="pos-window"') || body.includes('class="sample-label"') || body.includes('Complete sample sale') || body.includes('shop-sample-demo.js') || !body.includes('class="platform-gallery shop-gallery-all"') || countOccurrences(body, '<figure class="platform-image') !== galleryViews.shop || countOccurrences(body, 'class="platform-device-set has-tablet"') !== galleryViews.shop || body.includes('data-platform-carousel') || body.includes('data-device-choice') || body.includes('data-device-frame') || /<a\b[^>]*>\s*<img\b[^>]*src="\/images\/actual-shop-/i.test(body)
+      ? !body.includes('class="shop-actual-showcase"') || !body.includes('Sell, follow orders, restock.') || !body.includes('Real Shop screens. Synthetic sample records.') || body.includes('Makro PRO') || body.includes('17 October 2026') || body.includes('class="pos-window"') || body.includes('class="sample-label"') || body.includes('Complete sample sale') || body.includes('shop-sample-demo.js') || !body.includes('class="platform-gallery shop-gallery-all"') || countOccurrences(body, '<figure class="platform-image') !== galleryViews.shop || countOccurrences(body, 'class="platform-device-set has-tablet"') !== galleryViews.shop || body.includes('data-platform-carousel') || body.includes('data-device-choice') || body.includes('data-device-frame') || /<a\b[^>]*>\s*<img\b[^>]*src="\/images\/actual-shop-/i.test(body)
       : !body.includes('class="platform-image"') || !body.includes('class="feature-line"')
   if (productVisualMissing) fail('product_visual_missing', { route })
   if (route === '/') {
@@ -467,7 +467,7 @@ for (const [route, html] of [['/', home], ['/shop/', shopPage]]) {
   if (html.includes('data-language-toggle') || html.includes('src="/site-language.js"')) fail('marketing_language_control_present', { route })
   if (html.includes('data-i18n=') || /[\u1000-\u109f]/u.test(html)) fail('marketing_myanmar_copy_present', { route })
 }
-for (const token of ['Actual app interface · sample data', 'Sales, stock and orders.', 'One clear view.', 'Sell, follow orders, restock.', 'Real app screens. Sample records.', 'Search products, build the basket and complete a sale. Keep open orders and stock levels close at hand.']) {
+for (const token of ['Sales, stock and orders.', 'One clear view.', 'Sell, follow orders, restock.', 'Real Shop screens. Synthetic sample records.', 'Search products, build the basket and complete a sale. Keep open orders and stock levels close at hand.']) {
   if (!shopPage.includes(token)) fail('shop_page_scope_missing', { token })
 }
 if (/<section\b[^>]*class="[^"]*\bsubscription-section\b/.test(shopPage)

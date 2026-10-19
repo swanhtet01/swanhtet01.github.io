@@ -739,12 +739,14 @@ const publicObservabilityScript = `(function () {
 })()
 `
 
+const publicMarketingStyle = companyShopStyle + '\nbody[data-view="company"] .button,\nbody[data-view="shop"] .button { border-radius: 9px; }\nbody[data-view="shop"] .shop-showcase-nav a { border-radius: 8px; }'
+
 function documentHtml({ route, title, description, content, schema = null, robots = 'index,follow', shareImage = '/og-card.png' }) {
   const url = canonical(route)
   const shareImageUrl = canonical(shareImage)
   const view = route === '/' ? 'company' : route === '/shop/' ? 'shop' : null
   const themeColor = view === 'shop' ? '#f7f9fc' : '#ffffff'
-  const pageStyle = view ? `<style>${companyShopStyle}</style>` : ''
+  const pageStyle = view ? `<style>${publicMarketingStyle}</style>` : ''
   const viewAttribute = view ? ` data-view="${view}"` : ''
   return `<!doctype html>
 <html lang="en">
@@ -831,7 +833,7 @@ function productGallery(id,label,eagerFirst=false,showAll=false) {
   if(tabletImage) interfaceDisclosure(tabletImage)
   const loading=eagerFirst && index===0?'eager':'lazy'
   const fetchPriority=eagerFirst && index===0?' fetchpriority="high"':''
-  return `<figure class="platform-image" role="group"${showAll?'':` aria-roledescription="slide" aria-label="${index+1} of ${item.screens.length}: ${escapeHtml(caption)}"`}><div class="platform-device-stage">${deviceCaptureSet(label,image,mobileImage,tabletImage,alt,width,height,loading,fetchPriority)}</div><figcaption>${escapeHtml(label)} &middot; ${escapeHtml(caption)}<small>${interfaceDisclosure(image)}</small></figcaption></figure>`
+  return `<figure class="platform-image" role="group"${showAll?'':` aria-roledescription="slide" aria-label="${index+1} of ${item.screens.length}: ${escapeHtml(caption)}"`}><div class="platform-device-stage">${deviceCaptureSet(label,image,mobileImage,tabletImage,alt,width,height,loading,fetchPriority)}</div><figcaption>${escapeHtml(label)} &middot; ${escapeHtml(caption)}${showAll?'':`<small>${interfaceDisclosure(image)}</small>`}</figcaption></figure>`
  }).join('')
  if (showAll) return `<div class="platform-gallery shop-gallery-all" data-product-gallery="${id}" role="region" aria-label="${label} interface views"><div class="platform-slides">${slides}</div></div>`
  if (item.screens.length === 1) return `<div class="platform-gallery" data-product-gallery="${id}" data-single role="region" aria-label="${label} interface view"><div class="platform-slides">${slides}</div></div>`
@@ -873,7 +875,7 @@ function removeSectionByClass(source, className, code) {
 function shopOnlyCompanyMarkup(source) {
  let markup = source
  markup = replaceKnownCopyOnce(markup, ["Operating software · Myanmar", "Operating software for Myanmar companies", "Shop software for Myanmar businesses", "Shop software for Myanmar retailers", "For shops in Myanmar", "For Myanmar retailers", "Business software for Myanmar retailers", "Shop for Myanmar retailers", "Made for Myanmar retailers", "SuperMega · Operating software for Myanmar", "SUPERMEGA · MYANMAR", "SuperMega · Myanmar", "Business software for Myanmar", "Business software"], "For Myanmar retailers", "shop_only_hero_kicker")
- markup = replaceKnownCopyOnce(markup, ["Tools for<br><span>everyday work.</span>", "Run your shop.<br><span>See what’s next.</span>", "Sell faster.<br><span>Stay in control.</span>", "Clearer systems for<br><span>everyday business.</span>", "Sales. Stock. Orders.<br><span>Under control.</span>", "Software for<br><span>Myanmar businesses.</span>", "Sales, stock, and orders<br><span>for Myanmar shops.</span>", "Sales, stock, and orders<br><span>in one place.</span>", "Sales, stock and orders<br><span>in one place.</span>", "See what sold.<br><span>Know what needs action.</span>", "Business software<br><span>built for Myanmar.</span>", "Operating software<br><span>for Myanmar businesses.</span>", "Run your counter.<br><span>Stay ahead of stock.</span>", "Know what sold.<br><span>See what needs attention.</span>", "For Myanmar<br><span>retailers.</span>"], "Sell faster.<br><span>Stay in control.</span>", "shop_only_hero_heading")
+ markup = replaceKnownCopyOnce(markup, ["Tools for<br><span>everyday work.</span>", "Run your shop.<br><span>See what’s next.</span>", "Sell faster.<br><span>Stay in control.</span>", "Clearer systems for<br><span>everyday business.</span>", "Sales. Stock. Orders.<br><span>Under control.</span>", "Software for<br><span>Myanmar businesses.</span>", "Sales, stock, and orders<br><span>for Myanmar shops.</span>", "Sales, stock, and orders<br><span>in one place.</span>", "Sales, stock and orders<br><span>in one place.</span>", "See what sold.<br><span>Know what needs action.</span>", "Business software<br><span>built for Myanmar.</span>", "Operating software<br><span>for Myanmar businesses.</span>", "Run your counter.<br><span>Stay ahead of stock.</span>", "Know what sold.<br><span>See what needs attention.</span>", "For Myanmar<br><span>retailers.</span>"], "Run the counter.<br><span>See what needs attention.</span>", "shop_only_hero_heading")
  markup = replaceKnownCopyOnce(markup, [
   "Shop brings sales and stock into one operating view. Our team manages Sites and confirms Commerce availability for each setup.",
   "Keep sales, orders and stock together in one clear MMK workflow. See what needs attention without digging through settings.",
@@ -895,9 +897,10 @@ function shopOnlyCompanyMarkup(source) {
   "SuperMega Shop brings counter sales, stock and open orders into one workspace.",
   "Record sales, track stock, and follow open orders in one Shop workspace.",
   "Shop connects counter sales, stock and open orders in one workspace.",
- ], "Sell at the counter, track stock and follow open orders in one Shop workspace built for Myanmar retailers.", "shop_only_hero_description")
+ ], "SuperMega Shop brings sales, open orders and stock checks into one workspace for Myanmar retailers.", "shop_only_hero_description")
  markup = replaceKnownCopyOnce(markup, ['href="#products">Meet the product family', 'href="#products">Explore Shop', 'href="/contact/">Talk to our team', 'href="/contact/">Contact us'], 'href="/contact/">Contact us', "shop_only_hero_secondary_action")
  markup = replaceKnownCopyOnce(markup, ['href="/shop/#shop-demo">See Shop in action', 'href="/shop/#shop-demo">See Shop screens', 'href="/shop/#shop-demo">See Shop on desktop and mobile', 'href="/shop/#shop-demo">View every screen size', 'href="/shop/">See Shop', 'href="/shop/">Explore Shop'], 'href="/shop/">Explore Shop', "shop_only_hero_primary_action")
+ markup = replaceOnce(markup, '<a class="text-link hero-note" href="/contact/">Contact us</a>', '', "shop_only_remove_duplicate_home_contact_action")
  for (const id of ["website", "ecommerce"]) {
   const marker = '<article class="family-card" id="' + id + '">'
   const start = markup.indexOf(marker)
@@ -926,7 +929,7 @@ function shopOnlyCompanyMarkup(source) {
  return markup
 }
 function companyOperatingGraphic() {
- return `<figure class="company-product-visual"><img src="/images/actual-shop-sell.png" alt="SuperMega Shop counter sale with searchable products, stock counts and payment method recording. Wallet transfers are confirmed separately. Sample records." width="1440" height="900" loading="eager" fetchpriority="high" /><figcaption>Shop · Counter sale <span>Sample records</span></figcaption></figure>`
+ return `<figure class="company-product-visual"><img src="/images/actual-shop-sell.png" alt="SuperMega Shop counter sale with searchable products, stock counts and payment method recording. Wallet transfers are confirmed separately. Synthetic sample records." width="1440" height="900" loading="eager" fetchpriority="high" /><figcaption>Shop · Counter sale <span>Synthetic sample records</span></figcaption></figure>`
 }
 function replaceHomeShopShowcase(source) {
  const marker = /<section class="shop-showcase" aria-label="Shop product screens">[\s\S]*?<\/section>/g
@@ -958,13 +961,14 @@ const homeHtml = documentHtml({route:'/',title:homePage.title,description:homePa
 })
 
 function productAction(product) {
- if (product.status !== 'available-in-app') return ''
- return `<section class="home-contact product-action" aria-labelledby="product-action-title"><div><h2 id="product-action-title">Need help with ${escapeHtml(product.name)}?</h2><p>Tell us what your business needs.</p></div><a class="button" href="/contact/?product=${escapeHtml(product.id)}">Contact SuperMega</a></section>`
+ if (product.status !== 'available-in-app' || product.id === 'shop') return ''
+ const label = product.id === 'shop' ? 'Talk to the Shop team' : 'Contact SuperMega'
+ return `<section class="home-contact product-action" aria-labelledby="product-action-title"><div><h2 id="product-action-title">Need help with ${escapeHtml(product.name)}?</h2><p>Tell us what your business needs.</p></div><a class="button" href="/contact/?product=${escapeHtml(product.id)}">${label}</a></section>`
 }
 
 function shopLandingHtml(product, page) {
  const description = page.description || product.description
- const shopShowcase = `<section class="shop-actual-showcase" id="shop-demo" aria-labelledby="shop-actual-showcase-title"><div class="wrap"><div class="story-heading"><div><span class="eyebrow">Shop</span><h2 id="shop-actual-showcase-title">Sell, follow orders, restock.</h2></div><p>Real app screens. Sample records.</p></div>${productGallery('shop','Shop',true,true)}</div></section>`
+ const shopShowcase = `<section class="shop-actual-showcase" id="shop-demo" aria-labelledby="shop-actual-showcase-title"><div class="wrap"><div class="story-heading"><div><span class="eyebrow">Shop</span><h2 id="shop-actual-showcase-title">Sell, follow orders, restock.</h2></div><p>Real Shop screens. Synthetic sample records.</p></div>${productGallery('shop','Shop',true,true)}</div></section>`
  let shopContent = publicShopMarkup
  const showcaseAnchor = /<\/section>(\r?\n)([ \t]*)<section class="demo-section"/g
  assert((shopContent.match(showcaseAnchor) || []).length === 1, 'shop_showcase_insertion_point_missing')
@@ -1052,7 +1056,7 @@ var response=result.response,body=result.body;if(!response.ok){if(response.statu
 const inlineDigest = (value) => createHash('sha256').update(value).digest('base64')
 const contactScriptBody = contactScript.slice('<script>'.length, -'</script>'.length)
 const publicSecurityHeaders = {
-  'content-security-policy': `default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' 'sha256-${inlineDigest(contactScriptBody)}'; script-src-attr 'none'; style-src 'self' 'sha256-${inlineDigest(sharedStyle)}' 'sha256-${inlineDigest(companyShopStyle)}'; style-src-attr 'none'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; media-src 'none'; worker-src 'none'; manifest-src 'self'`,
+  'content-security-policy': `default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' 'sha256-${inlineDigest(contactScriptBody)}'; script-src-attr 'none'; style-src 'self' 'sha256-${inlineDigest(sharedStyle)}' 'sha256-${inlineDigest(publicMarketingStyle)}'; style-src-attr 'none'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; media-src 'none'; worker-src 'none'; manifest-src 'self'`,
   'cross-origin-opener-policy': 'same-origin',
   'cross-origin-resource-policy': 'same-origin',
   'permissions-policy': 'camera=(), microphone=(), geolocation=(), payment=(), usb=()',
