@@ -3469,6 +3469,9 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
         ? <Link to="/settings/#controls">Open Settings</Link>
         : null}
   </div>
+  const commerceActionNotice = notice && !commerceStorageError && commerceSync.status === 'ready' && commerceCanWrite
+    ? <div className="production-mode-banner commerce-action-notice" role="status"><p>{notice}</p></div>
+    : null
 
   // Durable-storage warning. Shown for a local workspace only, which is narrower than the
   // request itself: persistence is asked for on every Shop open, company account included,
@@ -3568,6 +3571,7 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
 
   const commerceBoundary = <>
     {commerceWriteBanner}
+    {commerceActionNotice}
     {/* A denied persistence request means the only copy may be cleared by the browser.
         Keep the recovery action visible on each Shop surface until backup is set up. */}
     {storageDurabilityNotice}
@@ -3609,6 +3613,7 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
         )
   const operatingBoundary = <>
     {commerceStorageError || commerceSyncBlocked || commerceSync.status === 'checking' || !commerceCanWrite ? commerceWriteBanner : null}
+    {commerceActionNotice}
     {storageDurabilityNotice}
     {commerceHeadroom?.level === 'urgent' ? storageHeadroomNotice : null}
     {commerceStuckRecoveryPanel}

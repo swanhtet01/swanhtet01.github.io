@@ -1165,6 +1165,14 @@ test('eviction warning replaces the overlapping local workspace banner', async (
   assert.ok(core.includes("'Private device'"), 'the shell keeps the concise local-mode label')
 })
 
+test('healthy Shop action feedback stays visible without reviving the storage-mode banner', async () => {
+  const core = await readFile(new URL('../showroom/src/core/CoreApp.tsx', import.meta.url), 'utf8')
+  assert.match(core, /const commerceActionNotice = notice && !commerceStorageError && commerceSync\.status === 'ready' && commerceCanWrite/)
+  assert.match(core, /className="production-mode-banner commerce-action-notice" role="status"><p>\{notice\}<\/p>/)
+  assert.match(core, /const commerceBoundary = <>[\s\S]*?\{commerceWriteBanner\}[\s\S]*?\{commerceActionNotice\}/)
+  assert.match(core, /const operatingBoundary = <>[\s\S]*?\{commerceActionNotice\}/)
+})
+
 test('denied persistence shows the backup reminder on Today without repeating it across Shop tabs', async () => {
   const coreApp = await readFile(new URL('../showroom/src/core/CoreApp.tsx', import.meta.url), 'utf8')
   assert.ok(
