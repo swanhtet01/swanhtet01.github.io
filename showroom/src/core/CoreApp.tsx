@@ -8327,7 +8327,7 @@ function OrderList({
     const acknowledgement = acknowledgementDownloads.get(order.id)
     const canCancelOrder = active && canCancel(order.id)
     const hasSecondaryActions = Boolean(acknowledgement) || canCancelOrder || (order.refundStatus === 'due' && !settleRefundIsPrimary) || (needsPayment && !reconcileIsPrimary)
-    const primaryActionLabel = shopOrderPrimaryActionLabel(order)
+    const primaryActionLabel = uiText(shopOrderPrimaryActionLabel(order))
     const targetId = shopOrderTargetId(order.id)
     const attentionLabels = shopOrderAttentionLabels(order, promiseUrgency)
     return <article data-highlighted={highlightedTargetId === targetId ? 'true' : undefined} id={targetId} key={order.id} tabIndex={-1}>
@@ -8353,7 +8353,7 @@ function OrderList({
       </div>
       <div className="order-row-actions">
         <b>{formatMoney(order.total)}</b>
-        {settleSaleIsPrimary ? <button className="core-button primary compact" disabled={disabled} onClick={() => onSettleSale(order.id)} type="button"><span className="cashier-action-label">{uiText(primaryActionLabel)}</span></button> : null}
+        {settleSaleIsPrimary ? <button className="core-button primary compact" disabled={disabled} onClick={() => onSettleSale(order.id)} type="button"><span className="cashier-action-label">{primaryActionLabel}</span></button> : null}
         {reconcileIsPrimary ? <button className="core-button primary compact" disabled={disabled} onClick={() => onReconcilePayment(order.id)} type="button">{primaryActionLabel}</button> : null}
         {settleRefundIsPrimary ? <button className="core-button primary compact" disabled={disabled} onClick={() => onSettleRefund(order.id)} type="button">{primaryActionLabel}</button> : null}
         {canAdvance ? <button className="core-button primary compact" disabled={disabled} onClick={() => onAdvance(order.id)} type="button">{primaryActionLabel}</button> : null}
