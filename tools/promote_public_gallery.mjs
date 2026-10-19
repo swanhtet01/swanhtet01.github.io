@@ -10,6 +10,19 @@ import { fileURLToPath } from 'node:url'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
 const assetsRoot = resolve(root, 'tools/public-assets')
+const captureFiles = [
+  'actual-shop-today.png',
+  'actual-shop-first-run.png',
+  'actual-shop-sell.png', 'actual-shop-sell-tablet.png', 'actual-shop-sell-mobile.png',
+  'actual-shop-order-record.png',
+  'actual-shop-today-tablet.png', 'actual-shop-today-mobile.png',
+  'actual-shop-orders.png', 'actual-shop-orders-tablet.png', 'actual-shop-orders-mobile.png',
+  'actual-shop-inventory.png', 'actual-shop-inventory-tablet.png', 'actual-shop-inventory-mobile.png',
+  'actual-sites-editor.png', 'actual-sites-editor-mobile.png',
+  'actual-sites-inquiries.png', 'actual-sites-inquiries-mobile.png',
+  'actual-commerce-catalog.png', 'actual-commerce-catalog-mobile.png',
+  'actual-commerce-order-request.png', 'actual-commerce-order-request-mobile.png',
+]
 const publicFiles = [
   'actual-shop-today.png', 'actual-shop-today-tablet.png', 'actual-shop-today-mobile.png',
   'actual-shop-sell.png', 'actual-shop-sell-tablet.png', 'actual-shop-sell-mobile.png',
@@ -40,16 +53,19 @@ assert.equal(report.fulfilledSyntheticMedia, 3)
 assert.equal(report.completedSale, true)
 assert.equal(report.customerReceiptVisible, false)
 assert.equal(report.captures?.length, 22, 'review the capture inventory before promotion')
-assert.equal(new Set(report.captures.map(capture => capture.file)).size, 22)
+assert.deepEqual(report.captures.map(capture => capture.file), captureFiles, 'capture inventory changed')
 assert(/^[0-9a-f]{64}$/.test(report.captureInputsSha256))
 const byFile = new Map(report.captures.map(capture => [capture.file, capture]))
-const assets = await Promise.all(publicFiles.map(async file => {
+const assets = await Promise.all(captureFiles.map(async file => {
   const capture = byFile.get(file)
-  assert(capture, `missing public capture: ${file}`)
-  assert.equal(capture.fixturePath, '/shop/')
-  assert.equal(capture.routeState, file.includes('-today') ? 'today'
-    : file.includes('-sell') ? 'counter'
-    : file.includes('-orders') ? 'orders' : 'inventory')
+  assert(capture, `missing capture: ${file}`)
+  if (file.startsWith('actual-shop-')) {
+    assert.equal(capture.fixturePath, '/shop/')
+    assert.equal(capture.routeState, file.includes('-today') || file.includes('first-run') ? 'today'
+      : file.includes('-sell') || file.includes('order-record') ? 'counter'
+      : file.includes('-orders') ? 'orders'
+        : file.includes('-inventory') ? 'inventory' : 'today')
+  } else assert.equal(capture.fixturePath, '/workspaces/')
   assert(capture.visibleSelector)
   const expected = file.endsWith('-mobile.png') ? [390, 844]
     : file.endsWith('-tablet.png') ? [768, 1024] : [1440, 900]
@@ -96,4 +112,5 @@ if (write) {
   await writeFile(resolve(assetsRoot, 'public-gallery-provenance.json'), JSON.stringify(provenance, null, 2) + '\n')
 }
 console.log(JSON.stringify({ ok: true, write, sourceCommit: report.sourceCommit,
-  showroomTree: report.showroomTree, captures: report.captures.length, promoted: assets.length }))
+  showroomTree: report.showroomTree, captures: report.captures.length,
+  promoted: assets.length, publicShopAssets: publicFiles.length }))

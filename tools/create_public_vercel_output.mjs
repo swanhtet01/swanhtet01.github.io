@@ -69,10 +69,17 @@ async function checkedOutShowroomTree(directory, atRoot = true) {
   return createHash('sha1').update(`tree ${tree.length}\0`).update(tree).digest()
 }
 const sourceGalleryAssetNames = [
-  'actual-shop-today.png', 'actual-shop-today-tablet.png', 'actual-shop-today-mobile.png',
+  'actual-shop-today.png',
+  'actual-shop-first-run.png',
   'actual-shop-sell.png', 'actual-shop-sell-tablet.png', 'actual-shop-sell-mobile.png',
+  'actual-shop-order-record.png',
+  'actual-shop-today-tablet.png', 'actual-shop-today-mobile.png',
   'actual-shop-orders.png', 'actual-shop-orders-tablet.png', 'actual-shop-orders-mobile.png',
   'actual-shop-inventory.png', 'actual-shop-inventory-tablet.png', 'actual-shop-inventory-mobile.png',
+  'actual-sites-editor.png', 'actual-sites-editor-mobile.png',
+  'actual-sites-inquiries.png', 'actual-sites-inquiries-mobile.png',
+  'actual-commerce-catalog.png', 'actual-commerce-catalog-mobile.png',
+  'actual-commerce-order-request.png', 'actual-commerce-order-request-mobile.png',
 ]
 // Keep the complete capture set and provenance available to internal review,
 // while exposing only the approved Shop customer surface in the public bundle.
@@ -144,7 +151,9 @@ const sourceGalleryAssetEvidence = await Promise.all(publicGalleryProvenance.ass
     `public_gallery_capture_receipt_invalid:${file}`)
   return { file, width, height, sha256, capture }
 }))
-const publicGalleryAssetEvidence = sourceGalleryAssetEvidence.filter(asset => publicGalleryAssetNames.includes(asset.file))
+const sourceGalleryEvidenceByFile = new Map(sourceGalleryAssetEvidence.map(asset => [asset.file, asset]))
+const publicGalleryAssetEvidence = publicGalleryAssetNames.map(file => sourceGalleryEvidenceByFile.get(file))
+assert(publicGalleryAssetEvidence.every(Boolean), 'public_gallery_customer_asset_missing_from_provenance')
 
 assert(manifest.schemaVersion === 'supermega.site-context.v2', 'unsupported_site_manifest')
 assert(manifest.brand?.version && manifest.contextVersion && manifest.catalogVersion, 'site_manifest_versions_missing')
