@@ -8361,7 +8361,7 @@ function OrderList({
           <div>
             {order.lines ? <small>{order.lines.map((line) => `${line.name} × ${line.quantity} @ ${line.unitPriceMmk.toLocaleString()} MMK`).join(' · ')}</small> : null}
             <OrderCalculationNote order={order} />
-            {hasShopPublicSource ? <ShopBuyerContactDisclosure key={order.id + '|' + workspaceIdentityKey} loadBuyerContact={loadBuyerContact} shopRequestId={shopRequestId} workspaceIdentityKey={workspaceIdentityKey} /> : null}
+            {hasShopPublicSource ? <ShopBuyerContactDisclosure key={order.id + '|' + workspaceIdentityKey + '|' + (loadBuyerContact ? 'write' : 'read')} loadBuyerContact={loadBuyerContact} shopRequestId={shopRequestId} workspaceIdentityKey={workspaceIdentityKey} /> : null}
             <small>{commerceOrderDisplayReference(order.id)} · {order.owner ? `${uiText('owner')} ${order.owner}` : uiText('owner not recorded')} · {uiText(order.channel)} · {order.payment}{order.paymentDueAt ? ` · ${uiText('payment due')} ${formatTime(order.paymentDueAt)}` : ''}{order.fulfilment ? ` · ${uiText(fulfilmentLabel(order.fulfilment))}` : ''}{order.fulfilmentReference ? ` · ${order.fulfilmentReference}` : ''} · {order.promisedAt ? `${uiText('promised')} ${formatTime(order.promisedAt)}` : uiText('promise not recorded')} · ${uiText('created')} ${formatTime(order.createdAt)}</small>
           </div>
         </details>

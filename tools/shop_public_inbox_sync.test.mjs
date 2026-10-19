@@ -8,9 +8,13 @@ const identity = { workspaceId: 'workspace-1', userId: 'user-1', email: 'operato
 
 test('revoking order write access hides and invalidates an open buyer-contact disclosure', async () => {
   const source = await readFile(new URL('../showroom/src/core/ShopBuyerContactDisclosure.tsx', import.meta.url), 'utf8')
+  const core = await readFile(new URL('../showroom/src/core/CoreApp.tsx', import.meta.url), 'utf8')
+  const history = await readFile(new URL('../showroom/src/core/ShopOrderHistory.tsx', import.meta.url), 'utf8')
   assert.match(source, /const canReadBuyerContact = Boolean\(loadBuyerContact && workspaceIdentityKey\)/)
-  assert.match(source, /requestEpoch\.current \+= 1\s+setPanel\(null\)\s+\}, \[canReadBuyerContact, workspaceIdentityKey\]\)/)
   assert.match(source, /const visiblePanel = canReadBuyerContact && panel\?\.identityKey === workspaceIdentityKey \? panel : null/)
+  assert.match(core, /<ShopBuyerContactDisclosure key=\{order\.id \+ '\|' \+ workspaceIdentityKey \+ '\|' \+ \(loadBuyerContact \? 'write' : 'read'\)\}/)
+  assert.match(history, /<ShopBuyerContactDisclosure key=\{order\.id \+ '\|' \+ workspaceIdentityKey \+ '\|' \+ \(loadBuyerContact \? 'write' : 'read'\)\}/)
+  assert.match(source, /useEffect\(\(\) => \(\) => \{ requestEpoch\.current \+= 1 \}, \[\]\)/)
 })
 
 test('one slow company inbox does not block a different company inbox', () => {

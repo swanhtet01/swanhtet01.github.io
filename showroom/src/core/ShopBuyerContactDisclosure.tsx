@@ -19,12 +19,6 @@ export function ShopBuyerContactDisclosure({ loadBuyerContact, shopRequestId, wo
   const requestEpoch = useRef(0)
   const canReadBuyerContact = Boolean(loadBuyerContact && workspaceIdentityKey)
   useEffect(() => () => { requestEpoch.current += 1 }, [])
-  useEffect(() => {
-    // Hide immediately during render when access disappears; this effect also invalidates
-    // any request already in flight so a late response cannot restore revoked contact data.
-    requestEpoch.current += 1
-    setPanel(null)
-  }, [canReadBuyerContact, workspaceIdentityKey])
 
   async function onToggle(event: SyntheticEvent<HTMLDetailsElement>) {
     if (!event.currentTarget.open) {
