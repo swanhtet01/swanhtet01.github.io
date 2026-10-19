@@ -3444,7 +3444,13 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
     && commerceSync.status === 'ready'
     && storageDurability.state === 'denied'
     && !storageDurability.quotaExceeded
-  const commerceWriteBanner = localEvictionWarningReplacesWriteBanner ? null : <div className="production-mode-banner commerce-mode-banner" data-sync={commerceSync.status} data-write={commerceCanWrite ? 'ready' : 'blocked'} role={commerceCanWrite ? 'status' : 'alert'}>
+  // The shell already identifies the workspace as Private device or Company data.
+  // Reserve the large banner for a state the operator needs to act on, rather than
+  // repeating a healthy storage-mode reminder above every Shop screen.
+  const commerceWriteNeedsAttention = Boolean(commerceStorageError)
+    || commerceSync.status !== 'ready'
+    || !commerceCanWrite
+  const commerceWriteBanner = localEvictionWarningReplacesWriteBanner || !commerceWriteNeedsAttention ? null : <div className="production-mode-banner commerce-mode-banner" data-sync={commerceSync.status} data-write={commerceCanWrite ? 'ready' : 'blocked'} role={commerceCanWrite ? 'status' : 'alert'}>
     <span className={`status-pill ${commerceCanWrite ? 'bounded' : 'pending'}`}>{managedIdentity ? 'Company records' : 'Private device'}</span>
     <p>{commerceStorageError
       ? `Writes paused: ${commerceStorageError}${managedIdentity && workspaceMode === coreUi.m ? ' Reload Shop and check Orders before recording the sale again; it may already be saved.' : ''}`

@@ -1154,7 +1154,10 @@ test('eviction warning leads directly to the existing backup panel', async () =>
 test('eviction warning replaces the overlapping local workspace banner', async () => {
   const core = await readFile(new URL('../showroom/src/core/CoreApp.tsx', import.meta.url), 'utf8')
   assert.ok(core.includes('const localEvictionWarningReplacesWriteBanner = !managedIdentity'))
-  assert.ok(core.includes('const commerceWriteBanner = localEvictionWarningReplacesWriteBanner ? null :'))
+  assert.ok(core.includes('const commerceWriteNeedsAttention = Boolean(commerceStorageError)'))
+  assert.ok(core.includes("|| commerceSync.status !== 'ready'"))
+  assert.ok(core.includes('const commerceWriteBanner = localEvictionWarningReplacesWriteBanner || !commerceWriteNeedsAttention ? null :'))
+  assert.ok(core.includes("'Private device'"), 'the shell keeps the concise local-mode label')
 })
 
 test('denied persistence keeps its backup action visible across Shop workspaces', async () => {

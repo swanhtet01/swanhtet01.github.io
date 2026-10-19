@@ -256,7 +256,7 @@ for (const page of landingPages) {
     ? 'href="https://app.supermega.dev/login?product=shop"'
     : 'href="https://app.supermega.dev/login"'
   check(countOccurrences(html, expectedLoginHref) === 1, `landing_login_actions:${page.route}`)
-  if (page.route === '/shop/') check(html.includes('class="button button-primary" href="/contact/?product=shop">Talk about Shop'), 'shop_primary_action_opens_contact')
+  if (page.route === '/shop/') check(html.includes('class="button button-primary" href="/contact/?product=shop">Contact our team'), 'shop_primary_action_opens_contact')
   check(!html.includes('Request assisted setup') && !html.includes('id="first-loop"'), `landing_no_setup_funnel:${page.route}`)
   for (const unsupportedClaim of ['AI may help prepare drafts', 'AI assisted', 'Ranked next actions', 'approved AI context']) {
     check(!html.includes(unsupportedClaim), `landing_unverified_ai_offer_absent:${page.route}:${unsupportedClaim}`)
@@ -355,6 +355,11 @@ check(home.includes('<p class="hero-kicker">For Myanmar retailers</p>')
   && home.includes('class="company-product-evidence"')
   && !/href="\/(?:website|ecommerce)\//.test(home)
   && !/\bSites\b|\bCommerce\b/.test(home), 'home_shop_only_customer_scope_visible')
+check(home.includes('class="platform-gallery home-platform-gallery shop-gallery-all"')
+  && !home.includes('data-platform-carousel') && !home.includes('<nav class="shop-showcase-nav"')
+  && !home.includes('Choose a Shop screen') && home.includes('Shop &middot; Counter sale and live basket')
+  && home.includes('Shop &middot; Orders and fulfilment') && home.includes('Shop &middot; Inventory and replenishment'),
+  'home_shows_all_distinct_shop_workflows_without_a_carousel')
 check(notFound.includes('Find Shop on the home page.')
   && !/\bSites\b|\bCommerce\b|\bPlant\b/.test(notFound), 'not_found_matches_shop_only_customer_scope')
 for (const token of [
@@ -378,6 +383,10 @@ check(!shopLanding.includes('Makro PRO') && !shopLanding.includes('17 October 20
   && !/<a\b[^>]*>\s*<img\b[^>]*src="\/images\/actual-shop-/i.test(shopLanding), 'shop_prices_not_dated_and_screens_not_raw_links')
 check(!shopLanding.includes('Shop setup / concept') && !shopLanding.includes('Concept only'), 'shop_no_unconnected_setup_concept')
 check(shopLanding.includes('id="shop-demo"') && shopLanding.includes('class="shop-actual-showcase"'), 'shop_actual_gallery_is_primary_showcase')
+check(shopLanding.includes('class="platform-gallery shop-gallery-all"')
+  && !shopLanding.includes('data-platform-carousel') && !shopLanding.includes('<div class="platform-gallery-controls"')
+  && !shopLanding.includes('data-gallery-next'),
+  'shop_landing_shows_all_screens_without_carousel_controls')
 check(!shopLanding.includes('class="pos-window"') && !shopLanding.includes('class="sample-label"')
   && !shopLanding.includes('Complete sample sale') && !shopLanding.includes('Sample receipt')
   && !shopLanding.includes('shop-sample-demo.js'), 'shop_public_page_has_no_simulated_pos')
@@ -401,14 +410,14 @@ for (const [route, html] of [['/', home], ['/shop/', shopLanding], ...activeIds.
     ? 'href="https://app.supermega.dev/login?product=shop"'
     : 'href="https://app.supermega.dev/login"'
   check(countOccurrences(body, expectedLoginHref) === 1, `login_action_count:${route}`)
-  const carouselCount = Number(route !== '/shop/' && (productScreens[routeProduct]?.length || 0) > 1)
-  const expectedLinks = route === '/' ? 15 : route === '/shop/' ? 9 : 5 + Number(routeManifestProduct?.status === 'available-in-app')
+  const carouselCount = Number(route !== '/' && route !== '/shop/' && (productScreens[routeProduct]?.length || 0) > 1)
+  const expectedLinks = route === '/' ? 11 : route === '/shop/' ? 9 : 5 + Number(routeManifestProduct?.status === 'available-in-app')
   check((body.match(/<a\b/g) || []).length === expectedLinks, `marketing_link_surface:${route}`)
   const viewportGalleryCount = countOccurrences(body, 'data-viewport-gallery')
   const expectedButtons = viewportGalleryCount * 3 + carouselCount * 2
   check((body.match(/<button\b/g) || []).length === expectedButtons, `marketing_buttons:${route}`)
   const figures = (body.match(/<figure class="platform-image/g) || []).length
-  check(figures === (route === '/' ? productScreens.shop.length : productScreens[routeProduct]?.length || 0), `marketing_interface_figures:${route}`)
+  check(figures === (route === '/' ? productScreens.shop.length - 1 : productScreens[routeProduct]?.length || 0), `marketing_interface_figures:${route}`)
   const expectedCaptureScreens = route === '/' ? productScreens.shop : productScreens[routeProduct] || []
   for (const screen of expectedCaptureScreens) check(body.includes(interfaceDisclosure(screen)), `interface_disclosure_per_image:${route}:${screen}`)
   check(!body.includes('Current Shop') && !body.includes('Current Sites') && !body.includes('Current Commerce'), `capture_not_claimed_current:${route}`)

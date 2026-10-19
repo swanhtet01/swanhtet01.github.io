@@ -579,6 +579,9 @@ const sharedStyle = `
   .platform-gallery[data-single] .platform-slides {overflow:hidden}
   .shop-gallery-all .platform-slides {display:grid;gap:28px;overflow:visible;scroll-snap-type:none;border-radius:0}
   .shop-gallery-all .platform-slides .platform-image {min-width:0;scroll-snap-align:none}
+  .shop-gallery-all .platform-image {padding:clamp(14px,2vw,24px);border-color:#e4e7ec;border-radius:14px;background:#fff;box-shadow:0 12px 34px rgba(16,24,40,.05)}
+  .shop-gallery-all .platform-device-stage {padding:clamp(12px,2vw,22px);border-color:#e4e7ec;border-radius:12px;background:#f6f7f9;box-shadow:none}
+  .shop-gallery-all .platform-device-capture img {border-radius:8px;box-shadow:0 5px 16px rgba(16,24,40,.08)}
   .platform-gallery-controls {display:flex;align-items:center;justify-content:flex-end;gap:12px;min-height:40px}
   .platform-gallery-controls button {display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border:1px solid var(--line-strong);border-radius:50%;color:var(--ink);background:#fff;font-size:20px;cursor:pointer}
   .platform-gallery-controls button:hover:not(:disabled) {border-color:var(--blue);color:var(--blue);background:#eff6ff}
@@ -661,7 +664,7 @@ const sharedStyle = `
   .company-product-evidence-head h2{margin:8px 0 0;font-size:clamp(25px,3vw,38px);letter-spacing:-.045em;line-height:1.12}
   .company-product-evidence-head p{max-width:42ch;margin:0;color:var(--muted);font-size:14px;line-height:1.55}
   .company-product-evidence .platform-home-caption{margin:10px 0 0;font-size:12px;color:#596579}
-  .company-product-evidence .platform-device-stage{padding:clamp(12px,2vw,22px);border-color:#dbeafe;border-radius:8px;background:linear-gradient(145deg,#eff6ff,#f8fafc);box-shadow:0 18px 42px rgba(37,99,235,.08)}
+  .company-product-evidence .platform-device-stage{padding:clamp(12px,2vw,22px);border-color:#e4e7ec;border-radius:12px;background:#f6f7f9;box-shadow:none}
   /* Company is the editorial brand surface; Shop remains a bright, task-first workspace. */
   body[data-view="company"] .shop-only-family{grid-template-columns:minmax(0,1fr);max-width:none}
   body[data-view="company"] .shop-only-family .family-card.featured{display:grid;grid-template-columns:64px minmax(0,1fr) auto;grid-template-rows:auto auto auto;align-items:center;gap:8px 24px;min-height:0;padding:26px 32px}
@@ -830,17 +833,18 @@ function productGallery(id,label,eagerFirst=false,showAll=false) {
 }
 function homeShopGallery() {
  const item=stories.shop
- const navigationLabels=['Counter sale','Today','Orders','Inventory']
- const navigation=item.screens.map(([, , caption],index)=>`<a href="#shop-home-slide-${index+1}" data-gallery-slide="${index}"${index===0?' aria-current="true"':''}>${navigationLabels[index] || escapeHtml(caption)}</a>`).join('')
- const slides=item.screens.map(([image,alt,caption,width=1440,height=900],index)=>{
+ // Today is already the hero capture. Show every other workflow together so visitors
+ // do not have to operate a carousel to discover Shop's core screens.
+ const screens=item.screens.filter((_,index)=>index!==1)
+ const slides=screens.map(([image,alt,caption,width=1440,height=900])=>{
   const mobileImage=image.replace(/\.png$/, '-mobile.png')
   const tabletImage=image.replace(/\.png$/, '-tablet.png')
   interfaceDisclosure(image)
   interfaceDisclosure(tabletImage)
   interfaceDisclosure(mobileImage)
-  return `<figure class="platform-image home-platform-image" id="shop-home-slide-${index+1}" role="group" aria-roledescription="slide" aria-label="${index+1} of ${item.screens.length}: ${escapeHtml(caption)}"><div class="platform-device-stage">${deviceCaptureSet('Shop',image,mobileImage,tabletImage,alt,width,height,index===0?'eager':'lazy',index===0?' fetchpriority="high"':'')}</div><figcaption class="platform-home-caption">Shop &middot; ${escapeHtml(caption)}<small>${interfaceDisclosure(image)}</small></figcaption></figure>`
+  return `<figure class="platform-image home-platform-image" role="group" aria-label="${escapeHtml(caption)}"><div class="platform-device-stage">${deviceCaptureSet('Shop',image,mobileImage,tabletImage,alt,width,height,'lazy')}</div><figcaption class="platform-home-caption">Shop &middot; ${escapeHtml(caption)}<small>${interfaceDisclosure(image)}</small></figcaption></figure>`
  }).join('')
- return `<div class="platform-gallery home-platform-gallery" data-product-gallery="shop" data-platform-carousel role="region" aria-roledescription="carousel" aria-label="Shop interface views"><nav class="shop-showcase-nav" aria-label="Choose a Shop screen">${navigation}</nav><div class="platform-slides" tabindex="0">${slides}</div></div>`
+ return `<div class="platform-gallery home-platform-gallery shop-gallery-all" data-product-gallery="shop" role="region" aria-label="Shop interface views"><div class="platform-slides">${slides}</div></div>`
 }
 function productStory(id, standalone = false) {
  const item=stories[id], label=publicProducts.find(product=>product.id===id).name
@@ -941,7 +945,7 @@ function replaceHomeShopShowcase(source, galleryHtml) {
  const companyVisual = `<div class="company-operating-overview" aria-label="SuperMega company overview">${companyOperatingGraphic()}</div>`
  const noScriptFallback = '<noscript><figure class="home-product-shot"><img src="/images/actual-shop-today.png" alt="Shop Today screen with sales, open orders, stock alerts and next actions" width="1440" height="900" /><figcaption><strong>Today</strong><span>See sales, open orders and the stock that needs attention.</span><small>Actual app interface · sample data</small></figcaption></figure></noscript>'
  const markup = source.replace(marker, companyVisual)
- const evidence = `<div class="company-product-evidence" aria-labelledby="company-shop-evidence-title"><div class="company-product-evidence-head"><div><p class="eyebrow">Shop · first product</p><h2 id="company-shop-evidence-title">One workflow. Every screen.</h2></div><p>See sales, stock and orders at desktop, tablet and phone sizes.</p></div>${galleryHtml}${noScriptFallback}</div>`
+ const evidence = `<div class="company-product-evidence" aria-labelledby="company-shop-evidence-title"><div class="company-product-evidence-head"><div><p class="eyebrow">Shop</p><h2 id="company-shop-evidence-title">Shop, at a glance.</h2></div><p>Sales, orders and stock in one workspace, shown on desktop, tablet and phone.</p></div>${galleryHtml}${noScriptFallback}</div>`
  const principleMarker = '<div class="company-principle">'
  const principleStart = markup.indexOf(principleMarker)
  if (principleStart >= 0) {
@@ -956,7 +960,7 @@ function replaceHomeShopShowcase(source, galleryHtml) {
 }
 const publicHomeMarkup = replaceHomeShopShowcase(shopOnlyCompanyMarkup(companyMarkup), homeShopGallery())
 function simplifyShopHeroActions(source) {
- let markup = replaceOnce(source, 'Ask about Shop', 'Talk about Shop', 'shop_primary_action_copy')
+ let markup = replaceOnce(source, 'Ask about Shop', 'Contact our team', 'shop_primary_action_copy')
  const secondaryAction = /[ \t]*<a class="button button-secondary" href="#shop-demo">See Shop screens<\/a>/g
  const matches = [...markup.matchAll(secondaryAction)]
  assert(matches.length === 1, 'shop_duplicate_screen_action_source_drift')
@@ -972,7 +976,7 @@ function productCard(id) {
 }
 const homeHtml = documentHtml({route:'/',title:homePage.title,description:homePage.description,
  schema:{'@type':'Organization',name:'SuperMega',url:canonical('/'),description:homePage.description},
- content:`<main id="content">${publicHomeMarkup}</main>${stories.shop.screens.length > 1 ? '<script src="/platform-carousel.js" defer></script>' : ''}`,
+ content:`<main id="content">${publicHomeMarkup}</main>`,
 })
 
 function productAction(product) {

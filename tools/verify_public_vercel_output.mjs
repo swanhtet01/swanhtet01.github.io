@@ -379,8 +379,8 @@ for (const retiredLabel of ['>Open Commerce<', '>Open Production<']) {
   if (home.includes(retiredLabel)) fail('ambiguous_demo_cta_present', { retiredLabel })
 }
 if (home.includes('Commerce and Production carry real records and actions.')) fail('unsupported_live_record_claim_present')
-// Company and Shop use their focused header/footer, while the other product
-// landings retain the existing gallery navigation.
+// The Shop-first home and Shop landings show the full workflow gallery without
+// navigation controls; other internal product landings retain their gallery UI.
 for (const [route, html] of [['/', home], ['/shop/', pages.get('/shop/').html], ...publicProducts.filter(product => product.id !== 'shop').map(product => [`/${product.id}/`, pages.get(`/${product.id}/`).html])]) {
   const body = html.slice(html.indexOf('<body'))
   const routeProduct = publicProducts.find(product => route === `/${product.id}/`) || null
@@ -388,13 +388,13 @@ for (const [route, html] of [['/', home], ['/shop/', pages.get('/shop/').html], 
     ? `/contact/?product=${routeProduct.id}`
     : null
   const galleryViews = { shop: 4, website: 2, ecommerce: 2 }
-  const expectedLinks = route === '/' ? 15 : route === '/shop/' ? 9 : 5 + Number(Boolean(contactActionTarget))
+  const expectedLinks = route === '/' ? 11 : route === '/shop/' ? 9 : 5 + Number(Boolean(contactActionTarget))
   if ((body.match(/<a\b/g) || []).length !== expectedLinks) fail('marketing_link_surface_drift', { route, expectedLinks })
   const expectedLogin = route === '/shop/'
     ? 'href="https://app.supermega.dev/login?product=shop"'
     : 'href="https://app.supermega.dev/login"'
   if (countOccurrences(body, expectedLogin) !== 1) fail('login_action_count_invalid', { route, expectedLogin })
-  if (route === '/shop/' && (!body.includes('class="button button-primary" href="/contact/?product=shop">Talk about Shop') || body.includes('See Shop screens'))) fail('shop_primary_product_action_missing')
+  if (route === '/shop/' && (!body.includes('class="button button-primary" href="/contact/?product=shop">Contact our team') || body.includes('See Shop screens'))) fail('shop_primary_product_action_missing')
   if (body.includes('>Company</a>')) fail('company_page_navigation_not_consolidated')
   const hasGalleryNavigation = route !== '/shop/' && (galleryViews[routeProduct?.id] || 0) > 1
   const expectedButtons = Number(hasGalleryNavigation) * 2
@@ -418,7 +418,7 @@ for (const [route, html] of [['/', home], ['/shop/', pages.get('/shop/').html], 
     }
   }
   const productVisualMissing = route === '/'
-    ? !hasClassToken(body, 'company-hero') || !hasClassToken(body, 'product-family') || !body.includes('See what sold.<br><span>Know what needs action.</span>') || !body.includes('class="company-operating-overview"') || !body.includes('class="company-product-visual"') || !body.includes('class="company-product-evidence"') || !body.includes('One workflow. Every screen.') || body.includes('Sell faster.') || countOccurrences(body, 'class="platform-device-set has-tablet"') !== galleryViews.shop || body.includes('data-device-choice')
+    ? !hasClassToken(body, 'company-hero') || !hasClassToken(body, 'product-family') || !body.includes('See what sold.<br><span>Know what needs action.</span>') || !body.includes('class="company-operating-overview"') || !body.includes('class="company-product-visual"') || !body.includes('class="company-product-evidence"') || !body.includes('Shop, at a glance.') || body.includes('data-platform-carousel') || body.includes('Choose a Shop screen') || body.includes('Sell faster.') || countOccurrences(body, 'class="platform-device-set has-tablet"') !== galleryViews.shop - 1 || body.includes('data-device-choice')
     : route === '/shop/'
       ? !body.includes('class="shop-actual-showcase"') || !body.includes('Sales, stock and orders.') || !body.includes('Real Shop screens with sample records. The catalog and prices shown are examples, not a live retail feed.') || body.includes('Makro PRO') || body.includes('17 October 2026') || body.includes('class="pos-window"') || body.includes('class="sample-label"') || body.includes('Complete sample sale') || body.includes('shop-sample-demo.js') || !body.includes('class="platform-gallery shop-gallery-all"') || countOccurrences(body, '<figure class="platform-image') !== galleryViews.shop || countOccurrences(body, 'class="platform-device-set has-tablet"') !== galleryViews.shop || body.includes('data-platform-carousel') || body.includes('data-device-choice') || body.includes('data-device-frame') || /<a\b[^>]*>\s*<img\b[^>]*src="\/images\/actual-shop-/i.test(body)
       : !body.includes('class="platform-image"') || !body.includes('class="feature-line"')
