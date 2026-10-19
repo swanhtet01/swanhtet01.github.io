@@ -165,7 +165,7 @@ const sharedRequired = [
   'font-family: "SuperMega Noto Sans"',
   '--font-latin: "SuperMega Noto Sans"',
   '.platform-image figcaption {margin-top:auto;padding:12px 2px 0;color:#596579;font-size:12px;line-height:1.45}',
-  '.platform-device-set {display:grid;grid-template-columns:minmax(0,2.45fr) minmax(0,1.1fr) minmax(0,.78fr);',
+  '.platform-device-set {display:grid;grid-template-columns:minmax(0,1.75fr) minmax(0,1.25fr) minmax(0,.95fr);',
   '.platform-device-capture figcaption',
   '.brand-mark { width: 30px; height: 18px; display: inline-flex; flex: none; align-items: center; justify-content: center; border: 0; border-radius: 0; padding: 0; background: transparent; box-shadow: none; color: var(--brand-accent); }',
   '.contact-page .contact-form { width:100%; padding:clamp(24px,3vw,40px); gap:18px; border-color:#dbe3ee; border-radius:8px;',
