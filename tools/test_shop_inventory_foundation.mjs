@@ -184,3 +184,4 @@ rejects(
 // either individual clause is load-bearing.
 
 console.log(`shop inventory foundation contract: ${checks} checks passed`)
+await import('./test_shop_inventory_locale.mjs')
