@@ -26,8 +26,10 @@ const outOfScopeMigrations = [
   '20261014103000_website_custom_domain_bindings.sql',
   '20261014122400_website_domain_attempt_fencing.sql',
   // This Commerce grant boundary is pinned by the v13 rehearsal contract and
-  // exercised by the disposable PostgreSQL Commerce suite, outside this RLS catalog digest.
+  // the Ecommerce review state-lock correction are exercised by the disposable PostgreSQL
+  // Commerce suite, outside this private-trial RLS catalog digest.
   '20261019070000_ecommerce_operator_management_boundary.sql',
+  '20261019103000_ecommerce_review_shared_state_lock.sql',
 ]
 const expectedMigrations = [
   '20260722004500_private_trial_backend_role_preflight.sql',
