@@ -25,7 +25,7 @@ import {
 } from './commerce-workspace'
 import type { ManagedIdentity } from './managed-trial'
 import type { ProductionState } from './production-workspace'
-import { uiText } from './ui-locale'
+import { shopInventoryText as uiText } from './shop-inventory-locale'
 
 
 type ShopInventoryFoundationProps = {

@@ -10,7 +10,7 @@ const ts = requireFromShowroom('typescript')
 const { build } = await import(pathToFileURL(requireFromShowroom.resolve('esbuild')).href)
 const localeBundle = await build({
   stdin: {
-    contents: `export { setUiLocale, uiText } from './ui-locale.ts'`,
+    contents: `export { setUiLocale } from './ui-locale.ts'\nexport { shopInventoryText } from './shop-inventory-locale.ts'`,
     resolveDir: resolve(root, 'showroom/src/core'),
     sourcefile: 'shop-inventory-locale-test-entry.ts',
     loader: 'ts',
@@ -21,7 +21,7 @@ const localeBundle = await build({
   write: false,
   logLevel: 'error',
 })
-const { setUiLocale, uiText } = await import(
+const { setUiLocale, shopInventoryText } = await import(
   `data:text/javascript;base64,${Buffer.from(localeBundle.outputFiles[0].contents).toString('base64')}`
 )
 
@@ -138,21 +138,60 @@ const labels = [
   'The retained Plant mapping points to missing Shop SKU',
   'Restore that catalog item before receiving more output.',
   'Released Plant stock needs one active Shop location.',
+  'd / MOQ',
   'days',
   'minimum order',
 ]
 
+const sharedLocale = await readFile(resolve(root, 'showroom/src/core/ui-locale.ts'), 'utf8')
+const sharedLocaleAst = ts.createSourceFile('ui-locale.ts', sharedLocale, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
+const sharedTranslationKeys = new Set()
+function collectSharedTranslationKeys(node) {
+  if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.name.text === 'UI_TRANSLATIONS'
+    && node.initializer && ts.isObjectLiteralExpression(node.initializer)) {
+    for (const property of node.initializer.properties) {
+      if (ts.isPropertyAssignment(property) && (ts.isStringLiteral(property.name) || ts.isNoSubstitutionTemplateLiteral(property.name))) {
+        sharedTranslationKeys.add(property.name.text)
+      }
+    }
+  }
+  ts.forEachChild(node, collectSharedTranslationKeys)
+}
+collectSharedTranslationKeys(sharedLocaleAst)
+assert.ok(sharedTranslationKeys.size > 0, 'Shared Burmese translation dictionary was not found')
+const inventoryLocale = await readFile(resolve(root, 'showroom/src/core/shop-inventory-locale.ts'), 'utf8')
+const inventoryLocaleAst = ts.createSourceFile('shop-inventory-locale.ts', inventoryLocale, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
+const inventoryTranslationKeys = new Set()
+function collectInventoryTranslationKeys(node) {
+  if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.name.text === 'SHOP_INVENTORY_TRANSLATIONS'
+    && node.initializer && ts.isObjectLiteralExpression(node.initializer)) {
+    for (const property of node.initializer.properties) {
+      if (ts.isPropertyAssignment(property) && (ts.isStringLiteral(property.name) || ts.isNoSubstitutionTemplateLiteral(property.name))) {
+        inventoryTranslationKeys.add(property.name.text)
+      }
+    }
+  }
+  ts.forEachChild(node, collectInventoryTranslationKeys)
+}
+collectInventoryTranslationKeys(inventoryLocaleAst)
+assert.ok(inventoryTranslationKeys.size > 0, 'Lazy inventory translation map was not found')
+for (const label of inventoryTranslationKeys) {
+  assert.ok(labels.includes(label), `Lazy stock translation has no Burmese test fixture: ${label}`)
+  assert.equal(sharedTranslationKeys.has(label), false, `Lazy stock translation entered the shared dictionary: ${label}`)
+}
+
 setUiLocale('my')
 for (const label of labels) {
-  const localized = uiText(label)
+  const localized = shopInventoryText(label)
   assert.notEqual(localized, label, `Burmese inventory phrase missing: ${label}`)
   assert.match(localized, /[\u1000-\u109F]/u, `Expected Myanmar script for: ${label}`)
 }
 setUiLocale('en')
-for (const label of labels) assert.equal(uiText(label), label, `English inventory phrase changed: ${label}`)
+for (const label of labels) assert.equal(shopInventoryText(label), label, `English inventory phrase changed: ${label}`)
 
 const component = await readFile(resolve(root, 'showroom/src/core/ShopInventoryFoundation.tsx'), 'utf8')
 const ast = ts.createSourceFile('ShopInventoryFoundation.tsx', component, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
+assert.ok(/import \{\s*shopInventoryText as uiText\s*\} from '\.\/shop-inventory-locale'/u.test(component), 'Inventory language strings should stay in the lazy stock chunk')
 const localeCalls = new Set()
 function findLocaleCalls(node) {
   if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === 'uiText' && node.arguments[0]) {
@@ -200,4 +239,4 @@ function visit(node) {
 visit(ast)
 assert.deepEqual(rawFragments, [], `Static English inventory UI remains: ${rawFragments.join(' | ')}`)
 
-console.log(JSON.stringify({ ok: true, contract: 'shop_inventory_locale.v1', phrases: labels.length, renderedCopy, rawStaticEnglishFragments: 0 }))
+console.log(JSON.stringify({ ok: true, contract: 'shop_inventory_locale.v1', phrases: labels.length, renderedCopy, rawStaticEnglishFragments: 0, inventoryTranslationsAreCodeSplit: true }))
