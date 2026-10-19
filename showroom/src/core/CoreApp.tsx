@@ -3570,11 +3570,9 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
 
   const commerceBoundary = <>
     {commerceWriteBanner}
-    {/* The device-only reminder belongs beside its backup controls in Settings. Repeating it
-        above routine order and inventory work adds a warning-shaped banner without an action
-        in that context. Keep the workspace interruption for a real quota failure, when writes
-        may stop and the operator needs to act immediately. */}
-    {storageDurability.quotaExceeded ? storageDurabilityNotice : null}
+    {/* A denied persistence request means the only copy may be cleared by the browser.
+        Keep the recovery action visible on each Shop surface until backup is set up. */}
+    {storageDurabilityNotice}
     {storageHeadroomNotice}
     {commerceStuckRecoveryPanel}
   </>
@@ -3613,7 +3611,7 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
         )
   const operatingBoundary = <>
     {commerceStorageError || commerceSyncBlocked || commerceSync.status === 'checking' || !commerceCanWrite ? commerceWriteBanner : null}
-    {storageDurability.quotaExceeded ? storageDurabilityNotice : null}
+    {storageDurabilityNotice}
     {commerceHeadroom?.level === 'urgent' ? storageHeadroomNotice : null}
     {commerceStuckRecoveryPanel}
   </>

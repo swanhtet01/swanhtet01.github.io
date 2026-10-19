@@ -1157,12 +1157,14 @@ test('eviction warning replaces the overlapping local workspace banner', async (
   assert.ok(core.includes('const commerceWriteBanner = localEvictionWarningReplacesWriteBanner ? null :'))
 })
 
-test('the device warning stays out of the product workspaces', async () => {
+test('denied persistence keeps its backup action visible across Shop workspaces', async () => {
   const coreApp = await readFile(new URL('../showroom/src/core/CoreApp.tsx', import.meta.url), 'utf8')
   assert.ok(
     !/measureLocalWorkspaceBackupHeadroom|localWorkspaceBackupHeadroomMessage/.test(coreApp),
-    'the device-wide backup warning has been rendered inside a product workspace -- the Shop meter already occupies that screen, and two storage warnings in one place is the failure this was shaped to avoid',
+    'the device-wide headroom meter should stay out of product workspaces; only the concise denied-storage action belongs there',
   )
+  assert.match(coreApp, /const commerceBoundary = <>[\s\S]*?\{storageDurabilityNotice\}/)
+  assert.match(coreApp, /const operatingBoundary = <>[\s\S]*?\{storageDurabilityNotice\}/)
 })
 
 test('restore requires explicit review of the exact selected snapshot', async () => {

@@ -1,9 +1,17 @@
 import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
 import { test } from 'node:test'
 
 import { acquireShopPublicInboxFlight, claimShopPublicInboxRequest, releaseShopPublicInboxFlight, shopPublicInboxBacklogCursor, shopPublicInboxIdentityState, shopPublicInboxPrunedRequestIds, syncShopPublicInbox } from '../showroom/src/core/shop-public-inbox-sync.ts'
 
 const identity = { workspaceId: 'workspace-1', userId: 'user-1', email: 'operator@example.com' }
+
+test('revoking order write access hides and invalidates an open buyer-contact disclosure', async () => {
+  const source = await readFile(new URL('../showroom/src/core/ShopBuyerContactDisclosure.tsx', import.meta.url), 'utf8')
+  assert.match(source, /const canReadBuyerContact = Boolean\(loadBuyerContact && workspaceIdentityKey\)/)
+  assert.match(source, /requestEpoch\.current \+= 1\s+setPanel\(null\)\s+\}, \[canReadBuyerContact, workspaceIdentityKey\]\)/)
+  assert.match(source, /const visiblePanel = canReadBuyerContact && panel\?\.identityKey === workspaceIdentityKey \? panel : null/)
+})
 
 test('one slow company inbox does not block a different company inbox', () => {
   const active = new Set()

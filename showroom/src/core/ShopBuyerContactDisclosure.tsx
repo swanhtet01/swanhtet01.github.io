@@ -17,7 +17,14 @@ const shopRequestIdPattern = /^ECR-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0
 export function ShopBuyerContactDisclosure({ loadBuyerContact, shopRequestId, workspaceIdentityKey }: ShopBuyerContactDisclosureProps) {
   const [panel, setPanel] = useState<BuyerContactPanel | null>(null)
   const requestEpoch = useRef(0)
+  const canReadBuyerContact = Boolean(loadBuyerContact && workspaceIdentityKey)
   useEffect(() => () => { requestEpoch.current += 1 }, [])
+  useEffect(() => {
+    // Hide immediately during render when access disappears; this effect also invalidates
+    // any request already in flight so a late response cannot restore revoked contact data.
+    requestEpoch.current += 1
+    setPanel(null)
+  }, [canReadBuyerContact, workspaceIdentityKey])
 
   async function onToggle(event: SyntheticEvent<HTMLDetailsElement>) {
     if (!event.currentTarget.open) {
@@ -44,7 +51,7 @@ export function ShopBuyerContactDisclosure({ loadBuyerContact, shopRequestId, wo
     }
   }
 
-  const visiblePanel = panel?.identityKey === workspaceIdentityKey ? panel : null
+  const visiblePanel = canReadBuyerContact && panel?.identityKey === workspaceIdentityKey ? panel : null
   return <details className="order-record-details" onToggle={onToggle}>
     <summary><span>{uiText('Contact')}</span><small>{uiText('Details')}</small></summary>
     <div>
