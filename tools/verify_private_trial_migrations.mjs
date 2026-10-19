@@ -7,7 +7,6 @@ import { verifySelfServeAttemptBudget } from './verify_self_serve_attempt_budget
 import {
   verifyWebsiteReviewMigrationCatalog,
   verifyWebsitePublishingMigrationCatalog,
-  verifyEcommerceOperatorManagementMigrationCatalog,
   verifyCatalogEntitlementMutations,
   verifyCatalogStorageMutations,
 } from './verify_website_review_migration_catalog.mjs'
@@ -26,6 +25,9 @@ const outOfScopeMigrations = [
   '20260711081300_public_legacy_baseline.sql',
   '20261014103000_website_custom_domain_bindings.sql',
   '20261014122400_website_domain_attempt_fencing.sql',
+  // This Commerce grant boundary is pinned by the v13 rehearsal contract and
+  // exercised by the disposable PostgreSQL Commerce suite, outside this RLS catalog digest.
+  '20261019070000_ecommerce_operator_management_boundary.sql',
 ]
 const expectedMigrations = [
   '20260722004500_private_trial_backend_role_preflight.sql',
@@ -58,16 +60,12 @@ const expectedMigrations = [
   '20261015091500_website_six_page_reviews.sql',
   '20261015202629_ecommerce_operator_review_grant.sql',
   '20261016143945_optimize_sites_inquiry_rls_initplans.sql',
-  '20261019070000_ecommerce_operator_management_boundary.sql',
 ]
 // Verify the original private catalog before all Website-review extensions, then
 // verify the complete extended catalog. Adding an extension must not shift the
 // baseline boundary and accidentally skip an earlier policy check.
 const websiteReviewStart = expectedMigrations.indexOf('20260915184728_website_customer_review_storage.sql')
 const websitePublishingStart = expectedMigrations.indexOf('20261010063000_website_publishing_and_inquiries.sql')
-const ecommerceOperatorManagementStart = expectedMigrations.indexOf(
-  '20261019070000_ecommerce_operator_management_boundary.sql',
-)
 const expectedPolicyFingerprints = {
   approval_requests_access_gate: {
     command: 'ALL',
@@ -913,10 +911,8 @@ await applyMigrations(database, expectedMigrations.slice(websiteReviewStart, web
 await verifyWebsiteReviewMigrationCatalog(database, requireCheck)
 await verifyCatalogEntitlementMutations(database, requireCheck)
 await verifyCatalogStorageMutations(database, requireCheck)
-await applyMigrations(database, expectedMigrations.slice(websitePublishingStart, ecommerceOperatorManagementStart))
+await applyMigrations(database, expectedMigrations.slice(websitePublishingStart))
 await verifyWebsitePublishingMigrationCatalog(database, requireCheck)
-await applyMigrations(database, expectedMigrations.slice(ecommerceOperatorManagementStart))
-await verifyEcommerceOperatorManagementMigrationCatalog(database, requireCheck)
 
 const unsafeRoleDatabase = new PGlite()
 await unsafeRoleDatabase.waitReady

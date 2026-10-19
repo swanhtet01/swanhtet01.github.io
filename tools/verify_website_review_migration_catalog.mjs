@@ -80,24 +80,10 @@ const publishingExpected = {
   indexes: '659bcab90bf3b9f35ef383481081049aaa97e018d2782e5f3107927620cb7984',
 }
 
-// The October 19 boundary migration changes only the scoped Ecommerce review
-// helper definitions; all other catalog surfaces must remain byte-for-byte stable.
-const ecommerceOperatorManagementExpected = {
-  ...publishingExpected,
-  functions: 'be3d60a85054d3c37c9791d664d14e0581182ffcc2165a801b4109f415e12794',
-}
-
 export async function verifyWebsitePublishingMigrationCatalog(database, requireCheck) {
   const actual = await websiteReviewCatalogDigests(database)
   for (const [name, digest] of Object.entries(publishingExpected)) {
     requireCheck(`Website review complete private catalog with publishing: ${name}`, actual[name] === digest)
-  }
-}
-
-export async function verifyEcommerceOperatorManagementMigrationCatalog(database, requireCheck) {
-  const actual = await websiteReviewCatalogDigests(database)
-  for (const [name, digest] of Object.entries(ecommerceOperatorManagementExpected)) {
-    requireCheck(`Ecommerce operator boundary private catalog: ${name}`, actual[name] === digest)
   }
 }
 
