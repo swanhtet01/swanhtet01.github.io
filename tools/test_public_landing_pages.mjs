@@ -256,7 +256,7 @@ for (const page of landingPages) {
     ? 'href="https://app.supermega.dev/login?product=shop"'
     : 'href="https://app.supermega.dev/login"'
   check(countOccurrences(html, expectedLoginHref) === 1, `landing_login_actions:${page.route}`)
-  if (page.route === '/shop/') check(html.includes('class="button button-primary" href="/contact/?product=shop">Contact our team'), 'shop_primary_action_opens_contact')
+  if (page.route === '/shop/') check(html.includes('class="button button-primary" href="/contact/?product=shop">Request Shop setup'), 'shop_primary_action_requests_setup')
   check(!html.includes('Request assisted setup') && !html.includes('id="first-loop"'), `landing_no_setup_funnel:${page.route}`)
   for (const unsupportedClaim of ['AI may help prepare drafts', 'AI assisted', 'Ranked next actions', 'approved AI context']) {
     check(!html.includes(unsupportedClaim), `landing_unverified_ai_offer_absent:${page.route}:${unsupportedClaim}`)
@@ -345,21 +345,20 @@ const shopManifest = manifest.customerProducts.find((product) => product.id === 
 check(homePage?.file === 'index.html', 'home_manifest_entry_exact')
 check(homePage?.title === 'SuperMega | Business software for Myanmar', 'home_manifest_title_exact')
 check(homePage?.description === expectedHomeDescription, 'home_manifest_description_derived_from_supported_copy')
-check(hasClassToken(home, 'company-hero') && home.includes('id="products"'), 'home_company_hero_and_product_family')
+check(hasClassToken(home, 'company-hero') && !home.includes('id="products"'), 'home_is_a_short_brand_entry_not_a_second_product_page')
 check(home.includes('href="/shop/">Explore Shop') && home.includes('href="/contact/">Contact us')
   && !home.includes('>View every screen size') && !home.includes('>See Shop on desktop and mobile'), 'home_actions_prioritize_product_and_human_contact')
 check(home.includes('<p class="hero-kicker">For Myanmar retailers</p>')
   && home.includes('See what sold.<br><span>Know what needs action.</span>')
   && home.includes('Record counter sales, check stock and follow open orders in SuperMega Shop.')
   && home.includes('class="company-operating-overview"') && home.includes('class="company-product-visual"')
-  && home.includes('class="company-product-evidence"')
+  && !home.includes('class="company-product-evidence"')
+  && !home.includes('class="company-portfolio"')
   && !/href="\/(?:website|ecommerce)\//.test(home)
   && !/\bSites\b|\bCommerce\b/.test(home), 'home_shop_only_customer_scope_visible')
-check(home.includes('class="platform-gallery home-platform-gallery shop-gallery-all"')
+check(!home.includes('class="platform-gallery home-platform-gallery shop-gallery-all"')
   && !home.includes('data-platform-carousel') && !home.includes('<nav class="shop-showcase-nav"')
-  && !home.includes('Choose a Shop screen') && home.includes('Shop &middot; Counter sale and live basket')
-  && home.includes('Shop &middot; Orders and fulfilment') && home.includes('Shop &middot; Inventory and replenishment'),
-  'home_shows_all_distinct_shop_workflows_without_a_carousel')
+  && !home.includes('Choose a Shop screen'), 'home_does_not_repeat_the_shop_gallery')
 check(notFound.includes('Find Shop on the home page.')
   && !/\bSites\b|\bCommerce\b|\bPlant\b/.test(notFound), 'not_found_matches_shop_only_customer_scope')
 for (const token of [
@@ -368,7 +367,8 @@ for (const token of [
   `<meta property="og:title" content="${homePage.title}" />`,
   `<meta property="og:description" content="${homePage.description}" />`,
 ]) check(home.includes(token), `home_metadata_manifest_bound:${token}`)
-check(home.includes('<figure class="home-product-shot"') && home.includes('src="/images/actual-shop-today.png"') && home.includes('Actual app interface · sample data'), 'home_provenance_checked_shop_capture_visible')
+check(home.includes('<figure class="company-product-visual"') && home.includes('src="/images/actual-shop-today.png"')
+  && home.includes('Shop · Today') && home.includes('Sample data'), 'home_provenance_checked_shop_capture_visible')
 const shopLanding = readStatic('shop/index.html')
 const shopProduct = manifest.customerProducts.find(product => product.id === 'shop')
 for (const token of [
@@ -411,14 +411,14 @@ for (const [route, html] of [['/', home], ['/shop/', shopLanding], ...activeIds.
     : 'href="https://app.supermega.dev/login"'
   check(countOccurrences(body, expectedLoginHref) === 1, `login_action_count:${route}`)
   const carouselCount = Number(route !== '/' && route !== '/shop/' && (productScreens[routeProduct]?.length || 0) > 1)
-  const expectedLinks = route === '/' ? 11 : route === '/shop/' ? 9 : 5 + Number(routeManifestProduct?.status === 'available-in-app')
+  const expectedLinks = route === '/' ? 10 : route === '/shop/' ? 9 : 5 + Number(routeManifestProduct?.status === 'available-in-app')
   check((body.match(/<a\b/g) || []).length === expectedLinks, `marketing_link_surface:${route}`)
   const viewportGalleryCount = countOccurrences(body, 'data-viewport-gallery')
   const expectedButtons = viewportGalleryCount * 3 + carouselCount * 2
   check((body.match(/<button\b/g) || []).length === expectedButtons, `marketing_buttons:${route}`)
   const figures = (body.match(/<figure class="platform-image/g) || []).length
-  check(figures === (route === '/' ? productScreens.shop.length - 1 : productScreens[routeProduct]?.length || 0), `marketing_interface_figures:${route}`)
-  const expectedCaptureScreens = route === '/' ? productScreens.shop : productScreens[routeProduct] || []
+  check(figures === (route === '/' ? 0 : productScreens[routeProduct]?.length || 0), `marketing_interface_figures:${route}`)
+  const expectedCaptureScreens = route === '/' ? [] : productScreens[routeProduct] || []
   for (const screen of expectedCaptureScreens) check(body.includes(interfaceDisclosure(screen)), `interface_disclosure_per_image:${route}:${screen}`)
   check(!body.includes('Current Shop') && !body.includes('Current Sites') && !body.includes('Current Commerce'), `capture_not_claimed_current:${route}`)
   const bodyWithoutCaptureDisclosure = body.replace(/Product UI capture . synthetic local records/g, '')
@@ -438,12 +438,8 @@ for (const [route, html] of [['/', home], ['/shop/', shopLanding], ...activeIds.
   check(directAppLinks.length === 0 || (route === '/shop/' && directAppLinks.length === 1 && directAppLinks[0] === 'https://app.supermega.dev/login?product=shop'), `app_actions_match_release_state:${route}`)
   if (expectedContactTarget) check(body.includes(`href="${expectedContactTarget}">Contact SuperMega</a>`), `product_contact_action_matches_release_state:${route}`)
 }
-for (const id of activeIds) check(home.includes(`id="${id}"`), `home_product_family_item:${id}`)
-for (const id of activeIds) {
-  const route = manifest.pages.find((page) => page.productId === id)?.route
-  check(typeof route === 'string' && countOccurrences(home, `class="family-link" href="${route}"`) === 1, `home_product_family_link:${id}`)
-}
-check(countOccurrences(home, 'class="family-link"') === activeIds.length, 'home_one_focused_shop_link')
+check(countOccurrences(home, 'href="/shop/">Explore Shop') === 1, 'home_one_focused_shop_link')
+check(!home.includes('class="family-link"'), 'home_removes_the_duplicate_company_product_section')
 check(home.includes('href="/contact/">Contact</a>'), 'home_contact_path_visible')
 const screenshotHashes = new Set()
 const publishedProductScreens = activeIds.flatMap((id) => productScreens[id] || [])
@@ -572,7 +568,7 @@ check(/<lastmod>\d{4}-\d{2}-\d{2}<\/lastmod>/.test(sitemap), 'sitemap_lastmod_fo
 check(readStatic('robots.txt').includes('Sitemap: https://supermega.dev/sitemap.xml'), 'robots_references_sitemap')
 
 
-check(countOccurrences(home, 'class="family-link"') === activeIds.length, 'home_one_link_per_active_product')
+check(countOccurrences(home, 'class="family-link"') === 0, 'home_has_no_duplicate_company_product_section')
 check(home.includes('SuperMega Noto Sans'), 'home_noto_font')
 for (const html of [home, shopLanding]) {
   check(html.includes('<html lang="en">'), 'marketing_page_english')

@@ -3486,9 +3486,9 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
     ? null
     : <div className="production-mode-banner storage-durability-banner" data-durability={storageDurability.quotaExceeded ? 'full' : 'device-only'} role={storageDurability.quotaExceeded ? 'alert' : 'status'}>
       <span className={`status-pill${storageDurability.quotaExceeded ? ' pending' : ''}`}>{uiText(storageDurability.quotaExceeded ? 'Storage full' : 'Device-only data')}</span>
-      <p>{storageDurability.quotaExceeded
-        ? uiText('Free space on this device before saving more Shop data.')
-        : uiText('Saved on this device only.')}</p>
+      {storageDurability.quotaExceeded
+        ? <p>{uiText('Free space on this device before saving more Shop data.')}</p>
+        : null}
       {storageDurability.quotaExceeded
         ? <button type="button" onClick={() => window.location.reload()}>{uiText('Reload Shop')}</button>
         : <Link to="/settings/#workspace-recovery">{uiText('Set up backup')}</Link>}

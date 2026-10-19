@@ -831,21 +831,6 @@ function productGallery(id,label,eagerFirst=false,showAll=false) {
  if (item.screens.length === 1) return `<div class="platform-gallery" data-product-gallery="${id}" data-single role="region" aria-label="${label} interface view"><div class="platform-slides">${slides}</div></div>`
  return `<div class="platform-gallery" data-product-gallery="${id}" data-platform-carousel role="region" aria-roledescription="carousel" aria-label="${label} interface views"><div class="platform-slides" tabindex="0">${slides}</div><div class="platform-gallery-controls"><button type="button" data-gallery-previous aria-label="Previous ${label} screen" disabled>&lsaquo;</button><span class="platform-gallery-status" data-gallery-status aria-live="polite">1 of ${item.screens.length}</span><button type="button" data-gallery-next aria-label="Next ${label} screen">&rsaquo;</button></div></div>`
 }
-function homeShopGallery() {
- const item=stories.shop
- // Today is already the hero capture. Show every other workflow together so visitors
- // do not have to operate a carousel to discover Shop's core screens.
- const screens=item.screens.filter((_,index)=>index!==1)
- const slides=screens.map(([image,alt,caption,width=1440,height=900])=>{
-  const mobileImage=image.replace(/\.png$/, '-mobile.png')
-  const tabletImage=image.replace(/\.png$/, '-tablet.png')
-  interfaceDisclosure(image)
-  interfaceDisclosure(tabletImage)
-  interfaceDisclosure(mobileImage)
-  return `<figure class="platform-image home-platform-image" role="group" aria-label="${escapeHtml(caption)}"><div class="platform-device-stage">${deviceCaptureSet('Shop',image,mobileImage,tabletImage,alt,width,height,'lazy')}</div><figcaption class="platform-home-caption">Shop &middot; ${escapeHtml(caption)}<small>${interfaceDisclosure(image)}</small></figcaption></figure>`
- }).join('')
- return `<div class="platform-gallery home-platform-gallery shop-gallery-all" data-product-gallery="shop" role="region" aria-label="Shop interface views"><div class="platform-slides">${slides}</div></div>`
-}
 function productStory(id, standalone = false) {
  const item=stories[id], label=publicProducts.find(product=>product.id===id).name
  const route=manifest.pages.find(page=>page.productId===id)?.route
@@ -938,29 +923,17 @@ function shopOnlyCompanyMarkup(source) {
 function companyOperatingGraphic() {
  return `<figure class="company-product-visual"><img src="/images/actual-shop-today.png" alt="SuperMega Shop Today view: sales, orders and low-stock items. Sample data." width="1440" height="900" loading="eager" fetchpriority="high" /><figcaption>Shop · Today <span>Sample data</span></figcaption></figure>`
 }
-function replaceHomeShopShowcase(source, galleryHtml) {
+function replaceHomeShopShowcase(source) {
  const marker = /<section class="shop-showcase" aria-label="Shop product screens">[\s\S]*?<\/section>/g
  const matches = source.match(marker) || []
  assert(matches.length === 1, 'home_shop_showcase_source_drift')
  const companyVisual = `<div class="company-operating-overview" aria-label="SuperMega company overview">${companyOperatingGraphic()}</div>`
- const noScriptFallback = '<noscript><figure class="home-product-shot"><img src="/images/actual-shop-today.png" alt="Shop Today screen with sales, open orders, stock alerts and next actions" width="1440" height="900" /><figcaption><strong>Today</strong><span>See sales, open orders and the stock that needs attention.</span><small>Actual app interface · sample data</small></figcaption></figure></noscript>'
  const markup = source.replace(marker, companyVisual)
- const evidence = `<div class="company-product-evidence" aria-labelledby="company-shop-evidence-title"><div class="company-product-evidence-head"><div><p class="eyebrow">Shop</p><h2 id="company-shop-evidence-title">Shop, at a glance.</h2></div><p>Sales, orders and stock in one workspace, shown on desktop, tablet and phone.</p></div>${galleryHtml}${noScriptFallback}</div>`
- const principleMarker = '<div class="company-principle">'
- const principleStart = markup.indexOf(principleMarker)
- if (principleStart >= 0) {
-  const principleEnd = markup.indexOf('</div>', principleStart) + '</div>'.length
-  assert(principleEnd > principleStart && markup.indexOf(principleMarker, principleStart + principleMarker.length) < 0, 'company_product_evidence_anchor_drift')
-  return markup.slice(0, principleStart) + evidence + markup.slice(principleEnd)
- }
- const portfolioMarker = '<section class="company-portfolio"'
- const portfolioStart = markup.indexOf(portfolioMarker)
- assert(portfolioStart >= 0 && markup.indexOf(portfolioMarker, portfolioStart + portfolioMarker.length) < 0, 'company_product_evidence_anchor_drift')
- return markup.slice(0, portfolioStart) + evidence + markup.slice(portfolioStart)
+ return removeSectionByClass(markup, 'company-portfolio', 'home_duplicate_shop_details')
 }
-const publicHomeMarkup = replaceHomeShopShowcase(shopOnlyCompanyMarkup(companyMarkup), homeShopGallery())
+const publicHomeMarkup = replaceHomeShopShowcase(shopOnlyCompanyMarkup(companyMarkup))
 function simplifyShopHeroActions(source) {
- let markup = replaceOnce(source, 'Ask about Shop', 'Contact our team', 'shop_primary_action_copy')
+ let markup = replaceOnce(source, 'Ask about Shop', 'Request Shop setup', 'shop_primary_action_copy')
  const secondaryAction = /[ \t]*<a class="button button-secondary" href="#shop-demo">See Shop screens<\/a>/g
  const matches = [...markup.matchAll(secondaryAction)]
  assert(matches.length === 1, 'shop_duplicate_screen_action_source_drift')
@@ -1086,7 +1059,7 @@ const contactHtml = documentHtml({
   route: '/contact/',
   title: 'Contact | SuperMega',
   description: 'Tell SuperMega which company workflow should run better.',
-  content: `<main class="frame contact-page" id="content"><section class="page-hero"><span class="eyebrow">Contact SuperMega</span><h1 data-contact-heading>Tell us what you need.</h1><p class="lede" data-contact-lede>We build practical operating software for Myanmar businesses, starting with Shop.</p></section><section class="contact-layout"><form class="contact-form" action="/api/contact-submissions" method="post" data-contact-form><div class="field-grid"><label>Name<input name="name" autocomplete="name" required maxlength="120" /></label><label>Email<input name="email" type="email" autocomplete="email" required maxlength="180" /></label><label class="wide">Company (optional)<input name="company" autocomplete="organization" maxlength="180" /></label><input type="hidden" name="product" value="guide" /><input type="hidden" name="template" maxlength="120" /><label class="wide">Message<textarea name="goal" required maxlength="4000" placeholder="Share a few details about your request."></textarea></label></div><input type="hidden" name="source_url" /><input type="hidden" name="referrer" /><input type="hidden" name="idempotency_key" /><input type="hidden" name="trial_claim_code" /><input type="hidden" name="proof_contract" /><input type="hidden" name="proof_version" /><input type="hidden" name="proof_digest" /><input type="hidden" name="proof_product" /><input type="hidden" name="proof_template" /><input type="hidden" name="proof_readiness" /><input type="hidden" name="proof_sources" /><input type="hidden" name="proof_behavior" /><input type="hidden" name="proof_decisions" /><input type="hidden" name="proof_raw_records" /><input type="hidden" name="proof_context_contract" /><input type="hidden" name="proof_context_digest" /><input type="hidden" name="proof_context_outcome_digest" /><input type="hidden" name="proof_context_approved" /><input type="hidden" name="proof_context_raw_records" /><input class="contact-honeypot" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" inert /><button class="button primary" type="submit">Send message</button><p class="form-status" data-form-status aria-live="polite"></p></form></section></main>${contactScript}`,
+  content: `<main class="frame contact-page" id="content"><section class="page-hero"><span class="eyebrow">Contact SuperMega</span><h1 data-contact-heading>Tell us what you need.</h1><p class="lede" data-contact-lede>SuperMega builds practical software for businesses in Myanmar. Shop is our retail product for sales, stock and order follow-up.</p></section><section class="contact-layout"><form class="contact-form" action="/api/contact-submissions" method="post" data-contact-form><div class="field-grid"><label>Name<input name="name" autocomplete="name" required maxlength="120" /></label><label>Email<input name="email" type="email" autocomplete="email" required maxlength="180" /></label><label class="wide">Company (optional)<input name="company" autocomplete="organization" maxlength="180" /></label><input type="hidden" name="product" value="guide" /><input type="hidden" name="template" maxlength="120" /><label class="wide">Message<textarea name="goal" required maxlength="4000" placeholder="Share a few details about your request."></textarea></label></div><input type="hidden" name="source_url" /><input type="hidden" name="referrer" /><input type="hidden" name="idempotency_key" /><input type="hidden" name="trial_claim_code" /><input type="hidden" name="proof_contract" /><input type="hidden" name="proof_version" /><input type="hidden" name="proof_digest" /><input type="hidden" name="proof_product" /><input type="hidden" name="proof_template" /><input type="hidden" name="proof_readiness" /><input type="hidden" name="proof_sources" /><input type="hidden" name="proof_behavior" /><input type="hidden" name="proof_decisions" /><input type="hidden" name="proof_raw_records" /><input type="hidden" name="proof_context_contract" /><input type="hidden" name="proof_context_digest" /><input type="hidden" name="proof_context_outcome_digest" /><input type="hidden" name="proof_context_approved" /><input type="hidden" name="proof_context_raw_records" /><input class="contact-honeypot" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" inert /><button class="button primary" type="submit">Send message</button><p class="form-status" data-form-status aria-live="polite"></p></form></section></main>${contactScript}`,
 })
 
 const privacyHtml = documentHtml({

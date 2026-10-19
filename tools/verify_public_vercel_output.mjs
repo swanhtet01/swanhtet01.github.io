@@ -343,7 +343,7 @@ for (const staleToken of [
   if (home.includes(staleToken)) fail('stale_home_metadata_present', { token: staleToken })
 }
 if (!hasClassToken(home, 'company-hero')) fail('homepage_contract_missing', { token: 'class token company-hero' })
-for (const token of ['id="products"', 'href="/shop/">Explore Shop', 'href="/contact/">Contact us', 'href="https://app.supermega.dev/login"']) {
+for (const token of ['class="company-operating-overview"', 'href="/shop/">Explore Shop', 'href="/contact/">Contact us', 'href="https://app.supermega.dev/login"']) {
   if (!home.includes(token)) fail('homepage_contract_missing', { token })
 }
 if (home.includes('>View every screen size') || home.includes('>See Shop on desktop and mobile')) fail('home_action_must_not_be_a_device_tour')
@@ -355,7 +355,7 @@ if (!home.includes('<p class="hero-kicker">For Myanmar retailers</p>')
   || !home.includes('See what sold.<br><span>Know what needs action.</span>')
   || !home.includes('Record counter sales, check stock and follow open orders in SuperMega Shop.')
   || !home.includes('class="company-operating-overview"')
-  || !home.includes('class="company-product-evidence"')
+  || home.includes('class="company-product-evidence"')
   || /href="\/(?:website|ecommerce)\//.test(home)
   || /\bSites\b|\bCommerce\b/.test(home)) fail('home_customer_access_scope_missing')
 for (const retiredToken of [
@@ -370,7 +370,6 @@ for (const retiredToken of [
 }
 for (const product of publicProducts) {
   if (home.includes(`href="${product.appRoute}"`)) fail('direct_product_route_remains_primary', { product: product.id })
-  if (countOccurrences(home, `id="${product.id}"`) !== 1) fail('product_story_missing', { product: product.id })
 }
 for (const internalLabel of ['SuperMega HQ', 'One next action for the company', 'Owners, evidence, review, and release', 'Gated R&amp;D']) {
   if (home.includes(internalLabel)) fail('internal_system_exposed_on_public_home', { internalLabel })
@@ -388,13 +387,13 @@ for (const [route, html] of [['/', home], ['/shop/', pages.get('/shop/').html], 
     ? `/contact/?product=${routeProduct.id}`
     : null
   const galleryViews = { shop: 4, website: 2, ecommerce: 2 }
-  const expectedLinks = route === '/' ? 11 : route === '/shop/' ? 9 : 5 + Number(Boolean(contactActionTarget))
+  const expectedLinks = route === '/' ? 10 : route === '/shop/' ? 9 : 5 + Number(Boolean(contactActionTarget))
   if ((body.match(/<a\b/g) || []).length !== expectedLinks) fail('marketing_link_surface_drift', { route, expectedLinks })
   const expectedLogin = route === '/shop/'
     ? 'href="https://app.supermega.dev/login?product=shop"'
     : 'href="https://app.supermega.dev/login"'
   if (countOccurrences(body, expectedLogin) !== 1) fail('login_action_count_invalid', { route, expectedLogin })
-  if (route === '/shop/' && (!body.includes('class="button button-primary" href="/contact/?product=shop">Contact our team') || body.includes('See Shop screens'))) fail('shop_primary_product_action_missing')
+  if (route === '/shop/' && (!body.includes('class="button button-primary" href="/contact/?product=shop">Request Shop setup') || body.includes('See Shop screens'))) fail('shop_primary_product_action_missing')
   if (body.includes('>Company</a>')) fail('company_page_navigation_not_consolidated')
   const hasGalleryNavigation = route !== '/shop/' && (galleryViews[routeProduct?.id] || 0) > 1
   const expectedButtons = Number(hasGalleryNavigation) * 2
@@ -418,7 +417,7 @@ for (const [route, html] of [['/', home], ['/shop/', pages.get('/shop/').html], 
     }
   }
   const productVisualMissing = route === '/'
-    ? !hasClassToken(body, 'company-hero') || !hasClassToken(body, 'product-family') || !body.includes('See what sold.<br><span>Know what needs action.</span>') || !body.includes('class="company-operating-overview"') || !body.includes('class="company-product-visual"') || !body.includes('class="company-product-evidence"') || !body.includes('Shop, at a glance.') || body.includes('data-platform-carousel') || body.includes('Choose a Shop screen') || body.includes('Sell faster.') || countOccurrences(body, 'class="platform-device-set has-tablet"') !== galleryViews.shop - 1 || body.includes('data-device-choice')
+    ? !hasClassToken(body, 'company-hero') || hasClassToken(body, 'product-family') || !body.includes('See what sold.<br><span>Know what needs action.</span>') || !body.includes('class="company-operating-overview"') || !body.includes('class="company-product-visual"') || body.includes('class="company-product-evidence"') || body.includes('class="company-portfolio"') || body.includes('data-platform-carousel') || body.includes('Choose a Shop screen') || body.includes('Sell faster.') || body.includes('data-device-choice')
     : route === '/shop/'
       ? !body.includes('class="shop-actual-showcase"') || !body.includes('Sales, stock and orders.') || !body.includes('Real Shop screens with sample records. The catalog and prices shown are examples, not a live retail feed.') || body.includes('Makro PRO') || body.includes('17 October 2026') || body.includes('class="pos-window"') || body.includes('class="sample-label"') || body.includes('Complete sample sale') || body.includes('shop-sample-demo.js') || !body.includes('class="platform-gallery shop-gallery-all"') || countOccurrences(body, '<figure class="platform-image') !== galleryViews.shop || countOccurrences(body, 'class="platform-device-set has-tablet"') !== galleryViews.shop || body.includes('data-platform-carousel') || body.includes('data-device-choice') || body.includes('data-device-frame') || /<a\b[^>]*>\s*<img\b[^>]*src="\/images\/actual-shop-/i.test(body)
       : !body.includes('class="platform-image"') || !body.includes('class="feature-line"')
@@ -426,10 +425,8 @@ for (const [route, html] of [['/', home], ['/shop/', pages.get('/shop/').html], 
   if (route === '/') {
     const heroIndex = body.indexOf('class="hero company-hero"')
     const overviewIndex = body.indexOf('class="company-operating-overview"')
-    const evidenceIndex = body.indexOf('class="company-product-evidence"')
-    const galleryIndex = body.indexOf('home-platform-gallery')
-    if (heroIndex < 0 || overviewIndex < heroIndex || evidenceIndex < 0 || galleryIndex < evidenceIndex) {
-      fail('company_site_product_story_order_drift')
+    if (heroIndex < 0 || overviewIndex < heroIndex || body.includes('class="company-product-evidence"')) {
+      fail('brand_home_story_order_drift')
     }
   }
   const directAppTargets = [...body.matchAll(/href="(https:\/\/app\.supermega\.dev\/[^\"]+)"/g)]
@@ -448,10 +445,7 @@ for (const [route, html] of [['/', home], ['/shop/', pages.get('/shop/').html], 
     if (legacyActionLabels.has(label)) fail('retired_acquisition_action', { route, label })
   }
 }
-for (const product of publicProducts) {
-  const productRoute = manifest.pages.find(page => page.productId === product.id)?.route
-  if (typeof productRoute !== 'string' || countOccurrences(home, `class="family-link" href="${productRoute}"`) !== 1) fail('homepage_product_link_missing', { product: product.id })
-}
+if (countOccurrences(home, 'href="/shop/">Explore Shop') !== 1 || home.includes('class="family-link"')) fail('brand_home_primary_shop_link_invalid')
 
 const shopPage = pages.get('/shop/')?.html || ''
 for (const [desktop, mobile, tablet] of [
@@ -487,7 +481,7 @@ for (const token of [
   'data-contact-form', 'action="/api/contact-submissions"', 'name="name"', 'name="email"',
   'name="company"', 'name="product"', 'value="guide"', 'name="template"', 'name="goal"',
   'name="idempotency_key"', 'name="proof_contract"', 'name="proof_digest"', 'class="contact-honeypot"',
-  'x-idempotency-key', 'Tell us what you need.', 'We build practical operating software for Myanmar businesses, starting with Shop.',
+  'x-idempotency-key', 'Tell us what you need.', 'SuperMega builds practical software for businesses in Myanmar. Shop is our retail product for sales, stock and order follow-up.',
   'placeholder="Share a few details about your request."', 'Company (optional)', '>Send message</button>',
   'Message received:', 'Keep this reference if you need to follow up.',
   "shop:'Shop'", "website:'Sites'", "ecommerce:'Commerce'",
