@@ -8,10 +8,12 @@ export type ShopPublicInboxRequest = Pick<
   request: Pick<ManagedCommercePublicRequest['request'], 'fulfilment' | 'totalMmk' | 'lines'>
 }
 
+export type ShopPublicInboxRequestSelection = Pick<ShopPublicInboxRequest, 'handle' | 'requestId'>
+
 export type ShopPublicInboxSyncResult = {
   requests: ShopPublicInboxRequest[]
   claimedRequests: ShopPublicInboxRequest[]
-  failedRequestIds: string[]
+  failedRequestKeys: string[]
   alreadyInShopRequests: ShopPublicInboxRequest[]
   nextCursor: string | null
 }
@@ -65,21 +67,26 @@ export function shopPublicInboxBacklogCursor(
     : firstPageNextCursor
 }
 
-export function shopPublicInboxPrunedRequestIds(
+export function shopPublicInboxRequestKey(request: ShopPublicInboxRequestSelection): string {
+  return JSON.stringify([request.handle, request.requestId])
+}
+
+export function shopPublicInboxPrunedRequestKeys(
   requests: ReadonlyMap<string, ShopPublicInboxRequest>,
-  observedRequestIds: ReadonlySet<string>,
+  observedRequestKeys: ReadonlySet<string>,
   completeSweep: boolean,
 ): string[] {
   if (!completeSweep) return []
-  return [...requests.keys()].filter((requestId) => !observedRequestIds.has(requestId))
+  return [...requests.keys()].filter((requestKey) => !observedRequestKeys.has(requestKey))
 }
 
 export function findShopPublicInboxRequestForReview(
-  requestId: string,
+  selection: ShopPublicInboxRequestSelection,
   pageRequests: readonly ShopPublicInboxRequest[],
   cachedRequests: readonly ShopPublicInboxRequest[],
 ): ShopPublicInboxRequest | null {
-  return [...pageRequests, ...cachedRequests].find((request) => request.requestId === requestId) ?? null
+  const requestKey = shopPublicInboxRequestKey(selection)
+  return [...pageRequests, ...cachedRequests].find((request) => shopPublicInboxRequestKey(request) === requestKey) ?? null
 }
 
 function shopInboxSummary(request: ManagedCommercePublicRequest): ShopPublicInboxRequest {
@@ -109,7 +116,7 @@ export async function syncShopPublicInbox(
   after?: string,
 ): Promise<ShopPublicInboxSyncResult> {
   const inbox = await api.loadInbox(identity, after)
-  if (!isCurrent()) return { requests: [], claimedRequests: [], failedRequestIds: [], alreadyInShopRequests: [], nextCursor: inbox.nextCursor }
+  if (!isCurrent()) return { requests: [], claimedRequests: [], failedRequestKeys: [], alreadyInShopRequests: [], nextCursor: inbox.nextCursor }
   const alreadyInShopRequests: ShopPublicInboxRequest[] = []
 
   for (const request of inbox.requests) {
@@ -122,7 +129,49 @@ export async function syncShopPublicInbox(
     .filter((request) => request.status !== 'in_shop')
     .map(shopInboxSummary)
 
-  return { requests, claimedRequests: [], failedRequestIds: [], alreadyInShopRequests, nextCursor: inbox.nextCursor }
+  return { requests, claimedRequests: [], failedRequestKeys: [], alreadyInShopRequests, nextCursor: inbox.nextCursor }
+}
+
+export async function applyShopPublicInboxReviewSelection(
+  identity: ManagedIdentity,
+  selection: ShopPublicInboxRequestSelection,
+  page: ShopPublicInboxSyncResult,
+  cachedRequests: readonly ShopPublicInboxRequest[],
+  claimRequest: (identity: ManagedIdentity, handle: string, requestId: string) => ReturnType<typeof import('../products/ecommerce/managed-commerce-public').claimManagedCommercePublicRequest>,
+): Promise<ShopPublicInboxSyncResult> {
+  const selected = findShopPublicInboxRequestForReview(
+    selection,
+    [...page.requests, ...page.alreadyInShopRequests],
+    cachedRequests,
+  )
+  const requestKey = shopPublicInboxRequestKey(selection)
+  if (!selected) return { ...page, failedRequestKeys: [...page.failedRequestKeys, requestKey] }
+
+  if (selected.status === 'in_shop') {
+    return {
+      ...page,
+      requests: page.requests.filter((request) => shopPublicInboxRequestKey(request) !== requestKey),
+      alreadyInShopRequests: [
+        ...page.alreadyInShopRequests.filter((request) => shopPublicInboxRequestKey(request) !== requestKey),
+        selected,
+      ],
+    }
+  }
+
+  try {
+    const claimed = await claimShopPublicInboxRequest(identity, selected, claimRequest)
+    if (!claimed) return { ...page, failedRequestKeys: [...page.failedRequestKeys, requestKey] }
+    return {
+      ...page,
+      requests: page.requests.filter((request) => shopPublicInboxRequestKey(request) !== requestKey),
+      claimedRequests: [
+        ...page.claimedRequests.filter((request) => shopPublicInboxRequestKey(request) !== requestKey),
+        claimed,
+      ],
+    }
+  } catch {
+    return { ...page, failedRequestKeys: [...page.failedRequestKeys, requestKey] }
+  }
 }
 
 export async function claimShopPublicInboxRequest(

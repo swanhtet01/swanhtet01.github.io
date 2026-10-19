@@ -19,7 +19,7 @@ import { Link, Navigate, useLocation, useNavigate, useOutletContext, useSearchPa
 import './core-app.css'
 import type { EcommerceShopDraft } from '../products/ecommerce/ecommerce-shop-handoff'
 import { claimManagedCommercePublicRequest, loadManagedCommercePublicInbox, loadManagedCommercePublicShopContact, type ManagedCommercePublicContact } from '../products/ecommerce/managed-commerce-public'
-import { acquireShopPublicInboxFlight, claimShopPublicInboxRequest, findShopPublicInboxRequestForReview, releaseShopPublicInboxFlight, shopPublicInboxBacklogCursor, shopPublicInboxIdentityState, shopPublicInboxPrunedRequestIds, syncShopPublicInbox, type ShopPublicInboxIdentityState as ShopPublicInboxIdentityStateType, type ShopPublicInboxRequest } from './shop-public-inbox-sync'
+import { acquireShopPublicInboxFlight, applyShopPublicInboxReviewSelection, releaseShopPublicInboxFlight, shopPublicInboxBacklogCursor, shopPublicInboxIdentityState, shopPublicInboxPrunedRequestKeys, shopPublicInboxRequestKey, syncShopPublicInbox, type ShopPublicInboxIdentityState as ShopPublicInboxIdentityStateType, type ShopPublicInboxRequest, type ShopPublicInboxRequestSelection } from './shop-public-inbox-sync'
 import { ShopBuyerContactDisclosure } from './ShopBuyerContactDisclosure'
 import type { EcommerceCancellationIntent, EcommerceOrderAmendmentIntent, EcommerceOrderRequestV2, EcommerceOrderRescheduleIntent, EcommerceShopDraftV2 } from '../products/ecommerce/ecommerce-buying-lifecycle'
 import { ecommerceShopIntentReference, type EcommerceShopNavigationIntents } from '../products/ecommerce/ecommerce-shop-intent-route'
@@ -1692,14 +1692,15 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
     ? `${managedIdentity.workspaceId}\u0000${managedIdentity.userId}\u0000${managedIdentity.email}`
     : ''
   managedPublicInboxIdentityRef.current = managedPublicInboxIdentityKey
-  const syncManagedPublicInbox = useCallback(async (retryRequestId?: string) => {
+  const syncManagedPublicInbox = useCallback(async (retrySelection?: ShopPublicInboxRequestSelection) => {
     if (!managedIdentity || !allowShopInboundRequests || !commerceCanWrite || workspaceMode !== coreUi.m) return
     const identityKey = `${managedIdentity.workspaceId}\u0000${managedIdentity.userId}\u0000${managedIdentity.email}`
     if (managedPublicInboxIdentityRef.current !== identityKey || !acquireShopPublicInboxFlight(managedPublicInboxFlights.current, identityKey)) return
 
     const sweepState = shopPublicInboxIdentityState(managedPublicInboxSweepStates.current, identityKey)
-    const retryAfter = retryRequestId && sweepState.requestCursors.has(retryRequestId)
-      ? sweepState.requestCursors.get(retryRequestId)
+    const retryRequestKey = retrySelection ? shopPublicInboxRequestKey(retrySelection) : ''
+    const retryAfter = retrySelection && sweepState.requestCursors.has(retryRequestKey)
+      ? sweepState.requestCursors.get(retryRequestKey)
       : undefined
     const previous = managedPublicInboxRef.current
     const previousRequests = previous.identityKey === identityKey ? previous.requests : []
@@ -1715,40 +1716,24 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
     try {
       const api = { loadInbox: loadManagedCommercePublicInbox }
       const isCurrent = () => managedPublicInboxIdentityRef.current === identityKey
-      const firstPage = await syncShopPublicInbox(managedIdentity, api, isCurrent, retryRequestId ? retryAfter : undefined)
-      if (retryRequestId && isCurrent()) {
-        const selectedRequest = findShopPublicInboxRequestForReview(
-          retryRequestId,
-          [...firstPage.requests, ...firstPage.alreadyInShopRequests],
-          previousRequests,
-        )
-        if (!selectedRequest) firstPage.failedRequestIds.push(retryRequestId)
-        else if (selectedRequest.status !== 'in_shop') {
-          try {
-            const claimedRequest = await claimShopPublicInboxRequest(managedIdentity, selectedRequest, claimManagedCommercePublicRequest)
-            if (claimedRequest) {
-              firstPage.claimedRequests.push(claimedRequest)
-              firstPage.requests = firstPage.requests.filter((request) => request.requestId !== retryRequestId)
-            } else firstPage.failedRequestIds.push(retryRequestId)
-          } catch {
-            firstPage.failedRequestIds.push(retryRequestId)
-          }
-        }
-      }
+      const loadedFirstPage = await syncShopPublicInbox(managedIdentity, api, isCurrent, retrySelection ? retryAfter : undefined)
+      const firstPage = retrySelection && isCurrent()
+        ? await applyShopPublicInboxReviewSelection(managedIdentity, retrySelection, loadedFirstPage, previousRequests, claimManagedCommercePublicRequest)
+        : loadedFirstPage
       const pageResults = [firstPage]
       const previousCursor = sameIdentity ? previous.cursor : null
       const previousAnchor = sameIdentity ? previous.scanAnchor : null
-      const scanAnchor = retryRequestId ? previousAnchor : firstPage.nextCursor
-      const restartSweep = !retryRequestId && (
+      const scanAnchor = retrySelection ? previousAnchor : firstPage.nextCursor
+      const restartSweep = !retrySelection && (
         !sameIdentity || previousAnchor !== firstPage.nextCursor || previousCursor === null
       )
       const backlogCursor = shopPublicInboxBacklogCursor(
         previousCursor,
         previousAnchor,
         firstPage.nextCursor,
-        Boolean(retryRequestId),
+        Boolean(retrySelection),
       )
-      let nextCursor = retryRequestId ? previousCursor : backlogCursor
+      let nextCursor = retrySelection ? previousCursor : backlogCursor
       let backlogLoadError = ''
       if (backlogCursor && isCurrent()) {
         try {
@@ -1765,38 +1750,39 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
       if (restartSweep) seenDuringSweep.clear()
       for (const [pageIndex, page] of pageResults.entries()) {
         const pageCursor = pageIndex === 0
-          ? retryRequestId ? retryAfter : undefined
+          ? retrySelection ? retryAfter : undefined
           : backlogCursor ?? undefined
         for (const request of [...page.requests, ...page.claimedRequests, ...page.alreadyInShopRequests]) {
-          if (!retryRequestId) seenDuringSweep.add(request.requestId)
-          sweepState.requestCursors.set(request.requestId, pageCursor)
+          const requestKey = shopPublicInboxRequestKey(request)
+          if (!retrySelection) seenDuringSweep.add(requestKey)
+          sweepState.requestCursors.set(requestKey, pageCursor)
         }
       }
       const claimedRequests = pageResults.flatMap((page) => page.claimedRequests)
       const alreadyInShopRequests = pageResults.flatMap((page) => page.alreadyInShopRequests)
-      const failedRequestIds = pageResults.flatMap((page) => page.failedRequestIds)
+      const failedRequestKeys = pageResults.flatMap((page) => page.failedRequestKeys)
       const needsShopRefresh = claimedRequests.length > 0 || alreadyInShopRequests.length > 0 || waitingForShopRefresh.length > 0
       const refreshed = needsShopRefresh ? await refreshManagedCommerceSnapshot() : true
-      const nextRequests = new Map(previousRequests.map((request) => [request.requestId, request]))
-      for (const request of alreadyInShopRequests) nextRequests.set(request.requestId, request)
-      for (const request of pageResults.flatMap((page) => page.requests)) nextRequests.set(request.requestId, request)
-      for (const request of claimedRequests) nextRequests.set(request.requestId, { ...request, status: 'in_shop' })
-      const resolvedRequestIds = new Set([
-        ...alreadyInShopRequests.map((request) => request.requestId),
-        ...claimedRequests.map((request) => request.requestId),
+      const nextRequests = new Map(previousRequests.map((request) => [shopPublicInboxRequestKey(request), request]))
+      for (const request of alreadyInShopRequests) nextRequests.set(shopPublicInboxRequestKey(request), request)
+      for (const request of pageResults.flatMap((page) => page.requests)) nextRequests.set(shopPublicInboxRequestKey(request), request)
+      for (const request of claimedRequests) nextRequests.set(shopPublicInboxRequestKey(request), { ...request, status: 'in_shop' })
+      const resolvedRequestKeys = new Set([
+        ...alreadyInShopRequests.map(shopPublicInboxRequestKey),
+        ...claimedRequests.map(shopPublicInboxRequestKey),
       ])
-      if (refreshed) for (const requestId of resolvedRequestIds) {
-        nextRequests.delete(requestId)
-        sweepState.requestCursors.delete(requestId)
+      if (refreshed) for (const requestKey of resolvedRequestKeys) {
+        nextRequests.delete(requestKey)
+        sweepState.requestCursors.delete(requestKey)
       }
-      const completeSweep = !retryRequestId && nextCursor === null && !backlogLoadError && refreshed
-      for (const requestId of shopPublicInboxPrunedRequestIds(nextRequests, seenDuringSweep, completeSweep)) {
-        nextRequests.delete(requestId)
-        sweepState.requestCursors.delete(requestId)
+      const completeSweep = !retrySelection && nextCursor === null && !backlogLoadError && refreshed
+      for (const requestKey of shopPublicInboxPrunedRequestKeys(nextRequests, seenDuringSweep, completeSweep)) {
+        nextRequests.delete(requestKey)
+        sweepState.requestCursors.delete(requestKey)
       }
       if (completeSweep) seenDuringSweep.clear()
       const requests = [...nextRequests.values()]
-      const error = failedRequestIds.length
+      const error = failedRequestKeys.length
         ? 'That online order could not be prepared in Shop yet. You can review it again.'
         : !refreshed
           ? 'Online orders are waiting for Shop to refresh. Retry below.'
@@ -7558,7 +7544,7 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
             const lines = request.request.lines
             const itemSummary = lines.length === 1 ? `${lines[0].name} × ${lines[0].quantity}` : `${lines.length} items · ${lines.reduce((total, line) => total + line.quantity, 0)} units`
             const awaitingShopRefresh = request.status === 'in_shop'
-            return <article key={request.requestId}><div><strong>{itemSummary}</strong><small>{formatMoney(request.request.totalMmk)} · {request.request.fulfilment} · {awaitingShopRefresh ? 'In Shop · refreshing' : 'New online order'}</small></div><button className="core-button compact" disabled={managedPublicInbox.checking} onClick={() => void syncManagedPublicInbox(request.requestId)} type="button">{awaitingShopRefresh ? 'Refresh Shop' : 'Review order'}</button></article>
+            return <article key={shopPublicInboxRequestKey(request)}><div><strong>{itemSummary}</strong><small>{formatMoney(request.request.totalMmk)} · {request.request.fulfilment} · {awaitingShopRefresh ? 'In Shop · refreshing' : 'New online order'}</small></div><button className="core-button compact" disabled={managedPublicInbox.checking} onClick={() => void syncManagedPublicInbox(request)} type="button">{awaitingShopRefresh ? 'Refresh Shop' : 'Review order'}</button></article>
           })}
         </div>
         {managedPublicInbox.checking && !managedPublicInboxRequests.length ? <p className="form-notice" role="status">Checking for new online orders…</p> : null}

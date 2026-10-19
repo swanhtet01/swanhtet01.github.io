@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { test } from 'node:test'
 
-import { acquireShopPublicInboxFlight, claimShopPublicInboxRequest, findShopPublicInboxRequestForReview, releaseShopPublicInboxFlight, shopPublicInboxBacklogCursor, shopPublicInboxIdentityState, shopPublicInboxPrunedRequestIds, syncShopPublicInbox } from '../showroom/src/core/shop-public-inbox-sync.ts'
+import { acquireShopPublicInboxFlight, applyShopPublicInboxReviewSelection, claimShopPublicInboxRequest, findShopPublicInboxRequestForReview, releaseShopPublicInboxFlight, shopPublicInboxBacklogCursor, shopPublicInboxIdentityState, shopPublicInboxPrunedRequestKeys, shopPublicInboxRequestKey, syncShopPublicInbox } from '../showroom/src/core/shop-public-inbox-sync.ts'
 
 const identity = { workspaceId: 'workspace-1', userId: 'user-1', email: 'operator@example.com' }
 
@@ -40,9 +40,9 @@ test('inbox sweep cursors and seen requests stay isolated by workspace identity'
   assert.deepEqual([...secondAccount.seenDuringSweep], [])
 })
 
-function request(requestId, status = 'new') {
+function request(requestId, status = 'new', handle = 'store-1') {
   return {
-    handle: 'store-1',
+    handle,
     requestId,
     shopRequestId: `shop-${requestId}`,
     status,
@@ -92,7 +92,7 @@ test('claims the cached selected order when newer requests shift it off the refr
   const refreshed = await syncShopPublicInbox(identity, {
     loadInbox: async () => ({ requests: Array.from({ length: 50 }, (_, index) => request(`new-${index + 1}`)), nextCursor: 'older-page' }),
   })
-  const selected = findShopPublicInboxRequestForReview('r-selected', refreshed.requests, cached.requests)
+  const selected = findShopPublicInboxRequestForReview({ handle: 'store-1', requestId: 'r-selected' }, refreshed.requests, cached.requests)
   assert.ok(selected)
   assert.equal(refreshed.requests.length, 50)
   const claimCalls = []
@@ -104,6 +104,39 @@ test('claims the cached selected order when newer requests shift it off the refr
   assert.deepEqual(claimCalls, [['store-1', 'r-selected']])
   assert.equal(claimed.status, 'in_shop')
   assert.equal(claimed.shopRequestId, 'shop-r-selected')
+})
+
+test('uses storefront handle and request ID together when selecting a cached order', () => {
+  const firstStore = request('same-id', 'new', 'store-1')
+  const secondStore = request('same-id', 'new', 'store-2')
+  const selected = findShopPublicInboxRequestForReview(
+    { handle: 'store-2', requestId: 'same-id' },
+    [firstStore],
+    [secondStore],
+  )
+
+  assert.equal(selected.handle, 'store-2')
+  assert.notEqual(shopPublicInboxRequestKey(firstStore), shopPublicInboxRequestKey(secondStore))
+})
+
+test('a cached in-Shop order is included in refresh resolution after newer requests arrive', async () => {
+  const cachedInShop = request('selected', 'in_shop')
+  const refreshed = await syncShopPublicInbox(identity, {
+    loadInbox: async () => ({ requests: Array.from({ length: 50 }, (_, index) => request(`new-${index + 1}`)), nextCursor: 'older-page' }),
+  })
+  let claimCalls = 0
+  const selectedPage = await applyShopPublicInboxReviewSelection(
+    identity,
+    { handle: cachedInShop.handle, requestId: cachedInShop.requestId },
+    refreshed,
+    [cachedInShop],
+    async () => { claimCalls += 1; throw new Error('already-claimed orders must not be claimed again') },
+  )
+
+  assert.equal(claimCalls, 0)
+  assert.equal(selectedPage.failedRequestKeys.length, 0)
+  assert.deepEqual(selectedPage.alreadyInShopRequests.map(shopPublicInboxRequestKey), [shopPublicInboxRequestKey(cachedInShop)])
+  assert.equal(selectedPage.requests.some((item) => shopPublicInboxRequestKey(item) === shopPublicInboxRequestKey(cachedInShop)), false)
 })
 
 test('does not re-claim a request that is already in Shop', async () => {
@@ -183,6 +216,6 @@ test('closed requests disappear only after a complete inbox sweep', () => {
     ['closed', request('closed')],
   ])
   const seen = new Set(['still-open'])
-  assert.deepEqual(shopPublicInboxPrunedRequestIds(displayed, seen, false), [])
-  assert.deepEqual(shopPublicInboxPrunedRequestIds(displayed, seen, true), ['closed'])
+  assert.deepEqual(shopPublicInboxPrunedRequestKeys(displayed, seen, false), [])
+  assert.deepEqual(shopPublicInboxPrunedRequestKeys(displayed, seen, true), ['closed'])
 })
