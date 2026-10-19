@@ -452,12 +452,16 @@ def require_command_product_entitlement(
     product_entitlements: Sequence[str] | None,
     capabilities: Sequence[str] = (),
 ) -> None:
-    """Do not treat Shop's shared commerce surface as Commerce authority."""
+    """Keep Shop writes and internal Ecommerce writes on separate grants."""
 
-    # Receiving or closing a public request is Shop fulfilment work. Only
-    # storefront setup and merchandising belong to internally managed Commerce.
     if event_type.startswith("commerce.storefront."):
         require_ecommerce_management_authority(product_entitlements, capabilities)
+    elif event_type.startswith("commerce.") and product_entitlements is not None:
+        # Ecommerce shares Shop's storage surface, but that must not make an
+        # Ecommerce-only workspace a Shop POS. Legacy/non-managed test stores
+        # pass None and retain their historical behavior.
+        if "commerce" not in product_entitlements:
+            raise TrialPermissionDenied("product.commerce")
 
 
 _PRIVATE_HARDENING_TRIGGER_CONTRACT: dict[tuple[str, str], dict[str, Any]] = {
@@ -3542,6 +3546,19 @@ def _required_surface_capability(surface: str) -> str:
     return SURFACE_WRITE_CAPABILITIES[_normalize_surface(surface)]
 
 
+def _required_command_capability(surface: str, event_type: str) -> str | None:
+    """Resolve the capability for a command on the shared commerce surface."""
+
+    if (
+        _normalize_surface(surface) == "commerce"
+        and _normalize_event_type(event_type).startswith("commerce.storefront.")
+    ):
+        # The event-level Ecommerce gate checks both activation and actor grant;
+        # skip the broader Shop write check for this internally managed path.
+        return None
+    return _required_surface_capability(surface)
+
+
 def has_surface_read_capability(capabilities: Sequence[str], surface: str) -> bool:
     surface_value = _normalize_surface(surface)
     granted = frozenset(capabilities)
@@ -4969,10 +4986,10 @@ class PostgresTrialStore:
         except Exception as exc:
             raise TrialNotReadyError(("command_authority_ready",)) from exc
 
-        required_capability = _required_surface_capability(surface)
-        if required_capability not in capabilities:
-            raise TrialPermissionDenied(required_capability)
         require_command_product_entitlement(event_type, product_entitlements, capabilities)
+        required_capability = _required_command_capability(surface, event_type)
+        if required_capability and required_capability not in capabilities:
+            raise TrialPermissionDenied(required_capability)
         for related_surface in related_surfaces:
             if related_surface not in server_verified_related_surfaces:
                 _require_surface_read_capability(capabilities, related_surface)
@@ -5066,7 +5083,7 @@ class PostgresTrialStore:
             surface=surface_value,
             event_type=event_type_value,
         )
-        capability = _required_surface_capability(surface_value)
+        capability = _required_command_capability(surface_value, event_type_value)
         with self._guarded_cursor(normalized, write=True, capability=capability) as (
             cursor,
             capabilities,
@@ -6047,7 +6064,7 @@ class InMemoryTrialStore:
             normalized, readiness = self._guard(
                 principal,
                 write=True,
-                capability=_required_surface_capability(surface_value),
+                capability=_required_command_capability(surface_value, event_type_value),
             )
             require_command_product_entitlement(
                 event_type_value, readiness.product_entitlements, readiness.capabilities

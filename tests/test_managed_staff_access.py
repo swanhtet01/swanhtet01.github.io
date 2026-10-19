@@ -56,7 +56,7 @@ class ManagedStaffAccessPlanTests(unittest.TestCase):
         plan = staff_plan(activation, "ecommerce-operator")
         self.assertEqual(plan["products"], ["ecommerce"])
         self.assertIn("ecommerce.manage", plan["capabilities"])
-        self.assertIn("commerce.write", plan["capabilities"])
+        self.assertNotIn("commerce.write", plan["capabilities"])
         self.assertNotIn("company.write", plan["capabilities"])
         self.assertEqual(validate_staff_access_plan(plan, activation, now=NOW), plan)
         for product in ("shop", "plant", "website"):

@@ -1414,9 +1414,41 @@ class ClientImportRouteTests(unittest.TestCase):
             workspace_id="workspace-b",
             actor_id=internal_ecommerce_operator.actor_id,
             actor_kind="human",
-            capabilities=("setup.write", "commerce.write", "ecommerce.manage"),
+            capabilities=("setup.write", "commerce.read", "ecommerce.manage"),
         )
         self.sessions["internal-ecommerce"] = internal_ecommerce_operator
+
+        with self.assertRaises(TrialPermissionDenied) as shop_write_denied:
+            self.store.apply_command(
+                internal_ecommerce_operator,
+                command_id="00000000-0000-4000-8000-000000000108",
+                surface="commerce",
+                event_type="commerce.order.created",
+                expected_version=1,
+                payload={},
+            )
+        self.assertEqual(shop_write_denied.exception.required_capability, "commerce.write")
+
+        ecommerce_only = TrialPrincipal("workspace-c", "ecommerce-only-owner", "human")
+        self.store.provision_product_entitlements(
+            workspace_id="workspace-c", products=("ecommerce",)
+        )
+        self.store.provision_membership(
+            workspace_id="workspace-c",
+            actor_id=ecommerce_only.actor_id,
+            actor_kind="human",
+            capabilities=("commerce.write", "ecommerce.manage"),
+        )
+        with self.assertRaises(TrialPermissionDenied) as missing_shop_entitlement:
+            self.store.apply_command(
+                ecommerce_only,
+                command_id="00000000-0000-4000-8000-000000000109",
+                surface="commerce",
+                event_type="commerce.order.created",
+                expected_version=0,
+                payload={},
+            )
+        self.assertEqual(missing_shop_entitlement.exception.required_capability, "product.commerce")
 
         shop_package = _package("commerce", "social-commerce")
         shop_applied = self.client.post(
@@ -1620,6 +1652,21 @@ class ClientImportRouteTests(unittest.TestCase):
         self.assertEqual(nonhuman.status_code, 403)
         self.assertEqual(nonhuman.json()["detail"]["code"], "trial_human_approval_required")
 
+        self.store.provision_product_entitlements(
+            workspace_id="workspace-b", products=("commerce", "ecommerce")
+        )
+        self.store.provision_membership(
+            workspace_id="workspace-b",
+            actor_id=self.setup_writer.actor_id,
+            actor_kind="human",
+            capabilities=(
+                "setup.write",
+                "commerce.write",
+                "production.write",
+                "website.write",
+                "ecommerce.manage",
+            ),
+        )
         ecommerce_package = _package("ecommerce")
         missing_prerequisites = self.client.post(
             "/api/trial/v1/imports/apply-preflight",

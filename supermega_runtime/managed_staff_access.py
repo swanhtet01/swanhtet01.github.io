@@ -97,7 +97,10 @@ def _role_capabilities(activation: Mapping[str, Any], role_id: str) -> list[str]
             or not {"commerce.read", "commerce.write"}.issubset(owner_capabilities)
         ):
             raise ManagedStaffAccessError("Ecommerce operator access requires an activated Ecommerce owner.")
-        capabilities = {"commerce.read", "commerce.write", "ecommerce.manage"}
+        # Ecommerce operators manage the online storefront, not Shop's POS,
+        # stock, payments, or order workflow. Grant Shop write separately when
+        # an employee also has an explicit Shop operator role.
+        capabilities = {"commerce.read", "ecommerce.manage"}
         for capability in ("company.read", "approvals.request"):
             if capability in owner_capabilities:
                 capabilities.add(capability)
