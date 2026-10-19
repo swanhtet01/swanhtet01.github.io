@@ -1,20 +1,20 @@
 # SuperMega Supergoal
 
-Version: 1.4.37
+Version: 1.4.38
 Owner: Swan Htet, Founder
 Maintainer: CTO, sole integration writer
-Updated: 2026-10-19 (15:42 UTC)
+Updated: 2026-10-19 (15:54 UTC)
 Status: ACTIVE — implementation and acceptance in progress; not production-ready.
 
-## Current launch state — 19 October, 15:42 UTC
+## Current launch state — 19 October, 15:54 UTC
 
-The live [SuperMega site](https://supermega.dev/) was fetched at 15:32 UTC and still shows the old Shop, Sites, and Commerce page with illustrative-record captions. Vercel confirms the correct website project is `supermega-public` (`prj_Yaf0cZYbiFXcLkMcKaAm4alPWMhR`) and `supermega.dev` is verified on it, but that project is not connected to Git and has no candidate branch preview; its latest deployments were CLI-created. I can now build a safe preview from the candidate Build Output API without touching production.
+The protected candidate preview is READY on Vercel project `supermega-public` (`prj_Yaf0cZYbiFXcLkMcKaAm4alPWMhR`) at [the preview URL](https://supermega-public-642jt0qqd-swanhtet01s-projects.vercel.app). GET checks for `/`, `/shop/`, `/contact/`, and `/privacy/` returned HTTP 200 with candidate titles and headings. The deployment has no aliases. A fresh production-site fetch at 15:54 UTC still shows “Your business. Working together.” and illustrative-record captions. The public site is therefore not updated; no production deployment or alias change was made.
 
-PR [#683](https://github.com/swanhtet01/swanhtet01.github.io/pull/683) is at `6182ee8ec81d544f54848c12a5747d253949ba88`, stacked on open PR #682. Its source changes fix three reviewed Shop inbox correctness issues; 22 real-component screenshots use synthetic records and remain marked non-publishable. Local focused checks pass. Exact-head hosted checks pass for Audit, dependency, GitGuardian, and Kernel; SuperMega App CI is still running. Fresh Codex review found no major issues, and security review found no security issues on `6182ee8`; these automated reviews are not independent human approval.
+PR [#683](https://github.com/swanhtet01/swanhtet01.github.io/pull/683) is at `5c85256b4f3114d1b8cf65e863429956487760e3`, stacked on open PR #682. Its source changes fix three reviewed Shop inbox correctness issues; 22 real-component screenshots use synthetic records and remain marked non-publishable. Local focused checks pass. At 15:54 UTC, exact-head CI is pending except GitGuardian, which passed. Codex and security reviews on source commit `6182ee8` found no major/security issues; only documentation changed since that reviewed source. These automated reviews are not independent human approval.
 
-Preview state is split and neither branch is accepted: `twflgmlwfkykgzsxnegc` is `MIGRATIONS_FAILED` with 31 migration-ledger entries and 18 `app_private` tables (all 18 RLS-enabled) but no public tables. `rvuutlqxdjaflovozsma` is `MIGRATIONS_FAILED` with only the baseline ledger entry `20261019074026_public_legacy_baseline`, 27 public tables (all RLS-enabled), and no `app_private` tables. Production migration history still lacks the source legacy-baseline migration; logs for the fresh branch recorded the predecessor failure on missing `public.enterprise_users`. No additional provider mutation or production write was made.
+The Supabase development branches are not accepted managed previews. Current branch readback still reports `twflgmlwfkykgzsxnegc`, `rvuutlqxdjaflovozsma`, `tnzgzimmqzbwbjpvkfer`, and `mzgvcrazadyrtphsnayh` as `MIGRATIONS_FAILED`. The detailed schema evidence and predecessor error are retained in the launch-gate record below. No additional provider mutation or production write was made.
 
-Overall decision remains **NO-GO**. Hosted Shop sign-in, two-tenant denial, save/reload and recovery are unproven; full Burmese coverage is incomplete; hardware receipt/scanner checks and the paid-VPS worker are unverified; the website preview/project mapping is unresolved; and independent review is still required for stacked PRs. No production migration, deployment, customer access, or commercial action occurred.
+Overall decision remains **NO-GO**. Hosted Shop sign-in, two-tenant denial, save/reload and recovery are unproven; full Burmese coverage is incomplete; hardware receipt/scanner checks and the paid-VPS worker are unverified; the live website still needs its candidate change; and independent human review is still required for stacked PRs. No production migration, deployment, customer access, or commercial action occurred.
 
 ### 2026-10-19 14:45 UTC — Previous gallery provenance and Shop access warnings
 
