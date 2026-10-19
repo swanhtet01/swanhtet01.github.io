@@ -20,8 +20,8 @@ const products = ['shop', 'plant', 'website', 'ecommerce'].map((id) => ({
 }))
 const sourceReceipts = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'].map((path) => ({ path, digest: readinessDigest(path) }))
 const historicalDatabaseFixture = JSON.parse(readFileSync(new URL('../hq/research/postgres17-rehearsal.json', import.meta.url), 'utf8'))
-// Build a synthetic current-shape proof for unit tests from either an older 29-migration receipt
-// or a refreshed 30-migration receipt, without duplicating the current RLS optimization.
+// Build a synthetic 29-migration current-shape proof while keeping the dormant
+// Sites inquiry RLS optimization out of the canonical rehearsal chain.
 const databaseFixture = structuredClone(historicalDatabaseFixture)
 databaseFixture.runner = 'unit-test-only-synthetic-proof'
 databaseFixture.recordedAt = '2026-07-31T10:00:00.000Z'
@@ -29,9 +29,9 @@ databaseFixture.implementationCommit = '0'.repeat(40)
 databaseFixture.implementationTree = '1'.repeat(40)
 const sitesInquiryRlsOptimization = '20261016143945_optimize_sites_inquiry_rls_initplans.sql'
 const currentDatabaseMigrations = databaseFixture.migration.names.includes(sitesInquiryRlsOptimization)
-  ? [...databaseFixture.migration.names]
-  : [...databaseFixture.migration.names, sitesInquiryRlsOptimization]
-assert.equal(currentDatabaseMigrations.length, 30)
+  ? databaseFixture.migration.names.filter((name) => name !== sitesInquiryRlsOptimization)
+  : [...databaseFixture.migration.names]
+assert.equal(currentDatabaseMigrations.length, 29)
 const databaseFixtureImplementationDigest = sha256(JSON.stringify({
   purpose: 'managed-pilot-readiness-unit-fixture', implementationPaths, currentDatabaseMigrations,
   checkNames: Object.keys(databaseFixture.checks).sort(),

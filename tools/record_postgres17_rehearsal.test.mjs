@@ -86,7 +86,8 @@ test('receipt inventory matches the actual PostgreSQL runner including current S
   assert.ok(runner.paths.includes('supermega_runtime/website_domain.py'))
   assert.ok(runner.paths.includes('supermega_runtime/website_acceptance_schema.py'))
   assert.ok(runner.paths.includes('supermega_runtime/ecommerce_decision_schema.py'))
-  assert.equal(runner.migrations.at(-1), '20261016143945_optimize_sites_inquiry_rls_initplans.sql')
+  assert.equal(runner.migrations.at(-1), '20261015202629_ecommerce_operator_review_grant.sql')
+  assert.ok(!runner.migrations.includes('20261016143945_optimize_sites_inquiry_rls_initplans.sql'))
 })
 const context = {
   recordedAt: '2026-07-31T10:00:00.000Z',
