@@ -1,11 +1,12 @@
 import { OrderCalculationNote, OrderReceiptActions } from './OrderReceiptActions'
 import { type CommerceReturnDraft, type CommerceSupportResolutionDraft, type CommerceSupportOpenDraft, type CommerceSupportReopenDraft, type CommerceSupportServiceDraft, type CommerceCorrectionDraft, type OrderAcknowledgementLookup, useMinuteClock, commerceOrderReturnLines, commerceOrderDisplayReference, fulfilmentLabel, formatMoney, formatTaxRate, formatCommerceCalculation, localDateTimeInputValue, orderAcknowledgementDownload } from './shop-order-presentation'
 import { spaCounterFields } from './shop-spa-counter-fields'
-import { lazy, Suspense, type ChangeEvent, type FormEvent, type KeyboardEvent, type MouseEvent, type ReactNode, useEffect, useEffectEvent, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { lazy, Suspense, type ChangeEvent, type FormEvent, type KeyboardEvent, type MouseEvent, type ReactNode, useCallback, useEffect, useEffectEvent, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { shopCounterDraftContext } from './shop-counter-draft-context'
 import { installShopSaleFocus } from './shop-sale-focus'
-import { projectShopCounterCatalog } from './shop-counter-catalog-window'
+import { activeShopCounterCategoryFilter, projectShopCounterCatalog, type ShopCounterCategoryFilter } from './shop-counter-catalog-window'
 import { shopOrderTargetId } from './shop-order-target'
+import { shopOrderAttentionLabels } from './shop-order-attention'
 import { createCounterTicketSession, emptyCounterBasket, type CounterBasket, type CounterTicketStorageScope } from './shop-parked-tickets'
 import {
   shopBusinessTemplate,
@@ -17,7 +18,8 @@ import { Link, Navigate, useLocation, useNavigate, useOutletContext, useSearchPa
 
 import './core-app.css'
 import type { EcommerceShopDraft } from '../products/ecommerce/ecommerce-shop-handoff'
-import { loadManagedCommercePublicShopContact, type ManagedCommercePublicContact } from '../products/ecommerce/managed-commerce-public'
+import { claimManagedCommercePublicRequest, loadManagedCommercePublicInbox, loadManagedCommercePublicShopContact, type ManagedCommercePublicContact } from '../products/ecommerce/managed-commerce-public'
+import { shopPublicInboxBacklogCursor, shopPublicInboxPrunedRequestIds, syncShopPublicInbox, type ShopPublicInboxRequest } from './shop-public-inbox-sync'
 import type { EcommerceCancellationIntent, EcommerceOrderAmendmentIntent, EcommerceOrderRequestV2, EcommerceOrderRescheduleIntent, EcommerceShopDraftV2 } from '../products/ecommerce/ecommerce-buying-lifecycle'
 import { ecommerceShopIntentReference, type EcommerceShopNavigationIntents } from '../products/ecommerce/ecommerce-shop-intent-route'
 import type { WebsiteEcommerceHandoffContext, WebsiteOrderRecord } from '../products/product-handoff'
@@ -26,15 +28,30 @@ import { recordBehaviorSignal } from './behavior-trail'
 import { downloadBlob } from './download-file'
 import { emitMetric } from '../analytics/metrics-collector'
 import { BarcodeScanButton } from './BarcodeScanButton'
+import { ShopMmkCashCount } from './ShopMmkCashCount'
+import { isShopCashSettlementMethod } from './shop-mmk-cash-count'
 import { prepareManagedFirstCatalog } from './shop-managed-first-catalog'
 import { applyStockCountScan } from './shop-stock-count-scan'
+import { unmatchedBarcodeForCreation } from './shop-unmatched-scan'
+
+function hasDisallowedControlCharacters(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index)
+    if (code <= 0x1f || code === 0x7f) return true
+  }
+  return false
+}
+
 const ClosedOrderHistory = lazy(() => import('./ShopOrderHistory').then((module) => ({ default: module.ClosedOrderHistory })))
 const ShopProductPhotoControl = lazy(() => import('./ShopProductPhotoControl').then((module) => ({ default: module.ShopProductPhotoControl })))
 const ShopStocktakeDraftRecovery = lazy(() => import('./ShopStocktakeDraftRecovery').then((module) => ({ default: module.ShopStocktakeDraftRecovery })))
 const ShopBarcodeLabels = lazy(() => import('./ShopBarcodeLabels').then((module) => ({ default: module.ShopBarcodeLabels })))
 import { Empty, PageHeading, type RuntimeHealth } from './CoreShell'
 import { activeCommerceTab, commerceTabs, type CommerceTab } from './commerce-tabs'
-import { bi, confirmedBurmese } from './i18n-actions'
+import { bi } from './i18n-actions'
+import { readUiLocale, uiText, useUiLocale } from './ui-locale'
+import { shopRouteCopy, shopRouteTasksLabel, shopRouteTemplateNotice } from './shop-route-copy'
+import { Cookie, Droplets, Package, Soup, WashingMachine, Wheat } from 'lucide-react'
 import { managedTrialProofFragmentFields, type ManagedTrialProof } from './managed-trial-proof'
 import {
   ACTION_KEY,
@@ -121,6 +138,7 @@ import {
   commerceOrderHasReleasableReservation,
   commerceOrderPromiseUrgency,
   commerceReceivablesAging,
+  commerceOrderPaymentDueAt,
   compareCommercePurchaseOrderAttention,
   commercePurchaseOrderArrivalUrgency,
   commercePurchaseOrderProgress,
@@ -156,6 +174,7 @@ import {
   recordCommerceSupplierInvoice,
   recordCommerceSupplierCreditNote,
   receiveCommercePurchaseOrder,
+  incrementPurchaseOrderReceiveFromScan,
   reconcileCommercePayment,
   recordCommerceCollectionAction,
   recordCommerceOrderReturn,
@@ -165,6 +184,9 @@ import {
   resolveCommerceOrderSupportCase,
   recordCommerceOrderCorrection,
   registerCommerceItem,
+  commerceItemBarcodeConflicts,
+  findCommerceItemByScanCode,
+  resolveCommerceItemByScanCode,
   reserveCommerceOrder,
   saveCommerceClose,
   saveCommerceMerchantProfile,
@@ -304,8 +326,6 @@ const ShopToday = lazy(() => import('./ShopToday').then((module) => ({ default: 
 const ShopMonthlyStatement = lazy(() => import('./ShopMonthlyStatement').then((module) => ({ default: module.ShopMonthlyStatement })))
 const PlantOrderFoundation = lazy(() => import('./PlantOrderFoundation').then((module) => ({ default: module.PlantOrderFoundation })))
 const ReceiptDialog = lazy(() => import('./ReceiptDialog').then((module) => ({ default: module.ReceiptDialog })))
-const CASHIER_COMPLETE_MY = confirmedBurmese('Complete')
-const CASHIER_SAVE_MY = confirmedBurmese('Save')
 const coreUi = Object.freeze({
   d: 'datetime-local',
   q: 'core-button primary compact',
@@ -447,13 +467,17 @@ type CatalogItemEditDraft = {
   sku: string
   expectedPrice: number
   expectedReorderAt: number
+  expectedBarcode: string | null
+  expectedNameMy: string | null
+  expectedCategory: string | null
   price: string
   reorderAt: string
+  barcode: string
+  nameMy: string
+  category: string
 }
 
 const commerceSupportPriorityOrder: CommerceSupportPriority[] = ['urgent', 'high', 'normal', 'low']
-
-type ProductId = 'commerce' | 'production'
 
 // Hand-maintained duplicate of the canonical ecommerceCancellationMatchesCurrentShop
 // export in ecommerce-buying-lifecycle.ts (kept local rather than statically imported
@@ -541,10 +565,6 @@ export function shopInboxRequestWindow<T extends { id: string }>(requests: reado
   return target ? [target, ...visible.slice(0, limit - 1)] : visible
 }
 
-function productCanonicalPath(product: ProductId) {
-  return product === 'commerce' ? '/shop/' : '/plant/'
-}
-
 type ProductionTab = 'production' | 'control'
 
 export type ManagedTrialRequestPrefill = {
@@ -604,7 +624,7 @@ export function managedTrialRequestUrl(product: SetupProductId, templateId: stri
 
 // commerceTabs lives in ./commerce-tabs so the CoreShell mobile bottom bar can
 // render the same task list without importing this chunk-isolated module.
-const productionTabs: Array<{ id: ProductionTab; label: string }> = [
+export const productionTabs: Array<{ id: ProductionTab; label: string }> = [
   { id: 'production', label: 'Jobs' },
   { id: 'control', label: 'Problems' },
 ]
@@ -1007,8 +1027,16 @@ function ActionHistory({ actions, domain }: { actions: AccountableAction[]; doma
   </details>
 }
 
-export function OperationsPage({ product }: { product: ProductId }) {
-  const runtime = useOutletContext<RuntimeHealth>()
+// The customer-facing workspace has one product route: Shop. Plant remains an
+// internal product surface and its old customer routes redirect at the router.
+// Keeping this entry concrete lets Rollup omit the dormant Plant application
+// from Shop's first-load chunk without removing its implementation or the
+// Shop replenishment handoff.
+export function OperationsPage() {
+  const uiLocale = useUiLocale()
+  const runtime = useOutletContext<RuntimeHealth & { ecommerceShopHandoffAllowed: boolean; shopInboundRequestsAllowed: boolean }>()
+  const allowEcommerceShopHandoff = runtime.ecommerceShopHandoffAllowed
+  const allowShopInboundRequests = runtime.shopInboundRequestsAllowed
   const location = useLocation()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -1027,60 +1055,48 @@ export function OperationsPage({ product }: { product: ProductId }) {
   const shopCounterClientId = (location.state as { shopCounterClientId?: string } | null)?.shopCounterClientId?.trim().slice(0, 80) ?? ''
   const requestedSource = searchParams.get('source')
   const requestedRequestId = searchParams.get('request')
-  const view = product
   const requestedTab = searchParams.get('tab')
-  const requestedShopTemplateId = view === 'commerce' ? shopBusinessTemplateFromQuery(searchParams.get('template')) : null
+  const requestedShopTemplateId = shopBusinessTemplateFromQuery(searchParams.get('template'))
   const requestedShopTemplate = requestedShopTemplateId ? shopBusinessTemplate(requestedShopTemplateId) : null
   // A trade link is a counter door, not a setup detour. An explicit tab still wins so an
   // operator can move through Today, Orders, and Stock without losing the trade context.
   const commerceTab = requestedShopTemplateId && requestedTab === null ? 'counter' : activeCommerceTab(requestedTab)
-  const productionTab = productionTabs.some((tab) => tab.id === requestedTab) ? requestedTab as ProductionTab : 'production'
-  const activeTab = view === 'commerce' ? commerceTab : productionTab
+  const activeTab = commerceTab
   const requestedTabIsCanonical = requestedTab === activeTab
-  const canonicalPath = productCanonicalPath(view)
+  const canonicalPath = '/shop/'
   const canonicalParams = new URLSearchParams({ tab: activeTab })
-  if (view === 'commerce' && requestedShopTemplateId) canonicalParams.set('template', requestedShopTemplateId)
+  if (requestedShopTemplateId) canonicalParams.set('template', requestedShopTemplateId)
   const canonicalTabPath = `${canonicalPath}?${canonicalParams}`
 
   useEffect(() => {
     if (location.pathname !== canonicalPath || !requestedTabIsCanonical) navigate(canonicalTabPath, { replace: true })
   }, [canonicalPath, canonicalTabPath, location.pathname, navigate, requestedTabIsCanonical])
 
-  function setTab(tab: CommerceTab | ProductionTab) {
+  function setTab(tab: CommerceTab) {
     const params = new URLSearchParams({ tab })
-    if (view === 'commerce' && requestedShopTemplateId) params.set('template', requestedShopTemplateId)
-    navigate(`${productCanonicalPath(view)}?${params}`, { replace: true })
+    if (requestedShopTemplateId) params.set('template', requestedShopTemplateId)
+    navigate(`/shop/?${params}`, { replace: true })
   }
 
   const entryDecision = operationsEntryDecision(runtime.status, managedIdentitySettled, managedIdentity)
   if (entryDecision === 'checking') return <div aria-live="polite" className="product-route-loading" role="status"><span>&gt;_</span><p>Checking company access…</p></div>
-  if (entryDecision === 'login') return <Navigate replace to={managedAccountPath('/login', view, location.search)} />
+  if (entryDecision === 'login') return <Navigate replace to={managedAccountPath('/login', 'commerce', location.search)} />
 
-  const tabs = view === 'commerce' ? commerceTabs : productionTabs
   const requestedShopTemplateState = shopTemplateDoorState(requestedShopTemplateId, confirmedLocalShop, Boolean(managedIdentity))
-  const productCopy = view === 'commerce'
-    ? requestedShopTemplateState === 'managed-unapplied' && requestedShopTemplate
-      ? `The ${requestedShopTemplate.name.en} public request is not applied to this company catalog until a separate managed review.`
-      : requestedShopTemplateState === 'checking' && requestedShopTemplate
-        ? `Checking workspace access. Your catalog has not been changed.`
-      : requestedShopTemplateState === 'local-active' && requestedShopTemplate && commerceTab === 'counter'
-      ? `${requestedShopTemplate.name.en}: choose an item, select a local payment method, and review the sale.`
-      : {
-        today: 'See today’s next job and key numbers.',
-        counter: 'Tap an item, choose payment, and confirm the sale.',
-        orders: 'Finish fulfilment, follow up payment, and handle exceptions.',
-        inventory: 'Count stock, replenish items, and review location availability.',
-      }[commerceTab]
-    : {
-        production: 'Plan jobs, record output, and track the materials each shift used.',
-        control: 'Contain quality, equipment, downtime, and maintenance problems.',
-      }[productionTab]
+  const templateName = requestedShopTemplate && (uiLocale === 'my' ? requestedShopTemplate.name.my : requestedShopTemplate.name.en)
+  const productCopy = requestedShopTemplateState === 'managed-unapplied' && templateName
+    ? shopRouteTemplateNotice(uiLocale, 'managed-unapplied', templateName)
+    : requestedShopTemplateState === 'checking' && requestedShopTemplate
+      ? shopRouteTemplateNotice(uiLocale, 'checking')
+      : requestedShopTemplateState === 'local-active' && templateName && commerceTab === 'counter'
+        ? shopRouteTemplateNotice(uiLocale, 'local-active', templateName)
+        : shopRouteCopy(uiLocale, commerceTab)
 
   return (
-    <div className={`workspace-screen operations-screen${view === 'commerce' ? ' commerce-screen' : ''}`} data-active-tab={activeTab}>
-      <PageHeading title={productDisplayName(view)} copy={productCopy} />
-      <nav className="workspace-toolbar view-tabs product-task-tabs" aria-label={`${productDisplayName(view)} tasks`}>{tabs.map((tab) => <button aria-current={activeTab === tab.id ? 'page' : undefined} key={tab.id} onClick={() => setTab(tab.id)} type="button">{view === 'commerce' ? bi(tab.label) : tab.label}</button>)}</nav>
-      <div className="workspace-view">{view === 'commerce' ? <CommercePage confirmedLocalShop={confirmedLocalShop} key={managedIdentity ? JSON.stringify([managedIdentity.workspaceId, managedIdentity.userId]) : confirmedLocalShop ? 'local' : 'checking'} managedIdentity={managedIdentity} requestedRequestId={requestedRequestId} requestedShopTemplate={requestedShopTemplate} requestedSource={requestedSource} shopCounterClientId={shopCounterClientId} shopCounterCustomer={shopCounterCustomer} shopCounterSearch={shopCounterSearch} tab={commerceTab} /> : <ProductionPage managedIdentity={managedIdentity} tab={productionTab} />}</div>
+    <div className="workspace-screen operations-screen commerce-screen" data-active-tab={activeTab}>
+      <PageHeading title={uiText('Shop')} copy={productCopy} />
+      <nav className="workspace-toolbar view-tabs product-task-tabs" aria-label={shopRouteTasksLabel(uiLocale)}>{commerceTabs.map((tab) => <button aria-current={activeTab === tab.id ? 'page' : undefined} key={tab.id} onClick={() => setTab(tab.id)} type="button">{bi(tab.label)}</button>)}</nav>
+      <div className="workspace-view"><CommercePage allowEcommerceShopHandoff={allowEcommerceShopHandoff} allowShopInboundRequests={allowShopInboundRequests} confirmedLocalShop={confirmedLocalShop} key={managedIdentity ? JSON.stringify([managedIdentity.workspaceId, managedIdentity.userId, allowEcommerceShopHandoff, allowShopInboundRequests]) : confirmedLocalShop ? 'local' : 'checking'} managedIdentity={managedIdentity} requestedRequestId={requestedRequestId} requestedShopTemplate={requestedShopTemplate} requestedSource={requestedSource} shopCounterClientId={shopCounterClientId} shopCounterCustomer={shopCounterCustomer} shopCounterSearch={shopCounterSearch} tab={commerceTab} /></div>
     </div>
   )
 }
@@ -1093,6 +1109,10 @@ type ShopCounterReview = {
   beforeCommit: (orderId: string) => Promise<boolean>
   onCommitted: (orderId: string) => void
 }
+
+const SHOP_COUNTER_PAYMENT_METHODS = ['Cash', 'KBZPay', 'WavePay', 'AYA Pay', 'MMQR'] as const
+const SHOP_COUNTER_QUICK_PAYMENTS = [SHOP_COUNTER_PAYMENT_METHODS[0], SHOP_COUNTER_PAYMENT_METHODS[1]] as const
+const SHOP_COUNTER_OTHER_PAYMENTS = [SHOP_COUNTER_PAYMENT_METHODS[2], SHOP_COUNTER_PAYMENT_METHODS[3], SHOP_COUNTER_PAYMENT_METHODS[4]] as const
 
 type ShopRecordStatus = {
   actionLabel: string | null
@@ -1120,12 +1140,19 @@ function readLocalShopServiceSchedule(): ShopServiceScheduleState | null {
   }
 }
 
+function shopProductArtworkKind(name: string, sku: string, category: string, fallback: number) {
+  const product = `${name} ${sku} ${category}`.toLocaleLowerCase()
+  if (/rice|grain|ဆန်/.test(product)) return 0
+  if (/noodle|pasta|ခေါက်ဆွဲ/.test(product)) return 1
+  if (/water|drink|သောက်ရေ/.test(product)) return 2
+  if (/detergent|laundry|ဆပ်ပြာ/.test(product)) return 3
+  if (/cracker|biscuit|snack|ဘီစကစ်/.test(product)) return 4
+  return fallback
+}
+
 function ShopProductArtwork({ kind }: { kind: number }) {
-  if (kind === 1) return <svg aria-hidden="true" className="shop-product-art" focusable="false" viewBox="0 0 100 100"><rect className="art-soft" height="88" rx="18" width="88" x="6" y="6" /><rect className="art-main" height="48" rx="7" width="18" x="20" y="34" /><rect className="art-main" height="58" rx="7" width="18" x="41" y="24" /><rect className="art-main" height="44" rx="7" width="18" x="62" y="38" /><path className="art-highlight" d="M24 42h10M45 33h10M66 46h10" /></svg>
-  if (kind === 2) return <svg aria-hidden="true" className="shop-product-art" focusable="false" viewBox="0 0 100 100"><rect className="art-soft" height="88" rx="18" width="88" x="6" y="6" /><path className="art-main" d="M27 23h46l7 58H20z" /><path className="art-highlight" d="M32 39h36M39 57h22" /><circle className="art-detail" cx="50" cy="69" r="6" /></svg>
-  if (kind === 3) return <svg aria-hidden="true" className="shop-product-art" focusable="false" viewBox="0 0 100 100"><rect className="art-soft" height="88" rx="18" width="88" x="6" y="6" /><rect className="art-main" height="48" rx="9" width="28" x="22" y="35" /><rect className="art-main" height="55" rx="9" width="26" x="55" y="28" /><path className="art-highlight" d="M29 28h15v8M62 20h13v9M30 54h12M62 49h12" /></svg>
-  if (kind === 4) return <svg aria-hidden="true" className="shop-product-art" focusable="false" viewBox="0 0 100 100"><rect className="art-soft" height="88" rx="18" width="88" x="6" y="6" /><rect className="art-main" height="58" rx="10" width="62" x="19" y="23" /><path className="art-detail" d="M50 67 34 53c-9-9 4-21 16-8 12-13 25-1 16 8z" /><path className="art-highlight" d="M27 32h46" /></svg>
-  return <svg aria-hidden="true" className="shop-product-art" focusable="false" viewBox="0 0 100 100"><rect className="art-soft" height="88" rx="18" width="88" x="6" y="6" /><path className="art-highlight" d="M30 41c2-18 38-18 40 0" /><path className="art-main" d="M18 42h64l-8 39H26z" /><rect className="art-detail" height="21" rx="4" width="15" x="31" y="50" /><circle className="art-detail" cx="59" cy="60" r="10" /></svg>
+  const Icon = [Wheat, Soup, Droplets, WashingMachine, Cookie][kind] ?? Package
+  return <span aria-hidden="true" className="shop-product-art shop-product-icon"><Icon aria-hidden="true" focusable="false" strokeWidth={1.8} /></span>
 }
 
 type ShopOperatingView = {
@@ -1140,13 +1167,13 @@ type ShopOperatingView = {
 }
 
 function ShopOperatingStrip({ actionLabel, choice, detail, disabled, onAction, operator, status, unit }: ShopOperatingView) {
-  return <section aria-label="Shift" className="summary-strip compact-summary shop-operating-strip">
-    <span className="shop-operating-status"><span><small>Shift</small><strong aria-live="polite">{status}</strong></span>{choice ?? (actionLabel ? <button className="core-button compact" disabled={disabled} onClick={onAction} title={detail} type="button">{actionLabel}</button> : <small>{detail}</small>)}</span>
-    <span><small>Operating unit</small><strong>{unit}</strong></span><span><small>Operator</small><strong>{operator}</strong></span>
+  return <section aria-label={uiText('Shift')} className="summary-strip compact-summary shop-operating-strip">
+    <span className="shop-operating-status"><span><small>{uiText('Shift')}</small><strong aria-live="polite">{uiText(status)}</strong></span>{choice ?? (actionLabel ? <button className="core-button compact" disabled={disabled} onClick={onAction} title={uiText(detail)} type="button">{uiText(actionLabel)}</button> : <small>{uiText(detail)}</small>)}</span>
+    <span><small>{uiText('Operating unit')}</small><strong>{unit}</strong></span><span><small>{uiText('Operator')}</small><strong>{operator}</strong></span>
   </section>
 }
 
-function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = null, initialCustomer, initialQuery, items, lowStockCount, loyaltyPoints, onReview, openOrderCount, operatorLabel, operatingContext, paymentQrScope, persistLocalDraft, productImageScope, recordStatus, recordedOrderIds }: {
+function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = null, initialCustomer, initialQuery, items, lowStockCount, loyaltyPoints, onCreateFromBarcode, onReview, openOrderCount, operatingContext, paymentQrScope, persistLocalDraft, productImageScope, receiptTools, recordStatus, recordedOrderIds }: {
   canCompleteInOneReview: boolean
   disabled: boolean
   draftStorageScope?: CounterTicketStorageScope | null
@@ -1155,13 +1182,14 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
   items: CommerceItem[]
   lowStockCount: number
   loyaltyPoints: ReadonlyMap<string, number> | null
+  onCreateFromBarcode: (barcode: string) => void
   onReview: (review: ShopCounterReview, returnFocus: HTMLElement) => void
   openOrderCount: number
-  operatorLabel: string
   operatingContext: ReactNode
   paymentQrScope: string
   persistLocalDraft: boolean
   productImageScope: string
+  receiptTools: ReactNode
   recordStatus: ShopRecordStatus
   recordedOrderIds: string[]
 }) {
@@ -1174,8 +1202,8 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
   })
   const ticketSnapshot = useSyncExternalStore(tickets.subscribe, tickets.getSnapshot)
   const { cart, customer, payment, outcome, parked, activeLabel, checkoutOrderId } = ticketSnapshot.state
-  const [ticketLabel, setTicketLabel] = useState('')
-  const [ticketsOpen, setTicketsOpen] = useState(false)
+  const [morePaymentOptions, setMorePaymentOptions] = useState(() => SHOP_COUNTER_OTHER_PAYMENTS.includes(payment as typeof SHOP_COUNTER_OTHER_PAYMENTS[number]))
+  const [parkedSalesOpen, setParkedSalesOpen] = useState(false)
   useEffect(() => { tickets.activate(); return () => tickets.deactivate() }, [tickets])
   function updateBasket(patch: Partial<CounterBasket>) {
     return tickets.dispatch({ kind: 'save', basket: { ...tickets.getSnapshot().state, ...patch } })
@@ -1185,10 +1213,16 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
   }
   const setCustomer = (value: string) => updateBasket({ customer: value })
   const setPayment = (value: string) => updateBasket({ payment: value })
+  function choosePaymentMethod(value: string) {
+    setPayment(value)
+    setMorePaymentOptions(SHOP_COUNTER_OTHER_PAYMENTS.some((method) => method === value))
+  }
   const setOutcome = (value: CounterBasket['outcome']) => updateBasket({ outcome: value })
   const [query, setQuery] = useState(initialQuery)
   const [catalogPage, setCatalogPage] = useState(0)
+  const [categoryFilter, setCategoryFilter] = useState<ShopCounterCategoryFilter>({ kind: 'all' })
   const [scanFeedback, setScanFeedback] = useState('')
+  const [unmatchedBarcode, setUnmatchedBarcode] = useState('')
   const [cartOpen, setCartOpen] = useState(false)
   const salePanelRef = useRef<HTMLElement>(null)
   const saleSearchRef = useRef<HTMLInputElement>(null)
@@ -1209,7 +1243,22 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
   }, [cartOpen])
 
   const normalizedQuery = query.trim().toLocaleLowerCase()
-  const catalog = useMemo(() => projectShopCounterCatalog(items, query, catalogPage), [items, query, catalogPage])
+  const categories = useMemo(() => {
+    const labels = new Map<string, string>()
+    for (const item of items) {
+      const category = item.category?.trim() ?? ''
+      if (category && !labels.has(category.toLocaleLowerCase())) labels.set(category.toLocaleLowerCase(), category)
+    }
+    return [...labels.entries()].sort((left, right) => left[1].localeCompare(right[1]))
+  }, [items])
+  const hasUncategorized = items.some((item) => !item.category?.trim())
+  const activeCategoryFilter = activeShopCounterCategoryFilter(categoryFilter, categories, hasUncategorized)
+  const categoryFilteredItems = useMemo(() => {
+    if (activeCategoryFilter.kind === 'all') return items
+    if (activeCategoryFilter.kind === 'uncategorized') return items.filter((item) => !item.category?.trim())
+    return items.filter((item) => item.category?.trim().toLocaleLowerCase() === activeCategoryFilter.value)
+  }, [activeCategoryFilter, items])
+  const catalog = useMemo(() => projectShopCounterCatalog(categoryFilteredItems, query, catalogPage), [categoryFilteredItems, query, catalogPage])
   const visibleItems = catalog.rows
   const lines = items.flatMap((item) => {
     const quantity = cart[item.sku] ?? 0
@@ -1252,25 +1301,63 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
 
   // Single resolution path for every scan source. The Enter key (keyboard-wedge USB/BT
   // scanners type the code and send Enter) and the camera scanner below both land here,
-  // so exact-SKU matching can never drift between the two.
-  function addScannedValue(value: string) {
-    const normalizedQuery = value.trim().toLocaleLowerCase()
-    if (!normalizedQuery) return false
-    const matches = items.filter((item) => item.sku.toLocaleLowerCase() === normalizedQuery)
-    const match = matches.length === 1 ? matches[0] : null
-    if (!match || match.onHand < 1) {
-      setScanFeedback('Enter adds an in-stock item by exact SKU. Choose a product below or check its code.')
+  // so exact SKU/barcode resolution cannot drift between the two.
+  function addScannedValue(value: string, source: 'camera' | 'keyboard') {
+    const scanCode = value.trim()
+    if (!scanCode) return false
+    const resolution = resolveCommerceItemByScanCode(items, scanCode)
+    if (resolution.kind === 'ambiguous') {
+      setScanFeedback('This SKU or barcode matches more than one product. Correct the duplicate product codes before scanning again.')
+      setUnmatchedBarcode('')
+      return false
+    }
+    if (resolution.kind === 'not_found') {
+      setScanFeedback('No product matches this SKU or barcode. Check the code or add the product.')
+      setUnmatchedBarcode(unmatchedBarcodeForCreation(value, source) ?? '')
+      return false
+    }
+    const match = resolution.item
+    setUnmatchedBarcode('')
+    if (match.onHand < 1) {
+      setScanFeedback('This product is out of stock. Review stock before selling it.')
       return false
     }
     if (!addItem(match)) return false
+    setScanFeedback(readUiLocale() === 'my' ? `${match.nameMy?.trim() || match.name} ${uiText('added to this sale.')}` : `${match.name} added to this sale.`)
     setQuery('')
+    setUnmatchedBarcode('')
     return true
   }
 
   function addSearchMatch(event: KeyboardEvent<HTMLInputElement>) {
     if (event.key !== 'Enter' || !normalizedQuery) return
     event.preventDefault()
-    if (addScannedValue(query)) setCatalogPage(0)
+    const codeMatch = resolveCommerceItemByScanCode(items, query.trim())
+    if (codeMatch.kind === 'ambiguous') {
+      addScannedValue(query, 'keyboard')
+      return
+    }
+    if (codeMatch.kind === 'matched') {
+      if (addScannedValue(query, 'keyboard')) setCatalogPage(0)
+      return
+    }
+    const exactNameMatches = items.filter((item) => [item.name, item.nameMy, item.variant]
+      .some((label) => label?.trim().toLocaleLowerCase() === normalizedQuery))
+    if (exactNameMatches.length === 1) {
+      const match = exactNameMatches[0]
+      if (!addItem(match)) return
+      setScanFeedback(readUiLocale() === 'my' ? `${match.nameMy?.trim() || match.name} ${uiText('added to this sale.')}` : `${match.name} added to this sale.`)
+      setQuery('')
+      setUnmatchedBarcode('')
+      setCatalogPage(0)
+      return
+    }
+    if (exactNameMatches.length > 1) {
+      setScanFeedback('More than one product has this name. Choose one from the list.')
+      setUnmatchedBarcode('')
+      return
+    }
+    if (addScannedValue(query, 'keyboard')) setCatalogPage(0)
   }
 
   function addCameraScan(value: string) {
@@ -1279,12 +1366,13 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
     // exact code the camera read next to the "no matching item" state instead of nothing.
     setQuery(value)
     setCatalogPage(0)
-    addScannedValue(value)
+    return addScannedValue(value, 'camera')
   }
 
   function clearSale() {
     tickets.dispatch({ kind: 'save', basket: emptyCounterBasket() })
     setCartOpen(false)
+    setMorePaymentOptions(false)
   }
 
   function reviewSale(event: MouseEvent<HTMLButtonElement>) {
@@ -1316,27 +1404,34 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
     }, event.currentTarget)
   }
 
-  return <section aria-label="Sales counter" className="shop-counter-surface">
+  return <section aria-label={uiText('Sales counter')} className="shop-counter-surface">
     <div className="shop-counter-grid">
       <section className="shop-catalog-panel">
         <header className="shop-catalog-head">
           <div>
-            <span className="core-eyebrow">Counter</span>
-            <h2>Products</h2>
+            <h2>{uiText('Products')}</h2>
             {operatingContext}
-            {persistLocalDraft && parked.length > 0 ? <button className="text-link" type="button" onClick={() => { setCartOpen(true); setTicketsOpen(true) }}>Parked sales ({parked.length})</button> : null}
-            <nav aria-label="Counter context" className="shop-counter-summary">
-              {openOrderCount > 0 ? <Link to="/shop/?tab=orders">{openOrderCount} open orders</Link> : null}
-              {lowStockCount > 0 ? <Link to="/shop/?tab=inventory">{lowStockCount} low stock</Link> : null}
-              <span aria-label="Record safety" className="shop-next-compact shop-record-status-counter" title={recordStatus.detail}>{recordStatus.badge} · {recordStatus.label}<small className="sr-only">{recordStatus.detail} · {operatorLabel || 'Cashier set at review'}</small></span>
+            <nav aria-label={uiText('Counter context')} className="shop-counter-summary">
+              {openOrderCount > 0 ? <Link to="/shop/?tab=orders">{openOrderCount} {uiText('orders to finish')}</Link> : null}
+              {lowStockCount > 0 ? <Link to="/shop/?tab=inventory">{lowStockCount} {uiText('low stock')}</Link> : null}
+              {recordStatus.badge === 'Paused' && recordStatus.target
+                  ? <Link aria-label={`${uiText('Sales paused')}. ${uiText(recordStatus.detail)}`} className="shop-record-status-counter is-danger" title={uiText(recordStatus.detail)} to={recordStatus.target}>{uiText('Sales paused · Review')}</Link>
+                  : recordStatus.badge === 'Checking'
+                    ? <span aria-label={uiText('Checking')} className="shop-record-status-counter" title={uiText(recordStatus.detail)}>{uiText('Checking')}</span>
+                    : null}
             </nav>
           </div>
-          <div className="shop-item-search-row"><label className="shop-item-search"><span className="sr-only">Find or scan an item</span><input ref={saleSearchRef} autoComplete="off" aria-keyshortcuts="/" onChange={(event) => { setQuery(event.target.value); setCatalogPage(0); setScanFeedback('') }} onKeyDown={addSearchMatch} placeholder="Search or scan SKU" type="search" value={query} /><kbd aria-hidden="true" className="shop-search-shortcut">/</kbd></label><BarcodeScanButton label="Scan a barcode with the camera" onDetected={addCameraScan} /></div>
-          {scanFeedback ? <p className="form-notice" role="status">{scanFeedback}</p> : null}
+          <div className="shop-item-search-row"><label className="shop-item-search"><span className="sr-only">{uiText('Find or scan an item')}</span><input ref={saleSearchRef} autoComplete="off" aria-keyshortcuts="/" onChange={(event) => { setQuery(event.target.value); setCatalogPage(0); setScanFeedback(''); setUnmatchedBarcode('') }} onKeyDown={addSearchMatch} placeholder={uiText('Search products or scan barcode')} type="search" value={query} /><kbd aria-hidden="true" className="shop-search-shortcut">/</kbd></label><BarcodeScanButton continuous continuousMode="sale" label={uiText('Find or scan an item')} onDetected={addCameraScan} /></div>
+          {categories.length + Number(hasUncategorized) > 1 ? <nav aria-label={uiText('Product categories')} className="shop-counter-category-filter">
+            <button aria-pressed={activeCategoryFilter.kind === 'all'} onClick={() => { setCategoryFilter({ kind: 'all' }); setCatalogPage(0) }} type="button">{uiText('All items')}</button>
+            {categories.map(([key, label]) => <button aria-pressed={activeCategoryFilter.kind === 'category' && activeCategoryFilter.value === key} key={key} onClick={() => { setCategoryFilter({ kind: 'category', value: key }); setCatalogPage(0) }} type="button">{label}</button>)}
+            {hasUncategorized ? <button aria-pressed={activeCategoryFilter.kind === 'uncategorized'} onClick={() => { setCategoryFilter({ kind: 'uncategorized' }); setCatalogPage(0) }} type="button">{uiText('Uncategorized')}</button> : null}
+          </nav> : null}
+          {scanFeedback ? <p className="form-notice" role="status">{uiText(scanFeedback)}{unmatchedBarcode ? <> <button className="text-link" onClick={() => onCreateFromBarcode(unmatchedBarcode)} type="button">{uiText('Add product with this barcode')}</button></> : null}</p> : null}
         </header>
         {catalog.pageCount > 1 ? <nav aria-label="Catalog pages" className="shop-catalog-pages">
-          <span aria-live="polite">{catalog.start + 1}–{Math.min(catalog.start + visibleItems.length, catalog.total)} of {catalog.total} products</span>
-          <div><button disabled={catalog.page === 0} onClick={() => setCatalogPage(catalog.page - 1)} type="button">Previous</button><span>Page {catalog.page + 1} of {catalog.pageCount}</span><button disabled={catalog.page >= catalog.pageCount - 1} onClick={() => setCatalogPage(catalog.page + 1)} type="button">Next</button></div>
+          <span aria-live="polite">{catalog.start + 1}–{Math.min(catalog.start + visibleItems.length, catalog.total)} {uiText('of')} {catalog.total} {uiText('Products')}</span>
+          <div><button disabled={catalog.page === 0} onClick={() => setCatalogPage(catalog.page - 1)} type="button">{uiText('Previous')}</button><span>{uiText('Page')} {catalog.page + 1} {uiText('of')} {catalog.pageCount}</span><button disabled={catalog.page >= catalog.pageCount - 1} onClick={() => setCatalogPage(catalog.page + 1)} type="button">{uiText('Next')}</button></div>
         </nav> : null}
         {/* The tile is named by REFERENCE, not by aria-label. An aria-label on a
             button replaces its whole subtree in the accessibility tree, so the
@@ -1366,34 +1461,35 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
             hidden all compute the identical name and description, and only the plain
             one leaves a traversable StaticText behind. */}
         <span aria-hidden="true" className="sr-only" id="shop-tile-action">{bi('Add to this sale')}</span>
-        {visibleItems.length ? <><div aria-hidden="true" className="shop-counter-column-head"><span>Product</span><span>Price</span><span>Stock</span><span>Sale</span></div><div className="shop-item-grid">
+        {visibleItems.length ? <div className="shop-item-grid">
           {visibleItems.map(({ item, index }, tileIndex) => {
             const quantity = cart[item.sku] ?? 0
-            const artKind = index % 5
+            const artKind = shopProductArtworkKind(item.name, item.sku, item.category ?? '', index % 5)
             // Ids are keyed by render position, not by SKU: aria-labelledby takes a
             // SPACE-separated id list and a SKU is operator-typed, so a SKU with a
             // space in it would silently split into two broken references.
             const nameId = `shop-tile-name-${tileIndex}`
-            const myId = `shop-tile-my-${tileIndex}`
             const variantId = `shop-tile-variant-${tileIndex}`
             const priceId = `shop-tile-price-${tileIndex}`
             const stockId = `shop-tile-stock-${tileIndex}`
             const quantityId = `shop-tile-quantity-${tileIndex}`
-            const labelledBy = ['shop-tile-action', nameId, item.nameMy ? myId : '', item.variant ? variantId : ''].filter(Boolean).join(' ')
+            const labelledBy = ['shop-tile-action', nameId, item.variant ? variantId : ''].filter(Boolean).join(' ')
             const describedBy = [priceId, stockId, quantity ? quantityId : ''].filter(Boolean).join(' ')
             return <button aria-describedby={describedBy} aria-labelledby={labelledBy} className="shop-product-tile" data-art={String(artKind)} data-empty={item.onHand < 1 ? 'true' : 'false'} disabled={item.onHand < 1 || quantity >= item.onHand} key={item.sku} onClick={() => addItem(item)} type="button">
               <ProductPhoto className="shop-product-art shop-product-photo" fallback={<ShopProductArtwork kind={artKind} />} scope={productImageScope} sku={item.sku} />
-              <span className="shop-product-copy"><span className="shop-product-name"><strong id={nameId}>{item.name}</strong>{item.nameMy ? <small className="shop-product-my" id={myId} lang="my">{item.nameMy}</small> : null}{item.variant ? <small id={variantId}>{item.variant}</small> : null}</span><b id={priceId}>{formatMoney(item.price)}</b><small className={item.onHand <= item.reorderAt ? 'is-low' : ''} id={stockId}>{item.onHand ? `${item.onHand} in stock` : bi('Out of stock')}</small></span>
-              {quantity ? <span className="shop-product-quantity" aria-label={`${quantity} in sale`} id={quantityId}>{quantity}</span> : <span aria-hidden="true" className="shop-product-add">Add</span>}
+              <span className="shop-product-copy"><span className="shop-product-name"><strong id={nameId} lang={readUiLocale() === 'my' && item.nameMy ? 'my' : undefined}>{readUiLocale() === 'my' && item.nameMy ? item.nameMy : item.name}</strong>{item.variant ? <small id={variantId}>{item.variant}</small> : null}</span><b id={priceId}>{formatMoney(item.price)}</b><small className={item.onHand <= item.reorderAt ? 'is-low' : ''} id={stockId}>{item.onHand ? `${item.onHand} ${uiText('in stock')}` : bi('Out of stock')}</small></span>
+              {quantity
+                ? <span className="shop-product-quantity" aria-label={`${quantity} ${uiText('in sale')}`} id={quantityId}>{quantity}</span>
+                : item.onHand > 0 ? <span aria-hidden="true" className="shop-product-add-hint">+ {uiText('Add')}</span> : null}
             </button>
           })}
-        </div></> : <Empty>{items.length
+        </div> : <Empty>{items.length
           ? bi('No matching item. Search by name or SKU.')
-          : <>Your catalog is empty. <Link className="text-link" to="/shop/?tab=inventory#shop-catalog-create">Add a product</Link> or <Link className="text-link" to="/shop/?tab=inventory#shop-catalog-import">import a CSV</Link>.</>}</Empty>}
+          : <>{uiText('Your catalog is empty.')} <Link className="text-link" to="/shop/?tab=inventory#shop-catalog-create">{uiText('Add a product')}</Link> {uiText('or')} <Link className="text-link" to="/shop/?tab=inventory#shop-catalog-import">{uiText('import a CSV')}</Link>.</>}</Empty>}
       </section>
 
-      <button aria-label="Close current sale" className={`shop-cart-backdrop${cartOpen ? ' is-open' : ''}`} onClick={() => setCartOpen(false)} type="button" />
-      <aside aria-label="Current sale" className={`shop-current-sale${cartOpen ? ' is-open' : ''}`} id="shop-current-sale" ref={salePanelRef} tabIndex={-1}>
+      <button aria-label={uiText('Close current sale')} className={`shop-cart-backdrop${cartOpen ? ' is-open' : ''}`} onClick={() => setCartOpen(false)} type="button" />
+      <aside aria-label={uiText('Current sale')} className={`shop-current-sale${cartOpen ? ' is-open' : ''}`} id="shop-current-sale" ref={salePanelRef} tabIndex={-1}>
         {ticketSnapshot.error ? <p className="authority-note" role="alert">{ticketSnapshot.error}</p> : null}
         {checkoutOrderId ? <div className="authority-note" role="alert"><p>This basket is locked to checkout {checkoutOrderId}. Do not record it again.</p>
           {recordedOrderIds.includes(checkoutOrderId)
@@ -1402,44 +1498,48 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
           <Link to="/shop/?tab=orders">Review recorded orders</Link></div> : null}
         {catalogChanged ? <p className="authority-note" role="alert">Saved quantities exceed current stock, or an item was removed. Review quantities or clear this basket; it has not been silently reduced.</p> : null}
         {!persistLocalDraft && unitCount > 0 ? <p className="authority-note">Unsubmitted basket is kept in this tab only. Review it before leaving or switching company.</p> : null}
-        <header><div><span className="core-eyebrow">{activeLabel || bi('Current sale')}</span><h2>Current sale</h2><p>{unitCount ? `${unitCount} ${unitCount === 1 ? 'item' : 'items'} selected` : 'Choose a product to start'}</p></div><div className="shop-cart-actions">{Object.keys(cart).length ? <button className="text-link" onClick={clearSale} type="button">Clear</button> : null}<button aria-label="Close current sale" className="shop-cart-close" onClick={() => setCartOpen(false)} type="button">×</button></div></header>
-        {persistLocalDraft && (parked.length > 0 || unitCount > 0 || recoveryPaused) ? <details className="shop-sale-details shop-parked-tickets" open={ticketsOpen} onToggle={event => setTicketsOpen(event.currentTarget.open)}><summary>{parked.length ? `Parked sales (${parked.length})` : 'Save sale for later'}</summary>
-          <p>Name and park this sale to serve someone else. Resume it on this device later.</p>
-          <label>Sale name<input maxLength={40} placeholder={activeLabel || 'Table 1'} value={ticketLabel} onChange={event => setTicketLabel(event.target.value)} /></label>
-          <button type="button" disabled={!Object.keys(cart).length || recoveryPaused || !(ticketLabel.trim() || activeLabel)} onClick={() => {
-            if (tickets.dispatch({ kind: 'park', id: crypto.randomUUID(), label: ticketLabel.trim() || activeLabel })) { setTicketLabel(''); setCartOpen(false) }
-          }}>Park sale</button>
+        <header><div><h2>{uiText('Current sale')}</h2><p>{unitCount ? `${unitCount} ${uiText(unitCount === 1 ? 'item' : 'items')} ${uiText('selected')}` : uiText('Choose a product to start')}</p></div><div className="shop-cart-actions">
+          {receiptTools}
+          {persistLocalDraft && unitCount > 0 && !recoveryPaused && !checkoutOrderId ? <button className="text-link" onClick={() => {
+            const customerLabel = customer.trim() && customer.trim() !== 'Guest' ? customer.trim() : 'Sale'
+            const label = activeLabel || `${customerLabel} · ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+            if (tickets.dispatch({ kind: 'park', id: crypto.randomUUID(), label })) setCartOpen(false)
+          }} type="button">{uiText('Park sale')}</button> : null}
+          {persistLocalDraft && parked.length > 0 ? <button aria-controls="shop-parked-tickets" aria-expanded={parkedSalesOpen} className="text-link" onClick={() => setParkedSalesOpen(open => !open)} type="button">{uiText('Parked')} · {parked.length}</button> : null}
+          {Object.keys(cart).length ? <button className="text-link" onClick={clearSale} type="button">{uiText('Clear')}</button> : null}
+          <button aria-label={uiText('Close current sale')} className="shop-cart-close" onClick={() => setCartOpen(false)} type="button">×</button>
+        </div></header>
+        {persistLocalDraft && parked.length > 0 && parkedSalesOpen ? <div aria-label="Parked sales on this device" className="shop-parked-tickets" id="shop-parked-tickets">
           {parked.map(ticket => <button type="button" key={ticket.id} disabled={Object.keys(cart).length > 0 || recoveryPaused} onClick={() => {
-            if (tickets.dispatch({ kind: 'resume', id: ticket.id })) { setTicketLabel(''); setTicketsOpen(false); setCartOpen(true) }
-          }}>Resume {ticket.label} · {Object.values(ticket.cart).reduce((sum, qty) => sum + qty, 0)} {Object.values(ticket.cart).reduce((sum, qty) => sum + qty, 0) === 1 ? 'item' : 'items'}</button>)}
-          {ticketSnapshot.pending ? <p role="status">Saving on this device…</p> : null}
-        </details> : null}
-        {lines.length ? <div aria-hidden="true" className="shop-cart-column-head"><span>Item</span><span>Price</span><span>Quantity</span><span>Total</span></div> : null}
-        <div aria-label="Current sale items" className="shop-cart-lines">
-          {lines.length ? lines.map(({ item, quantity }) => <article key={item.sku}><div className="shop-cart-item"><strong>{item.name}</strong>{item.nameMy ? <small className="shop-product-my" lang="my">{item.nameMy}</small> : null}</div><span className="shop-cart-unit-price">{formatMoney(item.price)}</span><div className="shop-quantity-stepper"><button aria-label={`Remove one ${item.name}`} onClick={() => changeQuantity(item, quantity - 1)} type="button">−</button><strong>{quantity}</strong><button aria-label={`Add one ${item.name}`} disabled={quantity >= item.onHand} onClick={() => changeQuantity(item, quantity + 1)} type="button">+</button></div><b className="shop-cart-line-total">{formatMoney(item.price * quantity)}</b></article>) : <div className="shop-empty-cart"><span aria-hidden="true">01</span><strong>{bi('Ready for the next sale')}</strong><small>{bi('Search, scan or choose a product.')}</small></div>}
+            if (tickets.dispatch({ kind: 'resume', id: ticket.id })) { setParkedSalesOpen(false); setCartOpen(true) }
+          }}><span>{ticket.label}</span><small>{Object.values(ticket.cart).reduce((sum, qty) => sum + qty, 0)} {uiText(Object.values(ticket.cart).reduce((sum, qty) => sum + qty, 0) === 1 ? 'item' : 'items')}</small><b>{uiText('Resume')}</b></button>)}
+        </div> : null}
+        {lines.length ? <div aria-hidden="true" className="shop-cart-column-head"><span>{uiText('Item')}</span><span>{uiText('Price')}</span><span>{uiText('Quantity')}</span><span>{uiText('Total')}</span></div> : null}
+        <div aria-label={uiText('Current sale items')} className="shop-cart-lines">
+          {lines.length ? lines.map(({ item, quantity }) => <article key={item.sku}><div className="shop-cart-item"><strong lang={readUiLocale() === 'my' && item.nameMy ? 'my' : undefined}>{readUiLocale() === 'my' && item.nameMy ? item.nameMy : item.name}</strong></div><span className="shop-cart-unit-price">{formatMoney(item.price)}</span><div className="shop-quantity-stepper"><button aria-label={`${uiText('Remove')} ${readUiLocale() === 'my' && item.nameMy ? item.nameMy : item.name}`} onClick={() => changeQuantity(item, quantity - 1)} type="button">−</button><strong>{quantity}</strong><button aria-label={`${uiText('Add')} ${readUiLocale() === 'my' && item.nameMy ? item.nameMy : item.name}`} disabled={quantity >= item.onHand} onClick={() => changeQuantity(item, quantity + 1)} type="button">+</button></div><b className="shop-cart-line-total">{formatMoney(item.price * quantity)}</b></article>) : <div className="shop-empty-cart"><span aria-hidden="true">01</span><strong>{bi('Ready for the next sale')}</strong><small>{bi('Search, scan or choose a product.')}</small></div>}
         </div>
         {unitCount ? <><div className="shop-sale-details">
-          <label>{bi('Customer')} <small>optional</small><input maxLength={80} onChange={(event) => setCustomer(event.target.value)} placeholder="Guest" value={customer} /></label>
+          <label>{bi('Customer')} <small>{uiText('optional')}</small><input maxLength={80} onChange={(event) => setCustomer(event.target.value)} placeholder={uiText('Guest')} value={customer} /></label>
           {/* S3 PR1 loyalty balance chip. Renders ONLY for an exact match against a known
               customer (a projected balance or a client-master name) while points are on —
               loyaltyPoints is null when the device-local setting is off, so a shop that
               never opted in sees nothing here. Balance is the pure projection in
               shop-loyalty.ts; showing it changes no record. */}
           {loyaltyPoints?.has(customer.trim()) && customer.trim() !== 'Guest' ? <p className="shop-loyalty-chip">{customer.trim()} · {shopLoyaltyDisplayPoints(loyaltyPoints.get(customer.trim()) ?? 0).toLocaleString()} pts</p> : null}
-          <fieldset><legend>{bi('Payment')}</legend><div className="shop-payment-options">{['Cash', 'KBZPay', 'WavePay', 'AYA Pay', 'MMQR'].map((method) => <button aria-pressed={payment === method} key={method} onClick={() => setPayment(method)} type="button">{method}</button>)}</div></fieldset>
+          <fieldset><legend>{bi('Payment')}</legend><div className="shop-payment-options">{SHOP_COUNTER_QUICK_PAYMENTS.map((method) => <button aria-pressed={payment === method} key={method} onClick={() => choosePaymentMethod(method)} type="button">{method}</button>)}<button aria-controls="shop-payment-more" aria-expanded={morePaymentOptions} className={SHOP_COUNTER_OTHER_PAYMENTS.some((method) => method === payment) ? 'shop-payment-more has-selected-payment' : 'shop-payment-more'} onClick={() => setMorePaymentOptions((current) => !current)} type="button">{SHOP_COUNTER_OTHER_PAYMENTS.find((method) => method === payment) ?? bi('More')}</button></div>{morePaymentOptions ? <div className="shop-payment-more-options" id="shop-payment-more">{SHOP_COUNTER_OTHER_PAYMENTS.map((method) => <button aria-pressed={payment === method} key={method} onClick={() => choosePaymentMethod(method)} type="button">{method}</button>)}</div> : null}</fieldset>
           {/* S2 merchant payment QR: display-only (see payment-qr-store.ts). At a Myanmar
               counter the customer pays a non-cash sale by scanning the owner's static
               merchant QR and typing the amount, so the affordance lives exactly here —
               non-cash method chosen, amount due on screen. No payment API, no status
               write; the cashier still confirms money received in the reviewed sale. */}
           {payment !== 'Cash' ? <PaymentQrButton amountDue={formatMoney(total)} method={payment} scope={paymentQrScope} settingsHint /> : null}
-          {canCompleteInOneReview ? <label className="shop-open-order-choice"><input checked={outcome === 'open_order'} onChange={(event) => setOutcome(event.target.checked ? 'open_order' : 'paid_handoff')} type="checkbox" /><span><strong>Keep as open order</strong><small>Use for pay-later or later handoff. Otherwise this sale completes now.</small></span></label> : null}
+          {canCompleteInOneReview ? <label className="shop-open-order-choice"><input checked={outcome === 'open_order'} onChange={(event) => setOutcome(event.target.checked ? 'open_order' : 'paid_handoff')} type="checkbox" /><span><strong>{uiText('Leave unpaid')}</strong><small>{uiText('Track it in Orders and finish later.')}</small></span></label> : null}
         </div>
-        {cartLowStockLines.length ? <div className="shop-cart-stock-risk" role="status"><strong>Stock needs attention after this sale</strong><span>{cartLowStockLines.length} {cartLowStockLines.length === 1 ? 'item reaches its' : 'items reach their'} reorder level. <Link to="/shop/?tab=inventory">Review stock</Link></span></div> : null}
-        <footer><div><span>{bi('Total')}</span><strong>{formatMoney(total)}</strong></div><button className="shop-review-sale" disabled={disabled || recoveryPaused || catalogChanged} onClick={reviewSale} type="button">{disabled ? bi('Sales paused') : effectiveOutcome === 'paid_handoff' ? <span className="cashier-action-label"><span>Review &amp; complete sale</span>{CASHIER_COMPLETE_MY ? <small lang="my">{CASHIER_COMPLETE_MY}</small> : null}</span> : bi('Review order')}<span aria-hidden="true">→</span></button></footer></> : null}
+        {cartLowStockLines.length ? <p className="shop-cart-stock-risk" role="status">{readUiLocale() === 'my' ? `ဤအရောင်းပြီးနောက် ပစ္စည်း ${cartLowStockLines.length} မျိုး ပြန်မှာရန် သတ်မှတ်ချက်သို့ ရောက်ပါမည်။` : `After this sale, ${cartLowStockLines.length} ${cartLowStockLines.length === 1 ? 'item reaches its' : 'items reach their'} reorder level.`} <Link to="/shop/?tab=inventory">{uiText('Review stock')}</Link></p> : null}
+        <footer><div><span>{bi('Total')}</span><strong>{formatMoney(total)}</strong></div><button className="shop-review-sale" disabled={disabled || recoveryPaused || catalogChanged} onClick={reviewSale} type="button">{disabled ? bi('Sales paused') : effectiveOutcome === 'paid_handoff' ? <span className="cashier-action-label">{uiText('Review & complete sale')}</span> : bi('Review order')}<span aria-hidden="true">→</span></button></footer></> : null}
       </aside>
     </div>
-    {unitCount ? <button aria-controls="shop-current-sale" aria-expanded={cartOpen} className="shop-mobile-cart" onClick={() => setCartOpen(true)} type="button"><span><small>{bi('Current sale')}</small><strong>{unitCount} {unitCount === 1 ? 'item' : 'items'}</strong></span><b>{formatMoney(total)}</b></button> : null}
+    {unitCount ? <button aria-controls="shop-current-sale" aria-expanded={cartOpen} className="shop-mobile-cart" onClick={() => setCartOpen(true)} type="button"><span><small>{bi('Current sale')}</small><strong>{unitCount} {uiText(unitCount === 1 ? 'item' : 'items')}</strong></span><b>{formatMoney(total)}</b></button> : null}
   </section>
 }
 
@@ -1536,7 +1636,9 @@ function buildCommerceOrderRecoveryInput(
   }
 }
 
-function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId, requestedShopTemplate, requestedSource, shopCounterClientId, shopCounterCustomer, shopCounterSearch, tab }: {
+function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, confirmedLocalShop, managedIdentity, requestedRequestId, requestedShopTemplate, requestedSource, shopCounterClientId, shopCounterCustomer, shopCounterSearch, tab }: {
+  allowEcommerceShopHandoff: boolean
+  allowShopInboundRequests: boolean
   confirmedLocalShop: boolean
   managedIdentity: ManagedIdentity | null
   requestedRequestId: string | null
@@ -1550,8 +1652,8 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   const navigate = useNavigate()
   const commerceLocation = useLocation()
   const requestedEcommerceIntent = useMemo(
-    () => ecommerceShopIntentReference(new URLSearchParams(commerceLocation.search)),
-    [commerceLocation.search],
+    () => allowEcommerceShopHandoff ? ecommerceShopIntentReference(new URLSearchParams(commerceLocation.search)) : null,
+    [allowEcommerceShopHandoff, commerceLocation.search],
   )
   const purchaseOrderClock = useMinuteClock()
   const counterDraftContext = shopCounterDraftContext(confirmedLocalShop, managedIdentity)
@@ -1572,7 +1674,165 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     status: 'checking' | 'ready' | 'error'
     intake: WebsiteEcommerceHandoffContext | null
   }>({ status: 'checking', intake: null })
-  const [commerce, mutateCommerce, commerceStorageError, workspaceMode, managedVersion, managedWorkspaceId, commerceCanWrite, commerceSync, commerceStuckRecovery, discardStuckCommerceChange, retryManagedCommerceLoad] = useCommerceWorkspace(managedIdentity)
+  const [commerce, mutateCommerce, commerceStorageError, workspaceMode, managedVersion, managedWorkspaceId, commerceCanWrite, commerceSync, commerceStuckRecovery, discardStuckCommerceChange, retryManagedCommerceLoad, refreshManagedCommerceSnapshot] = useCommerceWorkspace(managedIdentity)
+  const [managedPublicInbox, setManagedPublicInbox] = useState<{
+    identityKey: string
+    requests: ShopPublicInboxRequest[]
+    cursor: string | null
+    scanAnchor: string | null
+    checking: boolean
+    error: string
+  }>({ identityKey: '', requests: [], cursor: null, scanAnchor: null, checking: false, error: '' })
+  const managedPublicInboxRef = useRef(managedPublicInbox)
+  const managedPublicInboxAttempts = useRef(new Map<string, Set<string>>())
+  const managedPublicInboxRequestCursors = useRef(new Map<string, string | undefined>())
+  const managedPublicInboxSeenDuringSweep = useRef(new Set<string>())
+  const managedPublicInboxInFlight = useRef(false)
+  const managedPublicInboxIdentityRef = useRef('')
+  const managedPublicInboxIdentityKey = managedIdentity
+    ? `${managedIdentity.workspaceId}\u0000${managedIdentity.userId}\u0000${managedIdentity.email}`
+    : ''
+  managedPublicInboxIdentityRef.current = managedPublicInboxIdentityKey
+  useEffect(() => {
+    managedPublicInboxAttempts.current.clear()
+    managedPublicInboxRequestCursors.current.clear()
+    managedPublicInboxSeenDuringSweep.current.clear()
+  }, [managedPublicInboxIdentityKey])
+  const syncManagedPublicInbox = useCallback(async (retryRequestId?: string) => {
+    if (!managedIdentity || !allowShopInboundRequests || !commerceCanWrite || workspaceMode !== coreUi.m) return
+    const identityKey = `${managedIdentity.workspaceId}\u0000${managedIdentity.userId}\u0000${managedIdentity.email}`
+    if (managedPublicInboxIdentityRef.current !== identityKey || managedPublicInboxInFlight.current) return
+
+    let attempted = managedPublicInboxAttempts.current.get(identityKey)
+    if (!attempted) {
+      attempted = new Set<string>()
+      managedPublicInboxAttempts.current.set(identityKey, attempted)
+    }
+    const requestCursorKey = retryRequestId ? `${identityKey}\u0000${retryRequestId}` : ''
+    const retryAfter = retryRequestId && managedPublicInboxRequestCursors.current.has(requestCursorKey)
+      ? managedPublicInboxRequestCursors.current.get(requestCursorKey)
+      : undefined
+    if (retryRequestId) attempted.delete(retryRequestId)
+    managedPublicInboxInFlight.current = true
+
+    const previous = managedPublicInboxRef.current
+    const previousRequests = previous.identityKey === identityKey ? previous.requests : []
+    const waitingForShopRefresh = previousRequests.filter((request) => request.status === 'in_shop')
+    const commit = (next: typeof managedPublicInbox) => {
+      managedPublicInboxRef.current = next
+      setManagedPublicInbox(next)
+    }
+    const sameIdentity = previous.identityKey === identityKey
+    commit({ identityKey, requests: previousRequests, cursor: sameIdentity ? previous.cursor : null,
+      scanAnchor: sameIdentity ? previous.scanAnchor : null, checking: true, error: '' })
+
+    try {
+      const api = { loadInbox: loadManagedCommercePublicInbox, claimRequest: claimManagedCommercePublicRequest }
+      const isCurrent = () => managedPublicInboxIdentityRef.current === identityKey
+      const firstPage = await syncShopPublicInbox(
+        managedIdentity,
+        attempted,
+        api,
+        isCurrent,
+        retryRequestId ? retryAfter : undefined,
+      )
+      const pageResults = [firstPage]
+      const previousCursor = sameIdentity ? previous.cursor : null
+      const previousAnchor = sameIdentity ? previous.scanAnchor : null
+      const scanAnchor = retryRequestId ? previousAnchor : firstPage.nextCursor
+      const restartSweep = !retryRequestId && (
+        !sameIdentity || previousAnchor !== firstPage.nextCursor || previousCursor === null
+      )
+      const backlogCursor = shopPublicInboxBacklogCursor(
+        previousCursor,
+        previousAnchor,
+        firstPage.nextCursor,
+        Boolean(retryRequestId),
+      )
+      let nextCursor = retryRequestId ? previousCursor : backlogCursor
+      let backlogLoadError = ''
+      if (backlogCursor && isCurrent()) {
+        try {
+          const backlogPage = await syncShopPublicInbox(managedIdentity, attempted, api, isCurrent, backlogCursor)
+          pageResults.push(backlogPage)
+          nextCursor = backlogPage.nextCursor
+        } catch {
+          backlogLoadError = 'Retry shortly to continue checking older orders.'
+          nextCursor = backlogCursor
+        }
+      }
+      if (!isCurrent()) return
+      const seenDuringSweep = managedPublicInboxSeenDuringSweep.current
+      if (restartSweep) seenDuringSweep.clear()
+      for (const [pageIndex, page] of pageResults.entries()) {
+        const pageCursor = pageIndex === 0
+          ? retryRequestId ? retryAfter : undefined
+          : backlogCursor ?? undefined
+        for (const request of [...page.requests, ...page.claimedRequests, ...page.alreadyInShopRequests]) {
+          if (!retryRequestId) seenDuringSweep.add(request.requestId)
+          managedPublicInboxRequestCursors.current.set(`${identityKey}\u0000${request.requestId}`, pageCursor)
+        }
+      }
+      const claimedRequests = pageResults.flatMap((page) => page.claimedRequests)
+      const alreadyInShopRequests = pageResults.flatMap((page) => page.alreadyInShopRequests)
+      const failedRequestIds = pageResults.flatMap((page) => page.failedRequestIds)
+      const needsShopRefresh = claimedRequests.length > 0 || alreadyInShopRequests.length > 0 || waitingForShopRefresh.length > 0
+      const refreshed = needsShopRefresh ? await refreshManagedCommerceSnapshot() : true
+      const nextRequests = new Map(previousRequests.map((request) => [request.requestId, request]))
+      for (const request of alreadyInShopRequests) nextRequests.set(request.requestId, request)
+      for (const request of pageResults.flatMap((page) => page.requests)) nextRequests.set(request.requestId, request)
+      for (const request of claimedRequests) nextRequests.set(request.requestId, { ...request, status: 'in_shop' })
+      const resolvedRequestIds = new Set([
+        ...alreadyInShopRequests.map((request) => request.requestId),
+        ...claimedRequests.map((request) => request.requestId),
+      ])
+      if (refreshed) for (const requestId of resolvedRequestIds) {
+        nextRequests.delete(requestId)
+        attempted.delete(requestId)
+        managedPublicInboxRequestCursors.current.delete(`${identityKey}\u0000${requestId}`)
+      }
+      const completeSweep = !retryRequestId && nextCursor === null && !backlogLoadError && refreshed
+      for (const requestId of shopPublicInboxPrunedRequestIds(nextRequests, seenDuringSweep, completeSweep)) {
+        nextRequests.delete(requestId)
+        attempted.delete(requestId)
+        managedPublicInboxRequestCursors.current.delete(`${identityKey}\u0000${requestId}`)
+      }
+      if (completeSweep) seenDuringSweep.clear()
+      const requests = [...nextRequests.values()]
+      const error = failedRequestIds.length
+        ? 'Some online orders could not be added to Shop yet. Retry them below.'
+        : !refreshed
+          ? 'Online orders are waiting for Shop to refresh. Retry below.'
+          : backlogLoadError ? `Older online orders could not be checked. ${backlogLoadError}` : ''
+      if (isCurrent()) commit({ identityKey, requests, cursor: nextCursor, scanAnchor, checking: false, error })
+    } catch (error) {
+      if (managedPublicInboxIdentityRef.current === identityKey) commit({
+        identityKey,
+        requests: previousRequests,
+        cursor: sameIdentity ? previous.cursor : null,
+        scanAnchor: sameIdentity ? previous.scanAnchor : null,
+        checking: false,
+        error: error instanceof Error ? error.message : 'Online orders could not be checked. Retry below.',
+      })
+    } finally {
+      managedPublicInboxInFlight.current = false
+    }
+  }, [allowShopInboundRequests, commerceCanWrite, managedIdentity, refreshManagedCommerceSnapshot, workspaceMode])
+  useEffect(() => {
+    if (!managedIdentity || !allowShopInboundRequests || !commerceCanWrite || workspaceMode !== coreUi.m) return undefined
+    const poll = () => {
+      if (document.visibilityState === 'visible') void syncManagedPublicInbox()
+    }
+    poll()
+    const timer = window.setInterval(poll, 20_000)
+    window.addEventListener('focus', poll)
+    document.addEventListener('visibilitychange', poll)
+    return () => {
+      window.clearInterval(timer)
+      window.removeEventListener('focus', poll)
+      document.removeEventListener('visibilitychange', poll)
+    }
+  }, [allowShopInboundRequests, commerceCanWrite, managedIdentity, syncManagedPublicInbox, workspaceMode])
   async function saveCustomerReceiptProfile(input: CommerceMerchantProfileInput) {
     const revision = (commerce.merchantProfile?.revision ?? 0) + 1
     const proof: CommerceActionProof = {
@@ -1703,6 +1963,10 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   const [notice, setNotice] = useState('')
   const [recoveredEcommerceIntent, setRecoveredEcommerceIntent] = useState<{ scope: string; id: string; intents: EcommerceShopNavigationIntents } | null>(null)
   useEffect(() => {
+    if (allowEcommerceShopHandoff || new URLSearchParams(commerceLocation.search).get('source') !== 'ecommerce-handoff') return
+    navigate('/shop/?tab=orders', { replace: true, state: { blockedEcommerceHandoff: true } })
+  }, [allowEcommerceShopHandoff, commerceLocation.search, navigate])
+  useEffect(() => {
     if (!requestedEcommerceIntent || !confirmedLocalShop && (!managedIdentity || workspaceMode !== 'managed-ready')) return
     let current = true
     void import('../products/ecommerce/ecommerce-buying-lifecycle')
@@ -1729,14 +1993,16 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     && recoveredEcommerceIntent.id === requestedEcommerceIntent.id
     ? recoveredEcommerceIntent.intents
     : {} as Partial<EcommerceShopNavigationIntents>
-  const [catalogDraft, setCatalogDraft] = useState({ sku: '', name: '', onHand: '', reorderAt: '0', price: '', reason: '', evidenceReference: '' })
+  const [catalogDraft, setCatalogDraft] = useState({ sku: '', barcode: '', name: '', nameMy: '', category: '', onHand: '', reorderAt: '0', price: '', reason: '', evidenceReference: '' })
   const [managedTemplateDraft, setManagedTemplateDraft] = useState({ reviewed: false, reason: '', evidenceReference: '' })
-  const [itemDraft, setItemDraft] = useState({ sku: '', name: '', onHand: '', reorderAt: '0', price: '' })
+  const [itemDraft, setItemDraft] = useState({ sku: '', barcode: '', name: '', nameMy: '', category: '', onHand: '', reorderAt: '0', price: '' })
+  const shopCategoryOptions = useMemo(() => [...new Set(commerce.items.map((item) => item.category?.trim()).filter((category): category is string => Boolean(category)))].sort((left, right) => left.localeCompare(right)), [commerce.items])
   const [catalogCreateOpen, setCatalogCreateOpen] = useState(false)
   const [catalogEditDraft, setCatalogEditDraft] = useState<CatalogItemEditDraft | null>(null)
   const [purchaseBudgetDraft, setPurchaseBudgetDraft] = useState<PurchaseBudgetDraft | null>(null)
   const [supplierSourcingDraft, setSupplierSourcingDraft] = useState<SupplierSourcingDraft | null>(null)
   const [purchaseOrderDraft, setPurchaseOrderDraft] = useState<PurchaseOrderDraft | null>(null)
+  const [purchaseOrderScanCode, setPurchaseOrderScanCode] = useState('')
   const [supplierInvoiceDraft, setSupplierInvoiceDraft] = useState<SupplierInvoiceDraft | null>(null)
   const [supplierReturnDraft, setSupplierReturnDraft] = useState<SupplierReturnDraft | null>(null)
   const [supplierCreditDraft, setSupplierCreditDraft] = useState<SupplierCreditDraft | null>(null)
@@ -2082,16 +2348,20 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     }
   }, [commerce, purchaseOrderClock])
   const importedWebsiteOrderIds = commerce.orders.flatMap((order) => order.sourceRecordId ? [order.sourceRecordId] : [])
-  const websiteIntakes = commerceWebsiteIntakes(commerce)
+  // Incoming requests are Shop work even when Sites and Commerce editors are internal.
+  const websiteIntakes = allowShopInboundRequests ? commerceWebsiteIntakes(commerce) : []
   const localWebsiteIntake = localWebsiteIntakeRead.intake
   const legacyWebsiteWorkWaiting = managedIdentity
     ? websiteIntakes.some((intake) => intake.status === coreUi.p)
     : confirmedLocalShop && localWebsiteIntakeRead.status === 'ready'
       && Boolean(localWebsiteIntake && (!localWebsiteIntake.order || !importedWebsiteOrderIds.includes(localWebsiteIntake.order.id)))
-  const storefrontRequests = commerceStorefrontRequests(commerce)
+  const storefrontRequests = allowShopInboundRequests ? commerceStorefrontRequests(commerce) : []
   const pendingStorefrontRequests = storefrontRequests.filter((request) => (
     !commerce.orders.some((order) => order.sourceRecordId === request.id)
   ))
+  const managedPublicInboxRequests = managedPublicInbox.identityKey === managedPublicInboxIdentityKey
+    ? managedPublicInbox.requests
+    : []
   const pendingStorefrontStockConflicts = new Map(pendingStorefrontRequests.flatMap((request) => {
     const conflict = commerceStockConflict(commerce.items, commerceStorefrontRequestLines(request))
     return conflict ? [[request.id, conflict] as const] : []
@@ -2336,14 +2606,32 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   const catalogEditReorderResult = Number.isSafeInteger(catalogEditReorder) && catalogEditReorder >= 0
     ? catalogEditReorder
     : null
+  const catalogEditBarcodeText = catalogEditDraft?.barcode.trim() ?? ''
+  const catalogEditBarcode = catalogEditBarcodeText || null
+  const catalogEditBarcodeValid = catalogEditBarcodeText.length <= 80 && !hasDisallowedControlCharacters(catalogEditBarcodeText)
+  const catalogEditNameMyText = catalogEditDraft?.nameMy.trim() ?? ''
+  const catalogEditNameMy = catalogEditNameMyText || null
+  const catalogEditNameMyValid = catalogEditNameMyText.length <= 180 && !hasDisallowedControlCharacters(catalogEditNameMyText)
+  const catalogEditCategoryText = catalogEditDraft?.category.trim() ?? ''
+  const catalogEditCategory = catalogEditCategoryText || null
+  const catalogEditCategoryValid = catalogEditCategoryText.length <= 80 && !hasDisallowedControlCharacters(catalogEditCategoryText)
   const catalogEditStale = Boolean(catalogEditDraft && (!catalogEditItem
     || catalogEditItem.price !== catalogEditDraft.expectedPrice
-    || catalogEditItem.reorderAt !== catalogEditDraft.expectedReorderAt))
+    || catalogEditItem.reorderAt !== catalogEditDraft.expectedReorderAt
+    || (catalogEditItem.barcode ?? null) !== catalogEditDraft.expectedBarcode
+    || (catalogEditItem.nameMy ?? null) !== catalogEditDraft.expectedNameMy
+    || (catalogEditItem.category ?? null) !== catalogEditDraft.expectedCategory))
   const catalogEditChanged = Boolean(catalogEditDraft
     && catalogEditPriceResult !== null
     && catalogEditReorderResult !== null
+    && catalogEditBarcodeValid
+    && catalogEditNameMyValid
+    && catalogEditCategoryValid
     && (catalogEditPriceResult !== catalogEditDraft.expectedPrice
-      || catalogEditReorderResult !== catalogEditDraft.expectedReorderAt))
+      || catalogEditReorderResult !== catalogEditDraft.expectedReorderAt
+      || catalogEditBarcode !== catalogEditDraft.expectedBarcode
+      || catalogEditNameMy !== catalogEditDraft.expectedNameMy
+      || catalogEditCategory !== catalogEditDraft.expectedCategory))
   const stockCountBalance = stockCountDraft && managedInventoryProjection
     ? managedInventoryProjection.balances.find((balance) => (
         balance.stockUnitId === stockCountDraft.stockUnitId
@@ -2770,7 +3058,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
         if (!ecommerceCancellationMatchesCurrentShop(commerce, intent)) {
           navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
           setCancellationDraft(null)
-          setNotice('The cancellation request no longer matches the current Shop order, payment, refund, or reserved stock. Nothing was prepared.')
+          setNotice('Cancellation details changed. Reopen the request; nothing was prepared.')
           return
         }
         setReturnDraft(null)
@@ -2981,7 +3269,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
           || expectation.currentBalanceMmk !== intent.originalBalanceMmk) {
           navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
           setCorrectionDraft(null)
-          setNotice('The Ecommerce balance request no longer matches the current Shop calculation, payment, refund, or correction history. Nothing was prepared.')
+          setNotice('Balance details changed. Reopen the request; nothing was prepared.')
           return
         }
         setReturnDraft(null)
@@ -3053,7 +3341,12 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
       setCatalogError(prepared.error)
       return
     }
-    const { product } = prepared
+    const categoryText = catalogDraft.category.trim()
+    if (categoryText.length > 80 || hasDisallowedControlCharacters(categoryText)) {
+      setCatalogError('Category labels must be 80 characters or fewer.')
+      return
+    }
+    const product: CommerceItem = { ...prepared.product, ...(categoryText ? { category: categoryText } : {}) }
     const proof: CommerceActionProof = {
       actionId: uid('ACT'),
       capturedAt: new Date().toISOString(),
@@ -3118,16 +3411,18 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   const managedTemplateRequestBlocked = managedTemplateDoorRequiresReview(Boolean(managedIdentity), effectiveMode, managedTemplateId)
   const managedCommerceBoundary: ReactNode = managedTemplateRequestBlocked && managedIdentity && managedTemplate ? <section className="core-panel managed-commerce-boundary" data-template-request="blocked">
     <div className="panel-head"><div><span className="core-eyebrow">Managed catalog review required</span><h2>{managedTemplate.name.en} was requested, not applied</h2></div><span className="status-pill pending">Blocked</span></div>
-    <p className="panel-copy">This company already has a managed Shop catalog. The public trade link did not replace, merge, or relabel it, and no starter item, sale, customer, payment, or stock record was created.</p>
-    <p className="authority-note">Continue only with the existing company catalog, or ask the workspace owner to review a separate catalog migration.</p>
+    <p className="panel-copy">The managed Shop catalog is unchanged. This public link created no product, sale, customer, payment, or stock record.</p>
+    <p className="authority-note">Use the existing catalog, or ask the owner to review a separate migration.</p>
     <div className="form-actions"><Link className="core-button primary" to="/shop/?tab=counter">Continue existing managed Shop</Link><Link className="text-link" to="/settings/#controls">Open workspace controls</Link></div>
   </section> : managedIdentity && effectiveMode !== coreUi.m ? (() => {
     const unprovisioned = effectiveMode === 'managed-unprovisioned'
     if (unprovisioned) {
       const catalogForm = <form className="core-form compact-form shop-first-product-form" onSubmit={(formEvent) => void initializeManagedCatalog(formEvent)}>
         <fieldset><legend>Product</legend>
-        <div className="form-row"><label>Barcode or product code (optional)<span className="sku-scan-row"><input maxLength={80} onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, sku: inputEvent.target.value }))} placeholder="Leave blank for an assigned code" value={catalogDraft.sku} /><BarcodeScanButton label="Scan the product barcode into the SKU field" onDetected={(value) => setCatalogDraft((current) => ({ ...current, sku: value }))} /></span></label><label>Product name<input maxLength={180} onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, name: inputEvent.target.value }))} placeholder="Product name" required value={catalogDraft.name} /></label></div>
-        <label>Price (MMK)<input min="1" onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, price: inputEvent.target.value }))} required step="1" type="number" value={catalogDraft.price} /></label>
+        <div className="form-row"><label>Product name<input maxLength={180} onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, name: inputEvent.target.value }))} placeholder="Product name" required value={catalogDraft.name} /></label><label>Price (MMK)<input min="1" onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, price: inputEvent.target.value }))} required step="1" type="number" value={catalogDraft.price} /></label></div>
+        <label>Burmese name (optional)<input lang="my" maxLength={180} onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, nameMy: inputEvent.target.value }))} placeholder="Use the name your customers know" value={catalogDraft.nameMy} /></label>
+        <label>Category (optional)<input list="shop-product-category-options" maxLength={80} onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, category: inputEvent.target.value }))} placeholder="Type a category or choose an existing one" value={catalogDraft.category} /></label>
+        <div className="form-row"><label>SKU / item code (optional)<input maxLength={80} onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, sku: inputEvent.target.value }))} placeholder="Leave blank for an assigned code" value={catalogDraft.sku} /></label><label>Barcode (optional)<span className="sku-scan-row"><input autoComplete="off" maxLength={80} onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, barcode: inputEvent.target.value }))} placeholder="Scan or type the label code" value={catalogDraft.barcode} /><BarcodeScanButton label="Scan the product barcode" onDetected={(value) => setCatalogDraft((current) => ({ ...current, barcode: value }))} /></span></label></div>
         </fieldset>
         <fieldset><legend>Opening stock</legend>
         <div className="form-row"><label>Opening stock<input min="0" onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, onHand: inputEvent.target.value }))} required step="1" type="number" value={catalogDraft.onHand} /></label><label>Low-stock alert at<input min="0" onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, reorderAt: inputEvent.target.value }))} step="1" type="number" value={catalogDraft.reorderAt} /></label></div>
@@ -3197,14 +3492,14 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   // still being asked.
   const storageDurabilityNotice = managedIdentity || !(storageDurability.quotaExceeded || storageDurability.state === 'denied')
     ? null
-    : <div className="production-mode-banner storage-durability-banner" data-durability={storageDurability.quotaExceeded ? 'full' : 'evictable'} role="alert">
-      <span className="status-pill pending">{storageDurability.quotaExceeded ? 'Storage full' : 'Records at risk'}</span>
+    : <div className="production-mode-banner storage-durability-banner" data-durability={storageDurability.quotaExceeded ? 'full' : 'device-only'} role={storageDurability.quotaExceeded ? 'alert' : 'status'}>
+      <span className={`status-pill${storageDurability.quotaExceeded ? ' pending' : ''}`}>{uiText(storageDurability.quotaExceeded ? 'Storage full' : 'Device-only data')}</span>
       <p>{storageDurability.quotaExceeded
-        ? 'This device has run out of storage space. New Shop entries may not be saved until space is freed up on the device.'
-        : 'This browser may clear local Shop records when storage is low.'}</p>
+        ? uiText('Free space on this device before saving more Shop data.')
+        : uiText('Saved on this device only.')}</p>
       {storageDurability.quotaExceeded
-        ? <button type="button" onClick={() => window.location.reload()}>Reload Shop</button>
-        : <Link to="/settings/#workspace-recovery">Back up records</Link>}
+        ? <button type="button" onClick={() => window.location.reload()}>{uiText('Reload Shop')}</button>
+        : <Link to="/settings/#workspace-recovery">{uiText('Set up backup')}</Link>}
     </div>
 
   // Stuck-till escape hatch. 'conflict' and 'unavailable' both hold canWrite false with
@@ -3309,14 +3604,14 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
         )
         : makeShopRecordStatus(
           'Saved on this device',
-          storageDurability.state === 'denied' || localHeadroomNeedsAttention ? 'Backup advised' : 'Device record',
+          'Device record',
           storageDurability.state === 'denied'
             ? 'Saved here. This browser may clear Shop records when storage is low.'
             : localHeadroomNeedsAttention
               ? 'Saved here. Back up before this device runs out of Shop record space.'
               : 'This Shop record stays on this device. Back up before changing devices.',
           '/settings/#workspace-recovery',
-          'Back up records',
+          'Set up backup',
         )
   const operatingBoundary = <>
     {commerceStorageError || commerceSyncBlocked || commerceSync.status === 'checking' || !commerceCanWrite ? commerceWriteBanner : null}
@@ -3338,7 +3633,8 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
       <Link to="/shop/?tab=inventory">Manage catalog</Link>
     </div>
     : null
-  const orderNotice = notice || commerceStorageError
+  const orderNotice = (commerceLocation.state?.blockedEcommerceHandoff === true
+    ? 'This request is not available in your Shop workspace.' : '') || notice || commerceStorageError
   const commerceControlsDisabled = !commerceCanWrite || Boolean(pendingAction)
   // The appointment book is NOT a commerce control. ShopServiceSchedule has its own storage
   // key and does not read commerce state at all, but it was gated on commerceCanWrite -- so a
@@ -3386,7 +3682,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     ['Gate', pendingAction ? 'Pending approval' : commerceCanWrite ? 'Two-person' : 'Locked'],
   ] as const
   const supplierControl = <section className="shop-order-control supplier-control" aria-label="Supplier control">
-    <div><span className="core-eyebrow">Procurement control</span><strong>{supplierControlNext}</strong><small>AI combines demand, stock, Plant materials, approved-vendor evidence, comparable quotes, delivery, quality, and exposure. Budget, sourcing, requisition, and independent PO approval stay separate. Nothing contacts or pays a supplier here.</small><button className="text-link" disabled={commerceControlsDisabled || (Boolean(activePurchaseBudget) && !openPurchaseRequisitions.length && !procurementReviews.length)} onClick={startSupplierRequest} type="button">{openPurchaseRequisitions.length ? 'Create with second operator' : !activePurchaseBudget ? 'Set buying limits' : openSupplierSourcingDecisions.length ? 'Approve quoted requisition' : 'Compare supplier quotes'}</button></div>
+    <div><span className="core-eyebrow">Procurement control</span><strong>{supplierControlNext}</strong><small>Budget, sourcing, requisition, and independent PO approval stay separate. AI compares stock and quotes; no supplier is contacted or paid here.</small><button className="text-link" disabled={commerceControlsDisabled || (Boolean(activePurchaseBudget) && !openPurchaseRequisitions.length && !procurementReviews.length)} onClick={startSupplierRequest} type="button">{openPurchaseRequisitions.length ? 'Create with second operator' : !activePurchaseBudget ? 'Set buying limits' : openSupplierSourcingDecisions.length ? 'Approve quoted requisition' : 'Compare supplier quotes'}</button></div>
     <div className="shop-order-control-rows">{supplierControlRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
     {/* A Plant material's Shop SKU is free text on its BOM row, never checked against
         a real Shop item. A typo or a since-renamed/deleted item means Plant believes
@@ -3409,7 +3705,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     inventoryReady: Boolean(commerce.inventoryFoundation && managedInventoryProjection),
     lowStockCount: lowStock.length,
     pendingAction: Boolean(pendingAction),
-    pendingOnlineRequestCount: pendingStorefrontRequests.length + (legacyWebsiteWorkWaiting ? 1 : 0),
+    pendingOnlineRequestCount: pendingStorefrontRequests.length + managedPublicInboxRequests.length + (legacyWebsiteWorkWaiting ? 1 : 0),
   })
   const shopAgentJob = shopNextAction.job
   const shopAgentReason = shopNextAction.reason
@@ -3457,7 +3753,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     <div>
       <span className="core-eyebrow">Shop next step</span>
       <h2>{shopAutopilotStage}</h2>
-      <p>Open the next useful Shop task. SuperMega brings together online requests, orders, payments, purchasing, and stock so the manager can review one clear step at a time.</p>
+      <p>Start with the next sale, order or stock task.</p>
     </div>
     <div className="shop-command-center-rows">{shopAutopilotRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
     <button className={coreUi.q} onClick={runShopAutopilot} type="button">Open next step</button>
@@ -3688,7 +3984,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     returnFocus?: HTMLElement | null,
   ): boolean {
     if (!commerceCanWrite) {
-      setNotice('Shop changes are paused because this workspace cannot confirm writes. Reload or open Settings before retrying.')
+      setNotice('Shop cannot confirm writes. Reload or open Settings before retrying.')
       return false
     }
     if (pendingAction) {
@@ -3710,18 +4006,32 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     return true
   }
 
+  function openCatalogCreateFromBarcode(barcode: string) {
+    setItemDraft({ sku: '', barcode, name: '', nameMy: '', category: '', onHand: '', reorderAt: '0', price: '' })
+    setCatalogCreateOpen(true)
+    navigate('/shop/?tab=inventory#shop-catalog-create')
+  }
+
   function queueCatalogItem(event: FormEvent) {
     event.preventDefault()
     const suppliedSku = itemDraft.sku.trim().toUpperCase()
     const itemSku = suppliedSku || `SM-${commandUuid().slice(0, 8).toUpperCase()}`
     const name = itemDraft.name.trim()
+    const nameMy = itemDraft.nameMy.trim()
+    const categoryText = itemDraft.category.trim()
+    const category = categoryText || null
+    const barcodeText = itemDraft.barcode.trim()
+    const barcode = barcodeText || null
     const onHand = Number(itemDraft.onHand)
     const reorderAt = Number(itemDraft.reorderAt || '0')
     const price = Number(itemDraft.price)
     if (!name
       || !Number.isSafeInteger(onHand) || onHand < 0
       || !Number.isSafeInteger(reorderAt) || reorderAt < 0
-      || !Number.isSafeInteger(price) || price < 1) {
+      || !Number.isSafeInteger(price) || price < 1
+      || barcodeText.length > 80 || hasDisallowedControlCharacters(barcodeText)
+      || nameMy.length > 180 || hasDisallowedControlCharacters(nameMy)
+      || categoryText.length > 80 || hasDisallowedControlCharacters(categoryText)) {
       setNotice('Enter the item name, current stock, and a whole-MMK price.')
       return
     }
@@ -3729,7 +4039,11 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
       setNotice(`${itemSku} already exists. No catalog item was queued.`)
       return
     }
-    const item: CommerceItem = { sku: itemSku, name, onHand, reorderAt, price }
+    if (commerceItemBarcodeConflicts(commerce.items, itemSku, barcode)) {
+      setNotice('That barcode already identifies another product. Check the label or edit the existing item.')
+      return
+    }
+    const item: CommerceItem = { sku: itemSku, ...(barcode ? { barcode } : {}), name, ...(nameMy ? { nameMy } : {}), ...(category ? { category } : {}), onHand, reorderAt, price }
     const isFirstProduct = commerce.items.length === 0
     queueAction({
       kind: 'catalog_item_create',
@@ -3740,7 +4054,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
       apply: async (action) => {
         const proof = commerceActionProof(action)
         await mutateCommerce('commerce.item.created', action.commandId, proof, (current) => registerCommerceItem(current, item, proof))
-        setItemDraft({ sku: '', name: '', onHand: '', reorderAt: '0', price: '' })
+        setItemDraft({ sku: '', barcode: '', name: '', nameMy: '', category: '', onHand: '', reorderAt: '0', price: '' })
         setSku(item.sku)
         if (isFirstProduct) navigate('/shop/?tab=counter')
       },
@@ -3758,12 +4072,15 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     }
     if (purchaseOrderDraft) {
       requestAnimationFrame(() => purchaseOrderEditorRef.current?.querySelector<HTMLInputElement>('input:not(:disabled)')?.focus())
-      setNotice('Finish or cancel the stock order before editing catalog values. Your stock-order draft was preserved.')
+      setNotice('Finish or cancel the stock order first. Your draft is saved.')
       return
     }
     const alreadyEditingCurrent = catalogEditDraft?.sku === item.sku
       && catalogEditDraft.expectedPrice === item.price
       && catalogEditDraft.expectedReorderAt === item.reorderAt
+      && catalogEditDraft.expectedBarcode === (item.barcode ?? null)
+      && catalogEditDraft.expectedNameMy === (item.nameMy ?? null)
+      && catalogEditDraft.expectedCategory === (item.category ?? null)
     if (alreadyEditingCurrent) {
       requestAnimationFrame(() => catalogEditEditorRef.current?.querySelector<HTMLInputElement>('#catalog-edit-price')?.focus())
       setNotice(`Continue editing ${item.sku} below. Your draft was preserved.`)
@@ -3773,10 +4090,16 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
       sku: item.sku,
       expectedPrice: item.price,
       expectedReorderAt: item.reorderAt,
+      expectedBarcode: item.barcode ?? null,
+      expectedNameMy: item.nameMy ?? null,
+      expectedCategory: item.category ?? null,
       price: String(item.price),
       reorderAt: String(item.reorderAt),
+      barcode: item.barcode ?? '',
+      nameMy: item.nameMy ?? '',
+      category: item.category ?? '',
     })
-    setNotice(`Edit only the current price and reorder level for ${item.name}. Stock and prior orders stay unchanged.`)
+    setNotice(`Edit the price, reorder level, or barcode for ${item.name}, and update its Burmese name or category if needed. Stock and prior orders stay unchanged.`)
     requestAnimationFrame(() => catalogEditEditorRef.current?.querySelector<HTMLInputElement>('#catalog-edit-price')?.focus())
   }
 
@@ -3792,8 +4115,8 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   function reviewCatalogItemUpdate(event: FormEvent) {
     event.preventDefault()
     if (!catalogEditDraft || !catalogEditItem
-      || catalogEditPriceResult === null || catalogEditReorderResult === null) {
-      setNotice('Enter a whole-MMK price of at least 1 and a non-negative whole reorder level.')
+      || catalogEditPriceResult === null || catalogEditReorderResult === null || !catalogEditBarcodeValid || !catalogEditNameMyValid || !catalogEditCategoryValid) {
+      setNotice('Check the category, price, reorder level, barcode, and Burmese name. Category labels can contain up to 80 characters.')
       return
     }
     if (catalogEditStale) {
@@ -3801,23 +4124,33 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
       return
     }
     if (!catalogEditChanged) {
-      setNotice('Change the price or reorder level before review. Nothing was queued.')
+      setNotice('Change a catalog value before review. Nothing was queued.')
       return
     }
     const item = catalogEditItem
+    if (commerceItemBarcodeConflicts(commerce.items, item.sku, catalogEditBarcode)) {
+      setNotice('That barcode already identifies another product. Check the label before review.')
+      return
+    }
     const update: CommerceItemUpdate = {
       sku: item.sku,
       expectedPrice: catalogEditDraft.expectedPrice,
       nextPrice: catalogEditPriceResult,
       expectedReorderAt: catalogEditDraft.expectedReorderAt,
       nextReorderAt: catalogEditReorderResult,
+      expectedBarcode: catalogEditDraft.expectedBarcode,
+      nextBarcode: catalogEditBarcode,
+      expectedNameMy: catalogEditDraft.expectedNameMy,
+      nextNameMy: catalogEditNameMy,
+      expectedCategory: catalogEditDraft.expectedCategory,
+      nextCategory: catalogEditCategory,
     }
     queueAction({
       kind: 'catalog_item_update',
       subjectId: item.sku,
       summary: `Update catalog values for ${item.name}`,
-      before: `${item.sku} · ${formatMoney(update.expectedPrice)} · reorder at ${update.expectedReorderAt.toLocaleString()}`,
-      after: `${item.sku} · ${formatMoney(update.nextPrice)} · reorder at ${update.nextReorderAt.toLocaleString()} · stock unchanged`,
+      before: `${item.sku} · ${formatMoney(update.expectedPrice)} · reorder at ${update.expectedReorderAt.toLocaleString()} · category ${update.expectedCategory ?? 'not set'} · barcode ${update.expectedBarcode ?? 'not set'} · Burmese name ${update.expectedNameMy ?? 'not set'}`,
+      after: `${item.sku} · ${formatMoney(update.nextPrice)} · reorder at ${update.nextReorderAt.toLocaleString()} · category ${update.nextCategory ?? 'not set'} · barcode ${update.nextBarcode ?? 'not set'} · Burmese name ${update.nextNameMy ?? 'not set'} · stock unchanged`,
       apply: async (action) => {
         const proof = commerceActionProof(action)
         let reviewRequired = false
@@ -3894,7 +4227,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     const reviewEpoch = ++publicContactReviewEpoch.current
     setPublicShopContact(null)
     if (!commerceCanWrite || pendingAction) {
-      setNotice('Finish the current Shop action before reviewing an Ecommerce request.')
+      setNotice('Finish the current Shop action first.')
       return
     }
     const request = pendingStorefrontRequests.find((candidate) => candidate.id === requestId)
@@ -4067,7 +4400,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
       seenSkus.add(line.sku)
       orderQuantity = nextQuantity
       orderTotal = nextTotal
-      orderLines.push({ sku: item.sku, name: item.name, ...(item.variant ? { variant: item.variant } : {}), quantity: line.quantity, unitPriceMmk: item.price })
+      orderLines.push({ sku: item.sku, name: item.name, ...(item.nameMy ? { nameMy: item.nameMy } : {}), ...(item.variant ? { variant: item.variant } : {}), quantity: line.quantity, unitPriceMmk: item.price })
     }
     const orderId = uid('ORD')
     const promisedAt = new Date(reviewedAt.getTime() + 30 * 60 * 1000).toISOString()
@@ -4227,6 +4560,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
       orderLines.push({
         sku: line.item.sku,
         name: line.item.name,
+        ...(line.item.nameMy ? { nameMy: line.item.nameMy } : {}),
         ...(line.item.variant ? { variant: line.item.variant } : {}),
         quantity: line.quantity,
         unitPriceMmk: line.item.price,
@@ -4240,7 +4574,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     }
     if (sourceDraft && orderLines.length !== 1) {
       detachPreparedOrderSources({ ecommerce: false })
-      setNotice('This channel source contains one reviewed item. Its source link was removed; review the multi-item order manually.')
+      setNotice('This source has one item. Its link was removed; review a multi-item order manually.')
       return
     }
     if (sourceDraft && (customer.trim() !== sourceDraft.customer
@@ -4249,7 +4583,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
       || selectedLine.quantity !== sourceDraft.quantity
       || payment !== sourceDraft.payment)) {
       detachPreparedOrderSources({ ecommerce: false })
-      setNotice('The structured order changed after source review. Review the channel mapping again or continue as a manual order.')
+      setNotice('The source changed. Review its mapping again or enter a manual order.')
       return
     }
     const ecommerceLines = ecommerceDraft
@@ -4330,7 +4664,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
       })
       || pricedOrderTotal !== ecommerceDraft.totalMmk)) {
       detachPreparedOrderSources({ channel: false })
-      setNotice('The Ecommerce request changed after confirmation. Return to Ecommerce or continue as a manual order.')
+      setNotice('The request changed. Reopen it or enter a manual order.')
       return
     }
     const sourceRecordId = sourceDraft?.sourceRecordId ?? ecommerceDraft?.sourceRequestId
@@ -4566,7 +4900,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     const intake = websiteIntakes.find((candidate) => candidate.id === intakeId && candidate.status === coreUi.p)
     const item = intake ? commerce.items.find((candidate) => candidate.sku === intake.sku) : null
     if (!intake || !item || item.onHand < intake.quantity || item.price !== intake.unitPrice) {
-      setNotice('Managed Website intake failed closed. Recheck the retained intake, catalog price, and available stock.')
+      setNotice('Website intake changed. Check its price, quantity and stock.')
       return false
     }
     const orderId = `ORD-WEB-${intake.id.slice(5)}`
@@ -4696,12 +5030,12 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
       setNotice('Only a pending, active customer balance can receive a collection note.')
       return
     }
-    const dueAt = order.paymentDueAt ?? order.promisedAt ?? order.createdAt
+    const dueAt = commerceOrderPaymentDueAt(order)
     queueAction({
       kind: 'collection_contact',
       subjectId: orderId,
       summary: `Record customer follow-up for ${order.id}`,
-      before: `${order.customer} · ${formatMoney(order.total)} pending · due ${formatTime(dueAt)} · ${order.collectionActions?.length ?? 0} prior notes`,
+      before: `${order.customer} · ${formatMoney(order.total)} pending · ${dueAt ? `due ${formatTime(dueAt)}` : 'payment due at handoff'} · ${order.collectionActions?.length ?? 0} prior notes`,
       after: 'Append an attributable contact note · no message sent · no payment changed',
       reasonSuggestion: 'Customer payment follow-up recorded.',
       apply: (action) => mutateCommerce(
@@ -5632,6 +5966,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
       setNotice(`Continue the ${active ? 'receipt' : 'stock order'} below. Your draft was preserved.`)
       return
     }
+    setPurchaseOrderScanCode('')
     const receiptDate = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Yangon' }).format(new Date()).replaceAll('-', '')
     setPurchaseOrderDraft(active
       ? { mode: 'receive', purchaseOrderId: active.purchaseOrder.id, quantity: '', rejectedQuantity: '0', discrepancyCode: 'damaged', locationId: defaultReceiptLocationId, trackingCode: `IN-${receiptDate}-${commandUuid().slice(0, 8).toUpperCase()}` }
@@ -5639,6 +5974,43 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     setNotice(active
       ? `Record only units counted against ${active.purchaseOrder.id}. Nothing changes until confirmation.`
       : `Create an internal order for ${item.name}. This does not contact a supplier or create a payment.`)
+  }
+
+  function scanPurchaseOrderReceivedUnit(rawCode: string): boolean {
+    const draft = purchaseOrderDraft
+    const item = purchaseOrderDraftItem
+    if (draft?.mode !== 'receive' || !item) return false
+    const acceptedText = draft.quantity.trim()
+    const acceptedUnits = acceptedText === '' ? 0 : Number(acceptedText)
+    const result = incrementPurchaseOrderReceiveFromScan({
+      items: commerce.items,
+      purchaseOrderItem: item,
+      rawCode,
+      acceptedUnits,
+      maximumAcceptedUnits: purchaseOrderQuantityLimit,
+    })
+    setPurchaseOrderScanCode('')
+    if (!result.ok) {
+      setNotice(result.reason === 'wrong_purchase_order_item'
+        ? `That barcode belongs to another product. The ${item.name} receipt count did not change.`
+        : result.reason === 'receipt_limit_reached'
+          ? `The ordered quantity for ${item.name} is already counted. Review the receipt before accepting more.`
+          : result.reason === 'invalid_count'
+            ? 'Correct the accepted-unit count before scanning another item. The receipt count did not change.'
+            : 'No Shop product matches that code. Check the label; the receipt count did not change.')
+      return false
+    }
+    setPurchaseOrderDraft((current) => current?.mode === 'receive'
+      ? { ...current, quantity: String(result.acceptedUnits) }
+      : current)
+    setNotice(`${result.acceptedUnits.toLocaleString()} accepted ${result.acceptedUnits === 1 ? 'unit' : 'units'} counted for ${item.name}. Review the receipt before stock changes.`)
+    return true
+  }
+
+  function handlePurchaseOrderScanKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key !== 'Enter') return
+    event.preventDefault()
+    scanPurchaseOrderReceivedUnit(purchaseOrderScanCode)
   }
 
   function openPurchaseBudgetEditor() {
@@ -5787,13 +6159,13 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     }
     if (catalogEditDraft) {
       requestAnimationFrame(() => catalogEditEditorRef.current?.querySelector<HTMLInputElement>('input:not(:disabled)')?.focus())
-      setNotice('Finish or cancel the catalog edit before starting a supplier request. Your catalog draft was preserved.')
+      setNotice('Finish the catalog edit first. Your draft is saved.')
       return
     }
     if (stockCountDraft) {
       const selector = stockCountTargetSelected ? '#stock-count-quantity' : '#stock-count-sku'
       requestAnimationFrame(() => stockCountEditorRef.current?.querySelector<HTMLElement>(selector)?.focus())
-      setNotice('Finish or cancel the stock count before starting a supplier request. Your count draft was preserved.')
+      setNotice('Finish the stock count first. Your draft is saved.')
       return
     }
     const recommendedOption = decision?.supplierOptions.find((option) => option.supplier === decision.recommendedSupplier)
@@ -5849,6 +6221,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
       ? purchaseOrderDraft.sku
       : purchaseOrderDraftOrder?.purchaseOrder.sku
     setPurchaseOrderDraft(null)
+    setPurchaseOrderScanCode('')
     setNotice('Stock order editing closed. Shop data was not modified.')
     requestAnimationFrame(() => {
       if (itemSku) purchaseOrderTriggerRefs.current.get(itemSku)?.focus()
@@ -6000,6 +6373,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
           return receiveCommercePurchaseOrder(current, purchaseOrder.id, receiptQuantity, proof, locationReceipt, discrepancy)
         })
         setPurchaseOrderDraft((current) => current?.mode === 'receive' && current.purchaseOrderId === purchaseOrder.id ? null : current)
+        setPurchaseOrderScanCode('')
       },
     }, purchaseOrderTriggerRefs.current.get(item.sku))
   }
@@ -6167,7 +6541,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   function selectStockCountBarcode(rawValue: string) {
     const code = rawValue.trim()
     if (!code) return
-    const item = commerce.items.find((candidate) => candidate.sku.toLowerCase() === code.toLowerCase())
+    const item = findCommerceItemByScanCode(commerce.items, code)
     if (!item) {
       setNotice('No Shop product matches that barcode. Check the code or choose the product below.')
       return
@@ -6939,7 +7313,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   const afterSalesCount = commerce.orders.reduce((total, order) => (
     total + (order.returns?.length ?? 0) + (order.supportCases?.length ?? 0)
   ), 0)
-  const incomingRequestCount = pendingStorefrontRequests.length + (legacyWebsiteWorkWaiting ? 1 : 0)
+  const incomingRequestCount = pendingStorefrontRequests.length + managedPublicInboxRequests.length + (legacyWebsiteWorkWaiting ? 1 : 0)
   const completedSalesToday = projectShopTodayCompletedSales(commerce, purchaseOrderClock)
   const shopTodayMetrics = [
     { label: 'Open orders', value: String(openOrders.length), detail: actionOrders.length ? `${actionOrders.length} need action` : 'Awaiting fulfilment', tone: actionOrders.length ? 'attention' as const : 'ready' as const },
@@ -7071,15 +7445,6 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
           : stockNextActionKind === 'restore'
             ? 'Access'
             : 'Review'
-  const nextOrder = actionOrders[0]
-  const nextOrderAction = nextOrder ? shopOrderPrimaryActionLabel(nextOrder) : 'The queue is clear'
-  const nextOrderDetail = nextOrder
-    ? `${nextOrder.customer} · ${commerceOrderDisplayReference(nextOrder.id)} · ${formatMoney(nextOrder.total)}`
-    : 'No payment, fulfilment or refund action is waiting.'
-  const urgentOrderCount = actionOrders.filter((order) => {
-    const urgency = commerceOrderPromiseUrgency(order, purchaseOrderClock)
-    return urgency === 'late' || urgency === 'due_soon' || urgency === 'unrecorded'
-  }).length
 
   function renderStockRow({ item }: (typeof stockRows)[number]) {
     const active = activePurchaseOrderBySku.get(item.sku)
@@ -7116,16 +7481,14 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   if (tab === 'counter') return <div className="operation-module shop-counter-module">
     {counterBoundary}
     {shopCatalogSetupNotice}
-    <ShopCounter key={counterDraftContext.key} persistLocalDraft={counterDraftContext.persistLocalDraft} canCompleteInOneReview={confirmedLocalShop || Boolean(managedIdentity)} disabled={commerceControlsDisabled || (!confirmedLocalShop && !managedIdentity) || (shopShiftRequired && !activeShift)} draftStorageScope={counterDraftContext.storageScope} initialCustomer={shopCounterCustomer} initialQuery={shopCounterSearch} items={commerce.items} lowStockCount={lowStock.length} loyaltyPoints={shopLoyaltyPoints} onReview={reviewCounterSale} openOrderCount={openOrders.length} operatorLabel={managedIdentity?.email || readLastOperator()} operatingContext={shopOperatingEligible && shopShiftRequired ? <ShopOperatingStrip {...shopOperatingView} /> : null} paymentQrScope={paymentQrScope} productImageScope={productImageScope} recordStatus={shopRecordStatus} recordedOrderIds={commerce.orders.map(order => order.id)} />
-    <Suspense fallback={null}><ReceiptDialog ack={activeReceiptAck} disabled={commerceControlsDisabled} loyalty={receiptLoyalty} merchantProfile={commerce.merchantProfile} onSaveMerchantProfile={saveCustomerReceiptProfile} onClose={() => { setReceiptAck(null); setCounterReceiptOrderId('') }} paymentQrScope={paymentQrScope} /></Suspense>
+    <ShopCounter key={counterDraftContext.key} persistLocalDraft={counterDraftContext.persistLocalDraft} canCompleteInOneReview={confirmedLocalShop || Boolean(managedIdentity)} disabled={commerceControlsDisabled || (!confirmedLocalShop && !managedIdentity) || (shopShiftRequired && !activeShift)} draftStorageScope={counterDraftContext.storageScope} initialCustomer={shopCounterCustomer} initialQuery={shopCounterSearch} items={commerce.items} lowStockCount={lowStock.length} loyaltyPoints={shopLoyaltyPoints} onCreateFromBarcode={openCatalogCreateFromBarcode} onReview={reviewCounterSale} openOrderCount={openOrders.length} operatingContext={shopOperatingEligible && shopShiftRequired ? <ShopOperatingStrip {...shopOperatingView} /> : null} paymentQrScope={paymentQrScope} productImageScope={productImageScope} receiptTools={<Suspense fallback={null}><ReceiptDialog ack={activeReceiptAck} disabled={commerceControlsDisabled} loyalty={receiptLoyalty} merchantProfile={commerce.merchantProfile} onSaveMerchantProfile={saveCustomerReceiptProfile} onClose={() => { setReceiptAck(null); setCounterReceiptOrderId('') }} paymentQrScope={paymentQrScope} showSetupTrigger /></Suspense>} recordStatus={shopRecordStatus} recordedOrderIds={commerce.orders.map(order => order.id)} />
     {actionGate}
   </div>
 
   if (tab === 'orders') return <div className={`operation-module orders-module${returnDraft && selectedReturnLine || supportDraft || supportReopenDraft || supportServiceDraft || supportResolutionDraft || correctionDraft ? ' has-return-draft' : ''}`}>
     {commerceBoundary}
     <section className="core-panel order-queue-panel order-workspace" id="shop-order-queue">
-      <div className="panel-head"><div><span className="core-eyebrow">Orders</span><h2>Keep every order moving.</h2><p className="order-source-note">Website and Commerce requests appear automatically. Messenger and Viber are not connected yet.</p></div><div className="order-queue-actions">{!orderDraftRecoveryVisible ? <button className={coreUi.q} disabled={!commerceCanWrite || Boolean(pendingAction) || !orderDraftInitialized || orderDraftRecoveryBlocked} onClick={() => openOrderComposer()} ref={orderComposerTriggerRef} type="button">{!orderDraftInitialized ? 'Loading orders' : orderDraftRead.status === 'unavailable' ? 'Recovery unavailable' : 'Record phone or walk-in'}</button> : null}</div></div>
-      <dl className="order-queue-summary" aria-label="Order status"><div><dt>Need action</dt><dd>{actionOrders.length}</dd></div><div><dt>In fulfilment</dt><dd>{openOrders.length}</dd></div><div><dt>Payment pending</dt><dd>{pendingPaymentOrders.length}</dd></div></dl>
+      <div className="panel-head"><div><span className="core-eyebrow">Shop</span><h2>Orders</h2><p className="order-source-note">Review requests and move active orders forward.</p></div><div className="order-queue-actions">{!orderDraftRecoveryVisible ? <button className={coreUi.q} disabled={!commerceCanWrite || Boolean(pendingAction) || !orderDraftInitialized || orderDraftRecoveryBlocked} onClick={() => openOrderComposer()} ref={orderComposerTriggerRef} type="button">{!orderDraftInitialized ? 'Loading orders' : orderDraftRead.status === 'unavailable' ? 'Recovery unavailable' : 'New order'}</button> : null}</div></div>
       {orderDraftRecoveryVisible ? <div className={`order-draft-recovery ${orderDraftRecoveryBlocked || orderDraftRecoveryWarning ? 'is-blocked' : ''}`} role={orderDraftRecoveryBlocked || orderDraftRecoveryWarning ? 'alert' : 'status'}>
         <div>
           <strong>{orderDraftRecoveryWarning
@@ -7183,8 +7546,8 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
           <button className="core-button compact" disabled={Boolean(pendingAction)} onClick={keepOrderFromCancellation} type="button">Keep order</button>
         </div>
       </section> : null}
-      {managedIdentity && pendingStorefrontRequests.length ? <section aria-label="Incoming Ecommerce orders" className="incoming-order-inbox">
-        <div className="incoming-order-inbox-head"><div><span className="core-eyebrow">Ecommerce</span><h3>New online orders</h3><p>Orders arrive here automatically. Check stock, delivery and payment before adding one to Shop.</p></div><strong aria-label={`${pendingStorefrontRequests.length} orders waiting`}>{pendingStorefrontRequests.length}</strong></div>
+      {managedIdentity && (pendingStorefrontRequests.length || managedPublicInboxRequests.length || managedPublicInbox.checking || managedPublicInbox.error) ? <section aria-label="Incoming online orders" className="incoming-order-inbox">
+        <div className="incoming-order-inbox-head"><div><span className="core-eyebrow">Online orders</span><h3>New orders</h3><p>Orders appear here automatically. Review stock, delivery and payment before confirming.</p></div><strong aria-label={`${pendingStorefrontRequests.length + managedPublicInboxRequests.length} orders need review`}>{pendingStorefrontRequests.length + managedPublicInboxRequests.length}</strong></div>
         <div className="incoming-order-list">
           {visiblePendingStorefrontRequests.map((request) => {
             const lines = commerceStorefrontRequestLines(request)
@@ -7192,7 +7555,15 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
             const itemSummary = lines.length === 1 ? `${lines[0].name} × ${lines[0].quantity}` : `${lines.length} items · ${lines.reduce((total, line) => total + line.quantity, 0)} units`
             return <article key={request.id}><div><strong>{request.customerReference} · {itemSummary}</strong><small>{formatMoney(request.totalMmk)} · {request.fulfilment}{stockConflict ? ` · ${stockConflict.sku} needs stock review` : ''}</small></div><button className="core-button compact" disabled={commerceControlsDisabled} onClick={() => { openOrderComposer(); void reviewStorefrontRequest(request.id) }} ref={request.id === activeEcommerceInboxRequestId ? ecommerceInboxTargetRef : undefined} type="button">Check order</button></article>
           })}
+          {managedPublicInboxRequests.map((request) => {
+            const lines = request.request.lines
+            const itemSummary = lines.length === 1 ? `${lines[0].name} × ${lines[0].quantity}` : `${lines.length} items · ${lines.reduce((total, line) => total + line.quantity, 0)} units`
+            const awaitingShopRefresh = request.status === 'in_shop'
+            return <article key={request.requestId}><div><strong>{itemSummary}</strong><small>{formatMoney(request.request.totalMmk)} · {request.request.fulfilment} · {awaitingShopRefresh ? 'Added to Shop; refreshing' : 'Waiting to add to Shop'}</small></div><button className="core-button compact" disabled={managedPublicInbox.checking} onClick={() => void syncManagedPublicInbox(request.requestId)} type="button">{awaitingShopRefresh ? 'Refresh Shop' : 'Retry'}</button></article>
+          })}
         </div>
+        {managedPublicInbox.checking && !managedPublicInboxRequests.length ? <p className="form-notice" role="status">Checking for new online orders…</p> : null}
+        {managedPublicInbox.error ? <p className="form-notice" role="alert">{managedPublicInbox.error}</p> : null}
       </section> : null}
       {legacyWebsiteWorkWaiting ? <section aria-label="Incoming Website orders" className="incoming-order-inbox">
         <div className="incoming-order-inbox-head"><div><span className="core-eyebrow">Incoming</span><h3>Website requests waiting for review</h3></div><strong>{managedIdentity ? websiteIntakes.filter((intake) => intake.status === coreUi.p).length : 1}</strong></div>
@@ -7200,28 +7571,10 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
           <WebsiteCommerceIntake catalog={commerce.items} disabled={commerceControlsDisabled} importedSourceIds={importedWebsiteOrderIds} key={`${managedIdentity ? 'managed' : 'local'}:${websiteIntakes.find((intake) => intake.status === coreUi.p)?.id ?? 'local'}`} managedIntakes={websiteIntakes} mode={managedIdentity ? 'managed' : 'local'} onQueueManagedIntake={queueManagedWebsiteIntake} onQueueReadyOrder={queueWebsiteOrder} />
         </Suspense>
       </section> : null}
-      <div className="order-workspace-grid">
-        <section aria-labelledby="shop-order-list-heading" className="order-queue-main">
-          <div className="order-queue-section-head"><div><span className="core-eyebrow">Live queue</span><h3 id="shop-order-list-heading">Orders to finish</h3></div><small>{actionOrders.length ? `${actionOrders.length} active` : 'All caught up'}</small></div>
-          <OrderList acknowledgementDownloads={orderAcknowledgementDownloads} canCancel={(orderId) => commerceOrderHasReleasableReservation(commerce, orderId)} disabled={commerceControlsDisabled} highlightedTargetId={commerceLocation.hash.startsWith('#shop-order-') ? commerceLocation.hash.slice(1) : ''} onAdvance={advanceOrder} onCancel={cancelOrder} onReconcilePayment={reconcilePayment} onSettleRefund={settleRefund} onSettleSale={settleSale} onViewReceipt={setReceiptAck} orders={actionOrders} />
-        </section>
-        <aside aria-label="Order insights" className="order-insight-rail">
-          <section className="order-insight-card is-primary">
-            <span className="core-eyebrow">Next action</span>
-            <h3>{nextOrderAction}</h3>
-            <p>{nextOrderDetail}</p>
-            {nextOrder ? <a className={coreUi.q} href={`#${shopOrderTargetId(nextOrder.id)}`}>Open next order</a> : <Link className="core-button compact" to="/shop/?tab=counter">Open the counter</Link>}
-          </section>
-          <section className="order-insight-card">
-            <div className="order-insight-heading"><span className="core-eyebrow">Queue health</span><strong>What needs attention</strong></div>
-            <dl className="order-health-list">
-              <div><dt>Payment pending</dt><dd>{pendingPaymentOrders.length}</dd></div>
-              <div><dt>Promise attention</dt><dd>{urgentOrderCount}</dd></div>
-              <div><dt>Refunds due</dt><dd>{refundExposureOrders.length}</dd></div>
-            </dl>
-          </section>
-        </aside>
-      </div>
+      <section aria-labelledby="shop-order-list-heading" className="order-queue-main">
+        <div className="order-queue-section-head"><div><span className="core-eyebrow">Order queue</span><h3 id="shop-order-list-heading">Needs attention</h3></div><small>{actionOrders.length ? `${actionOrders.length} to finish` : 'All caught up'}</small></div>
+        <OrderList acknowledgementDownloads={orderAcknowledgementDownloads} canCancel={(orderId) => commerceOrderHasReleasableReservation(commerce, orderId)} disabled={commerceControlsDisabled} highlightedTargetId={commerceLocation.hash.startsWith('#shop-order-') ? commerceLocation.hash.slice(1) : ''} onAdvance={advanceOrder} onCancel={cancelOrder} onReconcilePayment={reconcilePayment} onSettleRefund={settleRefund} onSettleSale={settleSale} onViewReceipt={setReceiptAck} orders={actionOrders} />
+      </section>
       <details className="shop-business-controls">
         <summary><span>Daily tools</span><small>Reports and setup when needed</small></summary>
         <div className="shop-business-controls-content">
@@ -7239,7 +7592,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
           closeReady={closableOrders.length}
           confirmed={commerce.orders.filter((order) => order.status === 'confirmed').length}
           disabled={commerceControlsDisabled || !orderDraftInitialized || orderDraftRecoveryBlocked}
-          incomingOnline={pendingStorefrontRequests.length}
+          incomingOnline={pendingStorefrontRequests.length + managedPublicInboxRequests.length}
           incomingWebsite={managedIdentity ? websiteIntakes.filter((intake) => intake.status === coreUi.p).length : Number(legacyWebsiteWorkWaiting)}
           stockConflicts={pendingStockConflictCount}
           onOpenOrder={openOrderComposer}
@@ -7599,12 +7952,13 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
               <label>Variance owner<input disabled={commerceControlsDisabled} maxLength={80} onChange={(event) => update({ varianceOwner: event.target.value })} placeholder="Responsible person" required value={line.varianceOwner} /></label>
               <label>Review reason<input disabled={commerceControlsDisabled} maxLength={240} onChange={(event) => update({ varianceReason: event.target.value })} placeholder="Why the count differs and what happens next" required value={line.varianceReason} /></label>
             </div> : null}
+            {isShopCashSettlementMethod(line.paymentMethod) ? <ShopMmkCashCount disabled={commerceControlsDisabled} onApply={(totalMmk) => update({ countedMmk: String(totalMmk), ...(totalMmk === expectedMmk ? { varianceOwner: '', varianceReason: '' } : {}) })} /> : null}
           </div>
         }) : <p className="form-notice">No reconciled payments are waiting. Save a zero-value close only if the business date still needs an accountable snapshot.</p>}
         <p className="panel-copy">Expected amounts come from completed, reconciled orders. Counted amounts come from the cashier. A variance is retained with its owner and reason; SuperMega does not move money or post externally.</p>
       </section>
     </details>
-    <button className="core-button" disabled={commerceControlsDisabled || !closePreview || !closeSettlement} onClick={closeDay} type="button">{closePreview ? <span className="cashier-action-label"><span>Review and save close</span>{CASHIER_SAVE_MY ? <small lang="my">{CASHIER_SAVE_MY}</small> : null}</span> : legacyCloseNeedsMigration ? 'Close history needs migration' : 'Today is closed'}</button>
+    <button className="core-button" disabled={commerceControlsDisabled || !closePreview || !closeSettlement} onClick={closeDay} type="button">{closePreview ? <span className="cashier-action-label">{uiText('Review and save close')}</span> : legacyCloseNeedsMigration ? 'Close history needs migration' : 'Today is closed'}</button>
     <p className="form-notice" aria-live="polite">{`${closableOrders.length} completed, reconciled orders · ${formatMoney(reconciledValue)} ready to close.`}</p>
     {/* Roadmap §2 item 5 — what was unusual about the day just closed, read from
         the closes already saved. Nothing here is a finding about money owed or
@@ -7644,7 +7998,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     {!commerce.items.length ? shopCatalogOnboarding : null}
     <section aria-label="Shop stock workspace" className="core-panel inventory-panel shop-stock-workspace">
       <Suspense fallback={null}><ShopStocktakeDraftRecovery active={Boolean(stockCountDraft)} current={stockCountDraft} key={scheduleScopeKey} lines={stockCountBatchDrafts} onReady={setStocktakeRecoveryReadyScope} scopeKey={scheduleScopeKey} setCurrent={setStockCountDraft} setLines={setStockCountBatchDrafts} /></Suspense>
-      <header className="shop-stock-heading"><div><h2>Count. Receive. Reorder.</h2></div><button aria-expanded={Boolean(stockCountDraft && stocktakeScopeReady)} className="core-button" disabled={commerceControlsDisabled || !commerce.items.length} onClick={openStockCount} ref={stockCountTriggerRef} type="button">{stockCountDraft ? 'Continue count' : commerce.items.length ? 'Count stock' : 'Add products first'}</button></header>
+      <header className="shop-stock-heading"><div><h2>Inventory</h2></div><button aria-expanded={Boolean(stockCountDraft && stocktakeScopeReady)} className="core-button" disabled={commerceControlsDisabled || !commerce.items.length} onClick={openStockCount} ref={stockCountTriggerRef} type="button">{stockCountDraft ? 'Continue count' : commerce.items.length ? 'Count stock' : 'Add products first'}</button></header>
       <dl aria-label="Stock status" className="shop-stock-metrics">
         <div data-tone={lowStock.length ? 'attention' : 'ready'}><dt>Stock alerts</dt><dd>{lowStock.length.toLocaleString()}</dd><small>{lowStock.length ? 'At or below reorder' : 'Reorder levels clear'}</small></div>
         <div><dt>Units available</dt><dd>{stockUnitsAvailable.toLocaleString()}</dd><small>Across {commerce.items.length.toLocaleString()} {commerce.items.length === 1 ? 'product' : 'products'}</small></div>
@@ -7709,6 +8063,15 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
               {stockAttentionRows.length ? stockAttentionRows.map(renderStockRow) : <div className="data-row stock-empty-row" role="row"><span role="cell"><strong>No stock needs action.</strong><small>Count stock or open other products only when needed.</small></span></div>}
             </div>
           </div>
+          <details className="inventory-tools-disclosure stock-catalog-disclosure">
+            <summary><span><strong>Other products</strong><small>Healthy stock, pricing, and reorder levels</small></span><b>{stockCatalogRows.length} {stockCatalogRows.length === 1 ? 'item' : 'items'}</b></summary>
+            <div className="stock-catalog-content">
+              <div className="data-table" data-stock-list="catalog" role="table" aria-label="Other Shop products">
+                <div className="data-row table-head" role="row"><span role="columnheader">Item</span><span role="columnheader">Available</span><span role="columnheader">Reorder</span><span role="columnheader">Price</span><span role="columnheader">Next step</span></div>
+                {stockCatalogRows.length ? stockCatalogRows.map(renderStockRow) : <div className="data-row stock-empty-row" role="row"><span role="cell"><strong>No other products.</strong><small>Every current product appears in the action list above.</small></span></div>}
+              </div>
+            </div>
+          </details>
         </section>
         <aside aria-labelledby="shop-stock-next-title" className="shop-stock-next-action" data-action={stockNextActionKind}>
           <header><span><span className="core-eyebrow">Next stock action</span><h3 id="shop-stock-next-title">{stockNextActionTitle}</h3></span><b>{stockNextTrack}</b></header>
@@ -7721,23 +8084,18 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
               : <button className="core-button primary" disabled={commerceControlsDisabled || !stockNextItem} onClick={() => stockNextActionKind === 'count' ? openStockCount() : stockNextItem ? openPurchaseOrder(stockNextItem.sku) : undefined} type="button">{stockNextActionKind === 'pending' ? 'Pending review' : stockNextActionKind === 'receive' ? purchaseOrderDraft?.mode === 'receive' ? 'Continue receipt' : 'Receive stock' : stockNextActionKind === 'create' ? purchaseOrderDraft?.mode === 'create' ? 'Continue purchase order' : 'Create purchase order' : stockCountDraft ? 'Continue count' : 'Count stock'}</button>}</footer>
         </aside>
       </div>
-      <details className="inventory-tools-disclosure stock-catalog-disclosure">
-        <summary><span><strong>Other products</strong><small>Healthy stock, pricing, and reorder levels</small></span><b>{stockCatalogRows.length} {stockCatalogRows.length === 1 ? 'item' : 'items'}</b></summary>
-        <div className="stock-catalog-content">
-          <div className="data-table" data-stock-list="catalog" role="table" aria-label="Other Shop products">
-            <div className="data-row table-head" role="row"><span role="columnheader">Item</span><span role="columnheader">Available</span><span role="columnheader">Reorder</span><span role="columnheader">Price</span><span role="columnheader">Next step</span></div>
-            {stockCatalogRows.length ? stockCatalogRows.map(renderStockRow) : <div className="data-row stock-empty-row" role="row"><span role="cell"><strong>No other products.</strong><small>Every current product appears in the action list above.</small></span></div>}
-          </div>
-        </div>
-      </details>
       {catalogEditDraft && catalogEditItem ? <form aria-labelledby="catalog-item-editor-title" className="stock-receipt-editor" id="catalog-item-editor" onSubmit={reviewCatalogItemUpdate} ref={catalogEditEditorRef}>
         <div className="stock-receipt-copy">
           <span className="core-eyebrow">Edit item</span>
           <h3 id="catalog-item-editor-title">{catalogEditItem.name}</h3>
-          <small>{catalogEditItem.sku} · Only price and reorder level change{catalogEditStale ? ' · reload current values' : ''}</small>
+          <small>{catalogEditItem.sku} · Burmese name, price, reorder alert, and barcode{catalogEditStale ? ' · reload current values' : ''}</small>
         </div>
+        <label>Burmese name (optional)<input aria-invalid={!catalogEditNameMyValid} disabled={commerceControlsDisabled || catalogEditStale} lang="my" maxLength={180} onChange={(event) => setCatalogEditDraft((current) => current ? { ...current, nameMy: event.target.value } : current)} placeholder="Use the name your customers know" value={catalogEditDraft.nameMy} /></label>
+        <label>Category (optional)<input aria-invalid={!catalogEditCategoryValid} disabled={commerceControlsDisabled || catalogEditStale} list="shop-product-category-options" maxLength={80} onChange={(event) => setCatalogEditDraft((current) => current ? { ...current, category: event.target.value } : current)} placeholder="Type a category or choose an existing one" value={catalogEditDraft.category} /></label>
         <label>Price (MMK)<input aria-invalid={Boolean(catalogEditPriceText) && catalogEditPriceResult === null} disabled={commerceControlsDisabled || catalogEditStale} id="catalog-edit-price" inputMode="numeric" max={Number.MAX_SAFE_INTEGER} min="1" onChange={(event) => setCatalogEditDraft((current) => current ? { ...current, price: event.target.value } : current)} required step="1" type="number" value={catalogEditDraft.price} /></label>
         <label>Reorder at<input aria-invalid={Boolean(catalogEditReorderText) && catalogEditReorderResult === null} disabled={commerceControlsDisabled || catalogEditStale} inputMode="numeric" max={Number.MAX_SAFE_INTEGER} min="0" onChange={(event) => setCatalogEditDraft((current) => current ? { ...current, reorderAt: event.target.value } : current)} required step="1" type="number" value={catalogEditDraft.reorderAt} /></label>
+        <label>Barcode (optional)<span className="sku-scan-row"><input aria-invalid={!catalogEditBarcodeValid} disabled={commerceControlsDisabled || catalogEditStale} autoComplete="off" maxLength={80} onChange={(event) => setCatalogEditDraft((current) => current ? { ...current, barcode: event.target.value } : current)} placeholder="Scan or type the label code" value={catalogEditDraft.barcode} /><BarcodeScanButton disabled={commerceControlsDisabled || catalogEditStale} label="Scan the product barcode" onDetected={(value) => setCatalogEditDraft((current) => current ? { ...current, barcode: value } : current)} /></span></label>
+        <Suspense fallback={null}><ShopBarcodeLabels key={catalogEditItem.sku} disabled={commerceControlsDisabled || catalogEditStale || catalogEditChanged} product={{ sku: catalogEditItem.sku, barcode: catalogEditItem.barcode, itemName: catalogEditItem.name }} /></Suspense>
         <div className="form-actions"><button className="core-button" disabled={Boolean(pendingAction)} onClick={cancelCatalogItemEditor} type="button">Cancel</button><button className="core-button primary" disabled={catalogEditStale ? Boolean(pendingAction) || !commerceCanWrite : commerceControlsDisabled || !catalogEditChanged} onClick={catalogEditStale ? () => openCatalogItemEditor(catalogEditItem.sku) : undefined} type={catalogEditStale ? 'button' : 'submit'}>{catalogEditStale ? 'Reload values' : 'Review changes'}</button></div>
       </form> : null}
       <details className="inventory-tools-disclosure">
@@ -7772,6 +8130,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
         </div>
         {purchaseOrderDraft.mode === 'create' ? <label>Supplier reference{managedInventoryProjection ? <select disabled={commerceControlsDisabled} onChange={(event) => setPurchaseOrderDraft((current) => current?.mode === 'create' ? { ...current, supplier: event.target.value } : current)} required value={purchaseOrderDraft.supplier}><option value="">Choose supplier</option>{managedInventoryProjection.vendors.map((vendor) => <option key={vendor.id} value={vendor.name}>{vendor.name}</option>)}</select> : <input disabled={commerceControlsDisabled} maxLength={120} onChange={(event) => setPurchaseOrderDraft((current) => current?.mode === 'create' ? { ...current, supplier: event.target.value } : current)} placeholder="Supplier name" required value={purchaseOrderDraft.supplier} />}</label> : null}
         {purchaseOrderDraft.mode === 'create' ? <label>Expected arrival<input autoComplete="off" disabled={commerceControlsDisabled} min={localDateTimeInputValue(new Date())} onChange={(event) => setPurchaseOrderDraft((current) => current?.mode === 'create' ? { ...current, expectedAt: event.target.value } : current)} required type={coreUi.d} value={purchaseOrderDraft.expectedAt} /></label> : null}
+        {purchaseOrderDraft.mode === 'receive' ? <label>Scan accepted units<span className="sku-scan-row"><input autoComplete="off" disabled={commerceControlsDisabled} id="purchase-order-scan-code" maxLength={80} onChange={(event) => setPurchaseOrderScanCode(event.target.value)} onKeyDown={handlePurchaseOrderScanKeyDown} placeholder="Scan barcode or type SKU" value={purchaseOrderScanCode} /><BarcodeScanButton continuous disabled={commerceControlsDisabled} label="Scan items for this purchase receipt" onDetected={scanPurchaseOrderReceivedUnit} /></span></label> : null}
         <label>{purchaseOrderDraft.mode === 'create' ? 'Quantity to order' : 'Accepted units'}<input aria-describedby="stock-receipt-preview" disabled={commerceControlsDisabled} inputMode="numeric" max={purchaseOrderQuantityLimit} min="1" onChange={(event) => setPurchaseOrderDraft((current) => current ? { ...current, quantity: event.target.value } : current)} placeholder="10" required step="1" type="number" value={purchaseOrderDraft.quantity} /></label>
         {purchaseOrderDraft.mode === 'create' ? <label>Unit cost (MMK)<input aria-describedby="stock-receipt-preview" disabled={commerceControlsDisabled} inputMode="numeric" min="1" onChange={(event) => setPurchaseOrderDraft((current) => current?.mode === 'create' ? { ...current, unitCostMmk: event.target.value } : current)} placeholder="5000" required step="1" type="number" value={purchaseOrderDraft.unitCostMmk} /></label> : null}
         {purchaseOrderDraft.mode === 'receive' ? <div className="form-row"><label>Rejected units<input aria-describedby="stock-receipt-preview" disabled={commerceControlsDisabled} inputMode="numeric" max={Math.max(0, (purchaseOrderDraftOrder?.progress.remaining ?? 0) - (purchaseOrderQuantityResult ?? 0))} min="0" onChange={(event) => setPurchaseOrderDraft((current) => current?.mode === 'receive' ? { ...current, rejectedQuantity: event.target.value } : current)} required step="1" type="number" value={purchaseOrderDraft.rejectedQuantity} /></label><label>Discrepancy reason<select disabled={commerceControlsDisabled || purchaseOrderRejectedResult === 0} onChange={(event) => setPurchaseOrderDraft((current) => current?.mode === 'receive' ? { ...current, discrepancyCode: event.target.value as CommercePurchaseOrderDiscrepancyCode } : current)} required={Boolean(purchaseOrderRejectedResult)} value={purchaseOrderDraft.discrepancyCode}><option value="damaged">Damaged</option><option value="wrong_item">Wrong item</option><option value="quality_failed">Quality failed</option></select></label></div> : null}
@@ -7856,12 +8215,15 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
         })}</div> : <p className="empty-state">No purchase orders yet. Use Order stock on an item when replenishment is needed.</p>}
       </details>
       {commerce.items.length ? shopCatalogOnboarding : null}
+      <datalist id="shop-product-category-options">{shopCategoryOptions.map((category) => <option key={category} value={category} />)}</datalist>
       <details className="compact-disclosure catalog-disclosure" id="shop-catalog-create" onToggle={(event) => setCatalogCreateOpen(event.currentTarget.open)} open={catalogCreateOpen}>
         <summary>{commerce.items.length ? 'Add product' : 'Add your first product'}</summary>
         <form className="core-form compact-form catalog-create-form" onSubmit={queueCatalogItem} ref={catalogCreateFormRef}>
           <div className="form-row"><label>Product name<input disabled={commerceControlsDisabled} maxLength={180} name="product-name" onChange={(event) => setItemDraft((current) => ({ ...current, name: event.target.value }))} placeholder="e.g. Drinking water" required value={itemDraft.name} /></label><label>Price (MMK)<input disabled={commerceControlsDisabled} min="1" onChange={(event) => setItemDraft((current) => ({ ...current, price: event.target.value }))} required step="1" type="number" value={itemDraft.price} /></label></div>
+          <label>Burmese name (optional)<input disabled={commerceControlsDisabled} lang="my" maxLength={180} onChange={(event) => setItemDraft((current) => ({ ...current, nameMy: event.target.value }))} placeholder="Use the name your customers know" value={itemDraft.nameMy} /></label>
+          <label>Category (optional)<input disabled={commerceControlsDisabled} list="shop-product-category-options" maxLength={80} onChange={(event) => setItemDraft((current) => ({ ...current, category: event.target.value }))} placeholder="Type a category or choose an existing one" value={itemDraft.category} /></label>
           <div className="form-row"><label>Current stock<input disabled={commerceControlsDisabled} min="0" onChange={(event) => setItemDraft((current) => ({ ...current, onHand: event.target.value }))} required step="1" type="number" value={itemDraft.onHand} /></label><label>Low-stock alert (optional)<input disabled={commerceControlsDisabled} min="0" onChange={(event) => setItemDraft((current) => ({ ...current, reorderAt: event.target.value }))} step="1" type="number" value={itemDraft.reorderAt} /></label></div>
-          <label>Product code or barcode (optional)<span className="sku-scan-row"><input disabled={commerceControlsDisabled} maxLength={80} name="product-code" onChange={(event) => setItemDraft((current) => ({ ...current, sku: event.target.value }))} placeholder="Scan or type if you have one" value={itemDraft.sku} /><BarcodeScanButton disabled={commerceControlsDisabled} label="Scan a product code into the SKU field" onDetected={(value) => setItemDraft((current) => ({ ...current, sku: value }))} /></span></label>
+          <div className="form-row"><label>SKU / item code (optional)<input disabled={commerceControlsDisabled} maxLength={80} name="product-sku" onChange={(event) => setItemDraft((current) => ({ ...current, sku: event.target.value }))} placeholder="Leave blank to assign one" value={itemDraft.sku} /></label><label>Barcode (optional)<span className="sku-scan-row"><input disabled={commerceControlsDisabled} autoComplete="off" maxLength={80} name="product-barcode" onChange={(event) => setItemDraft((current) => ({ ...current, barcode: event.target.value }))} placeholder="Scan or type the label code" value={itemDraft.barcode} /><BarcodeScanButton disabled={commerceControlsDisabled} label="Scan the product barcode" onDetected={(value) => setItemDraft((current) => ({ ...current, barcode: value }))} /></span></label></div>
           <div className="form-actions"><button className={coreUi.q} disabled={commerceControlsDisabled} type="submit">Review and add product</button></div>
           <p className="panel-copy">Leave the code blank and Shop will create one. You can change the stock alert later.</p>
         </form>
@@ -7901,11 +8263,11 @@ function ReceivablesAging({ aging, disabled, onRecordContact }: {
     </div>
     <div className="receivables-aging-list">
       {aging.rows.slice(0, 5).map((row) => <div key={row.orderId}>
-        <span><strong>{row.customer}</strong><small>{row.orderId} · {row.paymentMethod} · due {formatTime(row.dueAt)}</small>{row.lastCollectionAction ? <small>Last contact {formatTime(row.lastCollectionAction.capturedAt)} by {row.lastCollectionAction.actor} · {row.collectionActionCount} total</small> : <small>No customer contact recorded</small>}</span>
+        <span><strong>{row.customer}</strong><small>{row.orderId} · {row.paymentMethod} · {row.dueAt ? `due ${formatTime(row.dueAt)}` : 'payment due at handoff'}</small>{row.lastCollectionAction ? <small>Last contact {formatTime(row.lastCollectionAction.capturedAt)} by {row.lastCollectionAction.actor} · {row.collectionActionCount} total</small> : <small>No customer contact recorded</small>}</span>
         <span><strong>{formatMoney(row.balanceMmk)}</strong><small>{row.daysPastDue ? `${row.daysPastDue} days overdue` : 'not overdue'}</small><button className="text-link" disabled={disabled} onClick={() => onRecordContact(row.orderId)} type="button">Record contact</button></span>
       </div>)}
     </div>
-    <p className="form-notice">New orders retain an immutable payment-due snapshot. Older orders fall back to their fulfilment promise. Contact notes are append-only evidence; recording one does not send a message or change payment.</p>
+    <p className="form-notice">Payment becomes overdue only after its recorded due date or completed handoff. Delivery promises do not count.</p>
   </details>
 }
 
@@ -7955,7 +8317,7 @@ function OrderList({
   onViewReceipt: (ack: CommerceOrderAcknowledgement) => void
 }) {
   const promiseNow = useMinuteClock()
-  if (!orders.length) return <Empty>No orders need action.</Empty>
+  if (!orders.length) return <Empty>{uiText('No orders need action.')}</Empty>
   return <div className="order-list">{orders.map((order) => {
     const active = order.status === 'confirmed' || order.status === 'preparing' || order.status === 'ready'
     const needsPayment = order.paymentStatus === 'pending'
@@ -7976,46 +8338,43 @@ function OrderList({
     const acknowledgement = acknowledgementDownloads.get(order.id)
     const canCancelOrder = active && canCancel(order.id)
     const hasSecondaryActions = Boolean(acknowledgement) || canCancelOrder || (order.refundStatus === 'due' && !settleRefundIsPrimary) || (needsPayment && !reconcileIsPrimary)
-    const primaryActionLabel = shopOrderPrimaryActionLabel(order)
+    const primaryActionLabel = uiText(shopOrderPrimaryActionLabel(order))
     const targetId = shopOrderTargetId(order.id)
+    const attentionLabels = shopOrderAttentionLabels(order, promiseUrgency)
     return <article data-highlighted={highlightedTargetId === targetId ? 'true' : undefined} id={targetId} key={order.id} tabIndex={-1}>
       <div>
         <strong>{order.customer} · {order.lines
           ? order.lines.length === 1
             ? `${order.lines[0].name} × ${order.quantity}`
-            : `${order.lines.length} items · ${order.quantity} units`
+            : `${order.lines.length} ${uiText('items')} · ${order.quantity} ${uiText('units')}`
           : `${order.item} × ${order.quantity}`}</strong>
         <div className="order-statuses">
-          <span className={`status-pill ${order.status === 'completed' ? 'approved' : order.status === 'cancelled' ? 'cancelled' : 'bounded'}`}>{order.status}</span>
-          <span className={`status-pill ${order.paymentStatus === 'reconciled' ? 'approved' : 'pending'}`}>payment {order.paymentStatus}</span>
-          {order.refundStatus === 'due' ? <span className="status-pill pending">refund due</span> : null}
-          {promiseUrgency === 'late' ? <span className="status-pill late">late</span> : null}
-          {promiseUrgency === 'due_soon' ? <span className="status-pill pending">due soon</span> : null}
-          {promiseUrgency === 'unrecorded' ? <span className="status-pill pending">promise missing</span> : null}
+          <span className={`status-pill ${order.status === 'completed' ? 'approved' : order.status === 'cancelled' ? 'cancelled' : 'bounded'}`}>{uiText(order.status)}</span>
+          {attentionLabels.map((attention) => <span className={`status-pill ${attention.tone}`} data-order-attention={attention.kind} key={attention.kind}>{uiText(attention.text)}</span>)}
         </div>
         <details className="order-record-details">
-          <summary><span>{commerceOrderDisplayReference(order.id)} · {order.promisedAt ? `promised ${formatTime(order.promisedAt)}` : 'promise missing'}</span><small>Details</small></summary>
+          <summary><span>{commerceOrderDisplayReference(order.id)} · {order.promisedAt ? `${uiText('promised')} ${formatTime(order.promisedAt)}` : uiText('promise not recorded')}</span><small>{uiText('Details')}</small></summary>
           <div>
             {order.lines ? <small>{order.lines.map((line) => `${line.name} × ${line.quantity} @ ${line.unitPriceMmk.toLocaleString()} MMK`).join(' · ')}</small> : null}
             <OrderCalculationNote order={order} />
-            <small>{commerceOrderDisplayReference(order.id)} · {order.owner ? `owner ${order.owner}` : 'owner not recorded'} · {order.channel} · {order.payment}{order.paymentDueAt ? ` · payment due ${formatTime(order.paymentDueAt)}` : ''}{order.fulfilment ? ` · ${fulfilmentLabel(order.fulfilment)}` : ''}{order.fulfilmentReference ? ` · ${order.fulfilmentReference}` : ''} · {order.promisedAt ? `promised ${formatTime(order.promisedAt)}` : 'promise not recorded'} · created {formatTime(order.createdAt)}</small>
+            <small>{commerceOrderDisplayReference(order.id)} · {order.owner ? `${uiText('owner')} ${order.owner}` : uiText('owner not recorded')} · {uiText(order.channel)} · {order.payment}{order.paymentDueAt ? ` · ${uiText('payment due')} ${formatTime(order.paymentDueAt)}` : ''}{order.fulfilment ? ` · ${uiText(fulfilmentLabel(order.fulfilment))}` : ''}{order.fulfilmentReference ? ` · ${order.fulfilmentReference}` : ''} · {order.promisedAt ? `${uiText('promised')} ${formatTime(order.promisedAt)}` : uiText('promise not recorded')} · ${uiText('created')} ${formatTime(order.createdAt)}</small>
           </div>
         </details>
-        {order.refundStatus === 'due' ? <small role="note">Record a refund already completed with the external payment provider. This does not send money.</small> : null}
+        {order.refundStatus === 'due' ? <small role="note">{uiText('Record a refund already completed with the external payment provider. This does not send money.')}</small> : null}
       </div>
       <div className="order-row-actions">
         <b>{formatMoney(order.total)}</b>
-        {settleSaleIsPrimary ? <button className="core-button primary compact" disabled={disabled} onClick={() => onSettleSale(order.id)} type="button"><span className="cashier-action-label"><span>{primaryActionLabel}</span>{CASHIER_COMPLETE_MY ? <small lang="my">{CASHIER_COMPLETE_MY}</small> : null}</span></button> : null}
+        {settleSaleIsPrimary ? <button className="core-button primary compact" disabled={disabled} onClick={() => onSettleSale(order.id)} type="button"><span className="cashier-action-label">{primaryActionLabel}</span></button> : null}
         {reconcileIsPrimary ? <button className="core-button primary compact" disabled={disabled} onClick={() => onReconcilePayment(order.id)} type="button">{primaryActionLabel}</button> : null}
         {settleRefundIsPrimary ? <button className="core-button primary compact" disabled={disabled} onClick={() => onSettleRefund(order.id)} type="button">{primaryActionLabel}</button> : null}
         {canAdvance ? <button className="core-button primary compact" disabled={disabled} onClick={() => onAdvance(order.id)} type="button">{primaryActionLabel}</button> : null}
         {hasSecondaryActions ? <details className="order-row-more">
-          <summary aria-label={`More options for ${order.id}`}>More</summary>
+          <summary aria-label={readUiLocale() === 'my' ? `${order.id} ${uiText('More options')}` : `More options for ${order.id}`}>{uiText('More')}</summary>
           <div>
-            {needsPayment && !reconcileIsPrimary ? <button className="text-link" disabled={disabled} onClick={() => onReconcilePayment(order.id)} type="button">Record payment only</button> : null}
-            {order.refundStatus === 'due' && !settleRefundIsPrimary ? <button className="text-link" disabled={disabled} onClick={() => onSettleRefund(order.id)} type="button">Record settled refund</button> : null}
+            {needsPayment && !reconcileIsPrimary ? <button className="text-link" disabled={disabled} onClick={() => onReconcilePayment(order.id)} type="button">{uiText('Record payment only')}</button> : null}
+            {order.refundStatus === 'due' && !settleRefundIsPrimary ? <button className="text-link" disabled={disabled} onClick={() => onSettleRefund(order.id)} type="button">{uiText('Record settled refund')}</button> : null}
             <OrderReceiptActions acknowledgement={acknowledgement} onViewReceipt={onViewReceipt} />
-            {canCancelOrder ? <button className="text-link subtle" disabled={disabled} onClick={() => onCancel(order.id)} type="button">Cancel order</button> : null}
+            {canCancelOrder ? <button className="text-link subtle" disabled={disabled} onClick={() => onCancel(order.id)} type="button">{uiText('Cancel order')}</button> : null}
           </div>
         </details> : null}
       </div>
@@ -8145,7 +8504,9 @@ function ProductionEventHistory({ events }: { events: ProductionEvent[] }) {
   </details>
 }
 
-function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIdentity | null; tab: ProductionTab }) {
+// Kept as an internal product module export so the customer Shop entry can be
+// tree-shaken independently while Plant remains available to internal entrypoints.
+export function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIdentity | null; tab: ProductionTab }) {
   const productionLocation = useLocation()
   const navigate = useNavigate()
   const [production, mutateProduction, productionStorageError, workspaceMode, managedVersion, managedWorkspaceId, productionCanWrite, retryManagedProductionLoad] = useProductionWorkspace(managedIdentity)

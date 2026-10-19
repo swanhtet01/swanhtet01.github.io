@@ -68,7 +68,7 @@ for (const required of [
   'discoverManagedWorkspacesForCurrentSession()',
   'directory.workspaces.find((workspace) => workspace.workspaceId === selectedWorkspace)',
   "directory.userId !== identity.userId",
-  'aria-label="Active company"',
+  "aria-label={uiText('Active company')}",
   '{portalAccess.companyName}',
   '{portalAccess.accountEmail}',
   '{portalAccess.companyRole}',
@@ -102,6 +102,7 @@ async function bundleAuth(configured = true) {
             if (!(i in h.slots)) h.slots[i] = typeof init === 'function' ? init() : init;
             return [h.slots[i], value => { h.slots[i] = typeof value === 'function' ? value(h.slots[i]) : value }]; };
           export const useRef = init => useState(() => ({ current: init }))[0];
+          export const useSyncExternalStore = (_subscribe, getSnapshot) => getSnapshot();
           export const createElement = (type, props, ...children) => ({ type, props: { ...props, children } });`,
         'react/jsx-runtime': 'export const jsx = (type, props) => ({ type, props }); export const jsxs = jsx; export const Fragment = "fragment";',
         'react-router': 'export const Link = "a"; export const useOutletContext = () => globalThis.__accountHarness.runtime; export const useLocation = () => globalThis.__accountHarness.routerLocation ?? ({ pathname: "/account/setup", search: window.location.search }); export const useNavigate = () => globalThis.__accountHarness.navigate ?? (() => { throw Error("unexpected navigation") });',
@@ -181,7 +182,7 @@ async function withAuth(run, configured = true) {
   }
   const replacements = {
     __accountHarness: { auth, signupAuth, effects: [], cursor: 0, slots: [], runtime: { status: 'checking', authReady: false } },
-    window: { location, history: { state: null, replaceState(_state, _title, path) {
+    window: { location, addEventListener() {}, history: { state: null, replaceState(_state, _title, path) {
       calls.push(['scrub', path]); location.search = ''; location.hash = ''
     } }, localStorage: {
       getItem: (key) => storage.get(key) ?? null,

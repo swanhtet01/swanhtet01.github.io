@@ -37,13 +37,20 @@ export function validatePreviewLinks(html, policy, products, options = {}) {
       return String.fromCodePoint(parseInt(entity.slice(entity[2].toLowerCase() === 'x' ? 3 : 2, -1), entity[2].toLowerCase() === 'x' ? 16 : 10))
     })
   })
-  const appPaths = new Set(['/login'])
+  // Shop links carry product intent so sign-in opens the correct workspace.
+  // Keep that route exact: no other product selectors or query parameters pass.
+  const appPaths = new Set(['/login', '/login?product=shop'])
   // Full-size gallery links are static, local PNGs. Keep this exact allowlist
   // separate from page routes so previews cannot turn an image into an escape.
   const galleryPaths = new Set([
-    '/images/actual-shop-today.png', '/images/actual-shop-sell.png', '/images/actual-shop-orders.png',
-    '/images/actual-sites-editor.png', '/images/actual-sites-inquiries.png',
-    '/images/actual-commerce-catalog.png', '/images/actual-commerce-order-request.png',
+    '/images/actual-shop-today.png', '/images/actual-shop-today-tablet.png', '/images/actual-shop-today-mobile.png',
+    '/images/actual-shop-sell.png', '/images/actual-shop-sell-tablet.png', '/images/actual-shop-sell-mobile.png',
+    '/images/actual-shop-orders.png', '/images/actual-shop-orders-tablet.png', '/images/actual-shop-orders-mobile.png',
+    '/images/actual-shop-inventory.png', '/images/actual-shop-inventory-tablet.png', '/images/actual-shop-inventory-mobile.png',
+    '/images/actual-sites-editor.png', '/images/actual-sites-editor-mobile.png',
+    '/images/actual-sites-inquiries.png', '/images/actual-sites-inquiries-mobile.png',
+    '/images/actual-commerce-catalog.png', '/images/actual-commerce-catalog-mobile.png',
+    '/images/actual-commerce-order-request.png', '/images/actual-commerce-order-request-mobile.png',
   ])
   const publicOrigin = options.publicOrigin || 'https://supermega.dev'
   for (const href of hrefs) {
@@ -58,8 +65,13 @@ export function validatePreviewLinks(html, policy, products, options = {}) {
     else if (!['/', '/shop/', '/website/', '/ecommerce/', '/contact/', '/privacy/'].includes(url.pathname)
       && !(galleryPaths.has(url.pathname) && !url.search && !url.hash)) throw new Error('public_preview_public_route_invalid')
   }
-  if (options.requireActions !== false && hrefs.filter(href => href === `${origin}/login`).length !== 1) {
-    throw new Error('public_preview_action_missing:single_login')
+  const loginPaths = new Set([`${origin}/login`, `${origin}/login?product=shop`])
+  const loginLinks = hrefs.filter(href => loginPaths.has(href))
+  const hasShopSignIn = html.includes(`<a class="button button-primary" href="${origin}/login?product=shop">Sign in to Shop`)
+  const expectedLoginCount = hasShopSignIn ? 2 : 1
+  if (options.requireActions !== false && (loginLinks.length !== expectedLoginCount
+    || (hasShopSignIn && !loginLinks.every(href => href === `${origin}/login?product=shop`)))) {
+    throw new Error('public_preview_action_missing:login_actions')
   }
   return { activeProducts: active.map(product => product.id), pairedOrigin: origin }
 }

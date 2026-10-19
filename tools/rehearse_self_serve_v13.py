@@ -40,6 +40,10 @@ EXTRAS = (
     "20261010070000_website_published_hero_media.sql",
     "20261010120857_website_inquiry_followup.sql",
     "20261014090000_website_channel_stable_update.sql",
+    "20261015091500_website_six_page_reviews.sql",
+    "20261015202629_ecommerce_operator_review_grant.sql",
+    "20261019070000_ecommerce_operator_management_boundary.sql",
+    "20261019103000_ecommerce_review_shared_state_lock.sql",
 )
 MIGRATIONS = (*pg.MIGRATIONS, *EXTRAS)
 PRODUCTS = ("commerce", "production", "website", "ecommerce")
@@ -55,6 +59,7 @@ CHECKS = (
     "four_product_workspaces_created", "product_entitlements_exact",
     "exact_create_replay", "claim_conflict_without_takeover", "durable_budget_enforced",
     "actor_directory_isolated", "cross_actor_read_denied", "revoked_session_denied",
+    "ecommerce_internal_operator_boundary",
     "unpaid_invoice_not_entitled", "payment_confirmation_not_entitlement",
     "separate_entitlement_grant_visible", "runtime_billing_write_denied",
     "backup_restored_exactly", "restored_runtime_readable", "restored_budget_enforced",
@@ -87,7 +92,8 @@ def source_identity(expected_head):
     require(git("rev-parse", "HEAD") == expected_head, "source_head_mismatch")
     observed = tuple(sorted(p.name for p in (ROOT / "supabase/migrations").glob("*.sql")
                             if p.name not in ("20260711081300_public_legacy_baseline.sql",
-                                              *pg.DOMAIN_CANDIDATE_MIGRATIONS)))
+                                              *pg.DOMAIN_CANDIDATE_MIGRATIONS,
+                                              *pg.DORMANT_CANDIDATE_MIGRATIONS)))
     require(observed == MIGRATIONS, "private_migration_inventory_mismatch")
     paths = sorted(set([
         "tools/rehearse_self_serve_v13.py", "tools/run_python_tool.mjs",
@@ -147,7 +153,8 @@ def snapshot(admin_url):
 def exercise(admin_url, runtime_url, head):
     from supermega_runtime.trial_store import (
         PostgresTrialStore, TrialPrincipal, TrialClaimConflict, TrialRateLimited,
-        TrialNotReadyError, SELF_SERVE_PRODUCT_ACTIVATION_IDS, self_serve_owner_capabilities,
+        TrialNotReadyError, TrialPermissionDenied, SELF_SERVE_PRODUCT_ACTIVATION_IDS,
+        self_serve_owner_capabilities,
     )
     from supermega_runtime.billing_rail import BillingLedger, BillingRailError, _digest
     from tests.test_billing_rail import sample_packet
@@ -279,6 +286,7 @@ def exercise(admin_url, runtime_url, head):
             "acceptance": adapter.acceptance(recipient, accepted_review["reviewId"])}}
     from tests.test_commerce_runtime import catalog_state, storefront_configuration
     from supermega_runtime.ecommerce_customer_review_store import EcommerceCustomerReviewStore
+    from supermega_runtime.managed_staff_access import _role_capabilities
     ecommerce = created[PRODUCTS.index("ecommerce")].workspace_id
     catalog = catalog_state()
     catalog["storefrontConfiguration"] = storefront_configuration(catalog)
@@ -288,27 +296,76 @@ def exercise(admin_url, runtime_url, head):
         conn.execute("insert into app_private.workspace_state(workspace_id,surface,version,state_json,updated_by) values (%s,'commerce',1,%s::jsonb,%s)",
                      (ecommerce, json.dumps(catalog), actors[0]))
     catalog_adapter = EcommerceCustomerReviewStore(store)
-    catalog_review = catalog_adapter.prepare(principal(ecommerce), review_id=str(uuid4()),
-        recipient_actor_id=recipient_id, expected_version=1,
-        expires_at=(datetime.now(timezone.utc)+timedelta(days=1)).isoformat())
+    operator_id, operator_session = str(uuid4()), str(uuid4())
+    try:
+        catalog_adapter.prepare(principal(ecommerce), review_id=str(uuid4()),
+            recipient_actor_id=recipient_id, expected_version=1,
+            expires_at=(datetime.now(timezone.utc)+timedelta(days=1)).isoformat())
+        raise pg.RehearsalFailure("self_serve_ecommerce_owner_granted_internal_work")
+    except TrialPermissionDenied:
+        pass
+    operator_capabilities = _role_capabilities({
+        "products": ["ecommerce"],
+        "ownerCapabilities": sorted(self_serve_owner_capabilities("ecommerce")),
+    }, "ecommerce-operator")
+    with pg._connect(admin_url) as conn:
+        conn.execute("insert into auth.sessions(id,user_id) values (%s::uuid,%s::uuid)",
+                     (operator_session, operator_id))
+        conn.execute("insert into app_private.workspace_memberships "
+                     "(workspace_id,actor_id,status,capabilities,actor_kind) "
+                     "values (%s,%s,'active',%s,'human')",
+                     (ecommerce, operator_id, operator_capabilities))
+    internal_operator = TrialPrincipal(workspace_id=ecommerce, actor_id=operator_id,
+        actor_kind="human", authenticated=True, session_id=operator_session,
+        identity_provider="supabase")
+    with pg._connect(admin_url) as conn:
+        operator_membership = conn.execute(
+            "select capabilities from app_private.workspace_memberships "
+            "where workspace_id=%s and actor_id=%s and status='active'",
+            (ecommerce, operator_id)).fetchone()
+    require(operator_membership is not None
+            and "ecommerce.manage" in (operator_membership[0] or []),
+            "ecommerce_internal_operator_grant_not_stored")
+    operator_readiness = store.readiness(internal_operator)
+    require(operator_readiness.write_ready, "ecommerce_internal_operator_not_ready")
+    require("ecommerce" in (operator_readiness.product_entitlements or ()),
+            "ecommerce_internal_operator_entitlement_missing")
+    require("ecommerce.manage" in operator_readiness.capabilities,
+            "ecommerce_internal_operator_capability_missing")
+    try:
+        catalog_review = catalog_adapter.prepare(internal_operator, review_id=str(uuid4()),
+            recipient_actor_id=recipient_id, expected_version=1,
+            expires_at=(datetime.now(timezone.utc)+timedelta(days=1)).isoformat())
+    except TrialPermissionDenied as exc:
+        raise pg.RehearsalFailure("ecommerce_internal_operator_prepare_denied") from exc
     require(catalog_review["persisted"] and not catalog_review["replayed"],
             "ecommerce_review_not_retained")
     catalog_recipient = TrialPrincipal(workspace_id=ecommerce, actor_id=recipient_id, actor_kind="human",
         authenticated=True, session_id=recipient_session, identity_provider="supabase")
+    try:
+        ecommerce_preview = catalog_adapter.preview(catalog_recipient, catalog_review["reviewId"])
+    except TrialPermissionDenied as exc:
+        raise pg.RehearsalFailure("ecommerce_recipient_preview_denied") from exc
     retained["ecommerce"] = {"workspace": ecommerce, "recipient": recipient_id,
         "session": recipient_session, "reviewId": catalog_review["reviewId"],
-        "preview": catalog_adapter.preview(catalog_recipient, catalog_review["reviewId"])}
+        "preview": ecommerce_preview}
     require(bool(retained["ecommerce"]["preview"]["preview"]["items"]), "ecommerce_preview_empty")
     retained['ecommerce']['decisionReviews'] = []
     for kind in ('acceptance', 'feedback'):
-        decision_review = catalog_adapter.prepare(principal(ecommerce), review_id=str(uuid4()),
-            recipient_actor_id=recipient_id, expected_version=1,
-            expires_at=(datetime.now(timezone.utc)+timedelta(days=1)).isoformat())
+        try:
+            decision_review = catalog_adapter.prepare(internal_operator, review_id=str(uuid4()),
+                recipient_actor_id=recipient_id, expected_version=1,
+                expires_at=(datetime.now(timezone.utc)+timedelta(days=1)).isoformat())
+        except TrialPermissionDenied as exc:
+            raise pg.RehearsalFailure("ecommerce_internal_operator_decision_prepare_denied") from exc
         payload = dict(commandId=str(uuid4()), reviewId=decision_review['reviewId'],
                        previewDigest=decision_review['previewDigest'])
         payload.update(dict(decision='accept_preview_for_release_review') if kind=='acceptance'
                        else dict(note='စျေးနှုန်း ပြင်ပါ'))
-        receipt = catalog_adapter.record_decision(catalog_recipient, payload, kind=kind)
+        try:
+            receipt = catalog_adapter.record_decision(catalog_recipient, payload, kind=kind)
+        except TrialPermissionDenied as exc:
+            raise pg.RehearsalFailure("ecommerce_recipient_decision_denied") from exc
         require(receipt['persisted'] and not receipt['replayed'], 'ecommerce_decision_not_retained')
         saved = catalog_adapter.decisions(catalog_recipient, decision_review['reviewId'])
         require(len(saved['decisions']) == 1 and saved['decisions'][0]['kind'] == kind,

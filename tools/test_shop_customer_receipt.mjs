@@ -8,7 +8,7 @@ const requireFromShowroom = createRequire(pathToFileURL(`${root}showroom/package
 const { build } = await import(pathToFileURL(requireFromShowroom.resolve('esbuild')).href)
 const bundled = await build({
   stdin: {
-    contents: "export { shopCustomerReceiptText, shopCustomerReceiptDocument } from './shop-customer-receipt.ts'",
+    contents: "export { formatShopBusinessDate, shopCustomerReceiptText, shopCustomerReceiptDocument, shopCustomerReceiptTestDocument } from './shop-customer-receipt.ts'",
     resolveDir: `${root}showroom/src/core`,
     sourcefile: 'shop-customer-receipt-check.ts',
     loader: 'ts',
@@ -19,7 +19,7 @@ const bundled = await build({
   write: false,
   logLevel: 'silent',
 })
-const { shopCustomerReceiptText, shopCustomerReceiptDocument } = await import(`data:text/javascript;base64,${Buffer.from(bundled.outputFiles[0].contents).toString('base64')}`)
+const { formatShopBusinessDate, shopCustomerReceiptText, shopCustomerReceiptDocument, shopCustomerReceiptTestDocument } = await import(`data:text/javascript;base64,${Buffer.from(bundled.outputFiles[0].contents).toString('base64')}`)
 
 const profileInput = {
   nameMyanmar: 'ဆိုင်', nameEnglish: 'Corner Shop', phone: '09 123 456',
@@ -35,18 +35,58 @@ const profile = validateCommerceState(JSON.parse(JSON.stringify(savedWorkspace))
 assert.ok(profile)
 const acknowledgement = {
   orderId: 'ORD-1001', createdAt: '2026-10-07T08:00:00.000Z', channel: 'counter', customer: 'Guest',
-  lines: [{ sku: 'RICE-1', name: 'Premium rice', quantity: 2, lineTotalMmk: 150000 }],
+  status: 'confirmed', cancellation: { state: 'not_cancelled', cancelledAt: null, actionId: null, evidenceReference: null },
+  lines: [{ sku: 'RICE-1', name: 'Premium rice', nameMy: 'ဆန်မွှေး', quantity: 2, lineTotalMmk: 150000 }],
   promotion: { discountMmk: 0 }, tax: { taxMmk: 0 }, delivery: null, totalMmk: 150000,
-  payment: { method: 'KBZPay', status: 'pending' },
+  payment: { method: 'KBZPay', status: 'pending', refundStatus: 'none' },
 }
 
 const text = shopCustomerReceiptText(acknowledgement, profile)
-assert.match(text, /ဆိုင်/)
 assert.match(text, /Corner Shop/)
-assert.match(text, /အရောင်းပြေစာ · SALES RECEIPT/)
+assert.doesNotMatch(text, /ဆိုင်|အရောင်းပြေစာ/)
+assert.match(text, /Sales receipt/)
+assert.match(text, /7 Oct 2026, 14:30/)
 assert.match(text, /Premium rice  ×2  150,000 MMK/)
-assert.match(text, /Payment · ငွေပေးချေမှု  Pending · ပေးချေရန်ကျန်/)
+assert.equal(formatShopBusinessDate('not-a-date'), 'not-a-date')
+assert.match(text, /Payment  Pending/)
 assert.doesNotMatch(text, /ACT-SHOP|SHOP-MERCHANT-PROFILE|evidence|internal note/i)
+const burmeseText = shopCustomerReceiptText(acknowledgement, profile, 'my')
+assert.match(burmeseText, /ဆိုင်/)
+assert.doesNotMatch(burmeseText, /Corner Shop|Sales receipt|Premium rice|Payment|Pending/)
+assert.match(burmeseText, /အရောင်းပြေစာ/)
+assert.match(burmeseText, /ဆန်မွှေး  ×2  150,000 MMK/)
+assert.match(burmeseText, /ငွေပေးချေမှု  ပေးချေရန်ကျန်/)
+
+const cancelledRefundDue = {
+  ...acknowledgement,
+  status: 'cancelled',
+  cancellation: { state: 'cancelled', cancelledAt: acknowledgement.createdAt, actionId: 'ACT-CANCEL-1', evidenceReference: 'CANCEL-1' },
+  payment: { method: 'KBZPay', status: 'reconciled', refundStatus: 'due' },
+}
+const refundDueText = shopCustomerReceiptText(cancelledRefundDue, profile)
+assert.match(refundDueText, /Order status  Cancelled/)
+assert.match(refundDueText, /Payment  Refund due/)
+assert.doesNotMatch(refundDueText, /Payment  Paid/)
+const refundSettledText = shopCustomerReceiptText({
+  ...cancelledRefundDue,
+  payment: { ...cancelledRefundDue.payment, refundStatus: 'settled' },
+}, profile)
+assert.match(refundSettledText, /Payment  Refunded/)
+assert.doesNotMatch(refundSettledText, /Payment  Paid/)
+const refundDueBurmese = shopCustomerReceiptText(cancelledRefundDue, profile, 'my')
+assert.match(refundDueBurmese, /အော်ဒါအခြေအနေ  ပယ်ဖျက်ပြီး/)
+assert.match(refundDueBurmese, /ငွေပေးချေမှု  ပြန်အမ်းရန်ကျန်/)
+assert.doesNotMatch(refundDueBurmese, /Cancelled|Refund due|Paid/)
+const cancelledUnpaid = shopCustomerReceiptText({
+  ...cancelledRefundDue,
+  payment: { method: 'KBZPay', status: 'pending', refundStatus: 'none' },
+}, profile)
+assert.match(cancelledUnpaid, /Payment  Not collected/)
+assert.doesNotMatch(cancelledUnpaid, /Payment  Paid/)
+const legacyAcknowledgement = { ...acknowledgement }
+delete legacyAcknowledgement.cancellation
+delete legacyAcknowledgement.payment.refundStatus
+assert.match(shopCustomerReceiptText(legacyAcknowledgement, profile), /Payment  Pending/)
 
 const reconciledAcknowledgement = {
   ...acknowledgement,
@@ -61,23 +101,56 @@ const customerDocument = shopCustomerReceiptDocument(reconciledAcknowledgement, 
   ...profile,
   nameEnglish: '<img src=x onerror=alert(1)>',
 })
-assert.match(customerDocument, /<html lang="my">/)
+assert.match(customerDocument, /<html lang="en">/)
 assert.match(customerDocument, /@media print and \(max-width: 65mm\)/)
 assert.match(customerDocument, /@media print and \(min-width: 90mm\)/)
 assert.doesNotMatch(customerDocument, /@page\s*\{\s*size:/)
 assert.match(customerDocument, /Premium &lt;script&gt;alert\(1\)&lt;\/script&gt;/)
 assert.match(customerDocument, /&lt;img src=x onerror=alert\(1\)&gt;/)
 assert.doesNotMatch(customerDocument, /<script|<img/)
-assert.match(customerDocument, /Tax · အခွန်  5,000 MMK/)
-assert.match(customerDocument, /Discount · လျှော့ဈေး  −10,000 MMK/)
-assert.match(customerDocument, /Delivery · ပို့ဆောင်ခ  2,000 MMK/)
-assert.match(customerDocument, /စုစုပေါင်း \/ TOTAL  147,000 MMK/)
+assert.match(customerDocument, /Tax  5,000 MMK/)
+assert.match(customerDocument, /Discount  −10,000 MMK/)
+assert.match(customerDocument, /Delivery  2,000 MMK/)
+assert.match(customerDocument, /Total  147,000 MMK/)
+assert.doesNotMatch(customerDocument, /အရောင်းပြေစာ|စုစုပေါင်း/)
 assert.equal(150000 - 10000 + 5000 + 2000, reconciledAcknowledgement.totalMmk)
 assert.doesNotMatch(customerDocument, /ACT-SHOP|SHOP-MERCHANT-PROFILE|evidence|internal note/i)
+const burmeseDocument = shopCustomerReceiptDocument({
+  ...reconciledAcknowledgement,
+  lines: [{ ...reconciledAcknowledgement.lines[0], nameMy: '<script>alert(2)</script>' }],
+}, { ...profile, nameMyanmar: '<img src=x onerror=alert(2)>' }, 'my')
+assert.match(burmeseDocument, /<html lang="my">/)
+assert.match(burmeseDocument, /&lt;script&gt;alert\(2\)&lt;\/script&gt;/)
+assert.match(burmeseDocument, /&lt;img src=x onerror=alert\(2\)&gt;/)
+assert.doesNotMatch(burmeseDocument, /<script|<img|Sales receipt|Premium rice/)
+assert.match(burmeseDocument, /အခွန်  5,000 MMK/)
+assert.match(burmeseDocument, /လျှော့ဈေး  −10,000 MMK/)
+assert.match(burmeseDocument, /ပို့ဆောင်ခ  2,000 MMK/)
+assert.match(burmeseDocument, /စုစုပေါင်း  147,000 MMK/)
+const printerTestDocument = shopCustomerReceiptTestDocument({ ...profile, nameEnglish: '<img src=x onerror=alert(1)>' })
+assert.match(printerTestDocument, /<html lang="en">/)
+assert.match(printerTestDocument, /Printer test only/)
+assert.match(printerTestDocument, /This test slip is not a sale\. No payment is due\./)
+assert.match(printerTestDocument, /Sales receipt/)
+assert.match(printerTestDocument, /&lt;img src=x onerror=alert\(1\)&gt;/)
+assert.match(printerTestDocument, /@media print and \(max-width: 65mm\)/)
+assert.match(printerTestDocument, /@media print and \(min-width: 90mm\)/)
+assert.doesNotMatch(printerTestDocument, /ORD-|Payment|evidence|internal note|<script|<img|စမ်းသပ်စာရွက်/)
+assert.match(printerTestDocument, /1234567890 · 5,000 MMK/)
+const burmeseTestDocument = shopCustomerReceiptTestDocument({ ...profile, nameMyanmar: '<img src=x onerror=alert(2)>' }, 'my')
+assert.match(burmeseTestDocument, /<html lang="my">/)
+assert.match(burmeseTestDocument, /စမ်းသပ်စာရွက်/)
+assert.match(burmeseTestDocument, /&lt;img src=x onerror=alert\(2\)&gt;/)
+assert.doesNotMatch(burmeseTestDocument, /<img|Printer test only|Sales receipt|Thank you/)
 const { readFile } = await import('node:fs/promises')
 const receiptDialogSource = await readFile(new URL('../showroom/src/core/ReceiptDialog.tsx', import.meta.url), 'utf8')
-assert.match(receiptDialogSource, /shopCustomerReceiptDocument\(ack, merchantProfile\)/)
+assert.match(receiptDialogSource, /const locale = useUiLocale\(\)/)
+assert.match(receiptDialogSource, /shopCustomerReceiptDocument\(ack, merchantProfile, locale\)/)
 assert.match(receiptDialogSource, /window\.open\('', '_blank'\)/)
-assert.match(receiptDialogSource, /Printing was blocked\. Allow pop-ups for this site/)
-assert.match(receiptDialogSource, /win\.document\.write\(shopCustomerReceiptDocument/)
-console.log('PASS bilingual customer receipt content and evidence separation')
+assert.match(receiptDialogSource, /uiText\('Printing was blocked\. Allow pop-ups for this site/)
+assert.match(receiptDialogSource, /win\.document\.write\(documentHtml\)/)
+assert.match(receiptDialogSource, /Print test slip/)
+assert.match(receiptDialogSource, /showSetupTrigger && !ack[\s\S]*openMerchantProfileSetup/)
+assert.match(receiptDialogSource, /shopCustomerReceiptTestDocument\(merchantProfile, locale\)/)
+assert.match(receiptDialogSource, /no sale was recorded/)
+console.log('PASS separate-language customer receipts and evidence separation')

@@ -132,7 +132,7 @@ export const APP_SHELL_REQUIREMENTS = [
       "const sensitiveAccountRoute = location.pathname.startsWith('/account/')",
       'const accountEntryRoute = loginRoute || sensitiveAccountRoute',
       'Login',
-      'aria-label="Login"',
+      "aria-label={uiText('Login')}",
       'mobile-account-link',
     ],
   },
@@ -174,7 +174,7 @@ export const APP_SHELL_REQUIREMENTS = [
       "routeProduct ? ' has-system-navigator' : ''",
       'export function ProductHomeEntry',
       'export function ProductHomePage',
-      '<nav aria-label="Your workspace" className="product-track-grid">',
+      "<nav aria-label={uiText('Your workspace')} className=\"product-track-grid\">",
     ],
   },
   {
@@ -294,7 +294,7 @@ export const ECOMMERCE_REQUIREMENTS = [
 export const RELEASE_SECURITY_HQ_REQUIREMENTS = [
   {
     id: 'upstream-managed-activation-runbook', authority: 'upstream', file: 'docs/supermega-enterprise-activation.md', tokens: [
-      'all 28 committed migrations', 'Validate core schema v13 and every post-v13 extension', 'Owner approved this exact plan and release.',
+      '32 migrations in the reviewed packet', 'Validate core schema v13 and every post-v13 extension', 'Owner approved this exact plan and release.',
       'Activation compensation after a downstream release gate failure.', '`SUPERMEGA_TRIAL_WRITES_ENABLED=true` is written last',
     ],
   },
@@ -336,7 +336,7 @@ export const RELEASE_SECURITY_HQ_REQUIREMENTS = [
   },
   {
     id: 'candidate-four-product-build-depth', authority: 'candidate', file: 'tools/verify_app_build.mjs', tokens: [
-      'aria-label="Shop operating view"', 'Services and resources', 'aria-label="Commerce operating status"', 'Order lifecycle queue',
+      "aria-label={uiText('Shop operating view')}", 'Services and resources', 'aria-label="Commerce operating status"', 'Order lifecycle queue',
       'Review one quote. Shop confirms the order, stock, delivery, and payment.',
     ],
   },

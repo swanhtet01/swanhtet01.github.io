@@ -1,10 +1,16 @@
 import { createRequire } from 'node:module'
-import { resolve } from 'node:path'
+import { isAbsolute, relative, resolve, sep } from 'node:path'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 const { build } = createRequire(resolve('showroom/package.json'))('esbuild')
 const managed = process.argv.includes('--managed')
 const today = process.argv.includes('--today')
-const out = resolve(managed ? '.tmp/qa-managed-shop' : '.tmp/qa-shop')
+const requestedOutput = process.env.SUPERMEGA_QA_FIXTURE_OUTPUT_DIR
+const out = resolve(requestedOutput || (managed ? '.tmp/qa-managed-shop' : '.tmp/qa-shop'))
+if (requestedOutput) {
+  const fromTemporaryRoot = relative(resolve('.tmp'), out)
+  if (!fromTemporaryRoot || fromTemporaryRoot === '..' || fromTemporaryRoot.startsWith(`..${sep}`) || isAbsolute(fromTemporaryRoot))
+    throw new Error('qa_fixture_output_must_be_inside_tmp')
+}
 mkdirSync(out,{recursive:true})
 await build({stdin:{resolveDir:resolve('showroom'),loader:'tsx',contents:`
 import React,{useState} from 'react';import {createRoot} from 'react-dom/client';import {MemoryRouter} from 'react-router';
@@ -13,10 +19,11 @@ import './src/core/core-app.css';
 let fail=false;let rejectedWrites=0;let ledgerWrites=0;window.__qaFailAck=false;const values=new Map();
 const memory=(map)=>({getItem:k=>map.get(k)??null,setItem:(k,v)=>{if(fail&&k===COMMERCE_KEY){rejectedWrites++;throw new DOMException('Synthetic quota','QuotaExceededError')};if(k===COMMERCE_KEY)ledgerWrites++;map.set(k,String(v))},removeItem:k=>map.delete(k),key:i=>[...map.keys()][i]??null,get length(){return map.size}});
 Object.defineProperty(window,'localStorage',{value:memory(values)});Object.defineProperty(window,'sessionStorage',{value:memory(new Map())});
-localStorage.setItem(COMMERCE_KEY,JSON.stringify(createSeedCommerce()));
+const seed=createSeedCommerce();
+localStorage.setItem(COMMERCE_KEY,JSON.stringify(seed));
 const baseline=localStorage.getItem(COMMERCE_KEY);
 const syntheticIdentity={workspaceId:'11111111-1111-4111-8111-111111111111',userId:'22222222-2222-4222-8222-222222222222'};
-window.__qaManaged={state:createSeedCommerce(),version:1,writes:0,reads:0};
+window.__qaManaged={state:structuredClone(seed),version:1,writes:0,reads:0};
 
 const nativeIDB=window.indexedDB;const prefix='supermega-qa-'+crypto.randomUUID()+'-';const names=new Set();const connections=new Set();
 Object.defineProperty(window,'indexedDB',{value:{open(name,version){const isolated=prefix+name;names.add(isolated);const request=version===undefined?nativeIDB.open(isolated):nativeIDB.open(isolated,version);request.addEventListener('success',()=>connections.add(request.result));return request},deleteDatabase(name){return nativeIDB.deleteDatabase(prefix+name)},cmp:nativeIDB.cmp.bind(nativeIDB)}});
@@ -26,7 +33,7 @@ const root=createRoot(document.getElementById('root'));
 async function cleanup(){root.unmount();for(const db of connections)db.close();await Promise.all([...names].map(name=>new Promise((resolve,reject)=>{const r=nativeIDB.deleteDatabase(name);r.onsuccess=resolve;r.onerror=reject;r.onblocked=()=>reject(Error('Synthetic cleanup blocked'))})));document.body.textContent='Synthetic databases removed';}
 function inspect(){const state=${managed ? 'window.__qaManaged.state' : 'JSON.parse(localStorage.getItem(COMMERCE_KEY))'};document.getElementById('evidence').textContent=JSON.stringify({managedWrites:window.__qaManaged.writes,managedReads:window.__qaManaged.reads,orders:state.orders.map(o=>({id:o.id,customer:o.customer})),rejectedWrites,ledgerWrites,unchanged:localStorage.getItem(COMMERCE_KEY)===baseline,completed:state.orders.filter(o=>o.status==='completed').map(o=>({id:o.id,paymentStatus:o.paymentStatus})),stock:state.items[0].onHand});}
 document.addEventListener('keydown',event=>{if(event.key==='F8'){event.preventDefault();fail=false;inspect()}if(event.key==='F9'){event.preventDefault();inspect()}});
-function Shop(){const [tab,setTab]=useState('${today ? 'today' : 'counter'}');window.__qaGalleryTab=tab;return <><button onClick={()=>setTab('today')}>Show Today</button><button onClick={()=>setTab('counter')}>Show Counter</button><button onClick={()=>setTab('orders')}>Show Orders</button><CommercePage confirmedLocalShop={${!managed}} managedIdentity={${managed ? 'syntheticIdentity' : 'null'}} tab={tab} shopCounterClientId="" shopCounterCustomer="" shopCounterSearch="" requestedRequestId={null} requestedShopTemplate={null} requestedSource={null} ecommerceCancellationNavigationIntent={null} ecommerceCorrectionNavigationIntent={null} ecommerceNavigationDraft={null} ecommerceOrderAmendmentNavigationIntent={null} ecommerceOrderRescheduleNavigationIntent={null} ecommerceReturnNavigationIntent={null} ecommerceSupportNavigationIntent={null}/></>}
+function Shop(){const [tab,setTab]=useState('${today ? 'today' : 'counter'}');window.__qaGalleryTab=tab;return <><button onClick={()=>setTab('today')}>Show Today</button><button onClick={()=>setTab('counter')}>Show Counter</button><button onClick={()=>setTab('orders')}>Show Orders</button><button onClick={()=>setTab('inventory')}>Show Inventory</button><CommercePage confirmedLocalShop={${!managed}} managedIdentity={${managed ? 'syntheticIdentity' : 'null'}} tab={tab} shopCounterClientId="" shopCounterCustomer="" shopCounterSearch="" requestedRequestId={null} requestedShopTemplate={null} requestedSource={null} ecommerceCancellationNavigationIntent={null} ecommerceCorrectionNavigationIntent={null} ecommerceNavigationDraft={null} ecommerceOrderAmendmentNavigationIntent={null} ecommerceOrderRescheduleNavigationIntent={null} ecommerceReturnNavigationIntent={null} ecommerceSupportNavigationIntent={null}/></>}
 let mountId=0;function renderFixture(){root.render(<><p>Isolated real Shop page. Synthetic records only; network blocked. F8 enables synthetic writes; F9 inspects records, including while a dialog is open.</p><button onClick={()=>{fail=true;document.getElementById('evidence').textContent='Synthetic Commerce writes blocked'}}>Block synthetic writes</button><button onClick={()=>{fail=false;document.getElementById('evidence').textContent='Synthetic Commerce writes enabled'}}>Enable synthetic writes</button><button onClick={()=>{window.__qaFailAck=true}}>Fail next acknowledgement</button><button onClick={renderFixture}>Reopen synthetic Shop</button><button onClick={inspect}>Inspect synthetic records</button><button onClick={()=>void cleanup()}>Clean synthetic databases</button><output id="evidence"/><MemoryRouter key={++mountId} initialEntries={['/shop/?tab=${today ? 'today' : 'counter'}']}><Shop/></MemoryRouter></>);}
 renderFixture();
 `},plugins:[{name:'fixture-only-commerce-export',setup(b){

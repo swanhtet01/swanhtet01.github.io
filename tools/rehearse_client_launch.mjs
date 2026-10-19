@@ -27,7 +27,7 @@ const SELECTED_LAUNCH_PROFILES = Object.freeze({
 })
 const REHEARSAL_PLANNING_DATE = '2026-07-30'
 const INVALID_SOURCE_REPLACEMENTS = Object.freeze({
-  commerce: [',24,', ',-1,'],
+  commerce: [',"24",', ',"-1",'],
   production: [',2026-08-13,', ',2026-02-30,'],
   website: [',https://example.com/contact', ',javascript:alert(1)'],
   ecommerce: [',true,', ',yes,'],
@@ -56,15 +56,16 @@ function replaceFirst(value, before, after, label) {
 }
 
 
-function genericSource(csvText, fields) {
+function genericSource(csvText, fields, optionalFieldIds = []) {
   const normalized = csvText.replaceAll('\r\n', '\n')
   const lines = normalized.split('\n')
   invariant(lines.length >= 3, 'A workflow template must include a header and data rows.')
-  const headers = fields.map((_, index) => `Source ${index + 1}`)
+  const mappingFields = [...fields, ...optionalFieldIds.map((id) => ({ id }))]
+  const headers = mappingFields.map((_, index) => `Source ${index + 1}`)
   return {
     csv: [headers.join(','), ...lines.slice(1)].join('\r\n'),
     headers,
-    mapping: Object.fromEntries(fields.map((field, index) => [field.id, headers[index]])),
+    mapping: Object.fromEntries(mappingFields.map((field, index) => [field.id, headers[index]])),
   }
 }
 
@@ -142,7 +143,7 @@ async function buildRehearsal() {
 
       if (selected) {
         const object = model.clientImportObject(product)
-        const generic = genericSource(source, object.fields)
+        const generic = genericSource(source, object.fields, product === 'commerce' ? ['nameMy'] : [])
         const [validValue, invalidValue] = INVALID_SOURCE_REPLACEMENTS[product]
         const invalidSource = replaceFirst(generic.csv, validValue, invalidValue, `${product}/${profileId}`)
         const unmapped = await model.createClientImportPreview(invalidSource, product, undefined, sourceName, profileId, REHEARSAL_PLANNING_DATE)
@@ -162,7 +163,7 @@ async function buildRehearsal() {
         )
 
         preview = await model.createClientImportPreview(generic.csv, product, generic.mapping, sourceName, profileId, REHEARSAL_PLANNING_DATE)
-        manualMappingDecisions += object.fields.length
+        manualMappingDecisions += Object.keys(generic.mapping).length
         sourceValueCorrections += 1
         recoveredProfiles += 1
         correctionMode = 'manual_mapping_and_value_recovery'
@@ -199,7 +200,7 @@ async function buildRehearsal() {
     ))
     const selectedSource = model.clientImportTemplate(product, SELECTED_LAUNCH_PROFILES[product], { planningDate: REHEARSAL_PLANNING_DATE })
     const selectedObject = model.clientImportObject(product)
-    const generic = genericSource(selectedSource, selectedObject.fields)
+    const generic = genericSource(selectedSource, selectedObject.fields, product === 'commerce' ? ['nameMy'] : [])
     const selectedPreview = await model.createClientImportPreview(
       generic.csv,
       product,

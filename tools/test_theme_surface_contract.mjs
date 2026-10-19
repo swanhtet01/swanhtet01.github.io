@@ -177,8 +177,8 @@ const AA_PINS = [
     // banner swaps in .status-pill.danger (CoreApp.tsx:2943). The pending pill on the red
     // tint is therefore a real combination, not a hypothetical one.
     text: '.status-pill.pending',
-    on: '.storage-durability-banner[data-durability="evictable"]',
-    surface: () => bannerSurface('.storage-durability-banner[data-durability="evictable"]'),
+    on: '.storage-durability-banner[data-durability="device-only"]',
+    surface: () => bannerSurface('.storage-durability-banner[data-durability="device-only"]'),
     was: 4.42,
   },
   {

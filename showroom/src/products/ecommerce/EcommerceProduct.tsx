@@ -279,7 +279,7 @@ function initialEcommerceState() {
 }
 
 function canDeliverCatalogReviews(bootstrap: Parameters<typeof managedBootstrapHasCapability>[0], identity: ManagedIdentity) {
-  return (['commerce.write', 'company.write', 'approvals.decide'] as const).every(capability => managedBootstrapHasCapability(bootstrap, identity, capability))
+  return (['commerce.write', 'ecommerce.manage', 'approvals.decide'] as const).every(capability => managedBootstrapHasCapability(bootstrap, identity, capability))
 }
 
 function StatusRows({ rows }: { rows: readonly (readonly string[])[] }) {
@@ -597,7 +597,7 @@ export function EcommerceProduct() {
           || confirmedIdentity.userId !== identity.userId) {
           throw new Error('The company account changed while loading. Reload to open the current company.')
         }
-        setManagedCanWrite(managedBootstrapHasCapability(bootstrap, identity, 'commerce.write'))
+        setManagedCanWrite(managedBootstrapHasCapability(bootstrap, identity, 'ecommerce.manage'))
         setManagedCanDeliverReviews(canDeliverCatalogReviews(bootstrap, identity))
         const view = resolveManagedStorefront(
           identity,
@@ -1052,7 +1052,7 @@ export function EcommerceProduct() {
       throw new Error('The company account changed. Reload before saving.')
     }
     const bootstrap = await loadManagedBootstrap(identity)
-    const writeAllowed = managedBootstrapHasCapability(bootstrap, identity, 'commerce.write')
+    const writeAllowed = managedBootstrapHasCapability(bootstrap, identity, 'ecommerce.manage')
     setManagedCanWrite(writeAllowed)
     setManagedCanDeliverReviews(canDeliverCatalogReviews(bootstrap, identity))
     if (!writeAllowed) throw new Error('View only — ask a company owner to assign Ecommerce operator access.')
@@ -1376,7 +1376,7 @@ export function EcommerceProduct() {
     }
     const bootstrap = await loadManagedBootstrap(identity)
     await assertCurrentRequestIdentity()
-    const writeAllowed = managedBootstrapHasCapability(bootstrap, identity, 'commerce.write')
+    const writeAllowed = managedBootstrapHasCapability(bootstrap, identity, 'ecommerce.manage')
     setManagedCanWrite(writeAllowed)
     setManagedCanDeliverReviews(canDeliverCatalogReviews(bootstrap, identity))
     if (!writeAllowed) throw new Error('View only — ask a company owner to assign Ecommerce operator access.')
@@ -2289,7 +2289,7 @@ export function EcommerceProduct() {
         </div>
         {openPublicRequests.length ? <div className="ecommerce-public-intake-list">
           {openPublicRequests.slice(0, publicVisibleCount).map((entry) => <div className="ecommerce-public-intake-row" key={`${entry.handle}:${entry.requestId}`}>
-            <div><strong>{entry.contact.name}</strong><small>{entry.request.lines.map((line) => `${line.quantity} × ${line.name}`).join(' · ')}</small><small>{entry.request.fulfilment === 'delivery' ? 'Delivery' : 'Pick up'} · {formatMmk(entry.request.totalMmk)} · {new Date(entry.receivedAt).toLocaleString()}</small><small>{entry.contact.phone}{entry.contact.address ? ` · ${entry.contact.address.line1}, ${entry.contact.address.township}, ${entry.contact.address.city}` : ''}</small></div>
+            <div><strong>Request {entry.requestId.slice(0, 8)}</strong><small>{entry.request.lines.map((line) => `${line.quantity} × ${line.name}`).join(' · ')}</small><small>{entry.request.fulfilment === 'delivery' ? 'Delivery' : 'Pick up'} · {formatMmk(entry.request.totalMmk)} · {new Date(entry.receivedAt).toLocaleString()}</small></div>
             <div>
               {entry.status === 'in_shop'
                 ? <Link className="core-button secondary" to={`/shop/?tab=orders&source=ecommerce-inbox&request=${encodeURIComponent(entry.shopRequestId)}`}>Open in Shop</Link>

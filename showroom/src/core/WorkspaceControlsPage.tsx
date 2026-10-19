@@ -21,6 +21,7 @@ import {
   type LocalWorkspaceBackupRefusal,
 } from './local-workspace-backup'
 import { PageHeading, RuntimeBadge, type RuntimeHealth } from './CoreShell'
+import { setUiLocale, uiText, useUiLocale } from './ui-locale'
 import { PaymentQrSettingsControls } from './PaymentQr'
 import { paymentQrScopeForWorkspace } from './payment-qr-store'
 import {
@@ -51,6 +52,20 @@ import type { EcommerceOrderRequestV2 } from '../products/ecommerce/ecommerce-bu
 const ECOMMERCE_BUYING_LOCAL_KEY = 'supermega.ecommerce.buying_lifecycle.v1.ecommerce%3Alocal'
 const CeoOperatingBriefView = lazy(() => import('./WorkspaceEvidenceViews').then((module) => ({ default: module.CeoOperatingBriefView })))
 const REPORT_FALLBACK = <div className="workspace-screen settings-screen"><p className="form-notice">Loading local report…</p></div>
+
+function LanguageSettingsView() {
+  const locale = useUiLocale()
+  return <div className="workspace-screen settings-screen">
+    <PageHeading actions={<Link className="core-button" to="/shop/">{uiText('Back to Shop')}</Link>} copy={uiText('Choose your language.')} eyebrow={uiText('Settings')} title={uiText('Language')} />
+    <section className="core-panel" aria-label={uiText('Language')}>
+      <div className="trial-actions" role="group" aria-label={uiText('Language')}>
+        <button aria-pressed={locale === 'en'} className={`core-button${locale === 'en' ? ' primary' : ''}`} onClick={() => setUiLocale('en')} type="button">English</button>
+        <button aria-pressed={locale === 'my'} className={`core-button${locale === 'my' ? ' primary' : ''}`} lang="my" onClick={() => setUiLocale('my')} type="button">မြန်မာ</button>
+      </div>
+      <p className="authority-note">{uiText('Saved on this device.')}</p>
+    </section>
+  </div>
+}
 
 // Same raw-localStorage read EcommercePipelineView below uses: readEcommerceBuyingState's
 // validation is async, and every other view on this page reads its workspace state
@@ -555,6 +570,7 @@ export function WorkspaceControlsPage() {
     ['Company changes', runtime.writesReady ? 'Available' : 'Unavailable'],
     ['Local records', currentBackup ? String(recordCount) : `${recordCount} · no backup file possible`],
   ]
+  if (searchParams.get('view') === 'language') return <LanguageSettingsView />
   if (searchParams.get('view') === 'local-metrics') return <LocalMetricsView />
   if (searchParams.get('view') === 'cross-product') return <CrossProductView />
   if (searchParams.get('view') === 'shop-revenue') return <ShopRevenueView />

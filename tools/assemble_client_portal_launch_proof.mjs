@@ -8,11 +8,11 @@ import { fileURLToPath } from 'node:url'
 import { validateReleaseHandoffPacket } from './prepare_release_handoff.mjs'
 import { portalEvidenceBindingDigest } from './verify_hosted_product_acceptance.mjs'
 
-export const CLIENT_PORTAL_LAUNCH_PROOF_CONTRACT = 'supermega.client_portal_launch_proof.v1'
+export const CLIENT_PORTAL_LAUNCH_PROOF_CONTRACT = 'supermega.client_portal_launch_proof.v2'
 
 const ACTIVATION_CONTRACT = 'supermega.managed_workspace_activation_requery_evidence.v2'
 const PORTAL_CONTRACT = 'supermega.hosted_client_portal_smoke.v1'
-const ACCEPTANCE_CONTRACT = 'supermega.hosted_product_acceptance_smoke.v2'
+const ACCEPTANCE_CONTRACT = 'supermega.hosted_product_acceptance_smoke.v3'
 const PRODUCT_ORDER = ['commerce', 'production', 'website', 'ecommerce']
 const PRODUCT_ALIASES = new Map([['shop', 'commerce'], ['plant', 'production']])
 const PRODUCT_ROUTES = new Map([
@@ -156,6 +156,15 @@ function validateAcceptance(value) {
     && exactDigest(value.prerequisitePortalArtifactDigest, 'launch_acceptance_portal_artifact_digest_invalid')
     && exactDigest(value.prerequisitePortalBindingDigest, 'launch_acceptance_portal_binding_digest_invalid'), 'launch_acceptance_invalid')
   const products = canonicalProducts(value.target.expectedProducts, 'launch_acceptance_products_invalid')
+  const suppliedApprovalDigests = value.target.productApprovalDigests
+  assert(isRecord(suppliedApprovalDigests)
+    && JSON.stringify(Object.keys(suppliedApprovalDigests).sort()) === JSON.stringify([...products].sort()),
+  'launch_acceptance_product_approval_set_invalid')
+  const productApprovalDigests = Object.fromEntries(products.map((product) => [
+    product,
+    exactDigest(suppliedApprovalDigests[product], 'launch_acceptance_product_approval_digest_invalid'),
+  ]))
+  assert(new Set(Object.values(productApprovalDigests)).size === products.length, 'launch_acceptance_product_approval_reused')
   assert(value.products.length === products.length
     && value.summary.productCount === products.length
     && value.summary.ownerReadbacksPassed === products.length
@@ -177,10 +186,11 @@ function validateAcceptance(value) {
       && item.ownerReadbackPassed === true
       && item.crossTenantDenied === true
       && item.replayPassed === true
+      && item.ownerApprovalDigest === productApprovalDigests[item.product]
       && /^sha256:[0-9a-f]{64}$/.test(String(item.stateDigest || '')), 'launch_acceptance_product_invalid')
   }
   exactTimestamp(value.capturedAt, 'launch_acceptance_time_invalid')
-  return { value, products }
+  return { value, products, productApprovalDigests }
 }
 
 export function buildClientPortalLaunchProof({ releaseHandoff, activationRequery, portalSmoke, productAcceptance, assembledAt = new Date().toISOString(), artifactDigests = {} }) {
@@ -200,8 +210,8 @@ export function buildClientPortalLaunchProof({ releaseHandoff, activationRequery
     && workspaceDigest === exactDigest(acceptance.value.target.workspaceDigest, 'launch_acceptance_workspace_digest_invalid'), 'launch_workspace_mismatch')
   assert(ownerDigest === exactDigest(portal.value.target.ownerDigest, 'launch_portal_owner_digest_invalid')
     && ownerDigest === exactDigest(acceptance.value.target.ownerDigest, 'launch_acceptance_owner_digest_invalid'), 'launch_owner_mismatch')
-  const ownerApprovalDigest = exactDigest(activation.value.activation.ownerApprovalDigest, 'launch_activation_approval_digest_invalid')
-  assert(ownerApprovalDigest === exactDigest(acceptance.value.target.ownerApprovalDigest, 'launch_acceptance_approval_digest_invalid'), 'launch_owner_approval_mismatch')
+  const activationOwnerApprovalDigest = exactDigest(activation.value.activation.ownerApprovalDigest, 'launch_activation_approval_digest_invalid')
+  assert(!Object.values(acceptance.productApprovalDigests).includes(activationOwnerApprovalDigest), 'launch_activation_product_approval_reused')
   const activationTime = Date.parse(activation.value.observedAt)
   const portalTime = Date.parse(portal.value.capturedAt)
   const acceptanceTime = Date.parse(acceptance.value.capturedAt)
@@ -224,7 +234,8 @@ export function buildClientPortalLaunchProof({ releaseHandoff, activationRequery
     tenant: {
       workspaceDigest,
       ownerDigest,
-      ownerApprovalDigest,
+      activationOwnerApprovalDigest,
+      productOwnerApprovalDigests: acceptance.productApprovalDigests,
       isolated: true,
       namedOwnerVerified: true,
       databaseActivationVerified: true,

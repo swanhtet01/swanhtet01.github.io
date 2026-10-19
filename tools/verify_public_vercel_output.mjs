@@ -34,6 +34,10 @@ function countOccurrences(value, token) {
   return value.split(token).length - 1
 }
 
+function hasClassToken(source, token) {
+  return [...source.matchAll(/\bclass="([^"]+)"/g)].some((match) => match[1].split(/\s+/).includes(token))
+}
+
 function walkFiles(directory) {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const fullPath = join(directory, entry.name)
@@ -54,7 +58,7 @@ const publicProductNames = publicProducts.map(product => product.name).join(', '
 const discoverablePages = manifest.pages.filter(page => !page.productId || publicProducts.some(product => product.id === page.productId))
 const shop = publicProducts.find((product) => product.id === 'shop')
 if (operatingProducts.map((product) => product.id).join(',') !== 'shop,plant') fail('operating_product_portfolio_drift')
-if (makerProducts.map((product) => `${product.id}:${product.status}`).join(',') !== 'website:available-in-app,ecommerce:release-candidate-local') fail('maker_product_portfolio_drift')
+if (makerProducts.map((product) => `${product.id}:${product.status}`).join(',') !== 'website:release-candidate-local,ecommerce:release-candidate-local') fail('maker_product_portfolio_drift')
 const website = manifest.customerProducts?.find((product) => product.id === 'website')
 if (website?.views?.join(',') !== 'Start,Edit,Preview,Download'
   || website?.templates?.some((template) => template.workflow?.at(-1) !== 'Download website')
@@ -100,12 +104,17 @@ const expectedStaticFiles = new Set([
   'vercel-insights.js',
   'platform-carousel.js',
   'images/actual-shop-today.png',
+  'images/actual-shop-today-tablet.png',
+  'images/actual-shop-today-mobile.png',
   'images/actual-shop-sell.png',
+  'images/actual-shop-sell-tablet.png',
+  'images/actual-shop-sell-mobile.png',
   'images/actual-shop-orders.png',
-  'images/actual-sites-editor.png',
-  'images/actual-sites-inquiries.png',
-  'images/actual-commerce-catalog.png',
-  'images/actual-commerce-order-request.png',
+  'images/actual-shop-orders-tablet.png',
+  'images/actual-shop-orders-mobile.png',
+  'images/actual-shop-inventory.png',
+  'images/actual-shop-inventory-tablet.png',
+  'images/actual-shop-inventory-mobile.png',
   'og-card.png',
   ...manifest.customerProducts.map((product) => `og-card-${product.id}.png`),
   'robots.txt',
@@ -114,14 +123,23 @@ const expectedStaticFiles = new Set([
 ])
 const actualStaticFiles = walkFiles(staticDir)
 for (const path of actualStaticFiles) {
+  if (/^images\/actual-(?:sites|commerce)-/.test(path)) fail('internal_product_capture_in_public_output', { path })
+}
+for (const path of actualStaticFiles) {
   if (!expectedStaticFiles.has(path)) fail('unapproved_public_artifact', { path })
 }
 for (const path of expectedStaticFiles) {
   if (!actualStaticFiles.includes(path)) fail('expected_public_artifact_missing', { path })
 }
-const ecommercePage = readStatic('ecommerce/index.html')
-for (const path of ['/images/actual-commerce-catalog.png', '/images/actual-commerce-order-request.png']) {
-  if (!ecommercePage.includes(`src="${path}"`)) fail('commerce_showcase_capture_missing', { path })
+for (const id of ['website', 'ecommerce']) {
+  const page = readStatic(`${id}/index.html`)
+  if (!publicProducts.some((product) => product.id === id)
+    && (!page.includes('name="robots" content="noindex,follow"')
+      || !page.includes('not offered for new setup')
+      || page.includes('class="platform-image')
+      || page.includes(`/images/actual-${id === 'website' ? 'sites' : 'commerce'}-`))) {
+    fail('internal_product_page_exposed', { id })
+  }
 }
 
 const sharedRequired = [
@@ -133,18 +151,27 @@ const sharedRequired = [
   'id="content"',
   '.skip-link { position: fixed; z-index: 60; top: 12px; left: 12px; min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; padding: 10px 14px; border-radius: 10px; background: var(--ink); color: #ffffff; font-size: 13px; font-weight: 720; text-decoration: none; transform: translateY(-160%); }',
   '.skip-link:focus { transform: translateY(0); }',
+  '.wrap { width: min(1260px, calc(100% - 64px)); margin-inline: auto; }',
+  '.site-header { position: sticky; top: 0; z-index: 40; min-height: 76px; border-bottom: 1px solid var(--brand-line); background: rgba(255,255,255,.96); backdrop-filter: blur(18px); }',
+  '.header-inner { min-height: 76px; display: flex; align-items: center; justify-content: space-between; gap: 24px; }',
+  '.nav-links { display: flex; min-width: 0; align-items: center; justify-content: flex-end; gap: 10px; }',
+  '.nav-links a { min-height: 48px; display: inline-flex; align-items: center; border: 1px solid transparent; border-radius: 8px; padding: 0 15px; color: var(--brand-muted); font-size: .9rem; font-weight: 600; text-decoration: none; transition: color 160ms ease, background-color 160ms ease, border-color 160ms ease; }',
   'aria-label="SuperMega home"',
-  '<span class="brand-mark" aria-hidden="true">&gt;_</span>',
-  '<span class="brand-name">SUPERMEGA</span>',
-  '<a class="button compact header-cta" href="https://app.supermega.dev/login">Login</a>',
+  '<nav class="nav-links" aria-label="Main navigation">',
+  '<span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 72 44" width="30" height="18" focusable="false"><path d="M10 9 26 22 10 35M35 35h27" fill="none" stroke="#2563eb" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>',
+  '<span class="brand-word">SuperMega</span>',
   '<script src="/vercel-insights.js"></script>',
   'href="/privacy/">Privacy</a>',
-  '--bg-raised: #f1f1fb;',
+  '--bg-raised: #f3f6fc;',
   '--ink: #151521;',
-  '--blue: #5b4ee8;',
+  '--blue: #2563eb;',
   'font-family: "SuperMega Noto Sans"',
   '--font-latin: "SuperMega Noto Sans"',
-  '.platform-image {margin:0;padding:24px;background:#f1f0fb;border:1px solid #dedbf4;',
+  '.platform-image figcaption {margin-top:auto;padding:12px 2px 0;color:#596579;font-size:12px;line-height:1.45}',
+  '.platform-device-set {display:grid;grid-template-columns:minmax(0,2.45fr) minmax(0,1.1fr) minmax(0,.78fr);',
+  '.platform-device-capture figcaption',
+  '.brand-mark { width: 30px; height: 18px; display: inline-flex; flex: none; align-items: center; justify-content: center; border: 0; border-radius: 0; padding: 0; background: transparent; box-shadow: none; color: var(--brand-accent); }',
+  '.contact-page .contact-form { width:100%; padding:clamp(24px,3vw,40px); gap:18px; border-color:#dbe3ee; border-radius:8px;',
 ]
 
 const forbiddenCopy = [
@@ -200,13 +227,27 @@ for (const [route, page] of pages) {
   for (const token of sharedRequired) {
     if (!page.html.includes(token)) fail('shared_brand_contract_missing', { route, token })
   }
+  const footerHref = route === '/shop/' ? '/shop/' : '/'
+  const footerLabel = route === '/shop/' ? 'SuperMega Shop, back to top' : 'SuperMega, back to top'
+  const footerBrand = `<a class="brand" href="${footerHref}" aria-label="${footerLabel}"><span class="brand-mark" aria-hidden="true">`
+  if (!page.html.includes(footerBrand)) fail('shared_footer_brand_missing', { route, footerHref })
+  const expectedLogin = route === '/shop/'
+    ? '<a href="https://app.supermega.dev/login?product=shop">Login</a>'
+    : '<a href="https://app.supermega.dev/login">Login</a>'
+  if (countOccurrences(page.html, expectedLogin) !== 1) fail('shared_login_destination_missing', { route, expectedLogin })
+  const expectedActive = route === '/' ? 'Company' : route === '/shop/' ? 'Shop' : route === '/contact/' ? 'Contact' : null
+  const activeLinks = [...page.html.matchAll(/<a\b[^>]*aria-current="page"[^>]*>([^<]+)<\/a>/g)].map(match => match[1])
+  if (activeLinks.join(',') !== (expectedActive || '')) fail('shared_navigation_active_state_drift', { route, expectedActive, activeLinks })
   for (const token of forbiddenCopy) {
     if (page.html.toLowerCase().includes(token.toLowerCase())) fail('retired_public_context_present', { route, token })
   }
   for (const marker of encodingCorruption) {
     if (page.html.includes(marker)) fail('public_copy_encoding_corrupt', { route })
   }
-  if (/\b(?:USD|MMK)\b|\$\s*\d|\d[\d,]*\s*(?:MMK|kyat)/i.test(page.html)) fail('public_price_present', { route })
+  if (route === '/shop/') {
+    if (/<section\b[^>]*class="[^"]*\bsubscription-section\b/.test(page.html)) fail('unverified_shop_subscription_section_present', { route })
+    if (/\b(?:USD|MMK)\b|\$\s*\d|\d[\d,]*\s*(?:MMK|kyat)/i.test(page.html)) fail('public_price_present', { route })
+  } else if (/\b(?:USD|MMK)\b|\$\s*\d|\d[\d,]*\s*(?:MMK|kyat)/i.test(page.html)) fail('public_price_present', { route })
   if (/target\s*=\s*["']?_blank/i.test(page.html) || page.html.includes('window.open(')) fail('new_tab_navigation_present', { route })
   if (page.html.includes('href="/solutions/"') || page.html.includes('href="/trust/"')) fail('retired_public_navigation_present', { route })
   if (!page.html.includes(`<link rel="canonical" href="${new URL(route, `${manifest.release.productionDomain}/`).href}"`)) fail('canonical_url_wrong', { route })
@@ -244,7 +285,7 @@ if (new Set(pageTitles).size !== pageTitles.length) fail('page_titles_not_unique
 const jsonLdBlocks = (html) => [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map((match) => match[1])
 const executableScriptCount = (html) => (html.match(/<script(?![^>]*type="application\/ld\+json")[\s>]/g) || []).length
 for (const [route, page] of pages) {
-  const expectedExecutable = route === '/contact/' ? 2 : page.html.includes('data-platform-carousel') ? 2 : 1
+  const expectedExecutable = route === '/contact/' || page.html.includes('data-platform-carousel') ? 2 : 1
   if (executableScriptCount(page.html) !== expectedExecutable) fail('unexpected_executable_script_element', { route, expected: expectedExecutable })
   const blocks = jsonLdBlocks(page.html)
   const landingProduct = publicProducts.find((product) => `/${product.id}/` === route)
@@ -290,22 +331,33 @@ if (publicObservability.indexOf("window.si('beforeSend'") > publicObservability.
 if (/(?:conversion|contact-form|customer|email|payment|proof_|window\.va\('event')/i.test(publicObservability)) fail('public_observability_private_or_custom_event_surface')
 
 const home = pages.get('/')?.html || ''
-const expectedHomeDescription = 'Explore tools for in-store sales, website pages and customer order requests with SuperMega.'
+const expectedHomeDescription = manifest.company.supporting
 if (homePage?.file !== 'index.html') fail('home_manifest_entry_invalid')
-if (homePage.title !== 'SuperMega | Run the business without the busywork') fail('home_manifest_title_drift')
+const expectedHomeTitle = `SuperMega | ${manifest.company.positioning.replace(/[.]$/, '')}`
+if (homePage.title !== expectedHomeTitle) fail('home_manifest_title_drift')
 if (homePage.description !== expectedHomeDescription) fail('home_manifest_description_source_drift')
 for (const staleToken of [
   '<title>SuperMega | Four products</title>',
   '<meta property="og:title" content="SuperMega | Four products" />',
-  `<meta name="description" content="${manifest.company.statement}" />`,
-  `<meta property="og:description" content="${manifest.company.statement}" />`,
 ]) {
   if (home.includes(staleToken)) fail('stale_home_metadata_present', { token: staleToken })
 }
-if (/\.brand-name\s*\{[^}]*display\s*:\s*none/i.test(home)) fail('mobile_brand_name_hidden')
-for (const token of ['Run the business.<br>Without the busywork.', 'id="products"', 'class="platform-image"', 'href="https://app.supermega.dev/login"', 'href="/contact/">Contact SuperMega</a>']) {
+if (!hasClassToken(home, 'company-hero')) fail('homepage_contract_missing', { token: 'class token company-hero' })
+for (const token of ['id="products"', 'href="/shop/">Explore Shop', 'href="/contact/">Contact us', 'href="https://app.supermega.dev/login"']) {
   if (!home.includes(token)) fail('homepage_contract_missing', { token })
 }
+if (home.includes('>View every screen size') || home.includes('>See Shop on desktop and mobile')) fail('home_action_must_not_be_a_device_tour')
+for (const token of ['body[data-view="company"] .company-hero::before{opacity:0;background-image:none}', 'body[data-view="company"] .shop-only-family{grid-template-columns:minmax(0,1fr);max-width:none}', 'body[data-view="company"] .company-hero .hero-grid{grid-template-columns:minmax(0,.88fr) minmax(420px,1.12fr)']) {
+  if (!home.includes(token)) fail('home_visual_contract_missing', { token })
+}
+if (home.includes('body[data-view="company"] .site-header .brand-word { color: var(--text); }')) fail('company_wordmark_light_on_light_override')
+if (!home.includes('<p class="hero-kicker">For Myanmar retailers</p>')
+  || !home.includes('See what sold.<br><span>Know what needs action.</span>')
+  || !home.includes('Record counter sales, check stock and follow open orders in SuperMega Shop.')
+  || !home.includes('class="company-operating-overview"')
+  || !home.includes('class="company-product-evidence"')
+  || /href="\/(?:website|ecommerce)\//.test(home)
+  || /\bSites\b|\bCommerce\b/.test(home)) fail('home_customer_access_scope_missing')
 for (const retiredToken of [
   'Four focused products',
   'Pick one product and try the working sample.',
@@ -327,25 +379,63 @@ for (const retiredLabel of ['>Open Commerce<', '>Open Production<']) {
   if (home.includes(retiredLabel)) fail('ambiguous_demo_cta_present', { retiredLabel })
 }
 if (home.includes('Commerce and Production carry real records and actions.')) fail('unsupported_live_record_claim_present')
-// Navigation is shared across all marketing pages: skip, home, header Contact,
-// Login, footer Contact and Privacy. The homepage adds one internal link for
-// each product and one closing Contact action.
-for (const [route, html] of [['/', home], ...publicProducts.map(product => [`/${product.id}/`, pages.get(`/${product.id}/`).html])]) {
+// Company and Shop use their focused header/footer, while the other product
+// landings retain the existing gallery navigation.
+for (const [route, html] of [['/', home], ['/shop/', pages.get('/shop/').html], ...publicProducts.filter(product => product.id !== 'shop').map(product => [`/${product.id}/`, pages.get(`/${product.id}/`).html])]) {
   const body = html.slice(html.indexOf('<body'))
   const routeProduct = publicProducts.find(product => route === `/${product.id}/`) || null
   const contactActionTarget = routeProduct?.status === 'available-in-app'
     ? `/contact/?product=${routeProduct.id}`
     : null
-  const galleryViews = { shop: 3, website: 2, ecommerce: 2 }
-  const expectedLinks = route === '/'
-    ? 7 + publicProducts.length + Object.values(galleryViews).reduce((total, count) => total + count, 0)
-    : 6 + Number(Boolean(contactActionTarget)) + (galleryViews[routeProduct?.id] || 0)
+  const galleryViews = { shop: 4, website: 2, ecommerce: 2 }
+  const expectedLinks = route === '/' ? 16 : route === '/shop/' ? 11 : 6 + Number(Boolean(contactActionTarget))
   if ((body.match(/<a\b/g) || []).length !== expectedLinks) fail('marketing_link_surface_drift', { route, expectedLinks })
-  if (countOccurrences(body, 'href="https://app.supermega.dev/login"') !== 1) fail('single_login_missing', { route })
-  if (!body.includes('class="platform-image"') || !(route === '/' ? body.includes('class="product-card-flow"') : body.includes('class="feature-line"'))) fail('product_visual_missing', { route })
+  const expectedLogin = route === '/shop/'
+    ? 'href="https://app.supermega.dev/login?product=shop"'
+    : 'href="https://app.supermega.dev/login"'
+  if (countOccurrences(body, expectedLogin) !== 1) fail('login_action_count_invalid', { route, expectedLogin })
+  if (route === '/shop/' && !body.includes('class="button button-primary" href="/contact/?product=shop">Ask about Shop')) fail('shop_primary_product_action_missing')
+  const hasGalleryNavigation = route !== '/shop/' && (galleryViews[routeProduct?.id] || 0) > 1
+  const expectedButtons = Number(hasGalleryNavigation) * 2
+  if ((body.match(/<button\b/g) || []).length !== expectedButtons) fail('marketing_button_surface_drift', { route, expectedButtons })
+  const galleryControlAttributes = [...body.matchAll(/<button\b([^>]*)>/g)]
+    .map(match => match[1])
+    .filter(attributes => /\bdata-gallery-(?:previous|next)\b/.test(attributes))
+  const expectedGalleryButtons = Number(hasGalleryNavigation) * 2
+  if (galleryControlAttributes.length !== expectedGalleryButtons) fail('gallery_navigation_button_count_drift', { route, expectedGalleryButtons, actual: galleryControlAttributes.length })
+  if (hasGalleryNavigation) {
+    const previous = galleryControlAttributes.filter(attributes => /\bdata-gallery-previous\b/.test(attributes))
+    const next = galleryControlAttributes.filter(attributes => /\bdata-gallery-next\b/.test(attributes))
+    if (previous.length !== 1 || !/aria-label="Previous [^"]+ screen"/.test(previous[0] || '') || !/\bdisabled\b/.test(previous[0] || '')) {
+      fail('gallery_previous_control_accessibility_drift', { route })
+    }
+    if (next.length !== 1 || !/aria-label="Next [^"]+ screen"/.test(next[0] || '') || /\bdisabled\b/.test(next[0] || '')) {
+      fail('gallery_next_control_accessibility_drift', { route })
+    }
+    if (!/data-gallery-status\b[^>]*aria-live="polite"/.test(body) || !hasClassToken(body, 'platform-slides') || !/class="platform-slides"[^>]*tabindex="0"/.test(body)) {
+      fail('gallery_status_or_keyboard_accessibility_drift', { route })
+    }
+  }
+  const productVisualMissing = route === '/'
+    ? !hasClassToken(body, 'company-hero') || !hasClassToken(body, 'product-family') || !body.includes('See what sold.<br><span>Know what needs action.</span>') || !body.includes('class="company-operating-overview"') || !body.includes('class="company-product-visual"') || !body.includes('class="company-product-evidence"') || !body.includes('One workflow. Every screen.') || body.includes('Sell faster.') || countOccurrences(body, 'class="platform-device-set has-tablet"') !== galleryViews.shop || body.includes('data-device-choice')
+    : route === '/shop/'
+      ? !body.includes('class="shop-actual-showcase"') || !body.includes('Sales, stock and orders.') || !body.includes('Real Shop screens with sample records. The catalog and prices shown are examples, not a live retail feed.') || body.includes('Makro PRO') || body.includes('17 October 2026') || body.includes('class="pos-window"') || body.includes('class="sample-label"') || body.includes('Complete sample sale') || body.includes('shop-sample-demo.js') || !body.includes('class="platform-gallery shop-gallery-all"') || countOccurrences(body, '<figure class="platform-image') !== galleryViews.shop || countOccurrences(body, 'class="platform-device-set has-tablet"') !== galleryViews.shop || body.includes('data-platform-carousel') || body.includes('data-device-choice') || body.includes('data-device-frame') || /<a\b[^>]*>\s*<img\b[^>]*src="\/images\/actual-shop-/i.test(body)
+      : !body.includes('class="platform-image"') || !body.includes('class="feature-line"')
+  if (productVisualMissing) fail('product_visual_missing', { route })
+  if (route === '/') {
+    const heroIndex = body.indexOf('class="hero company-hero"')
+    const overviewIndex = body.indexOf('class="company-operating-overview"')
+    const evidenceIndex = body.indexOf('class="company-product-evidence"')
+    const galleryIndex = body.indexOf('home-platform-gallery')
+    if (heroIndex < 0 || overviewIndex < heroIndex || evidenceIndex < 0 || galleryIndex < evidenceIndex) {
+      fail('company_site_product_story_order_drift')
+    }
+  }
   const directAppTargets = [...body.matchAll(/href="(https:\/\/app\.supermega\.dev\/[^\"]+)"/g)]
     .map(match => match[1])
-    .filter(target => target !== 'https://app.supermega.dev/login')
+    .filter(target => target !== (route === '/shop/'
+      ? 'https://app.supermega.dev/login?product=shop'
+      : 'https://app.supermega.dev/login'))
   if (directAppTargets.length !== 0) fail('product_action_release_state_drift', { route, expected: 0, actual: directAppTargets.length })
   if (contactActionTarget && !body.includes(`href="${contactActionTarget}">Contact SuperMega</a>`)) fail('product_action_destination_drift', { route, expected: contactActionTarget })
   for (const token of ['Request assisted setup', 'Open Ecommerce', 'Open Website', 'Choose shop type', 'theme-toggle', 'Start guided trial']) {
@@ -359,15 +449,36 @@ for (const [route, html] of [['/', home], ...publicProducts.map(product => [`/${
 }
 for (const product of publicProducts) {
   const productRoute = manifest.pages.find(page => page.productId === product.id)?.route
-  if (typeof productRoute !== 'string' || countOccurrences(home, `class="story-link" href="${productRoute}"`) !== 1) fail('homepage_product_link_missing', { product: product.id })
+  if (typeof productRoute !== 'string' || countOccurrences(home, `class="family-link" href="${productRoute}"`) !== 1) fail('homepage_product_link_missing', { product: product.id })
 }
 
 const shopPage = pages.get('/shop/')?.html || ''
+for (const [desktop, mobile, tablet] of [
+  ['actual-shop-today.png', 'actual-shop-today-mobile.png', 'actual-shop-today-tablet.png'],
+  ['actual-shop-sell.png', 'actual-shop-sell-mobile.png', 'actual-shop-sell-tablet.png'],
+  ['actual-shop-orders.png', 'actual-shop-orders-mobile.png', 'actual-shop-orders-tablet.png'],
+  ['actual-shop-inventory.png', 'actual-shop-inventory-mobile.png', 'actual-shop-inventory-tablet.png'],
+]) {
+  if (!shopPage.includes(`src="/images/${desktop}"`)
+    || !shopPage.includes(`src="/images/${tablet}"`)
+    || !shopPage.includes(`src="/images/${mobile}"`)
+    || !hasClassToken(shopPage, 'platform-device-capture-desktop')
+    || !hasClassToken(shopPage, 'platform-device-capture-tablet')
+    || !hasClassToken(shopPage, 'platform-device-capture-phone')) {
+    fail('shop_device_capture_set_missing', { desktop, mobile })
+  }
+}
 for (const [route, html] of [['/', home], ['/shop/', shopPage]]) {
   if (!html.includes('<html lang="en">')) fail('marketing_page_not_english', { route })
   if (html.includes('data-language-toggle') || html.includes('src="/site-language.js"')) fail('marketing_language_control_present', { route })
   if (html.includes('data-i18n=') || /[\u1000-\u109f]/u.test(html)) fail('marketing_myanmar_copy_present', { route })
 }
+for (const token of ['Actual app interface · sample data', 'Sales, stock and orders.', 'One clear view.', 'Search products, build the basket and complete a sale. Keep open orders and stock levels close at hand.']) {
+  if (!shopPage.includes(token)) fail('shop_page_scope_missing', { token })
+}
+if (/<section\b[^>]*class="[^"]*\bsubscription-section\b/.test(shopPage)
+  || /no setup fee|printer-sourcing markup|Shop is subscription-only/i.test(shopPage)) fail('unverified_shop_offer_copy_present')
+if (publicProducts.map(product => product.id).join(',') !== 'shop') fail('shop_customer_access_scope_missing')
 
 const contact = pages.get('/contact/')?.html || ''
 const contactMain = contact.match(/<main\b[\s\S]*?<\/main>/)?.[0] || ''
@@ -405,9 +516,11 @@ for (const token of ['Contact requests', 'Product data', 'AI processing', 'Delet
 }
 
 const favicon = readStatic('favicon.svg')
-for (const token of ['SuperMega terminal mark', manifest.brand.colors.background, manifest.brand.colors.accent, manifest.brand.colors.ink]) {
+const faviconAccent = manifest.brand.colors.accent
+for (const token of ['SuperMega terminal mark', 'd="M10 9 26 22 10 35M35 35h27"', `stroke="${faviconAccent}"`, 'stroke-width="6"', 'shape-rendering="geometricPrecision"']) {
   if (!favicon.includes(token)) fail('brand_mark_contract_missing', { token })
 }
+if (/<rect\b/i.test(favicon)) fail('brand_mark_background_present')
 
 for (const cardFile of ['og-card.png', ...manifest.customerProducts.map((product) => `og-card-${product.id}.png`)]) {
   const ogCardPath = resolve(staticDir, cardFile)
@@ -430,18 +543,32 @@ if (!/^(?:[0-9a-f]{40}|preview-[a-z0-9-]{8,64}|unknown)$/.test(release.commit)) 
 if (!/^\d{4}-\d{2}-\d{2}T/.test(release.generatedAt)) fail('release_timestamp_invalid')
 const publicGalleryEvidence = release.publicGalleryEvidence
 const publicGalleryFiles = [
-  'actual-shop-today.png', 'actual-shop-sell.png', 'actual-shop-orders.png',
-  'actual-sites-editor.png', 'actual-sites-inquiries.png',
-  'actual-commerce-catalog.png', 'actual-commerce-order-request.png',
+  'actual-shop-today.png', 'actual-shop-today-tablet.png', 'actual-shop-today-mobile.png',
+  'actual-shop-sell.png', 'actual-shop-sell-tablet.png', 'actual-shop-sell-mobile.png',
+  'actual-shop-orders.png', 'actual-shop-orders-tablet.png', 'actual-shop-orders-mobile.png',
+  'actual-shop-inventory.png', 'actual-shop-inventory-tablet.png', 'actual-shop-inventory-mobile.png',
 ]
+const sourceGalleryByFile = new Map(publicGalleryProvenance.assets?.map(asset => [asset.file, asset]) ?? [])
+const expectedPublicGalleryEvidence = {
+  schemaVersion: publicGalleryProvenance.schemaVersion,
+  status: publicGalleryProvenance.status,
+  records: publicGalleryProvenance.records,
+  captureSourceCommit: publicGalleryProvenance.captureSourceCommit,
+  captureSourceTree: publicGalleryProvenance.captureSourceTree,
+  capturedAt: publicGalleryProvenance.capturedAt,
+  assets: publicGalleryFiles.map(file => sourceGalleryByFile.get(file)),
+}
 if (publicGalleryEvidence?.schemaVersion !== 'supermega.public-gallery-provenance.v1'
   || publicGalleryEvidence.status !== 'local_component_capture'
   || publicGalleryEvidence.records !== 'synthetic'
   || !/^[0-9a-f]{40}$/.test(publicGalleryEvidence.captureSourceCommit)
   || !/^[0-9a-f]{40}$/.test(publicGalleryEvidence.captureSourceTree)
-  || publicGalleryEvidence.capturedAt !== null
+  || typeof publicGalleryEvidence.capturedAt !== 'string'
+  || !Number.isFinite(Date.parse(publicGalleryEvidence.capturedAt))
+  || new Date(publicGalleryEvidence.capturedAt).toISOString() !== publicGalleryEvidence.capturedAt
   || publicGalleryEvidence.assets?.map((asset) => asset.file).join(',') !== publicGalleryFiles.join(',')
-  || JSON.stringify(publicGalleryEvidence) !== JSON.stringify(publicGalleryProvenance)) {
+  || expectedPublicGalleryEvidence.assets.some(asset => asset === undefined)
+  || JSON.stringify(publicGalleryEvidence) !== JSON.stringify(expectedPublicGalleryEvidence)) {
   fail('public_gallery_provenance_drift')
 }
 for (const asset of publicGalleryEvidence.assets) {
@@ -490,12 +617,15 @@ if (config.crons) fail('public_artifact_must_not_define_crons')
 const securityRoute = config.routes.find((entry) => entry.src === '^/(.*)$' && entry.continue === true && entry.headers?.['content-security-policy'])
 if (!securityRoute) fail('public_security_header_route_missing')
 const csp = securityRoute.headers['content-security-policy']
-const styleBody = contact.match(/<style>([\s\S]*?)<\/style>/)?.[1] ?? ''
 const scriptBody = contact.match(/<script>([\s\S]*?)<\/script>/)?.[1] ?? ''
-const expectedStyleHash = `'sha256-${createHash('sha256').update(styleBody).digest('base64')}'`
+const styleBodies = [contact, home].flatMap((page) => [...page.matchAll(/<style>([\s\S]*?)<\/style>/g)].map((match) => match[1]))
+const expectedStyleHashes = [...new Set(styleBodies.map((styleBody) => `'sha256-${createHash('sha256').update(styleBody).digest('base64')}'`))]
 const expectedScriptHash = `'sha256-${createHash('sha256').update(scriptBody).digest('base64')}'`
-for (const token of ["default-src 'self'", "base-uri 'none'", "object-src 'none'", "frame-ancestors 'none'", "form-action 'self'", "script-src-attr 'none'", "style-src-attr 'none'", expectedStyleHash, expectedScriptHash]) {
+for (const token of ["default-src 'self'", "base-uri 'none'", "object-src 'none'", "frame-ancestors 'none'", "form-action 'self'", "script-src-attr 'none'", "style-src-attr 'none'", expectedScriptHash]) {
   if (!csp.includes(token)) fail('public_csp_contract_missing', { token })
+}
+for (const token of expectedStyleHashes) {
+  if (!csp.includes(token)) fail('public_csp_style_hash_missing', { token })
 }
 if (csp.includes("'unsafe-inline'") || csp.includes("'unsafe-eval'")) fail('public_csp_unsafe_policy')
 for (const [name, value] of Object.entries({ 'cross-origin-opener-policy': 'same-origin', 'cross-origin-resource-policy': 'same-origin', 'permissions-policy': 'camera=(), microphone=(), geolocation=(), payment=(), usb=()', 'referrer-policy': 'no-referrer', 'x-content-type-options': 'nosniff', 'x-frame-options': 'DENY' })) {

@@ -55,7 +55,26 @@ function check(condition, label) {
 }
 
 const dataRows = (csv) => csv.split(/\r?\n/).slice(1).filter(Boolean)
-const firstColumn = (csv) => dataRows(csv).map((line) => line.split(',')[0].trim()).filter(Boolean)
+function csvCells(line) {
+  const cells = []
+  let value = ''
+  let quoted = false
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index]
+    if (char === '"') {
+      if (quoted && line[index + 1] === '"') { value += '"'; index += 1 }
+      else quoted = !quoted
+    } else if (char === ',' && !quoted) { cells.push(value.trim()); value = '' }
+    else value += char
+  }
+  if (quoted) throw new Error('sample_csv_unclosed_quote')
+  cells.push(value.trim())
+  return cells
+}
+const firstColumn = (csv) => dataRows(csv).map((line) => csvCells(line)[0]).filter(Boolean)
+
+check(firstColumn('sku,name\n"RICE-25KG","Rice"\n')[0] === 'RICE-25KG', 'quoted catalog SKU is parsed before pairing')
+check(csvCells('"OIL-1L","Cooking oil, 1L",40')[1] === 'Cooking oil, 1L', 'quoted commas remain inside sample names')
 
 check(shopIndustryPacks.length >= 6, `Shop ships at least six industry packs, got ${shopIndustryPacks.length}`)
 
@@ -74,7 +93,7 @@ for (const pack of shopIndustryPacks) {
   const missing = storefrontSkus.filter((sku) => !catalogSkus.has(sku))
   check(
     missing.length === 0,
-    `${pack.id}: THE PAIR HOLDS -- every storefront SKU is in its own catalog, missing ${missing.join(', ')}`,
+    `${pack.id}: THE PAIR HOLDS -- every storefront SKU is in its own catalog, missing ${missing.join(', ')}; catalog ${[...catalogSkus].join(', ')}`,
   )
 
   // The samples must actually be about this industry rather than a shared placeholder set,
@@ -155,7 +174,7 @@ const dedicatedItem = (catalog, service) => catalog.find((item) => (
 // on one route and not the other is the same defect, just harder to see.
 for (const pack of shopIndustryPacks) {
   const catalog = dataRows(clientImportTemplate('commerce', undefined, { shopIndustryPackId: pack.id }))
-    .map((line) => { const cells = line.split(','); return { name: cells[1].trim(), priceMmk: Number(cells[4]) } })
+    .map((line) => { const cells = csvCells(line); return { name: cells[1], priceMmk: Number(cells[4]) } })
   for (const service of createShopServiceSchedule(pack.id).services) {
     const item = dedicatedItem(catalog, service)
     check(
@@ -219,7 +238,7 @@ for (const pack of shopIndustryPacks) {
 // close already understands. Copying that pattern is the whole fix.
 const depositPacks = ['restaurant', 'spa', 'gym']
 const catalogRows = (packId) => dataRows(clientImportTemplate('commerce', undefined, { shopIndustryPackId: packId }))
-  .map((line) => { const cells = line.split(','); return { sku: cells[0].trim(), name: cells[1].trim(), reorderAt: Number(cells[3]), priceMmk: Number(cells[4]) } })
+  .map((line) => { const cells = csvCells(line); return { sku: cells[0], name: cells[1], reorderAt: Number(cells[3]), priceMmk: Number(cells[4]) } })
 
 for (const packId of depositPacks) {
   const deposit = catalogRows(packId).find((item) => /deposit/i.test(item.name))

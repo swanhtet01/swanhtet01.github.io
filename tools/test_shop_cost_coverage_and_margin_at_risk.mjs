@@ -336,14 +336,16 @@ for (const badOrder of [
 }
 
 {
-  const source = await readFile('showroom/src/core/ShopToday.tsx', 'utf8')
+  const todaySource = await readFile('showroom/src/core/ShopToday.tsx', 'utf8')
+  const source = await readFile('showroom/src/core/ShopTodayAdvanced.tsx', 'utf8')
   const coreSource = await readFile('showroom/src/core/CoreApp.tsx', 'utf8')
+  check(todaySource.includes("lazy(() => import('./ShopTodayAdvanced')"), 'advanced margin controls load from Today only when opened')
   const coverageIndex = source.indexOf('Sold-value cost coverage')
   const profitIndex = source.indexOf('Aggregate gross profit')
   check(coverageIndex >= 0 && profitIndex > coverageIndex, 'UI source places cost coverage before aggregate profit')
   check(source.includes('Retained non-sample completed sales') && source.includes('not pilot, customer, or commercial proof'), 'UI states the retained-local truth boundary without asserting owner observation')
   check(!source.includes('owner-observed'), 'UI does not infer owner observation from an absent sample marker')
-  check(source.includes('useMemo(() => projectShopCostCoverageAndMarginAtRisk(commerce), [commerce])'), 'Today memoizes the projection by retained Commerce state')
+  check(source.includes('useMemo(() => projectShopCostCoverageAndMarginAtRisk(commerce), [commerce])'), 'advanced Today memoizes the projection by retained Commerce state')
   check(!coreSource.includes('projectShopCostCoverageAndMarginAtRisk'), 'non-Today Commerce renders do not derive the margin projection')
   check((source.match(/Margin rate unavailable — no sold value/g) ?? []).length === 1, 'Today renders one explicit unavailable rate for zero-sale priorities in the retained margin view')
   check((source.match(/Critical cost with no sold value/g) ?? []).length === 1, 'Today names zero-sale cost exposure once as critical without fabricating a percentage')

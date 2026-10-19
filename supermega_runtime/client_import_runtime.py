@@ -74,6 +74,9 @@ CLIENT_IMPORT_OBJECTS: dict[str, ClientImportObjectSpec] = {
         ),
         optional_extensions=(
             ClientImportFieldSpec("variant", "text", required=False, maximum=120),
+            ClientImportFieldSpec("barcode", "text", required=False, maximum=80),
+            ClientImportFieldSpec("category", "text", required=False, maximum=80),
+            ClientImportFieldSpec("nameMy", "text", required=False, maximum=180),
         ),
     ),
     "production": ClientImportObjectSpec(
@@ -424,6 +427,21 @@ def validate_client_import_staging_package(
         if field.identifier in mapping_candidate
     )
     fields = (*spec.fields, *extension_fields)
+    if product == "commerce":
+        # Match the browser's Shop field order so preview and package digests
+        # are stable across the TypeScript and Python validators.
+        shop_field_order = {
+            "sku": 0,
+            "barcode": 1,
+            "name": 2,
+            "nameMy": 3,
+            "category": 4,
+            "onHand": 5,
+            "reorderAt": 6,
+            "price": 7,
+            "variant": 8,
+        }
+        fields = tuple(sorted(fields, key=lambda field: shop_field_order[field.identifier]))
     field_ids = tuple(field.identifier for field in fields)
     mapping_raw = _exact_object(mapping_candidate, "package.mapping", field_ids)
     mapping: dict[str, str] = {}
@@ -494,6 +512,26 @@ def validate_client_import_staging_package(
                 "values": values,
             }
         )
+
+    if product == "commerce":
+        sku_owners_by_code = {
+            row["values"]["sku"].lower(): row["key"]
+            for row in normalized_rows
+        }
+        barcode_owners_by_code: dict[str, str] = {}
+        for row in normalized_rows:
+            barcode = row["values"].get("barcode", "")
+            if not barcode:
+                continue
+            code = barcode.lower()
+            previous_owner = barcode_owners_by_code.get(code)
+            if previous_owner is not None and previous_owner != row["key"]:
+                raise _fail("A Shop barcode must identify only one catalog item.")
+            barcode_owners_by_code[code] = row["key"]
+        for code, barcode_owner in barcode_owners_by_code.items():
+            sku_owner = sku_owners_by_code.get(code)
+            if sku_owner is not None and sku_owner != barcode_owner:
+                raise _fail("A Shop barcode cannot match a different item's SKU.")
 
     controls = _exact_object(
         package["controls"],

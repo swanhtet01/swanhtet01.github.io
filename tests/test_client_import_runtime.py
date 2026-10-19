@@ -24,7 +24,12 @@ from supermega_runtime.client_import_runtime import (
 from supermega_runtime.commerce_runtime import commerce_catalog_digest, validate_commerce_state
 from supermega_runtime.runtime import reduce_trial_state
 from supermega_runtime.trial_runtime import create_trial_router
-from supermega_runtime.trial_store import InMemoryTrialStore, TrialPrincipal, TrialValidationError
+from supermega_runtime.trial_store import (
+    InMemoryTrialStore,
+    TrialPermissionDenied,
+    TrialPrincipal,
+    TrialValidationError,
+)
 from supermega_runtime.website_runtime import validate_website_state
 
 
@@ -583,11 +588,13 @@ class ClientImportRouteTests(unittest.TestCase):
         *,
         command_id: str,
         expected_version: int = 0,
+        session: str = "writer",
     ) -> dict[str, object]:
         validation = validate_client_import_staging_package(package)
         preflight = self._apply_preflight(
             package,
             expected_version=expected_version,
+            session=session,
         )
         return {
             "command_id": command_id,
@@ -965,7 +972,65 @@ class ClientImportRouteTests(unittest.TestCase):
         self.assertEqual(self.reducer.calls, 1)
         self.assertEqual(len(self.store._events), 1)
 
-    def test_reviewed_shop_import_preserves_optional_variant(self) -> None:
+    def test_optional_shop_barcode_is_text_and_cannot_collide_with_another_item(self) -> None:
+        package = _package("commerce", "retail-wholesale")
+        package["mapping"]["barcode"] = "ean"
+        package["rows"][0]["values"]["barcode"] = "0000123456789"
+        package["mapping"] = {
+            "sku": package["mapping"]["sku"],
+            "barcode": package["mapping"]["barcode"],
+            **{key: value for key, value in package["mapping"].items() if key not in {"sku", "barcode"}},
+        }
+        package["rows"][0]["values"] = {
+            "sku": package["rows"][0]["values"]["sku"],
+            "barcode": package["rows"][0]["values"]["barcode"],
+            **{key: value for key, value in package["rows"][0]["values"].items() if key not in {"sku", "barcode"}},
+        }
+        valid = validate_client_import_staging_package(_resign(package))
+        self.assertEqual(valid.product, "commerce")
+        self.assertEqual(valid.row_count, 1)
+
+        unsafe = deepcopy(package)
+        unsafe["rows"][0]["values"]["barcode"] = "=1+1"
+        with self.assertRaises(ClientImportValidationError):
+            validate_client_import_staging_package(_resign(unsafe))
+
+        duplicate = deepcopy(package)
+        second_row = deepcopy(duplicate["rows"][0])
+        second_row["sourceRow"] = 3
+        second_row["key"] = "TEA-100"
+        second_row["values"] = {
+            "sku": "TEA-100",
+            "name": "Myanmar green tea",
+            "onHand": "12",
+            "reorderAt": "4",
+            "price": "4500",
+            "barcode": "0000123456789",
+        }
+        duplicate["rows"].append(second_row)
+        duplicate["controls"]["rowCount"] = 2
+        with self.assertRaisesRegex(ClientImportValidationError, "barcode must identify only one"):
+            validate_client_import_staging_package(_resign(duplicate))
+
+        sku_collision = deepcopy(package)
+        sku_collision["rows"][0]["values"]["barcode"] = "TEA-100"
+        second_row = deepcopy(sku_collision["rows"][0])
+        second_row["sourceRow"] = 3
+        second_row["key"] = "TEA-100"
+        second_row["values"] = {
+            "sku": "TEA-100",
+            "name": "Myanmar green tea",
+            "onHand": "12",
+            "reorderAt": "4",
+            "price": "4500",
+            "barcode": "",
+        }
+        sku_collision["rows"].append(second_row)
+        sku_collision["controls"]["rowCount"] = 2
+        with self.assertRaisesRegex(ClientImportValidationError, "cannot match a different"):
+            validate_client_import_staging_package(_resign(sku_collision))
+
+    def test_reviewed_shop_import_preserves_optional_category_variant_and_barcode(self) -> None:
         omitted_variant = _package("commerce", "retail-wholesale")
         omitted_variant["mapping"]["variant"] = ""
         omitted_variant["rows"][0]["values"]["variant"] = ""
@@ -982,7 +1047,31 @@ class ClientImportRouteTests(unittest.TestCase):
 
         package = _package("commerce", "retail-wholesale")
         package["mapping"]["variant"] = "product_variant"
+        package["mapping"]["barcode"] = "ean"
+        package["mapping"]["category"] = "category"
         package["rows"][0]["values"]["variant"] = "Large"
+        package["rows"][0]["values"]["barcode"] = "0000123456789"
+        package["rows"][0]["values"]["category"] = "အဖျော်ယမကာ"
+        package["mapping"] = {
+            "sku": package["mapping"]["sku"],
+            "barcode": package["mapping"]["barcode"],
+            "name": package["mapping"]["name"],
+            "category": package["mapping"]["category"],
+            "onHand": package["mapping"]["onHand"],
+            "reorderAt": package["mapping"]["reorderAt"],
+            "price": package["mapping"]["price"],
+            "variant": package["mapping"]["variant"],
+        }
+        package["rows"][0]["values"] = {
+            "sku": package["rows"][0]["values"]["sku"],
+            "barcode": package["rows"][0]["values"]["barcode"],
+            "name": package["rows"][0]["values"]["name"],
+            "category": package["rows"][0]["values"]["category"],
+            "onHand": package["rows"][0]["values"]["onHand"],
+            "reorderAt": package["rows"][0]["values"]["reorderAt"],
+            "price": package["rows"][0]["values"]["price"],
+            "variant": package["rows"][0]["values"]["variant"],
+        }
         package = _resign(package)
 
         unsafe_variant = deepcopy(package)
@@ -1000,6 +1089,8 @@ class ClientImportRouteTests(unittest.TestCase):
             "reorderAt": "4",
             "price": "4500",
             "variant": "",
+            "barcode": "",
+            "category": "",
         }
         package["rows"].append(second_row)
         package["controls"]["rowCount"] = 2
@@ -1030,7 +1121,9 @@ class ClientImportRouteTests(unittest.TestCase):
                 {
                     "sku": "COFFEE-250",
                     "name": "Myanmar coffee 250g",
+                    "category": "အဖျော်ယမကာ",
                     "variant": "Large",
+                    "barcode": "0000123456789",
                     "onHand": 24,
                     "reorderAt": 8,
                     "price": 7000,
@@ -1311,6 +1404,52 @@ class ClientImportRouteTests(unittest.TestCase):
         self.assertEqual(len(self.store._events), 1)
 
     def test_reviewed_ecommerce_import_updates_existing_storefront_once(self) -> None:
+        internal_ecommerce_operator = TrialPrincipal(
+            "workspace-b", "ecommerce-operator", "human"
+        )
+        self.store.provision_product_entitlements(
+            workspace_id="workspace-b", products=("commerce", "ecommerce")
+        )
+        self.store.provision_membership(
+            workspace_id="workspace-b",
+            actor_id=internal_ecommerce_operator.actor_id,
+            actor_kind="human",
+            capabilities=("setup.write", "commerce.read", "ecommerce.manage"),
+        )
+        self.sessions["internal-ecommerce"] = internal_ecommerce_operator
+
+        with self.assertRaises(TrialPermissionDenied) as shop_write_denied:
+            self.store.apply_command(
+                internal_ecommerce_operator,
+                command_id="00000000-0000-4000-8000-000000000108",
+                surface="commerce",
+                event_type="commerce.order.created",
+                expected_version=1,
+                payload={},
+            )
+        self.assertEqual(shop_write_denied.exception.required_capability, "commerce.write")
+
+        ecommerce_only = TrialPrincipal("workspace-c", "ecommerce-only-owner", "human")
+        self.store.provision_product_entitlements(
+            workspace_id="workspace-c", products=("ecommerce",)
+        )
+        self.store.provision_membership(
+            workspace_id="workspace-c",
+            actor_id=ecommerce_only.actor_id,
+            actor_kind="human",
+            capabilities=("commerce.write", "ecommerce.manage"),
+        )
+        with self.assertRaises(TrialPermissionDenied) as missing_shop_entitlement:
+            self.store.apply_command(
+                ecommerce_only,
+                command_id="00000000-0000-4000-8000-000000000109",
+                surface="commerce",
+                event_type="commerce.order.created",
+                expected_version=0,
+                payload={},
+            )
+        self.assertEqual(missing_shop_entitlement.exception.required_capability, "product.commerce")
+
         shop_package = _package("commerce", "social-commerce")
         shop_applied = self.client.post(
             "/api/trial/v1/imports/apply",
@@ -1329,7 +1468,7 @@ class ClientImportRouteTests(unittest.TestCase):
         storefront_proof = {
             "actionId": storefront_action_id,
             "capturedAt": "2026-07-26T08:00:00.000Z",
-            "actor": "setup-writer",
+            "actor": internal_ecommerce_operator.actor_id,
             "reason": "Save the storefront identity before importing merchandising.",
             "evidenceReference": f"ECOMMERCE-STOREFRONT:{catalog_digest}:R1",
         }
@@ -1344,8 +1483,18 @@ class ClientImportRouteTests(unittest.TestCase):
             "selectedSkus": ["COFFEE-250"],
             "saved": storefront_proof,
         }
+        with self.assertRaises(TrialPermissionDenied) as denied:
+            self.store.apply_command(
+                self.setup_writer,
+                command_id="00000000-0000-4000-8000-000000000106",
+                surface="commerce",
+                event_type="commerce.storefront.configuration.saved",
+                expected_version=1,
+                payload={"state": configured_state, "evidence": storefront_proof},
+            )
+        self.assertEqual(denied.exception.required_capability, "ecommerce.manage")
         configured = self.store.apply_command(
-            self.setup_writer,
+            internal_ecommerce_operator,
             command_id="00000000-0000-4000-8000-000000000106",
             surface="commerce",
             event_type="commerce.storefront.configuration.saved",
@@ -1360,10 +1509,17 @@ class ClientImportRouteTests(unittest.TestCase):
             ecommerce_package,
             command_id="00000000-0000-4000-8000-000000000107",
             expected_version=2,
+            session="internal-ecommerce",
         )
+        ecommerce_preflight = self._apply_preflight(
+            ecommerce_package,
+            expected_version=2,
+            session="internal-ecommerce",
+        )
+        self.assertEqual(ecommerce_preflight["required_capability"], "ecommerce.manage")
         applied = self.client.post(
             "/api/trial/v1/imports/apply",
-            headers=self._headers("writer"),
+            headers=self._headers("internal-ecommerce"),
             json=body,
         )
         self.assertEqual(applied.status_code, 200, applied.text)
@@ -1426,7 +1582,9 @@ class ClientImportRouteTests(unittest.TestCase):
         tampered_activation["storefrontConfiguration"]["activation"]["skus"] = ["UNKNOWN-SKU"]
         with self.assertRaises(TrialValidationError):
             validate_commerce_state(tampered_activation)
-        self.assertEqual(configuration["saved"]["actor"], "setup-writer")
+        self.assertEqual(
+            configuration["saved"]["actor"], internal_ecommerce_operator.actor_id
+        )
         self.assertRegex(
             configuration["saved"]["capturedAt"],
             r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$",
@@ -1438,7 +1596,7 @@ class ClientImportRouteTests(unittest.TestCase):
 
         replay = self.client.post(
             "/api/trial/v1/imports/apply",
-            headers=self._headers("writer"),
+            headers=self._headers("internal-ecommerce"),
             json=body,
         )
         self.assertEqual(replay.status_code, 200, replay.text)
@@ -1449,7 +1607,7 @@ class ClientImportRouteTests(unittest.TestCase):
 
         stale = self.client.post(
             "/api/trial/v1/imports/apply",
-            headers=self._headers("writer"),
+            headers=self._headers("internal-ecommerce"),
             json={
                 **body,
                 "command_id": "00000000-0000-4000-8000-000000000108",
@@ -1500,6 +1658,21 @@ class ClientImportRouteTests(unittest.TestCase):
         self.assertEqual(nonhuman.status_code, 403)
         self.assertEqual(nonhuman.json()["detail"]["code"], "trial_human_approval_required")
 
+        self.store.provision_product_entitlements(
+            workspace_id="workspace-b", products=("commerce", "ecommerce")
+        )
+        self.store.provision_membership(
+            workspace_id="workspace-b",
+            actor_id=self.setup_writer.actor_id,
+            actor_kind="human",
+            capabilities=(
+                "setup.write",
+                "commerce.write",
+                "production.write",
+                "website.write",
+                "ecommerce.manage",
+            ),
+        )
         ecommerce_package = _package("ecommerce")
         missing_prerequisites = self.client.post(
             "/api/trial/v1/imports/apply-preflight",

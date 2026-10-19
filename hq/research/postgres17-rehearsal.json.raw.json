@@ -142,6 +142,7 @@
     "self_serve_claim_conflict_without_takeover": true,
     "self_serve_cross_actor_read_denied": true,
     "self_serve_durable_budget_enforced": true,
+    "self_serve_ecommerce_internal_operator_boundary": true,
     "self_serve_exact_create_replay": true,
     "self_serve_four_product_workspaces_created": true,
     "self_serve_product_entitlements_exact": true,
@@ -162,7 +163,7 @@
     "version": "17.10"
   },
   "implementation": {
-    "digest": "sha256:a2dbd85602fe806e1c4ef1992690760ae5104e03474d4dbba081e857d5967eff",
+    "digest": "sha256:4e2a5cae154a0418277d4fe7eca66d662ebabdca05137f02d8a52f6f9b3bb480",
     "paths": [
       "kernel/database-rehearsal-evidence.mjs",
       "supabase/migrations/20260722004500_private_trial_backend_role_preflight.sql",
@@ -194,6 +195,10 @@
       "supabase/migrations/20261014090000_website_channel_stable_update.sql",
       "supabase/migrations/20261014103000_website_custom_domain_bindings.sql",
       "supabase/migrations/20261014122400_website_domain_attempt_fencing.sql",
+      "supabase/migrations/20261015091500_website_six_page_reviews.sql",
+      "supabase/migrations/20261015202629_ecommerce_operator_review_grant.sql",
+      "supabase/migrations/20261019070000_ecommerce_operator_management_boundary.sql",
+      "supabase/migrations/20261019103000_ecommerce_review_shared_state_lock.sql",
       "supabase/rehearsal/20260804_public_browser_quarantine.sql",
       "supermega_runtime/billing_rail.py",
       "supermega_runtime/core_security_catalog.py",
@@ -251,7 +256,7 @@
   },
   "migrations": {
     "catalog_contract": "supermega_private_trial_database_v13_self_serve_v1",
-    "count": 27,
+    "count": 31,
     "names": [
       "20260722004500_private_trial_backend_role_preflight.sql",
       "20260722005134_private_trial_backend_foundation.sql",
@@ -279,7 +284,11 @@
       "20261010063000_website_publishing_and_inquiries.sql",
       "20261010070000_website_published_hero_media.sql",
       "20261010120857_website_inquiry_followup.sql",
-      "20261014090000_website_channel_stable_update.sql"
+      "20261014090000_website_channel_stable_update.sql",
+      "20261015091500_website_six_page_reviews.sql",
+      "20261015202629_ecommerce_operator_review_grant.sql",
+      "20261019070000_ecommerce_operator_management_boundary.sql",
+      "20261019103000_ecommerce_review_shared_state_lock.sql"
     ],
     "production_validator_ready": true,
     "schema_profile": "v13-self-serve",
@@ -291,15 +300,15 @@
   "recovery": {
     "backup_nonempty": true,
     "format": "pg_dump_custom",
-    "private_snapshot_after": "sha256:8a94e071e69a3cc0b79dec19d4dc5663049cc17412b6e26565dcb714e3789895",
-    "private_snapshot_before": "sha256:8a94e071e69a3cc0b79dec19d4dc5663049cc17412b6e26565dcb714e3789895",
+    "private_snapshot_after": "sha256:5c600fd026002b6760e42a646b94052578a390a4e5b11e5db854a5c0195ce4ca",
+    "private_snapshot_before": "sha256:5c600fd026002b6760e42a646b94052578a390a4e5b11e5db854a5c0195ce4ca",
     "restored_schema_version": 13
   },
   "secret_values_exposed": false,
   "source": {
-    "head": "774ce768dc8c34ecaf3b4046e804c0f3bf072a4f",
-    "implementation_digest": "sha256:a2dbd85602fe806e1c4ef1992690760ae5104e03474d4dbba081e857d5967eff",
-    "tree": "a6b366f21b1800daf6a6b3049a541550df3a5cf5"
+    "head": "2ed58386920c4dc10e94046a39d295f86d24d926",
+    "implementation_digest": "sha256:4e2a5cae154a0418277d4fe7eca66d662ebabdca05137f02d8a52f6f9b3bb480",
+    "tree": "3dd3202ab3de62d6694a82c45b4a852df59d1bb8"
   },
   "status": "rehearsed",
   "storage": {

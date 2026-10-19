@@ -86,11 +86,20 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
             "20261010063000_website_publishing_and_inquiries.sql",
             "20261010070000_website_published_hero_media.sql",
             "20261010120857_website_inquiry_followup.sql",
-            "20261014090000_website_channel_stable_update.sql"))
+            "20261014090000_website_channel_stable_update.sql",
+            "20261015091500_website_six_page_reviews.sql",
+            "20261015202629_ecommerce_operator_review_grant.sql",
+            "20261019070000_ecommerce_operator_management_boundary.sql",
+            "20261019103000_ecommerce_review_shared_state_lock.sql"))
+        dormant_sites_rls_candidate = "20261016143945_optimize_sites_inquiry_rls_initplans.sql"
         observed = tuple(sorted(path.name for path in (ROOT / "supabase/migrations").glob("*.sql")
                                 if path.name not in ("20260711081300_public_legacy_baseline.sql",
-                                                     *module.DOMAIN_CANDIDATE_MIGRATIONS)))
+                                                     *module.DOMAIN_CANDIDATE_MIGRATIONS,
+                                                     *module.DORMANT_CANDIDATE_MIGRATIONS)))
         self.assertEqual(module.CURRENT_MIGRATIONS, observed)
+        self.assertTrue((ROOT / "supabase/migrations" / dormant_sites_rls_candidate).is_file())
+        self.assertNotIn(dormant_sites_rls_candidate, module.CURRENT_MIGRATIONS)
+        self.assertNotIn(f"supabase/migrations/{dormant_sites_rls_candidate}", module.IMPLEMENTATION_PATHS)
         self.assertEqual(len(module.DOMAIN_CANDIDATE_MIGRATIONS), 2)
         for candidate in module.DOMAIN_CANDIDATE_MIGRATIONS:
             self.assertTrue((ROOT / "supabase/migrations" / candidate).is_file())

@@ -1,22 +1,22 @@
 {
   "contract": "supermega.managed-pilot-readiness.v5",
-  "asOf": "2026-10-14T13:58:45.200Z",
+  "asOf": "2026-10-19T11:33:10.375Z",
   "pilotMode": "owner_named",
   "localDatabase": {
     "contract": "supermega.hq.database-rehearsal.v3",
     "schemaVersion": 13,
     "schemaProfile": "v13-self-serve",
-    "migrationCount": 27,
-    "implementationCommit": "774ce768dc8c34ecaf3b4046e804c0f3bf072a4f",
-    "implementationTree": "a6b366f21b1800daf6a6b3049a541550df3a5cf5",
-    "implementationDigest": "sha256:a2dbd85602fe806e1c4ef1992690760ae5104e03474d4dbba081e857d5967eff",
-    "receiptDigest": "sha256:83b258259abc162bd5fe53ddd0a992763ede2c66cc0d1ad2e32fbf07b814498f",
-    "behaviorChecks": 74,
+    "migrationCount": 31,
+    "implementationCommit": "2ed58386920c4dc10e94046a39d295f86d24d926",
+    "implementationTree": "3dd3202ab3de62d6694a82c45b4a852df59d1bb8",
+    "implementationDigest": "sha256:4e2a5cae154a0418277d4fe7eca66d662ebabdca05137f02d8a52f6f9b3bb480",
+    "receiptDigest": "sha256:707ab0bd25ad72bad57938426a4ef849df70a5c889390b16e49ebff29cb8f577",
+    "behaviorChecks": 75,
     "catalogChecksBefore": 33,
     "catalogChecksAfter": 33,
     "hostedEvidenceCurrent": false
   },
-  "sourceDigest": "sha256:eb9e2a6928b64fe3c87dc572cf5d82b4a3f9479cbb71b6748055fa70cfc46166",
+  "sourceDigest": "sha256:5985194d91f3a31010e6d6d7ed7ce1e5eb99a216e6982a31459de43ceb5835c8",
   "overall": {
     "status": "blocked",
     "localDatabaseProofReady": true,
@@ -282,7 +282,7 @@
     },
     {
       "path": "hq/research/postgres17-rehearsal.json",
-      "digest": "sha256:57dc64e57fcb9b8182553d01bd3a1ee5dd12fd4063dfbd09f5023828237a683d"
+      "digest": "sha256:c7076641ba9fe3b3f6067566576b588a1aee1757df6b232f0a528312f093510d"
     },
     {
       "path": "hq/pilots/private-storage-privacy-audit.md",
@@ -310,11 +310,11 @@
     },
     {
       "path": "package.json",
-      "digest": "sha256:2c10abd5fbf6ec98791eaf90c067739525fd45cc8db8198c660eb1b2c79ce737"
+      "digest": "sha256:ce9102a11f470ec7d52b3cefd602bd98e726db608dab8dd7ada9d2b64cf5508d"
     },
     {
       "path": "kernel/managed-pilot-readiness.mjs",
-      "digest": "sha256:98cad0f02b5b18717d88268ae0fce888d01e92158d4cda5961077c1e323f8b83"
+      "digest": "sha256:5f09fba486016a48c6ba5f66973e8a18be46ce27d79da66d2b869982960f39aa"
     }
   ]
 }

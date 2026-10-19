@@ -393,7 +393,7 @@ export type ManagedClientImportValidation = {
   activation: {
     status: 'not_applied'
     target_surface: 'commerce' | 'production' | 'website'
-    required_capability: 'commerce.write' | 'production.write' | 'website.write'
+    required_capability: 'commerce.write' | 'ecommerce.manage' | 'production.write' | 'website.write'
     human_approval_required: true
     atomic_adapter_ready: boolean
     external_writes_performed: false
@@ -419,7 +419,7 @@ export type ManagedClientImportApplyPreflight = {
   object: string
   workflow_template_id: string
   target_surface: 'commerce' | 'production' | 'website'
-  required_capability: 'commerce.write' | 'production.write' | 'website.write'
+  required_capability: 'commerce.write' | 'ecommerce.manage' | 'production.write' | 'website.write'
   package_digest: string
   row_count: number
   expected_version: number
@@ -1057,7 +1057,7 @@ const CLIENT_IMPORT_ACTIVATION = {
   commerce: { target: 'commerce', capability: 'commerce.write' },
   production: { target: 'production', capability: 'production.write' },
   website: { target: 'website', capability: 'website.write' },
-  ecommerce: { target: 'commerce', capability: 'commerce.write' },
+  ecommerce: { target: 'commerce', capability: 'ecommerce.manage' },
 } as const
 
 const CLIENT_IMPORT_COMMAND_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -1565,12 +1565,23 @@ export function assertManagedShopImportState(
   }
   for (const [index, row] of stagingPackage.rows.entries()) {
     const item = state.items[index]
+    const category = row.values.category || undefined
     const variant = row.values.variant
-    const itemKeys = variant ? [...baseItemKeys, 'variant'] : baseItemKeys
+    const barcode = row.values.barcode || undefined
+    const itemKeys = [
+      ...baseItemKeys,
+      ...(row.values.nameMy ? ['nameMy'] : []),
+      ...(category ? ['category'] : []),
+      ...(variant ? ['variant'] : []),
+      ...(barcode ? ['barcode'] : []),
+    ].sort()
     const expected = {
       sku: row.values.sku,
       name: row.values.name,
+      ...(row.values.nameMy ? { nameMy: row.values.nameMy } : {}),
+      ...(category ? { category } : {}),
       ...(variant ? { variant } : {}),
+      ...(barcode ? { barcode } : {}),
       onHand: Number(row.values.onHand),
       reorderAt: Number(row.values.reorderAt),
       price: Number(row.values.price),
@@ -1582,6 +1593,10 @@ export function assertManagedShopImportState(
       || !Number.isSafeInteger(expected.price)
       || item.sku !== expected.sku
       || item.name !== expected.name
+      || item.nameMy !== expected.nameMy
+      || item.category !== expected.category
+      || item.variant !== expected.variant
+      || item.barcode !== expected.barcode
       || item.onHand !== expected.onHand
       || item.reorderAt !== expected.reorderAt
       || item.price !== expected.price) {
@@ -2319,7 +2334,7 @@ const MANAGED_CAPABILITY_PATTERN = /^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$/
 export function managedBootstrapHasCapability(
   bootstrap: unknown,
   expectedIdentity: ManagedIdentity,
-  capability: 'commerce.write' | 'production.write' | 'website.write' | 'company.write' | 'approvals.decide',
+  capability: 'commerce.write' | 'production.write' | 'website.write' | 'company.write' | 'ecommerce.manage' | 'approvals.decide',
 ): boolean {
   const verified = assertManagedBootstrapIdentity(bootstrap, expectedIdentity)
   const capabilities = verified.readiness.capabilities
@@ -2350,7 +2365,9 @@ export function managedProductsFromBootstrap(
       throw new ManagedTrialError('The company account returned invalid product entitlements.', { code: 'managed_bootstrap_invalid' })
     }
     return explicit.filter((product) => {
-      if (product === 'commerce' || product === 'ecommerce') return Boolean(verified.states.commerce)
+      if (product === 'commerce') return Boolean(verified.states.commerce)
+      if (product === 'ecommerce') return Boolean(verified.states.commerce)
+        && managedBootstrapHasCapability(verified, expectedIdentity, 'ecommerce.manage')
       if (product === 'production') return Boolean(verified.states.production)
       return Boolean(verified.states.website)
     })
@@ -2904,6 +2921,9 @@ export async function requestSelfServeWorkspace(
   businessName: string,
   product: ClientSolutionId = 'commerce',
 ): Promise<ManagedSelfServeWorkspace> {
+  if (product !== 'commerce') {
+    throw errorSelfServeWorkspaceInvalid('Shop is the only customer-managed product at launch.')
+  }
   const claim = normalizeSelfServeClaimCode(claimCode)
   const name = normalizeSelfServeBusinessName(businessName)
   const response = await fetch('/api/trial/v1/workspaces', {

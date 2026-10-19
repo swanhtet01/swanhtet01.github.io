@@ -36,7 +36,7 @@ export const COMMERCE_DAILY_CLOSE_EXPORT_SCHEMA = 'supermega.commerce.daily-clos
 export const COMMERCE_ACCOUNTING_HANDOFF_SCHEMA = 'supermega.commerce.accounting-handoff.v3' as const
 export const COMMERCE_ACCOUNTING_HANDOFF_V4_SCHEMA = 'supermega.commerce.accounting-handoff.v4' as const
 export const COMMERCE_SUPPLIER_PAYABLES_HANDOFF_SCHEMA = 'supermega.commerce.supplier-payables-handoff.v1' as const
-export const COMMERCE_CUSTOMER_RECEIVABLES_HANDOFF_SCHEMA = 'supermega.commerce.customer-receivables-handoff.v1' as const
+export const COMMERCE_CUSTOMER_RECEIVABLES_HANDOFF_SCHEMA = 'supermega.commerce.customer-receivables-handoff.v2' as const
 export const COMMERCE_CLOSE_SETTLEMENT_SCHEMA = 'supermega.commerce.close-settlement.v1' as const
 export const COMMERCE_SUPPORT_WORKLOAD_EXPORT_SCHEMA = 'supermega.commerce.support-workload.v1' as const
 export const COMMERCE_ORDER_ACKNOWLEDGEMENT_SCHEMA = 'supermega.commerce.order-acknowledgement.v1' as const
@@ -46,9 +46,21 @@ export const COMMERCE_KEY = 'supermega.commerce.workspace.v2'
 export const LEGACY_COMMERCE_KEYS = ['supermega.commerce.workspace.v1', 'supermega.shop.workspace.v2']
 export const COMMERCE_LOCK = 'supermega-commerce-workspace-v2'
 
+function hasDisallowedControlCharacters(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index)
+    if (code <= 0x1f || code === 0x7f) return true
+  }
+  return false
+}
+
 export type CommerceItem = {
   sku: string
+  /** Optional scanner identity, stored as text so leading zeroes survive CSV, camera and HID scans. */
+  barcode?: string
   name: string
+  /** Owner-defined label for fast counter filtering; absent on older catalogs and uncategorized items. */
+  category?: string
   // Burmese display name, carried alongside `name` rather than widening `name` to {en, my}:
   // `name` is snapshotted onto every order line and printed on receipts, so changing its type
   // would invalidate saved workspaces and stored orders.
@@ -58,14 +70,75 @@ export type CommerceItem = {
   // catalog an owner imports from her own CSV, which has no column for one. Requiring it would
   // turn an ordinary existing workspace into an unreadable one.
   //
-  // Only rows that sell a bookable service ever receive it, from the pack's own translations via
-  // withShopServiceMyanmarNames. Retail goods have no Myanmar name anywhere in this codebase and
-  // must not be given machine-made ones.
+  // Service rows may receive the pack's own translations; Shop owners may also enter the name
+  // customers use for a retail item. Never invent a Burmese translation for them.
   nameMy?: string
   variant?: string
   onHand: number
   reorderAt: number
   price: number
+}
+
+function normalizedScanCode(value: string | null | undefined) {
+  const normalized = value?.trim().toLowerCase() ?? ''
+  return normalized || null
+}
+
+/** Resolve a SKU or barcode only when it identifies exactly one catalog item. */
+export function findCommerceItemByScanCode(items: readonly CommerceItem[], rawCode: string): CommerceItem | null {
+  const resolution = resolveCommerceItemByScanCode(items, rawCode)
+  return resolution.kind === 'matched' ? resolution.item : null
+}
+
+export type CommerceItemScanResolution =
+  | { kind: 'matched'; item: CommerceItem }
+  | { kind: 'not_found' }
+  | { kind: 'ambiguous' }
+
+/** Resolve an exact SKU/barcode and report duplicate-code ambiguity separately from a miss. */
+export function resolveCommerceItemByScanCode(items: readonly CommerceItem[], rawCode: string): CommerceItemScanResolution {
+  const exactCode = rawCode.trim()
+  if (!exactCode) return { kind: 'not_found' }
+  const exactMatches = items.filter((item) => item.sku.trim() === exactCode || item.barcode?.trim() === exactCode)
+  if (exactMatches.length > 1) return { kind: 'ambiguous' }
+  if (exactMatches.length === 1) return { kind: 'matched', item: exactMatches[0] }
+  const code = normalizedScanCode(rawCode)
+  if (!code) return { kind: 'not_found' }
+  const matches = items.filter((item) => normalizedScanCode(item.sku) === code || normalizedScanCode(item.barcode) === code)
+  if (matches.length > 1) return { kind: 'ambiguous' }
+  return matches.length === 1 ? { kind: 'matched', item: matches[0] } : { kind: 'not_found' }
+}
+
+export type PurchaseOrderReceiveScanResult =
+  | { ok: true; acceptedUnits: number }
+  | { ok: false; reason: 'item_not_found' | 'wrong_purchase_order_item' | 'invalid_count' | 'receipt_limit_reached' }
+
+/** Count one exactly matched catalog unit into the current receipt draft; never writes stock. */
+export function incrementPurchaseOrderReceiveFromScan(input: {
+  items: readonly CommerceItem[]
+  purchaseOrderItem: CommerceItem
+  rawCode: string
+  acceptedUnits: number
+  maximumAcceptedUnits: number
+}): PurchaseOrderReceiveScanResult {
+  const item = findCommerceItemByScanCode(input.items, input.rawCode)
+  if (!item) return { ok: false, reason: 'item_not_found' }
+  if (item.sku !== input.purchaseOrderItem.sku) return { ok: false, reason: 'wrong_purchase_order_item' }
+  if (!Number.isSafeInteger(input.acceptedUnits) || input.acceptedUnits < 0
+    || !Number.isSafeInteger(input.maximumAcceptedUnits) || input.maximumAcceptedUnits < 0
+    || input.acceptedUnits > input.maximumAcceptedUnits) {
+    return { ok: false, reason: 'invalid_count' }
+  }
+  if (input.acceptedUnits >= input.maximumAcceptedUnits) return { ok: false, reason: 'receipt_limit_reached' }
+  return { ok: true, acceptedUnits: input.acceptedUnits + 1 }
+}
+
+/** Prevent a new barcode from silently identifying a different existing catalog item. */
+export function commerceItemBarcodeConflicts(items: readonly CommerceItem[], sku: string, barcode: string | null) {
+  const code = normalizedScanCode(barcode)
+  if (!code) return false
+  return items.some((item) => item.sku !== sku
+    && (normalizedScanCode(item.sku) === code || normalizedScanCode(item.barcode) === code))
 }
 
 export type CommerceOrderStatus = 'confirmed' | 'preparing' | 'ready' | 'completed' | 'cancelled'
@@ -78,6 +151,9 @@ export type CommerceCorrectionReasonCode = 'pricing_error' | 'service_recovery' 
 export type CommerceOrderLine = {
   sku: string
   name: string
+  // Owner-entered Myanmar display name, captured with the order so later catalog edits do not
+  // rewrite a customer's historical item description.
+  nameMy?: string
   variant?: string
   quantity: number
   unitPriceMmk: number
@@ -527,7 +603,7 @@ export type CommerceReceivableAgingRow = {
   orderId: string
   customer: string
   paymentMethod: string
-  dueAt: string
+  dueAt: string | null
   balanceMmk: number
   daysPastDue: number
   bucket: CommerceReceivableAgingBucket
@@ -547,6 +623,11 @@ export type CommerceReceivablesAging = {
 const receivableBuckets: CommerceReceivableAgingBucket[] = ['current', '1_7', '8_30', '31_60', 'over_60']
 const dayMilliseconds = 24 * 60 * 60 * 1000
 
+// Fulfilment promises and order creation timestamps are not payment terms.
+export function commerceOrderPaymentDueAt(order: Pick<CommerceOrder, 'paymentDueAt' | 'status' | 'completion'>) {
+  return order.paymentDueAt ?? (order.status === 'completed' ? order.completion?.capturedAt ?? null : null)
+}
+
 function receivableBucket(daysPastDue: number): CommerceReceivableAgingBucket {
   if (daysPastDue <= 0) return 'current'
   if (daysPastDue <= 7) return '1_7'
@@ -560,10 +641,10 @@ export function commerceReceivablesAging(state: CommerceState, now: number): Com
   const rows = state.orders
     .filter((order) => order.status !== 'cancelled' && order.paymentStatus === 'pending')
     .flatMap((order): CommerceReceivableAgingRow[] => {
-      const dueAt = order.paymentDueAt ?? order.promisedAt ?? order.createdAt
-      const dueTime = Date.parse(dueAt)
-      if (!Number.isFinite(dueTime) || !Number.isSafeInteger(order.total) || order.total < 0) return []
-      const daysPastDue = safeNow > dueTime ? Math.ceil((safeNow - dueTime) / dayMilliseconds) : 0
+      const dueAt = commerceOrderPaymentDueAt(order)
+      const dueTime = dueAt === null ? Number.NaN : Date.parse(dueAt)
+      if ((dueAt !== null && !Number.isFinite(dueTime)) || !Number.isSafeInteger(order.total) || order.total < 0) return []
+      const daysPastDue = Number.isFinite(dueTime) && safeNow > dueTime ? Math.ceil((safeNow - dueTime) / dayMilliseconds) : 0
       return [{
         orderId: order.id,
         customer: order.customer,
@@ -576,7 +657,7 @@ export function commerceReceivablesAging(state: CommerceState, now: number): Com
         ...(order.collectionActions?.[0] ? { lastCollectionAction: order.collectionActions[0].proof } : {}),
       }]
     })
-    .sort((left, right) => right.daysPastDue - left.daysPastDue || left.dueAt.localeCompare(right.dueAt) || left.orderId.localeCompare(right.orderId))
+    .sort((left, right) => right.daysPastDue - left.daysPastDue || (left.dueAt ?? '').localeCompare(right.dueAt ?? '') || left.orderId.localeCompare(right.orderId))
   const totalsMmk = Object.fromEntries(receivableBuckets.map((bucket) => [
     bucket,
     rows.filter((row) => row.bucket === bucket).reduce((sum, row) => sum + row.balanceMmk, 0),
@@ -886,7 +967,7 @@ export type CommerceCustomerReceivablesHandoffRow = {
   customer: string
   paymentMethod: string
   createdAt: string
-  dueAt: string
+  dueAt: string | null
   balanceMmk: number
   daysPastDue: number
   bucket: CommerceReceivableAgingBucket
@@ -1283,6 +1364,12 @@ export type CommerceCatalogChange = {
   nextPrice: number
   previousReorderAt: number
   nextReorderAt: number
+  previousBarcode?: string | null
+  nextBarcode?: string | null
+  previousNameMy?: string | null
+  nextNameMy?: string | null
+  previousCategory?: string | null
+  nextCategory?: string | null
   proof: CommerceActionProof
 }
 
@@ -1348,6 +1435,12 @@ export type CommerceItemUpdate = {
   nextPrice: number
   expectedReorderAt: number
   nextReorderAt: number
+  expectedBarcode?: string | null
+  nextBarcode?: string | null
+  expectedNameMy?: string | null
+  nextNameMy?: string | null
+  expectedCategory?: string | null
+  nextCategory?: string | null
 }
 
 export type CommerceOrderReturnInput = {
@@ -2186,12 +2279,17 @@ export function createSeedCommerce(now = deterministicSeedNow): CommerceState {
   const purchaseOrderAt = new Date(now - 2 * 60 * 60 * 1000).toISOString()
   const firstOrderAt = new Date(now - 54 * 60 * 1000).toISOString()
   const secondOrderAt = new Date(now - 29 * 60 * 1000).toISOString()
+  // Yangon retail examples from Makro PRO listings checked 2026-10-17. These remain
+  // synthetic demo stock and must be replaced with each merchant's own catalog/prices.
+  // Sources: makropro.com.mm/en/c/dry-grocery/grains-rice-cereal,
+  // /en/c/dry-grocery/pasta-noodles, /en/c/beverages/drinking-water,
+  // /en/c/household-supplies/laundry-supplies, /en/p/ETuOUnrc-858707669623079.
   const items: CommerceItem[] = [
-    { sku: 'SM-1001', name: 'Daily essentials basket', onHand: 34, reorderAt: 10, price: 18500 },
-    { sku: 'SM-1002', name: 'Cold drink pack', onHand: 8, reorderAt: 12, price: 6500 },
-    { sku: 'SM-1003', name: 'Household refill', onHand: 21, reorderAt: 8, price: 12000 },
-    { sku: 'SM-1004', name: 'Personal care set', onHand: 13, reorderAt: 6, price: 22500 },
-    { sku: 'SM-CARE-01', name: 'Family care set', variant: 'Standard bundle', onHand: 14, reorderAt: 6, price: 31000 },
+    { sku: 'SM-1001', name: 'KAUNG 90 Days Rice', nameMy: 'ကောင်း ၉၀ ရက် ဆန်', variant: '6 kg', category: 'Pantry', onHand: 34, reorderAt: 10, price: 12450 },
+    { sku: 'SM-1002', name: 'MAMA Chicken Instant Noodles', nameMy: 'မာမား ကြက်သားအရသာ ခေါက်ဆွဲခြောက်', variant: '55 g × 5', category: 'Pantry', onHand: 8, reorderAt: 12, price: 2950 },
+    { sku: 'SM-1003', name: 'ALPINE Drinking Water', nameMy: 'အယ်လ်ပင်း သောက်ရေ', variant: '1 L × 6', category: 'Drinks', onHand: 21, reorderAt: 8, price: 5700 },
+    { sku: 'SM-1004', name: 'BAYDAR Laundry Detergent', nameMy: 'ဘေဒါ အဝတ်လျှော်ဆပ်ပြာမှုန့်', variant: '700 g', category: 'Home care', onHand: 13, reorderAt: 6, price: 5900 },
+    { sku: 'SM-CARE-01', name: 'ZESS Sugar Crackers', nameMy: 'ဇက်စ် သကြားဘီစကစ်', variant: '192 g', category: 'Pantry', onHand: 14, reorderAt: 6, price: 8000 },
   ]
   const baselineProof: CommerceActionProof = {
     actionId: 'ACT-DEMO-CATALOG-BASELINE',
@@ -2204,15 +2302,15 @@ export function createSeedCommerce(now = deterministicSeedNow): CommerceState {
     schema: COMMERCE_WORKSPACE_SCHEMA,
     items,
     orders: [
-      { id: 'ORD-1042', createdAt: firstOrderAt, customer: 'May', owner: 'Counter operator', channel: 'Messenger', item: 'Daily essentials basket', itemSku: 'SM-1001', quantity: 2, payment: 'KBZPay', paymentStatus: 'pending', refundStatus: 'none', fulfilment: 'delivery', fulfilmentReference: 'Messenger delivery review #1042', promisedAt: new Date(now + 60 * 60 * 1000).toISOString(), lines: [{ sku: 'SM-1001', name: 'Daily essentials basket', quantity: 2, unitPriceMmk: 18500 }], calculation: { schema: COMMERCE_ORDER_CALCULATION_SCHEMA, currency: 'MMK', catalogRevision: 0, subtotalMmk: 37000, taxMode: 'not_configured', taxMmk: 0, totalMmk: 37000 }, total: 37000, status: 'preparing' },
-      { id: 'ORD-1041', createdAt: secondOrderAt, customer: 'Ko Aung', owner: 'Counter operator', channel: 'Phone', item: 'Household refill', itemSku: 'SM-1003', quantity: 1, payment: 'Cash on delivery', paymentStatus: 'pending', refundStatus: 'none', fulfilment: 'delivery', fulfilmentReference: 'Phone delivery review #1041', promisedAt: new Date(now + 90 * 60 * 1000).toISOString(), lines: [{ sku: 'SM-1003', name: 'Household refill', quantity: 1, unitPriceMmk: 12000 }], calculation: { schema: COMMERCE_ORDER_CALCULATION_SCHEMA, currency: 'MMK', catalogRevision: 0, subtotalMmk: 12000, taxMode: 'not_configured', taxMmk: 0, totalMmk: 12000 }, total: 12000, status: 'ready' },
+      { id: 'ORD-1042', createdAt: firstOrderAt, customer: 'May', owner: 'Counter operator', channel: 'Messenger', item: 'KAUNG 90 Days Rice', itemSku: 'SM-1001', quantity: 2, payment: 'KBZPay', paymentStatus: 'pending', refundStatus: 'none', fulfilment: 'delivery', fulfilmentReference: 'Messenger delivery review #1042', promisedAt: new Date(now + 60 * 60 * 1000).toISOString(), lines: [{ sku: 'SM-1001', name: 'KAUNG 90 Days Rice', quantity: 2, unitPriceMmk: 12450 }], calculation: { schema: COMMERCE_ORDER_CALCULATION_SCHEMA, currency: 'MMK', catalogRevision: 0, subtotalMmk: 24900, taxMode: 'not_configured', taxMmk: 0, totalMmk: 24900 }, total: 24900, status: 'preparing' },
+      { id: 'ORD-1041', createdAt: secondOrderAt, customer: 'Ko Aung', owner: 'Counter operator', channel: 'Phone', item: 'ALPINE Drinking Water', itemSku: 'SM-1003', quantity: 1, payment: 'Cash on delivery', paymentStatus: 'pending', refundStatus: 'none', fulfilment: 'delivery', fulfilmentReference: 'Phone delivery review #1041', promisedAt: new Date(now + 90 * 60 * 1000).toISOString(), lines: [{ sku: 'SM-1003', name: 'ALPINE Drinking Water', quantity: 1, unitPriceMmk: 5700 }], calculation: { schema: COMMERCE_ORDER_CALCULATION_SCHEMA, currency: 'MMK', catalogRevision: 0, subtotalMmk: 5700, taxMode: 'not_configured', taxMmk: 0, totalMmk: 5700 }, total: 5700, status: 'ready' },
       {
         id: 'ORD-1039',
         createdAt: completedOrderAt,
         customer: 'Daw Mya',
         owner: 'Counter operator',
         channel: 'Counter',
-        item: 'Personal care set',
+        item: 'BAYDAR Laundry Detergent',
         itemSku: 'SM-1004',
         quantity: 1,
         payment: 'Cash',
@@ -2226,9 +2324,9 @@ export function createSeedCommerce(now = deterministicSeedNow): CommerceState {
         fulfilment: 'pickup',
         fulfilmentReference: 'Counter handoff #1039',
         promisedAt: new Date(now - 2 * 60 * 60 * 1000).toISOString(),
-        lines: [{ sku: 'SM-1004', name: 'Personal care set', quantity: 1, unitPriceMmk: 22500 }],
-        calculation: { schema: COMMERCE_ORDER_CALCULATION_SCHEMA, currency: 'MMK', catalogRevision: 0, subtotalMmk: 22500, taxMode: 'not_configured', taxMmk: 0, totalMmk: 22500 },
-        total: 22500,
+        lines: [{ sku: 'SM-1004', name: 'BAYDAR Laundry Detergent', quantity: 1, unitPriceMmk: 5900 }],
+        calculation: { schema: COMMERCE_ORDER_CALCULATION_SCHEMA, currency: 'MMK', catalogRevision: 0, subtotalMmk: 5900, taxMode: 'not_configured', taxMmk: 0, totalMmk: 5900 },
+        total: 5900,
         status: 'completed',
         completion: {
           actionId: 'ACT-DEMO-COMPLETE-1039',
@@ -2330,15 +2428,16 @@ export function createSeedCommerce(now = deterministicSeedNow): CommerceState {
       id: 'PO-11111111-1111-4111-8111-111111111111',
       createdAt: purchaseOrderAt,
       expectedAt: new Date(now + 24 * 60 * 60 * 1000).toISOString(),
-      supplier: 'Myanmar Beverage Supply',
+      supplier: 'Sample wholesale supplier',
       sku: 'SM-1002',
       quantityOrdered: 40,
-      unitCostMmk: 4_200,
+      // No wholesale quote is part of the public retail-price references; keep
+      // acquisition cost unset instead of inventing a margin for the demo.
       creation: {
         actionId: 'ACT-DEMO-PO-1001',
         capturedAt: purchaseOrderAt,
         actor: 'Purchasing lead',
-        reason: 'Replenish the low-stock cold drink pack.',
+        reason: 'Replenish the low-stock MAMA noodle multipack.',
         evidenceReference: 'SEED-PO-1001',
       },
     }],
@@ -2484,6 +2583,8 @@ export function validateCommerceState(value: unknown): CommerceState {
     || shiftSessions.length > maxShiftSessions) rejectInvalid(operatingIntegrityError)
   const itemSkus: string[] = []
   const itemBySku = new Map<string, Record<string, unknown>>()
+  const skuOwnersByCode = new Map<string, Set<string>>()
+  const barcodeOwners = new Map<string, string>()
   const orderIds: string[] = []
   const orderById = new Map<string, Record<string, unknown>>()
   const sourceRecordIds: string[] = []
@@ -2588,7 +2689,19 @@ export function validateCommerceState(value: unknown): CommerceState {
     const sku = canonicalText(candidate.sku, `items[${index}].sku`, 80)
     itemSkus.push(sku)
     itemBySku.set(sku, candidate)
+    const normalizedSku = sku.toLowerCase()
+    const matchingSkuOwners = skuOwnersByCode.get(normalizedSku) ?? new Set<string>()
+    matchingSkuOwners.add(sku)
+    skuOwnersByCode.set(normalizedSku, matchingSkuOwners)
+    if (candidate.barcode !== undefined) {
+      const barcode = canonicalText(candidate.barcode, `items[${index}].barcode`, 80)
+      const normalizedBarcode = barcode.toLowerCase()
+      const existingOwner = barcodeOwners.get(normalizedBarcode)
+      if (existingOwner && existingOwner !== sku) rejectInvalid(`items[${index}].barcode is already assigned to another item.`)
+      barcodeOwners.set(normalizedBarcode, sku)
+    }
     canonicalText(candidate.name, `items[${index}].name`)
+    if (candidate.category !== undefined) canonicalText(candidate.category, `items[${index}].category`, 80)
     if (candidate.nameMy !== undefined) canonicalText(candidate.nameMy, `items[${index}].nameMy`)
     if (candidate.variant !== undefined) canonicalText(candidate.variant, `items[${index}].variant`)
     assertSafeInteger(candidate.onHand, `items[${index}].onHand`)
@@ -2596,6 +2709,12 @@ export function validateCommerceState(value: unknown): CommerceState {
     assertSafeInteger(candidate.price, `items[${index}].price`, 1)
   }
   assertUnique(itemSkus, 'Item SKU')
+  for (const [barcode, ownerSku] of barcodeOwners) {
+    const matchingSkuOwners = skuOwnersByCode.get(barcode)
+    if (matchingSkuOwners && [...matchingSkuOwners].some((sku) => sku !== ownerSku)) {
+      rejectInvalid(`Barcode for ${ownerSku} conflicts with another item code.`)
+    }
+  }
 
   const catalogBaselineSkus: string[] = []
   const catalogBaselineBySku = new Map<string, CommerceCatalogBaseline>()
@@ -2641,11 +2760,36 @@ export function validateCommerceState(value: unknown): CommerceState {
   assertUnique(catalogBaselineSkus, 'Catalog baseline SKU')
 
   const newerCatalogChangeBySku = new Map<string, CommerceCatalogChange>()
+  const expectedOptionalCatalogValuesBySku = new Map<string, {
+    barcode: string | null
+    nameMy: string | null
+    category: string | null
+  }>()
   for (const [index, candidate] of catalogChanges.entries()) {
-    if (!isRecord(candidate) || !hasExactKeys(
-      candidate,
-      ['sku', 'previousPrice', 'nextPrice', 'previousReorderAt', 'nextReorderAt', 'proof'],
-    )) rejectInvalid(`catalogChanges[${index}] is invalid.`)
+    const catalogChangeFields = ['sku', 'previousPrice', 'nextPrice', 'previousReorderAt', 'nextReorderAt', 'proof']
+    const hasBarcodeHistory = isRecord(candidate)
+      && Object.prototype.hasOwnProperty.call(candidate, 'previousBarcode')
+      && Object.prototype.hasOwnProperty.call(candidate, 'nextBarcode')
+    const hasMyanmarNameHistory = isRecord(candidate)
+      && Object.prototype.hasOwnProperty.call(candidate, 'previousNameMy')
+      && Object.prototype.hasOwnProperty.call(candidate, 'nextNameMy')
+    const hasCategoryHistory = isRecord(candidate)
+      && Object.prototype.hasOwnProperty.call(candidate, 'previousCategory')
+      && Object.prototype.hasOwnProperty.call(candidate, 'nextCategory')
+    const hasBarcodeHistoryField = isRecord(candidate)
+      && (Object.prototype.hasOwnProperty.call(candidate, 'previousBarcode')
+        || Object.prototype.hasOwnProperty.call(candidate, 'nextBarcode'))
+    const hasMyanmarNameHistoryField = isRecord(candidate)
+      && (Object.prototype.hasOwnProperty.call(candidate, 'previousNameMy')
+        || Object.prototype.hasOwnProperty.call(candidate, 'nextNameMy'))
+    const hasCategoryHistoryField = isRecord(candidate)
+      && (Object.prototype.hasOwnProperty.call(candidate, 'previousCategory')
+        || Object.prototype.hasOwnProperty.call(candidate, 'nextCategory'))
+    if (!isRecord(candidate)
+      || !hasExactKeys(candidate, catalogChangeFields, ['previousBarcode', 'nextBarcode', 'previousNameMy', 'nextNameMy', 'previousCategory', 'nextCategory'])
+      || (hasBarcodeHistoryField && !hasBarcodeHistory)
+      || (hasMyanmarNameHistoryField && !hasMyanmarNameHistory)
+      || (hasCategoryHistoryField && !hasCategoryHistory)) rejectInvalid(`catalogChanges[${index}] is invalid.`)
     const sku = canonicalText(candidate.sku, `catalogChanges[${index}].sku`, 80)
     const item = itemBySku.get(sku)
     if (!item) rejectInvalid(`catalogChanges[${index}].sku is unknown.`)
@@ -2653,8 +2797,29 @@ export function validateCommerceState(value: unknown): CommerceState {
     assertSafeInteger(candidate.nextPrice, `catalogChanges[${index}].nextPrice`, 1)
     assertSafeInteger(candidate.previousReorderAt, `catalogChanges[${index}].previousReorderAt`)
     assertSafeInteger(candidate.nextReorderAt, `catalogChanges[${index}].nextReorderAt`)
+    if (hasBarcodeHistory) {
+      for (const field of ['previousBarcode', 'nextBarcode'] as const) {
+        const barcode = candidate[field]
+        if (barcode !== null) canonicalText(barcode, `catalogChanges[${index}].${field}`, 80)
+      }
+    }
+    if (hasMyanmarNameHistory) {
+      for (const field of ['previousNameMy', 'nextNameMy'] as const) {
+        const nameMy = candidate[field]
+        if (nameMy !== null) canonicalText(nameMy, `catalogChanges[${index}].${field}`, 180)
+      }
+    }
+    if (hasCategoryHistory) {
+      for (const field of ['previousCategory', 'nextCategory'] as const) {
+        const category = candidate[field]
+        if (category !== null) canonicalText(category, `catalogChanges[${index}].${field}`, 80)
+      }
+    }
     if (candidate.previousPrice === candidate.nextPrice
-      && candidate.previousReorderAt === candidate.nextReorderAt) {
+      && candidate.previousReorderAt === candidate.nextReorderAt
+      && (!hasBarcodeHistory || candidate.previousBarcode === candidate.nextBarcode)
+      && (!hasMyanmarNameHistory || candidate.previousNameMy === candidate.nextNameMy)
+      && (!hasCategoryHistory || candidate.previousCategory === candidate.nextCategory)) {
       rejectInvalid(`catalogChanges[${index}] cannot record an unchanged item.`)
     }
     if (!isRecord(candidate.proof)
@@ -2668,12 +2833,42 @@ export function validateCommerceState(value: unknown): CommerceState {
     }
     const change = candidate as unknown as CommerceCatalogChange
     const newer = newerCatalogChangeBySku.get(sku)
+    const expectedOptionalValues = expectedOptionalCatalogValuesBySku.get(sku) ?? {
+      barcode: (item.barcode as string | null | undefined) ?? null,
+      nameMy: (item.nameMy as string | null | undefined) ?? null,
+      category: (item.category as string | null | undefined) ?? null,
+    }
+    if (hasBarcodeHistory) {
+      if (change.nextBarcode !== expectedOptionalValues.barcode) {
+        rejectInvalid(`catalogChanges[${index}] breaks the barcode history for ${sku}.`)
+      }
+      expectedOptionalValues.barcode = change.previousBarcode ?? null
+    }
+    if (hasMyanmarNameHistory) {
+      if (change.nextNameMy !== expectedOptionalValues.nameMy) {
+        rejectInvalid(`catalogChanges[${index}] breaks the Myanmar name history for ${sku}.`)
+      }
+      expectedOptionalValues.nameMy = change.previousNameMy ?? null
+    }
+    if (hasCategoryHistory) {
+      if (change.nextCategory !== expectedOptionalValues.category) {
+        rejectInvalid(`catalogChanges[${index}] breaks the category history for ${sku}.`)
+      }
+      expectedOptionalValues.category = change.previousCategory ?? null
+    }
+    expectedOptionalCatalogValuesBySku.set(sku, expectedOptionalValues)
     if (!newer) {
-      if (item.price !== change.nextPrice || item.reorderAt !== change.nextReorderAt) {
+      if (item.price !== change.nextPrice || item.reorderAt !== change.nextReorderAt
+        || (hasBarcodeHistory && (item.barcode ?? null) !== change.nextBarcode)
+        || (hasMyanmarNameHistory && (item.nameMy ?? null) !== change.nextNameMy)
+        || (hasCategoryHistory && (item.category ?? null) !== change.nextCategory)) {
         rejectInvalid(`catalogChanges[${index}] does not match the current catalog item.`)
       }
     } else if (newer.previousPrice !== change.nextPrice
       || newer.previousReorderAt !== change.nextReorderAt
+      || (newer.previousBarcode !== undefined && change.nextBarcode !== undefined && newer.previousBarcode !== change.nextBarcode)
+      || (newer.previousNameMy !== undefined && change.nextNameMy !== undefined && newer.previousNameMy !== change.nextNameMy)
+      || (newer.previousCategory !== undefined && change.nextCategory !== undefined && newer.previousCategory !== change.nextCategory)
       || (timestampMicros(newer.proof.capturedAt) as bigint) < (timestampMicros(change.proof.capturedAt) as bigint)) {
       rejectInvalid(`catalogChanges[${index}] breaks the newest-first item history.`)
     }
@@ -3402,10 +3597,11 @@ export function validateCommerceState(value: unknown): CommerceState {
       let capturedQuantity = 0
       let capturedTotal = 0
       for (const [lineIndex, lineCandidate] of candidate.lines.entries()) {
-        if (!isRecord(lineCandidate) || !hasExactKeys(lineCandidate, ['sku', 'name', 'quantity', 'unitPriceMmk'], ['variant'])) rejectInvalid(`orders[${index}].lines[${lineIndex}] is invalid.`)
+        if (!isRecord(lineCandidate) || !hasExactKeys(lineCandidate, ['sku', 'name', 'quantity', 'unitPriceMmk'], ['variant', 'nameMy'])) rejectInvalid(`orders[${index}].lines[${lineIndex}] is invalid.`)
         const lineSku = canonicalText(lineCandidate.sku, `orders[${index}].lines[${lineIndex}].sku`, 80)
         if (!itemSkus.includes(lineSku)) rejectInvalid(`orders[${index}].lines[${lineIndex}].sku is unknown.`)
         canonicalText(lineCandidate.name, `orders[${index}].lines[${lineIndex}].name`)
+        if (lineCandidate.nameMy !== undefined) canonicalText(lineCandidate.nameMy, `orders[${index}].lines[${lineIndex}].nameMy`, 180)
         if (lineCandidate.variant !== undefined) canonicalText(lineCandidate.variant, `orders[${index}].lines[${lineIndex}].variant`)
         assertSafeInteger(lineCandidate.quantity, `orders[${index}].lines[${lineIndex}].quantity`, 1)
         assertSafeInteger(lineCandidate.unitPriceMmk, `orders[${index}].lines[${lineIndex}].unitPriceMmk`, 1)
@@ -5045,6 +5241,12 @@ function sameCatalogChange(left: CommerceCatalogChange, right: CommerceCatalogCh
     && left.nextPrice === right.nextPrice
     && left.previousReorderAt === right.previousReorderAt
     && left.nextReorderAt === right.nextReorderAt
+    && left.previousBarcode === right.previousBarcode
+    && left.nextBarcode === right.nextBarcode
+    && left.previousNameMy === right.previousNameMy
+    && left.nextNameMy === right.nextNameMy
+    && left.previousCategory === right.previousCategory
+    && left.nextCategory === right.nextCategory
     && sameActionProof(left.proof, right.proof)
 }
 
@@ -5627,6 +5829,7 @@ function commerceOrderAcknowledgementProjection(
     artifact.lines.map((line) => [
       line.sku,
       line.name,
+      ...(line.nameMy === undefined ? [] : [line.nameMy]),
       line.variant ?? null,
       line.quantity,
       line.unitPriceMmk,
@@ -6913,7 +7116,7 @@ export function installCommerceWorkingSampleActivity(stateValue: CommerceState, 
       if (!Number.isSafeInteger(lineTotal) || !Number.isSafeInteger(nextQty) || !Number.isSafeInteger(nextTotal)) return null
       orderQuantity = nextQty
       orderTotal = nextTotal
-      orderLines.push({ sku: item.sku, name: item.name, ...(item.variant ? { variant: item.variant } : {}), quantity: line.quantity, unitPriceMmk: item.price })
+    orderLines.push({ sku: item.sku, name: item.name, ...(item.nameMy ? { nameMy: item.nameMy } : {}), ...(item.variant ? { variant: item.variant } : {}), quantity: line.quantity, unitPriceMmk: item.price })
       const reservedSoFar = safeBalance(reservedQuantityBySku.get(item.sku) ?? 0, line.quantity)
       if (reservedSoFar === null || reservedSoFar > item.onHand) return null
       reservedQuantityBySku.set(item.sku, reservedSoFar)
@@ -6980,7 +7183,7 @@ export function installCommerceWorkingSampleActivity(stateValue: CommerceState, 
     if (!Number.isSafeInteger(lineTotal) || !Number.isSafeInteger(nextQty) || !Number.isSafeInteger(nextTotal)) return null
     pendingQuantity = nextQty
     pendingTotal = nextTotal
-    pendingOrderLines.push({ sku: item.sku, name: item.name, ...(item.variant ? { variant: item.variant } : {}), quantity: line.quantity, unitPriceMmk: item.price })
+    pendingOrderLines.push({ sku: item.sku, name: item.name, ...(item.nameMy ? { nameMy: item.nameMy } : {}), ...(item.variant ? { variant: item.variant } : {}), quantity: line.quantity, unitPriceMmk: item.price })
     const reservedSoFar = safeBalance(reservedQuantityBySku.get(item.sku) ?? 0, line.quantity)
     if (reservedSoFar === null || reservedSoFar > item.onHand) return null
     reservedQuantityBySku.set(item.sku, reservedSoFar)
@@ -7051,7 +7254,7 @@ export function commerceWorkingSampleSkus(stateValue: CommerceState) {
   return [...skus].sort((left, right) => left.localeCompare(right, 'en'))
 }
 
-export const commerceCatalogImportFields = ['name', 'variant', 'onHand', 'reorderAt', 'price'] as const
+export const commerceCatalogImportFields = ['name', 'category', 'variant', 'barcode', 'onHand', 'reorderAt', 'price'] as const
 
 export function commerceCatalogImportDifferences(existing: CommerceItem, incoming: CommerceItem): (typeof commerceCatalogImportFields)[number][] {
   return commerceCatalogImportFields.filter((field) => existing[field] !== incoming[field])
@@ -7076,7 +7279,8 @@ export function importCommerceCatalog(stateValue: CommerceState, input: {
   for (const [index, item] of input.items.entries()) {
     const existing = state.items.find((candidate) => candidate.sku === item.sku)
     if (existing) {
-      if (commerceCatalogImportDifferences(existing, item).length) return null
+      if (commerceCatalogImportDifferences(existing, item).length
+        || (Object.prototype.hasOwnProperty.call(item, 'nameMy') && existing.nameMy !== item.nameMy)) return null
       alreadyPresent += 1
       continue
     }
@@ -7097,6 +7301,24 @@ export function importCommerceCatalog(stateValue: CommerceState, input: {
 }
 
 export function updateCommerceItem(state: CommerceState, update: CommerceItemUpdate, proof: CommerceActionProof) {
+  const hasExpectedBarcode = Object.prototype.hasOwnProperty.call(update ?? {}, 'expectedBarcode')
+  const hasNextBarcode = Object.prototype.hasOwnProperty.call(update ?? {}, 'nextBarcode')
+  const hasBarcodeUpdate = hasExpectedBarcode && hasNextBarcode
+  const hasExpectedNameMy = Object.prototype.hasOwnProperty.call(update ?? {}, 'expectedNameMy')
+  const hasNextNameMy = Object.prototype.hasOwnProperty.call(update ?? {}, 'nextNameMy')
+  const hasNameMyUpdate = hasExpectedNameMy && hasNextNameMy
+  const hasExpectedCategory = Object.prototype.hasOwnProperty.call(update ?? {}, 'expectedCategory')
+  const hasNextCategory = Object.prototype.hasOwnProperty.call(update ?? {}, 'nextCategory')
+  const hasCategoryUpdate = hasExpectedCategory && hasNextCategory
+  const barcodeUpdateMalformed = hasExpectedBarcode !== hasNextBarcode
+    || (hasBarcodeUpdate && (![update.expectedBarcode, update.nextBarcode].every((barcode) => barcode === null
+      || (typeof barcode === 'string' && barcode.length > 0 && barcode === barcode.trim() && barcode.length <= 80))))
+  const nameMyUpdateMalformed = hasExpectedNameMy !== hasNextNameMy
+    || (hasNameMyUpdate && ![update.expectedNameMy, update.nextNameMy].every((nameMy) => nameMy === null
+      || (typeof nameMy === 'string' && nameMy.length > 0 && nameMy === nameMy.trim() && nameMy.length <= 180 && !hasDisallowedControlCharacters(nameMy))))
+  const categoryUpdateMalformed = hasExpectedCategory !== hasNextCategory
+    || (hasCategoryUpdate && ![update.expectedCategory, update.nextCategory].every((category) => category === null
+      || (typeof category === 'string' && category.length > 0 && category === category.trim() && category.length <= 80 && !hasDisallowedControlCharacters(category))))
   if (!validProof(proof)
     || typeof update?.sku !== 'string'
     || !update.sku
@@ -7110,8 +7332,14 @@ export function updateCommerceItem(state: CommerceState, update: CommerceItemUpd
     || update.expectedReorderAt < 0
     || !Number.isSafeInteger(update.nextReorderAt)
     || update.nextReorderAt < 0
+    || barcodeUpdateMalformed
+    || nameMyUpdateMalformed
+    || categoryUpdateMalformed
     || (update.expectedPrice === update.nextPrice
-      && update.expectedReorderAt === update.nextReorderAt)) return null
+      && update.expectedReorderAt === update.nextReorderAt
+      && (!hasBarcodeUpdate || update.expectedBarcode === update.nextBarcode)
+      && (!hasNameMyUpdate || update.expectedNameMy === update.nextNameMy)
+      && (!hasCategoryUpdate || update.expectedCategory === update.nextCategory))) return null
   const current = validateCommerceState(state)
   const change: CommerceCatalogChange = {
     sku: update.sku,
@@ -7119,6 +7347,9 @@ export function updateCommerceItem(state: CommerceState, update: CommerceItemUpd
     nextPrice: update.nextPrice,
     previousReorderAt: update.expectedReorderAt,
     nextReorderAt: update.nextReorderAt,
+    ...(hasBarcodeUpdate ? { previousBarcode: update.expectedBarcode, nextBarcode: update.nextBarcode } : {}),
+    ...(hasNameMyUpdate ? { previousNameMy: update.expectedNameMy, nextNameMy: update.nextNameMy } : {}),
+    ...(hasCategoryUpdate ? { previousCategory: update.expectedCategory, nextCategory: update.nextCategory } : {}),
     proof: { ...proof },
   }
   const changes = commerceCatalogChanges(current)
@@ -7132,14 +7363,25 @@ export function updateCommerceItem(state: CommerceState, update: CommerceItemUpd
   const items = current.items.filter((item) => item.sku === update.sku)
   if (items.length !== 1
     || items[0].price !== update.expectedPrice
-    || items[0].reorderAt !== update.expectedReorderAt) return null
+    || items[0].reorderAt !== update.expectedReorderAt
+    || (hasBarcodeUpdate && (items[0].barcode ?? null) !== update.expectedBarcode)
+    || (hasNameMyUpdate && (items[0].nameMy ?? null) !== update.expectedNameMy)
+    || (hasCategoryUpdate && (items[0].category ?? null) !== update.expectedCategory)
+    || (hasBarcodeUpdate && commerceItemBarcodeConflicts(current.items, update.sku, update.nextBarcode ?? null))) return null
   const nextBaselines = existingBaseline
     ? baselines
     : [createCommerceCatalogBaseline(items[0], proof), ...baselines]
   return validateCommerceState({
     ...current,
     items: current.items.map((item) => item.sku === update.sku
-      ? { ...item, price: update.nextPrice, reorderAt: update.nextReorderAt }
+      ? {
+          ...item,
+          price: update.nextPrice,
+          reorderAt: update.nextReorderAt,
+          ...(hasBarcodeUpdate ? { barcode: update.nextBarcode ?? undefined } : {}),
+          ...(hasNameMyUpdate ? { nameMy: update.nextNameMy ?? undefined } : {}),
+          ...(hasCategoryUpdate ? { category: update.nextCategory ?? undefined } : {}),
+        }
       : item),
     catalogBaselines: nextBaselines,
     catalogChanges: [change, ...changes],
@@ -7452,9 +7694,10 @@ function validatedOrderLineSnapshots(order: CommerceOrder): CommerceOrderLine[] 
   let total = 0
   for (const line of order.lines) {
     if (!isRecord(line)
-      || !hasExactKeys(line, ['sku', 'name', 'quantity', 'unitPriceMmk'], ['variant'])
+      || !hasExactKeys(line, ['sku', 'name', 'quantity', 'unitPriceMmk'], ['variant', 'nameMy'])
       || typeof line.sku !== 'string' || line.sku !== line.sku.trim() || !line.sku
       || typeof line.name !== 'string' || line.name !== line.name.trim() || !line.name
+      || (line.nameMy !== undefined && (typeof line.nameMy !== 'string' || line.nameMy !== line.nameMy.trim() || !line.nameMy || line.nameMy.length > 180 || hasDisallowedControlCharacters(line.nameMy)))
       || (line.variant !== undefined && (typeof line.variant !== 'string' || line.variant !== line.variant.trim() || !line.variant))
       || !Number.isSafeInteger(line.quantity) || line.quantity < 1
       || !Number.isSafeInteger(line.unitPriceMmk) || line.unitPriceMmk < 1
@@ -11360,7 +11603,7 @@ export function commerceCustomerReceivablesHandoff(state: CommerceState, now: nu
       orderId: agingRow.orderId,
       customer: agingRow.customer,
       paymentMethod: agingRow.paymentMethod,
-      createdAt: order?.createdAt ?? agingRow.dueAt,
+      createdAt: order?.createdAt ?? aging.asOf,
       dueAt: agingRow.dueAt,
       balanceMmk: agingRow.balanceMmk,
       daysPastDue: agingRow.daysPastDue,

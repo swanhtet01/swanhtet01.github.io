@@ -21,7 +21,10 @@ test('retired direct setup stops before write-capable onboarding hooks mount', a
   const source = await readFile(resolve(root, 'showroom/src/core/ProductOnboardingPage.tsx'), 'utf8')
   const gate = source.slice(source.indexOf('export function ProductOnboardingPage('), source.indexOf('function ActiveProductOnboardingPage('))
   assert.match(gate, /!activeSetupProductContracts\.some\(contract => contract\.id === product\)/)
-  assert.match(gate, /Open retained Plant workspace/)
+  assert.match(gate, /const retainedProduct = productContracts\[product\]/)
+  assert.match(gate, /to=\{`\/\$\{retainedProduct\.slug\}\/`\}>Open retained \{retainedProduct\.name\} workspace/)
+  assert.match(gate, /to="\/\?choose=1">Choose Shop<\/Link>/)
+  assert.doesNotMatch(gate, /Open retained Plant workspace|Choose Shop, Ecommerce or Website/)
   assert.match(gate, /return <ActiveProductOnboardingPage key=\{product\}/)
   assert.doesNotMatch(gate, /useSetupWorkspace|useProductionWorkspace|rememberProductSetup|useEffect/)
 })
@@ -36,8 +39,11 @@ test('new trial choices consume active products and reject retired query selecti
 
 test('unavailable sign-in offers saved work and assisted setup without demo entry', async () => {
   const source = await readFile(resolve(root, 'showroom/src/core/ManagedLoginPage.tsx'), 'utf8')
-  const unavailable = source.slice(source.indexOf('<section className="managed-login-panel" aria-label="Login unavailable">'))
-  assert.match(unavailable, /to="\/\?choose=1">Saved work on this device/)
+  const unavailableStart = source.indexOf('<section className="managed-login-panel"')
+  assert.ok(unavailableStart >= 0)
+  const unavailable = source.slice(unavailableStart)
+  assert.match(unavailable, /aria-label=\{uiText\('Login unavailable'\)\}/)
+  assert.match(unavailable, /to="\/\?choose=1">\{uiText\('Saved work on this device'\)\}/)
   assert.match(unavailable, /Contact support/)
   assert.doesNotMatch(unavailable, /Free trial|Try free demo|Try a sample/)
   assert.match(source, /Date\.now\(\) < cooldownUntil/)
@@ -68,20 +74,24 @@ test('release assets require the current login choices and local workspace bound
 
 test('unauthenticated launcher preserves managed-only access and hides browser-local workspace detail', async () => {
   const source = await readFile(resolve(root, 'showroom/src/core/CoreShell.tsx'), 'utf8')
-  assert.match(source, /!emptyCompany && managedPortal \? <nav aria-label="Your workspace"/)
+  assert.match(source, /!emptyCompany && managedPortal \? <nav aria-label=\{uiText\('Your workspace'\)\}/)
   assert.match(source, /customerProducts\.filter\(\(\[name\]\) => managedProductIsVisible/)
   assert.match(source, /if \(!managedProductIsVisible\(portalAccess\.products, setupKey\)\) return null/)
-  assert.match(source, /Sign in to your business\./)
-  assert.match(source, /to=\{managedLoginPath\(null\)\}>Login<\/Link>/)
+  assert.match(source, /uiText\('Sign in to your business\.'\)/)
+  assert.match(source, /to=\{managedLoginPath\(null\)\}>\{uiText\('Login'\)\}<\/Link>/)
   for (const retiredBrowserDetail of ['localProductSetups', "readProductSetup(window.localStorage, 'production')", 'setSetupLoadFailed', 'Workspace unavailable', 'On this device']) {
     assert.ok(!source.includes(retiredBrowserDetail), `unauthenticated root must not expose ${retiredBrowserDetail}`)
   }
 })
 
-test('one source policy declares exactly three active acquisition doors', () => {
+test('one source policy exposes Shop only and retains internal workspaces', () => {
   const before = JSON.stringify(manifest)
-  assert.deepEqual(activeProductContracts(manifest).map(p => p.id), ['shop', 'ecommerce', 'website'])
-  assert.deepEqual(activeSetupProductContracts.map(p => p.id), ['commerce', 'ecommerce', 'website'])
+  assert.deepEqual(manifest.productVisibility.activeProductIds, ['shop'])
+  assert.deepEqual(manifest.productVisibility.retainedOnlyProductIds, ['plant', 'website', 'ecommerce'])
+  assert.equal(manifest.productVisibility.retainedWorkspaceAccess, true)
+  assert.equal(manifest.productVisibility.deleteRetainedData, false)
+  assert.deepEqual(activeProductContracts(manifest).map(p => p.id), ['shop'])
+  assert.deepEqual(activeSetupProductContracts.map(p => p.id), ['commerce'])
   assert.equal(JSON.stringify(manifest), before)
   assert.deepEqual(Object.keys(productContracts), ['commerce', 'production', 'website', 'ecommerce'])
 })
@@ -115,17 +125,28 @@ test('saved Plant setup survives visibility projection byte-for-byte', () => {
 })
 
 test('generated public home and contact offer only active products', async () => {
-  const home = main(await html('index.html')), contact = main(await html('contact/index.html'))
-  assert.equal((home.match(/class="product-card-compact"/g)??[]).length, 3)
-  assert.equal((home.match(/class="product-card-flow"/g)??[]).length, 3)
-  assert.match(home, /Contact SuperMega/)
+  const homeDocument = await html('index.html')
+  const home = main(homeDocument), contact = main(await html('contact/index.html'))
+  assert.equal((home.match(/class="family-card/g)??[]).length, 1)
+  assert.equal((home.match(/class="family-link"/g)??[]).length, 1)
+  const headline = home.match(/<h1 id="hero-title">([\s\S]*?)<\/h1>/)?.[1]
+  assert.ok(headline, 'Company page has its primary headline')
+  const headlineText = headline.replace(/<br\s*\/?>/gi, ' ').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
+  assert.equal(headlineText, manifest.company.headline)
+  assert.match(homeDocument, /href="\/contact\/">Contact<\/a>/)
+  assert.doesNotMatch(home, /\bSites\b|\bCommerce\b/)
+  assert.doesNotMatch(home, /Explore Sites|Explore Commerce|href="\/(?:website|ecommerce)\//)
   assert.doesNotMatch(home, /Plant|all four|href="[^\"]*(?:\/plant\/|product=plant)/)
   assert.match(contact, /<input type="hidden" name="product" value="guide" \/>/)
   assert.doesNotMatch(contact, /<select[^>]*name="product"/)
   for (const product of activeProductContracts(manifest)) {
     const page = main(await html(product.id+'/index.html'))
     const fullPage = await html(product.id+'/index.html')
-    assert.equal((fullPage.match(/href="https:\/\/app\.supermega\.dev\/login"/g) ?? []).length, 1)
+    const expectedLogin = product.id === 'shop'
+      ? 'href="https://app.supermega.dev/login?product=shop"'
+      : 'href="https://app.supermega.dev/login"'
+    const loginLinks = [...fullPage.matchAll(/href="https:\/\/app\.supermega\.dev\/login[^"]*"/g)].map(([link]) => link)
+    assert.deepEqual(loginLinks, [expectedLogin])
     assert.match(page, /class="platform-image"/)
     assert.doesNotMatch(page, /Request assisted setup/)
     if (product.status === 'available-in-app') {
@@ -135,6 +156,16 @@ test('generated public home and contact offer only active products', async () =>
       assert.doesNotMatch(page, /class="home-contact product-action"/)
     }
     assert.doesNotMatch(page, /product=plant|href="\/plant\//)
+  }
+})
+
+test('internal Sites and Commerce routes preserve records without product capture or setup CTA', async () => {
+  for (const id of ['website', 'ecommerce']) {
+    const page = await html(id + '/index.html')
+    assert.match(page, /name="robots" content="noindex,follow"/)
+    assert.match(page, /not offered for new setup/)
+    assert.match(page, /Existing workspace records are preserved/)
+    assert.doesNotMatch(page, /class="platform-image|class="trade-card|Request assisted setup|Open (?:Website|Ecommerce)/)
   }
 })
 

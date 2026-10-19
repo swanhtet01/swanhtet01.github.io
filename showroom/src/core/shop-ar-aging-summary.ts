@@ -1,4 +1,4 @@
-import type { CommerceState } from './commerce-workspace.ts'
+import { commerceOrderPaymentDueAt, type CommerceState } from './commerce-workspace.ts'
 
 export type ArAgingBucket = 'current' | '1_7' | '8_30' | '31_60' | 'over_60'
 
@@ -27,10 +27,10 @@ export function projectShopArAgingSummary(commerce: CommerceState, asOf: string)
   type Row = { daysPastDue: number; totalMmk: number; bucket: ArAgingBucket; customer: string }
   const rows: Row[] = commerce.orders.flatMap((order) => {
     if (order.status === 'cancelled' || order.paymentStatus !== 'pending') return []
-    const dueAt = order.paymentDueAt ?? order.promisedAt ?? order.createdAt
-    const dueMs = Date.parse(dueAt)
-    if (!Number.isFinite(dueMs) || !Number.isFinite(asOfMs)) return []
-    const daysPastDue = asOfMs > dueMs ? Math.ceil((asOfMs - dueMs) / 86_400_000) : 0
+    const dueAt = commerceOrderPaymentDueAt(order)
+    const dueMs = dueAt === null ? Number.NaN : Date.parse(dueAt)
+    if ((dueAt !== null && !Number.isFinite(dueMs)) || !Number.isFinite(asOfMs)) return []
+    const daysPastDue = Number.isFinite(dueMs) && asOfMs > dueMs ? Math.ceil((asOfMs - dueMs) / 86_400_000) : 0
     return [{ daysPastDue, totalMmk: order.total, bucket: agingBucket(daysPastDue), customer: order.customer }]
   })
   const byBucket = Object.fromEntries(

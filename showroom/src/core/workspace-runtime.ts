@@ -502,6 +502,15 @@ type CommerceWorkspaceView = {
   writeReady: boolean
 }
 
+// A command acknowledgement and an inbox refresh can finish out of order. Never
+// replace a newer revision for the same company with an older response (or a
+// late load error without a revision).
+function shouldPublishManagedCommerceSnapshot(current: CommerceWorkspaceView, next: CommerceWorkspaceView): boolean {
+  return current.workspaceId !== next.workspaceId
+    || current.version === null
+    || next.version !== null && next.version >= current.version
+}
+
 function managedCommerceView(record: ManagedStateRecord, workspaceId: string, writeReady: boolean): CommerceWorkspaceView {
   if (record.surface !== 'commerce' || !Number.isSafeInteger(record.version) || record.version < 0) throw new Error('Managed Shop returned an invalid state envelope.')
   if (record.version === 0) {
@@ -642,6 +651,27 @@ export function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = n
     setManagedLoadAttempt((attempt) => attempt + 1)
   }, [])
 
+  const refreshManagedCommerceSnapshot = useCallback(async () => {
+    const identity = identityRef.current
+    if (!identity) return false
+    try {
+      const bootstrap = await loadManagedBootstrap(identity)
+      if (!identityRef.current || !sameManagedIdentity(identityRef.current, identity)) return false
+      const next = managedCommerceView(
+        requireManagedSurfaceState(bootstrap, 'commerce', 'Shop'),
+        identity.workspaceId,
+        managedBootstrapHasCapability(bootstrap, identity, 'commerce.write'),
+      )
+      if (!shouldPublishManagedCommerceSnapshot(snapshotRef.current, next)) return false
+      snapshotRef.current = next
+      setManagedSnapshot(next)
+      return true
+    } catch (error) {
+      reportManagedPersistenceFailure('shop.load', error, 'Shop could not refresh incoming online orders.')
+      return false
+    }
+  }, [])
+
   // Load the stuck change's evidence as soon as the till freezes, so the recovery
   // control can show what it would discard before the operator commits to discarding it.
   const stuck = !managedIdentity && (syncStatus.status === 'conflict' || syncStatus.status === 'unavailable')
@@ -717,15 +747,19 @@ export function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = n
         if (!active || !identityRef.current || !sameManagedIdentity(identityRef.current, managedIdentity)) return
         const record = requireManagedSurfaceState(bootstrap, 'commerce', 'Shop')
         const next = managedCommerceView(record, managedIdentity.workspaceId, managedBootstrapHasCapability(bootstrap, managedIdentity, 'commerce.write'))
-        snapshotRef.current = next
-        setManagedSnapshot(next)
+        if (shouldPublishManagedCommerceSnapshot(snapshotRef.current, next)) {
+          snapshotRef.current = next
+          setManagedSnapshot(next)
+        }
       })
       .catch((error) => {
         if (!active || !identityRef.current || !sameManagedIdentity(identityRef.current, managedIdentity)) return
         reportManagedPersistenceFailure('shop.load', error, 'Managed Shop could not be loaded.')
         const next = { state: createEmptyCommerce(), mode: 'managed-error' as const, workspaceId: managedIdentity.workspaceId, version: null, error: error instanceof Error ? error.message : 'Managed Shop could not be loaded.', writeReady: false }
-        snapshotRef.current = next
-        setManagedSnapshot(next)
+        if (shouldPublishManagedCommerceSnapshot(snapshotRef.current, next)) {
+          snapshotRef.current = next
+          setManagedSnapshot(next)
+        }
       })
     return () => { active = false }
   }, [managedIdentity, managedLoadAttempt])
@@ -874,8 +908,10 @@ export function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = n
         }
         nextSnapshot = { ...refreshed, error: '' }
       }
-      snapshotRef.current = nextSnapshot
-      setManagedSnapshot(nextSnapshot)
+      if (shouldPublishManagedCommerceSnapshot(snapshotRef.current, nextSnapshot)) {
+        snapshotRef.current = nextSnapshot
+        setManagedSnapshot(nextSnapshot)
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'The managed Shop write was not confirmed.'
       if (error instanceof ManagedTrialError && error.code === 'trial_version_conflict') {
@@ -888,8 +924,10 @@ export function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = n
             managedBootstrapHasCapability(bootstrap, managedIdentity, 'commerce.write'),
           )
           const conflict = { ...refreshed, error: '' }
-          snapshotRef.current = conflict
-          setManagedSnapshot(conflict)
+          if (shouldPublishManagedCommerceSnapshot(snapshotRef.current, conflict)) {
+            snapshotRef.current = conflict
+            setManagedSnapshot(conflict)
+          }
         } catch (refreshError) {
           reportManagedPersistenceFailure('shop.reconcile', refreshError, 'Shop changed and the latest revision could not be loaded.')
           const refreshMessage = refreshError instanceof Error ? refreshError.message : 'Shop changed and the latest revision could not be loaded.'
@@ -914,7 +952,7 @@ export function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = n
   const canWrite = managedIdentity
     ? visible.mode === 'managed-ready' && visible.version !== null && !visible.error && visible.writeReady
     : visible.mode === 'local' && !visible.error && visible.writeReady && syncStatus.status === 'ready'
-  return [visible.state, mutate, visible.error, visible.mode, visible.version, visible.workspaceId, canWrite, syncStatus, stuckRecovery, discardStuckChange, retryManagedLoad] as const
+  return [visible.state, mutate, visible.error, visible.mode, visible.version, visible.workspaceId, canWrite, syncStatus, stuckRecovery, discardStuckChange, retryManagedLoad, refreshManagedCommerceSnapshot] as const
 }
 
 type ProductionWorkspaceMode = 'local' | 'managed-loading' | 'managed-ready' | 'managed-unprovisioned' | 'managed-error'

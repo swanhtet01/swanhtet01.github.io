@@ -81,6 +81,7 @@ const DELIBERATE_EXCLUSIONS = new Map([
   ['supermega.catalog-response:', 'Actor/workspace/review-bound sessionStorage retry payload, cleared after confirmation or expiry; copying it through a workspace backup could replay a private response.'],
   ['supermega.website-feedback:', 'Actor/workspace/review-bound sessionStorage feedback retry, not portable business content. It has its own confirmation and expiry lifecycle.'],
   ['supermega.managed.workspace.v1', 'Holds the managed workspace IDENTITY, not workspace content, and has its own lifecycle (forgetWorkspace on sign-out). Registering it would make a local demo reset silently sign the operator out of their enterprise workspace.'],
+  ['supermega.ui-locale.v1', 'Device language preference shared across products and accounts, not business content. A workspace backup or reset must not change the operator\'s chosen interface language.'],
   // Everything below this line was invisible until discovery stopped depending on constant
   // names. None of them is workspace content; each says why.
   ['supermega.last-product.v1', 'CoreShell remembers which product the operator last opened so a reload lands where they were. It is navigation state about the person, not data about the business: restoring last Tuesday\'s backup must not also send them back to whichever tab was open when it was taken.'],

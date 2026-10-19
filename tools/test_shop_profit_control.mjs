@@ -133,7 +133,7 @@ for (const [field, value] of [
   const todaySource = (await readFile('showroom/src/core/ShopToday.tsx', 'utf8')).replace(/\r\n?/g, '\n')
   check(todaySource.includes('data-state={profitControl.state}'), 'Profit Control surface exposes the exact projected state')
   check(todaySource.includes('data-priority-id={attentionPriority.id}'), 'Profit Control priority identity stays model-bound')
-  check(todaySource.includes('<small><strong>Next:</strong> {attentionPriority.actionLabel}</small>'), 'the exact model action label is visibly rendered inside its target link')
+  check(todaySource.includes("<small><strong>{uiText('Next:')}</strong> {uiText(attentionPriority.actionLabel)}</small>"), 'the localized model action label is visibly rendered inside its target link')
   check(todaySource.includes('to={attentionPriority.target}'), 'the visible action remains bound to the exact model target')
 }
 

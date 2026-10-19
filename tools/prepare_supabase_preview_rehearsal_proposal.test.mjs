@@ -49,7 +49,7 @@ async function proposal(overrides = {}) {
     sourceReceipts,
     securityAudit,
     readiness,
-    generatedAt: '2026-08-25T00:00:00.000Z',
+    generatedAt: '2026-10-19T00:00:00.000Z',
     ...overrides,
   })
 }
@@ -69,12 +69,13 @@ test('builds a data-less preview proposal with branch mode and schema unverified
   assert.equal(built.previewBranch.productionRefsAllowed, false)
   assert.equal(built.previewBranch.privilegedRuntimeCredentialsAllowed, false)
   assert.equal(built.previewBranch.deleteAfterEvidence, true)
-  assert.equal(built.migrationPlan.migrationCount, 28)
-  assert.equal(built.migrationPlan.privateMigrationCount, 27)
+  assert.equal(built.migrationPlan.migrationCount, 32)
+  assert.equal(built.migrationPlan.privateMigrationCount, 31)
   assert.equal(built.migrationPlan.schemaVersion, 13)
   assert.equal(built.migrationPlan.publicBaseline, '20260711081300_public_legacy_baseline.sql')
-  assert.equal(built.migrationPlan.finalMigration, '20261014090000_website_channel_stable_update.sql')
+  assert.equal(built.migrationPlan.finalMigration, '20261019103000_ecommerce_review_shared_state_lock.sql')
   assert.ok(!built.migrationPlan.migrations.some(entry => entry.name === '20261014103000_website_custom_domain_bindings.sql'))
+  assert.ok(!built.migrationPlan.migrations.some(entry => entry.name === '20261016143945_optimize_sites_inquiry_rls_initplans.sql'))
   assert.equal(built.productionBaseline.schemaVersionAtAudit, 11)
   assert.equal(built.migrationPlan.historicalAuditSchemaVersion, 11)
   assert.equal(built.migrationPlan.sourceAheadOfHistoricalAudit, true)
@@ -110,11 +111,20 @@ test('builds a data-less preview proposal with branch mode and schema unverified
   assert.match(built.digest, /^sha256:[0-9a-f]{64}$/)
 })
 
-test('binds exact ordered public baseline and twenty-seven private migrations through stable Sites updates', async () => {
+test('records generation time and rejects malformed or backdated source packets', async () => {
+  const before = Date.now()
+  const built = await proposal({ generatedAt: undefined })
+  assert.ok(Date.parse(built.generatedAt) >= before && Date.parse(built.generatedAt) <= Date.now())
+  for (const generatedAt of ['2026-10-14T00:00:00.000Z', 'invalid', '2026-10-15']) {
+    await assert.rejects(proposal({ generatedAt }), /supabase_preview_rehearsal_proposal_timestamp_invalid/)
+    await assert.rejects(validateSupabasePreviewRehearsalProposal({ ...built, generatedAt }), /supabase_preview_rehearsal_proposal_timestamp_invalid/)
+  }
+})
+
+test('binds exact ordered public baseline and thirty-one private migrations through Ecommerce operator capability correction', async () => {
   const built = await proposal()
   const entries = built.migrationPlan.migrations
-  assert.deepEqual(entries.slice(-13).map(entry => entry.name), [
-    '20260907024457_self_serve_durable_attempt_budget.sql',
+  assert.deepEqual(entries.slice(-16).map(entry => entry.name), [
     '20260915184728_website_customer_review_storage.sql',
     '20260915191528_website_review_entitlement_proof.sql',
     '20260918011500_website_customer_acceptance.sql',
@@ -127,6 +137,10 @@ test('binds exact ordered public baseline and twenty-seven private migrations th
     '20261010070000_website_published_hero_media.sql',
     '20261010120857_website_inquiry_followup.sql',
     '20261014090000_website_channel_stable_update.sql',
+    '20261015091500_website_six_page_reviews.sql',
+    '20261015202629_ecommerce_operator_review_grant.sql',
+    '20261019070000_ecommerce_operator_management_boundary.sql',
+    '20261019103000_ecommerce_review_shared_state_lock.sql',
   ])
   assert.equal(validatePreviewMigrationEntries(entries), entries)
   for (const mutate of [list => list.pop(), list => list.push({ ...list.at(-1) }),

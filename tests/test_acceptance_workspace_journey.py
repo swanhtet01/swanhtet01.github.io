@@ -10,7 +10,9 @@ from tools.acceptance_workspace_journey import (
     PROJECT, PRODUCTS, exercise_workspaces, payload_for, verified_session, require_runtime_target,
 )
 from supermega_runtime.runtime import reduce_trial_state
-from supermega_runtime.trial_store import TrialNotReadyError, self_serve_workspace_id
+from supermega_runtime.trial_store import (
+    ACTIVATION_PRODUCT_ENTITLEMENTS, TrialNotReadyError, self_serve_workspace_id,
+)
 
 
 class JourneyTests(unittest.TestCase):
@@ -27,9 +29,13 @@ class JourneyTests(unittest.TestCase):
 
     def test_all_product_payloads_use_real_reducers(self):
         for product in PRODUCTS:
-            surface = 'website' if product == 'website' else 'commerce'
-            payload = payload_for(product)
+            surface = ACTIVATION_PRODUCT_ENTITLEMENTS[product]
+            payload = payload_for(surface)
             self.assertEqual(reduce_trial_state(surface, surface + '.workspace.initialized', {}, payload), payload['state'])
+
+    def test_acceptance_product_scope_is_shop_only(self):
+        self.assertEqual(PRODUCTS, ('shop',))
+        self.assertEqual(ACTIVATION_PRODUCT_ENTITLEMENTS['shop'], 'commerce')
 
     def test_token_claims_cannot_override_verified_identity(self):
         user_id = str(uuid4())
@@ -41,36 +47,45 @@ class JourneyTests(unittest.TestCase):
     def test_database_failure_is_not_counted_as_denial(self):
         self.run_journey('database_ready', should_fail=True)
 
-    def test_membership_denial_and_reconnect_checks(self):
+    def test_cross_tenant_denial_and_reconnect_checks(self):
         self.run_journey('membership_ready', should_fail=False)
 
     def run_journey(self, denial, should_fail):
-        registered, states, owner = [], {}, str(uuid4())
+        registered, states, owners = [], {}, {}
+        users = [{'id': str(uuid4())}, {'id': str(uuid4())}]
         class Store:
             def __init__(self, *args, **kwargs): pass
             def create_self_serve_workspace(self, **kwargs):
                 workspace = self_serve_workspace_id(kwargs['claim_code'])
+                owner = kwargs['actor_id']
                 self_test.assertIn((workspace, owner), registered)
+                owners[workspace] = owner
                 return SimpleNamespace(workspace_id=workspace)
             def apply_command(self, principal, **command):
-                if principal.actor_id != owner: raise TrialNotReadyError((denial,))
+                if principal.actor_id != owners.get(principal.workspace_id):
+                    raise TrialNotReadyError((denial,))
                 replay = principal.workspace_id in states
                 states[principal.workspace_id] = command['payload']['state']
                 return SimpleNamespace(version=1, idempotent_replay=replay)
             def get_state(self, principal, surface):
-                if principal.actor_id != owner: raise TrialNotReadyError((denial,))
+                if principal.actor_id != owners.get(principal.workspace_id):
+                    raise TrialNotReadyError((denial,))
                 return SimpleNamespace(version=1, state=states[principal.workspace_id])
         self_test = self
-        users = [{'id': owner}, {'id': str(uuid4())}]
         with patch('tools.acceptance_workspace_journey.verified_session', return_value=str(uuid4())):
             def run():
-                return exercise_workspaces(None, users, 'postgresql://supermega_trial_login@db.' + PROJECT + '.supabase.co/postgres?sslmode=require', ['SM-1234-5678', 'SM-1234-5679', 'SM-1234-567A'],
+                return exercise_workspaces(None, users, 'postgresql://supermega_trial_login@db.' + PROJECT + '.supabase.co/postgres?sslmode=require', ['SM-1234-5678', 'SM-1234-5679'],
                     project=PROJECT, approved=True, register_cleanup=lambda *pair: registered.append(pair), store_factory=Store)
             if should_fail:
                 with self.assertRaisesRegex(RuntimeError, 'denial_not_proven'): run()
             else:
                 result = run()
-                self.assertEqual(len(result['products']), 3)
+                self.assertEqual(len(result['products']), 2)
+                for tenant in result['products']:
+                    self.assertEqual(tenant['product'], 'shop')
+                    self.assertEqual(tenant['surface'], 'commerce')
+                    self.assertTrue(tenant['cross_tenant_read_denied'])
+                    self.assertTrue(tenant['cross_tenant_write_denied'])
                 self.assertFalse(result['browser_acceptance'])
 
 

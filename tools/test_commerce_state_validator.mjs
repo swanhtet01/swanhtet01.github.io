@@ -21,7 +21,7 @@ const { build } = await import(pathToFileURL(requireFromShowroom.resolve('esbuil
 
 const bundle = await build({
   stdin: {
-    contents: `export { createSeedCommerce, validateCommerceState } from './commerce-workspace.ts'`,
+    contents: `export { createSeedCommerce, importCommerceCatalog, updateCommerceItem, validateCommerceState } from './commerce-workspace.ts'`,
     resolveDir: 'showroom/src/core',
     sourcefile: 'showroom/src/core/validator-test-entry.ts',
     loader: 'ts',
@@ -33,7 +33,7 @@ const bundle = await build({
   logLevel: 'error',
 })
 
-const { createSeedCommerce, validateCommerceState } =
+const { createSeedCommerce, importCommerceCatalog, updateCommerceItem, validateCommerceState } =
   await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].contents).toString('base64')}`)
 
 let checks = 0
@@ -55,6 +55,63 @@ check(
   validateCommerceState(seed).orders.length === seed.orders.length,
   'and comes back with its orders intact rather than emptied',
 )
+
+// Optional catalog fields must remain linked through intervening price-only edits. Otherwise
+// changing the current item can silently sever barcode, Burmese-name, or category history.
+const rice = seed.items.find((item) => item.sku === 'SM-1001')
+const baselineAt = Date.parse(seed.catalogBaselines.find((baseline) => baseline.sku === rice.sku).proof.capturedAt)
+const historyProof = (actionId, offset) => ({
+  actionId,
+  capturedAt: new Date(baselineAt + offset).toISOString(),
+  actor: 'Counter operator',
+  reason: 'Verify catalog values against the merchant source.',
+  evidenceReference: `EV-${actionId}`,
+})
+const optionalFieldsUpdate = updateCommerceItem(seed, {
+  sku: rice.sku,
+  expectedPrice: rice.price,
+  nextPrice: rice.price + 50,
+  expectedReorderAt: rice.reorderAt,
+  nextReorderAt: rice.reorderAt + 1,
+  expectedBarcode: null,
+  nextBarcode: '8901234567890',
+  expectedNameMy: rice.nameMy,
+  nextNameMy: 'ကောင်း ဆန် ၆ ကီလို',
+  expectedCategory: rice.category,
+  nextCategory: 'Rice & grains',
+}, historyProof('ACT-VALIDATOR-OPTIONAL-CATALOG', 1_000))
+const sparseHistory = optionalFieldsUpdate && updateCommerceItem(optionalFieldsUpdate, {
+  sku: rice.sku,
+  expectedPrice: rice.price + 50,
+  nextPrice: rice.price + 100,
+  expectedReorderAt: rice.reorderAt + 1,
+  nextReorderAt: rice.reorderAt + 2,
+}, historyProof('ACT-VALIDATOR-PRICE-ONLY', 2_000))
+check(Boolean(sparseHistory), 'optional catalog values validate through a later price-only edit')
+for (const [field, value] of [
+  ['barcode', '0000000000000'],
+  ['nameMy', 'မှားယွင်းသော အမည်'],
+  ['category', 'Broken category'],
+]) {
+  checks += 1
+  const corrupted = structuredClone(sparseHistory)
+  corrupted.items.find((item) => item.sku === rice.sku)[field] = value
+  assert.throws(() => validateCommerceState(corrupted), undefined, `tampered ${field} must not sever sparse catalog history`)
+}
+const catalogImportDigest = `sha256:${'b'.repeat(64)}`
+const legacyRiceImport = Object.fromEntries(Object.entries(rice).filter(([field]) => field !== 'nameMy'))
+check(importCommerceCatalog(seed, {
+  items: [legacyRiceImport],
+  sourceDigest: catalogImportDigest,
+  capturedAt: new Date(baselineAt + 3_000).toISOString(),
+  actor: 'Counter operator',
+})?.replayed === true, 'legacy catalog import without a Burmese column preserves the saved Burmese name')
+check(importCommerceCatalog(seed, {
+  items: [{ ...rice, nameMy: 'အခြား ထုတ်ကုန်အမည်' }],
+  sourceDigest: catalogImportDigest,
+  capturedAt: new Date(baselineAt + 4_000).toISOString(),
+  actor: 'Counter operator',
+}) === null, 'catalog replay rejects a conflicting Burmese product name')
 
 // --- schema and shape --------------------------------------------------------
 rejects((state) => { state.schema = 'supermega.commerce.workspace.v1' }, 'a workspace on the wrong schema is rejected')

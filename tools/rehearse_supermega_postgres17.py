@@ -72,11 +72,18 @@ CURRENT_MIGRATIONS = (*MIGRATIONS,
     "20261010070000_website_published_hero_media.sql",
     "20261010120857_website_inquiry_followup.sql",
     "20261014090000_website_channel_stable_update.sql",
+    "20261015091500_website_six_page_reviews.sql",
+    "20261015202629_ecommerce_operator_review_grant.sql",
+    "20261019070000_ecommerce_operator_management_boundary.sql",
+    "20261019103000_ecommerce_review_shared_state_lock.sql",
 )
 DOMAIN_CANDIDATE_MIGRATION = "20261014103000_website_custom_domain_bindings.sql"
 DOMAIN_CORRECTIVE_MIGRATION = "20261014122400_website_domain_attempt_fencing.sql"
 # Both depend on each other and remain outside the canonical release chain.
 DOMAIN_CANDIDATE_MIGRATIONS = (DOMAIN_CANDIDATE_MIGRATION, DOMAIN_CORRECTIVE_MIGRATION)
+DORMANT_CANDIDATE_MIGRATIONS = (
+    "20261016143945_optimize_sites_inquiry_rls_initplans.sql",
+)
 RUNTIME_ROLE = "supermega_trial_login"
 DATABASE_NAME = "supermega_rehearsal"
 RESTORE_DATABASE_NAME = "supermega_rehearsal_restore"
@@ -169,6 +176,7 @@ CURRENT_ACCOUNT_CHECKS = (
     "self_serve_exact_create_replay", "self_serve_claim_conflict_without_takeover",
     "self_serve_durable_budget_enforced", "self_serve_actor_directory_isolated",
     "self_serve_cross_actor_read_denied", "self_serve_revoked_session_denied",
+    "self_serve_ecommerce_internal_operator_boundary",
     "billing_unpaid_invoice_not_entitled", "billing_payment_confirmation_not_entitlement",
     "billing_separate_entitlement_grant_visible", "billing_runtime_write_denied",
 )
@@ -198,6 +206,16 @@ class RehearsalFailure(RuntimeError):
     """A fail-closed error with a safe, credential-free code."""
 
 
+def safe_rehearsal_failure_code(exc: BaseException) -> str | None:
+    """Preserve a nested runner's safe failure code without leaking exception text."""
+    if type(exc).__name__ != "RehearsalFailure" or type(exc).__module__ != (
+        "tools.rehearse_supermega_postgres17"
+    ):
+        return None
+    candidate = str(exc)
+    return candidate if re.fullmatch(r"[a-z0-9_]{1,120}", candidate) else None
+
+
 def _implementation_digest() -> str:
     digest = sha256()
     for relative_path in IMPLEMENTATION_PATHS:
@@ -222,7 +240,8 @@ def _source_identity(expected_head: str | None) -> dict[str, str]:
     if git("rev-parse", "HEAD") != expected_head:
         raise RehearsalFailure("source_head_mismatch")
     observed = tuple(sorted(path.name for path in MIGRATION_DIRECTORY.glob("*.sql")
-        if path.name not in ("20260711081300_public_legacy_baseline.sql", *DOMAIN_CANDIDATE_MIGRATIONS)))
+        if path.name not in ("20260711081300_public_legacy_baseline.sql",
+                             *DOMAIN_CANDIDATE_MIGRATIONS, *DORMANT_CANDIDATE_MIGRATIONS)))
     if observed != CURRENT_MIGRATIONS:
         raise RehearsalFailure("private_migration_inventory_mismatch")
     return {"head": expected_head, "tree": git("rev-parse", "HEAD^{tree}"),
@@ -961,7 +980,9 @@ def _create_backend_group_for_restore(admin_database_url: str) -> None:
         )
 
 
-def _seed_rehearsal_data(admin_database_url: str) -> None:
+def _seed_rehearsal_data(
+    admin_database_url: str, *, product_workspace_products: tuple[str, ...] = ('shop', 'website')
+) -> None:
     with _connect(admin_database_url, autocommit=True) as connection:
         with connection.cursor() as cursor:
             cursor.execute(
@@ -1037,9 +1058,10 @@ def _seed_rehearsal_data(admin_database_url: str) -> None:
                 from (values
                   ('rehearsal-a', 'owner-a', array['shop']::text[]),
                   ('rehearsal-b', 'owner-b', array['plant']::text[]),
-                  ('rehearsal-product', 'owner-product', array['shop', 'website']::text[])
+                  ('rehearsal-product', 'owner-product', %s::text[])
                 ) as fixture(workspace_id, owner_actor_id, products)
-                """
+                """,
+                (list(product_workspace_products),),
             )
 
 
@@ -4028,8 +4050,9 @@ def _run_rehearsal(
                 "_",
                 type(exc).__name__.casefold(),
             ).strip("_") or "unexpected"
+            safe_failure_code = safe_rehearsal_failure_code(exc)
             report = _safe_report(
-                f"{phase}_{safe_error_type}_failed",
+                safe_failure_code or f"{phase}_{safe_error_type}_failed",
                 cleanup_complete=False,
             )
         finally:

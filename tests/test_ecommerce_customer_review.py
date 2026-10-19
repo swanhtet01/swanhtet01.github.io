@@ -1,11 +1,122 @@
 """Synthetic private catalog domain tests; no provider access."""
+import hashlib
+from pathlib import Path
+import re
 import unittest
-from unittest.mock import patch
+from contextlib import contextmanager
+from unittest.mock import Mock, patch
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from supermega_runtime.ecommerce_customer_review import prepare_catalog_review, catalog_review_projection, build_catalog_acceptance, build_catalog_change_request
-from supermega_runtime.trial_store import TrialPrincipal, TrialReadiness, TrialValidationError
+from supermega_runtime.ecommerce_customer_review_store import EcommerceCustomerReviewStore, FUNCTIONS
+from supermega_runtime.trial_store import TrialPermissionDenied, TrialPrincipal, TrialReadiness, TrialValidationError, _ECOMMERCE_REVIEW_TRIGGERS
 from tests.test_commerce_runtime import catalog_state, storefront_configuration
+
+
+class CatalogReviewManagementBoundaryTests(unittest.TestCase):
+    def test_runtime_function_pins_match_the_authoritative_migration(self):
+        migration = Path(__file__).resolve().parents[1] / "supabase/migrations/20261019070000_ecommerce_operator_management_boundary.sql"
+        source = migration.read_text(encoding="utf-8")
+        for name in ("ecommerce_review_operator_entitled", "ecommerce_review_recipient_ready"):
+            with self.subTest(function=name):
+                match = re.search(
+                    rf"create or replace function app_private\.{name}\([^)]*\).*?as \$\$(.*?)\$\$;",
+                    source, re.IGNORECASE | re.DOTALL)
+                self.assertIsNotNone(match)
+                digest = hashlib.sha256(match.group(1).replace("\r\n", "\n").strip().encode()).hexdigest()
+                self.assertEqual(FUNCTIONS[name][-1], digest)
+
+    def test_runtime_review_trigger_pin_matches_shared_lock_migration(self):
+        migration = Path(__file__).resolve().parents[1] / "supabase/migrations/20261019103000_ecommerce_review_shared_state_lock.sql"
+        source = migration.read_text(encoding="utf-8")
+        match = re.search(
+            r"create or replace function app_private\.guard_ecommerce_review\(\).*?as \$\$(.*?)\$\$;",
+            source, re.IGNORECASE | re.DOTALL)
+        self.assertIsNotNone(match)
+        body = match.group(1).replace("\r\n", "\n").strip()
+        digest = hashlib.sha256(body.encode()).hexdigest()
+        self.assertEqual(FUNCTIONS["guard_ecommerce_review"][-1], digest)
+        self.assertEqual(_ECOMMERCE_REVIEW_TRIGGERS[("ecommerce_customer_reviews", "ecommerce_review_guard")][-1], digest)
+        self.assertIn("new.workspace_id::text || ':state:commerce'", body)
+        self.assertNotRegex(body, r"\bfor\s+update\b")
+
+    def test_internal_operator_can_read_approved_reviewer_choices_without_shop_write(self):
+        principal = TrialPrincipal('internal-workspace', 'ecommerce-operator', 'human')
+        cursor = Mock()
+        adapter = EcommerceCustomerReviewStore(Mock())
+
+        @contextmanager
+        def transaction(*args, **kwargs):
+            self.assertEqual(args, (principal,))
+            self.assertEqual(kwargs, {'write': False, 'capability': 'ecommerce.manage'})
+            yield cursor, principal.normalized()
+
+        with patch.object(adapter, '_transaction', side_effect=transaction), \
+                patch.object(adapter, '_enrolled_recipients', return_value=[]) as enrolled:
+            result = adapter.list_recipients(principal)
+
+        self.assertEqual(result, {'recipients': [], 'nextAfter': None,
+                                  'order': 'grant_id_ascending', 'accessGranted': False})
+        enrolled.assert_called_once_with(cursor, principal.normalized(), after=None)
+
+    def test_shop_operator_cannot_prepare_internal_ecommerce_review(self):
+        principal = TrialPrincipal('internal-workspace', 'shop-operator', 'human')
+        cursor = Mock()
+        store = Mock()
+
+        @contextmanager
+        def guarded_cursor(*_args, **_kwargs):
+            yield cursor, frozenset({'commerce.write'})
+
+        store._guarded_cursor.side_effect = guarded_cursor
+        store._product_entitlements.return_value = ('commerce', 'ecommerce')
+        adapter = EcommerceCustomerReviewStore(store)
+        with patch('supermega_runtime.ecommerce_customer_review_store._assert_storage') as storage:
+            with self.assertRaises(TrialPermissionDenied) as denied:
+                adapter.preparation_preview(principal)
+        self.assertEqual(denied.exception.required_capability, 'ecommerce.manage')
+        storage.assert_not_called()
+        cursor.execute.assert_not_called()
+
+    def test_explicit_internal_grant_can_enter_the_review_transaction(self):
+        principal = TrialPrincipal('internal-workspace', 'ecommerce-operator', 'human')
+        cursor = Mock()
+        cursor.fetchone.return_value = {'isolation': 'read committed'}
+        store = Mock()
+
+        @contextmanager
+        def guarded_cursor(*_args, **_kwargs):
+            yield cursor, frozenset({'commerce.read', 'ecommerce.manage'})
+
+        store._guarded_cursor.side_effect = guarded_cursor
+        store._product_entitlements.return_value = ('commerce', 'ecommerce')
+        store._load_membership.return_value = frozenset({'commerce.read', 'ecommerce.manage'})
+        adapter = EcommerceCustomerReviewStore(store)
+        with patch('supermega_runtime.ecommerce_customer_review_store._assert_storage'):
+            with adapter._transaction(principal, capability='ecommerce.manage') as (_, actor):
+                self.assertEqual(actor, principal)
+
+    def test_revoked_management_grant_is_denied_after_review_lock(self):
+        principal = TrialPrincipal('internal-workspace', 'ecommerce-operator', 'human')
+        cursor = Mock()
+        cursor.fetchone.return_value = {'isolation': 'read committed'}
+        store = Mock()
+
+        @contextmanager
+        def guarded_cursor(*_args, **_kwargs):
+            # The grant was valid before the transaction contested the lock.
+            yield cursor, frozenset({'commerce.read', 'ecommerce.manage'})
+
+        store._guarded_cursor.side_effect = guarded_cursor
+        store._product_entitlements.return_value = ('commerce', 'ecommerce')
+        store._load_membership.return_value = frozenset({'commerce.read'})
+        adapter = EcommerceCustomerReviewStore(store)
+        with patch('supermega_runtime.ecommerce_customer_review_store._assert_storage'):
+            with self.assertRaises(TrialPermissionDenied) as denied:
+                with adapter._transaction(principal, capability='ecommerce.manage'):
+                    self.fail('A revoked Ecommerce operator entered the review transaction.')
+        self.assertEqual(denied.exception.required_capability, 'ecommerce.manage')
+        store._load_membership.assert_called_once_with(cursor, principal)
 
 class CatalogReviewTests(unittest.TestCase):
     def setUp(self):

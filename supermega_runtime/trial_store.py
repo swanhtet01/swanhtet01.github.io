@@ -141,6 +141,7 @@ PRODUCT_ACCEPTANCE_SURFACES = {
 }
 PRODUCT_ACCEPTANCE_CONTRACT = "supermega.hosted_product_acceptance.v1"
 PRODUCT_ACCEPTANCE_EVENT_TYPE = "client.product_acceptance.recorded"
+PRODUCT_ACCEPTANCE_APPROVAL_SUBJECT_KIND = "hosted.product_acceptance"
 # TLS transit is enforced by connection configuration (finding 6): psycopg refuses
 # to connect unless the DSN negotiates TLS under one of these sslmodes. This is the
 # authoritative client->server (or client->Supavisor-pooler) guarantee -- a
@@ -151,6 +152,10 @@ TRUSTED_IDENTITY_PROVIDERS = frozenset({"gateway", "supabase"})
 HUMAN_ACTOR_KIND = "human"
 _MAX_SAFE_INTEGER = 9_007_199_254_740_991
 _ORDER_CALCULATION_SCHEMA = "supermega.commerce.order-calculation.v1"
+PUBLIC_ORDER_REQUEST_EVENTS = frozenset({
+    "commerce.storefront_request.received",
+    "commerce.storefront_request.closed",
+})
 HUMAN_COMMAND_EVENTS = frozenset(
     {
         "commerce.workspace.initialized",
@@ -191,6 +196,7 @@ HUMAN_COMMAND_EVENTS = frozenset(
         "commerce.close.saved",
         "commerce.website_intake.converted",
         "commerce.storefront.configuration.saved",
+        "commerce.storefront_request.received",
         "commerce.storefront_request.closed",
         "commerce.merchant_profile.saved",
         "commerce.storefront.merchandising.imported",
@@ -367,7 +373,7 @@ def capabilities_for_product_entitlements(
         capability
         for surface in ("commerce", "production", "website")
         for capability in (f"{surface}.read", f"{surface}.write")
-    } | {"website.review", "ecommerce.review"}
+    } | {"website.review", "ecommerce.review", "ecommerce.manage"}
     allowed_capabilities = {
         capability
         for surface in allowed_surfaces
@@ -379,11 +385,98 @@ def capabilities_for_product_entitlements(
     # an Ecommerce delivery capability, never implied by Shop activation.
     if "ecommerce" in products:
         allowed_capabilities.add("ecommerce.review")
+        allowed_capabilities.add("ecommerce.manage")
     return frozenset(
         capability
         for capability in granted
         if capability not in product_capabilities or capability in allowed_capabilities
     )
+
+
+def _project_state_for_membership(
+    surface: str,
+    state: Mapping[str, Any],
+    capabilities: Sequence[str],
+) -> JsonObject:
+    """Keep internal Ecommerce drafts out of Shop's shared state response."""
+
+    projected = deepcopy(dict(state))
+    if surface == "commerce" and "ecommerce.manage" not in capabilities:
+        projected.pop("storefrontConfiguration", None)
+    return projected
+
+
+def _restore_internal_commerce_state_for_reducer(
+    surface: str,
+    payload: Mapping[str, Any],
+    current_state: Mapping[str, Any],
+    capabilities: Sequence[str],
+) -> JsonObject:
+    """Preserve an unseen storefront draft when Shop submits full-state work."""
+
+    if surface != "commerce" or "ecommerce.manage" in capabilities:
+        return deepcopy(dict(payload))
+    submitted_state = payload.get("state")
+    if not isinstance(submitted_state, Mapping):
+        return deepcopy(dict(payload))
+    if "storefrontConfiguration" in submitted_state:
+        raise TrialPermissionDenied("ecommerce.manage")
+    reducer_payload = deepcopy(dict(payload))
+    if "storefrontConfiguration" in current_state:
+        reducer_payload["state"] = {
+            **deepcopy(dict(submitted_state)),
+            "storefrontConfiguration": deepcopy(current_state["storefrontConfiguration"]),
+        }
+    return reducer_payload
+
+
+def require_ecommerce_management_authority(
+    product_entitlements: Sequence[str] | None,
+    capabilities: Sequence[str] = (),
+) -> None:
+    """Require both Ecommerce activation and a named internal actor grant.
+
+    A ``None`` proof is reserved for legacy non-managed test stores. Hosted
+    Postgres always supplies an activation-derived tuple, including an empty
+    tuple when no valid proof exists.
+    """
+
+    if product_entitlements is None:
+        return
+    if "ecommerce" not in product_entitlements:
+        raise TrialPermissionDenied("product.ecommerce")
+    # Company ownership is also held by self-serve Shop customers. It cannot
+    # stand in for an internal Ecommerce operator grant when both products are
+    # activated in the same workspace.
+    if "ecommerce.manage" not in capabilities:
+        raise TrialPermissionDenied("ecommerce.manage")
+
+
+def require_command_product_entitlement(
+    event_type: str,
+    product_entitlements: Sequence[str] | None,
+    capabilities: Sequence[str] = (),
+) -> None:
+    """Keep Shop fulfillment and Ecommerce storefront administration scoped."""
+
+    if event_type in PUBLIC_ORDER_REQUEST_EVENTS:
+        # A submitted storefront order is fulfillment work for Shop. A Shop
+        # member may carry it into the Shop queue with commerce.write; internal
+        # Ecommerce operators retain the same path through their scoped grant.
+        if product_entitlements is None:
+            return
+        if "commerce" in product_entitlements and "commerce.write" in capabilities:
+            return
+        require_ecommerce_management_authority(product_entitlements, capabilities)
+    elif event_type.startswith("commerce.storefront."):
+        require_ecommerce_management_authority(product_entitlements, capabilities)
+    elif event_type.startswith("commerce.") and product_entitlements is not None:
+        # Ecommerce shares Shop's storage surface, but that must not make an
+        # Ecommerce-only workspace a Shop POS. Legacy/non-managed test stores
+        # pass None and retain their historical behavior.
+        if "commerce" not in product_entitlements:
+            raise TrialPermissionDenied("product.commerce")
+
 
 _PRIVATE_HARDENING_TRIGGER_CONTRACT: dict[tuple[str, str], dict[str, Any]] = {
     ("workspace_access_controls", "workspace_access_control_guard"): {
@@ -974,6 +1067,7 @@ class TrialStore(Protocol):
         related_surfaces: Sequence[str] = (),
         expected_related_versions: Mapping[str, int] | None = None,
         state_precondition: StatePrecondition | None = None,
+        server_verified_related_surfaces: Sequence[str] = (),
     ) -> CommandResult: ...
 
     def create_approval(
@@ -3307,6 +3401,53 @@ def _normalize_release_commit(value: object) -> str:
     return commit
 
 
+def _require_product_acceptance_approval(
+    approval: Mapping[str, Any] | ApprovalRecord | None,
+    *,
+    product: str,
+    release_commit: str,
+    state_digest: str,
+) -> None:
+    """Bind a recorded acceptance to a human decision on this exact snapshot."""
+    if approval is None:
+        raise TrialPermissionDenied("owner_approval_id")
+    if isinstance(approval, ApprovalRecord):
+        status = approval.status
+        proposal = approval.proposal
+        decided_by = approval.decided_by
+        decided_actor_kind = approval.decided_actor_kind
+        decided_at = approval.decided_at
+        contract_version = 2
+    else:
+        status = approval.get("status")
+        proposal = approval.get("proposal_json")
+        decided_by = approval.get("decided_by")
+        decided_actor_kind = approval.get("decided_actor_kind")
+        decided_at = approval.get("decided_at")
+        contract_version = approval.get("decision_contract_version")
+    if isinstance(proposal, str):
+        try:
+            proposal = json.loads(proposal)
+        except ValueError:
+            proposal = None
+    expected_subject = {
+        "kind": PRODUCT_ACCEPTANCE_APPROVAL_SUBJECT_KIND,
+        "id": f"{product}:{release_commit}:{state_digest}",
+        "version": 1,
+    }
+    if (
+        status != "approved"
+        or not decided_by
+        or decided_actor_kind != HUMAN_ACTOR_KIND
+        or not decided_at
+        or contract_version != 2
+        or not isinstance(proposal, Mapping)
+        or proposal.get("contract") != DECISION_PACKET_CONTRACT
+        or proposal.get("subject") != expected_subject
+    ):
+        raise TrialPermissionDenied("owner_approval_id")
+
+
 def _product_acceptance_record(
     value: Mapping[str, Any],
     *,
@@ -3419,6 +3560,22 @@ def _required_surface_capability(surface: str) -> str:
     return SURFACE_WRITE_CAPABILITIES[_normalize_surface(surface)]
 
 
+def _required_command_capability(surface: str, event_type: str) -> str | None:
+    """Resolve the capability for a command on the shared commerce surface."""
+
+    if (
+        _normalize_surface(surface) == "commerce"
+        and (
+            _normalize_event_type(event_type).startswith("commerce.storefront.")
+            or _normalize_event_type(event_type) in PUBLIC_ORDER_REQUEST_EVENTS
+        )
+    ):
+        # The narrower product-entitlement check below authorizes storefront
+        # administration and public-order intake separately.
+        return None
+    return _required_surface_capability(surface)
+
+
 def has_surface_read_capability(capabilities: Sequence[str], surface: str) -> bool:
     surface_value = _normalize_surface(surface)
     granted = frozenset(capabilities)
@@ -3445,6 +3602,35 @@ def _require_surface_read_capability(capabilities: Sequence[str], surface: str) 
     surface_value = _normalize_surface(surface)
     if not has_surface_read_capability(capabilities, surface_value):
         raise TrialPermissionDenied(SURFACE_READ_CAPABILITIES[surface_value])
+
+
+def _server_verified_related_surface_access(
+    *,
+    surface: str,
+    event_type: str,
+    related_surfaces: Sequence[str],
+    verified_surfaces: Sequence[str],
+    state_precondition: StatePrecondition | None,
+) -> frozenset[str]:
+    """Allow one server-side proof check without granting a customer surface read.
+
+    The public API never accepts ``verified_surfaces`` from a request. The runtime
+    uses it only when a Shop intake is checked against a retained Website publish
+    record; the callback consumes the Website state without returning it.
+    """
+
+    verified = tuple(verified_surfaces)
+    if not verified:
+        return frozenset()
+    if (
+        surface != "commerce"
+        or event_type != "commerce.website_intake.created"
+        or tuple(related_surfaces) != ("website",)
+        or verified != ("website",)
+        or state_precondition is None
+    ):
+        raise TrialValidationError("Server-verified Website access is limited to intake source checks.")
+    return frozenset(verified)
 
 
 def _require_approval_read_capability(capabilities: Sequence[str]) -> None:
@@ -3517,7 +3703,7 @@ def _without_verified_website_review_triggers(rows: Sequence[Mapping[str, Any]])
 
 
 _ECOMMERCE_REVIEW_TRIGGERS = {
-    ("ecommerce_customer_reviews", "ecommerce_review_guard"): (31, "guard_ecommerce_review", "41583ca2889b54fcf7c77c68d307f55ec127b218b27f3bc001cf05418e4776d9"),
+    ("ecommerce_customer_reviews", "ecommerce_review_guard"): (31, "guard_ecommerce_review", "e7858e577b22e4fcf3243ed05c377ff4ac4a89bc0028d69d9afa45112ba12d26"),
     ("workspace_state", "ecommerce_reviews_invalidate"): (25, "invalidate_ecommerce_reviews", "2f8e3905cd867d3a118d4fd6eaf9963248cee9ea14cfd7df0160d073f2167959"),
 }
 
@@ -4756,8 +4942,12 @@ class PostgresTrialStore:
             workspace_id=str(row["workspace_id"]),
             surface=str(row["surface"]),
             version=int(row["version"]),
-            state=_json_object(
-                state, field_name="state", max_bytes=_json_limit_for_surface(normalized_surface)
+            state=_project_state_for_membership(
+                normalized_surface,
+                _json_object(
+                    state, field_name="state", max_bytes=_json_limit_for_surface(normalized_surface)
+                ),
+                capabilities,
             ),
             updated_by=str(row.get("updated_by", "")),
             updated_at=str(row.get("updated_at", "")),
@@ -4786,6 +4976,73 @@ class PostgresTrialStore:
     @staticmethod
     def _lock(cursor: Any, key: str) -> None:
         cursor.execute("select pg_advisory_xact_lock(hashtextextended(%s, 0))", (key,))
+
+    def _refresh_command_authority(
+        self,
+        cursor: Any,
+        principal: TrialPrincipal,
+        *,
+        surface: str,
+        event_type: str,
+        related_surfaces: Sequence[str],
+        server_verified_related_surfaces: Sequence[str] = (),
+    ) -> frozenset[str]:
+        """Recheck mutable authority after lock waits using a fresh READ COMMITTED snapshot."""
+
+        try:
+            cursor.execute("show transaction_isolation")
+            isolation = str((cursor.fetchone() or {}).get("transaction_isolation", "")).strip().lower()
+            if isolation != "read committed":
+                raise TrialNotReadyError(("command_authority_requires_read_committed",))
+            self._assert_active_identity_session(cursor, principal)
+            capabilities = self._load_membership(cursor, principal)
+            product_entitlements = self._product_entitlements(cursor, principal.workspace_id)
+            capabilities = capabilities_for_product_entitlements(capabilities, product_entitlements)
+        except TrialStoreError:
+            raise
+        except Exception as exc:
+            raise TrialNotReadyError(("command_authority_ready",)) from exc
+
+        require_command_product_entitlement(event_type, product_entitlements, capabilities)
+        required_capability = _required_command_capability(surface, event_type)
+        if required_capability and required_capability not in capabilities:
+            raise TrialPermissionDenied(required_capability)
+        for related_surface in related_surfaces:
+            if related_surface not in server_verified_related_surfaces:
+                _require_surface_read_capability(capabilities, related_surface)
+        return capabilities
+
+    def _refresh_product_acceptance_authority(
+        self,
+        cursor: Any,
+        principal: TrialPrincipal,
+        *,
+        product: str,
+        surface: str,
+    ) -> frozenset[str]:
+        """Reload the actor's mutable access after acceptance locks have waited."""
+        try:
+            cursor.execute("show transaction_isolation")
+            isolation = str((cursor.fetchone() or {}).get("transaction_isolation", "")).strip().lower()
+            if isolation != "read committed":
+                raise TrialNotReadyError(("product_acceptance_authority_requires_read_committed",))
+            self._assert_active_identity_session(cursor, principal)
+            capabilities = self._load_membership(cursor, principal)
+            product_entitlements = self._product_entitlements(cursor, principal.workspace_id)
+            capabilities = capabilities_for_product_entitlements(capabilities, product_entitlements)
+        except TrialStoreError:
+            raise
+        except Exception as exc:
+            raise TrialNotReadyError(("product_acceptance_authority_ready",)) from exc
+
+        if product not in product_entitlements:
+            raise TrialPermissionDenied(f"product.{product}")
+        if product == "ecommerce":
+            require_ecommerce_management_authority(product_entitlements, capabilities)
+        required_capability = _required_surface_capability(surface)
+        if required_capability not in capabilities:
+            raise TrialPermissionDenied(required_capability)
+        return capabilities
 
     @staticmethod
     def _load_event_replay(
@@ -4823,6 +5080,7 @@ class PostgresTrialStore:
         related_surfaces: Sequence[str] = (),
         expected_related_versions: Mapping[str, int] | None = None,
         state_precondition: StatePrecondition | None = None,
+        server_verified_related_surfaces: Sequence[str] = (),
     ) -> CommandResult:
         command_id_value = _normalize_uuid(command_id, field_name="command_id")
         surface_value = _normalize_surface(surface)
@@ -4836,6 +5094,13 @@ class PostgresTrialStore:
             raise TrialValidationError("expected_version must be non-negative.")
         if related_surface_values and state_precondition is None:
             raise TrialValidationError("related surfaces require a state precondition.")
+        server_verified_surface_values = _server_verified_related_surface_access(
+            surface=surface_value,
+            event_type=event_type_value,
+            related_surfaces=related_surface_values,
+            verified_surfaces=server_verified_related_surfaces,
+            state_precondition=state_precondition,
+        )
         payload_value = _json_object(
             payload, field_name="payload", max_bytes=_json_limit_for_surface(surface_value)
         )
@@ -4867,14 +5132,28 @@ class PostgresTrialStore:
             surface=surface_value,
             event_type=event_type_value,
         )
-        capability = _required_surface_capability(surface_value)
+        capability = _required_command_capability(surface_value, event_type_value)
         with self._guarded_cursor(normalized, write=True, capability=capability) as (
             cursor,
             capabilities,
         ):
+            require_command_product_entitlement(
+                event_type_value,
+                self._product_entitlements(cursor, normalized.workspace_id),
+                capabilities,
+            )
             for related_surface in related_surface_values:
-                _require_surface_read_capability(capabilities, related_surface)
+                if related_surface not in server_verified_surface_values:
+                    _require_surface_read_capability(capabilities, related_surface)
             self._lock(cursor, f"{normalized.workspace_id}:command:{command_id_value}")
+            capabilities = self._refresh_command_authority(
+                cursor,
+                normalized,
+                surface=surface_value,
+                event_type=event_type_value,
+                related_surfaces=related_surface_values,
+                server_verified_related_surfaces=server_verified_surface_values,
+            )
             replay = self._load_event_replay(
                 cursor,
                 workspace_id=normalized.workspace_id,
@@ -4888,8 +5167,10 @@ class PostgresTrialStore:
                     event_type=str(replay["event_type"]),
                     version=int(replay["version"]),
                     state=_json_object(
-                        replay.get("state", {}), field_name="state",
-                        max_bytes=_json_limit_for_surface(surface_value),
+                        _project_state_for_membership(
+                            surface_value, replay.get("state", {}), capabilities,
+                        ),
+                        field_name="state", max_bytes=_json_limit_for_surface(surface_value),
                     ),
                     idempotent_replay=True,
                 )
@@ -4954,6 +5235,14 @@ class PostgresTrialStore:
                     raise TrialValidationError(
                         "Commerce actionId was already used by an earlier command."
                     )
+            capabilities = self._refresh_command_authority(
+                cursor,
+                normalized,
+                surface=surface_value,
+                event_type=event_type_value,
+                related_surfaces=related_surface_values,
+                server_verified_related_surfaces=server_verified_surface_values,
+            )
             if state_precondition is not None:
                 state_precondition(
                     deepcopy(current_state),
@@ -4974,12 +5263,15 @@ class PostgresTrialStore:
                 field_name="authoritative payload",
                 max_bytes=_json_limit_for_surface(surface_value),
             )
+            reducer_payload = _restore_internal_commerce_state_for_reducer(
+                surface_value, authoritative_payload, current_state, capabilities,
+            )
             next_state = _json_object(
                 self.reducer(
                     surface_value,
                     event_type_value,
                     deepcopy(current_state),
-                    deepcopy(authoritative_payload),
+                    reducer_payload,
                 ),
                 field_name="reduced state",
                 max_bytes=_json_limit_for_surface(surface_value),
@@ -5056,7 +5348,7 @@ class PostgresTrialStore:
             surface=surface_value,
             event_type=event_type_value,
             version=next_version,
-            state=next_state,
+            state=_project_state_for_membership(surface_value, next_state, capabilities),
         )
 
     def record_product_acceptance(
@@ -5085,17 +5377,38 @@ class PostgresTrialStore:
             "release_commit": release_commit_value,
         }
         fingerprint = _canonical_fingerprint("hosted_product_acceptance", payload)
+        _require_human_decider(normalized)
         with self._guarded_cursor(
             normalized,
             write=True,
             capability=_required_surface_capability(surface),
-        ) as (cursor, _capabilities):
-            if product_value not in self._product_entitlements(
-                cursor,
-                normalized.workspace_id,
-            ):
+        ) as (cursor, capabilities):
+            product_entitlements = self._product_entitlements(cursor, normalized.workspace_id)
+            if product_value not in product_entitlements:
                 raise TrialPermissionDenied(f"product.{product_value}")
+            if product_value == "ecommerce":
+                require_ecommerce_management_authority(product_entitlements, capabilities)
+
+            def require_approved_snapshot(state_digest: str) -> None:
+                cursor.execute(
+                    """
+                    select status, proposal_json, decided_by, decided_actor_kind,
+                           decided_at, decision_contract_version
+                    from app_private.approval_requests
+                    where workspace_id = %s and approval_id = %s
+                    for share
+                    """,
+                    (normalized.workspace_id, owner_approval_id_value),
+                )
+                _require_product_acceptance_approval(
+                    cursor.fetchone(), product=product_value,
+                    release_commit=release_commit_value, state_digest=state_digest,
+                )
+
             self._lock(cursor, f"{normalized.workspace_id}:acceptance:{probe_id_value}")
+            self._refresh_product_acceptance_authority(
+                cursor, normalized, product=product_value, surface=surface,
+            )
             replay = self._load_event_replay(
                 cursor,
                 workspace_id=normalized.workspace_id,
@@ -5103,7 +5416,14 @@ class PostgresTrialStore:
                 fingerprint=fingerprint,
             )
             if replay is not None:
-                return _product_acceptance_record(replay, idempotent_replay=True)
+                record = _product_acceptance_record(replay, idempotent_replay=True)
+                require_approved_snapshot(record.state_digest)
+                return record
+            # Serialize with workspace commands, including an initially absent state row.
+            self._lock(cursor, f"{normalized.workspace_id}:state:{surface}")
+            self._refresh_product_acceptance_authority(
+                cursor, normalized, product=product_value, surface=surface,
+            )
             cursor.execute(
                 """
                 select version, state_json
@@ -5125,6 +5445,7 @@ class PostgresTrialStore:
                 "product_state", state_value,
                 max_bytes=_json_limit_for_surface(surface),
             )
+            require_approved_snapshot(state_digest)
             recorded_at = _utc_now()
             result = ProductAcceptanceRecord(
                 probe_id=probe_id_value,
@@ -5215,7 +5536,12 @@ class PostgresTrialStore:
             result = row.get("result_json") or {}
             if isinstance(result, str):
                 result = json.loads(result)
-            return _product_acceptance_record(result)
+            record = _product_acceptance_record(result)
+            if record.product == "ecommerce":
+                require_ecommerce_management_authority(
+                    self._product_entitlements(cursor, normalized.workspace_id), capabilities,
+                )
+            return record
 
     def create_approval(
         self,
@@ -5690,7 +6016,9 @@ class InMemoryTrialStore:
             workspace_id=state.workspace_id,
             surface=state.surface,
             version=state.version,
-            state=deepcopy(state.state),
+            state=_project_state_for_membership(
+                surface_value, state.state, readiness.capabilities,
+            ),
             updated_by=state.updated_by,
             updated_at=state.updated_at,
         )
@@ -5744,6 +6072,7 @@ class InMemoryTrialStore:
         related_surfaces: Sequence[str] = (),
         expected_related_versions: Mapping[str, int] | None = None,
         state_precondition: StatePrecondition | None = None,
+        server_verified_related_surfaces: Sequence[str] = (),
     ) -> CommandResult:
         command_id_value = _normalize_uuid(command_id, field_name="command_id")
         surface_value = _normalize_surface(surface)
@@ -5757,6 +6086,13 @@ class InMemoryTrialStore:
             raise TrialValidationError("expected_version must be non-negative.")
         if related_surface_values and state_precondition is None:
             raise TrialValidationError("related surfaces require a state precondition.")
+        server_verified_surface_values = _server_verified_related_surface_access(
+            surface=surface_value,
+            event_type=event_type_value,
+            related_surfaces=related_surface_values,
+            verified_surfaces=server_verified_related_surfaces,
+            state_precondition=state_precondition,
+        )
         payload_value = _json_object(
             payload, field_name="payload", max_bytes=_json_limit_for_surface(surface_value)
         )
@@ -5783,10 +6119,14 @@ class InMemoryTrialStore:
             normalized, readiness = self._guard(
                 principal,
                 write=True,
-                capability=_required_surface_capability(surface_value),
+                capability=_required_command_capability(surface_value, event_type_value),
+            )
+            require_command_product_entitlement(
+                event_type_value, readiness.product_entitlements, readiness.capabilities
             )
             for related_surface in related_surface_values:
-                _require_surface_read_capability(readiness.capabilities, related_surface)
+                if related_surface not in server_verified_surface_values:
+                    _require_surface_read_capability(readiness.capabilities, related_surface)
             if event_type_value in HUMAN_COMMAND_EVENTS and normalized.actor_kind != HUMAN_ACTOR_KIND:
                 raise TrialHumanApprovalRequired()
             _require_command_evidence_actor(
@@ -5809,8 +6149,10 @@ class InMemoryTrialStore:
                     event_type=str(replay["event_type"]),
                     version=int(replay["version"]),
                     state=_json_object(
-                        replay.get("state", {}), field_name="state",
-                        max_bytes=_json_limit_for_surface(surface_value),
+                        _project_state_for_membership(
+                            surface_value, replay.get("state", {}), readiness.capabilities,
+                        ),
+                        field_name="state", max_bytes=_json_limit_for_surface(surface_value),
                     ),
                     idempotent_replay=True,
                 )
@@ -5869,12 +6211,15 @@ class InMemoryTrialStore:
                 field_name="authoritative payload",
                 max_bytes=_json_limit_for_surface(surface_value),
             )
+            reducer_payload = _restore_internal_commerce_state_for_reducer(
+                surface_value, authoritative_payload, current.state, readiness.capabilities,
+            )
             next_state = _json_object(
                 self.reducer(
                     surface_value,
                     event_type_value,
                     deepcopy(current.state),
-                    deepcopy(authoritative_payload),
+                    reducer_payload,
                 ),
                 field_name="reduced state",
                 max_bytes=_json_limit_for_surface(surface_value),
@@ -5906,7 +6251,15 @@ class InMemoryTrialStore:
                 self._commerce_action_ids[
                     (normalized.workspace_id, commerce_action_id)
                 ] = command_id_value
-            return result
+            return CommandResult(
+                command_id=command_id_value,
+                surface=surface_value,
+                event_type=event_type_value,
+                version=next_version,
+                state=_project_state_for_membership(
+                    surface_value, next_state, readiness.capabilities,
+                ),
+            )
 
     def record_product_acceptance(
         self,
@@ -5934,6 +6287,7 @@ class InMemoryTrialStore:
         }
         fingerprint = _canonical_fingerprint("hosted_product_acceptance", payload)
         with self._lock:
+            _require_human_decider(principal.normalized())
             normalized, _readiness = self._guard(
                 principal,
                 write=True,
@@ -5944,6 +6298,10 @@ class InMemoryTrialStore:
                 or product_value not in _readiness.product_entitlements
             ):
                 raise TrialPermissionDenied(f"product.{product_value}")
+            if product_value == "ecommerce":
+                require_ecommerce_management_authority(
+                    _readiness.product_entitlements, _readiness.capabilities,
+                )
             replay = self._replay(
                 normalized.workspace_id,
                 normalized.actor_id,
@@ -5952,7 +6310,13 @@ class InMemoryTrialStore:
                 fingerprint,
             )
             if replay is not None:
-                return _product_acceptance_record(replay, idempotent_replay=True)
+                record = _product_acceptance_record(replay, idempotent_replay=True)
+                _require_product_acceptance_approval(
+                    self._approvals.get((normalized.workspace_id, owner_approval_id_value)),
+                    product=product_value, release_commit=release_commit_value,
+                    state_digest=record.state_digest,
+                )
+                return record
             state = self._states.get(
                 (normalized.workspace_id, surface),
                 TrialState(normalized.workspace_id, surface, 0, {}),
@@ -5960,6 +6324,11 @@ class InMemoryTrialStore:
             state_digest = "sha256:" + _canonical_fingerprint(
                 "product_state", state.state,
                 max_bytes=_json_limit_for_surface(surface),
+            )
+            _require_product_acceptance_approval(
+                self._approvals.get((normalized.workspace_id, owner_approval_id_value)),
+                product=product_value, release_commit=release_commit_value,
+                state_digest=state_digest,
             )
             record = ProductAcceptanceRecord(
                 probe_id=probe_id_value,
@@ -5995,6 +6364,10 @@ class InMemoryTrialStore:
                 raise TrialNotFound()
             record = _product_acceptance_record(row[3])
             _require_surface_read_capability(readiness.capabilities, record.surface)
+            if record.product == "ecommerce":
+                require_ecommerce_management_authority(
+                    readiness.product_entitlements, readiness.capabilities,
+                )
             return record
 
     def create_approval(

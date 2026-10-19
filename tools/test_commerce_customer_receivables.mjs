@@ -81,7 +81,7 @@ function makeState(orders = []) {
 {
   const artifact = commerceCustomerReceivablesHandoff(makeState([makeOrder('o1', 50000, 5)]), NOW)
   check(artifact !== null, 'artifact not null')
-  check(artifact.schema === 'supermega.commerce.customer-receivables-handoff.v1', 'schema correct')
+  check(artifact.schema === 'supermega.commerce.customer-receivables-handoff.v2', 'schema correct')
   check(artifact.status === 'review_required', 'status correct')
   check(artifact.collectionAuthority === 'none', 'collectionAuthority none')
   check(artifact.paymentReceived === false, 'paymentReceived false')
@@ -235,6 +235,36 @@ function makeState(orders = []) {
   const csv = commerceCustomerReceivablesHandoffCsv(artifact)
   const dataRow = csv.split('\r\n')[1]
   check(dataRow.includes(artifact.digest), 'CSV data row contains artifact digest')
+}
+
+// 18. no explicit due date: keep balance visible without inventing a deadline
+{
+  const order = makeOrder('o1', 42000, 15, 'Acme', {
+    paymentDueAt: undefined,
+    promisedAt: new Date(NOW - 15 * DAY_MS).toISOString(),
+    status: 'preparing',
+  })
+  const aging = commerceReceivablesAging(makeState([order]), NOW)
+  const artifact = commerceCustomerReceivablesHandoff(makeState([order]), NOW)
+  check(aging.totalOutstandingMmk === 42000, 'undated balance stays in total outstanding')
+  check(aging.overdueOrders === 0, 'fulfilment promise is not a payment deadline')
+  check(aging.rows[0].dueAt === null, 'no payment deadline is represented as null')
+  check(aging.rows[0].bucket === 'current', 'undated pay-at-handoff balance remains current')
+  check(artifact.rows[0].dueAt === null, 'handoff preserves missing due date')
+  check(commerceCustomerReceivablesHandoffCsv(artifact).split('\r\n')[1].split(',')[20] === '""', 'CSV leaves unknown due date blank')
+}
+
+// 19. completed unpaid order becomes due from completion evidence
+{
+  const order = makeOrder('o1', 42000, 5, 'Acme', {
+    paymentDueAt: undefined,
+    promisedAt: new Date(NOW + 15 * DAY_MS).toISOString(),
+    status: 'completed',
+    completion: { capturedAt: new Date(NOW - 5 * DAY_MS).toISOString() },
+  })
+  const aging = commerceReceivablesAging(makeState([order]), NOW)
+  check(aging.rows[0].dueAt === order.completion.capturedAt, 'handoff evidence becomes payment due time')
+  check(aging.overdueOrders === 1, 'completed unpaid balance ages after handoff')
 }
 
 console.log(`\ntest_commerce_customer_receivables: ${checks} checks passed\n`)

@@ -38,7 +38,7 @@ export function verifyCurrentReleaseAssets({
     ['launcher', assetCorpus, ['SUPERMEGA', 'Switch product', 'Login', 'supermega.last-product.v1', 'Your workspace', 'Shop', 'Website', 'Ecommerce', 'Sales, stock and your daily totals.', 'Your services, photos and contact details.', 'A product catalog and customer requests.', 'Welcome back', 'Sign in to your business.', manifest.brand.colors.accent, manifest.brand.colors.ink]],
     ['guided_outcomes', productOnboardingChunk, ['Add your first product', 'Continue to catalog', 'Run a sample production job', 'Create Plant and open the job', 'Prepare your business website', 'Continue to website setup', 'Set up your online store', 'Continue to store setup']],
     ['onboarding', productOnboardingChunk, ['Make ', ' yours', 'One step', 'Name your workspace', 'Prepare your business content to continue.', 'First useful result:', 'Saves your setup, then opens the first task.', 'Enter a business name to continue.', 'This setup affects', 'Opening it will not run setup again.', 'Nothing is sent or published.', 'Need help bringing real data?', 'Ask SuperMega to set up ', 'product_requested']],
-    ['shop_plant', operationsChunk, ['Review & complete sale', 'Complete sale', 'Keep as open order', 'Create order', 'Counter context', 'Cashier set at review', 'Stock needs attention after this sale', 'Jobs', 'Problems', 'Record output', 'Close shift', 'This device records the sale, payment review, handoff and stock.', 'It does not charge or message anyone']],
+    ['shop', operationsChunk, ['Review & complete sale', 'Complete sale', 'Leave unpaid', 'Create order', 'Counter context', 'Cashier set at review', 'After this sale,', 'Close shift', 'This device records the sale, payment review, handoff and stock.', 'It does not charge or message anyone']],
     ['secondary_tools', productSystemNavigatorChunk, ['Next steps', 'More workflows or your data', 'Keep working in ', 'Choose a workflow or import your data.', 'Make ', ' mine', 'Your data', 'Upload your CSV to review and import your data.', 'Use my Shop data', 'Use my Plant data', 'Use my website content', 'Use my store data', 'next_steps_opened', 'data_setup_opened']],
     ['settings', settingsChunk, ['supermega_trial_evidence', 'Premium company learning', 'Advanced controls', 'Save, export, restore, or reset.', 'Export full evidence', 'Selected product only', 'activation journey', 'Shows where this browser stopped between next steps, own data, and a product request.']],
     ['activation_learning', assetCorpus, ['supermega.product_activation_funnel.v1']],
@@ -61,7 +61,9 @@ export function verifyCurrentReleaseAssets({
     checks += 1
     if (operationsChunk.includes(forbidden)) throw new Error(`misleading_shop_release_asset:${forbidden}`)
   }
-  for (const forbidden of ['Run a sample production job', 'Jobs, materials, quality.', 'Start with one product.', 'Company workspace readiness', 'Choose one product when its demo makes sense', 'Prepare one product at a time.', 'Samples open immediately with no account or setup.', 'Saved on this device.']) {
+  // The locale catalog includes “Saved on this device.” for Settings. Root-bundle
+  // text cannot tell that legitimate preference hint from retired launcher copy.
+  for (const forbidden of ['Run a sample production job', 'Jobs, materials, quality.', 'Start with one product.', 'Company workspace readiness', 'Choose one product when its demo makes sense', 'Prepare one product at a time.', 'Samples open immediately with no account or setup.']) {
     checks += 1
     if (assetCorpus.includes(forbidden)) throw new Error(`retired_launcher_release_asset:${forbidden}`)
   }
@@ -216,6 +218,18 @@ if (artifactSelfTest) {
     }
     if (!rejected) throw new Error(`launcher_mutation_not_rejected:${expected}`)
   }
+  const shopRequirements = ['Leave unpaid', 'After this sale,']
+  for (const text of shopRequirements) {
+    const expected = `missing_current_release_asset:shop:${text}`
+    let rejected = false
+    try {
+      verifyCurrentReleaseAssets({ ...artifactInput, operationsChunk: operationsChunk.replaceAll(text, '') })
+    } catch (error) {
+      if (error.message !== expected) throw error
+      rejected = true
+    }
+    if (!rejected) throw new Error(`shop_mutation_not_rejected:${text}`)
+  }
   const loginRequirements = ['Sign in to your workspace.', 'Login is currently unavailable.', 'Saved work on this device', 'Contact support']
   for (const text of loginRequirements) {
     const expected = `missing_current_release_asset:company_login:${text}`
@@ -228,7 +242,7 @@ if (artifactSelfTest) {
     }
     if (!rejected) throw new Error(`login_mutation_not_rejected:${text}`)
   }
-  console.log(JSON.stringify({ ok: true, ...result, launcherMutationChecks: launcherMutations.length, loginMutationChecks: loginRequirements.length, evidenceVersion }, null, 2))
+  console.log(JSON.stringify({ ok: true, ...result, launcherMutationChecks: launcherMutations.length, shopMutationChecks: shopRequirements.length, loginMutationChecks: loginRequirements.length, evidenceVersion }, null, 2))
   process.exit(0)
 }
 

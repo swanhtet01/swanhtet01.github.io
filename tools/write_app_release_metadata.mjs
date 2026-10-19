@@ -2,9 +2,13 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { deflateSync } from 'node:zlib'
 import { APP_DESCRIPTION } from './app_metadata.mjs'
+import { superMegaBrandMark } from '../showroom/src/core/brand-mark.ts'
 
 const root = resolve(import.meta.dirname, '..')
 const manifest = JSON.parse(await readFile(resolve(root, 'site-manifest.json'), 'utf8'))
+const appIconBackground = manifest.brand.colors.background
+const appIconMark = manifest.brand.colors.accent
+const appSurface = '#f8f9fc'
 const commit = String(process.env.SUPERMEGA_RELEASE_COMMIT || process.env.VERCEL_GIT_COMMIT_SHA || 'local').trim()
 const release = {
   service: 'supermega-app',
@@ -16,27 +20,22 @@ const release = {
   generatedAt: new Date().toISOString(),
 }
 
-const favicon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="SuperMega terminal mark" shape-rendering="geometricPrecision">
-  <rect width="64" height="64" rx="8" fill="${manifest.brand.colors.background}" />
-  <rect x="1" y="1" width="62" height="62" rx="7" fill="none" stroke="${manifest.brand.colors.ink}" stroke-opacity=".16" />
-  <path d="M13 18 27 32 13 46" fill="none" stroke="${manifest.brand.colors.accent}" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter" />
-  <path d="M34 46h17" fill="none" stroke="${manifest.brand.colors.ink}" stroke-width="4.5" stroke-linecap="square" />
-</svg>
-`
+const favicon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${superMegaBrandMark.viewBox}" role="img" aria-label="SuperMega terminal mark" shape-rendering="geometricPrecision">
+  <path d="${superMegaBrandMark.path}" fill="none" stroke="${manifest.brand.colors.accent}" stroke-width="${superMegaBrandMark.strokeWidth}" stroke-linecap="round" stroke-linejoin="round" />
+</svg>\n`
 const webmanifest = {
   name: manifest.brand.name,
   short_name: manifest.brand.name,
   description: APP_DESCRIPTION,
   start_url: '/',
   display: 'standalone',
-  background_color: manifest.brand.colors.background,
-  theme_color: manifest.brand.colors.background,
+  background_color: appSurface,
+  theme_color: appSurface,
   // Design phase 2 item 8: the vector-only favicon does not satisfy Chrome/Android
   // installability (wants a raster PNG at 192/512) and iOS ignores the manifest
   // entirely for "Add to Home Screen" (apple-touch-icon.png, linked from index.html,
-  // covers that case). All four rasters are generated below from the same brand
-  // colors and terminal-mark geometry as the SVG immediately above, so they can
-  // never drift from it.
+  // covers that case). Standard install icons use the transparent unboxed mark;
+  // the maskable and Apple icons use a white surface for platform compatibility.
   icons: [
     { src: '/favicon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
     { src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
@@ -47,18 +46,17 @@ const webmanifest = {
 
 // Raster icon generation. No new dependency: a tiny supersampled rasterizer + a
 // minimal PNG encoder, both pure Node (zlib for IDAT deflate, a hand-rolled CRC32 for
-// chunk checksums). Renders the exact same rect/path geometry as the favicon SVG above.
+// chunk checksums). Renders the install-icon geometry; the browser favicon is the standalone mark.
 const hexToRgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16))
-const BG = hexToRgb(manifest.brand.colors.background)
-const INK = hexToRgb(manifest.brand.colors.ink)
-const ACCENT = hexToRgb(manifest.brand.colors.accent)
+const BG = hexToRgb(appIconBackground)
+const MARK = hexToRgb(appIconMark)
 const SS = 4 // supersample factor
-const STROKE = 4.5 / 2
-const SEGMENTS = [
-  [13, 18, 27, 32, ACCENT],
-  [27, 32, 13, 46, ACCENT],
-  [34, 46, 51, 46, INK],
-]
+const STROKE = superMegaBrandMark.strokeWidth / 2
+const [markX, markY, markWidth, markHeight] = superMegaBrandMark.viewBox.split(/\s+/).map(Number)
+const ICON_CANVAS = Math.max(markWidth, markHeight)
+const MARK_OFFSET_X = (ICON_CANVAS - markWidth) / 2 - markX
+const MARK_OFFSET_Y = (ICON_CANVAS - markHeight) / 2 - markY
+const SEGMENTS = superMegaBrandMark.segments.map(([ax, ay, bx, by]) => [ax + MARK_OFFSET_X, ay + MARK_OFFSET_Y, bx + MARK_OFFSET_X, by + MARK_OFFSET_Y, MARK])
 
 function inRoundedRect(x, y, w, h, r) {
   const cx = Math.min(Math.max(x, r), w - r)
@@ -78,22 +76,21 @@ function distToSegment(px, py, ax, ay, bx, by) {
   return Math.sqrt(dx * dx + dy * dy)
 }
 
-function renderIcon(size, { maskable = false } = {}) {
+function renderIcon(size, { maskable = false, surface = maskable } = {}) {
   const hi = size * SS
-  // maskable icons need the mark inside Android's ~80% safe zone; regular icons use
-  // the full square with the source SVG's own rounded corners.
+  // Maskable icons use a white field and keep the mark inside Android's safe zone.
+  // Standard install icons stay transparent so the logo reads as the same unboxed mark
+  // as the website header and browser tab. Apple touch icons request a white surface.
   const pad = maskable ? hi * 0.22 : 0
-  const scale = (hi - pad * 2) / 64
+  const scale = (hi - pad * 2) / ICON_CANVAS
   const buf = Buffer.alloc(hi * hi * 4)
   for (let y = 0; y < hi; y += 1) {
     for (let x = 0; x < hi; x += 1) {
       const sx = (x - pad) / scale
       const sy = (y - pad) / scale
-      let color = maskable ? BG : (inRoundedRect(sx, sy, 64, 64, 8) ? BG : null)
-      if (color) {
-        for (const [ax, ay, bx, by, strokeColor] of SEGMENTS) {
-          if (distToSegment(sx, sy, ax, ay, bx, by) <= STROKE) { color = strokeColor; break }
-        }
+      let color = surface ? (maskable ? BG : (inRoundedRect(sx, sy, ICON_CANVAS, ICON_CANVAS, 14) ? BG : null)) : null
+      for (const [ax, ay, bx, by, strokeColor] of SEGMENTS) {
+        if (distToSegment(sx, sy, ax, ay, bx, by) <= STROKE) { color = strokeColor; break }
       }
       const i = (y * hi + x) * 4
       if (color) { buf[i] = color[0]; buf[i + 1] = color[1]; buf[i + 2] = color[2]; buf[i + 3] = 255 }
@@ -163,7 +160,7 @@ const rasterIcons = [
   ['icon-192.png', 192, {}],
   ['icon-512.png', 512, {}],
   ['icon-512-maskable.png', 512, { maskable: true }],
-  ['apple-touch-icon.png', 180, {}],
+  ['apple-touch-icon.png', 180, { surface: true }],
 ].map(([name, size, opts]) => [name, encodePng(renderIcon(size, opts), size)])
 
 // The app shell must emit NO inline <script>. Both content policies that serve this app
@@ -180,7 +177,7 @@ const rasterIcons = [
 // Apply the fixed light palette before first paint, independent of legacy preferences.
 const themeRestoreScript = `document.documentElement.dataset.supermegaTheme = 'light'
 const themeMeta = document.querySelector('meta[name="theme-color"]')
-if (themeMeta) themeMeta.setAttribute('content', '#f6f4ee')
+if (themeMeta) themeMeta.setAttribute('content', '${appSurface}')
 `
 const serviceWorkerRegisterScript = `if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js'))
 `

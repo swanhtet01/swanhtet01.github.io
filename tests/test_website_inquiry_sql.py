@@ -17,6 +17,7 @@ from uuid import uuid4
 from tools import rehearse_supermega_postgres17 as pg
 from supermega_runtime.trial_store import PostgresTrialStore, TrialPrincipal, TrialNotReadyError, TrialPermissionDenied, TrialValidationError
 from supermega_runtime.website_inquiry_store import WebsiteInquiryStore
+from supermega_runtime.website_publishing_schema import PUBLISHING_CATALOG_DIGEST, publishing_catalog_digest
 from tests.test_website_runtime import _page, _state, _published_state
 
 WORKSPACE = 'rehearsal-product'
@@ -231,6 +232,12 @@ class WebsiteInquirySqlTests(unittest.TestCase):
                                (WORKSPACE, json.dumps(_published_state()), OWNER.actor_id))
         self.adapter = WebsiteInquiryStore(PostgresTrialStore(self.runtime_url, reducer=lambda *args: {}, write_enabled=True))
         self.origins = {}
+
+    def test_publishing_catalog_fingerprint_matches_migrated_schema(self):
+        with pg._connect(self.admin_url) as connection:
+            with connection.cursor() as cursor:
+                observed = publishing_catalog_digest(cursor)
+        self.assertEqual(observed, PUBLISHING_CATALOG_DIGEST)
 
     def channel(self, *, enabled=True, origin=ORIGIN, page_id='page-home', expected_version=1):
         channel = str(uuid4())

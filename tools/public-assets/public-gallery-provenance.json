@@ -2,135 +2,250 @@
   "schemaVersion": "supermega.public-gallery-provenance.v1",
   "status": "local_component_capture",
   "records": "synthetic",
-  "captureSourceCommit": "9285d1b3334a4d6c3f189dbce98ead675bc93049",
-  "captureSourceTree": "ecbbd197f6416a1301ffc10e9f7cc0998b727c9f",
-  "capturedAt": null,
+  "captureSourceCommit": "73216f003481307ca90597a742d78632aefbd364",
+  "captureSourceTree": "13816e76657ba837f781eb1938acb3b22c3b122d",
+  "capturedAt": "2026-10-19T06:22:55.590Z",
   "assets": [
     {
       "file": "actual-shop-today.png",
       "width": 1440,
       "height": 900,
-      "sha256": "774d35cd3b6a72d63d7dd5d827fb52864abd98a9c9d0c3b068b939c777702291",
+      "sha256": "97acf0d420ecc7b295cef7f735c509be27e9ba2dcc4cbb0b6d4bca8a76b15741",
       "capture": {
         "classification": "local_real_component_synthetic",
         "publicationReady": false,
-        "sourceCommit": "9285d1b3334a4d6c3f189dbce98ead675bc93049",
-        "showroomTree": "ecbbd197f6416a1301ffc10e9f7cc0998b727c9f",
+        "sourceCommit": "73216f003481307ca90597a742d78632aefbd364",
+        "showroomTree": "13816e76657ba837f781eb1938acb3b22c3b122d",
         "captureTool": "tools/capture_public_gallery.mjs",
         "fixturePath": "/shop/",
         "routeState": "today",
         "visibleSelector": ".shop-today-module",
         "loadedImages": 0,
-        "deniedExternal": 0
+        "deniedExternal": 0,
+        "captureInputsSha256": "ac1895d85073bd783b9d3ebc58fb5e10609831b66c8bd4cb6e3d0eb5875a3b8a",
+        "captureMode": "clean-commit-review"
+      }
+    },
+    {
+      "file": "actual-shop-today-tablet.png",
+      "width": 768,
+      "height": 1024,
+      "sha256": "bfd3853fae9304907170b5126816e4c89b8f0e985d3e8f811a40ec505c78da50",
+      "capture": {
+        "classification": "local_real_component_synthetic",
+        "publicationReady": false,
+        "sourceCommit": "73216f003481307ca90597a742d78632aefbd364",
+        "showroomTree": "13816e76657ba837f781eb1938acb3b22c3b122d",
+        "captureTool": "tools/capture_public_gallery.mjs",
+        "fixturePath": "/shop/",
+        "routeState": "today",
+        "visibleSelector": ".shop-today-module",
+        "loadedImages": 0,
+        "deniedExternal": 0,
+        "captureInputsSha256": "ac1895d85073bd783b9d3ebc58fb5e10609831b66c8bd4cb6e3d0eb5875a3b8a",
+        "captureMode": "clean-commit-review"
+      }
+    },
+    {
+      "file": "actual-shop-today-mobile.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "ec42aba5f29de88f0e00bdd4206fe1c6850d9b3c522597804627df11bf62939f",
+      "capture": {
+        "classification": "local_real_component_synthetic",
+        "publicationReady": false,
+        "sourceCommit": "73216f003481307ca90597a742d78632aefbd364",
+        "showroomTree": "13816e76657ba837f781eb1938acb3b22c3b122d",
+        "captureTool": "tools/capture_public_gallery.mjs",
+        "fixturePath": "/shop/",
+        "routeState": "today",
+        "visibleSelector": ".shop-today-module",
+        "loadedImages": 0,
+        "deniedExternal": 0,
+        "captureInputsSha256": "ac1895d85073bd783b9d3ebc58fb5e10609831b66c8bd4cb6e3d0eb5875a3b8a",
+        "captureMode": "clean-commit-review"
       }
     },
     {
       "file": "actual-shop-sell.png",
       "width": 1440,
       "height": 900,
-      "sha256": "68e9ee7f02c5546f33df8fa4a46035a0633a4a9ed3e2c3512a802c96280853a5",
+      "sha256": "c5fb2d708bb590b81fec1e0c07be0a0b5ac235d58cecd0cb0e2e6800b3e15db0",
       "capture": {
         "classification": "local_real_component_synthetic",
         "publicationReady": false,
-        "sourceCommit": "9285d1b3334a4d6c3f189dbce98ead675bc93049",
-        "showroomTree": "ecbbd197f6416a1301ffc10e9f7cc0998b727c9f",
+        "sourceCommit": "73216f003481307ca90597a742d78632aefbd364",
+        "showroomTree": "13816e76657ba837f781eb1938acb3b22c3b122d",
         "captureTool": "tools/capture_public_gallery.mjs",
         "fixturePath": "/shop/",
         "routeState": "counter",
         "visibleSelector": ".shop-current-sale",
         "loadedImages": 0,
-        "deniedExternal": 0
+        "deniedExternal": 0,
+        "captureInputsSha256": "ac1895d85073bd783b9d3ebc58fb5e10609831b66c8bd4cb6e3d0eb5875a3b8a",
+        "captureMode": "clean-commit-review"
+      }
+    },
+    {
+      "file": "actual-shop-sell-tablet.png",
+      "width": 768,
+      "height": 1024,
+      "sha256": "8f5f7de629062b19fae37b6a3b5a2561f7e092dd2d9842b12e2b5cb9e01f9bf1",
+      "capture": {
+        "classification": "local_real_component_synthetic",
+        "publicationReady": false,
+        "sourceCommit": "73216f003481307ca90597a742d78632aefbd364",
+        "showroomTree": "13816e76657ba837f781eb1938acb3b22c3b122d",
+        "captureTool": "tools/capture_public_gallery.mjs",
+        "fixturePath": "/shop/",
+        "routeState": "counter",
+        "visibleSelector": ".shop-counter-grid",
+        "loadedImages": 0,
+        "deniedExternal": 0,
+        "captureInputsSha256": "ac1895d85073bd783b9d3ebc58fb5e10609831b66c8bd4cb6e3d0eb5875a3b8a",
+        "captureMode": "clean-commit-review"
+      }
+    },
+    {
+      "file": "actual-shop-sell-mobile.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "924c944135952942a37e35b0d93bcd8be2234642893cef5df3e5eb66e9fa09af",
+      "capture": {
+        "classification": "local_real_component_synthetic",
+        "publicationReady": false,
+        "sourceCommit": "73216f003481307ca90597a742d78632aefbd364",
+        "showroomTree": "13816e76657ba837f781eb1938acb3b22c3b122d",
+        "captureTool": "tools/capture_public_gallery.mjs",
+        "fixturePath": "/shop/",
+        "routeState": "counter",
+        "visibleSelector": ".shop-current-sale",
+        "loadedImages": 0,
+        "deniedExternal": 0,
+        "captureInputsSha256": "ac1895d85073bd783b9d3ebc58fb5e10609831b66c8bd4cb6e3d0eb5875a3b8a",
+        "captureMode": "clean-commit-review"
       }
     },
     {
       "file": "actual-shop-orders.png",
       "width": 1440,
       "height": 900,
-      "sha256": "b55cce8aa5eb52ab22bf35789bb3d1fbed692b5cf15301bc381af5ebcf729db8",
+      "sha256": "115030f3ce111fe4bcfbd279bad0973926e6fb4d727f1535d100c6089363e9fb",
       "capture": {
         "classification": "local_real_component_synthetic",
         "publicationReady": false,
-        "sourceCommit": "9285d1b3334a4d6c3f189dbce98ead675bc93049",
-        "showroomTree": "ecbbd197f6416a1301ffc10e9f7cc0998b727c9f",
+        "sourceCommit": "73216f003481307ca90597a742d78632aefbd364",
+        "showroomTree": "13816e76657ba837f781eb1938acb3b22c3b122d",
         "captureTool": "tools/capture_public_gallery.mjs",
         "fixturePath": "/shop/",
         "routeState": "orders",
         "visibleSelector": ".orders-module",
         "loadedImages": 0,
-        "deniedExternal": 0
+        "deniedExternal": 0,
+        "captureInputsSha256": "ac1895d85073bd783b9d3ebc58fb5e10609831b66c8bd4cb6e3d0eb5875a3b8a",
+        "captureMode": "clean-commit-review"
       }
     },
     {
-      "file": "actual-sites-editor.png",
-      "width": 1440,
-      "height": 900,
-      "sha256": "f2ad39ae0779db6d983b79fbc1d5bbfd32c0d26fb929a3a5664be63b290cc4bb",
+      "file": "actual-shop-orders-tablet.png",
+      "width": 768,
+      "height": 1024,
+      "sha256": "a572d14033053cced52519896bdf9ee64f46cf3576270185d8ddaed519dfdbc4",
       "capture": {
         "classification": "local_real_component_synthetic",
         "publicationReady": false,
-        "sourceCommit": "9285d1b3334a4d6c3f189dbce98ead675bc93049",
-        "showroomTree": "ecbbd197f6416a1301ffc10e9f7cc0998b727c9f",
+        "sourceCommit": "73216f003481307ca90597a742d78632aefbd364",
+        "showroomTree": "13816e76657ba837f781eb1938acb3b22c3b122d",
         "captureTool": "tools/capture_public_gallery.mjs",
-        "fixturePath": "/workspaces/",
-        "routeState": "/website/",
-        "visibleSelector": "[data-content-section=\"hero\"]",
-        "loadedImages": 3,
-        "deniedExternal": 0
-      }
-    },
-    {
-      "file": "actual-sites-inquiries.png",
-      "width": 1440,
-      "height": 900,
-      "sha256": "d6c4c787dc24c521e6ec6b83532c7e4495318226e11e9f0b7fb03d6b513e7086",
-      "capture": {
-        "classification": "local_real_component_synthetic",
-        "publicationReady": false,
-        "sourceCommit": "9285d1b3334a4d6c3f189dbce98ead675bc93049",
-        "showroomTree": "ecbbd197f6416a1301ffc10e9f7cc0998b727c9f",
-        "captureTool": "tools/capture_public_gallery.mjs",
-        "fixturePath": "/workspaces/",
-        "routeState": "/website/?view=inquiries",
-        "visibleSelector": ".website-inquiry-detail",
+        "fixturePath": "/shop/",
+        "routeState": "orders",
+        "visibleSelector": ".orders-module",
         "loadedImages": 0,
-        "deniedExternal": 0
+        "deniedExternal": 0,
+        "captureInputsSha256": "ac1895d85073bd783b9d3ebc58fb5e10609831b66c8bd4cb6e3d0eb5875a3b8a",
+        "captureMode": "clean-commit-review"
       }
     },
     {
-      "file": "actual-commerce-catalog.png",
-      "width": 1440,
-      "height": 900,
-      "sha256": "0f8e9c99e437fdd69d05bc47f7b5bccc1a04713fff64317b5b85a290e5d43c76",
+      "file": "actual-shop-orders-mobile.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "2661da4349505d1f6471ee7c2b18ffcf51ce95a9291254eb5c8332dc8d915410",
       "capture": {
         "classification": "local_real_component_synthetic",
         "publicationReady": false,
-        "sourceCommit": "9285d1b3334a4d6c3f189dbce98ead675bc93049",
-        "showroomTree": "ecbbd197f6416a1301ffc10e9f7cc0998b727c9f",
+        "sourceCommit": "73216f003481307ca90597a742d78632aefbd364",
+        "showroomTree": "13816e76657ba837f781eb1938acb3b22c3b122d",
         "captureTool": "tools/capture_public_gallery.mjs",
-        "fixturePath": "/workspaces/",
-        "routeState": "/ecommerce/?view=preview&workspace=1",
-        "visibleSelector": ".storefront-grid",
-        "loadedImages": 3,
-        "deniedExternal": 0
-      }
-    },
-    {
-      "file": "actual-commerce-order-request.png",
-      "width": 1440,
-      "height": 900,
-      "sha256": "fccc34fe98d66d40b58e34af80f5d63755ccf608696120305419ef044778ac41",
-      "capture": {
-        "classification": "local_real_component_synthetic",
-        "publicationReady": false,
-        "sourceCommit": "9285d1b3334a4d6c3f189dbce98ead675bc93049",
-        "showroomTree": "ecbbd197f6416a1301ffc10e9f7cc0998b727c9f",
-        "captureTool": "tools/capture_public_gallery.mjs",
-        "fixturePath": "/workspaces/",
-        "routeState": "/ecommerce/?view=preview&workspace=1",
-        "visibleSelector": ".ecommerce-quote-receipt[data-current=\"true\"]",
+        "fixturePath": "/shop/",
+        "routeState": "orders",
+        "visibleSelector": ".orders-module",
         "loadedImages": 0,
-        "deniedExternal": 0
+        "deniedExternal": 0,
+        "captureInputsSha256": "ac1895d85073bd783b9d3ebc58fb5e10609831b66c8bd4cb6e3d0eb5875a3b8a",
+        "captureMode": "clean-commit-review"
+      }
+    },
+    {
+      "file": "actual-shop-inventory.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "adb061e3c213977b449b48b7401a227f71a3f4919d069300515e0b419ee1079b",
+      "capture": {
+        "classification": "local_real_component_synthetic",
+        "publicationReady": false,
+        "sourceCommit": "73216f003481307ca90597a742d78632aefbd364",
+        "showroomTree": "13816e76657ba837f781eb1938acb3b22c3b122d",
+        "captureTool": "tools/capture_public_gallery.mjs",
+        "fixturePath": "/shop/",
+        "routeState": "inventory",
+        "visibleSelector": ".shop-stock-module",
+        "loadedImages": 0,
+        "deniedExternal": 0,
+        "captureInputsSha256": "ac1895d85073bd783b9d3ebc58fb5e10609831b66c8bd4cb6e3d0eb5875a3b8a",
+        "captureMode": "clean-commit-review"
+      }
+    },
+    {
+      "file": "actual-shop-inventory-tablet.png",
+      "width": 768,
+      "height": 1024,
+      "sha256": "f2a8285f8093f61b1a0212a474c34d154ccd6d7b01825795e286d30305bd5f61",
+      "capture": {
+        "classification": "local_real_component_synthetic",
+        "publicationReady": false,
+        "sourceCommit": "73216f003481307ca90597a742d78632aefbd364",
+        "showroomTree": "13816e76657ba837f781eb1938acb3b22c3b122d",
+        "captureTool": "tools/capture_public_gallery.mjs",
+        "fixturePath": "/shop/",
+        "routeState": "inventory",
+        "visibleSelector": ".shop-stock-module",
+        "loadedImages": 0,
+        "deniedExternal": 0,
+        "captureInputsSha256": "ac1895d85073bd783b9d3ebc58fb5e10609831b66c8bd4cb6e3d0eb5875a3b8a",
+        "captureMode": "clean-commit-review"
+      }
+    },
+    {
+      "file": "actual-shop-inventory-mobile.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "5434df7fdd0b5b87155d7e309ed8f44ced75b0acfd11672042fb76e10adc3ac4",
+      "capture": {
+        "classification": "local_real_component_synthetic",
+        "publicationReady": false,
+        "sourceCommit": "73216f003481307ca90597a742d78632aefbd364",
+        "showroomTree": "13816e76657ba837f781eb1938acb3b22c3b122d",
+        "captureTool": "tools/capture_public_gallery.mjs",
+        "fixturePath": "/shop/",
+        "routeState": "inventory",
+        "visibleSelector": ".shop-stock-module",
+        "loadedImages": 0,
+        "deniedExternal": 0,
+        "captureInputsSha256": "ac1895d85073bd783b9d3ebc58fb5e10609831b66c8bd4cb6e3d0eb5875a3b8a",
+        "captureMode": "clean-commit-review"
       }
     }
-  ]
+  ],
+  "captureInputsSha256": "ac1895d85073bd783b9d3ebc58fb5e10609831b66c8bd4cb6e3d0eb5875a3b8a"
 }

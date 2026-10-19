@@ -5,7 +5,8 @@ import json
 
 from .trial_store import TrialNotReadyError
 
-# Derived only from the canonical migrations on disposable PostgreSQL 17.
+# Derived from CURRENT_MIGRATIONS on disposable PostgreSQL 17. The Sites RLS
+# init-plan migration remains a dormant candidate and is intentionally excluded.
 PUBLISHING_CATALOG_DIGEST = "df490858d94482684956eb53094caf6a68a8e68a48b1833c185ee63094b23956"
 
 

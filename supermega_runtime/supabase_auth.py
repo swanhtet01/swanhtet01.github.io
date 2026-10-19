@@ -202,9 +202,12 @@ def verify_supabase_user_identity(
         with opener.open(request, timeout=timeout_seconds) as response:
             payload = response.read(_MAX_AUTH_RESPONSE_BYTES + 1)
     except HTTPError as exc:
-        if exc.code in {400, 401, 403}:
-            return None
-        raise SupabaseAuthUnavailable("Supabase Auth returned an unexpected response.") from exc
+        try:
+            if exc.code in {400, 401, 403}:
+                return None
+            raise SupabaseAuthUnavailable("Supabase Auth returned an unexpected response.") from exc
+        finally:
+            exc.close()
     except (OSError, TimeoutError, URLError) as exc:
         raise SupabaseAuthUnavailable("Supabase Auth is unavailable.") from exc
 

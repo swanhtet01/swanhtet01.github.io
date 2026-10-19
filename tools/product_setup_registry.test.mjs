@@ -177,7 +177,7 @@ test('Plant pack mismatch stays blocked until an explicit reviewed choice and la
     'disabled={Boolean(pendingRequestedPlantIndustryPack)}',
     'setPlantPackChangeSelected(true)',
     'setPlantPackChangeSelected(hasSavedPlantSetup && id !== savedPlantIndustryPackId)',
-    'if (pendingRequestedWorkflowTemplate || pendingRequestedPlantIndustryPack)',
+    'if (pendingRequestedWorkflowTemplate || pendingRequestedPlantIndustryPack || pendingRequestedShopBusinessChoiceId)',
     "clearSetupDoorDimension('template')",
     "clearSetupDoorDimension('variant')",
     'if (!setupVariantMatchesSource(plantIndustryPackId, linkedPlantTemplate?.industryPackId))',
@@ -192,7 +192,7 @@ test('Plant pack mismatch stays blocked until an explicit reviewed choice and la
     'a conflicting Shop-linked Plant pack must stop before provisioning',
   )
   assert.ok(
-    onboardingSource.indexOf('if (pendingRequestedWorkflowTemplate || pendingRequestedPlantIndustryPack)')
+    onboardingSource.indexOf('if (pendingRequestedWorkflowTemplate || pendingRequestedPlantIndustryPack || pendingRequestedShopBusinessChoiceId)')
       < onboardingSource.indexOf('savePlantIndustryPackId(plantIndustryPackId, window.localStorage)'),
     'Plant pack choice must fail closed before the saved pack can change',
   )

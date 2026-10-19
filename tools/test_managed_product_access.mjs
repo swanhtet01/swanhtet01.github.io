@@ -1,10 +1,14 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { readFileSync } from 'node:fs'
 
 import {
+  ecommerceShopHandoffVisible,
+  hostedProductRouteRequiresLogin,
   managedProductIsVisible,
   managedProductPath,
   productSwitcherVisible,
+  shopInboundRequestsVisible,
   resolveManagedProductHome,
   resolveManagedProductRoute,
 } from '../showroom/src/core/managed-product-access.ts'
@@ -12,6 +16,18 @@ import { managedProductConnections } from '../showroom/src/core/managed-product-
 
 const products = ['commerce', 'production', 'website', 'ecommerce']
 const paths = ['/shop/', '/plant/', '/website/', '/ecommerce/']
+const coreShell = readFileSync(new URL('../showroom/src/core/CoreShell.tsx', import.meta.url), 'utf8')
+
+test('hosted product routes require managed access when the portal falls back to local mode', () => {
+  assert.equal(hostedProductRouteRequiresLogin(true, 'local'), true)
+  assert.equal(hostedProductRouteRequiresLogin(true, 'checking'), false)
+  assert.equal(hostedProductRouteRequiresLogin(true, 'ready'), false)
+  assert.equal(hostedProductRouteRequiresLogin(true, 'reauthenticate'), false)
+  assert.equal(hostedProductRouteRequiresLogin(true, 'error'), false)
+  assert.equal(hostedProductRouteRequiresLogin(false, 'local'), false)
+  assert.match(coreShell, /hostedProductRouteRequiresLogin\(import\.meta\.env\.PROD, portalAccess\.status\)/)
+  assert.match(coreShell, /requestedProduct && hostedProductLoginRequired[\s\S]{0,100}<Navigate replace to=\{companyLoginPath\}/)
+})
 
 test('maps every client product to its canonical workspace route', () => {
   assert.deepEqual(products.map(managedProductPath), paths)
@@ -54,6 +70,26 @@ test('the managed launcher shows only assigned products', () => {
     assigned,
   )
   assert.equal(managedProductIsVisible(['commerce'], 'ecommerce'), false)
+})
+
+test('private Ecommerce-to-Shop handoffs require both managed assignments', () => {
+  assert.equal(ecommerceShopHandoffVisible('ready', ['commerce']), false)
+  assert.equal(ecommerceShopHandoffVisible('ready', ['ecommerce']), false)
+  assert.equal(ecommerceShopHandoffVisible('ready', ['commerce', 'website']), false)
+  assert.equal(ecommerceShopHandoffVisible('ready', ['commerce', 'ecommerce']), true)
+  assert.equal(ecommerceShopHandoffVisible('checking', ['commerce', 'ecommerce']), false)
+  assert.equal(ecommerceShopHandoffVisible('reauthenticate', ['commerce', 'ecommerce']), false)
+  assert.equal(ecommerceShopHandoffVisible('local', []), true)
+})
+
+test('Shop receives submitted requests without internal Sites or Commerce editor access', () => {
+  assert.equal(shopInboundRequestsVisible('ready', ['commerce']), true)
+  assert.equal(shopInboundRequestsVisible('ready', ['commerce', 'website']), true)
+  assert.equal(shopInboundRequestsVisible('ready', ['commerce', 'ecommerce']), true)
+  assert.equal(shopInboundRequestsVisible('ready', ['website', 'ecommerce']), false)
+  assert.equal(shopInboundRequestsVisible('checking', ['commerce']), false)
+  assert.equal(shopInboundRequestsVisible('reauthenticate', ['commerce']), false)
+  assert.equal(shopInboundRequestsVisible('local', []), true)
 })
 
 test('the product switcher appears only when there is somewhere authorized to switch', () => {

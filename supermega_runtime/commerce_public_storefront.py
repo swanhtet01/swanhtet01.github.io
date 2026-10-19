@@ -39,6 +39,7 @@ from .ecommerce_buying_lifecycle import (
 from .trial_store import (
     PostgresTrialStore, TrialNotReadyError, TrialPermissionDenied,
     TrialPrincipal, TrialValidationError, TrialVersionConflict,
+    require_ecommerce_management_authority,
 )
 from .website_publishing_routes import vercel_client_address
 
@@ -232,10 +233,40 @@ class CommercePublicStorefront:
     def __init__(self, store: PostgresTrialStore):
         self.store = store
 
+    def _require_public_request_access(
+        self, cursor: Any, principal: TrialPrincipal, capabilities,
+    ) -> None:
+        """Allow Shop staff to work incoming orders without storefront admin.
+
+        The private inbox table's RLS policy requires commerce.write even for
+        SELECT. Keep that same capability at this API boundary; contact data
+        remains available only through the separate Shop contact endpoint.
+        """
+        required = 'commerce.write'
+        products = self.store._product_entitlements(cursor, principal.workspace_id)
+        if products is None:
+            # Legacy non-managed stores still require an explicit actor grant.
+            if required in capabilities or 'ecommerce.manage' in capabilities:
+                return
+            raise TrialPermissionDenied(required)
+        if 'commerce' in products and required in capabilities:
+            return
+        if 'ecommerce' in products:
+            self._require_ecommerce_entitlement(cursor, principal, capabilities)
+            return
+        raise TrialPermissionDenied(required if 'commerce' in products else 'product.commerce')
+
+    def _require_ecommerce_entitlement(self, cursor: Any, principal: TrialPrincipal, capabilities) -> None:
+        # Publication is internal even when a Shop operator shares the surface.
+        require_ecommerce_management_authority(
+            self.store._product_entitlements(cursor, principal.workspace_id), capabilities,
+        )
+
     def publish(self, principal: TrialPrincipal, *, expected_version: int) -> dict[str, Any]:
         if principal.actor_kind != 'human' or type(expected_version) is not int or expected_version < 1:
             raise TrialValidationError('commerce_public_invalid')
-        with self.store._guarded_cursor(principal, write=True, capability='commerce.write') as (cursor, _):
+        with self.store._guarded_cursor(principal, write=True, capability='ecommerce.manage') as (cursor, capabilities):
+            self._require_ecommerce_entitlement(cursor, principal, capabilities)
             _require_public_schema(cursor)
             cursor.execute("select version,state_json from app_private.workspace_state where workspace_id=%s and surface='commerce' for share",
                            (principal.workspace_id,))
@@ -247,6 +278,13 @@ class CommercePublicStorefront:
             configuration = state['storefrontConfiguration']
             digest = commerce_storefront_preview_digest(state)
             self.store._lock(cursor, f'{principal.workspace_id}:commerce-publication')
+            # The named operator grant can be revoked while this transaction
+            # waits for another publication. Recheck the active session and
+            # membership after the serialization point before changing rows.
+            self.store._assert_active_identity_session(cursor, principal)
+            self._require_ecommerce_entitlement(
+                cursor, principal, self.store._load_membership(cursor, principal),
+            )
             cursor.execute('select handle,preview_digest,source_action_id from app_private.commerce_public_storefronts where workspace_id=%s and enabled for update',
                            (principal.workspace_id,))
             previous = cursor.fetchone()
@@ -267,7 +305,8 @@ class CommercePublicStorefront:
                 'productCount': len(preview['items'])}
 
     def publications(self, principal: TrialPrincipal) -> dict[str, Any]:
-        with self.store._guarded_cursor(principal, write=False, capability='commerce.write') as (cursor, _):
+        with self.store._guarded_cursor(principal, write=False, capability='ecommerce.manage') as (cursor, capabilities):
+            self._require_ecommerce_entitlement(cursor, principal, capabilities)
             _require_public_schema(cursor)
             cursor.execute('select handle,enabled,source_revision,preview_digest,published_at from app_private.commerce_public_storefronts where workspace_id=%s order by published_at desc limit 10',
                            (principal.workspace_id,))
@@ -281,8 +320,14 @@ class CommercePublicStorefront:
         if principal.actor_kind != 'human' or not _DIGEST.fullmatch(preview_digest):
             raise TrialValidationError('commerce_public_invalid')
         handle = _uuid(handle)
-        with self.store._guarded_cursor(principal, write=True, capability='commerce.write') as (cursor, _):
+        with self.store._guarded_cursor(principal, write=True, capability='ecommerce.manage') as (cursor, capabilities):
+            self._require_ecommerce_entitlement(cursor, principal, capabilities)
             _require_public_schema(cursor)
+            self.store._lock(cursor, f'{principal.workspace_id}:commerce-publication')
+            self.store._assert_active_identity_session(cursor, principal)
+            self._require_ecommerce_entitlement(
+                cursor, principal, self.store._load_membership(cursor, principal),
+            )
             cursor.execute("""update app_private.commerce_public_storefronts
                 set enabled=false,revoked_at=clock_timestamp()
                 where handle=%s and workspace_id=%s and enabled and preview_digest=%s
@@ -366,9 +411,10 @@ class CommercePublicStorefront:
 
     def inbox(self, principal: TrialPrincipal, *, after: str | None = None) -> dict[str, Any]:
         cursor_key = _parse_page_cursor(after) if after is not None else None
-        with self.store._guarded_cursor(principal, write=False, capability='commerce.write') as (cursor, _):
+        with self.store._guarded_cursor(principal, write=False) as (cursor, capabilities):
+            self._require_public_request_access(cursor, principal, capabilities)
             _require_public_schema(cursor)
-            cursor.execute("""select handle,request_id,shop_request_id,request_json,contact_json,received_at,status
+            cursor.execute("""select handle,request_id,shop_request_id,request_json,received_at,status
                 from app_private.commerce_public_requests where workspace_id=%s
                 and status <> 'closed'
                 and (%s::timestamptz is null or (received_at,handle,request_id) < (%s::timestamptz,%s::uuid,%s::uuid))
@@ -386,7 +432,6 @@ class CommercePublicStorefront:
                 if order.get('sourceRecordId')} if state else set()
             return {'requests': [{'handle': str(row['handle']), 'requestId': str(row['request_id']),
                 'request': row['request_json'],
-                'contact': row['contact_json'],
                 'shopRequestId': row['shop_request_id'],
                 'status': ('in_shop' if row['status'] == 'in_shop'
                     or row['shop_request_id'] in retained
@@ -424,7 +469,8 @@ class CommercePublicStorefront:
         """Requote a received request into Shop review; never confirm or charge it."""
         handle, request_id = _uuid(handle), _uuid(request_id)
         shop_request_id = _shop_request_id(handle, request_id)
-        with self.store._guarded_cursor(principal, write=True, capability='commerce.write') as (cursor, _):
+        with self.store._guarded_cursor(principal, write=True) as (cursor, capabilities):
+            self._require_public_request_access(cursor, principal, capabilities)
             _require_public_schema(cursor)
             cursor.execute('select app_private.reserve_commerce_public_request(%s,%s,%s) as reserved',
                 (principal.workspace_id, handle, request_id))
@@ -485,7 +531,8 @@ class CommercePublicStorefront:
         retained = result.state.get('storefrontRequests', [])
         if not retained or retained[0]['id'] != shop_request_id:
             raise TrialNotReadyError(('commerce_public_claim_readback',))
-        with self.store._guarded_cursor(principal, write=True, capability='commerce.write') as (cursor, _):
+        with self.store._guarded_cursor(principal, write=True) as (cursor, capabilities):
+            self._require_public_request_access(cursor, principal, capabilities)
             cursor.execute('select app_private.complete_commerce_public_request_claim(%s,%s,%s)',
                            (principal.workspace_id, handle, request_id))
         return {'status': 'in_shop', 'shopRequestId': shop_request_id,
@@ -499,7 +546,8 @@ class CommercePublicStorefront:
                 'spam_or_duplicate', 'other'):
             raise TrialValidationError('commerce_public_invalid')
         handle, request_id = _uuid(handle), _uuid(request_id)
-        with self.store._guarded_cursor(principal, write=True, capability='commerce.write') as (cursor, _):
+        with self.store._guarded_cursor(principal, write=True) as (cursor, capabilities):
+            self._require_public_request_access(cursor, principal, capabilities)
             _require_public_schema(cursor)
             cursor.execute('select app_private.inspect_commerce_public_request(%s,%s,%s) as item',
                 (principal.workspace_id, handle, request_id))

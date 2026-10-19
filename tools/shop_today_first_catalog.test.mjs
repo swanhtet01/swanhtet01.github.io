@@ -4,13 +4,20 @@ import { resolve } from 'node:path'
 import test from 'node:test'
 import { prepareManagedFirstCatalog } from '../showroom/src/core/shop-managed-first-catalog.ts'
 import { confirmedBurmese } from '../showroom/src/core/i18n-actions.ts'
-import { summarizeShopCatalogImportReview } from '../showroom/src/core/shop-catalog-import.ts'
+import { createShopCatalogImportPreview, SHOP_CATALOG_IMPORT_TEMPLATE, summarizeShopCatalogImportReview } from '../showroom/src/core/shop-catalog-import.ts'
+import { shopCustomerReceiptText } from '../showroom/src/core/shop-customer-receipt.ts'
 import {
+  COMMERCE_ORDER_CALCULATION_SCHEMA,
   advanceCommerceOrder,
+  commerceOrderAcknowledgementReader,
   createCommerceCatalogBaseline,
   createEmptyCommerce,
+  commerceItemBarcodeConflicts,
+  findCommerceItemByScanCode,
+  resolveCommerceItemByScanCode,
   reconcileCommercePayment,
   reserveCommerceOrder,
+  updateCommerceItem,
   validateCommerceState,
 } from '../showroom/src/core/commerce-workspace.ts'
 
@@ -72,6 +79,152 @@ test('catalog import keeps unchanged items out of the write and disables a no-op
   assert.match(onboarding, /exact matches will stay unchanged\. Approve adding only the new items/)
 })
 
+test('Shop catalog import maps Burmese categories, preserves leading-zero barcodes, and never overwrites existing categories', async () => {
+  const csv = 'SKU,Barcode,Item name,Category,Opening stock,Reorder at,Price (MMK)\r\nTEA-01,00012345,လက်ဖက်ရည်,သောက်စရာ,10,3,2500\r\n'
+  const preview = await createShopCatalogImportPreview(csv, [])
+  assert.equal(preview.mapping.category, 'Category')
+  assert.equal(preview.rows[0].item?.category, 'သောက်စရာ')
+  assert.equal(preview.rows[0].item?.barcode, '00012345')
+  assert.match(SHOP_CATALOG_IMPORT_TEMPLATE.split('\r\n')[0], /category/i)
+
+  const burmeseHeaders = await createShopCatalogImportPreview(
+    'ပစ္စည်းကုဒ်,ဘားကုဒ်,ပစ္စည်းအမည်,အမျိုးအစား,လက်ကျန်,အနည်းဆုံးလက်ကျန်,စျေးနှုန်း\nTEA-02,00098765,လက်ဖက်စိမ်း,အဖျော်ယမကာ,8,2,1800\n',
+    [],
+  )
+  assert.equal(burmeseHeaders.rows[0].item?.category, 'အဖျော်ယမကာ')
+  assert.equal(burmeseHeaders.rows[0].item?.barcode, '00098765')
+
+  const existing = { sku: 'TEA-01', barcode: '00012345', name: 'လက်ဖက်ရည်', category: 'သောက်စရာ', onHand: 10, reorderAt: 3, price: 2500 }
+  const blankCategory = await createShopCatalogImportPreview(
+    'SKU,Barcode,Item name,Category,Opening stock,Reorder at,Price (MMK)\r\nTEA-01,00012345,လက်ဖက်ရည်,,10,3,2500\r\n',
+    [existing],
+  )
+  assert.equal(blankCategory.rows[0].status, 'already_exists')
+
+  const changedCategory = await createShopCatalogImportPreview(csv.replace('သောက်စရာ', 'အစားအသောက်'), [existing])
+  assert.equal(changedCategory.rows[0].status, 'conflict')
+  assert.ok(changedCategory.rows[0].issues.some((issue) => issue.message.includes('category')))
+})
+
+test('Shop barcode identity stays separate from SKU, preserves leading zeroes, and fails closed on ambiguity', () => {
+  const product = { sku: 'TEA-01', name: 'Tea', onHand: 4, reorderAt: 1, price: 2500 }
+  const state = validateCommerceState({ ...createEmptyCommerce(), items: [{ ...product, barcode: '00012345' }] })
+  assert.equal(findCommerceItemByScanCode(state.items, '00012345')?.sku, 'TEA-01')
+  assert.equal(findCommerceItemByScanCode(state.items, ' tea-01 ')?.sku, 'TEA-01')
+  assert.equal(commerceItemBarcodeConflicts(state.items, 'OTHER', '00012345'), true)
+  assert.throws(() => validateCommerceState({ ...state, items: [{ ...product, barcode: '00012345' }, { ...product, sku: 'TEA-02', barcode: '00012345' }] }))
+  assert.throws(() => validateCommerceState({ ...state, items: [{ ...product, barcode: '00012345' }, { ...product, sku: '00012345' }] }))
+  const ambiguous = validateCommerceState({
+    ...createEmptyCommerce(),
+    items: [{ ...product, sku: 'tea-01' }, { ...product, sku: 'TEA-01' }],
+  })
+  assert.equal(resolveCommerceItemByScanCode(ambiguous.items, 'TEA-01').item?.sku, 'TEA-01')
+  assert.equal(resolveCommerceItemByScanCode(ambiguous.items, 'tea-01').item?.sku, 'tea-01')
+  assert.equal(resolveCommerceItemByScanCode(ambiguous.items, 'Tea-01').kind, 'ambiguous')
+  assert.match(core, /function addScannedValue[\s\S]*resolveCommerceItemByScanCode\(items, scanCode\)/)
+  assert.match(core, /resolution\.kind === 'ambiguous'[\s\S]*Correct the duplicate product codes/)
+  assert.match(core, /resolution\.kind === 'not_found'[\s\S]*unmatchedBarcodeForCreation\(value, source\)/)
+  assert.match(core, /function selectStockCountBarcode[\s\S]*findCommerceItemByScanCode\(commerce\.items, code\)/)
+  assert.match(core, /placeholder=\{uiText\('Search products or scan barcode'\)\}/)
+  assert.match(core, /name="product-barcode"/)
+  assert.match(core, /label>SKU \/ item code \(optional\)/)
+})
+
+test('adding or removing a barcode is an idempotent, auditable catalog update', () => {
+  const state = validateCommerceState({
+    ...createEmptyCommerce(),
+    items: [{ sku: 'TEA-01', name: 'Tea', onHand: 4, reorderAt: 1, price: 2500 }],
+  })
+  const proof = {
+    actionId: 'SYNTHETIC-BARCODE-UPDATE',
+    capturedAt: '2026-10-16T00:00:00.000Z',
+    actor: 'synthetic-operator',
+    reason: 'Assign the supplier barcode to the item.',
+    evidenceReference: 'Synthetic regression fixture.',
+  }
+  const update = {
+    sku: 'TEA-01',
+    expectedPrice: 2500,
+    nextPrice: 2500,
+    expectedReorderAt: 1,
+    nextReorderAt: 1,
+    expectedBarcode: null,
+    nextBarcode: '00012345',
+  }
+  const updated = updateCommerceItem(state, update, proof)
+  assert.ok(updated)
+  assert.equal(updated.items[0].barcode, '00012345')
+  assert.equal(findCommerceItemByScanCode(updated.items, '00012345')?.sku, 'TEA-01')
+  assert.equal(updateCommerceItem(updated, update, proof), updated)
+  assert.equal(updateCommerceItem(updated, { ...update, nextBarcode: null }, { ...proof, actionId: 'SYNTHETIC-BARCODE-REMOVE' })?.items[0].barcode, undefined)
+})
+
+test('Burmese product names are editable, versioned, replay-safe, and retained as order display data', () => {
+  const state = validateCommerceState({
+    ...createEmptyCommerce(),
+    items: [{ sku: 'TEA-01', name: 'Green tea', onHand: 4, reorderAt: 1, price: 2500 }],
+  })
+  const proof = {
+    actionId: 'SYNTHETIC-BURMESE-NAME-UPDATE',
+    capturedAt: '2026-10-16T00:00:00.000Z',
+    actor: 'synthetic-operator',
+    reason: 'Add the owner-provided Myanmar display name.',
+    evidenceReference: 'Synthetic regression fixture.',
+  }
+  const update = {
+    sku: 'TEA-01',
+    expectedPrice: 2500,
+    nextPrice: 2500,
+    expectedReorderAt: 1,
+    nextReorderAt: 1,
+    expectedNameMy: null,
+    nextNameMy: 'လက်ဖက်ရည်',
+  }
+  const updated = updateCommerceItem(state, update, proof)
+  assert.ok(updated)
+  assert.equal(updated.items[0].name, 'Green tea')
+  assert.equal(updated.items[0].nameMy, 'လက်ဖက်ရည်')
+  assert.equal(updated.catalogChanges?.[0].previousNameMy, null)
+  assert.equal(updated.catalogChanges?.[0].nextNameMy, 'လက်ဖက်ရည်')
+  assert.equal(updateCommerceItem(updated, update, proof), updated)
+  assert.equal(updateCommerceItem(state, { ...update, expectedNameMy: 'wrong' }, { ...proof, actionId: 'SYNTHETIC-BURMESE-STALE' }), null)
+  assert.equal(updateCommerceItem(state, { ...update, expectedNameMy: undefined }, { ...proof, actionId: 'SYNTHETIC-BURMESE-MALFORMED' }), null)
+
+  const renamed = updateCommerceItem(updated, {
+    ...update,
+    expectedNameMy: 'လက်ဖက်ရည်',
+    nextNameMy: 'လက်ဖက်စိမ်း',
+  }, { ...proof, actionId: 'SYNTHETIC-BURMESE-RENAME', capturedAt: '2026-10-16T00:00:01.000Z' })
+  assert.ok(renamed)
+  assert.equal(validateCommerceState(renamed).items[0].nameMy, 'လက်ဖက်စိမ်း')
+  assert.equal(renamed.catalogChanges?.[0].previousNameMy, 'လက်ဖက်ရည်')
+  assert.equal(renamed.catalogChanges?.[1].nextNameMy, 'လက်ဖက်ရည်')
+  assert.match(core, /Burmese name \(optional\)[\s\S]*catalogEditDraft\.nameMy/)
+  assert.match(core, /name: item\.name, \.\.\.\(item\.nameMy \? \{ nameMy: item\.nameMy \} : \{\}\)/)
+})
+
+test('customer receipts use the selected language for owner-entered product names', () => {
+  const acknowledgement = {
+    orderId: 'ORD-SYNTHETIC-MY',
+    createdAt: '2026-10-16T00:00:00.000Z',
+    channel: 'Walk-in',
+    customer: 'Guest',
+    lines: [{ sku: 'TEA-01', name: 'Green tea', nameMy: 'လက်ဖက်ရည်', quantity: 1, lineTotalMmk: 2500 }],
+    promotion: { discountMmk: 0 },
+    tax: { taxMmk: 0 },
+    delivery: null,
+    totalMmk: 2500,
+    payment: { method: 'Cash', status: 'reconciled' },
+  }
+  const profile = { nameMyanmar: 'ဆိုင်', nameEnglish: 'Shop', phone: '', addressMyanmar: '', addressEnglish: '' }
+  const english = shopCustomerReceiptText(acknowledgement, profile, 'en')
+  const burmese = shopCustomerReceiptText(acknowledgement, profile, 'my')
+  assert.match(english, /Green tea  ×1  2,500 MMK/)
+  assert.doesNotMatch(english, /လက်ဖက်ရည်|အရောင်းပြေစာ/)
+  assert.match(burmese, /လက်ဖက်ရည်  ×1  2,500 MMK/)
+  assert.doesNotMatch(burmese, /Green tea|Sales receipt/)
+})
+
 test('first product setup keeps required data minimal and continues to Counter after review', () => {
   assert.match(core, /name="product-name"[\s\S]*?required value=\{itemDraft\.name\}/)
   assert.match(core, /Current stock[\s\S]*?required step="1" type="number" value=\{itemDraft\.onHand\}/)
@@ -93,8 +246,8 @@ test('managed first-product setup requires name, opening stock, and price and re
     const fieldEnd = form.indexOf('</label>', fieldStart)
     return fieldStart >= 0 && fieldEnd > fieldStart ? form.slice(fieldStart, fieldEnd) : ''
   }
-  assert.match(field('Barcode or product code (optional)'), /<input/)
-  assert.doesNotMatch(field('Barcode or product code (optional)'), /required/)
+  assert.match(field('SKU / item code (optional)'), /<input/)
+  assert.doesNotMatch(field('SKU / item code (optional)'), /required/)
   assert.match(field('Product name'), /required/)
   assert.match(field('Price (MMK)'), /required/)
   assert.match(field('Opening stock'), /required/)
@@ -143,7 +296,7 @@ test('managed first-product setup preserves supplied codes and rejects missing o
 test('a managed first product can complete a counter sale and leave a receipt-ready order with reduced stock', () => {
   const actor = 'synthetic-managed-owner'
   const prepared = prepareManagedFirstCatalog({
-    sku: '', name: 'Tea', onHand: '12', reorderAt: '2', price: '2500', reason: '', evidenceReference: '',
+    sku: '', name: 'Tea', nameMy: 'လက်ဖက်ရည်', onHand: '12', reorderAt: '2', price: '2500', reason: '', evidenceReference: '',
   }, () => 'abcdef12-0000-4000-8000-000000000000')
   assert.equal(prepared.ok, true)
   if (!prepared.ok) return
@@ -176,7 +329,8 @@ test('a managed first product can complete a counter sale and leave a receipt-re
     fulfilment: 'pickup',
     fulfilmentReference: `Counter ${orderId}`,
     promisedAt: '2026-10-11T06:31:00.000Z',
-    lines: [{ sku: prepared.product.sku, name: prepared.product.name, quantity: 1, unitPriceMmk: prepared.product.price }],
+    lines: [{ sku: prepared.product.sku, name: prepared.product.name, nameMy: prepared.product.nameMy, quantity: 1, unitPriceMmk: prepared.product.price }],
+    calculation: { schema: COMMERCE_ORDER_CALCULATION_SCHEMA, currency: 'MMK', catalogRevision: 0, subtotalMmk: prepared.product.price, taxMode: 'not_configured', taxMmk: 0, totalMmk: prepared.product.price },
     total: prepared.product.price,
     status: 'confirmed',
   }
@@ -205,10 +359,12 @@ test('a managed first product can complete a counter sale and leave a receipt-re
   assert.equal(completed.status, 'completed')
   assert.equal(completed.paymentStatus, 'reconciled')
   assert.equal(completed.total, 2500)
+  assert.equal(completed.lines[0].nameMy, 'လက်ဖက်ရည်')
+  assert.equal(commerceOrderAcknowledgementReader(state)(orderId)?.lines[0].nameMy, 'လက်ဖက်ရည်')
   assert.equal(state.items.find((item) => item.sku === prepared.product.sku).onHand, 11)
   assert.match(core, /if \(completesSale\) \{\s*setReceiptAck\(null\)\s*setCounterReceiptOrderId\(order\.id\)/)
 })
 
 test('the empty catalog state does not show a duplicate generic products link', () => {
-  assert.match(today, /\{commerce\.items\.length \? <footer><Link to="\/shop\/\?tab=inventory">View products/)
+  assert.match(today, /\{commerce\.items\.length \? <footer><Link to="\/shop\/\?tab=inventory">\{uiText\('View products'\)\}/)
 })

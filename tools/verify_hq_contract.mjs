@@ -1070,7 +1070,7 @@ requireContract('local PostgreSQL rehearsal remains bounded',
     && path !== 'supabase/migrations/20261014122400_website_domain_attempt_fencing.sql').length
   && databaseRehearsal.migration?.schemaVersion === 13
   && databaseRehearsal.migration?.productionValidatorReady === true
-  && Object.keys(databaseRehearsal.checks || {}).length === 74
+  && Object.keys(databaseRehearsal.checks || {}).length === 75
   && databaseRehearsal.checks?.managedCounterOldReceiptRecovery === true
   && databaseRehearsal.checks?.temporaryRuntimePasswordExpiryVerified === true
   && Object.values(databaseRehearsal.checks || {}).every((value) => value === true)

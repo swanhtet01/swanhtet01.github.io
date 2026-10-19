@@ -99,7 +99,7 @@ function activationRequery() {
       activatedAt: '2026-08-22T00:59:00.000Z',
       workspaceId,
       ownerActorId: ownerId,
-      ownerApprovalDigest: sha256('approval-id'),
+      ownerApprovalDigest: sha256('activation-approval-id'),
       products: ['shop', 'website'],
     },
     target: { projectRef: 'project-ref', releaseCommit: commit, postgresMajor: 17, schemaVersion: 11 },
@@ -138,12 +138,16 @@ function portalSmoke() {
 }
 
 function productAcceptance({ portal = portalSmoke(), portalArtifactDigest = `sha256:${'6'.repeat(64)}` } = {}) {
+  const productApprovalDigests = {
+    commerce: sha256('commerce-product-approval-id'),
+    website: sha256('website-product-approval-id'),
+  }
   return {
-    contract: 'supermega.hosted_product_acceptance_smoke.v2', status: 'passed', capturedAt: '2026-08-22T03:00:00.000Z',
-    target: { exactReleaseCommit: commit, workspaceDigest: sha256(workspaceId), ownerDigest: sha256(ownerId), ownerApprovalDigest: sha256('approval-id'), expectedProducts: ['commerce', 'website'] },
+    contract: 'supermega.hosted_product_acceptance_smoke.v3', status: 'passed', capturedAt: '2026-08-22T03:00:00.000Z',
+    target: { exactReleaseCommit: commit, workspaceDigest: sha256(workspaceId), ownerDigest: sha256(ownerId), productApprovalDigests, expectedProducts: ['commerce', 'website'] },
     prerequisitePortalArtifactDigest: portalArtifactDigest,
     prerequisitePortalBindingDigest: portalEvidenceBindingDigest(portal),
-    products: ['commerce', 'website'].map((product) => ({ product, ownerReadbackPassed: true, crossTenantDenied: true, replayPassed: true, stateDigest: `sha256:${'3'.repeat(64)}` })),
+    products: ['commerce', 'website'].map((product) => ({ product, ownerApprovalDigest: productApprovalDigests[product], ownerReadbackPassed: true, crossTenantDenied: true, replayPassed: true, stateDigest: `sha256:${'3'.repeat(64)}` })),
     summary: { productCount: 2, newlyWritten: 2, idempotentExisting: 0, ownerReadbacksPassed: 2, crossTenantDenialsPassed: 2, replaysPassed: 2 },
     boundaries: { productStateMutationsPerformed: false, deploymentPerformed: false, billingActivated: false, customerMessagesSent: false, scheduledAutomationEnabled: false, credentialsPersisted: false, clientIdentifiersPersisted: false, secretValuesExposed: false },
   }
@@ -160,10 +164,15 @@ function input(overrides = {}) {
 
 test('binds one isolated named-owner portal across activation, release, denial, and per-product acceptance', () => {
   const proof = buildClientPortalLaunchProof(input())
+  assert.equal(proof.contract, 'supermega.client_portal_launch_proof.v2')
   assert.equal(proof.status, 'ready_for_named_use')
   assert.equal(proof.exactReleaseCommit, commit)
   assert.equal(proof.tenant.isolated, true)
-  assert.equal(proof.tenant.ownerApprovalDigest, sha256('approval-id'))
+  assert.equal(proof.tenant.activationOwnerApprovalDigest, sha256('activation-approval-id'))
+  assert.deepEqual(proof.tenant.productOwnerApprovalDigests, {
+    commerce: sha256('commerce-product-approval-id'),
+    website: sha256('website-product-approval-id'),
+  })
   assert.deepEqual(proof.portal.products.map((item) => item.productId), ['shop', 'website'])
   assert.deepEqual(proof.portal.products.map((item) => item.url), ['https://app.supermega.dev/shop/', 'https://app.supermega.dev/website/'])
   assert.equal(proof.customSolutions.lifecycle, 'available_post_launch')
@@ -182,11 +191,22 @@ test('fails closed on cross-artifact release, tenant, product, or time drift', (
   assert.throws(() => buildClientPortalLaunchProof(input({ productAcceptance: wrongTenant })), /launch_workspace_mismatch/)
 
   const wrongApproval = productAcceptance()
-  wrongApproval.target.ownerApprovalDigest = sha256('another-approval')
-  assert.throws(() => buildClientPortalLaunchProof(input({ productAcceptance: wrongApproval })), /launch_owner_approval_mismatch/)
+  wrongApproval.target.productApprovalDigests.commerce = sha256('another-approval')
+  assert.throws(() => buildClientPortalLaunchProof(input({ productAcceptance: wrongApproval })), /launch_acceptance_product_invalid/)
+
+  const reusedProductApproval = productAcceptance()
+  reusedProductApproval.target.productApprovalDigests.website = reusedProductApproval.target.productApprovalDigests.commerce
+  reusedProductApproval.products[1].ownerApprovalDigest = reusedProductApproval.target.productApprovalDigests.commerce
+  assert.throws(() => buildClientPortalLaunchProof(input({ productAcceptance: reusedProductApproval })), /launch_acceptance_product_approval_reused/)
+
+  const reusedActivationApproval = productAcceptance()
+  reusedActivationApproval.target.productApprovalDigests.commerce = sha256('activation-approval-id')
+  reusedActivationApproval.products[0].ownerApprovalDigest = sha256('activation-approval-id')
+  assert.throws(() => buildClientPortalLaunchProof(input({ productAcceptance: reusedActivationApproval })), /launch_activation_product_approval_reused/)
 
   const wrongProducts = productAcceptance()
   wrongProducts.target.expectedProducts = ['commerce']
+  delete wrongProducts.target.productApprovalDigests.website
   wrongProducts.products = wrongProducts.products.slice(0, 1)
   wrongProducts.summary = { productCount: 1, newlyWritten: 1, idempotentExisting: 0, ownerReadbacksPassed: 1, crossTenantDenialsPassed: 1, replaysPassed: 1 }
   assert.throws(() => buildClientPortalLaunchProof(input({ productAcceptance: wrongProducts })), /launch_product_set_mismatch/)

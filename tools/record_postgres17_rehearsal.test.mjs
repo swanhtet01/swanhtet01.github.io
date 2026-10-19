@@ -57,7 +57,8 @@ const checkNames = [
   'restored_data_preserved', 'restored_database_validated', 'restored_public_browser_quarantine_preserved', 'revocation', 'runtime_role_settings_empty',
   'runtime_set_role_denied', 'server_timestamps', 'tenant_isolation', 'v1_upgrade_preserved', 'write_capability_implies_read',
   'self_serve_four_product_workspaces_created', 'self_serve_product_entitlements_exact', 'self_serve_exact_create_replay',
-  'self_serve_claim_conflict_without_takeover', 'self_serve_durable_budget_enforced', 'self_serve_actor_directory_isolated',
+   'self_serve_claim_conflict_without_takeover', 'self_serve_durable_budget_enforced', 'self_serve_actor_directory_isolated',
+   'self_serve_ecommerce_internal_operator_boundary',
   'self_serve_cross_actor_read_denied', 'self_serve_revoked_session_denied', 'billing_unpaid_invoice_not_entitled',
   'billing_payment_confirmation_not_entitlement', 'billing_separate_entitlement_grant_visible', 'billing_runtime_write_denied',
   'billing_entitlement_preserved_after_restore', 'self_serve_budget_preserved_after_restore',
@@ -72,7 +73,7 @@ const domainCandidates = new Set([
 const migrationNames = implementation.paths
   .filter((path) => path.startsWith('supabase/migrations/') && !domainCandidates.has(path.split('/').at(-1)))
   .map((path) => path.split('/').at(-1))
-test('receipt inventory matches the actual PostgreSQL runner including Website acceptance', () => {
+test('receipt inventory matches the actual PostgreSQL runner including current Sites policy RLS', () => {
   const python = process.env.SUPERMEGA_PYTHON || (process.platform === 'win32' ? 'python' : 'python3')
   const result = spawnSync(python, ['-c', 'import json; from tools.rehearse_supermega_postgres17 import IMPLEMENTATION_PATHS, CURRENT_MIGRATIONS; print(json.dumps({"paths": list(IMPLEMENTATION_PATHS), "migrations": list(CURRENT_MIGRATIONS)}))'], {
     cwd: new URL('..', import.meta.url), encoding: 'utf8', timeout: 10000, windowsHide: true,
@@ -85,7 +86,8 @@ test('receipt inventory matches the actual PostgreSQL runner including Website a
   assert.ok(runner.paths.includes('supermega_runtime/website_domain.py'))
   assert.ok(runner.paths.includes('supermega_runtime/website_acceptance_schema.py'))
   assert.ok(runner.paths.includes('supermega_runtime/ecommerce_decision_schema.py'))
-  assert.equal(runner.migrations.at(-1), '20261014090000_website_channel_stable_update.sql')
+  assert.equal(runner.migrations.at(-1), '20261019103000_ecommerce_review_shared_state_lock.sql')
+  assert.ok(!runner.migrations.includes('20261016143945_optimize_sites_inquiry_rls_initplans.sql'))
 })
 const context = {
   recordedAt: '2026-07-31T10:00:00.000Z',
@@ -121,7 +123,7 @@ test('builds a sanitized digest-bound local PostgreSQL 17 proof without hosted c
   assert.deepEqual(validateSanitizedProof(proof, implementation), {
     ok: true,
     contract: DATABASE_REHEARSAL_EVIDENCE_SCHEMA,
-    checks: 74,
+    checks: 75,
     implementationFiles: implementation.fileCount,
     hostedActivationProven: false,
   })
@@ -146,7 +148,7 @@ test('record completion is derived from validated shared proof before publishing
   const proof = buildSanitizedProof(raw, context)
   const summary = recordCompletionSummary(proof, implementation)
   assert.equal(summary.ok, true)
-  assert.equal(summary.checks, 74)
+  assert.equal(summary.checks, 75)
   assert.equal(summary.implementationCommit, context.implementationCommit)
   assert.equal(summary.implementationTree, context.implementationTree)
   assert.equal(summary.receiptDigest, proof.receiptDigest)
@@ -194,7 +196,7 @@ test('exact catalog checks cannot be omitted, renamed, failed or replaced by a c
 })
 
 test('restored rows must match and every legacy plus new behavior must pass', () => {
-  assert.equal(checkNames.length, 74)
+  assert.equal(checkNames.length, 75)
   for (const name of checkNames) {
     const invalid = structuredClone(raw)
     invalid.checks[name] = false
@@ -252,7 +254,7 @@ test('read-only CLI consumer recomputes exact raw receipt pair and rejects chang
     assert.match(duplicate.stderr, /database_rehearsal_output_exists/)
     const pass = invoke()
     assert.equal(pass.status, 0, pass.stderr)
-    assert.equal(JSON.parse(pass.stdout).checks, 74)
+    assert.equal(JSON.parse(pass.stdout).checks, 75)
     const changed = structuredClone(raw)
     changed.checks.billing_runtime_write_denied = false
     await writeFile(`${input}.raw.json`, JSON.stringify(changed))

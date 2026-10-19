@@ -12,33 +12,33 @@ const end = source.indexOf('\nfunction PortalAccessPanel(', start)
 assert.ok(start >= 0 && end > start)
 const code = transformSync(source.slice(start, end), { loader: 'ts', format: 'cjs' }).code
 
-function render(enabled, workspace, resolved) {
+function render(runtimeStatus, workspace, resolved) {
   const local = { status: 'local', products: [], workspaceId: '' }
-  return runInNewContext(`${code}\nuseManagedPortalAccess(enabled, workspace, '/')`, {
-    enabled, workspace, localPortalAccess: local,
+  return runInNewContext(`${code}\nuseManagedPortalAccess(runtimeStatus, workspace, '/')`, {
+    runtimeStatus, workspace, localPortalAccess: local,
     useState: initial => [resolved ?? initial, () => { throw Error('Unexpected state write during render') }],
     // This harness exercises synchronous render gating; it never performs identity/network work.
     useEffect: () => {},
   })
 }
 
-test('selected managed company stays checking before runtime health resolves', () => {
-  const result = render(false, 'synthetic-company')
+test('routes stay blocked before runtime health resolves', () => {
+  const result = render('checking', '')
   assert.equal(result.status, 'checking')
   assert.equal(result.products.length, 0)
 })
 
 test('only a matching resolved company can expose assigned products', () => {
   const access = { status: 'ready', products: ['commerce'], workspaceId: 'synthetic-company' }
-  assert.equal(render(true, 'synthetic-company').status, 'checking')
-  assert.equal(render(true, 'synthetic-company', { key: 'other:/', access }).status, 'checking')
-  assert.equal(render(true, 'synthetic-company', { key: 'synthetic-company:/', access }), access)
-  assert.equal(render(false, 'synthetic-company', { key: 'synthetic-company:/', access }).status, 'checking')
+  assert.equal(render('enterprise', 'synthetic-company').status, 'checking')
+  assert.equal(render('enterprise', 'synthetic-company', { key: 'other:/', access }).status, 'checking')
+  assert.equal(render('enterprise', 'synthetic-company', { key: 'synthetic-company:/', access }), access)
 })
 
-test('unselected local workspace remains available', () => {
-  assert.equal(render(false, '').status, 'local')
-  assert.equal(render(true, '').status, 'local')
+test('managed and offline company runtimes stay gated while an isolated local demo can open', () => {
+  assert.equal(render('enterprise', '').status, 'reauthenticate')
+  assert.equal(render('demo', '').status, 'local')
+  assert.equal(render('demo', 'stale-workspace').status, 'error')
 })
 
 // Run the actual effect body with a controlled portal-client import. No React
@@ -62,7 +62,7 @@ function startEffect(overrides = {}) {
     managedProductsFromBootstrap: () => ['commerce'],
     ...overrides,
   }
-  runInNewContext(`${effectCode}\nuseManagedPortalAccess(true, 'company-a', '/')`, {
+  runInNewContext(`${effectCode}\nuseManagedPortalAccess('enterprise', 'company-a', '/')`, {
     client, localPortalAccess: { status: 'local', products: [], workspaceId: '' },
     useState: initial => [initial, next => writes.push(next)],
     useEffect: effect => { cleanup = effect() },

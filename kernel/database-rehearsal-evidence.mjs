@@ -32,6 +32,10 @@ const migrations = [
   '20261010070000_website_published_hero_media.sql',
   '20261010120857_website_inquiry_followup.sql',
   '20261014090000_website_channel_stable_update.sql',
+  '20261015091500_website_six_page_reviews.sql',
+  '20261015202629_ecommerce_operator_review_grant.sql',
+  '20261019070000_ecommerce_operator_management_boundary.sql',
+  '20261019103000_ecommerce_review_shared_state_lock.sql',
 ]
 
 const implementationPaths = [...new Set([
@@ -180,6 +184,7 @@ const rawCheckNames = [
   'self_serve_actor_directory_isolated',
   'self_serve_cross_actor_read_denied',
   'self_serve_revoked_session_denied',
+  'self_serve_ecommerce_internal_operator_boundary',
   'billing_unpaid_invoice_not_entitled',
   'billing_payment_confirmation_not_entitlement',
   'billing_separate_entitlement_grant_visible',

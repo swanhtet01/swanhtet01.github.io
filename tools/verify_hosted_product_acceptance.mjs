@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url'
 
 import { verifyHostedClientPortal } from './verify_hosted_client_portal.mjs'
 
-const CONTRACT = 'supermega.hosted_product_acceptance_smoke.v2'
+const CONTRACT = 'supermega.hosted_product_acceptance_smoke.v3'
 const CONFIRMATION = 'RECORD HOSTED PRODUCT ACCEPTANCE'
 const PRODUCTS = ['commerce', 'production', 'website', 'ecommerce']
 const ALIASES = new Map([['shop', 'commerce'], ['plant', 'production']])
@@ -82,6 +82,21 @@ function identifier(value, code) {
 function uuid(value, code) {
   const normalized = String(value || '').trim().toLowerCase()
   assert(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(normalized), code)
+  return normalized
+}
+
+function resolveProductApprovalIds(value, expectedProducts) {
+  const approvals = isRecord(value)
+    ? value
+    : expectedProducts.length === 1 ? { [expectedProducts[0]]: value } : null
+  assert(isRecord(approvals), 'owner_approval_ids_required')
+  const expectedKeys = [...expectedProducts].sort()
+  assert(JSON.stringify(Object.keys(approvals).sort()) === JSON.stringify(expectedKeys), 'owner_approval_product_set_mismatch')
+  const normalized = Object.fromEntries(expectedProducts.map((product) => [
+    product,
+    uuid(approvals[product], 'owner_approval_id_invalid'),
+  ]))
+  assert(new Set(Object.values(normalized)).size === expectedProducts.length, 'owner_approval_ids_must_be_unique')
   return normalized
 }
 
@@ -165,6 +180,7 @@ export async function verifyHostedProductAcceptance({
   expectedProducts,
   expectedWorkspaceId,
   expectedOwnerId,
+  ownerApprovalIds,
   ownerApprovalId,
   ownerToken,
   deniedToken,
@@ -181,9 +197,9 @@ export async function verifyHostedProductAcceptance({
   const releaseCommit = String(expectedCommit || '').trim().toLowerCase()
   assert(/^[0-9a-f]{40}$/.test(releaseCommit), 'expected_release_commit_invalid')
   const expectedProductList = Array.isArray(expectedProducts) ? products(expectedProducts.join(',')) : products(expectedProducts)
+  const approvalsByProduct = resolveProductApprovalIds(ownerApprovalIds ?? ownerApprovalId, expectedProductList)
   const workspaceId = identifier(expectedWorkspaceId, 'expected_workspace_id_invalid')
   const ownerId = identifier(expectedOwnerId, 'expected_owner_id_invalid')
-  const approvalId = uuid(ownerApprovalId, 'owner_approval_id_invalid')
   const ownerAccessToken = token(ownerToken, 'owner_access_token_invalid')
   const deniedAccessToken = token(deniedToken, 'denied_access_token_invalid')
   assert(ownerAccessToken !== deniedAccessToken, 'independent_principals_required')
@@ -213,6 +229,7 @@ export async function verifyHostedProductAcceptance({
   const acceptedProducts = []
   let newlyWritten = 0
   for (const product of expectedProductList) {
+    const approvalId = approvalsByProduct[product]
     const probeId = deterministicProbeId({ workspaceId, ownerApprovalId: approvalId, releaseCommit, product })
     const expected = { probeId, ownerApprovalId: approvalId, product, releaseCommit }
     const requestBody = {
@@ -270,6 +287,7 @@ export async function verifyHostedProductAcceptance({
       product,
       surface: recorded.surface,
       probeId,
+      ownerApprovalDigest: sha256(approvalId),
       stateVersion: recorded.state_version,
       stateDigest: recorded.state_digest,
       recordedAt: recorded.recorded_at,
@@ -293,7 +311,10 @@ export async function verifyHostedProductAcceptance({
       exactReleaseCommit: releaseCommit,
       workspaceDigest: sha256(workspaceId),
       ownerDigest: sha256(ownerId),
-      ownerApprovalDigest: sha256(approvalId),
+      productApprovalDigests: Object.fromEntries(expectedProductList.map((product) => [
+        product,
+        sha256(approvalsByProduct[product]),
+      ])),
       expectedProducts: expectedProductList,
     },
     prerequisitePortalArtifactDigest: portalArtifactDigest,
@@ -350,7 +371,7 @@ async function requiredJsonArtifact(value, code) {
   }
 }
 
-function mockFetch() {
+function mockFetch(expectedApprovalIds = null) {
   const commit = 'a'.repeat(40)
   const events = new Map()
   const headers = { 'content-type': 'application/json', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' }
@@ -367,6 +388,9 @@ function mockFetch() {
     if (path === '/api/trial/v1/bootstrap') return json({ detail: { code: 'trial_membership_required' } }, 403)
     if (path === '/api/trial/v1/product-acceptance' && init.method === 'POST') {
       const body = JSON.parse(init.body)
+      if (expectedApprovalIds && body.owner_approval_id !== expectedApprovalIds[body.product]) {
+        return json({ detail: { code: 'approval_subject_mismatch' } }, 403)
+      }
       const existing = events.get(body.probe_id)
       const acceptance = existing || { contract: 'supermega.hosted_product_acceptance.v1', probe_id: body.probe_id, owner_approval_id: body.owner_approval_id, product: body.product, surface: SURFACES.get(body.product), release_commit: body.release_commit, state_version: 0, state_digest: `sha256:${'b'.repeat(64)}`, recorded_at: '2026-08-22T00:00:00+00:00', idempotent_replay: false }
       events.set(body.probe_id, acceptance)
@@ -385,7 +409,7 @@ function mockFetch() {
 }
 
 async function selfTest() {
-  const fetchImpl = mockFetch()
+  const portalFetch = mockFetch()
   const portalInput = {
     appBaseUrl: 'http://127.0.0.1:4173', allowHttp: true, expectedCommit: 'a'.repeat(40),
     expectedProducts: 'shop,website,ecommerce', expectedWorkspaceId: 'workspace-owner', expectedOwnerId: 'owner-actor',
@@ -400,16 +424,21 @@ async function selfTest() {
     expectedOwnerId: portalInput.expectedOwnerId,
     ownerToken: portalInput.ownerToken,
     deniedToken: portalInput.deniedToken,
-    fetchImpl,
+    fetchImpl: portalFetch,
     allowHttp: true,
     capturedAt: portalInput.capturedAt,
   })
   const input = {
     ...portalInput,
-    ownerApprovalId: '11111111-1111-4111-8111-111111111111', confirmation: CONFIRMATION,
+    ownerApprovalIds: {
+      commerce: '11111111-1111-4111-8111-111111111111',
+      website: '22222222-2222-4222-8222-222222222222',
+      ecommerce: '33333333-3333-4333-8333-333333333333',
+    }, confirmation: CONFIRMATION,
     productionHandoff: true, prerequisitePortalEvidence,
     prerequisitePortalArtifactDigest: sha256(JSON.stringify(prerequisitePortalEvidence)),
   }
+  const fetchImpl = mockFetch(input.ownerApprovalIds)
   const evidence = await verifyHostedProductAcceptance({ ...input, fetchImpl })
   assert(evidence.status === 'passed' && evidence.summary.productCount === 3 && evidence.summary.newlyWritten === 3, 'self_test_positive_failed')
   assert(evidence.products.every((entry) => entry.ownerReadbackPassed && entry.crossTenantDenied && entry.replayPassed), 'self_test_product_proof_failed')
@@ -422,11 +451,34 @@ async function selfTest() {
     && repeated.products.every((entry, index) => entry.probeId === evidence.products[index].probeId),
     'self_test_repeat_created_new_acceptance')
   const rendered = JSON.stringify(evidence)
-  for (const forbidden of [input.ownerToken, input.deniedToken, input.expectedWorkspaceId, input.expectedOwnerId, input.ownerApprovalId]) {
+  for (const forbidden of [input.ownerToken, input.deniedToken, input.expectedWorkspaceId, input.expectedOwnerId, ...Object.values(input.ownerApprovalIds)]) {
     assert(!rendered.includes(forbidden), 'self_test_sensitive_value_persisted')
   }
-  const probe = deterministicProbeId({ workspaceId: input.expectedWorkspaceId, ownerApprovalId: input.ownerApprovalId, releaseCommit: input.expectedCommit, product: 'commerce' })
-  assert(probe === deterministicProbeId({ workspaceId: input.expectedWorkspaceId, ownerApprovalId: input.ownerApprovalId, releaseCommit: input.expectedCommit, product: 'commerce' }), 'self_test_probe_not_deterministic')
+  const probe = deterministicProbeId({ workspaceId: input.expectedWorkspaceId, ownerApprovalId: input.ownerApprovalIds.commerce, releaseCommit: input.expectedCommit, product: 'commerce' })
+  assert(probe === deterministicProbeId({ workspaceId: input.expectedWorkspaceId, ownerApprovalId: input.ownerApprovalIds.commerce, releaseCommit: input.expectedCommit, product: 'commerce' }), 'self_test_probe_not_deterministic')
+  let scalarApprovalDenied = false
+  try {
+    await verifyHostedProductAcceptance({
+      ...input,
+      ownerApprovalIds: undefined,
+      ownerApprovalId: input.ownerApprovalIds.commerce,
+      fetchImpl: async () => { throw new Error('single approval must be rejected before any request') },
+    })
+  } catch (error) {
+    scalarApprovalDenied = String(error?.message || '').startsWith('owner_approval_ids_required:')
+  }
+  assert(scalarApprovalDenied, 'self_test_single_approval_accepted_for_multiple_products')
+  let reusedApprovalDenied = false
+  try {
+    await verifyHostedProductAcceptance({
+      ...input,
+      ownerApprovalIds: Object.fromEntries(['commerce', 'website', 'ecommerce'].map((product) => [product, input.ownerApprovalIds.commerce])),
+      fetchImpl: async () => { throw new Error('reused approval must be rejected before any request') },
+    })
+  } catch (error) {
+    reusedApprovalDenied = String(error?.message || '').startsWith('owner_approval_ids_must_be_unique:')
+  }
+  assert(reusedApprovalDenied, 'self_test_reused_product_approval_accepted')
   let confirmationDenied = false
   try {
     await verifyHostedProductAcceptance({ ...input, confirmation: 'wrong', fetchImpl: mockFetch() })
@@ -443,28 +495,31 @@ async function selfTest() {
     changedPortalDenied = String(error?.message || '').startsWith('prerequisite_portal_changed:')
   }
   assert(changedPortalDenied, 'self_test_changed_prerequisite_portal_accepted')
-  console.log(JSON.stringify({ ok: true, contract: `${CONTRACT}.self_test`, checks: 12 }, null, 2))
+  console.log(JSON.stringify({ ok: true, contract: `${CONTRACT}.self_test`, checks: 14 }, null, 2))
 }
 
 async function main() {
   if (process.argv.includes('--self-test')) return selfTest()
   const productionHandoff = process.argv.includes('--production-handoff')
   const expectedCommit = process.argv.includes('--current-head') ? currentHead() : String(process.env.EXPECTED_RELEASE_COMMIT || '').trim()
-  const [workspaceId, ownerId, approvalId, ownerAccessToken, deniedAccessToken, prerequisitePortal] = await Promise.all([
+  const approvalIdsFile = process.env.SUPERMEGA_OWNER_APPROVAL_IDS_FILE || process.env.SUPERMEGA_OWNER_APPROVAL_ID_FILE
+  const [workspaceId, ownerId, approvalIdsText, ownerAccessToken, deniedAccessToken, prerequisitePortal] = await Promise.all([
     requiredFile(process.env.SUPERMEGA_EXPECTED_WORKSPACE_ID_FILE, 'expected_workspace_id_file_required'),
     requiredFile(process.env.SUPERMEGA_EXPECTED_OWNER_ID_FILE, 'expected_owner_id_file_required'),
-    requiredFile(process.env.SUPERMEGA_OWNER_APPROVAL_ID_FILE, 'owner_approval_id_file_required'),
+    requiredFile(approvalIdsFile, 'owner_approval_ids_file_required'),
     requiredFile(process.env.SUPERMEGA_OWNER_ACCESS_TOKEN_FILE, 'owner_access_token_file_required'),
     requiredFile(process.env.SUPERMEGA_DENIED_ACCESS_TOKEN_FILE, 'denied_access_token_file_required'),
     requiredJsonArtifact(process.env.SUPERMEGA_HOSTED_PORTAL_EVIDENCE_FILE, 'hosted_portal_evidence_file_required'),
   ])
+  let approvalInput
+  try { approvalInput = JSON.parse(approvalIdsText) } catch { approvalInput = approvalIdsText }
   const evidence = await verifyHostedProductAcceptance({
     appBaseUrl: process.env.SUPERMEGA_HOSTED_PORTAL_BASE_URL || 'https://app.supermega.dev',
     expectedCommit,
     expectedProducts: process.env.SUPERMEGA_EXPECTED_PRODUCTS,
     expectedWorkspaceId: workspaceId,
     expectedOwnerId: ownerId,
-    ownerApprovalId: approvalId,
+    ownerApprovalIds: approvalInput,
     ownerToken: ownerAccessToken,
     deniedToken: deniedAccessToken,
     prerequisitePortalEvidence: prerequisitePortal.value,

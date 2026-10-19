@@ -4,6 +4,14 @@ import { readFile } from 'node:fs/promises'
 const onboardingSource = await readFile('showroom/src/core/ProductOnboardingPage.tsx', 'utf8')
 const onboardingStyles = await readFile('showroom/src/core/core-app.css', 'utf8')
 const packageJson = JSON.parse(await readFile('package.json', 'utf8'))
+const startGuidedWorkspaceSource = onboardingSource.slice(
+  onboardingSource.indexOf('async function startGuidedWorkspace'),
+  onboardingSource.indexOf('function recordGuidedSetupRequest'),
+)
+const managedShopStartSource = startGuidedWorkspaceSource.slice(
+  startGuidedWorkspaceSource.indexOf('if (managedCommerce)'),
+  startGuidedWorkspaceSource.indexOf('if (managedProduction)'),
+)
 
 let checks = 0
 function check(condition, label) {
@@ -64,5 +72,21 @@ check(
 check(
   packageJson.scripts['shop:onboarding:first-run:verify'] === 'node tools/test_shop_onboarding_first_run_path.mjs',
   'package exposes the Shop first-run onboarding verifier',
+)
+check(
+  managedShopStartSource.includes('navigate(onboardingJourney.firstTaskPath)'),
+  'the first managed generic or service Shop submit reaches the existing catalog surface',
+)
+check(
+  !managedShopStartSource.includes('managedShopOnboardingNotice'),
+  'the first managed generic or service Shop submit does not stop at a notice',
+)
+check(
+  managedShopStartSource.includes('navigate(shopBusinessTemplateManagedCatalogPath(selectedBusinessTemplate.id))'),
+  'a named Shop template keeps its explicit reviewed-catalog route',
+)
+check(
+  !/provisionLocalShopBusinessTemplateSample|installCommerceWorkingSampleCatalog|mutateCommerceWorkspace/.test(managedShopStartSource),
+  'the managed first submit does not write catalog or sample records',
 )
 console.log(JSON.stringify({ ok: true, checks, contract: 'supermega.shop.onboarding_first_run_path.v1' }))

@@ -202,11 +202,15 @@ class TrialProductAcceptanceRequest(_StrictRequest):
 
 
 class TrialSelfServeWorkspaceRequest(_StrictRequest):
-    """One named company and one explicit first-product entitlement."""
+    """Launch admission creates Shop customer tenants only.
+
+    Sites and Commerce are activated through the separately reviewed,
+    owner-authorized managed activation path.
+    """
 
     claimCode: str = Field(min_length=1, max_length=40)
     businessName: str = Field(min_length=1, max_length=120)
-    product: Literal["commerce", "production", "website", "ecommerce"]
+    product: Literal["commerce"]
 
 
 class TrialClientImportApplyRequest(_StrictRequest):
@@ -657,7 +661,10 @@ def _shop_catalog_import_payload(
                 {
                     "sku": values["sku"],
                     "name": values["name"],
+                    **({"nameMy": values["nameMy"]} if values.get("nameMy") else {}),
+                    **({"category": values["category"]} if values.get("category") else {}),
                     **({"variant": values["variant"]} if values.get("variant") else {}),
+                    **({"barcode": values["barcode"]} if values.get("barcode") else {}),
                     "onHand": int(values["onHand"]),
                     "reorderAt": int(values["reorderAt"]),
                     "price": int(values["price"]),
@@ -884,7 +891,7 @@ def _client_import_apply_preflight_digest(
         validation.object_id,
         validation.workflow_template_id,
         validation.target_surface,
-        validation.required_capability,
+        _client_import_required_capability(validation),
         validation.package_digest,
         validation.row_count,
         expected_version,
@@ -895,6 +902,14 @@ def _client_import_apply_preflight_digest(
         separators=(",", ":"),
     ).encode("utf-8")
     return f"sha256:{sha256(canonical).hexdigest()}"
+
+
+def _client_import_required_capability(validation: Any) -> str:
+    """Use Ecommerce's internal grant without changing shared import recipes."""
+
+    if validation.product == "ecommerce":
+        return "ecommerce.manage"
+    return validation.required_capability
 
 
 def _client_import_apply_preflight(
@@ -957,7 +972,7 @@ def _client_import_apply_preflight(
         "object": validation.object_id,
         "workflow_template_id": validation.workflow_template_id,
         "target_surface": validation.target_surface,
-        "required_capability": validation.required_capability,
+        "required_capability": _client_import_required_capability(validation),
         "package_digest": validation.package_digest,
         "row_count": validation.row_count,
         "expected_version": expected_version,
@@ -1980,7 +1995,7 @@ def create_trial_router(
                 "client_import_validation_error",
                 message=str(exc),
             ) from exc
-        _require_write_ready(readiness, validation.required_capability)
+        _require_write_ready(readiness, _client_import_required_capability(validation))
         current_state = _invoke(
             lambda: store.get_state(principal, validation.target_surface)
         )
@@ -2240,7 +2255,7 @@ def create_trial_router(
                 "client_import_activation_not_ready",
                 product=validation.product,
             )
-        _require_write_ready(readiness, validation.required_capability)
+        _require_write_ready(readiness, _client_import_required_capability(validation))
         expected_preflight_digest = _client_import_apply_preflight_digest(
             principal=principal,
             validation=validation,
@@ -2387,6 +2402,7 @@ def create_trial_router(
         readiness = _readiness(store, principal)
         _require_write_ready(readiness, SURFACE_WRITE_CAPABILITIES[body.surface])
         related_surfaces: tuple[str, ...] = ()
+        server_verified_related_surfaces: tuple[str, ...] = ()
         state_precondition: StatePrecondition | None = None
         if body.surface == "commerce" and body.event_type == "commerce.website_intake.created":
             next_state = body.payload.get("state")
@@ -2405,6 +2421,7 @@ def create_trial_router(
                     validate_website_snapshot_source(related_states.get("website", {}), source)
 
             related_surfaces = ("website",)
+            server_verified_related_surfaces = ("website",)
             state_precondition = require_website_source
         elif (
             body.surface == "commerce"
@@ -2575,6 +2592,7 @@ def create_trial_router(
                 expected_version=body.expected_version,
                 payload=body.payload,
                 related_surfaces=related_surfaces,
+                server_verified_related_surfaces=server_verified_related_surfaces,
                 state_precondition=state_precondition,
             )
 

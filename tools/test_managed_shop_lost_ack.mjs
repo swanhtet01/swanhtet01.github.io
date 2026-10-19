@@ -14,6 +14,12 @@ import {
 
 const { transformSync } = createRequire(resolve('showroom/package.json'))('esbuild')
 const source = readFileSync('showroom/src/core/workspace-runtime.ts', 'utf8')
+const guardStart = source.indexOf('function shouldPublishManagedCommerceSnapshot(')
+const guardEnd = source.indexOf('\nfunction managedCommerceView(', guardStart)
+assert.ok(guardStart > 0 && guardEnd > guardStart)
+const shouldPublishManagedCommerceSnapshot = runInNewContext(
+  transformSync(source.slice(guardStart, guardEnd), { loader: 'ts' }).code + '\nshouldPublishManagedCommerceSnapshot',
+)
 const start = source.indexOf('    const workspaceId = managedIdentity.workspaceId', source.indexOf('  async function mutate('))
 const end = source.indexOf('\n  const visible = managedIdentity ?', start)
 assert.ok(start > 0 && end > start)
@@ -67,6 +73,7 @@ test('managed lost acknowledgement pauses writes; remount reads saved order with
     Error, managedIdentity: identity, managedLoadAttempt: 0, identityRef: { current: identity }, snapshotRef,
     sameManagedIdentity: (a, b) => a.workspaceId === b.workspaceId && a.userId === b.userId,
     validateCommerceState: state => state, // This test covers runtime orchestration, not schema validation.
+    shouldPublishManagedCommerceSnapshot,
     ManagedTrialError: class extends Error {},
     setManagedSnapshot: next => { snapshotRef.current = next; if (next.version === 2 && !next.error) loaded() },
     saveManagedCommerceCommand: async command => {
@@ -103,6 +110,36 @@ test('managed lost acknowledgement pauses writes; remount reads saved order with
   assert.equal(snapshotRef.current.error, '')
   assert.equal(reads, 1)
   assert.equal(writes, 1)
+})
+
+test('late command acknowledgement cannot replace a newer Shop inbox snapshot', async () => {
+  const identity = { workspaceId: 'synthetic-company', userId: 'synthetic-user' }
+  const initial = { orders: [{ id: 'INITIAL' }] }
+  const incoming = { orders: [{ id: 'INITIAL' }, { id: 'INBOX' }] }
+  const snapshotRef = { current: { state: initial, mode: 'managed-ready', workspaceId: identity.workspaceId, version: 1, error: '', writeReady: true } }
+  let finishCommand
+  const commandPending = new Promise(resolve => { finishCommand = resolve })
+  let commandStarted
+  const started = new Promise(resolve => { commandStarted = resolve })
+  const context = {
+    Error, managedIdentity: identity, identityRef: { current: identity }, snapshotRef,
+    sameManagedIdentity: (a, b) => a.workspaceId === b.workspaceId && a.userId === b.userId,
+    validateCommerceState: state => state,
+    shouldPublishManagedCommerceSnapshot,
+    ManagedTrialError: class extends Error {},
+    setManagedSnapshot: next => { snapshotRef.current = next },
+    saveManagedCommerceCommand: async () => { commandStarted(); return commandPending },
+    reportManagedPersistenceFailure: () => {},
+  }
+  const mutate = runInNewContext(mutation + '\nmutate', context)
+  const pending = mutate('commerce.order.created', 'synthetic-command', {}, state => ({ ...state, orders: [...state.orders, { id: 'COUNTER' }] }))
+  await started
+  snapshotRef.current = { ...snapshotRef.current, state: incoming, version: 3 }
+  finishCommand({ surface: 'commerce', event_type: 'commerce.order.created', version: 2, state: { orders: [{ id: 'INITIAL' }, { id: 'COUNTER' }] } })
+  await pending
+  assert.equal(snapshotRef.current.version, 3)
+  assert.deepEqual(snapshotRef.current.state.orders.map(order => order.id), ['INITIAL', 'INBOX'])
+  assert.equal(shouldPublishManagedCommerceSnapshot(snapshotRef.current, { ...snapshotRef.current, version: null }), false)
 })
 
 test('managed order intent preserves one open reviewed shift and rejects detached orders', () => {

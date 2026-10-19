@@ -46,12 +46,17 @@ const expectedMigrationNames = [
   '20261010070000_website_published_hero_media.sql',
   '20261010120857_website_inquiry_followup.sql',
   '20261014090000_website_channel_stable_update.sql',
+  '20261015091500_website_six_page_reviews.sql',
+  '20261015202629_ecommerce_operator_review_grant.sql',
+  '20261019070000_ecommerce_operator_management_boundary.sql',
+  '20261019103000_ecommerce_review_shared_state_lock.sql',
 ]
 // These source-only dependent domain candidates are not part of the reviewed
 // v13 rehearsal chain. Every other unexpected SQL file still fails closed.
 const dormantCandidateNames = new Set([
   '20261014103000_website_custom_domain_bindings.sql',
   '20261014122400_website_domain_attempt_fencing.sql',
+  '20261016143945_optimize_sites_inquiry_rls_initplans.sql',
 ])
 
 export function validateRehearsalMigrationNames(names) {

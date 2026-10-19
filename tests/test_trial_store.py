@@ -52,6 +52,17 @@ def _decision_packet(release: str = "catalog-v1") -> dict[str, object]:
     }
 
 
+def _acceptance_packet(product: str, release_commit: str, state: Mapping[str, object]) -> dict[str, object]:
+    packet = _decision_packet()
+    state_digest = "sha256:" + trial_store_module._canonical_fingerprint("product_state", state)
+    packet["subject"] = {
+        "kind": trial_store_module.PRODUCT_ACCEPTANCE_APPROVAL_SUBJECT_KIND,
+        "id": f"{product}:{release_commit}:{state_digest}",
+        "version": 1,
+    }
+    return packet
+
+
 class RecordingReducer:
     def __init__(self) -> None:
         self.calls = 0
@@ -307,6 +318,61 @@ class TrialStoreTests(unittest.TestCase):
         self.assertEqual(raised.exception.current_version, 1)
         self.assertEqual(self.reducer.calls, calls_before_rejection)
         self.assertEqual(self.store.get_state(self.operator, "commerce").version, 0)
+
+    def test_shop_only_can_validate_website_source_without_sites_read_access(self) -> None:
+        shop_only = TrialPrincipal("workspace-a", "actor-shop-only", "human")
+        self.store.provision_membership(
+            workspace_id="workspace-a",
+            actor_id="actor-shop-only",
+            actor_kind="human",
+            capabilities=("commerce.write",),
+        )
+        self.store.apply_command(
+            self.operator,
+            command_id=str(uuid4()),
+            surface="website",
+            event_type="website.content.saved",
+            expected_version=0,
+            payload={"changes": {"fingerprint": "web-verified"}},
+        )
+        verified_state: list[dict[str, object]] = []
+
+        def verify_published_source(
+            _current: Mapping[str, object],
+            related: Mapping[str, Mapping[str, object]],
+        ) -> None:
+            verified_state.append(dict(related["website"]))
+            if related["website"].get("fingerprint") != "web-verified":
+                raise TrialValidationError("Website source proof changed.")
+
+        def command(*, verified: bool, event_type: str = "commerce.website_intake.created"):
+            kwargs: dict[str, object] = {
+                "principal": shop_only,
+                "command_id": str(uuid4()),
+                "surface": "commerce",
+                "event_type": event_type,
+                "expected_version": 0,
+                "payload": {"changes": {"intake": "accepted"}},
+                "related_surfaces": ("website",),
+                "state_precondition": verify_published_source,
+            }
+            if verified:
+                kwargs["server_verified_related_surfaces"] = ("website",)
+            return self.store.apply_command(**kwargs)  # type: ignore[arg-type]
+
+        with self.assertRaises(TrialPermissionDenied):
+            command(verified=False)
+        with self.assertRaises(TrialPermissionDenied):
+            self.store.get_state(shop_only, "website")
+
+        created = command(verified=True)
+        self.assertEqual(created.version, 1)
+        self.assertEqual(verified_state, [{"fingerprint": "web-verified", "last_surface": "website", "last_event_type": "website.content.saved"}])
+        with self.assertRaises(TrialPermissionDenied):
+            self.store.get_state(shop_only, "website")
+
+        with self.assertRaises(TrialValidationError):
+            command(verified=True, event_type="commerce.order.saved")
 
     def test_store_enforces_human_only_consequential_commerce_events(self) -> None:
         self.store.provision_membership(
@@ -953,6 +1019,16 @@ class TrialStoreTests(unittest.TestCase):
                 self.executions: list[tuple[str, tuple[object, ...]]] = []
                 self.stored_fingerprint = ""
                 self.stored_result: dict[str, object] | None = None
+                self.approval = {
+                    "status": "approved",
+                    "proposal_json": _acceptance_packet(
+                        "commerce", "a" * 40, {"orders": [{"id": "order-a"}]},
+                    ),
+                    "decided_by": "actor-manager",
+                    "decided_actor_kind": "human",
+                    "decided_at": datetime(2026, 10, 16, tzinfo=timezone.utc),
+                    "decision_contract_version": 2,
+                }
 
             def execute(self, query: str, parameters: tuple[object, ...] = ()) -> None:
                 self.query = " ".join(query.split()).lower()
@@ -971,6 +1047,8 @@ class TrialStoreTests(unittest.TestCase):
                     }
                 if "select version, state_json" in self.query:
                     return {"version": 3, "state_json": {"orders": [{"id": "order-a"}]}}
+                if "from app_private.approval_requests" in self.query:
+                    return deepcopy(self.approval)
                 if "select result_json" in self.query:
                     return {"result_json": deepcopy(self.stored_result)}
                 return None
@@ -987,6 +1065,10 @@ class TrialStoreTests(unittest.TestCase):
             @staticmethod
             def _product_entitlements(_cursor, _workspace_id):
                 return ("commerce",)
+
+            @staticmethod
+            def _refresh_product_acceptance_authority(_cursor, _principal, *, product, surface):
+                return frozenset({"commerce.write"})
 
         cursor = AcceptanceCursor()
         store = AcceptanceStore(cursor)
@@ -1014,6 +1096,11 @@ class TrialStoreTests(unittest.TestCase):
         self.assertEqual(event_insert[1][8], 3)
         self.assertEqual(event_insert[1][9], 3)
         self.assertFalse(any("update app_private.workspace_state" in query for query, _ in cursor.executions))
+        self.assertTrue(any(
+            "from app_private.approval_requests" in query
+            and parameters == (self.operator.workspace_id, owner_approval_id)
+            for query, parameters in cursor.executions
+        ))
 
         replay = store.record_product_acceptance(
             self.operator,
@@ -1036,6 +1123,69 @@ class TrialStoreTests(unittest.TestCase):
                 product="commerce",
                 release_commit="a" * 40,
             )
+
+        cursor.stored_result = None
+        cursor.approval["status"] = "pending"
+        before = sum("insert into app_private.workspace_events" in query for query, _ in cursor.executions)
+        with self.assertRaises(TrialPermissionDenied):
+            store.record_product_acceptance(
+                self.operator, probe_id=str(uuid4()),
+                owner_approval_id=owner_approval_id, product="commerce",
+                release_commit="a" * 40,
+            )
+        self.assertEqual(
+            sum("insert into app_private.workspace_events" in query for query, _ in cursor.executions),
+            before,
+        )
+
+    def test_product_acceptance_needs_a_real_human_decision_for_exact_snapshot(self) -> None:
+        self.store.provision_product_entitlements(
+            workspace_id="workspace-a", products=("commerce",),
+        )
+        release_commit = "a" * 40
+
+        def accept(approval_id: str, *, commit: str = release_commit) -> None:
+            self.store.record_product_acceptance(
+                self.operator, probe_id=str(uuid4()), owner_approval_id=approval_id,
+                product="commerce", release_commit=commit,
+            )
+
+        with self.assertRaises(TrialPermissionDenied):
+            accept(str(uuid4()))
+        approval = self.store.create_approval(
+            self.operator, command_id=str(uuid4()), title="Accept exact Shop snapshot",
+            proposal=_acceptance_packet("commerce", release_commit, {}),
+            evidence_refs=("review://catalog/1",),
+        )
+        with self.assertRaises(TrialPermissionDenied):
+            accept(approval.approval_id)
+        self.store.decide_approval(
+            self.manager, approval_id=approval.approval_id, command_id=str(uuid4()),
+            decision="approved", note="Owner reviewed the exact Shop snapshot.",
+        )
+        with self.assertRaises(TrialPermissionDenied):
+            accept(approval.approval_id, commit="b" * 40)
+        self.store.apply_command(
+            self.operator, command_id=str(uuid4()), surface="commerce",
+            event_type="commerce.order.saved", expected_version=0,
+            payload={"changes": {"order": "one"}},
+        )
+        with self.assertRaises(TrialPermissionDenied):
+            accept(approval.approval_id)
+        current_approval = self.store.create_approval(
+            self.operator, command_id=str(uuid4()), title="Accept updated Shop snapshot",
+            proposal=_acceptance_packet(
+                "commerce", release_commit,
+                self.store.get_state(self.operator, "commerce").state,
+            ),
+            evidence_refs=("review://catalog/1",),
+        )
+        self.store.decide_approval(
+            self.manager, approval_id=current_approval.approval_id,
+            command_id=str(uuid4()), decision="approved",
+            note="Owner reviewed the updated Shop snapshot.",
+        )
+        accept(current_approval.approval_id)
 
     def test_product_acceptance_rejects_timezone_ambiguous_evidence(self) -> None:
         evidence = {

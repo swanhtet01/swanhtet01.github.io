@@ -57,14 +57,14 @@ async function currentLedger() {
 async function main() {
   const args = process.argv.slice(2)
   if (args.length > 1 || (args[0] && args[0] !== '--verify')) throw new Error('managed_pilot_readiness_arguments_invalid')
-  const expected = currentLedger()
+  const expected = await currentLedger()
   if (args[0] === '--verify') {
     const actual = validateManagedPilotReadiness(JSON.parse(await readFile(output, 'utf8')))
-    if (JSON.stringify(actual) !== JSON.stringify(await expected)) throw new Error('managed_pilot_readiness_evidence_stale')
+    if (JSON.stringify(actual) !== JSON.stringify(expected)) throw new Error('managed_pilot_readiness_evidence_stale')
     console.log(JSON.stringify({ ok: true, contract: actual.contract, products: actual.products.length, blockingGates: actual.overall.blockingGateCount, hostedActivationReady: false }))
     return
   }
-  const ledger = await expected
+  const ledger = expected
   await mkdir(dirname(output), { recursive: true })
   const staged = resolve(dirname(output), `.managed-pilot-readiness.${randomUUID()}.tmp`)
   await writeFile(staged, `${JSON.stringify(ledger, null, 2)}\n`, { encoding: 'utf8', flag: 'wx' })

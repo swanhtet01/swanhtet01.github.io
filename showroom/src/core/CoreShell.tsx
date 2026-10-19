@@ -1,17 +1,22 @@
 import { createContext, lazy, Suspense, type ReactNode, useContext, useEffect, useRef, useState } from 'react'
 import { Link, Navigate, NavLink, Outlet, useLocation } from 'react-router'
+import { superMegaBrandIdentity, superMegaBrandMark } from './brand-mark'
 import { productionEntryDecision } from './production-entry'
 import { managedAccountPath } from './account-routes'
 
 import './core-app.css'
 import { RouteErrorBoundary } from './RouteErrorBoundary'
 import { bi } from './i18n-actions'
+import { setUiLocale, uiText, useUiLocale } from './ui-locale'
 import { recordBehaviorSignal } from './behavior-trail'
 import { activeCommerceTab, commerceTabs } from './commerce-tabs'
 import type { ClientSolutionId } from './client-onboarding'
 import {
+  ecommerceShopHandoffVisible,
+  hostedProductRouteRequiresLogin,
   managedProductIsVisible,
   productSwitcherVisible,
+  shopInboundRequestsVisible,
   resolveManagedProductHome,
   resolveManagedProductRoute,
 } from './managed-product-access'
@@ -220,12 +225,13 @@ type ManagedPortalAccess =
 const localPortalAccess: ManagedPortalAccess = { status: 'local', products: [], workspaceId: '' }
 const ManagedPortalAccessContext = createContext<ManagedPortalAccess>(localPortalAccess)
 
-function useManagedPortalAccess(enabled: boolean, selectedWorkspace: string, refreshKey: string): ManagedPortalAccess {
-  const accessKey = enabled && selectedWorkspace ? `${selectedWorkspace}:${refreshKey}` : 'local'
+function useManagedPortalAccess(runtimeStatus: RuntimeStatus, selectedWorkspace: string, refreshKey: string): ManagedPortalAccess {
+  const managedRuntime = runtimeStatus === 'enterprise'
+  const accessKey = managedRuntime && selectedWorkspace ? `${selectedWorkspace}:${refreshKey}` : 'local'
   const [resolved, setResolved] = useState<{ key: string; access: ManagedPortalAccess }>({ key: 'local', access: localPortalAccess })
 
   useEffect(() => {
-    if (!enabled || !selectedWorkspace) return undefined
+    if (!managedRuntime || !selectedWorkspace) return undefined
     let active = true
     void import('./managed-portal-client')
       .then(async ({ currentManagedIdentity, discoverManagedWorkspacesForCurrentSession, loadManagedBootstrap, managedProductsFromBootstrap }) => {
@@ -269,10 +275,21 @@ function useManagedPortalAccess(enabled: boolean, selectedWorkspace: string, ref
         })
       })
     return () => { active = false }
-  }, [accessKey, enabled, selectedWorkspace])
+  }, [accessKey, managedRuntime, selectedWorkspace])
 
-  if (!selectedWorkspace) return localPortalAccess
-  if (!enabled) return { status: 'checking', products: [], workspaceId: '' }
+  if (runtimeStatus === 'checking') return { status: 'checking', products: [], workspaceId: selectedWorkspace }
+  if (runtimeStatus === 'demo') {
+    if (selectedWorkspace) {
+      return {
+        status: 'error',
+        products: [],
+        workspaceId: '',
+        message: 'Managed company access is unavailable while this service is offline. Try again when service is restored.',
+      }
+    }
+    return localPortalAccess
+  }
+  if (!selectedWorkspace) return { status: 'reauthenticate', products: [], workspaceId: '' }
   if (resolved.key !== accessKey) return { status: 'checking', products: [], workspaceId: '' }
   return resolved.access
 }
@@ -385,9 +402,13 @@ function useRuntimeHealth() {
 
 function Brand() {
   return (
-    <Link className="core-brand" to="/" aria-label="SuperMega app home">
-      <span className="core-brand-mark" aria-hidden="true">&gt;_</span>
-      <span className="core-brand-name">SUPERMEGA</span>
+    <Link className="core-brand" to="/" aria-label={`${superMegaBrandIdentity.name} app home`}>
+      <span className="core-brand-mark" aria-hidden="true">
+        <svg viewBox={superMegaBrandMark.viewBox} width={superMegaBrandMark.width} height={superMegaBrandMark.height} focusable={false}>
+          <path d={superMegaBrandMark.path} fill="none" stroke={superMegaBrandIdentity.accent} strokeWidth={superMegaBrandMark.strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </span>
+      <span className="core-brand-name">{superMegaBrandIdentity.name}</span>
     </Link>
   )
 }
@@ -408,6 +429,7 @@ export function Empty({ children }: { children: ReactNode }) {
 }
 
 export function CoreLayout() {
+  const uiLocale = useUiLocale()
   const [sessionChanged, setSessionChanged] = useState(false)
   useEffect(() => watchManagedSessionStorage(window, () => setSessionChanged(true)), [])
   const location = useLocation()
@@ -419,7 +441,7 @@ export function CoreLayout() {
   const settingsProduct = customerSettingsRoute ? setupProductFromQuery(new URLSearchParams(location.search).get('product')) : null
   const requestedProduct = routeProduct ?? settingsProduct
   const selectedManagedWorkspace = typeof window !== 'undefined' ? currentManagedWorkspace() : ''
-  const portalAccess = useManagedPortalAccess(runtime.status !== 'checking', selectedManagedWorkspace, location.pathname)
+  const portalAccess = useManagedPortalAccess(runtime.status, selectedManagedWorkspace, location.pathname)
   const storedSettingsSetup = customerSettingsRoute || internalBuilderRoute ? readLocalSetupReadiness() : null
   const sensitiveAccountRoute = location.pathname.startsWith('/account/')
   const loginRoute = location.pathname === '/login' || location.pathname === '/login/'
@@ -471,9 +493,9 @@ export function CoreLayout() {
       : internalBuilderRoute
         ? 'Client builder'
       : customerSettingsRoute
-        ? (settingsProduct ? `${productDisplayName(settingsProduct)} setup` : 'Recovery')
+        ? (settingsProduct ? `${productDisplayName(settingsProduct)} setup` : new URLSearchParams(location.search).get('view') === 'language' ? uiText('Language') : 'Recovery')
         : location.pathname.startsWith('/shop/')
-          ? 'Shop'
+          ? uiText('Shop')
           : location.pathname.startsWith('/plant/')
             ? 'Plant'
             : 'Products'
@@ -481,15 +503,21 @@ export function CoreLayout() {
   const managedRouteDecision = portalAccess.status === 'ready'
     ? resolveManagedProductRoute(requestedProduct, portalAccess.products)
     : { kind: 'allow' as const }
+  const hostedProductLoginRequired = Boolean(requestedProduct)
+    && hostedProductRouteRequiresLogin(import.meta.env.PROD, portalAccess.status)
   const managedProductAllowed = !requestedProduct
-    || portalAccess.status === 'local'
+    || (!hostedProductLoginRequired && portalAccess.status === 'local')
     || (portalAccess.status === 'ready' && managedRouteDecision.kind === 'allow')
   const managedWorkspace = portalAccess.status === 'ready' ? portalAccess : null
 
   useEffect(() => {
-    document.title = `${routeName} | SuperMega`
+    document.documentElement.lang = uiLocale
+    document.title = `${uiText(routeName)} | SuperMega`
+  }, [routeName, uiLocale])
+
+  useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'instant' })
-  }, [location.hash, location.pathname, location.search, routeName])
+  }, [location.pathname])
 
   useEffect(() => {
     if (location.pathname.startsWith('/vision/')) return
@@ -529,24 +557,24 @@ export function CoreLayout() {
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', '#f6f7fb')
   }, [])
 
-  if (sessionChanged) return <PortalAccessPanel title="Account changed in another tab" copy="Reload to verify the current account. Saved records are unchanged; unsaved edits may need to be entered again." action={<button className="core-button primary" onClick={() => window.location.reload()} type="button">Reload workspace</button>} />
+  if (sessionChanged) return <PortalAccessPanel title={uiText('Account changed in another tab')} copy={uiText('Reload to verify the current account. Saved records are unchanged; unsaved edits may need to be entered again.')} action={<button className="core-button primary" onClick={() => window.location.reload()} type="button">{uiText('Reload workspace')}</button>} />
 
   const productionEntry = productionEntryDecision(window.location.hostname, accountEntryRoute, portalAccess.status)
-  if (productionEntry === 'checking') return <PortalAccessPanel title="Opening…" copy="Checking your account." />
+  if (productionEntry === 'checking') return <PortalAccessPanel title={uiText('Opening…')} copy={uiText('Checking your account.')} />
   if (productionEntry === 'login') return <Navigate replace to={companyLoginPath} />
 
   return (
     <div className={`core-shell theme-light${routeProduct === 'commerce' ? ' shop-product-shell' : ''}${routeProduct === 'website' ? ' sites-product-shell' : ''}${commerceWorkspaceEntry ? ' commerce-product-shell' : ''}${routeProduct === 'production' ? ' plant-shell' : ''}`}>
-      <a className="core-skip" href="#workspace-main" onClick={() => requestAnimationFrame(() => workspaceMainRef.current?.focus())}>Skip to workspace</a>
+      <a className="core-skip" href="#workspace-main" onClick={() => requestAnimationFrame(() => workspaceMainRef.current?.focus())}>{uiText('Skip to workspace')}</a>
       <aside className="core-sidebar">
         <Brand />
-        {routeProduct === 'commerce' && mobileCommerceTab ? <Suspense fallback={null}><DesktopShopNavigation activeTab={mobileCommerceTab} /></Suspense> : routeProduct === 'website' ? <Suspense fallback={null}><DesktopSitesNavigation activeView={desktopSitesView} /></Suspense> : commerceWorkspaceEntry ? <Suspense fallback={null}><DesktopCommerceNavigation activeView={desktopCommerceView} /></Suspense> : activeNavigation.length ? <nav className="core-nav" aria-label="Application">
+        {routeProduct === 'commerce' && mobileCommerceTab ? <Suspense fallback={null}><DesktopShopNavigation activeTab={mobileCommerceTab} /></Suspense> : routeProduct === 'website' ? <Suspense fallback={null}><DesktopSitesNavigation activeView={desktopSitesView} /></Suspense> : commerceWorkspaceEntry ? <Suspense fallback={null}><DesktopCommerceNavigation activeView={desktopCommerceView} /></Suspense> : activeNavigation.length ? <nav className="core-nav" aria-label={uiText('Application')}>
           {activeNavigation.map((item) => <NavLink className={({ isActive }) => navigationClass(item.to, isActive)} end={item.end} key={item.to} to={item.to}>{item.label}</NavLink>)}
         </nav> : null}
-        <div className="sidebar-foot">{routeProduct && canSwitchProduct ? <Link className="product-switch-shell-link" to="/?choose=1"><span className="shell-nav-icon" aria-hidden="true" data-icon="products" /><span>All products</span></Link> : null}</div>
+        <div className="sidebar-foot">{routeProduct && canSwitchProduct ? <Link className="product-switch-shell-link" to="/?choose=1"><span className="shell-nav-icon" aria-hidden="true" data-icon="products" /><span>{uiText('All products')}</span></Link> : null}{!accountEntryRoute ? <Link className="product-switch-shell-link" to="/settings/?view=language#controls"><span className="shell-nav-icon" aria-hidden="true" data-icon="settings" /><span>{uiText('Settings')}</span></Link> : null}</div>
       </aside>
       <div className="core-stage">
-        <header className="core-topbar"><div className="mobile-brand"><Brand /></div><div className="topbar-title"><strong>{routeName}</strong><span>{managedWorkspace ? managedWorkspace.companyName : 'SuperMega workspace'}</span></div><div className="topbar-meta">{!accountEntryRoute ? <Suspense fallback={<Link aria-label="Login" className="account-shell-link mobile-account-link" to={companyLoginPath}>Login</Link>}><WorkspaceAccount companyLoginPath={companyLoginPath} companyName={managedWorkspace?.companyName} companyRole={managedWorkspace?.companyRole} /></Suspense> : null}</div></header>
+        <header className="core-topbar"><div className="mobile-brand"><Brand /></div><div className="topbar-title"><strong>{uiText(routeName)}</strong><span>{managedWorkspace ? managedWorkspace.companyName : uiText('Workspace')}</span></div><div className="topbar-meta"><button aria-label={uiText(uiLocale === 'my' ? 'Switch to English' : 'Switch to Burmese')} className="account-shell-link locale-toggle" onClick={() => setUiLocale(uiLocale === 'my' ? 'en' : 'my')} type="button">{uiLocale === 'my' ? 'EN' : 'မြန်မာ'}</button>{!accountEntryRoute ? <Suspense fallback={<Link aria-label={uiText('Login')} className="account-shell-link mobile-account-link" to={companyLoginPath}>{uiText('Login')}</Link>}><WorkspaceAccount companyLoginPath={companyLoginPath} companyName={managedWorkspace?.companyName} companyRole={managedWorkspace?.companyRole} /></Suspense> : null}</div></header>
         {/* Shop's bottom bar is task navigation (all four links share the /shop/
             pathname, so NavLink's pathname-based isActive would mark every tab
             active — the highlight must come from the ?tab= param instead). Every
@@ -557,23 +585,25 @@ export function CoreLayout() {
             users inside one product. It is a plain Link with no active state:
             on /?choose=1 routeProduct is null and this bar never renders. */}
         {routeProduct === 'commerce'
-          ? <nav className={`mobile-nav mobile-task-nav${canSwitchProduct ? ' has-switch' : ''}`} aria-label="Shop task shortcuts">{commerceTabs.map((tab) => <Link aria-current={mobileCommerceTab === tab.id ? 'page' : undefined} className={mobileCommerceTab === tab.id ? 'active' : ''} key={tab.id} replace to={`/shop/?tab=${tab.id}`}>{bi(tab.label)}</Link>)}{canSwitchProduct ? <Link to="/?choose=1">Switch</Link> : null}</nav>
-          : mobileNavigation.length > 0 ? <nav className="mobile-nav" aria-label="Current product navigation">{mobileNavigation.map((item) => <NavLink className={({ isActive }) => navigationClass(item.to, isActive)} end={item.end} key={item.to} to={item.to}>{item.label}</NavLink>)}</nav> : null}
+          ? <nav className={`mobile-nav mobile-task-nav${canSwitchProduct ? ' has-switch' : ''}`} aria-label={uiText('Shop task shortcuts')}>{commerceTabs.map((tab) => <Link aria-current={mobileCommerceTab === tab.id ? 'page' : undefined} className={mobileCommerceTab === tab.id ? 'active' : ''} key={tab.id} replace to={`/shop/?tab=${tab.id}`}>{bi(tab.label)}</Link>)}{canSwitchProduct ? <Link to="/?choose=1">{uiText('Switch')}</Link> : null}</nav>
+          : mobileNavigation.length > 0 ? <nav className="mobile-nav" aria-label={uiText('Current product navigation')}>{mobileNavigation.map((item) => <NavLink className={({ isActive }) => navigationClass(item.to, isActive)} end={item.end} key={item.to} to={item.to}>{item.label}</NavLink>)}</nav> : null}
         <main id="workspace-main" className={`core-main${routeProduct ? ' has-system-navigator' : ''}${routeProduct === 'ecommerce' || routeProduct === 'website' ? ' natural-scroll' : ''}`} ref={workspaceMainRef} tabIndex={-1}>
           <div className="core-route-content">
             <ManagedPortalAccessContext.Provider value={portalAccess}>
               <RouteErrorBoundary resetKey={`${location.pathname}${location.search}`}>
-                {requestedProduct && portalAccess.status === 'checking'
-                  ? <PortalAccessPanel copy="Verifying this company and its assigned products." title="Opening company portal…" />
+                {requestedProduct && hostedProductLoginRequired
+                  ? <Navigate replace to={companyLoginPath} />
+                  : requestedProduct && portalAccess.status === 'checking'
+                  ? <PortalAccessPanel copy={uiText('Verifying this company and its assigned products.')} title={uiText('Opening company portal…')} />
                   : requestedProduct && portalAccess.status === 'reauthenticate'
                     ? <Navigate replace to={companyLoginPath} />
                     : requestedProduct && portalAccess.status === 'error'
-                      ? <PortalAccessPanel action={<Link className="button" to={companyLoginPath}>Sign in again</Link>} copy={portalAccess.message} title="Access issue" />
+                      ? <PortalAccessPanel action={<Link className="button" to={companyLoginPath}>{uiText('Sign in again')}</Link>} copy={portalAccess.message} title={uiText('Access issue')} />
                       : requestedProduct && !managedProductAllowed
                         ? managedRouteDecision.kind === 'redirect'
                           ? <Navigate replace to={managedRouteDecision.path} />
-                      : <PortalAccessPanel action={<a className="core-button primary" href="https://supermega.dev/contact/?product=guide&amp;source=company-no-products" target="_blank" rel="noopener noreferrer">Contact support</a>} copy="Your company has no active products yet. SuperMega can help you get started." title="No products yet" />
-                        : <Outlet context={runtime} />}
+                      : <PortalAccessPanel action={<a className="core-button primary" href="https://supermega.dev/contact/?product=guide&amp;source=company-no-products" target="_blank" rel="noopener noreferrer">{uiText('Contact support')}</a>} copy={uiText('Your company has no active products yet. SuperMega can help you get started.')} title={uiText('No products yet')} />
+                        : <Outlet context={{ ...runtime, uiLocale, ecommerceShopHandoffAllowed: ecommerceShopHandoffVisible(portalAccess.status, portalAccess.products), shopInboundRequestsAllowed: shopInboundRequestsVisible(portalAccess.status, portalAccess.products) }} />}
               </RouteErrorBoundary>
             </ManagedPortalAccessContext.Provider>
           </div>
@@ -582,7 +612,7 @@ export function CoreLayout() {
               the entire shell — the exact blank page the boundary exists to prevent, reached
               by a different door. It is secondary furniture, so its own boundary is enough:
               the route content beside it keeps working. */}
-          {routeProduct && managedProductAllowed ? <details className="product-tools-disclosure"><summary>More</summary><RouteErrorBoundary resetKey={`nav:${location.pathname}`}><Suspense fallback={null}><ProductSystemNavigator key={`${location.pathname}${location.search}`} managed={runtime.status === 'enterprise'} product={routeProduct} /></Suspense></RouteErrorBoundary></details> : null}
+          {routeProduct && managedProductAllowed ? <details className="product-tools-disclosure"><summary>{uiText('More')}</summary><Link to="/settings/?view=language#controls">{uiText('Language')}</Link><RouteErrorBoundary resetKey={`nav:${location.pathname}`}><Suspense fallback={null}><ProductSystemNavigator key={`${location.pathname}${location.search}`} managed={runtime.status === 'enterprise'} product={routeProduct} /></Suspense></RouteErrorBoundary></details> : null}
         </main>
       </div>
     </div>
@@ -613,11 +643,11 @@ export function ProductHomeEntry() {
     : null
   if (retiredDemoQuery) return <Navigate replace to="/" />
   if (portalAccess.status === 'checking') {
-    return <PortalAccessPanel copy="Checking products." title="Opening…" />
+    return <PortalAccessPanel copy={uiText('Checking products.')} title={uiText('Opening…')} />
   }
   if (portalAccess.status === 'reauthenticate') return <Navigate replace to={managedLoginPath(lastProduct)} />
   if (portalAccess.status === 'error') {
-    return <PortalAccessPanel action={<Link className="button" to={managedLoginPath(lastProduct)}>Sign in again</Link>} copy={portalAccess.message} title="Access issue" />
+    return <PortalAccessPanel action={<Link className="button" to={managedLoginPath(lastProduct)}>{uiText('Sign in again')}</Link>} copy={portalAccess.message} title={uiText('Access issue')} />
   }
   if (portalAccess.status === 'ready') {
     const decision = resolveManagedProductHome({
@@ -641,23 +671,23 @@ export function ProductHomePage() {
   return (
     <div className="workspace-screen product-home-screen">
       {managedPortal
-        ? emptyCompany ? null : <PageHeading copy="" eyebrow="SuperMega" title="Workspace" />
-        : <PageHeading copy="Sign in to your business." eyebrow="SuperMega" title="Welcome back" actions={<Link className="core-button primary" to={managedLoginPath(null)}>Login</Link>} />}
-      {managedPortal ? <section aria-label="Active company" className="company-portal-identity">
+        ? emptyCompany ? null : <PageHeading copy="" eyebrow="SuperMega" title={uiText('Workspace')} />
+        : <PageHeading copy={uiText('Sign in to your business.')} eyebrow="SuperMega" title={uiText('Welcome back')} actions={<Link className="core-button primary" to={managedLoginPath(null)}>{uiText('Login')}</Link>} />}
+      {managedPortal ? <section aria-label={uiText('Active company')} className="company-portal-identity">
         <div>
-          <span>Active company</span>
+          <span>{uiText('Active company')}</span>
           <strong>{portalAccess.companyName}</strong>
           <small>{portalAccess.accountEmail}</small>
         </div>
         <div className="company-portal-role">
           <span>{portalAccess.companyRole}</span>
-          <Link to="/login">Switch company</Link>
+          <Link to="/login">{uiText('Switch company')}</Link>
         </div>
       </section> : null}
       {emptyCompany
-        ? <PortalAccessPanel action={<a className="core-button primary" href="https://supermega.dev/contact/?product=guide&amp;source=company-no-products" target="_blank" rel="noopener noreferrer">Contact support</a>} copy="Your company has no active products yet. SuperMega can help you get started." title="No products yet" />
+        ? <PortalAccessPanel action={<a className="core-button primary" href="https://supermega.dev/contact/?product=guide&amp;source=company-no-products" target="_blank" rel="noopener noreferrer">{uiText('Contact support')}</a>} copy={uiText('Your company has no active products yet. SuperMega can help you get started.')} title={uiText('No products yet')} />
         : null}
-      {!emptyCompany && managedPortal ? <nav aria-label="Your workspace" className="product-track-grid">
+      {!emptyCompany && managedPortal ? <nav aria-label={uiText('Your workspace')} className="product-track-grid">
         {customerProducts.filter(([name]) => managedProductIsVisible(portalAccess.products, PRODUCT_SETUP_KEY[name]))
           .map(([name, outcome, , path]) => {
           const setupKey = PRODUCT_SETUP_KEY[name]
@@ -665,7 +695,7 @@ export function ProductHomePage() {
           return <Link aria-label={name} className="product-track-card" key={name} to={path}>
               <span className="product-track-copy">
                 <h2>{name}</h2>
-                <p>{outcome}</p>
+                <p>{uiText(outcome)}</p>
               </span>
               <span aria-hidden="true" className="product-track-open">→</span>
             </Link>

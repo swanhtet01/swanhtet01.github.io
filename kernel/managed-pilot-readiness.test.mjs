@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { proofDigest } from './database-rehearsal-evidence.mjs'
+import { implementationPaths, proofDigest, sha256, validateSanitizedProof } from './database-rehearsal-evidence.mjs'
 
 import { buildManagedPilotReadiness, readinessDigest, validateManagedPilotReadiness } from './managed-pilot-readiness.mjs'
 
@@ -19,9 +19,33 @@ const products = ['shop', 'plant', 'website', 'ecommerce'].map((id) => ({
   },
 }))
 const sourceReceipts = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'].map((path) => ({ path, digest: readinessDigest(path) }))
-const databaseFixture = JSON.parse(readFileSync(new URL('../hq/research/postgres17-rehearsal.json', import.meta.url), 'utf8'))
-// Unit-only time fixture; never written as operational evidence.
+const historicalDatabaseFixture = JSON.parse(readFileSync(new URL('../hq/research/postgres17-rehearsal.json', import.meta.url), 'utf8'))
+// Build a synthetic 31-migration current-shape proof while keeping the dormant
+// Sites inquiry RLS optimization out of the canonical rehearsal chain.
+const databaseFixture = structuredClone(historicalDatabaseFixture)
+databaseFixture.runner = 'unit-test-only-synthetic-proof'
 databaseFixture.recordedAt = '2026-07-31T10:00:00.000Z'
+databaseFixture.implementationCommit = '0'.repeat(40)
+databaseFixture.implementationTree = '1'.repeat(40)
+const sitesInquiryRlsOptimization = '20261016143945_optimize_sites_inquiry_rls_initplans.sql'
+const currentDatabaseMigrations = databaseFixture.migration.names
+  .filter((name) => name !== sitesInquiryRlsOptimization)
+if (!currentDatabaseMigrations.includes('20261019070000_ecommerce_operator_management_boundary.sql')) {
+  currentDatabaseMigrations.push('20261019070000_ecommerce_operator_management_boundary.sql')
+}
+if (!currentDatabaseMigrations.includes('20261019103000_ecommerce_review_shared_state_lock.sql')) {
+  currentDatabaseMigrations.push('20261019103000_ecommerce_review_shared_state_lock.sql')
+}
+assert.equal(currentDatabaseMigrations.length, 31)
+const databaseFixtureImplementationDigest = sha256(JSON.stringify({
+  purpose: 'managed-pilot-readiness-unit-fixture', implementationPaths, currentDatabaseMigrations,
+  checkNames: Object.keys(databaseFixture.checks).sort(),
+}))
+databaseFixture.implementationDigest = databaseFixtureImplementationDigest
+databaseFixture.implementationFileCount = implementationPaths.length
+databaseFixture.implementation = { ...databaseFixture.implementation, digest: databaseFixtureImplementationDigest, paths: [...implementationPaths] }
+databaseFixture.migration.count = currentDatabaseMigrations.length
+databaseFixture.migration.names = currentDatabaseMigrations
 databaseFixture.receiptDigest = proofDigest(databaseFixture)
 const selfServePilotProof = {
   contract: 'supermega.self-serve-pilot-proof.v1',
@@ -71,6 +95,15 @@ const input = {
   sourceReceipts,
 }
 
+test('historical local rehearsal evidence cannot be silently rebound to a newer implementation', () => {
+  const currentImplementation = {
+    digest: databaseFixtureImplementationDigest,
+    fileCount: implementationPaths.length,
+    paths: [...implementationPaths],
+  }
+  assert.throws(() => validateSanitizedProof(historicalDatabaseFixture, currentImplementation), /database_rehearsal_evidence_stale/)
+})
+
 test('derives one blocked four-product ledger from current bounded evidence', () => {
   const ledger = buildManagedPilotReadiness(input)
   assert.equal(ledger.contract, 'supermega.managed-pilot-readiness.v5')
@@ -94,7 +127,8 @@ test('derives one blocked four-product ledger from current bounded evidence', ()
   assert.equal(ledger.liveProduction.localTargetVersion, 13)
   assert.equal(ledger.liveProduction.versionDrift, 6)
   assert.equal(ledger.localDatabase.schemaVersion, 13)
-  assert.equal(ledger.localDatabase.migrationCount, 27)
+  assert.equal(ledger.localDatabase.migrationCount, databaseFixture.migration.count)
+  assert.equal(ledger.localDatabase.behaviorChecks, Object.keys(databaseFixture.checks).length)
   assert.equal(ledger.localDatabase.hostedEvidenceCurrent, false)
   assert.equal(ledger.liveProduction.managedWritesEnabled, false)
   assert.equal(ledger.pilotEvidence.pilotMode, 'owner_named')
@@ -226,6 +260,55 @@ test('historical clean hosted audit cannot satisfy current schema or self-serve 
   assert.throws(() => validateManagedPilotReadiness(staleInstruction), /managed_pilot_readiness_gate_evidence_invalid/)
 })
 
+test('accepts current schema v13 audit evidence without opening unrelated launch gates', () => {
+  const current = structuredClone(input)
+  current.securityAudit.asOf = '2026-10-18T00:00:00.000Z'
+  current.securityAudit.advisor = { status: 'clear', findingCount: 0 }
+  current.securityAudit.managedBackend = { ...current.securityAudit.managedBackend,
+    liveSchemaVersion: 13, localTargetVersion: 13, versionDrift: 0, metadataRlsEnabled: true }
+
+  const ledger = buildManagedPilotReadiness(current)
+  assert.equal(ledger.securityAudit.liveSchemaVersion, 13)
+  assert.equal(ledger.securityAudit.localTargetVersion, 13)
+  assert.equal(ledger.liveProduction.versionDrift, 0)
+  assert.equal(ledger.gates.find(g => g.id === 'security').status, 'ready-hosted')
+  assert.match(ledger.gates.find(g => g.id === 'security').evidence, /Current production state, public-browser quarantine, and this candidate's access remain unverified/)
+  assert.match(ledger.gates.find(g => g.id === 'security').nextAction, /Revalidate current production state, public-browser quarantine, and candidate access/)
+  assert.equal(ledger.liveProduction.managedWritesEnabled, false)
+  assert.equal(ledger.liveProduction.publicBrowserQuarantine, false)
+  assert.equal(ledger.liveProduction.productionMutationAuthorized, false)
+  assert.ok(ledger.overall.blockingGateCount > 0)
+
+  for (const mutate of [
+    audit => { audit.managedBackend.liveSchemaVersion = 14 },
+    audit => { audit.managedBackend.localTargetVersion = 14 },
+  ]) {
+    const invalid = structuredClone(current)
+    mutate(invalid.securityAudit)
+    assert.throws(() => buildManagedPilotReadiness(invalid), /managed_pilot_readiness_security_audit_invalid/)
+  }
+})
+
+test('keeps a current v13 audit blocked when findings or metadata RLS gaps remain', () => {
+  const withFinding = structuredClone(input)
+  withFinding.securityAudit.asOf = '2026-10-18T00:00:00.000Z'
+  withFinding.securityAudit.advisor = { status: 'blocked', findingCount: 1 }
+  withFinding.securityAudit.managedBackend = { ...withFinding.securityAudit.managedBackend,
+    liveSchemaVersion: 13, localTargetVersion: 13, versionDrift: 0, metadataRlsEnabled: true }
+  const findingsLedger = buildManagedPilotReadiness(withFinding)
+  assert.equal(findingsLedger.gates.find(g => g.id === 'security').status, 'blocked')
+  assert.match(findingsLedger.gates.find(g => g.id === 'security').evidence, /1 Security Advisor findings/)
+  assert.match(findingsLedger.gates.find(g => g.id === 'security').nextAction, /Resolve recorded Security Advisor findings/)
+
+  const withRlsGap = structuredClone(withFinding)
+  withRlsGap.securityAudit.advisor = { status: 'clear', findingCount: 0 }
+  withRlsGap.securityAudit.managedBackend.metadataRlsEnabled = false
+  const rlsLedger = buildManagedPilotReadiness(withRlsGap)
+  assert.equal(rlsLedger.gates.find(g => g.id === 'security').status, 'blocked')
+  assert.match(rlsLedger.gates.find(g => g.id === 'security').evidence, /metadata RLS disabled/)
+  assert.match(rlsLedger.gates.find(g => g.id === 'security').nextAction, /metadata RLS gaps/)
+})
+
 test('completed historical persistence and Storage proofs stay retained but cannot clear current gates', () => {
   const historical = structuredClone(input)
   historical.storagePrivacyEvidence = JSON.parse(readFileSync(new URL('../hq/readiness/hosted-storage-privacy-proof.json', import.meta.url), 'utf8'))
@@ -251,7 +334,9 @@ test('changed implementation binding and local proof summaries cannot be called 
   changed.databaseImplementation = { paths: databaseFixture.implementation.paths,
     fileCount: databaseFixture.implementationFileCount, digest: `sha256:${'0'.repeat(64)}` }
   assert.throws(() => buildManagedPilotReadiness(changed), /managed_pilot_readiness_database_evidence_invalid/)
-  for (const mutate of [d => { d.migrationCount = 18 }, d => { d.behaviorChecks = 72 }, d => { d.migrationCount = 14 }, d => { d.migrationCount = 17 }, d => { d.catalogChecksAfter = 32 },
+  for (const mutate of [d => { d.migrationCount = 18 }, d => { d.behaviorChecks = 72 },
+    d => { d.migrationCount = 28 }, d => { d.migrationCount = 30 }, d => { d.behaviorChecks = 74 },
+    d => { d.migrationCount = 14 }, d => { d.migrationCount = 17 }, d => { d.catalogChecksAfter = 32 },
     d => { d.hostedEvidenceCurrent = true }, d => { d.implementationTree = '' }]) {
     const ledger = buildManagedPilotReadiness(input)
     mutate(ledger.localDatabase)

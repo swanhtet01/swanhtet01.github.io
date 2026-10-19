@@ -14,6 +14,7 @@ import {
   type ClientSolutionId,
 } from './client-onboarding'
 import { activateLocalStagingPackage } from './local-client-import'
+import { resolveClientImportPreviewIfCurrent } from './client-import-preview-runtime'
 import { readCommerceWorkspace } from './commerce-workspace'
 import {
   classifyShopCatalogImportRows,
@@ -593,16 +594,23 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
     const requestId = requestRef.current + 1
     requestRef.current = requestId
     validationRequestRef.current += 1
+    const isCurrentRequest = () => requestRef.current === requestId
+      && productRef.current === expectedProduct
+      && workflowTemplateRef.current === expectedWorkflowTemplateId
     setShowAllRows(false)
     setState((current) => ({ ...current, sourceName, sourceText, preview: null, catalogReview: {}, busy: true, validating: false, preflighting: false, applying: false, validation: null, error: '' }))
     try {
       let preview = await createClientImportPreview(sourceText, expectedProduct, mapping, sourceName, expectedWorkflowTemplateId)
-      if (requestRef.current !== requestId || productRef.current !== expectedProduct || workflowTemplateRef.current !== expectedWorkflowTemplateId) return
+      if (!isCurrentRequest()) return
       if (expectedProduct === 'commerce') {
         const selectedVariantHeader = mapping && Object.prototype.hasOwnProperty.call(mapping, 'variant')
           ? mapping.variant ?? ''
           : undefined
-        const shopPreview = await addShopVariantColumnToClientImportPreview(preview, selectedVariantHeader)
+        const shopPreview = await resolveClientImportPreviewIfCurrent(
+          addShopVariantColumnToClientImportPreview(preview, selectedVariantHeader),
+          isCurrentRequest,
+        )
+        if (!shopPreview || !isCurrentRequest()) return
         preview = shopPreview.preview
       }
       const catalogReview: ImportState['catalogReview'] = {}
@@ -624,7 +632,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
       setState({ ...emptyImportState(), sourceName, sourceText, preview, catalogReview })
       if (!mapping) window.requestAnimationFrame(() => previewRef.current?.focus())
     } catch (error) {
-      if (requestRef.current !== requestId || productRef.current !== expectedProduct || workflowTemplateRef.current !== expectedWorkflowTemplateId) return
+      if (!isCurrentRequest()) return
       setState((current) => ({ ...current, busy: false, error: error instanceof Error ? error.message : 'The CSV could not be previewed.' }))
     }
   }

@@ -11,10 +11,10 @@ export const SUPABASE_PREVIEW_REHEARSAL_PROPOSAL_CONTRACT = 'supermega.supabase-
 const root = resolve(import.meta.dirname, '..')
 const output = resolve(root, 'hq', 'readiness', 'supabase-preview-rehearsal-proposal.json')
 const REPOSITORY = 'swanhtet01/swanhtet01.github.io'
-const EXPECTED_MIGRATION_COUNT = 28
-const EXPECTED_PRIVATE_MIGRATION_COUNT = 27
+const EXPECTED_MIGRATION_COUNT = 32
+const EXPECTED_PRIVATE_MIGRATION_COUNT = 31
 const EXPECTED_PUBLIC_BASELINE = '20260711081300_public_legacy_baseline.sql'
-const EXPECTED_FINAL_MIGRATION = '20261014090000_website_channel_stable_update.sql'
+const EXPECTED_FINAL_MIGRATION = '20261019103000_ecommerce_review_shared_state_lock.sql'
 const EXPECTED_MIGRATIONS = Object.freeze([
   EXPECTED_PUBLIC_BASELINE,
   '20260722004500_private_trial_backend_role_preflight.sql',
@@ -43,11 +43,14 @@ const EXPECTED_MIGRATIONS = Object.freeze([
   '20261010063000_website_publishing_and_inquiries.sql',
   '20261010070000_website_published_hero_media.sql',
   '20261010120857_website_inquiry_followup.sql',
+  '20261014090000_website_channel_stable_update.sql',
+  '20261015091500_website_six_page_reviews.sql',
+  '20261015202629_ecommerce_operator_review_grant.sql',
+  '20261019070000_ecommerce_operator_management_boundary.sql',
   EXPECTED_FINAL_MIGRATION,
 ])
 const EXPECTED_SOURCE_TARGET_SCHEMA_VERSION = 13
 const MAX_PREVIEW_LIFETIME_HOURS = 24
-const PROPOSAL_GENERATED_AT = '2026-10-14T00:00:00.000Z'
 const PRODUCTION_REPLAY_GATE = Object.freeze({
   status: 'blocked',
   evidenceClassification: 'historical-provider-observation',
@@ -189,6 +192,11 @@ function validateProposalShape(packet) {
   if (packet.repository !== REPOSITORY) fail('supabase_preview_rehearsal_proposal_repository_invalid')
   if (packet.mode !== 'owner_approval_required') fail('supabase_preview_rehearsal_proposal_mode_invalid')
   if (packet.state !== 'prepared-not-executed') fail('supabase_preview_rehearsal_proposal_state_invalid')
+  if (typeof packet.generatedAt !== 'string' || !Number.isFinite(Date.parse(packet.generatedAt))
+    || new Date(packet.generatedAt).toISOString() !== packet.generatedAt
+    || packet.generatedAt.slice(0, 10).replaceAll('-', '') < EXPECTED_FINAL_MIGRATION.slice(0, 8)) {
+    fail('supabase_preview_rehearsal_proposal_timestamp_invalid')
+  }
   if (packet.previewBranch?.kind !== 'data_less_ephemeral_preview_schema_unverified'
     || packet.previewBranch?.creationMode !== 'unselected'
     || packet.previewBranch?.branchSchemaVerified !== false) fail('supabase_preview_rehearsal_proposal_branch_kind_invalid')
@@ -304,7 +312,7 @@ function validateProposalShape(packet) {
 
 export async function buildSupabasePreviewRehearsalProposal({
   sourceReceipts = [],
-  generatedAt = PROPOSAL_GENERATED_AT,
+  generatedAt = new Date().toISOString(),
   securityAudit,
   readiness,
 } = {}) {
@@ -454,7 +462,7 @@ async function currentSourceReceipts() {
   return receipts
 }
 
-async function currentProposal(generatedAt = PROPOSAL_GENERATED_AT) {
+async function currentProposal(generatedAt = new Date().toISOString()) {
   return buildSupabasePreviewRehearsalProposal({
     sourceReceipts: await currentSourceReceipts(),
     generatedAt,

@@ -36,9 +36,9 @@ test('verifies Unicode prepared content and returns isolated copy', async () => 
   assert.equal(input.preview.pages[0].hero.headline, 'Welcome')
 })
 
-test('verifies four prepared pages with twelve sections each and rejects a thirteenth', async () => {
+test('verifies six prepared Burmese pages with twelve sections each and rejects overflow', async () => {
   const review = fixture()
-  review.preview.pages = Array.from({ length: 4 }, (_, pageIndex) => ({
+  review.preview.pages = Array.from({ length: 6 }, (_, pageIndex) => ({
     ...structuredClone(review.preview.pages[0]),
     id: `page-${pageIndex}`,
     slug: pageIndex ? `/page-${pageIndex}` : '/',
@@ -49,21 +49,32 @@ test('verifies four prepared pages with twelve sections each and rejects a thirt
   }))
   review.previewDigest = `sha256:${createHash('sha256').update(canonical(review.preview)).digest('hex')}`
   const verified = await verifyCustomerWebsiteReview(review, reviewId, now)
-  assert.equal(verified.preview.pages.length, 4)
-  assert.equal(verified.preview.pages[3].sections.length, 12)
+  assert.equal(verified.preview.pages.length, 6)
+  assert.equal(verified.preview.pages[5].sections.length, 12)
 
   const longUnicodeUrl = `https://example.com/${'က'.repeat(2028)}`
   for (const page of review.preview.pages) {
     for (const section of page.sections) {
+      section.body = 'က'.repeat(360)
       section.image = { src: longUnicodeUrl, alt: 'မြန်မာ', decorative: false }
     }
   }
   const largePreviewBytes = new TextEncoder().encode(canonical(review.preview)).length
-  assert.ok(largePreviewBytes > 250000 && largePreviewBytes < 512 * 1024)
+  assert.ok(largePreviewBytes > 512 * 1024 && largePreviewBytes < 1024 * 1024)
   review.previewDigest = `sha256:${createHash('sha256').update(canonical(review.preview)).digest('hex')}`
   await verifyCustomerWebsiteReview(review, reviewId, now)
 
-  review.preview.pages[3].sections.push({ id: 'overflow', eyebrow: '', title: 'Overflow', body: 'Too many' })
+  for (const page of review.preview.pages) for (const section of page.sections) section.body = 'က'.repeat(6000)
+  assert.ok(new TextEncoder().encode(canonical(review.preview)).length > 1024 * 1024)
+  review.previewDigest = `sha256:${createHash('sha256').update(canonical(review.preview)).digest('hex')}`
+  await assert.rejects(verifyCustomerWebsiteReview(review, reviewId, now))
+  for (const page of review.preview.pages) for (const section of page.sections) section.body = 'က'.repeat(360)
+
+  review.preview.pages[5].sections.push({ id: 'overflow', eyebrow: '', title: 'Overflow', body: 'Too many' })
+  review.previewDigest = `sha256:${createHash('sha256').update(canonical(review.preview)).digest('hex')}`
+  await assert.rejects(verifyCustomerWebsiteReview(review, reviewId, now))
+  review.preview.pages[5].sections.pop()
+  review.preview.pages.push({ ...structuredClone(review.preview.pages[5]), id: 'page-7', slug: '/page-7' })
   review.previewDigest = `sha256:${createHash('sha256').update(canonical(review.preview)).digest('hex')}`
   await assert.rejects(verifyCustomerWebsiteReview(review, reviewId, now))
 })

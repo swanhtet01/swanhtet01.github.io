@@ -5,25 +5,25 @@
   "brand": {
     "name": "SuperMega",
     "domain": "supermega.dev",
-    "version": "indigo-v1-2026-09",
+    "version": "cobalt-unboxed-v14-2026-10",
     "mark": "terminal",
     "colors": {
-      "background": "#f6f7fb",
-      "accent": "#5b4ee8",
+      "background": "#ffffff",
+      "accent": "#2563eb",
       "ink": "#151521"
     }
   },
   "company": {
-    "positioning": "POS-independent Shop Profit Control for Myanmar operators.",
-    "statement": "Start with POS-independent Shop Profit Control, with Ecommerce requests and Website delivery as connected workflows.",
-    "headline": "Shop Profit Control: see today’s operating money risk and close one accountable action.",
-    "supporting": "A read-only first job over the current local Shop record surfaces the current operating money leak or risk, accountable owner, objective closure, and next action. It does not replace a POS or create a payment, stock movement, customer message, revenue record, or managed write.",
+    "positioning": "Business software for Myanmar.",
+    "statement": "Record counter sales, check stock and follow open orders in SuperMega Shop.",
+    "headline": "See what sold. Know what needs action.",
+    "supporting": "Record counter sales, check stock and follow open orders in SuperMega Shop.",
     "publicPricing": false
   },
   "productVisibility": {
     "contract": "supermega.product-visibility.v1",
-    "activeProductIds": ["shop", "ecommerce", "website"],
-    "retainedOnlyProductIds": ["plant"],
+    "activeProductIds": ["shop"],
+    "retainedOnlyProductIds": ["plant", "website", "ecommerce"],
     "retainedWorkspaceAccess": true,
     "deleteRetainedData": false
   },
@@ -59,39 +59,30 @@
       "name": "Shop",
       "publicAnchor": "/#shop",
       "appRoute": "https://app.supermega.dev/shop/",
-      "status": "available-in-app",
-      "eyebrow": "POS-independent Shop Profit Control",
-      "headline": "Shop Profit Control: see today’s operating money risk.",
-      "description": "A read-only first job over the current local Shop record surfaces the current operating money leak or risk, accountable owner, objective closure, and next action. It does not replace a POS or create a payment, stock movement, customer message, revenue record, or managed write.",
+      "status": "release-candidate-local",
+      "eyebrow": "Shop operations for Myanmar businesses",
+      "headline": "Sell at the counter. Keep orders and stock in view.",
+      "description": "Search the catalog, review a sale, follow recorded orders and see which products need attention in one Shop workspace.",
       "firstOperatingLoop": [
-        "Open Today from the current local Shop record.",
-        "Review the highest operating money leak or risk.",
-        "Confirm its accountable owner, due point, and next action.",
-        "Close it only when the source metric meets its objective condition."
+        "Open Today to see daily sales, open orders and low-stock items.",
+        "Find a product by name, SKU or barcode and build a sale.",
+        "Review quantities and the total before confirming the sale.",
+        "Follow order status and stock attention in the same workspace."
       ],
       "primaryCta": {
-        "label": "Open Shop Profit Control",
-        "url": "https://app.supermega.dev/shop/?tab=today"
+        "label": "See Shop screens",
+        "url": "/shop/#shop-demo"
       },
       "secondaryCta": {
-        "label": "Request assisted setup",
+        "label": "Contact SuperMega",
         "url": "/contact/?product=shop"
       },
       "modules": [
-        "Counter sales — ring up a sale, take Cash, KBZPay or WavePay, stock falls on its own",
-        "Appointment book — treatments and services against staff and rooms, double-booking refused",
-        "Orders, returns and refunds — hold, hand over, and issue a credit note when something comes back",
-        "Stock and reorder levels — lots, counts and movement history, told before you run out",
-        "Purchasing and receiving — requisitions, approvals, purchase orders, 3-way invoice match",
-        "Suppliers and money owed (AP) — supplier scoring, ageing, payables handoff",
-        "Customer credit (AR) — terms, exposure checks at order time, ageing and collections",
-        "Daily close — count the drawer against the day, keep every difference with its reason",
-        "General ledger — 14 bilingual accounts, balanced by construction, no manual entries",
-        "Monthly statement — profit and loss in plain language, not accountant words",
-        "Accounting export — a balanced, sealed packet your accountant can check",
-        "Tax engine — effective-dated rates and digest-checked order calculations",
-        "10 Myanmar trade templates — Mini-mart & grocery, Pharmacy, Phone & electronics, Fashion & clothing, Hardware & construction supply, Tea & coffee shop, Auto parts, Restaurant, Beauty spa, Bakery & patisserie",
-        "Sales and stock insight — 7/30-day trends, payment mix, what to do next"
+        "Today — daily sales, open orders and low-stock items in one view",
+        "Counter sales — find or scan a product, review the basket and record a sale",
+        "Catalog import — preserve barcode text and flag duplicate codes before review",
+        "Stock visibility — review on-hand quantities and reorder thresholds",
+        "Order follow-up — see recorded status and the next fulfilment or payment review"
       ],
       "internalTemplatePacks": [
         {
@@ -725,7 +716,7 @@
       "name": "Sites",
       "publicAnchor": "/#website",
       "appRoute": "https://app.supermega.dev/website/",
-      "status": "available-in-app",
+      "status": "release-candidate-local",
       "eyebrow": "Your business online",
       "headline": "Make your business easy to find.",
       "workspaceSchema": "supermega.website.workspace.v2",
@@ -995,8 +986,8 @@
     {
       "route": "/",
       "file": "index.html",
-      "title": "SuperMega | Run the business without the busywork",
-      "description": "Explore tools for in-store sales, website pages and customer order requests with SuperMega."
+      "title": "SuperMega | Business software for Myanmar",
+      "description": "Record counter sales, check stock and follow open orders in SuperMega Shop."
     },
     {
       "route": "/shop/",
@@ -1019,7 +1010,7 @@
       "title": "Sites | Your business online | SuperMega",
       "productId": "website",
       "liveGate": "post-release",
-      "description": "Edit business pages and services, check readiness, and review customer inquiries in one workspace."
+      "description": "The SuperMega team manages business pages, readiness checks and customer inquiries in Sites."
     },
     {
       "route": "/ecommerce/",
@@ -1027,7 +1018,7 @@
       "title": "Commerce | Your product catalog | SuperMega",
       "productId": "ecommerce",
       "liveGate": "post-release",
-      "description": "Browse a Shop-backed catalog, save customer order requests, and review them before any order or payment is confirmed."
+      "description": "The SuperMega team manages the Shop-backed catalog and reviews customer requests before any order or payment is confirmed."
     },
     {
       "route": "/contact/",

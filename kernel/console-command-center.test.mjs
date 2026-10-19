@@ -10,7 +10,7 @@ test('console presents one clear operator control room with secondary business t
 
   assert.ok(nav)
   assert.match(html, /<title>SuperMega Operations<\/title>/)
-  assert.match(html, /SuperMega <span>operations<\/span>/)
+  assert.match(html, /<span class="brand-word">SuperMega<\/span>/)
   assert.match(html, /id="ownerGate"/)
   assert.match(html, /id="ownerGateForm"/)
   assert.match(html, /Private control plane/)

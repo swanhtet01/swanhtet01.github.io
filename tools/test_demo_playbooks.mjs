@@ -12,14 +12,16 @@
 import assert from 'node:assert/strict'
 import { readdirSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { companyShopFooterHtml, companyShopHeaderHtml } from './public_company_shop_design.mjs'
 
 const root = process.cwd()
 const read = (path) => readFileSync(resolve(root, path), 'utf8').replaceAll('\r\n', '\n')
 
 let checks = 0
+const failures = []
 function check(condition, label) {
   checks += 1
-  assert.ok(condition, label)
+  if (!condition) failures.push(label)
 }
 
 function collectSourceFiles(relativeDir, out) {
@@ -33,6 +35,9 @@ function collectSourceFiles(relativeDir, out) {
 
 const corpusPaths = [
   'tools/create_public_vercel_output.mjs',
+  'tools/public_company_shop_design.mjs',
+  'tools/public-assets/company-shop/company-home.html',
+  'tools/public-assets/company-shop/shop-page.html',
   'site-manifest.json',
   'package.json',
   ...collectSourceFiles('showroom/src', []),
@@ -54,7 +59,12 @@ const derived = new Set()
 check(manifest.release?.productionDomain === 'https://supermega.dev', 'manifest_production_domain')
 // The public surface presents products through screenshots and one Login.
 // Historical contact links below remain valid app/support routes, not public CTAs.
-check(generator.includes('href="https://app.supermega.dev/login">Login</a>'), 'generator_single_login_route')
+const loginUrl = 'https://app.supermega.dev/login'
+for (const route of ['/', '/shop/', '/contact/']) {
+  const links = [...companyShopHeaderHtml(route).matchAll(/href="([^"]+)">Login<\/a>/g)].map(([, href]) => href)
+  check(links.length === 1 && (links[0] === loginUrl || (route === '/shop/' && links[0] === `${loginUrl}?product=shop`)), `public_single_login_route:${route}`)
+  derived.add(links[0])
+}
 check(generator.includes('class="platform-gallery"')
   && generator.includes('class="platform-slides"')
   && generator.includes('class="platform-gallery-controls"')
@@ -65,7 +75,7 @@ check(generator.includes('class="platform-gallery"')
   && generator.includes('item.screens.map('), 'generator_product_screenshots')
 check(!generator.includes('function assistedSetupAction('), 'generator_setup_funnel_removed')
 check(!generator.includes('Open Shop Profit Control'), 'generator_profit_control_action_removed')
-check(generator.includes('href="/contact/">Contact</a>'), 'generator_contact_footer')
+check(companyShopFooterHtml('/', 2026).includes('href="/contact/">Contact</a>'), 'generator_contact_footer')
 derived.add('/contact/?product=guide&source=assisted-setup')
 // Historical deep links stay supported, but are not the current acquisition CTA.
 check(generator.includes('source.value=location.href')
@@ -80,7 +90,7 @@ check(accountRoutes.includes("template: 'managed-account'"), 'account_contact_te
 for (const product of manifest.customerProducts) {
   check(product.appRoute === `https://app.supermega.dev/${product.id}/`, `manifest_app_route:${product.id}`)
   const expectedAssistedSetupHref = `/contact/?product=${encodeURIComponent(product.id)}`
-  check(product.secondaryCta?.label === 'Request assisted setup', `manifest_assisted_setup_label:${product.id}`)
+  check(typeof product.secondaryCta?.label === 'string' && product.secondaryCta.label.trim().length > 0, `manifest_contact_label:${product.id}`)
   check(product.secondaryCta?.url === expectedAssistedSetupHref, `manifest_assisted_setup_route:${product.id}`)
   derived.add(product.secondaryCta.label)
   derived.add(product.secondaryCta.url)
@@ -313,4 +323,5 @@ check(kitAcceptance.includes('If either digest is missing, reused, or equal to t
 
 check(read(`${kitDir}/pilot-agreement-outline.md`).includes('NOT LEGAL ADVICE'), 'pilot_kit_agreement_disclaimer')
 
+assert.deepEqual(failures, [], 'demo_playbook_contract_drift')
 console.log(JSON.stringify({ ok: true, contract: 'supermega_demo_playbooks', playbooks: files.length, pilotKitDocs: kitFiles.length, checks }))

@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
+import { createCameraBarcodeScanSession, nextCameraBarcodeScan, type CameraBarcodeScanSession } from './shop-camera-scan-session'
+import { uiText, useUiLocale } from './ui-locale'
 
 type DetectedBarcode = { rawValue: string }
 
@@ -27,16 +29,22 @@ function cameraFailureMessage(cause: unknown) {
   return 'The camera could not be started. Close any other app using the camera, or type the code instead.'
 }
 
-export function BarcodeScannerDialog({ label, onDetected, onClose }: {
+export function BarcodeScannerDialog({ continuous = false, continuousMode = 'receiving', label, onDetected, onClose }: {
+  continuous?: boolean
+  continuousMode?: 'sale' | 'receiving'
   label: string
-  onDetected: (value: string) => void
+  onDetected: (value: string) => boolean | void
   onClose: () => void
 }) {
   const [error, setError] = useState('')
+  const [scanCount, setScanCount] = useState(0)
+  const [scanFeedback, setScanFeedback] = useState('')
+  const locale = useUiLocale()
   const dialogRef = useRef<HTMLDialogElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
   const onDetectedRef = useRef(onDetected)
   const onCloseRef = useRef(onClose)
+  const scanSessionRef = useRef<CameraBarcodeScanSession>(createCameraBarcodeScanSession())
   const cancelledRef = useRef(false)
 
   useEffect(() => {
@@ -54,6 +62,7 @@ export function BarcodeScannerDialog({ label, onDetected, onClose }: {
     if (!dialog.open) dialog.showModal()
     let cancelled = false
     cancelledRef.current = false
+    scanSessionRef.current = createCameraBarcodeScanSession()
     let stream: MediaStream | null = null
     let timer: number | undefined
     let detecting = false
@@ -96,8 +105,27 @@ export function BarcodeScannerDialog({ label, onDetected, onClose }: {
         detector.detect(activeVideo)
           .then((barcodes) => {
             if (cancelled) return
-            const value = barcodes.map((barcode) => barcode.rawValue.trim()).find(Boolean)
+            const values = barcodes.map((barcode) => barcode.rawValue.trim()).filter(Boolean)
+            const value = continuous
+              ? nextCameraBarcodeScan(scanSessionRef.current, values, Date.now())
+              : values[0]
             if (!value) return
+            if (continuous) {
+              const accepted = onDetectedRef.current(value)
+              if (accepted !== false) setScanCount((count) => count + 1)
+              setScanFeedback(accepted === false
+                ? continuousMode === 'sale'
+                  ? 'Not added. Check the product code and available stock.'
+                  : 'Not added. Check the item code and this receipt.'
+                : accepted === true
+                  ? continuousMode === 'sale'
+                    ? 'Added to this sale. Remove the label before scanning it again.'
+                    : 'Unit added to the receipt draft. Remove the label before scanning another unit.'
+                  : continuousMode === 'sale'
+                    ? 'Code read. Remove the label before scanning it again.'
+                    : 'Code read. Remove the label before scanning another unit.')
+              return
+            }
             cancelled = true
             cancelledRef.current = true
             onDetectedRef.current(value)
@@ -125,7 +153,7 @@ export function BarcodeScannerDialog({ label, onDetected, onClose }: {
       video.srcObject = null
       if (dialog.open) dialog.close()
     }
-  }, [])
+  }, [continuous, continuousMode])
 
   function requestClose() {
     if (!cancelledRef.current) onCloseRef.current()
@@ -133,16 +161,18 @@ export function BarcodeScannerDialog({ label, onDetected, onClose }: {
 
   return <dialog aria-label={label} className="barcode-scan-dialog" onClose={requestClose} ref={dialogRef}>
     <header className="barcode-scan-head">
-      <span className="core-eyebrow">Camera scan</span>
-      <h2>Point the camera at the barcode</h2>
+      <span className="core-eyebrow">{uiText('Camera scan')}</span>
+      <h2>{uiText(continuous ? continuousMode === 'sale' ? 'Scan items into this sale' : 'Scan accepted units' : 'Point the camera at the barcode')}</h2>
     </header>
     {/* muted + playsInline keep mobile browsers rendering the preview inline without sound. */}
     <video className="barcode-scan-video" muted playsInline ref={videoRef} />
     {error
-      ? <p className="barcode-scan-error" role="alert">{error}</p>
-      : <p className="barcode-scan-hint">The code is added automatically as soon as it is recognized. Nothing is recorded or uploaded — the camera only reads the code.</p>}
+      ? <p className="barcode-scan-error" role="alert">{uiText(error)}</p>
+      : continuous
+        ? <p aria-live="polite" className="barcode-scan-hint" role="status">{uiText(scanFeedback || 'Each label is counted once per camera presentation.')}{scanCount ? locale === 'my' ? ` · ${scanCount} ကြိမ် ဖတ်ပြီး` : ` · ${scanCount} scan${scanCount === 1 ? '' : 's'}` : ''}</p>
+        : <p className="barcode-scan-hint">{uiText('The code is added when recognized. The camera reads locally and does not record video.')}</p>}
     <div className="barcode-scan-actions">
-      <button className="core-button compact" onClick={requestClose} type="button">Cancel</button>
+      <button className="core-button compact" onClick={requestClose} type="button">{uiText(continuous ? 'Finish scanning' : 'Cancel')}</button>
     </div>
   </dialog>
 }

@@ -18,24 +18,28 @@ class BarcodeScannerErrorBoundary extends Component<{ children: ReactNode; onDis
   }
 }
 
-export function BarcodeScanButton({ disabled, label, onDetected }: {
+export function BarcodeScanButton({ continuous = false, continuousMode = 'receiving', disabled, label, onDetected }: {
+  continuous?: boolean
+  continuousMode?: 'sale' | 'receiving'
   disabled?: boolean
   label: string
-  onDetected: (value: string) => void
+  onDetected: (value: string) => boolean | void
 }) {
   const [open, setOpen] = useState(false)
+  const [fallbackOpen, setFallbackOpen] = useState(false)
+  const cameraAvailable = typeof window !== 'undefined' && typeof window.BarcodeDetector === 'function'
 
-  // Feature-detect the platform API. Without it the button renders nothing at all and the
-  // text input remains the only (fully working) path — no polyfill, no dead control.
-  if (typeof window === 'undefined' || typeof window.BarcodeDetector !== 'function') return null
+  // Keep the scan affordance visible on every device. Browsers without BarcodeDetector
+  // still support manual entry and many keyboard-wedge scanners through the adjacent field.
+  if (typeof window === 'undefined') return null
 
   return <>
     <button
-      aria-label={label}
+      aria-label={cameraAvailable ? label : 'Camera scan unavailable; show scanner options'}
       className="barcode-scan-button"
       disabled={disabled}
-      onClick={() => setOpen(true)}
-      title={label}
+      onClick={() => cameraAvailable ? setOpen(true) : setFallbackOpen((value) => !value)}
+      title={cameraAvailable ? label : 'Camera scanning is unavailable here; view code-entry options'}
       type="button"
     >
       <svg aria-hidden="true" fill="none" height="20" stroke="currentColor" strokeLinecap="round" strokeWidth="2" viewBox="0 0 24 24" width="20">
@@ -43,11 +47,14 @@ export function BarcodeScanButton({ disabled, label, onDetected }: {
         <path d="M7 8v8M10.5 8v8M14 8v8M17 8v8" />
       </svg>
     </button>
-    {open ? <BarcodeScannerErrorBoundary onDismiss={() => setOpen(false)}>
+    {fallbackOpen && !cameraAvailable ? <span className="barcode-scan-hint" role="status">
+      Camera scanning is unavailable in this browser. Use a connected scanner in the code field, or type the code.
+    </span> : null}
+    {open && cameraAvailable ? <BarcodeScannerErrorBoundary onDismiss={() => setOpen(false)}>
       <Suspense fallback={<span className="barcode-scan-hint" role="status">
         Opening camera scanner… <button className="core-button compact" onClick={() => setOpen(false)} type="button">Cancel</button>
       </span>}>
-        <BarcodeScannerDialog label={label} onClose={() => setOpen(false)} onDetected={onDetected} />
+        <BarcodeScannerDialog continuous={continuous} continuousMode={continuousMode} label={label} onClose={() => setOpen(false)} onDetected={onDetected} />
       </Suspense>
     </BarcodeScannerErrorBoundary> : null}
   </>

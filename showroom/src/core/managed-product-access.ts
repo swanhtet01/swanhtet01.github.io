@@ -16,6 +16,15 @@ export type ManagedProductHomeDecision =
   | { kind: 'launcher' }
   | { kind: 'redirect'; product: ClientSolutionId; path: string }
 
+export type ManagedPortalAccessStatus = 'checking' | 'local' | 'reauthenticate' | 'ready' | 'error'
+
+export function hostedProductRouteRequiresLogin(
+  productionBuild: boolean,
+  portalStatus: ManagedPortalAccessStatus,
+) {
+  return productionBuild && portalStatus === 'local'
+}
+
 export function managedProductPath(product: ClientSolutionId) {
   return PRODUCT_PATHS[product]
 }
@@ -25,6 +34,25 @@ export function managedProductIsVisible(
   product: ClientSolutionId,
 ) {
   return assignedProducts.includes(product)
+}
+
+export function ecommerceShopHandoffVisible(
+  status: 'checking' | 'local' | 'ready' | 'reauthenticate' | 'error',
+  assignedProducts: readonly ClientSolutionId[],
+) {
+  return status === 'local' || status === 'ready'
+    && managedProductIsVisible(assignedProducts, 'commerce')
+    && managedProductIsVisible(assignedProducts, 'ecommerce')
+}
+
+export function shopInboundRequestsVisible(
+  status: 'checking' | 'local' | 'ready' | 'reauthenticate' | 'error',
+  assignedProducts: readonly ClientSolutionId[],
+) {
+  // Website and Ecommerce are managed internally, but their submitted requests
+  // are Shop fulfilment work. Shop access must not depend on editor access.
+  return status === 'local' || status === 'ready'
+    && managedProductIsVisible(assignedProducts, 'commerce')
 }
 
 export function productSwitcherVisible(

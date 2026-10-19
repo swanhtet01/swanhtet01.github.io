@@ -4,6 +4,7 @@ import { Link, useLocation, useNavigate, useOutletContext } from 'react-router'
 
 import { PageHeading, type RuntimeHealth } from './CoreShell'
 import { bi } from './i18n-actions'
+import { uiText } from './ui-locale'
 import {
   alternateManagedWorkspaceId,
   managedAccountPath,
@@ -37,6 +38,7 @@ export function ManagedLoginPage() {
   const location = useLocation()
   const navigate = useNavigate()
   const productIntent = new URLSearchParams(location.search).get('product')
+  const shopActivationIntent = trialSignupProductChoice(productIntent).id === 'commerce'
   const reviewReturnPath = managedLoginReviewPath(location.search)
   const portalEntryPath = reviewReturnPath ?? managedPortalEntryPath(productIntent)
   const [email, setEmail] = useState('')
@@ -212,6 +214,11 @@ export function ManagedLoginPage() {
       const selectedProduct = localTrial?.claimCode === claimCode.trim()
         ? localTrial.product
         : trialSignupProductChoice(productIntent).id
+      if (selectedProduct !== 'commerce') {
+        setNoticeTone('error')
+        setNotice('Shop is the only customer-managed product at launch. Ask SuperMega to set up other products for your business.')
+        return
+      }
       const workspace = await createSelfServeWorkspace(claimCode, businessName, selectedProduct)
       setNotice(workspace.created
         ? `${workspace.label} is ready. Opening your company...`
@@ -287,7 +294,7 @@ export function ManagedLoginPage() {
 
   return (
     <div className={`workspace-screen managed-login-screen${creatingAccount ? ' signup-entry-screen' : ''}`}>
-      <PageHeading eyebrow={reviewReturnPath ? 'Private customer review' : 'Account'} title={reviewReturnPath ? 'Open your prepared review.' : creatingAccount ? 'Create your account.' : 'Login'} copy={reviewReturnPath ? 'Sign in with the account assigned to this review.' : creatingAccount ? 'Confirm your email first. Company access is a separate step.' : managedReady ? 'Sign in to your workspace.' : ''} />
+      <PageHeading eyebrow={uiText(reviewReturnPath ? 'Private customer review' : 'Account')} title={uiText(reviewReturnPath ? 'Open your prepared review.' : creatingAccount ? 'Create your account.' : 'Login')} copy={uiText(reviewReturnPath ? 'Sign in with the account assigned to this review.' : creatingAccount ? 'Confirm your email first. Company access is a separate step.' : managedReady ? 'Sign in to your workspace.' : '')} />
       {existingIdentity ? <section className="managed-login-panel" aria-label="Current managed account">
         <div><span className="core-eyebrow">Connected</span><h2>{existingIdentity.email}</h2><p>Your company account is ready.</p></div>
         <div className="managed-login-actions">
@@ -320,6 +327,13 @@ export function ManagedLoginPage() {
           <a className="core-button primary" href={managedAccountRequestUrl(productIntent)}>Contact support</a>
           <button className="account-inline-link account-link-button" disabled={busy} onClick={() => void signOut()} type="button">Sign out</button>
         </div>
+      </section> : managedReady && activating && !reviewReturnPath && !shopActivationIntent ? <section className="managed-login-panel" aria-label="Managed product setup">
+        <h2>We set up this product with you.</h2>
+        <p>Shop is the customer-managed workspace at launch. SuperMega sets up the other products with you.</p>
+        <div className="managed-login-actions">
+          <a className="core-button primary" href={managedAccountRequestUrl(productIntent)}>Request setup</a>
+          <button className="account-inline-link account-link-button" onClick={() => setActivating(false)} type="button">Back to sign in</button>
+        </div>
       </section> : managedReady && activating && !reviewReturnPath ? <form aria-busy={busy} className="managed-login-panel core-form" onSubmit={(event) => void activate(event)}>
         <div><span className="core-eyebrow">Activate your company</span><h2>Claim your company.</h2><p>Enter your claim code to connect your company to this account.</p></div>
         <label>Claim code<input aria-describedby={claimCodeFieldError ? 'managed-login-notice' : undefined} aria-invalid={claimCodeFieldError} autoComplete="off" maxLength={12} onChange={(event) => setClaimCode(event.target.value)} placeholder="SM-XXXX-XXXX" required value={claimCode} /></label>
@@ -342,12 +356,13 @@ export function ManagedLoginPage() {
         </>}
         <button className="core-button primary" disabled={busy} type="submit">{busy ? 'Checking...' : reviewReturnPath ? 'Continue to review' : directory ? bi('Open company') : bi('Login')}</button>
         <p className="form-notice" data-tone={noticeTone} id="managed-login-notice" role="status">{notice}</p>
-      </form> : <section className="managed-login-panel" aria-label="Login unavailable">
-        {reviewReturnPath ? <div><h2>Review sign-in is unavailable here.</h2><p>Keep your original review link and ask SuperMega in your existing setup conversation to restore access. Use the account associated with this review.</p></div> : <>
-          <div><h2>Login is currently unavailable.</h2><p>{publicApp ? 'Contact support for account access.' : 'Contact support for account access. Your saved work is still available on this device.'}</p></div>
-          <div className="managed-login-actions"><a className="core-button primary" href={managedAccountRequestUrl(productIntent)}>Contact support</a>{!publicApp ? <Link className="account-inline-link" to="/?choose=1">Saved work on this device</Link> : null}{signupPolicy ? <button className="core-button" onClick={() => chooseAccountMode(true)} type="button">Create an account</button> : null}</div>
+      </form> : <section className="managed-login-panel" aria-label={uiText('Login unavailable')}>
+        {reviewReturnPath ? <div><h2>{uiText('Review sign-in is unavailable here.')}</h2><p>{uiText('Keep your original review link and ask SuperMega in your existing setup conversation to restore access. Use the account associated with this review.')}</p></div> : <>
+          <div><h2>{uiText('Login is currently unavailable.')}</h2><p>{uiText(publicApp ? 'Contact support for account access.' : 'Contact support for account access. Your saved work is still available on this device.')}</p></div>
+          <div className="managed-login-actions"><a className="core-button primary" href={managedAccountRequestUrl(productIntent)}>{uiText('Contact support')}</a>{!publicApp ? <Link className="account-inline-link" to="/?choose=1">{uiText('Saved work on this device')}</Link> : null}{signupPolicy ? <button className="core-button" onClick={() => chooseAccountMode(true)} type="button">{uiText('Create an account')}</button> : null}</div>
         </>}
       </section>}
+      {!reviewReturnPath ? <div className="managed-login-actions"><a className="account-inline-link" href="https://supermega.dev/shop/#shop-demo">{uiText('View Shop sample screens')}</a></div> : null}
     </div>
   )
 }

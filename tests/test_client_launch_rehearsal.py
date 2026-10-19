@@ -61,7 +61,7 @@ class ClientLaunchRehearsalTests(unittest.TestCase):
         self.assertEqual(metrics["exactFirstPassProfiles"], 8)
         self.assertEqual(metrics["recoveredProfiles"], 4)
         self.assertGreaterEqual(metrics["detectedIssues"], 20)
-        self.assertEqual(metrics["manualMappingDecisions"], 20)
+        self.assertEqual(metrics["manualMappingDecisions"], 23)
         self.assertEqual(metrics["sourceValueCorrections"], 4)
         self.assertEqual(metrics["deniedStagingAttempts"], 12)
         self.assertEqual(metrics["humanReviewsRequired"], 12)

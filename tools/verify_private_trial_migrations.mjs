@@ -4,7 +4,12 @@ import { resolve } from 'node:path'
 
 import { PGlite } from '@electric-sql/pglite'
 import { verifySelfServeAttemptBudget } from './verify_self_serve_attempt_budget.mjs'
-import { verifyWebsiteReviewMigrationCatalog, verifyWebsitePublishingMigrationCatalog, verifyCatalogEntitlementMutations, verifyCatalogStorageMutations } from './verify_website_review_migration_catalog.mjs'
+import {
+  verifyWebsiteReviewMigrationCatalog,
+  verifyWebsitePublishingMigrationCatalog,
+  verifyCatalogEntitlementMutations,
+  verifyCatalogStorageMutations,
+} from './verify_website_review_migration_catalog.mjs'
 
 const root = resolve(import.meta.dirname, '..')
 const migrationDirectory = resolve(root, 'supabase', 'migrations')
@@ -20,6 +25,11 @@ const outOfScopeMigrations = [
   '20260711081300_public_legacy_baseline.sql',
   '20261014103000_website_custom_domain_bindings.sql',
   '20261014122400_website_domain_attempt_fencing.sql',
+  // This Commerce grant boundary is pinned by the v13 rehearsal contract and
+  // the Ecommerce review state-lock correction are exercised by the disposable PostgreSQL
+  // Commerce suite, outside this private-trial RLS catalog digest.
+  '20261019070000_ecommerce_operator_management_boundary.sql',
+  '20261019103000_ecommerce_review_shared_state_lock.sql',
 ]
 const expectedMigrations = [
   '20260722004500_private_trial_backend_role_preflight.sql',
@@ -49,6 +59,9 @@ const expectedMigrations = [
   '20261010070000_website_published_hero_media.sql',
   '20261010120857_website_inquiry_followup.sql',
   '20261014090000_website_channel_stable_update.sql',
+  '20261015091500_website_six_page_reviews.sql',
+  '20261015202629_ecommerce_operator_review_grant.sql',
+  '20261016143945_optimize_sites_inquiry_rls_initplans.sql',
 ]
 // Verify the original private catalog before all Website-review extensions, then
 // verify the complete extended catalog. Adding an extension must not shift the

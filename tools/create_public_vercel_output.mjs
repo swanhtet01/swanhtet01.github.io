@@ -9,6 +9,7 @@ import { promisify } from 'node:util'
 import { bindPreviewNavigation, parsePreviewAppBinding } from './public_preview_navigation.mjs'
 
 import { activeProductContracts } from '../showroom/src/core/product-visibility.ts'
+import { brandFaviconSvg, companyMarkup, companyShopFooterHtml, companyShopHeaderHtml, companyShopStyle, shopMarkup } from './public_company_shop_design.mjs'
 
 
 const run = promisify(execFile)
@@ -67,17 +68,33 @@ async function checkedOutShowroomTree(directory, atRoot = true) {
   const tree = Buffer.concat(body)
   return createHash('sha1').update(`tree ${tree.length}\0`).update(tree).digest()
 }
+const sourceGalleryAssetNames = [
+  'actual-shop-today.png', 'actual-shop-today-tablet.png', 'actual-shop-today-mobile.png',
+  'actual-shop-sell.png', 'actual-shop-sell-tablet.png', 'actual-shop-sell-mobile.png',
+  'actual-shop-orders.png', 'actual-shop-orders-tablet.png', 'actual-shop-orders-mobile.png',
+  'actual-shop-inventory.png', 'actual-shop-inventory-tablet.png', 'actual-shop-inventory-mobile.png',
+]
+// Keep the complete capture set and provenance available to internal review,
+// while exposing only the approved Shop customer surface in the public bundle.
 const publicGalleryAssetNames = [
-  'actual-shop-today.png', 'actual-shop-sell.png', 'actual-shop-orders.png',
-  'actual-sites-editor.png', 'actual-sites-inquiries.png',
-  'actual-commerce-catalog.png', 'actual-commerce-order-request.png',
+  'actual-shop-today.png', 'actual-shop-today-tablet.png', 'actual-shop-today-mobile.png',
+  'actual-shop-sell.png', 'actual-shop-sell-tablet.png', 'actual-shop-sell-mobile.png',
+  'actual-shop-orders.png', 'actual-shop-orders-tablet.png', 'actual-shop-orders-mobile.png',
+  'actual-shop-inventory.png', 'actual-shop-inventory-tablet.png', 'actual-shop-inventory-mobile.png',
 ]
 assert(publicGalleryProvenance.schemaVersion === 'supermega.public-gallery-provenance.v1', 'public_gallery_provenance_schema_unsupported')
 assert(publicGalleryProvenance.status === 'local_component_capture' && publicGalleryProvenance.records === 'synthetic'
-  && publicGalleryProvenance.capturedAt === null, 'public_gallery_provenance_status_invalid')
+  && typeof publicGalleryProvenance.capturedAt === 'string'
+  && Number.isFinite(Date.parse(publicGalleryProvenance.capturedAt))
+  && new Date(publicGalleryProvenance.capturedAt).toISOString() === publicGalleryProvenance.capturedAt
+  && publicGalleryProvenance.capturedAt === publicGalleryCapture.capturedAt, 'public_gallery_provenance_status_invalid')
 assert(publicGalleryCapture.ok === true && publicGalleryCapture.classification === 'candidate_only_local_real_component_synthetic'
   && publicGalleryCapture.publicationReady === false && publicGalleryCapture.deniedExternal === 0,
   'public_gallery_capture_report_invalid')
+assert(publicGalleryCapture.captureMode === 'clean-commit-review'
+  && publicGalleryCapture.sourceHasLocalChanges === false
+  && publicGalleryCapture.captureHarnessHasLocalChanges === false,
+  'public_gallery_clean_capture_required')
 assert(publicGalleryProvenance.captureSourceCommit === publicGalleryCapture.sourceCommit
   && publicGalleryProvenance.captureSourceTree === publicGalleryCapture.showroomTree
   && /^[0-9a-f]{40}$/.test(publicGalleryCapture.sourceCommit)
@@ -92,16 +109,20 @@ try {
 }
 assert(currentShowroomTree === publicGalleryCapture.showroomTree,
   `public_gallery_capture_source_tree_drift:${currentShowroomTree}:${publicGalleryCapture.showroomTree}`)
-assert(publicGalleryProvenance.assets?.map(asset => asset.file).join(',') === publicGalleryAssetNames.join(','), 'public_gallery_asset_set_changed')
+assert(publicGalleryProvenance.assets?.map(asset => asset.file).join(',') === sourceGalleryAssetNames.join(','), 'public_gallery_source_asset_set_changed')
+assert(publicGalleryAssetNames.every(file => sourceGalleryAssetNames.includes(file)), 'public_gallery_customer_asset_missing_from_source')
 const galleryCaptureByFile = new Map(publicGalleryCapture.captures?.map(capture => [capture.file, capture]))
 assert(galleryCaptureByFile.size === publicGalleryCapture.captures?.length, 'public_gallery_capture_files_not_unique')
-const publicGalleryAssetEvidence = await Promise.all(publicGalleryProvenance.assets.map(async ({ file, width, height, sha256, capture }) => {
+const sourceGalleryAssetEvidence = await Promise.all(publicGalleryProvenance.assets.map(async ({ file, width, height, sha256, capture }) => {
   const reportCapture = galleryCaptureByFile.get(file)
   assert(reportCapture && reportCapture.width === width && reportCapture.height === height
     && reportCapture.sha256 === sha256, `public_gallery_capture_report_asset_mismatch:${file}`)
   const bytes = await readFile(resolve(root, 'tools', 'public-assets', file))
   assert(bytes.subarray(0, 8).equals(OG_CARD_PNG_SIGNATURE), `public_gallery_asset_not_png:${file}`)
-  assert(Number.isInteger(width) && Number.isInteger(height) && width >= 1000 && height >= 700,
+  const expectedDimensions = file.endsWith('-mobile.png') ? [390, 844]
+    : file.endsWith('-tablet.png') ? [768, 1024] : [1440, 900]
+  assert(Number.isInteger(width) && Number.isInteger(height)
+    && width === expectedDimensions[0] && height === expectedDimensions[1],
     `public_gallery_asset_dimensions_invalid:${file}`)
   assert(bytes.readUInt32BE(16) === width && bytes.readUInt32BE(20) === height,
     `public_gallery_asset_dimensions_mismatch:${file}`)
@@ -117,10 +138,13 @@ const publicGalleryAssetEvidence = await Promise.all(publicGalleryProvenance.ass
     && capture.routeState === reportCapture.routeState
     && capture.visibleSelector === reportCapture.visibleSelector
     && capture.loadedImages === reportCapture.loadedImages
+    && capture.captureMode === 'clean-commit-review'
+    && capture.captureInputsSha256 === publicGalleryCapture.captureInputsSha256
     && capture.deniedExternal === publicGalleryCapture.deniedExternal,
     `public_gallery_capture_receipt_invalid:${file}`)
   return { file, width, height, sha256, capture }
 }))
+const publicGalleryAssetEvidence = sourceGalleryAssetEvidence.filter(asset => publicGalleryAssetNames.includes(asset.file))
 
 assert(manifest.schemaVersion === 'supermega.site-context.v2', 'unsupported_site_manifest')
 assert(manifest.brand?.version && manifest.contextVersion && manifest.catalogVersion, 'site_manifest_versions_missing')
@@ -207,29 +231,35 @@ const previewAppBinding = parsePreviewAppBinding(
 )
 if (previewAppBinding) release.previewNavigation = previewAppBinding
 
-const faviconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="SuperMega terminal mark" shape-rendering="geometricPrecision"><rect width="64" height="64" rx="8" fill="${brand.colors.background}"/><rect x="1" y="1" width="62" height="62" rx="7" fill="none" stroke="${brand.colors.ink}" stroke-opacity=".16"/><path d="M13 18 27 32 13 46" fill="none" stroke="${brand.colors.accent}" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/><path d="M34 46h17" fill="none" stroke="${brand.colors.ink}" stroke-width="4.5" stroke-linecap="square"/></svg>\n`
+const faviconSvg = brandFaviconSvg(manifest.brand.colors.accent)
 
 const sharedStyle = `
   @font-face { font-family: "SuperMega Noto Sans"; src: url("/fonts/noto-sans-latin.woff2") format("woff2"); font-style: normal; font-weight: 100 900; font-display: swap; }
   :root {
     color-scheme: light;
     --bg: #ffffff;
-    --bg-raised: #f1f1fb;
+    --bg-raised: #f3f6fc;
     --panel: rgba(255, 255, 255, .92);
     --panel-solid: #ffffff;
-    --panel-soft: #f2f1fb;
+    --panel-soft: #f3f6fc;
     --ink: #151521;
-    --muted: #5f5d70;
-    --quiet: #5f5d70;
-    --line: rgba(28,26,48, .12);
-    --line-strong: rgba(28,26,48, .2);
-    --blue: #5b4ee8;
-    --blue-strong: #4538c8;
-    --green: #5b4ee8;
-    --green-soft: rgba(91,78,232, .1);
-    --blue-soft: rgba(91,78,232, .1);
-    --shadow: 0 22px 65px rgba(28,26,48, .1);
-    --radius: 16px;
+    --brand-ink: #151521;
+    --brand-accent: #2563eb;
+    --brand-accent-strong: #1d4ed8;
+    --brand-accent-wash: #eff6ff;
+    --brand-line: #e6e5ef;
+    --brand-muted: #485168;
+    --muted: #5a6478;
+    --quiet: #5a6478;
+    --line: rgba(11,15,23, .12);
+    --line-strong: rgba(11,15,23, .2);
+    --blue: #2563eb;
+    --blue-strong: #1d4ed8;
+    --green: #2563eb;
+    --green-soft: rgba(37,99,235, .1);
+    --blue-soft: rgba(37,99,235, .1);
+    --shadow: 0 18px 48px rgba(15,23,42, .08);
+    --radius: 8px;
     --font-latin: "SuperMega Noto Sans", "Noto Sans", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI";
   }
   * { box-sizing: border-box; }
@@ -244,17 +274,24 @@ const sharedStyle = `
   .skip-link:focus { transform: translateY(0); }
   .shell { min-height: 100svh; }
   .frame { width: min(calc(100% - 48px), 1200px); margin-inline: auto; }
-  .site-header { position: sticky; top: 0; z-index: 40; border-bottom: 1px solid var(--line); background: rgba(255,255,255,.96); backdrop-filter: blur(18px); }
-  .header-inner { min-height: 72px; display: flex; align-items: center; justify-content: space-between; gap: 18px; }
-  .brand { display: inline-flex; min-height: 44px; align-items: center; gap: 12px; text-decoration: none; font-size: 13px; font-weight: 820; letter-spacing: .08em; }
-  .brand-mark { color: var(--green); font-family: "SFMono-Regular", Consolas, monospace; font-size: 20px; letter-spacing: -.12em; }
-  .brand-name { color: var(--ink); }
+  .wrap { width: min(1260px, calc(100% - 64px)); margin-inline: auto; }
+  .site-header { position: sticky; top: 0; z-index: 40; min-height: 76px; border-bottom: 1px solid var(--brand-line); background: rgba(255,255,255,.96); backdrop-filter: blur(18px); }
+  .header-inner { min-height: 76px; display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+  .brand { display: inline-flex; min-height: 48px; align-items: center; gap: .625rem; text-decoration: none; font-family: Geist, Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Myanmar Text", "Noto Sans Myanmar", sans-serif; font-size: 1rem; font-weight: 650; letter-spacing: -.02em; }
+  .brand-mark { width: 30px; height: 18px; display: inline-flex; flex: none; align-items: center; justify-content: center; border: 0; border-radius: 0; padding: 0; background: transparent; box-shadow: none; color: var(--brand-accent); }
+  .brand-mark svg { display: block; width: 100%; height: 100%; }
+  .brand-word { color: var(--brand-ink); font-size: 1rem; font-weight: 650; letter-spacing: -.02em; line-height: 1; }
+  .brand-domain { color: var(--quiet); font-size: 11px; font-weight: 600; letter-spacing: 0; }
   .nav { display: flex; min-width: 0; align-items: center; justify-content: flex-end; gap: 4px; }
   .nav-link { min-height: 44px; display: inline-flex; align-items: center; border-radius: 10px; padding: 0 11px; color: var(--muted); font-size: 13px; font-weight: 720; text-decoration: none; }
   .nav-link:hover, .nav-link[aria-current="page"] { background: var(--green-soft); color: var(--ink); }
+  .nav-links { display: flex; min-width: 0; align-items: center; justify-content: flex-end; gap: 10px; }
+  .nav-links a { min-height: 48px; display: inline-flex; align-items: center; border: 1px solid transparent; border-radius: 8px; padding: 0 15px; color: var(--brand-muted); font-size: .9rem; font-weight: 600; text-decoration: none; transition: color 160ms ease, background-color 160ms ease, border-color 160ms ease; }
+  .nav-links a[aria-current="page"] { color: var(--brand-accent-strong); background: var(--brand-accent-wash); }
+  .nav-links a:hover:not([aria-current="page"]) { border-color: #dbeafe; color: var(--brand-accent-strong); }
   .button { min-height: 48px; display: inline-flex; align-items: center; justify-content: center; gap: 9px; border: 1px solid var(--line-strong); border-radius: 12px; padding: 0 18px; background: #fff; color: var(--ink); font-size: 13px; font-weight: 780; text-decoration: none; transition: transform 160ms ease, border-color 160ms ease, background 160ms ease; }
   .button:hover { transform: translateY(-1px); border-color: var(--green); background: var(--green-soft); }
-  .button.primary { border-color: var(--green); background: var(--green); color: #fff; box-shadow: 0 12px 28px rgba(91,78,232,.2); }
+  .button.primary { border-color: var(--green); background: var(--green); color: #fff; box-shadow: 0 12px 28px rgba(37,99,235,.2); }
   .button.primary:hover { background: var(--blue-strong); }
   .button.compact { min-height: 44px; padding-inline: 15px; }
   .eyebrow { display: inline-flex; align-items: center; gap: 9px; color: var(--green); font-family: "SFMono-Regular", Consolas, monospace; font-size: 12px; font-weight: 760; letter-spacing: .04em; text-transform: uppercase; }
@@ -284,7 +321,7 @@ const sharedStyle = `
   .workspace-title { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 22px; }
   .workspace-title strong { font-size: 18px; }
   .workspace-title small { display: block; margin-top: 4px; color: var(--quiet); }
-  .live-pill, .status-pill { display: inline-flex; min-height: 28px; align-items: center; gap: 7px; border: 1px solid rgba(91,78,232,.2); border-radius: 999px; padding: 0 10px; background: var(--green-soft); color: var(--green); font-size: 10px; font-weight: 760; text-transform: uppercase; }
+  .live-pill, .status-pill { display: inline-flex; min-height: 28px; align-items: center; gap: 7px; border: 1px solid rgba(37,99,235,.2); border-radius: 999px; padding: 0 10px; background: var(--green-soft); color: var(--green); font-size: 10px; font-weight: 760; text-transform: uppercase; }
   .live-pill::before, .status-pill::before { width: 6px; height: 6px; border-radius: 50%; background: currentColor; content: ""; }
   .metric-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
   .metric { min-height: 94px; border: 1px solid var(--line); border-radius: 13px; padding: 14px; background: var(--panel-soft); }
@@ -300,13 +337,13 @@ const sharedStyle = `
   .section-head h2 { margin-top: 17px; }
   .section-head p { color: var(--muted); font-size: 18px; }
   .surface-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
-  .surface-card { min-height: 260px; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: var(--radius); padding: 28px; background: var(--panel-solid); box-shadow: 0 12px 34px rgba(28,26,48,.055); }
+  .surface-card { min-height: 260px; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: var(--radius); padding: 28px; background: var(--panel-solid); box-shadow: 0 12px 34px rgba(11,15,23,.055); }
   .surface-card > span { color: var(--green); font-family: "SFMono-Regular", Consolas, monospace; font-size: 10px; }
   .surface-card h3 { margin-top: 46px; font-size: 31px; }
   .surface-card p { margin: 0; color: var(--muted); }
   .surface-card small { margin-top: auto; padding-top: 24px; color: var(--quiet); font-size: 11px; }
   .product-grid, .template-grid, .principle-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
-  .product-card, .template-card, .principle-card, .module-card, .case-card { position: relative; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius); padding: 30px; background: var(--panel-solid); box-shadow: 0 12px 34px rgba(28,26,48,.055); }
+  .product-card, .template-card, .principle-card, .module-card, .case-card { position: relative; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius); padding: 30px; background: var(--panel-solid); box-shadow: 0 12px 34px rgba(11,15,23,.055); }
   .product-card::after { position: absolute; width: 220px; height: 220px; top: -130px; right: -80px; border-radius: 50%; background: var(--blue); opacity: .12; filter: blur(2px); content: ""; }
   .product-card.production::after { background: var(--green); }
   .card-index { color: var(--quiet); font-family: "SFMono-Regular", Consolas, monospace; font-size: 11px; }
@@ -324,7 +361,7 @@ const sharedStyle = `
   .template-card p { color: var(--muted); }
   .template-card .card-link { margin-top: auto; }
   .product-label { display: inline-flex; min-height: 30px; align-items: center; border: 1px solid var(--line); border-radius: 999px; padding: 0 10px; color: var(--muted); font-size: 11px; font-weight: 760; }
-  .callout { display: grid; grid-template-columns: 1fr auto; gap: 34px; align-items: center; border: 1px solid rgba(91,78,232,.2); border-radius: var(--radius); padding: 36px; background: linear-gradient(120deg, rgba(91,78,232,.1), rgba(255,255,255,.76)); }
+  .callout { display: grid; grid-template-columns: 1fr auto; gap: 34px; align-items: center; border: 1px solid rgba(37,99,235,.2); border-radius: var(--radius); padding: 36px; background: linear-gradient(120deg, rgba(37,99,235,.1), rgba(255,255,255,.76)); }
   .callout p { max-width: 700px; margin: 0; color: var(--muted); }
   .steps { counter-reset: step; display: grid; gap: 0; border-top: 1px solid var(--line); }
   .step { counter-increment: step; display: grid; grid-template-columns: 54px 1fr; gap: 22px; border-bottom: 1px solid var(--line); padding: 25px 0; }
@@ -345,15 +382,15 @@ const sharedStyle = `
   .contact-copy p { color: var(--muted); font-size: 18px; }
   .contact-page { display:grid; grid-template-columns:minmax(0,.82fr) minmax(0,1fr); align-items:start; gap:clamp(32px,5vw,84px); max-width:1160px; padding:clamp(44px,7vw,88px) 0 86px; }
   .contact-page .page-hero { max-width:none; padding:36px 0 0; position:sticky; top:100px; }
-  .contact-page .page-hero::after { content:""; display:block; width:min(100%,340px); height:1px; margin-top:36px; background:linear-gradient(90deg,var(--blue),#e8e5f7); }
+  .contact-page .page-hero::after { content:""; display:block; width:min(100%,340px); height:1px; margin-top:36px; background:linear-gradient(90deg,var(--blue),#e8f0ff); }
   .contact-page .page-hero h1 { max-width:480px; font-size:clamp(46px,5vw,66px); line-height:1.03; letter-spacing:-.055em; }
   .contact-page .page-hero .lede { max-width:430px; font-size:18px; line-height:1.62; }
   .contact-page .contact-layout { display:block; padding:0; }
-  .contact-page .contact-form { width:100%; padding:clamp(24px,3vw,40px); gap:18px; border-color:#dedce9; border-radius:28px; background:linear-gradient(160deg,#fff,#fbfaff); box-shadow:0 24px 70px rgba(28,26,48,.08); }
+  .contact-page .contact-form { width:100%; padding:clamp(24px,3vw,40px); gap:18px; border-color:#dbe3ee; border-radius:8px; background:#fff; box-shadow:0 16px 42px rgba(11,15,23,.06); }
   .contact-page .field-grid { gap:20px 16px; }
   .contact-page .field-grid label { display: block; color: var(--ink); font-size: 13px; font-weight: 650; }
   .contact-page .field-grid label span[lang="my"] { color: var(--muted); font-weight: 500; }
-  .contact-page .field-grid input, .contact-page .field-grid select, .contact-page .field-grid textarea { display: block; margin-top: 9px; min-height: 52px; border-color: #dedce9; border-radius: 12px; background: #fff; font-size: 15px; }
+  .contact-page .field-grid input, .contact-page .field-grid select, .contact-page .field-grid textarea { display: block; margin-top: 9px; min-height: 52px; border-color: #dbe3ee; border-radius: 6px; background: #fff; font-size: 15px; }
   .contact-page .field-grid textarea { min-height: 122px; line-height: 1.55; }
   .contact-page .contact-form .button { min-height:56px; width:100%; justify-content:center; padding-inline:26px; }
   .contact-page .contact-copy summary { cursor: pointer; min-height: 44px; align-content: center; color: var(--muted); }
@@ -377,7 +414,7 @@ const sharedStyle = `
   label.wide { grid-column: 1/-1; }
   .contact-service { grid-column: 1/-1; }
   input, select, textarea { width: 100%; min-width: 0; border: 1px solid var(--line); border-radius: 11px; padding: 13px 14px; background: #fff; color: var(--ink); outline: none; }
-  input:focus, select:focus, textarea:focus { border-color: var(--green); box-shadow: 0 0 0 3px rgba(91,78,232,.1); }
+  input:focus, select:focus, textarea:focus { border-color: var(--green); box-shadow: 0 0 0 3px rgba(37,99,235,.1); }
   textarea { min-height: 150px; resize: vertical; }
   .form-note, .form-status { margin: 0; color: var(--quiet); font-size: 12px; }
   .form-status { min-height: 1.5em; color: var(--green); }
@@ -385,11 +422,14 @@ const sharedStyle = `
   .prose { max-width: 820px; padding-bottom: 100px; }
   .prose section { display: grid; grid-template-columns: 220px 1fr; gap: 42px; border-top: 1px solid var(--line); padding: 30px 0; }
   .prose p { color: var(--muted); }
-  .site-footer { margin-top: 32px; border-top: 1px solid var(--line); padding: 34px 0 48px; }
-  .footer-inner { display: flex; align-items: center; justify-content: space-between; gap: 24px; color: var(--quiet); font-size: 12px; }
-  .footer-links { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 18px; }
-  .footer-links a { min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
-  .footer-links a:hover { color: var(--ink); }
+  .footer { margin-top: 32px; border-top: 1px solid var(--brand-line); padding: 25px 0 34px; color: var(--muted); background: #fff; }
+  .footer-row { display: flex; align-items: center; justify-content: space-between; gap: 20px; font-size: .76rem; }
+  .footer .brand { color: var(--brand-ink); font-size: .92rem; }
+  .footer .brand-word { color: var(--brand-ink); }
+  .footer-links { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 10px 18px; }
+  .footer-links a { min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; color: var(--brand-muted); font-size: .875rem; font-weight: 650; text-decoration: none; }
+  .footer-links a:hover { color: var(--brand-accent-strong); text-decoration: underline; text-underline-offset: 4px; }
+  .footer-links span { min-height: 44px; display: inline-flex; align-items: center; color: var(--quiet); }
   .system-preview { transform: none; border-radius: 8px; }
   .system-preview-body { padding: 24px; }
   .system-kicker { margin-bottom: 18px; color: var(--quiet); font-family: "SFMono-Regular", Consolas, monospace; font-size: 10px; letter-spacing: .1em; }
@@ -428,7 +468,7 @@ const sharedStyle = `
   .trust-compact { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .trust-compact .principle-card { min-height: 210px; }
   .trust-strip { padding-bottom: 24px; }
-  .control-line { grid-column: 1/-1; display: flex; align-items: center; justify-content: space-between; gap: 22px; border: 1px solid rgba(91,78,232,.2); border-radius: var(--radius); padding: 18px 22px; background: var(--green-soft); }
+  .control-line { grid-column: 1/-1; display: flex; align-items: center; justify-content: space-between; gap: 22px; border: 1px solid rgba(37,99,235,.2); border-radius: var(--radius); padding: 18px 22px; background: var(--green-soft); }
   .control-line p { max-width: 760px; margin: 0; color: var(--muted); font-size: 12px; }
   .compact-solutions { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 20px; }
   .delivery-steps { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 20px; padding: 0; list-style: none; counter-reset: delivery; }
@@ -440,7 +480,7 @@ const sharedStyle = `
   .delivery-boundary summary { min-height: 44px; align-content: center; cursor: pointer; font-weight: 650; }
   .delivery-boundary p { font-size: 14px; margin-block: 12px; }
   @media (max-width: 760px) { .delivery-steps { grid-template-columns: 1fr; } }
-  .compact-solution { min-width: 0; min-height: 270px; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: var(--radius); padding: 28px; background: var(--panel-solid); box-shadow: 0 12px 34px rgba(28,26,48,.045); }
+  .compact-solution { min-width: 0; min-height: 270px; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: var(--radius); padding: 28px; background: var(--panel-solid); box-shadow: 0 12px 34px rgba(11,15,23,.045); }
   .compact-solution h3 { margin: 20px 0 9px; font-size: 30px; }
   .compact-solution > p { min-height: 44px; color: var(--muted); font-size: 16px; }
   .compact-first { display: grid; gap: 4px; margin-top: 14px; border-left: 2px solid var(--green); padding-left: 10px; color: var(--muted); font-size: 14px; line-height: 1.5; }
@@ -456,7 +496,7 @@ const sharedStyle = `
   .roadmap-solution > p { min-height: 0; }
   .roadmap-solution .card-link, .roadmap-solution .status-note { margin-top: auto; }
   .status-note { display: inline-flex; min-height: 44px; align-items: center; color: var(--quiet); font-size: 11px; font-weight: 760; }
-  .shared-capability { display: grid; grid-template-columns: minmax(0,.35fr) minmax(0,1fr) auto; gap: 22px; align-items: center; margin-top: 14px; border: 1px solid rgba(91,78,232,.2); border-radius: var(--radius); padding: 20px 24px; background: var(--green-soft); scroll-margin-top: 92px; }
+  .shared-capability { display: grid; grid-template-columns: minmax(0,.35fr) minmax(0,1fr) auto; gap: 22px; align-items: center; margin-top: 14px; border: 1px solid rgba(37,99,235,.2); border-radius: var(--radius); padding: 20px 24px; background: var(--green-soft); scroll-margin-top: 92px; }
   .shared-capability h3, .shared-capability p { margin: 0; }
   .shared-capability h3 { font-size: 22px; }
   .shared-capability p { color: var(--muted); font-size: 12px; }
@@ -471,7 +511,7 @@ const sharedStyle = `
   .detail-disclosure[open] > summary::after { content: "−"; }
   .disclosure-body { padding-top: 4px; }
   .boundary-note { margin: 0; border-left: 2px solid var(--green); padding: 2px 0 2px 12px; color: var(--quiet); font-size: 10px; }
-  .closing-strip { display: grid; grid-template-columns: 1fr auto; gap: 30px; align-items: center; margin-top: 14px; border: 1px solid rgba(91,78,232,.2); border-radius: var(--radius); padding: 24px 28px; background: var(--panel-soft); }
+  .closing-strip { display: grid; grid-template-columns: 1fr auto; gap: 30px; align-items: center; margin-top: 14px; border: 1px solid rgba(37,99,235,.2); border-radius: var(--radius); padding: 24px 28px; background: var(--panel-soft); }
   .closing-strip h2 { margin-bottom: 6px; font-size: 27px; }
   .closing-strip p { margin: 0; color: var(--muted); font-size: 12px; }
   .offer-model-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); border-block: 1px solid var(--line-strong); }
@@ -484,7 +524,7 @@ const sharedStyle = `
   .offer-model-list li::before { margin-right: 10px; color: var(--green); content: ">"; font-family: "SFMono-Regular", Consolas, monospace; font-weight: 800; }
   .offer-model-action { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-top: 24px; }
   .offer-model-action p { max-width: 720px; margin: 0; color: var(--quiet); font-size: 11px; }
-  :focus-visible { outline: 3px solid rgba(91,78,232,.34); outline-offset: 3px; }
+  :focus-visible { outline: 3px solid rgba(37,99,235,.34); outline-offset: 3px; }
   @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } *, *::before, *::after { transition-duration: .01ms !important; } }
   .home-hero { display: grid; grid-template-columns: 1fr; align-items: center; gap: 64px; padding-block: 88px; }
   .home-hero h1 { font-size: clamp(44px, 5.4vw, 76px); line-height: 1.05; letter-spacing: -.055em; }
@@ -510,7 +550,9 @@ const sharedStyle = `
   @media (max-width: 760px) { .home-hero { gap: 32px; } .business-overview { padding: 20px; } .home-hero .lede { font-size: 18px; } .home-hero .actions > a { flex: 1; } }
   @media (max-width: 980px) { .hero { grid-template-columns: 1fr; gap: 42px; padding-top: 60px; } .hero-copy { max-width: 820px; } .workspace { transform: none; } .split, .solution-block { grid-template-columns: 1fr; gap: 30px; } .sticky-copy { position: static; } .surface-grid { grid-template-columns: repeat(2,minmax(0,1fr)); } .surface-card:last-child { grid-column: 1/-1; min-height: 210px; } .principle-grid, .trust-compact { grid-template-columns: repeat(2,minmax(0,1fr)); } .product-roadmap { grid-template-columns: 1fr; } .contact-layout { grid-template-columns: 1fr; gap: 42px; } }
   @media (max-width: 760px) { .contact-form input, .contact-form select, .contact-form textarea { font-size: 16px; } }
-  @media (max-width: 760px) { .frame { width: min(calc(100% - 30px), 1200px); } .header-inner { min-height: 62px; gap: 10px; } .brand { gap: 8px; font-size: 11px; } .nav-link { padding-inline: 8px; } .nav-optional { display: none; } .header-cta { min-height: 42px; padding-inline: 13px; } .hero, .page-hero { padding-top: 46px; } .hero { padding-bottom: 52px; } .workspace-body { grid-template-columns: 1fr; min-height: 0; } .workspace-nav { display: none; } .workspace-main { padding: 16px; } .metric-grid { grid-template-columns: 1fr; } .metric { min-height: 76px; } .surface-grid, .product-grid, .template-grid, .module-grid, .principle-grid, .trust-compact, .case-grid, .compact-solutions, .product-roadmap, .shared-capability { grid-template-columns: 1fr; } .surface-card, .surface-card:last-child { grid-column: auto; min-height: 220px; } .solution-block { padding: 24px; } .system-preview-body { padding: 18px; } .system-row { grid-template-columns: 28px 92px minmax(0, 1fr); } .system-row i { display: none; } .section { padding: 50px 0; } .control-line, .closing-strip { display: grid; grid-template-columns: 1fr; } .callout { grid-template-columns: 1fr; } .callout { padding: 26px; } .contact-form { padding: 20px; } .field-grid { grid-template-columns: 1fr; } label.wide { grid-column: auto; } .prose section { grid-template-columns: 1fr; gap: 6px; } .footer-inner { display: grid; } .footer-links { justify-content: flex-start; } }
+  @media (max-width: 1050px) { .wrap { width: min(calc(100% - 48px), 900px); } }
+  @media (max-width: 760px) { .frame { width: min(calc(100% - 30px), 1200px); } .header-inner { min-height: 62px; gap: 10px; } .nav-link { padding-inline: 8px; } .nav-optional { display: none; } .header-cta { min-height: 42px; padding-inline: 13px; } .hero, .page-hero { padding-top: 46px; } .hero { padding-bottom: 52px; } .workspace-body { grid-template-columns: 1fr; min-height: 0; } .workspace-nav { display: none; } .workspace-main { padding: 16px; } .metric-grid { grid-template-columns: 1fr; } .metric { min-height: 76px; } .surface-grid, .product-grid, .template-grid, .module-grid, .principle-grid, .trust-compact, .case-grid, .compact-solutions, .product-roadmap, .shared-capability { grid-template-columns: 1fr; } .surface-card, .surface-card:last-child { grid-column: auto; min-height: 220px; } .solution-block { padding: 24px; } .system-preview-body { padding: 18px; } .system-row { grid-template-columns: 28px 92px minmax(0, 1fr); } .system-row i { display: none; } .section { padding: 50px 0; } .control-line, .closing-strip { display: grid; grid-template-columns: 1fr; } .callout { grid-template-columns: 1fr; } .callout { padding: 26px; } .contact-form { padding: 20px; } .field-grid { grid-template-columns: 1fr; } label.wide { grid-column: auto; } .prose section { grid-template-columns: 1fr; gap: 6px; } .footer-row { display: grid; } .footer-links { justify-content: flex-start; } }
+  @media (max-width: 680px) { .wrap { width: min(calc(100% - 36px), 560px); } .site-header .header-inner { flex-wrap: wrap; gap: 6px 12px; padding-block: 8px; } .site-header .brand { min-height: 48px; gap: .625rem; font-size: 1rem; } .site-header .nav-links { flex: 1 0 100%; justify-content: flex-end; flex-wrap: wrap; } .site-header .nav-links a { min-height: 48px; padding-inline: 9px; } }
   @media (max-width: 420px) { .nav-link { display: none; } h1 { font-size: 38px; } .product-card { padding: 24px; } .compact-solution { padding: 22px; } }
   @media (min-width: 761px) { .detail-disclosure > summary { display: none; } details.detail-disclosure:not([open]) > .disclosure-body { display: block; } .detail-disclosure { margin-top: 0; border-top: 0; } .product-disclosure .disclosure-body { padding-top: 16px; } }
   @media (max-width: 760px) { .hero { gap: 28px; padding-top: 28px; padding-bottom: 32px; } .hero-note { display: none; } .section { padding: 32px 0; } .section-head { margin-bottom: 18px; } .section-head p { font-size: 16px; } .workspace-bar { min-height: 44px; } .system-preview-body { padding: 14px 16px; } .system-row { min-height: 44px; } .system-boundary { margin-top: 14px; } .compact-solution > p { min-height: 0; } .closing-strip { padding: 22px; } }
@@ -521,23 +563,30 @@ const sharedStyle = `
   .editorial-hero h1 {font-size:clamp(40px,4.7vw,64px);line-height:1.04;letter-spacing:-.055em;margin:12px 0 14px;font-weight:650}
   .editorial-hero .lede {max-width:610px;font-size:17px;line-height:1.55;color:var(--muted)}
   .platform-gallery {display:grid;gap:12px;min-width:0}
+  .company-hero .shop-showcase-nav a[aria-current="true"] {border-color:#93c5fd;background:#eff6ff;color:#1d4ed8}
+  .platform-home-caption {margin:12px 0 0;color:#5a6478;font-size:12px;line-height:1.45}
   .platform-slides {display:flex;align-items:stretch;min-width:0;overflow-x:auto;overscroll-behavior-inline:contain;scroll-snap-type:x mandatory;scrollbar-width:none;border-radius:24px}
   .platform-slides::-webkit-scrollbar {display:none}
-  .platform-slides .platform-image {display:flex;flex:0 0 100%;flex-direction:column;box-sizing:border-box;scroll-snap-align:start}
+  .platform-slides .platform-image {display:flex;flex:0 0 100%;flex-direction:column;box-sizing:border-box;margin:0;scroll-snap-align:start}
   .platform-gallery[data-single] .platform-slides {overflow:hidden}
+  .shop-gallery-all .platform-slides {display:grid;gap:28px;overflow:visible;scroll-snap-type:none;border-radius:0}
+  .shop-gallery-all .platform-slides .platform-image {min-width:0;scroll-snap-align:none}
   .platform-gallery-controls {display:flex;align-items:center;justify-content:flex-end;gap:12px;min-height:40px}
   .platform-gallery-controls button {display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border:1px solid var(--line-strong);border-radius:50%;color:var(--ink);background:#fff;font-size:20px;cursor:pointer}
-  .platform-gallery-controls button:hover:not(:disabled) {border-color:var(--blue);color:var(--blue);background:#f7f6ff}
+  .platform-gallery-controls button:hover:not(:disabled) {border-color:var(--blue);color:var(--blue);background:#eff6ff}
   .platform-gallery-controls button:focus-visible {outline:2px solid var(--blue);outline-offset:3px}
   .platform-gallery-controls button:disabled {opacity:.4;cursor:default}
   .platform-gallery-status {min-width:48px;color:var(--muted);font-size:13px;font-variant-numeric:tabular-nums;text-align:center}
-  .platform-image {margin:0;padding:24px;background:#f1f0fb;border:1px solid #dedbf4;border-radius:24px;overflow:hidden}
-  .platform-image img {display:block;width:100%;height:auto;max-width:1440px;margin-inline:auto;border-radius:12px;box-shadow:0 16px 48px rgba(28,26,48,.08);background:#fff}
-  .platform-image-open {position:relative;display:block;min-width:0;color:var(--ink);text-decoration:none}
-  .platform-image-open span {position:absolute;right:12px;bottom:12px;display:inline-flex;align-items:center;min-height:32px;padding:6px 10px;border:1px solid #dedbf4;border-radius:8px;background:rgba(255,255,255,.96);font-size:11px;font-weight:700;box-shadow:0 5px 18px rgba(28,26,48,.08)}
-  .platform-image-open:hover span,.platform-image-open:focus-visible span {color:var(--blue);border-color:var(--blue)}
-  .platform-image figcaption {margin-top:auto;padding:16px 0 0;color:#615f73;font-size:12px}
-  .product-proof {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));margin-top:18px;border:1px solid var(--line);border-radius:16px;background:var(--panel-solid);overflow:hidden;list-style:none;padding:0}
+  .platform-device-capture img {display:block;width:100%;height:auto;border:1px solid #dfe2ea;border-radius:5px;background:#fff;box-shadow:0 10px 24px rgba(16,24,40,.09);pointer-events:none;user-select:none}
+  .platform-image figcaption {margin-top:auto;padding:12px 2px 0;color:#596579;font-size:12px;line-height:1.45}
+  .platform-image figcaption small {display:block;margin-top:3px;color:#778196;font-size:11px}
+  .platform-device-set {display:grid;grid-template-columns:minmax(0,2.45fr) minmax(0,1.1fr) minmax(0,.78fr);align-items:end;gap:clamp(8px,1.4vw,16px);min-width:0}
+  .platform-device-set:not(.has-tablet) {grid-template-columns:minmax(0,1fr) minmax(0,.48fr)}
+  .platform-device-capture {display:flex;flex-direction:column;min-width:0;margin:0}
+  .platform-device-capture figcaption {margin:7px 0 0;color:#657087;font-size:10px;font-weight:650;line-height:1.25;text-align:center}
+  .platform-device-capture-phone {width:100%}
+  .platform-home-caption {margin:10px 0 0;color:#596579;font-size:12px;line-height:1.45}
+  .product-proof {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));margin-top:18px;border:1px solid var(--line);border-radius:8px;background:var(--panel-solid);overflow:hidden;list-style:none;padding:0}
   .product-proof li {min-width:0;padding:18px 20px}
   .product-proof li+li {border-left:1px solid var(--line)}
   .product-proof span {display:block;margin-bottom:8px;color:var(--blue-strong);font-family:"SFMono-Regular",Consolas,monospace;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
@@ -547,7 +596,7 @@ const sharedStyle = `
   .story-heading {display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:end;margin-bottom:32px}
   .story-heading h2 {font-size:clamp(32px,4vw,52px);letter-spacing:-.045em;line-height:1.12;margin:12px 0 0}
   .story-heading p {font-size:18px;line-height:1.65;color:var(--muted);margin:0;max-width:500px}
-  .feature-line {display:flex;flex-wrap:wrap;gap:12px 30px;list-style:none;padding:24px 0 0;margin:0;font-size:14px;color:#49465f}
+  .feature-line {display:flex;flex-wrap:wrap;gap:12px 30px;list-style:none;padding:24px 0 0;margin:0;font-size:14px;color:#344054}
   .feature-line > li {flex:1 1 240px;min-width:0;padding:12px 0}
   .feature-line h2, .feature-line h3 {margin:0 0 10px;font-size:18px;letter-spacing:-.025em;color:var(--ink)}
   .feature-line p {margin:0;max-width:34ch;font-size:15px;line-height:1.7;color:var(--muted)}
@@ -562,7 +611,7 @@ const sharedStyle = `
   .product-tabs button {min-width:120px;min-height:48px;padding:10px 22px;border:0;border-bottom:3px solid transparent;background:transparent;color:var(--muted);font:inherit;font-size:15px;font-weight:700;cursor:pointer}
   .product-tabs button:hover,.product-tabs button[aria-selected="true"] {color:var(--ink);border-bottom-color:var(--blue)}
   .product-cards {display:grid;gap:18px;padding:0 0 48px}
-  .product-card-compact {min-width:0;display:grid;grid-template-columns:minmax(0,1.42fr) minmax(290px,.58fr);gap:26px;padding:16px;border:1px solid var(--line-strong);border-radius:24px;background:var(--panel-solid);box-shadow:0 18px 60px rgba(28,26,48,.06)}
+  .product-card-compact {min-width:0;display:grid;grid-template-columns:minmax(0,1.42fr) minmax(290px,.58fr);gap:26px;padding:16px;border:1px solid var(--line-strong);border-radius:10px;background:var(--panel-solid);box-shadow:0 18px 60px rgba(11,15,23,.06)}
   .product-card-compact[hidden] {display:none}
   .product-card-media {min-width:0}
   .product-card-compact .platform-image {padding:12px;border-radius:14px}
@@ -571,32 +620,62 @@ const sharedStyle = `
   .product-card-copy h2 {margin:12px 0;font-size:clamp(30px,3vw,44px);line-height:1.08;letter-spacing:-.045em}
   .product-card-copy > p {margin:0;color:var(--muted);font-size:16px;line-height:1.6}
   .product-card-flow {display:grid;gap:10px;margin:24px 0;padding:0;list-style:none}
-  .product-card-flow li {display:flex;align-items:center;gap:10px;color:#49465f;font-size:14px;line-height:1.35}
+  .product-card-flow li {display:flex;align-items:center;gap:10px;color:#344054;font-size:14px;line-height:1.35}
   .product-card-flow li::before {content:"";flex:0 0 5px;width:5px;height:5px;border-radius:50%;background:var(--blue)}
   .product-card-copy .story-link {margin-top:auto;padding-top:8px;font-size:14px;font-weight:700}
-  .home-contact {display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:28px;margin:0 0 80px;padding:34px 36px;border:1px solid #d9d5fb;border-radius:24px;background:linear-gradient(135deg,#f6f5ff,#eeecff)}
+  .home-contact {display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:28px;margin:0 0 80px;padding:34px 36px;border:1px solid #cbdaf0;border-radius:10px;background:linear-gradient(135deg,#f5f3ff,#f5f7fb)}
   .home-contact h2 {margin:0 0 8px;font-size:clamp(28px,3vw,42px);line-height:1.1;letter-spacing:-.04em}
   .home-contact p {max-width:650px;margin:0;color:var(--muted);font-size:16px;line-height:1.6}
-  .site-header {background:#fff}
   .header-actions{display:flex;align-items:center;gap:8px}
   @media(max-width:980px){.product-card-compact{grid-template-columns:minmax(0,1fr) minmax(230px,.8fr);gap:12px}.product-card-copy{padding:16px}}
-  @media(max-width:760px){.editorial-hero{padding:28px 0 20px}.editorial-hero h1{font-size:clamp(38px,11vw,52px)}.editorial-hero .lede{font-size:16px}.story-heading{grid-template-columns:1fr;gap:18px}.product-story{padding:48px 0}.product-story-standalone{padding:0 0 44px}.platform-gallery{grid-template-columns:1fr;gap:12px}.platform-image{padding:10px;border-radius:14px}.platform-image img{border-radius:8px}.product-proof{grid-template-columns:1fr}.product-proof li+li{border-top:1px solid var(--line);border-left:0}.feature-line{gap:12px 20px}.product-cards{gap:14px;padding-bottom:48px}.product-card-compact{display:flex;flex-direction:column;gap:0}.product-card-copy{padding:18px 8px 12px}.product-card-copy h2{font-size:30px}.product-card-flow{margin:18px 0}.product-tabs button{flex:1;min-width:0;padding:10px 6px;font-size:14px}.platform-image-open span{right:6px;bottom:6px;font-size:10px}.home-contact{grid-template-columns:1fr;margin-bottom:52px;padding:26px 24px}.home-contact .button{width:100%}}
+ @media(max-width:760px){.editorial-hero{padding:28px 0 20px}.editorial-hero h1{font-size:clamp(38px,11vw,52px)}.editorial-hero .lede{font-size:16px}.story-heading{grid-template-columns:1fr;gap:18px}.product-story{padding:48px 0}.product-story-standalone{padding:0 0 44px}.platform-gallery{grid-template-columns:1fr;gap:12px}.platform-image{padding:10px;border-radius:14px}.platform-device-stage{grid-template-columns:1fr;gap:0;padding:14px;border-radius:12px}.platform-open-label{min-height:32px}.product-proof{grid-template-columns:1fr}.product-proof li+li{border-top:1px solid var(--line);border-left:0}.feature-line{gap:12px 20px}.product-cards{gap:14px;padding-bottom:48px}.product-card-compact{display:flex;flex-direction:column;gap:0}.product-card-copy{padding:18px 8px 12px}.product-card-copy h2{font-size:30px}.product-card-flow{margin:18px 0}.product-tabs button{flex:1;min-width:0;padding:10px 6px;font-size:14px}.home-contact{grid-template-columns:1fr;margin-bottom:52px;padding:26px 24px}.home-contact .button{width:100%}}
+  .platform-image{padding:16px;background:#f8fafc;border-color:#e4e7ec;border-radius:20px}
+  .platform-device-stage{min-width:0;padding:clamp(12px,2vw,22px);border:1px solid #dbeafe;border-radius:8px;background:linear-gradient(145deg,#eff6ff,#f8fafc)}
+  .shop-showcase-nav{display:flex;flex-wrap:wrap;gap:18px;margin:0 0 12px;border-bottom:1px solid #e4e6ee}
+  .shop-showcase-nav a{min-height:38px;display:inline-flex;align-items:center;border:0;border-bottom:2px solid transparent;border-radius:0;padding:0 2px;color:#657087;font-size:12px;font-weight:700;text-decoration:none}
+  .shop-showcase-nav a:hover,.shop-showcase-nav a[aria-current="true"]{border-bottom-color:#2563eb;background:transparent;color:#1d4ed8}
+  .platform-gallery-controls button{width:36px;height:36px;border-radius:5px}
+  .platform-gallery-controls button:hover:not(:disabled){background:#eff6ff}
+  .button,.nav-link,.product-tabs button,.shop-showcase-nav a,.platform-gallery-controls button{border-radius:6px}
+  .button.primary{background:#2563eb;border-color:#2563eb;box-shadow:none}
+  .button.primary:hover{background:#1d4ed8}
+  .company-hero{background:radial-gradient(ellipse at 84% 18%,rgba(37,99,235,.10),transparent 32%),linear-gradient(180deg,#f5f8ff,#fff 68%)}
+  body[data-view="company"] .company-hero{background:linear-gradient(180deg,#f8fbff,#fff 72%)}
+  body[data-view="company"] .company-hero::before{opacity:0;background-image:none}
+  @media(min-width:1051px){body[data-view="company"] .company-hero .hero-grid{grid-template-columns:minmax(0,.88fr) minmax(420px,1.12fr);gap:clamp(36px,5vw,72px)}}
+  body[data-view="company"] .company-hero .hero-art{min-height:0}
+  body[data-view="company"] .company-hero .company-product-visual{display:grid;min-width:0;gap:10px;margin:0;padding:10px;border:1px solid #e1e5ed;border-radius:12px;background:#fff;box-shadow:0 18px 40px rgba(17,24,39,.08)}
+  .company-product-visual img{display:block;width:100%;height:auto;border:1px solid #e5e8ef;border-radius:7px;background:#f7f8fb;pointer-events:none;user-select:none}
+  .company-product-visual figcaption{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:2px 5px;color:#3d4655;font-size:12px;font-weight:700}
+  .company-product-visual figcaption span{color:#70798a;font-size:11px;font-weight:500}
+  body[data-view="company"] .company-product-evidence{margin-top:clamp(40px,6vw,72px);padding-top:clamp(28px,4vw,48px);border-top:1px solid #e5e4ed}
+  .company-product-evidence-head{display:flex;align-items:end;justify-content:space-between;gap:24px;margin-bottom:22px}
+  .company-product-evidence-head h2{margin:8px 0 0;font-size:clamp(25px,3vw,38px);letter-spacing:-.045em;line-height:1.12}
+  .company-product-evidence-head p{max-width:42ch;margin:0;color:var(--muted);font-size:14px;line-height:1.55}
+  .company-product-evidence .platform-home-caption{margin:10px 0 0;font-size:12px;color:#596579}
+  .company-product-evidence .platform-device-stage{padding:clamp(12px,2vw,22px);border-color:#dbeafe;border-radius:8px;background:linear-gradient(145deg,#eff6ff,#f8fafc);box-shadow:0 18px 42px rgba(37,99,235,.08)}
+  /* Company is the editorial brand surface; Shop remains a bright, task-first workspace. */
+  body[data-view="company"] .shop-only-family{grid-template-columns:minmax(0,1fr);max-width:none}
+  body[data-view="company"] .shop-only-family .family-card.featured{display:grid;grid-template-columns:64px minmax(0,1fr) auto;grid-template-rows:auto auto auto;align-items:center;gap:8px 24px;min-height:0;padding:26px 32px}
+  body[data-view="company"] .shop-only-family .family-icon{grid-column:1;grid-row:1/4;margin:0}
+  body[data-view="company"] .shop-only-family .family-label{grid-column:2;grid-row:1}
+  body[data-view="company"] .shop-only-family .family-card h3{grid-column:2;grid-row:2;margin:0}
+  body[data-view="company"] .shop-only-family .family-card p{grid-column:2;grid-row:3;max-width:70ch}
+  body[data-view="company"] .shop-only-family .family-card .family-link{grid-column:3;grid-row:1/4;margin:0;padding:0;white-space:nowrap}
+  @media(max-width:760px){body[data-view="company"] .shop-only-family .family-card.featured{grid-template-columns:48px minmax(0,1fr);gap:8px 16px;padding:22px}body[data-view="company"] .shop-only-family .family-icon{grid-column:1;grid-row:1/4;align-self:start}body[data-view="company"] .shop-only-family .family-card .family-link{grid-column:2;grid-row:4;justify-self:start;margin-top:8px}}
+  @media(max-width:760px){.platform-device-set,.platform-device-set:not(.has-tablet){grid-template-columns:minmax(0,1fr) minmax(80px,.42fr);gap:12px}.platform-device-capture-desktop{grid-column:1/-1}.platform-device-set.has-tablet .platform-device-capture-tablet{justify-self:end;width:min(100%,220px)}.platform-device-set.has-tablet .platform-device-capture-phone{justify-self:start;width:min(100%,175px)}.platform-device-set:not(.has-tablet) .platform-device-capture-phone{grid-column:1/-1;justify-self:center;width:min(100%,175px)}.platform-device-stage{padding:12px}.platform-gallery-controls{min-height:38px}.platform-image{padding:10px}.product-card-compact{border-radius:8px}.contact-page .contact-form{border-radius:8px}.company-product-visual{align-self:start}.company-product-evidence-head{display:block}.company-product-evidence-head p{margin-top:12px}}
   @media(max-width:980px){.contact-page{grid-template-columns:1fr;gap:24px;max-width:760px;padding:42px 0 70px}.contact-page .page-hero{position:static;padding:0}.contact-page .page-hero::after{display:none}.contact-page .page-hero h1{font-size:clamp(36px,7vw,52px)}}
-  @media(max-width:760px){.contact-page{padding:28px 0 52px}.contact-page .page-hero h1{font-size:clamp(36px,9vw,48px)}.contact-page .contact-form{padding:20px;border-radius:20px}}
+  @media(max-width:760px){.contact-page{padding:28px 0 52px}.contact-page .page-hero h1{font-size:clamp(36px,9vw,48px)}.contact-page .contact-form{padding:20px;border-radius:8px}.brand-domain{display:none}}
 
 `
 
-function brandHtml() {
-  return `<a class="brand" href="/" aria-label="SuperMega home"><span class="brand-mark" aria-hidden="true">&gt;_</span><span class="brand-name">SUPERMEGA</span></a>`
-}
-
 function headerHtml(route) {
-  return `<header class="site-header"><div class="frame header-inner">${brandHtml()}<div class="header-actions"><a class="nav-link" href="/contact/">Contact</a><a class="button compact header-cta" href="https://app.supermega.dev/login">Login</a></div></div></header>`
+  return companyShopHeaderHtml(route)
 }
 
 function footerHtml(route) {
-  const contactLink = '<a href="/contact/">Contact</a>'
-  return `<footer class="site-footer"><div class="frame footer-inner"><span>© ${new Date().getUTCFullYear()} SuperMega</span><span class="footer-links">${contactLink}<a href="/privacy/">Privacy</a></span></div></footer>`
+  const year = new Date().getUTCFullYear()
+  return companyShopFooterHtml(route, year)
 }
 
 // JSON-LD structured data ships as <script type="application/ld+json"> blocks.
@@ -647,13 +726,17 @@ const publicObservabilityScript = `(function () {
 function documentHtml({ route, title, description, content, schema = null, robots = 'index,follow', shareImage = '/og-card.png' }) {
   const url = canonical(route)
   const shareImageUrl = canonical(shareImage)
+  const view = route === '/' ? 'company' : route === '/shop/' ? 'shop' : null
+  const themeColor = view === 'shop' ? '#f7f9fc' : '#ffffff'
+  const pageStyle = view ? `<style>${companyShopStyle}</style>` : ''
+  const viewAttribute = view ? ` data-view="${view}"` : ''
   return `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <meta name="robots" content="${robots}" />
-    <meta name="theme-color" content="#ffffff" />
+    <meta name="theme-color" content="${themeColor}" />
     <meta name="supermega-brand-version" content="${escapeHtml(brand.version)}" />
     <meta name="supermega-context-version" content="${escapeHtml(manifest.contextVersion)}" />
     <title>${escapeHtml(title)}</title>
@@ -671,9 +754,9 @@ function documentHtml({ route, title, description, content, schema = null, robot
     <meta property="og:image:height" content="${OG_CARD_HEIGHT}" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:image" content="${escapeHtml(shareImageUrl)}" />${structuredDataHtml(schema)}
-    <style>${sharedStyle}</style>
+    <style>${sharedStyle}</style>${pageStyle}
   </head>
-  <body data-brand-version="${escapeHtml(brand.version)}" data-context-version="${escapeHtml(manifest.contextVersion)}">
+  <body data-brand-version="${escapeHtml(brand.version)}" data-context-version="${escapeHtml(manifest.contextVersion)}"${viewAttribute}>
     <a class="skip-link" href="#content">Skip to content</a>
     <div class="shell">${headerHtml(route)}${content}${footerHtml(route)}</div>
     <script src="/vercel-insights.js"></script>
@@ -687,15 +770,15 @@ assert(typeof homePage.title === 'string' && homePage.title.includes('SuperMega'
 assert(typeof homePage.description === 'string' && homePage.description.length >= 40, 'home_page_description_invalid')
 
 const stories = {
- shop: {title:'Know what sold. Know what happens next.', body:'Run the counter, orders, stock and daily close from one operating view.', screens:[['actual-shop-today.png','Shop operating view showing fulfilment priorities, stock alerts and money awaiting collection','Today and priorities'],['actual-shop-sell.png','Shop counter with searchable products, visible stock levels, and Add controls for a new sale','Counter catalog and sale setup'],['actual-shop-orders.png','Shop order queue showing payment handoff, the next action and queue health','Orders and fulfilment']], proof:[['Record','Sale, payment and receipt'],['Action','Reorder, fulfil or follow up'],['Result','A close your team can explain']]},
- website: {title:'Build clear pages. Review inquiries in one place.', body:'Manage pages, readiness checks and customer inquiries without assembling a separate toolchain.', screens:[['actual-sites-editor.png','Sites editor showing page navigation, focused content editing and readiness checks','Page workspace and readiness'],['actual-sites-inquiries.png','Sites inquiry workspace showing a synthetic customer request, ownership and decision controls','Inquiry review and ownership']], proof:[['Record','Pages, services and metadata'],['Action','Edit, check and prepare to publish'],['Result','Qualified inquiries in one inbox']]},
- ecommerce: {title:'Show your catalog. Review each request.', body:'See your catalog and customer order requests. Your team reviews each request, payment and delivery step.', screens:[['actual-commerce-catalog.png','Commerce catalog showing available products, local pricing and customer ordering','Store catalog and availability'],['actual-commerce-order-request.png','Commerce Store showing a locally saved customer request awaiting Shop confirmation','Request saved locally']], proof:[['Record','Catalog, customer and request'],['Action','Review before an order is confirmed'],['Result','A clear next step for fulfilment']]},
+ shop: {title:'Sell at the counter. Keep stock and orders in view.', body:'Search or scan a product, build a sale, and see order and stock follow-up in the same Shop workspace.', screens:[['actual-shop-sell.png','Shop counter with searchable products, visible stock levels, and Add controls for a new sale; barcode search, a three-item basket and Myanmar payment methods','Counter sale and live basket'],['actual-shop-today.png','Shop Today showing sales, open orders and low-stock indicators','Today and priorities'],['actual-shop-orders.png','Shop order queue showing order status and the next follow-up','Orders and fulfilment'],['actual-shop-inventory.png','Shop inventory workspace showing stock levels and the count, receive, and reorder workflow','Inventory and replenishment']], proof:[['Find','Search or scan the right product'],['Sell','Review each item and the MMK total'],['Follow up','See order status and stock needs']]},
+ website: {title:'Build clear pages. Review inquiries in one place.', body:'Our team manages pages, readiness checks and customer inquiries in one workspace.', screens:[['actual-sites-editor.png','Sites editor showing page navigation, focused content editing and readiness checks','Page workspace and readiness'],['actual-sites-inquiries.png','Sites inquiry workspace showing a synthetic customer request, ownership and decision controls','Inquiry review and ownership']], proof:[['Record','Pages, services and metadata'],['Action','Edit, check and prepare to publish'],['Result','Qualified inquiries in one inbox']]},
+ ecommerce: {title:'Show your catalog. Review each request.', body:'Our team reviews each catalog request before Shop records an order or payment.', screens:[['actual-commerce-catalog.png','Commerce catalog showing available products, local pricing and customer ordering','Store catalog and availability'],['actual-commerce-order-request.png','Commerce Store showing a locally saved customer request awaiting Shop confirmation','Request saved locally']], proof:[['Record','Catalog, customer and request'],['Action','Review before an order is confirmed'],['Result','A clear next step for fulfilment']]},
 }
 const productOutcomes = {
  shop: [
-  ['Serve the next customer', 'Find products, build a sale and record payment from the counter. Keep the order available for receipts and follow-up.'],
-  ['Know what needs restocking', 'Review stock levels, purchasing and demand together. Move from a shortage to the items that need attention.'],
-  ['Close with clear records', 'Follow open orders, review payment exceptions and prepare a daily close with accounting exports.'],
+  ['Sell with confidence', 'Search the catalog by name, SKU or barcode; review the basket and total before recording the sale.'],
+  ['Keep stock in view', 'See on-hand quantities and reorder thresholds, then start with the items that need attention.'],
+  ['Follow each order', 'Review recorded status and the next fulfilment or payment follow-up without leaving Shop.'],
  ],
  website: [
   ['Start with your business', 'Bring your services, contact details and business information into one place. Build your pages around what customers need to know.'],
@@ -710,13 +793,46 @@ const productOutcomes = {
 }
 function interfaceDisclosure(image) {
  assert(publicGalleryAssetNames.includes(image), `interface_gallery_asset_unverified:${image}`)
- return 'Product UI capture · synthetic local records'
+ return 'Actual app interface · sample data'
 }
-function productGallery(id,label,eagerFirst=false) {
+function deviceCapture(device,image,alt,width,height,loading,fetchPriority='') {
+ interfaceDisclosure(image)
+ return `<figure class="platform-device-capture platform-device-capture-${device.toLowerCase()}"><img src="/images/${image}" alt="${escapeHtml(alt)} · ${escapeHtml(device)} layout · sample data" width="${width}" height="${height}" loading="${loading}"${fetchPriority} /><figcaption>${escapeHtml(device)}</figcaption></figure>`
+}
+function deviceCaptureSet(label,image,mobileImage,tabletImage,alt,width,height,loading,fetchPriority='') {
+ const captures = [deviceCapture('Desktop',image,alt,width,height,loading,fetchPriority)]
+ if(tabletImage) captures.push(deviceCapture('Tablet',tabletImage,alt,768,1024,'lazy'))
+ captures.push(deviceCapture('Phone',mobileImage,alt,390,844,'lazy'))
+ return `<div class="platform-device-set${tabletImage?' has-tablet':''}" role="group" aria-label="${escapeHtml(label)} on desktop${tabletImage?', tablet':''} and phone">${captures.join('')}</div>`
+}
+function productGallery(id,label,eagerFirst=false,showAll=false) {
  const item=stories[id]
- const slides=item.screens.map(([image,alt,caption,width=1440,height=900],index)=>`<figure class="platform-image" role="group" aria-roledescription="slide" aria-label="${index+1} of ${item.screens.length}: ${escapeHtml(caption)}"><a class="platform-image-open" href="/images/${image}" aria-label="Open full-size ${escapeHtml(label)} ${escapeHtml(caption)} local product view"><img src="/images/${image}" alt="${escapeHtml(alt)}" width="${width}" height="${height}" loading="${eagerFirst && index === 0 ? 'eager' : 'lazy'}"${eagerFirst && index === 0 ? ' fetchpriority="high"' : ''} /><span aria-hidden="true">View full size &rarr;</span></a><figcaption>${label} &middot; ${escapeHtml(caption)} &middot; ${interfaceDisclosure(image)}</figcaption></figure>`).join('')
- if (item.screens.length === 1) return `<div class="platform-gallery" data-single role="region" aria-roledescription="carousel" aria-label="${label} interface view"><div class="platform-slides">${slides}</div></div>`
- return `<div class="platform-gallery" data-platform-carousel role="region" aria-roledescription="carousel" aria-label="${label} interface views"><div class="platform-slides" tabindex="0">${slides}</div><div class="platform-gallery-controls"><button type="button" data-gallery-previous aria-label="Previous ${label} screenshot" disabled>&lsaquo;</button><span class="platform-gallery-status" data-gallery-status aria-live="polite">1 of ${item.screens.length}</span><button type="button" data-gallery-next aria-label="Next ${label} screenshot">&rsaquo;</button></div></div>`
+ const slides=item.screens.map(([image,alt,caption,width=1440,height=900],index)=>{
+  const mobileImage=image.replace(/\.png$/, '-mobile.png')
+  const tabletImage=id==='shop'?image.replace(/\.png$/, '-tablet.png'):null
+  interfaceDisclosure(mobileImage)
+  if(tabletImage) interfaceDisclosure(tabletImage)
+  const loading=eagerFirst && index===0?'eager':'lazy'
+  const fetchPriority=eagerFirst && index===0?' fetchpriority="high"':''
+  return `<figure class="platform-image" role="group"${showAll?'':` aria-roledescription="slide" aria-label="${index+1} of ${item.screens.length}: ${escapeHtml(caption)}"`}><div class="platform-device-stage">${deviceCaptureSet(label,image,mobileImage,tabletImage,alt,width,height,loading,fetchPriority)}</div><figcaption>${escapeHtml(label)} &middot; ${escapeHtml(caption)}<small>${interfaceDisclosure(image)}</small></figcaption></figure>`
+ }).join('')
+ if (showAll) return `<div class="platform-gallery shop-gallery-all" data-product-gallery="${id}" role="region" aria-label="${label} interface views"><div class="platform-slides">${slides}</div></div>`
+ if (item.screens.length === 1) return `<div class="platform-gallery" data-product-gallery="${id}" data-single role="region" aria-label="${label} interface view"><div class="platform-slides">${slides}</div></div>`
+ return `<div class="platform-gallery" data-product-gallery="${id}" data-platform-carousel role="region" aria-roledescription="carousel" aria-label="${label} interface views"><div class="platform-slides" tabindex="0">${slides}</div><div class="platform-gallery-controls"><button type="button" data-gallery-previous aria-label="Previous ${label} screen" disabled>&lsaquo;</button><span class="platform-gallery-status" data-gallery-status aria-live="polite">1 of ${item.screens.length}</span><button type="button" data-gallery-next aria-label="Next ${label} screen">&rsaquo;</button></div></div>`
+}
+function homeShopGallery() {
+ const item=stories.shop
+ const navigationLabels=['Counter sale','Today','Orders','Inventory']
+ const navigation=item.screens.map(([, , caption],index)=>`<a href="#shop-home-slide-${index+1}" data-gallery-slide="${index}"${index===0?' aria-current="true"':''}>${navigationLabels[index] || escapeHtml(caption)}</a>`).join('')
+ const slides=item.screens.map(([image,alt,caption,width=1440,height=900],index)=>{
+  const mobileImage=image.replace(/\.png$/, '-mobile.png')
+  const tabletImage=image.replace(/\.png$/, '-tablet.png')
+  interfaceDisclosure(image)
+  interfaceDisclosure(tabletImage)
+  interfaceDisclosure(mobileImage)
+  return `<figure class="platform-image home-platform-image" id="shop-home-slide-${index+1}" role="group" aria-roledescription="slide" aria-label="${index+1} of ${item.screens.length}: ${escapeHtml(caption)}"><div class="platform-device-stage">${deviceCaptureSet('Shop',image,mobileImage,tabletImage,alt,width,height,index===0?'eager':'lazy',index===0?' fetchpriority="high"':'')}</div><figcaption class="platform-home-caption">Shop &middot; ${escapeHtml(caption)}<small>${interfaceDisclosure(image)}</small></figcaption></figure>`
+ }).join('')
+ return `<div class="platform-gallery home-platform-gallery" data-product-gallery="shop" data-platform-carousel role="region" aria-roledescription="carousel" aria-label="Shop interface views"><nav class="shop-showcase-nav" aria-label="Choose a Shop screen">${navigation}</nav><div class="platform-slides" tabindex="0">${slides}</div></div>`
 }
 function productStory(id, standalone = false) {
  const item=stories[id], label=publicProducts.find(product=>product.id===id).name
@@ -725,6 +841,114 @@ function productStory(id, standalone = false) {
  const galleryHtml=productGallery(id,label,standalone)
   return `<section class="product-story${standalone ? ' product-story-standalone' : ''}" id="${id}">${standalone ? '' : `<div class="story-heading"><div><a class="eyebrow story-link" href="${escapeHtml(route)}">${label}<span aria-hidden="true">&rarr;</span></a><h2>${item.title}</h2></div><p>${item.body}</p></div>`}${galleryHtml}<ol class="product-proof" aria-label="${label} operating flow">${item.proof.map(([stage, value])=>`<li><span>${escapeHtml(stage)}</span><strong>${escapeHtml(value)}</strong></li>`).join('')}</ol><ul class="feature-line">${productOutcomes[id].map(([title, description])=>`<li><${standalone ? 'h2' : 'h3'}>${escapeHtml(title)}</${standalone ? 'h2' : 'h3'}><p>${escapeHtml(description)}</p></li>`).join('')}</ul></section>`
 }
+function replaceOnce(source, before, after, code) {
+ assert(source.split(before).length === 2, code + "_source_drift")
+ return source.replace(before, after)
+}
+function replaceKnownCopyOnce(source, accepted, after, code) {
+ const legacy = accepted.filter(before => before !== after && source.split(before).length === 2)
+ if (legacy.length === 1) return replaceOnce(source, legacy[0], after, code)
+ const hasLegacyCopy = accepted.some(before => before !== after && source.includes(before))
+ if (legacy.length === 0 && !hasLegacyCopy && source.includes(after)) return source
+ assert(false, code + "_source_drift")
+ return source
+}
+function removeSectionByClass(source, className, code) {
+ const openingTag = new RegExp(`<section\\b[^>]*class="[^"]*\\b${className}\\b[^"]*"[^>]*>`, 'g')
+ const start = openingTag.exec(source)
+ assert(start && openingTag.exec(source) === null, code + "_section_count_drift")
+ const sectionTags = /<\/?section\b[^>]*>/g
+ sectionTags.lastIndex = start.index
+ let depth = 0
+ let tag
+ while ((tag = sectionTags.exec(source)) !== null) {
+  depth += tag[0].startsWith('</') ? -1 : 1
+  if (depth === 0) return source.slice(0, start.index) + source.slice(sectionTags.lastIndex)
+ }
+ assert.fail(code + "_section_not_closed")
+}
+function shopOnlyCompanyMarkup(source) {
+ let markup = source
+ markup = replaceKnownCopyOnce(markup, ["Operating software · Myanmar", "Operating software for Myanmar companies", "Shop software for Myanmar businesses", "Shop software for Myanmar retailers", "For shops in Myanmar", "For Myanmar retailers", "Business software for Myanmar retailers", "Shop for Myanmar retailers", "Made for Myanmar retailers", "SuperMega · Operating software for Myanmar", "SUPERMEGA · MYANMAR", "SuperMega · Myanmar", "Business software for Myanmar", "Business software"], "For Myanmar retailers", "shop_only_hero_kicker")
+ markup = replaceKnownCopyOnce(markup, ["Tools for<br><span>everyday work.</span>", "Run your shop.<br><span>See what’s next.</span>", "Sell faster.<br><span>Stay in control.</span>", "Clearer systems for<br><span>everyday business.</span>", "Sales. Stock. Orders.<br><span>Under control.</span>", "Software for<br><span>Myanmar businesses.</span>", "Sales, stock, and orders<br><span>for Myanmar shops.</span>", "Sales, stock, and orders<br><span>in one place.</span>", "Sales, stock and orders<br><span>in one place.</span>", "See what sold.<br><span>Know what needs action.</span>", "Business software<br><span>built for Myanmar.</span>", "Operating software<br><span>for Myanmar businesses.</span>", "Run your counter.<br><span>Stay ahead of stock.</span>", "Know what sold.<br><span>See what needs attention.</span>", "For Myanmar<br><span>retailers.</span>"], "See what sold.<br><span>Know what needs action.</span>", "shop_only_hero_heading")
+ markup = replaceKnownCopyOnce(markup, [
+  "Shop brings sales and stock into one operating view. Our team manages Sites and confirms Commerce availability for each setup.",
+  "Keep sales, orders and stock together in one clear MMK workflow. See what needs attention without digging through settings.",
+  "Keep sales, orders and stock together in one clear view. See what needs attention without digging through settings.",
+  "We build practical operating software for Myanmar businesses. Start with Shop to bring sales, stock and orders into one clear workflow.",
+  "Start with Shop to record counter sales, track stock and follow open orders in one workspace.",
+  "Record counter sales, follow open orders, and spot low-stock products in one Shop workspace.",
+  "Record counter sales, track stock, and follow open orders with Shop.",
+  "SuperMega Shop brings counter sales, open orders, and stock tracking together for Myanmar businesses.",
+  "SuperMega brings daily sales, stock, and order follow-up into one clear workspace. Start with Shop.",
+  "Record counter sales, check stock and follow open orders in SuperMega Shop.",
+  "Record each sale, spot low stock early, and follow every open order in SuperMega Shop, built for Myanmar retailers.",
+  "Record sales, track stock and follow open orders with SuperMega Shop.",
+  "See each sale, spot low stock early and keep open orders moving with SuperMega Shop.",
+  "Record sales, track stock and keep open orders moving in SuperMega Shop.",
+  "Record counter sales, follow open orders and catch low stock with SuperMega Shop.",
+  "Ring up sales, check stock and follow open orders from one Shop workspace.",
+  "SuperMega builds tools for daily operations. Shop brings counter sales, stock and open orders into one workspace.",
+  "SuperMega Shop brings counter sales, stock and open orders into one workspace.",
+  "Record sales, track stock, and follow open orders in one Shop workspace.",
+  "Shop connects counter sales, stock and open orders in one workspace.",
+  "Record counter sales, check stock and follow open orders in SuperMega Shop.",
+ ], "Record counter sales, check stock and follow open orders in SuperMega Shop.", "shop_only_hero_description")
+ markup = replaceKnownCopyOnce(markup, ['href="#products">Meet the product family', 'href="#products">Explore Shop', 'href="/contact/">Talk to our team', 'href="/contact/">Contact us'], 'href="/contact/">Contact us', "shop_only_hero_secondary_action")
+ markup = replaceKnownCopyOnce(markup, ['href="/shop/#shop-demo">See Shop in action', 'href="/shop/#shop-demo">See Shop screens', 'href="/shop/#shop-demo">See Shop on desktop and mobile', 'href="/shop/#shop-demo">View every screen size', 'href="/shop/">See Shop', 'href="/shop/">Explore Shop'], 'href="/shop/">Explore Shop', "shop_only_hero_primary_action")
+ for (const id of ["website", "ecommerce"]) {
+  const marker = '<article class="family-card" id="' + id + '">'
+  const start = markup.indexOf(marker)
+  if (start < 0) continue
+  const end = markup.indexOf("</article>", start)
+  assert(end > start && markup.indexOf(marker, start + marker.length) < 0, "shop_only_family_card_drift:" + id)
+  markup = markup.slice(0, start) + markup.slice(end + "</article>".length)
+ }
+ markup = replaceKnownCopyOnce(markup, ["The SuperMega product family", "Shop for local businesses", "A SuperMega product", "PRODUCTS"], "Shop", "shop_only_family_eyebrow")
+ markup = replaceKnownCopyOnce(markup, ["Software for the work at hand.", "Start simple. Grow with your business.", "Built around the way local businesses work.", "Know what sold. Know what needs attention.", "Start with Shop."], "Start with Shop.", "shop_only_family_heading")
+ markup = replaceKnownCopyOnce(markup, [
+  "Shop keeps counter work together. Sites and Commerce extend the customer experience with the SuperMega team.",
+  "Start with Shop. Our team can scope a business website or online ordering when you are ready for the next step.",
+  "Shop is our starting point: one clear place for sales, stock and orders, designed for the pace of daily operations.",
+  "Shop brings counter sales, stock checks and open orders together for Myanmar retailers.",
+ ], "Shop brings counter sales, stock checks and open orders together for Myanmar retailers.", "shop_only_family_description")
+ if (!markup.includes('<div class="product-family shop-only-family">')) {
+  markup = replaceOnce(markup, '<div class="product-family">', '<div class="product-family shop-only-family">', "shop_only_family_layout")
+ }
+ const principleCopy = ["One company identity, with each workflow shaped around the work.", "Built for the everyday. Clear about what comes next."]
+ if (principleCopy.some((copy) => markup.includes(copy))) {
+  markup = replaceKnownCopyOnce(markup, principleCopy, "Sales · Stock · Orders", "shop_only_company_principle")
+ }
+ assert(!markup.includes('href="/website/') && !markup.includes('href="/ecommerce/')
+  && !markup.includes('id="website"') && !markup.includes('id="ecommerce"'), "shop_only_inactive_product_link_remains")
+ return markup
+}
+function companyOperatingGraphic() {
+ return `<figure class="company-product-visual"><img src="/images/actual-shop-today.png" alt="SuperMega Shop Today view: sales, orders and low-stock items. Sample data." width="1440" height="900" loading="eager" fetchpriority="high" /><figcaption>Shop · Today <span>Sample data</span></figcaption></figure>`
+}
+function replaceHomeShopShowcase(source, galleryHtml) {
+ const marker = /<section class="shop-showcase" aria-label="Shop product screens">[\s\S]*?<\/section>/g
+ const matches = source.match(marker) || []
+ assert(matches.length === 1, 'home_shop_showcase_source_drift')
+ const companyVisual = `<div class="company-operating-overview" aria-label="SuperMega company overview">${companyOperatingGraphic()}</div>`
+ const noScriptFallback = '<noscript><figure class="home-product-shot"><img src="/images/actual-shop-today.png" alt="Shop Today screen with sales, open orders, stock alerts and next actions" width="1440" height="900" /><figcaption><strong>Today</strong><span>See sales, open orders and the stock that needs attention.</span><small>Actual app interface · sample data</small></figcaption></figure></noscript>'
+ const markup = source.replace(marker, companyVisual)
+ const evidence = `<div class="company-product-evidence" aria-labelledby="company-shop-evidence-title"><div class="company-product-evidence-head"><div><p class="eyebrow">Shop · first product</p><h2 id="company-shop-evidence-title">One workflow. Every screen.</h2></div><p>See sales, stock and orders at desktop, tablet and phone sizes.</p></div>${galleryHtml}${noScriptFallback}</div>`
+ const principleMarker = '<div class="company-principle">'
+ const principleStart = markup.indexOf(principleMarker)
+ if (principleStart >= 0) {
+  const principleEnd = markup.indexOf('</div>', principleStart) + '</div>'.length
+  assert(principleEnd > principleStart && markup.indexOf(principleMarker, principleStart + principleMarker.length) < 0, 'company_product_evidence_anchor_drift')
+  return markup.slice(0, principleStart) + evidence + markup.slice(principleEnd)
+ }
+ const portfolioMarker = '<section class="company-portfolio"'
+ const portfolioStart = markup.indexOf(portfolioMarker)
+ assert(portfolioStart >= 0 && markup.indexOf(portfolioMarker, portfolioStart + portfolioMarker.length) < 0, 'company_product_evidence_anchor_drift')
+ return markup.slice(0, portfolioStart) + evidence + markup.slice(portfolioStart)
+}
+const publicHomeMarkup = replaceHomeShopShowcase(shopOnlyCompanyMarkup(companyMarkup), homeShopGallery())
+const publicShopMarkup = shopMarkup
+
 function productCard(id) {
  const item=stories[id], label=publicProducts.find(product=>product.id===id).name
  const route=manifest.pages.find(page=>page.productId===id)?.route
@@ -733,7 +957,7 @@ function productCard(id) {
 }
 const homeHtml = documentHtml({route:'/',title:homePage.title,description:homePage.description,
  schema:{'@type':'Organization',name:'SuperMega',url:canonical('/'),description:homePage.description},
- content:`<main class="frame" id="content"><section class="editorial-hero"><span class="eyebrow">SuperMega platform</span><h1>Run the business.<br>Without the busywork.</h1><p class="lede">Explore tools for in-store sales, website pages and online order requests.</p></section><section class="product-showcase" id="products" data-product-showcase aria-label="Explore SuperMega products"><div class="product-tabs" data-product-tabs></div><div class="product-cards">${['shop','website','ecommerce'].map(id => productCard(id)).join('')}</div></section><section class="home-contact" aria-labelledby="home-contact-title"><div><h2 id="home-contact-title">Not sure where to start?</h2><p>Tell us how your business works today. We’ll help you choose the right product.</p></div><a class="button" href="/contact/">Contact SuperMega</a></section></main><script src="/platform-carousel.js" defer></script>`,
+ content:`<main id="content">${publicHomeMarkup}</main>${stories.shop.screens.length > 1 ? '<script src="/platform-carousel.js" defer></script>' : ''}`,
 })
 
 function productAction(product) {
@@ -741,7 +965,21 @@ function productAction(product) {
  return `<section class="home-contact product-action" aria-labelledby="product-action-title"><div><h2 id="product-action-title">Need help with ${escapeHtml(product.name)}?</h2><p>Tell us what your business needs.</p></div><a class="button" href="/contact/?product=${escapeHtml(product.id)}">Contact SuperMega</a></section>`
 }
 
+function shopLandingHtml(product, page) {
+ const description = page.description || product.description
+ const shopShowcase = `<section class="shop-actual-showcase" id="shop-demo" aria-labelledby="shop-actual-showcase-title"><div class="wrap"><div class="story-heading"><div><span class="eyebrow">Shop</span><h2 id="shop-actual-showcase-title">Sales, stock and orders.</h2></div><p>Real Shop screens with sample records. The catalog and prices shown are examples, not a live retail feed.</p></div>${productGallery('shop','Shop',true,true)}</div></section>`
+ let shopContent = publicShopMarkup
+ const showcaseAnchor = /<\/section>(\r?\n)([ \t]*)<section class="demo-section"/g
+ assert((shopContent.match(showcaseAnchor) || []).length === 1, 'shop_showcase_insertion_point_missing')
+ const shopWithActualShowcase = shopContent.replace(showcaseAnchor, (_, newline, indent) => `</section>${newline}${indent}${shopShowcase}${newline}${indent}<section class="demo-section"`)
+ const shopWithRemovedMocks = removeSectionByClass(removeSectionByClass(shopWithActualShowcase, 'demo-section', 'shop_interactive_mock'), 'benefits-section', 'shop_mock_benefits')
+ return documentHtml({route:page.route,title:page.title,description,shareImage:`/og-card-${product.id}.png`,
+  schema:{'@type':'Product',name:product.name,description,url:canonical(page.route)},
+  content:`<main id="content">${shopWithRemovedMocks}</main>${productAction(product)}`})
+}
+
 function productLandingHtml(product,page) {
+ if (product.id === 'shop') return shopLandingHtml(product, page)
  const description=page.description||product.description
  const storyBody=escapeHtml(stories[product.id].body)
  return documentHtml({route:page.route,title:page.title,description,shareImage:`/og-card-${product.id}.png`,
@@ -817,7 +1055,7 @@ var response=result.response,body=result.body;if(!response.ok){if(response.statu
 const inlineDigest = (value) => createHash('sha256').update(value).digest('base64')
 const contactScriptBody = contactScript.slice('<script>'.length, -'</script>'.length)
 const publicSecurityHeaders = {
-  'content-security-policy': `default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' 'sha256-${inlineDigest(contactScriptBody)}'; script-src-attr 'none'; style-src 'self' 'sha256-${inlineDigest(sharedStyle)}'; style-src-attr 'none'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; media-src 'none'; worker-src 'none'; manifest-src 'self'`,
+  'content-security-policy': `default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' 'sha256-${inlineDigest(contactScriptBody)}'; script-src-attr 'none'; style-src 'self' 'sha256-${inlineDigest(sharedStyle)}' 'sha256-${inlineDigest(companyShopStyle)}'; style-src-attr 'none'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; media-src 'none'; worker-src 'none'; manifest-src 'self'`,
   'cross-origin-opener-policy': 'same-origin',
   'cross-origin-resource-policy': 'same-origin',
   'permissions-policy': 'camera=(), microphone=(), geolocation=(), payment=(), usb=()',
@@ -844,7 +1082,7 @@ const notFoundHtml = documentHtml({
   title: 'Page not found | SuperMega',
   description: 'The requested SuperMega route does not exist.',
   robots: 'noindex,nofollow',
-  content: `<main class="frame" id="content"><section class="page-hero"><span class="eyebrow">Page not found</span><h1>We couldn’t find that page.</h1><p class="lede">Find Shop, Sites and Commerce on the home page.</p><div class="actions"><a class="button primary" href="/">Return home</a></div></section></main>`,
+  content: `<main class="frame" id="content"><section class="page-hero"><span class="eyebrow">Page not found</span><h1>We couldn’t find that page.</h1><p class="lede">Find Shop on the home page.</p><div class="actions"><a class="button primary" href="/">Return home</a></div></section></main>`,
 })
 
 const healthFunction = `'use strict'
@@ -1456,17 +1694,17 @@ await mkdir(staticDir, { recursive: true })
 await mkdir(functionsDir, { recursive: true })
 
 for (const [relativePath, content] of pageFiles) await writeStatic(relativePath, content)
-for (const image of [...new Set(Object.values(stories).flatMap((story) => story.screens.map(([file]) => file)))]) await writeStatic(`images/${image}`, await readFile(resolve(root,'tools/public-assets',image)))
+for (const image of publicGalleryAssetNames) await writeStatic(`images/${image}`, await readFile(resolve(root,'tools/public-assets',image)))
 await writeStatic('fonts/noto-sans-latin.woff2', await readFile(resolve(root,'tools/public-assets/noto-sans-latin.woff2')))
 await writeStatic('fonts/noto-sans-latin-OFL.txt', await readFile(resolve(root,'tools/public-assets/noto-sans-latin-OFL.txt')))
 await writeStatic('favicon.svg', faviconSvg)
 await writeStatic('vercel-insights.js', publicObservabilityScript)
 await writeStatic('platform-carousel.js', `(function(){
   document.querySelectorAll('[data-platform-carousel]').forEach(function(carousel){
-    var track=carousel.querySelector('.platform-slides'),slides=Array.from(track.querySelectorAll('.platform-image')),previous=carousel.querySelector('[data-gallery-previous]'),next=carousel.querySelector('[data-gallery-next]'),status=carousel.querySelector('[data-gallery-status]'),active=0,timer;
-    function update(){var left=track.getBoundingClientRect().left;active=slides.reduce(function(best,slide,index){return Math.abs(slide.getBoundingClientRect().left-left)<Math.abs(slides[best].getBoundingClientRect().left-left)?index:best},0);status.textContent=(active+1)+' of '+slides.length;previous.disabled=active===0;next.disabled=active===slides.length-1;}
-    function go(index){slides[Math.max(0,Math.min(index,slides.length-1))].scrollIntoView({behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'nearest',inline:'start'});}
-    previous.addEventListener('click',function(){go(active-1)});next.addEventListener('click',function(){go(active+1)});track.addEventListener('scroll',function(){clearTimeout(timer);timer=setTimeout(update,80)},{passive:true});track.addEventListener('keydown',function(event){if(event.target!==track)return;if(event.key==='ArrowLeft'||event.key==='ArrowRight'){event.preventDefault();go(active+(event.key==='ArrowRight'?1:-1))}});window.addEventListener('resize',update);update();
+     var track=carousel.querySelector('.platform-slides'),slides=Array.from(track.querySelectorAll('.platform-image')),previous=carousel.querySelector('[data-gallery-previous]'),next=carousel.querySelector('[data-gallery-next]'),status=carousel.querySelector('[data-gallery-status]'),slideLinks=Array.from(carousel.querySelectorAll('[data-gallery-slide]')),active=0,timer;
+     function go(index){var target=slides[Math.max(0,Math.min(index,slides.length-1))];target.querySelectorAll('img[loading="lazy"]').forEach(function(image){image.loading='eager'});var left=target.getBoundingClientRect().left-track.getBoundingClientRect().left+track.scrollLeft;track.scrollTo({left:left,behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'});}
+     function update(){var left=track.getBoundingClientRect().left;active=slides.reduce(function(best,slide,index){return Math.abs(slide.getBoundingClientRect().left-left)<Math.abs(slides[best].getBoundingClientRect().left-left)?index:best},0);if(status)status.textContent=(active+1)+' of '+slides.length;if(previous)previous.disabled=active===0;if(next)next.disabled=active===slides.length-1;slideLinks.forEach(function(link,index){link.setAttribute('aria-current',String(index===active));});}
+     if(previous)previous.addEventListener('click',function(){go(active-1)});if(next)next.addEventListener('click',function(){go(active+1)});slideLinks.forEach(function(link,index){link.addEventListener('click',function(event){event.preventDefault();go(index)})});track.addEventListener('scroll',function(){clearTimeout(timer);timer=setTimeout(update,80)},{passive:true});track.addEventListener('keydown',function(event){if(event.target!==track)return;if(event.key==='ArrowLeft'||event.key==='ArrowRight'){event.preventDefault();go(active+(event.key==='ArrowRight'?1:-1))}});window.addEventListener('resize',update);update();
     carousel.refreshGallery=update;
   });
   var showcase=document.querySelector('[data-product-showcase]');

@@ -14,10 +14,433 @@ WORKSPACE, OWNER, RECIPIENT = fixture.WORKSPACE, fixture.OWNER, fixture.RECIPIEN
 @unittest.skipUnless(os.environ.get('SUPERMEGA_RUN_WEBSITE_REVIEW_SQL') == '1', 'explicit local SQL rehearsal only')
 class CatalogReviewSqlTests(unittest.TestCase):
     # Reuse lifecycle helpers, never inherit the Website test cases or database.
-    setUpClass = classmethod(fixture.WebsiteReviewSqlTests.setUpClass.__func__)
+    @classmethod
+    def setUpClass(cls):
+        fixture.WebsiteReviewSqlTests.setUpClass.__func__(cls)
+        # Only this isolated Ecommerce fixture receives the internal operator
+        # grant; the shared Shop/Website seed remains unchanged.
+        with pg._connect(cls.admin_url) as connection:
+            connection.execute(
+                "update app_private.workspace_memberships "
+                "set capabilities=array_append(capabilities,'ecommerce.manage') "
+                "where workspace_id=%s and actor_id=%s",
+                (WORKSPACE, OWNER),
+            )
     stop = classmethod(fixture.WebsiteReviewSqlTests.stop.__func__)
     context = fixture.WebsiteReviewSqlTests.context
     transaction = fixture.WebsiteReviewSqlTests.transaction
+
+    def test_revoked_operator_grant_denies_private_review_functions(self):
+        from tests.test_commerce_runtime import catalog_state, storefront_configuration
+        from supermega_runtime.commerce_runtime import (
+            commerce_storefront_preview, commerce_storefront_preview_digest,
+        )
+        source = catalog_state()
+        source['storefrontConfiguration'] = storefront_configuration(source)
+        review_id = uuid4()
+        with pg._connect(self.admin_url) as connection:
+            try:
+                connection.execute("""insert into app_private.workspace_events
+                    (event_id,workspace_id,command_id,command_fingerprint,surface,event_type,
+                     actor_id,actor_kind,payload_json,result_json)
+                    values (%s,%s,%s,%s,'company','company.workspace.activated',%s,'human',
+                      '{"products":["ecommerce"]}'::jsonb,'{}'::jsonb)""",
+                    (uuid4(), WORKSPACE, uuid4(), 'a' * 64, OWNER))
+                connection.execute(
+                    "update app_private.workspace_memberships "
+                    "set capabilities=array['commerce.read','ecommerce.manage'] "
+                    "where workspace_id=%s and actor_id=%s",
+                    (WORKSPACE, OWNER),
+                )
+                connection.execute(
+                    "update app_private.workspace_memberships "
+                    "set capabilities=array['ecommerce.review'] "
+                    "where workspace_id=%s and actor_id=%s",
+                    (WORKSPACE, RECIPIENT),
+                )
+                connection.execute(
+                    "insert into app_private.workspace_state"
+                    "(workspace_id,surface,version,state_json,updated_by) "
+                    "values (%s,'commerce',1,%s::jsonb,%s) "
+                    "on conflict(workspace_id,surface) do update "
+                    "set state_json=excluded.state_json,"
+                    "version=app_private.workspace_state.version+1",
+                    (WORKSPACE, json.dumps(source), OWNER),
+                )
+                version = connection.execute(
+                    "select version from app_private.workspace_state "
+                    "where workspace_id=%s and surface='commerce'",
+                    (WORKSPACE,),
+                ).fetchone()[0]
+                self.context(connection, OWNER)
+                connection.execute('set local role supermega_trial_backend')
+                self.assertTrue(connection.execute(
+                    'select app_private.ecommerce_review_operator_entitled()').fetchone()[0])
+                self.assertTrue(connection.execute(
+                    'select app_private.ecommerce_review_recipient_ready(%s)', (RECIPIENT,)).fetchone()[0])
+                connection.execute(
+                    """insert into app_private.ecommerce_customer_reviews
+                    (review_id,workspace_id,recipient_actor_id,prepared_by,source_version,
+                     preview,preview_digest,expires_at)
+                    values (%s,%s,%s,%s,%s,%s::jsonb,%s,clock_timestamp()+interval '1 day')""",
+                    (review_id, WORKSPACE, RECIPIENT, OWNER, version,
+                     json.dumps(commerce_storefront_preview(source)),
+                     commerce_storefront_preview_digest(source)),
+                )
+                self.assertEqual(connection.execute(
+                    "select count(*) from app_private.ecommerce_customer_reviews "
+                    "where review_id=%s", (review_id,)).fetchone()[0], 1)
+                connection.execute('reset role')
+                connection.execute(
+                    "update app_private.workspace_memberships "
+                    "set capabilities=array_remove(capabilities,'ecommerce.manage') "
+                    "where workspace_id=%s and actor_id=%s",
+                    (WORKSPACE, OWNER),
+                )
+                connection.execute('set local role supermega_trial_backend')
+                self.assertFalse(connection.execute(
+                    'select app_private.ecommerce_review_operator_entitled()').fetchone()[0])
+                self.assertFalse(connection.execute(
+                    'select app_private.ecommerce_review_recipient_ready(%s)', (RECIPIENT,)).fetchone()[0])
+                self.assertEqual(connection.execute(
+                    "select count(*) from app_private.ecommerce_customer_reviews "
+                    "where review_id=%s", (review_id,)).fetchone()[0], 0)
+                self.assertEqual(connection.execute(
+                    "update app_private.ecommerce_customer_reviews "
+                    "set status='revoked' where review_id=%s",
+                    (review_id,)).rowcount, 0)
+            finally:
+                connection.rollback()
+
+    def test_apply_command_rechecks_authority_after_command_and_state_lock_waits(self):
+        from supermega_runtime.trial_store import (
+            PostgresTrialStore, TrialPermissionDenied, TrialPrincipal,
+        )
+
+        owner = TrialPrincipal(WORKSPACE, OWNER, 'human')
+        with pg._connect(self.admin_url) as connection:
+            connection.execute(
+                "update app_private.workspace_memberships "
+                "set capabilities=case when 'ecommerce.manage'=any(capabilities) "
+                "then capabilities else array_append(capabilities,'ecommerce.manage') end "
+                "where workspace_id=%s and actor_id=%s",
+                (WORKSPACE, OWNER),
+            )
+            connection.execute("""insert into app_private.workspace_events
+                (event_id,workspace_id,command_id,command_fingerprint,surface,event_type,
+                 actor_id,actor_kind,payload_json,result_json)
+                values (%s,%s,%s,%s,'company','company.workspace.activated',%s,'human',
+                  '{"products":["ecommerce"]}'::jsonb,'{}'::jsonb)""",
+                (uuid4(), WORKSPACE, uuid4(), 'b' * 64, OWNER),
+            )
+
+        payload = {'storefrontConfiguration': {'name': 'Local review fixture'}}
+        event_type = 'commerce.storefront.configuration.saved'
+        first_command_id = str(uuid4())
+        seed_store = PostgresTrialStore(
+            self.runtime_url,
+            reducer=lambda surface, event, state, command_payload: state,
+            write_enabled=True,
+        )
+        with pg._connect(self.admin_url) as connection:
+            row = connection.execute(
+                "select version from app_private.workspace_state "
+                "where workspace_id=%s and surface='commerce'",
+                (WORKSPACE,),
+            ).fetchone()
+            initial_version = int(row[0]) if row else 0
+        saved = seed_store.apply_command(
+            owner,
+            command_id=first_command_id,
+            surface='commerce',
+            event_type=event_type,
+            expected_version=initial_version,
+            payload=payload,
+        )
+        self.assertFalse(saved.idempotent_replay)
+
+        started = Queue()
+
+        class ObservedStore(PostgresTrialStore):
+            def _connect(inner):
+                connection = super()._connect()
+                connection.execute("set statement_timeout='8s'")
+                started.put(connection.info.backend_pid)
+                return connection
+
+        store = ObservedStore(
+            self.runtime_url,
+            reducer=lambda surface, event, state, command_payload: state,
+            write_enabled=True,
+        )
+
+        def attempt(command_id, expected_version, state_precondition=None):
+            return store.apply_command(
+                owner,
+                command_id=command_id,
+                surface='commerce',
+                event_type=event_type,
+                expected_version=expected_version,
+                payload=payload,
+                state_precondition=state_precondition,
+            )
+
+        def assert_denied_after_wait(lock_key, command_id, expected_version, state_precondition=None):
+            revoked = False
+            with pg._connect(self.runtime_url) as blocker:
+                self.context(blocker, OWNER)
+                blocker.execute(
+                    "select pg_advisory_xact_lock(hashtextextended(%s,0))", (lock_key,),
+                )
+                with ThreadPoolExecutor(max_workers=1) as pool:
+                    pending = pool.submit(attempt, command_id, expected_version, state_precondition)
+                    try:
+                        pid = started.get(timeout=5)
+                        waiting = False
+                        with pg._connect(self.admin_url, autocommit=True) as observer:
+                            deadline = time.monotonic() + 5
+                            while time.monotonic() < deadline:
+                                row = observer.execute(
+                                    "select wait_event_type='Lock' from pg_stat_activity where pid=%s",
+                                    (pid,),
+                                ).fetchone()
+                                if row and row[0]:
+                                    waiting = True
+                                    break
+                                time.sleep(0.02)
+                            self.assertTrue(waiting, 'command must reach its advisory lock before revocation')
+                            observer.execute(
+                                "update app_private.workspace_memberships "
+                                "set capabilities=array_remove(capabilities,'ecommerce.manage') "
+                                "where workspace_id=%s and actor_id=%s",
+                                (WORKSPACE, OWNER),
+                            )
+                            revoked = True
+                        blocker.commit()
+                        with self.assertRaises(TrialPermissionDenied):
+                            pending.result(timeout=10)
+                    finally:
+                        blocker.rollback()
+            if revoked:
+                with pg._connect(self.admin_url, autocommit=True) as connection:
+                    connection.execute(
+                        "update app_private.workspace_memberships "
+                        "set capabilities=case when 'ecommerce.manage'=any(capabilities) "
+                        "then capabilities else array_append(capabilities,'ecommerce.manage') end "
+                        "where workspace_id=%s and actor_id=%s",
+                        (WORKSPACE, OWNER),
+                    )
+
+        # A replay must not return its saved result with the authority snapshot
+        # that was loaded before waiting on the command-id lock.
+        assert_denied_after_wait(
+            f'{WORKSPACE}:command:{first_command_id}', first_command_id, initial_version,
+        )
+        with pg._connect(self.admin_url) as connection:
+            replay_state_version = int(connection.execute(
+                "select version from app_private.workspace_state "
+                "where workspace_id=%s and surface='commerce'",
+                (WORKSPACE,),
+            ).fetchone()[0])
+            self.assertEqual(connection.execute(
+                "select count(*) from app_private.workspace_events "
+                "where workspace_id=%s and command_id=%s",
+                (WORKSPACE, first_command_id),
+            ).fetchone()[0], 1)
+
+        # A new write must recheck again after waiting on the state lock. The
+        # precondition and reducer must remain unreachable after revocation.
+        state_command_id = str(uuid4())
+        precondition_calls = []
+        assert_denied_after_wait(
+            f'{WORKSPACE}:state:commerce',
+            state_command_id,
+            replay_state_version,
+            lambda *_args: precondition_calls.append(True),
+        )
+        self.assertEqual(precondition_calls, [])
+        with pg._connect(self.admin_url) as connection:
+            state_version = int(connection.execute(
+                "select version from app_private.workspace_state "
+                "where workspace_id=%s and surface='commerce'",
+                (WORKSPACE,),
+            ).fetchone()[0])
+            event_count = int(connection.execute(
+                "select count(*) from app_private.workspace_events "
+                "where workspace_id=%s and command_id=%s",
+                (WORKSPACE, state_command_id),
+            ).fetchone()[0])
+        self.assertEqual(state_version, replay_state_version)
+        self.assertEqual(event_count, 0)
+
+    def test_product_acceptance_rechecks_ecommerce_grant_after_acceptance_and_state_locks(self):
+        from supermega_runtime.trial_store import (
+            PostgresTrialStore, TrialPermissionDenied, TrialPrincipal,
+        )
+        from tests.test_trial_store import _acceptance_packet
+
+        owner = TrialPrincipal(WORKSPACE, OWNER, 'human')
+        release_commit = 'a' * 40
+        with pg._connect(self.admin_url) as connection:
+            original_capabilities = connection.execute(
+                "select capabilities from app_private.workspace_memberships "
+                "where workspace_id=%s and actor_id=%s",
+                (WORKSPACE, OWNER),
+            ).fetchone()[0]
+            connection.execute(
+                "update app_private.workspace_memberships "
+                "set capabilities=case when 'ecommerce.manage'=any(capabilities) "
+                "then capabilities else array_append(capabilities,'ecommerce.manage') end "
+                "where workspace_id=%s and actor_id=%s",
+                (WORKSPACE, OWNER),
+            )
+            connection.execute(
+                "update app_private.workspace_memberships "
+                "set capabilities=case when 'approvals.request'=any(capabilities) "
+                "then capabilities else array_append(capabilities,'approvals.request') end "
+                "where workspace_id=%s and actor_id=%s",
+                (WORKSPACE, OWNER),
+            )
+            connection.execute(
+                "update app_private.workspace_memberships "
+                "set capabilities=case when 'approvals.decide'=any(capabilities) "
+                "then capabilities else array_append(capabilities,'approvals.decide') end "
+                "where workspace_id=%s and actor_id=%s",
+                (WORKSPACE, OWNER),
+            )
+            connection.execute("""insert into app_private.workspace_events
+                (event_id,workspace_id,command_id,command_fingerprint,surface,event_type,
+                 actor_id,actor_kind,payload_json,result_json)
+                values (%s,%s,%s,%s,'company','company.workspace.activated',%s,'human',
+                  '{"products":["ecommerce"]}'::jsonb,'{}'::jsonb)""",
+                (uuid4(), WORKSPACE, uuid4(), 'c' * 64, OWNER),
+            )
+            connection.execute("""insert into app_private.workspace_state
+                (workspace_id,surface,version,state_json,updated_by)
+                values (%s,'commerce',1,'{}'::jsonb,%s)
+                on conflict(workspace_id,surface) do update
+                set version=app_private.workspace_state.version+1,
+                    state_json=excluded.state_json,updated_by=excluded.updated_by""",
+                (WORKSPACE, OWNER),
+            )
+
+        def restore_owner_capabilities():
+            with pg._connect(self.admin_url, autocommit=True) as connection:
+                connection.execute(
+                    "update app_private.workspace_memberships set capabilities=%s::text[] "
+                    "where workspace_id=%s and actor_id=%s",
+                    (original_capabilities, WORKSPACE, OWNER),
+                )
+
+        setup_store = PostgresTrialStore(
+            self.runtime_url, reducer=lambda *_args: {}, write_enabled=True,
+        )
+        try:
+            approval = setup_store.create_approval(
+                owner,
+                command_id=uuid4(),
+                title='Approve exact Ecommerce acceptance state',
+                proposal=_acceptance_packet('ecommerce', release_commit, {}),
+                evidence_refs=('review://catalog/1',),
+            )
+            setup_store.decide_approval(
+                owner,
+                approval_id=approval.approval_id,
+                command_id=uuid4(),
+                decision='approved',
+                note='Approved the exact isolated test snapshot.',
+            )
+        except BaseException:
+            restore_owner_capabilities()
+            raise
+
+        started = Queue()
+
+        class ObservedStore(PostgresTrialStore):
+            def _connect(inner):
+                connection = super()._connect()
+                connection.execute("set statement_timeout='8s'")
+                started.put(connection.info.backend_pid)
+                return connection
+
+        store = ObservedStore(
+            self.runtime_url, reducer=lambda *_args: {}, write_enabled=True,
+        )
+
+        def assert_denied_after_wait(lock_key, probe_id):
+            revoked = False
+            with pg._connect(self.runtime_url) as blocker:
+                self.context(blocker, OWNER)
+                blocker.execute(
+                    "select pg_advisory_xact_lock(hashtextextended(%s,0))", (lock_key,),
+                )
+                with ThreadPoolExecutor(max_workers=1) as pool:
+                    pending = pool.submit(
+                        store.record_product_acceptance,
+                        owner,
+                        probe_id=probe_id,
+                        owner_approval_id=approval.approval_id,
+                        product='ecommerce',
+                        release_commit=release_commit,
+                    )
+                    try:
+                        pid = started.get(timeout=5)
+                        waiting = False
+                        with pg._connect(self.admin_url, autocommit=True) as observer:
+                            deadline = time.monotonic() + 5
+                            while time.monotonic() < deadline:
+                                row = observer.execute(
+                                    "select wait_event_type='Lock' from pg_stat_activity where pid=%s",
+                                    (pid,),
+                                ).fetchone()
+                                if row and row[0]:
+                                    waiting = True
+                                    break
+                                time.sleep(0.02)
+                            self.assertTrue(waiting, 'acceptance must reach its serialization lock before revocation')
+                            observer.execute(
+                                "update app_private.workspace_memberships "
+                                "set capabilities=array_remove(capabilities,'ecommerce.manage') "
+                                "where workspace_id=%s and actor_id=%s",
+                                (WORKSPACE, OWNER),
+                            )
+                            revoked = True
+                        blocker.commit()
+                        with self.assertRaises(TrialPermissionDenied):
+                            pending.result(timeout=10)
+                    finally:
+                        blocker.rollback()
+            if revoked:
+                with pg._connect(self.admin_url, autocommit=True) as connection:
+                    connection.execute(
+                        "update app_private.workspace_memberships "
+                        "set capabilities=case when 'ecommerce.manage'=any(capabilities) "
+                        "then capabilities else array_append(capabilities,'ecommerce.manage') end "
+                        "where workspace_id=%s and actor_id=%s",
+                        (WORKSPACE, OWNER),
+                    )
+
+        try:
+            probe_id = str(uuid4())
+            assert_denied_after_wait(
+                f'{WORKSPACE}:acceptance:{probe_id}', probe_id,
+            )
+            acceptance_lock_probe_id = probe_id
+            probe_id = str(uuid4())
+            assert_denied_after_wait(
+                f'{WORKSPACE}:state:commerce', probe_id,
+            )
+            state_lock_probe_id = probe_id
+            with pg._connect(self.admin_url) as connection:
+                for candidate in (acceptance_lock_probe_id, state_lock_probe_id):
+                    self.assertEqual(connection.execute(
+                        "select count(*) from app_private.workspace_events "
+                        "where workspace_id=%s and command_id=%s "
+                        "and event_type='client.product_acceptance.recorded'",
+                        (WORKSPACE, candidate),
+                    ).fetchone()[0], 0)
+        finally:
+            restore_owner_capabilities()
 
     def test_reviewer_cannot_read_or_lock_private_commerce_source(self):
         from tests.test_commerce_runtime import catalog_state, storefront_configuration

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { projectShopTodayCompletedSales, projectShopTodaySalesPulse } from '../showroom/src/core/shop-today-sales.ts'
+import { hasShopTodaySalesPattern, projectShopTodayCompletedSales, projectShopTodaySalesPulse } from '../showroom/src/core/shop-today-sales.ts'
 
 const now = Date.parse('2026-10-02T05:00:00.000Z')
 
@@ -62,4 +62,25 @@ test('sales pulse groups retained completions into Yangon three-hour periods and
     { count: 0, grossMmk: 0 },
     { count: 0, grossMmk: 0 },
   ])
+})
+
+test('sales insight waits for repeated activity across periods before showing a time pattern', () => {
+  const oneSale = projectShopTodaySalesPulse({ movements: [], orders: [
+    order('ONE-SALE', { completion: { actionId: 'ACT-1', capturedAt: '2026-10-02T03:00:00.000Z', evidenceReference: 'R-1' } }),
+  ] }, now)
+  assert.equal(hasShopTodaySalesPattern(oneSale), false)
+
+  const samePeriod = projectShopTodaySalesPulse({ movements: [], orders: [
+    order('SAME-1', { completion: { actionId: 'ACT-1', capturedAt: '2026-10-02T03:00:00.000Z', evidenceReference: 'R-1' } }),
+    order('SAME-2', { completion: { actionId: 'ACT-2', capturedAt: '2026-10-02T03:30:00.000Z', evidenceReference: 'R-2' } }),
+    order('SAME-3', { completion: { actionId: 'ACT-3', capturedAt: '2026-10-02T03:45:00.000Z', evidenceReference: 'R-3' } }),
+  ] }, now)
+  assert.equal(hasShopTodaySalesPattern(samePeriod), false)
+
+  const acrossPeriods = projectShopTodaySalesPulse({ movements: [], orders: [
+    order('PERIOD-1', { completion: { actionId: 'ACT-1', capturedAt: '2026-10-01T17:45:00.000Z', evidenceReference: 'R-1' } }),
+    order('PERIOD-2', { completion: { actionId: 'ACT-2', capturedAt: '2026-10-02T03:00:00.000Z', evidenceReference: 'R-2' } }),
+    order('PERIOD-3', { completion: { actionId: 'ACT-3', capturedAt: '2026-10-02T03:30:00.000Z', evidenceReference: 'R-3' } }),
+  ] }, now)
+  assert.equal(hasShopTodaySalesPattern(acrossPeriods), true)
 })
