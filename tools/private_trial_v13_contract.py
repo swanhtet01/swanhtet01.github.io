@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PROFILE = "v13-self-serve"
 CONTRACT = "supermega_private_trial_database_v13_self_serve_v1"
 MIGRATION_PINS = {
+    "20261019103000_ecommerce_review_shared_state_lock.sql": "2e5fe0486a38cd434a8e24b1d46ddf4f5144a6f67e24834d30ab98f298cbb8c0",
     "20261019070000_ecommerce_operator_management_boundary.sql": "4028c5e571ae9d4ac8f043fe1609c7ae047d11fbfc4a65e8695d8c01f8306c8d",
     "20261015202629_ecommerce_operator_review_grant.sql": "c37a78902bae3d04fcc38d2cf044f36da06fa636ac49be6fa4e98564679f45ee",
     "20261015091500_website_six_page_reviews.sql": "65472d2a57a787b1135bb362875e527caf84bbc83bfd00549c4191e3b4bb1e6e",
@@ -96,7 +97,7 @@ POLICIES = frozenset({"billing_entitlements_self_read", "self_serve_attempt_budg
 CATALOG_PINS = {
     "extension_columns_exact": "a4ff9d29472484ce891adb75e177e24887daafad3a7171f6a24c67ac9cfc0fd4",
     "extension_constraints_exact": "f003f0fc410fe3b14d0d1b77427a67ea7d2f5b7e381009312a8df437acdb0b94",
-    "extension_functions_exact": "158c69232e24a205132aa800c3bc5ed1fcb8699499bba4bbaa36d152c4c3be7c",
+    "extension_functions_exact": "7eb4edbee222c156a07a84fd11e1c75efc03eaf7bf191c60616bdb5cd5051878",
     "extension_policies_exact": "9ebb7163b5e86d70fdddec40768d71fc3fff2284a4e2072a2d1a8a6d0ce76de5",
 }
 POLICY_PINS = {"billing_entitlements_self_read": "28369fc95fa5a46002daf06b67038c4c9c8695d9defe59a69014c7c40a44d5b5",
@@ -259,7 +260,10 @@ def extend_contract(base):
         ('ecommerce_review_guard','guard_ecommerce_review','ecommerce_customer_reviews',31),
         ('ecommerce_reviews_invalidate','invalidate_ecommerce_reviews','workspace_state',25),
     ):
-        body = re.findall(r'create function app_private\.'+function+r'\(\).*?as \$\$(.*?)\$\$;', sql['20260924194557_ecommerce_customer_review_storage.sql'], re.S)
+        source_name = ("20261019103000_ecommerce_review_shared_state_lock.sql"
+                       if trigger == "ecommerce_review_guard"
+                       else "20260924194557_ecommerce_customer_review_storage.sql")
+        body = re.findall(r'create(?: or replace)? function app_private\.'+function+r'\(\).*?as \$\$(.*?)\$\$;', sql[source_name], re.S)
         if len(body)!=1: raise ValueError('catalog_review_trigger_source_missing')
         base['EXPECTED_TRIGGERS'][trigger]=dict(table=table,function=function,trigger_type=mask,function_source=body[0])
     body = re.findall(r'create function app_private.guard_ecommerce_decision\(\).*?as \$\$(.*?)\$\$;', sql['20260924231714_ecommerce_customer_decisions.sql'], re.S)
