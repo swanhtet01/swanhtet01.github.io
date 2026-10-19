@@ -654,8 +654,15 @@ const SEED_NOW_MS = Date.parse('2026-07-23T08:00:00.000Z')
 
 test('receivables aging buckets pending orders and excludes reconciled orders', () => {
   const state = createSeedCommerce()
+  // These receivables have explicit payment terms; the delivery promise is not a due date.
+  const paymentDueAt = new Date(SEED_NOW_MS + 24 * 60 * 60 * 1000).toISOString()
+  state.orders = state.orders.map((order) => (
+    order.id === 'ORD-1042' || order.id === 'ORD-1041'
+      ? { ...order, paymentDueAt }
+      : order
+  ))
 
-  // At seed time, both pending orders are current (promisedAt is in the future).
+  // At seed time, both pending orders are current (payment is due tomorrow).
   const atSeedTime = commerceReceivablesAging(state, SEED_NOW_MS)
   assert.equal(atSeedTime.rows.length, 2, 'aging must include both pending orders')
   assert.equal(atSeedTime.overdueOrders, 0, 'no orders are overdue at seed time')
@@ -663,7 +670,7 @@ test('receivables aging buckets pending orders and excludes reconciled orders', 
   assert.equal(atSeedTime.totalOutstandingMmk, 24900 + 5700)
   assert.ok(atSeedTime.rows.every((row) => row.bucket === 'current'), 'all rows must be current at seed time')
 
-  // Ten days later both orders are overdue (~10 days past due → '8_30' bucket).
+  // Ten days later both are 9 days past due → '8_30' bucket.
   const tenDaysLaterMs = SEED_NOW_MS + 10 * 24 * 60 * 60 * 1000
   const at10Days = commerceReceivablesAging(state, tenDaysLaterMs)
   assert.equal(at10Days.overdueOrders, 2)
