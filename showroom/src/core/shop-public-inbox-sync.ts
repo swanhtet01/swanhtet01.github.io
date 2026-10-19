@@ -26,12 +26,23 @@ export function releaseShopPublicInboxFlight(activeIdentityKeys: Set<string>, id
   activeIdentityKeys.delete(identityKey)
 }
 
-export function shopPublicInboxSweepSet(sweeps: Map<string, Set<string>>, identityKey: string): Set<string> {
-  const existing = sweeps.get(identityKey)
+export type ShopPublicInboxIdentityState = {
+  requestCursors: Map<string, string | undefined>
+  seenDuringSweep: Set<string>
+}
+
+export function shopPublicInboxIdentityState(
+  states: Map<string, ShopPublicInboxIdentityState>,
+  identityKey: string,
+): ShopPublicInboxIdentityState {
+  const existing = states.get(identityKey)
   if (existing) return existing
-  const observedRequestIds = new Set<string>()
-  sweeps.set(identityKey, observedRequestIds)
-  return observedRequestIds
+  const state: ShopPublicInboxIdentityState = {
+    requestCursors: new Map(),
+    seenDuringSweep: new Set(),
+  }
+  states.set(identityKey, state)
+  return state
 }
 
 type ShopPublicInboxApi = {

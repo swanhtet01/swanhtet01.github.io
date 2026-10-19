@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { acquireShopPublicInboxFlight, claimShopPublicInboxRequest, releaseShopPublicInboxFlight, shopPublicInboxBacklogCursor, shopPublicInboxPrunedRequestIds, shopPublicInboxSweepSet, syncShopPublicInbox } from '../showroom/src/core/shop-public-inbox-sync.ts'
+import { acquireShopPublicInboxFlight, claimShopPublicInboxRequest, releaseShopPublicInboxFlight, shopPublicInboxBacklogCursor, shopPublicInboxIdentityState, shopPublicInboxPrunedRequestIds, syncShopPublicInbox } from '../showroom/src/core/shop-public-inbox-sync.ts'
 
 const identity = { workspaceId: 'workspace-1', userId: 'user-1', email: 'operator@example.com' }
 
@@ -14,15 +14,18 @@ test('one slow company inbox does not block a different company inbox', () => {
   assert.equal(acquireShopPublicInboxFlight(active, 'company-a'), true)
 })
 
-test('inbox sweep observations stay isolated between workspace identities', () => {
-  const sweeps = new Map()
-  const firstAccount = shopPublicInboxSweepSet(sweeps, 'workspace-a:user-a')
-  const secondAccount = shopPublicInboxSweepSet(sweeps, 'workspace-b:user-b')
+test('inbox sweep cursors and seen requests stay isolated by workspace identity', () => {
+  const states = new Map()
+  const firstAccount = shopPublicInboxIdentityState(states, 'workspace-a:user-a')
+  const secondAccount = shopPublicInboxIdentityState(states, 'workspace-b:user-b')
 
-  firstAccount.add('request-visible-only-to-a')
-  assert.equal(shopPublicInboxSweepSet(sweeps, 'workspace-a:user-a'), firstAccount)
-  assert.deepEqual([...firstAccount], ['request-visible-only-to-a'])
-  assert.deepEqual([...secondAccount], [])
+  firstAccount.requestCursors.set('request-a', 'cursor-a')
+  firstAccount.seenDuringSweep.add('request-a')
+  assert.equal(shopPublicInboxIdentityState(states, 'workspace-a:user-a'), firstAccount)
+  assert.deepEqual([...firstAccount.requestCursors], [['request-a', 'cursor-a']])
+  assert.deepEqual([...firstAccount.seenDuringSweep], ['request-a'])
+  assert.deepEqual([...secondAccount.requestCursors], [])
+  assert.deepEqual([...secondAccount.seenDuringSweep], [])
 })
 
 function request(requestId, status = 'new') {

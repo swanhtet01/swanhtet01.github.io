@@ -19,7 +19,7 @@ import { Link, Navigate, useLocation, useNavigate, useOutletContext, useSearchPa
 import './core-app.css'
 import type { EcommerceShopDraft } from '../products/ecommerce/ecommerce-shop-handoff'
 import { claimManagedCommercePublicRequest, loadManagedCommercePublicInbox, loadManagedCommercePublicShopContact, type ManagedCommercePublicContact } from '../products/ecommerce/managed-commerce-public'
-import { acquireShopPublicInboxFlight, claimShopPublicInboxRequest, releaseShopPublicInboxFlight, shopPublicInboxBacklogCursor, shopPublicInboxPrunedRequestIds, shopPublicInboxSweepSet, syncShopPublicInbox, type ShopPublicInboxRequest } from './shop-public-inbox-sync'
+import { acquireShopPublicInboxFlight, claimShopPublicInboxRequest, releaseShopPublicInboxFlight, shopPublicInboxBacklogCursor, shopPublicInboxIdentityState, shopPublicInboxPrunedRequestIds, syncShopPublicInbox, type ShopPublicInboxIdentityState as ShopPublicInboxIdentityStateType, type ShopPublicInboxRequest } from './shop-public-inbox-sync'
 import { ShopBuyerContactDisclosure } from './ShopBuyerContactDisclosure'
 import type { EcommerceCancellationIntent, EcommerceOrderAmendmentIntent, EcommerceOrderRequestV2, EcommerceOrderRescheduleIntent, EcommerceShopDraftV2 } from '../products/ecommerce/ecommerce-buying-lifecycle'
 import { ecommerceShopIntentReference, type EcommerceShopNavigationIntents } from '../products/ecommerce/ecommerce-shop-intent-route'
@@ -1685,8 +1685,7 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
     error: string
   }>({ identityKey: '', requests: [], cursor: null, scanAnchor: null, checking: false, error: '' })
   const managedPublicInboxRef = useRef(managedPublicInbox)
-  const managedPublicInboxRequestCursors = useRef(new Map<string, string | undefined>())
-  const managedPublicInboxSeenDuringSweep = useRef(new Map<string, Set<string>>())
+  const managedPublicInboxSweepStates = useRef(new Map<string, ShopPublicInboxIdentityStateType>())
   const managedPublicInboxFlights = useRef(new Set<string>())
   const managedPublicInboxIdentityRef = useRef('')
   const managedPublicInboxIdentityKey = managedIdentity
@@ -1698,9 +1697,9 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
     const identityKey = `${managedIdentity.workspaceId}\u0000${managedIdentity.userId}\u0000${managedIdentity.email}`
     if (managedPublicInboxIdentityRef.current !== identityKey || !acquireShopPublicInboxFlight(managedPublicInboxFlights.current, identityKey)) return
 
-    const requestCursorKey = retryRequestId ? `${identityKey}\u0000${retryRequestId}` : ''
-    const retryAfter = retryRequestId && managedPublicInboxRequestCursors.current.has(requestCursorKey)
-      ? managedPublicInboxRequestCursors.current.get(requestCursorKey)
+    const sweepState = shopPublicInboxIdentityState(managedPublicInboxSweepStates.current, identityKey)
+    const retryAfter = retryRequestId && sweepState.requestCursors.has(retryRequestId)
+      ? sweepState.requestCursors.get(retryRequestId)
       : undefined
     const previous = managedPublicInboxRef.current
     const previousRequests = previous.identityKey === identityKey ? previous.requests : []
@@ -1759,7 +1758,7 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
         }
       }
       if (!isCurrent()) return
-      const seenDuringSweep = shopPublicInboxSweepSet(managedPublicInboxSeenDuringSweep.current, identityKey)
+      const seenDuringSweep = sweepState.seenDuringSweep
       if (restartSweep) seenDuringSweep.clear()
       for (const [pageIndex, page] of pageResults.entries()) {
         const pageCursor = pageIndex === 0
@@ -1767,7 +1766,7 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
           : backlogCursor ?? undefined
         for (const request of [...page.requests, ...page.claimedRequests, ...page.alreadyInShopRequests]) {
           if (!retryRequestId) seenDuringSweep.add(request.requestId)
-          managedPublicInboxRequestCursors.current.set(`${identityKey}\u0000${request.requestId}`, pageCursor)
+          sweepState.requestCursors.set(request.requestId, pageCursor)
         }
       }
       const claimedRequests = pageResults.flatMap((page) => page.claimedRequests)
@@ -1785,14 +1784,14 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
       ])
       if (refreshed) for (const requestId of resolvedRequestIds) {
         nextRequests.delete(requestId)
-        managedPublicInboxRequestCursors.current.delete(`${identityKey}\u0000${requestId}`)
+        sweepState.requestCursors.delete(requestId)
       }
       const completeSweep = !retryRequestId && nextCursor === null && !backlogLoadError && refreshed
       for (const requestId of shopPublicInboxPrunedRequestIds(nextRequests, seenDuringSweep, completeSweep)) {
         nextRequests.delete(requestId)
-        managedPublicInboxRequestCursors.current.delete(`${identityKey}\u0000${requestId}`)
+        sweepState.requestCursors.delete(requestId)
       }
-      if (completeSweep) managedPublicInboxSeenDuringSweep.current.delete(identityKey)
+      if (completeSweep) seenDuringSweep.clear()
       const requests = [...nextRequests.values()]
       const error = failedRequestIds.length
         ? 'That online order could not be prepared in Shop yet. You can review it again.'
