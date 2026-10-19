@@ -42,7 +42,6 @@ EXTRAS = (
     "20261014090000_website_channel_stable_update.sql",
     "20261015091500_website_six_page_reviews.sql",
     "20261015202629_ecommerce_operator_review_grant.sql",
-    "20261016143945_optimize_sites_inquiry_rls_initplans.sql",
 )
 MIGRATIONS = (*pg.MIGRATIONS, *EXTRAS)
 PRODUCTS = ("commerce", "production", "website", "ecommerce")
@@ -91,7 +90,8 @@ def source_identity(expected_head):
     require(git("rev-parse", "HEAD") == expected_head, "source_head_mismatch")
     observed = tuple(sorted(p.name for p in (ROOT / "supabase/migrations").glob("*.sql")
                             if p.name not in ("20260711081300_public_legacy_baseline.sql",
-                                              *pg.DOMAIN_CANDIDATE_MIGRATIONS)))
+                                              *pg.DOMAIN_CANDIDATE_MIGRATIONS,
+                                              *pg.DORMANT_CANDIDATE_MIGRATIONS)))
     require(observed == MIGRATIONS, "private_migration_inventory_mismatch")
     paths = sorted(set([
         "tools/rehearse_self_serve_v13.py", "tools/run_python_tool.mjs",

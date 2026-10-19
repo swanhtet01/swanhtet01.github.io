@@ -39,13 +39,17 @@ class FullChainProofContractTests(unittest.TestCase):
     def test_exact_current_private_migration_chain(self):
         actual = sorted(p.name for p in (proof.ROOT / "supabase/migrations").glob("*.sql")
                         if p.name not in ("20260711081300_public_legacy_baseline.sql",
-                                          *proof.pg.DOMAIN_CANDIDATE_MIGRATIONS))
+                                          *proof.pg.DOMAIN_CANDIDATE_MIGRATIONS,
+                                          *proof.pg.DORMANT_CANDIDATE_MIGRATIONS))
         self.assertEqual(list(proof.MIGRATIONS), actual)
         for candidate in proof.pg.DOMAIN_CANDIDATE_MIGRATIONS:
             self.assertTrue((proof.ROOT / "supabase/migrations" / candidate).is_file())
             self.assertNotIn(candidate, proof.MIGRATIONS)
-        self.assertEqual(len(proof.MIGRATIONS), 30)
-        self.assertEqual(proof.MIGRATIONS[-15:], (
+        for candidate in proof.pg.DORMANT_CANDIDATE_MIGRATIONS:
+            self.assertTrue((proof.ROOT / "supabase/migrations" / candidate).is_file())
+            self.assertNotIn(candidate, proof.MIGRATIONS)
+        self.assertEqual(len(proof.MIGRATIONS), 29)
+        self.assertEqual(proof.MIGRATIONS[-14:], (
             "20260915184728_website_customer_review_storage.sql",
             "20260915191528_website_review_entitlement_proof.sql",
             "20260918011500_website_customer_acceptance.sql",
@@ -60,7 +64,6 @@ class FullChainProofContractTests(unittest.TestCase):
             "20261014090000_website_channel_stable_update.sql",
             "20261015091500_website_six_page_reviews.sql",
             "20261015202629_ecommerce_operator_review_grant.sql",
-            "20261016143945_optimize_sites_inquiry_rls_initplans.sql",
         ))
 
     def test_matrix_has_exact_unique_behavior_checks(self):
