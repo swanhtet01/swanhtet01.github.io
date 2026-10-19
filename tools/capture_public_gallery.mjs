@@ -405,12 +405,17 @@ async function main() {
     await cdp.send('Page.navigate', { url: `${origin}/shop/` }, sessionId)
     await waitFor(cdp, sessionId, 'Today')
     await waitFor(cdp, sessionId, 'Order queue')
+    const completedSaleSurvivedReload = await evaluate(cdp, sessionId, `(() => {
+      const state = JSON.parse(localStorage.getItem('supermega.commerce.workspace.v2') || '{}');
+      return state.orders?.some(order => order.status === 'completed' && order.paymentStatus === 'reconciled') === true;
+    })()`)
+    if (!completedSaleSurvivedReload) throw new Error('synthetic_counter_sale_missing_after_reload')
     await clickText(cdp, sessionId, 'Show Today')
-    captures.unshift(await capture(cdp, sessionId, output, 'actual-shop-today', ['Today', 'Quick tasks', 'Order queue', '1 completed'],
+    captures.unshift(await capture(cdp, sessionId, output, 'actual-shop-today', ['Today', 'Quick tasks', 'Order queue'],
       { fixturePath: '/shop/', tab: 'today', selector: '.shop-today-module' }))
-    captures.push(await captureTablet(cdp, sessionId, output, 'actual-shop-today-tablet', ['Today', 'Quick tasks', 'Order queue', '1 completed'],
+    captures.push(await captureTablet(cdp, sessionId, output, 'actual-shop-today-tablet', ['Today', 'Quick tasks', 'Order queue'],
       { fixturePath: '/shop/', tab: 'today', selector: '.shop-today-module' }))
-    captures.push(await captureMobile(cdp, sessionId, output, 'actual-shop-today-mobile', ['Today', 'Quick tasks', 'Order queue', '1 completed'],
+    captures.push(await captureMobile(cdp, sessionId, output, 'actual-shop-today-mobile', ['Today', 'Quick tasks', 'Order queue'],
       { fixturePath: '/shop/', tab: 'today', selector: '.shop-today-module' }))
     await assertShopMobileFits(cdp, sessionId, '.shop-operations-board')
     await clickText(cdp, sessionId, 'Show Orders')
