@@ -3732,6 +3732,7 @@ class CommerceRuntimeTests(unittest.TestCase):
                     "commerce.merchant_profile.saved",
                     "commerce.storefront.merchandising.imported",
                     "commerce.storefront_request.closed",
+                    "commerce.storefront_request.received",
                     "commerce.tax_configuration.saved",
                     "commerce.account_mapping.saved",
                     "commerce.customer_credit_policy.saved",

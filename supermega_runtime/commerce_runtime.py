@@ -151,6 +151,7 @@ COMMERCE_HUMAN_EVENTS = frozenset(
         "commerce.storefront.configuration.saved",
         "commerce.storefront.merchandising.imported",
         "commerce.storefront_request.closed",
+        "commerce.storefront_request.received",
         "commerce.service_schedule.initialized",
         "commerce.service_schedule.saved",
     }
