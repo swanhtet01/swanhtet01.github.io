@@ -65,7 +65,11 @@ class EcommerceCustomerReviewStore:
             if cursor.fetchone()['isolation']!='read committed':
                 raise TrialValidationError('ecommerce_review_requires_read_committed')
             if lock_source:
-                cursor.execute("select version from app_private.workspace_state where workspace_id=%s and surface='commerce' for update",(actor.workspace_id,))
+                # Serialize with the same per-surface lock used by Shop state commands.
+                # The internal Ecommerce role has commerce.read but deliberately lacks
+                # commerce.write, so it cannot use SELECT FOR UPDATE under workspace RLS.
+                self.store._lock(cursor, f"{actor.workspace_id}:state:commerce")
+                cursor.execute("select version from app_private.workspace_state where workspace_id=%s and surface='commerce'",(actor.workspace_id,))
                 if cursor.fetchone() is None: raise TrialValidationError('ecommerce_review_source_missing')
             cursor.execute("select pg_advisory_xact_lock(hashtextextended('ecommerce-review:' || %s,0))",(actor.workspace_id,))
             self.store._assert_active_identity_session(cursor,actor)
