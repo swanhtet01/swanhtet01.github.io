@@ -1160,12 +1160,14 @@ test('eviction warning replaces the overlapping local workspace banner', async (
   assert.ok(core.includes("'Private device'"), 'the shell keeps the concise local-mode label')
 })
 
-test('denied persistence keeps its backup action visible across Shop workspaces', async () => {
+test('denied persistence shows the backup reminder on Today without repeating it across Shop tabs', async () => {
   const coreApp = await readFile(new URL('../showroom/src/core/CoreApp.tsx', import.meta.url), 'utf8')
   assert.ok(
     !/measureLocalWorkspaceBackupHeadroom|localWorkspaceBackupHeadroomMessage/.test(coreApp),
     'the device-wide headroom meter should stay out of product workspaces; only the concise denied-storage action belongs there',
   )
+  assert.ok(coreApp.includes("storageDurability.state === 'denied' && tab === 'today'"))
+  assert.ok(coreApp.includes('storageDurability.quotaExceeded || (storageDurability.state === \'denied\' && tab === \'today\')'))
   assert.match(coreApp, /const commerceBoundary = <>[\s\S]*?\{storageDurabilityNotice\}/)
   assert.match(coreApp, /const operatingBoundary = <>[\s\S]*?\{storageDurabilityNotice\}/)
 })
