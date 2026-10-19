@@ -152,7 +152,7 @@ TRUSTED_IDENTITY_PROVIDERS = frozenset({"gateway", "supabase"})
 HUMAN_ACTOR_KIND = "human"
 _MAX_SAFE_INTEGER = 9_007_199_254_740_991
 _ORDER_CALCULATION_SCHEMA = "supermega.commerce.order-calculation.v1"
-ECOMMERCE_PUBLIC_REQUEST_EVENTS = frozenset({
+PUBLIC_ORDER_REQUEST_EVENTS = frozenset({
     "commerce.storefront_request.received",
     "commerce.storefront_request.closed",
 })
@@ -457,9 +457,18 @@ def require_command_product_entitlement(
     product_entitlements: Sequence[str] | None,
     capabilities: Sequence[str] = (),
 ) -> None:
-    """Keep Shop writes and internal Ecommerce writes on separate grants."""
+    """Keep Shop fulfillment and Ecommerce storefront administration scoped."""
 
-    if event_type.startswith("commerce.storefront.") or event_type in ECOMMERCE_PUBLIC_REQUEST_EVENTS:
+    if event_type in PUBLIC_ORDER_REQUEST_EVENTS:
+        # A submitted storefront order is fulfillment work for Shop. A Shop
+        # member may carry it into the Shop queue with commerce.write; internal
+        # Ecommerce operators retain the same path through their scoped grant.
+        if product_entitlements is None:
+            return
+        if "commerce" in product_entitlements and "commerce.write" in capabilities:
+            return
+        require_ecommerce_management_authority(product_entitlements, capabilities)
+    elif event_type.startswith("commerce.storefront."):
         require_ecommerce_management_authority(product_entitlements, capabilities)
     elif event_type.startswith("commerce.") and product_entitlements is not None:
         # Ecommerce shares Shop's storage surface, but that must not make an
@@ -3558,11 +3567,11 @@ def _required_command_capability(surface: str, event_type: str) -> str | None:
         _normalize_surface(surface) == "commerce"
         and (
             _normalize_event_type(event_type).startswith("commerce.storefront.")
-            or _normalize_event_type(event_type) in ECOMMERCE_PUBLIC_REQUEST_EVENTS
+            or _normalize_event_type(event_type) in PUBLIC_ORDER_REQUEST_EVENTS
         )
     ):
-        # The event-level Ecommerce gate checks both activation and actor grant;
-        # skip the broader Shop write check for this internally managed path.
+        # The narrower product-entitlement check below authorizes storefront
+        # administration and public-order intake separately.
         return None
     return _required_surface_capability(surface)
 

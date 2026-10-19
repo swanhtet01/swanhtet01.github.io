@@ -233,6 +233,29 @@ class CommercePublicStorefront:
     def __init__(self, store: PostgresTrialStore):
         self.store = store
 
+    def _require_public_request_access(
+        self, cursor: Any, principal: TrialPrincipal, capabilities,
+    ) -> None:
+        """Allow Shop staff to work incoming orders without storefront admin.
+
+        The private inbox table's RLS policy requires commerce.write even for
+        SELECT. Keep that same capability at this API boundary; contact data
+        remains available only through the separate Shop contact endpoint.
+        """
+        required = 'commerce.write'
+        products = self.store._product_entitlements(cursor, principal.workspace_id)
+        if products is None:
+            # Legacy non-managed stores still require an explicit actor grant.
+            if required in capabilities or 'ecommerce.manage' in capabilities:
+                return
+            raise TrialPermissionDenied(required)
+        if 'commerce' in products and required in capabilities:
+            return
+        if 'ecommerce' in products:
+            self._require_ecommerce_entitlement(cursor, principal, capabilities)
+            return
+        raise TrialPermissionDenied(required if 'commerce' in products else 'product.commerce')
+
     def _require_ecommerce_entitlement(self, cursor: Any, principal: TrialPrincipal, capabilities) -> None:
         # Publication is internal even when a Shop operator shares the surface.
         require_ecommerce_management_authority(
@@ -388,7 +411,8 @@ class CommercePublicStorefront:
 
     def inbox(self, principal: TrialPrincipal, *, after: str | None = None) -> dict[str, Any]:
         cursor_key = _parse_page_cursor(after) if after is not None else None
-        with self.store._guarded_cursor(principal, write=False, capability='ecommerce.manage') as (cursor, _):
+        with self.store._guarded_cursor(principal, write=False) as (cursor, capabilities):
+            self._require_public_request_access(cursor, principal, capabilities)
             _require_public_schema(cursor)
             cursor.execute("""select handle,request_id,shop_request_id,request_json,received_at,status
                 from app_private.commerce_public_requests where workspace_id=%s
@@ -445,7 +469,8 @@ class CommercePublicStorefront:
         """Requote a received request into Shop review; never confirm or charge it."""
         handle, request_id = _uuid(handle), _uuid(request_id)
         shop_request_id = _shop_request_id(handle, request_id)
-        with self.store._guarded_cursor(principal, write=True, capability='ecommerce.manage') as (cursor, _):
+        with self.store._guarded_cursor(principal, write=True) as (cursor, capabilities):
+            self._require_public_request_access(cursor, principal, capabilities)
             _require_public_schema(cursor)
             cursor.execute('select app_private.reserve_commerce_public_request(%s,%s,%s) as reserved',
                 (principal.workspace_id, handle, request_id))
@@ -506,7 +531,8 @@ class CommercePublicStorefront:
         retained = result.state.get('storefrontRequests', [])
         if not retained or retained[0]['id'] != shop_request_id:
             raise TrialNotReadyError(('commerce_public_claim_readback',))
-        with self.store._guarded_cursor(principal, write=True, capability='ecommerce.manage') as (cursor, _):
+        with self.store._guarded_cursor(principal, write=True) as (cursor, capabilities):
+            self._require_public_request_access(cursor, principal, capabilities)
             cursor.execute('select app_private.complete_commerce_public_request_claim(%s,%s,%s)',
                            (principal.workspace_id, handle, request_id))
         return {'status': 'in_shop', 'shopRequestId': shop_request_id,
@@ -520,7 +546,8 @@ class CommercePublicStorefront:
                 'spam_or_duplicate', 'other'):
             raise TrialValidationError('commerce_public_invalid')
         handle, request_id = _uuid(handle), _uuid(request_id)
-        with self.store._guarded_cursor(principal, write=True, capability='ecommerce.manage') as (cursor, _):
+        with self.store._guarded_cursor(principal, write=True) as (cursor, capabilities):
+            self._require_public_request_access(cursor, principal, capabilities)
             _require_public_schema(cursor)
             cursor.execute('select app_private.inspect_commerce_public_request(%s,%s,%s) as item',
                 (principal.workspace_id, handle, request_id))

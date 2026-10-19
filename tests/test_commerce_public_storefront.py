@@ -60,17 +60,33 @@ class CommercePublicBoundaryTests(unittest.TestCase):
 
         @contextmanager
         def guarded_cursor(*_args, **_kwargs):
-            yield cursor, frozenset({'ecommerce.manage'})
+            yield cursor, frozenset({'commerce.write'})
 
         store._guarded_cursor.side_effect = guarded_cursor
+        store._product_entitlements.return_value = ('commerce',)
         with patch('supermega_runtime.commerce_public_storefront._require_public_schema'):
             inbox = CommercePublicStorefront(store).inbox(principal)
-        store._guarded_cursor.assert_called_once_with(
-            principal, write=False, capability='ecommerce.manage')
+        store._guarded_cursor.assert_called_once_with(principal, write=False)
+        store._product_entitlements.assert_called_once_with(cursor, principal.workspace_id)
         self.assertNotIn('contact_json', cursor.execute.call_args_list[0].args[0].lower())
         self.assertNotIn('contact', inbox['requests'][0])
         self.assertNotIn('Private name', str(inbox))
         self.assertNotIn('+95900000000', str(inbox))
+
+    def test_shop_write_grant_can_work_public_order_intake_without_ecommerce_entitlement(self):
+        principal = TrialPrincipal('shop-only-workspace', 'shop-operator', 'human')
+        cursor = Mock()
+        store = Mock()
+        store._product_entitlements.return_value = ('commerce',)
+        adapter = CommercePublicStorefront(store)
+        adapter._require_public_request_access(cursor, principal, frozenset({'commerce.write'}))
+
+        from supermega_runtime.trial_store import require_command_product_entitlement
+        for event_type in ('commerce.storefront_request.received', 'commerce.storefront_request.closed'):
+            require_command_product_entitlement(event_type, ('commerce',), frozenset({'commerce.write'}))
+        with self.assertRaises(TrialPermissionDenied) as denied:
+            adapter._require_public_request_access(cursor, principal, frozenset({'commerce.read'}))
+        self.assertEqual(denied.exception.required_capability, 'commerce.write')
 
     def test_revoked_internal_grant_while_waiting_blocks_publication_changes(self):
         principal = TrialPrincipal('internal-workspace', 'internal-operator', 'human')
@@ -384,6 +400,13 @@ class CommercePublicSqlTests(unittest.TestCase):
 
     def setUp(self):
         with self.pg._connect(self.admin_url) as connection:
+            restored = connection.execute("""update app_private.workspace_memberships
+                set capabilities = array_append(capabilities, 'ecommerce.manage')
+                where workspace_id = %s and actor_id = %s
+                  and not ('ecommerce.manage' = any(capabilities))""",
+                (self.workspace_id, self.owner.actor_id)).rowcount
+            if restored not in (0, 1):
+                raise AssertionError('commerce_public_owner_grant_reset_failed')
             connection.execute('delete from app_private.commerce_public_requests')
             connection.execute('delete from app_private.commerce_public_storefronts')
             connection.execute("delete from app_private.workspace_state where workspace_id=%s and surface='commerce'",
@@ -411,7 +434,7 @@ class CommercePublicSqlTests(unittest.TestCase):
             self.assertEqual(denied.exception.required_capability, 'ecommerce.manage')
         self.assertTrue(self.adapter.publications(self.owner)['publications'][0]['enabled'])
 
-    def test_buyer_request_arrives_once_in_private_operator_inbox_and_revocation_closes_it(self):
+    def test_buyer_request_arrives_once_and_shop_can_claim_it_without_ecommerce_admin(self):
         publication = self.adapter.publish(self.owner, expected_version=1)
         handle = publication['handle']
         self.assertEqual(self.adapter.catalog(handle=handle)['items'][0]['unitPriceMmk'], 100)
@@ -429,6 +452,14 @@ class CommercePublicSqlTests(unittest.TestCase):
         self.assertEqual(inbox[0]['status'], 'new')
         with self.assertRaises(TrialValidationError):
             self.adapter.shop_contact(self.owner, shop_request_id=inbox[0]['shopRequestId'])
+        with self.pg._connect(self.admin_url) as connection:
+            connection.execute("""update app_private.workspace_memberships
+                set capabilities = array_remove(capabilities, 'ecommerce.manage')
+                where workspace_id = %s and actor_id = %s""",
+                (self.workspace_id, self.owner.actor_id))
+        # Shop operations can pick up a submitted request without publishing or
+        # administering the internal storefront.
+        self.assertEqual(len(self.adapter.inbox(self.owner)['requests']), 1)
         claim = self.adapter.claim(self.owner, handle=handle, request_id=body['requestId'])
         self.assertEqual(claim['status'], 'in_shop')
         self.assertFalse(claim['priceChanged'])
@@ -454,6 +485,11 @@ class CommercePublicSqlTests(unittest.TestCase):
         conflict = {**body, 'lines': [{'sku': 'SKU-1', 'quantity': 3}]}
         with self.assertRaises(Exception):
             self.adapter.receive(handle=handle, body=conflict, client_key='a' * 64)
+        with self.pg._connect(self.admin_url) as connection:
+            connection.execute("""update app_private.workspace_memberships
+                set capabilities = array_append(capabilities, 'ecommerce.manage')
+                where workspace_id = %s and actor_id = %s""",
+                (self.workspace_id, self.owner.actor_id))
         self.adapter.revoke(self.owner, handle=handle, preview_digest=publication['previewDigest'])
         with self.assertRaises(TrialValidationError):
             self.adapter.catalog(handle=handle)
@@ -535,6 +571,11 @@ class CommercePublicSqlTests(unittest.TestCase):
                     self.owner, write=True, capability='commerce.write') as (cursor, _):
                 cursor.execute('select app_private.close_commerce_public_request(%s,%s,%s,%s)',
                     (self.workspace_id, handle, body['requestId'], 'customer_withdrew'))
+        with self.pg._connect(self.admin_url) as connection:
+            connection.execute("""update app_private.workspace_memberships
+                set capabilities = array_remove(capabilities, 'ecommerce.manage')
+                where workspace_id = %s and actor_id = %s""",
+                (self.workspace_id, self.owner.actor_id))
         closed = self.adapter.close(self.owner, handle=handle,
                                     request_id=body['requestId'], reason='customer_withdrew')
         self.assertEqual((closed['status'], closed['duplicate']), ('closed', False))
