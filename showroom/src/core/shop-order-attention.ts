@@ -17,7 +17,7 @@ export function shopOrderAttentionLabels(
 
   if (promiseUrgency === 'late') labels.push({ kind: 'promise', text: 'Fulfilment late', tone: 'late' })
   else if (promiseUrgency === 'due_soon') labels.push({ kind: 'promise', text: 'due soon', tone: 'pending' })
-  else if (promiseUrgency === 'unrecorded') labels.push({ kind: 'promise', text: 'promise missing', tone: 'pending' })
+  else if (promiseUrgency === 'unrecorded') labels.push({ kind: 'promise', text: 'promise not recorded', tone: 'pending' })
 
   return labels
 }

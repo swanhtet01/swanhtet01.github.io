@@ -37,3 +37,13 @@ test('payment pending, refund due, and late fulfilment remain distinct signals',
     ],
   )
 })
+
+test('an unrecorded fulfilment promise is described accurately', () => {
+  assert.deepEqual(
+    shopOrderAttentionLabels({ paymentStatus: 'pending', refundStatus: 'none' }, 'unrecorded'),
+    [
+      { kind: 'payment', text: 'Payment pending', tone: 'pending' },
+      { kind: 'promise', text: 'promise not recorded', tone: 'pending' },
+    ],
+  )
+})

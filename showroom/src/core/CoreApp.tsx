@@ -8256,7 +8256,7 @@ function ReceivablesAging({ aging, disabled, onRecordContact }: {
         <span><strong>{formatMoney(row.balanceMmk)}</strong><small>{row.daysPastDue ? `${row.daysPastDue} days overdue` : 'not overdue'}</small><button className="text-link" disabled={disabled} onClick={() => onRecordContact(row.orderId)} type="button">Record contact</button></span>
       </div>)}
     </div>
-    <p className="form-notice">Only a recorded payment deadline or completed handoff can make an unpaid balance overdue. Fulfilment promises do not set payment due dates. Contact notes are append-only evidence; recording one does not send a message or change payment.</p>
+    <p className="form-notice">Payment becomes overdue only after its recorded due date or completed handoff. Delivery promises do not count.</p>
   </details>
 }
 
@@ -8342,7 +8342,7 @@ function OrderList({
           {attentionLabels.map((attention) => <span className={`status-pill ${attention.tone}`} data-order-attention={attention.kind} key={attention.kind}>{uiText(attention.text)}</span>)}
         </div>
         <details className="order-record-details">
-          <summary><span>{commerceOrderDisplayReference(order.id)} · {order.promisedAt ? `${uiText('promised')} ${formatTime(order.promisedAt)}` : uiText('promise missing')}</span><small>{uiText('Details')}</small></summary>
+          <summary><span>{commerceOrderDisplayReference(order.id)} · {order.promisedAt ? `${uiText('promised')} ${formatTime(order.promisedAt)}` : uiText('promise not recorded')}</span><small>{uiText('Details')}</small></summary>
           <div>
             {order.lines ? <small>{order.lines.map((line) => `${line.name} × ${line.quantity} @ ${line.unitPriceMmk.toLocaleString()} MMK`).join(' · ')}</small> : null}
             <OrderCalculationNote order={order} />
