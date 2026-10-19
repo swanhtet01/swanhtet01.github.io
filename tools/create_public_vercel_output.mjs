@@ -929,7 +929,7 @@ function shopOnlyCompanyMarkup(source) {
  return markup
 }
 function companyOperatingGraphic() {
- return `<figure class="company-product-visual"><img src="/images/actual-shop-sell.png" alt="SuperMega Shop counter sale with searchable products, stock counts and payment method recording. Wallet transfers are confirmed separately. Synthetic sample records." width="1440" height="900" loading="eager" fetchpriority="high" /><figcaption>Shop · Counter sale <span>Synthetic sample records</span></figcaption></figure>`
+ return `<figure class="company-product-visual"><img src="/images/actual-shop-sell.png" alt="SuperMega Shop counter sale with searchable products, stock counts and payment method recording. Wallet transfers are confirmed separately. Synthetic sample records." width="1440" height="900" loading="eager" fetchpriority="high" /><figcaption>Shop · Counter sale <span>Actual Shop screen · synthetic sample records</span></figcaption></figure>`
 }
 function replaceHomeShopShowcase(source) {
  const marker = /<section class="shop-showcase" aria-label="Shop product screens">[\s\S]*?<\/section>/g

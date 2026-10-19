@@ -363,7 +363,7 @@ for (const token of [
   `<meta property="og:description" content="${homePage.description}" />`,
 ]) check(home.includes(token), `home_metadata_manifest_bound:${token}`)
 check(home.includes('<figure class="company-product-visual"') && home.includes('src="/images/actual-shop-sell.png"')
-  && home.includes('Shop · Counter sale') && home.includes('Synthetic sample records'), 'home_provenance_checked_shop_capture_visible')
+  && home.includes('Shop · Counter sale') && home.includes('Actual Shop screen · synthetic sample records'), 'home_provenance_checked_shop_capture_visible')
 const shopLanding = readStatic('shop/index.html')
 const shopProduct = manifest.customerProducts.find(product => product.id === 'shop')
 for (const token of [

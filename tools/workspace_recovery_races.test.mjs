@@ -20,11 +20,12 @@ function harness({ draft = async () => {}, apply = async () => {}, frozen = fals
   const records = new Map(), calls = []
   return new Function('records', 'calls', 'draft', 'apply', 'frozen', `
     let restorePoint = { records: { before: 'synthetic' } }, reviewedRestorePoint = restorePoint;
+    let restorePointLabel = 'Existing restore point';
     const localWorkspaceOperation = { current: null }, restoreLoadSequence = { current: 0 };
     const LOCAL_WORKSPACE_RESTORE_POINT_KEY = 'restore', LOCAL_WORKSPACE_BACKUP_MAX_BYTES = 5000000;
     const setRestorePoint = value => { restorePoint = value };
     const setReviewedRestorePoint = value => { if (!frozen) reviewedRestorePoint = value };
-    const setRestorePointLabel = () => {}, setCurrentBackup = () => {}, setNotice = () => {};
+    const setRestorePointLabel = value => { restorePointLabel = value }, setCurrentBackup = () => {}, setNotice = () => {};
     const setRestoreBusy = () => {}, setResetBusy = () => {};
     const window = { localStorage: { removeItem: key => calls.push(['remove', key]) },
       sessionStorage: { setItem: (key,value) => records.set(key,value), removeItem: key => records.delete(key) },
@@ -39,7 +40,8 @@ function harness({ draft = async () => {}, apply = async () => {}, frozen = fals
       deleteAllPaymentQrData: async () => {}, deleteAllProductImageData: async () => {} });
     ${handlers}
     return { save: saveRestorePoint, load: loadBackupFile, restore: restoreWorkspace, reset: resetWorkspace,
-      point: () => restorePoint, operation: () => localWorkspaceOperation.current, calls, records };
+      point: () => restorePoint, reviewed: () => reviewedRestorePoint, label: () => restorePointLabel,
+      operation: () => localWorkspaceOperation.current, calls, records };
   `)(records, calls, draft, apply, frozen)
 }
 const file = data => ({ size: 100, name: 'synthetic.json', text: async () => JSON.stringify(data) })
@@ -80,15 +82,33 @@ test('customer restore excludes reset and duplicate restore before React flush',
   apply.resolve()
   await restoring
 })
-test('invalid file clears previous selection; older reads cannot replace newer ones', async () => {
-  const h = harness(), read = deferred()
+test('invalid or oversized file preserves the last verified restore point', async () => {
+  const h = harness()
+  await h.load(file({ valid: true, records: { previous: 'keep' } }))
+  const point = h.point(), stored = h.records.get('restore'), label = h.label()
   await h.load(file({ valid: false }))
-  assert.equal(h.point(), null)
-  const loading = h.load({ size: 100, text: () => read.promise })
+  assert.equal(h.point(), point)
+  assert.equal(h.records.get('restore'), stored)
+  assert.equal(h.label(), label)
+  const tooLarge = { size: 5000001, name: 'too-large.json', text: async () => { throw new Error('must not read') } }
+  await h.load(tooLarge)
+  assert.equal(h.point(), point)
+  assert.equal(h.records.get('restore'), stored)
+  assert.equal(h.label(), label)
+})
+test('valid file replaces restore point; older reads cannot replace newer ones', async () => {
+  const h = harness(), read = deferred()
+  await h.load(file({ valid: true, records: { previous: 'keep' } }))
+  const previous = h.point()
+  const loading = h.load({ size: 100, name: 'slow.json', text: () => read.promise })
   await h.load(file({ valid: true, records: { latest: 'yes' } }))
+  assert.notEqual(h.point(), previous)
+  const latestStored = h.records.get('restore'), latestLabel = h.label()
   read.resolve(JSON.stringify({ valid: true, records: { stale: 'no' } }))
   await loading
   assert.deepEqual(h.point().records, { latest: 'yes' })
+  assert.equal(h.records.get('restore'), latestStored)
+  assert.equal(h.label(), latestLabel)
 })
 test('failed reset or restore releases synchronous ownership without navigation', async () => {
   for (const name of ['reset', 'restore']) {

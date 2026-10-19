@@ -220,7 +220,6 @@ async function captureMobile(cdp, sessionId, output, name, expectedTexts, view) 
       }
       if (!phonePreview) throw new Error(`commerce_phone_preview_state_not_updated:${name}`)
     }
-    if (name === 'actual-shop-sell-mobile') await clickSelector(cdp, sessionId, '.shop-mobile-cart')
     const mobileLayout = await evaluate(cdp, sessionId, `(() => {
       const node = document.querySelector(${JSON.stringify(view.selector)});
       const top = node?.getBoundingClientRect().top ?? 0;
@@ -228,22 +227,8 @@ async function captureMobile(cdp, sessionId, output, name, expectedTexts, view) 
       return { viewport: innerWidth, page: document.documentElement.scrollWidth };
     })()`)
     if (mobileLayout.page > mobileLayout.viewport + 1) throw new Error(`mobile_capture_horizontal_overflow:${name}:${JSON.stringify(mobileLayout)}`)
-    // The fixture opens the basket with HTMLElement.click(), which does not set
-    // pointer modality. Tap a static heading so this frame reflects touch use;
-    // keyboard focus styling in the application remains intact.
-    if (name === 'actual-shop-sell-mobile') {
-      const point = await evaluate(cdp, sessionId, `(() => {
-        const heading = document.querySelector('.shop-current-sale h2');
-        const box = heading?.getBoundingClientRect();
-        return box ? { x: box.left + box.width / 2, y: box.top + box.height / 2 } : null;
-      })()`)
-      if (!point) throw new Error('mobile_sale_heading_missing')
-      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [point] }, sessionId)
-      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] }, sessionId)
-    }
     return await capture(cdp, sessionId, output, name, expectedTexts, { ...view, width: 390, height: 844 })
   } finally {
-    if (name === 'actual-shop-sell-mobile') await clickSelector(cdp, sessionId, '.shop-cart-close')
     await cdp.send('Emulation.setScrollbarsHidden', { hidden: false }, sessionId)
     await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false }, sessionId)
     await evaluate(cdp, sessionId, 'window.scrollTo(0,0)')
@@ -388,8 +373,8 @@ async function main() {
       { fixturePath: '/shop/', tab: 'counter', selector: '.shop-current-sale' }))
     captures.push(await captureTablet(cdp, sessionId, output, 'actual-shop-sell-tablet', ['Products', 'Current sale', 'KAUNG 90 Days Rice'],
       { fixturePath: '/shop/', tab: 'counter', selector: '.shop-counter-grid', scrollToTop: true, openSale: true }))
-    captures.push(await captureMobile(cdp, sessionId, output, 'actual-shop-sell-mobile', ['Products', 'Current sale', 'KAUNG 90 Days Rice'],
-      { fixturePath: '/shop/', tab: 'counter', selector: '.shop-current-sale' }))
+    captures.push(await captureMobile(cdp, sessionId, output, 'actual-shop-sell-mobile', ['Products', 'KAUNG 90 Days Rice'],
+      { fixturePath: '/shop/', tab: 'counter', selector: '.shop-counter-grid' }))
     await clickSelector(cdp, sessionId, '.shop-review-sale')
     await waitFor(cdp, sessionId, 'Review counter sale')
     await typeInto(cdp, sessionId, '.accountable-action-gate input', 'Synthetic cashier')

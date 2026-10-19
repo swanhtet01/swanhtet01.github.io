@@ -605,11 +605,7 @@ export function WorkspaceControlsPage() {
   async function loadBackupFile(file: File | null) {
     if (!file || localWorkspaceOperation.current) return
     const sequence = ++restoreLoadSequence.current
-    setReviewedRestorePoint(null)
-    setRestorePoint(null)
-    setRestorePointLabel('')
     try {
-      window.sessionStorage.removeItem(LOCAL_WORKSPACE_RESTORE_POINT_KEY)
       if (file.size < 1 || file.size > LOCAL_WORKSPACE_BACKUP_MAX_BYTES) throw new Error('Choose a SuperMega backup smaller than 5 MB.')
       const text = await file.text()
       if (sequence !== restoreLoadSequence.current) return
@@ -617,6 +613,7 @@ export function WorkspaceControlsPage() {
       const backup = restoreLocalWorkspaceBackup(parsed) ?? restoreLocalWorkspaceBackupFromEvidence(parsed)
       if (!backup) throw new Error('This is not a valid SuperMega workspace backup or version 24 evidence file.')
       window.sessionStorage.setItem(LOCAL_WORKSPACE_RESTORE_POINT_KEY, JSON.stringify(backup))
+      setReviewedRestorePoint(null)
       setRestorePoint(backup)
       setRestorePointLabel(file.name)
       setNotice(`${Object.keys(backup.records).length} records verified. Restore only when you are ready to replace this browser workspace.`)
