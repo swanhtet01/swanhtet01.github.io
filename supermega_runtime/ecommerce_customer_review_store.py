@@ -14,8 +14,8 @@ FUNCTIONS = {
     "ecommerce_review_text_length": (1, "bigint", "sql", False, "i", "789f685f8ef315e66146b9bd853f4f68e40e3de2e4e022a506ff4679c3a0579f"),
     "ecommerce_review_projection": (1, "jsonb", "plpgsql", False, "i", "958a3fea1726d57a4e833a0888102edb2a3d1105cd7f3c5f84d4741c2294c976"),
     "ecommerce_review_preview_digest": (1, "text", "plpgsql", False, "i", "fba073c4a638ca22f7a267cd8c2912999b89c245b7f0df895142f98fed8f726d"),
-    "ecommerce_review_operator_entitled": (0, "boolean", "sql", True, "s", "4cca9c52c01f834f292c0d421a36f8ba9cdf9bea215db8b5a7f1a83a7d63e8f9"),
-    "ecommerce_review_recipient_ready": (1, "boolean", "sql", True, "s", "245b24cd05826522a9825a618fb48e786fe4225f6483936634a4557555b18794"),
+    "ecommerce_review_operator_entitled": (0, "boolean", "sql", True, "s", "f760e1483ba3ef6be801a40e7a9e4524f82ac7631e6ae44cba44a4d14bba4b6a"),
+    "ecommerce_review_recipient_ready": (1, "boolean", "sql", True, "s", "0c20ff75bfb11617c42b224ca1980f934ddf66039625d72d0f8e81d50ef0c88e"),
     "guard_ecommerce_review": (0, "trigger", "plpgsql", False, "v", "41583ca2889b54fcf7c77c68d307f55ec127b218b27f3bc001cf05418e4776d9"),
     "invalidate_ecommerce_reviews": (0, "trigger", "plpgsql", False, "v", "2f8e3905cd867d3a118d4fd6eaf9963248cee9ea14cfd7df0160d073f2167959"),
 }
@@ -53,11 +53,11 @@ class EcommerceCustomerReviewStore:
 
     @contextmanager
     def _transaction(self,principal,*,write=False,lock_source=False,capability=None):
-        capability=capability or ('commerce.write' if write else 'ecommerce.review')
+        capability=capability or ('ecommerce.manage' if write else 'ecommerce.review')
         actor=principal.normalized()
         if actor.actor_kind!='human': raise TrialPermissionDenied(capability)
         with self.store._guarded_cursor(actor,write=write,capability=capability) as (cursor,capabilities):
-            if capability=='commerce.write':
+            if capability=='ecommerce.manage':
                 require_ecommerce_management_authority(
                     self.store._product_entitlements(cursor,actor.workspace_id), capabilities)
             _assert_storage(cursor)
@@ -73,14 +73,14 @@ class EcommerceCustomerReviewStore:
             latest_products = self.store._product_entitlements(cursor,actor.workspace_id)
             if capability not in latest_capabilities or 'ecommerce' not in latest_products:
                 raise TrialPermissionDenied(capability)
-            if capability == 'commerce.write':
+            if capability == 'ecommerce.manage':
                 # A grant can be revoked while the review lock is contested.
                 require_ecommerce_management_authority(latest_products, latest_capabilities)
             yield cursor,actor
 
     def preparation_preview(self,principal):
         """Read saved public catalog facts; prepare still checks version under lock."""
-        with self._transaction(principal,capability='commerce.write') as (cursor,actor):
+        with self._transaction(principal,capability='ecommerce.manage') as (cursor,actor):
             cursor.execute("select version,state_json,clock_timestamp() as read_at from app_private.workspace_state where workspace_id=%s and surface='commerce'",(actor.workspace_id,))
             source=cursor.fetchone()
             if source is None: raise TrialValidationError('ecommerce_review_source_missing')
@@ -98,7 +98,7 @@ class EcommerceCustomerReviewStore:
         """Confirm absence only after this exact request can no longer prepare."""
         review_id=uuid(review_id)
         expiry=stamp(expires_at)
-        with self._transaction(principal,capability='commerce.write') as (cursor,actor):
+        with self._transaction(principal,capability='ecommerce.manage') as (cursor,actor):
             # Preparation checks expiry after acquiring this same advisory lock.
             # Do not treat absence before expiry as cancellation or terminal proof.
             cursor.execute('select clock_timestamp() as now')
@@ -114,7 +114,7 @@ class EcommerceCustomerReviewStore:
     def prepared_reviews(self, principal, *, after=None):
         """Discover only this operator's retained assignments without browser receipts."""
         after = uuid(after) if after is not None else None
-        with self._transaction(principal, capability='commerce.write') as (cursor, actor):
+        with self._transaction(principal, capability='ecommerce.manage') as (cursor, actor):
             cursor.execute('select clock_timestamp() as read_at')
             read_at = cursor.fetchone()['read_at']
             cursor.execute("""select review_id,source_version,content_revision,preview_digest,
@@ -139,14 +139,14 @@ class EcommerceCustomerReviewStore:
     def reconcile(self,principal,review_id):
         """Read only the caller's retained assignment; absence stays uncertain."""
         review_id=uuid(review_id)
-        with self._transaction(principal,capability='commerce.write') as (cursor,actor):
+        with self._transaction(principal,capability='ecommerce.manage') as (cursor,actor):
             cursor.execute("""select source_version,content_revision,preview_digest,prepared_at,
                     expires_at,status,clock_timestamp() as read_at
                 from app_private.ecommerce_customer_reviews
                 where workspace_id=%s and prepared_by=%s and review_id=%s""",
                 (actor.workspace_id,actor.actor_id,review_id))
             row=cursor.fetchone()
-            if row is None: raise TrialPermissionDenied('commerce.write')
+            if row is None: raise TrialPermissionDenied('ecommerce.manage')
             status=row['status']
             if status=='active' and row['expires_at']<=row['read_at']: status='expired'
             result=dict(reviewId=review_id,status=status,sourceVersion=row['source_version'],
@@ -210,7 +210,7 @@ class EcommerceCustomerReviewStore:
     def list_recipients(self, principal, *, after: str | None = None):
         if after is not None:
             after = uuid(after)
-        with self._transaction(principal, write=False, capability="commerce.write") as (cursor, actor):
+        with self._transaction(principal, write=False, capability="ecommerce.manage") as (cursor, actor):
             rows = self._enrolled_recipients(cursor, actor, after=after)
             recipients = [{"grantId": str(row["grant_id"]), "label": _text(row["label"], 120)} for row in rows[:50]]
             return {"recipients": recipients, "nextAfter": recipients[-1]["grantId"] if len(rows) > 50 else None,
@@ -225,7 +225,7 @@ class EcommerceCustomerReviewStore:
         expiry=stamp(expires_at)
         if type(expected_version) is not int or not 1<=expected_version<=9_007_199_254_740_991:
             raise TrialValidationError('ecommerce_review_source_stale')
-        with self._transaction(principal,write=True,lock_source=True) as (cursor,actor):
+        with self._transaction(principal,write=True,lock_source=True,capability='ecommerce.manage') as (cursor,actor):
             if grant_id is not None:
                 recipients=self._enrolled_recipients(cursor,actor,grant_id=grant_id)
                 if len(recipients)!=1: raise TrialPermissionDenied('ecommerce.review')
@@ -262,10 +262,10 @@ class EcommerceCustomerReviewStore:
 
     def revoke(self,principal,review_id):
         review_id=uuid(review_id)
-        with self._transaction(principal,write=True) as (cursor,actor):
+        with self._transaction(principal,write=True,capability='ecommerce.manage') as (cursor,actor):
             cursor.execute('select status from app_private.ecommerce_customer_reviews where workspace_id=%s and review_id=%s',(actor.workspace_id,review_id))
             prior=cursor.fetchone()
-            if prior is None: raise TrialPermissionDenied('commerce.write')
+            if prior is None: raise TrialPermissionDenied('ecommerce.manage')
             replay=prior['status']=='revoked'
             if not replay:
                 cursor.execute("update app_private.ecommerce_customer_reviews set status='revoked' where workspace_id=%s and review_id=%s returning status",(actor.workspace_id,review_id))
@@ -308,14 +308,14 @@ class EcommerceCustomerReviewStore:
         """Read retained responses for the caller's own prepared review, including history."""
         review_id = uuid(review_id)
         after = uuid(after) if after is not None else None
-        with self._transaction(principal, capability='commerce.write') as (cursor, actor):
+        with self._transaction(principal, capability='ecommerce.manage') as (cursor, actor):
             cursor.execute("""select source_version,content_revision,preview_digest,recipient_actor_id,
                     status,expires_at,clock_timestamp() as read_at
                 from app_private.ecommerce_customer_reviews
                 where workspace_id=%s and prepared_by=%s and review_id=%s""",
                 (actor.workspace_id, actor.actor_id, review_id))
             assignment = cursor.fetchone()
-            if assignment is None: raise TrialPermissionDenied('commerce.write')
+            if assignment is None: raise TrialPermissionDenied('ecommerce.manage')
             cursor.execute("""select command_id,kind,note,created_at
                 from app_private.ecommerce_customer_decisions
                 where workspace_id=%s and actor_id=%s and review_id=%s

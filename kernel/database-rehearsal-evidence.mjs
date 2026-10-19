@@ -34,6 +34,7 @@ const migrations = [
   '20261014090000_website_channel_stable_update.sql',
   '20261015091500_website_six_page_reviews.sql',
   '20261015202629_ecommerce_operator_review_grant.sql',
+  '20261019070000_ecommerce_operator_management_boundary.sql',
 ]
 
 const implementationPaths = [...new Set([

@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PROFILE = "v13-self-serve"
 CONTRACT = "supermega_private_trial_database_v13_self_serve_v1"
 MIGRATION_PINS = {
+    "20261019070000_ecommerce_operator_management_boundary.sql": "4028c5e571ae9d4ac8f043fe1609c7ae047d11fbfc4a65e8695d8c01f8306c8d",
     "20261015202629_ecommerce_operator_review_grant.sql": "c37a78902bae3d04fcc38d2cf044f36da06fa636ac49be6fa4e98564679f45ee",
     "20261015091500_website_six_page_reviews.sql": "65472d2a57a787b1135bb362875e527caf84bbc83bfd00549c4191e3b4bb1e6e",
     "20261014090000_website_channel_stable_update.sql": "9ed6dc61a3ebc832db5ad54e4d7c91ad18e48d3a4f577ffb9a093baa52b3612a",

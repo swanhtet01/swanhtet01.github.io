@@ -48,6 +48,12 @@ class CatalogReviewSqlTests(unittest.TestCase):
                     (uuid4(), WORKSPACE, uuid4(), 'a' * 64, OWNER))
                 connection.execute(
                     "update app_private.workspace_memberships "
+                    "set capabilities=array['commerce.read','ecommerce.manage'] "
+                    "where workspace_id=%s and actor_id=%s",
+                    (WORKSPACE, OWNER),
+                )
+                connection.execute(
+                    "update app_private.workspace_memberships "
                     "set capabilities=array['ecommerce.review'] "
                     "where workspace_id=%s and actor_id=%s",
                     (WORKSPACE, RECIPIENT),
