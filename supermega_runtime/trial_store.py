@@ -4995,6 +4995,38 @@ class PostgresTrialStore:
                 _require_surface_read_capability(capabilities, related_surface)
         return capabilities
 
+    def _refresh_product_acceptance_authority(
+        self,
+        cursor: Any,
+        principal: TrialPrincipal,
+        *,
+        product: str,
+        surface: str,
+    ) -> frozenset[str]:
+        """Reload the actor's mutable access after acceptance locks have waited."""
+        try:
+            cursor.execute("show transaction_isolation")
+            isolation = str((cursor.fetchone() or {}).get("transaction_isolation", "")).strip().lower()
+            if isolation != "read committed":
+                raise TrialNotReadyError(("product_acceptance_authority_requires_read_committed",))
+            self._assert_active_identity_session(cursor, principal)
+            capabilities = self._load_membership(cursor, principal)
+            product_entitlements = self._product_entitlements(cursor, principal.workspace_id)
+            capabilities = capabilities_for_product_entitlements(capabilities, product_entitlements)
+        except TrialStoreError:
+            raise
+        except Exception as exc:
+            raise TrialNotReadyError(("product_acceptance_authority_ready",)) from exc
+
+        if product not in product_entitlements:
+            raise TrialPermissionDenied(f"product.{product}")
+        if product == "ecommerce":
+            require_ecommerce_management_authority(product_entitlements, capabilities)
+        required_capability = _required_surface_capability(surface)
+        if required_capability not in capabilities:
+            raise TrialPermissionDenied(required_capability)
+        return capabilities
+
     @staticmethod
     def _load_event_replay(
         cursor: Any,
@@ -5357,6 +5389,9 @@ class PostgresTrialStore:
                 )
 
             self._lock(cursor, f"{normalized.workspace_id}:acceptance:{probe_id_value}")
+            self._refresh_product_acceptance_authority(
+                cursor, normalized, product=product_value, surface=surface,
+            )
             replay = self._load_event_replay(
                 cursor,
                 workspace_id=normalized.workspace_id,
@@ -5369,6 +5404,9 @@ class PostgresTrialStore:
                 return record
             # Serialize with workspace commands, including an initially absent state row.
             self._lock(cursor, f"{normalized.workspace_id}:state:{surface}")
+            self._refresh_product_acceptance_authority(
+                cursor, normalized, product=product_value, surface=surface,
+            )
             cursor.execute(
                 """
                 select version, state_json

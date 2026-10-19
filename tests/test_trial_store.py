@@ -1066,6 +1066,10 @@ class TrialStoreTests(unittest.TestCase):
             def _product_entitlements(_cursor, _workspace_id):
                 return ("commerce",)
 
+            @staticmethod
+            def _refresh_product_acceptance_authority(_cursor, _principal, *, product, surface):
+                return frozenset({"commerce.write"})
+
         cursor = AcceptanceCursor()
         store = AcceptanceStore(cursor)
         probe_id = str(uuid4())
