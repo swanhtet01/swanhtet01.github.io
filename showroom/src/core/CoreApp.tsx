@@ -1679,9 +1679,10 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
     identityKey: string
     requests: ShopPublicInboxRequest[]
     cursor: string | null
+    scanAnchor: string | null
     checking: boolean
     error: string
-  }>({ identityKey: '', requests: [], cursor: null, checking: false, error: '' })
+  }>({ identityKey: '', requests: [], cursor: null, scanAnchor: null, checking: false, error: '' })
   const managedPublicInboxRef = useRef(managedPublicInbox)
   const managedPublicInboxAttempts = useRef(new Map<string, Set<string>>())
   const managedPublicInboxRequestCursors = useRef(new Map<string, string | undefined>())
@@ -1721,7 +1722,9 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
       managedPublicInboxRef.current = next
       setManagedPublicInbox(next)
     }
-    commit({ identityKey, requests: previousRequests, cursor: previous.identityKey === identityKey ? previous.cursor : null, checking: true, error: '' })
+    const sameIdentity = previous.identityKey === identityKey
+    commit({ identityKey, requests: previousRequests, cursor: sameIdentity ? previous.cursor : null,
+      scanAnchor: sameIdentity ? previous.scanAnchor : null, checking: true, error: '' })
 
     try {
       const api = { loadInbox: loadManagedCommercePublicInbox, claimRequest: claimManagedCommercePublicRequest }
@@ -1734,12 +1737,19 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
         retryRequestId ? retryAfter : undefined,
       )
       const pageResults = [firstPage]
+      const previousCursor = sameIdentity ? previous.cursor : null
+      const previousAnchor = sameIdentity ? previous.scanAnchor : null
+      const scanAnchor = retryRequestId ? previousAnchor : firstPage.nextCursor
+      const restartSweep = !retryRequestId && (
+        !sameIdentity || previousAnchor !== firstPage.nextCursor || previousCursor === null
+      )
       const backlogCursor = shopPublicInboxBacklogCursor(
-        previous.identityKey === identityKey ? previous.cursor : null,
+        previousCursor,
+        previousAnchor,
         firstPage.nextCursor,
         Boolean(retryRequestId),
       )
-      let nextCursor = previous.identityKey === identityKey ? previous.cursor : firstPage.nextCursor
+      let nextCursor = retryRequestId ? previousCursor : backlogCursor
       let backlogLoadError = ''
       if (backlogCursor && isCurrent()) {
         try {
@@ -1753,7 +1763,7 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
       }
       if (!isCurrent()) return
       const seenDuringSweep = managedPublicInboxSeenDuringSweep.current
-      if (!retryRequestId && previous.cursor === null) seenDuringSweep.clear()
+      if (restartSweep) seenDuringSweep.clear()
       for (const [pageIndex, page] of pageResults.entries()) {
         const pageCursor = pageIndex === 0
           ? retryRequestId ? retryAfter : undefined
@@ -1794,12 +1804,13 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
         : !refreshed
           ? 'Online orders are waiting for Shop to refresh. Retry below.'
           : backlogLoadError ? `Older online orders could not be checked. ${backlogLoadError}` : ''
-      if (isCurrent()) commit({ identityKey, requests, cursor: nextCursor, checking: false, error })
+      if (isCurrent()) commit({ identityKey, requests, cursor: nextCursor, scanAnchor, checking: false, error })
     } catch (error) {
       if (managedPublicInboxIdentityRef.current === identityKey) commit({
         identityKey,
         requests: previousRequests,
-        cursor: previous.identityKey === identityKey ? previous.cursor : null,
+        cursor: sameIdentity ? previous.cursor : null,
+        scanAnchor: sameIdentity ? previous.scanAnchor : null,
         checking: false,
         error: error instanceof Error ? error.message : 'Online orders could not be checked. Retry below.',
       })

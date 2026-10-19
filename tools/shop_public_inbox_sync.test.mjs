@@ -114,15 +114,15 @@ test('passes the saved page cursor to the inbox API and returns the next cursor'
   assert.equal(result.nextCursor, 'cursor-page-3')
 })
 
-test('a completed sweep still discovers new orders beyond the next first page', async () => {
+test('a shifted first-page boundary backfills requests before resuming the older cursor', async () => {
   const loaded = [], claimed = []
   const attempts = new Set()
   const api = {
     loadInbox: async (_identity, after) => {
       loaded.push(after)
-      return after === 'older-new-orders'
-        ? { requests: [request('new-after-first-page')], nextCursor: null }
-        : { requests: [request('already-in-shop', 'in_shop')], nextCursor: 'older-new-orders' }
+      return after === 'current-first-page-boundary'
+        ? { requests: [request('request-between-boundaries')], nextCursor: 'saved-older-cursor' }
+        : { requests: [request('already-in-shop', 'in_shop')], nextCursor: 'current-first-page-boundary' }
     },
     claimRequest: async (_identity, _handle, requestId) => {
       claimed.push(requestId)
@@ -130,13 +130,15 @@ test('a completed sweep still discovers new orders beyond the next first page', 
     },
   }
   const first = await syncShopPublicInbox(identity, attempts, api)
-  const cursor = shopPublicInboxBacklogCursor(null, first.nextCursor)
+  const cursor = shopPublicInboxBacklogCursor(
+    'saved-older-cursor', 'previous-first-page-boundary', first.nextCursor)
   const backlog = await syncShopPublicInbox(identity, attempts, api, () => true, cursor)
-  assert.deepEqual(loaded, [undefined, 'older-new-orders'])
-  assert.deepEqual(claimed, ['new-after-first-page'])
-  assert.equal(backlog.claimedRequests[0].shopRequestId, 'shop-new-after-first-page')
-  assert.equal(shopPublicInboxBacklogCursor('unfinished-page', first.nextCursor), 'unfinished-page')
-  assert.equal(shopPublicInboxBacklogCursor('unfinished-page', first.nextCursor, true), null)
+  assert.deepEqual(loaded, [undefined, 'current-first-page-boundary'])
+  assert.deepEqual(claimed, ['request-between-boundaries'])
+  assert.equal(backlog.claimedRequests[0].shopRequestId, 'shop-request-between-boundaries')
+  assert.equal(shopPublicInboxBacklogCursor('saved-older-cursor', first.nextCursor, first.nextCursor), 'saved-older-cursor')
+  assert.equal(shopPublicInboxBacklogCursor(null, first.nextCursor, first.nextCursor), first.nextCursor)
+  assert.equal(shopPublicInboxBacklogCursor('unfinished-page', first.nextCursor, first.nextCursor, true), null)
 })
 
 test('closed requests disappear only after a complete inbox sweep', () => {

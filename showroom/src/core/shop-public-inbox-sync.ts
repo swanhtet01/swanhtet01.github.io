@@ -21,9 +21,20 @@ type ShopPublicInboxApi = {
   claimRequest: (identity: ManagedIdentity, handle: string, requestId: string) => ReturnType<typeof import('../products/ecommerce/managed-commerce-public').claimManagedCommercePublicRequest>
 }
 
-export function shopPublicInboxBacklogCursor(previousCursor: string | null, firstPageNextCursor: string | null, retrying = false) {
-  // A completed sweep must not strand new orders beyond the next first page.
-  return retrying ? null : previousCursor ?? firstPageNextCursor
+export function shopPublicInboxBacklogCursor(
+  previousCursor: string | null,
+  previousAnchor: string | null,
+  firstPageNextCursor: string | null,
+  retrying = false,
+) {
+  if (retrying || !firstPageNextCursor) return null
+  // Keep paging older records when the newest-page boundary is unchanged.
+  // If new requests moved that boundary, restart immediately after the current
+  // first page so records between it and the older saved cursor cannot be lost.
+  // A null cursor means the prior sweep finished, so begin the next bounded sweep.
+  return previousAnchor === firstPageNextCursor
+    ? previousCursor ?? firstPageNextCursor
+    : firstPageNextCursor
 }
 
 export function shopPublicInboxPrunedRequestIds(
