@@ -1916,12 +1916,6 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
   const [preparedEcommerceDraft, setPreparedEcommerceDraft] = useState<EcommerceShopDraft | null>(null)
   const [publicShopContact, setPublicShopContact] = useState<ManagedCommercePublicContact | null>(null)
   const publicContactReviewEpoch = useRef(0)
-  const [shopOrderBuyerContact, setShopOrderBuyerContact] = useState<ShopOrderBuyerContactPanel | null>(null)
-  const shopOrderBuyerContactEpoch = useRef(0)
-  useEffect(() => {
-    shopOrderBuyerContactEpoch.current += 1
-    setShopOrderBuyerContact(null)
-  }, [managedPublicInboxIdentityKey])
   const [orderDraftRead, setOrderDraftRead] = useState<CommerceOrderDraftReadResult>({ status: 'empty', draft: null, error: '' })
   const [orderDraftActive, setOrderDraftActive] = useState(false)
   const [resumedOrderDraft, setResumedOrderDraft] = useState<CommerceOrderDraft | null>(null)
@@ -4233,41 +4227,6 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
       : `${pendingAction.summary} ${managedIdentity ? 'confirmed.' : 'completed.'}`)
     setPendingAction(null)
     if (pendingAction.presentation === 'counter' && !counterSettlement) navigate(`/shop/?tab=orders#${shopOrderTargetId(pendingAction.subjectId)}`)
-  }
-
-  async function toggleShopOrderBuyerContact(orderId: string, shopRequestId: string, open: boolean) {
-    if (!open) {
-      if (shopOrderBuyerContact?.orderId === orderId) {
-        shopOrderBuyerContactEpoch.current += 1
-        setShopOrderBuyerContact(null)
-      }
-      return
-    }
-    if (!/^ECR-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/.test(shopRequestId)) return
-    const identity = managedIdentity
-    const identityKey = managedPublicInboxIdentityKey
-    if (!identity || !commerceCanWrite || !identityKey) {
-      setShopOrderBuyerContact({ identityKey, orderId, status: 'unavailable' })
-      return
-    }
-    if (shopOrderBuyerContact?.identityKey === identityKey
-      && shopOrderBuyerContact.orderId === orderId
-      && (shopOrderBuyerContact.status === 'loading' || shopOrderBuyerContact.status === 'ready')) return
-
-    const requestEpoch = ++shopOrderBuyerContactEpoch.current
-    setShopOrderBuyerContact({ identityKey, orderId, status: 'loading' })
-    try {
-      const contact = await loadManagedCommercePublicShopContact(identity, shopRequestId)
-      if (requestEpoch !== shopOrderBuyerContactEpoch.current
-        || managedPublicInboxIdentityRef.current !== identityKey) return
-      if (contact.shopRequestId !== shopRequestId) throw new Error('Buyer contact does not match this order.')
-      setShopOrderBuyerContact({ identityKey, orderId, status: 'ready', contact })
-    } catch {
-      if (requestEpoch === shopOrderBuyerContactEpoch.current
-        && managedPublicInboxIdentityRef.current === identityKey) {
-        setShopOrderBuyerContact({ identityKey, orderId, status: 'unavailable' })
-      }
-    }
   }
 
   async function reviewStorefrontRequest(requestId: string) {
@@ -7620,7 +7579,7 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
       </section> : null}
       <section aria-labelledby="shop-order-list-heading" className="order-queue-main">
         <div className="order-queue-section-head"><div><span className="core-eyebrow">Order queue</span><h3 id="shop-order-list-heading">Needs attention</h3></div><small>{actionOrders.length ? `${actionOrders.length} to finish` : 'All caught up'}</small></div>
-        <OrderList acknowledgementDownloads={orderAcknowledgementDownloads} buyerContact={shopOrderBuyerContact?.identityKey === managedPublicInboxIdentityKey ? shopOrderBuyerContact : null} canCancel={(orderId) => commerceOrderHasReleasableReservation(commerce, orderId)} disabled={commerceControlsDisabled} highlightedTargetId={commerceLocation.hash.startsWith('#shop-order-') ? commerceLocation.hash.slice(1) : ''} onAdvance={advanceOrder} onCancel={cancelOrder} onReconcilePayment={reconcilePayment} onSettleRefund={settleRefund} onSettleSale={settleSale} onToggleBuyerContact={toggleShopOrderBuyerContact} onViewReceipt={setReceiptAck} orders={actionOrders} />
+        <OrderList acknowledgementDownloads={orderAcknowledgementDownloads} key={`${managedPublicInboxIdentityKey}\u0000${commerceCanWrite ? 'write' : 'read'}`} canCancel={(orderId) => commerceOrderHasReleasableReservation(commerce, orderId)} disabled={commerceControlsDisabled} highlightedTargetId={commerceLocation.hash.startsWith('#shop-order-') ? commerceLocation.hash.slice(1) : ''} loadBuyerContact={managedIdentity && commerceCanWrite ? (shopRequestId) => loadManagedCommercePublicShopContact(managedIdentity, shopRequestId) : null} onAdvance={advanceOrder} onCancel={cancelOrder} onReconcilePayment={reconcilePayment} onSettleRefund={settleRefund} onSettleSale={settleSale} onViewReceipt={setReceiptAck} orders={actionOrders} workspaceIdentityKey={managedPublicInboxIdentityKey} />
       </section>
       <details className="shop-business-controls">
         <summary><span>Daily tools</span><small>Reports and setup when needed</small></summary>
@@ -8340,34 +8299,67 @@ function orderAcknowledgementLookup(commerce: CommerceState): OrderAcknowledgeme
 
 function OrderList({
   acknowledgementDownloads,
-  buyerContact,
   orders,
   canCancel,
   disabled,
   highlightedTargetId,
+  loadBuyerContact,
   onAdvance,
   onCancel,
   onReconcilePayment,
   onSettleRefund,
   onSettleSale,
-  onToggleBuyerContact,
   onViewReceipt,
+  workspaceIdentityKey,
 }: {
   acknowledgementDownloads: OrderAcknowledgementLookup
-  buyerContact: ShopOrderBuyerContactPanel | null
   orders: CommerceOrder[]
   canCancel: (id: string) => boolean
   disabled: boolean
   highlightedTargetId: string
+  loadBuyerContact: ((shopRequestId: string) => Promise<ManagedCommercePublicContact>) | null
   onAdvance: (id: string) => void
   onCancel: (id: string) => void
   onReconcilePayment: (id: string) => void
   onSettleRefund: (id: string) => void
   onSettleSale: (id: string) => void
-  onToggleBuyerContact: (orderId: string, shopRequestId: string, open: boolean) => void
   onViewReceipt: (ack: CommerceOrderAcknowledgement) => void
+  workspaceIdentityKey: string
 }) {
+  const [buyerContact, setBuyerContact] = useState<ShopOrderBuyerContactPanel | null>(null)
+  const buyerContactEpoch = useRef(0)
+  useEffect(() => () => { buyerContactEpoch.current += 1 }, [])
   const promiseNow = useMinuteClock()
+  async function toggleBuyerContact(orderId: string, shopRequestId: string, open: boolean) {
+    if (!open) {
+      if (buyerContact?.orderId === orderId) {
+        buyerContactEpoch.current += 1
+        setBuyerContact(null)
+      }
+      return
+    }
+    if (!/^ECR-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/.test(shopRequestId)) return
+    if (!loadBuyerContact || !workspaceIdentityKey) {
+      setBuyerContact({ identityKey: workspaceIdentityKey, orderId, status: 'unavailable' })
+      return
+    }
+    if (buyerContact?.identityKey === workspaceIdentityKey
+      && buyerContact.orderId === orderId
+      && (buyerContact.status === 'loading' || buyerContact.status === 'ready')) return
+
+    const requestEpoch = ++buyerContactEpoch.current
+    setBuyerContact({ identityKey: workspaceIdentityKey, orderId, status: 'loading' })
+    try {
+      const contact = await loadBuyerContact(shopRequestId)
+      if (requestEpoch !== buyerContactEpoch.current) return
+      if (contact.shopRequestId !== shopRequestId) throw new Error('Buyer contact does not match this order.')
+      setBuyerContact({ identityKey: workspaceIdentityKey, orderId, status: 'ready', contact })
+    } catch {
+      if (requestEpoch === buyerContactEpoch.current) {
+        setBuyerContact({ identityKey: workspaceIdentityKey, orderId, status: 'unavailable' })
+      }
+    }
+  }
   if (!orders.length) return <Empty>{uiText('No orders need action.')}</Empty>
   return <div className="order-list">{orders.map((order) => {
     const active = order.status === 'confirmed' || order.status === 'preparing' || order.status === 'ready'
@@ -8394,7 +8386,7 @@ function OrderList({
     const attentionLabels = shopOrderAttentionLabels(order, promiseUrgency)
     const shopRequestId = order.sourceRecordId ?? ''
     const hasShopPublicSource = /^ECR-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/.test(shopRequestId)
-    const orderBuyerContact = buyerContact?.orderId === order.id ? buyerContact : null
+    const orderBuyerContact = buyerContact?.identityKey === workspaceIdentityKey && buyerContact.orderId === order.id ? buyerContact : null
     return <article data-highlighted={highlightedTargetId === targetId ? 'true' : undefined} id={targetId} key={order.id} tabIndex={-1}>
       <div>
         <strong>{order.customer} · {order.lines
@@ -8411,7 +8403,7 @@ function OrderList({
           <div>
             {order.lines ? <small>{order.lines.map((line) => `${line.name} × ${line.quantity} @ ${line.unitPriceMmk.toLocaleString()} MMK`).join(' · ')}</small> : null}
             <OrderCalculationNote order={order} />
-            {hasShopPublicSource ? <details className="order-record-details" onToggle={(event) => onToggleBuyerContact(order.id, shopRequestId, event.currentTarget.open)}>
+            {hasShopPublicSource ? <details className="order-record-details" onToggle={(event) => toggleBuyerContact(order.id, shopRequestId, event.currentTarget.open)}>
               <summary><span>{uiText('Contact')}</span><small>{uiText('Details')}</small></summary>
               <div>
                 {orderBuyerContact?.status === 'loading' ? <small role="status">…</small> : null}
