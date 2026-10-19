@@ -188,8 +188,9 @@ async function capture(cdp, sessionId, output, name, expectedTexts, view) {
   })()`)
   await evaluate(cdp, sessionId, 'document.activeElement?.blur()')
   const visibleQaChrome = await evaluate(cdp, sessionId, `(() => [...document.querySelectorAll('.qa-notice,.qa-nav,#root > p,#root > button,#root > output')]
-    .some(node => getComputedStyle(node).display !== 'none' && node.getClientRects().length > 0))()`)
-  if (visibleQaChrome) throw new Error(`qa_fixture_controls_visible:${name}`)
+    .filter(node => getComputedStyle(node).display !== 'none' && node.getClientRects().length > 0)
+    .map(node => ({tag:node.tagName, className:node.className, text:node.textContent?.trim().slice(0,100)})))()`)
+  if (visibleQaChrome.length) throw new Error(`qa_fixture_controls_visible:${name}:${JSON.stringify(visibleQaChrome)}`)
   let previous = null
   let bytes = null
   // Mobile layout can settle a few frames after the viewport or scroll changes.
