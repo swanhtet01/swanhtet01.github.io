@@ -3,37 +3,47 @@ import test from 'node:test'
 
 import { shopOrderAttentionLabels } from '../showroom/src/core/shop-order-attention.ts'
 
-test('an unpaid order with an on-time promise shows payment pending only', () => {
+test('an unpaid order with an on-time promise shows unpaid only', () => {
   assert.deepEqual(
-    shopOrderAttentionLabels({ paymentStatus: 'pending', refundStatus: 'none' }, 'scheduled'),
-    [{ kind: 'payment', text: 'Payment pending', tone: 'pending' }],
+    shopOrderAttentionLabels({ paymentStatus: 'pending', refundStatus: 'none', fulfilment: 'delivery' }, 'scheduled'),
+    [{ kind: 'payment', text: 'Unpaid', tone: 'pending' }],
   )
 })
 
-test('an unpaid order with a late promise keeps payment and fulfilment signals separate', () => {
+test('an unpaid order with a late delivery promise keeps payment and delivery signals separate', () => {
   assert.deepEqual(
-    shopOrderAttentionLabels({ paymentStatus: 'pending', refundStatus: 'none' }, 'late'),
+    shopOrderAttentionLabels({ paymentStatus: 'pending', refundStatus: 'none', fulfilment: 'delivery' }, 'late'),
     [
-      { kind: 'payment', text: 'Payment pending', tone: 'pending' },
-      { kind: 'promise', text: 'Fulfilment late', tone: 'late' },
+      { kind: 'payment', text: 'Unpaid', tone: 'pending' },
+      { kind: 'promise', text: 'Delivery late', tone: 'late' },
     ],
   )
 })
 
-test('a paid order with a late promise does not show payment pending', () => {
+test('a paid order with a late pickup does not show unpaid', () => {
   assert.deepEqual(
-    shopOrderAttentionLabels({ paymentStatus: 'reconciled', refundStatus: 'none' }, 'late'),
-    [{ kind: 'promise', text: 'Fulfilment late', tone: 'late' }],
+    shopOrderAttentionLabels({ paymentStatus: 'reconciled', refundStatus: 'none', fulfilment: 'pickup' }, 'late'),
+    [{ kind: 'promise', text: 'Pickup late', tone: 'late' }],
   )
 })
 
-test('payment pending, refund due, and late fulfilment remain distinct signals', () => {
+test('unpaid, refund due, and a late unclassified promise remain distinct signals', () => {
   assert.deepEqual(
     shopOrderAttentionLabels({ paymentStatus: 'pending', refundStatus: 'due' }, 'late'),
     [
-      { kind: 'payment', text: 'Payment pending', tone: 'pending' },
+      { kind: 'payment', text: 'Unpaid', tone: 'pending' },
       { kind: 'refund', text: 'refund due', tone: 'pending' },
-      { kind: 'promise', text: 'Fulfilment late', tone: 'late' },
+      { kind: 'promise', text: 'Promise late', tone: 'late' },
+    ],
+  )
+})
+
+test('an unpaid delivery order due soon is not marked late', () => {
+  assert.deepEqual(
+    shopOrderAttentionLabels({ paymentStatus: 'pending', refundStatus: 'none', fulfilment: 'delivery' }, 'due_soon'),
+    [
+      { kind: 'payment', text: 'Unpaid', tone: 'pending' },
+      { kind: 'promise', text: 'Delivery due soon', tone: 'pending' },
     ],
   )
 })
@@ -42,7 +52,7 @@ test('an unrecorded fulfilment promise is described accurately', () => {
   assert.deepEqual(
     shopOrderAttentionLabels({ paymentStatus: 'pending', refundStatus: 'none' }, 'unrecorded'),
     [
-      { kind: 'payment', text: 'Payment pending', tone: 'pending' },
+      { kind: 'payment', text: 'Unpaid', tone: 'pending' },
       { kind: 'promise', text: 'promise not recorded', tone: 'pending' },
     ],
   )
