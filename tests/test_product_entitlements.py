@@ -166,8 +166,17 @@ class ActivationProductEntitlementTests(unittest.TestCase):
         self.assertEqual(store.get_state(principal, "commerce").version, 0)
         self.assertEqual(store._events, {})
         require_command_product_entitlement("commerce.order.created", ("commerce",))
-        require_command_product_entitlement("commerce.storefront_request.received", ("commerce",))
-        require_command_product_entitlement("commerce.storefront_request.closed", ("commerce",))
+        for event_type in (
+            "commerce.storefront_request.received",
+            "commerce.storefront_request.closed",
+        ):
+            with self.subTest(event_type=event_type):
+                with self.assertRaises(TrialPermissionDenied) as denied:
+                    require_command_product_entitlement(event_type, ("commerce",))
+                self.assertEqual(denied.exception.required_capability, "product.ecommerce")
+        require_command_product_entitlement(
+            "commerce.storefront_request.received", ("ecommerce",), ("ecommerce.manage",)
+        )
         with self.assertRaises(TrialPermissionDenied) as missing_actor_grant:
             require_command_product_entitlement(
                 "commerce.storefront.configuration.saved", ("ecommerce",), ("commerce.write",)

@@ -3764,7 +3764,7 @@ class CommerceRuntimeTests(unittest.TestCase):
                          "evidence": close_evidence}
         store.provision_membership(
             workspace_id=operator.workspace_id, actor_id="Service actor",
-            actor_kind="service", capabilities=("commerce.write",),
+            actor_kind="service", capabilities=("commerce.write", "ecommerce.manage"),
         )
         with self.assertRaises(TrialHumanApprovalRequired):
             store.apply_command(

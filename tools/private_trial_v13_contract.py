@@ -96,7 +96,7 @@ POLICIES = frozenset({"billing_entitlements_self_read", "self_serve_attempt_budg
 CATALOG_PINS = {
     "extension_columns_exact": "a4ff9d29472484ce891adb75e177e24887daafad3a7171f6a24c67ac9cfc0fd4",
     "extension_constraints_exact": "f003f0fc410fe3b14d0d1b77427a67ea7d2f5b7e381009312a8df437acdb0b94",
-    "extension_functions_exact": "cca7bcd67f295f60576c4519c550e224780f8655bcc13f4c135c99f2e88815d1",
+    "extension_functions_exact": "158c69232e24a205132aa800c3bc5ed1fcb8699499bba4bbaa36d152c4c3be7c",
     "extension_policies_exact": "9ebb7163b5e86d70fdddec40768d71fc3fff2284a4e2072a2d1a8a6d0ce76de5",
 }
 POLICY_PINS = {"billing_entitlements_self_read": "28369fc95fa5a46002daf06b67038c4c9c8695d9defe59a69014c7c40a44d5b5",
