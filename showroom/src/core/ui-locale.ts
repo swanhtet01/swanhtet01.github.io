@@ -13,6 +13,7 @@ function isUiLocale(value: unknown): value is UiLocale {
 type MyanmarLocaleModule = typeof import('./ui-locale-my.ts')
 let myLocaleModule: MyanmarLocaleModule | null = null
 let myLocaleLoad: Promise<MyanmarLocaleModule> | null = null
+let myLocaleLoadError: unknown = null
 
 function loadMyLocaleModule(): Promise<MyanmarLocaleModule> {
   if (myLocaleModule) return Promise.resolve(myLocaleModule)
@@ -28,8 +29,21 @@ function loadMyLocaleModule(): Promise<MyanmarLocaleModule> {
   return myLocaleLoad
 }
 
-async function applyUiLocale(next: UiLocale, persist: boolean): Promise<void> {
-  if (next === 'my') await loadMyLocaleModule()
+function applyUiLocale(next: UiLocale, persist: boolean): Promise<void> {
+  if (next === 'my' && !myLocaleModule) {
+    return loadMyLocaleModule().then(() => {
+      myLocaleLoadError = null
+      return commitUiLocale(next, persist)
+    }).catch((error: unknown) => {
+      myLocaleLoadError = error
+      throw error
+    })
+  }
+  commitUiLocale(next, persist)
+  return Promise.resolve()
+}
+
+function commitUiLocale(next: UiLocale, persist: boolean): void {
   if (next === currentLocale) return
   currentLocale = next
   if (typeof document !== 'undefined') document.documentElement.lang = next
@@ -40,7 +54,9 @@ async function applyUiLocale(next: UiLocale, persist: boolean): Promise<void> {
 }
 
 export function ensureUiLocaleReady(): Promise<void> {
-  return currentLocale === 'my' ? loadMyLocaleModule().then(() => undefined) : Promise.resolve()
+  if (currentLocale !== 'my') return Promise.resolve()
+  if (myLocaleLoadError) return Promise.reject(myLocaleLoadError)
+  return loadMyLocaleModule().then(() => undefined)
 }
 
 if (typeof window !== 'undefined') {
@@ -56,6 +72,16 @@ if (typeof window !== 'undefined') {
     const next = isUiLocale(event.newValue) ? event.newValue : 'en'
     return applyUiLocale(next, false).catch(() => undefined)
   })
+}
+
+// A saved Burmese preference blocks module evaluation until its dictionary is
+// ready, so every consumer begins in one language. English sessions never fetch it.
+if (currentLocale === 'my') {
+  try {
+    await loadMyLocaleModule()
+  } catch (error: unknown) {
+    myLocaleLoadError = error
+  }
 }
 
 export function readUiLocale(): UiLocale { return currentLocale }

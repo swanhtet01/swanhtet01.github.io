@@ -143,8 +143,8 @@ const labels = [
   'minimum order',
 ]
 
-const sharedLocale = await readFile(resolve(root, 'showroom/src/core/ui-locale.ts'), 'utf8')
-const sharedLocaleAst = ts.createSourceFile('ui-locale.ts', sharedLocale, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
+const sharedLocale = await readFile(resolve(root, 'showroom/src/core/ui-locale-my.ts'), 'utf8')
+const sharedLocaleAst = ts.createSourceFile('ui-locale-my.ts', sharedLocale, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
 const sharedTranslationKeys = new Set()
 function collectSharedTranslationKeys(node) {
   if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.name.text === 'UI_TRANSLATIONS'
@@ -180,7 +180,7 @@ for (const label of inventoryTranslationKeys) {
   assert.equal(sharedTranslationKeys.has(label), false, `Lazy stock translation entered the shared dictionary: ${label}`)
 }
 
-setUiLocale('my')
+await setUiLocale('my')
 for (const label of labels) {
   const localized = shopInventoryText(label)
   assert.notEqual(localized, label, `Burmese inventory phrase missing: ${label}`)
