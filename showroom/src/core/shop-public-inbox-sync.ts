@@ -74,6 +74,14 @@ export function shopPublicInboxPrunedRequestIds(
   return [...requests.keys()].filter((requestId) => !observedRequestIds.has(requestId))
 }
 
+export function findShopPublicInboxRequestForReview(
+  requestId: string,
+  pageRequests: readonly ShopPublicInboxRequest[],
+  cachedRequests: readonly ShopPublicInboxRequest[],
+): ShopPublicInboxRequest | null {
+  return [...pageRequests, ...cachedRequests].find((request) => request.requestId === requestId) ?? null
+}
+
 function shopInboxSummary(request: ManagedCommercePublicRequest): ShopPublicInboxRequest {
   return {
     handle: request.handle,

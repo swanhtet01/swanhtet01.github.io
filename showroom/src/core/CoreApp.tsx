@@ -19,7 +19,7 @@ import { Link, Navigate, useLocation, useNavigate, useOutletContext, useSearchPa
 import './core-app.css'
 import type { EcommerceShopDraft } from '../products/ecommerce/ecommerce-shop-handoff'
 import { claimManagedCommercePublicRequest, loadManagedCommercePublicInbox, loadManagedCommercePublicShopContact, type ManagedCommercePublicContact } from '../products/ecommerce/managed-commerce-public'
-import { acquireShopPublicInboxFlight, claimShopPublicInboxRequest, releaseShopPublicInboxFlight, shopPublicInboxBacklogCursor, shopPublicInboxIdentityState, shopPublicInboxPrunedRequestIds, syncShopPublicInbox, type ShopPublicInboxIdentityState as ShopPublicInboxIdentityStateType, type ShopPublicInboxRequest } from './shop-public-inbox-sync'
+import { acquireShopPublicInboxFlight, claimShopPublicInboxRequest, findShopPublicInboxRequestForReview, releaseShopPublicInboxFlight, shopPublicInboxBacklogCursor, shopPublicInboxIdentityState, shopPublicInboxPrunedRequestIds, syncShopPublicInbox, type ShopPublicInboxIdentityState as ShopPublicInboxIdentityStateType, type ShopPublicInboxRequest } from './shop-public-inbox-sync'
 import { ShopBuyerContactDisclosure } from './ShopBuyerContactDisclosure'
 import type { EcommerceCancellationIntent, EcommerceOrderAmendmentIntent, EcommerceOrderRequestV2, EcommerceOrderRescheduleIntent, EcommerceShopDraftV2 } from '../products/ecommerce/ecommerce-buying-lifecycle'
 import { ecommerceShopIntentReference, type EcommerceShopNavigationIntents } from '../products/ecommerce/ecommerce-shop-intent-route'
@@ -1717,8 +1717,11 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
       const isCurrent = () => managedPublicInboxIdentityRef.current === identityKey
       const firstPage = await syncShopPublicInbox(managedIdentity, api, isCurrent, retryRequestId ? retryAfter : undefined)
       if (retryRequestId && isCurrent()) {
-        const selectedRequest = [...firstPage.requests, ...firstPage.alreadyInShopRequests]
-          .find((request) => request.requestId === retryRequestId)
+        const selectedRequest = findShopPublicInboxRequestForReview(
+          retryRequestId,
+          [...firstPage.requests, ...firstPage.alreadyInShopRequests],
+          previousRequests,
+        )
         if (!selectedRequest) firstPage.failedRequestIds.push(retryRequestId)
         else if (selectedRequest.status !== 'in_shop') {
           try {

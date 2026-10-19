@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { test } from 'node:test'
 
-import { acquireShopPublicInboxFlight, claimShopPublicInboxRequest, releaseShopPublicInboxFlight, shopPublicInboxBacklogCursor, shopPublicInboxIdentityState, shopPublicInboxPrunedRequestIds, syncShopPublicInbox } from '../showroom/src/core/shop-public-inbox-sync.ts'
+import { acquireShopPublicInboxFlight, claimShopPublicInboxRequest, findShopPublicInboxRequestForReview, releaseShopPublicInboxFlight, shopPublicInboxBacklogCursor, shopPublicInboxIdentityState, shopPublicInboxPrunedRequestIds, syncShopPublicInbox } from '../showroom/src/core/shop-public-inbox-sync.ts'
 
 const identity = { workspaceId: 'workspace-1', userId: 'user-1', email: 'operator@example.com' }
 
@@ -83,6 +83,27 @@ test('claims only the request explicitly selected for review', async () => {
   assert.deepEqual(attempts, [['store-1', 'r-2']])
   assert.equal(claimed.status, 'in_shop')
   assert.equal(claimed.shopRequestId, 'shop-r-2')
+})
+
+test('claims the cached selected order when newer requests shift it off the refreshed first page', async () => {
+  const cached = await syncShopPublicInbox(identity, {
+    loadInbox: async () => ({ requests: [request('r-selected')], nextCursor: null }),
+  })
+  const refreshed = await syncShopPublicInbox(identity, {
+    loadInbox: async () => ({ requests: Array.from({ length: 50 }, (_, index) => request(`new-${index + 1}`)), nextCursor: 'older-page' }),
+  })
+  const selected = findShopPublicInboxRequestForReview('r-selected', refreshed.requests, cached.requests)
+  assert.ok(selected)
+  assert.equal(refreshed.requests.length, 50)
+  const claimCalls = []
+  const claimed = await claimShopPublicInboxRequest(identity, selected, async (_identity, handle, requestId) => {
+    claimCalls.push([handle, requestId])
+    return { status: 'in_shop', shopRequestId: 'shop-r-selected', priceChanged: false }
+  })
+
+  assert.deepEqual(claimCalls, [['store-1', 'r-selected']])
+  assert.equal(claimed.status, 'in_shop')
+  assert.equal(claimed.shopRequestId, 'shop-r-selected')
 })
 
 test('does not re-claim a request that is already in Shop', async () => {
