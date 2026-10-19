@@ -16,8 +16,8 @@
   "company": {
     "positioning": "Business software for Myanmar.",
     "statement": "Record counter sales, check stock and follow open orders in SuperMega Shop.",
-    "headline": "See what sold. Know what needs action.",
-    "supporting": "Record counter sales, check stock and follow open orders in SuperMega Shop.",
+    "headline": "Sell faster. Stay in control.",
+    "supporting": "Sell at the counter, track stock and follow open orders in one Shop workspace built for Myanmar retailers.",
     "publicPricing": false
   },
   "productVisibility": {
@@ -987,7 +987,7 @@
       "route": "/",
       "file": "index.html",
       "title": "SuperMega | Business software for Myanmar",
-      "description": "Record counter sales, check stock and follow open orders in SuperMega Shop."
+      "description": "Sell at the counter, track stock and follow open orders in one Shop workspace built for Myanmar retailers."
     },
     {
       "route": "/shop/",

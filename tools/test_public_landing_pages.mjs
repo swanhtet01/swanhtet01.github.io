@@ -350,8 +350,8 @@ check(hasClassToken(home, 'company-hero') && !home.includes('id="products"'), 'h
 check(home.includes('href="/shop/">Explore Shop') && home.includes('href="/contact/">Contact us')
   && !home.includes('>View every screen size') && !home.includes('>See Shop on desktop and mobile'), 'home_actions_prioritize_product_and_human_contact')
 check(home.includes('<p class="hero-kicker">For Myanmar retailers</p>')
-  && home.includes('See what sold.<br><span>Know what needs action.</span>')
-  && home.includes('Record counter sales, check stock and follow open orders in SuperMega Shop.')
+  && home.includes('Sell faster.<br><span>Stay in control.</span>')
+  && home.includes('Sell at the counter, track stock and follow open orders in one Shop workspace built for Myanmar retailers.')
   && home.includes('class="company-operating-overview"') && home.includes('class="company-product-visual"')
   && !home.includes('class="company-product-evidence"')
   && !home.includes('class="company-portfolio"')
@@ -368,8 +368,8 @@ for (const token of [
   `<meta property="og:title" content="${homePage.title}" />`,
   `<meta property="og:description" content="${homePage.description}" />`,
 ]) check(home.includes(token), `home_metadata_manifest_bound:${token}`)
-check(home.includes('<figure class="company-product-visual"') && home.includes('src="/images/actual-shop-today.png"')
-  && home.includes('Shop · Today') && home.includes('Sample data'), 'home_provenance_checked_shop_capture_visible')
+check(home.includes('<figure class="company-product-visual"') && home.includes('src="/images/actual-shop-sell.png"')
+  && home.includes('Shop · Counter sale') && home.includes('Sample records'), 'home_provenance_checked_shop_capture_visible')
 const shopLanding = readStatic('shop/index.html')
 const shopProduct = manifest.customerProducts.find(product => product.id === 'shop')
 for (const token of [

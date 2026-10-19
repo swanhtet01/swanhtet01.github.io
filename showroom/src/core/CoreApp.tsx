@@ -3605,7 +3605,7 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
               ? 'Saved here. Back up before this device runs out of Shop record space.'
               : 'This Shop record stays on this device. Back up before changing devices.',
           '/settings/#workspace-recovery',
-          'Set up backup',
+          'Export backup',
         )
   const operatingBoundary = <>
     {commerceStorageError || commerceSyncBlocked || commerceSync.status === 'checking' || !commerceCanWrite ? commerceWriteBanner : null}

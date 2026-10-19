@@ -1142,6 +1142,8 @@ test('eviction warning leads directly to the existing backup panel', async () =>
   const page = await readFile(new URL('../showroom/src/core/WorkspaceControlsPage.tsx', import.meta.url), 'utf8')
   const notice = core.slice(core.indexOf('const storageDurabilityNotice ='), core.indexOf('// Stuck-till escape hatch.'))
   assert.ok(notice.includes('<Link to="/settings/#workspace-recovery">{uiText(\'Export backup\')}</Link>'))
+  assert.ok(core.includes("'Export backup'"), 'local record status must name the manual export action accurately')
+  assert.ok(!core.includes("'Set up backup'"), 'local record status must not imply automatic cloud backup is configured')
   assert.ok(!notice.includes('Saved on this device only.'), 'local-only status appears once, without duplicate explanatory text')
   assert.ok(notice.includes("role={storageDurability.quotaExceeded ? 'alert' : 'status'}"))
   assert.ok(notice.includes('Free space on this device before saving more Shop data.'))

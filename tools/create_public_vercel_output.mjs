@@ -873,7 +873,7 @@ function removeSectionByClass(source, className, code) {
 function shopOnlyCompanyMarkup(source) {
  let markup = source
  markup = replaceKnownCopyOnce(markup, ["Operating software · Myanmar", "Operating software for Myanmar companies", "Shop software for Myanmar businesses", "Shop software for Myanmar retailers", "For shops in Myanmar", "For Myanmar retailers", "Business software for Myanmar retailers", "Shop for Myanmar retailers", "Made for Myanmar retailers", "SuperMega · Operating software for Myanmar", "SUPERMEGA · MYANMAR", "SuperMega · Myanmar", "Business software for Myanmar", "Business software"], "For Myanmar retailers", "shop_only_hero_kicker")
- markup = replaceKnownCopyOnce(markup, ["Tools for<br><span>everyday work.</span>", "Run your shop.<br><span>See what’s next.</span>", "Sell faster.<br><span>Stay in control.</span>", "Clearer systems for<br><span>everyday business.</span>", "Sales. Stock. Orders.<br><span>Under control.</span>", "Software for<br><span>Myanmar businesses.</span>", "Sales, stock, and orders<br><span>for Myanmar shops.</span>", "Sales, stock, and orders<br><span>in one place.</span>", "Sales, stock and orders<br><span>in one place.</span>", "See what sold.<br><span>Know what needs action.</span>", "Business software<br><span>built for Myanmar.</span>", "Operating software<br><span>for Myanmar businesses.</span>", "Run your counter.<br><span>Stay ahead of stock.</span>", "Know what sold.<br><span>See what needs attention.</span>", "For Myanmar<br><span>retailers.</span>"], "See what sold.<br><span>Know what needs action.</span>", "shop_only_hero_heading")
+ markup = replaceKnownCopyOnce(markup, ["Tools for<br><span>everyday work.</span>", "Run your shop.<br><span>See what’s next.</span>", "Sell faster.<br><span>Stay in control.</span>", "Clearer systems for<br><span>everyday business.</span>", "Sales. Stock. Orders.<br><span>Under control.</span>", "Software for<br><span>Myanmar businesses.</span>", "Sales, stock, and orders<br><span>for Myanmar shops.</span>", "Sales, stock, and orders<br><span>in one place.</span>", "Sales, stock and orders<br><span>in one place.</span>", "See what sold.<br><span>Know what needs action.</span>", "Business software<br><span>built for Myanmar.</span>", "Operating software<br><span>for Myanmar businesses.</span>", "Run your counter.<br><span>Stay ahead of stock.</span>", "Know what sold.<br><span>See what needs attention.</span>", "For Myanmar<br><span>retailers.</span>"], "Sell faster.<br><span>Stay in control.</span>", "shop_only_hero_heading")
  markup = replaceKnownCopyOnce(markup, [
   "Shop brings sales and stock into one operating view. Our team manages Sites and confirms Commerce availability for each setup.",
   "Keep sales, orders and stock together in one clear MMK workflow. See what needs attention without digging through settings.",
@@ -895,8 +895,7 @@ function shopOnlyCompanyMarkup(source) {
   "SuperMega Shop brings counter sales, stock and open orders into one workspace.",
   "Record sales, track stock, and follow open orders in one Shop workspace.",
   "Shop connects counter sales, stock and open orders in one workspace.",
-  "Record counter sales, check stock and follow open orders in SuperMega Shop.",
- ], "Record counter sales, check stock and follow open orders in SuperMega Shop.", "shop_only_hero_description")
+ ], "Sell at the counter, track stock and follow open orders in one Shop workspace built for Myanmar retailers.", "shop_only_hero_description")
  markup = replaceKnownCopyOnce(markup, ['href="#products">Meet the product family', 'href="#products">Explore Shop', 'href="/contact/">Talk to our team', 'href="/contact/">Contact us'], 'href="/contact/">Contact us', "shop_only_hero_secondary_action")
  markup = replaceKnownCopyOnce(markup, ['href="/shop/#shop-demo">See Shop in action', 'href="/shop/#shop-demo">See Shop screens', 'href="/shop/#shop-demo">See Shop on desktop and mobile', 'href="/shop/#shop-demo">View every screen size', 'href="/shop/">See Shop', 'href="/shop/">Explore Shop'], 'href="/shop/">Explore Shop', "shop_only_hero_primary_action")
  for (const id of ["website", "ecommerce"]) {
@@ -927,7 +926,7 @@ function shopOnlyCompanyMarkup(source) {
  return markup
 }
 function companyOperatingGraphic() {
- return `<figure class="company-product-visual"><img src="/images/actual-shop-today.png" alt="SuperMega Shop Today view: sales, orders and low-stock items. Sample data." width="1440" height="900" loading="eager" fetchpriority="high" /><figcaption>Shop · Today <span>Sample data</span></figcaption></figure>`
+ return `<figure class="company-product-visual"><img src="/images/actual-shop-sell.png" alt="SuperMega Shop counter sale with searchable products, stock counts, Myanmar payment options and a live basket. Sample records." width="1440" height="900" loading="eager" fetchpriority="high" /><figcaption>Shop · Counter sale <span>Sample records</span></figcaption></figure>`
 }
 function replaceHomeShopShowcase(source) {
  const marker = /<section class="shop-showcase" aria-label="Shop product screens">[\s\S]*?<\/section>/g
