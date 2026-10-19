@@ -3,10 +3,16 @@
 Version: 1.4.28
 Owner: Swan Htet, Founder
 Maintainer: CTO, sole integration writer
-Updated: 2026-10-17
+Updated: 2026-10-19
 Status: ACTIVE — implementation and acceptance in progress; not production-ready.
 
-## Current checkpoint — 17 October
+## Current launch state — 19 October
+
+Customer-managed access remains **Shop only**; Sites and Commerce stay internal. The live [supermega.dev](https://supermega.dev/) page still lists all three products and labels the images “illustrative records,” so production website alignment is **NO-GO**. A local review candidate at `a4fa5a89fe7d730468654cfd616ae12449dfe9a1` now builds the Shop-only offer and uses twelve hash-bound captures from the actual Shop components across Today, Counter, Orders, and Inventory at desktop, tablet, and mobile sizes. The records are synthetic, the capture is local-only, and `publicationReady` remains false; nothing was deployed.
+
+The preview branch approved for this rehearsal is `MIGRATIONS_FAILED` because dashboard branching replays production migration history, which omits the repository's `20260711081300_public_legacy_baseline.sql`. Production remains untouched. Managed Auth, cross-tenant denial, hosted reload, device compatibility, and paid-VPS worker acceptance are not proven. The active launch decision remains **NO-GO** pending a source-correct preview, exact-head review, and the remaining acceptance gates.
+
+### 17 October checkpoint (historical)
 
 Customer-managed launch access is **Shop only**. Sites and Commerce are managed internally, while submitted requests must arrive automatically in Shop for fulfilment. [Integration PR #682](https://github.com/swanhtet01/swanhtet01.github.io/pull/682) binds the public gallery to 14 desktop/mobile captures of real product components with synthetic records. The product source through `b9b90726c044b05462d6ca4f693a9dd509acd9b3` now shows Shop-facing Website and Commerce requests to a Shop-only operator; direct navigation from the internal Commerce editor to Shop still requires both assignments. This corrects the prior overbroad UI filter that hid useful incoming orders.
 
