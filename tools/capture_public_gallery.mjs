@@ -339,7 +339,7 @@ async function main() {
         && order.promisedAt && Date.parse(order.promisedAt) <= Date.now()).map(order => order.id);
     })()`)
     if (overdueOpenOrders.length) throw new Error(`shop_gallery_seed_has_overdue_open_orders:${overdueOpenOrders.join(',')}`)
-    await evaluate(cdp, sessionId, `(() => { const s=document.createElement('style');s.textContent='#root > p,#root > button,#root > output{display:none!important}body{margin:0!important}';document.head.append(s) })()`)
+    await evaluate(cdp, sessionId, `(() => { const s=document.createElement('style');s.textContent='#root > p,#root > button,#root > output,.qa-notice,.qa-nav{display:none!important}body{margin:0!important}';document.head.append(s) })()`)
     const stockedShop = await evaluate(cdp, sessionId, "localStorage.getItem('supermega.commerce.workspace.v2')")
     if (!stockedShop) throw new Error('synthetic_shop_seed_missing')
     await evaluate(cdp, sessionId, `(() => {
