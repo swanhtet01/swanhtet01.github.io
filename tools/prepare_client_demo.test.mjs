@@ -97,6 +97,10 @@ function validateSelected(packages) {
   return { status: result.status, response: JSON.parse(result.stdout || '{}') }
 }
 
+function digestJson(value) {
+  return `sha256:${createHash('sha256').update(JSON.stringify(value)).digest('hex')}`
+}
+
 async function fixture() {
   const directory = await mkdtemp(resolve(tmpdir(), 'supermega-client-prepare-'))
   const model = await import(`${pathToFileURL(resolve(ROOT, 'showroom', 'src', 'core', 'client-onboarding.ts')).href}?preparation-test=${Date.now()}`)
@@ -859,6 +863,49 @@ test('output is exclusive and CLI stdout remains metadata-only', async () => {
     assert.equal(verifyCli.status, 0, verifyCli.stderr)
     assert.equal(JSON.parse(verifyCli.stdout).status, 'verified_not_applied')
     assert.doesNotMatch(verifyCli.stdout, /Confidential client workspace|Founder reviewer|RICE-25KG/)
+  } finally {
+    await rm(source.directory, { recursive: true, force: true })
+  }
+})
+
+test('restores older Shop preparation artifacts without barcode, Burmese-name, or category fields', async () => {
+  const source = await fixture()
+  try {
+    const artifact = structuredClone(await prepareClientDemo({ kitPath: source.kitPath, preparedAt: PREPARED_AT }))
+    const shop = artifact.products.find((product) => product.product === 'commerce')
+    const stagingPackage = shop.stagingPackage
+    for (const field of ['barcode', 'nameMy', 'category']) {
+      delete stagingPackage.mapping[field]
+      for (const row of stagingPackage.rows) delete row.values[field]
+    }
+    const legacyFields = ['sku', 'name', 'onHand', 'reorderAt', 'price']
+    shop.previewDigest = digestJson({
+      schema: source.model.CLIENT_IMPORT_SCHEMA,
+      product: shop.product,
+      object: stagingPackage.object,
+      workflowTemplateId: shop.templateId,
+      sourceDigest: stagingPackage.source.digest,
+      mapping: stagingPackage.mapping,
+    })
+    stagingPackage.source.previewDigest = shop.previewDigest
+    shop.packageDigest = digestJson(stagingPackage)
+    assert.deepEqual(Object.keys(stagingPackage.mapping).sort(), [...legacyFields].sort())
+    const payload = {
+      contract: artifact.contract,
+      preparedAt: artifact.preparedAt,
+      kit: artifact.kit,
+      client: artifact.client,
+      foundation: artifact.foundation,
+      topology: artifact.topology,
+      products: artifact.products,
+      integrations: artifact.integrations,
+      checks: artifact.checks,
+      controls: artifact.controls,
+    }
+    artifact.bundleDigest = digestJson(payload)
+    artifact.review.confirmation = `APPROVE CLIENT WORKSPACE ${artifact.bundleDigest}`
+    const restored = await source.model.restoreClientDemoPreparationArtifact(artifact)
+    assert.equal(restored?.bundleDigest, artifact.bundleDigest)
   } finally {
     await rm(source.directory, { recursive: true, force: true })
   }

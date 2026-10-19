@@ -1875,8 +1875,13 @@ export async function restoreClientDemoPreparationArtifact(value: unknown): Prom
       || !stagingPackage || typeof stagingPackage !== 'object' || Array.isArray(stagingPackage)) return null
 
     const object = clientImportObject(productId)
+    const stagingMapping = stagingPackage.mapping
+    const hasMyanmarNameMapping = Boolean(stagingMapping && typeof stagingMapping === 'object'
+      && !Array.isArray(stagingMapping) && Object.hasOwn(stagingMapping, 'nameMy'))
+    const currentCommerceFields = ['sku', 'barcode', 'name', ...(hasMyanmarNameMapping ? ['nameMy'] : []), 'category', 'onHand', 'reorderAt', 'price']
+    const legacyCommerceFields = ['sku', 'name', ...(hasMyanmarNameMapping ? ['nameMy'] : []), 'onHand', 'reorderAt', 'price']
     const packageFieldIds = productId === 'commerce'
-      ? ['sku', 'barcode', 'name', ...(Object.hasOwn(stagingPackage.mapping ?? {}, 'nameMy') ? ['nameMy'] : []), 'category', 'onHand', 'reorderAt', 'price']
+      ? hasExactKeys(stagingMapping, currentCommerceFields) ? currentCommerceFields : legacyCommerceFields
       : object.fields.map((field) => field.id)
     const stagingKeys = ['contract', 'product', 'object', 'workflowTemplateId', 'workspace', 'owner', 'source', 'mapping', 'rows', 'controls']
     if (productId === 'production') stagingKeys.push('plantIndustryPackId')
@@ -1921,7 +1926,12 @@ export async function restoreClientDemoPreparationArtifact(value: unknown): Prom
         || !hasExactKeys(row.values, packageFieldIds)
         || row.key !== row.values[object.keyField] || seenKeys.has(row.key)) return null
       seenKeys.add(row.key)
-      if (object.fields.some((field) => typeof row.values[field.id] !== 'string' || fieldIssue(field, row.values[field.id]) !== null)) return null
+      if (packageFieldIds.some((fieldId) => {
+        const field = productId === 'commerce' && fieldId === 'nameMy'
+          ? shopMyanmarNameField
+          : object.fields.find((candidate) => candidate.id === fieldId)
+        return !field || typeof row.values[fieldId] !== 'string' || fieldIssue(field, row.values[fieldId]) !== null
+      })) return null
       if (productId === 'commerce' && typeof row.values.nameMy === 'string' && fieldIssue(shopMyanmarNameField, row.values.nameMy) !== null) return null
     }
     const expectedPreviewDigest = await sha256(JSON.stringify({

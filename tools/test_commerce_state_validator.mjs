@@ -21,7 +21,7 @@ const { build } = await import(pathToFileURL(requireFromShowroom.resolve('esbuil
 
 const bundle = await build({
   stdin: {
-    contents: `export { createSeedCommerce, updateCommerceItem, validateCommerceState } from './commerce-workspace.ts'`,
+    contents: `export { createSeedCommerce, importCommerceCatalog, updateCommerceItem, validateCommerceState } from './commerce-workspace.ts'`,
     resolveDir: 'showroom/src/core',
     sourcefile: 'showroom/src/core/validator-test-entry.ts',
     loader: 'ts',
@@ -33,7 +33,7 @@ const bundle = await build({
   logLevel: 'error',
 })
 
-const { createSeedCommerce, updateCommerceItem, validateCommerceState } =
+const { createSeedCommerce, importCommerceCatalog, updateCommerceItem, validateCommerceState } =
   await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].contents).toString('base64')}`)
 
 let checks = 0
@@ -98,6 +98,20 @@ for (const [field, value] of [
   corrupted.items.find((item) => item.sku === rice.sku)[field] = value
   assert.throws(() => validateCommerceState(corrupted), undefined, `tampered ${field} must not sever sparse catalog history`)
 }
+const catalogImportDigest = `sha256:${'b'.repeat(64)}`
+const legacyRiceImport = Object.fromEntries(Object.entries(rice).filter(([field]) => field !== 'nameMy'))
+check(importCommerceCatalog(seed, {
+  items: [legacyRiceImport],
+  sourceDigest: catalogImportDigest,
+  capturedAt: new Date(baselineAt + 3_000).toISOString(),
+  actor: 'Counter operator',
+})?.replayed === true, 'legacy catalog import without a Burmese column preserves the saved Burmese name')
+check(importCommerceCatalog(seed, {
+  items: [{ ...rice, nameMy: 'အခြား ထုတ်ကုန်အမည်' }],
+  sourceDigest: catalogImportDigest,
+  capturedAt: new Date(baselineAt + 4_000).toISOString(),
+  actor: 'Counter operator',
+}) === null, 'catalog replay rejects a conflicting Burmese product name')
 
 // --- schema and shape --------------------------------------------------------
 rejects((state) => { state.schema = 'supermega.commerce.workspace.v1' }, 'a workspace on the wrong schema is rejected')

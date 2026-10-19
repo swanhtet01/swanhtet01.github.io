@@ -7279,7 +7279,8 @@ export function importCommerceCatalog(stateValue: CommerceState, input: {
   for (const [index, item] of input.items.entries()) {
     const existing = state.items.find((candidate) => candidate.sku === item.sku)
     if (existing) {
-      if (commerceCatalogImportDifferences(existing, item).length) return null
+      if (commerceCatalogImportDifferences(existing, item).length
+        || (Object.prototype.hasOwnProperty.call(item, 'nameMy') && existing.nameMy !== item.nameMy)) return null
       alreadyPresent += 1
       continue
     }
