@@ -178,5 +178,5 @@ export const UI_TRANSLATIONS: Readonly<Record<string, string>> = {
   'Device-only data': 'ဤစက်ပေါ်တွင်သာ သိမ်းထားသော မှတ်တမ်း',
   'Free space on this device before saving more Shop data.': 'ဆိုင်မှတ်တမ်းများ ထပ်မသိမ်းမီ ဤစက်ပေါ်တွင် နေရာလွတ် ပြုလုပ်ပါ။',
   'Saved on this device only.': 'ဤစက်ပေါ်တွင်သာ သိမ်းထားသည်။',
-  'Reload Shop': 'ဆိုင်ကို ပြန်ဖွင့်ရန်', 'Set up backup': 'အရန်သိမ်းဆည်းမှု ပြင်ဆင်ရန်',
+  'Reload Shop': 'ဆိုင်ကို ပြန်ဖွင့်ရန်', 'Export backup': 'အရန်မိတ္တူ ထုတ်ယူရန်',
 }

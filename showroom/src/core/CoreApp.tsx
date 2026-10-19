@@ -3491,7 +3491,7 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
         : null}
       {storageDurability.quotaExceeded
         ? <button type="button" onClick={() => window.location.reload()}>{uiText('Reload Shop')}</button>
-        : <Link to="/settings/#workspace-recovery">{uiText('Set up backup')}</Link>}
+        : <Link to="/settings/#workspace-recovery">{uiText('Export backup')}</Link>}
     </div>
 
   // Stuck-till escape hatch. 'conflict' and 'unavailable' both hold canWrite false with
