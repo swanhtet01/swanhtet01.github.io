@@ -390,9 +390,9 @@ const sharedStyle = `
   .contact-copy { padding-top: 24px; }
   .contact-copy p { color: var(--muted); font-size: 18px; }
   .contact-page { display:grid; grid-template-columns:minmax(0,.82fr) minmax(0,1fr); align-items:start; gap:clamp(32px,5vw,84px); max-width:1160px; padding:clamp(44px,7vw,88px) 0 86px; }
-  .contact-page .page-hero { max-width:none; padding:36px 0 0; position:sticky; top:100px; }
-  .contact-page .page-hero::after { content:""; display:block; width:min(100%,340px); height:1px; margin-top:36px; background:linear-gradient(90deg,var(--blue),#e8f0ff); }
-  .contact-page .page-hero h1 { max-width:480px; font-size:clamp(46px,5vw,66px); line-height:1.03; letter-spacing:-.055em; }
+  .contact-page .page-hero { max-width:none; padding:18px 0 0; position:static; }
+  .contact-page .page-hero::after { display:none; }
+  .contact-page .page-hero h1 { max-width:480px; font-size:clamp(40px,4.3vw,58px); line-height:1.04; letter-spacing:-.045em; }
   .contact-page .page-hero .lede { max-width:430px; font-size:18px; line-height:1.62; }
   .contact-page .contact-layout { display:block; padding:0; }
   .contact-page .contact-form { width:100%; padding:clamp(24px,3vw,40px); gap:18px; border-color:#dbe3ee; border-radius:8px; background:#fff; box-shadow:0 16px 42px rgba(11,15,23,.06); }
@@ -681,10 +681,9 @@ const sharedStyle = `
   body[data-view="company"] .shop-only-family .family-card p{grid-column:2;grid-row:3;max-width:70ch}
   body[data-view="company"] .shop-only-family .family-card .family-link{grid-column:3;grid-row:1/4;margin:0;padding:0;white-space:nowrap}
   @media(max-width:760px){body[data-view="company"] .shop-only-family .family-card.featured{grid-template-columns:48px minmax(0,1fr);gap:8px 16px;padding:22px}body[data-view="company"] .shop-only-family .family-icon{grid-column:1;grid-row:1/4;align-self:start}body[data-view="company"] .shop-only-family .family-card .family-link{grid-column:2;grid-row:4;justify-self:start;margin-top:8px}}
-  @media(max-width:760px){.platform-device-set,.platform-device-set:not(.has-tablet){grid-template-columns:minmax(0,1fr) minmax(80px,.42fr);gap:12px}.platform-device-capture-desktop{grid-column:1/-1}.platform-device-set.has-tablet .platform-device-capture-tablet{justify-self:end;width:min(100%,220px)}.platform-device-set.has-tablet .platform-device-capture-phone{justify-self:start;width:min(100%,175px)}.platform-device-set:not(.has-tablet) .platform-device-capture-phone{grid-column:1/-1;justify-self:center;width:min(100%,175px)}.platform-device-stage{padding:12px}.platform-gallery-controls{min-height:38px}.platform-image{padding:10px}.product-card-compact{border-radius:8px}.contact-page .contact-form{border-radius:8px}.company-product-visual{align-self:start}.company-product-evidence-head{display:block}.company-product-evidence-head p{margin-top:12px}}
+  @media(max-width:760px){.platform-device-set,.platform-device-set:not(.has-tablet){grid-template-columns:minmax(0,1fr);align-items:start;gap:16px}.platform-device-capture-desktop,.platform-device-set.has-tablet .platform-device-capture-tablet,.platform-device-set .platform-device-capture-phone{grid-column:1;width:100%;max-width:none;justify-self:stretch}.platform-device-capture img{border-radius:4px;box-shadow:none}.platform-device-capture figcaption{font-size:11px}.platform-device-stage{padding:12px}.platform-gallery-controls{min-height:38px}.platform-image{padding:10px}.product-card-compact{border-radius:8px}.contact-page .contact-form{border-radius:8px}.company-product-visual{align-self:start}.company-product-evidence-head{display:block}.company-product-evidence-head p{margin-top:12px}}
   @media(max-width:980px){.contact-page{grid-template-columns:1fr;gap:24px;max-width:760px;padding:42px 0 70px}.contact-page .page-hero{position:static;padding:0}.contact-page .page-hero::after{display:none}.contact-page .page-hero h1{font-size:clamp(36px,7vw,52px)}}
   @media(max-width:760px){.contact-page{padding:28px 0 52px}.contact-page .page-hero h1{font-size:clamp(36px,9vw,48px)}.contact-page .contact-form{padding:20px;border-radius:8px}.brand-domain{display:none}}
-
 `
 
 function headerHtml(route) {
@@ -940,7 +939,7 @@ function replaceHomeShopShowcase(source) {
 }
 const publicHomeMarkup = replaceHomeShopShowcase(shopOnlyCompanyMarkup(companyMarkup))
 function simplifyShopHeroActions(source) {
- let markup = replaceOnce(source, 'Ask about Shop', 'Request Shop setup', 'shop_primary_action_copy')
+ let markup = replaceOnce(source, 'Ask about Shop', 'Contact SuperMega', 'shop_primary_action_copy')
  const secondaryAction = /[ \t]*<a class="button button-secondary" href="#shop-demo">See Shop screens<\/a>/g
  const matches = [...markup.matchAll(secondaryAction)]
  assert(matches.length === 1, 'shop_duplicate_screen_action_source_drift')
@@ -1022,13 +1021,13 @@ const contactScript = `<script>(function(){
   function updateServiceSummary(){
     if(!heading)return;
     var serviceName=product&&({website:'Sites',ecommerce:'Commerce',shop:'Shop'})[product.value];
-    heading.textContent=serviceName?'Ask us about '+serviceName+'.':'Tell us what you need.';
+    heading.textContent=serviceName?'Contact our '+serviceName+' team.':'Contact SuperMega.';
   }
   updateServiceSummary();
   if(product)product.addEventListener('change',function(){if(template)template.value='';detachProofIfChanged();updateServiceSummary()});
   if(template)template.addEventListener('input',detachProofIfChanged);
   if(handoff.toString()){
-    if(lede)lede.textContent='We build practical operating software for Myanmar businesses, starting with Shop.';
+    if(lede)lede.textContent='SuperMega builds business software for Myanmar. Shop brings counter sales, stock and order follow-up together for retailers.';
     if(proof)status.textContent='Helpful context attached. Nothing has been sent.';
     else if(proofResult.attempted)status.textContent='Attached context could not be verified and was left out.';
     history.replaceState(null,'',location.pathname+location.search);
@@ -1066,7 +1065,7 @@ const contactHtml = documentHtml({
   route: '/contact/',
   title: 'Contact | SuperMega',
   description: 'Tell SuperMega which company workflow should run better.',
-  content: `<main class="frame contact-page" id="content"><section class="page-hero"><span class="eyebrow">Contact SuperMega</span><h1 data-contact-heading>Tell us what you need.</h1><p class="lede" data-contact-lede>SuperMega builds practical software for businesses in Myanmar. Shop is our retail product for sales, stock and order follow-up.</p></section><section class="contact-layout"><form class="contact-form" action="/api/contact-submissions" method="post" data-contact-form><div class="field-grid"><label>Name<input name="name" autocomplete="name" required maxlength="120" /></label><label>Email<input name="email" type="email" autocomplete="email" required maxlength="180" /></label><label class="wide">Company (optional)<input name="company" autocomplete="organization" maxlength="180" /></label><input type="hidden" name="product" value="guide" /><input type="hidden" name="template" maxlength="120" /><label class="wide">Message<textarea name="goal" required maxlength="4000" placeholder="Share a few details about your request."></textarea></label></div><input type="hidden" name="source_url" /><input type="hidden" name="referrer" /><input type="hidden" name="idempotency_key" /><input type="hidden" name="trial_claim_code" /><input type="hidden" name="proof_contract" /><input type="hidden" name="proof_version" /><input type="hidden" name="proof_digest" /><input type="hidden" name="proof_product" /><input type="hidden" name="proof_template" /><input type="hidden" name="proof_readiness" /><input type="hidden" name="proof_sources" /><input type="hidden" name="proof_behavior" /><input type="hidden" name="proof_decisions" /><input type="hidden" name="proof_raw_records" /><input type="hidden" name="proof_context_contract" /><input type="hidden" name="proof_context_digest" /><input type="hidden" name="proof_context_outcome_digest" /><input type="hidden" name="proof_context_approved" /><input type="hidden" name="proof_context_raw_records" /><input class="contact-honeypot" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" inert /><button class="button primary" type="submit">Send message</button><p class="form-status" data-form-status aria-live="polite"></p></form></section></main>${contactScript}`,
+  content: `<main class="frame contact-page" id="content"><section class="page-hero"><span class="eyebrow">SuperMega · Myanmar</span><h1 data-contact-heading>Contact SuperMega.</h1><p class="lede" data-contact-lede>SuperMega builds business software for Myanmar. Shop brings counter sales, stock and order follow-up together for retailers.</p></section><section class="contact-layout"><form class="contact-form" action="/api/contact-submissions" method="post" data-contact-form><div class="field-grid"><label>Name<input name="name" autocomplete="name" required maxlength="120" /></label><label>Email<input name="email" type="email" autocomplete="email" required maxlength="180" /></label><label class="wide">Company (optional)<input name="company" autocomplete="organization" maxlength="180" /></label><input type="hidden" name="product" value="guide" /><input type="hidden" name="template" maxlength="120" /><label class="wide">Message<textarea name="goal" required maxlength="4000" placeholder="Share a few details about your request."></textarea></label></div><input type="hidden" name="source_url" /><input type="hidden" name="referrer" /><input type="hidden" name="idempotency_key" /><input type="hidden" name="trial_claim_code" /><input type="hidden" name="proof_contract" /><input type="hidden" name="proof_version" /><input type="hidden" name="proof_digest" /><input type="hidden" name="proof_product" /><input type="hidden" name="proof_template" /><input type="hidden" name="proof_readiness" /><input type="hidden" name="proof_sources" /><input type="hidden" name="proof_behavior" /><input type="hidden" name="proof_decisions" /><input type="hidden" name="proof_raw_records" /><input type="hidden" name="proof_context_contract" /><input type="hidden" name="proof_context_digest" /><input type="hidden" name="proof_context_outcome_digest" /><input type="hidden" name="proof_context_approved" /><input type="hidden" name="proof_context_raw_records" /><input class="contact-honeypot" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" inert /><button class="button primary" type="submit">Send message</button><p class="form-status" data-form-status aria-live="polite"></p></form></section></main>${contactScript}`,
 })
 
 const privacyHtml = documentHtml({

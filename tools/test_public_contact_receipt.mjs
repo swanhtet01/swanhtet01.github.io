@@ -17,8 +17,8 @@ const script = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
 assert.ok(script, 'actual generated contact script exists')
 
 test('contact form stays concise and does not make customers classify the request', () => {
-  assert.match(page, /Tell us what you need\./)
-  assert.match(page, /We build practical operating software for Myanmar businesses, starting with Shop\./)
+  assert.match(page, /Contact SuperMega\./)
+  assert.match(page, /SuperMega builds business software for Myanmar\. Shop brings counter sales, stock and order follow-up together for retailers\./)
   assert.doesNotMatch(page, /English and Burmese are both welcome|lang="my"|[\u1000-\u109f]/u)
   assert.doesNotMatch(formHtml, /Your reference number confirms receipt/)
   assert.match(formHtml, /<label>Email<input name="email"/)
@@ -58,7 +58,7 @@ function harness(responses, search = '', hash = '') {
     document: { querySelector: selector => {
       if (selector === '[data-contact-form]') return form
       if (['[data-contact-heading]', '[data-contact-lede]'].includes(selector)) {
-        if (!headings.has(selector)) headings.set(selector, { textContent: selector === '[data-contact-heading]' ? 'Tell us what you need.' : 'We build practical operating software for Myanmar businesses, starting with Shop.' })
+        if (!headings.has(selector)) headings.set(selector, { textContent: selector === '[data-contact-heading]' ? 'Contact SuperMega.' : 'SuperMega builds business software for Myanmar. Shop brings counter sales, stock and order follow-up together for retailers.' })
         return headings.get(selector)
       }
       return null
@@ -95,14 +95,14 @@ test('only active public product links set product context; internal routes fall
   assert.doesNotMatch(html, /<select name="product"/)
   const shop = harness([], '?product=shop&source=shop-brief', '#company=Example&goal=Prepare%20our%20shop')
   assert.equal(shop.fields.get('[name="product"]').value, 'shop')
-  assert.equal(shop.headings.get('[data-contact-heading]').textContent, 'Ask us about Shop.')
+  assert.equal(shop.headings.get('[data-contact-heading]').textContent, 'Contact our Shop team.')
   assert.equal(shop.fields.get('[name="goal"]').value, 'Prepare our shop')
   assert.equal(shop.calls.length, 0)
   for (const product of ['website', 'ecommerce']) {
     const state = harness([], `?product=${product}&source=${product}-brief`, '#company=Example&goal=Prepare%20our%20site')
     assert.equal(state.fields.get('[name="product"]').value, 'guide')
     assert.equal(state.fields.get('[name="template"]').value, '')
-    assert.equal(state.headings.get('[data-contact-heading]').textContent, 'Tell us what you need.')
+    assert.equal(state.headings.get('[data-contact-heading]').textContent, 'Contact SuperMega.')
     assert.equal(state.fields.get('[name="goal"]').value, 'Prepare our site')
     assert.equal(state.calls.length, 0)
   }
@@ -111,7 +111,7 @@ test('only active public product links set product context; internal routes fall
 
 test('prefilled message stays editable and does not claim setup is complete', () => {
   const state = harness([], '?product=shop', '#company=Example&goal=Prepare%20our%20shop')
-  assert.equal(state.headings.get('[data-contact-heading]').textContent, 'Ask us about Shop.')
+  assert.equal(state.headings.get('[data-contact-heading]').textContent, 'Contact our Shop team.')
   assert.equal(state.fields.get('[name="company"]').value, 'Example')
   assert.equal(state.calls.length, 0)
   assert.doesNotMatch(script, /Your setup is ready\./)
@@ -131,7 +131,7 @@ test('Shop handoffs preserve valid context and unsupported internal routes canno
     const internal = harness([], `?product=${product}&template=example-template`)
     assert.equal(internal.fields.get('[name="product"]').value, 'guide')
     assert.equal(internal.fields.get('[name="template"]').value, '')
-    assert.equal(internal.headings.get('[data-contact-heading]').textContent, 'Tell us what you need.')
+    assert.equal(internal.headings.get('[data-contact-heading]').textContent, 'Contact SuperMega.')
   }
   for (const search of ['?product=unknown&template=example', '?product=guide&template=example', '?product=website&template=' + 'a'.repeat(121), '?product=website&template=%3Cbad%3E']) {
     assert.equal(harness([], search).fields.get('[name="template"]').value, '')

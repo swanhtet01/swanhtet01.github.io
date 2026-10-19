@@ -256,7 +256,7 @@ for (const page of landingPages) {
     ? 'href="https://app.supermega.dev/login?product=shop"'
     : 'href="https://app.supermega.dev/login"'
   check(countOccurrences(html, expectedLoginHref) === 1, `landing_login_actions:${page.route}`)
-  if (page.route === '/shop/') check(html.includes('class="button button-primary" href="/contact/?product=shop">Request Shop setup'), 'shop_primary_action_requests_setup')
+  if (page.route === '/shop/') check(html.includes('class="button button-primary" href="/contact/?product=shop">Contact SuperMega'), 'shop_primary_action_contacts_team')
   if (page.route === '/') check(html.includes('.company-hero .hero-actions .button-primary') && html.includes('white-space:nowrap'), 'company_primary_action_stays_compact')
   check(!html.includes('Request assisted setup') && !html.includes('id="first-loop"'), `landing_no_setup_funnel:${page.route}`)
   for (const unsupportedClaim of ['AI may help prepare drafts', 'AI assisted', 'Ranked next actions', 'approved AI context']) {
@@ -330,7 +330,7 @@ for (const token of ['Site measurement', 'seven public page paths', 'removes que
 }
 
 const contact = readStatic('contact/index.html')
-for (const token of ['Message received:', 'Keep this reference if you need to follow up.', 'We build practical operating software for Myanmar businesses, starting with Shop.']) {
+for (const token of ['Message received:', 'Keep this reference if you need to follow up.', 'SuperMega builds business software for Myanmar. Shop brings counter sales, stock and order follow-up together for retailers.']) {
   check(contact.includes(token), `contact_confirmed_receipt_guidance:${token}`)
 }
 for (const token of ['No action is needed now.', 'SuperMega will review your brief and reply with one scoped next step.', 'We’ll reply by email', 'We’ll follow up by email']) {

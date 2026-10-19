@@ -396,7 +396,7 @@ for (const [route, html] of [['/', home], ['/shop/', pages.get('/shop/').html], 
     ? 'href="https://app.supermega.dev/login?product=shop"'
     : 'href="https://app.supermega.dev/login"'
   if (countOccurrences(body, expectedLogin) !== 1) fail('login_action_count_invalid', { route, expectedLogin })
-  if (route === '/shop/' && (!body.includes('class="button button-primary" href="/contact/?product=shop">Request Shop setup') || body.includes('See Shop screens'))) fail('shop_primary_product_action_missing')
+  if (route === '/shop/' && (!body.includes('class="button button-primary" href="/contact/?product=shop">Contact SuperMega') || body.includes('See Shop screens'))) fail('shop_primary_product_action_missing')
   if (body.includes('>Company</a>')) fail('company_page_navigation_not_consolidated')
   const hasGalleryNavigation = route !== '/shop/' && (galleryViews[routeProduct?.id] || 0) > 1
   const expectedButtons = Number(hasGalleryNavigation) * 2
@@ -484,7 +484,7 @@ for (const token of [
   'data-contact-form', 'action="/api/contact-submissions"', 'name="name"', 'name="email"',
   'name="company"', 'name="product"', 'value="guide"', 'name="template"', 'name="goal"',
   'name="idempotency_key"', 'name="proof_contract"', 'name="proof_digest"', 'class="contact-honeypot"',
-  'x-idempotency-key', 'Tell us what you need.', 'SuperMega builds practical software for businesses in Myanmar. Shop is our retail product for sales, stock and order follow-up.',
+  'x-idempotency-key', 'Contact SuperMega.', 'SuperMega builds business software for Myanmar. Shop brings counter sales, stock and order follow-up together for retailers.',
   'placeholder="Share a few details about your request."', 'Company (optional)', '>Send message</button>',
   'Message received:', 'Keep this reference if you need to follow up.',
   "shop:'Shop'", "website:'Sites'", "ecommerce:'Commerce'",

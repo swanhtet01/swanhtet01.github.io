@@ -127,8 +127,8 @@ test('saved Plant setup survives visibility projection byte-for-byte', () => {
 test('generated public home and contact offer only active products', async () => {
   const homeDocument = await html('index.html')
   const home = main(homeDocument), contact = main(await html('contact/index.html'))
-  assert.equal((home.match(/class="family-card/g)??[]).length, 1)
-  assert.equal((home.match(/class="family-link"/g)??[]).length, 1)
+  assert.equal((home.match(/class="family-card/g)??[]).length, 0)
+  assert.equal((home.match(/class="family-link"/g)??[]).length, 0)
   const headline = home.match(/<h1 id="hero-title">([\s\S]*?)<\/h1>/)?.[1]
   assert.ok(headline, 'Company page has its primary headline')
   const headlineText = headline.replace(/<br\s*\/?>/gi, ' ').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
@@ -139,6 +139,8 @@ test('generated public home and contact offer only active products', async () =>
   assert.doesNotMatch(home, /Plant|all four|href="[^\"]*(?:\/plant\/|product=plant)/)
   assert.match(contact, /<input type="hidden" name="product" value="guide" \/>/)
   assert.doesNotMatch(contact, /<select[^>]*name="product"/)
+  assert.match(contact, /SuperMega builds business software for Myanmar\. Shop brings counter sales, stock and order follow-up together for retailers\./)
+  assert.doesNotMatch(contact, /English and Burmese are both welcome/)
   for (const product of activeProductContracts(manifest)) {
     const page = main(await html(product.id+'/index.html'))
     const fullPage = await html(product.id+'/index.html')
