@@ -38,13 +38,13 @@ const labels = [
   'Record settled refund',
 ]
 
-setUiLocale('my')
+await setUiLocale('my')
 for (const label of labels) {
   const localized = uiText(label)
   assert.notEqual(localized, label, `Burmese action missing for: ${label}`)
   assert.match(localized, /[\u1000-\u109F]/u, `Expected Myanmar script for: ${label}`)
 }
-setUiLocale('en')
+await setUiLocale('en')
 for (const label of labels) assert.equal(uiText(label), label, `English action changed: ${label}`)
 
 const coreApp = await readFile(resolve(root, 'showroom/src/core/CoreApp.tsx'), 'utf8')
