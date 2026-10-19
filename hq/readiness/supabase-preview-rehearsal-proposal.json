@@ -4,7 +4,7 @@
   "repository": "swanhtet01/swanhtet01.github.io",
   "mode": "owner_approval_required",
   "state": "prepared-not-executed",
-  "generatedAt": "2026-10-19T10:46:08.052Z",
+  "generatedAt": "2026-10-19T11:02:47.496Z",
   "purpose": "Record a source-bound Supabase preview plan that requires a known creation mode, actual branch catalog and migration-history reconciliation, and a reviewed delta; do not create a branch or approve managed activation.",
   "productionBaseline": {
     "projectRef": "zvtzwcimpvvtkowflhda",
@@ -341,7 +341,7 @@
     },
     {
       "path": "tools/verify_private_trial_migrations.mjs",
-      "digest": "sha256:14f886446702a61bc44910028d0246cd968aa2be7c9826288aa32dcf4fb7e663"
+      "digest": "sha256:f590c833ceb1cc4326c7876a889e649c8bc79232b8d7a9dd311ca78699202569"
     },
     {
       "path": "tools/verify_public_browser_quarantine.mjs",
@@ -364,5 +364,5 @@
       "digest": "sha256:5c1e1c1e220467b0731911a5a7ed7bbca18023c7f62f040393f9868ea79a2981"
     }
   ],
-  "digest": "sha256:73dcb3d6b0484d6825c300742635a0b370c6d02c96c641593d5b329580f9b324"
+  "digest": "sha256:5e56bd123a17a76b24a3778c7bdaa7accabbba6e8b5a2f7d8d74350d89d2eeec"
 }
