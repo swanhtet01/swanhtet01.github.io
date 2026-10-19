@@ -891,7 +891,7 @@ def _client_import_apply_preflight_digest(
         validation.object_id,
         validation.workflow_template_id,
         validation.target_surface,
-        validation.required_capability,
+        _client_import_required_capability(validation),
         validation.package_digest,
         validation.row_count,
         expected_version,
@@ -902,6 +902,14 @@ def _client_import_apply_preflight_digest(
         separators=(",", ":"),
     ).encode("utf-8")
     return f"sha256:{sha256(canonical).hexdigest()}"
+
+
+def _client_import_required_capability(validation: Any) -> str:
+    """Use Ecommerce's internal grant without changing shared import recipes."""
+
+    if validation.product == "ecommerce":
+        return "ecommerce.manage"
+    return validation.required_capability
 
 
 def _client_import_apply_preflight(
@@ -964,7 +972,7 @@ def _client_import_apply_preflight(
         "object": validation.object_id,
         "workflow_template_id": validation.workflow_template_id,
         "target_surface": validation.target_surface,
-        "required_capability": validation.required_capability,
+        "required_capability": _client_import_required_capability(validation),
         "package_digest": validation.package_digest,
         "row_count": validation.row_count,
         "expected_version": expected_version,
@@ -1987,7 +1995,7 @@ def create_trial_router(
                 "client_import_validation_error",
                 message=str(exc),
             ) from exc
-        _require_write_ready(readiness, validation.required_capability)
+        _require_write_ready(readiness, _client_import_required_capability(validation))
         current_state = _invoke(
             lambda: store.get_state(principal, validation.target_surface)
         )
@@ -2247,7 +2255,7 @@ def create_trial_router(
                 "client_import_activation_not_ready",
                 product=validation.product,
             )
-        _require_write_ready(readiness, validation.required_capability)
+        _require_write_ready(readiness, _client_import_required_capability(validation))
         expected_preflight_digest = _client_import_apply_preflight_digest(
             principal=principal,
             validation=validation,

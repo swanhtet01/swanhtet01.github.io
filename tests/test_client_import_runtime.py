@@ -1511,6 +1511,12 @@ class ClientImportRouteTests(unittest.TestCase):
             expected_version=2,
             session="internal-ecommerce",
         )
+        ecommerce_preflight = self._apply_preflight(
+            ecommerce_package,
+            expected_version=2,
+            session="internal-ecommerce",
+        )
+        self.assertEqual(ecommerce_preflight["required_capability"], "ecommerce.manage")
         applied = self.client.post(
             "/api/trial/v1/imports/apply",
             headers=self._headers("internal-ecommerce"),
