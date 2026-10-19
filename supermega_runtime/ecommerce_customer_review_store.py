@@ -16,7 +16,7 @@ FUNCTIONS = {
     "ecommerce_review_preview_digest": (1, "text", "plpgsql", False, "i", "fba073c4a638ca22f7a267cd8c2912999b89c245b7f0df895142f98fed8f726d"),
     "ecommerce_review_operator_entitled": (0, "boolean", "sql", True, "s", "f760e1483ba3ef6be801a40e7a9e4524f82ac7631e6ae44cba44a4d14bba4b6a"),
     "ecommerce_review_recipient_ready": (1, "boolean", "sql", True, "s", "0c20ff75bfb11617c42b224ca1980f934ddf66039625d72d0f8e81d50ef0c88e"),
-    "guard_ecommerce_review": (0, "trigger", "plpgsql", False, "v", "41583ca2889b54fcf7c77c68d307f55ec127b218b27f3bc001cf05418e4776d9"),
+    "guard_ecommerce_review": (0, "trigger", "plpgsql", False, "v", "e7858e577b22e4fcf3243ed05c377ff4ac4a89bc0028d69d9afa45112ba12d26"),
     "invalidate_ecommerce_reviews": (0, "trigger", "plpgsql", False, "v", "2f8e3905cd867d3a118d4fd6eaf9963248cee9ea14cfd7df0160d073f2167959"),
 }
 

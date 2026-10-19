@@ -35,6 +35,7 @@ class CatalogReviewManagementBoundaryTests(unittest.TestCase):
         self.assertIsNotNone(match)
         body = match.group(1).replace("\r\n", "\n").strip()
         digest = hashlib.sha256(body.encode()).hexdigest()
+        self.assertEqual(FUNCTIONS["guard_ecommerce_review"][-1], digest)
         self.assertEqual(_ECOMMERCE_REVIEW_TRIGGERS[("ecommerce_customer_reviews", "ecommerce_review_guard")][-1], digest)
         self.assertIn("new.workspace_id::text || ':state:commerce'", body)
         self.assertNotRegex(body, r"\bfor\s+update\b")
