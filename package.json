@@ -92,7 +92,7 @@
     "shop:sales:velocity:verify": "node tools/test_shop_sales_velocity.mjs",
     "shop:order:exception:verify": "node tools/test_shop_order_exception_summary.mjs",
     "shop:fulfillment:lead:verify": "node tools/test_shop_fulfillment_lead_time_summary.mjs",
-    "shop:payment:status:verify": "node tools/test_shop_payment_status_summary.mjs && node --test tools/test_shop_order_attention.mjs",
+    "shop:payment:status:verify": "node tools/test_shop_payment_status_summary.mjs && node --test tools/test_shop_order_attention.mjs && node tools/test_shop_order_primary_action_locale.mjs",
     "shop:daily:close:verify": "node tools/test_shop_daily_close_summary.mjs",
     "shop:inventory:movement:verify": "node tools/test_shop_inventory_movement_summary.mjs",
     "website:content:verify": "node tools/test_website_content_summary.mjs",
