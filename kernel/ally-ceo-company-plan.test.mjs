@@ -67,9 +67,12 @@ function portfolio(overrides = {}, automationOverrides = {}) {
 function managedReadiness() {
   const database = structuredClone(JSON.parse(readFileSync(new URL('../hq/research/postgres17-rehearsal.json', import.meta.url), 'utf8')))
   const sitesInquiryRlsOptimization = '20261016143945_optimize_sites_inquiry_rls_initplans.sql'
-  const currentDatabaseMigrations = database.migration.names.includes(sitesInquiryRlsOptimization)
-    ? [...database.migration.names]
-    : [...database.migration.names, sitesInquiryRlsOptimization]
+  const currentDatabaseMigrations = database.migration.names
+    .filter((name) => name !== sitesInquiryRlsOptimization)
+  const ecommerceOperatorManagementBoundary = '20261019070000_ecommerce_operator_management_boundary.sql'
+  if (!currentDatabaseMigrations.includes(ecommerceOperatorManagementBoundary)) {
+    currentDatabaseMigrations.push(ecommerceOperatorManagementBoundary)
+  }
   assert.equal(currentDatabaseMigrations.length, 30)
   const implementationDigest = sha256(JSON.stringify({
     purpose: 'ally-ceo-unit-fixture', implementationPaths, currentDatabaseMigrations,
