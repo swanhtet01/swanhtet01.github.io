@@ -13276,7 +13276,7 @@ async function verifyWebsiteOrderCompletionRuntime() {
       approvalId: currentApproval.id,
       localPublishId: currentPublish.id,
       pageId: 'page-products',
-      sku: 'SM-CARE-01',
+      sku: 'SM-1005',
       quantity: 1,
     })
     const pending = await handoffContract.writeWebsiteEcommerceHandoff(pendingHandoff, workspace)
@@ -13284,13 +13284,13 @@ async function verifyWebsiteOrderCompletionRuntime() {
     const accepted = await handoffContract.acceptWebsiteEcommerceHandoff(pendingHandoff.id, 'OP-OWNER')
     assert(accepted?.schema === 'website_ecommerce_handoff_store.v1' && accepted.audit.length === 1 && !accepted.draft && !accepted.order, 'runtime_v1_acceptance_invalid')
     const drafted = await handoffContract.createWebsiteOrderDraft(pendingHandoff.id, {
-      sku: 'SM-CARE-01',
-      itemName: 'Family care set',
-      variant: 'Standard bundle',
+      sku: 'SM-1005',
+      itemName: 'ZESS Sugar Crackers',
+      variant: '192 g',
       active: true,
-      unitPriceMmk: 31_000,
+      unitPriceMmk: 8_000,
     })
-    assert(drafted?.schema === 'website_ecommerce_handoff_store.v2' && drafted.draft?.totalMmk === 31_000 && !drafted.order && drafted.audit.length === 1, 'runtime_v2_draft_invalid')
+    assert(drafted?.schema === 'website_ecommerce_handoff_store.v2' && drafted.draft?.totalMmk === 8_000 && !drafted.order && drafted.audit.length === 1, 'runtime_v2_draft_invalid')
     const v2Raw = localStorage.getItem(handoffContract.WEBSITE_ECOMMERCE_HANDOFF_KEY)
     const input = {
       fulfilmentMethod: 'local_delivery',
@@ -16144,8 +16144,8 @@ async function verifyStorefrontDraftRuntime() {
       removeItem: (key) => importValues.delete(key),
     }
     const merchandisingRows = [
-      { sku: 'SM-1003', featured: false, collection: 'Home care', displayName: 'Household refill', note: 'Confirm local availability.' },
-      { sku: 'SM-1001', featured: true, collection: 'Best sellers', displayName: 'Daily essentials basket', note: 'Lead with everyday value.' },
+      { sku: 'SM-1003', featured: false, collection: 'Drinks', displayName: 'ALPINE Drinking Water', note: 'Confirm local availability.' },
+      { sku: 'SM-1001', featured: true, collection: 'Pantry', displayName: 'KAUNG 90 Days Rice', note: 'Lead with everyday value.' },
     ]
     const localImport = await localMerchandisingImport.activateLocalEcommerceMerchandising({
       storeName: 'Example Storefront',
@@ -16465,20 +16465,20 @@ async function verifyStorefrontRuntime() {
     const input = {
       storeName: 'Mingalar Shop',
       summary: 'Clear prices and a small customer-ready catalog.',
-      selectedSkus: ['SM-1003', 'SM-1001', 'SM-CARE-01'],
+      selectedSkus: ['SM-1003', 'SM-1001', 'SM-1005'],
     }
     const preview = storefront.buildStorefrontPreview(catalog, input)
     const reordered = storefront.buildStorefrontPreview([...catalog].reverse(), input)
     assert(JSON.stringify(preview) === JSON.stringify(reordered), 'storefront_preview_depends_on_catalog_order')
-    assert(preview.items.map((item) => item.sku).join(',') === 'SM-1001,SM-1003,SM-CARE-01', 'storefront_preview_items_not_canonical')
+    assert(preview.items.map((item) => item.sku).join(',') === 'SM-1001,SM-1003,SM-1005', 'storefront_preview_items_not_canonical')
     const serialized = JSON.stringify(preview)
     assert(!serialized.includes('onHand') && !serialized.includes('reorderAt'), 'storefront_preview_leaked_shop_stock_fields')
     const firstDigest = await storefront.storefrontPreviewDigest(preview)
     const retryDigest = await storefront.storefrontPreviewDigest(reordered)
     assert(firstDigest === retryDigest && /^sha256:[a-f0-9]{64}$/.test(firstDigest), 'storefront_digest_not_deterministic_sha256')
     const merchandising = [
-      { sku: 'SM-CARE-01', featured: false, collection: 'Care', displayName: '', note: '' },
-      { sku: 'SM-1003', featured: false, collection: 'Pantry', displayName: 'Household refill', note: 'Confirm availability.' },
+      { sku: 'SM-1005', featured: false, collection: 'Pantry', displayName: 'ZESS Sugar Crackers', note: 'Confirm availability.' },
+      { sku: 'SM-1003', featured: false, collection: 'Drinks', displayName: 'ALPINE Drinking Water', note: 'Confirm availability.' },
       { sku: 'SM-1001', featured: true, collection: 'Best sellers', displayName: 'Daily essentials', note: 'Lead with the customer favourite.' },
     ]
     const merchandisedPreview = storefront.buildStorefrontPreview(catalog, { ...input, merchandising })
@@ -16761,12 +16761,12 @@ async function verifyStorefrontRuntime() {
       && JSON.stringify(pim) === JSON.stringify(pimRetry)
       && pim.items.length === preview.items.length
       && pim.items.every((item) => item.variant === preview.items.find((sourceItem) => sourceItem.sku === item.sku)?.variant)
-      && pim.items.find((item) => item.sku === 'SM-CARE-01')?.variant === '192 g',
+      && pim.items.find((item) => item.sku === 'SM-1005')?.variant === '192 g',
     'ecommerce_buying_pim_not_deterministic_or_variant_bound')
     const buyingQuote = await buyingModel.buildEcommerceCheckoutQuote({
       pim,
       cart: [
-        { sku: 'SM-CARE-01', quantity: 1 },
+        { sku: 'SM-1005', quantity: 1 },
         { sku: 'SM-1001', quantity: 2 },
       ],
       customerReference: 'Ma Su · 09 123 456',
@@ -16783,7 +16783,7 @@ async function verifyStorefrontRuntime() {
       pim,
       cart: [
         { sku: 'SM-1001', quantity: 2 },
-        { sku: 'SM-CARE-01', quantity: 1 },
+        { sku: 'SM-1005', quantity: 1 },
       ],
       customerReference: 'Ma Su · 09 123 456',
       fulfilment: 'delivery',
@@ -16967,7 +16967,7 @@ async function verifyStorefrontRuntime() {
     const returnIntent = buyingModel.buildEcommerceReturnIntent({
       scope: buyingScope,
       orderSnapshot: completedOrder,
-      sku: 'SM-CARE-01',
+      sku: 'SM-1005',
       quantity: 1,
       disposition: 'not_restocked',
       reason: 'Opened item needs Shop condition review.',
@@ -17787,7 +17787,7 @@ async function verifyStorefrontRuntime() {
     const replacementQuote = await buyingModel.buildEcommerceCheckoutQuote({
       pim,
       cart: [
-        { sku: 'SM-CARE-01', quantity: 1 },
+        { sku: 'SM-1005', quantity: 1 },
         { sku: 'SM-1001', quantity: 3 },
       ],
       customerReference: buyingRequest.customerReference,
@@ -18599,10 +18599,10 @@ async function verifyManagedStorefrontRuntime() {
     const input = {
       storeName: 'Mingalar Shop',
       summary: 'A small managed catalog for customer requests.',
-      selectedSkus: ['SM-CARE-01', 'SM-1001'],
+      selectedSkus: ['SM-1005', 'SM-1001'],
       merchandising: [
         { sku: 'SM-1001', featured: true, collection: 'Best sellers', displayName: 'Daily essentials', note: 'Lead with the customer favourite.' },
-        { sku: 'SM-CARE-01', featured: false, collection: 'Care', displayName: '', note: '' },
+        { sku: 'SM-1005', featured: false, collection: 'Pantry', displayName: 'ZESS Sugar Crackers', note: 'Confirm availability.' },
       ],
     }
     const plan = await model.prepareManagedStorefrontSave(

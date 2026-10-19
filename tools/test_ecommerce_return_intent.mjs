@@ -56,8 +56,7 @@ const COMPLETED_ORDER = {
     evidenceReference: 'HANDOFF-0001',
   },
   lines: [
-    { sku: 'SM-1001', name: 'Daily essentials basket', quantity: 3, unitPriceMmk: 18_500 },
-    { sku: 'SM-1003', name: 'Household refill', quantity: 1, unitPriceMmk: 12_000 },
+    { sku: 'SM-1001', name: 'KAUNG 90 Days Rice', quantity: 3, unitPriceMmk: 12_450 },
   ],
 }
 

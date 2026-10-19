@@ -210,31 +210,23 @@ for (const page of landingPages) {
   } else {
     check(html.includes('class="platform-gallery"') && html.includes('class="platform-image"') && html.includes('class="product-proof"') && html.includes('class="feature-line"'), `landing_interface_and_features:${page.route}`)
     check(countOccurrences(html, '<figure class="platform-image') === productScreens[page.productId]?.length, `landing_product_views:${page.route}`)
-    const carousel = (productScreens[page.productId]?.length || 0) > 1
-    check(
-      html.includes('aria-roledescription="carousel"') &&
-        html.includes('align-items:stretch') &&
-        html.includes('display:flex;flex:0 0 100%;flex-direction:column') &&
-        html.includes('width:100%;height:auto;max-width:1440px') &&
-        html.includes('margin-top:auto;padding:16px 0 0') &&
-        !html.includes('aspect-ratio:16/10') &&
-        !html.includes('object-fit:contain'),
-      `landing_gallery_native_ratio_equal_width_slides:${page.route}`,
-    )
-    check(countOccurrences(html, 'data-gallery-previous') === Number(carousel) && countOccurrences(html, 'data-gallery-next') === Number(carousel), `landing_gallery_navigation:${page.route}`)
-    check(html.includes('role="group" aria-roledescription="slide"'), `landing_gallery_accessible_slides:${page.route}`)
-    check(countOccurrences(html, 'class="platform-image-open"') === productScreens[page.productId].length
-      && countOccurrences(html, 'aria-label="Open the selected full-size') === productScreens[page.productId].length
-      && countOccurrences(html, 'data-mobile-image="/images/') === productScreens[page.productId].length * 2
-      && !html.includes('target="_blank"'),
-    `landing_full_size_gallery_views:${page.route}`)
+    check(html.includes('class="platform-gallery shop-gallery-all"')
+      && html.includes('platform-device-capture-desktop')
+      && html.includes('platform-device-capture-tablet')
+      && html.includes('platform-device-capture-phone'), `landing_all_device_screens_together:${page.route}`)
+    check(!html.includes('data-platform-carousel') && !html.includes('data-gallery-previous')
+      && !html.includes('data-gallery-next') && !html.includes('class="platform-gallery-controls"')
+      && !html.includes('class="platform-image-open"') && !html.includes('aria-label="Open the selected full-size'),
+    `landing_static_noninteractive_product_gallery:${page.route}`)
     check(html.includes('class="product-story product-story-standalone"') && html.includes('.product-story-standalone {padding:0 0 58px;border-top:0}'), `landing_gallery_above_fold_spacing:${page.route}`)
-    check(carousel === html.includes('<script src="/platform-carousel.js" defer></script>'), `landing_gallery_script:${page.route}`)
+    check(!html.includes('<script src="/platform-carousel.js" defer></script>'), `landing_gallery_script:${page.route}`)
     check(!html.includes('data-legacy-interface-assets'), `landing_legacy_interface_assets_absent:${page.route}`)
     for (const screen of productScreens[page.productId] || []) check(html.includes(`/images/${screen}`), `landing_product_view:${page.route}:${screen}`)
     for (const screen of productScreens[page.productId] || []) {
       const mobile = screen.replace(/\.png$/, '-mobile.png')
-      check(html.includes(`data-mobile-image="/images/${mobile}"`), `landing_mobile_product_view:${page.route}:${mobile}`)
+      const tablet = screen.replace(/\.png$/, '-tablet.png')
+      check(html.includes(`/images/${mobile}`), `landing_mobile_product_view:${page.route}:${mobile}`)
+      check(html.includes(`/images/${tablet}`), `landing_tablet_product_view:${page.route}:${tablet}`)
     }
     check(html.includes('height:clamp(300px,112vw,500px);object-fit:cover'), `landing_compact_mobile_gallery:${page.route}`)
   }
@@ -412,7 +404,7 @@ for (const [route, html] of [['/', home], ['/shop/', shopLanding], ...activeIds.
     ? 'href="https://app.supermega.dev/login?product=shop"'
     : 'href="https://app.supermega.dev/login"'
   check(countOccurrences(body, expectedLoginHref) === 1, `login_action_count:${route}`)
-  const carouselCount = Number(route !== '/' && route !== '/shop/' && (productScreens[routeProduct]?.length || 0) > 1)
+  const carouselCount = 0
   const expectedLinks = route === '/' ? 10 : route === '/shop/' ? 9 : 5 + Number(routeManifestProduct?.status === 'available-in-app')
   check((body.match(/<a\b/g) || []).length === expectedLinks, `marketing_link_surface:${route}`)
   const viewportGalleryCount = countOccurrences(body, 'data-viewport-gallery')

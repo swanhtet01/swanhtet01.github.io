@@ -320,6 +320,10 @@ async function main() {
     const launched = await launchBrowser(findBrowser(), profile)
     browser = launched.browser
     cdp = await Cdp.connect(launched.wsUrl)
+    // Give the isolated capture origin the same durable-storage permission a real
+    // browser may grant. Never publish the harness's denied-permission warning as
+    // though it were a normal Shop screen.
+    await cdp.send('Browser.grantPermissions', { origin, permissions: ['durableStorage'] })
     const { targetId } = await cdp.send('Target.createTarget', { url: 'about:blank' })
     ;({ sessionId } = await cdp.send('Target.attachToTarget', { targetId, flatten: true }))
     await cdp.send('Page.enable', {}, sessionId)
@@ -342,6 +346,8 @@ async function main() {
     await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false }, sessionId)
     await cdp.send('Page.navigate', { url: `${origin}/shop/` }, sessionId)
     await waitFor(cdp, sessionId, 'Today')
+    const persistentStorage = await evaluate(cdp, sessionId, 'navigator.storage?.persisted?.() === true')
+    if (!persistentStorage) throw new Error('gallery_durable_storage_permission_not_applied')
     const overdueOpenOrders = await evaluate(cdp, sessionId, `(() => {
       const state = JSON.parse(localStorage.getItem('supermega.commerce.workspace.v2') || '{}');
       return (state.orders || []).filter(order => order.status !== 'completed' && order.status !== 'cancelled'
@@ -445,10 +451,14 @@ async function main() {
     await clickText(cdp, sessionId, 'Pages')
     captures.push(await capture(cdp, sessionId, output, 'actual-sites-editor', ['Edit page', 'Business details', 'Page checks'],
       { fixturePath: '/workspaces/', route: '/website/', selector: '[data-content-section="hero"]', imageSelector: '.website-page-card img', images: 3 }))
+    captures.push(await captureTablet(cdp, sessionId, output, 'actual-sites-editor-tablet', ['Edit page', 'Business details', 'Page checks'],
+      { fixturePath: '/workspaces/', route: '/website/', selector: '[data-content-section="hero"]', imageSelector: '.website-page-card img', images: 3 }))
     captures.push(await captureMobile(cdp, sessionId, output, 'actual-sites-editor-mobile', ['Edit page', 'Business details', 'Page checks'],
       { fixturePath: '/workspaces/', route: '/website/', selector: '[data-content-section="hero"]', imageSelector: '.website-page-card img', images: 3 }))
     await clickText(cdp, sessionId, 'Inquiries')
     captures.push(await capture(cdp, sessionId, output, 'actual-sites-inquiries', ['12 requests need review', 'Ko Min'],
+      { fixturePath: '/workspaces/', route: '/website/?view=inquiries', selector: '.website-inquiry-detail' }))
+    captures.push(await captureTablet(cdp, sessionId, output, 'actual-sites-inquiries-tablet', ['12 requests need review', 'Ko Min'],
       { fixturePath: '/workspaces/', route: '/website/?view=inquiries', selector: '.website-inquiry-detail' }))
     captures.push(await captureMobile(cdp, sessionId, output, 'actual-sites-inquiries-mobile', ['12 requests need review', 'Ko Min'],
       { fixturePath: '/workspaces/', route: '/website/?view=inquiries', selector: '.website-inquiry-detail' }))
@@ -460,6 +470,8 @@ async function main() {
     await clickText(cdp, sessionId, 'Save store')
     await waitFor(cdp, sessionId, 'Storefront saved on this device')
     captures.push(await capture(cdp, sessionId, output, 'actual-commerce-catalog', ['Example Studio', '3 products', 'Add to cart'],
+      { fixturePath: '/workspaces/', route: '/ecommerce/?view=preview', selector: '.storefront-grid', imageSelector: '.storefront-grid img.storefront-product-photo', images: 3 }))
+    captures.push(await captureTablet(cdp, sessionId, output, 'actual-commerce-catalog-tablet', ['Example Studio', '3 products', 'Add to cart'],
       { fixturePath: '/workspaces/', route: '/ecommerce/?view=preview', selector: '.storefront-grid', imageSelector: '.storefront-grid img.storefront-product-photo', images: 3 }))
     captures.push(await captureMobile(cdp, sessionId, output, 'actual-commerce-catalog-mobile', ['Example Studio', '3 products', 'Add to cart'],
       { fixturePath: '/workspaces/', route: '/ecommerce/?view=preview', selector: '.storefront-grid', imageSelector: '.storefront-grid img.storefront-product-photo', images: 3 }))
@@ -491,6 +503,9 @@ async function main() {
     })()`)
     if (!requestPanelShown) throw new Error('commerce_request_panel_missing')
     captures.push(await capture(cdp, sessionId, output, 'actual-commerce-order-request',
+      ['Request saved on this device', 'No order or payment was confirmed.'],
+      { fixturePath: '/workspaces/', route: '/ecommerce/?view=preview', selector: '.ecommerce-quote-receipt[data-current="true"]' }))
+    captures.push(await captureTablet(cdp, sessionId, output, 'actual-commerce-order-request-tablet',
       ['Request saved on this device', 'No order or payment was confirmed.'],
       { fixturePath: '/workspaces/', route: '/ecommerce/?view=preview', selector: '.ecommerce-quote-receipt[data-current="true"]' }))
     captures.push(await captureMobile(cdp, sessionId, output, 'actual-commerce-order-request-mobile',

@@ -100,7 +100,7 @@ export const capabilities: readonly Capability[] = [
     id: 'shop-counter',
     label: 'Counter and payments',
     tier: 'free',
-    outcome: 'Ring up a sale, take Cash, KBZPay or WavePay, and watch stock fall on its own.',
+    outcome: 'Record Cash, KBZPay or WavePay for a sale, then confirm wallet transfers in your provider app.',
     reason: 'Runs entirely on your device. It costs us nothing, so it costs you nothing.',
   },
   {
