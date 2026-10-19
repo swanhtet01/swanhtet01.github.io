@@ -2,9 +2,9 @@
   "schemaVersion": "supermega.public-gallery-provenance.v1",
   "status": "local_component_capture",
   "records": "synthetic",
-  "captureSourceCommit": "a4fa5a89fe7d730468654cfd616ae12449dfe9a1",
-  "captureSourceTree": "6c2a8ef455bca0c6e8140395b96f48a05042518f",
-  "capturedAt": "2026-10-19T00:45:22.693Z",
+  "captureSourceCommit": "aee11c592f3696a6d93b7edcafd783a135d83b8a",
+  "captureSourceTree": "021606874edcbdca7ce107be35890ff3ad071f32",
+  "capturedAt": "2026-10-19T01:55:24.070Z",
   "assets": [
     {
       "file": "actual-shop-today.png",
@@ -14,15 +14,15 @@
       "capture": {
         "classification": "local_real_component_synthetic",
         "publicationReady": false,
-        "sourceCommit": "a4fa5a89fe7d730468654cfd616ae12449dfe9a1",
-        "showroomTree": "6c2a8ef455bca0c6e8140395b96f48a05042518f",
+        "sourceCommit": "aee11c592f3696a6d93b7edcafd783a135d83b8a",
+        "showroomTree": "021606874edcbdca7ce107be35890ff3ad071f32",
         "captureTool": "tools/capture_public_gallery.mjs",
         "fixturePath": "/shop/",
         "routeState": "today",
         "visibleSelector": ".shop-today-module",
         "loadedImages": 0,
         "deniedExternal": 0,
-        "captureInputsSha256": "2a47aa87a492b117756dcca0fba43af3f7fb5d147df05b3d68a9bab74cbc619d",
+        "captureInputsSha256": "56db179bb0b15c9d8fdfe42b1f7bd3338d5b6a7c61094ca6cf3b40f4197875d6",
         "captureMode": "clean-commit-review"
       }
     },
@@ -34,15 +34,15 @@
       "capture": {
         "classification": "local_real_component_synthetic",
         "publicationReady": false,
-        "sourceCommit": "a4fa5a89fe7d730468654cfd616ae12449dfe9a1",
-        "showroomTree": "6c2a8ef455bca0c6e8140395b96f48a05042518f",
+        "sourceCommit": "aee11c592f3696a6d93b7edcafd783a135d83b8a",
+        "showroomTree": "021606874edcbdca7ce107be35890ff3ad071f32",
         "captureTool": "tools/capture_public_gallery.mjs",
         "fixturePath": "/shop/",
         "routeState": "today",
         "visibleSelector": ".shop-today-module",
         "loadedImages": 0,
         "deniedExternal": 0,
-        "captureInputsSha256": "2a47aa87a492b117756dcca0fba43af3f7fb5d147df05b3d68a9bab74cbc619d",
+        "captureInputsSha256": "56db179bb0b15c9d8fdfe42b1f7bd3338d5b6a7c61094ca6cf3b40f4197875d6",
         "captureMode": "clean-commit-review"
       }
     },
@@ -50,19 +50,19 @@
       "file": "actual-shop-today-mobile.png",
       "width": 390,
       "height": 844,
-      "sha256": "10104bda45a08b262ccf959625b8328226fbe3cf17ede6d1aaa6580a6231f6f7",
+      "sha256": "0be86a2dcb93a6214f9a438e5018e720c3699f9c98f8c147b809214f708b2def",
       "capture": {
         "classification": "local_real_component_synthetic",
         "publicationReady": false,
-        "sourceCommit": "a4fa5a89fe7d730468654cfd616ae12449dfe9a1",
-        "showroomTree": "6c2a8ef455bca0c6e8140395b96f48a05042518f",
+        "sourceCommit": "aee11c592f3696a6d93b7edcafd783a135d83b8a",
+        "showroomTree": "021606874edcbdca7ce107be35890ff3ad071f32",
         "captureTool": "tools/capture_public_gallery.mjs",
         "fixturePath": "/shop/",
         "routeState": "today",
         "visibleSelector": ".shop-today-module",
         "loadedImages": 0,
         "deniedExternal": 0,
-        "captureInputsSha256": "2a47aa87a492b117756dcca0fba43af3f7fb5d147df05b3d68a9bab74cbc619d",
+        "captureInputsSha256": "56db179bb0b15c9d8fdfe42b1f7bd3338d5b6a7c61094ca6cf3b40f4197875d6",
         "captureMode": "clean-commit-review"
       }
     },
@@ -74,15 +74,15 @@
       "capture": {
         "classification": "local_real_component_synthetic",
         "publicationReady": false,
-        "sourceCommit": "a4fa5a89fe7d730468654cfd616ae12449dfe9a1",
-        "showroomTree": "6c2a8ef455bca0c6e8140395b96f48a05042518f",
+        "sourceCommit": "aee11c592f3696a6d93b7edcafd783a135d83b8a",
+        "showroomTree": "021606874edcbdca7ce107be35890ff3ad071f32",
         "captureTool": "tools/capture_public_gallery.mjs",
         "fixturePath": "/shop/",
         "routeState": "counter",
         "visibleSelector": ".shop-current-sale",
         "loadedImages": 0,
         "deniedExternal": 0,
-        "captureInputsSha256": "2a47aa87a492b117756dcca0fba43af3f7fb5d147df05b3d68a9bab74cbc619d",
+        "captureInputsSha256": "56db179bb0b15c9d8fdfe42b1f7bd3338d5b6a7c61094ca6cf3b40f4197875d6",
         "captureMode": "clean-commit-review"
       }
     },
@@ -90,19 +90,19 @@
       "file": "actual-shop-sell-tablet.png",
       "width": 768,
       "height": 1024,
-      "sha256": "74556f2f2f733a5e16301b56db6086ccc9010cb74034a27066f9d451506cc676",
+      "sha256": "8f5f7de629062b19fae37b6a3b5a2561f7e092dd2d9842b12e2b5cb9e01f9bf1",
       "capture": {
         "classification": "local_real_component_synthetic",
         "publicationReady": false,
-        "sourceCommit": "a4fa5a89fe7d730468654cfd616ae12449dfe9a1",
-        "showroomTree": "6c2a8ef455bca0c6e8140395b96f48a05042518f",
+        "sourceCommit": "aee11c592f3696a6d93b7edcafd783a135d83b8a",
+        "showroomTree": "021606874edcbdca7ce107be35890ff3ad071f32",
         "captureTool": "tools/capture_public_gallery.mjs",
         "fixturePath": "/shop/",
         "routeState": "counter",
         "visibleSelector": ".shop-counter-grid",
         "loadedImages": 0,
         "deniedExternal": 0,
-        "captureInputsSha256": "2a47aa87a492b117756dcca0fba43af3f7fb5d147df05b3d68a9bab74cbc619d",
+        "captureInputsSha256": "56db179bb0b15c9d8fdfe42b1f7bd3338d5b6a7c61094ca6cf3b40f4197875d6",
         "captureMode": "clean-commit-review"
       }
     },
@@ -114,15 +114,15 @@
       "capture": {
         "classification": "local_real_component_synthetic",
         "publicationReady": false,
-        "sourceCommit": "a4fa5a89fe7d730468654cfd616ae12449dfe9a1",
-        "showroomTree": "6c2a8ef455bca0c6e8140395b96f48a05042518f",
+        "sourceCommit": "aee11c592f3696a6d93b7edcafd783a135d83b8a",
+        "showroomTree": "021606874edcbdca7ce107be35890ff3ad071f32",
         "captureTool": "tools/capture_public_gallery.mjs",
         "fixturePath": "/shop/",
         "routeState": "counter",
         "visibleSelector": ".shop-current-sale",
         "loadedImages": 0,
         "deniedExternal": 0,
-        "captureInputsSha256": "2a47aa87a492b117756dcca0fba43af3f7fb5d147df05b3d68a9bab74cbc619d",
+        "captureInputsSha256": "56db179bb0b15c9d8fdfe42b1f7bd3338d5b6a7c61094ca6cf3b40f4197875d6",
         "captureMode": "clean-commit-review"
       }
     },
@@ -134,15 +134,15 @@
       "capture": {
         "classification": "local_real_component_synthetic",
         "publicationReady": false,
-        "sourceCommit": "a4fa5a89fe7d730468654cfd616ae12449dfe9a1",
-        "showroomTree": "6c2a8ef455bca0c6e8140395b96f48a05042518f",
+        "sourceCommit": "aee11c592f3696a6d93b7edcafd783a135d83b8a",
+        "showroomTree": "021606874edcbdca7ce107be35890ff3ad071f32",
         "captureTool": "tools/capture_public_gallery.mjs",
         "fixturePath": "/shop/",
         "routeState": "orders",
         "visibleSelector": ".orders-module",
         "loadedImages": 0,
         "deniedExternal": 0,
-        "captureInputsSha256": "2a47aa87a492b117756dcca0fba43af3f7fb5d147df05b3d68a9bab74cbc619d",
+        "captureInputsSha256": "56db179bb0b15c9d8fdfe42b1f7bd3338d5b6a7c61094ca6cf3b40f4197875d6",
         "captureMode": "clean-commit-review"
       }
     },
@@ -154,15 +154,15 @@
       "capture": {
         "classification": "local_real_component_synthetic",
         "publicationReady": false,
-        "sourceCommit": "a4fa5a89fe7d730468654cfd616ae12449dfe9a1",
-        "showroomTree": "6c2a8ef455bca0c6e8140395b96f48a05042518f",
+        "sourceCommit": "aee11c592f3696a6d93b7edcafd783a135d83b8a",
+        "showroomTree": "021606874edcbdca7ce107be35890ff3ad071f32",
         "captureTool": "tools/capture_public_gallery.mjs",
         "fixturePath": "/shop/",
         "routeState": "orders",
         "visibleSelector": ".orders-module",
         "loadedImages": 0,
         "deniedExternal": 0,
-        "captureInputsSha256": "2a47aa87a492b117756dcca0fba43af3f7fb5d147df05b3d68a9bab74cbc619d",
+        "captureInputsSha256": "56db179bb0b15c9d8fdfe42b1f7bd3338d5b6a7c61094ca6cf3b40f4197875d6",
         "captureMode": "clean-commit-review"
       }
     },
@@ -174,15 +174,15 @@
       "capture": {
         "classification": "local_real_component_synthetic",
         "publicationReady": false,
-        "sourceCommit": "a4fa5a89fe7d730468654cfd616ae12449dfe9a1",
-        "showroomTree": "6c2a8ef455bca0c6e8140395b96f48a05042518f",
+        "sourceCommit": "aee11c592f3696a6d93b7edcafd783a135d83b8a",
+        "showroomTree": "021606874edcbdca7ce107be35890ff3ad071f32",
         "captureTool": "tools/capture_public_gallery.mjs",
         "fixturePath": "/shop/",
         "routeState": "orders",
         "visibleSelector": ".orders-module",
         "loadedImages": 0,
         "deniedExternal": 0,
-        "captureInputsSha256": "2a47aa87a492b117756dcca0fba43af3f7fb5d147df05b3d68a9bab74cbc619d",
+        "captureInputsSha256": "56db179bb0b15c9d8fdfe42b1f7bd3338d5b6a7c61094ca6cf3b40f4197875d6",
         "captureMode": "clean-commit-review"
       }
     },
@@ -194,15 +194,15 @@
       "capture": {
         "classification": "local_real_component_synthetic",
         "publicationReady": false,
-        "sourceCommit": "a4fa5a89fe7d730468654cfd616ae12449dfe9a1",
-        "showroomTree": "6c2a8ef455bca0c6e8140395b96f48a05042518f",
+        "sourceCommit": "aee11c592f3696a6d93b7edcafd783a135d83b8a",
+        "showroomTree": "021606874edcbdca7ce107be35890ff3ad071f32",
         "captureTool": "tools/capture_public_gallery.mjs",
         "fixturePath": "/shop/",
         "routeState": "inventory",
         "visibleSelector": ".shop-stock-module",
         "loadedImages": 0,
         "deniedExternal": 0,
-        "captureInputsSha256": "2a47aa87a492b117756dcca0fba43af3f7fb5d147df05b3d68a9bab74cbc619d",
+        "captureInputsSha256": "56db179bb0b15c9d8fdfe42b1f7bd3338d5b6a7c61094ca6cf3b40f4197875d6",
         "captureMode": "clean-commit-review"
       }
     },
@@ -214,15 +214,15 @@
       "capture": {
         "classification": "local_real_component_synthetic",
         "publicationReady": false,
-        "sourceCommit": "a4fa5a89fe7d730468654cfd616ae12449dfe9a1",
-        "showroomTree": "6c2a8ef455bca0c6e8140395b96f48a05042518f",
+        "sourceCommit": "aee11c592f3696a6d93b7edcafd783a135d83b8a",
+        "showroomTree": "021606874edcbdca7ce107be35890ff3ad071f32",
         "captureTool": "tools/capture_public_gallery.mjs",
         "fixturePath": "/shop/",
         "routeState": "inventory",
         "visibleSelector": ".shop-stock-module",
         "loadedImages": 0,
         "deniedExternal": 0,
-        "captureInputsSha256": "2a47aa87a492b117756dcca0fba43af3f7fb5d147df05b3d68a9bab74cbc619d",
+        "captureInputsSha256": "56db179bb0b15c9d8fdfe42b1f7bd3338d5b6a7c61094ca6cf3b40f4197875d6",
         "captureMode": "clean-commit-review"
       }
     },
@@ -234,18 +234,18 @@
       "capture": {
         "classification": "local_real_component_synthetic",
         "publicationReady": false,
-        "sourceCommit": "a4fa5a89fe7d730468654cfd616ae12449dfe9a1",
-        "showroomTree": "6c2a8ef455bca0c6e8140395b96f48a05042518f",
+        "sourceCommit": "aee11c592f3696a6d93b7edcafd783a135d83b8a",
+        "showroomTree": "021606874edcbdca7ce107be35890ff3ad071f32",
         "captureTool": "tools/capture_public_gallery.mjs",
         "fixturePath": "/shop/",
         "routeState": "inventory",
         "visibleSelector": ".shop-stock-module",
         "loadedImages": 0,
         "deniedExternal": 0,
-        "captureInputsSha256": "2a47aa87a492b117756dcca0fba43af3f7fb5d147df05b3d68a9bab74cbc619d",
+        "captureInputsSha256": "56db179bb0b15c9d8fdfe42b1f7bd3338d5b6a7c61094ca6cf3b40f4197875d6",
         "captureMode": "clean-commit-review"
       }
     }
   ],
-  "captureInputsSha256": "2a47aa87a492b117756dcca0fba43af3f7fb5d147df05b3d68a9bab74cbc619d"
+  "captureInputsSha256": "56db179bb0b15c9d8fdfe42b1f7bd3338d5b6a7c61094ca6cf3b40f4197875d6"
 }
