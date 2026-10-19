@@ -3157,6 +3157,7 @@ input, select, textarea,
 .shop-product-list > a { grid-template-columns: minmax(0,1fr) 4.5rem 7.25rem; }
 .shop-product-identity { min-width: 0; grid-template-columns: 2.75rem minmax(0,1fr); align-items: center; gap: .75rem !important; }
 .shop-product-identity > span { min-width: 0; }
+.shop-product-identity strong { display: -webkit-box; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: normal; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
 .shop-product-list > a[data-low-stock="true"] .shop-product-stock { color: var(--core-warning); font-weight: 700; }
 .shop-product-stock { display: grid; justify-items: end; font-variant-numeric: tabular-nums; }
 .shop-product-stock small { color: var(--core-warning); font-size: .625rem; font-weight: 650; }
