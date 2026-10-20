@@ -74,9 +74,10 @@ class ReceiptPrinterSettings {
       throw const FormatException('Choose a printer discovered on this Wi-Fi.');
     }
     final range = await _rangeProvider();
-    if (!Ipv4Subnet.fromAddress(range.ip, range.mask).hosts.contains(
-      candidate.host,
-    )) {
+    if (!Ipv4Subnet.fromAddress(
+      range.ip,
+      range.mask,
+    ).hosts.contains(candidate.host)) {
       throw const PrinterNetworkChanged();
     }
     final saved = await (await _preferences()).setString(
@@ -131,8 +132,11 @@ class ShopReceiptPrinter {
   }
 }
 
-typedef ReceiptPrintSender =
-    Future<void> Function(String host, ShopSaleReceipt receipt, bool myanmar);
+typedef ReceiptPrintSender = Future<void> Function(
+  String host,
+  ShopSaleReceipt receipt,
+  bool myanmar,
+);
 
 /// A saved address alone never authorizes a reprint after Shop restarts.
 /// The cashier must test and confirm that printer in the current session.
@@ -141,12 +145,10 @@ class ReceiptReprintService {
     ReceiptPrinterSettings? settings,
     ReceiptPrintSender? send,
   }) : _settings = settings ?? ReceiptPrinterSettings(),
-       _send = send ??
-           ((host, receipt, myanmar) => ShopReceiptPrinter().printSale(
-                 host,
-                 receipt,
-                 myanmar: myanmar,
-               ));
+       _send =
+           send ??
+           ((host, receipt, myanmar) =>
+               ShopReceiptPrinter().printSale(host, receipt, myanmar: myanmar));
 
   final ReceiptPrinterSettings _settings;
   final ReceiptPrintSender _send;

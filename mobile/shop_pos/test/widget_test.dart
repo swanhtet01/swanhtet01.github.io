@@ -111,10 +111,8 @@ void main() {
           myanmar: false,
           reprintService: ReceiptReprintService(
             settings: ReceiptPrinterSettings(
-              rangeProvider: () async => (
-                ip: '192.168.20.10',
-                mask: '255.255.255.248',
-              ),
+              rangeProvider: () async =>
+                  (ip: '192.168.20.10', mask: '255.255.255.248'),
               session: VerifiedPrinterSession(),
             ),
             send: (host, receipt, myanmar) async {

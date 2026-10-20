@@ -205,7 +205,11 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
                   },
             icon: const Icon(Icons.print_outlined),
             label: Text(
-              shopCopy(widget.myanmar, 'Reprint receipt', 'ပြေစာပြန်ပုံနှိပ်ရန်'),
+              shopCopy(
+                widget.myanmar,
+                'Reprint receipt',
+                'ပြေစာပြန်ပုံနှိပ်ရန်',
+              ),
             ),
           ),
           TextButton(
@@ -221,10 +225,7 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
     if (_reprinting) return;
     setState(() => _reprinting = true);
     try {
-      var sent = await _reprinter.printIfTrusted(
-        sale,
-        myanmar: widget.myanmar,
-      );
+      var sent = await _reprinter.printIfTrusted(sale, myanmar: widget.myanmar);
       if (!sent) {
         if (!mounted) return;
         await Navigator.of(context).push<void>(
@@ -233,10 +234,7 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
           ),
         );
         if (!mounted) return;
-        sent = await _reprinter.printIfTrusted(
-          sale,
-          myanmar: widget.myanmar,
-        );
+        sent = await _reprinter.printIfTrusted(sale, myanmar: widget.myanmar);
       }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
