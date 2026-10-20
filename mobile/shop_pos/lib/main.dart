@@ -839,6 +839,10 @@ class _ShopHomeState extends State<ShopHome> {
     if (intent == null || _saving) return;
     try {
       final provider = intent.paymentMethod == 'kbzpay' ? 'KBZPay' : 'WavePay';
+      if (intent.merchantQrPayload.isEmpty) {
+        await _reconcileLegacyWalletCheckout(intent, closeSheet: closeSheet);
+        return;
+      }
       if (qrPayloadForDisplay(
             intent.merchantQrPayload,
             confirmedAsProviderIssued: true,
@@ -879,6 +883,101 @@ class _ShopHomeState extends State<ShopHome> {
         );
       }
     }
+  }
+
+  Future<void> _reconcileLegacyWalletCheckout(
+    PendingWalletCheckout intent, {
+    required bool closeSheet,
+  }) async {
+    final provider = intent.paymentMethod == 'kbzpay' ? 'KBZPay' : 'WavePay';
+    final verified = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        var checked = false;
+        return StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            title: Text(
+              shopCopy(
+                widget.myanmar,
+                'Check an earlier wallet payment',
+                'ယခင် wallet ငွေပေးချေမှုကို စစ်ဆေးရန်',
+              ),
+            ),
+            content: SizedBox(
+              width: 400,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('$provider · ${_mmk(intent.totalMmk)}'),
+                    const SizedBox(height: 8),
+                    for (final line in intent.lines)
+                      Text('${line.productName} × ${line.quantity}'),
+                    const SizedBox(height: 12),
+                    Text(
+                      shopCopy(
+                        widget.myanmar,
+                        'The older app did not save this sale’s QR. Do not ask the customer to scan again. Check the recipient and matching incoming payment in your wallet app.',
+                        'အက်ပ်အဟောင်းတွင် ဤအရောင်း၏ QR ကို မသိမ်းခဲ့ပါ။ ဝယ်သူကို ထပ်မံ scan မလုပ်ခိုင်းပါနှင့်။ Wallet app ထဲတွင် လက်ခံသူနှင့် ကိုက်ညီသော ငွေလက်ခံမှုကို စစ်ပါ။',
+                      ),
+                    ),
+                    CheckboxListTile(
+                      contentPadding: EdgeInsets.zero,
+                      controlAffinity: ListTileControlAffinity.leading,
+                      value: checked,
+                      onChanged: (value) =>
+                          setDialogState(() => checked = value ?? false),
+                      title: Text(
+                        shopCopy(
+                          widget.myanmar,
+                          'I verified the matching payment in the wallet app.',
+                          'Wallet app တွင် ကိုက်ညီသော ငွေလက်ခံမှုကို စစ်ဆေးပြီးပါပြီ။',
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: Text(
+                  shopCopy(widget.myanmar, 'Keep pending', 'ဆိုင်းငံ့ထားပါ'),
+                ),
+              ),
+              FilledButton(
+                onPressed: checked
+                    ? () => Navigator.of(dialogContext).pop(true)
+                    : null,
+                child: Text(
+                  shopCopy(
+                    widget.myanmar,
+                    'Record verified payment',
+                    'စစ်ပြီးသော ငွေပေးချေမှုကို မှတ်တမ်းတင်ရန်',
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    if (verified != true || !mounted) return;
+    setState(() {
+      _cart
+        ..clear()
+        ..addEntries(
+          intent.lines.map((line) => MapEntry(line.productId, line.quantity)),
+        );
+      _operationId = intent.operationId;
+    });
+    await _completeSale(
+      closeSheet: closeSheet,
+      paymentMethod: intent.paymentMethod,
+      walletCheckoutOperationId: intent.operationId,
+    );
   }
 
   Future<void> _showWalletCheckout(

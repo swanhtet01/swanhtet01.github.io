@@ -854,6 +854,24 @@ class ShopDatabase extends _$ShopDatabase {
         );
       }
 
+      // Read the persisted intent inside the same transaction as the stock
+      // mutation. Startup UI recovery can still be loading or can fail, so a
+      // null in-memory checkout must never make a second sale permissible.
+      final openWalletIntents = await customSelect(
+        'SELECT operation_id FROM shop_wallet_checkout_intents '
+        'WHERE state = ? LIMIT 2',
+        variables: [const Variable<String>('pending')],
+      ).get();
+      if (openWalletIntents.isNotEmpty &&
+          (paymentMethod == 'cash' ||
+              openWalletIntents.length != 1 ||
+              openWalletIntents.single.read<String>('operation_id') !=
+                  cleanWalletCheckoutId)) {
+        throw StateError(
+          'Finish or cancel the pending wallet payment before another sale.',
+        );
+      }
+
       Map<String, WalletCheckoutLineSnapshot>? walletSnapshots;
       if (paymentMethod != 'cash') {
         final intentRow = await customSelect(

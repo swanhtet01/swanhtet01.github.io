@@ -275,6 +275,79 @@ void main() {
     },
   );
 
+  testWidgets('older wallet intent without a saved QR needs manual check', (
+    tester,
+  ) async {
+    final database = ShopDatabase(NativeDatabase.memory());
+    await database.addProduct(
+      id: 'tea',
+      name: 'Tea',
+      barcode: '0012345678905',
+      priceMmk: 2500,
+      openingStock: 2,
+    );
+    await database.createWalletCheckoutIntent(
+      operationId: 'legacy-wallet',
+      merchant: MerchantWalletSetup(
+        provider: 'KBZPay',
+        merchantPhone: '09123456789',
+        officialQrPayload: _testStaticMmqr(),
+        issuerConfirmed: true,
+      ),
+      lines: const [ShopSaleLineInput(productId: 'tea', quantity: 1)],
+    );
+    // The v4-to-v5 migration preserves the pending basket but cannot recover
+    // the QR the older app showed. Simulate its empty migrated snapshot.
+    await database.customUpdate(
+      'UPDATE shop_wallet_checkout_intents SET merchant_qr_payload = ? '
+      'WHERE operation_id = ?',
+      variables: [
+        const Variable<String>(''),
+        const Variable<String>('legacy-wallet'),
+      ],
+    );
+    await tester.pumpWidget(
+      ShopApp(
+        database: database,
+        authClient: null,
+        apiBaseUrl: 'https://app.supermega.dev',
+        initialMyanmar: false,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Resume payment'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Check an earlier wallet payment'), findsOneWidget);
+    expect(find.byType(QrImageView), findsNothing);
+    expect(await database.countSales(), 0);
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.widgetWithText(FilledButton, 'Record verified payment'),
+          )
+          .onPressed,
+      isNull,
+    );
+    await tester.tap(find.text('Keep pending'));
+    await tester.pumpAndSettle();
+    expect(await database.readPendingWalletCheckout(), isNotNull);
+
+    await tester.tap(find.text('Resume payment'));
+    await tester.pumpAndSettle();
+    final check = find.text('I verified the matching payment in the wallet app.');
+    await tester.ensureVisible(check);
+    await tester.tap(check);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Record verified payment'));
+    await tester.pumpAndSettle();
+
+    expect(await database.countSales(), 1);
+    expect((await database.readActiveProducts()).single.onHand, 1);
+    expect(await database.readPendingWalletCheckout(), isNull);
+    await database.close();
+  });
+
   group('offline catalog and sale transactions', () {
     late ShopDatabase database;
 
@@ -359,6 +432,41 @@ void main() {
         }
       },
     );
+
+    test('a persisted wallet intent blocks a new cash sale during recovery',
+        () async {
+      await addProduct(stock: 2);
+      final pending = await database.createWalletCheckoutIntent(
+        operationId: 'wallet-still-open',
+        merchant: MerchantWalletSetup(
+          provider: 'KBZPay',
+          merchantPhone: '09123456789',
+          officialQrPayload: _testStaticMmqr(),
+          issuerConfirmed: true,
+        ),
+        lines: const [ShopSaleLineInput(productId: 'tea', quantity: 1)],
+      );
+
+      await expectLater(
+        database.recordCashSale(
+          operationId: 'cash-during-recovery',
+          lines: const [ShopSaleLineInput(productId: 'tea', quantity: 1)],
+        ),
+        throwsA(isA<StateError>()),
+      );
+      expect(await database.countSales(), 0);
+      expect((await database.readActiveProducts()).single.onHand, 2);
+      expect(await database.readPendingWalletCheckout(), isNotNull);
+
+      expect(await database.cancelWalletCheckoutIntent(pending.operationId),
+          isTrue);
+      await database.recordCashSale(
+        operationId: 'cash-after-reconciliation',
+        lines: const [ShopSaleLineInput(productId: 'tea', quantity: 1)],
+      );
+      expect(await database.countSales(), 1);
+      expect((await database.readActiveProducts()).single.onHand, 1);
+    });
 
     test(
       'sale, line snapshots, stock movement and outbox commit together',
