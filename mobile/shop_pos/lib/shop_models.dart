@@ -113,7 +113,7 @@ bool isValidStaticMyanmarMmqr(String payload) {
         !RegExp(r'^[0-9A-F]{4}$').hasMatch(values['63'] ?? '') ||
         values['63'] != _mmqrCrc16(bytes.sublist(0, bytes.length - 4)) ||
         values['00'] != '01' ||
-        values['01'] != '11' ||
+        (values['01'] != null && values['01'] != '11') ||
         values.containsKey('54') ||
         !RegExp(r'^[0-9]{4}$').hasMatch(values['52'] ?? '') ||
         values['53'] != '104' ||

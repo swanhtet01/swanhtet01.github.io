@@ -463,16 +463,29 @@ void main() {
       );
     });
 
-    test('requires an explicit static-mode tag and rejects dynamic mode', () {
-      expect(
-        isValidStaticMyanmarMmqr(_syntheticStaticMmqr(initiationMode: null)),
-        isFalse,
-      );
-      expect(
-        isValidStaticMyanmarMmqr(_syntheticStaticMmqr(initiationMode: '12')),
-        isFalse,
-      );
-    });
+    test(
+      'accepts an omitted initiation tag and rejects dynamic mode',
+      () async {
+        final staticWithoutTag = _syntheticStaticMmqr(initiationMode: null);
+        expect(isValidStaticMyanmarMmqr(staticWithoutTag), isTrue);
+        await database.saveWalletSetup(
+          MerchantWalletSetup(
+            provider: 'KBZPay',
+            merchantPhone: null,
+            officialQrPayload: staticWithoutTag,
+            issuerConfirmed: true,
+          ),
+        );
+        expect(
+          (await database.readWalletSetups()).single.officialQrPayload,
+          staticWithoutTag,
+        );
+        expect(
+          isValidStaticMyanmarMmqr(_syntheticStaticMmqr(initiationMode: '12')),
+          isFalse,
+        );
+      },
+    );
 
     test('accepts supported additional data and fixed merchant fee fields', () {
       final additionalData = [
