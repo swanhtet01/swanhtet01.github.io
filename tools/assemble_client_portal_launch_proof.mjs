@@ -141,6 +141,17 @@ function validatePortal(value) {
     && value.boundaries.credentialsPersisted === false
     && value.boundaries.clientIdentifiersPersisted === false
     && value.boundaries.secretValuesExposed === false, 'launch_portal_proof_invalid')
+  if (products.length === 1 && products[0] === 'commerce') {
+    const internal = value.internalManagement
+    assert(isRecord(internal)
+      && internal.shopOnlyAccessVerified === true
+      && internal.sitesManagementDenied === true
+      && internal.commerceManagementDenied === true
+      && internal.denialStatus === 403
+      && exactDigest(internal.sitesResponseDigest, 'launch_sites_denial_digest_invalid')
+      && exactDigest(internal.commerceResponseDigest, 'launch_commerce_denial_digest_invalid'),
+    'launch_shop_internal_management_denial_required')
+  }
   exactTimestamp(value.capturedAt, 'launch_portal_time_invalid')
   return { value, products }
 }
