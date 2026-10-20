@@ -1086,9 +1086,9 @@ packages:
     dependency: "direct main"
     description:
       name: unified_esc_pos_printer
-      sha256: "430a33968d2fa080bb31df9190d221dcd52f25a083e546debab032737f17cc9c"
-      url: "https://pub.dev"
-    source: hosted
+      path: vendor/unified_esc_pos_printer
+      relative: true
+    source: path
     version: "3.4.0"
   url_launcher:
     dependency: transitive

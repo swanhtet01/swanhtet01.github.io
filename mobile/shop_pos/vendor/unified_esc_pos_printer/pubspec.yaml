@@ -1,0 +1,62 @@
+name: unified_esc_pos_printer
+description: Unified ESC/POS thermal printer package for Flutter. Supports USB, Bluetooth Classic, BLE, and Network connections with a single PrinterManager API
+version: 3.4.0
+homepage: https://github.com/elrizwiraswara/unified_esc_pos_printer
+repository: https://github.com/elrizwiraswara/unified_esc_pos_printer
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+  flutter: ">=3.10.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # ESC/POS image processing
+  image: ^4.8.0
+
+  # USB — Android OTG
+  usb_serial: ^0.5.2
+
+  # USB — Windows / Linux / macOS serial port (wraps libserialport).
+  # Wide range: the API this package uses is compatible with both 0.1.x
+  # (Flutter FFI plugin) and 1.x (Dart FFI package with build hooks, needs
+  # Dart >= 3.10). Pub resolves the newest one the consumer's SDK supports.
+  libserialport_plus: ">=0.1.1 <2.0.0"
+
+  # Network discovery — get device local IP for subnet scanning
+  network_info_plus: ">=7.0.0 <9.0.0"
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  test: ^1.25.0
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: com.elriztechnology.unified_esc_pos_printer
+        pluginClass: UnifiedEscPosPrinterPlugin
+      ios:
+        pluginClass: UnifiedEscPosPrinterPlugin
+      windows:
+        pluginClass: UnifiedEscPosPrinterPluginCApi
+  assets:
+    - lib/resources/capabilities.json
+
+platforms:
+  android:
+  ios:
+  macos:
+  windows:
+  linux:
+  web:
+
+topics:
+  - esc-pos
+  - esc-pos-printer
+  - thermal-printer
+  - receipt-printer
+  - printer-manager
