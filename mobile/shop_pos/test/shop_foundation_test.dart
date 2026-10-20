@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supermega_shop/menu_import_service.dart';
 import 'package:supermega_shop/printer_services.dart';
 import 'package:supermega_shop/shop_database.dart';
@@ -531,6 +532,40 @@ void main() {
   });
 
   group('bounded printer discovery', () {
+    test('saved IP needs current-session printer trust', () async {
+      SharedPreferences.setMockInitialValues({
+        shopReceiptPrinterHostKey: '192.168.20.9',
+      });
+      var range = (ip: '192.168.20.10', mask: '255.255.255.248');
+      final session = VerifiedPrinterSession();
+      final settings = ReceiptPrinterSettings(
+        rangeProvider: () async => range,
+        session: session,
+      );
+      expect(await settings.readSavedHost(), '192.168.20.9');
+      expect(await settings.readHost(), isNull);
+
+      final discovery = PrinterDiscoveryService(
+        rangeProvider: () async => range,
+        probe: (host, port) async => host == '192.168.20.9',
+      );
+      final printer = (await discovery.scan()).printers.single;
+      await settings.saveAfterTest(printer);
+      expect(await settings.readHost(), printer.host);
+
+      range = (ip: '192.168.20.11', mask: '255.255.255.248');
+      expect(await settings.readHost(), isNull);
+      range = (ip: '192.168.20.10', mask: '255.255.255.248');
+      expect(await settings.readHost(), isNull);
+      expect(
+        await ReceiptPrinterSettings(
+          rangeProvider: () async => range,
+          session: VerifiedPrinterSession(),
+        ).readHost(),
+        isNull,
+      );
+    });
+
     test('scans host addresses only within the current private subnet', () {
       final subnet = Ipv4Subnet.fromAddress('192.168.1.25', '255.255.255.0');
       expect(subnet.prefixLength, 24);

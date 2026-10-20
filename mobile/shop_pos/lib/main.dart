@@ -1200,8 +1200,10 @@ class _ShopHomeState extends State<ShopHome> {
       if (closeSheet) Navigator.of(context).pop();
       var printed = false;
       var printFailed = false;
+      var printerNeedsTest = false;
       try {
-        final host = await ReceiptPrinterSettings().readHost();
+        final printerSettings = ReceiptPrinterSettings();
+        final host = await printerSettings.readHost();
         if (host != null) {
           await ShopReceiptPrinter().printSale(
             host,
@@ -1209,6 +1211,8 @@ class _ShopHomeState extends State<ShopHome> {
             myanmar: widget.myanmar,
           );
           printed = true;
+        } else {
+          printerNeedsTest = await printerSettings.readSavedHost() != null;
         }
       } catch (_) {
         // The local sale is committed before printing; printer errors never
@@ -1229,19 +1233,35 @@ class _ShopHomeState extends State<ShopHome> {
                 'Sale saved · ${_mmk(receipt.totalMmk)} · receipt not printed',
                 'အရောင်းသိမ်းပြီး · ${_mmk(receipt.totalMmk)} · ပြေစာမပုံနှိပ်နိုင်ပါ',
               )
+            : printerNeedsTest
+            ? shopCopy(
+                widget.myanmar,
+                'Sale saved · ${_mmk(receipt.totalMmk)} · test printer to print',
+                'အရောင်းသိမ်းပြီး · ${_mmk(receipt.totalMmk)} · ပရင်တာစမ်းသပ်ပြီးမှ ပုံနှိပ်ပါ',
+              )
             : shopCopy(
                 widget.myanmar,
                 'Sale saved · ${_mmk(receipt.totalMmk)} · this device',
                 'အရောင်းသိမ်းပြီး · ${_mmk(receipt.totalMmk)} · ဤစက်တွင်',
               ),
-        action: (printed || printFailed)
+        action: (printed || printFailed || printerNeedsTest)
             ? SnackBarAction(
                 label: shopCopy(
                   widget.myanmar,
-                  printed ? 'Send again' : 'Retry print',
-                  printed ? 'ထပ်ပို့ရန်' : 'ထပ်စမ်းရန်',
+                  printerNeedsTest
+                      ? 'Test printer'
+                      : printed
+                      ? 'Send again'
+                      : 'Retry print',
+                  printerNeedsTest
+                      ? 'ပရင်တာစမ်းရန်'
+                      : printed
+                      ? 'ထပ်ပို့ရန်'
+                      : 'ထပ်စမ်းရန်',
                 ),
-                onPressed: () => _printReceipt(receipt),
+                onPressed: printerNeedsTest
+                    ? _openPrinter
+                    : () => _printReceipt(receipt),
               )
             : null,
       );

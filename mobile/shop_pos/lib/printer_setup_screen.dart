@@ -19,6 +19,7 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
   String? _message;
   String? _testedHost;
   String? _savedHost;
+  String? _previousHost;
   List<NetworkPrinterCandidate> _printers = [];
   String? _scannedIp;
   String? _scannedMask;
@@ -31,8 +32,14 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
 
   Future<void> _loadSavedPrinter() async {
     try {
-      final host = await _settings.readHost();
-      if (mounted) setState(() => _savedHost = host);
+      final previous = await _settings.readSavedHost();
+      final active = await _settings.readHost();
+      if (mounted) {
+        setState(() {
+          _previousHost = previous;
+          _savedHost = active;
+        });
+      }
     } catch (_) {
       // Printer discovery remains available if the local preference is unreadable.
     }
@@ -48,9 +55,11 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
       _printers = [];
     });
     try {
+      final active = await _settings.readHost();
       final result = await _service.scan(cancelled: () => _cancelled);
       if (!mounted) return;
       setState(() {
+        _savedHost = active;
         _scannedIp = result.localIp;
         _scannedMask = result.subnetMask;
         _printers = result.printers;
@@ -157,10 +166,11 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
       if (mounted) {
         setState(() {
           _savedHost = printer.host;
+          _previousHost = printer.host;
           _message = shopCopy(
             widget.myanmar,
-            'Receipt printer saved. New sales will print here when this printer is on the same Wi-Fi.',
-            'ပြေစာပရင်တာကို သိမ်းပြီးပါပြီ။ ပရင်တာနှင့် Wi-Fi တစ်ခုတည်းတွင်ရှိချိန် အရောင်းအသစ်များကို ဤနေရာတွင် ပုံနှိပ်မည်။',
+            'Printer ready for this session. Re-test it after reopening Shop before sending customer receipts.',
+            'ဤအကြိမ်အတွက် ပရင်တာအသင့်ဖြစ်ပါပြီ။ Shop ကို ပြန်ဖွင့်ပြီးနောက် ဖောက်သည်ပြေစာမပို့မီ ပြန်စမ်းသပ်ပါ။',
           );
         });
       }
@@ -229,6 +239,17 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
                       shopCopy(myanmar, 'Find printers', 'ပရင်တာရှာရန်'),
                     ),
                   ),
+                  if (_previousHost != null && _savedHost == null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      shopCopy(
+                        myanmar,
+                        'Previous printer: $_previousHost · find and test again.',
+                        'ယခင်ပရင်တာ: $_previousHost · ပြန်ရှာပြီး စမ်းသပ်ပါ။',
+                      ),
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
                   if (_busy) ...[
                     const SizedBox(height: 12),
                     const LinearProgressIndicator(),

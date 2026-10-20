@@ -9,29 +9,82 @@ import 'shop_database.dart';
 
 const shopReceiptPrinterHostKey = 'shop_receipt_printer_host_v1';
 
+class VerifiedPrinterSession {
+  String? _host;
+  ({String ip, String mask})? _range;
+
+  bool permits(String host, ({String ip, String mask}) range) =>
+      _host == host && _range?.ip == range.ip && _range?.mask == range.mask;
+
+  void trust(String host, ({String ip, String mask}) range) {
+    _host = host;
+    _range = range;
+  }
+
+  void clear() {
+    _host = null;
+    _range = null;
+  }
+}
+
+final _printerSession = VerifiedPrinterSession();
+
 class ReceiptPrinterSettings {
   ReceiptPrinterSettings({
     Future<SharedPreferences> Function()? preferences,
-  }) : _preferences = preferences ?? SharedPreferences.getInstance;
+    WifiRangeProvider? rangeProvider,
+    VerifiedPrinterSession? session,
+  }) : _preferences = preferences ?? SharedPreferences.getInstance,
+       _rangeProvider = rangeProvider ?? _networkRangeProvider(NetworkInfo()),
+       _session = session ?? _printerSession;
 
   final Future<SharedPreferences> Function() _preferences;
+  final WifiRangeProvider _rangeProvider;
+  final VerifiedPrinterSession _session;
 
-  Future<String?> readHost() async {
+  Future<String?> readSavedHost() async {
     final host = (await _preferences()).getString(shopReceiptPrinterHostKey);
     if (host == null || !Ipv4Subnet.isPrivateAddress(host)) return null;
     return host;
   }
 
+  Future<String?> readHost() async {
+    final host = await readSavedHost();
+    if (host == null) {
+      _session.clear();
+      return null;
+    }
+    try {
+      final range = await _rangeProvider();
+      if (_session.permits(host, range) &&
+          Ipv4Subnet.fromAddress(range.ip, range.mask).hosts.contains(host)) {
+        return host;
+      }
+    } catch (_) {
+      // Network range unavailable: a saved IP cannot authorize printing.
+    }
+    _session.clear();
+    return null;
+  }
+
   Future<void> saveAfterTest(NetworkPrinterCandidate candidate) async {
+    _session.clear();
     if (candidate.port != 9100 ||
         !Ipv4Subnet.isPrivateAddress(candidate.host)) {
       throw const FormatException('Choose a printer discovered on this Wi-Fi.');
+    }
+    final range = await _rangeProvider();
+    if (!Ipv4Subnet.fromAddress(range.ip, range.mask).hosts.contains(
+      candidate.host,
+    )) {
+      throw const PrinterNetworkChanged();
     }
     final saved = await (await _preferences()).setString(
       shopReceiptPrinterHostKey,
       candidate.host,
     );
     if (!saved) throw StateError('Printer setup could not be saved.');
+    _session.trust(candidate.host, range);
   }
 }
 
