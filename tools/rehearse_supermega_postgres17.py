@@ -76,6 +76,7 @@ CURRENT_MIGRATIONS = (*MIGRATIONS,
     "20261015202629_ecommerce_operator_review_grant.sql",
     "20261019070000_ecommerce_operator_management_boundary.sql",
     "20261019103000_ecommerce_review_shared_state_lock.sql",
+    "20261020175519_access_control_member_read_hardening.sql",
 )
 DOMAIN_CANDIDATE_MIGRATION = "20261014103000_website_custom_domain_bindings.sql"
 DOMAIN_CORRECTIVE_MIGRATION = "20261014122400_website_domain_attempt_fencing.sql"

@@ -30,6 +30,9 @@ const outOfScopeMigrations = [
   // Commerce suite, outside this private-trial RLS catalog digest.
   '20261019070000_ecommerce_operator_management_boundary.sql',
   '20261019103000_ecommerce_review_shared_state_lock.sql',
+  // Uses a privileged, transaction-scoped role to exercise FORCE RLS and is
+  // covered by the disposable PostgreSQL 17 rehearsal instead of PGlite.
+  '20261020175519_access_control_member_read_hardening.sql',
 ]
 const expectedMigrations = [
   '20260722004500_private_trial_backend_role_preflight.sql',

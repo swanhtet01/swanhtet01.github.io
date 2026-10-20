@@ -1950,6 +1950,20 @@ def evaluate_snapshot(snapshot: Mapping[str, Any], *, schema_profile: str = "leg
             functions["workspace_is_active"].get("function_source")
         )
         == WORKSPACE_ACCESS_FUNCTION_FINGERPRINT
+        and (
+            profile.get("EXPECTED_ACCESS_MEMBER_FUNCTION_FINGERPRINT") is None
+            or (
+                str(functions["workspace_access_member_active"].get("function_language")) == "sql"
+                and functions["workspace_access_member_active"].get("security_definer") is True
+                and str(functions["workspace_access_member_active"].get("volatility")) == "s"
+                and _ordered_texts(functions["workspace_access_member_active"].get("function_config"))
+                == ("search_path=pg_catalog, app_private",)
+                and _catalog_expression_fingerprint(
+                    functions["workspace_access_member_active"].get("function_source")
+                )
+                == profile["EXPECTED_ACCESS_MEMBER_FUNCTION_FINGERPRINT"]
+            )
+        )
         and str(functions["actor_workspace_directory"].get("function_language")) == "sql"
         and functions["actor_workspace_directory"].get("security_definer") is True
         and _ordered_texts(functions["actor_workspace_directory"].get("function_config"))

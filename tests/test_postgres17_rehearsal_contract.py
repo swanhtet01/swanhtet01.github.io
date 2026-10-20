@@ -90,7 +90,8 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
             "20261015091500_website_six_page_reviews.sql",
             "20261015202629_ecommerce_operator_review_grant.sql",
             "20261019070000_ecommerce_operator_management_boundary.sql",
-            "20261019103000_ecommerce_review_shared_state_lock.sql"))
+            "20261019103000_ecommerce_review_shared_state_lock.sql",
+            "20261020175519_access_control_member_read_hardening.sql"))
         dormant_sites_rls_candidate = "20261016143945_optimize_sites_inquiry_rls_initplans.sql"
         observed = tuple(sorted(path.name for path in (ROOT / "supabase/migrations").glob("*.sql")
                                 if path.name not in ("20260711081300_public_legacy_baseline.sql",

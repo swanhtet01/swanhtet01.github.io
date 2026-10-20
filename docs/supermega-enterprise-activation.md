@@ -6,17 +6,18 @@ The validator is intentionally read-only. It does not apply migrations, create u
 
 ## Current reviewed preview rehearsal packet (v3)
 
-There are 32 migrations in the reviewed packet: the legacy public baseline,
-the 14 private-core migrations through schema v13, and seventeen later migrations for durable
+There are 33 migrations in the reviewed packet: the legacy public baseline,
+the 14 private-core migrations through schema v13, and eighteen later migrations for durable
 signup attempts, Website and Ecommerce review storage, entitlement proof, customer decisions,
 RLS optimization, Sites publishing, private media, inquiry follow-up, stable updates,
-six-page reviews, the internal Ecommerce management boundary, and the shared Commerce state lock.
+six-page reviews, the internal Ecommerce management boundary, the shared Commerce state lock,
+and tenant access-control read hardening.
 Core schema version 13 alone does not prove those later features exist. Historical local
 rehearsal descriptions below retain their original scope; they are not full-candidate proof.
-The source directory contains 35 SQL files. The two custom-domain migrations,
+The source directory contains 36 SQL files. The two custom-domain migrations,
 `20261014103000_website_custom_domain_bindings.sql` and
-`20261014122400_website_domain_attempt_fencing.sql`, are outside this 32-file packet and
-the observed 31-private-migration rehearsal chain. Do not infer domain lifecycle support
+`20261014122400_website_domain_attempt_fencing.sql`, are outside this 33-file packet and
+the 32-private-migration source chain. Do not infer domain lifecycle support
 or add those files to an apply operation without a separately reviewed inventory and proof.
 The additional `20261016143945_optimize_sites_inquiry_rls_initplans.sql` is also outside
 this packet; its presence in source does not authorize applying it to a preview.

@@ -34,14 +34,14 @@ test('binds the complete candidate chain without granting baseline or migration 
   assert.equal(packet.contract, 'supermega.supabase-rehearsal-packet.v3')
   assert.equal(packet.state, 'prepared-not-executed')
   assert.equal(packet.release.schemaVersion, 13)
-  assert.equal(packet.release.migrationCount, 32)
+  assert.equal(packet.release.migrationCount, 33)
   for (const candidate of ['20261014103000_website_custom_domain_bindings.sql',
     '20261014122400_website_domain_attempt_fencing.sql']) {
     assert.ok(!packet.release.migrations.some(({ name }) => name === candidate))
   }
   assert.deepEqual(packet.release.review, releaseReview)
   assert.equal(packet.release.migrations[0].name, '20260711081300_public_legacy_baseline.sql')
-  assert.equal(packet.release.migrations.at(-1).name, '20261019103000_ecommerce_review_shared_state_lock.sql')
+  assert.equal(packet.release.migrations.at(-1).name, '20261020175519_access_control_member_read_hardening.sql')
   assert.equal(packet.release.schemaVersionScope, 'private-core-v13-plus-explicit-post-v13-extensions')
   assert.equal(packet.preflight.baselinePrerequisite.applyAutomatically, false)
   assert.equal(packet.preflight.baselinePrerequisite.freshTargetOnly, true)
@@ -64,7 +64,7 @@ test('binds the complete candidate chain without granting baseline or migration 
   assert.doesNotMatch(JSON.stringify(packet), /postgres(?:ql)?:\/\//i)
   assert.equal(manifest.scripts['database:supabase:packet'], 'node tools/prepare_supabase_rehearsal_packet.mjs')
   assert.match(ignoreRules, /^\.tmp\/$/m)
-  assert.match(runbook, /32 migrations in the reviewed packet/)
+  assert.match(runbook, /33 migrations in the reviewed packet/)
   assert.match(runbook, /Validate core schema v13 and every post-v13 extension/)
   assert.match(runbook, /supermega_trial_login/)
   assert.doesNotMatch(runbook, /supermega_trial_runtime|Runtime readiness requires schema version 10/)
