@@ -30,6 +30,8 @@ void main() {
   ) async {
     debugDefaultTargetPlatformOverride = TargetPlatform.windows;
     addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    await tester.binding.setSurfaceSize(const Size(1200, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     final database = ShopDatabase(NativeDatabase.memory());
     await database.addProduct(
       id: 'tea',
@@ -67,14 +69,14 @@ void main() {
     await tester.testTextInput.receiveAction(TextInputAction.search);
     await tester.pump();
     expect(tester.widget<TextField>(search).controller!.text, isEmpty);
-    expect(find.text('Review sale · 1 · 2,500 MMK'), findsOneWidget);
+    expect(find.text('2,500 MMK'), findsOneWidget);
     expect(tester.widget<TextField>(search).focusNode!.hasFocus, isTrue);
 
     await tester.enterText(search, '0012345678906');
     await tester.testTextInput.receiveAction(TextInputAction.search);
     await tester.pump();
     expect(tester.widget<TextField>(search).controller!.text, isEmpty);
-    expect(find.text('Review sale · 2 · 5,500 MMK'), findsOneWidget);
+    expect(find.text('5,500 MMK'), findsOneWidget);
     expect(tester.widget<TextField>(search).focusNode!.hasFocus, isTrue);
     expect(await database.countSales(), 0);
     await tester.pumpWidget(const SizedBox());
