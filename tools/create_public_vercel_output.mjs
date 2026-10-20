@@ -959,8 +959,8 @@ function removeSectionByClass(source, className, code) {
 }
 function shopOnlyCompanyMarkup(source) {
  let markup = source
- markup = replaceKnownCopyOnce(markup, ["Operating software · Myanmar", "Operating software for Myanmar companies", "Shop software for Myanmar businesses", "Shop software for Myanmar retailers", "For shops in Myanmar", "For Myanmar retailers", "Business software for Myanmar retailers", "Shop for Myanmar retailers", "Made for Myanmar retailers", "SuperMega · Operating software for Myanmar", "SUPERMEGA · MYANMAR", "SuperMega · Myanmar", "Business software for Myanmar", "Business software"], "For Myanmar retailers", "shop_only_hero_kicker")
- markup = replaceKnownCopyOnce(markup, ["Tools for<br><span>everyday work.</span>", "Run your shop.<br><span>See what’s next.</span>", "Run the counter.<br><span>See what needs attention.</span>", "Sell at the counter.<br><span>Keep orders and stock in view.</span>", "Clearer systems for<br><span>everyday business.</span>", "Sales. Stock. Orders.<br><span>Under control.</span>", "Software for<br><span>Myanmar businesses.</span>", "Sales, stock, and orders<br><span>for Myanmar shops.</span>", "Sales, stock, and orders<br><span>in one place.</span>", "Sales, stock and orders<br><span>in one place.</span>", "See what sold.<br><span>Know what needs action.</span>", "Business software<br><span>built for Myanmar.</span>", "Operating software<br><span>for Myanmar businesses.</span>", "Run your counter.<br><span>Stay ahead of stock.</span>", "Know what sold.<br><span>See what needs attention.</span>", "For Myanmar<br><span>retailers.</span>"], "Sell at the counter.<br><span>Keep orders and stock in view.</span>", "shop_only_hero_heading")
+ markup = replaceKnownCopyOnce(markup, ["Operating software · Myanmar", "Operating software for Myanmar companies", "Shop software for Myanmar businesses", "Shop software for Myanmar retailers", "For shops in Myanmar", "For Myanmar retailers", "Business software for Myanmar retailers", "Shop for Myanmar retailers", "Made for Myanmar retailers", "SuperMega · Operating software for Myanmar", "SUPERMEGA · MYANMAR", "SuperMega · Myanmar", "Business software for Myanmar", "Business software"], "SuperMega · Myanmar", "shop_only_hero_kicker")
+ markup = replaceKnownCopyOnce(markup, ["Tools for<br><span>everyday work.</span>", "Run your shop.<br><span>See what’s next.</span>", "Run the counter.<br><span>See what needs attention.</span>", "Sell at the counter.<br><span>Keep orders and stock in view.</span>", "Clearer systems for<br><span>everyday business.</span>", "Sales. Stock. Orders.<br><span>Under control.</span>", "Software for<br><span>Myanmar businesses.</span>", "Sales, stock, and orders<br><span>for Myanmar shops.</span>", "Sales, stock, and orders<br><span>in one place.</span>", "Sales, stock and orders<br><span>in one place.</span>", "See what sold.<br><span>Know what needs action.</span>", "Business software<br><span>built for Myanmar.</span>", "Operating software<br><span>for Myanmar businesses.</span>", "Run your counter.<br><span>Stay ahead of stock.</span>", "Know what sold.<br><span>See what needs attention.</span>", "For Myanmar<br><span>retailers.</span>"], "Operating software<br><span>for Myanmar businesses.</span>", "shop_only_hero_heading")
  markup = replaceKnownCopyOnce(markup, [
   "Shop brings sales and stock into one operating view. Our team manages Sites and confirms Commerce availability for each setup.",
   "Keep sales, orders and stock together in one clear MMK workflow. See what needs attention without digging through settings.",
@@ -971,6 +971,7 @@ function shopOnlyCompanyMarkup(source) {
   "Record counter sales, track stock, and follow open orders with Shop.",
   "SuperMega Shop brings counter sales, open orders, and stock tracking together for Myanmar businesses.",
   "SuperMega brings daily sales, stock, and order follow-up into one clear workspace. Start with Shop.",
+  "SuperMega is a Myanmar software company. Shop is our first customer product for counter sales, stock and order follow-up.",
   "Record counter sales, check stock and follow open orders in SuperMega Shop.",
   "Record each sale, spot low stock early, and follow every open order in SuperMega Shop, built for Myanmar retailers.",
   "Record sales, track stock and follow open orders with SuperMega Shop.",
@@ -982,7 +983,7 @@ function shopOnlyCompanyMarkup(source) {
   "SuperMega Shop brings counter sales, stock and open orders into one workspace.",
   "Record sales, track stock, and follow open orders in one Shop workspace.",
   "Shop connects counter sales, stock and open orders in one workspace.",
- ], "SuperMega Shop brings sales, open orders and stock checks into one workspace for Myanmar retailers.", "shop_only_hero_description")
+ ], "SuperMega is a Myanmar software company. Shop is our first customer product for counter sales, stock and order follow-up.", "shop_only_hero_description")
  markup = replaceKnownCopyOnce(markup, ['href="#products">Meet the product family', 'href="#products">Explore Shop', 'href="/contact/">Talk to our team', 'href="/contact/">Contact us'], 'href="/contact/">Contact us', "shop_only_hero_secondary_action")
  markup = replaceKnownCopyOnce(markup, ['href="/shop/#shop-demo">See Shop in action', 'href="/shop/#shop-demo">See Shop screens', 'href="/shop/#shop-demo">See Shop on desktop and mobile', 'href="/shop/#shop-demo">View every screen size', 'href="/shop/">See Shop', 'href="/shop/">Explore Shop'], 'href="/shop/">Explore Shop', "shop_only_hero_primary_action")
  markup = replaceOnce(markup, '<a class="text-link hero-note" href="/contact/">Contact us</a>', '', "shop_only_remove_duplicate_home_contact_action")
@@ -1014,7 +1015,7 @@ function shopOnlyCompanyMarkup(source) {
  return markup
 }
 function companyOperatingGraphic() {
- return `<div class="company-operating-overview" aria-label="Shop dashboard preview"><figure class="company-product-visual"><img src="/images/actual-shop-today.png" alt="Shop Today dashboard showing sales, open orders, stock alerts, and next actions. Synthetic sample records." width="1440" height="900" loading="eager" fetchpriority="high" /><figcaption><strong>Today</strong><span>Sales, orders, and stock that need attention</span></figcaption></figure><p class="company-operating-proof">Sample catalog, stock and prices.</p></div>`
+ return `<div class="company-operating-overview" aria-label="SuperMega Shop sample screen"><figure class="company-product-visual"><img src="/images/actual-shop-today.png" alt="Shop Today dashboard showing sales, open orders, stock alerts, and next actions. Synthetic sample records." width="1440" height="900" loading="eager" fetchpriority="high" /><figcaption><strong>Shop · Today</strong><span>Sample workspace</span></figcaption></figure><p class="company-operating-proof">Sample records · no live store data.</p></div>`
 }
 function replaceHomeShopShowcase(source) {
  const marker = /<section class="shop-showcase" aria-label="Shop product screens">[\s\S]*?<\/section>/g

@@ -352,9 +352,9 @@ if (home.includes('body[data-view="company"] .site-header .brand-word { color: v
 if (!home.includes('.company-hero .hero-actions .button-primary') || !home.includes('white-space:nowrap')) fail('company_primary_action_layout_missing')
 const shopPageHtml = pages.get('/shop/').html
 if (!shopPageHtml.includes('.shop-hero .button-primary') || !shopPageHtml.includes('white-space:nowrap')) fail('shop_primary_action_layout_missing')
-if (!home.includes('<p class="hero-kicker">For Myanmar retailers</p>')
-  || !home.includes('Sell at the counter.<br><span>Keep orders and stock in view.</span>')
-  || !home.includes('SuperMega Shop brings sales, open orders and stock checks into one workspace for Myanmar retailers.')
+if (!home.includes('<p class="hero-kicker">SuperMega · Myanmar</p>')
+  || !home.includes('Operating software<br><span>for Myanmar businesses.</span>')
+  || !home.includes('SuperMega is a Myanmar software company. Shop is our first customer product for counter sales, stock and order follow-up.')
   || !home.includes('class="company-operating-overview"')
   || home.includes('class="company-product-evidence"')
   || /href="\/(?:website|ecommerce)\//.test(home)
@@ -418,7 +418,7 @@ for (const [route, html] of [['/', home], ['/shop/', pages.get('/shop/').html], 
     }
   }
   const productVisualMissing = route === '/'
-    ? !hasClassToken(body, 'company-hero') || hasClassToken(body, 'product-family') || !body.includes('Sell at the counter.<br><span>Keep orders and stock in view.</span>') || !body.includes('class="company-operating-overview"') || !body.includes('class="company-product-visual"') || body.includes('class="company-product-evidence"') || body.includes('class="company-portfolio"') || body.includes('data-platform-carousel') || body.includes('Choose a Shop screen') || !body.includes('src="/images/actual-shop-today.png"') || body.includes('data-device-choice')
+    ? !hasClassToken(body, 'company-hero') || hasClassToken(body, 'product-family') || !body.includes('Operating software<br><span>for Myanmar businesses.</span>') || !body.includes('class="company-operating-overview"') || !body.includes('class="company-product-visual"') || body.includes('class="company-product-evidence"') || body.includes('class="company-portfolio"') || body.includes('data-platform-carousel') || body.includes('Choose a Shop screen') || !body.includes('src="/images/actual-shop-today.png"') || body.includes('data-device-choice')
     : route === '/shop/'
       ? !body.includes('class="shop-hero-app"') || !body.includes('class="shop-actual-showcase"') || !body.includes('Orders and stock. Clear next steps.') || !body.includes('class="shop-responsive-showcase"') || !body.includes('Counter sale on desktop, tablet and phone') || !body.includes('Sample catalog and example prices.') || !body.includes('src="/images/actual-shop-orders.png"') || !body.includes('src="/images/actual-shop-inventory.png"') || countOccurrences(body, 'class="platform-device-capture ') !== 3 || countOccurrences(body, '<article class="shop-workflow-card">') !== 2 || countOccurrences(body, 'src="/images/actual-shop-sell.png"') !== 1 || body.includes('Makro PRO') || body.includes('17 October 2026') || body.includes('class="pos-window"') || body.includes('class="sample-label"') || body.includes('Complete sample sale') || body.includes('shop-sample-demo.js') || body.includes('class="platform-gallery shop-gallery-all"') || body.includes('data-platform-carousel') || body.includes('data-device-choice') || body.includes('data-device-frame') || /<a\b[^>]*>\s*<img\b[^>]*src="\/images\/actual-shop-/i.test(body)
       : !body.includes('class="platform-image"') || !body.includes('class="feature-line"')
