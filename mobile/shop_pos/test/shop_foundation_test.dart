@@ -532,6 +532,57 @@ void main() {
   });
 
   group('bounded printer discovery', () {
+    test('reprint needs a tested printer in this session', () async {
+      SharedPreferences.setMockInitialValues({
+        shopReceiptPrinterHostKey: '192.168.20.9',
+      });
+      const range = (ip: '192.168.20.10', mask: '255.255.255.248');
+      final session = VerifiedPrinterSession();
+      final settings = ReceiptPrinterSettings(
+        rangeProvider: () async => range,
+        session: session,
+      );
+      final sent = <String>[];
+      final reprint = ReceiptReprintService(
+        settings: settings,
+        send: (host, receipt, myanmar) async {
+          sent.add('$host:${receipt.id}:$myanmar');
+        },
+      );
+      final receipt = ShopSaleReceipt(
+        id: 'sale-for-reprint',
+        operationId: 'sale-for-reprint',
+        totalMmk: 2500,
+        createdAtMillis: 1,
+        paymentMethod: 'cash',
+      );
+
+      expect(await reprint.printIfTrusted(receipt, myanmar: true), isFalse);
+      expect(sent, isEmpty);
+      final candidate = (await PrinterDiscoveryService(
+        rangeProvider: () async => range,
+        probe: (host, port) async => host == '192.168.20.9',
+      ).scan()).printers.single;
+      await settings.saveAfterTest(candidate);
+      expect(await reprint.printIfTrusted(receipt, myanmar: true), isTrue);
+      expect(sent, ['192.168.20.9:sale-for-reprint:true']);
+
+      final afterRestart = ReceiptReprintService(
+        settings: ReceiptPrinterSettings(
+          rangeProvider: () async => range,
+          session: VerifiedPrinterSession(),
+        ),
+        send: (host, receipt, myanmar) async {
+          sent.add('unexpected');
+        },
+      );
+      expect(
+        await afterRestart.printIfTrusted(receipt, myanmar: true),
+        isFalse,
+      );
+      expect(sent, hasLength(1));
+    });
+
     test('saved IP needs current-session printer trust', () async {
       SharedPreferences.setMockInitialValues({
         shopReceiptPrinterHostKey: '192.168.20.9',

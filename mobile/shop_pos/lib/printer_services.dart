@@ -131,6 +131,40 @@ class ShopReceiptPrinter {
   }
 }
 
+typedef ReceiptPrintSender =
+    Future<void> Function(String host, ShopSaleReceipt receipt, bool myanmar);
+
+/// A saved address alone never authorizes a reprint after Shop restarts.
+/// The cashier must test and confirm that printer in the current session.
+class ReceiptReprintService {
+  ReceiptReprintService({
+    ReceiptPrinterSettings? settings,
+    ReceiptPrintSender? send,
+  }) : _settings = settings ?? ReceiptPrinterSettings(),
+       _send = send ??
+           ((host, receipt, myanmar) => ShopReceiptPrinter().printSale(
+                 host,
+                 receipt,
+                 myanmar: myanmar,
+               ));
+
+  final ReceiptPrinterSettings _settings;
+  final ReceiptPrintSender _send;
+
+  /// Returns false when setup/retest is required; it never sends to a saved,
+  /// unverified host. A true result means the print request was sent, not that
+  /// paper output or payment status was confirmed.
+  Future<bool> printIfTrusted(
+    ShopSaleReceipt receipt, {
+    required bool myanmar,
+  }) async {
+    final host = await _settings.readHost();
+    if (host == null) return false;
+    await _send(host, receipt, myanmar);
+    return true;
+  }
+}
+
 List<String> shopReceiptTextLines(
   ShopSaleReceipt receipt, {
   required bool myanmar,
