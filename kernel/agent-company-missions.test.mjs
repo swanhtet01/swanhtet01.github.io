@@ -267,6 +267,19 @@ test('accepted evaluation and exact reviewed handoff unlock only the next stage'
   assert.equal((await advanceCompanyMissionStage(changedResult, state.options)).reason, 'company_mission_accepted_evaluation_required')
   order.result = savedResult
   order.resultHash = resultHash
+  for (const status of ['partial', 'blocked', 'failed']) {
+    order.status = status
+    assert.equal((await advanceCompanyMissionStage(advance, state.options)).reason, 'company_mission_result_mismatch')
+  }
+  order.status = 'completed'
+  for (const resultPatch of [{ status: 'partial' }, { ok: false }]) {
+    order.result = { ...savedResult, ...resultPatch }
+    order.resultHash = sha256(stableStringify(order.result))
+    const changed = advanceInput(queued.mission, queued.mission.stages[0], queued.workOrder, order.resultHash, 'reviewed redacted stage two packet')
+    assert.equal((await advanceCompanyMissionStage(changed, state.options)).reason, 'company_mission_result_mismatch')
+  }
+  order.result = savedResult
+  order.resultHash = resultHash
   assert.equal(state.missions.get(`company-mission-record:${created.mission.missionRunId}`).revision, queued.mission.revision)
 
   const advanced = await advanceCompanyMissionStage(advance, state.options)
