@@ -1,7 +1,9 @@
 import { pathToFileURL } from 'node:url'
 
 // Acceptance-only inspection. This never provisions credentials or changes providers.
-export const acceptanceProject = 'twflgmlwfkykgzsxnegc'
+// The earlier acceptance branch failed migration replay. Bind this preflight to
+// the fresh, data-less branch that received the scoped tenant-isolation proof.
+export const acceptanceProject = 'aaonrwgghhdycwqbxuoi'
 export function inspectAcceptanceEnvironment(env, expectedCommit) {
   const failures = []
   const check = (ok, code) => { if (!ok) failures.push(code) }

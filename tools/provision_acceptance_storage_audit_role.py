@@ -15,7 +15,8 @@ from typing import Any, Mapping
 
 import provision_supermega_runtime_role as core
 
-ACCEPTANCE_REF = "twflgmlwfkykgzsxnegc"
+# Exact data-less preview for the 20 October clean Shop replay.
+ACCEPTANCE_REF = "aaonrwgghhdycwqbxuoi"
 ROLE = "supermega_storage_audit"
 CONTRACT = "supermega.acceptance-storage-audit-role.v1"
 EXPECTED_SETTINGS = {

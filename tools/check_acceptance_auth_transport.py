@@ -4,7 +4,7 @@ import json
 import urllib.error
 import urllib.request
 
-AUTH_HEALTH = 'https://twflgmlwfkykgzsxnegc.supabase.co/auth/v1/health'
+AUTH_HEALTH = 'https://aaonrwgghhdycwqbxuoi.supabase.co/auth/v1/health'
 
 PRODUCTION_AUTH_HEALTH = 'https://zvtzwcimpvvtkowflhda.supabase.co/auth/v1/health'
 AUTH_TARGETS = {'acceptance': AUTH_HEALTH, 'production': PRODUCTION_AUTH_HEALTH}

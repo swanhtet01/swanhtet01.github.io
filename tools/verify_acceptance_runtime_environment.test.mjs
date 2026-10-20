@@ -12,6 +12,7 @@ const valid = { VERCEL_ENV: 'preview', SUPERMEGA_RELEASE_COMMIT: commit,
 test('accepts only staged acceptance preview configuration', () => {
  assert.equal(inspect(valid, commit).ok, true)
  for (const patch of [{ VERCEL_ENV: 'production' }, { SUPERMEGA_SUPABASE_PROJECT_REF: 'zvtzwcimpvvtkowflhda' },
+ { SUPERMEGA_SUPABASE_PROJECT_REF: 'twflgmlwfkykgzsxnegc' },
  { VITE_SUPABASE_URL: 'https://zvtzwcimpvvtkowflhda.supabase.co' }, { SUPERMEGA_RELEASE_COMMIT: 'b'.repeat(40) },
  { SUPERMEGA_TRIAL_WRITES_ENABLED: 'false' }, { SUPERMEGA_SELF_SERVE_ACTIVATION_WINDOW: 'open' },
  { VITE_SUPABASE_PUBLISHABLE_KEY: 'service_role' }, { SUPERMEGA_BILLING_SCHEMA_VERSION: '12' }]) {
