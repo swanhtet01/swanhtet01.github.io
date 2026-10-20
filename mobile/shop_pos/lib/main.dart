@@ -1259,9 +1259,13 @@ class _ShopHomeState extends State<ShopHome> {
                       ? 'ထပ်ပို့ရန်'
                       : 'ထပ်စမ်းရန်',
                 ),
-                onPressed: printerNeedsTest
-                    ? _openPrinter
-                    : () => _printReceipt(receipt),
+                onPressed: () {
+                  if (printerNeedsTest) {
+                    _testPrinterThenPrint(receipt);
+                  } else {
+                    _printReceipt(receipt);
+                  }
+                },
               )
             : null,
       );
@@ -1312,6 +1316,38 @@ class _ShopHomeState extends State<ShopHome> {
           action: SnackBarAction(
             label: shopCopy(widget.myanmar, 'Retry', 'ထပ်စမ်းရန်'),
             onPressed: () => _printReceipt(receipt),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _testPrinterThenPrint(ShopSaleReceipt receipt) async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => PrinterSetupScreen(myanmar: widget.myanmar),
+      ),
+    );
+    if (!mounted) return;
+    try {
+      if (await ReceiptPrinterSettings().readHost() != null) {
+        await _printReceipt(receipt);
+      } else if (mounted) {
+        _message(
+          shopCopy(
+            widget.myanmar,
+            'Sale is saved. Test the printer before printing this receipt.',
+            'အရောင်းသိမ်းပြီးပါပြီ။ ဤပြေစာမပုံနှိပ်မီ ပရင်တာကို စမ်းသပ်ပါ။',
+          ),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        _message(
+          shopCopy(
+            widget.myanmar,
+            'Sale is saved. Printer setup is unavailable; try again later.',
+            'အရောင်းသိမ်းပြီးပါပြီ။ ပရင်တာဆက်တင်မရနိုင်သေးပါ။ နောက်မှထပ်စမ်းပါ။',
           ),
         );
       }
