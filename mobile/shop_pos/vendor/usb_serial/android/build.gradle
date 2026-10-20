@@ -24,5 +24,10 @@ android {
 }
 
 dependencies {
-    implementation 'com.github.felHR85:UsbSerial:6.1.0'
+    implementation('com.github.felHR85:UsbSerial:7ad6c9f') {
+        artifact {
+            classifier = 'release'
+            type = 'aar'
+        }
+    }
 }
