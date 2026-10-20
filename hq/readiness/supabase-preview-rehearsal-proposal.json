@@ -4,7 +4,7 @@
   "repository": "swanhtet01/swanhtet01.github.io",
   "mode": "owner_approval_required",
   "state": "prepared-not-executed",
-  "generatedAt": "2026-10-19T11:35:55.876Z",
+  "generatedAt": "2026-10-20T19:29:31.582Z",
   "purpose": "Record a source-bound Supabase preview plan that requires a known creation mode, actual branch catalog and migration-history reconciliation, and a reviewed delta; do not create a branch or approve managed activation.",
   "productionBaseline": {
     "projectRef": "zvtzwcimpvvtkowflhda",
@@ -59,11 +59,11 @@
   },
   "migrationPlan": {
     "schemaVersion": 13,
-    "migrationCount": 32,
-    "privateMigrationCount": 31,
+    "migrationCount": 33,
+    "privateMigrationCount": 32,
     "publicBaseline": "20260711081300_public_legacy_baseline.sql",
-    "finalMigration": "20261019103000_ecommerce_review_shared_state_lock.sql",
-    "chainDigest": "sha256:2fe66f44b2afbb77363090fc2d6be957a846ae176505ea733f7965141788a974",
+    "finalMigration": "20261020175519_access_control_member_read_hardening.sql",
+    "chainDigest": "sha256:834e91a8767f36e5e0918d32940c2af03851d8b6c83c85c64b46c3041a73d314",
     "migrations": [
       {
         "name": "20260711081300_public_legacy_baseline.sql",
@@ -224,6 +224,11 @@
         "name": "20261019103000_ecommerce_review_shared_state_lock.sql",
         "path": "supabase/migrations/20261019103000_ecommerce_review_shared_state_lock.sql",
         "digest": "sha256:2e5fe0486a38cd434a8e24b1d46ddf4f5144a6f67e24834d30ab98f298cbb8c0"
+      },
+      {
+        "name": "20261020175519_access_control_member_read_hardening.sql",
+        "path": "supabase/migrations/20261020175519_access_control_member_read_hardening.sql",
+        "digest": "sha256:352605d30bcf1371b94ee50c01469b599265afe2cf69abfe1e4136016778cba3"
       }
     ],
     "browserQuarantine": {
@@ -325,7 +330,7 @@
     "customerContactAllowed": false,
     "paymentOrStockActionAllowed": false
   },
-  "ownerApprovalTemplate": "I approve one Supabase preview rehearsal setup for swanhtet01/swanhtet01.github.io using migration chain sha256:2fe66f44b2afbb77363090fc2d6be957a846ae176505ea733f7965141788a974 on a data-less maximum-24-hour non-production preview branch only, with deletion after evidence, only after branch creation mode and automatic migration replay are reviewed, current production history and the actual branch catalog are reconciled, and I separately confirm the quoted branch cost. Manual replay of the full source chain is not approved; apply only a reviewed delta after exact baseline proof. I do not approve production refs, production data, production writes, managed activation, credential change, Vercel deploy, GitHub push or PR or merge, customer contact, payment, stock, domain, hosted-write, or scheduler activation.",
+  "ownerApprovalTemplate": "I approve one Supabase preview rehearsal setup for swanhtet01/swanhtet01.github.io using migration chain sha256:834e91a8767f36e5e0918d32940c2af03851d8b6c83c85c64b46c3041a73d314 on a data-less maximum-24-hour non-production preview branch only, with deletion after evidence, only after branch creation mode and automatic migration replay are reviewed, current production history and the actual branch catalog are reconciled, and I separately confirm the quoted branch cost. Manual replay of the full source chain is not approved; apply only a reviewed delta after exact baseline proof. I do not approve production refs, production data, production writes, managed activation, credential change, Vercel deploy, GitHub push or PR or merge, customer contact, payment, stock, domain, hosted-write, or scheduler activation.",
   "sourceReceipts": [
     {
       "path": "package.json",
@@ -333,15 +338,15 @@
     },
     {
       "path": "tools/prepare_supabase_preview_rehearsal_proposal.mjs",
-      "digest": "sha256:564f237c2bb2685e65ad902c6b10b099e12260688b7fe6d77d1b59bcb4f20160"
+      "digest": "sha256:430b57aae95ac9797d98647ed936e3bfb4e48cd36874c68905e4364d7505f014"
     },
     {
       "path": "tools/prepare_supabase_rehearsal_packet.mjs",
-      "digest": "sha256:907005dbc648ae6b2b2be282b68923276dba17b8bcf07948697adf124645ac77"
+      "digest": "sha256:3e90111977c1873461b92773fe29a849adb1d683cdbe05601c0706486219c4c7"
     },
     {
       "path": "tools/verify_private_trial_migrations.mjs",
-      "digest": "sha256:f590c833ceb1cc4326c7876a889e649c8bc79232b8d7a9dd311ca78699202569"
+      "digest": "sha256:147592e55d6e97682db7704098e0cc235f8282a4a652fcd19be551cd83398621"
     },
     {
       "path": "tools/verify_public_browser_quarantine.mjs",
@@ -353,7 +358,7 @@
     },
     {
       "path": "hq/readiness/managed-pilot-readiness.json",
-      "digest": "sha256:c68e68f0d96c941029ca5cfdb0d78e3011b80f08d4fe87bc95e6c5ca6a6e4a6e"
+      "digest": "sha256:b6d4400976dd0c9f16ef93c0e20ff47e56a4c3c638f0cb15606e62ba67ea9e92"
     },
     {
       "path": "hq/readiness/github-main-protection-proposal.json",
@@ -364,5 +369,5 @@
       "digest": "sha256:5c1e1c1e220467b0731911a5a7ed7bbca18023c7f62f040393f9868ea79a2981"
     }
   ],
-  "digest": "sha256:b999bb412bf2df9475177a7045d1c08779d6e5f1cd20068c03f198c51e50d092"
+  "digest": "sha256:dd23273612d95a8bbd0b1c370fff10bc2c583547fd8797fa815bc1e397408ef2"
 }
