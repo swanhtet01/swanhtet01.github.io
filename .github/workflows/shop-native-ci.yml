@@ -99,8 +99,16 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Generate Windows runner
-        run: flutter create --platforms=windows --no-pub .
+      - name: Generate Windows runner without touching the app lockfile
+        shell: pwsh
+        run: |
+          $lockBefore = (Get-FileHash -Algorithm SHA256 -LiteralPath 'pubspec.lock').Hash
+          $runnerSource = Join-Path $env:RUNNER_TEMP 'supermega_shop_windows_runner'
+          flutter create --platforms=windows --no-pub --project-name supermega_shop $runnerSource
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Copy-Item -LiteralPath (Join-Path $runnerSource 'windows') -Destination 'windows' -Recurse
+          $lockAfter = (Get-FileHash -Algorithm SHA256 -LiteralPath 'pubspec.lock').Hash
+          if ($lockBefore -ne $lockAfter) { throw 'Windows runner generation changed the committed pubspec.lock.' }
 
       - name: Resolve locked dependencies
         run: flutter pub get --enforce-lockfile
