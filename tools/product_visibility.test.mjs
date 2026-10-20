@@ -6,6 +6,13 @@ import { runInNewContext } from 'node:vm'
 import { activeProductContracts } from '../showroom/src/core/product-visibility.ts'
 import { activeSetupProductContracts, productContracts, seedSetupForProduct,
   rememberProductSetup, readProductSetup, setupProductFromQuery } from '../showroom/src/core/product-setup.ts'
+import {
+  managedCustomerProductIsVisible,
+  managedCustomerProducts,
+  productSwitcherVisible,
+  resolveManagedProductHome,
+  resolveManagedProductRoute,
+} from '../showroom/src/core/managed-product-access.ts'
 
 const root = resolve(import.meta.dirname, '..')
 const isolatedOutputId = process.env.SUPERMEGA_PUBLIC_OUTPUT_ID || ''
@@ -75,8 +82,8 @@ test('release assets require the current login choices and local workspace bound
 test('unauthenticated launcher preserves managed-only access and hides browser-local workspace detail', async () => {
   const source = await readFile(resolve(root, 'showroom/src/core/CoreShell.tsx'), 'utf8')
   assert.match(source, /!emptyCompany && managedPortal \? <nav aria-label=\{uiText\('Your workspace'\)\}/)
-  assert.match(source, /customerProducts\.filter\(\(\[name\]\) => managedProductIsVisible/)
-  assert.match(source, /if \(!managedProductIsVisible\(portalAccess\.products, setupKey\)\) return null/)
+  assert.match(source, /customerProducts\.filter\(\(\[name\]\) => managedCustomerProductIsVisible/)
+  assert.match(source, /if \(!managedCustomerProductIsVisible\(portalAccess\.products, setupKey\)\) return null/)
   assert.match(source, /uiText\('Sign in to your business\.'\)/)
   assert.match(source, /to=\{managedLoginPath\(null\)\}>\{uiText\('Login'\)\}<\/Link>/)
   for (const retiredBrowserDetail of ['localProductSetups', "readProductSetup(window.localStorage, 'production')", 'setSetupLoadFailed', 'Workspace unavailable', 'On this device']) {
@@ -94,6 +101,39 @@ test('one source policy exposes Shop only and retains internal workspaces', () =
   assert.deepEqual(activeSetupProductContracts.map(p => p.id), ['commerce'])
   assert.equal(JSON.stringify(manifest), before)
   assert.deepEqual(Object.keys(productContracts), ['commerce', 'production', 'website', 'ecommerce'])
+})
+
+test('managed customer routes stay Shop-only even when internal product entitlements are assigned', () => {
+  const assignments = ['commerce', 'website', 'ecommerce', 'production']
+  assert.deepEqual(managedCustomerProducts(assignments), ['commerce'])
+  assert.equal(managedCustomerProductIsVisible(assignments, 'commerce'), true)
+  for (const internal of ['website', 'ecommerce', 'production']) {
+    assert.equal(managedCustomerProductIsVisible(assignments, internal), false)
+    assert.deepEqual(resolveManagedProductRoute(internal, assignments), {
+      kind: 'redirect', product: 'commerce', path: '/shop/',
+    })
+  }
+  assert.equal(productSwitcherVisible('ready', assignments), false)
+  assert.deepEqual(resolveManagedProductHome({
+    requestedProduct: null,
+    requestedPath: null,
+    rememberedProduct: 'ecommerce',
+    choosingProduct: false,
+    assignedProducts: assignments,
+  }), { kind: 'redirect', product: 'commerce', path: '/shop/' })
+})
+
+test('internal-only assignments do not grant a managed customer product route', () => {
+  const assignments = ['website', 'ecommerce', 'production']
+  assert.deepEqual(managedCustomerProducts(assignments), [])
+  for (const internal of assignments) assert.deepEqual(resolveManagedProductRoute(internal, assignments), { kind: 'empty' })
+  assert.deepEqual(resolveManagedProductHome({
+    requestedProduct: null,
+    requestedPath: null,
+    rememberedProduct: null,
+    choosingProduct: false,
+    assignedProducts: assignments,
+  }), { kind: 'launcher' })
 })
 
 test('missing, overlapping, unknown or destructive visibility fails closed', () => {
@@ -139,7 +179,7 @@ test('generated public home and contact offer only active products', async () =>
   assert.doesNotMatch(home, /Plant|all four|href="[^\"]*(?:\/plant\/|product=plant)/)
   assert.match(contact, /<input type="hidden" name="product" value="guide" \/>/)
   assert.doesNotMatch(contact, /<select[^>]*name="product"/)
-  assert.match(contact, /SuperMega builds business software for Myanmar\. Shop brings counter sales, stock and order follow-up together for retailers\./)
+  assert.match(contact, /SuperMega builds practical business software for Myanmar\. Shop helps retailers manage counter sales, stock and open orders\./)
   assert.doesNotMatch(contact, /English and Burmese are both welcome/)
   for (const product of activeProductContracts(manifest)) {
     const page = main(await html(product.id+'/index.html'))
@@ -149,7 +189,8 @@ test('generated public home and contact offer only active products', async () =>
       : 'href="https://app.supermega.dev/login"'
     const loginLinks = [...fullPage.matchAll(/href="https:\/\/app\.supermega\.dev\/login[^"]*"/g)].map(([link]) => link)
     assert.deepEqual(loginLinks, [expectedLogin])
-    assert.match(page, /class="platform-image"/)
+    if (product.id === 'shop') assert.match(page, /class="shop-hero-app"/)
+    else assert.match(page, /class="platform-image"/)
     assert.doesNotMatch(page, /Request assisted setup/)
     if (product.status === 'available-in-app') {
       assert.match(page, /class="home-contact product-action"/)

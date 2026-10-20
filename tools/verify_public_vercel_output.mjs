@@ -103,6 +103,7 @@ const expectedStaticFiles = new Set([
   'fonts/noto-sans-latin-OFL.txt',
   'vercel-insights.js',
   'platform-carousel.js',
+  'images/actual-shop-today.png',
   'images/actual-shop-sell.png',
   'images/actual-shop-sell-tablet.png',
   'images/actual-shop-sell-mobile.png',
@@ -344,7 +345,7 @@ for (const token of ['class="company-operating-overview"', 'href="/shop/">Explor
   if (!home.includes(token)) fail('homepage_contract_missing', { token })
 }
 if (home.includes('>View every screen size') || home.includes('>See Shop on desktop and mobile')) fail('home_action_must_not_be_a_device_tour')
-for (const token of ['body[data-view="company"] .company-hero::before{opacity:0;background-image:none}', 'body[data-view="company"] .shop-only-family{grid-template-columns:minmax(0,1fr);max-width:none}', 'body[data-view="company"] .company-hero .hero-grid{grid-template-columns:minmax(0,.88fr) minmax(420px,1.12fr)']) {
+for (const token of ['body[data-view="company"] .company-hero::before{opacity:0;background-image:none}', 'body[data-view="company"] .shop-only-family{grid-template-columns:minmax(0,1fr);max-width:none}', 'body[data-view="company"] .company-hero .hero-grid{grid-template-columns:minmax(0,.76fr) minmax(520px,1.24fr)']) {
   if (!home.includes(token)) fail('home_visual_contract_missing', { token })
 }
 if (home.includes('body[data-view="company"] .site-header .brand-word { color: var(--text); }')) fail('company_wordmark_light_on_light_override')
@@ -352,7 +353,7 @@ if (!home.includes('.company-hero .hero-actions .button-primary') || !home.inclu
 const shopPageHtml = pages.get('/shop/').html
 if (!shopPageHtml.includes('.shop-hero .button-primary') || !shopPageHtml.includes('white-space:nowrap')) fail('shop_primary_action_layout_missing')
 if (!home.includes('<p class="hero-kicker">For Myanmar retailers</p>')
-  || !home.includes('Run the counter.<br><span>See what needs attention.</span>')
+  || !home.includes('Sell at the counter.<br><span>Keep orders and stock in view.</span>')
   || !home.includes('SuperMega Shop brings sales, open orders and stock checks into one workspace for Myanmar retailers.')
   || !home.includes('class="company-operating-overview"')
   || home.includes('class="company-product-evidence"')
@@ -393,7 +394,7 @@ for (const [route, html] of [['/', home], ['/shop/', pages.get('/shop/').html], 
     ? 'href="https://app.supermega.dev/login?product=shop"'
     : 'href="https://app.supermega.dev/login"'
   if (countOccurrences(body, expectedLogin) !== 1) fail('login_action_count_invalid', { route, expectedLogin })
-  if (route === '/shop/' && (!body.includes('class="button button-primary" href="/contact/?product=shop">Contact SuperMega') || body.includes('See Shop screens') || body.includes('Need help with Shop?'))) fail('shop_primary_product_action_missing')
+  if (route === '/shop/' && (!body.includes('class="button button-primary" href="/contact/?product=shop">Contact the Shop team') || body.includes('Ask about Shop') || body.includes('Talk about Shop') || body.includes('See Shop screens') || body.includes('Need help with Shop?'))) fail('shop_primary_product_action_missing')
   if (body.includes('>Company</a>')) fail('company_page_navigation_not_consolidated')
   const hasGalleryNavigation = route !== '/shop/' && (galleryViews[routeProduct?.id] || 0) > 1
   const expectedButtons = Number(hasGalleryNavigation) * 2
@@ -417,9 +418,9 @@ for (const [route, html] of [['/', home], ['/shop/', pages.get('/shop/').html], 
     }
   }
   const productVisualMissing = route === '/'
-    ? !hasClassToken(body, 'company-hero') || hasClassToken(body, 'product-family') || !body.includes('Run the counter.<br><span>See what needs attention.</span>') || !body.includes('class="company-operating-overview"') || !body.includes('class="company-product-visual"') || body.includes('class="company-product-evidence"') || body.includes('class="company-portfolio"') || body.includes('data-platform-carousel') || body.includes('Choose a Shop screen') || !body.includes('src="/images/actual-shop-sell.png"') || body.includes('data-device-choice')
+    ? !hasClassToken(body, 'company-hero') || hasClassToken(body, 'product-family') || !body.includes('Sell at the counter.<br><span>Keep orders and stock in view.</span>') || !body.includes('class="company-operating-overview"') || !body.includes('class="company-product-visual"') || body.includes('class="company-product-evidence"') || body.includes('class="company-portfolio"') || body.includes('data-platform-carousel') || body.includes('Choose a Shop screen') || !body.includes('src="/images/actual-shop-today.png"') || body.includes('data-device-choice')
     : route === '/shop/'
-      ? !body.includes('class="shop-actual-showcase"') || !body.includes('Sell, follow orders, restock.') || !body.includes('Real Shop screens. Synthetic sample records.') || body.includes('Makro PRO') || body.includes('17 October 2026') || body.includes('class="pos-window"') || body.includes('class="sample-label"') || body.includes('Complete sample sale') || body.includes('shop-sample-demo.js') || !body.includes('class="platform-gallery shop-gallery-all"') || countOccurrences(body, '<figure class="platform-image') !== galleryViews.shop || countOccurrences(body, 'class="platform-device-set has-tablet"') !== galleryViews.shop || body.includes('data-platform-carousel') || body.includes('data-device-choice') || body.includes('data-device-frame') || /<a\b[^>]*>\s*<img\b[^>]*src="\/images\/actual-shop-/i.test(body)
+      ? !body.includes('class="shop-hero-app"') || !body.includes('class="shop-actual-showcase"') || !body.includes('Orders and stock. Clear next steps.') || !body.includes('class="shop-responsive-showcase"') || !body.includes('Counter sale on desktop, tablet and phone') || !body.includes('Sample catalog and example prices.') || !body.includes('src="/images/actual-shop-orders.png"') || !body.includes('src="/images/actual-shop-inventory.png"') || countOccurrences(body, 'class="platform-device-capture ') !== 3 || countOccurrences(body, '<article class="shop-workflow-card">') !== 2 || countOccurrences(body, 'src="/images/actual-shop-sell.png"') !== 1 || body.includes('Makro PRO') || body.includes('17 October 2026') || body.includes('class="pos-window"') || body.includes('class="sample-label"') || body.includes('Complete sample sale') || body.includes('shop-sample-demo.js') || body.includes('class="platform-gallery shop-gallery-all"') || body.includes('data-platform-carousel') || body.includes('data-device-choice') || body.includes('data-device-frame') || /<a\b[^>]*>\s*<img\b[^>]*src="\/images\/actual-shop-/i.test(body)
       : !body.includes('class="platform-image"') || !body.includes('class="feature-line"')
   if (productVisualMissing) fail('product_visual_missing', { route })
   if (route === '/') {
@@ -450,8 +451,6 @@ if (countOccurrences(home, 'href="/shop/">Explore Shop') !== 1 || home.includes(
 const shopPage = pages.get('/shop/')?.html || ''
 for (const [desktop, mobile, tablet] of [
   ['actual-shop-sell.png', 'actual-shop-sell-mobile.png', 'actual-shop-sell-tablet.png'],
-  ['actual-shop-orders.png', 'actual-shop-orders-mobile.png', 'actual-shop-orders-tablet.png'],
-  ['actual-shop-inventory.png', 'actual-shop-inventory-mobile.png', 'actual-shop-inventory-tablet.png'],
 ]) {
   if (!shopPage.includes(`src="/images/${desktop}"`)
     || !shopPage.includes(`src="/images/${tablet}"`)
@@ -467,7 +466,7 @@ for (const [route, html] of [['/', home], ['/shop/', shopPage]]) {
   if (html.includes('data-language-toggle') || html.includes('src="/site-language.js"')) fail('marketing_language_control_present', { route })
   if (html.includes('data-i18n=') || /[\u1000-\u109f]/u.test(html)) fail('marketing_myanmar_copy_present', { route })
 }
-for (const token of ['Sales, stock and orders.', 'One clear view.', 'Sell, follow orders, restock.', 'Real Shop screens. Synthetic sample records.', 'Search products, build the basket and complete a sale. Keep open orders and stock levels close at hand.']) {
+for (const token of ['Sell at the counter.', 'Stay ahead of stock.', 'Orders and stock. Clear next steps.', 'Sample catalog and example prices.', 'Search or scan products, record a sale, and follow open orders and stock in one workspace.']) {
   if (!shopPage.includes(token)) fail('shop_page_scope_missing', { token })
 }
 if (/<section\b[^>]*class="[^"]*\bsubscription-section\b/.test(shopPage)
@@ -480,8 +479,8 @@ for (const token of [
   'data-contact-form', 'action="/api/contact-submissions"', 'name="name"', 'name="email"',
   'name="company"', 'name="product"', 'value="guide"', 'name="template"', 'name="goal"',
   'name="idempotency_key"', 'name="proof_contract"', 'name="proof_digest"', 'class="contact-honeypot"',
-  'x-idempotency-key', 'Contact SuperMega.', 'SuperMega builds business software for Myanmar. Shop brings counter sales, stock and order follow-up together for retailers.',
-  'placeholder="Share a few details about your request."', 'Company (optional)', '>Send message</button>',
+  'x-idempotency-key', 'Email',
+  'placeholder="Tell us what your business needs."', 'Company (optional)', '>Send message</button>',
   'Message received:', 'Keep this reference if you need to follow up.',
   "shop:'Shop'", "website:'Sites'", "ecommerce:'Commerce'",
 ]) {
@@ -537,6 +536,7 @@ if (!/^(?:[0-9a-f]{40}|preview-[a-z0-9-]{8,64}|unknown)$/.test(release.commit)) 
 if (!/^\d{4}-\d{2}-\d{2}T/.test(release.generatedAt)) fail('release_timestamp_invalid')
 const publicGalleryEvidence = release.publicGalleryEvidence
 const publicGalleryFiles = [
+  'actual-shop-today.png',
   'actual-shop-sell.png', 'actual-shop-sell-tablet.png', 'actual-shop-sell-mobile.png',
   'actual-shop-orders.png', 'actual-shop-orders-tablet.png', 'actual-shop-orders-mobile.png',
   'actual-shop-inventory.png', 'actual-shop-inventory-tablet.png', 'actual-shop-inventory-mobile.png',

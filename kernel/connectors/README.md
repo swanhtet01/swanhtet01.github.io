@@ -161,7 +161,7 @@ returns `registry.healthAll()`:
   },
   "connectors": [
     { "key": "ai-gateway", "name": "Claude (AI gateway)", "category": "ai", "configured": true, "ok": true, "detail": "configured (tiers: bulk/reason/deep)", "docs": "kernel/gateway.mjs" },
-    { "key": "payment-mmqr", "name": "MMQR (KBZPay / AYA / CB — EMVCo)", "category": "payment", "configured": true, "ok": true, "detail": "implemented in DeskPOS ...", "docs": "spa-desk-pilot/src/lib/mmqr.ts" }
+    { "key": "payment-mmqr", "name": "Myanmar MMQR format helper (EMVCo)", "category": "payment", "configured": true, "ok": true, "detail": "local synthetic parser/CRC check passed; issuer acceptance not tested", "docs": "kernel/connectors/_mmqr-core.mjs" }
     // ...
   ]
 }

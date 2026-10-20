@@ -5,6 +5,8 @@ import { readFileSync } from 'node:fs'
 import {
   ecommerceShopHandoffVisible,
   hostedProductRouteRequiresLogin,
+  managedCustomerProductIsVisible,
+  managedCustomerProducts,
   managedProductIsVisible,
   managedProductPath,
   productSwitcherVisible,
@@ -33,9 +35,10 @@ test('maps every client product to its canonical workspace route', () => {
   assert.deepEqual(products.map(managedProductPath), paths)
 })
 
-test('allows only assigned direct product routes', () => {
-  for (const product of products) {
-    assert.deepEqual(resolveManagedProductRoute(product, [product]), { kind: 'allow' })
+test('managed customer routes honor the Shop-only product allowlist', () => {
+  assert.deepEqual(resolveManagedProductRoute('commerce', ['commerce']), { kind: 'allow' })
+  for (const product of products.filter((id) => id !== 'commerce')) {
+    assert.deepEqual(resolveManagedProductRoute(product, [product]), { kind: 'empty' })
   }
   assert.deepEqual(resolveManagedProductRoute(null, ['commerce']), { kind: 'allow' })
 })
@@ -47,15 +50,9 @@ test('redirects an unauthorized direct URL to the first assigned product', () =>
     path: '/shop/',
   })
   assert.deepEqual(resolveManagedProductRoute('commerce', ['ecommerce']), {
-    kind: 'redirect',
-    product: 'ecommerce',
-    path: '/ecommerce/',
+    kind: 'empty',
   })
-  assert.deepEqual(resolveManagedProductRoute('website', ['production', 'ecommerce']), {
-    kind: 'redirect',
-    product: 'ecommerce',
-    path: '/ecommerce/',
-  })
+  assert.deepEqual(resolveManagedProductRoute('website', ['production', 'ecommerce']), { kind: 'empty' })
 })
 
 test('returns an explicit empty decision when no product is assigned', () => {
@@ -63,13 +60,23 @@ test('returns an explicit empty decision when no product is assigned', () => {
   assert.deepEqual(resolveManagedProductRoute('commerce', ['production']), { kind: 'empty' })
 })
 
-test('the managed launcher shows only assigned products', () => {
+test('the managed customer launcher shows only assigned Shop access', () => {
   const assigned = ['commerce', 'website']
+  assert.deepEqual(managedCustomerProducts(assigned), ['commerce'])
+  assert.equal(managedCustomerProductIsVisible(assigned, 'commerce'), true)
+  assert.equal(managedCustomerProductIsVisible(assigned, 'website'), false)
+  assert.equal(managedCustomerProductIsVisible(assigned, 'ecommerce'), false)
+  assert.equal(managedCustomerProductIsVisible(assigned, 'production'), false)
   assert.deepEqual(
     products.filter((product) => managedProductIsVisible(assigned, product)),
     assigned,
   )
   assert.equal(managedProductIsVisible(['commerce'], 'ecommerce'), false)
+  assert.deepEqual(managedCustomerProducts(['website', 'ecommerce', 'production']), [])
+  assert.match(coreShell, /resolveManagedProductRoute\(requestedProduct, portalAccess\.products\)/)
+  assert.match(coreShell, /\['Shop', 'Sales, stock and your daily totals\.', 'Shop', '\/shop\/'\]/)
+  assert.doesNotMatch(coreShell, /\['Sites', 'Your services, photos and contact details\.'/)
+  assert.doesNotMatch(coreShell, /\['Commerce', 'A product catalog and customer requests\.'/)
 })
 
 test('private Ecommerce-to-Shop handoffs require both managed assignments', () => {
@@ -97,7 +104,8 @@ test('the product switcher appears only when there is somewhere authorized to sw
   assert.equal(productSwitcherVisible('ready', ['commerce']), false)
   assert.equal(productSwitcherVisible('ready', ['production']), false)
   assert.equal(productSwitcherVisible('ready', ['production', 'commerce']), false)
-  assert.equal(productSwitcherVisible('ready', ['commerce', 'website']), true)
+  assert.equal(productSwitcherVisible('ready', ['commerce', 'website']), false)
+  assert.equal(productSwitcherVisible('ready', ['commerce', 'website', 'ecommerce']), false)
   assert.equal(productSwitcherVisible('checking', []), false)
   assert.equal(productSwitcherVisible('reauthenticate', []), false)
   assert.equal(productSwitcherVisible('error', []), false)
@@ -129,18 +137,14 @@ test('connection decisions do not mutate or reveal unassigned products', () => {
   assert.equal(JSON.stringify(connections).includes('ecommerce'), false)
 })
 
-test('an authorized deep-link wins and opens its exact product', () => {
+test('an internal-product deep-link in the customer portal returns to Shop', () => {
   assert.deepEqual(resolveManagedProductHome({
     requestedProduct: 'website',
     requestedPath: '/website/pages/home/',
     rememberedProduct: 'commerce',
-    choosingProduct: true,
+    choosingProduct: false,
     assignedProducts: ['commerce', 'website'],
-  }), {
-    kind: 'redirect',
-    product: 'website',
-    path: '/website/pages/home/',
-  })
+  }), { kind: 'redirect', product: 'commerce', path: '/shop/' })
 })
 
 test('the explicit chooser opens the filtered launcher', () => {
@@ -153,18 +157,14 @@ test('the explicit chooser opens the filtered launcher', () => {
   }), { kind: 'launcher' })
 })
 
-test('home resumes an assigned remembered product', () => {
+test('home ignores a remembered internal product and resumes Shop', () => {
   assert.deepEqual(resolveManagedProductHome({
     requestedProduct: null,
     requestedPath: null,
     rememberedProduct: 'website',
     choosingProduct: false,
     assignedProducts: ['commerce', 'website'],
-  }), {
-    kind: 'redirect',
-    product: 'website',
-    path: '/website/',
-  })
+  }), { kind: 'redirect', product: 'commerce', path: '/shop/' })
 })
 
 test('retained Plant stays explicit and never becomes the default company entry', () => {
@@ -175,7 +175,7 @@ test('retained Plant stays explicit and never becomes the default company entry'
   })
   assert.deepEqual(resolveManagedProductHome({ ...base, assignedProducts: ['production'] }), { kind: 'launcher' })
   assert.deepEqual(resolveManagedProductHome({ ...base, requestedProduct: 'production', requestedPath: '/plant/jobs/', assignedProducts }), {
-    kind: 'redirect', product: 'production', path: '/plant/jobs/',
+    kind: 'redirect', product: 'commerce', path: '/shop/',
   })
   assert.deepEqual(assignedProducts, ['production', 'commerce'])
 })

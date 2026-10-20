@@ -14,7 +14,8 @@ import type { ClientSolutionId } from './client-onboarding'
 import {
   ecommerceShopHandoffVisible,
   hostedProductRouteRequiresLogin,
-  managedProductIsVisible,
+  managedCustomerProductIsVisible,
+  managedCustomerProducts,
   productSwitcherVisible,
   shopInboundRequestsVisible,
   resolveManagedProductHome,
@@ -628,8 +629,6 @@ const PRODUCT_SETUP_KEY: Record<string, SetupProductId> = {
 
 const customerProducts = [
   ['Shop', 'Sales, stock and your daily totals.', 'Shop', '/shop/'],
-  ['Sites', 'Your services, photos and contact details.', 'Sites', '/website/'],
-  ['Commerce', 'A product catalog and customer requests.', 'Commerce', '/ecommerce/'],
 ] as const
 
 export function ProductHomeEntry() {
@@ -667,7 +666,7 @@ export function ProductHomeEntry() {
 export function ProductHomePage() {
   const portalAccess = useContext(ManagedPortalAccessContext)
   const managedPortal = portalAccess.status === 'ready'
-  const emptyCompany = managedPortal && !customerProducts.some(([name]) => managedProductIsVisible(portalAccess.products, PRODUCT_SETUP_KEY[name]))
+  const emptyCompany = managedPortal && !customerProducts.some(([name]) => managedCustomerProductIsVisible(portalAccess.products, PRODUCT_SETUP_KEY[name]))
   return (
     <div className="workspace-screen product-home-screen">
       {managedPortal
@@ -688,10 +687,10 @@ export function ProductHomePage() {
         ? <PortalAccessPanel action={<a className="core-button primary" href="https://supermega.dev/contact/?product=guide&amp;source=company-no-products" target="_blank" rel="noopener noreferrer">{uiText('Contact support')}</a>} copy={uiText('Your company has no active products yet. SuperMega can help you get started.')} title={uiText('No products yet')} />
         : null}
       {!emptyCompany && managedPortal ? <nav aria-label={uiText('Your workspace')} className="product-track-grid">
-        {customerProducts.filter(([name]) => managedProductIsVisible(portalAccess.products, PRODUCT_SETUP_KEY[name]))
+        {customerProducts.filter(([name]) => managedCustomerProductIsVisible(portalAccess.products, PRODUCT_SETUP_KEY[name]))
           .map(([name, outcome, , path]) => {
           const setupKey = PRODUCT_SETUP_KEY[name]
-          if (!managedProductIsVisible(portalAccess.products, setupKey)) return null
+          if (!managedCustomerProductIsVisible(portalAccess.products, setupKey)) return null
           return <Link aria-label={name} className="product-track-card" key={name} to={path}>
               <span className="product-track-copy">
                 <h2>{name}</h2>
@@ -701,7 +700,7 @@ export function ProductHomePage() {
             </Link>
         })}
       </nav> : null}
-      {managedPortal && !emptyCompany ? <Suspense fallback={null}><ManagedProductConnections products={portalAccess.products.filter(product => product !== 'production')} /></Suspense> : null}
+      {managedPortal && !emptyCompany ? <Suspense fallback={null}><ManagedProductConnections products={managedCustomerProducts(portalAccess.products)} /></Suspense> : null}
     </div>
   )
 }

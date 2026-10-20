@@ -1,0 +1,588 @@
+import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
+
+import 'package:drift/native.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:supermega_shop/menu_import_service.dart';
+import 'package:supermega_shop/printer_services.dart';
+import 'package:supermega_shop/shop_database.dart';
+import 'package:supermega_shop/shop_models.dart';
+
+void main() {
+  group('menu candidate contract', () {
+    test('accepts a nullable price and preserves Burmese text', () {
+      final item = MenuCandidate.fromJson({
+        'category': 'အစားအသောက်',
+        'description': '',
+        'name': 'မုန့်',
+        'price': null,
+      });
+      expect(item.category, 'အစားအသောက်');
+      expect(item.name, 'မုန့်');
+      expect(item.priceMmk, isNull);
+    });
+
+    test('rejects unexpected fields and non-integer MMK values', () {
+      expect(
+        () => MenuCandidate.fromJson({
+          'category': 'Food',
+          'description': '',
+          'name': 'Tea',
+          'price': 1500,
+          'sku': 'invented',
+        }),
+        throwsFormatException,
+      );
+      expect(
+        () => MenuCandidate.fromJson({
+          'category': 'Food',
+          'description': '',
+          'name': 'Tea',
+          'price': 1500.5,
+        }),
+        throwsFormatException,
+      );
+    });
+  });
+
+  group('menu photo service', () {
+    test('deletes the temporary camera file after the flow', () async {
+      final directory = await Directory.systemTemp.createTemp('shop-menu-');
+      final file = File('${directory.path}${Platform.pathSeparator}menu.png');
+      await file.writeAsBytes(_pngBytes());
+      expect(await file.exists(), isTrue);
+
+      await discardCapturedMenuPhoto(XFile(file.path));
+
+      expect(await file.exists(), isFalse);
+      await directory.delete(recursive: true);
+    });
+
+    test(
+      'requires consent before reading a token or making a request',
+      () async {
+        var tokenRead = false;
+        var requestMade = false;
+        final client = MockClient((request) async {
+          requestMade = true;
+          return http.Response('{}', 200);
+        });
+        final service = MenuImportService(
+          endpoint: Uri.https('app.supermega.dev', '/api/shop/menu-import'),
+          accessToken: () async {
+            tokenRead = true;
+            return 'test-session';
+          },
+          client: client,
+        );
+
+        await expectLater(
+          service.parsePhoto(
+            XFile.fromData(_pngBytes(), name: 'menu.png'),
+            cloudConsent: false,
+          ),
+          throwsA(isA<MenuImportException>()),
+        );
+        expect(tokenRead, isFalse);
+        expect(requestMade, isFalse);
+        service.close();
+      },
+    );
+
+    test(
+      'sends one consented photo to the authenticated endpoint and parses v1',
+      () async {
+        final payloads = <Map<String, dynamic>>[];
+        final client = MockClient((request) async {
+          expect(request.url.path, '/api/shop/menu-import');
+          expect(request.headers['authorization'], 'Bearer test-session');
+          payloads.add(jsonDecode(request.body) as Map<String, dynamic>);
+          return http.Response(
+            jsonEncode({
+              'schemaVersion': 1,
+              'reviewRequired': true,
+              'items': [
+                {
+                  'category': 'ကုန်စုံ',
+                  'description': '',
+                  'name': 'ဆန်',
+                  'price': null,
+                },
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        });
+        final service = MenuImportService(
+          endpoint: Uri.https('app.supermega.dev', '/api/shop/menu-import'),
+          accessToken: () async => 'test-session',
+          client: client,
+        );
+        final items = await service.parsePhoto(
+          XFile.fromData(_pngBytes(), name: 'menu.png'),
+          cloudConsent: true,
+        );
+        expect(payloads.single['cloudConsent'], isTrue);
+        expect(
+          (payloads.single['imageDataUrl'] as String).startsWith(
+            'data:image/png;base64,',
+          ),
+          isTrue,
+        );
+        expect(items.single.name, 'ဆန်');
+        expect(items.single.priceMmk, isNull);
+        service.close();
+      },
+    );
+
+    test(
+      'rejects oversized photos before reading a token or uploading',
+      () async {
+        var tokenRead = false;
+        var requestMade = false;
+        final service = MenuImportService(
+          endpoint: Uri.https('app.supermega.dev', '/api/shop/menu-import'),
+          accessToken: () async {
+            tokenRead = true;
+            return 'test-session';
+          },
+          client: MockClient((_) async {
+            requestMade = true;
+            return http.Response('{}', 200);
+          }),
+        );
+        await expectLater(
+          service.parsePhoto(
+            XFile.fromData(
+              Uint8List(maxMenuPhotoBytes + 1),
+              name: 'large.png',
+              mimeType: 'image/png',
+            ),
+            cloudConsent: true,
+          ),
+          throwsA(isA<MenuImportException>()),
+        );
+        expect(tokenRead, isFalse);
+        expect(requestMade, isFalse);
+        service.close();
+      },
+    );
+
+    test('rejects insecure endpoints before upload', () async {
+      final service = MenuImportService(
+        endpoint: Uri.http('localhost:4177', '/api/shop/menu-import'),
+        accessToken: () async => 'test-session',
+        client: MockClient((_) async => http.Response('{}', 200)),
+      );
+      await expectLater(
+        service.parsePhoto(
+          XFile.fromData(_pngBytes(), name: 'menu.png'),
+          cloudConsent: true,
+        ),
+        throwsA(isA<MenuImportException>()),
+      );
+      service.close();
+    });
+
+    test(
+      'rejects an off-domain HTTPS endpoint before reading a token',
+      () async {
+        var tokenRead = false;
+        final service = MenuImportService(
+          endpoint: Uri.https('untrusted.example', '/api/shop/menu-import'),
+          accessToken: () async {
+            tokenRead = true;
+            return 'test-session';
+          },
+          client: MockClient((_) async => http.Response('{}', 200)),
+        );
+        await expectLater(
+          service.parsePhoto(
+            XFile.fromData(_pngBytes(), name: 'menu.png'),
+            cloudConsent: true,
+          ),
+          throwsA(isA<MenuImportException>()),
+        );
+        expect(tokenRead, isFalse);
+        service.close();
+      },
+    );
+
+    test(
+      'rejects an off-domain HTTPS endpoint before reading a token',
+      () async {
+        var tokenRead = false;
+        final service = MenuImportService(
+          endpoint: Uri.https('untrusted.example', '/api/shop/menu-import'),
+          accessToken: () async {
+            tokenRead = true;
+            return 'test-session';
+          },
+          client: MockClient((_) async => http.Response('{}', 200)),
+        );
+        await expectLater(
+          service.parsePhoto(
+            XFile.fromData(_pngBytes(), name: 'menu.png'),
+            cloudConsent: true,
+          ),
+          throwsA(isA<MenuImportException>()),
+        );
+        expect(tokenRead, isFalse);
+        service.close();
+      },
+    );
+  });
+
+  group('Drift local draft and payment setup', () {
+    late ShopDatabase database;
+
+    setUp(() {
+      database = ShopDatabase(NativeDatabase.memory());
+    });
+
+    tearDown(() async {
+      await database.close();
+    });
+
+    test('sale receipt keeps immutable item lines for print and reprint', () async {
+      await database.addProduct(
+        id: 'tea',
+        name: 'လက်ဖက်ရည်',
+        priceMmk: 2500,
+        openingStock: 3,
+      );
+      const saleLines = [ShopSaleLineInput(productId: 'tea', quantity: 2)];
+      final receipt = await database.recordCashSale(
+        operationId: 'receipt-lines-sale',
+        lines: saleLines,
+      );
+      final replay = await database.recordCashSale(
+        operationId: 'receipt-lines-sale',
+        lines: saleLines,
+      );
+
+      expect(receipt.paymentMethod, 'cash');
+      expect(receipt.lines.single.productName, 'လက်ဖက်ရည်');
+      expect(receipt.lines.single.unitPriceMmk, 2500);
+      expect(receipt.lines.single.quantity, 2);
+      expect(replay.lines.single.productName, 'လက်ဖက်ရည်');
+      expect(replay.lines.single.lineTotalMmk, 5000);
+
+      final printLines = shopReceiptTextLines(receipt, myanmar: true);
+      expect(printLines, contains('လက်ဖက်ရည် x2'));
+      expect(printLines, contains('စုစုပေါင်း: 5,000 MMK'));
+      expect(printLines, contains('ငွေပေးချေမှု: CASH'));
+    });
+
+    test(
+      'stores the batch as review drafts, not active product rows',
+      () async {
+        final count = await database.stageMenuCandidates(
+          batchId: 'batch-1',
+          drafts: [
+            const MenuDraftInput(
+              id: 'draft-1',
+              batchId: 'batch-1',
+              category: 'Drink',
+              name: 'Tea',
+              description: '',
+              priceMmk: null,
+              sku: null,
+              barcode: null,
+              openingStock: null,
+            ),
+          ],
+        );
+        final rows = await database.readMenuDrafts();
+        expect(count, 1);
+        expect(rows.single.reviewState, 'needs_review');
+        expect(rows.single.priceMmk, isNull);
+        expect(rows.single.sku, isNull);
+        expect(await database.countMenuDrafts(), 1);
+      },
+    );
+
+    test('validates the full batch before inserting any rows', () async {
+      final first = const MenuDraftInput(
+        id: 'same-id',
+        batchId: 'batch-2',
+        category: 'Food',
+        name: 'Rice',
+        description: '',
+        priceMmk: 1200,
+        sku: null,
+        barcode: null,
+        openingStock: 4,
+      );
+      await expectLater(
+        database.stageMenuCandidates(
+          batchId: 'batch-2',
+          drafts: [first, first],
+        ),
+        throwsArgumentError,
+      );
+      expect(await database.countMenuDrafts(), 0);
+    });
+
+    test('wallet phone numbers never become QR data', () async {
+      await database.saveWalletSetup(
+        const MerchantWalletSetup(
+          provider: 'KBZPay',
+          merchantPhone: '09 123 456 789',
+          officialQrPayload: null,
+          issuerConfirmed: false,
+        ),
+      );
+      expect(
+        qrPayloadForDisplay(null, confirmedAsProviderIssued: true),
+        isNull,
+      );
+      expect(
+        qrPayloadForDisplay('09 123 456 789', confirmedAsProviderIssued: false),
+        isNull,
+      );
+      expect(
+        qrPayloadForDisplay(
+          'kbzpay://pay?number=09123456789',
+          confirmedAsProviderIssued: true,
+        ),
+        isNull,
+      );
+      final officialPayload = _syntheticStaticMmqr();
+      expect(
+        qrPayloadForDisplay(officialPayload, confirmedAsProviderIssued: true),
+        officialPayload,
+      );
+      expect(
+        qrPayloadForDisplay('09 123 456 789', confirmedAsProviderIssued: true),
+        isNull,
+      );
+      expect(
+        qrPayloadForDisplay(
+          '${officialPayload.substring(0, officialPayload.length - 1)}0',
+          confirmedAsProviderIssued: true,
+        ),
+        isNull,
+      );
+      await expectLater(
+        database.saveWalletSetup(
+          const MerchantWalletSetup(
+            provider: 'KBZPay',
+            merchantPhone: null,
+            officialQrPayload: '09 123 456 789',
+            issuerConfirmed: true,
+          ),
+        ),
+        throwsArgumentError,
+      );
+    });
+
+    test('requires an explicit static-mode tag and rejects dynamic mode', () {
+      expect(
+        isValidStaticMyanmarMmqr(_syntheticStaticMmqr(initiationMode: null)),
+        isFalse,
+      );
+      expect(
+        isValidStaticMyanmarMmqr(_syntheticStaticMmqr(initiationMode: '12')),
+        isFalse,
+      );
+    });
+
+    test('accepts supported additional data and fixed merchant fee fields', () {
+      final additionalData = [
+        '01${'ORDER-7'.length.toString().padLeft(2, '0')}ORDER-7',
+      ].join();
+      expect(
+        isValidStaticMyanmarMmqr(
+          _syntheticStaticMmqr(
+            extraFields: [
+              '62${additionalData.length.toString().padLeft(2, '0')}$additionalData',
+              '550202',
+              '56041.50',
+            ],
+          ),
+        ),
+        isTrue,
+      );
+    });
+
+    test('rejects reserved additional data and inconsistent fee fields', () {
+      final reservedData = '1201X';
+      expect(
+        isValidStaticMyanmarMmqr(
+          _syntheticStaticMmqr(
+            extraFields: [
+              '62${reservedData.length.toString().padLeft(2, '0')}$reservedData',
+            ],
+          ),
+        ),
+        isFalse,
+      );
+      expect(
+        isValidStaticMyanmarMmqr(
+          _syntheticStaticMmqr(extraFields: ['56041.50']),
+        ),
+        isFalse,
+      );
+      expect(
+        isValidStaticMyanmarMmqr(_syntheticStaticMmqr(extraFields: ['550202'])),
+        isFalse,
+      );
+    });
+  });
+
+  group('bounded printer discovery', () {
+    test('scans host addresses only within the current private subnet', () {
+      final subnet = Ipv4Subnet.fromAddress('192.168.1.25', '255.255.255.0');
+      expect(subnet.prefixLength, 24);
+      expect(subnet.hosts, hasLength(253));
+      expect(subnet.hosts, contains('192.168.1.1'));
+      expect(subnet.hosts, contains('192.168.1.254'));
+      expect(subnet.hosts, isNot(contains('192.168.1.25')));
+      expect(
+        () => Ipv4Subnet.fromAddress('8.8.8.8', '255.255.255.0'),
+        throwsFormatException,
+      );
+      expect(
+        () => Ipv4Subnet.fromAddress('192.168.1.25', '255.255.252.0'),
+        throwsFormatException,
+      );
+    });
+
+    test('probes only the selected subnet on port 9100', () async {
+      final seen = <String>[];
+      final service = PrinterDiscoveryService(
+        rangeProvider: () async =>
+            (ip: '192.168.10.10', mask: '255.255.255.248'),
+        probe: (host, port) async {
+          seen.add('$host:$port');
+          return host == '192.168.10.11';
+        },
+      );
+      final result = await service.scan();
+      expect(result.localIp, '192.168.10.10');
+      expect(result.subnetMask, '255.255.255.248');
+      expect(result.printers.map((item) => item.host), ['192.168.10.11']);
+      expect(seen.every((item) => item.startsWith('192.168.10.')), isTrue);
+      expect(seen.every((item) => item.endsWith(':9100')), isTrue);
+      expect(seen, isNot(contains('192.168.10.10:9100')));
+    });
+
+    test('aborts discovery when Wi-Fi changes between probe batches', () async {
+      var rangeReads = 0;
+      final seen = <String>[];
+      final service = PrinterDiscoveryService(
+        rangeProvider: () async {
+          rangeReads++;
+          return rangeReads <= 2
+              ? (ip: '192.168.10.10', mask: '255.255.255.248')
+              : (ip: '192.168.11.10', mask: '255.255.255.248');
+        },
+        probe: (host, port) async {
+          seen.add('$host:$port');
+          return false;
+        },
+      );
+
+      await expectLater(
+        service.scan(maxConcurrent: 2),
+        throwsA(isA<PrinterNetworkChanged>()),
+      );
+      expect(seen, hasLength(2));
+      expect(seen.every((item) => item.startsWith('192.168.10.')), isTrue);
+    });
+
+    test('invalidates candidates from a replaced scan', () async {
+      var respond = true;
+      final service = PrinterDiscoveryService(
+        rangeProvider: () async =>
+            (ip: '192.168.20.10', mask: '255.255.255.248'),
+        probe: (host, port) async => respond && host == '192.168.20.9',
+      );
+      final firstScan = await service.scan();
+      expect(firstScan.printers, hasLength(1));
+      final priorCandidate = firstScan.printers.single;
+      respond = false;
+      await service.scan();
+      await expectLater(
+        service.sendTestReceipt(priorCandidate),
+        throwsFormatException,
+      );
+    });
+
+    test('rejects a candidate when Wi-Fi changes after discovery', () async {
+      var range = (ip: '192.168.20.10', mask: '255.255.255.248');
+      final service = PrinterDiscoveryService(
+        rangeProvider: () async => range,
+        probe: (host, port) async => host == '192.168.20.9',
+      );
+      final result = await service.scan();
+      final candidate = result.printers.single;
+      range = (ip: '192.168.21.10', mask: '255.255.255.248');
+      await expectLater(
+        service.sendTestReceipt(candidate),
+        throwsA(isA<PrinterNetworkChanged>()),
+      );
+    });
+  });
+}
+
+Uint8List _pngBytes() {
+  return Uint8List.fromList([
+    0x89,
+    0x50,
+    0x4e,
+    0x47,
+    0x0d,
+    0x0a,
+    0x1a,
+    0x0a,
+    ...List<int>.filled(20, 0),
+  ]);
+}
+
+String _syntheticStaticMmqr({
+  List<String> extraFields = const [],
+  String? initiationMode = '11',
+}) {
+  String field(String id, String value) =>
+      '$id${utf8.encode(value).length.toString().padLeft(2, '0')}$value';
+
+  final merchant = [
+    field('00', 'MM.COM.MMQR'),
+    field('01', '999999999999999'),
+    field('02', '000000'),
+  ].join();
+  final language = [field('00', 'my'), field('01', 'ဆိုင်')].join();
+  final body = [
+    field('00', '01'),
+    if (initiationMode != null) field('01', initiationMode),
+    field('26', merchant),
+    field('52', '5411'),
+    field('53', '104'),
+    field('58', 'MM'),
+    field('59', 'TEST STORE'),
+    field('60', 'Yangon'),
+    field('64', language),
+    ...extraFields,
+    '6304',
+  ].join();
+  return '$body${_testCrc16(utf8.encode(body))}';
+}
+
+String _testCrc16(List<int> bytes) {
+  var crc = 0xffff;
+  for (final byte in bytes) {
+    crc ^= byte << 8;
+    for (var bit = 0; bit < 8; bit++) {
+      crc = (crc & 0x8000) != 0 ? ((crc << 1) ^ 0x1021) : crc << 1;
+      crc &= 0xffff;
+    }
+  }
+  return crc.toRadixString(16).toUpperCase().padLeft(4, '0');
+}

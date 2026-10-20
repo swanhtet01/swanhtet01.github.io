@@ -152,7 +152,7 @@ async function capture(cdp, sessionId, output, name, expectedTexts, view) {
     const state = await evaluate(cdp, sessionId, `(() => {
       const node = document.querySelector(${JSON.stringify(view.selector)});
       const bounds = node?.getBoundingClientRect();
-      const images = [...document.querySelectorAll(${JSON.stringify(view.imageSelector || 'img[data-no-gallery-images]')})];
+      const images = [...document.querySelectorAll(${JSON.stringify(view.imageSelector || 'img')})];
       return { path: location.pathname, route: window.__qaGalleryRoute ?? null,
         tab: window.__qaGalleryTab ?? null, visible: Boolean(bounds && bounds.bottom > 0 && bounds.top < innerHeight && bounds.right > 0 && bounds.left < innerWidth),
         imageCount: images.length, loadedImages: images.filter(image => image.complete && image.naturalWidth > 0).length };
@@ -375,11 +375,11 @@ async function main() {
       throw new Error(`counter_multi_item_basket_missing:${JSON.stringify(saleBasket)}`)
     }
     captures.push(await capture(cdp, sessionId, output, 'actual-shop-sell', ['Products', 'Current sale', 'KAUNG 90 Days Rice'],
-      { fixturePath: '/shop/', tab: 'counter', selector: '.shop-current-sale' }))
+      { fixturePath: '/shop/', tab: 'counter', selector: '.shop-current-sale', imageSelector: '.shop-product-art.shop-product-photo', images: 5 }))
     captures.push(await captureTablet(cdp, sessionId, output, 'actual-shop-sell-tablet', ['Products', 'Current sale', 'KAUNG 90 Days Rice'],
-      { fixturePath: '/shop/', tab: 'counter', selector: '.shop-counter-grid', scrollToTop: true, openSale: true }))
+      { fixturePath: '/shop/', tab: 'counter', selector: '.shop-counter-grid', scrollToTop: true, openSale: true, imageSelector: '.shop-product-art.shop-product-photo', images: 5 }))
     captures.push(await captureMobile(cdp, sessionId, output, 'actual-shop-sell-mobile', ['Products', 'KAUNG 90 Days Rice'],
-      { fixturePath: '/shop/', tab: 'counter', selector: '.shop-counter-grid' }))
+      { fixturePath: '/shop/', tab: 'counter', selector: '.shop-counter-grid', imageSelector: '.shop-product-art.shop-product-photo', images: 5 }))
     await clickSelector(cdp, sessionId, '.shop-review-sale')
     await waitFor(cdp, sessionId, 'Review counter sale')
     await typeInto(cdp, sessionId, '.accountable-action-gate input', 'Synthetic cashier')

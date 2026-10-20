@@ -16,6 +16,15 @@ test('Shop Today exposes the real reviewed accounting handoff after close', () =
   assert.match(today, /data-shop-accounting-export="accounting-csv-v1"[\s\S]*?<strong>CSV<\/strong>/)
 })
 
+test('Shop Today removes empty sales duplication and distinguishes unpaid orders from recorded takings', async () => {
+  assert.match(today, /salesPatternReady \|\| salesPulse\.today\.count > 0 \? <article aria-label=\{uiText\('Sales insight'\)\}/)
+  assert.match(today, /attentionPriority\.id === 'payment_pending' \? 'Orders awaiting payment' : attentionPriority\.title/)
+  assert.match(today, /uiText\('Reconcile recorded takings'\)/)
+  const locale = await readFile(resolve(root, 'showroom', 'src', 'core', 'ui-locale-my.ts'), 'utf8')
+  assert.match(locale, /'Orders awaiting payment': 'ငွေပေးချေရန် စောင့်နေသော အော်ဒါများ'/)
+  assert.match(locale, /'Reconcile recorded takings': 'မှတ်တမ်းတင်ထားသော ရငွေများကို စစ်ဆေးရန်'/)
+})
+
 test('accounting CSV bytes are created only when the operator downloads', () => {
   const start = core.indexOf('const latestAccountingDownload = useMemo(')
   const end = core.indexOf('const supplierPayablesDownload = useMemo(', start)
