@@ -1,6 +1,6 @@
 # SuperMega Supergoal
 
-- Version: 1.7.0
+- Version: 1.8.0
 - Owner: Swan Htet, Founder
 - Maintainer: CTO, sole integration writer
 - Updated: 2026-10-20
@@ -16,11 +16,19 @@ The differentiated promise is a full English or full Burmese merchant experience
 
 The current design decision uses an **eliminate / reduce / raise / create** test against a merchant's first day. Eliminate repeated device-only warnings, dummy controls and manual message re-entry from the primary path. Reduce setup to a usable first catalog item, a first sale and an optional connected-account step; move printer, wallet, team and advanced policy setup to the point of need. Raise sale/stock correctness, discoverability, full-language quality, hardware reliability and recovery to non-negotiable release criteria. Create a reviewed photo-to-catalog path and later grounded, cited sales/stock suggestions that save measured operator time. Do not add an AI card, setting or subscription control unless it improves a named job and its failure state is clear.
 
+## Current delivery goal after the 20 October checkpoint
+
+Produce **one independently reviewable Shop merchant pilot**, not a broad feature-complete claim. A merchant must be able to set up a catalog, scan or find an item, finish an offline sale, print or retrieve its receipt, and recover after interruption on a named supported device. The signed-in account must show the right workspace and deny ordinary customers Sites and Commerce management at both UI and API boundaries. The public site must show current source-bound Shop screens and advertise only the platform and download paths actually verified. Sites and Commerce remain usable by internal operators under their own acceptance checks.
+
+The pilot is ready for a release decision only when these five evidence packets are complete: (1) exact-build app and real-device checkout, barcode and receipt tests; (2) managed sign-in, tenant separation, save/reload, sync and restore; (3) protected-preview browser and public-claim parity; (4) passing exact-head CI/security, eligible independent review and reversible release procedure; and (5) a bounded paid-VPS agent job with restart, verifier and cost receipts. Mark each packet `PASS`, `FAIL`, `BLOCKED` or `NOT RUN` with build, device/target and evidence. A passing source test or AI critique cannot stand in for device, hosted or merchant proof. The first four packets gate the customer Shop pilot; packet five gates claims that the internal agent workcell is operational. The founder retains the separate production and commercial decisions.
+
 ## AI-native operating model
 
 **Working autonomously, scaling infinitely** is the direction for SuperMega's internal workcell, not a claim of unlimited compute or unattended authority. The outcome is less time and cost from a real merchant problem to a verified improvement. Agents should use other AI for bounded research, generation, critique and test-case discovery, while tools and source records establish what actually happened. Give them machine advantages a human team cannot sustain manually: exact-revision memory, repeatable multimodal inspection, many cheap hypotheses, replayable failure cases and continuous measurement. Spend concurrency only when independent tasks and measured throughput justify it; keep one accountable integration writer.
 
 The operating loop is **observe → propose → implement → verify → learn**. Each work order names one user job, exact input/source revision, permitted tools and data, owner, budget, expected artifact, deterministic acceptance check, evidence type and stop condition. A second model may challenge a proposal or generate counterexamples, but cannot approve its own output. Record tool traces and outcome metadata without raw secrets or customer content. Turn each confirmed failure into a reproducible test or narrow skill update, replay the relevant evaluation set before changing prompts, models or tools, and retire changes that do not improve the merchant outcome. Use the existing work-order and evaluation system; do not launch a parallel agent platform.
+
+Measure the machine advantage on the **same pinned cases**: manual/current workflow, one agent, and a bounded proposer-plus-challenger workflow. Blind-check factual accuracy and task completion first, then compare operator corrections, elapsed time, retries and cost per accepted result. Use multimodal input, exhaustive edge-case generation and exact-revision replay where they demonstrably outperform a human-maintained checklist. An agent's own confidence, a second model's agreement, or four checked boxes is never proof that a blocked or partial job completed. Stop an experiment when it adds cost or complexity without a repeatable merchant or operating gain.
 
 The first internal deployment target is the approved paid VPS/cloud capacity. Prove one queued, authorized, bounded synthetic job survives worker restart, yields a source-bound artifact and independent evaluation, records model/tool cost, and never performs an unapproved external write. Until that end-to-end proof exists, agent execution is **NOT RUN** as a hosted capability. Local runner RAM checks do not determine hosted readiness. The [AI-native operating loop](docs/ai-native-operating-loop.md) holds the first benchmark, task contract and acceptance matrix; the launch-control record holds mutable evidence.
 

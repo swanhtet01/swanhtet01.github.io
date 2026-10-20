@@ -108,6 +108,7 @@ jobs:
       - name: Verify coordinated release and RLS guards
         run: |
           node --test tools/prepare_release_integration_batch.test.mjs
+          node --test tools/score_ai_native_shop_benchmark.test.mjs
           node --test tools/run_app_verify_annotation.test.mjs
           python tools/validate_supermega_database_url.py --self-test
           node tools/verify_private_trial_migrations.mjs

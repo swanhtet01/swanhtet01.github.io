@@ -47,7 +47,6 @@ const ADVANCE_FIELDS = new Set([
   'nextStageEvidence',
   'confirmation',
 ])
-const ACCEPTED_ORDER_STATUSES = new Set(['completed', 'partial'])
 const ACCEPTANCE_CHECKS = Object.freeze(['accurate', 'complete', 'usable', 'boundarySafe'])
 
 const failure = (reason, extra = {}) => ({ ok: false, reason, ...extra })
@@ -469,8 +468,10 @@ export async function advanceCompanyMissionStage(input, options = {}) {
     digest: stage.evidenceDigest,
     bytes: stage.evidenceBytes,
   })
-    || !ACCEPTED_ORDER_STATUSES.has(order.status)
+    || order.status !== 'completed'
     || !isRecord(order.result)
+    || order.result.status !== 'completed'
+    || order.result.ok !== true
     || !sameHash(order.resultHash, sha256(stableStringify(order.result)))
     || !sameHash(order.resultHash, resultHash)) {
     return failure('company_mission_result_mismatch', { status: 'conflict' })

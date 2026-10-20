@@ -218,6 +218,38 @@ test('evaluation rejects non-terminal work, mismatched plans, weak verdicts, and
   })).reason, 'company_evaluation_result_mismatch')
 })
 
+test('accepted evaluation cannot promote a partial, blocked, failed, or internally unsuccessful result', async () => {
+  const state = evaluationHarness()
+  for (const status of ['partial', 'blocked', 'failed']) {
+    const result = await evaluateCompanyWorkOrder(evaluationInput(), {
+      ...state.options,
+      getCompanyWorkOrder: async () => ({ ok: true, workOrder: order({ status }) }),
+    })
+    assert.equal(result.reason, 'company_evaluation_completed_result_required')
+  }
+  for (const resultPatch of [{ status: 'partial' }, { ok: false }]) {
+    const cycleResult = { ...order().result, ...resultPatch }
+    const result = await evaluateCompanyWorkOrder(evaluationInput(), {
+      ...state.options,
+      getCompanyWorkOrder: async () => ({
+        ok: true,
+        workOrder: order({ result: cycleResult, resultHash: hash(cycleResult) }),
+      }),
+    })
+    assert.equal(result.reason, 'company_evaluation_completed_result_required')
+  }
+  assert.equal(state.records.size, 0)
+  const revision = await evaluateCompanyWorkOrder(evaluationInput({
+    verdict: 'revision_required',
+    checks: { accurate: false, complete: true, usable: true, boundarySafe: true },
+  }), {
+    ...state.options,
+    getCompanyWorkOrder: async () => ({ ok: true, workOrder: order({ status: 'partial' }) }),
+  })
+  assert.equal(revision.ok, true)
+  assert.equal(revision.evaluation.verdict, 'revision_required')
+})
+
 test('evaluation fails closed when its immutable claim or record is not durable', async () => {
   let released = ''
   const nonDurable = await evaluateCompanyWorkOrder(evaluationInput(), {

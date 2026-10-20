@@ -475,6 +475,10 @@ export async function evaluateCompanyWorkOrder(input, options = {}) {
   if (!sameHash(order.resultHash, resultHash)) {
     return failure('company_evaluation_result_mismatch', { status: 'conflict', workOrderId })
   }
+  if (verdict === 'accepted'
+    && (order.status !== 'completed' || order.result.status !== 'completed' || order.result.ok !== true)) {
+    return failure('company_evaluation_completed_result_required', { status: 'conflict', workOrderId })
+  }
 
   const evaluationPayload = { clientId, workOrderId, planHash: order.planHash, resultHash, verdict, checks }
   const evaluationHash = sha256(stableStringify(evaluationPayload))
