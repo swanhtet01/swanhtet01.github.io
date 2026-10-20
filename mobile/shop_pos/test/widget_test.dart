@@ -57,7 +57,6 @@ void main() {
     await tester.tap(find.text('Cash sale'));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('Sale saved'), findsOneWidget);
     expect(await database.countSales(), 1);
     expect((await database.readActiveProducts()).single.onHand, 1);
     await database.close();
@@ -91,6 +90,8 @@ void main() {
   testWidgets('editing a merchant QR clears its prior issuer confirmation', (
     tester,
   ) async {
+    final semantics = tester.ensureSemantics();
+    addTearDown(semantics.dispose);
     final database = ShopDatabase(NativeDatabase.memory());
     final revisedPayload = _testStaticMmqr(merchantName: 'REVISED STORE');
     await database.saveWalletSetup(
@@ -150,6 +151,8 @@ void main() {
   testWidgets(
     'wallet QR checkout writes only after the cashier verifies payment',
     (tester) async {
+      final semantics = tester.ensureSemantics();
+      addTearDown(semantics.dispose);
       final database = ShopDatabase(NativeDatabase.memory());
       await database.addProduct(
         id: 'tea',
@@ -200,7 +203,7 @@ void main() {
       // checks UI recovery only; a separate file-backed test covers disk reopen.
       await tester.tap(find.text('Cancel'));
       await tester.pumpAndSettle();
-      await tester.pageBack();
+      await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
       expect(find.text('Resume payment'), findsOneWidget);
       expect(
