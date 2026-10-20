@@ -1,6 +1,6 @@
 # SuperMega Shop native POS candidate
 
-Flutter Shop targets Android tablets and iPad. A Windows PC build is now configured in CI and, if it passes, retained as an unsigned QA archive; it is not yet a signed installer or a supported public download. Drift/SQLite is the on-device source of truth for the local catalog, completed sales, stock movements, and pending operations. The client can open offline and record local cash sales; it does not currently synchronize between devices or restore cloud backups.
+Flutter Shop targets Android tablets, iPad, and Windows PC. CI produces Android and unsigned Windows QA archives, but these are not signed installers or supported public downloads; the iPad build is unsigned too. Drift/SQLite is the on-device source of truth for the local catalog, completed sales, stock movements, and pending operations. The client can open offline and record local cash sales; it does not currently synchronize between devices or restore cloud backups.
 
 ## Current flows
 
@@ -10,6 +10,7 @@ Flutter Shop targets Android tablets and iPad. A Windows PC build is now configu
 - Search only the current private Wi-Fi subnet for possible ESC/POS devices on port 9100 after the operator starts discovery. Select a candidate, send a test slip, and confirm the paper before saving it as the receipt printer. Completed sales print after the local transaction commits; a printer failure does not undo the sale and offers a retry.
 - Store KBZPay/WavePay merchant details and the exact issuer-confirmed static Myanmar MMQR payload. Checkout shows the amount separately, so the customer enters it in their wallet. The cashier must verify receipt in the wallet app. This is not an amount-specific payment intent and does not settle automatically.
 - Persist a wallet checkout intent before showing the QR. If the app closes while the customer is paying, the basket and amount remain available to resume; sale, stock movement, and outbox event commit together only after the cashier confirms receipt. Cancelling requires an explicit confirmation that no payment arrived.
+- Block any different sale in the same database transaction while a wallet intent remains pending, even if the app has not finished restoring its screen state. Older pending checkouts without a saved QR use a manual wallet-app reconciliation dialog rather than showing an unverified replacement QR.
 - Choose English or Burmese in Settings. Review device language rendering and Myanmar-script receipt output on supported hardware before release.
 
 ## AI and privacy boundary

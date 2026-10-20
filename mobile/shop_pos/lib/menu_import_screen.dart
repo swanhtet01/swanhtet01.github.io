@@ -613,6 +613,7 @@ class _EmailCodeSignInScreenState extends State<EmailCodeSignInScreen> {
       if (mounted) {
         setState(() {
           _sent = true;
+          _code.clear();
           _message = shopCopy(
             widget.myanmar,
             'Check your email for the sign-in code.',
@@ -679,6 +680,14 @@ class _EmailCodeSignInScreenState extends State<EmailCodeSignInScreen> {
             controller: _email,
             keyboardType: TextInputType.emailAddress,
             autocorrect: false,
+            onChanged: (_) {
+              if (!_sent) return;
+              setState(() {
+                _sent = false;
+                _code.clear();
+                _message = null;
+              });
+            },
             decoration: InputDecoration(
               labelText: shopCopy(myanmar, 'Email', 'အီးမေးလ်'),
             ),
@@ -710,6 +719,13 @@ class _EmailCodeSignInScreenState extends State<EmailCodeSignInScreen> {
                     ),
             ),
           ),
+          if (_sent)
+            TextButton(
+              onPressed: _busy ? null : _sendCode,
+              child: Text(
+                shopCopy(myanmar, 'Send another code', 'Code ထပ်ပို့ရန်'),
+              ),
+            ),
         ],
       ),
     );
