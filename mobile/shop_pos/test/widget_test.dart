@@ -24,7 +24,9 @@ void main() {
   testWidgets('restored Android menu photo waits for fresh cloud consent', (
     tester,
   ) async {
-    final directory = await Directory.systemTemp.createTemp('shop-menu-recovery-');
+    final directory = await Directory.systemTemp.createTemp(
+      'shop-menu-recovery-',
+    );
     addTearDown(() async {
       if (await directory.exists()) await directory.delete(recursive: true);
     });

@@ -195,10 +195,7 @@ class _ShopHomeState extends State<ShopHome> {
   @override
   void dispose() {
     unawaited(
-      discardCapturedMenuPhoto(
-        _recoveredMenuPhoto,
-        createdByCamera: true,
-      ),
+      discardCapturedMenuPhoto(_recoveredMenuPhoto, createdByCamera: true),
     );
     _search.dispose();
     super.dispose();
