@@ -5,6 +5,7 @@ import 'package:drift/drift.dart' hide isNotNull, isNull;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:supermega_shop/main.dart';
 import 'package:supermega_shop/shop_database.dart';
 import 'package:supermega_shop/shop_models.dart';
@@ -109,6 +110,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    final qrWidget = find.byType(QrImageView).first;
+    await tester.ensureVisible(qrWidget);
+    await tester.pumpAndSettle();
     expect(find.bySemanticsLabel('KBZPay merchant QR'), findsOneWidget);
     await tester.enterText(
       find.byKey(const ValueKey('wallet-payload-KBZPay')),
@@ -128,6 +132,8 @@ void main() {
     expect(saved.issuerConfirmed, isFalse);
 
     await tester.tap(find.byType(CheckboxListTile).first);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byType(QrImageView).first);
     await tester.pumpAndSettle();
     expect(find.bySemanticsLabel('KBZPay merchant QR'), findsOneWidget);
     await tester.enterText(
@@ -186,6 +192,8 @@ void main() {
       await tester.tap(find.text('Wallet QR'));
       await tester.pumpAndSettle();
 
+      await tester.ensureVisible(find.byType(QrImageView).first);
+      await tester.pumpAndSettle();
       expect(find.text('2,500 MMK'), findsWidgets);
       expect(find.bySemanticsLabel('KBZPay merchant QR'), findsOneWidget);
       final pending = await database.readPendingWalletCheckout();
