@@ -654,6 +654,8 @@ class _ShopHomeState extends State<ShopHome> {
               ),
             ],
           ),
+        ),
+        ),
         IconButton(
           tooltip: shopCopy(widget.myanmar, 'Remove one', 'တစ်ခုလျှော့ရန်'),
           onPressed:
