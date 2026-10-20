@@ -104,6 +104,7 @@ export function ShopBarcodeLabels(props: ShopBarcodeLabelsProps) {
           dialog.shop-barcode-label-dialog[open] { position:fixed; inset:0; display:block; width:50mm; height:30mm; max-width:none; max-height:none; overflow:visible; padding:0; border:0; border-radius:0; background:#fff; box-shadow:none; }
           .shop-barcode-label-shell,.shop-barcode-label-heading,.shop-barcode-label-controls,.shop-barcode-label-preview,.shop-barcode-label-actions,.shop-barcode-label-note { display:none !important; }
           .shop-barcode-label-print-host { position:fixed; inset:0; display:block !important; visibility:visible !important; background:#fff; }
+          .shop-barcode-label-print-host * { visibility:visible !important; }
           .shop-barcode-label-print { display:grid; grid-template-rows:auto auto 1fr auto; align-content:center; justify-items:center; gap:1mm; width:50mm; height:30mm; padding:2mm; overflow:hidden; break-after:page; page-break-after:always; background:#fff; color:#111; }
           .shop-barcode-label-print:last-child { break-after:auto; page-break-after:auto; }
           .shop-barcode-label-print strong { width:100%; overflow:hidden; font:600 8pt/1.1 Arial,sans-serif; text-align:center; text-overflow:ellipsis; white-space:nowrap; }

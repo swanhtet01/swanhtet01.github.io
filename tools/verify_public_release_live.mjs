@@ -138,15 +138,14 @@ async function verifyOnce() {
   const pages = new Map(pageResults)
   verifyCompanyHeadline(pages.get('/') || '', 'homepage_headline_wrong')
   assert(pages.get('/')?.includes('href="https://app.supermega.dev/login">Login</a>'), 'homepage_product_cta_missing')
-  assert(pages.get('/')?.includes('id="products"'), 'product_portfolio_missing')
   const homepage = pages.get('/') || ''
-  for (const token of ['class="home-product-shot"']) {
+  for (const token of ['class="company-operating-overview"', 'class="company-product-visual"', 'src="/images/actual-shop-today.png"']) {
     assert(homepage.includes(token), 'homepage_offer_contract_missing', { token })
   }
   assert(!/\bSites\b|\bCommerce\b/.test(homepage), 'internal_products_exposed_on_homepage')
   const shop = publicProducts.find(product => product.id === 'shop')
   const shopAction = `href="${shop.primaryCta.url}">${shop.primaryCta.label}</a>`
-  assert(homepage.includes('id="shop"'), 'homepage_shop_action_missing')
+  assert(homepage.includes('href="/shop/">Explore Shop'), 'homepage_shop_action_missing')
   for (const product of publicProducts) {
     const landingRoute = `/${product.id}/`
     const landing = pages.get(landingRoute)
@@ -154,12 +153,16 @@ async function verifyOnce() {
     const guidedSampleRoute = product.id === 'shop'
       ? 'https://app.supermega.dev/login?product=shop'
       : 'https://app.supermega.dev/login'
-    assert(landing.includes('class="platform-image"'), 'landing_headline_missing', { product: product.id })
+    if (product.id === 'shop') {
+      assert(landing.includes('class="shop-hero-app"') && landing.includes('src="/images/actual-shop-sell.png"'), 'landing_headline_missing', { product: product.id })
+    } else {
+      assert(landing.includes('class="platform-image"'), 'landing_headline_missing', { product: product.id })
+    }
     assert(landing.includes(`href="${guidedSampleRoute}"`), 'landing_login_route_missing', { product: product.id })
-    if (product.id === 'shop') assert(landing.includes('class="button button-primary" href="/contact/?product=shop">Ask about Shop'), 'shop_contact_action_missing')
+    if (product.id === 'shop') assert(landing.includes('href="/contact/?product=shop">Contact the Shop team'), 'shop_contact_action_missing')
     assert(!landing.includes(shopAction), 'retired_shop_action_present')
     assert(landing.includes('href="/contact/">Contact</a>'), 'landing_contact_route_missing', { product: product.id })
-    assert(homepage.includes(`id="${product.id}"`), 'landing_route_link_missing_on_home', { product: product.id })
+    assert(homepage.includes('href="/shop/">Explore Shop'), 'landing_route_link_missing_on_home', { product: product.id })
   }
   for (const product of manifest.customerProducts.filter(product => !publicProducts.includes(product))) {
     assert(!homepage.includes(`href="/${product.id}/"`) && !homepage.includes(`product=${product.id}`), 'retired_product_marketed', { product: product.id })
@@ -249,14 +252,19 @@ async function verifyOnce() {
   // their actual response bytes; a 200 HTML fallback must never pass as an image.
   assert(publicProducts.map(product => product.id).join(',') === 'shop', 'public_product_scope_not_shop_only')
   const interfaceImages = {
-    shop: ['actual-shop-today.png', 'actual-shop-sell.png', 'actual-shop-orders.png'],
+    shop: [
+      { file: 'actual-shop-today.png', routes: ['/'] },
+      { file: 'actual-shop-sell.png', routes: ['/shop/'] },
+      { file: 'actual-shop-orders.png', routes: ['/shop/'] },
+      { file: 'actual-shop-inventory.png', routes: ['/shop/'] },
+    ],
   }
   for (const product of publicProducts) {
-    const filenames = interfaceImages[product.id]
-    assert(filenames?.length >= 1, 'interface_image_mapping_missing', { product: product.id })
-    for (const [index, filename] of filenames.entries()) {
+    const captures = interfaceImages[product.id]
+    assert(captures?.length >= 1, 'interface_image_mapping_missing', { product: product.id })
+    for (const capture of captures) {
+      const { file: filename, routes } = capture
       const path = `/images/${filename}`
-      const routes = product.id === 'shop' && index === 0 ? ['/', `/${product.id}/`] : [`/${product.id}/`]
       for (const route of routes) {
         const html = pages.get(route)
         if (html != null) assert(html.includes(`src="${path}"`), 'interface_image_reference_missing', { route, path })

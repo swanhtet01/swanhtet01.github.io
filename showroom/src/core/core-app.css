@@ -779,7 +779,7 @@ label.checkbox-row input { width: 1.25rem; min-width: 1.25rem; min-height: 1.25r
    only ever moves down, and OS font scaling is the reason -- a shop owner running a large
    system font should get a proportionally larger warning, not a fixed one. */
 .storage-durability-banner { margin-top: 0.5rem; }
-.storage-durability-banner[data-durability="device-only"] { border-color: rgba(148,98,0,.34); background: rgba(148,98,0,.06); }
+.storage-durability-banner[data-durability="device-only"] { min-height: 38px; width: fit-content; max-width: 100%; display: flex; gap: 8px; padding: 4px 8px; border-color: rgba(148,98,0,.24); background: rgba(148,98,0,.035); }
 .storage-durability-banner[data-durability="full"] { border-color: rgba(197,58,58,.38); background: rgba(197,58,58,.07); }
 /* A durability warning that ellipsises is a warning the owner cannot act on, so this
    one wraps at every width instead of inheriting the single-line banner treatment. */
@@ -2104,9 +2104,9 @@ label.checkbox-row input { width: 1.25rem; min-width: 1.25rem; min-height: 1.25r
   .production-mode-banner > a { grid-column: 1 / -1; justify-content: center; border-top: 1px solid var(--core-line); }
   /* The advisory device-only state keeps its warning text but leaves the order queue
      visible. Storage-full remains the prominent three-part interruption. */
-  .storage-durability-banner[data-durability="device-only"] { grid-template-columns: minmax(0,1fr) auto; gap: .5rem; }
-  .storage-durability-banner[data-durability="device-only"] .status-pill { display: none; }
-  .storage-durability-banner[data-durability="device-only"] > a { grid-column: 2; min-height: 2.75rem; justify-content: flex-end; border-top: 0; }
+  .storage-durability-banner[data-durability="device-only"] { gap: .35rem; }
+  .storage-durability-banner[data-durability="device-only"] .status-pill { display: inline-flex; }
+  .storage-durability-banner[data-durability="device-only"] > a { min-height: 2.25rem; justify-content: flex-end; border-top: 0; }
   .plant-business-controls:not([open]) > summary { align-items: center; flex-wrap: nowrap; }
   .plant-business-controls:not([open]) > summary small { display: none; }
   .plant-today { grid-template-columns: 1fr; gap: 10px; padding: 12px; }

@@ -703,11 +703,11 @@ test('commerceOrderPromiseUrgency and commerceOrderItemSummary return correct va
   assert.equal(commerceOrderPromiseUrgency({}, SEED_NOW_MS), 'unrecorded')
 
   // Item summary: a single line uses the line name; multiple lines → "N items".
-  const oneLine = [{ sku: 'SM-1001', name: 'Daily essentials basket', quantity: 2, unitPriceMmk: 18500 }]
-  assert.equal(commerceOrderItemSummary(oneLine), 'Daily essentials basket')
+  const oneLine = [{ sku: 'SM-1001', name: 'KAUNG 90 Days Rice', quantity: 2, unitPriceMmk: 12450 }]
+  assert.equal(commerceOrderItemSummary(oneLine), 'KAUNG 90 Days Rice')
   const twoLines = [
-    { sku: 'SM-1001', name: 'Daily essentials basket', quantity: 2, unitPriceMmk: 18500 },
-    { sku: 'SM-1003', name: 'Household refill', quantity: 1, unitPriceMmk: 12000 },
+    { sku: 'SM-1001', name: 'KAUNG 90 Days Rice', quantity: 2, unitPriceMmk: 12450 },
+    { sku: 'SM-1003', name: 'ALPINE Drinking Water', quantity: 1, unitPriceMmk: 5700 },
   ]
   assert.equal(commerceOrderItemSummary(twoLines), '2 items')
 })
@@ -1121,14 +1121,14 @@ test('commerceStorefrontConfigurationActionId, accessors, commerceWorkingSampleC
     customerReference: 'Ko Aung',
     fulfilment: 'pickup',
     currency: 'MMK',
-    line: { sku: 'SM-1001', name: 'Daily essentials basket', variant: null, quantity: 2, unitPriceMmk: 18500 },
-    totalMmk: 37000,
+    line: { sku: 'SM-1001', name: 'KAUNG 90 Days Rice', variant: '6 kg', quantity: 2, unitPriceMmk: 12450 },
+    totalMmk: 24900,
   }
   const lines = commerceStorefrontRequestLines(v1Request)
   assert.equal(lines.length, 1)
   assert.equal(lines[0].sku, 'SM-1001')
   assert.equal(lines[0].quantity, 2)
-  assert.equal(lines[0].lineTotalMmk, 37000)
+  assert.equal(lines[0].lineTotalMmk, 24900)
 
   // commerceStorefrontRequestEquals: identical v1 requests are equal.
   assert.ok(commerceStorefrontRequestEquals(v1Request, { ...v1Request, line: { ...v1Request.line } }))
@@ -1141,7 +1141,7 @@ test('commerceStorefrontConfigurationActionId, accessors, commerceWorkingSampleC
   const diffSchema = { ...v1Request, schema: 'supermega.ecommerce.order_request.v2' }
   assert.ok(!commerceStorefrontRequestEquals(v1Request, diffSchema))
 
-  // commerceCatalogBaselines: seed has one baseline per item (4 items).
+  // commerceCatalogBaselines: seed has one baseline per item (5 items).
   const baselines = commerceCatalogBaselines(seed)
   assert.equal(baselines.length, seed.items.length)
 
@@ -1309,7 +1309,7 @@ test('commerceSupplierInvoiceMatch, commerceSupplierPerformance, commerceSupport
   const performance = commerceSupplierPerformance(seed, Date.parse('2026-07-23T08:00:00.000Z'))
   assert.ok(Array.isArray(performance))
   assert.ok(performance.length >= 1)
-  assert.equal(performance[0].supplier, 'Sample wholesale supplier')
+  assert.equal(performance[0].supplier, 'Supplier to confirm')
   assert.equal(performance[0].totalOrders, 1)
 
   // commerceSupportCheckpointState returns null for both checkpoints when no events exist.
@@ -1469,15 +1469,15 @@ test('registerCommerceItem, updateCommerceItem, reconcileCommercePayment, record
   const seedNowIso = '2026-07-23T08:00:00.000Z'
 
   // registerCommerceItem: adds a new item to the state.
-  const newItem = { sku: 'SM-1005', name: 'New product', onHand: 10, reorderAt: 3, price: 15000 }
-  const regProof = { actionId: 'ACT-REG-SM1005', capturedAt: seedNowIso, actor: 'Store manager', reason: 'Register new product.', evidenceReference: 'REG-REF-001' }
+  const newItem = { sku: 'SM-TEST-01', name: 'New product', onHand: 10, reorderAt: 3, price: 15000 }
+  const regProof = { actionId: 'ACT-REG-SMTEST01', capturedAt: seedNowIso, actor: 'Store manager', reason: 'Register new product.', evidenceReference: 'REG-REF-001' }
   const withItem = registerCommerceItem(seed, newItem, regProof)
   assert.ok(withItem !== null, 'valid item registration must succeed')
-  assert.ok(withItem.items.some((item) => item.sku === 'SM-1005'))
+  assert.ok(withItem.items.some((item) => item.sku === 'SM-TEST-01'))
   // Opening movement must be recorded.
-  assert.ok(withItem.movements.some((m) => m.kind === 'opening' && m.sku === 'SM-1005' && m.quantityDelta === 10))
+  assert.ok(withItem.movements.some((m) => m.kind === 'opening' && m.sku === 'SM-TEST-01' && m.quantityDelta === 10))
   // Catalog baseline must be created.
-  assert.ok(commerceCatalogBaselines(withItem).some((b) => b.sku === 'SM-1005'))
+  assert.ok(commerceCatalogBaselines(withItem).some((b) => b.sku === 'SM-TEST-01'))
   // Duplicate SKU → null.
   assert.equal(registerCommerceItem(withItem, newItem, { ...regProof, actionId: 'ACT-REG-DUP' }), null)
   // Invalid price → null.

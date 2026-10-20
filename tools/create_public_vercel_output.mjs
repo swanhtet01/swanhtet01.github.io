@@ -69,15 +69,22 @@ async function checkedOutShowroomTree(directory, atRoot = true) {
   return createHash('sha1').update(`tree ${tree.length}\0`).update(tree).digest()
 }
 const sourceGalleryAssetNames = [
-  'actual-shop-today.png', 'actual-shop-today-tablet.png', 'actual-shop-today-mobile.png',
+  'actual-shop-today.png',
+  'actual-shop-first-run.png',
   'actual-shop-sell.png', 'actual-shop-sell-tablet.png', 'actual-shop-sell-mobile.png',
+  'actual-shop-order-record.png',
+  'actual-shop-today-tablet.png', 'actual-shop-today-mobile.png',
   'actual-shop-orders.png', 'actual-shop-orders-tablet.png', 'actual-shop-orders-mobile.png',
   'actual-shop-inventory.png', 'actual-shop-inventory-tablet.png', 'actual-shop-inventory-mobile.png',
+  'actual-sites-editor.png', 'actual-sites-editor-tablet.png', 'actual-sites-editor-mobile.png',
+  'actual-sites-inquiries.png', 'actual-sites-inquiries-tablet.png', 'actual-sites-inquiries-mobile.png',
+  'actual-commerce-catalog.png', 'actual-commerce-catalog-tablet.png', 'actual-commerce-catalog-mobile.png',
+  'actual-commerce-order-request.png', 'actual-commerce-order-request-tablet.png', 'actual-commerce-order-request-mobile.png',
 ]
 // Keep the complete capture set and provenance available to internal review,
 // while exposing only the approved Shop customer surface in the public bundle.
 const publicGalleryAssetNames = [
-  'actual-shop-today.png', 'actual-shop-today-tablet.png', 'actual-shop-today-mobile.png',
+  'actual-shop-today.png',
   'actual-shop-sell.png', 'actual-shop-sell-tablet.png', 'actual-shop-sell-mobile.png',
   'actual-shop-orders.png', 'actual-shop-orders-tablet.png', 'actual-shop-orders-mobile.png',
   'actual-shop-inventory.png', 'actual-shop-inventory-tablet.png', 'actual-shop-inventory-mobile.png',
@@ -144,7 +151,9 @@ const sourceGalleryAssetEvidence = await Promise.all(publicGalleryProvenance.ass
     `public_gallery_capture_receipt_invalid:${file}`)
   return { file, width, height, sha256, capture }
 }))
-const publicGalleryAssetEvidence = sourceGalleryAssetEvidence.filter(asset => publicGalleryAssetNames.includes(asset.file))
+const sourceGalleryEvidenceByFile = new Map(sourceGalleryAssetEvidence.map(asset => [asset.file, asset]))
+const publicGalleryAssetEvidence = publicGalleryAssetNames.map(file => sourceGalleryEvidenceByFile.get(file))
+assert(publicGalleryAssetEvidence.every(Boolean), 'public_gallery_customer_asset_missing_from_provenance')
 
 assert(manifest.schemaVersion === 'supermega.site-context.v2', 'unsupported_site_manifest')
 assert(manifest.brand?.version && manifest.contextVersion && manifest.catalogVersion, 'site_manifest_versions_missing')
@@ -381,15 +390,14 @@ const sharedStyle = `
   .contact-copy { padding-top: 24px; }
   .contact-copy p { color: var(--muted); font-size: 18px; }
   .contact-page { display:grid; grid-template-columns:minmax(0,.82fr) minmax(0,1fr); align-items:start; gap:clamp(32px,5vw,84px); max-width:1160px; padding:clamp(44px,7vw,88px) 0 86px; }
-  .contact-page .page-hero { max-width:none; padding:36px 0 0; position:sticky; top:100px; }
-  .contact-page .page-hero::after { content:""; display:block; width:min(100%,340px); height:1px; margin-top:36px; background:linear-gradient(90deg,var(--blue),#e8f0ff); }
-  .contact-page .page-hero h1 { max-width:480px; font-size:clamp(46px,5vw,66px); line-height:1.03; letter-spacing:-.055em; }
+  .contact-page .page-hero { max-width:none; padding:18px 0 0; position:static; }
+  .contact-page .page-hero::after { display:none; }
+  .contact-page .page-hero h1 { max-width:480px; font-size:clamp(40px,4.3vw,58px); line-height:1.04; letter-spacing:-.045em; }
   .contact-page .page-hero .lede { max-width:430px; font-size:18px; line-height:1.62; }
   .contact-page .contact-layout { display:block; padding:0; }
   .contact-page .contact-form { width:100%; padding:clamp(24px,3vw,40px); gap:18px; border-color:#dbe3ee; border-radius:8px; background:#fff; box-shadow:0 16px 42px rgba(11,15,23,.06); }
   .contact-page .field-grid { gap:20px 16px; }
   .contact-page .field-grid label { display: block; color: var(--ink); font-size: 13px; font-weight: 650; }
-  .contact-page .field-grid label span[lang="my"] { color: var(--muted); font-weight: 500; }
   .contact-page .field-grid input, .contact-page .field-grid select, .contact-page .field-grid textarea { display: block; margin-top: 9px; min-height: 52px; border-color: #dbe3ee; border-radius: 6px; background: #fff; font-size: 15px; }
   .contact-page .field-grid textarea { min-height: 122px; line-height: 1.55; }
   .contact-page .contact-form .button { min-height:56px; width:100%; justify-content:center; padding-inline:26px; }
@@ -571,6 +579,20 @@ const sharedStyle = `
   .platform-gallery[data-single] .platform-slides {overflow:hidden}
   .shop-gallery-all .platform-slides {display:grid;gap:28px;overflow:visible;scroll-snap-type:none;border-radius:0}
   .shop-gallery-all .platform-slides .platform-image {min-width:0;scroll-snap-align:none}
+  .shop-gallery-all .platform-image {padding:clamp(14px,2vw,24px);border-color:#e4e7ec;border-radius:14px;background:#fff;box-shadow:0 12px 34px rgba(16,24,40,.05)}
+  .shop-gallery-all .platform-device-stage {padding:clamp(12px,2vw,22px);border-color:#e4e7ec;border-radius:12px;background:#f6f7f9;box-shadow:none}
+  .shop-gallery-all .platform-device-capture img {border-radius:8px;box-shadow:0 5px 16px rgba(16,24,40,.08)}
+  .shop-responsive-showcase {display:grid;gap:18px;min-width:0}
+  .shop-hero-app {min-width:0;align-self:center}
+  .shop-hero-app .platform-device-stage {padding:clamp(10px,1.5vw,18px);border-color:#e4e7ec;border-radius:12px;background:#f6f7f9;box-shadow:none}
+  .shop-hero-app .platform-device-set {grid-template-columns:minmax(0,1.55fr) minmax(0,1.05fr) minmax(0,.78fr);align-items:end}
+  .shop-workflow-card p {margin:0;color:#596579;font-size:14px;line-height:1.55}
+  .shop-workflow-support {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+  .shop-workflow-card {display:grid;grid-template-columns:minmax(0,1.35fr) minmax(150px,.65fr);gap:18px;align-items:center;min-width:0;margin:0;padding:14px;border:1px solid #e4e7ec;border-radius:12px;background:#fff}
+  .shop-workflow-card img {display:block;width:100%;height:auto;border:1px solid #e5e8ef;border-radius:8px;background:#f7f8fb;pointer-events:none;user-select:none}
+  .shop-workflow-card-copy {min-width:0}
+  .shop-workflow-card h3 {margin:0 0 8px;font-size:18px;letter-spacing:-.025em}
+  .shop-sample-note {margin:0;color:#70798a;font-size:12px;line-height:1.45}
   .platform-gallery-controls {display:flex;align-items:center;justify-content:flex-end;gap:12px;min-height:40px}
   .platform-gallery-controls button {display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border:1px solid var(--line-strong);border-radius:50%;color:var(--ink);background:#fff;font-size:20px;cursor:pointer}
   .platform-gallery-controls button:hover:not(:disabled) {border-color:var(--blue);color:var(--blue);background:#eff6ff}
@@ -580,7 +602,7 @@ const sharedStyle = `
   .platform-device-capture img {display:block;width:100%;height:auto;border:1px solid #dfe2ea;border-radius:5px;background:#fff;box-shadow:0 10px 24px rgba(16,24,40,.09);pointer-events:none;user-select:none}
   .platform-image figcaption {margin-top:auto;padding:12px 2px 0;color:#596579;font-size:12px;line-height:1.45}
   .platform-image figcaption small {display:block;margin-top:3px;color:#778196;font-size:11px}
-  .platform-device-set {display:grid;grid-template-columns:minmax(0,2.45fr) minmax(0,1.1fr) minmax(0,.78fr);align-items:end;gap:clamp(8px,1.4vw,16px);min-width:0}
+  .platform-device-set {display:grid;grid-template-columns:minmax(0,1.75fr) minmax(0,1.25fr) minmax(0,.95fr);align-items:end;gap:clamp(8px,1.4vw,16px);min-width:0}
   .platform-device-set:not(.has-tablet) {grid-template-columns:minmax(0,1fr) minmax(0,.48fr)}
   .platform-device-capture {display:flex;flex-direction:column;min-width:0;margin:0}
   .platform-device-capture figcaption {margin:7px 0 0;color:#657087;font-size:10px;font-weight:650;line-height:1.25;text-align:center}
@@ -641,19 +663,30 @@ const sharedStyle = `
   .button.primary:hover{background:#1d4ed8}
   .company-hero{background:radial-gradient(ellipse at 84% 18%,rgba(37,99,235,.10),transparent 32%),linear-gradient(180deg,#f5f8ff,#fff 68%)}
   body[data-view="company"] .company-hero{background:linear-gradient(180deg,#f8fbff,#fff 72%)}
+  .company-hero .hero-actions .button-primary,.shop-hero .button-primary{box-sizing:border-box;display:inline-flex;width:max-content;max-width:100%;min-height:50px;flex:0 1 auto;align-items:center;justify-content:center;gap:10px;border:1px solid #1d4ed8;border-radius:8px;padding:0 18px;color:#fff;background:#2563eb;font-size:14px;font-weight:650;line-height:1.2;text-decoration:none;white-space:nowrap;box-shadow:none}
+  .company-hero .hero-actions .button-primary:hover,.shop-hero .button-primary:hover{border-color:#1d4ed8;color:#fff;background:#1d4ed8}
+  .company-hero .hero-actions .button-primary svg,.shop-hero .button-primary svg{display:block;width:18px;height:18px;max-width:none;flex:0 0 18px}
+  .shop-actual-showcase{padding-block:clamp(46px,6vw,78px);border-bottom:1px solid #e4e7ec;background:#fff}
+  .shop-actual-showcase .story-heading{margin-bottom:26px}
+  .shop-actual-showcase .story-heading h2{font-size:clamp(30px,4vw,48px);letter-spacing:-.045em;line-height:1.08}
+  .shop-actual-showcase .story-heading p{max-width:36ch;font-size:15px;line-height:1.55}
   body[data-view="company"] .company-hero::before{opacity:0;background-image:none}
-  @media(min-width:1051px){body[data-view="company"] .company-hero .hero-grid{grid-template-columns:minmax(0,.88fr) minmax(420px,1.12fr);gap:clamp(36px,5vw,72px)}}
+  @media(min-width:1051px){body[data-view="company"] .company-hero .hero-grid{grid-template-columns:minmax(0,.76fr) minmax(520px,1.24fr);gap:clamp(28px,3.5vw,56px)}}
   body[data-view="company"] .company-hero .hero-art{min-height:0}
   body[data-view="company"] .company-hero .company-product-visual{display:grid;min-width:0;gap:10px;margin:0;padding:10px;border:1px solid #e1e5ed;border-radius:12px;background:#fff;box-shadow:0 18px 40px rgba(17,24,39,.08)}
   .company-product-visual img{display:block;width:100%;height:auto;border:1px solid #e5e8ef;border-radius:7px;background:#f7f8fb;pointer-events:none;user-select:none}
   .company-product-visual figcaption{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:2px 5px;color:#3d4655;font-size:12px;font-weight:700}
   .company-product-visual figcaption span{color:#70798a;font-size:11px;font-weight:500}
+  .company-operating-overview{display:grid;min-width:0;gap:12px}
+  .company-operating-overview .company-product-visual{gap:8px;padding:8px;border-radius:8px;box-shadow:0 10px 28px rgba(17,24,39,.07)}
+  .company-operating-overview .company-product-visual img{aspect-ratio:16/10;object-fit:contain;border-radius:5px}
+  .company-operating-proof{margin:0;color:#70798a;font-size:11px;line-height:1.45}
   body[data-view="company"] .company-product-evidence{margin-top:clamp(40px,6vw,72px);padding-top:clamp(28px,4vw,48px);border-top:1px solid #e5e4ed}
   .company-product-evidence-head{display:flex;align-items:end;justify-content:space-between;gap:24px;margin-bottom:22px}
   .company-product-evidence-head h2{margin:8px 0 0;font-size:clamp(25px,3vw,38px);letter-spacing:-.045em;line-height:1.12}
   .company-product-evidence-head p{max-width:42ch;margin:0;color:var(--muted);font-size:14px;line-height:1.55}
   .company-product-evidence .platform-home-caption{margin:10px 0 0;font-size:12px;color:#596579}
-  .company-product-evidence .platform-device-stage{padding:clamp(12px,2vw,22px);border-color:#dbeafe;border-radius:8px;background:linear-gradient(145deg,#eff6ff,#f8fafc);box-shadow:0 18px 42px rgba(37,99,235,.08)}
+  .company-product-evidence .platform-device-stage{padding:clamp(12px,2vw,22px);border-color:#e4e7ec;border-radius:12px;background:#f6f7f9;box-shadow:none}
   /* Company is the editorial brand surface; Shop remains a bright, task-first workspace. */
   body[data-view="company"] .shop-only-family{grid-template-columns:minmax(0,1fr);max-width:none}
   body[data-view="company"] .shop-only-family .family-card.featured{display:grid;grid-template-columns:64px minmax(0,1fr) auto;grid-template-rows:auto auto auto;align-items:center;gap:8px 24px;min-height:0;padding:26px 32px}
@@ -663,10 +696,12 @@ const sharedStyle = `
   body[data-view="company"] .shop-only-family .family-card p{grid-column:2;grid-row:3;max-width:70ch}
   body[data-view="company"] .shop-only-family .family-card .family-link{grid-column:3;grid-row:1/4;margin:0;padding:0;white-space:nowrap}
   @media(max-width:760px){body[data-view="company"] .shop-only-family .family-card.featured{grid-template-columns:48px minmax(0,1fr);gap:8px 16px;padding:22px}body[data-view="company"] .shop-only-family .family-icon{grid-column:1;grid-row:1/4;align-self:start}body[data-view="company"] .shop-only-family .family-card .family-link{grid-column:2;grid-row:4;justify-self:start;margin-top:8px}}
-  @media(max-width:760px){.platform-device-set,.platform-device-set:not(.has-tablet){grid-template-columns:minmax(0,1fr) minmax(80px,.42fr);gap:12px}.platform-device-capture-desktop{grid-column:1/-1}.platform-device-set.has-tablet .platform-device-capture-tablet{justify-self:end;width:min(100%,220px)}.platform-device-set.has-tablet .platform-device-capture-phone{justify-self:start;width:min(100%,175px)}.platform-device-set:not(.has-tablet) .platform-device-capture-phone{grid-column:1/-1;justify-self:center;width:min(100%,175px)}.platform-device-stage{padding:12px}.platform-gallery-controls{min-height:38px}.platform-image{padding:10px}.product-card-compact{border-radius:8px}.contact-page .contact-form{border-radius:8px}.company-product-visual{align-self:start}.company-product-evidence-head{display:block}.company-product-evidence-head p{margin-top:12px}}
+  @media(max-width:760px){.platform-device-set{grid-template-columns:minmax(0,1fr);align-items:start;gap:16px}.platform-device-capture-desktop,.platform-device-set.has-tablet .platform-device-capture-tablet{display:none}.platform-device-set .platform-device-capture-phone{grid-column:1;width:100%;max-width:none;justify-self:stretch}.platform-device-capture img{border-radius:4px;box-shadow:none}.platform-device-capture figcaption{font-size:11px}.platform-device-stage{padding:12px}.platform-gallery-controls{min-height:38px}.platform-image{padding:10px}.product-card-compact{border-radius:8px}.contact-page .contact-form{border-radius:8px}.company-product-visual{align-self:start}.company-product-evidence-head{display:block}.company-product-evidence-head p{margin-top:12px}}
   @media(max-width:980px){.contact-page{grid-template-columns:1fr;gap:24px;max-width:760px;padding:42px 0 70px}.contact-page .page-hero{position:static;padding:0}.contact-page .page-hero::after{display:none}.contact-page .page-hero h1{font-size:clamp(36px,7vw,52px)}}
   @media(max-width:760px){.contact-page{padding:28px 0 52px}.contact-page .page-hero h1{font-size:clamp(36px,9vw,48px)}.contact-page .contact-form{padding:20px;border-radius:8px}.brand-domain{display:none}}
-
+  @media(max-width:1050px){body[data-view="shop"] .shop-hero .wrap{grid-template-columns:minmax(0,1fr);gap:28px}.shop-hero-app{max-width:920px}}
+  @media(max-width:760px){.shop-workflow-support{grid-template-columns:1fr}.shop-workflow-card{grid-template-columns:minmax(0,1.2fr) minmax(125px,.8fr);gap:12px;padding:12px}}
+  @media(max-width:480px){.shop-workflow-card{grid-template-columns:minmax(0,1fr)}.shop-workflow-card h3{margin-top:6px}}
 `
 
 function headerHtml(route) {
@@ -723,12 +758,58 @@ const publicObservabilityScript = `(function () {
 })()
 `
 
+const publicMarketingStyle = companyShopStyle + `
+/* One quiet, consistent public identity. The company page is editorial; Shop is product-led. */
+.nav-links a { min-height: 44px; border-radius: 6px; padding-inline: 13px; transition: color 160ms ease, border-color 160ms ease; }
+.nav-links a[aria-current="page"] { border-bottom: 2px solid var(--brand-accent); border-radius: 0; color: var(--ink); background: transparent; }
+.nav-links a:hover:not([aria-current="page"]) { border-color: transparent; color: var(--brand-accent-strong); background: transparent; }
+body[data-view="shop"] .shop-showcase-nav a { border-radius: 8px; }
+.button, .button.primary, .button-primary { min-height: 48px; border: 1px solid #202432; border-radius: 8px; padding-inline: 18px; box-shadow: none; font-size: 14px; font-weight: 680; transition: background-color 150ms ease, border-color 150ms ease, transform 150ms ease; }
+.button.primary, .button-primary { border-color: #202432; color: #fff; background: #202432; }
+.button.primary:hover, .button-primary:hover { border-color: #343b4e; color: #fff; background: #343b4e; transform: translateY(-1px); }
+body[data-view="company"] .company-hero .hero-actions .button-primary,
+body[data-view="shop"] .shop-hero .button-primary { border-color: #202432; color: #fff; background: #202432; box-shadow: none; }
+body[data-view="company"] .company-hero .hero-actions .button-primary:hover,
+body[data-view="shop"] .shop-hero .button-primary:hover { border-color: #343b4e; color: #fff; background: #343b4e; box-shadow: none; }
+.button-secondary { border-color: #d5d8df; color: #252a36; background: transparent; box-shadow: none; }
+.button-secondary:hover { border-color: #aeb4c1; color: #151922; background: #f6f7f9; }
+.button:focus-visible, .button-primary:focus-visible, .nav-links a:focus-visible { outline: 3px solid rgba(37,99,235,.28); outline-offset: 3px; }
+body[data-view="company"] .company-hero { background: #f6f5f1; }
+body[data-view="company"] .company-hero::before { display: none; }
+body[data-view="company"] .company-hero .hero-grid { min-height: 500px; align-items: start; padding-block: clamp(32px,4vw,54px); }
+body[data-view="company"] .company-hero .hero-copy { max-width: 590px; }
+body[data-view="company"] .company-hero h1 { max-width: 13ch; font-size: clamp(42px,4.8vw,62px); line-height: 1.02; letter-spacing: -.052em; }
+body[data-view="company"] .company-hero .hero-copy > p:not(.hero-kicker) { max-width: 44ch; font-size: 17px; line-height: 1.55; }
+body[data-view="company"] .company-product-visual { gap: 10px; padding: 12px; border-color: #dfded8; border-radius: 14px; background: #fff; box-shadow: 0 24px 58px rgba(25,28,38,.09); }
+body[data-view="company"] .company-product-visual img { border-color: #e4e4e1; border-radius: 8px; }
+body[data-view="shop"] .shop-hero { padding-block: clamp(34px,4vw,52px); background: #f3f5f9; }
+body[data-view="shop"] .shop-hero h1 { max-width: 24ch; font-size: clamp(40px,4.1vw,54px); line-height: 1.02; }
+body[data-view="shop"] .shop-hero-copy { display: grid; gap: 18px; align-content: center; min-width: 0; }
+body[data-view="shop"] .shop-hero-copy .eyebrow, body[data-view="shop"] .shop-hero-copy h1, body[data-view="shop"] .shop-hero-copy > p { margin: 0; }
+body[data-view="shop"] .shop-hero .button-primary { align-self: start; width: max-content; max-width: 100%; flex-wrap: nowrap; white-space: nowrap; word-break: normal; overflow-wrap: normal; }
+body[data-view="shop"] .shop-hero .wrap { display: grid; grid-template-columns: minmax(0,.82fr) minmax(0,1.18fr); gap: clamp(24px,4vw,56px); align-items: center; }
+@media (max-width: 1050px) { body[data-view="shop"] .shop-hero .wrap { grid-template-columns: minmax(0,1fr); gap: 28px; } body[data-view="shop"] .shop-hero-app { width: 100%; max-width: 920px; justify-self: center; } }
+body[data-view="shop"] .shop-actual-showcase { background: #fff; }
+body[data-view="contact"] .contact-page { padding-block: clamp(48px,6vw,78px); }
+body[data-view="contact"] .contact-page .contact-form { gap: 16px; padding: 26px; border-color: #e1e3e8; border-radius: 12px; background: #fafbfc; box-shadow: none; }
+body[data-view="contact"] .contact-page .field-grid input, body[data-view="contact"] .contact-page .field-grid textarea { border-radius: 7px; }
+body[data-view="contact"] .contact-page .contact-form .button { width: max-content; min-width: 176px; min-height: 48px; justify-self: start; }
+@media (max-width: 760px) {
+  body[data-view="company"] .company-hero .hero-grid { min-height: 0; padding-block: 32px; }
+  body[data-view="company"] .company-hero h1 { max-width: 12ch; font-size: clamp(38px,10vw,52px); }
+  body[data-view="shop"] .shop-hero { padding-block: 34px; }
+  body[data-view="contact"] .contact-page { padding-block: 32px 52px; }
+  body[data-view="contact"] .contact-page .contact-form { padding: 20px; }
+  body[data-view="contact"] .contact-page .contact-form .button { width: 100%; }
+}
+`
+
 function documentHtml({ route, title, description, content, schema = null, robots = 'index,follow', shareImage = '/og-card.png' }) {
   const url = canonical(route)
   const shareImageUrl = canonical(shareImage)
-  const view = route === '/' ? 'company' : route === '/shop/' ? 'shop' : null
+  const view = route === '/' ? 'company' : route === '/shop/' ? 'shop' : route === '/contact/' ? 'contact' : null
   const themeColor = view === 'shop' ? '#f7f9fc' : '#ffffff'
-  const pageStyle = view ? `<style>${companyShopStyle}</style>` : ''
+  const pageStyle = view ? `<style>${publicMarketingStyle}</style>` : ''
   const viewAttribute = view ? ` data-view="${view}"` : ''
   return `<!doctype html>
 <html lang="en">
@@ -770,7 +851,7 @@ assert(typeof homePage.title === 'string' && homePage.title.includes('SuperMega'
 assert(typeof homePage.description === 'string' && homePage.description.length >= 40, 'home_page_description_invalid')
 
 const stories = {
- shop: {title:'Sell at the counter. Keep stock and orders in view.', body:'Search or scan a product, build a sale, and see order and stock follow-up in the same Shop workspace.', screens:[['actual-shop-sell.png','Shop counter with searchable products, visible stock levels, and Add controls for a new sale; barcode search, a three-item basket and Myanmar payment methods','Counter sale and live basket'],['actual-shop-today.png','Shop Today showing sales, open orders and low-stock indicators','Today and priorities'],['actual-shop-orders.png','Shop order queue showing order status and the next follow-up','Orders and fulfilment'],['actual-shop-inventory.png','Shop inventory workspace showing stock levels and the count, receive, and reorder workflow','Inventory and replenishment']], proof:[['Find','Search or scan the right product'],['Sell','Review each item and the MMK total'],['Follow up','See order status and stock needs']]},
+ shop: {title:'Sell at the counter. Keep stock and orders in view.', body:'Search or scan a product, build a sale, and see order and stock follow-up in the same Shop workspace.', screens:[['actual-shop-sell.png','Shop counter sale with product search and a live basket','Counter sale'],['actual-shop-orders.png','Shop order queue showing order status and the next follow-up','Orders and fulfilment'],['actual-shop-inventory.png','Shop inventory workspace showing stock levels and the count, receive, and reorder workflow','Inventory and replenishment']], proof:[['Find','Search or scan the right product'],['Sell','Review each item and the MMK total'],['Follow up','See order status and stock needs']]},
  website: {title:'Build clear pages. Review inquiries in one place.', body:'Our team manages pages, readiness checks and customer inquiries in one workspace.', screens:[['actual-sites-editor.png','Sites editor showing page navigation, focused content editing and readiness checks','Page workspace and readiness'],['actual-sites-inquiries.png','Sites inquiry workspace showing a synthetic customer request, ownership and decision controls','Inquiry review and ownership']], proof:[['Record','Pages, services and metadata'],['Action','Edit, check and prepare to publish'],['Result','Qualified inquiries in one inbox']]},
  ecommerce: {title:'Show your catalog. Review each request.', body:'Our team reviews each catalog request before Shop records an order or payment.', screens:[['actual-commerce-catalog.png','Commerce catalog showing available products, local pricing and customer ordering','Store catalog and availability'],['actual-commerce-order-request.png','Commerce Store showing a locally saved customer request awaiting Shop confirmation','Request saved locally']], proof:[['Record','Catalog, customer and request'],['Action','Review before an order is confirmed'],['Result','A clear next step for fulfilment']]},
 }
@@ -809,36 +890,41 @@ function productGallery(id,label,eagerFirst=false,showAll=false) {
  const item=stories[id]
  const slides=item.screens.map(([image,alt,caption,width=1440,height=900],index)=>{
   const mobileImage=image.replace(/\.png$/, '-mobile.png')
-  const tabletImage=id==='shop'?image.replace(/\.png$/, '-tablet.png'):null
+  const tabletCandidate=image.replace(/\.png$/, '-tablet.png')
+  const tabletImage=publicGalleryAssetNames.includes(tabletCandidate)?tabletCandidate:null
   interfaceDisclosure(mobileImage)
   if(tabletImage) interfaceDisclosure(tabletImage)
   const loading=eagerFirst && index===0?'eager':'lazy'
   const fetchPriority=eagerFirst && index===0?' fetchpriority="high"':''
-  return `<figure class="platform-image" role="group"${showAll?'':` aria-roledescription="slide" aria-label="${index+1} of ${item.screens.length}: ${escapeHtml(caption)}"`}><div class="platform-device-stage">${deviceCaptureSet(label,image,mobileImage,tabletImage,alt,width,height,loading,fetchPriority)}</div><figcaption>${escapeHtml(label)} &middot; ${escapeHtml(caption)}<small>${interfaceDisclosure(image)}</small></figcaption></figure>`
+  return `<figure class="platform-image" role="group"${showAll?'':` aria-roledescription="slide" aria-label="${index+1} of ${item.screens.length}: ${escapeHtml(caption)}"`}><div class="platform-device-stage">${deviceCaptureSet(label,image,mobileImage,tabletImage,alt,width,height,loading,fetchPriority)}</div><figcaption>${escapeHtml(label)} &middot; ${escapeHtml(caption)}${showAll?'':`<small>${interfaceDisclosure(image)}</small>`}</figcaption></figure>`
  }).join('')
  if (showAll) return `<div class="platform-gallery shop-gallery-all" data-product-gallery="${id}" role="region" aria-label="${label} interface views"><div class="platform-slides">${slides}</div></div>`
  if (item.screens.length === 1) return `<div class="platform-gallery" data-product-gallery="${id}" data-single role="region" aria-label="${label} interface view"><div class="platform-slides">${slides}</div></div>`
  return `<div class="platform-gallery" data-product-gallery="${id}" data-platform-carousel role="region" aria-roledescription="carousel" aria-label="${label} interface views"><div class="platform-slides" tabindex="0">${slides}</div><div class="platform-gallery-controls"><button type="button" data-gallery-previous aria-label="Previous ${label} screen" disabled>&lsaquo;</button><span class="platform-gallery-status" data-gallery-status aria-live="polite">1 of ${item.screens.length}</span><button type="button" data-gallery-next aria-label="Next ${label} screen">&rsaquo;</button></div></div>`
 }
-function homeShopGallery() {
- const item=stories.shop
- const navigationLabels=['Counter sale','Today','Orders','Inventory']
- const navigation=item.screens.map(([, , caption],index)=>`<a href="#shop-home-slide-${index+1}" data-gallery-slide="${index}"${index===0?' aria-current="true"':''}>${navigationLabels[index] || escapeHtml(caption)}</a>`).join('')
- const slides=item.screens.map(([image,alt,caption,width=1440,height=900],index)=>{
-  const mobileImage=image.replace(/\.png$/, '-mobile.png')
-  const tabletImage=image.replace(/\.png$/, '-tablet.png')
-  interfaceDisclosure(image)
-  interfaceDisclosure(tabletImage)
-  interfaceDisclosure(mobileImage)
-  return `<figure class="platform-image home-platform-image" id="shop-home-slide-${index+1}" role="group" aria-roledescription="slide" aria-label="${index+1} of ${item.screens.length}: ${escapeHtml(caption)}"><div class="platform-device-stage">${deviceCaptureSet('Shop',image,mobileImage,tabletImage,alt,width,height,index===0?'eager':'lazy',index===0?' fetchpriority="high"':'')}</div><figcaption class="platform-home-caption">Shop &middot; ${escapeHtml(caption)}<small>${interfaceDisclosure(image)}</small></figcaption></figure>`
- }).join('')
- return `<div class="platform-gallery home-platform-gallery" data-product-gallery="shop" data-platform-carousel role="region" aria-roledescription="carousel" aria-label="Shop interface views"><nav class="shop-showcase-nav" aria-label="Choose a Shop screen">${navigation}</nav><div class="platform-slides" tabindex="0">${slides}</div></div>`
+function shopSupportCard({image,alt,title,description}) {
+ interfaceDisclosure(image)
+ return `<article class="shop-workflow-card"><img src="/images/${image}" alt="${escapeHtml(alt)} · sample records" width="1440" height="900" loading="lazy" /><div class="shop-workflow-card-copy"><h3>${escapeHtml(title)}</h3><p>${escapeHtml(description)}</p></div></article>`
+}
+function shopCounterSalePreview() {
+ const [image,alt] = stories.shop.screens[0]
+ const mobileImage = image.replace(/\.png$/, '-mobile.png')
+ const tabletImage = image.replace(/\.png$/, '-tablet.png')
+ interfaceDisclosure(image)
+ interfaceDisclosure(mobileImage)
+ interfaceDisclosure(tabletImage)
+ return `<div class="platform-device-stage">${deviceCaptureSet('Counter sale',image,mobileImage,tabletImage,alt,1440,900,'eager',' fetchpriority="high"')}</div>`
+}
+function shopResponsiveShowcase() {
+ const orders = shopSupportCard({image:'actual-shop-orders.png',alt:'Shop order queue with fulfilment and payment follow-up',title:'Orders',description:'See what is ready, what is unpaid, and what needs the next step.'})
+ const stock = shopSupportCard({image:'actual-shop-inventory.png',alt:'Shop inventory list with on-hand quantities and reorder signals',title:'Stock',description:'Find products that need a count or replenishment.'})
+ return `<div class="shop-responsive-showcase" role="region" aria-label="Order and stock workflows"><div class="shop-workflow-support" aria-label="More Shop workflows">${orders}${stock}</div><p class="shop-sample-note">Sample catalog and example prices.</p></div>`
 }
 function productStory(id, standalone = false) {
  const item=stories[id], label=publicProducts.find(product=>product.id===id).name
  const route=manifest.pages.find(page=>page.productId===id)?.route
  assert(typeof route === 'string' && /^\/[a-z]+\/$/.test(route), `public_product_route_missing:${id}`)
- const galleryHtml=productGallery(id,label,standalone)
+ const galleryHtml=productGallery(id,label,standalone,true)
   return `<section class="product-story${standalone ? ' product-story-standalone' : ''}" id="${id}">${standalone ? '' : `<div class="story-heading"><div><a class="eyebrow story-link" href="${escapeHtml(route)}">${label}<span aria-hidden="true">&rarr;</span></a><h2>${item.title}</h2></div><p>${item.body}</p></div>`}${galleryHtml}<ol class="product-proof" aria-label="${label} operating flow">${item.proof.map(([stage, value])=>`<li><span>${escapeHtml(stage)}</span><strong>${escapeHtml(value)}</strong></li>`).join('')}</ol><ul class="feature-line">${productOutcomes[id].map(([title, description])=>`<li><${standalone ? 'h2' : 'h3'}>${escapeHtml(title)}</${standalone ? 'h2' : 'h3'}><p>${escapeHtml(description)}</p></li>`).join('')}</ul></section>`
 }
 function replaceOnce(source, before, after, code) {
@@ -870,7 +956,7 @@ function removeSectionByClass(source, className, code) {
 function shopOnlyCompanyMarkup(source) {
  let markup = source
  markup = replaceKnownCopyOnce(markup, ["Operating software · Myanmar", "Operating software for Myanmar companies", "Shop software for Myanmar businesses", "Shop software for Myanmar retailers", "For shops in Myanmar", "For Myanmar retailers", "Business software for Myanmar retailers", "Shop for Myanmar retailers", "Made for Myanmar retailers", "SuperMega · Operating software for Myanmar", "SUPERMEGA · MYANMAR", "SuperMega · Myanmar", "Business software for Myanmar", "Business software"], "For Myanmar retailers", "shop_only_hero_kicker")
- markup = replaceKnownCopyOnce(markup, ["Tools for<br><span>everyday work.</span>", "Run your shop.<br><span>See what’s next.</span>", "Sell faster.<br><span>Stay in control.</span>", "Clearer systems for<br><span>everyday business.</span>", "Sales. Stock. Orders.<br><span>Under control.</span>", "Software for<br><span>Myanmar businesses.</span>", "Sales, stock, and orders<br><span>for Myanmar shops.</span>", "Sales, stock, and orders<br><span>in one place.</span>", "Sales, stock and orders<br><span>in one place.</span>", "See what sold.<br><span>Know what needs action.</span>", "Business software<br><span>built for Myanmar.</span>", "Operating software<br><span>for Myanmar businesses.</span>", "Run your counter.<br><span>Stay ahead of stock.</span>", "Know what sold.<br><span>See what needs attention.</span>", "For Myanmar<br><span>retailers.</span>"], "See what sold.<br><span>Know what needs action.</span>", "shop_only_hero_heading")
+ markup = replaceKnownCopyOnce(markup, ["Tools for<br><span>everyday work.</span>", "Run your shop.<br><span>See what’s next.</span>", "Run the counter.<br><span>See what needs attention.</span>", "Sell at the counter.<br><span>Keep orders and stock in view.</span>", "Clearer systems for<br><span>everyday business.</span>", "Sales. Stock. Orders.<br><span>Under control.</span>", "Software for<br><span>Myanmar businesses.</span>", "Sales, stock, and orders<br><span>for Myanmar shops.</span>", "Sales, stock, and orders<br><span>in one place.</span>", "Sales, stock and orders<br><span>in one place.</span>", "See what sold.<br><span>Know what needs action.</span>", "Business software<br><span>built for Myanmar.</span>", "Operating software<br><span>for Myanmar businesses.</span>", "Run your counter.<br><span>Stay ahead of stock.</span>", "Know what sold.<br><span>See what needs attention.</span>", "For Myanmar<br><span>retailers.</span>"], "Sell at the counter.<br><span>Keep orders and stock in view.</span>", "shop_only_hero_heading")
  markup = replaceKnownCopyOnce(markup, [
   "Shop brings sales and stock into one operating view. Our team manages Sites and confirms Commerce availability for each setup.",
   "Keep sales, orders and stock together in one clear MMK workflow. See what needs attention without digging through settings.",
@@ -892,11 +978,11 @@ function shopOnlyCompanyMarkup(source) {
   "SuperMega Shop brings counter sales, stock and open orders into one workspace.",
   "Record sales, track stock, and follow open orders in one Shop workspace.",
   "Shop connects counter sales, stock and open orders in one workspace.",
-  "Record counter sales, check stock and follow open orders in SuperMega Shop.",
- ], "Record counter sales, check stock and follow open orders in SuperMega Shop.", "shop_only_hero_description")
+ ], "SuperMega Shop brings sales, open orders and stock checks into one workspace for Myanmar retailers.", "shop_only_hero_description")
  markup = replaceKnownCopyOnce(markup, ['href="#products">Meet the product family', 'href="#products">Explore Shop', 'href="/contact/">Talk to our team', 'href="/contact/">Contact us'], 'href="/contact/">Contact us', "shop_only_hero_secondary_action")
  markup = replaceKnownCopyOnce(markup, ['href="/shop/#shop-demo">See Shop in action', 'href="/shop/#shop-demo">See Shop screens', 'href="/shop/#shop-demo">See Shop on desktop and mobile', 'href="/shop/#shop-demo">View every screen size', 'href="/shop/">See Shop', 'href="/shop/">Explore Shop'], 'href="/shop/">Explore Shop', "shop_only_hero_primary_action")
- for (const id of ["website", "ecommerce"]) {
+ markup = replaceOnce(markup, '<a class="text-link hero-note" href="/contact/">Contact us</a>', '', "shop_only_remove_duplicate_home_contact_action")
+ for (const id of ["plant", "website", "ecommerce"]) {
   const marker = '<article class="family-card" id="' + id + '">'
   const start = markup.indexOf(marker)
   if (start < 0) continue
@@ -919,34 +1005,23 @@ function shopOnlyCompanyMarkup(source) {
  if (principleCopy.some((copy) => markup.includes(copy))) {
   markup = replaceKnownCopyOnce(markup, principleCopy, "Sales · Stock · Orders", "shop_only_company_principle")
  }
- assert(!markup.includes('href="/website/') && !markup.includes('href="/ecommerce/')
-  && !markup.includes('id="website"') && !markup.includes('id="ecommerce"'), "shop_only_inactive_product_link_remains")
+ assert(!markup.includes('href="/plant/') && !markup.includes('href="/website/') && !markup.includes('href="/ecommerce/')
+  && !markup.includes('id="plant"') && !markup.includes('id="website"') && !markup.includes('id="ecommerce"'), "shop_only_inactive_product_link_remains")
  return markup
 }
 function companyOperatingGraphic() {
- return `<figure class="company-product-visual"><img src="/images/actual-shop-today.png" alt="SuperMega Shop Today view: sales, orders and low-stock items. Sample data." width="1440" height="900" loading="eager" fetchpriority="high" /><figcaption>Shop · Today <span>Sample data</span></figcaption></figure>`
+ return `<div class="company-operating-overview" aria-label="Shop dashboard preview"><figure class="company-product-visual"><img src="/images/actual-shop-today.png" alt="Shop Today dashboard showing sales, open orders, stock alerts, and next actions. Synthetic sample records." width="1440" height="900" loading="eager" fetchpriority="high" /><figcaption><strong>Today</strong><span>Sales, orders, and stock that need attention</span></figcaption></figure><p class="company-operating-proof">Sample catalog, stock and prices.</p></div>`
 }
-function replaceHomeShopShowcase(source, galleryHtml) {
+function replaceHomeShopShowcase(source) {
  const marker = /<section class="shop-showcase" aria-label="Shop product screens">[\s\S]*?<\/section>/g
  const matches = source.match(marker) || []
  assert(matches.length === 1, 'home_shop_showcase_source_drift')
- const companyVisual = `<div class="company-operating-overview" aria-label="SuperMega company overview">${companyOperatingGraphic()}</div>`
- const noScriptFallback = '<noscript><figure class="home-product-shot"><img src="/images/actual-shop-today.png" alt="Shop Today screen with sales, open orders, stock alerts and next actions" width="1440" height="900" /><figcaption><strong>Today</strong><span>See sales, open orders and the stock that needs attention.</span><small>Actual app interface · sample data</small></figcaption></figure></noscript>'
+ const companyVisual = companyOperatingGraphic()
  const markup = source.replace(marker, companyVisual)
- const evidence = `<div class="company-product-evidence" aria-labelledby="company-shop-evidence-title"><div class="company-product-evidence-head"><div><p class="eyebrow">Shop · first product</p><h2 id="company-shop-evidence-title">One workflow. Every screen.</h2></div><p>See sales, stock and orders at desktop, tablet and phone sizes.</p></div>${galleryHtml}${noScriptFallback}</div>`
- const principleMarker = '<div class="company-principle">'
- const principleStart = markup.indexOf(principleMarker)
- if (principleStart >= 0) {
-  const principleEnd = markup.indexOf('</div>', principleStart) + '</div>'.length
-  assert(principleEnd > principleStart && markup.indexOf(principleMarker, principleStart + principleMarker.length) < 0, 'company_product_evidence_anchor_drift')
-  return markup.slice(0, principleStart) + evidence + markup.slice(principleEnd)
- }
- const portfolioMarker = '<section class="company-portfolio"'
- const portfolioStart = markup.indexOf(portfolioMarker)
- assert(portfolioStart >= 0 && markup.indexOf(portfolioMarker, portfolioStart + portfolioMarker.length) < 0, 'company_product_evidence_anchor_drift')
- return markup.slice(0, portfolioStart) + evidence + markup.slice(portfolioStart)
+ assert(!markup.includes('<a class="text-link hero-note" href="/contact/">Contact us</a>'), 'home_duplicate_contact_action_remains')
+ return removeSectionByClass(markup, 'company-portfolio', 'home_duplicate_shop_details')
 }
-const publicHomeMarkup = replaceHomeShopShowcase(shopOnlyCompanyMarkup(companyMarkup), homeShopGallery())
+const publicHomeMarkup = replaceHomeShopShowcase(shopOnlyCompanyMarkup(companyMarkup))
 const publicShopMarkup = shopMarkup
 
 function productCard(id) {
@@ -957,18 +1032,20 @@ function productCard(id) {
 }
 const homeHtml = documentHtml({route:'/',title:homePage.title,description:homePage.description,
  schema:{'@type':'Organization',name:'SuperMega',url:canonical('/'),description:homePage.description},
- content:`<main id="content">${publicHomeMarkup}</main>${stories.shop.screens.length > 1 ? '<script src="/platform-carousel.js" defer></script>' : ''}`,
+ content:`<main id="content">${publicHomeMarkup}</main>`,
 })
 
 function productAction(product) {
- if (product.status !== 'available-in-app') return ''
- return `<section class="home-contact product-action" aria-labelledby="product-action-title"><div><h2 id="product-action-title">Need help with ${escapeHtml(product.name)}?</h2><p>Tell us what your business needs.</p></div><a class="button" href="/contact/?product=${escapeHtml(product.id)}">Contact SuperMega</a></section>`
+ if (product.status !== 'available-in-app' || product.id === 'shop') return ''
+ const label = product.id === 'shop' ? 'Talk to the Shop team' : 'Contact SuperMega'
+ return `<section class="home-contact product-action" aria-labelledby="product-action-title"><div><h2 id="product-action-title">Need help with ${escapeHtml(product.name)}?</h2><p>Tell us what your business needs.</p></div><a class="button" href="/contact/?product=${escapeHtml(product.id)}">${label}</a></section>`
 }
 
 function shopLandingHtml(product, page) {
  const description = page.description || product.description
- const shopShowcase = `<section class="shop-actual-showcase" id="shop-demo" aria-labelledby="shop-actual-showcase-title"><div class="wrap"><div class="story-heading"><div><span class="eyebrow">Shop</span><h2 id="shop-actual-showcase-title">Sales, stock and orders.</h2></div><p>Real Shop screens with sample records. The catalog and prices shown are examples, not a live retail feed.</p></div>${productGallery('shop','Shop',true,true)}</div></section>`
- let shopContent = publicShopMarkup
+ const heroWithPreview = replaceOnce(publicShopMarkup, '<div class="shop-hero-app" aria-label="Counter sale interface preview"></div>', '<div class="shop-hero-app" aria-label="Counter sale interface preview">' + shopCounterSalePreview() + '</div>', 'shop_hero_app_capture')
+ const shopShowcase = `<section class="shop-actual-showcase" id="shop-demo" aria-labelledby="shop-actual-showcase-title"><div class="wrap"><div class="story-heading"><div><span class="eyebrow">SHOP WORKSPACE</span><h2 id="shop-actual-showcase-title">Orders and stock. Clear next steps.</h2></div><p>Follow orders that need fulfilment or payment. See which products need a count or reorder.</p></div>${shopResponsiveShowcase()}</div></section>`
+ let shopContent = heroWithPreview
  const showcaseAnchor = /<\/section>(\r?\n)([ \t]*)<section class="demo-section"/g
  assert((shopContent.match(showcaseAnchor) || []).length === 1, 'shop_showcase_insertion_point_missing')
  const shopWithActualShowcase = shopContent.replace(showcaseAnchor, (_, newline, indent) => `</section>${newline}${indent}${shopShowcase}${newline}${indent}<section class="demo-section"`)
@@ -984,7 +1061,7 @@ function productLandingHtml(product,page) {
  const storyBody=escapeHtml(stories[product.id].body)
  return documentHtml({route:page.route,title:page.title,description,shareImage:`/og-card-${product.id}.png`,
  schema:{'@type':'Product',name:product.name,description,url:canonical(page.route)},
- content:`<main class="frame" id="content"><section class="editorial-hero"><span class="eyebrow">SuperMega / ${escapeHtml(product.name)}</span><h1>${stories[product.id].title}</h1><p class="lede">${storyBody}</p></section>${productStory(product.id, true)}${productAction(product)}<p class="platform-note">Part of the SuperMega platform.</p></main>${stories[product.id].screens.length > 1 ? '<script src="/platform-carousel.js" defer></script>' : ''}`})
+  content:`<main class="frame" id="content"><section class="editorial-hero"><span class="eyebrow">SuperMega / ${escapeHtml(product.name)}</span><h1>${stories[product.id].title}</h1><p class="lede">${storyBody}</p></section>${productStory(product.id, true)}${productAction(product)}<p class="platform-note">Part of the SuperMega platform.</p></main>`})
 }
 
 const contactScript = `<script>(function(){
@@ -1023,13 +1100,13 @@ const contactScript = `<script>(function(){
   function updateServiceSummary(){
     if(!heading)return;
     var serviceName=product&&({website:'Sites',ecommerce:'Commerce',shop:'Shop'})[product.value];
-    heading.textContent=serviceName?'Ask us about '+serviceName+'.':'Tell us what you need.';
+    heading.textContent=serviceName?(serviceName==='Shop'?'Request a Shop walkthrough':'Contact our '+serviceName+' team.'):'Contact';
   }
   updateServiceSummary();
   if(product)product.addEventListener('change',function(){if(template)template.value='';detachProofIfChanged();updateServiceSummary()});
   if(template)template.addEventListener('input',detachProofIfChanged);
   if(handoff.toString()){
-    if(lede)lede.textContent='Tell us about your business or question. English and Burmese are both welcome.';
+    if(lede)lede.textContent='SuperMega builds practical business software for Myanmar. Shop helps retailers manage counter sales, stock and open orders.';
     if(proof)status.textContent='Helpful context attached. Nothing has been sent.';
     else if(proofResult.attempted)status.textContent='Attached context could not be verified and was left out.';
     history.replaceState(null,'',location.pathname+location.search);
@@ -1055,7 +1132,7 @@ var response=result.response,body=result.body;if(!response.ok){if(response.statu
 const inlineDigest = (value) => createHash('sha256').update(value).digest('base64')
 const contactScriptBody = contactScript.slice('<script>'.length, -'</script>'.length)
 const publicSecurityHeaders = {
-  'content-security-policy': `default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' 'sha256-${inlineDigest(contactScriptBody)}'; script-src-attr 'none'; style-src 'self' 'sha256-${inlineDigest(sharedStyle)}' 'sha256-${inlineDigest(companyShopStyle)}'; style-src-attr 'none'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; media-src 'none'; worker-src 'none'; manifest-src 'self'`,
+  'content-security-policy': `default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' 'sha256-${inlineDigest(contactScriptBody)}'; script-src-attr 'none'; style-src 'self' 'sha256-${inlineDigest(sharedStyle)}' 'sha256-${inlineDigest(publicMarketingStyle)}'; style-src-attr 'none'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; media-src 'none'; worker-src 'none'; manifest-src 'self'`,
   'cross-origin-opener-policy': 'same-origin',
   'cross-origin-resource-policy': 'same-origin',
   'permissions-policy': 'camera=(), microphone=(), geolocation=(), payment=(), usb=()',
@@ -1063,12 +1140,15 @@ const publicSecurityHeaders = {
   'x-content-type-options': 'nosniff',
   'x-frame-options': 'DENY',
 }
-const contactHtml = documentHtml({
+let contactHtml = documentHtml({
   route: '/contact/',
   title: 'Contact | SuperMega',
   description: 'Tell SuperMega which company workflow should run better.',
-  content: `<main class="frame contact-page" id="content"><section class="page-hero"><span class="eyebrow">Contact SuperMega</span><h1 data-contact-heading>Tell us what you need.</h1><p class="lede" data-contact-lede>Tell us about your business or question. English and Burmese are both welcome.</p></section><section class="contact-layout"><form class="contact-form" action="/api/contact-submissions" method="post" data-contact-form><div class="field-grid"><label>Name / <span lang="my">အမည်</span><input name="name" autocomplete="name" required maxlength="120" /></label><label>Email / <span lang="my">အီးမေးလ်</span><input name="email" type="email" autocomplete="email" required maxlength="180" /></label><label class="wide">Company (optional) / <span lang="my">လုပ်ငန်းအမည်</span><input name="company" autocomplete="organization" maxlength="180" /></label><input type="hidden" name="product" value="guide" /><input type="hidden" name="template" maxlength="120" /><label class="wide">Message / <span lang="my">မက်ဆေ့ချ်</span><textarea name="goal" required maxlength="4000" placeholder="Share a few details about your request."></textarea></label></div><input type="hidden" name="source_url" /><input type="hidden" name="referrer" /><input type="hidden" name="idempotency_key" /><input type="hidden" name="trial_claim_code" /><input type="hidden" name="proof_contract" /><input type="hidden" name="proof_version" /><input type="hidden" name="proof_digest" /><input type="hidden" name="proof_product" /><input type="hidden" name="proof_template" /><input type="hidden" name="proof_readiness" /><input type="hidden" name="proof_sources" /><input type="hidden" name="proof_behavior" /><input type="hidden" name="proof_decisions" /><input type="hidden" name="proof_raw_records" /><input type="hidden" name="proof_context_contract" /><input type="hidden" name="proof_context_digest" /><input type="hidden" name="proof_context_outcome_digest" /><input type="hidden" name="proof_context_approved" /><input type="hidden" name="proof_context_raw_records" /><input class="contact-honeypot" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" inert /><button class="button primary" type="submit">Send message</button><p class="form-status" data-form-status aria-live="polite"></p></form></section></main>${contactScript}`,
+  content: `<main class="frame contact-page" id="content"><section class="page-hero"><span class="eyebrow">SuperMega · Myanmar</span><h1 data-contact-heading>Contact SuperMega.</h1><p class="lede" data-contact-lede>SuperMega builds business software for Myanmar. Shop brings counter sales, stock and order follow-up together for retailers.</p></section><section class="contact-layout"><form class="contact-form" action="/api/contact-submissions" method="post" data-contact-form><div class="field-grid"><label>Name<input name="name" autocomplete="name" required maxlength="120" /></label><label>Email<input name="email" type="email" autocomplete="email" required maxlength="180" /></label><label class="wide">Company (optional)<input name="company" autocomplete="organization" maxlength="180" /></label><input type="hidden" name="product" value="guide" /><input type="hidden" name="template" maxlength="120" /><label class="wide">Message<textarea name="goal" required maxlength="4000" placeholder="Share a few details about your request."></textarea></label></div><input type="hidden" name="source_url" /><input type="hidden" name="referrer" /><input type="hidden" name="idempotency_key" /><input type="hidden" name="trial_claim_code" /><input type="hidden" name="proof_contract" /><input type="hidden" name="proof_version" /><input type="hidden" name="proof_digest" /><input type="hidden" name="proof_product" /><input type="hidden" name="proof_template" /><input type="hidden" name="proof_readiness" /><input type="hidden" name="proof_sources" /><input type="hidden" name="proof_behavior" /><input type="hidden" name="proof_decisions" /><input type="hidden" name="proof_raw_records" /><input type="hidden" name="proof_context_contract" /><input type="hidden" name="proof_context_digest" /><input type="hidden" name="proof_context_outcome_digest" /><input type="hidden" name="proof_context_approved" /><input type="hidden" name="proof_context_raw_records" /><input class="contact-honeypot" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" inert /><button class="button primary" type="submit">Send message</button><p class="form-status" data-form-status aria-live="polite"></p></form></section></main>${contactScript}`,
 })
+contactHtml = replaceOnce(contactHtml, 'Contact SuperMega.', 'Contact', 'contact_heading_copy')
+contactHtml = replaceOnce(contactHtml, 'SuperMega builds business software for Myanmar. Shop brings counter sales, stock and order follow-up together for retailers.', 'SuperMega builds practical business software for Myanmar. Shop helps retailers manage counter sales, stock and open orders.', 'contact_company_intro_copy')
+contactHtml = replaceOnce(contactHtml, 'Share a few details about your request.', 'Tell us what your business needs.', 'contact_message_placeholder_copy')
 
 const privacyHtml = documentHtml({
   route: '/privacy/',

@@ -217,7 +217,7 @@ export function ShopToday({ accountingExport = null, batchProfitControl, catalog
       </article>
 
       <aside className="shop-operations-rail">
-        <article aria-label={uiText('Sales insight')} className="shop-sales-pulse">
+        {salesPatternReady || salesPulse.today.count > 0 ? <article aria-label={uiText('Sales insight')} className="shop-sales-pulse">
           <header><span><small>{uiText(salesPatternReady ? 'Sales insight' : 'Sales activity')}</small><strong>{formatMmk(salesPulse.today.grossMmk)}</strong></span>{salesPulse.today.count ? <b data-direction={salesPatternReady && salesPulse.deltaBasisPoints !== null ? salesPulse.deltaBasisPoints >= 0 ? 'up' : 'down' : 'neutral'}>{salesPatternReady ? formatSalesComparison(salesPulse.deltaBasisPoints, salesPulse.previous.grossMmk) : `${salesPulse.today.count} ${uiText('completed')} ${uiText(salesPulse.today.count === 1 ? 'sale' : 'sales')}`}</b> : null}</header>
           {salesPatternReady ? <>
             <div aria-label="Retained completed sales by three-hour Yangon period" className="shop-sales-bars">
@@ -229,19 +229,19 @@ export function ShopToday({ accountingExport = null, batchProfitControl, catalog
             <p>{salesPulse.today.count} {uiText('completed')} {uiText(salesPulse.today.count === 1 ? 'sale' : 'sales')} {uiText('today')}</p>
           </> : salesPulse.today.count ? <div className="shop-sales-empty" role="status"><strong>{uiText('Sales by time')}</strong><span>{uiText('At least 3 sales across 2 time blocks show your busiest hours.')}</span></div>
             : <div className="shop-sales-empty"><strong>{uiText('No sales yet today')}</strong><span>{uiText('Completed counter sales will appear here.')}</span></div>}
-        </article>
+        </article> : null}
 
         <section aria-label={uiText('Quick tasks')} className="shop-next-focus">
           <header className="shop-next-focus-copy"><h3>{uiText('Quick tasks')}</h3></header>
           <div className="shop-operating-list shop-task-list">
             {attentionPriority ? <Link data-priority-id={attentionPriority.id} data-state={profitControl.state} to={attentionPriority.target}>
-              <span><strong>{uiText(attentionPriority.title)}</strong><small><strong>{uiText('Next:')}</strong> {uiText(attentionPriority.actionLabel)}</small></span>
+              <span><strong>{uiText(attentionPriority.id === 'payment_pending' ? 'Orders awaiting payment' : attentionPriority.title)}</strong><small><strong>{uiText('Next:')}</strong> {uiText(attentionPriority.actionLabel)}</small></span>
             </Link> : taskLink(primaryTask.title, primaryTask.detail, primaryTask.action, primaryTask.target, primaryTask.ownerGate)}
 
             {financeModule && (accountingExport || closeQueue.orderCount || closeQueue.exceptionCount) ? accountingExport ? <button className="shop-task-row shop-finance-task" data-shop-accounting-export="accounting-csv-v1" onClick={accountingExport.onDownload} type="button">
               <span><strong>CSV</strong><small>{accountingExport.businessDate} · {uiText(accountingExport.mappingReady ? 'Mapped' : 'Unmapped')}</small></span>
             </button> : <Link aria-label="Cash and wallet close queue" aria-description="Not reconciled. Expected from completed, reconciled Shop orders. Wallet and bank settlement is not independently confirmed." to={closeQueue.target}>
-              <span><strong>{uiText('Review payments')}</strong><small>{closeQueue.paymentMethods.length
+              <span><strong>{uiText('Reconcile recorded takings')}</strong><small>{closeQueue.paymentMethods.length
                 ? closeQueue.paymentMethods.map((method) => `${method.paymentMethod} ${formatMmk(method.totalMmk)}`).join(' · ')
                 : closeQueue.exceptionCount ? `${closeQueue.exceptionCount} exceptions`
                     : closeQueue.orderCount ? `${closeQueue.orderCount} ready · ${formatMmk(closeQueue.totalMmk)}`

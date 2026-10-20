@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://supermega.dev/contracts/shop-menu-import.v1.json",
+  "title": "SuperMega Shop menu import v1",
+  "schemaVersion": 1,
+  "modelOutputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["items"],
+    "properties": {
+      "items": {
+        "type": "array",
+        "maxItems": 100,
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["category", "description", "name", "price"],
+          "properties": {
+            "category": { "type": "string" },
+            "description": { "type": "string" },
+            "name": { "type": "string" },
+            "price": { "type": ["integer", "null"] }
+          }
+        }
+      }
+    }
+  },
+  "responseSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["schemaVersion", "items", "reviewRequired"],
+    "properties": {
+      "schemaVersion": { "const": 1 },
+      "items": {
+        "type": "array",
+        "maxItems": 100,
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["category", "description", "name", "price"],
+          "properties": {
+            "category": { "type": "string" },
+            "description": { "type": "string" },
+            "name": { "type": "string" },
+            "price": { "type": ["integer", "null"] }
+          }
+        }
+      },
+      "reviewRequired": { "const": true }
+    }
+  }
+}

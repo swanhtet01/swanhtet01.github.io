@@ -1141,11 +1141,16 @@ test('eviction warning leads directly to the existing backup panel', async () =>
   const core = await readFile(new URL('../showroom/src/core/CoreApp.tsx', import.meta.url), 'utf8')
   const page = await readFile(new URL('../showroom/src/core/WorkspaceControlsPage.tsx', import.meta.url), 'utf8')
   const notice = core.slice(core.indexOf('const storageDurabilityNotice ='), core.indexOf('// Stuck-till escape hatch.'))
-  assert.ok(notice.includes('<Link to="/settings/#workspace-recovery">{uiText(\'Set up backup\')}</Link>'))
-  assert.ok(notice.includes('Saved on this device only.'))
+  assert.ok(notice.includes('<Link to="/settings/#workspace-recovery">{uiText(\'Export backup\')}</Link>'))
+  assert.ok(core.includes("'Export backup'"), 'local record status must name the manual export action accurately')
+  assert.ok(!core.includes("'Set up backup'"), 'local record status must not imply automatic cloud backup is configured')
+  assert.ok(!notice.includes('Saved on this device only.'), 'local-only status appears once, without duplicate explanatory text')
   assert.ok(notice.includes("role={storageDurability.quotaExceeded ? 'alert' : 'status'}"))
   assert.ok(notice.includes('Free space on this device before saving more Shop data.'))
   assert.ok(!notice.includes('to="/settings/#controls"'))
+  const styles = await readFile(new URL('../showroom/src/core/core-app.css', import.meta.url), 'utf8')
+  assert.ok(styles.includes('.storage-durability-banner[data-durability="device-only"] .status-pill { display: inline-flex; }'), 'phone layout must keep the private-device warning label visible')
+  assert.ok(!styles.includes('.storage-durability-banner[data-durability="device-only"] .status-pill { display: none; }'), 'phone layout must not leave a blank recovery strip')
   assert.ok(page.includes('id="workspace-recovery"'))
   assert.ok(page.includes("window.location.hash === '#workspace-recovery'"))
   assert.ok(page.includes("scrollIntoView({ block: 'start' })"))
@@ -1154,15 +1159,30 @@ test('eviction warning leads directly to the existing backup panel', async () =>
 test('eviction warning replaces the overlapping local workspace banner', async () => {
   const core = await readFile(new URL('../showroom/src/core/CoreApp.tsx', import.meta.url), 'utf8')
   assert.ok(core.includes('const localEvictionWarningReplacesWriteBanner = !managedIdentity'))
-  assert.ok(core.includes('const commerceWriteBanner = localEvictionWarningReplacesWriteBanner ? null :'))
+  assert.ok(core.includes('const commerceWriteNeedsAttention = Boolean(commerceStorageError)'))
+  assert.ok(core.includes("|| commerceSync.status !== 'ready'"))
+  assert.ok(core.includes('const commerceWriteBanner = localEvictionWarningReplacesWriteBanner || !commerceWriteNeedsAttention ? null :'))
+  assert.ok(core.includes("'Private device'"), 'the shell keeps the concise local-mode label')
 })
 
-test('the device warning stays out of the product workspaces', async () => {
+test('healthy Shop action feedback stays visible without reviving the storage-mode banner', async () => {
+  const core = await readFile(new URL('../showroom/src/core/CoreApp.tsx', import.meta.url), 'utf8')
+  assert.match(core, /const commerceActionNotice = notice && !commerceStorageError && commerceSync\.status === 'ready' && commerceCanWrite/)
+  assert.match(core, /className="production-mode-banner commerce-action-notice" role="status"><p>\{notice\}<\/p>/)
+  assert.match(core, /const commerceBoundary = <>[\s\S]*?\{commerceWriteBanner\}[\s\S]*?\{commerceActionNotice\}/)
+  assert.match(core, /const operatingBoundary = <>[\s\S]*?\{commerceActionNotice\}/)
+})
+
+test('denied persistence shows the backup reminder on Today without repeating it across Shop tabs', async () => {
   const coreApp = await readFile(new URL('../showroom/src/core/CoreApp.tsx', import.meta.url), 'utf8')
   assert.ok(
     !/measureLocalWorkspaceBackupHeadroom|localWorkspaceBackupHeadroomMessage/.test(coreApp),
-    'the device-wide backup warning has been rendered inside a product workspace -- the Shop meter already occupies that screen, and two storage warnings in one place is the failure this was shaped to avoid',
+    'the device-wide headroom meter should stay out of product workspaces; only the concise denied-storage action belongs there',
   )
+  assert.ok(coreApp.includes("storageDurability.state === 'denied' && tab === 'today'"))
+  assert.ok(coreApp.includes('storageDurability.quotaExceeded || (storageDurability.state === \'denied\' && tab === \'today\')'))
+  assert.match(coreApp, /const commerceBoundary = <>[\s\S]*?\{storageDurabilityNotice\}/)
+  assert.match(coreApp, /const operatingBoundary = <>[\s\S]*?\{storageDurabilityNotice\}/)
 })
 
 test('restore requires explicit review of the exact selected snapshot', async () => {

@@ -29,7 +29,7 @@ from supermega_runtime.runtime import reduce_trial_state
 from supermega_runtime.trial_store import (
     PostgresTrialStore, TrialPermissionDenied, TrialPrincipal, TrialValidationError,
 )
-from tests.test_commerce_runtime import catalog_state, storefront_configuration
+from tests.test_commerce_runtime import catalog_state, order_record, storefront_configuration
 
 
 def _state():
@@ -45,6 +45,32 @@ def _body(request_id=None):
 
 
 class CommercePublicBoundaryTests(unittest.TestCase):
+    def test_shop_contact_remains_available_for_the_linked_order_after_request_leaves_queue(self):
+        principal = TrialPrincipal('internal-workspace', 'shop-operator', 'human')
+        shop_request_id = _shop_request_id(str(uuid4()), str(uuid4()))
+        contact = {'name': 'Synthetic Buyer', 'phone': '09 12345678', 'address': None}
+        state = _state()
+        state['storefrontRequests'] = []
+        order = order_record('ORD-PUBLIC-1')
+        order['sourceRecordId'] = shop_request_id
+        state['orders'] = [order]
+        cursor = Mock()
+        cursor.fetchone.side_effect = [{'contact_json': contact}, {'state_json': state}]
+        store = Mock()
+
+        @contextmanager
+        def guarded_cursor(*_args, **_kwargs):
+            yield cursor, frozenset({'commerce.write'})
+
+        store._guarded_cursor.side_effect = guarded_cursor
+        store._product_entitlements.return_value = ('commerce',)
+        with patch('supermega_runtime.commerce_public_storefront._require_public_schema'):
+            result = CommercePublicStorefront(store).shop_contact(
+                principal, shop_request_id=shop_request_id)
+
+        self.assertEqual(result, {'shopRequestId': shop_request_id, 'contact': contact})
+        self.assertNotIn(contact['phone'], str(state), 'buyer contact must stay out of the shared Shop order state')
+
     def test_inbox_response_omits_contact_before_network_delivery(self):
         principal = TrialPrincipal('internal-workspace', 'shop-operator', 'human')
         cursor = Mock()

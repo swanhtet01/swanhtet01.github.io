@@ -36,7 +36,7 @@ globalThis.fetch=async input=>{
   if(mode==='image-missing') return new Response('missing',{status:404});
   if(mode==='image-html') return new Response('<html>fallback</html>',{headers:{'content-type':'text/html'}});
   if(mode==='image-corrupt') return new Response('broken',{headers:{'content-type':'image/png'}});
-  const path=mode==='image-stale'?'/images/actual-shop-today.png':u.pathname;
+  const path=mode==='image-stale'?'/images/actual-shop-sell.png':u.pathname;
   return new Response(fs.readFileSync(outputDir+'/static'+path),{headers:{'content-type':'image/png'}});
  }
  if(u.pathname.endsWith('.png')) return new Response(fs.readFileSync(outputDir+'/static'+u.pathname),{headers:{'content-type':'image/png'}});
@@ -45,8 +45,8 @@ globalThis.fetch=async input=>{
  let html=fs.readFileSync(outputDir+'/static/'+page.file,'utf8');
  if(mode==='pilot-pitch'&&u.pathname==='/contact/') html+='<p>Request managed company intelligence.</p>';
  if(mode==='missing-source'&&u.pathname==='/contact/') html=html.replaceAll('source.value=location.href','REMOVED');
- if(mode==='missing-offer') html=html.replaceAll('class="home-product-shot"','REMOVED');
- if(mode==='missing-action') html=html.replaceAll('id="shop"','REMOVED');
+ if(mode==='missing-offer') html=html.replaceAll('class="company-operating-overview"','REMOVED');
+ if(mode==='missing-action') html=html.replace('href="/shop/">Explore Shop','REMOVED');
  if(mode==='missing-guided') html=html.replaceAll('>Login</a>','>REMOVED</a>');
  if(mode==='missing-assisted') html=html.replaceAll('>Contact</a>','>REMOVED</a>');
  if(mode==='plant-marketing'&&u.pathname==='/') html+='<a href="/plant/">Plant</a>';

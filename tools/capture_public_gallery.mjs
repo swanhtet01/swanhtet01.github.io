@@ -152,7 +152,7 @@ async function capture(cdp, sessionId, output, name, expectedTexts, view) {
     const state = await evaluate(cdp, sessionId, `(() => {
       const node = document.querySelector(${JSON.stringify(view.selector)});
       const bounds = node?.getBoundingClientRect();
-      const images = [...document.querySelectorAll(${JSON.stringify(view.imageSelector || 'img[data-no-gallery-images]')})];
+      const images = [...document.querySelectorAll(${JSON.stringify(view.imageSelector || 'img')})];
       return { path: location.pathname, route: window.__qaGalleryRoute ?? null,
         tab: window.__qaGalleryTab ?? null, visible: Boolean(bounds && bounds.bottom > 0 && bounds.top < innerHeight && bounds.right > 0 && bounds.left < innerWidth),
         imageCount: images.length, loadedImages: images.filter(image => image.complete && image.naturalWidth > 0).length };
@@ -172,6 +172,10 @@ async function capture(cdp, sessionId, output, name, expectedTexts, view) {
     await new Promise(resolveWait => setTimeout(resolveWait, 200))
   }
   if (!viewVerified) throw new Error(`capture_view_or_images_missing:${name}:${JSON.stringify(lastState)}`)
+  for (const text of view.forbiddenText || []) {
+    const found = await evaluate(cdp, sessionId, `document.body?.innerText.includes(${JSON.stringify(text)}) === true`)
+    if (found) throw new Error(`capture_contains_transient_or_forbidden_text:${name}:${text}`)
+  }
   const myanmarFontLoaded = await evaluate(cdp, sessionId, `(async () => {
     await document.fonts.load('16px "Noto Sans Myanmar"', 'မင်္ဂလာပါ');
     return [...document.fonts].some(face => face.family === 'Noto Sans Myanmar' && face.status === 'loaded');
@@ -179,13 +183,14 @@ async function capture(cdp, sessionId, output, name, expectedTexts, view) {
   if (!myanmarFontLoaded) throw new Error(`myanmar_font_missing:${name}`)
   await evaluate(cdp, sessionId, `(() => {
     const style = document.createElement('style');
-    style.textContent = '*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}';
+    style.textContent = '*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}.qa-notice,.qa-nav,#root > p,#root > button,#root > output{display:none!important}';
     document.head.append(style);
   })()`)
   await evaluate(cdp, sessionId, 'document.activeElement?.blur()')
   const visibleQaChrome = await evaluate(cdp, sessionId, `(() => [...document.querySelectorAll('.qa-notice,.qa-nav,#root > p,#root > button,#root > output')]
-    .some(node => getComputedStyle(node).display !== 'none' && node.getClientRects().length > 0))()`)
-  if (visibleQaChrome) throw new Error(`qa_fixture_controls_visible:${name}`)
+    .filter(node => getComputedStyle(node).display !== 'none' && node.getClientRects().length > 0)
+    .map(node => ({tag:node.tagName, className:node.className, text:node.textContent?.trim().slice(0,100)})))()`)
+  if (visibleQaChrome.length) throw new Error(`qa_fixture_controls_visible:${name}:${JSON.stringify(visibleQaChrome)}`)
   let previous = null
   let bytes = null
   // Mobile layout can settle a few frames after the viewport or scroll changes.
@@ -209,6 +214,7 @@ async function capture(cdp, sessionId, output, name, expectedTexts, view) {
 
 async function captureMobile(cdp, sessionId, output, name, expectedTexts, view) {
   await cdp.send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true }, sessionId)
+  await cdp.send('Emulation.setScrollbarsHidden', { hidden: true }, sessionId)
   try {
     if (name === 'actual-commerce-catalog-mobile' || name === 'actual-commerce-order-request-mobile') {
       let phonePreview = false
@@ -219,7 +225,6 @@ async function captureMobile(cdp, sessionId, output, name, expectedTexts, view) 
       }
       if (!phonePreview) throw new Error(`commerce_phone_preview_state_not_updated:${name}`)
     }
-    if (name === 'actual-shop-sell-mobile') await clickSelector(cdp, sessionId, '.shop-mobile-cart')
     const mobileLayout = await evaluate(cdp, sessionId, `(() => {
       const node = document.querySelector(${JSON.stringify(view.selector)});
       const top = node?.getBoundingClientRect().top ?? 0;
@@ -227,22 +232,9 @@ async function captureMobile(cdp, sessionId, output, name, expectedTexts, view) 
       return { viewport: innerWidth, page: document.documentElement.scrollWidth };
     })()`)
     if (mobileLayout.page > mobileLayout.viewport + 1) throw new Error(`mobile_capture_horizontal_overflow:${name}:${JSON.stringify(mobileLayout)}`)
-    // The fixture opens the basket with HTMLElement.click(), which does not set
-    // pointer modality. Tap a static heading so this frame reflects touch use;
-    // keyboard focus styling in the application remains intact.
-    if (name === 'actual-shop-sell-mobile') {
-      const point = await evaluate(cdp, sessionId, `(() => {
-        const heading = document.querySelector('.shop-current-sale h2');
-        const box = heading?.getBoundingClientRect();
-        return box ? { x: box.left + box.width / 2, y: box.top + box.height / 2 } : null;
-      })()`)
-      if (!point) throw new Error('mobile_sale_heading_missing')
-      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [point] }, sessionId)
-      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] }, sessionId)
-    }
     return await capture(cdp, sessionId, output, name, expectedTexts, { ...view, width: 390, height: 844 })
   } finally {
-    if (name === 'actual-shop-sell-mobile') await clickSelector(cdp, sessionId, '.shop-cart-close')
+    await cdp.send('Emulation.setScrollbarsHidden', { hidden: false }, sessionId)
     await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false }, sessionId)
     await evaluate(cdp, sessionId, 'window.scrollTo(0,0)')
   }
@@ -342,7 +334,13 @@ async function main() {
     await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false }, sessionId)
     await cdp.send('Page.navigate', { url: `${origin}/shop/` }, sessionId)
     await waitFor(cdp, sessionId, 'Today')
-    await evaluate(cdp, sessionId, `(() => { const s=document.createElement('style');s.textContent='#root > p,#root > button,#root > output{display:none!important}body{margin:0!important}';document.head.append(s) })()`)
+    const overdueOpenOrders = await evaluate(cdp, sessionId, `(() => {
+      const state = JSON.parse(localStorage.getItem('supermega.commerce.workspace.v2') || '{}');
+      return (state.orders || []).filter(order => order.status !== 'completed' && order.status !== 'cancelled'
+        && order.promisedAt && Date.parse(order.promisedAt) <= Date.now()).map(order => order.id);
+    })()`)
+    if (overdueOpenOrders.length) throw new Error(`shop_gallery_seed_has_overdue_open_orders:${overdueOpenOrders.join(',')}`)
+    await evaluate(cdp, sessionId, `(() => { const s=document.createElement('style');s.textContent='#root > p,#root > button,#root > output,.qa-notice,.qa-nav{display:none!important}body{margin:0!important}';document.head.append(s) })()`)
     const stockedShop = await evaluate(cdp, sessionId, "localStorage.getItem('supermega.commerce.workspace.v2')")
     if (!stockedShop) throw new Error('synthetic_shop_seed_missing')
     await evaluate(cdp, sessionId, `(() => {
@@ -377,11 +375,11 @@ async function main() {
       throw new Error(`counter_multi_item_basket_missing:${JSON.stringify(saleBasket)}`)
     }
     captures.push(await capture(cdp, sessionId, output, 'actual-shop-sell', ['Products', 'Current sale', 'KAUNG 90 Days Rice'],
-      { fixturePath: '/shop/', tab: 'counter', selector: '.shop-current-sale' }))
+      { fixturePath: '/shop/', tab: 'counter', selector: '.shop-current-sale', imageSelector: '.shop-product-art.shop-product-photo', images: 5 }))
     captures.push(await captureTablet(cdp, sessionId, output, 'actual-shop-sell-tablet', ['Products', 'Current sale', 'KAUNG 90 Days Rice'],
-      { fixturePath: '/shop/', tab: 'counter', selector: '.shop-counter-grid', scrollToTop: true, openSale: true }))
-    captures.push(await captureMobile(cdp, sessionId, output, 'actual-shop-sell-mobile', ['Products', 'Current sale', 'KAUNG 90 Days Rice'],
-      { fixturePath: '/shop/', tab: 'counter', selector: '.shop-current-sale' }))
+      { fixturePath: '/shop/', tab: 'counter', selector: '.shop-counter-grid', scrollToTop: true, openSale: true, imageSelector: '.shop-product-art.shop-product-photo', images: 5 }))
+    captures.push(await captureMobile(cdp, sessionId, output, 'actual-shop-sell-mobile', ['Products', 'KAUNG 90 Days Rice'],
+      { fixturePath: '/shop/', tab: 'counter', selector: '.shop-counter-grid', imageSelector: '.shop-product-art.shop-product-photo', images: 5 }))
     await clickSelector(cdp, sessionId, '.shop-review-sale')
     await waitFor(cdp, sessionId, 'Review counter sale')
     await typeInto(cdp, sessionId, '.accountable-action-gate input', 'Synthetic cashier')
@@ -403,33 +401,43 @@ async function main() {
       recordKind: 'paid_order_record_not_customer_receipt',
     })
     await clickSelector(cdp, sessionId, '.receipt-dialog-actions button:last-child')
+    // Reset transient success feedback before capturing the next views; the synthetic sale
+    // remains in browser storage and is still visible in the Today and Orders totals.
+    await cdp.send('Page.navigate', { url: `${origin}/shop/` }, sessionId)
+    await waitFor(cdp, sessionId, 'Today')
+    await waitFor(cdp, sessionId, 'Order queue')
+    const completedSaleSurvivedReload = await evaluate(cdp, sessionId, `(() => {
+      const state = JSON.parse(localStorage.getItem('supermega.commerce.workspace.v2') || '{}');
+      return state.orders?.some(order => order.status === 'completed' && order.paymentStatus === 'reconciled') === true;
+    })()`)
+    if (!completedSaleSurvivedReload) throw new Error('synthetic_counter_sale_missing_after_reload')
     await clickText(cdp, sessionId, 'Show Today')
-    captures.unshift(await capture(cdp, sessionId, output, 'actual-shop-today', ['Today', 'Quick tasks', 'Order queue', '1 completed'],
+    captures.unshift(await capture(cdp, sessionId, output, 'actual-shop-today', ['Today', 'Quick tasks', 'Order queue'],
       { fixturePath: '/shop/', tab: 'today', selector: '.shop-today-module' }))
-    captures.push(await captureTablet(cdp, sessionId, output, 'actual-shop-today-tablet', ['Today', 'Quick tasks', 'Order queue', '1 completed'],
+    captures.push(await captureTablet(cdp, sessionId, output, 'actual-shop-today-tablet', ['Today', 'Quick tasks', 'Order queue'],
       { fixturePath: '/shop/', tab: 'today', selector: '.shop-today-module' }))
-    captures.push(await captureMobile(cdp, sessionId, output, 'actual-shop-today-mobile', ['Today', 'Quick tasks', 'Order queue', '1 completed'],
+    captures.push(await captureMobile(cdp, sessionId, output, 'actual-shop-today-mobile', ['Today', 'Quick tasks', 'Order queue'],
       { fixturePath: '/shop/', tab: 'today', selector: '.shop-today-module' }))
     await assertShopMobileFits(cdp, sessionId, '.shop-operations-board')
     await clickText(cdp, sessionId, 'Show Orders')
     captures.push(await capture(cdp, sessionId, output, 'actual-shop-orders', ['Needs attention', 'New order'],
-      { fixturePath: '/shop/', tab: 'orders', selector: '.orders-module' }))
+      { fixturePath: '/shop/', tab: 'orders', selector: '.orders-module', forbiddenText: ['Payment and handoff recorded'] }))
     captures.push(await captureTablet(cdp, sessionId, output, 'actual-shop-orders-tablet', ['Needs attention', 'New order'],
-      { fixturePath: '/shop/', tab: 'orders', selector: '.orders-module' }))
+      { fixturePath: '/shop/', tab: 'orders', selector: '.orders-module', forbiddenText: ['Payment and handoff recorded'] }))
     captures.push(await captureMobile(cdp, sessionId, output, 'actual-shop-orders-mobile', ['Needs attention', 'New order'],
-      { fixturePath: '/shop/', tab: 'orders', selector: '.orders-module' }))
+      { fixturePath: '/shop/', tab: 'orders', selector: '.orders-module', forbiddenText: ['Payment and handoff recorded'] }))
     await clickText(cdp, sessionId, 'Show Inventory')
     await waitFor(cdp, sessionId, 'Inventory')
     await clickSelector(cdp, sessionId, '.stock-catalog-disclosure summary')
     await waitForSelector(cdp, sessionId, '.stock-catalog-disclosure[open]')
     captures.push(await capture(cdp, sessionId, output, 'actual-shop-inventory', ['Inventory', 'Stock', 'Other products', 'BAYDAR Laundry Detergent'],
-      { fixturePath: '/shop/', tab: 'inventory', selector: '.shop-stock-module' }))
+      { fixturePath: '/shop/', tab: 'inventory', selector: '.shop-stock-module', forbiddenText: ['Payment and handoff recorded'] }))
     captures.push(await captureTablet(cdp, sessionId, output, 'actual-shop-inventory-tablet', ['Inventory', 'Stock', 'Other products', 'BAYDAR Laundry Detergent'],
-      { fixturePath: '/shop/', tab: 'inventory', selector: '.shop-stock-module' }))
+      { fixturePath: '/shop/', tab: 'inventory', selector: '.shop-stock-module', forbiddenText: ['Payment and handoff recorded'] }))
     await clickSelector(cdp, sessionId, '.stock-catalog-disclosure summary')
     await waitForSelector(cdp, sessionId, '.stock-catalog-disclosure:not([open])')
     captures.push(await captureMobile(cdp, sessionId, output, 'actual-shop-inventory-mobile', ['Inventory', 'Stock'],
-      { fixturePath: '/shop/', tab: 'inventory', selector: '.shop-stock-module' }))
+      { fixturePath: '/shop/', tab: 'inventory', selector: '.shop-stock-module', forbiddenText: ['Payment and handoff recorded'] }))
     await assertShopMobileFits(cdp, sessionId, '.shop-stock-module')
     await clickText(cdp, sessionId, 'Clean synthetic databases')
 
@@ -439,10 +447,14 @@ async function main() {
     await clickText(cdp, sessionId, 'Pages')
     captures.push(await capture(cdp, sessionId, output, 'actual-sites-editor', ['Edit page', 'Business details', 'Page checks'],
       { fixturePath: '/workspaces/', route: '/website/', selector: '[data-content-section="hero"]', imageSelector: '.website-page-card img', images: 3 }))
+    captures.push(await captureTablet(cdp, sessionId, output, 'actual-sites-editor-tablet', ['Edit page', 'Business details', 'Page checks'],
+      { fixturePath: '/workspaces/', route: '/website/', selector: '[data-content-section="hero"]', imageSelector: '.website-page-card img', images: 3 }))
     captures.push(await captureMobile(cdp, sessionId, output, 'actual-sites-editor-mobile', ['Edit page', 'Business details', 'Page checks'],
       { fixturePath: '/workspaces/', route: '/website/', selector: '[data-content-section="hero"]', imageSelector: '.website-page-card img', images: 3 }))
     await clickText(cdp, sessionId, 'Inquiries')
     captures.push(await capture(cdp, sessionId, output, 'actual-sites-inquiries', ['12 requests need review', 'Ko Min'],
+      { fixturePath: '/workspaces/', route: '/website/?view=inquiries', selector: '.website-inquiry-detail' }))
+    captures.push(await captureTablet(cdp, sessionId, output, 'actual-sites-inquiries-tablet', ['12 requests need review', 'Ko Min'],
       { fixturePath: '/workspaces/', route: '/website/?view=inquiries', selector: '.website-inquiry-detail' }))
     captures.push(await captureMobile(cdp, sessionId, output, 'actual-sites-inquiries-mobile', ['12 requests need review', 'Ko Min'],
       { fixturePath: '/workspaces/', route: '/website/?view=inquiries', selector: '.website-inquiry-detail' }))
@@ -454,6 +466,8 @@ async function main() {
     await clickText(cdp, sessionId, 'Save store')
     await waitFor(cdp, sessionId, 'Storefront saved on this device')
     captures.push(await capture(cdp, sessionId, output, 'actual-commerce-catalog', ['Example Studio', '3 products', 'Add to cart'],
+      { fixturePath: '/workspaces/', route: '/ecommerce/?view=preview', selector: '.storefront-grid', imageSelector: '.storefront-grid img.storefront-product-photo', images: 3 }))
+    captures.push(await captureTablet(cdp, sessionId, output, 'actual-commerce-catalog-tablet', ['Example Studio', '3 products', 'Add to cart'],
       { fixturePath: '/workspaces/', route: '/ecommerce/?view=preview', selector: '.storefront-grid', imageSelector: '.storefront-grid img.storefront-product-photo', images: 3 }))
     captures.push(await captureMobile(cdp, sessionId, output, 'actual-commerce-catalog-mobile', ['Example Studio', '3 products', 'Add to cart'],
       { fixturePath: '/workspaces/', route: '/ecommerce/?view=preview', selector: '.storefront-grid', imageSelector: '.storefront-grid img.storefront-product-photo', images: 3 }))
@@ -485,6 +499,9 @@ async function main() {
     })()`)
     if (!requestPanelShown) throw new Error('commerce_request_panel_missing')
     captures.push(await capture(cdp, sessionId, output, 'actual-commerce-order-request',
+      ['Request saved on this device', 'No order or payment was confirmed.'],
+      { fixturePath: '/workspaces/', route: '/ecommerce/?view=preview', selector: '.ecommerce-quote-receipt[data-current="true"]' }))
+    captures.push(await captureTablet(cdp, sessionId, output, 'actual-commerce-order-request-tablet',
       ['Request saved on this device', 'No order or payment was confirmed.'],
       { fixturePath: '/workspaces/', route: '/ecommerce/?view=preview', selector: '.ecommerce-quote-receipt[data-current="true"]' }))
     captures.push(await captureMobile(cdp, sessionId, output, 'actual-commerce-order-request-mobile',

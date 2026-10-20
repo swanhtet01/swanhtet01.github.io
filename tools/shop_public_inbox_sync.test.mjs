@@ -1,13 +1,48 @@
 import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
 import { test } from 'node:test'
 
-import { shopPublicInboxBacklogCursor, shopPublicInboxPrunedRequestIds, syncShopPublicInbox } from '../showroom/src/core/shop-public-inbox-sync.ts'
+import { acquireShopPublicInboxFlight, applyShopPublicInboxReviewSelection, claimShopPublicInboxRequest, findShopPublicInboxRequestForReview, releaseShopPublicInboxFlight, shopPublicInboxBacklogCursor, shopPublicInboxIdentityState, shopPublicInboxPrunedRequestKeys, shopPublicInboxRequestKey, syncShopPublicInbox } from '../showroom/src/core/shop-public-inbox-sync.ts'
 
 const identity = { workspaceId: 'workspace-1', userId: 'user-1', email: 'operator@example.com' }
 
-function request(requestId, status = 'new') {
+test('revoking order write access hides and invalidates an open buyer-contact disclosure', async () => {
+  const source = await readFile(new URL('../showroom/src/core/ShopBuyerContactDisclosure.tsx', import.meta.url), 'utf8')
+  const core = await readFile(new URL('../showroom/src/core/CoreApp.tsx', import.meta.url), 'utf8')
+  const history = await readFile(new URL('../showroom/src/core/ShopOrderHistory.tsx', import.meta.url), 'utf8')
+  assert.match(source, /const canReadBuyerContact = Boolean\(loadBuyerContact && workspaceIdentityKey\)/)
+  assert.match(source, /const visiblePanel = canReadBuyerContact && panel\?\.identityKey === workspaceIdentityKey \? panel : null/)
+  assert.match(core, /<ShopBuyerContactDisclosure key=\{order\.id \+ '\|' \+ workspaceIdentityKey \+ '\|' \+ \(loadBuyerContact \? 'write' : 'read'\)\}/)
+  assert.match(history, /<ShopBuyerContactDisclosure key=\{order\.id \+ '\|' \+ workspaceIdentityKey \+ '\|' \+ \(loadBuyerContact \? 'write' : 'read'\)\}/)
+  assert.match(source, /useEffect\(\(\) => \(\) => \{ requestEpoch\.current \+= 1 \}, \[\]\)/)
+})
+
+test('one slow company inbox does not block a different company inbox', () => {
+  const active = new Set()
+  assert.equal(acquireShopPublicInboxFlight(active, 'company-a'), true)
+  assert.equal(acquireShopPublicInboxFlight(active, 'company-a'), false)
+  assert.equal(acquireShopPublicInboxFlight(active, 'company-b'), true)
+  releaseShopPublicInboxFlight(active, 'company-a')
+  assert.equal(acquireShopPublicInboxFlight(active, 'company-a'), true)
+})
+
+test('inbox sweep cursors and seen requests stay isolated by workspace identity', () => {
+  const states = new Map()
+  const firstAccount = shopPublicInboxIdentityState(states, 'workspace-a:user-a')
+  const secondAccount = shopPublicInboxIdentityState(states, 'workspace-b:user-b')
+
+  firstAccount.requestCursors.set('request-a', 'cursor-a')
+  firstAccount.seenDuringSweep.add('request-a')
+  assert.equal(shopPublicInboxIdentityState(states, 'workspace-a:user-a'), firstAccount)
+  assert.deepEqual([...firstAccount.requestCursors], [['request-a', 'cursor-a']])
+  assert.deepEqual([...firstAccount.seenDuringSweep], ['request-a'])
+  assert.deepEqual([...secondAccount.requestCursors], [])
+  assert.deepEqual([...secondAccount.seenDuringSweep], [])
+})
+
+function request(requestId, status = 'new', handle = 'store-1') {
   return {
-    handle: 'store-1',
+    handle,
     requestId,
     shopRequestId: `shop-${requestId}`,
     status,
@@ -23,60 +58,104 @@ function request(requestId, status = 'new') {
   }
 }
 
-test('automatically claims a new public request only into the Shop review queue', async () => {
-  const attempts = []
-  const result = await syncShopPublicInbox(identity, new Set(), {
+test('automatically displays new public requests without claiming or changing Shop', async () => {
+  let claimCalls = 0
+  const result = await syncShopPublicInbox(identity, {
     loadInbox: async () => ({ requests: [request('r-1')], nextCursor: null }),
-    claimRequest: async (_identity, handle, requestId) => {
-      attempts.push([handle, requestId])
-      return { status: 'in_shop', shopRequestId: `shop-${requestId}`, priceChanged: false }
-    },
+    claimRequest: async () => { claimCalls += 1; throw new Error('polling must never claim') },
   })
 
-  assert.deepEqual(attempts, [['store-1', 'r-1']])
-  assert.deepEqual(result.requests, [])
-  assert.equal(result.claimedRequests[0].status, 'in_shop')
-  assert.equal(result.claimedRequests[0].shopRequestId, 'shop-r-1')
+  assert.equal(claimCalls, 0)
+  assert.deepEqual(result.requests.map((item) => item.requestId), ['r-1'])
+  assert.deepEqual(result.claimedRequests, [])
 })
 
-test('does not re-claim requests already in Shop and skips a prior failed attempt', async () => {
+test('claims only the request explicitly selected for review', async () => {
   const attempts = []
-  const priorAttempts = new Set(['r-2'])
-  const result = await syncShopPublicInbox(identity, priorAttempts, {
-    loadInbox: async () => ({ requests: [request('r-1', 'in_shop'), request('r-2')], nextCursor: null }),
-    claimRequest: async (_identity, _handle, requestId) => {
-      attempts.push(requestId)
-      return { status: 'in_shop', shopRequestId: `shop-${requestId}`, priceChanged: false }
-    },
+  const selected = await syncShopPublicInbox(identity, {
+    loadInbox: async () => ({ requests: [request('r-1'), request('r-2')], nextCursor: null }),
+  })
+  const claimed = await claimShopPublicInboxRequest(identity, selected.requests[1], async (_identity, handle, requestId) => {
+    attempts.push([handle, requestId])
+    return { status: 'in_shop', shopRequestId: `shop-${requestId}`, priceChanged: false }
   })
 
-  assert.deepEqual(attempts, [])
+  assert.deepEqual(attempts, [['store-1', 'r-2']])
+  assert.equal(claimed.status, 'in_shop')
+  assert.equal(claimed.shopRequestId, 'shop-r-2')
+})
+
+test('claims the cached selected order when newer requests shift it off the refreshed first page', async () => {
+  const cached = await syncShopPublicInbox(identity, {
+    loadInbox: async () => ({ requests: [request('r-selected')], nextCursor: null }),
+  })
+  const refreshed = await syncShopPublicInbox(identity, {
+    loadInbox: async () => ({ requests: Array.from({ length: 50 }, (_, index) => request(`new-${index + 1}`)), nextCursor: 'older-page' }),
+  })
+  const selected = findShopPublicInboxRequestForReview({ handle: 'store-1', requestId: 'r-selected' }, refreshed.requests, cached.requests)
+  assert.ok(selected)
+  assert.equal(refreshed.requests.length, 50)
+  const claimCalls = []
+  const claimed = await claimShopPublicInboxRequest(identity, selected, async (_identity, handle, requestId) => {
+    claimCalls.push([handle, requestId])
+    return { status: 'in_shop', shopRequestId: 'shop-r-selected', priceChanged: false }
+  })
+
+  assert.deepEqual(claimCalls, [['store-1', 'r-selected']])
+  assert.equal(claimed.status, 'in_shop')
+  assert.equal(claimed.shopRequestId, 'shop-r-selected')
+})
+
+test('uses storefront handle and request ID together when selecting a cached order', () => {
+  const firstStore = request('same-id', 'new', 'store-1')
+  const secondStore = request('same-id', 'new', 'store-2')
+  const selected = findShopPublicInboxRequestForReview(
+    { handle: 'store-2', requestId: 'same-id' },
+    [firstStore],
+    [secondStore],
+  )
+
+  assert.equal(selected.handle, 'store-2')
+  assert.notEqual(shopPublicInboxRequestKey(firstStore), shopPublicInboxRequestKey(secondStore))
+})
+
+test('a cached in-Shop order is included in refresh resolution after newer requests arrive', async () => {
+  const cachedInShop = request('selected', 'in_shop')
+  const refreshed = await syncShopPublicInbox(identity, {
+    loadInbox: async () => ({ requests: Array.from({ length: 50 }, (_, index) => request(`new-${index + 1}`)), nextCursor: 'older-page' }),
+  })
+  let claimCalls = 0
+  const selectedPage = await applyShopPublicInboxReviewSelection(
+    identity,
+    { handle: cachedInShop.handle, requestId: cachedInShop.requestId },
+    refreshed,
+    [cachedInShop],
+    async () => { claimCalls += 1; throw new Error('already-claimed orders must not be claimed again') },
+  )
+
+  assert.equal(claimCalls, 0)
+  assert.equal(selectedPage.failedRequestKeys.length, 0)
+  assert.deepEqual(selectedPage.alreadyInShopRequests.map(shopPublicInboxRequestKey), [shopPublicInboxRequestKey(cachedInShop)])
+  assert.equal(selectedPage.requests.some((item) => shopPublicInboxRequestKey(item) === shopPublicInboxRequestKey(cachedInShop)), false)
+})
+
+test('does not re-claim a request that is already in Shop', async () => {
+  let claimCalls = 0
+  const result = await syncShopPublicInbox(identity, {
+    loadInbox: async () => ({ requests: [request('r-1', 'in_shop'), request('r-2')], nextCursor: null }),
+  })
+
+  const alreadyInShop = result.alreadyInShopRequests[0]
+  await claimShopPublicInboxRequest(identity, alreadyInShop, async () => { claimCalls += 1; throw new Error('must not reclaim') })
+  assert.equal(claimCalls, 0)
   assert.deepEqual(result.claimedRequests, [])
   assert.deepEqual(result.requests.map((item) => item.requestId), ['r-2'])
   assert.deepEqual(result.alreadyInShopRequests.map((item) => item.requestId), ['r-1'])
 })
 
-test('keeps a failed request visible and continues processing later requests', async () => {
-  const attempts = []
-  const result = await syncShopPublicInbox(identity, new Set(), {
-    loadInbox: async () => ({ requests: [request('r-1'), request('r-2')], nextCursor: null }),
-    claimRequest: async (_identity, _handle, requestId) => {
-      attempts.push(requestId)
-      if (requestId === 'r-1') throw new Error('temporary failure')
-      return { status: 'in_shop', shopRequestId: `shop-${requestId}`, priceChanged: true }
-    },
-  })
-
-  assert.deepEqual(attempts, ['r-1', 'r-2'])
-  assert.deepEqual(result.failedRequestIds, ['r-1'])
-  assert.deepEqual(result.requests.map((item) => item.requestId), ['r-1'])
-  assert.deepEqual(result.claimedRequests.map((item) => item.requestId), ['r-2'])
-})
-
 test('does not retain or return customer contact fields or customer-entered names', async () => {
-  const result = await syncShopPublicInbox(identity, new Set(), {
+  const result = await syncShopPublicInbox(identity, {
     loadInbox: async () => ({ requests: [request('r-1')], nextCursor: null }),
-    claimRequest: async () => { throw new Error('offline') },
   })
 
   const serialized = JSON.stringify(result.requests[0])
@@ -84,30 +163,26 @@ test('does not retain or return customer contact fields or customer-entered name
   assert.deepEqual(Object.keys(result.requests[0].request).sort(), ['fulfilment', 'lines', 'totalMmk'])
 })
 
-test('stops claiming as soon as the Shop workspace is no longer current', async () => {
+test('does not expose an inbox response after the Shop workspace changes', async () => {
   let current = true
-  const attempts = []
-  const result = await syncShopPublicInbox(identity, new Set(), {
-    loadInbox: async () => ({ requests: [request('r-1'), request('r-2')], nextCursor: null }),
-    claimRequest: async (_identity, _handle, requestId) => {
-      attempts.push(requestId)
+  const result = await syncShopPublicInbox(identity, {
+    loadInbox: async () => {
       current = false
-      return { status: 'in_shop', shopRequestId: `shop-${requestId}`, priceChanged: false }
+      return { requests: [request('r-1'), request('r-2')], nextCursor: null }
     },
+    claimRequest: async () => { throw new Error('polling must not claim') },
   }, () => current)
 
-  assert.deepEqual(attempts, ['r-1'])
-  assert.deepEqual(result.claimedRequests.map((item) => item.requestId), ['r-1'])
+  assert.deepEqual(result.requests, [])
 })
 
 test('passes the saved page cursor to the inbox API and returns the next cursor', async () => {
   let observedCursor = null
-  const result = await syncShopPublicInbox(identity, new Set(), {
+  const result = await syncShopPublicInbox(identity, {
     loadInbox: async (_identity, after) => {
       observedCursor = after
       return { requests: [], nextCursor: 'cursor-page-3' }
     },
-    claimRequest: async () => { throw new Error('no request to claim') },
   }, () => true, 'cursor-page-2')
 
   assert.equal(observedCursor, 'cursor-page-2')
@@ -115,8 +190,7 @@ test('passes the saved page cursor to the inbox API and returns the next cursor'
 })
 
 test('a shifted first-page boundary backfills requests before resuming the older cursor', async () => {
-  const loaded = [], claimed = []
-  const attempts = new Set()
+  const loaded = []
   const api = {
     loadInbox: async (_identity, after) => {
       loaded.push(after)
@@ -124,18 +198,13 @@ test('a shifted first-page boundary backfills requests before resuming the older
         ? { requests: [request('request-between-boundaries')], nextCursor: 'saved-older-cursor' }
         : { requests: [request('already-in-shop', 'in_shop')], nextCursor: 'current-first-page-boundary' }
     },
-    claimRequest: async (_identity, _handle, requestId) => {
-      claimed.push(requestId)
-      return { status: 'in_shop', shopRequestId: `shop-${requestId}`, priceChanged: false }
-    },
   }
-  const first = await syncShopPublicInbox(identity, attempts, api)
+  const first = await syncShopPublicInbox(identity, api)
   const cursor = shopPublicInboxBacklogCursor(
     'saved-older-cursor', 'previous-first-page-boundary', first.nextCursor)
-  const backlog = await syncShopPublicInbox(identity, attempts, api, () => true, cursor)
+  const backlog = await syncShopPublicInbox(identity, api, () => true, cursor)
   assert.deepEqual(loaded, [undefined, 'current-first-page-boundary'])
-  assert.deepEqual(claimed, ['request-between-boundaries'])
-  assert.equal(backlog.claimedRequests[0].shopRequestId, 'shop-request-between-boundaries')
+  assert.deepEqual(backlog.requests.map((item) => item.requestId), ['request-between-boundaries'])
   assert.equal(shopPublicInboxBacklogCursor('saved-older-cursor', first.nextCursor, first.nextCursor), 'saved-older-cursor')
   assert.equal(shopPublicInboxBacklogCursor(null, first.nextCursor, first.nextCursor), first.nextCursor)
   assert.equal(shopPublicInboxBacklogCursor('unfinished-page', first.nextCursor, first.nextCursor, true), null)
@@ -147,6 +216,6 @@ test('closed requests disappear only after a complete inbox sweep', () => {
     ['closed', request('closed')],
   ])
   const seen = new Set(['still-open'])
-  assert.deepEqual(shopPublicInboxPrunedRequestIds(displayed, seen, false), [])
-  assert.deepEqual(shopPublicInboxPrunedRequestIds(displayed, seen, true), ['closed'])
+  assert.deepEqual(shopPublicInboxPrunedRequestKeys(displayed, seen, false), [])
+  assert.deepEqual(shopPublicInboxPrunedRequestKeys(displayed, seen, true), ['closed'])
 })

@@ -19,7 +19,8 @@ import { Link, Navigate, useLocation, useNavigate, useOutletContext, useSearchPa
 import './core-app.css'
 import type { EcommerceShopDraft } from '../products/ecommerce/ecommerce-shop-handoff'
 import { claimManagedCommercePublicRequest, loadManagedCommercePublicInbox, loadManagedCommercePublicShopContact, type ManagedCommercePublicContact } from '../products/ecommerce/managed-commerce-public'
-import { shopPublicInboxBacklogCursor, shopPublicInboxPrunedRequestIds, syncShopPublicInbox, type ShopPublicInboxRequest } from './shop-public-inbox-sync'
+import { acquireShopPublicInboxFlight, applyShopPublicInboxReviewSelection, releaseShopPublicInboxFlight, shopPublicInboxBacklogCursor, shopPublicInboxIdentityState, shopPublicInboxPrunedRequestKeys, shopPublicInboxRequestKey, syncShopPublicInbox, type ShopPublicInboxIdentityState as ShopPublicInboxIdentityStateType, type ShopPublicInboxRequest, type ShopPublicInboxRequestSelection } from './shop-public-inbox-sync'
+import { ShopBuyerContactDisclosure } from './ShopBuyerContactDisclosure'
 import type { EcommerceCancellationIntent, EcommerceOrderAmendmentIntent, EcommerceOrderRequestV2, EcommerceOrderRescheduleIntent, EcommerceShopDraftV2 } from '../products/ecommerce/ecommerce-buying-lifecycle'
 import { ecommerceShopIntentReference, type EcommerceShopNavigationIntents } from '../products/ecommerce/ecommerce-shop-intent-route'
 import type { WebsiteEcommerceHandoffContext, WebsiteOrderRecord } from '../products/product-handoff'
@@ -1684,37 +1685,23 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
     error: string
   }>({ identityKey: '', requests: [], cursor: null, scanAnchor: null, checking: false, error: '' })
   const managedPublicInboxRef = useRef(managedPublicInbox)
-  const managedPublicInboxAttempts = useRef(new Map<string, Set<string>>())
-  const managedPublicInboxRequestCursors = useRef(new Map<string, string | undefined>())
-  const managedPublicInboxSeenDuringSweep = useRef(new Set<string>())
-  const managedPublicInboxInFlight = useRef(false)
+  const managedPublicInboxSweepStates = useRef(new Map<string, ShopPublicInboxIdentityStateType>())
+  const managedPublicInboxFlights = useRef(new Set<string>())
   const managedPublicInboxIdentityRef = useRef('')
   const managedPublicInboxIdentityKey = managedIdentity
     ? `${managedIdentity.workspaceId}\u0000${managedIdentity.userId}\u0000${managedIdentity.email}`
     : ''
   managedPublicInboxIdentityRef.current = managedPublicInboxIdentityKey
-  useEffect(() => {
-    managedPublicInboxAttempts.current.clear()
-    managedPublicInboxRequestCursors.current.clear()
-    managedPublicInboxSeenDuringSweep.current.clear()
-  }, [managedPublicInboxIdentityKey])
-  const syncManagedPublicInbox = useCallback(async (retryRequestId?: string) => {
+  const syncManagedPublicInbox = useCallback(async (retrySelection?: ShopPublicInboxRequestSelection) => {
     if (!managedIdentity || !allowShopInboundRequests || !commerceCanWrite || workspaceMode !== coreUi.m) return
     const identityKey = `${managedIdentity.workspaceId}\u0000${managedIdentity.userId}\u0000${managedIdentity.email}`
-    if (managedPublicInboxIdentityRef.current !== identityKey || managedPublicInboxInFlight.current) return
+    if (managedPublicInboxIdentityRef.current !== identityKey || !acquireShopPublicInboxFlight(managedPublicInboxFlights.current, identityKey)) return
 
-    let attempted = managedPublicInboxAttempts.current.get(identityKey)
-    if (!attempted) {
-      attempted = new Set<string>()
-      managedPublicInboxAttempts.current.set(identityKey, attempted)
-    }
-    const requestCursorKey = retryRequestId ? `${identityKey}\u0000${retryRequestId}` : ''
-    const retryAfter = retryRequestId && managedPublicInboxRequestCursors.current.has(requestCursorKey)
-      ? managedPublicInboxRequestCursors.current.get(requestCursorKey)
+    const sweepState = shopPublicInboxIdentityState(managedPublicInboxSweepStates.current, identityKey)
+    const retryRequestKey = retrySelection ? shopPublicInboxRequestKey(retrySelection) : ''
+    const retryAfter = retrySelection && sweepState.requestCursors.has(retryRequestKey)
+      ? sweepState.requestCursors.get(retryRequestKey)
       : undefined
-    if (retryRequestId) attempted.delete(retryRequestId)
-    managedPublicInboxInFlight.current = true
-
     const previous = managedPublicInboxRef.current
     const previousRequests = previous.identityKey === identityKey ? previous.requests : []
     const waitingForShopRefresh = previousRequests.filter((request) => request.status === 'in_shop')
@@ -1727,33 +1714,30 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
       scanAnchor: sameIdentity ? previous.scanAnchor : null, checking: true, error: '' })
 
     try {
-      const api = { loadInbox: loadManagedCommercePublicInbox, claimRequest: claimManagedCommercePublicRequest }
+      const api = { loadInbox: loadManagedCommercePublicInbox }
       const isCurrent = () => managedPublicInboxIdentityRef.current === identityKey
-      const firstPage = await syncShopPublicInbox(
-        managedIdentity,
-        attempted,
-        api,
-        isCurrent,
-        retryRequestId ? retryAfter : undefined,
-      )
+      const loadedFirstPage = await syncShopPublicInbox(managedIdentity, api, isCurrent, retrySelection ? retryAfter : undefined)
+      const firstPage = retrySelection && isCurrent()
+        ? await applyShopPublicInboxReviewSelection(managedIdentity, retrySelection, loadedFirstPage, previousRequests, claimManagedCommercePublicRequest)
+        : loadedFirstPage
       const pageResults = [firstPage]
       const previousCursor = sameIdentity ? previous.cursor : null
       const previousAnchor = sameIdentity ? previous.scanAnchor : null
-      const scanAnchor = retryRequestId ? previousAnchor : firstPage.nextCursor
-      const restartSweep = !retryRequestId && (
+      const scanAnchor = retrySelection ? previousAnchor : firstPage.nextCursor
+      const restartSweep = !retrySelection && (
         !sameIdentity || previousAnchor !== firstPage.nextCursor || previousCursor === null
       )
       const backlogCursor = shopPublicInboxBacklogCursor(
         previousCursor,
         previousAnchor,
         firstPage.nextCursor,
-        Boolean(retryRequestId),
+        Boolean(retrySelection),
       )
-      let nextCursor = retryRequestId ? previousCursor : backlogCursor
+      let nextCursor = retrySelection ? previousCursor : backlogCursor
       let backlogLoadError = ''
       if (backlogCursor && isCurrent()) {
         try {
-          const backlogPage = await syncShopPublicInbox(managedIdentity, attempted, api, isCurrent, backlogCursor)
+          const backlogPage = await syncShopPublicInbox(managedIdentity, api, isCurrent, backlogCursor)
           pageResults.push(backlogPage)
           nextCursor = backlogPage.nextCursor
         } catch {
@@ -1762,45 +1746,44 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
         }
       }
       if (!isCurrent()) return
-      const seenDuringSweep = managedPublicInboxSeenDuringSweep.current
+      const seenDuringSweep = sweepState.seenDuringSweep
       if (restartSweep) seenDuringSweep.clear()
       for (const [pageIndex, page] of pageResults.entries()) {
         const pageCursor = pageIndex === 0
-          ? retryRequestId ? retryAfter : undefined
+          ? retrySelection ? retryAfter : undefined
           : backlogCursor ?? undefined
         for (const request of [...page.requests, ...page.claimedRequests, ...page.alreadyInShopRequests]) {
-          if (!retryRequestId) seenDuringSweep.add(request.requestId)
-          managedPublicInboxRequestCursors.current.set(`${identityKey}\u0000${request.requestId}`, pageCursor)
+          const requestKey = shopPublicInboxRequestKey(request)
+          if (!retrySelection) seenDuringSweep.add(requestKey)
+          sweepState.requestCursors.set(requestKey, pageCursor)
         }
       }
       const claimedRequests = pageResults.flatMap((page) => page.claimedRequests)
       const alreadyInShopRequests = pageResults.flatMap((page) => page.alreadyInShopRequests)
-      const failedRequestIds = pageResults.flatMap((page) => page.failedRequestIds)
+      const failedRequestKeys = pageResults.flatMap((page) => page.failedRequestKeys)
       const needsShopRefresh = claimedRequests.length > 0 || alreadyInShopRequests.length > 0 || waitingForShopRefresh.length > 0
       const refreshed = needsShopRefresh ? await refreshManagedCommerceSnapshot() : true
-      const nextRequests = new Map(previousRequests.map((request) => [request.requestId, request]))
-      for (const request of alreadyInShopRequests) nextRequests.set(request.requestId, request)
-      for (const request of pageResults.flatMap((page) => page.requests)) nextRequests.set(request.requestId, request)
-      for (const request of claimedRequests) nextRequests.set(request.requestId, { ...request, status: 'in_shop' })
-      const resolvedRequestIds = new Set([
-        ...alreadyInShopRequests.map((request) => request.requestId),
-        ...claimedRequests.map((request) => request.requestId),
+      const nextRequests = new Map(previousRequests.map((request) => [shopPublicInboxRequestKey(request), request]))
+      for (const request of alreadyInShopRequests) nextRequests.set(shopPublicInboxRequestKey(request), request)
+      for (const request of pageResults.flatMap((page) => page.requests)) nextRequests.set(shopPublicInboxRequestKey(request), request)
+      for (const request of claimedRequests) nextRequests.set(shopPublicInboxRequestKey(request), { ...request, status: 'in_shop' })
+      const resolvedRequestKeys = new Set([
+        ...alreadyInShopRequests.map(shopPublicInboxRequestKey),
+        ...claimedRequests.map(shopPublicInboxRequestKey),
       ])
-      if (refreshed) for (const requestId of resolvedRequestIds) {
-        nextRequests.delete(requestId)
-        attempted.delete(requestId)
-        managedPublicInboxRequestCursors.current.delete(`${identityKey}\u0000${requestId}`)
+      if (refreshed) for (const requestKey of resolvedRequestKeys) {
+        nextRequests.delete(requestKey)
+        sweepState.requestCursors.delete(requestKey)
       }
-      const completeSweep = !retryRequestId && nextCursor === null && !backlogLoadError && refreshed
-      for (const requestId of shopPublicInboxPrunedRequestIds(nextRequests, seenDuringSweep, completeSweep)) {
-        nextRequests.delete(requestId)
-        attempted.delete(requestId)
-        managedPublicInboxRequestCursors.current.delete(`${identityKey}\u0000${requestId}`)
+      const completeSweep = !retrySelection && nextCursor === null && !backlogLoadError && refreshed
+      for (const requestKey of shopPublicInboxPrunedRequestKeys(nextRequests, seenDuringSweep, completeSweep)) {
+        nextRequests.delete(requestKey)
+        sweepState.requestCursors.delete(requestKey)
       }
       if (completeSweep) seenDuringSweep.clear()
       const requests = [...nextRequests.values()]
-      const error = failedRequestIds.length
-        ? 'Some online orders could not be added to Shop yet. Retry them below.'
+      const error = failedRequestKeys.length
+        ? 'That online order could not be prepared in Shop yet. You can review it again.'
         : !refreshed
           ? 'Online orders are waiting for Shop to refresh. Retry below.'
           : backlogLoadError ? `Older online orders could not be checked. ${backlogLoadError}` : ''
@@ -1815,7 +1798,7 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
         error: error instanceof Error ? error.message : 'Online orders could not be checked. Retry below.',
       })
     } finally {
-      managedPublicInboxInFlight.current = false
+      releaseShopPublicInboxFlight(managedPublicInboxFlights.current, identityKey)
     }
   }, [allowShopInboundRequests, commerceCanWrite, managedIdentity, refreshManagedCommerceSnapshot, workspaceMode])
   useEffect(() => {
@@ -3461,7 +3444,13 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
     && commerceSync.status === 'ready'
     && storageDurability.state === 'denied'
     && !storageDurability.quotaExceeded
-  const commerceWriteBanner = localEvictionWarningReplacesWriteBanner ? null : <div className="production-mode-banner commerce-mode-banner" data-sync={commerceSync.status} data-write={commerceCanWrite ? 'ready' : 'blocked'} role={commerceCanWrite ? 'status' : 'alert'}>
+  // The shell already identifies the workspace as Private device or Company data.
+  // Reserve the large banner for a state the operator needs to act on, rather than
+  // repeating a healthy storage-mode reminder above every Shop screen.
+  const commerceWriteNeedsAttention = Boolean(commerceStorageError)
+    || commerceSync.status !== 'ready'
+    || !commerceCanWrite
+  const commerceWriteBanner = localEvictionWarningReplacesWriteBanner || !commerceWriteNeedsAttention ? null : <div className="production-mode-banner commerce-mode-banner" data-sync={commerceSync.status} data-write={commerceCanWrite ? 'ready' : 'blocked'} role={commerceCanWrite ? 'status' : 'alert'}>
     <span className={`status-pill ${commerceCanWrite ? 'bounded' : 'pending'}`}>{managedIdentity ? 'Company records' : 'Private device'}</span>
     <p>{commerceStorageError
       ? `Writes paused: ${commerceStorageError}${managedIdentity && workspaceMode === coreUi.m ? ' Reload Shop and check Orders before recording the sale again; it may already be saved.' : ''}`
@@ -3480,6 +3469,9 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
         ? <Link to="/settings/#controls">Open Settings</Link>
         : null}
   </div>
+  const commerceActionNotice = notice && !commerceStorageError && commerceSync.status === 'ready' && commerceCanWrite
+    ? <div className="production-mode-banner commerce-action-notice" role="status"><p>{notice}</p></div>
+    : null
 
   // Durable-storage warning. Shown for a local workspace only, which is narrower than the
   // request itself: persistence is asked for on every Shop open, company account included,
@@ -3490,16 +3482,20 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
   // for something a re-open repairs. Quota outranks eviction risk -- "writes are failing
   // now" beats "writes may be cleared later" -- and neither is shown while the browser is
   // still being asked.
-  const storageDurabilityNotice = managedIdentity || !(storageDurability.quotaExceeded || storageDurability.state === 'denied')
+  // Keep the storage-mode reminder on Today only. The label describes where this
+  // workspace lives; backup management remains available in Settings. A full quota
+  // is a live write risk and remains visible everywhere.
+  const storageDurabilityNotice = managedIdentity
+    || !(storageDurability.quotaExceeded || (storageDurability.state === 'denied' && tab === 'today'))
     ? null
     : <div className="production-mode-banner storage-durability-banner" data-durability={storageDurability.quotaExceeded ? 'full' : 'device-only'} role={storageDurability.quotaExceeded ? 'alert' : 'status'}>
-      <span className={`status-pill${storageDurability.quotaExceeded ? ' pending' : ''}`}>{uiText(storageDurability.quotaExceeded ? 'Storage full' : 'Device-only data')}</span>
-      <p>{storageDurability.quotaExceeded
-        ? uiText('Free space on this device before saving more Shop data.')
-        : uiText('Saved on this device only.')}</p>
+      <span className={`status-pill${storageDurability.quotaExceeded ? ' pending' : ''}`}>{uiText(storageDurability.quotaExceeded ? 'Storage full' : 'Local workspace')}</span>
+      {storageDurability.quotaExceeded
+        ? <p>{uiText('Free space on this device before saving more Shop data.')}</p>
+        : null}
       {storageDurability.quotaExceeded
         ? <button type="button" onClick={() => window.location.reload()}>{uiText('Reload Shop')}</button>
-        : <Link to="/settings/#workspace-recovery">{uiText('Set up backup')}</Link>}
+        : <Link to="/settings/#workspace-recovery">{uiText('Export backup')}</Link>}
     </div>
 
   // Stuck-till escape hatch. 'conflict' and 'unavailable' both hold canWrite false with
@@ -3576,6 +3572,9 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
 
   const commerceBoundary = <>
     {commerceWriteBanner}
+    {commerceActionNotice}
+    {/* A denied persistence request means the only copy may be cleared by the browser.
+        Keep the recovery action visible on each Shop surface until backup is set up. */}
     {storageDurabilityNotice}
     {storageHeadroomNotice}
     {commerceStuckRecoveryPanel}
@@ -3611,11 +3610,12 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
               ? 'Saved here. Back up before this device runs out of Shop record space.'
               : 'This Shop record stays on this device. Back up before changing devices.',
           '/settings/#workspace-recovery',
-          'Set up backup',
+          'Export backup',
         )
   const operatingBoundary = <>
     {commerceStorageError || commerceSyncBlocked || commerceSync.status === 'checking' || !commerceCanWrite ? commerceWriteBanner : null}
-    {storageDurability.quotaExceeded ? storageDurabilityNotice : null}
+    {commerceActionNotice}
+    {storageDurabilityNotice}
     {commerceHeadroom?.level === 'urgent' ? storageHeadroomNotice : null}
     {commerceStuckRecoveryPanel}
   </>
@@ -7559,7 +7559,7 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
             const lines = request.request.lines
             const itemSummary = lines.length === 1 ? `${lines[0].name} × ${lines[0].quantity}` : `${lines.length} items · ${lines.reduce((total, line) => total + line.quantity, 0)} units`
             const awaitingShopRefresh = request.status === 'in_shop'
-            return <article key={request.requestId}><div><strong>{itemSummary}</strong><small>{formatMoney(request.request.totalMmk)} · {request.request.fulfilment} · {awaitingShopRefresh ? 'Added to Shop; refreshing' : 'Waiting to add to Shop'}</small></div><button className="core-button compact" disabled={managedPublicInbox.checking} onClick={() => void syncManagedPublicInbox(request.requestId)} type="button">{awaitingShopRefresh ? 'Refresh Shop' : 'Retry'}</button></article>
+            return <article key={shopPublicInboxRequestKey(request)}><div><strong>{itemSummary}</strong><small>{formatMoney(request.request.totalMmk)} · {request.request.fulfilment} · {awaitingShopRefresh ? 'In Shop · refreshing' : 'New online order'}</small></div><button className="core-button compact" disabled={managedPublicInbox.checking} onClick={() => void syncManagedPublicInbox(request)} type="button">{awaitingShopRefresh ? 'Refresh Shop' : 'Review order'}</button></article>
           })}
         </div>
         {managedPublicInbox.checking && !managedPublicInboxRequests.length ? <p className="form-notice" role="status">Checking for new online orders…</p> : null}
@@ -7573,7 +7573,7 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
       </section> : null}
       <section aria-labelledby="shop-order-list-heading" className="order-queue-main">
         <div className="order-queue-section-head"><div><span className="core-eyebrow">Order queue</span><h3 id="shop-order-list-heading">Needs attention</h3></div><small>{actionOrders.length ? `${actionOrders.length} to finish` : 'All caught up'}</small></div>
-        <OrderList acknowledgementDownloads={orderAcknowledgementDownloads} canCancel={(orderId) => commerceOrderHasReleasableReservation(commerce, orderId)} disabled={commerceControlsDisabled} highlightedTargetId={commerceLocation.hash.startsWith('#shop-order-') ? commerceLocation.hash.slice(1) : ''} onAdvance={advanceOrder} onCancel={cancelOrder} onReconcilePayment={reconcilePayment} onSettleRefund={settleRefund} onSettleSale={settleSale} onViewReceipt={setReceiptAck} orders={actionOrders} />
+        <OrderList acknowledgementDownloads={orderAcknowledgementDownloads} key={`${managedPublicInboxIdentityKey}\u0000${commerceCanWrite ? 'write' : 'read'}`} canCancel={(orderId) => commerceOrderHasReleasableReservation(commerce, orderId)} disabled={commerceControlsDisabled} highlightedTargetId={commerceLocation.hash.startsWith('#shop-order-') ? commerceLocation.hash.slice(1) : ''} loadBuyerContact={managedIdentity && commerceCanWrite ? (shopRequestId) => loadManagedCommercePublicShopContact(managedIdentity, shopRequestId) : null} onAdvance={advanceOrder} onCancel={cancelOrder} onReconcilePayment={reconcilePayment} onSettleRefund={settleRefund} onSettleSale={settleSale} onViewReceipt={setReceiptAck} orders={actionOrders} workspaceIdentityKey={managedPublicInboxIdentityKey} />
       </section>
       <details className="shop-business-controls">
         <summary><span>Daily tools</span><small>Reports and setup when needed</small></summary>
@@ -7717,6 +7717,8 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
     correctionCalculation={correctionCalculation}
     correctionDraft={correctionDraft}
     disabled={commerceControlsDisabled}
+    loadBuyerContact={managedIdentity && commerceCanWrite ? (shopRequestId) => loadManagedCommercePublicShopContact(managedIdentity, shopRequestId) : null}
+    workspaceIdentityKey={managedPublicInboxIdentityKey}
     onCancelCorrection={cancelCorrectionEditor}
     onCancelReturn={cancelReturnEditor}
     onChangeCorrection={(patch) => setCorrectionDraft((current) => current ? { ...current, ...patch } : current)}
@@ -8297,24 +8299,28 @@ function OrderList({
   canCancel,
   disabled,
   highlightedTargetId,
+  loadBuyerContact,
   onAdvance,
   onCancel,
   onReconcilePayment,
   onSettleRefund,
   onSettleSale,
   onViewReceipt,
+  workspaceIdentityKey,
 }: {
   acknowledgementDownloads: OrderAcknowledgementLookup
   orders: CommerceOrder[]
   canCancel: (id: string) => boolean
   disabled: boolean
   highlightedTargetId: string
+  loadBuyerContact: ((shopRequestId: string) => Promise<ManagedCommercePublicContact>) | null
   onAdvance: (id: string) => void
   onCancel: (id: string) => void
   onReconcilePayment: (id: string) => void
   onSettleRefund: (id: string) => void
   onSettleSale: (id: string) => void
   onViewReceipt: (ack: CommerceOrderAcknowledgement) => void
+  workspaceIdentityKey: string
 }) {
   const promiseNow = useMinuteClock()
   if (!orders.length) return <Empty>{uiText('No orders need action.')}</Empty>
@@ -8341,6 +8347,8 @@ function OrderList({
     const primaryActionLabel = uiText(shopOrderPrimaryActionLabel(order))
     const targetId = shopOrderTargetId(order.id)
     const attentionLabels = shopOrderAttentionLabels(order, promiseUrgency)
+    const shopRequestId = order.sourceRecordId ?? ''
+    const hasShopPublicSource = /^ECR-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/.test(shopRequestId)
     return <article data-highlighted={highlightedTargetId === targetId ? 'true' : undefined} id={targetId} key={order.id} tabIndex={-1}>
       <div>
         <strong>{order.customer} · {order.lines
@@ -8357,6 +8365,7 @@ function OrderList({
           <div>
             {order.lines ? <small>{order.lines.map((line) => `${line.name} × ${line.quantity} @ ${line.unitPriceMmk.toLocaleString()} MMK`).join(' · ')}</small> : null}
             <OrderCalculationNote order={order} />
+            {hasShopPublicSource ? <ShopBuyerContactDisclosure key={order.id + '|' + workspaceIdentityKey + '|' + (loadBuyerContact ? 'write' : 'read')} loadBuyerContact={loadBuyerContact} shopRequestId={shopRequestId} workspaceIdentityKey={workspaceIdentityKey} /> : null}
             <small>{commerceOrderDisplayReference(order.id)} · {order.owner ? `${uiText('owner')} ${order.owner}` : uiText('owner not recorded')} · {uiText(order.channel)} · {order.payment}{order.paymentDueAt ? ` · ${uiText('payment due')} ${formatTime(order.paymentDueAt)}` : ''}{order.fulfilment ? ` · ${uiText(fulfilmentLabel(order.fulfilment))}` : ''}{order.fulfilmentReference ? ` · ${order.fulfilmentReference}` : ''} · {order.promisedAt ? `${uiText('promised')} ${formatTime(order.promisedAt)}` : uiText('promise not recorded')} · ${uiText('created')} ${formatTime(order.createdAt)}</small>
           </div>
         </details>

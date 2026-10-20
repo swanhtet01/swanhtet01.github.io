@@ -7,6 +7,11 @@ const PRODUCT_PATHS: Record<ClientSolutionId, string> = {
   ecommerce: '/ecommerce/',
 }
 
+// The managed customer portal is launching Shop first. Sites and Commerce stay
+// internal until a separate staff authorization boundary exists; assignments
+// alone must not make those products customer-visible.
+const CUSTOMER_ACCESS_PRODUCTS: ReadonlySet<ClientSolutionId> = new Set(['commerce'])
+
 export type ManagedProductRouteDecision =
   | { kind: 'allow' }
   | { kind: 'redirect'; product: ClientSolutionId; path: string }
@@ -36,6 +41,17 @@ export function managedProductIsVisible(
   return assignedProducts.includes(product)
 }
 
+export function managedCustomerProductIsVisible(
+  assignedProducts: readonly ClientSolutionId[],
+  product: ClientSolutionId,
+) {
+  return CUSTOMER_ACCESS_PRODUCTS.has(product) && assignedProducts.includes(product)
+}
+
+export function managedCustomerProducts(assignedProducts: readonly ClientSolutionId[]) {
+  return assignedProducts.filter((product) => CUSTOMER_ACCESS_PRODUCTS.has(product))
+}
+
 export function ecommerceShopHandoffVisible(
   status: 'checking' | 'local' | 'ready' | 'reauthenticate' | 'error',
   assignedProducts: readonly ClientSolutionId[],
@@ -59,18 +75,17 @@ export function productSwitcherVisible(
   status: 'checking' | 'local' | 'ready' | 'reauthenticate' | 'error',
   assignedProducts: readonly ClientSolutionId[],
 ) {
-  return status === 'local' || status === 'ready' && assignedProducts.filter(product => product !== 'production').length > 1
+  return status === 'local' || status === 'ready' && managedCustomerProducts(assignedProducts).length > 1
 }
 
 export function resolveManagedProductRoute(
   requestedProduct: ClientSolutionId | null,
   assignedProducts: readonly ClientSolutionId[],
 ): ManagedProductRouteDecision {
-  if (!requestedProduct || managedProductIsVisible(assignedProducts, requestedProduct)) {
+  if (!requestedProduct || managedCustomerProductIsVisible(assignedProducts, requestedProduct)) {
     return { kind: 'allow' }
   }
-  // Retained Plant access remains explicit; never promote it as a fallback.
-  const fallback = assignedProducts.find(product => product !== 'production')
+  const fallback = managedCustomerProducts(assignedProducts)[0]
   return fallback
     ? { kind: 'redirect', product: fallback, path: managedProductPath(fallback) }
     : { kind: 'empty' }
@@ -89,7 +104,7 @@ export function resolveManagedProductHome({
   choosingProduct: boolean
   assignedProducts: readonly ClientSolutionId[]
 }): ManagedProductHomeDecision {
-  if (requestedProduct && managedProductIsVisible(assignedProducts, requestedProduct)) {
+  if (requestedProduct && managedCustomerProductIsVisible(assignedProducts, requestedProduct)) {
     return {
       kind: 'redirect',
       product: requestedProduct,
@@ -97,7 +112,7 @@ export function resolveManagedProductHome({
     }
   }
   if (choosingProduct || assignedProducts.length === 0) return { kind: 'launcher' }
-  const activeAssignments = assignedProducts.filter(product => product !== 'production')
+  const activeAssignments = managedCustomerProducts(assignedProducts)
   const fallbackProduct = activeAssignments[0]
   if (!fallbackProduct) return { kind: 'launcher' }
   const product = rememberedProduct && rememberedProduct !== 'production' && activeAssignments.includes(rememberedProduct)

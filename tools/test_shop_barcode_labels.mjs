@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
 import {
   acceptedReceiptLabelTarget,
   cappedShopBarcodeLabelCopies,
@@ -41,5 +42,8 @@ assert.match(product?.description ?? '', /saved barcode/)
 const skuFallback = catalogProductLabelTarget({ sku: 'SKU-88219', itemName: 'Everyday tee' })
 assert.equal(skuFallback?.code, 'SKU-88219')
 assert.equal(catalogProductLabelTarget({ sku: ' ', itemName: 'No code' }), null)
+
+const printComponent = await readFile(new URL('../showroom/src/core/ShopBarcodeLabels.tsx', import.meta.url), 'utf8')
+assert.match(printComponent, /\.shop-barcode-label-print-host\s*\*\s*\{\s*visibility:\s*visible\s*!important;\s*\}/)
 
 console.log('Shop barcode label checks passed')

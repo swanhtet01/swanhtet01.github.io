@@ -93,6 +93,9 @@ const appConfig = {
       includeFiles: 'supermega_runtime/**',
       excludeFiles: '{tests/**,showroom/**,api-static/**,tools/**,mark1_pilot/**,pilot-data/**,node_modules/**,assets/**,supabase/**,ytf-dqms/**,hyper_unicorn/**,venv/**,**/__pycache__/**,**/*.pyc}',
     },
+    'api/shop/menu-import.js': {
+      maxDuration: 60,
+    },
   },
   installCommand: 'npm --prefix showroom ci',
   buildCommand: 'npm run app:build',
@@ -132,6 +135,7 @@ const appConfig = {
       },
       continue: true,
     },
+    { src: '/api/shop/menu-import', dest: '/api/shop/menu-import.js' },
     { src: '/api/(.*)', dest: '/api/app.py' },
     { handle: 'filesystem' },
     { src: '/(.*)', dest: '/index.html' },

@@ -171,7 +171,7 @@ export async function runIntegratedClientPilots() {
   shop = commerce.createCommerceWebsiteIntake(shop, {
     id: 'WINT-PILOT-WEBSITE-001',
     source: websiteSource,
-    sku: 'SM-CARE-01',
+    sku: 'SM-1005',
     quantity: 1,
   }, websiteIntakeProof)
   invariant(shop, 'integrated_pilot_website_intake_failed')
@@ -200,7 +200,7 @@ export async function runIntegratedClientPilots() {
   const storefrontInput = {
     storeName: 'Integrated Pilot Store',
     summary: 'A Shop-backed catalog with accountable order review.',
-    selectedSkus: ['SM-1002', 'SM-CARE-01'],
+    selectedSkus: ['SM-1002', 'SM-1005'],
   }
   const preview = storefront.buildStorefrontPreview(shop.items, storefrontInput)
   const previewDigest = await storefront.storefrontPreviewDigest(preview)

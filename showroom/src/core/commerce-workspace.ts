@@ -2279,7 +2279,7 @@ export function createSeedCommerce(now = deterministicSeedNow): CommerceState {
   const purchaseOrderAt = new Date(now - 2 * 60 * 60 * 1000).toISOString()
   const firstOrderAt = new Date(now - 54 * 60 * 1000).toISOString()
   const secondOrderAt = new Date(now - 29 * 60 * 1000).toISOString()
-  // Yangon retail examples from Makro PRO listings checked 2026-10-17. These remain
+  // Yangon retail examples from Makro PRO listings checked 2026-10-20. These remain
   // synthetic demo stock and must be replaced with each merchant's own catalog/prices.
   // Sources: makropro.com.mm/en/c/dry-grocery/grains-rice-cereal,
   // /en/c/dry-grocery/pasta-noodles, /en/c/beverages/drinking-water,
@@ -2289,7 +2289,7 @@ export function createSeedCommerce(now = deterministicSeedNow): CommerceState {
     { sku: 'SM-1002', name: 'MAMA Chicken Instant Noodles', nameMy: 'မာမား ကြက်သားအရသာ ခေါက်ဆွဲခြောက်', variant: '55 g × 5', category: 'Pantry', onHand: 8, reorderAt: 12, price: 2950 },
     { sku: 'SM-1003', name: 'ALPINE Drinking Water', nameMy: 'အယ်လ်ပင်း သောက်ရေ', variant: '1 L × 6', category: 'Drinks', onHand: 21, reorderAt: 8, price: 5700 },
     { sku: 'SM-1004', name: 'BAYDAR Laundry Detergent', nameMy: 'ဘေဒါ အဝတ်လျှော်ဆပ်ပြာမှုန့်', variant: '700 g', category: 'Home care', onHand: 13, reorderAt: 6, price: 5900 },
-    { sku: 'SM-CARE-01', name: 'ZESS Sugar Crackers', nameMy: 'ဇက်စ် သကြားဘီစကစ်', variant: '192 g', category: 'Pantry', onHand: 14, reorderAt: 6, price: 8000 },
+    { sku: 'SM-1005', name: 'ZESS Sugar Crackers', nameMy: 'ဇက်စ် သကြားဘီစကစ်', variant: '192 g', category: 'Pantry', onHand: 14, reorderAt: 6, price: 8000 },
   ]
   const baselineProof: CommerceActionProof = {
     actionId: 'ACT-DEMO-CATALOG-BASELINE',
@@ -2428,7 +2428,7 @@ export function createSeedCommerce(now = deterministicSeedNow): CommerceState {
       id: 'PO-11111111-1111-4111-8111-111111111111',
       createdAt: purchaseOrderAt,
       expectedAt: new Date(now + 24 * 60 * 60 * 1000).toISOString(),
-      supplier: 'Sample wholesale supplier',
+      supplier: 'Supplier to confirm',
       sku: 'SM-1002',
       quantityOrdered: 40,
       // No wholesale quote is part of the public retail-price references; keep
