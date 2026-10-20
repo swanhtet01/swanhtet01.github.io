@@ -1,5 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
+import 'printer_services.dart';
+import 'printer_setup_screen.dart';
 import 'shop_copy.dart';
 import 'shop_database.dart';
 
@@ -7,11 +11,13 @@ class RecentSalesScreen extends StatefulWidget {
   const RecentSalesScreen({
     required this.database,
     required this.myanmar,
+    this.reprintService,
     super.key,
   });
 
   final ShopDatabase database;
   final bool myanmar;
+  final ReceiptReprintService? reprintService;
 
   @override
   State<RecentSalesScreen> createState() => _RecentSalesScreenState();
@@ -19,6 +25,9 @@ class RecentSalesScreen extends StatefulWidget {
 
 class _RecentSalesScreenState extends State<RecentSalesScreen> {
   late Future<List<ShopSaleReceipt>> _sales = widget.database.readRecentSales();
+  late final ReceiptReprintService _reprinter =
+      widget.reprintService ?? ReceiptReprintService();
+  bool _reprinting = false;
 
   void _reload() {
     setState(() => _sales = widget.database.readRecentSales());
@@ -187,6 +196,22 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
           ),
         ),
         actions: [
+          FilledButton.icon(
+            onPressed: _reprinting
+                ? null
+                : () {
+                    Navigator.of(dialogContext).pop();
+                    unawaited(_reprintSale(sale));
+                  },
+            icon: const Icon(Icons.print_outlined),
+            label: Text(
+              shopCopy(
+                widget.myanmar,
+                'Reprint receipt',
+                'ပြေစာပြန်ပုံနှိပ်ရန်',
+              ),
+            ),
+          ),
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(),
             child: Text(shopCopy(widget.myanmar, 'Close', 'ပိတ်ရန်')),
@@ -194,5 +219,56 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _reprintSale(ShopSaleReceipt sale) async {
+    if (_reprinting) return;
+    setState(() => _reprinting = true);
+    try {
+      var sent = await _reprinter.printIfTrusted(sale, myanmar: widget.myanmar);
+      if (!sent) {
+        if (!mounted) return;
+        await Navigator.of(context).push<void>(
+          MaterialPageRoute<void>(
+            builder: (_) => PrinterSetupScreen(myanmar: widget.myanmar),
+          ),
+        );
+        if (!mounted) return;
+        sent = await _reprinter.printIfTrusted(sale, myanmar: widget.myanmar);
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            sent
+                ? shopCopy(
+                    widget.myanmar,
+                    'Receipt sent to printer.',
+                    'ပြေစာကို ပရင်တာသို့ ပို့ပြီးပါပြီ။',
+                  )
+                : shopCopy(
+                    widget.myanmar,
+                    'Test and confirm a printer before reprinting this sale.',
+                    'ဤအရောင်းပြေစာကို ပြန်ပုံနှိပ်မီ ပရင်တာကို စမ်းသပ်အတည်ပြုပါ။',
+                  ),
+          ),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            shopCopy(
+              widget.myanmar,
+              'Sale is saved. Receipt could not print; check the printer and try again.',
+              'အရောင်းသိမ်းပြီးပါပြီ။ ပြေစာမပုံနှိပ်နိုင်ပါ။ ပရင်တာကို စစ်ပြီး ထပ်စမ်းပါ။',
+            ),
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _reprinting = false);
+    }
   }
 }

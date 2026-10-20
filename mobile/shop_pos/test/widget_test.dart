@@ -7,7 +7,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supermega_shop/main.dart';
+import 'package:supermega_shop/printer_services.dart';
+import 'package:supermega_shop/recent_sales_screen.dart';
 import 'package:supermega_shop/shop_database.dart';
 import 'package:supermega_shop/shop_models.dart';
 import 'package:supermega_shop/wallet_setup_screen.dart';
@@ -21,6 +24,124 @@ Finder _merchantQrSemantics(String provider) => find.byWidgetPredicate(
 );
 
 void main() {
+  testWidgets('saved sale reprints without recording another sale', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({
+      shopReceiptPrinterHostKey: '192.168.20.9',
+    });
+    const range = (ip: '192.168.20.10', mask: '255.255.255.248');
+    final settings = ReceiptPrinterSettings(
+      rangeProvider: () async => range,
+      session: VerifiedPrinterSession(),
+    );
+    final candidate = (await PrinterDiscoveryService(
+      rangeProvider: () async => range,
+      probe: (host, port) async => host == '192.168.20.9',
+    ).scan()).printers.single;
+    await settings.saveAfterTest(candidate);
+
+    final database = ShopDatabase(NativeDatabase.memory());
+    await database.addProduct(
+      id: 'tea',
+      name: 'Tea',
+      priceMmk: 2500,
+      openingStock: 2,
+    );
+    await database.recordCashSale(
+      operationId: 'saved-sale',
+      lines: const [ShopSaleLineInput(productId: 'tea', quantity: 1)],
+    );
+    final sent = <ShopSaleReceipt>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RecentSalesScreen(
+          database: database,
+          myanmar: false,
+          reprintService: ReceiptReprintService(
+            settings: settings,
+            send: (host, receipt, myanmar) async {
+              expect(host, '192.168.20.9');
+              expect(myanmar, isFalse);
+              sent.add(receipt);
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('2,500 MMK'));
+    await tester.pumpAndSettle();
+    expect(find.text('Reprint receipt'), findsOneWidget);
+    await tester.tap(find.text('Reprint receipt'));
+    await tester.pumpAndSettle();
+
+    expect(sent, hasLength(1));
+    expect(sent.single.id, 'saved-sale');
+    expect(sent.single.lines.single.productName, 'Tea');
+    expect(await database.countSales(), 1);
+    expect((await database.readActiveProducts()).single.onHand, 1);
+    expect(find.text('Receipt sent to printer.'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+    await database.close();
+  });
+
+  testWidgets('saved printer does not reprint after restart without a retest', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({
+      shopReceiptPrinterHostKey: '192.168.20.9',
+    });
+    final database = ShopDatabase(NativeDatabase.memory());
+    await database.addProduct(
+      id: 'tea',
+      name: 'Tea',
+      priceMmk: 2500,
+      openingStock: 2,
+    );
+    await database.recordCashSale(
+      operationId: 'saved-sale-after-restart',
+      lines: const [ShopSaleLineInput(productId: 'tea', quantity: 1)],
+    );
+    var sends = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RecentSalesScreen(
+          database: database,
+          myanmar: false,
+          reprintService: ReceiptReprintService(
+            settings: ReceiptPrinterSettings(
+              rangeProvider: () async =>
+                  (ip: '192.168.20.10', mask: '255.255.255.248'),
+              session: VerifiedPrinterSession(),
+            ),
+            send: (host, receipt, myanmar) async {
+              sends++;
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('2,500 MMK'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Reprint receipt'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Find printers'), findsOneWidget);
+    expect(sends, 0);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(sends, 0);
+    expect(await database.countSales(), 1);
+    expect(
+      find.text('Test and confirm a printer before reprinting this sale.'),
+      findsOneWidget,
+    );
+    await tester.pumpWidget(const SizedBox());
+    await database.close();
+  });
+
   testWidgets('restored Android menu photo waits for fresh cloud consent', (
     tester,
   ) async {
