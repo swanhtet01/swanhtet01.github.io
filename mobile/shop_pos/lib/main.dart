@@ -9,6 +9,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 
 import 'menu_import_screen.dart';
+import 'menu_import_service.dart';
 import 'printer_setup_screen.dart';
 import 'printer_services.dart';
 import 'recent_sales_screen.dart';
