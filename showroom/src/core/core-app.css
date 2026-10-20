@@ -3277,23 +3277,16 @@ input, select, textarea,
   .shop-product-copy > small { grid-column: 2; text-align: right; }
   .shop-product-quantity, .shop-product-add-hint { width: 3rem; min-width: 3rem; }
 }
-/* Portrait tablets use a single-column catalog and keep the current sale one tap
-   away in a touch-sized sheet instead of scrolling it below every product. */
-@media (min-width: 601px) and (max-width: 840px) {
+/* Portrait tablets keep products and the sale visible together once both
+   columns have room. Narrow devices retain the existing touch-sized sheet. */
+@media (min-width: 700px) and (max-width: 840px) {
   .shop-product-shell .core-main { padding-bottom: 1.5rem; }
   .shop-counter-surface, .shop-counter-grid { height: auto; }
-  .shop-counter-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: .75rem; }
-  .shop-counter-surface { padding-bottom: calc(5.75rem + env(safe-area-inset-bottom)); }
-  .shop-current-sale { position: fixed; top: auto; right: auto; bottom: calc(1rem + env(safe-area-inset-bottom)); left: 50%; z-index: 72; width: min(680px,calc(100% - 2rem)); max-height: calc(100svh - 2rem - env(safe-area-inset-bottom)); overflow-y: auto; margin: 0; border-radius: 1.25rem; padding: 1.25rem; opacity: 0; visibility: hidden; pointer-events: none; transform: translate(-50%,1rem); transition: opacity .18s ease, transform .18s ease, visibility .18s; }
-  .shop-current-sale.is-open { opacity: 1; visibility: visible; pointer-events: auto; transform: translate(-50%,0); }
-  .shop-current-sale > footer { position: sticky; bottom: -1.25rem; z-index: 2; margin: .5rem -1.25rem -1.25rem; padding: .875rem 1.25rem 1.25rem; background: color-mix(in srgb,var(--core-panel) 96%,transparent); box-shadow: 0 -.75rem 1.5rem color-mix(in srgb,var(--core-panel) 88%,transparent); backdrop-filter: blur(.75rem); }
-  .shop-cart-backdrop { position: fixed; inset: 0; z-index: 71; display: block; border: 0; background: rgba(0,3,7,.48); opacity: 0; visibility: hidden; pointer-events: none; backdrop-filter: blur(3px); transition: opacity .18s ease, visibility .18s; }
-  .shop-cart-backdrop.is-open { opacity: 1; visibility: visible; pointer-events: auto; }
-  .shop-mobile-cart { position: fixed; right: 1rem; bottom: calc(1rem + env(safe-area-inset-bottom)); left: 1rem; z-index: 70; min-height: 3.75rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; border: 1px solid var(--core-green); border-radius: 1rem; padding: 0 1.125rem; background: var(--core-green); color: var(--core-on-accent); box-shadow: var(--core-shadow); cursor: pointer; }
-  .shop-mobile-cart > span { display: grid; gap: .125rem; text-align: left; }
-  .shop-mobile-cart small { font-size: .6875rem; font-weight: var(--font-weight-bold); text-transform: uppercase; }
-  .shop-mobile-cart strong { font-size: .9375rem; }
-  .shop-mobile-cart b { font-family: var(--core-mono); font-size: .875rem; }
+  .shop-counter-grid { display: grid; grid-template-columns: minmax(0, 1.08fr) minmax(0, .92fr); gap: .75rem; align-items: start; }
+  .shop-counter-surface { padding-bottom: 0; }
+  .shop-current-sale, .shop-current-sale.is-open { position: static; top: auto; right: auto; bottom: auto; left: auto; z-index: auto; width: auto; max-height: none; overflow: visible; margin: 0; border-radius: 1rem; padding: .875rem; opacity: 1; visibility: visible; pointer-events: auto; transform: none; transition: none; }
+  .shop-current-sale > footer { position: static; bottom: auto; z-index: auto; margin: .5rem -.875rem -.875rem; padding: .875rem; }
+  .shop-cart-backdrop, .shop-cart-backdrop.is-open, .shop-mobile-cart, .shop-cart-close { display: none; }
 }
 @media (pointer: coarse) {
   .shop-counter-category-filter button,

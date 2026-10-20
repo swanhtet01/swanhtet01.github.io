@@ -1,5 +1,8 @@
-// Match the existing CSS overlay breakpoint. Desktop remains a non-modal aside.
-export const SHOP_SALE_OVERLAY_QUERY = '(max-width: 840px)'
+// Only phone-sized counters use a modal sale sheet. Tablets keep the basket
+// beside the catalog, so focus must remain free to move between both tasks.
+// Use the inverse of the tablet minimum so fractional viewport widths cannot
+// leave a visible sheet without its dialog focus behavior.
+export const SHOP_SALE_OVERLAY_QUERY = '(not (min-width: 700px))'
 
 export function installShopSaleFocus(panel: HTMLElement, close: () => void, fallback: () => HTMLElement | null) {
   const doc = panel.ownerDocument
