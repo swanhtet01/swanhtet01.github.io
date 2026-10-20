@@ -228,10 +228,14 @@ class _WalletEditorState extends State<_WalletEditor> {
               ),
             if (qrPayload != null)
               Center(
-                child: QrImageView(
-                  data: qrPayload,
-                  size: 210,
-                  semanticsLabel: '${widget.provider} merchant QR',
+                child: Semantics(
+                  image: true,
+                  label: '${widget.provider} merchant QR',
+                  child: QrImageView(
+                    data: qrPayload,
+                    size: 210,
+                    semanticsLabel: '${widget.provider} merchant QR',
+                  ),
                 ),
               ),
             if (_message != null) ...[

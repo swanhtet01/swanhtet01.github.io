@@ -1263,10 +1263,14 @@ class _WalletCheckoutDialogState extends State<_WalletCheckoutDialog> {
               ),
               const SizedBox(height: 8),
               Center(
-                child: QrImageView(
-                  data: payload,
-                  size: 220,
-                  semanticsLabel: '${_selected.provider} merchant QR',
+                child: Semantics(
+                  image: true,
+                  label: '${_selected.provider} merchant QR',
+                  child: QrImageView(
+                    data: payload,
+                    size: 220,
+                    semanticsLabel: '${_selected.provider} merchant QR',
+                  ),
                 ),
               ),
               Text(
