@@ -64,17 +64,23 @@ void main() {
     expect(find.text('Tea'), findsOneWidget);
 
     final search = find.byKey(const ValueKey('shop-product-search'));
+    expect(MediaQuery.sizeOf(tester.element(search)).width, 1200);
     expect(tester.widget<TextField>(search).focusNode!.hasFocus, isTrue);
     await tester.enterText(search, '0012345678905');
     await tester.testTextInput.receiveAction(TextInputAction.search);
-    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
     expect(tester.widget<TextField>(search).controller!.text, isEmpty);
-    expect(find.text('2,500 MMK'), findsOneWidget);
+    final firstTexts = tester
+        .widgetList<Text>(find.byType(Text))
+        .map((widget) => widget.data)
+        .whereType<String>()
+        .toList();
+    expect(find.text('2,500 MMK'), findsOneWidget, reason: '$firstTexts');
     expect(tester.widget<TextField>(search).focusNode!.hasFocus, isTrue);
 
     await tester.enterText(search, '0012345678906');
     await tester.testTextInput.receiveAction(TextInputAction.search);
-    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
     expect(tester.widget<TextField>(search).controller!.text, isEmpty);
     expect(find.text('5,500 MMK'), findsOneWidget);
     expect(tester.widget<TextField>(search).focusNode!.hasFocus, isTrue);
