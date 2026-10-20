@@ -16,6 +16,8 @@ const stableStringify = (value) => value === null || typeof value !== 'object'
   : Array.isArray(value)
     ? `[${value.map(stableStringify).join(',')}]`
     : `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`).join(',')}}`
+const completedResult = { ok: true, status: 'completed', actionMode: 'draft_only', results: [] }
+const completedResultHash = sha256(stableStringify(completedResult))
 const createInput = (patch = {}) => ({
   clientId: 'client-acme',
   missionId: 'cash-close-1',
@@ -95,21 +97,21 @@ function missionHarness() {
         : { ok: false, reason: 'company_evaluation_not_found' }
     },
   }
-  const completeAndAccept = (workOrderId, resultHash) => {
+  const completeAndAccept = (workOrderId) => {
     const current = workOrders.get(workOrderId)
     workOrders.set(workOrderId, {
       ...current,
       status: 'completed',
       completedAt: now(),
-      result: { ok: true, status: 'completed', actionMode: 'draft_only', results: [] },
-      resultHash,
+      result: structuredClone(completedResult),
+      resultHash: completedResultHash,
     })
     const evaluation = {
       evaluationId: `company-evaluation:${workOrderId.split(':').pop()}`,
       workOrderId,
       clientId: current.clientId,
       planHash: current.planHash,
-      resultHash,
+      resultHash: completedResultHash,
       verdict: 'accepted',
       checks: { accurate: true, complete: true, usable: true, boundarySafe: true },
       evaluatedAt: now(),
@@ -234,12 +236,12 @@ test('accepted evaluation and exact reviewed handoff unlock only the next stage'
   const state = missionHarness()
   const created = await createCompanyMission(createInput(), state.options)
   const queued = await queueCompanyMissionStage(queueInput(created.mission, created.mission.stages[0], 'cash evidence'), state.options)
-  const resultHash = 'a'.repeat(64)
+  const resultHash = completedResultHash
   const advance = advanceInput(queued.mission, queued.mission.stages[0], queued.workOrder, resultHash, 'reviewed redacted stage two packet')
 
   const beforeEvaluation = await advanceCompanyMissionStage(advance, state.options)
   assert.equal(beforeEvaluation.reason, 'company_mission_result_mismatch')
-  state.completeAndAccept(queued.workOrder.workOrderId, resultHash)
+  state.completeAndAccept(queued.workOrder.workOrderId)
   state.evaluations.get(queued.workOrder.workOrderId).verdict = 'revision_required'
   const revisionRequired = await advanceCompanyMissionStage(advance, state.options)
   assert.equal(revisionRequired.reason, 'company_mission_accepted_evaluation_required')
@@ -255,10 +257,16 @@ test('accepted evaluation and exact reviewed handoff unlock only the next stage'
   evaluation.evaluationHash = 'c'.repeat(64)
   assert.equal((await advanceCompanyMissionStage(advance, state.options)).reason, 'company_mission_accepted_evaluation_required')
   evaluation.evaluationHash = exactEvaluationHash
-  state.workOrders.get(queued.workOrder.workOrderId).resultHash = 'b'.repeat(64)
-  const changedResult = advanceInput(queued.mission, queued.mission.stages[0], queued.workOrder, 'b'.repeat(64), 'reviewed redacted stage two packet')
+  const order = state.workOrders.get(queued.workOrder.workOrderId)
+  const savedResult = structuredClone(order.result)
+  order.result = { ...order.result, results: [{ agentId: 'changed' }] }
+  assert.equal((await advanceCompanyMissionStage(advance, state.options)).reason, 'company_mission_result_mismatch')
+  const changedResultHash = sha256(stableStringify(order.result))
+  order.resultHash = changedResultHash
+  const changedResult = advanceInput(queued.mission, queued.mission.stages[0], queued.workOrder, changedResultHash, 'reviewed redacted stage two packet')
   assert.equal((await advanceCompanyMissionStage(changedResult, state.options)).reason, 'company_mission_accepted_evaluation_required')
-  state.workOrders.get(queued.workOrder.workOrderId).resultHash = resultHash
+  order.result = savedResult
+  order.resultHash = resultHash
   assert.equal(state.missions.get(`company-mission-record:${created.mission.missionRunId}`).revision, queued.mission.revision)
 
   const advanced = await advanceCompanyMissionStage(advance, state.options)
@@ -284,8 +292,8 @@ test('a three-stage mission completes through serial server-verified gates witho
     const evidence = index === 0 ? 'approved first-stage evidence' : handoffs[index - 1]
     const queued = await queueCompanyMissionStage(queueInput(mission, stage, evidence), state.options)
     assert.equal(queued.ok, true)
-    const resultHash = String(index + 1).repeat(64)
-    state.completeAndAccept(queued.workOrder.workOrderId, resultHash)
+    const resultHash = completedResultHash
+    state.completeAndAccept(queued.workOrder.workOrderId)
     const nextEvidence = index < mission.stages.length - 1 ? handoffs[index] : undefined
     const advanced = await advanceCompanyMissionStage(
       advanceInput(queued.mission, queued.mission.stages[index], queued.workOrder, resultHash, nextEvidence),

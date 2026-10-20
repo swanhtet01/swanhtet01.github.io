@@ -471,6 +471,7 @@ export async function advanceCompanyMissionStage(input, options = {}) {
   })
     || !ACCEPTED_ORDER_STATUSES.has(order.status)
     || !isRecord(order.result)
+    || !sameHash(order.resultHash, sha256(stableStringify(order.result)))
     || !sameHash(order.resultHash, resultHash)) {
     return failure('company_mission_result_mismatch', { status: 'conflict' })
   }
