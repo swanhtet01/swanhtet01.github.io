@@ -11,6 +11,14 @@ import 'package:supermega_shop/shop_database.dart';
 import 'package:supermega_shop/shop_models.dart';
 import 'package:supermega_shop/wallet_setup_screen.dart';
 
+Finder _merchantQrSemantics(String provider) => find.byWidgetPredicate(
+  (widget) =>
+      widget is Semantics &&
+      widget.properties.label == '$provider merchant QR' &&
+      widget.properties.image == true,
+  description: '$provider merchant QR semantic image',
+);
+
 void main() {
   testWidgets('empty catalog can make a durable cash sale', (tester) async {
     final database = ShopDatabase(NativeDatabase.memory());
@@ -91,8 +99,6 @@ void main() {
   testWidgets('editing a merchant QR clears its prior issuer confirmation', (
     tester,
   ) async {
-    final semantics = tester.ensureSemantics();
-    addTearDown(semantics.dispose);
     final database = ShopDatabase(NativeDatabase.memory());
     final revisedPayload = _testStaticMmqr(merchantName: 'REVISED STORE');
     await database.saveWalletSetup(
@@ -113,14 +119,14 @@ void main() {
     final qrWidget = find.byType(QrImageView).first;
     await tester.ensureVisible(qrWidget);
     await tester.pumpAndSettle();
-    expect(find.bySemanticsLabel('KBZPay merchant QR'), findsOneWidget);
+    expect(_merchantQrSemantics('KBZPay'), findsOneWidget);
     await tester.enterText(
       find.byKey(const ValueKey('wallet-payload-KBZPay')),
       revisedPayload,
     );
     await tester.pumpAndSettle();
 
-    expect(find.bySemanticsLabel('KBZPay merchant QR'), findsNothing);
+    expect(_merchantQrSemantics('KBZPay'), findsNothing);
     final payloadConfirmation = tester.widget<CheckboxListTile>(
       find.byType(CheckboxListTile).first,
     );
@@ -135,13 +141,13 @@ void main() {
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.byType(QrImageView).first);
     await tester.pumpAndSettle();
-    expect(find.bySemanticsLabel('KBZPay merchant QR'), findsOneWidget);
+    expect(_merchantQrSemantics('KBZPay'), findsOneWidget);
     await tester.enterText(
       find.byKey(const ValueKey('wallet-phone-KBZPay')),
       '09987654321',
     );
     await tester.pumpAndSettle();
-    expect(find.bySemanticsLabel('KBZPay merchant QR'), findsNothing);
+    expect(_merchantQrSemantics('KBZPay'), findsNothing);
     final phoneConfirmation = tester.widget<CheckboxListTile>(
       find.byType(CheckboxListTile).first,
     );
@@ -157,8 +163,6 @@ void main() {
   testWidgets(
     'wallet QR checkout writes only after the cashier verifies payment',
     (tester) async {
-      final semantics = tester.ensureSemantics();
-      addTearDown(semantics.dispose);
       final database = ShopDatabase(NativeDatabase.memory());
       await database.addProduct(
         id: 'tea',
@@ -195,7 +199,7 @@ void main() {
       await tester.ensureVisible(find.byType(QrImageView).first);
       await tester.pumpAndSettle();
       expect(find.text('2,500 MMK'), findsWidgets);
-      expect(find.bySemanticsLabel('KBZPay merchant QR'), findsOneWidget);
+      expect(_merchantQrSemantics('KBZPay'), findsOneWidget);
       final pending = await database.readPendingWalletCheckout();
       expect(pending, isNotNull);
       expect(pending!.totalMmk, 2500);
@@ -214,8 +218,12 @@ void main() {
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
       expect(find.text('Resume payment'), findsOneWidget);
+      final addToSaleButton = find.ancestor(
+        of: find.byTooltip('Add to sale'),
+        matching: find.byType(IconButton),
+      );
       expect(
-        tester.widget<IconButton>(find.byTooltip('Add to sale')).onPressed,
+        tester.widget<IconButton>(addToSaleButton.first).onPressed,
         isNull,
       );
       await tester.pumpWidget(const SizedBox.shrink());
@@ -230,7 +238,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Resume payment'));
       await tester.pumpAndSettle();
-      expect(find.bySemanticsLabel('KBZPay merchant QR'), findsOneWidget);
+      expect(_merchantQrSemantics('KBZPay'), findsOneWidget);
 
       await tester.ensureVisible(
         find.text('I verified this payment in the wallet app.'),
