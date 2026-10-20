@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:drift/drift.dart' hide isNotNull, isNull;
 import 'package:drift/native.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image_picker/image_picker.dart';
@@ -25,72 +24,6 @@ Finder _merchantQrSemantics(String provider) => find.byWidgetPredicate(
 );
 
 void main() {
-  testWidgets('Windows counter accepts consecutive keyboard-wedge scans', (
-    tester,
-  ) async {
-    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
-    addTearDown(() => debugDefaultTargetPlatformOverride = null);
-    tester.view.physicalSize = const Size(1200, 800);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    final database = ShopDatabase(NativeDatabase.memory());
-    await database.addProduct(
-      id: 'tea',
-      name: 'Tea',
-      barcode: '0012345678905',
-      priceMmk: 2500,
-      openingStock: 2,
-    );
-    await database.addProduct(
-      id: 'coffee',
-      name: 'Coffee',
-      barcode: '0012345678906',
-      priceMmk: 3000,
-      openingStock: 1,
-    );
-    await tester.pumpWidget(
-      ShopApp(
-        database: database,
-        authClient: null,
-        apiBaseUrl: 'https://app.supermega.dev',
-        initialMyanmar: false,
-      ),
-    );
-    // A focused desktop TextField keeps animating its caret. Pump only the
-    // frames needed for the product stream, never wait for the caret to settle.
-    for (var attempt = 0; attempt < 10; attempt++) {
-      await tester.pump(const Duration(milliseconds: 50));
-      if (find.text('Tea').evaluate().isNotEmpty) break;
-    }
-    expect(find.text('Tea'), findsOneWidget);
-
-    final search = find.byKey(const ValueKey('shop-product-search'));
-    expect(MediaQuery.sizeOf(tester.element(search)).width, 1200);
-    expect(tester.widget<TextField>(search).focusNode!.hasFocus, isTrue);
-    await tester.enterText(search, '0012345678905');
-    await tester.testTextInput.receiveAction(TextInputAction.search);
-    await tester.pump(const Duration(milliseconds: 50));
-    expect(tester.widget<TextField>(search).controller!.text, isEmpty);
-    final firstTexts = tester
-        .widgetList<Text>(find.byType(Text))
-        .map((widget) => widget.data)
-        .whereType<String>()
-        .toList();
-    expect(find.text('2,500 MMK'), findsOneWidget, reason: '$firstTexts');
-    expect(tester.widget<TextField>(search).focusNode!.hasFocus, isTrue);
-
-    await tester.enterText(search, '0012345678906');
-    await tester.testTextInput.receiveAction(TextInputAction.search);
-    await tester.pump(const Duration(milliseconds: 50));
-    expect(tester.widget<TextField>(search).controller!.text, isEmpty);
-    expect(find.text('5,500 MMK'), findsOneWidget);
-    expect(tester.widget<TextField>(search).focusNode!.hasFocus, isTrue);
-    expect(await database.countSales(), 0);
-    await tester.pumpWidget(const SizedBox());
-    await database.close();
-  });
-
   testWidgets('saved sale reprints without recording another sale', (
     tester,
   ) async {

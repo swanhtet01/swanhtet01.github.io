@@ -476,7 +476,6 @@ class _ShopHomeState extends State<ShopHome> {
   );
 
   Widget _searchField(List<ShopProduct> products) => TextField(
-    key: const ValueKey('shop-product-search'),
     controller: _search,
     focusNode: _searchFocus,
     autofocus: defaultTargetPlatform == TargetPlatform.windows,
