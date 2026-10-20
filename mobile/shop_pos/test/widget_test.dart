@@ -335,7 +335,9 @@ void main() {
 
     await tester.tap(find.text('Resume payment'));
     await tester.pumpAndSettle();
-    final check = find.text('I verified the matching payment in the wallet app.');
+    final check = find.text(
+      'I verified the matching payment in the wallet app.',
+    );
     await tester.ensureVisible(check);
     await tester.tap(check);
     await tester.pumpAndSettle();
@@ -433,40 +435,44 @@ void main() {
       },
     );
 
-    test('a persisted wallet intent blocks a new cash sale during recovery',
-        () async {
-      await addProduct(stock: 2);
-      final pending = await database.createWalletCheckoutIntent(
-        operationId: 'wallet-still-open',
-        merchant: MerchantWalletSetup(
-          provider: 'KBZPay',
-          merchantPhone: '09123456789',
-          officialQrPayload: _testStaticMmqr(),
-          issuerConfirmed: true,
-        ),
-        lines: const [ShopSaleLineInput(productId: 'tea', quantity: 1)],
-      );
-
-      await expectLater(
-        database.recordCashSale(
-          operationId: 'cash-during-recovery',
+    test(
+      'a persisted wallet intent blocks a new cash sale during recovery',
+      () async {
+        await addProduct(stock: 2);
+        final pending = await database.createWalletCheckoutIntent(
+          operationId: 'wallet-still-open',
+          merchant: MerchantWalletSetup(
+            provider: 'KBZPay',
+            merchantPhone: '09123456789',
+            officialQrPayload: _testStaticMmqr(),
+            issuerConfirmed: true,
+          ),
           lines: const [ShopSaleLineInput(productId: 'tea', quantity: 1)],
-        ),
-        throwsA(isA<StateError>()),
-      );
-      expect(await database.countSales(), 0);
-      expect((await database.readActiveProducts()).single.onHand, 2);
-      expect(await database.readPendingWalletCheckout(), isNotNull);
+        );
 
-      expect(await database.cancelWalletCheckoutIntent(pending.operationId),
-          isTrue);
-      await database.recordCashSale(
-        operationId: 'cash-after-reconciliation',
-        lines: const [ShopSaleLineInput(productId: 'tea', quantity: 1)],
-      );
-      expect(await database.countSales(), 1);
-      expect((await database.readActiveProducts()).single.onHand, 1);
-    });
+        await expectLater(
+          database.recordCashSale(
+            operationId: 'cash-during-recovery',
+            lines: const [ShopSaleLineInput(productId: 'tea', quantity: 1)],
+          ),
+          throwsA(isA<StateError>()),
+        );
+        expect(await database.countSales(), 0);
+        expect((await database.readActiveProducts()).single.onHand, 2);
+        expect(await database.readPendingWalletCheckout(), isNotNull);
+
+        expect(
+          await database.cancelWalletCheckoutIntent(pending.operationId),
+          isTrue,
+        );
+        await database.recordCashSale(
+          operationId: 'cash-after-reconciliation',
+          lines: const [ShopSaleLineInput(productId: 'tea', quantity: 1)],
+        );
+        expect(await database.countSales(), 1);
+        expect((await database.readActiveProducts()).single.onHand, 1);
+      },
+    );
 
     test(
       'sale, line snapshots, stock movement and outbox commit together',
