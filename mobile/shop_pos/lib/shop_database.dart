@@ -1017,6 +1017,50 @@ class ShopDatabase extends _$ShopDatabase {
     });
   }
 
+  /// A bounded, device-local history of committed sales. The item snapshots
+  /// survive later catalog edits and make an old receipt explainable offline.
+  Future<List<ShopSaleReceipt>> readRecentSales({int limit = 30}) async {
+    if (limit < 1 || limit > 100) {
+      throw ArgumentError.value(limit, 'limit', 'Use between 1 and 100 sales.');
+    }
+    final sales = await (select(shopSales)
+          ..orderBy([
+            (sale) => OrderingTerm.desc(sale.createdAtMillis),
+            (sale) => OrderingTerm.desc(sale.id),
+          ])
+          ..limit(limit))
+        .get();
+    if (sales.isEmpty) return const [];
+
+    final saleIds = sales.map((sale) => sale.id).toList(growable: false);
+    final savedLines = await (select(shopSaleLines)
+          ..where((line) => line.saleId.isIn(saleIds))
+          ..orderBy([(line) => OrderingTerm.asc(line.id)]))
+        .get();
+    final linesBySale = <String, List<ShopSaleReceiptLine>>{};
+    for (final line in savedLines) {
+      (linesBySale[line.saleId] ??= []).add(
+        ShopSaleReceiptLine(
+          productName: line.productName,
+          unitPriceMmk: line.unitPriceMmk,
+          quantity: line.quantity,
+          lineTotalMmk: line.lineTotalMmk,
+        ),
+      );
+    }
+    return [
+      for (final sale in sales)
+        ShopSaleReceipt(
+          id: sale.id,
+          operationId: sale.operationId,
+          totalMmk: sale.totalMmk,
+          createdAtMillis: sale.createdAtMillis,
+          paymentMethod: sale.paymentMethod,
+          lines: linesBySale[sale.id] ?? const [],
+        ),
+    ];
+  }
+
   Future<int> countSales() async {
     final count = countAll();
     final query = selectOnly(shopSales)..addColumns([count]);

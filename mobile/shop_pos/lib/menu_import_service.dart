@@ -11,10 +11,13 @@ const maxMenuPhotoBytes = 2400000;
 const _menuImportHost = 'app.supermega.dev';
 const _menuImportPath = '/api/shop/menu-import';
 
-/// Removes the temporary file created by the camera picker after use.
-/// This is best-effort because the OS can remove picker cache files first.
-Future<void> discardCapturedMenuPhoto(XFile? photo) async {
-  if (photo == null) return;
+/// Only camera captures are temporary picker files. A desktop gallery picker
+/// can return the merchant's original file, which must never be deleted.
+Future<void> discardCapturedMenuPhoto(
+  XFile? photo, {
+  required bool createdByCamera,
+}) async {
+  if (photo == null || !createdByCamera) return;
   try {
     final file = File(photo.path);
     if (await file.exists()) await file.delete();

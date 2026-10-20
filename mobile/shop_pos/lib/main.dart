@@ -7,6 +7,7 @@ import 'package:uuid/uuid.dart';
 import 'menu_import_screen.dart';
 import 'printer_setup_screen.dart';
 import 'printer_services.dart';
+import 'recent_sales_screen.dart';
 import 'shop_copy.dart';
 import 'shop_database.dart';
 import 'shop_models.dart';
@@ -163,6 +164,11 @@ class _ShopHomeState extends State<ShopHome> {
       appBar: AppBar(
         title: Text(shopCopy(widget.myanmar, 'Shop', 'ဆိုင်')),
         actions: [
+          IconButton(
+            tooltip: shopCopy(widget.myanmar, 'Recent sales', 'မကြာသေးမီက အရောင်းများ'),
+            icon: const Icon(Icons.receipt_long_outlined),
+            onPressed: _openRecentSales,
+          ),
           IconButton(
             tooltip: shopCopy(widget.myanmar, 'Receipt printer', 'ပြေစာပရင်တာ'),
             icon: const Icon(Icons.print_outlined),
@@ -1163,6 +1169,15 @@ class _ShopHomeState extends State<ShopHome> {
     ),
   );
 
+  void _openRecentSales() => Navigator.of(context).push<void>(
+    MaterialPageRoute<void>(
+      builder: (_) => RecentSalesScreen(
+        database: widget.database,
+        myanmar: widget.myanmar,
+      ),
+    ),
+  );
+
   void _openSettings() => Navigator.of(context).push<void>(
     MaterialPageRoute<void>(
       builder: (_) => ShopSettingsScreen(
@@ -1187,15 +1202,7 @@ class _ShopHomeState extends State<ShopHome> {
   }
 }
 
-String _mmk(int amount) {
-  final digits = amount.toString();
-  final output = StringBuffer();
-  for (var index = 0; index < digits.length; index++) {
-    if (index > 0 && (digits.length - index) % 3 == 0) output.write(',');
-    output.write(digits[index]);
-  }
-  return '${output.toString()} MMK';
-}
+String _mmk(int amount) => shopMmk(amount);
 
 class _WalletCheckoutDialog extends StatefulWidget {
   const _WalletCheckoutDialog({

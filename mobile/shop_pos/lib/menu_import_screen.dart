@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -31,6 +32,7 @@ class MenuImportScreen extends StatefulWidget {
 class _MenuImportScreenState extends State<MenuImportScreen> {
   final _picker = ImagePicker();
   XFile? _photo;
+  bool _photoWasCamera = false;
   bool _cloudConsent = false;
   bool _busy = false;
   String? _message;
@@ -39,7 +41,9 @@ class _MenuImportScreenState extends State<MenuImportScreen> {
 
   @override
   void dispose() {
-    unawaited(discardCapturedMenuPhoto(_photo));
+    unawaited(
+      discardCapturedMenuPhoto(_photo, createdByCamera: _photoWasCamera),
+    );
     for (final editor in _editors) {
       editor.dispose();
     }
@@ -47,8 +51,11 @@ class _MenuImportScreenState extends State<MenuImportScreen> {
   }
 
   Future<void> _takePhoto() async {
+    final cameraDevice = defaultTargetPlatform == TargetPlatform.android ||
+        defaultTargetPlatform == TargetPlatform.iOS;
+    final source = cameraDevice ? ImageSource.camera : ImageSource.gallery;
     final photo = await _picker.pickImage(
-      source: ImageSource.camera,
+      source: source,
       imageQuality: 80,
       maxWidth: 1800,
       maxHeight: 1800,
@@ -56,15 +63,23 @@ class _MenuImportScreenState extends State<MenuImportScreen> {
     );
     if (photo == null) return;
     final previousPhoto = _photo;
+    final previousWasCamera = _photoWasCamera;
     if (previousPhoto?.path != photo.path) {
-      await discardCapturedMenuPhoto(previousPhoto);
+      await discardCapturedMenuPhoto(
+        previousPhoto,
+        createdByCamera: previousWasCamera,
+      );
     }
     if (!mounted) {
-      await discardCapturedMenuPhoto(photo);
+      await discardCapturedMenuPhoto(
+        photo,
+        createdByCamera: source == ImageSource.camera,
+      );
       return;
     }
     setState(() {
       _photo = photo;
+      _photoWasCamera = source == ImageSource.camera;
       _cloudConsent = false;
       _message = null;
       _batchId = null;
@@ -112,6 +127,7 @@ class _MenuImportScreenState extends State<MenuImportScreen> {
     final signedIn = await _ensureSignedIn();
     if (!signedIn || !mounted) return;
     final photo = _photo!;
+    final photoWasCamera = _photoWasCamera;
     setState(() {
       _busy = true;
       _message = null;
@@ -158,12 +174,16 @@ class _MenuImportScreenState extends State<MenuImportScreen> {
       );
     } finally {
       service.close();
-      await discardCapturedMenuPhoto(photo);
+      await discardCapturedMenuPhoto(
+        photo,
+        createdByCamera: photoWasCamera,
+      );
       if (mounted) {
         setState(() {
           _busy = false;
           if (_photo?.path == photo.path) {
             _photo = null;
+            _photoWasCamera = false;
             _cloudConsent = false;
           }
         });
@@ -299,16 +319,31 @@ class _MenuImportScreenState extends State<MenuImportScreen> {
                   const SizedBox(height: 14),
                   OutlinedButton.icon(
                     onPressed: _busy ? null : _takePhoto,
-                    icon: const Icon(Icons.camera_alt_outlined),
+                    icon: Icon(
+                      defaultTargetPlatform == TargetPlatform.android ||
+                              defaultTargetPlatform == TargetPlatform.iOS
+                          ? Icons.camera_alt_outlined
+                          : Icons.photo_library_outlined,
+                    ),
                     label: Text(
                       shopCopy(
                         myanmar,
-                        _photo == null
-                            ? 'Take menu photo'
-                            : 'Take another photo',
-                        _photo == null
-                            ? 'မီနူးဓာတ်ပုံရိုက်ရန်'
-                            : 'ဓာတ်ပုံအသစ်ရိုက်ရန်',
+                        defaultTargetPlatform == TargetPlatform.android ||
+                                defaultTargetPlatform == TargetPlatform.iOS
+                            ? (_photo == null
+                                ? 'Take menu photo'
+                                : 'Take another photo')
+                            : (_photo == null
+                                ? 'Choose menu photo'
+                                : 'Choose another photo'),
+                        defaultTargetPlatform == TargetPlatform.android ||
+                                defaultTargetPlatform == TargetPlatform.iOS
+                            ? (_photo == null
+                                ? 'မီနူးဓာတ်ပုံရိုက်ရန်'
+                                : 'ဓာတ်ပုံအသစ်ရိုက်ရန်')
+                            : (_photo == null
+                                ? 'မီနူးဓာတ်ပုံရွေးရန်'
+                                : 'ဓာတ်ပုံအသစ်ရွေးရန်'),
                       ),
                     ),
                   ),

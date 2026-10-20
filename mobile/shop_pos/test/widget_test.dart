@@ -68,6 +68,14 @@ void main() {
 
     expect(await database.countSales(), 1);
     expect((await database.readActiveProducts()).single.onHand, 1);
+    await tester.tap(find.byTooltip('Recent sales'));
+    await tester.pumpAndSettle();
+    expect(find.text('Recent sales'), findsOneWidget);
+    expect(find.text('2,500 MMK'), findsOneWidget);
+    await tester.tap(find.text('2,500 MMK'));
+    await tester.pumpAndSettle();
+    expect(find.text('Sale details'), findsOneWidget);
+    expect(find.text('Tea × 1'), findsOneWidget);
     await database.close();
   });
 

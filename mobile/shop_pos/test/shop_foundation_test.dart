@@ -56,9 +56,26 @@ void main() {
       await file.writeAsBytes(_pngBytes());
       expect(await file.exists(), isTrue);
 
-      await discardCapturedMenuPhoto(XFile(file.path));
+      await discardCapturedMenuPhoto(
+        XFile(file.path),
+        createdByCamera: true,
+      );
 
       expect(await file.exists(), isFalse);
+      await directory.delete(recursive: true);
+    });
+
+    test('does not delete an existing gallery photo', () async {
+      final directory = await Directory.systemTemp.createTemp('shop-gallery-');
+      final file = File('${directory.path}${Platform.pathSeparator}menu.png');
+      await file.writeAsBytes(_pngBytes());
+
+      await discardCapturedMenuPhoto(
+        XFile(file.path),
+        createdByCamera: false,
+      );
+
+      expect(await file.exists(), isTrue);
       await directory.delete(recursive: true);
     });
 
@@ -272,6 +289,12 @@ void main() {
       expect(receipt.lines.single.quantity, 2);
       expect(replay.lines.single.productName, 'လက်ဖက်ရည်');
       expect(replay.lines.single.lineTotalMmk, 5000);
+      final history = await database.readRecentSales();
+      expect(history, hasLength(1));
+      expect(history.single.id, receipt.id);
+      expect(history.single.totalMmk, 5000);
+      expect(history.single.lines.single.productName, 'လက်ဖက်ရည်');
+      expect(history.single.lines.single.lineTotalMmk, 5000);
 
       final printLines = shopReceiptTextLines(receipt, myanmar: true);
       expect(printLines, contains('လက်ဖက်ရည် x2'));
@@ -316,6 +339,10 @@ void main() {
         expect(product.barcode, '0012345678905');
         expect(product.onHand, 2);
         expect(await persistentDatabase.countSales(), 1);
+        final recentSale = (await persistentDatabase.readRecentSales()).single;
+        expect(recentSale.totalMmk, 5000);
+        expect(recentSale.lines.single.productName, 'Tea');
+        expect(recentSale.lines.single.quantity, 2);
         expect(
           await persistentDatabase.countOutboxOperations(),
           greaterThan(0),

@@ -78,3 +78,45 @@ jobs:
 
       - name: Build iOS app without signing
         run: flutter build ios --debug --no-codesign --no-pub
+
+  windows:
+    name: Build Windows PC app
+    needs: android
+    runs-on: windows-latest
+    timeout-minutes: 35
+    defaults:
+      run:
+        working-directory: mobile/shop_pos
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          channel: stable
+          cache: true
+
+      - name: Generate Windows runner
+        run: flutter create --platforms=windows --no-pub .
+
+      - name: Resolve locked dependencies
+        run: flutter pub get --enforce-lockfile
+
+      - name: Build unsigned Windows app
+        run: flutter build windows --release --no-pub
+
+      - name: Package complete Windows app for device QA
+        shell: pwsh
+        run: |
+          $releaseDir = 'build/windows/x64/runner/Release'
+          if (-not (Test-Path -LiteralPath $releaseDir)) { throw 'Windows release directory is missing.' }
+          Compress-Archive -Path (Join-Path $releaseDir '*') -DestinationPath 'build/supermega-shop-windows-unsigned.zip'
+
+      - name: Retain Windows QA package
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: supermega-shop-windows-unsigned-${{ github.sha }}
+          path: mobile/shop_pos/build/supermega-shop-windows-unsigned.zip
+          if-no-files-found: error
+          retention-days: 7
