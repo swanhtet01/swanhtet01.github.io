@@ -515,6 +515,89 @@ void main() {
     await database.close();
   });
 
+  test('v4 wallet upgrade keeps intent and blocks another sale', () async {
+    final directory = await Directory.systemTemp.createTemp('shop-v4-upgrade-');
+    final file = File('${directory.path}${Platform.pathSeparator}shop.sqlite');
+    try {
+      final legacy = ShopDatabase(NativeDatabase(file));
+      try {
+        await legacy.addProduct(
+          id: 'tea',
+          name: 'Tea',
+          priceMmk: 2500,
+          openingStock: 2,
+        );
+        await legacy.createWalletCheckoutIntent(
+          operationId: 'v4-wallet',
+          merchant: MerchantWalletSetup(
+            provider: 'KBZPay',
+            merchantPhone: '09123456789',
+            officialQrPayload: _testStaticMmqr(),
+            issuerConfirmed: true,
+          ),
+          lines: const [ShopSaleLineInput(productId: 'tea', quantity: 1)],
+        );
+        // Reproduce the v4 on-disk table, which had the pending basket but
+        // neither the merchant phone nor the QR snapshot added in v5.
+        await legacy.customStatement(
+          'ALTER TABLE shop_wallet_checkout_intents DROP COLUMN merchant_phone',
+        );
+        await legacy.customStatement(
+          'ALTER TABLE shop_wallet_checkout_intents '
+          'DROP COLUMN merchant_qr_payload',
+        );
+        await legacy.customStatement('PRAGMA user_version = 4');
+        final columns = await legacy
+            .customSelect('PRAGMA table_info(shop_wallet_checkout_intents)')
+            .get();
+        expect(
+          columns.any(
+            (row) => row.read<String>('name') == 'merchant_qr_payload',
+          ),
+          isFalse,
+        );
+      } finally {
+        await legacy.close();
+      }
+
+      final upgraded = ShopDatabase(NativeDatabase(file));
+      try {
+        final pending = await upgraded.readPendingWalletCheckout();
+        expect(pending, isNotNull);
+        expect(pending!.operationId, 'v4-wallet');
+        expect(pending.totalMmk, 2500);
+        expect(pending.lines.single.productName, 'Tea');
+        expect(pending.merchantPhone, isNull);
+        expect(pending.merchantQrPayload, isEmpty);
+        final version = await upgraded
+            .customSelect('PRAGMA user_version')
+            .getSingle();
+        expect(version.read<int>('user_version'), 5);
+
+        await expectLater(
+          upgraded.recordCashSale(
+            operationId: 'cash-during-v4-recovery',
+            lines: const [ShopSaleLineInput(productId: 'tea', quantity: 1)],
+          ),
+          throwsA(isA<StateError>()),
+        );
+        expect(await upgraded.countSales(), 0);
+        expect((await upgraded.readActiveProducts()).single.onHand, 2);
+        expect(await upgraded.cancelWalletCheckoutIntent('v4-wallet'), isTrue);
+        await upgraded.recordCashSale(
+          operationId: 'cash-after-v4-review',
+          lines: const [ShopSaleLineInput(productId: 'tea', quantity: 1)],
+        );
+        expect(await upgraded.countSales(), 1);
+        expect((await upgraded.readActiveProducts()).single.onHand, 1);
+      } finally {
+        await upgraded.close();
+      }
+    } finally {
+      await directory.delete(recursive: true);
+    }
+  });
+
   group('offline catalog and sale transactions', () {
     late ShopDatabase database;
 
