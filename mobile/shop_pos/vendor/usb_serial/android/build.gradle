@@ -1,0 +1,28 @@
+group 'dev.bessems.usbserial'
+version '1.0'
+
+repositories {
+    google()
+    mavenCentral()
+    maven { url 'https://jitpack.io' }
+}
+
+apply plugin: 'com.android.library'
+
+android {
+    namespace 'dev.bessems.usbserial'
+    compileSdkVersion 36
+
+    defaultConfig {
+        minSdkVersion 16
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation 'com.github.felHR85:UsbSerial:6.1.0'
+}

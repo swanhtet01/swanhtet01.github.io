@@ -60,6 +60,12 @@ dev_dependencies:
   drift_dev: ^2.35.1
   build_runner: ^2.16.2
 
+dependency_overrides:
+  # unified_esc_pos_printer supports optional Android USB serial; the pub.dev
+  # release still calls removed jcenter() in its Gradle script.
+  usb_serial:
+    path: vendor/usb_serial
+
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
 
