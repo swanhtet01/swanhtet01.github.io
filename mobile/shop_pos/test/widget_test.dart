@@ -24,16 +24,12 @@ void main() {
   testWidgets('restored Android menu photo waits for fresh cloud consent', (
     tester,
   ) async {
-    final directory = await Directory.systemTemp.createTemp(
-      'shop-menu-recovery-',
-    );
-    addTearDown(() async {
-      if (await directory.exists()) await directory.delete(recursive: true);
-    });
-    final file = File('${directory.path}/menu.jpg');
-    await file.writeAsBytes(List<int>.filled(32, 1));
+    final photoPath = [
+      Directory.systemTemp.path,
+      'shop-menu-recovery-missing-${DateTime.now().microsecondsSinceEpoch}.jpg',
+    ].join(Platform.pathSeparator);
+    final photo = XFile(photoPath);
     final database = ShopDatabase(NativeDatabase.memory());
-    addTearDown(database.close);
 
     await tester.pumpWidget(
       MaterialApp(
@@ -43,7 +39,7 @@ void main() {
           apiBaseUrl: 'https://app.supermega.dev',
           myanmar: false,
           onLanguageChanged: (_) {},
-          recoverMenuPhoto: () async => XFile(file.path),
+          recoverMenuPhoto: () async => photo,
         ),
       ),
     );
@@ -65,6 +61,7 @@ void main() {
     await tester.pageBack();
     await tester.pumpAndSettle();
     expect(find.text('Menu photo ready to review'), findsNothing);
+    await database.close();
   });
 
   testWidgets('empty catalog can make a durable cash sale', (tester) async {
