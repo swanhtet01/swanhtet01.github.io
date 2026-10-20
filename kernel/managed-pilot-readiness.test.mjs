@@ -20,7 +20,7 @@ const products = ['shop', 'plant', 'website', 'ecommerce'].map((id) => ({
 }))
 const sourceReceipts = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'].map((path) => ({ path, digest: readinessDigest(path) }))
 const historicalDatabaseFixture = JSON.parse(readFileSync(new URL('../hq/research/postgres17-rehearsal.json', import.meta.url), 'utf8'))
-// Build a synthetic 31-migration current-shape proof while keeping the dormant
+// Build a synthetic 32-migration current-shape proof while keeping the dormant
 // Sites inquiry RLS optimization out of the canonical rehearsal chain.
 const databaseFixture = structuredClone(historicalDatabaseFixture)
 databaseFixture.runner = 'unit-test-only-synthetic-proof'
@@ -36,7 +36,10 @@ if (!currentDatabaseMigrations.includes('20261019070000_ecommerce_operator_manag
 if (!currentDatabaseMigrations.includes('20261019103000_ecommerce_review_shared_state_lock.sql')) {
   currentDatabaseMigrations.push('20261019103000_ecommerce_review_shared_state_lock.sql')
 }
-assert.equal(currentDatabaseMigrations.length, 31)
+if (!currentDatabaseMigrations.includes('20261020175519_access_control_member_read_hardening.sql')) {
+  currentDatabaseMigrations.push('20261020175519_access_control_member_read_hardening.sql')
+}
+assert.equal(currentDatabaseMigrations.length, 32)
 const databaseFixtureImplementationDigest = sha256(JSON.stringify({
   purpose: 'managed-pilot-readiness-unit-fixture', implementationPaths, currentDatabaseMigrations,
   checkNames: Object.keys(databaseFixture.checks).sort(),
