@@ -53,19 +53,22 @@ void main() {
         initialMyanmar: false,
       ),
     );
-    await tester.pumpAndSettle();
+    // A focused desktop TextField keeps animating its caret. Pump only the
+    // frames needed for the product stream, never wait for the caret to settle.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
 
     final search = find.byKey(const ValueKey('shop-product-search'));
     expect(tester.widget<TextField>(search).focusNode!.hasFocus, isTrue);
     await tester.enterText(search, '0012345678905');
     await tester.testTextInput.receiveAction(TextInputAction.search);
-    await tester.pumpAndSettle();
+    await tester.pump();
     expect(find.text('Review sale · 1 · 2,500 MMK'), findsOneWidget);
     expect(tester.widget<TextField>(search).focusNode!.hasFocus, isTrue);
 
     await tester.enterText(search, '0012345678906');
     await tester.testTextInput.receiveAction(TextInputAction.search);
-    await tester.pumpAndSettle();
+    await tester.pump();
     expect(find.text('Review sale · 2 · 5,500 MMK'), findsOneWidget);
     expect(tester.widget<TextField>(search).focusNode!.hasFocus, isTrue);
     expect(await database.countSales(), 0);
