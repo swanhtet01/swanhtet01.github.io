@@ -231,6 +231,35 @@ export async function verifyHostedClientPortal({
   verifyPrivateResponseHeaders(ownerBootstrapResult.response, 'owner_bootstrap')
   const ownerPortal = verifyOwnerBootstrap(ownerBootstrapResult.body, workspaceId, ownerId, products)
 
+  // The Shop-first customer portal must also deny direct API access to the
+  // internally managed products. Navigation filtering is not an API boundary.
+  const shopOnly = products.length === 1 && products[0] === 'commerce'
+  let internalManagement = null
+  if (shopOnly) {
+    const sitesResult = await requestJson(fetchImpl, origin, '/api/trial/v1/website-publications', {
+      token: ownerAccessToken, workspaceId,
+    })
+    assert(sitesResult.response.status === 403 && sitesResult.body?.detail === 'access_denied',
+      'shop_owner_sites_management_not_denied', { status: sitesResult.response.status })
+    verifyPrivateResponseHeaders(sitesResult.response, 'shop_owner_sites_denial')
+    const commerceResult = await requestJson(fetchImpl, origin, '/api/trial/v1/ecommerce-review-recipients', {
+      token: ownerAccessToken, workspaceId,
+    })
+    assert(commerceResult.response.status === 403
+      && commerceResult.body?.detail?.code === 'trial_capability_required'
+      && commerceResult.body?.detail?.required_capability === 'ecommerce.manage',
+    'shop_owner_commerce_management_not_denied', { status: commerceResult.response.status })
+    verifyPrivateResponseHeaders(commerceResult.response, 'shop_owner_commerce_denial')
+    internalManagement = {
+      shopOnlyAccessVerified: true,
+      sitesManagementDenied: true,
+      commerceManagementDenied: true,
+      denialStatus: 403,
+      sitesResponseDigest: sitesResult.digest,
+      commerceResponseDigest: commerceResult.digest,
+    }
+  }
+
   const deniedDirectoryResult = await requestJson(fetchImpl, origin, '/api/trial/v1/workspaces', { token: deniedAccessToken })
   assert(deniedDirectoryResult.response.status === 200, 'denied_principal_directory_http_error', { status: deniedDirectoryResult.response.status })
   verifyPrivateResponseHeaders(deniedDirectoryResult.response, 'denied_principal_directory')
@@ -293,8 +322,9 @@ export async function verifyHostedClientPortal({
       directoryResponseDigest: deniedDirectoryResult.digest,
       denialResponseDigest: deniedBootstrapResult.digest,
     },
+    ...(internalManagement ? { internalManagement } : {}),
     boundaries: {
-      requestsPerformed: 'six HTTPS GET requests',
+      requestsPerformed: `${shopOnly ? 'eight' : 'six'} HTTPS GET requests`,
       tenantWritesPerformed: false,
       deploymentPerformed: false,
       credentialsPersisted: false,
@@ -321,7 +351,7 @@ async function readRequiredFile(pathValue, code) {
   return (await readFile(resolve(path), 'utf8')).trim()
 }
 
-function mockFetch({ crossTenantStatus = 403 } = {}) {
+function mockFetch({ crossTenantStatus = 403, ownerProducts = ['commerce', 'website'], sitesStatus = 403, commerceStatus = 403 } = {}) {
   const commit = 'a'.repeat(40)
   const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' } })
   return async (url, init) => {
@@ -338,9 +368,13 @@ function mockFetch({ crossTenantStatus = 403 } = {}) {
       : json({ contract: 'supermega.managed_workspace_directory.v1', status: 'ready', workspaces: [{ workspace_id: 'workspace-other', label: 'Other company', access: 'owner' }], external_writes_performed: false, secret_values_exposed: false })
     if (path === '/api/trial/v1/bootstrap' && auth.includes('owner-token')) return json({
       identity: { workspace_id: 'workspace-owner', actor_id: 'owner-actor', actor_kind: 'human' },
-      readiness: { status: 'ready', backend: 'postgres', read_ready: true, write_ready: true, checks: { database_ready: true, role_ready: true, schema_ready: true, auth_ready: true, membership_ready: true, audit_ready: true, write_enabled: true }, capabilities: ['commerce.write', 'website.write'], productEntitlements: ['commerce', 'website'] },
-      states: { commerce: {}, website: {} }, approvals: [],
+      readiness: { status: 'ready', backend: 'postgres', read_ready: true, write_ready: true, checks: { database_ready: true, role_ready: true, schema_ready: true, auth_ready: true, membership_ready: true, audit_ready: true, write_enabled: true }, capabilities: ownerProducts.map((product) => `${product === 'commerce' ? 'commerce' : product}.write`), productEntitlements: ownerProducts },
+      states: Object.fromEntries(ownerProducts.map((product) => [product, {}])), approvals: [],
     })
+    if (path === '/api/trial/v1/website-publications') return json(
+      sitesStatus === 403 ? { detail: 'access_denied' } : { publications: [] }, sitesStatus)
+    if (path === '/api/trial/v1/ecommerce-review-recipients') return json(
+      commerceStatus === 403 ? { detail: { code: 'trial_capability_required', required_capability: 'ecommerce.manage' } } : { recipients: [] }, commerceStatus)
     if (path === '/api/trial/v1/bootstrap') return crossTenantStatus === 403
       ? json({ detail: { code: 'trial_membership_required' } }, 403)
       : json({ identity: { workspace_id: 'workspace-owner', actor_id: 'other-actor', actor_kind: 'human' }, readiness: {}, states: {}, approvals: [] }, crossTenantStatus)
@@ -367,7 +401,20 @@ async function selfTest() {
     denied = String(error?.message || '').startsWith('cross_tenant_bootstrap_not_denied:')
   }
   assert(denied, 'self_test_cross_tenant_leak_accepted')
-  console.log(JSON.stringify({ ok: true, contract: `${CONTRACT}.self_test`, checks: 6 }, null, 2))
+  const shopInput = { ...input, expectedProducts: 'shop' }
+  const shopEvidence = await verifyHostedClientPortal({ ...shopInput, fetchImpl: mockFetch({ ownerProducts: ['commerce'] }) })
+  assert(shopEvidence.internalManagement?.shopOnlyAccessVerified === true
+    && shopEvidence.boundaries.requestsPerformed === 'eight HTTPS GET requests', 'self_test_shop_internal_denial_missing')
+  for (const override of [{ sitesStatus: 200 }, { commerceStatus: 200 }]) {
+    let rejected = false
+    try {
+      await verifyHostedClientPortal({ ...shopInput, fetchImpl: mockFetch({ ownerProducts: ['commerce'], ...override }) })
+    } catch (error) {
+      rejected = /shop_owner_(sites|commerce)_management_not_denied/.test(String(error?.message || ''))
+    }
+    assert(rejected, 'self_test_internal_management_leak_accepted')
+  }
+  console.log(JSON.stringify({ ok: true, contract: `${CONTRACT}.self_test`, checks: 9 }, null, 2))
 }
 
 async function main() {
@@ -401,6 +448,7 @@ async function main() {
     expectedProducts: evidence.target.expectedProducts,
     ownerPortalReady: true,
     crossTenantDenied: true,
+    shopOnlyInternalManagementDenied: evidence.internalManagement?.shopOnlyAccessVerified === true,
     tenantWritesPerformed: false,
     deploymentPerformed: false,
     secretValuesExposed: false,

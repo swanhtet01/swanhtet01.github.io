@@ -234,6 +234,39 @@ test('rejects tampered activation evidence and incomplete acceptance proof', () 
   assert.throws(() => buildClientPortalLaunchProof(input({ productAcceptance: detachedAcceptance })), /launch_acceptance_portal_artifact_mismatch/)
 })
 
+test('a Shop-only launch packet requires direct Sites and Commerce management denials', () => {
+  const portal = portalSmoke()
+  portal.target.expectedProducts = ['commerce']
+  portal.ownerPortal.productEntitlements = ['commerce']
+  assert.throws(() => buildClientPortalLaunchProof(input({ portalSmoke: portal })),
+    /launch_shop_internal_management_denial_required/)
+  portal.internalManagement = {
+    shopOnlyAccessVerified: true,
+    sitesManagementDenied: true,
+    commerceManagementDenied: false,
+    denialStatus: 403,
+    sitesResponseDigest: sha256('sites denial'),
+    commerceResponseDigest: sha256('commerce denial'),
+  }
+  assert.throws(() => buildClientPortalLaunchProof(input({ portalSmoke: portal })),
+    /launch_shop_internal_management_denial_required/)
+  portal.internalManagement.commerceManagementDenied = true
+  const activation = activationRequery()
+  activation.activation.products = ['shop']
+  const { evidenceDigest: _oldDigest, ...activationBody } = activation
+  activation.evidenceDigest = sha256(canonical(activationBody))
+  const acceptance = productAcceptance({ portal })
+  acceptance.target.expectedProducts = ['commerce']
+  delete acceptance.target.productApprovalDigests.website
+  acceptance.products = acceptance.products.slice(0, 1)
+  acceptance.summary = { productCount: 1, newlyWritten: 1, idempotentExisting: 0,
+    ownerReadbacksPassed: 1, crossTenantDenialsPassed: 1, replaysPassed: 1 }
+  const proof = buildClientPortalLaunchProof(input({
+    activationRequery: activation, portalSmoke: portal, productAcceptance: acceptance,
+  }))
+  assert.deepEqual(proof.portal.products.map((item) => item.productId), ['shop'])
+})
+
 test('CLI writes one exclusive metadata-only launch proof', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'supermega-client-launch-proof-'))
   const files = {
