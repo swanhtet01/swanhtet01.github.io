@@ -28,10 +28,16 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(shopCopy(widget.myanmar, 'Recent sales', 'မကြာသေးမီက အရောင်းများ')),
+        title: Text(
+          shopCopy(widget.myanmar, 'Recent sales', 'မကြာသေးမီက အရောင်းများ'),
+        ),
         actions: [
           IconButton(
-            tooltip: shopCopy(widget.myanmar, 'Refresh sales', 'အရောင်းစာရင်း ပြန်ဖတ်ရန်'),
+            tooltip: shopCopy(
+              widget.myanmar,
+              'Refresh sales',
+              'အရောင်းစာရင်း ပြန်ဖတ်ရန်',
+            ),
             icon: const Icon(Icons.refresh),
             onPressed: _reload,
           ),
@@ -57,7 +63,9 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
                   ),
                   TextButton(
                     onPressed: _reload,
-                    child: Text(shopCopy(widget.myanmar, 'Try again', 'ထပ်ကြိုးစားရန်')),
+                    child: Text(
+                      shopCopy(widget.myanmar, 'Try again', 'ထပ်ကြိုးစားရန်'),
+                    ),
                   ),
                 ],
               ),
@@ -128,7 +136,9 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: Text(shopCopy(widget.myanmar, 'Sale details', 'အရောင်းအသေးစိတ်')),
+        title: Text(
+          shopCopy(widget.myanmar, 'Sale details', 'အရောင်းအသေးစိတ်'),
+        ),
         content: SizedBox(
           width: 480,
           child: SingleChildScrollView(
@@ -157,7 +167,9 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
                 Row(
                   children: [
                     Expanded(
-                      child: Text(shopCopy(widget.myanmar, 'Total', 'စုစုပေါင်း')),
+                      child: Text(
+                        shopCopy(widget.myanmar, 'Total', 'စုစုပေါင်း'),
+                      ),
                     ),
                     Text(
                       shopMmk(sale.totalMmk),

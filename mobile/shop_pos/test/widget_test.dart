@@ -118,9 +118,7 @@ void main() {
       ),
     );
     await tester.pumpWidget(
-      MaterialApp(
-        home: WalletSetupScreen(database: database, myanmar: false),
-      ),
+      MaterialApp(home: WalletSetupScreen(database: database, myanmar: false)),
     );
     await tester.pumpAndSettle();
 

@@ -56,10 +56,7 @@ void main() {
       await file.writeAsBytes(_pngBytes());
       expect(await file.exists(), isTrue);
 
-      await discardCapturedMenuPhoto(
-        XFile(file.path),
-        createdByCamera: true,
-      );
+      await discardCapturedMenuPhoto(XFile(file.path), createdByCamera: true);
 
       expect(await file.exists(), isFalse);
       await directory.delete(recursive: true);
@@ -70,10 +67,7 @@ void main() {
       final file = File('${directory.path}${Platform.pathSeparator}menu.png');
       await file.writeAsBytes(_pngBytes());
 
-      await discardCapturedMenuPhoto(
-        XFile(file.path),
-        createdByCamera: false,
-      );
+      await discardCapturedMenuPhoto(XFile(file.path), createdByCamera: false);
 
       expect(await file.exists(), isTrue);
       await directory.delete(recursive: true);
@@ -266,41 +260,44 @@ void main() {
       await database.close();
     });
 
-    test('sale receipt keeps immutable item lines for print and reprint', () async {
-      await database.addProduct(
-        id: 'tea',
-        name: 'လက်ဖက်ရည်',
-        priceMmk: 2500,
-        openingStock: 3,
-      );
-      const saleLines = [ShopSaleLineInput(productId: 'tea', quantity: 2)];
-      final receipt = await database.recordCashSale(
-        operationId: 'receipt-lines-sale',
-        lines: saleLines,
-      );
-      final replay = await database.recordCashSale(
-        operationId: 'receipt-lines-sale',
-        lines: saleLines,
-      );
+    test(
+      'sale receipt keeps immutable item lines for print and reprint',
+      () async {
+        await database.addProduct(
+          id: 'tea',
+          name: 'လက်ဖက်ရည်',
+          priceMmk: 2500,
+          openingStock: 3,
+        );
+        const saleLines = [ShopSaleLineInput(productId: 'tea', quantity: 2)];
+        final receipt = await database.recordCashSale(
+          operationId: 'receipt-lines-sale',
+          lines: saleLines,
+        );
+        final replay = await database.recordCashSale(
+          operationId: 'receipt-lines-sale',
+          lines: saleLines,
+        );
 
-      expect(receipt.paymentMethod, 'cash');
-      expect(receipt.lines.single.productName, 'လက်ဖက်ရည်');
-      expect(receipt.lines.single.unitPriceMmk, 2500);
-      expect(receipt.lines.single.quantity, 2);
-      expect(replay.lines.single.productName, 'လက်ဖက်ရည်');
-      expect(replay.lines.single.lineTotalMmk, 5000);
-      final history = await database.readRecentSales();
-      expect(history, hasLength(1));
-      expect(history.single.id, receipt.id);
-      expect(history.single.totalMmk, 5000);
-      expect(history.single.lines.single.productName, 'လက်ဖက်ရည်');
-      expect(history.single.lines.single.lineTotalMmk, 5000);
+        expect(receipt.paymentMethod, 'cash');
+        expect(receipt.lines.single.productName, 'လက်ဖက်ရည်');
+        expect(receipt.lines.single.unitPriceMmk, 2500);
+        expect(receipt.lines.single.quantity, 2);
+        expect(replay.lines.single.productName, 'လက်ဖက်ရည်');
+        expect(replay.lines.single.lineTotalMmk, 5000);
+        final history = await database.readRecentSales();
+        expect(history, hasLength(1));
+        expect(history.single.id, receipt.id);
+        expect(history.single.totalMmk, 5000);
+        expect(history.single.lines.single.productName, 'လက်ဖက်ရည်');
+        expect(history.single.lines.single.lineTotalMmk, 5000);
 
-      final printLines = shopReceiptTextLines(receipt, myanmar: true);
-      expect(printLines, contains('လက်ဖက်ရည် x2'));
-      expect(printLines, contains('စုစုပေါင်း: 5,000 MMK'));
-      expect(printLines, contains('ငွေပေးချေမှု: CASH'));
-    });
+        final printLines = shopReceiptTextLines(receipt, myanmar: true);
+        expect(printLines, contains('လက်ဖက်ရည် x2'));
+        expect(printLines, contains('စုစုပေါင်း: 5,000 MMK'));
+        expect(printLines, contains('ငွေပေးချေမှု: CASH'));
+      },
+    );
 
     test('catalog, sale, stock and outbox survive a database reopen', () async {
       final directory = await Directory.systemTemp.createTemp(

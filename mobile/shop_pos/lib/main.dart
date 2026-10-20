@@ -165,7 +165,11 @@ class _ShopHomeState extends State<ShopHome> {
         title: Text(shopCopy(widget.myanmar, 'Shop', 'ဆိုင်')),
         actions: [
           IconButton(
-            tooltip: shopCopy(widget.myanmar, 'Recent sales', 'မကြာသေးမီက အရောင်းများ'),
+            tooltip: shopCopy(
+              widget.myanmar,
+              'Recent sales',
+              'မကြာသေးမီက အရောင်းများ',
+            ),
             icon: const Icon(Icons.receipt_long_outlined),
             onPressed: _openRecentSales,
           ),
@@ -495,16 +499,14 @@ class _ShopHomeState extends State<ShopHome> {
               'Add to sale',
               'အရောင်းထဲထည့်ရန်',
             ),
-            onPressed:
-                item.onHand == 0 || _pendingWalletCheckout != null
-                    ? null
-                    : () => _add(item),
+            onPressed: item.onHand == 0 || _pendingWalletCheckout != null
+                ? null
+                : () => _add(item),
             icon: const Icon(Icons.add),
           ),
-          onTap:
-              item.onHand == 0 || _pendingWalletCheckout != null
-                  ? null
-                  : () => _add(item),
+          onTap: item.onHand == 0 || _pendingWalletCheckout != null
+              ? null
+              : () => _add(item),
         );
       },
     );
@@ -532,10 +534,9 @@ class _ShopHomeState extends State<ShopHome> {
                 ),
                 if (entries.isNotEmpty)
                   TextButton(
-                    onPressed:
-                        _saving || _pendingWalletCheckout != null
-                            ? null
-                            : () {
+                    onPressed: _saving || _pendingWalletCheckout != null
+                        ? null
+                        : () {
                             setState(_clearCart);
                             refresh?.call(() {});
                           },
@@ -597,12 +598,9 @@ class _ShopHomeState extends State<ShopHome> {
                 children: [
                   Expanded(
                     child: FilledButton.icon(
-                      onPressed:
-                          _saving || _pendingWalletCheckout != null
-                              ? null
-                              : () => _completeSale(
-                                  closeSheet: refresh != null,
-                                ),
+                      onPressed: _saving || _pendingWalletCheckout != null
+                          ? null
+                          : () => _completeSale(closeSheet: refresh != null),
                       icon: _saving
                           ? const SizedBox.square(
                               dimension: 18,
@@ -638,8 +636,9 @@ class _ShopHomeState extends State<ShopHome> {
 
   Widget _cartLine(ShopProduct item, int quantity, {StateSetter? refresh}) {
     WalletCheckoutLineSnapshot? snapshot;
-    for (final line in
-        _pendingWalletCheckout?.lines ?? const <WalletCheckoutLineSnapshot>[]) {
+    for (final line
+        in _pendingWalletCheckout?.lines ??
+            const <WalletCheckoutLineSnapshot>[]) {
       if (line.productId == item.id) {
         snapshot = line;
         break;
@@ -663,10 +662,9 @@ class _ShopHomeState extends State<ShopHome> {
         ),
         IconButton(
           tooltip: shopCopy(widget.myanmar, 'Remove one', 'တစ်ခုလျှော့ရန်'),
-          onPressed:
-              _saving || _pendingWalletCheckout != null
-                  ? null
-                  : () => _adjust(item, -1, refresh: refresh),
+          onPressed: _saving || _pendingWalletCheckout != null
+              ? null
+              : () => _adjust(item, -1, refresh: refresh),
           icon: const Icon(Icons.remove_circle_outline),
         ),
         Text(quantity.toString()),
@@ -674,10 +672,10 @@ class _ShopHomeState extends State<ShopHome> {
           tooltip: shopCopy(widget.myanmar, 'Add one', 'တစ်ခုထပ်ထည့်ရန်'),
           onPressed:
               _saving ||
-                      _pendingWalletCheckout != null ||
-                      quantity >= item.onHand
-                  ? null
-                  : () => _adjust(item, 1, refresh: refresh),
+                  _pendingWalletCheckout != null ||
+                  quantity >= item.onHand
+              ? null
+              : () => _adjust(item, 1, refresh: refresh),
           icon: const Icon(Icons.add_circle_outline),
         ),
       ],
@@ -797,7 +795,9 @@ class _ShopHomeState extends State<ShopHome> {
                     const SizedBox(height: 8),
                     for (final method in available)
                       ListTile(
-                        leading: const Icon(Icons.account_balance_wallet_outlined),
+                        leading: const Icon(
+                          Icons.account_balance_wallet_outlined,
+                        ),
                         title: Text(method.provider),
                         subtitle: Text(method.merchantPhone ?? ''),
                         onTap: () => Navigator.of(sheetContext).pop(method),
@@ -925,11 +925,15 @@ class _ShopHomeState extends State<ShopHome> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: Text(shopCopy(widget.myanmar, 'Keep pending', 'ဆိုင်းငံ့ထားပါ')),
+            child: Text(
+              shopCopy(widget.myanmar, 'Keep pending', 'ဆိုင်းငံ့ထားပါ'),
+            ),
           ),
           FilledButton(
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: Text(shopCopy(widget.myanmar, 'Cancel checkout', 'ပယ်ဖျက်ရန်')),
+            child: Text(
+              shopCopy(widget.myanmar, 'Cancel checkout', 'ပယ်ဖျက်ရန်'),
+            ),
           ),
         ],
       ),
@@ -1171,10 +1175,8 @@ class _ShopHomeState extends State<ShopHome> {
 
   void _openRecentSales() => Navigator.of(context).push<void>(
     MaterialPageRoute<void>(
-      builder: (_) => RecentSalesScreen(
-        database: widget.database,
-        myanmar: widget.myanmar,
-      ),
+      builder: (_) =>
+          RecentSalesScreen(database: widget.database, myanmar: widget.myanmar),
     ),
   );
 

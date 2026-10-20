@@ -304,9 +304,7 @@ class ShopDatabase extends _$ShopDatabase {
   ) async {
     final rows = await customSelect('PRAGMA table_info($table)').get();
     if (rows.any((row) => row.read<String>('name') == column)) return;
-    await customStatement(
-      'ALTER TABLE $table ADD COLUMN $column $declaration',
-    );
+    await customStatement('ALTER TABLE $table ADD COLUMN $column $declaration');
   }
 
   Future<void> addProduct({
@@ -680,9 +678,10 @@ class ShopDatabase extends _$ShopDatabase {
           'Finish or cancel the open wallet checkout before starting another.',
         );
       }
-      final priorSale = await (select(shopSales)
-            ..where((sale) => sale.operationId.equals(cleanOperationId)))
-          .getSingleOrNull();
+      final priorSale =
+          await (select(shopSales)
+                ..where((sale) => sale.operationId.equals(cleanOperationId)))
+              .getSingleOrNull();
       if (priorSale != null) {
         throw StateError('This sale ID was already completed.');
       }
@@ -690,10 +689,11 @@ class ShopDatabase extends _$ShopDatabase {
       final snapshots = <WalletCheckoutLineSnapshot>[];
       var totalMmk = 0;
       for (final line in canonicalLines) {
-        final product = await (select(shopProducts)..where(
-              (row) => row.id.equals(line.key) & row.archived.equals(false),
-            ))
-            .getSingleOrNull();
+        final product =
+            await (select(shopProducts)..where(
+                  (row) => row.id.equals(line.key) & row.archived.equals(false),
+                ))
+                .getSingleOrNull();
         if (product == null) {
           throw StateError('A selected product is no longer available.');
         }
@@ -717,7 +717,9 @@ class ShopDatabase extends _$ShopDatabase {
         );
       }
       final createdAt = DateTime.now().millisecondsSinceEpoch;
-      final basketJson = jsonEncode(snapshots.map((line) => line.toJson()).toList());
+      final basketJson = jsonEncode(
+        snapshots.map((line) => line.toJson()).toList(),
+      );
       await customInsert(
         'INSERT INTO shop_wallet_checkout_intents '
         '(operation_id, payment_method, request_fingerprint, total_mmk, merchant_phone, '
@@ -829,10 +831,11 @@ class ShopDatabase extends _$ShopDatabase {
             'A sale operation ID was reused with different items.',
           );
         }
-        final priorLines = await (select(shopSaleLines)
-              ..where((line) => line.saleId.equals(priorSale.id))
-              ..orderBy([(line) => OrderingTerm.asc(line.productName)]))
-            .get();
+        final priorLines =
+            await (select(shopSaleLines)
+                  ..where((line) => line.saleId.equals(priorSale.id))
+                  ..orderBy([(line) => OrderingTerm.asc(line.productName)]))
+                .get();
         return ShopSaleReceipt(
           id: priorSale.id,
           operationId: priorSale.operationId,
@@ -1023,20 +1026,22 @@ class ShopDatabase extends _$ShopDatabase {
     if (limit < 1 || limit > 100) {
       throw ArgumentError.value(limit, 'limit', 'Use between 1 and 100 sales.');
     }
-    final sales = await (select(shopSales)
-          ..orderBy([
-            (sale) => OrderingTerm.desc(sale.createdAtMillis),
-            (sale) => OrderingTerm.desc(sale.id),
-          ])
-          ..limit(limit))
-        .get();
+    final sales =
+        await (select(shopSales)
+              ..orderBy([
+                (sale) => OrderingTerm.desc(sale.createdAtMillis),
+                (sale) => OrderingTerm.desc(sale.id),
+              ])
+              ..limit(limit))
+            .get();
     if (sales.isEmpty) return const [];
 
     final saleIds = sales.map((sale) => sale.id).toList(growable: false);
-    final savedLines = await (select(shopSaleLines)
-          ..where((line) => line.saleId.isIn(saleIds))
-          ..orderBy([(line) => OrderingTerm.asc(line.id)]))
-        .get();
+    final savedLines =
+        await (select(shopSaleLines)
+              ..where((line) => line.saleId.isIn(saleIds))
+              ..orderBy([(line) => OrderingTerm.asc(line.id)]))
+            .get();
     final linesBySale = <String, List<ShopSaleReceiptLine>>{};
     for (final line in savedLines) {
       (linesBySale[line.saleId] ??= []).add(

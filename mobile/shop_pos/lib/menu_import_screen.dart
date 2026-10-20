@@ -51,7 +51,8 @@ class _MenuImportScreenState extends State<MenuImportScreen> {
   }
 
   Future<void> _takePhoto() async {
-    final cameraDevice = defaultTargetPlatform == TargetPlatform.android ||
+    final cameraDevice =
+        defaultTargetPlatform == TargetPlatform.android ||
         defaultTargetPlatform == TargetPlatform.iOS;
     final source = cameraDevice ? ImageSource.camera : ImageSource.gallery;
     final photo = await _picker.pickImage(
@@ -174,10 +175,7 @@ class _MenuImportScreenState extends State<MenuImportScreen> {
       );
     } finally {
       service.close();
-      await discardCapturedMenuPhoto(
-        photo,
-        createdByCamera: photoWasCamera,
-      );
+      await discardCapturedMenuPhoto(photo, createdByCamera: photoWasCamera);
       if (mounted) {
         setState(() {
           _busy = false;
@@ -331,19 +329,19 @@ class _MenuImportScreenState extends State<MenuImportScreen> {
                         defaultTargetPlatform == TargetPlatform.android ||
                                 defaultTargetPlatform == TargetPlatform.iOS
                             ? (_photo == null
-                                ? 'Take menu photo'
-                                : 'Take another photo')
+                                  ? 'Take menu photo'
+                                  : 'Take another photo')
                             : (_photo == null
-                                ? 'Choose menu photo'
-                                : 'Choose another photo'),
+                                  ? 'Choose menu photo'
+                                  : 'Choose another photo'),
                         defaultTargetPlatform == TargetPlatform.android ||
                                 defaultTargetPlatform == TargetPlatform.iOS
                             ? (_photo == null
-                                ? 'မီနူးဓာတ်ပုံရိုက်ရန်'
-                                : 'ဓာတ်ပုံအသစ်ရိုက်ရန်')
+                                  ? 'မီနူးဓာတ်ပုံရိုက်ရန်'
+                                  : 'ဓာတ်ပုံအသစ်ရိုက်ရန်')
                             : (_photo == null
-                                ? 'မီနူးဓာတ်ပုံရွေးရန်'
-                                : 'ဓာတ်ပုံအသစ်ရွေးရန်'),
+                                  ? 'မီနူးဓာတ်ပုံရွေးရန်'
+                                  : 'ဓာတ်ပုံအသစ်ရွေးရန်'),
                       ),
                     ),
                   ),
