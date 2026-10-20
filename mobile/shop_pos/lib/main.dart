@@ -1264,6 +1264,8 @@ class _WalletCheckoutDialogState extends State<_WalletCheckoutDialog> {
               const SizedBox(height: 8),
               Center(
                 child: Semantics(
+                  container: true,
+                  excludeSemantics: true,
                   image: true,
                   label: '${_selected.provider} merchant QR',
                   child: QrImageView(

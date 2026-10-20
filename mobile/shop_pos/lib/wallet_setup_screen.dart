@@ -229,6 +229,8 @@ class _WalletEditorState extends State<_WalletEditor> {
             if (qrPayload != null)
               Center(
                 child: Semantics(
+                  container: true,
+                  excludeSemantics: true,
                   image: true,
                   label: '${widget.provider} merchant QR',
                   child: QrImageView(
