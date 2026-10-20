@@ -6,8 +6,8 @@ Flutter Shop targets Android tablets and iPad. Drift/SQLite is the on-device sou
 
 - Add products manually or scan keyboard-wedge barcodes; barcode values stay text so leading zeroes are preserved.
 - Photograph a paper menu, explicitly consent to cloud processing, and receive editable English or Burmese candidates. Confirm name, price, and opening stock for every row; then import the accepted batch atomically into the local catalog.
-- Search only the current private Wi-Fi subnet for possible ESC/POS devices on port 9100 after the operator starts discovery. Select a candidate and send a test slip. This version does not save a default printer or print a completed-sale receipt.
-- Store KBZPay/WavePay merchant details and the exact issuer-confirmed static Myanmar MMQR payload. Checkout shows the amount and QR, but the cashier must verify receipt in the wallet app.
+- Search only the current private Wi-Fi subnet for possible ESC/POS devices on port 9100 after the operator starts discovery. Select a candidate, send a test slip, and confirm the paper before saving it as the receipt printer. Completed sales print after the local transaction commits; a printer failure does not undo the sale and offers a retry.
+- Store KBZPay/WavePay merchant details and the exact issuer-confirmed static Myanmar MMQR payload. Checkout shows the amount separately, so the customer enters it in their wallet. The cashier must verify receipt in the wallet app. This is not an amount-specific payment intent and does not settle automatically.
 - Persist a wallet checkout intent before showing the QR. If the app closes while the customer is paying, the basket and amount remain available to resume; sale, stock movement, and outbox event commit together only after the cashier confirms receipt. Cancelling requires an explicit confirmation that no payment arrived.
 - Choose English or Burmese in Settings. Review device language rendering and Myanmar-script receipt output on supported hardware before release.
 

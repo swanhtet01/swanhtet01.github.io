@@ -279,6 +279,63 @@ void main() {
       expect(printLines, contains('ငွေပေးချေမှု: CASH'));
     });
 
+    test('catalog, sale, stock and outbox survive a database reopen', () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'supermega-shop-persistent-',
+      );
+      final file = File(
+        '${directory.path}${Platform.pathSeparator}shop.sqlite',
+      );
+      var persistentDatabase = ShopDatabase(NativeDatabase(file));
+      try {
+        await persistentDatabase.addProduct(
+          id: 'offline-tea',
+          name: 'Tea',
+          priceMmk: 2500,
+          openingStock: 4,
+          barcode: '0012345678905',
+        );
+        const lines = [
+          ShopSaleLineInput(productId: 'offline-tea', quantity: 2),
+        ];
+        await persistentDatabase.recordCashSale(
+          operationId: 'offline-reopen-sale',
+          lines: lines,
+        );
+        expect(await persistentDatabase.countSales(), 1);
+        expect(
+          await persistentDatabase.countOutboxOperations(),
+          greaterThan(0),
+        );
+
+        await persistentDatabase.close();
+        persistentDatabase = ShopDatabase(NativeDatabase(file));
+
+        final product = (await persistentDatabase.readActiveProducts()).single;
+        expect(product.name, 'Tea');
+        expect(product.barcode, '0012345678905');
+        expect(product.onHand, 2);
+        expect(await persistentDatabase.countSales(), 1);
+        expect(
+          await persistentDatabase.countOutboxOperations(),
+          greaterThan(0),
+        );
+
+        await persistentDatabase.recordCashSale(
+          operationId: 'offline-reopen-sale',
+          lines: lines,
+        );
+        expect(
+          (await persistentDatabase.readActiveProducts()).single.onHand,
+          2,
+        );
+        expect(await persistentDatabase.countSales(), 1);
+      } finally {
+        await persistentDatabase.close();
+        await directory.delete(recursive: true);
+      }
+    });
+
     test(
       'stores the batch as review drafts, not active product rows',
       () async {

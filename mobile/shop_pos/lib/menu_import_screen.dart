@@ -52,6 +52,7 @@ class _MenuImportScreenState extends State<MenuImportScreen> {
       imageQuality: 80,
       maxWidth: 1800,
       maxHeight: 1800,
+      requestFullMetadata: false,
     );
     if (photo == null) return;
     final previousPhoto = _photo;
