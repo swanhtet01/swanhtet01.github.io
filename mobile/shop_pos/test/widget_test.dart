@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:drift/drift.dart' hide isNotNull, isNull;
 import 'package:drift/native.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image_picker/image_picker.dart';
@@ -24,6 +25,54 @@ Finder _merchantQrSemantics(String provider) => find.byWidgetPredicate(
 );
 
 void main() {
+  testWidgets('Windows counter accepts consecutive keyboard-wedge scans', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    final database = ShopDatabase(NativeDatabase.memory());
+    await database.addProduct(
+      id: 'tea',
+      name: 'Tea',
+      barcode: '0012345678905',
+      priceMmk: 2500,
+      openingStock: 2,
+    );
+    await database.addProduct(
+      id: 'coffee',
+      name: 'Coffee',
+      barcode: '0012345678906',
+      priceMmk: 3000,
+      openingStock: 1,
+    );
+    await tester.pumpWidget(
+      ShopApp(
+        database: database,
+        authClient: null,
+        apiBaseUrl: 'https://app.supermega.dev',
+        initialMyanmar: false,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final search = find.byKey(const ValueKey('shop-product-search'));
+    expect(tester.widget<TextField>(search).focusNode!.hasFocus, isTrue);
+    await tester.enterText(search, '0012345678905');
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await tester.pumpAndSettle();
+    expect(find.text('Review sale · 1 · 2,500 MMK'), findsOneWidget);
+    expect(tester.widget<TextField>(search).focusNode!.hasFocus, isTrue);
+
+    await tester.enterText(search, '0012345678906');
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await tester.pumpAndSettle();
+    expect(find.text('Review sale · 2 · 5,500 MMK'), findsOneWidget);
+    expect(tester.widget<TextField>(search).focusNode!.hasFocus, isTrue);
+    expect(await database.countSales(), 0);
+    await tester.pumpWidget(const SizedBox());
+    await database.close();
+  });
+
   testWidgets('saved sale reprints without recording another sale', (
     tester,
   ) async {

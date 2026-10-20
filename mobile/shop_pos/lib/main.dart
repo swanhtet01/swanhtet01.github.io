@@ -131,6 +131,7 @@ class ShopHome extends StatefulWidget {
 
 class _ShopHomeState extends State<ShopHome> {
   final _search = TextEditingController();
+  final _searchFocus = FocusNode();
   final _cart = <String, int>{};
   String? _operationId;
   bool _saving = false;
@@ -199,6 +200,7 @@ class _ShopHomeState extends State<ShopHome> {
       discardCapturedMenuPhoto(_recoveredMenuPhoto, createdByCamera: true),
     );
     _search.dispose();
+    _searchFocus.dispose();
     super.dispose();
   }
 
@@ -474,8 +476,15 @@ class _ShopHomeState extends State<ShopHome> {
   );
 
   Widget _searchField(List<ShopProduct> products) => TextField(
+    key: const ValueKey('shop-product-search'),
     controller: _search,
+    focusNode: _searchFocus,
+    autofocus: defaultTargetPlatform == TargetPlatform.windows,
+    textInputAction: TextInputAction.search,
     onChanged: (_) => setState(() {}),
+    // Keyboard-wedge scanners usually finish with Enter. Keep the field armed
+    // so the next scan can add another item without a cashier tap.
+    onEditingComplete: () {},
     onSubmitted: (value) {
       final code = value.trim();
       final matches = products.where((item) => item.barcode == code);
@@ -485,6 +494,7 @@ class _ShopHomeState extends State<ShopHome> {
         setState(() {});
       }
     },
+    onTapOutside: (_) => _searchFocus.unfocus(),
     decoration: InputDecoration(
       prefixIcon: const Icon(Icons.search),
       hintText: shopCopy(
