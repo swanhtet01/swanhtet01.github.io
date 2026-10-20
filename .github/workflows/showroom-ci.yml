@@ -175,7 +175,7 @@ jobs:
           assert evidence['customerReceiptVisible'] is False
           assert evidence['fulfilledSyntheticMedia'] == 3
           captures = evidence['captures']
-          assert len(captures) == 22
+          assert len(captures) == 26
           expected = {
               'actual-shop-first-run.png', 'actual-shop-today.png', 'actual-shop-sell.png', 'actual-shop-order-record.png', 'actual-shop-orders.png',
               'actual-shop-inventory.png',
@@ -187,6 +187,8 @@ jobs:
               'actual-shop-inventory-tablet.png', 'actual-shop-inventory-mobile.png',
               'actual-sites-editor-mobile.png', 'actual-sites-inquiries-mobile.png',
               'actual-commerce-catalog-mobile.png', 'actual-commerce-order-request-mobile.png',
+              'actual-sites-editor-tablet.png', 'actual-sites-inquiries-tablet.png',
+              'actual-commerce-catalog-tablet.png', 'actual-commerce-order-request-tablet.png',
           }
           assert {item['file'] for item in captures} == expected
           expected_states = {
@@ -205,11 +207,15 @@ jobs:
               'actual-shop-inventory-tablet.png': ('/shop/', 'inventory'),
               'actual-shop-inventory-mobile.png': ('/shop/', 'inventory'),
               'actual-sites-editor.png': ('/workspaces/', '/website/'),
+              'actual-sites-editor-tablet.png': ('/workspaces/', '/website/'),
               'actual-sites-inquiries.png': ('/workspaces/', '/website/?view=inquiries'),
+              'actual-sites-inquiries-tablet.png': ('/workspaces/', '/website/?view=inquiries'),
               'actual-sites-editor-mobile.png': ('/workspaces/', '/website/'),
               'actual-sites-inquiries-mobile.png': ('/workspaces/', '/website/?view=inquiries'),
               'actual-commerce-catalog.png': ('/workspaces/', '/ecommerce/?view=preview'),
+              'actual-commerce-catalog-tablet.png': ('/workspaces/', '/ecommerce/?view=preview'),
               'actual-commerce-order-request.png': ('/workspaces/', '/ecommerce/?view=preview'),
+              'actual-commerce-order-request-tablet.png': ('/workspaces/', '/ecommerce/?view=preview'),
               'actual-commerce-catalog-mobile.png': ('/workspaces/', '/ecommerce/?view=preview'),
               'actual-commerce-order-request-mobile.png': ('/workspaces/', '/ecommerce/?view=preview'),
           }
