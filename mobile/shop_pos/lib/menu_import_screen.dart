@@ -17,6 +17,7 @@ class MenuImportScreen extends StatefulWidget {
     required this.authClient,
     required this.apiBaseUrl,
     required this.myanmar,
+    this.recoveredCameraPhoto,
     super.key,
   });
 
@@ -24,6 +25,7 @@ class MenuImportScreen extends StatefulWidget {
   final SupabaseClient? authClient;
   final String apiBaseUrl;
   final bool myanmar;
+  final XFile? recoveredCameraPhoto;
 
   @override
   State<MenuImportScreen> createState() => _MenuImportScreenState();
@@ -38,6 +40,13 @@ class _MenuImportScreenState extends State<MenuImportScreen> {
   String? _message;
   String? _batchId;
   List<_CandidateEditor> _editors = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _photo = widget.recoveredCameraPhoto;
+    _photoWasCamera = widget.recoveredCameraPhoto != null;
+  }
 
   @override
   void dispose() {

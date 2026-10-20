@@ -1,4 +1,8 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -109,6 +113,7 @@ class ShopHome extends StatefulWidget {
     required this.apiBaseUrl,
     required this.myanmar,
     required this.onLanguageChanged,
+    this.recoverMenuPhoto,
     super.key,
   });
 
@@ -117,6 +122,7 @@ class ShopHome extends StatefulWidget {
   final String apiBaseUrl;
   final bool myanmar;
   final ValueChanged<bool> onLanguageChanged;
+  final Future<XFile?> Function()? recoverMenuPhoto;
 
   @override
   State<ShopHome> createState() => _ShopHomeState();
@@ -128,11 +134,45 @@ class _ShopHomeState extends State<ShopHome> {
   String? _operationId;
   bool _saving = false;
   PendingWalletCheckout? _pendingWalletCheckout;
+  XFile? _recoveredMenuPhoto;
 
   @override
   void initState() {
     super.initState();
     _loadPendingWalletCheckout();
+    _recoverMenuPhoto();
+  }
+
+  Future<void> _recoverMenuPhoto() async {
+    if (defaultTargetPlatform != TargetPlatform.android &&
+        widget.recoverMenuPhoto == null) {
+      return;
+    }
+    try {
+      final XFile? photo;
+      final recover = widget.recoverMenuPhoto;
+      if (recover != null) {
+        photo = await recover();
+      } else {
+        final lost = await ImagePicker().retrieveLostData();
+        final files = lost.files;
+        photo = files == null || files.isEmpty ? null : files.first;
+      }
+      if (photo == null) return;
+      if (!mounted) {
+        await discardCapturedMenuPhoto(photo, createdByCamera: true);
+        return;
+      }
+      setState(() => _recoveredMenuPhoto = photo);
+    } catch (_) {
+      // A missing camera result must never block the offline counter.
+    }
+  }
+
+  Future<void> _discardRecoveredMenuPhoto() async {
+    final photo = _recoveredMenuPhoto;
+    setState(() => _recoveredMenuPhoto = null);
+    await discardCapturedMenuPhoto(photo, createdByCamera: true);
   }
 
   Future<void> _loadPendingWalletCheckout() async {
@@ -154,6 +194,12 @@ class _ShopHomeState extends State<ShopHome> {
 
   @override
   void dispose() {
+    unawaited(
+      discardCapturedMenuPhoto(
+        _recoveredMenuPhoto,
+        createdByCamera: true,
+      ),
+    );
     _search.dispose();
     super.dispose();
   }
@@ -201,6 +247,10 @@ class _ShopHomeState extends State<ShopHome> {
                       child: Column(
                         children: [
                           _deviceNotice(),
+                          if (_recoveredMenuPhoto != null) ...[
+                            const SizedBox(height: 12),
+                            _recoveredMenuPhotoCard(),
+                          ],
                           if (_pendingWalletCheckout != null) ...[
                             const SizedBox(height: 12),
                             _pendingWalletCheckoutCard(),
@@ -219,6 +269,11 @@ class _ShopHomeState extends State<ShopHome> {
             return Column(
               children: [
                 _deviceNotice(),
+                if (_recoveredMenuPhoto != null)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+                    child: _recoveredMenuPhotoCard(),
+                  ),
                 if (_pendingWalletCheckout != null)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
@@ -313,6 +368,49 @@ class _ShopHomeState extends State<ShopHome> {
       ),
     );
   }
+
+  Widget _recoveredMenuPhotoCard() => Card(
+    child: Padding(
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            shopCopy(
+              widget.myanmar,
+              'Menu photo ready to review',
+              'မီနူးဓာတ်ပုံကို စစ်ဆေးနိုင်ပါပြီ',
+            ),
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            shopCopy(
+              widget.myanmar,
+              'The camera closed while Shop restarted. Nothing was sent.',
+              'Shop ပြန်စတင်နေစဉ် ကင်မရာပိတ်သွားသည်။ ဓာတ်ပုံကို မပို့ရသေးပါ။',
+            ),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            children: [
+              FilledButton.tonal(
+                onPressed: _openMenuImport,
+                child: Text(
+                  shopCopy(widget.myanmar, 'Review photo', 'ဓာတ်ပုံစစ်ရန်'),
+                ),
+              ),
+              TextButton(
+                onPressed: _discardRecoveredMenuPhoto,
+                child: Text(shopCopy(widget.myanmar, 'Discard', 'ဖျက်ရန်')),
+              ),
+            ],
+          ),
+        ],
+      ),
+    ),
+  );
 
   Widget _deviceNotice() => Material(
     color: Theme.of(context).colorScheme.secondaryContainer,
@@ -1255,16 +1353,21 @@ class _ShopHomeState extends State<ShopHome> {
     }
   }
 
-  void _openMenuImport() => Navigator.of(context).push<void>(
-    MaterialPageRoute<void>(
-      builder: (_) => MenuImportScreen(
-        database: widget.database,
-        authClient: widget.authClient,
-        apiBaseUrl: widget.apiBaseUrl,
-        myanmar: widget.myanmar,
+  void _openMenuImport() {
+    final recoveredPhoto = _recoveredMenuPhoto;
+    if (recoveredPhoto != null) setState(() => _recoveredMenuPhoto = null);
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => MenuImportScreen(
+          database: widget.database,
+          authClient: widget.authClient,
+          apiBaseUrl: widget.apiBaseUrl,
+          myanmar: widget.myanmar,
+          recoveredCameraPhoto: recoveredPhoto,
+        ),
       ),
-    ),
-  );
+    );
+  }
 
   void _openPrinter() => Navigator.of(context).push<void>(
     MaterialPageRoute<void>(

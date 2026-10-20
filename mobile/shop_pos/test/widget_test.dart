@@ -5,6 +5,7 @@ import 'package:drift/drift.dart' hide isNotNull, isNull;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:supermega_shop/main.dart';
 import 'package:supermega_shop/shop_database.dart';
@@ -20,6 +21,50 @@ Finder _merchantQrSemantics(String provider) => find.byWidgetPredicate(
 );
 
 void main() {
+  testWidgets('restored Android menu photo waits for fresh cloud consent', (
+    tester,
+  ) async {
+    final directory = await Directory.systemTemp.createTemp('shop-menu-recovery-');
+    addTearDown(() async {
+      if (await directory.exists()) await directory.delete(recursive: true);
+    });
+    final file = File('${directory.path}/menu.jpg');
+    await file.writeAsBytes(List<int>.filled(32, 1));
+    final database = ShopDatabase(NativeDatabase.memory());
+    addTearDown(database.close);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ShopHome(
+          database: database,
+          authClient: null,
+          apiBaseUrl: 'https://app.supermega.dev',
+          myanmar: false,
+          onLanguageChanged: (_) {},
+          recoverMenuPhoto: () async => XFile(file.path),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Menu photo ready to review'), findsOneWidget);
+    expect(
+      find.text('The camera closed while Shop restarted. Nothing was sent.'),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('Review photo'));
+    await tester.pumpAndSettle();
+    expect(find.text('Photo ready'), findsOneWidget);
+    expect(
+      tester.widget<CheckboxListTile>(find.byType(CheckboxListTile)).value,
+      isFalse,
+    );
+    expect(find.text('Review suggestions'), findsNothing);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.text('Menu photo ready to review'), findsNothing);
+  });
+
   testWidgets('empty catalog can make a durable cash sale', (tester) async {
     final database = ShopDatabase(NativeDatabase.memory());
     await tester.pumpWidget(
