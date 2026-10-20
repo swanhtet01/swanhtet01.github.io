@@ -471,6 +471,7 @@ export async function advanceCompanyMissionStage(input, options = {}) {
   })
     || !ACCEPTED_ORDER_STATUSES.has(order.status)
     || !isRecord(order.result)
+    || !sameHash(order.resultHash, sha256(stableStringify(order.result)))
     || !sameHash(order.resultHash, resultHash)) {
     return failure('company_mission_result_mismatch', { status: 'conflict' })
   }
@@ -482,7 +483,15 @@ export async function advanceCompanyMissionStage(input, options = {}) {
     || evaluation.clientId !== clientId
     || evaluation.workOrderId !== workOrderId
     || !sameHash(evaluation.planHash, order.planHash)
-    || !HASH_RE.test(String(evaluation.evaluationHash || ''))
+    || !sameHash(evaluation.resultHash, resultHash)
+    || !sameHash(evaluation.evaluationHash, sha256(stableStringify({
+      clientId: evaluation.clientId,
+      workOrderId: evaluation.workOrderId,
+      planHash: evaluation.planHash,
+      resultHash: evaluation.resultHash,
+      verdict: evaluation.verdict,
+      checks: evaluation.checks,
+    })))
     || evaluation.verdict !== 'accepted'
     || !ACCEPTANCE_CHECKS.every((field) => evaluation.checks?.[field] === true)) {
     return failure('company_mission_accepted_evaluation_required', { status: 'conflict' })

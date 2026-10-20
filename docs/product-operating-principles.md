@@ -1,6 +1,6 @@
 # SuperMega product and operating principles
 
-Status: maintained decision guide, updated 10 October 2026. Current execution state and authority live in `../supergoal.md`; this document does not authorize spending or deployment.
+Status: maintained decision guide, updated 20 October 2026. Product direction and authority live in `../supergoal.md`; mutable source status and release gates live in the corporate launch-control record. This document does not authorize spending or deployment.
 
 ## Product promise
 

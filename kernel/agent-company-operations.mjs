@@ -407,6 +407,7 @@ function publicEvaluation(record) {
     workOrderId: record.workOrderId,
     clientId: record.clientId,
     planHash: record.planHash,
+    resultHash: record.resultHash,
     verdict: record.verdict,
     checks: record.checks,
     evaluatedAt: record.evaluatedAt,
@@ -470,8 +471,12 @@ export async function evaluateCompanyWorkOrder(input, options = {}) {
   if (!TERMINAL_STATUSES.has(order.status) || !isRecord(order.result)) {
     return failure('company_evaluation_terminal_result_required', { status: 'conflict', workOrderId })
   }
+  const resultHash = sha256(stableStringify(order.result))
+  if (!sameHash(order.resultHash, resultHash)) {
+    return failure('company_evaluation_result_mismatch', { status: 'conflict', workOrderId })
+  }
 
-  const evaluationPayload = { clientId, workOrderId, planHash: order.planHash, verdict, checks }
+  const evaluationPayload = { clientId, workOrderId, planHash: order.planHash, resultHash, verdict, checks }
   const evaluationHash = sha256(stableStringify(evaluationPayload))
   const evaluationId = evaluationIdFor(workOrderId)
   const reserve = options.claimActivity || claimActivity
