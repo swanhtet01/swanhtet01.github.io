@@ -1,6 +1,6 @@
 # SuperMega Supergoal
 
-- Version: 1.6.0
+- Version: 1.7.0
 - Owner: Swan Htet, Founder
 - Maintainer: CTO, sole integration writer
 - Updated: 2026-10-20
@@ -15,6 +15,14 @@ Bring SuperMega.dev to a sellable, founder-controlled Shop launch built around a
 The differentiated promise is a full English or full Burmese merchant experience that removes catalog setup, checkout and insight work while keeping money and stock explainable. AI should accelerate reviewed catalog import and grounded decisions, within consent, privacy, quality and cost limits. After customer-facing acceptance, package one complete Basic/Free offer, a capability-backed Pro offer and Assisted Launch, then build measured onboarding, sales and marketing operations and cost-controlled agents on existing paid cloud/VPS capacity.
 
 The current design decision uses an **eliminate / reduce / raise / create** test against a merchant's first day. Eliminate repeated device-only warnings, dummy controls and manual message re-entry from the primary path. Reduce setup to a usable first catalog item, a first sale and an optional connected-account step; move printer, wallet, team and advanced policy setup to the point of need. Raise sale/stock correctness, discoverability, full-language quality, hardware reliability and recovery to non-negotiable release criteria. Create a reviewed photo-to-catalog path and later grounded, cited sales/stock suggestions that save measured operator time. Do not add an AI card, setting or subscription control unless it improves a named job and its failure state is clear.
+
+## AI-native operating model
+
+**Working autonomously, scaling infinitely** is the direction for SuperMega's internal workcell, not a claim of unlimited compute or unattended authority. The outcome is less time and cost from a real merchant problem to a verified improvement. Agents should use other AI for bounded research, generation, critique and test-case discovery, while tools and source records establish what actually happened. Give them machine advantages a human team cannot sustain manually: exact-revision memory, repeatable multimodal inspection, many cheap hypotheses, replayable failure cases and continuous measurement. Spend concurrency only when independent tasks and measured throughput justify it; keep one accountable integration writer.
+
+The operating loop is **observe → propose → implement → verify → learn**. Each work order names one user job, exact input/source revision, permitted tools and data, owner, budget, expected artifact, deterministic acceptance check, evidence type and stop condition. A second model may challenge a proposal or generate counterexamples, but cannot approve its own output. Record tool traces and outcome metadata without raw secrets or customer content. Turn each confirmed failure into a reproducible test or narrow skill update, replay the relevant evaluation set before changing prompts, models or tools, and retire changes that do not improve the merchant outcome. Use the existing work-order and evaluation system; do not launch a parallel agent platform.
+
+The first internal deployment target is the approved paid VPS/cloud capacity. Prove one queued, authorized, bounded synthetic job survives worker restart, yields a source-bound artifact and independent evaluation, records model/tool cost, and never performs an unapproved external write. Until that end-to-end proof exists, agent execution is **NOT RUN** as a hosted capability. Local runner RAM checks do not determine hosted readiness. The [AI-native operating loop](docs/ai-native-operating-loop.md) holds the first benchmark, task contract and acceptance matrix; the launch-control record holds mutable evidence.
 
 ## Product promise and boundaries
 

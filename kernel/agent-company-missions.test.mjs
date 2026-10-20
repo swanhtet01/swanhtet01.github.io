@@ -11,6 +11,11 @@ import {
 } from './agent-company-missions.mjs'
 
 const sha256 = (value) => createHash('sha256').update(String(value)).digest('hex')
+const stableStringify = (value) => value === null || typeof value !== 'object'
+  ? JSON.stringify(value)
+  : Array.isArray(value)
+    ? `[${value.map(stableStringify).join(',')}]`
+    : `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`).join(',')}}`
 const createInput = (patch = {}) => ({
   clientId: 'client-acme',
   missionId: 'cash-close-1',
@@ -99,16 +104,25 @@ function missionHarness() {
       result: { ok: true, status: 'completed', actionMode: 'draft_only', results: [] },
       resultHash,
     })
-    evaluations.set(workOrderId, {
+    const evaluation = {
       evaluationId: `company-evaluation:${workOrderId.split(':').pop()}`,
       workOrderId,
       clientId: current.clientId,
       planHash: current.planHash,
+      resultHash,
       verdict: 'accepted',
       checks: { accurate: true, complete: true, usable: true, boundarySafe: true },
       evaluatedAt: now(),
-      evaluationHash: sha256(`${workOrderId}\naccepted`),
-    })
+    }
+    evaluation.evaluationHash = sha256(stableStringify({
+      clientId: evaluation.clientId,
+      workOrderId: evaluation.workOrderId,
+      planHash: evaluation.planHash,
+      resultHash: evaluation.resultHash,
+      verdict: evaluation.verdict,
+      checks: evaluation.checks,
+    }))
+    evaluations.set(workOrderId, evaluation)
   }
   return { calls, claims, completeAndAccept, evaluations, missions, options, workOrders }
 }
@@ -230,6 +244,22 @@ test('accepted evaluation and exact reviewed handoff unlock only the next stage'
   const revisionRequired = await advanceCompanyMissionStage(advance, state.options)
   assert.equal(revisionRequired.reason, 'company_mission_accepted_evaluation_required')
   state.evaluations.get(queued.workOrder.workOrderId).verdict = 'accepted'
+
+  const evaluation = state.evaluations.get(queued.workOrder.workOrderId)
+  const exactEvaluationHash = evaluation.evaluationHash
+  delete evaluation.resultHash
+  assert.equal((await advanceCompanyMissionStage(advance, state.options)).reason, 'company_mission_accepted_evaluation_required')
+  evaluation.resultHash = 'b'.repeat(64)
+  assert.equal((await advanceCompanyMissionStage(advance, state.options)).reason, 'company_mission_accepted_evaluation_required')
+  evaluation.resultHash = resultHash
+  evaluation.evaluationHash = 'c'.repeat(64)
+  assert.equal((await advanceCompanyMissionStage(advance, state.options)).reason, 'company_mission_accepted_evaluation_required')
+  evaluation.evaluationHash = exactEvaluationHash
+  state.workOrders.get(queued.workOrder.workOrderId).resultHash = 'b'.repeat(64)
+  const changedResult = advanceInput(queued.mission, queued.mission.stages[0], queued.workOrder, 'b'.repeat(64), 'reviewed redacted stage two packet')
+  assert.equal((await advanceCompanyMissionStage(changedResult, state.options)).reason, 'company_mission_accepted_evaluation_required')
+  state.workOrders.get(queued.workOrder.workOrderId).resultHash = resultHash
+  assert.equal(state.missions.get(`company-mission-record:${created.mission.missionRunId}`).revision, queued.mission.revision)
 
   const advanced = await advanceCompanyMissionStage(advance, state.options)
   assert.equal(advanced.ok, true)

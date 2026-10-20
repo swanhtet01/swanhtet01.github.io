@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
@@ -18,6 +19,12 @@ import {
 } from './supermega-hq-authority.mjs'
 
 const HASH = 'a'.repeat(64)
+const stableStringify = (value) => value === null || typeof value !== 'object'
+  ? JSON.stringify(value)
+  : Array.isArray(value)
+    ? `[${value.map(stableStringify).join(',')}]`
+    : `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`).join(',')}}`
+const hash = (value) => createHash('sha256').update(stableStringify(value)).digest('hex')
 const AUTHORITY_DIGEST = 'c'.repeat(64)
 const SUCCESS_MEASURE_DIGEST = 'b'.repeat(64)
 const operatorUsage = (patch = {}) => ({
@@ -30,42 +37,44 @@ const operatorUsage = (patch = {}) => ({
   weightedTotalUnits: 45,
   ...patch,
 })
-const order = (patch = {}) => ({
-  workOrderId: 'company-order:1111111111111111111111111111111111111111',
-  clientId: 'client-acme',
-  cycleId: 'cycle-1',
-  status: 'completed',
-  planHash: HASH,
-  createdAt: '2026-07-14T00:00:00.000Z',
-  startedAt: '2026-07-14T00:10:00.000Z',
-  completedAt: '2026-07-14T00:20:00.000Z',
-  plan: {
-    assignments: [{ agentId: 'sales-qualifier', name: 'Sales Qualifier', department: 'growth', crew: 'lead-qualification-desk', roleCount: 3 }],
-    budget: { roleLimit: 3 },
-    controls: { externalWrites: false, dynamicDelegation: false },
-  },
-  result: {
-    ok: true,
+const order = (patch = {}) => {
+  const record = {
+    workOrderId: 'company-order:1111111111111111111111111111111111111111',
+    clientId: 'client-acme',
+    cycleId: 'cycle-1',
     status: 'completed',
-    actionMode: 'draft_only',
-    approvalRequired: true,
-    results: [{
-      agentId: 'sales-qualifier',
+    planHash: HASH,
+    createdAt: '2026-07-14T00:00:00.000Z',
+    startedAt: '2026-07-14T00:10:00.000Z',
+    completedAt: '2026-07-14T00:20:00.000Z',
+    plan: {
+      assignments: [{ agentId: 'sales-qualifier', name: 'Sales Qualifier', department: 'growth', crew: 'lead-qualification-desk', roleCount: 3 }],
+      budget: { roleLimit: 3 },
+      controls: { externalWrites: false, dynamicDelegation: false },
+    },
+    result: {
+      ok: true,
       status: 'completed',
-      usedRoleCalls: 3,
-      output: { private: 'model output' },
-      usageByRole: [
-        { role: 'intake', requestedTier: 'bulk', tier: 'bulk', provider: 'anthropic', model: 'private-model-1', cached: false, usage: { input_tokens: 100, output_tokens: 50 } },
-        { role: 'analyst', requestedTier: 'reason', tier: 'reason', provider: 'anthropic', model: 'private-model-2', cached: false, usage: { input_tokens: 20, output_tokens: 10 } },
-        { role: 'writer', requestedTier: 'reason', tier: 'reason', provider: 'anthropic', model: 'private-model-3', cached: true, usage: { input_tokens: 30, output_tokens: 15 } },
-      ],
-    }],
-    budget: { usedRoleCalls: 3 },
-    durableResultStored: true,
-  },
-  evidence: [{ digest: 'e'.repeat(64), bytes: 20 }],
-  ...patch,
-})
+      actionMode: 'draft_only',
+      approvalRequired: true,
+      results: [{
+        agentId: 'sales-qualifier',
+        status: 'completed',
+        usedRoleCalls: 3,
+        output: { private: 'model output' },
+        usageByRole: [
+          { role: 'intake', requestedTier: 'bulk', tier: 'bulk', provider: 'anthropic', model: 'private-model-1', cached: false, usage: { input_tokens: 100, output_tokens: 50 } },
+          { role: 'analyst', requestedTier: 'reason', tier: 'reason', provider: 'anthropic', model: 'private-model-2', cached: false, usage: { input_tokens: 20, output_tokens: 10 } },
+          { role: 'writer', requestedTier: 'reason', tier: 'reason', provider: 'anthropic', model: 'private-model-3', cached: true, usage: { input_tokens: 30, output_tokens: 15 } },
+        ],
+      }],
+      budget: { usedRoleCalls: 3 },
+      durableResultStored: true,
+    },
+    evidence: [{ digest: 'e'.repeat(64), bytes: 20 }],
+  }
+  return { ...record, resultHash: hash(record.result), ...patch }
+}
 
 const evaluationInput = (patch = {}) => ({
   clientId: 'client-acme',
@@ -157,6 +166,7 @@ test('terminal work-order evaluation is hash-bound, checklist-bound, immutable, 
   const result = await evaluateCompanyWorkOrder(evaluationInput(), state.options)
   assert.equal(result.ok, true)
   assert.equal(result.evaluation.verdict, 'accepted')
+  assert.equal(result.evaluation.resultHash, order().resultHash)
   assert.match(result.evaluation.evaluationHash, /^[a-f0-9]{64}$/)
   assert.equal(JSON.stringify(result).includes('model output'), false)
   assert.equal(JSON.stringify(result).includes('e'.repeat(64)), false)
@@ -202,6 +212,10 @@ test('evaluation rejects non-terminal work, mismatched plans, weak verdicts, and
     ...state.options,
     getCompanyWorkOrder: async () => ({ ok: true, workOrder: order({ status: 'running', result: undefined }) }),
   })).reason, 'company_evaluation_terminal_result_required')
+  assert.equal((await evaluateCompanyWorkOrder(evaluationInput(), {
+    ...state.options,
+    getCompanyWorkOrder: async () => ({ ok: true, workOrder: order({ resultHash: 'b'.repeat(64) }) }),
+  })).reason, 'company_evaluation_result_mismatch')
 })
 
 test('evaluation fails closed when its immutable claim or record is not durable', async () => {
