@@ -262,7 +262,9 @@ void main() {
           .getSingle();
       expect(intentState.read<String>('state'), 'completed');
       expect(await database.countSales(), 1);
-      expect(await database.countStockMovements(), 1);
+      // Product setup records opening stock; the wallet sale records the
+      // second movement when it reduces on-hand quantity.
+      expect(await database.countStockMovements(), 2);
       await database.close();
     },
   );
