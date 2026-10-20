@@ -78,6 +78,9 @@ const sql = `-- REVIEW ONLY. Target: production project zvtzwcimpvvtkowflhda.
 -- not execute the baseline DDL, copy data, or change customer-facing tables.
 -- Execute only after a fresh provider preflight and separate owner approval.
 BEGIN;
+SET LOCAL lock_timeout = '2s';
+SET LOCAL statement_timeout = '15s';
+LOCK TABLE supabase_migrations.schema_migrations IN SHARE ROW EXCLUSIVE MODE;
 DO $preflight$
 DECLARE actual record;
 BEGIN
