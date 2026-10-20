@@ -8,6 +8,8 @@ As of 2026-10-20, dashboard-created previews from production project `zvtzwcimpv
 
 The proposed operation **only inserts one historical migration record** into `supabase_migrations.schema_migrations`, with the pinned baseline SQL in `statements[1]`. It does not execute that SQL on production. Do not apply the baseline through `apply_migration` or `db push` on production: its DDL is for building an empty database. Do not run the generated SQL against a preview or another project.
 
+This is still a consequential production change: an incorrect ledger entry could make future branch builds replay the wrong schema or mislead migration tooling even though customer rows are untouched. The exact statement, parent schema parity and fresh branch replay must all be checked before declaring recovery.
+
 ## Read-only evidence
 
 | Gate | Production parent | Data-less preview `rvuutlqxdjaflovozsma` |
