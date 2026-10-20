@@ -1,6 +1,6 @@
 # Production parent-history recovery packet — review only
 
-**Decision:** Prepare a metadata-only repair of the production migration ledger, then create a fresh data-less dashboard preview and run managed Shop acceptance. No production SQL, branch reset, new paid branch, or deployment was performed by this packet.
+**Decision:** The owner approved and the metadata-only production migration-ledger repair was applied on 2026-10-20 after exact-head CI and a fresh read-only preflight. A fresh data-less dashboard preview and managed Shop acceptance remain pending. No baseline DDL, branch reset, new paid branch, or deployment was performed.
 
 ## Observed failure and exact scope
 
@@ -37,7 +37,8 @@ Rollback, if the metadata insert is approved and later found incorrect, is a sep
 ## Status
 
 - Parent catalog parity: **PASS** for the measured baseline objects.
-- SQL proposal generation: **PASS** locally; not run against Supabase.
-- Production ledger repair: **NOT RUN**, separate owner approval required.
+- SQL proposal generation: **PASS** locally; the exact 60,623-byte SQL had SHA-256 `4dece18e2414f1eae2443b4fd966f27007fe7c9d006ca663a6550c0c6fcda82f` before execution.
+- Exact-head [App CI run 39460610648](https://github.com/swanhtet01/swanhtet01.github.io/actions/runs/39460610648) at `902f8a06697868513ca60c926e72d97da7eebae9`: **PASS** before the provider write. The approved write did not depend on a later documentation-only commit.
+- Production ledger repair: **PASS BOUNDED** on project `zvtzwcimpvvtkowflhda` after explicit owner approval and matching preflight. Provider readback showed 19 ledger rows, exactly one `20260711081300` row named `public_legacy_baseline`, one stored statement with MD5 `25c31b57c571a503adff2522f1ffde75`, and unchanged measured legacy catalog fingerprints. This is migration-history metadata evidence, not successful preview replay or customer data acceptance.
 - New dashboard preview and managed Shop acceptance: **NOT RUN**.
 - Protected public-site preview: accessible after Vercel two-factor sign-in; homepage, Shop and Contact read-only navigation passed. The Shop preview displays desktop, tablet and phone captures; this is visual evidence only, not a device/hardware test.
