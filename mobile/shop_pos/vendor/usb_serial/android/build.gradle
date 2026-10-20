@@ -4,7 +4,6 @@ version '1.0'
 repositories {
     google()
     mavenCentral()
-    maven { url 'https://jitpack.io' }
 }
 
 apply plugin: 'com.android.library'
@@ -20,14 +19,5 @@ android {
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
-    }
-}
-
-dependencies {
-    implementation('com.github.felHR85:UsbSerial:7ad6c9f') {
-        artifact {
-            classifier = 'release'
-            type = 'aar'
-        }
     }
 }
