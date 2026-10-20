@@ -207,8 +207,11 @@ if (artifactSelfTest) {
   }
   const result = verifyCurrentReleaseAssets(artifactInput)
   const launcherMutations = [
-    ...['Sales, stock and your daily totals.', 'Your services, photos and contact details.', 'A product catalog and customer requests.'].map((text) => ({
+    ...['Sales, stock and your daily totals.', 'Welcome back'].map((text) => ({
       corpus: assetCorpus.replaceAll(text, ''), expected: `missing_current_release_asset:launcher:${text}`,
+    })),
+    ...['Your services, photos and contact details.', 'A product catalog and customer requests.'].map((text) => ({
+      corpus: `${assetCorpus}\n${text}`, expected: `retired_customer_launcher_asset:${text}`,
     })),
     ...['Run a sample production job', 'Jobs, materials, quality.'].map((text) => ({
       corpus: `${assetCorpus}\n${text}`, expected: `retired_launcher_release_asset:${text}`,
