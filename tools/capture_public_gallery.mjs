@@ -241,8 +241,8 @@ async function captureMobile(cdp, sessionId, output, name, expectedTexts, view) 
 }
 
 async function captureTablet(cdp, sessionId, output, name, expectedTexts, view) {
-  // iPad-sized portrait viewport: the Shop switches to its tablet layout while
-  // retaining touch targets and opening the sale as a compact review sheet.
+  // iPad-sized portrait viewport: the Shop keeps the sale beside the catalog
+  // while retaining touch targets; phone capture exercises the modal sheet.
   await cdp.send('Emulation.setDeviceMetricsOverride', { width: 768, height: 1024, deviceScaleFactor: 1, mobile: true }, sessionId)
   await cdp.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 }, sessionId)
   try {
@@ -377,7 +377,7 @@ async function main() {
     captures.push(await capture(cdp, sessionId, output, 'actual-shop-sell', ['Products', 'Current sale', 'KAUNG 90 Days Rice'],
       { fixturePath: '/shop/', tab: 'counter', selector: '.shop-current-sale', imageSelector: '.shop-product-art.shop-product-photo', images: 5 }))
     captures.push(await captureTablet(cdp, sessionId, output, 'actual-shop-sell-tablet', ['Products', 'Current sale', 'KAUNG 90 Days Rice'],
-      { fixturePath: '/shop/', tab: 'counter', selector: '.shop-counter-grid', scrollToTop: true, openSale: true, imageSelector: '.shop-product-art.shop-product-photo', images: 5 }))
+      { fixturePath: '/shop/', tab: 'counter', selector: '.shop-counter-grid', scrollToTop: true, imageSelector: '.shop-product-art.shop-product-photo', images: 5 }))
     captures.push(await captureMobile(cdp, sessionId, output, 'actual-shop-sell-mobile', ['Products', 'KAUNG 90 Days Rice'],
       { fixturePath: '/shop/', tab: 'counter', selector: '.shop-counter-grid', imageSelector: '.shop-product-art.shop-product-photo', images: 5 }))
     await clickSelector(cdp, sessionId, '.shop-review-sale')

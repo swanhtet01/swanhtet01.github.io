@@ -154,12 +154,16 @@ test('cleanup never steals focus from a native confirmation', () => {
   f.cleanup()
   assert.equal(f.doc.activeElement, f.opener)
 })
-test('Shop wires focus only for open panel, with a focusable fallback and matching CSS breakpoint', () => {
+test('Shop traps focus on phones while tablets retain a visible non-modal sale', () => {
   const source = readFileSync(new URL('../showroom/src/core/CoreApp.tsx', import.meta.url), 'utf8')
   const css = readFileSync(new URL('../showroom/src/core/core-app.css', import.meta.url), 'utf8')
   assert.match(source, /if \(!cartOpen \|\| !salePanelRef.current\) return/)
   assert.match(source, /installShopSaleFocus\(salePanelRef.current, \(\) => setCartOpen\(false\), \(\) => saleSearchRef.current\)/)
   assert.match(source, /id="shop-current-sale" ref=\{salePanelRef\} tabIndex=\{-1\}/)
   assert.match(source, /input ref=\{saleSearchRef\} autoComplete="off"/)
+  assert.equal(SHOP_SALE_OVERLAY_QUERY, '(not (min-width: 700px))')
   assert.match(css, /@media \(max-width: 840px\) \{[\s\S]*?\.shop-current-sale \{ position: fixed;/)
+  assert.match(css, /@media \(min-width: 700px\) and \(max-width: 840px\) \{[\s\S]*?\.shop-counter-grid \{ display: grid; grid-template-columns: minmax\(0, 1\.08fr\) minmax\(0, \.92fr\)/)
+  assert.match(css, /\.shop-current-sale, \.shop-current-sale\.is-open \{ position: static;/)
+  assert.match(css, /\.shop-cart-backdrop, \.shop-cart-backdrop\.is-open, \.shop-mobile-cart, \.shop-cart-close \{ display: none; \}/)
 })
