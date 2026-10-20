@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 from uuid import uuid4
 
+from tools.acceptance_auth_fixture import APPROVAL_ACTION, APPROVAL_CONTRACT
 from tools.acceptance_workspace_journey import (
     PROJECT, PRODUCTS, exercise_workspaces, payload_for, verified_session, require_runtime_target,
 )
@@ -18,9 +19,14 @@ from supermega_runtime.trial_store import (
 class JourneyTests(unittest.TestCase):
     def setUp(self):
         clock = patch('tools.acceptance_auth_fixture.datetime').start()
-        clock.now.return_value = datetime(2026, 9, 28, 23, tzinfo=timezone.utc)
+        clock.now.return_value = datetime(2026, 10, 21, 9, tzinfo=timezone.utc)
+        clock.fromisoformat.side_effect = datetime.fromisoformat
         self.addCleanup(patch.stopall)
         patch.dict('os.environ', {'SUPERMEGA_SUPABASE_PROJECT_REF': PROJECT}).start()
+        self.approval = dict(contract=APPROVAL_CONTRACT, project_ref=PROJECT,
+            action=APPROVAL_ACTION, synthetic_only=True, cleanup_required=True,
+            approval_id=str(uuid4()), issued_at='2026-10-21T08:30:00Z',
+            expires_at='2026-10-21T09:30:00Z')
 
     def test_runtime_rejects_production_or_admin_identity(self):
         for url in ('postgresql://postgres@db.' + PROJECT + '.supabase.co/postgres?sslmode=require',
@@ -75,7 +81,7 @@ class JourneyTests(unittest.TestCase):
         with patch('tools.acceptance_workspace_journey.verified_session', return_value=str(uuid4())):
             def run():
                 return exercise_workspaces(None, users, 'postgresql://supermega_trial_login@db.' + PROJECT + '.supabase.co/postgres?sslmode=require', ['SM-1234-5678', 'SM-1234-5679'],
-                    project=PROJECT, approved=True, register_cleanup=lambda *pair: registered.append(pair), store_factory=Store)
+                    project=PROJECT, approved=self.approval, register_cleanup=lambda *pair: registered.append(pair), store_factory=Store)
             if should_fail:
                 with self.assertRaisesRegex(RuntimeError, 'denial_not_proven'): run()
             else:

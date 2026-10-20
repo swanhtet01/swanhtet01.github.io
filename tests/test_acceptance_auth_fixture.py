@@ -2,7 +2,10 @@ from datetime import datetime, timezone
 import unittest
 from uuid import uuid4
 from unittest.mock import patch
-from tools.acceptance_auth_fixture import PROJECT, AuthApi, NoRedirect, temporary_users, require_authority
+from tools.acceptance_auth_fixture import (
+    PROJECT, APPROVAL_ACTION, APPROVAL_CONTRACT, AuthApi, NoRedirect,
+    temporary_users, require_authority,
+)
 
 
 class FakeApi:
@@ -24,23 +27,42 @@ class FakeApi:
 class AcceptanceAuthTests(unittest.TestCase):
     def setUp(self):
         clock=patch("tools.acceptance_auth_fixture.datetime").start()
-        clock.now.return_value=datetime(2026,9,28,23,0,tzinfo=timezone.utc)
+        clock.now.return_value=datetime(2026,10,21,9,0,tzinfo=timezone.utc)
+        clock.fromisoformat.side_effect=datetime.fromisoformat
         self.addCleanup(patch.stopall)
+        self.approval = dict(contract=APPROVAL_CONTRACT, project_ref=PROJECT,
+            action=APPROVAL_ACTION, synthetic_only=True, cleanup_required=True,
+            approval_id=str(uuid4()), issued_at='2026-10-21T08:30:00Z',
+            expires_at='2026-10-21T09:30:00Z')
     def test_cleanup_after_caller_failure(self):
         api=FakeApi()
         with self.assertRaisesRegex(RuntimeError,'caller failed'):
-            with temporary_users(api,project=PROJECT,approved=True) as users:
+            with temporary_users(api,project=PROJECT,approved=self.approval) as users:
                 self.assertEqual(len(users),2)
                 raise RuntimeError('caller failed')
         self.assertCountEqual(api.created,api.deleted)
     def test_cleanup_after_login_failure(self):
         api=FakeApi(fail_login=True)
         with self.assertRaises(RuntimeError):
-            with temporary_users(api,project=PROJECT,approved=True): pass
+            with temporary_users(api,project=PROJECT,approved=self.approval): pass
         self.assertEqual(api.created,api.deleted)
-    def test_reject_production_and_expiry(self):
-        for project,approved,now in [('zvtzwcimpvvtkowflhda',True,None),(PROJECT,False,None),(PROJECT,True,datetime(2026,9,29,11,3,tzinfo=timezone.utc))]:
-            with self.assertRaises(ValueError): require_authority(project,approved,now)
+    def test_reject_production_missing_approval_and_expiry(self):
+        for project, approval, now in [
+            ('zvtzwcimpvvtkowflhda', self.approval, None),
+            (PROJECT, {}, None),
+            (PROJECT, self.approval, datetime(2026,10,21,9,30,tzinfo=timezone.utc)),
+        ]:
+            with self.assertRaises(ValueError): require_authority(project, approval, now)
+
+    def test_reject_wrong_target_action_and_excessive_window(self):
+        for change in (
+            {'project_ref': 'twflgmlwfkykgzsxnegc'},
+            {'action': 'create_temporary_runtime_login'},
+            {'expires_at': '2026-10-21T10:30:01Z'},
+            {'approval_id': 'not-a-uuid'},
+        ):
+            with self.assertRaisesRegex(ValueError, 'acceptance_authority_invalid'):
+                require_authority(PROJECT, dict(self.approval, **change))
 
     def test_ambiguous_create_is_reconciled_and_deleted(self):
         class LostResponse(FakeApi):
@@ -53,7 +75,7 @@ class AcceptanceAuthTests(unittest.TestCase):
                 return super().request(method, path, payload, **kwargs)
         api = LostResponse()
         with self.assertRaisesRegex(OSError, 'response lost'):
-            with temporary_users(api, project=PROJECT, approved=True): pass
+            with temporary_users(api, project=PROJECT, approved=self.approval): pass
         self.assertEqual(api.deleted, [api.record['id']])
 
     def test_delete_success_without_removal_fails_cleanup(self):
@@ -66,7 +88,7 @@ class AcceptanceAuthTests(unittest.TestCase):
                     return {'users': [self.record]}
                 return super().request(method, path, payload, **kwargs)
         with self.assertRaisesRegex(RuntimeError, 'acceptance_auth_cleanup_incomplete'):
-            with temporary_users(RetainedUser(), project=PROJECT, approved=True): pass
+            with temporary_users(RetainedUser(), project=PROJECT, approved=self.approval): pass
 
     def test_redirects_are_refused(self):
         with self.assertRaisesRegex(ValueError, 'acceptance_redirect_refused'):

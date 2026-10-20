@@ -19,7 +19,8 @@ from tools.acceptance_workspace_cleanup import cleanup_workspaces, verify_cleanu
 
 
 def run():
-    require_authority(PROJECT, os.environ.get('SUPERMEGA_ACCEPTANCE_APPROVED') == '20260929T1103Z')
+    approval = json.loads(os.environ.get('SUPERMEGA_ACCEPTANCE_APPROVAL_JSON') or '{}')
+    require_authority(PROJECT, approval)
     admin_url, runtime_url = os.environ['ACCEPTANCE_ADMIN_URL'], os.environ['ACCEPTANCE_RUNTIME_URL']
     require_runtime_target(runtime_url)
     url = urlsplit(admin_url)
@@ -44,11 +45,11 @@ def run():
     alphabet = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
     claims = ['SM-' + ''.join(secrets.choice(alphabet) for _ in range(4)) + '-' +
               ''.join(secrets.choice(alphabet) for _ in range(4)) for _ in range(2)]
-    with temporary_users(api, project=PROJECT, approved=True, run_id=run_id) as users:
+    with temporary_users(api, project=PROJECT, approved=approval, run_id=run_id) as users:
         actors = [user['id'] for user in users]
         try:
             result = exercise_workspaces(api, users, runtime_url, claims, project=PROJECT,
-                approved=True, register_cleanup=lambda *pair: registrations.append(pair))
+                approved=approval, register_cleanup=lambda *pair: registrations.append(pair))
         finally:
             with connect() as connection:
                 cleanup_workspaces(connection, registrations, actors, project=PROJECT)
