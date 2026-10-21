@@ -389,9 +389,7 @@ void main() {
         expect(
           width >= 820
               ? find.text(myanmar ? 'ငွေသား' : 'Cash sale')
-              : find.textContaining(
-                  myanmar ? 'အရောင်းစစ်ရန်' : 'Review sale',
-                ),
+              : find.textContaining(myanmar ? 'အရောင်းစစ်ရန်' : 'Review sale'),
           findsOneWidget,
         );
         expect(tester.takeException(), isNull);
@@ -991,10 +989,7 @@ void main() {
         of: find.byTooltip('Finish the pending payment first'),
         matching: find.byType(ListTile),
       );
-      expect(
-        tester.widget<ListTile>(addToSaleRow.first).onTap,
-        isNull,
-      );
+      expect(tester.widget<ListTile>(addToSaleRow.first).onTap, isNull);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpWidget(
         ShopApp(
