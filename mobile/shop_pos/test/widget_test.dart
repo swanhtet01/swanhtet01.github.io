@@ -61,7 +61,7 @@ void main() {
           tester
               .widget<MaterialApp>(find.byType(MaterialApp))
               .theme
-              ?.fontFamily,
+              ?.textTheme.bodyMedium?.fontFamily,
           'Inter',
         );
         expect(find.text(myanmar ? 'ယနေ့' : 'Today'), findsWidgets);
