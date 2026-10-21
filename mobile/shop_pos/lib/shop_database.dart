@@ -111,6 +111,21 @@ class ShopSaleLineInput {
   final int quantity;
 }
 
+/// A device-local counter basket. It is neither an order nor a stock hold.
+class CounterSaleDraft {
+  const CounterSaleDraft({
+    required this.operationId,
+    required this.quantities,
+    required this.unitPricesMmk,
+    required this.updatedAtMillis,
+  });
+
+  final String operationId;
+  final Map<String, int> quantities;
+  final Map<String, int> unitPricesMmk;
+  final int updatedAtMillis;
+}
+
 class ShopSaleReceipt {
   const ShopSaleReceipt({
     required this.id,
@@ -289,7 +304,7 @@ class ShopDatabase extends _$ShopDatabase {
     : super(executor ?? driftDatabase(name: 'supermega_shop'));
 
   @override
-  int get schemaVersion => 7;
+  int get schemaVersion => 8;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -298,6 +313,7 @@ class ShopDatabase extends _$ShopDatabase {
       await _createWalletCheckoutTable();
       await _createCashShiftTables();
       await _createProductImageTable();
+      await _createCounterDraftTable();
     },
     onUpgrade: (migrator, from, to) async {
       if (from < 2) {
@@ -339,6 +355,9 @@ class ShopDatabase extends _$ShopDatabase {
       }
       if (from < 7) {
         await _createProductImageTable();
+      }
+      if (from < 8) {
+        await _createCounterDraftTable();
       }
     },
     beforeOpen: (_) => customStatement('PRAGMA foreign_keys = ON'),
@@ -408,6 +427,135 @@ class ShopDatabase extends _$ShopDatabase {
       updated_at_millis INTEGER NOT NULL
     )
   ''');
+
+  Future<void> _createCounterDraftTable() => customStatement('''
+    CREATE TABLE IF NOT EXISTS shop_counter_drafts (
+      slot INTEGER PRIMARY KEY NOT NULL CHECK (slot = 1),
+      operation_id TEXT NOT NULL UNIQUE CHECK (length(operation_id) BETWEEN 1 AND 120),
+      basket_json TEXT NOT NULL,
+      updated_at_millis INTEGER NOT NULL
+    )
+  ''');
+
+  /// Persist the next basket before showing it to the operator. No stock or
+  /// outbox row changes until recordSale commits the actual sale.
+  Future<void> saveCounterSaleDraft({
+    required String operationId,
+    required Map<String, int> quantities,
+  }) async {
+    final cleanOperationId = operationId.trim();
+    if (cleanOperationId.isEmpty ||
+        cleanOperationId.length > 120 ||
+        quantities.isEmpty ||
+        quantities.length > 100) {
+      throw ArgumentError('A counter draft needs a bounded basket.');
+    }
+    final sorted = quantities.entries.toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
+    if (sorted.any((line) =>
+        line.key.trim().isEmpty ||
+        line.key.length > 100 ||
+        line.value < 1 ||
+        line.value > 1000)) {
+      throw ArgumentError('Counter draft item values are invalid.');
+    }
+    await transaction(() async {
+      final completed = await (select(shopSales)
+            ..where((sale) => sale.operationId.equals(cleanOperationId)))
+          .getSingleOrNull();
+      if (completed != null) {
+        throw StateError('This counter sale was already completed.');
+      }
+      final pending = await customSelect(
+        "SELECT operation_id FROM shop_wallet_checkout_intents WHERE state = 'pending' LIMIT 1",
+      ).getSingleOrNull();
+      if (pending != null) {
+        throw StateError('Finish the pending wallet checkout first.');
+      }
+      final previous = await readCounterSaleDraft();
+      final lines = <Map<String, Object>>[];
+      for (final line in sorted) {
+        final product = await (select(shopProducts)
+              ..where((row) =>
+                  row.id.equals(line.key) & row.archived.equals(false)))
+            .getSingleOrNull();
+        lines.add({
+          'productId': line.key,
+          'quantity': line.value,
+          'unitPriceMmk': product?.priceMmk ??
+              (previous?.operationId == cleanOperationId
+                  ? previous?.unitPricesMmk[line.key]
+                  : null) ??
+              0,
+        });
+      }
+      await customStatement(
+        'INSERT INTO shop_counter_drafts '
+        '(slot, operation_id, basket_json, updated_at_millis) '
+        'VALUES (1, ?, ?, ?) ON CONFLICT(slot) DO UPDATE SET '
+        'operation_id = excluded.operation_id, '
+        'basket_json = excluded.basket_json, '
+        'updated_at_millis = excluded.updated_at_millis',
+        [cleanOperationId, jsonEncode(lines), DateTime.now().millisecondsSinceEpoch],
+      );
+    });
+  }
+
+  Future<CounterSaleDraft?> readCounterSaleDraft() async {
+    final row = await customSelect(
+      'SELECT operation_id, basket_json, updated_at_millis '
+      'FROM shop_counter_drafts WHERE slot = 1',
+    ).getSingleOrNull();
+    if (row == null) return null;
+    final operationId = row.read<String>('operation_id');
+    final completed = await (select(shopSales)
+          ..where((sale) => sale.operationId.equals(operationId)))
+        .getSingleOrNull();
+    if (completed != null) {
+      throw StateError('A completed sale still has a counter draft.');
+    }
+    final raw = jsonDecode(row.read<String>('basket_json'));
+    if (raw is! List || raw.isEmpty || raw.length > 100) {
+      throw const FormatException('Counter draft is invalid.');
+    }
+    final quantities = <String, int>{};
+    final prices = <String, int>{};
+    for (final value in raw) {
+      if (value is! Map<String, dynamic>) {
+        throw const FormatException('Counter draft is invalid.');
+      }
+      final id = value['productId'];
+      final quantity = value['quantity'];
+      final price = value['unitPriceMmk'];
+      if (id is! String ||
+          id.isEmpty ||
+          id.length > 100 ||
+          quantity is! int ||
+          quantity < 1 ||
+          quantity > 1000 ||
+          price is! int ||
+          price < 0 ||
+          price > 2000000000 ||
+          quantities.containsKey(id)) {
+        throw const FormatException('Counter draft is invalid.');
+      }
+      quantities[id] = quantity;
+      prices[id] = price;
+    }
+    return CounterSaleDraft(
+      operationId: operationId,
+      quantities: Map.unmodifiable(quantities),
+      unitPricesMmk: Map.unmodifiable(prices),
+      updatedAtMillis: row.read<int>('updated_at_millis'),
+    );
+  }
+
+  Future<void> clearCounterSaleDraft(String operationId) async {
+    await customStatement(
+      'DELETE FROM shop_counter_drafts WHERE slot = 1 AND operation_id = ?',
+      [operationId],
+    );
+  }
 
   /// Store only bounded, metadata-free PNG thumbnails beside the local catalog.
   /// They are included in encrypted SQLite snapshots but not in JSON sync events.
@@ -1129,6 +1277,7 @@ class ShopDatabase extends _$ShopDatabase {
           Variable<int>(createdAt),
         ],
       );
+      await clearCounterSaleDraft(cleanOperationId);
       return PendingWalletCheckout(
         operationId: cleanOperationId,
         paymentMethod: paymentMethod,
@@ -1143,17 +1292,62 @@ class ShopDatabase extends _$ShopDatabase {
     });
   }
 
-  Future<bool> cancelWalletCheckoutIntent(String operationId) async {
-    final changed = await customUpdate(
-      'UPDATE shop_wallet_checkout_intents SET state = ? '
-      'WHERE operation_id = ? AND state = ?',
-      variables: [
-        const Variable<String>('cancelled'),
-        Variable<String>(operationId),
-        const Variable<String>('pending'),
-      ],
-    );
-    return changed == 1;
+  Future<bool> cancelWalletCheckoutIntent(
+    String operationId, {
+    String? resumeOperationId,
+  }) async {
+    if (resumeOperationId != null &&
+        (resumeOperationId.trim().isEmpty ||
+            resumeOperationId.length > 120 ||
+            resumeOperationId == operationId)) {
+      throw ArgumentError('A resumed basket needs a new operation ID.');
+    }
+    return transaction(() async {
+      final row = await customSelect(
+        'SELECT operation_id, payment_method, request_fingerprint, total_mmk, '
+        'merchant_phone, merchant_qr_payload, basket_json, state, created_at_millis '
+        'FROM shop_wallet_checkout_intents '
+        "WHERE operation_id = ? AND state = 'pending'",
+        variables: [Variable<String>(operationId)],
+      ).getSingleOrNull();
+      if (row == null) return false;
+      final intent = _walletCheckoutFromRow(row);
+      if (resumeOperationId != null) {
+        final priorSale = await (select(shopSales)
+              ..where((sale) => sale.operationId.equals(resumeOperationId)))
+            .getSingleOrNull();
+        final otherDraft = await readCounterSaleDraft();
+        if (priorSale != null || otherDraft != null) {
+          throw StateError('A different sale already uses this draft slot.');
+        }
+      }
+      final changed = await customUpdate(
+        "UPDATE shop_wallet_checkout_intents SET state = 'cancelled' "
+        "WHERE operation_id = ? AND state = 'pending'",
+        variables: [Variable<String>(operationId)],
+      );
+      if (changed != 1) return false;
+      if (resumeOperationId != null) {
+        final draftLines = [
+          for (final line in intent.lines)
+            {
+              'productId': line.productId,
+              'quantity': line.quantity,
+              'unitPriceMmk': line.unitPriceMmk,
+            },
+        ];
+        await customStatement(
+          'INSERT INTO shop_counter_drafts '
+          '(slot, operation_id, basket_json, updated_at_millis) '
+          'VALUES (1, ?, ?, ?) ON CONFLICT(slot) DO UPDATE SET '
+          'operation_id = excluded.operation_id, '
+          'basket_json = excluded.basket_json, '
+          'updated_at_millis = excluded.updated_at_millis',
+          [resumeOperationId, jsonEncode(draftLines), DateTime.now().millisecondsSinceEpoch],
+        );
+      }
+      return true;
+    });
   }
 
   Future<List<ShopProduct>> readActiveProducts() {
@@ -1474,6 +1668,7 @@ class ShopDatabase extends _$ShopDatabase {
                   ..where((line) => line.saleId.equals(priorSale.id))
                   ..orderBy([(line) => OrderingTerm.asc(line.productName)]))
                 .get();
+        await clearCounterSaleDraft(cleanOperationId);
         return ShopSaleReceipt(
           id: priorSale.id,
           operationId: priorSale.operationId,
@@ -1680,6 +1875,7 @@ class ShopDatabase extends _$ShopDatabase {
           throw StateError('The wallet checkout could not be finalized.');
         }
       }
+      await clearCounterSaleDraft(cleanOperationId);
       return ShopSaleReceipt(
         id: saleId,
         operationId: cleanOperationId,

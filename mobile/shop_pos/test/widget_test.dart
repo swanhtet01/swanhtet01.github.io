@@ -170,6 +170,68 @@ void main() {
     }
   });
 
+  testWidgets('two scans restore as one unfinished sale after app restart', (
+    tester,
+  ) async {
+    _usePhoneViewport(tester);
+    final database = ShopDatabase(NativeDatabase.memory());
+    try {
+      await database.addProduct(
+        id: 'tea',
+        name: 'Tea',
+        barcode: '111111',
+        priceMmk: 2500,
+        openingStock: 3,
+      );
+      await tester.pumpWidget(
+        ShopApp(
+          initialCounter: true,
+          database: database,
+          authClient: null,
+          apiBaseUrl: 'https://app.supermega.dev',
+          initialMyanmar: false,
+        ),
+      );
+      await tester.pumpAndSettle();
+      for (var scan = 0; scan < 2; scan++) {
+        await tester.enterText(find.byType(TextField), '111111');
+        await tester.testTextInput.receiveAction(TextInputAction.done);
+      }
+      await tester.pumpAndSettle();
+      expect((await database.readCounterSaleDraft())?.quantities, {'tea': 2});
+      expect((await database.readActiveProducts()).single.onHand, 3);
+      expect(await database.countSales(), 0);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+      await tester.pumpWidget(
+        ShopApp(
+          database: database,
+          authClient: null,
+          apiBaseUrl: 'https://app.supermega.dev',
+          initialMyanmar: false,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Continue sale'), findsOneWidget);
+      await tester.tap(find.text('Continue sale'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Review sale · 2 · 5,000 MMK'),
+          findsOneWidget);
+      expect(find.text('Unfinished sale restored on this device.'),
+          findsNothing);
+      await tester.tap(find.textContaining('Review sale · 2 · 5,000 MMK'));
+      await tester.pumpAndSettle();
+      expect(find.text('Unfinished sale restored on this device.'),
+          findsOneWidget);
+      expect(tester.takeException(), isNull);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+      await database.close();
+    }
+  });
+
   testWidgets('Today counts only completed local sales and actual stock', (
     tester,
   ) async {
