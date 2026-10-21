@@ -603,7 +603,10 @@ void main() {
           find.descendant(of: row, matching: find.byType(IconButton)),
           findsNothing,
         );
-        expect(find.text('24,900 MMK'), findsOneWidget);
+        expect(
+          find.text(myanmar ? '၂၄,၉၀၀ ကျပ်' : '24,900 MMK'),
+          findsOneWidget,
+        );
         expect(tester.takeException(), isNull);
 
         await tester.tap(row);

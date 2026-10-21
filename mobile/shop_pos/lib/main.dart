@@ -153,28 +153,31 @@ class _ShopAppState extends State<ShopApp> {
               headlineSmall: TextStyle(
                 fontSize: 28,
                 fontWeight: FontWeight.w700,
-                height: 1.2,
+                height: _myanmar ? 1.4 : 1.2,
                 letterSpacing: tracking,
               ),
               titleLarge: TextStyle(
                 fontSize: 21,
                 fontWeight: FontWeight.w700,
-                height: 1.25,
+                height: _myanmar ? 1.45 : 1.25,
                 letterSpacing: tracking,
               ),
               titleMedium: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
-                height: 1.35,
+                height: _myanmar ? 1.5 : 1.35,
                 letterSpacing: _myanmar ? 0 : -0.1,
               ),
-              bodyLarge: const TextStyle(fontSize: 16, height: 1.45),
-              bodyMedium: const TextStyle(fontSize: 14, height: 1.45),
-              bodySmall: const TextStyle(fontSize: 13, height: 1.5),
-              labelLarge: const TextStyle(
+              bodyLarge: TextStyle(fontSize: 16, height: _myanmar ? 1.6 : 1.45),
+              bodyMedium: TextStyle(
+                fontSize: 14,
+                height: _myanmar ? 1.6 : 1.45,
+              ),
+              bodySmall: TextStyle(fontSize: 13, height: _myanmar ? 1.65 : 1.5),
+              labelLarge: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
-                height: 1.25,
+                height: _myanmar ? 1.5 : 1.25,
               ),
             ).apply(
               fontFamily: fontFamily,
@@ -193,7 +196,38 @@ class _ShopAppState extends State<ShopApp> {
             fontSize: 20,
             fontWeight: FontWeight.w700,
             letterSpacing: tracking,
+            height: _myanmar ? 1.45 : 1.2,
             color: ink,
+          ),
+        ),
+        navigationBarTheme: NavigationBarThemeData(
+          height: _myanmar ? 84 : 78,
+          labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+          labelTextStyle: WidgetStateProperty.resolveWith((states) {
+            final selected = states.contains(WidgetState.selected);
+            return TextStyle(
+              fontFamily: fontFamily,
+              fontSize: _myanmar ? 13.5 : 13,
+              fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+              height: _myanmar ? 1.45 : 1.25,
+              color: selected ? accent : ink.withValues(alpha: 0.76),
+            );
+          }),
+        ),
+        navigationRailTheme: NavigationRailThemeData(
+          selectedLabelTextStyle: TextStyle(
+            fontFamily: fontFamily,
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+            height: _myanmar ? 1.45 : 1.25,
+            color: accent,
+          ),
+          unselectedLabelTextStyle: TextStyle(
+            fontFamily: fontFamily,
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            height: _myanmar ? 1.45 : 1.25,
+            color: ink.withValues(alpha: 0.76),
           ),
         ),
         cardTheme: const CardThemeData(
@@ -924,7 +958,7 @@ class _ShopHomeState extends State<ShopHome> {
             : shopCopy(
                 widget.myanmar,
                 '${item.onHand} in stock',
-                '${item.onHand} ခုလက်ကျန်',
+                '${shopNumber(item.onHand, myanmar: true)} ခုလက်ကျန်',
               );
         final canAdd = item.onHand > 0 && _pendingWalletCheckout == null;
         return Tooltip(

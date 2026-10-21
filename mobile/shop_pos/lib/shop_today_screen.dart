@@ -198,8 +198,11 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
   }
 
   Future<void> _refresh() async {
+    if (!mounted) return;
     final next = _readSnapshot();
-    setState(() => _snapshot = next);
+    setState(() {
+      _snapshot = next;
+    });
     try {
       await next;
     } catch (_) {
@@ -211,6 +214,8 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
     await destination(context);
     if (mounted) await _refresh();
   }
+
+  Future<void> _openSale() => widget.onNewSale(context);
 
   @override
   Widget build(BuildContext context) {
@@ -239,7 +244,7 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
               extended: desktop,
               selectedIndex: 0,
               onDestinationSelected: (index) {
-                if (index == 1) _open(widget.onNewSale);
+                if (index == 1) _openSale();
                 if (index == 2) _open(widget.onSales);
                 if (index == 3) _open(widget.onStock);
                 if (index == 4) _open(widget.onSettings);
@@ -296,7 +301,7 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
               myanmar: widget.myanmar,
               selectedIndex: 0,
               onDestinationSelected: (index) {
-                if (index == 1) _open(widget.onNewSale);
+                if (index == 1) _openSale();
                 if (index == 2) _open(widget.onSales);
                 if (index == 3) _open(widget.onStock);
               },
@@ -383,7 +388,7 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
                       ),
                       detail: _money(snapshot.pendingWallet!.totalMmk),
                       action: _copy('Review payment', 'ငွေပေးချေမှု စစ်ရန်'),
-                      onTap: () => _open(widget.onNewSale),
+                      onTap: () => _openSale(),
                     ),
                   if (snapshot.stockToCheck.isNotEmpty)
                     _actionCard(
@@ -410,7 +415,7 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
                         'အရောင်းကောင်တာတွင် အမည်၊ ဈေးနှုန်းနှင့် စတင်လက်ကျန်ကို ထည့်ပါ။',
                       ),
                       action: _copy('Open Counter', 'အရောင်းကောင်တာ ဖွင့်ရန်'),
-                      onTap: () => _open(widget.onNewSale),
+                      onTap: () => _openSale(),
                     ),
                 ],
               ],
@@ -446,7 +451,7 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
       ),
       if (showNewSale)
         FilledButton.icon(
-          onPressed: () => _open(widget.onNewSale),
+          onPressed: () => _openSale(),
           icon: const Icon(Icons.add),
           label: Text(_copy('New sale', 'အရောင်းအသစ်')),
         ),
