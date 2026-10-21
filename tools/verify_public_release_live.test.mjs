@@ -19,7 +19,22 @@ const manifest=JSON.parse(fs.readFileSync('site-manifest.json'));
 const config=JSON.parse(fs.readFileSync(outputDir+'/config.json'));
 const release=JSON.parse(fs.readFileSync(outputDir+'/static/__release.json'));
 const mode=process.env.TEST_PUBLIC_MUTATION;
-const firstPageRoute=path=>config.routes.find(r=>typeof r.src==='string'&&r.continue!==true&&new RegExp(r.src).test(path));
+if(mode?.startsWith('retired-guard-after-filesystem:')) {
+ const path=mode.slice('retired-guard-after-filesystem:'.length);
+ const filesystemIndex=config.routes.findIndex(r=>r.handle==='filesystem');
+ const guardIndex=config.routes.findIndex((r,index)=>index<filesystemIndex&&typeof r.src==='string'&&r.continue!==true&&new RegExp(r.src).test(path));
+ if(guardIndex>=0) {
+  const [guard]=config.routes.splice(guardIndex,1);
+  const nextFilesystemIndex=config.routes.findIndex(r=>r.handle==='filesystem');
+  config.routes.splice(nextFilesystemIndex+1,0,guard);
+ }
+}
+const filesystemIndex=()=>config.routes.findIndex(r=>r.handle==='filesystem');
+const firstPageRoute=path=>{
+ const boundary=filesystemIndex();
+ const index=config.routes.findIndex((r,i)=>i<boundary&&typeof r.src==='string'&&r.continue!==true&&new RegExp(r.src).test(path));
+ return index<0?undefined:config.routes[index];
+};
 globalThis.fetch=async input=>{
  const u=new URL(input);
  if(!['supermega.dev','www.supermega.dev'].includes(u.hostname)) throw Error('offline_fixture_unexpected_host');
@@ -36,6 +51,9 @@ globalThis.fetch=async input=>{
   const page=manifest.pages.find(p=>p.productId===retiredProductId);
   const route=firstPageRoute(u.pathname);
   if(mode==='retired-page-served'||mode==='retired-page-served:'+u.pathname) return new Response(fs.readFileSync(outputDir+'/static/'+page.file,'utf8'),{status:200,headers});
+  // Vercel's filesystem handler serves a matching static page unless an earlier
+  // terminal route stops it. Model that precedence so a guard after filesystem
+  // cannot make an internal static page appear safely hidden.
   if(route?.status===404&&route.dest==='/404.html') return new Response(fs.readFileSync(outputDir+'/static/404.html','utf8'),{status:404,headers});
   return new Response(fs.readFileSync(outputDir+'/static/'+page.file,'utf8'),{status:200,headers});
  }
@@ -105,6 +123,11 @@ for (const productId of JSON.parse(readFileSync(resolve(root, 'site-manifest.jso
   for (const route of [`/${productId}`, `/${productId}/`, `/${productId}/index.html`, `/${productId}/settings/nested`]) {
     test(`rejects a served retained page at ${route}`, () => {
       const result = run(`retired-page-served:${route}`)
+      assert.equal(result.status, 1, result.output)
+      assert.ok(result.output.includes('retired_product_route_not_found'), result.output)
+    })
+    test(`rejects a retained route guard placed after Vercel filesystem handling at ${route}`, () => {
+      const result = run(`retired-guard-after-filesystem:${route}`)
       assert.equal(result.status, 1, result.output)
       assert.ok(result.output.includes('retired_product_route_not_found'), result.output)
     })

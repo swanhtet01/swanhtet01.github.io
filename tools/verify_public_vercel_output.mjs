@@ -685,15 +685,21 @@ for (const route of [
 }
 if (!config.routes.some((entry) => entry.src === '^/vercel-insights\\.js$' && entry.continue === true && entry.headers?.['cache-control'] === 'no-store, max-age=0')) fail('public_observability_no_store_route_missing')
 if (!config.routes.some((entry) => entry.src === '^/(?:favicon\\.svg|site\\.webmanifest|og-card(?:-shop)?\\.png)$' && entry.continue === true && entry.headers?.['cache-control'])) fail('static_asset_cache_route_missing')
-const firstPublicRouteMatch = (path) => config.routes.find((entry) => typeof entry.src === 'string' && entry.continue !== true && new RegExp(entry.src).test(path))
+const filesystemRouteIndex = config.routes.findIndex((entry) => entry.handle === 'filesystem')
+if (filesystemRouteIndex < 0) fail('filesystem_route_missing')
+const firstPublicRouteMatch = (path) => {
+  const index = config.routes.findIndex((entry) => typeof entry.src === 'string' && entry.continue !== true && new RegExp(entry.src).test(path))
+  return index < 0 ? undefined : { entry: config.routes[index], index }
+}
 for (const productId of manifest.productVisibility.retainedOnlyProductIds) {
   for (const path of [`/${productId}`, `/${productId}/`, `/${productId}/index.html`, `/${productId}/settings/nested`]) {
-    const route = firstPublicRouteMatch(path)
-    if (route?.status !== 404 || route?.dest !== '/404.html') fail('internal_product_route_not_private', { productId, path, route })
+    const match = firstPublicRouteMatch(path)
+    if (!match || match.index >= filesystemRouteIndex || match.entry.status !== 404 || match.entry.dest !== '/404.html') {
+      fail('internal_product_route_not_private', { productId, path, match, filesystemRouteIndex })
+    }
   }
   if (existsSync(resolve(staticDir, `og-card-${productId}.png`))) fail('internal_product_share_card_public', { productId })
 }
-if (!config.routes.some((entry) => entry.handle === 'filesystem')) fail('filesystem_route_missing')
 if (!config.routes.some((entry) => entry.src === '^/(.*)$' && entry.status === 404 && entry.dest === '/404.html')) fail('not_found_route_missing')
 
 // Retired public API surface. The legacy ops endpoints were deliberately removed
