@@ -6,6 +6,101 @@ import 'shop_database.dart';
 
 typedef ShopTodayDestination = Future<void> Function(BuildContext context);
 
+/// Keeps the same operator map visible on Today and Counter.
+class ShopTaskRail extends StatelessWidget {
+  const ShopTaskRail({
+    required this.myanmar,
+    required this.extended,
+    required this.selectedIndex,
+    required this.onDestinationSelected,
+    super.key,
+  });
+
+  final bool myanmar;
+  final bool extended;
+  final int selectedIndex;
+  final ValueChanged<int> onDestinationSelected;
+
+  @override
+  Widget build(BuildContext context) => ColoredBox(
+    color: Colors.white,
+    child: NavigationRail(
+      extended: extended,
+      minWidth: 76,
+      minExtendedWidth: 190,
+      selectedIndex: selectedIndex,
+      labelType: extended
+          ? NavigationRailLabelType.none
+          : NavigationRailLabelType.all,
+      onDestinationSelected: onDestinationSelected,
+      destinations: [
+        NavigationRailDestination(
+          icon: const Icon(Icons.home_outlined),
+          selectedIcon: const Icon(Icons.home),
+          label: Text(shopCopy(myanmar, 'Today', 'ယနေ့')),
+        ),
+        NavigationRailDestination(
+          icon: const Icon(Icons.point_of_sale_outlined),
+          label: Text(shopCopy(myanmar, 'Sell', 'ရောင်းရန်')),
+        ),
+        NavigationRailDestination(
+          icon: const Icon(Icons.receipt_long_outlined),
+          label: Text(shopCopy(myanmar, 'Sales', 'အရောင်း')),
+        ),
+        NavigationRailDestination(
+          icon: const Icon(Icons.inventory_2_outlined),
+          label: Text(shopCopy(myanmar, 'Stock', 'လက်ကျန်')),
+        ),
+        NavigationRailDestination(
+          icon: const Icon(Icons.settings_outlined),
+          label: Text(shopCopy(myanmar, 'Settings', 'ဆက်တင်များ')),
+        ),
+      ],
+    ),
+  );
+}
+
+class ShopTaskBottomBar extends StatelessWidget {
+  const ShopTaskBottomBar({
+    required this.myanmar,
+    required this.selectedIndex,
+    required this.onDestinationSelected,
+    super.key,
+  });
+
+  final bool myanmar;
+  final int selectedIndex;
+  final ValueChanged<int> onDestinationSelected;
+
+  @override
+  Widget build(BuildContext context) => SafeArea(
+    top: false,
+    child: NavigationBar(
+      selectedIndex: selectedIndex,
+      onDestinationSelected: onDestinationSelected,
+      destinations: [
+        NavigationDestination(
+          icon: const Icon(Icons.home_outlined),
+          selectedIcon: const Icon(Icons.home),
+          label: shopCopy(myanmar, 'Today', 'ယနေ့'),
+        ),
+        NavigationDestination(
+          icon: const Icon(Icons.point_of_sale_outlined),
+          label: shopCopy(myanmar, 'Sell', 'ရောင်းရန်'),
+        ),
+        NavigationDestination(
+          icon: const Icon(Icons.receipt_long_outlined),
+          label: shopCopy(myanmar, 'Sales', 'အရောင်း'),
+        ),
+        NavigationDestination(
+          icon: const Icon(Icons.inventory_2_outlined),
+          label: shopCopy(myanmar, 'Stock', 'လက်ကျန်'),
+        ),
+      ],
+    ),
+  );
+}
+
 /// A local operating view. It never presents a device sale as a synced order.
 class ShopTodayScreen extends StatefulWidget {
   const ShopTodayScreen({
@@ -15,6 +110,7 @@ class ShopTodayScreen extends StatefulWidget {
     required this.onSales,
     required this.onStock,
     required this.onSettings,
+    this.refreshToken = 0,
     super.key,
   });
 
@@ -24,6 +120,7 @@ class ShopTodayScreen extends StatefulWidget {
   final ShopTodayDestination onSales;
   final ShopTodayDestination onStock;
   final ShopTodayDestination onSettings;
+  final int refreshToken;
 
   @override
   State<ShopTodayScreen> createState() => _ShopTodayScreenState();
@@ -52,6 +149,14 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
   void initState() {
     super.initState();
     _snapshot = _readSnapshot();
+  }
+
+  @override
+  void didUpdateWidget(covariant ShopTodayScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.refreshToken != widget.refreshToken) {
+      _snapshot = _readSnapshot();
+    }
   }
 
   String _copy(String english, String burmese) =>
@@ -129,46 +234,16 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
       body: Row(
         children: [
           if (!compact) ...[
-            ColoredBox(
-              color: Colors.white,
-              child: NavigationRail(
-                extended: desktop,
-                minWidth: 76,
-                minExtendedWidth: 190,
-                selectedIndex: 0,
-                labelType: desktop
-                    ? NavigationRailLabelType.none
-                    : NavigationRailLabelType.all,
-                onDestinationSelected: (index) {
-                  if (index == 1) _open(widget.onNewSale);
-                  if (index == 2) _open(widget.onSales);
-                  if (index == 3) _open(widget.onStock);
-                  if (index == 4) _open(widget.onSettings);
-                },
-                destinations: [
-                  NavigationRailDestination(
-                    icon: const Icon(Icons.home_outlined),
-                    selectedIcon: const Icon(Icons.home),
-                    label: Text(_copy('Today', 'ယနေ့')),
-                  ),
-                  NavigationRailDestination(
-                    icon: const Icon(Icons.point_of_sale_outlined),
-                    label: Text(_copy('Sell', 'ရောင်းရန်')),
-                  ),
-                  NavigationRailDestination(
-                    icon: const Icon(Icons.receipt_long_outlined),
-                    label: Text(_copy('Sales', 'အရောင်း')),
-                  ),
-                  NavigationRailDestination(
-                    icon: const Icon(Icons.inventory_2_outlined),
-                    label: Text(_copy('Stock', 'လက်ကျန်')),
-                  ),
-                  NavigationRailDestination(
-                    icon: const Icon(Icons.settings_outlined),
-                    label: Text(_copy('Settings', 'ဆက်တင်များ')),
-                  ),
-                ],
-              ),
+            ShopTaskRail(
+              myanmar: widget.myanmar,
+              extended: desktop,
+              selectedIndex: 0,
+              onDestinationSelected: (index) {
+                if (index == 1) _open(widget.onNewSale);
+                if (index == 2) _open(widget.onSales);
+                if (index == 3) _open(widget.onStock);
+                if (index == 4) _open(widget.onSettings);
+              },
             ),
             const VerticalDivider(width: 1),
           ],
@@ -217,35 +292,14 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
         ],
       ),
       bottomNavigationBar: compact
-          ? SafeArea(
-              top: false,
-              child: NavigationBar(
-                selectedIndex: 0,
-                onDestinationSelected: (index) {
-                  if (index == 1) _open(widget.onNewSale);
-                  if (index == 2) _open(widget.onSales);
-                  if (index == 3) _open(widget.onStock);
-                },
-                destinations: [
-                  NavigationDestination(
-                    icon: const Icon(Icons.home_outlined),
-                    selectedIcon: const Icon(Icons.home),
-                    label: _copy('Today', 'ယနေ့'),
-                  ),
-                  NavigationDestination(
-                    icon: const Icon(Icons.point_of_sale_outlined),
-                    label: _copy('Sell', 'ရောင်းရန်'),
-                  ),
-                  NavigationDestination(
-                    icon: const Icon(Icons.receipt_long_outlined),
-                    label: _copy('Sales', 'အရောင်း'),
-                  ),
-                  NavigationDestination(
-                    icon: const Icon(Icons.inventory_2_outlined),
-                    label: _copy('Stock', 'လက်ကျန်'),
-                  ),
-                ],
-              ),
+          ? ShopTaskBottomBar(
+              myanmar: widget.myanmar,
+              selectedIndex: 0,
+              onDestinationSelected: (index) {
+                if (index == 1) _open(widget.onNewSale);
+                if (index == 2) _open(widget.onSales);
+                if (index == 3) _open(widget.onStock);
+              },
             )
           : null,
     );

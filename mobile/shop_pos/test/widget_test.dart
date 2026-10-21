@@ -85,6 +85,74 @@ void main() {
     }
   });
 
+  testWidgets('Today and Sell keep an unfinished basket and refresh sales', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final database = ShopDatabase(NativeDatabase.memory());
+    try {
+      await database.addProduct(
+        id: 'tea',
+        name: 'Tea',
+        barcode: '111111',
+        priceMmk: 2500,
+        openingStock: 3,
+      );
+      await tester.pumpWidget(
+        ShopApp(
+          database: database,
+          authClient: null,
+          apiBaseUrl: 'https://app.supermega.dev',
+          initialMyanmar: false,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Sell'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), '111111');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('Review sale · 1 · 2,500 MMK'),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.text('Today'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Review sale'), findsNothing);
+      await tester.tap(find.text('Sell'));
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('Review sale · 1 · 2,500 MMK'),
+        findsOneWidget,
+      );
+
+      await database.recordCashSale(
+        operationId: 'outside-counter-sale',
+        lines: const [ShopSaleLineInput(productId: 'tea', quantity: 1)],
+      );
+      await tester.tap(find.text('Today'));
+      await tester.pumpAndSettle();
+      expect(find.text('2,500 MMK'), findsOneWidget);
+      expect(find.text('Completed sales'), findsOneWidget);
+      await tester.tap(find.text('Sell'));
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('Review sale · 1 · 2,500 MMK'),
+        findsOneWidget,
+      );
+      expect(await database.countSales(), 1);
+      expect(tester.takeException(), isNull);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+      await database.close();
+    }
+  });
+
   testWidgets('Today counts only completed local sales and actual stock', (
     tester,
   ) async {
@@ -170,6 +238,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('၂,၅၀၀ ကျပ်'), findsOneWidget);
     expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 1));
   });
 
   testWidgets('saved sale reprints without recording another sale', (
@@ -577,6 +647,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.textContaining('အရောင်းစစ်ရန်'));
     await tester.pumpAndSettle();
+    expect(find.text('၂,၅၀၀ ကျပ် × ၁'), findsOneWidget);
+    expect(find.text('၁'), findsOneWidget);
     expect(find.text('မိုဘိုင်းငွေပေးချေမှု'), findsOneWidget);
     await tester.tap(find.text('ငွေသား'));
     await tester.pumpAndSettle();
