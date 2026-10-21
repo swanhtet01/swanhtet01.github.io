@@ -1002,7 +1002,8 @@ class _ShopHomeState extends State<ShopHome> {
           ? Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (_cart.isNotEmpty) cartAction,
+                if (_cart.isNotEmpty && contentWidth < minSplitContentWidth)
+                  cartAction,
                 ShopTaskBottomBar(
                   myanmar: widget.myanmar,
                   selectedIndex: 1,

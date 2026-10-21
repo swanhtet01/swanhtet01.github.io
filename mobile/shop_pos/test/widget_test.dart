@@ -79,9 +79,14 @@ void main() {
         );
         expect(find.text(myanmar ? 'ယနေ့' : 'Today'), findsWidgets);
         expect(find.text(myanmar ? 'ရောင်းရန်' : 'Sell'), findsOneWidget);
-        if (width >= 700) {
+        if (width >= 1100) {
           expect(
             find.text(myanmar ? 'ဆက်တင်များ' : 'Settings'),
+            findsOneWidget,
+          );
+        } else {
+          expect(
+            find.byTooltip(myanmar ? 'ဆက်တင်များ' : 'Settings'),
             findsOneWidget,
           );
         }
