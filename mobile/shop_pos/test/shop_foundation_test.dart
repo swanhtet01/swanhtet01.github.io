@@ -646,6 +646,50 @@ void main() {
       expect(shopMmk(-1200), '-1,200 MMK');
     });
 
+    test('cash sale cannot make an open shift impossible to close', () async {
+      final database = ShopDatabase(NativeDatabase.memory());
+      try {
+        await database.addProduct(
+          id: 'tea',
+          name: 'Tea',
+          priceMmk: 1,
+          openingStock: 1,
+        );
+        final shift = await database.openCashShift(
+          operationId: 'open-at-limit',
+          operatorLabel: 'May',
+          openingFloatMmk: 200000000000000,
+        );
+        final outboxCount = await database.countOutboxOperations();
+        final movementCount = await database.countStockMovements();
+        await expectLater(
+          database.recordCashSale(
+            operationId: 'sale-over-shift-limit',
+            lines: const [ShopSaleLineInput(productId: 'tea', quantity: 1)],
+          ),
+          throwsA(isA<StateError>()),
+        );
+        expect(await database.countSales(), 0);
+        expect(await database.countStockMovements(), movementCount);
+        expect(await database.countOutboxOperations(), outboxCount);
+        expect((await database.readActiveProducts()).single.onHand, 1);
+        final review = await database.readCashShiftReview(shift.id);
+        expect(review.expectedCashMmk, 200000000000000);
+        expect(
+          (await database.closeCashShift(
+            shiftId: shift.id,
+            operationId: 'close-at-limit',
+            seenSaleCount: review.saleCount,
+            seenCashTotalMmk: review.cashSalesTotalMmk,
+            countedCashMmk: 200000000000000,
+          )).state,
+          'closed',
+        );
+      } finally {
+        await database.close();
+      }
+    });
+
     test(
       'counts only assigned sales, guards stale close and replays safely',
       () async {
@@ -968,6 +1012,69 @@ void main() {
   });
 
   group('offline stock updates', () {
+    test('a count preserves stock promised in a pending wallet sale', () async {
+      final database = ShopDatabase(NativeDatabase.memory());
+      try {
+        await database.addProduct(
+          id: 'tea',
+          name: 'Tea',
+          priceMmk: 2500,
+          openingStock: 2,
+        );
+        await database.createWalletCheckoutIntent(
+          operationId: 'wallet-before-count',
+          merchant: MerchantWalletSetup(
+            provider: 'KBZPay',
+            merchantPhone: null,
+            officialQrPayload: _syntheticStaticMmqr(),
+            issuerConfirmed: true,
+          ),
+          lines: const [ShopSaleLineInput(productId: 'tea', quantity: 2)],
+        );
+        final movementCount = await database.countStockMovements();
+        final outboxCount = await database.countOutboxOperations();
+        await expectLater(
+          database.changeStock(
+            operationId: 'count-below-wallet',
+            productId: 'tea',
+            kind: 'count',
+            quantity: 1,
+            expectedOnHand: 2,
+          ),
+          throwsA(isA<StateError>()),
+        );
+        expect((await database.readActiveProducts()).single.onHand, 2);
+        expect(await database.countStockMovements(), movementCount);
+        expect(await database.countOutboxOperations(), outboxCount);
+        expect(
+          await database.changeStock(
+            operationId: 'count-wallet-safe',
+            productId: 'tea',
+            kind: 'count',
+            quantity: 2,
+            expectedOnHand: 2,
+          ),
+          2,
+        );
+        expect(
+          await database.cancelWalletCheckoutIntent('wallet-before-count'),
+          isTrue,
+        );
+        expect(
+          await database.changeStock(
+            operationId: 'count-after-cancel',
+            productId: 'tea',
+            kind: 'count',
+            quantity: 1,
+            expectedOnHand: 2,
+          ),
+          1,
+        );
+      } finally {
+        await database.close();
+      }
+    });
+
     test(
       'receive and count are durable, idempotent and reject stale counts',
       () async {

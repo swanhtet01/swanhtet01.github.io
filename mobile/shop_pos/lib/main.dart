@@ -219,6 +219,7 @@ class ShopHome extends StatefulWidget {
 
 class _ShopHomeState extends State<ShopHome> {
   final _search = TextEditingController();
+  final _searchFocus = FocusNode();
   final _cart = <String, int>{};
   late final Stream<List<ShopProduct>> _productsStream = widget.database
       .watchActiveProducts();
@@ -290,6 +291,7 @@ class _ShopHomeState extends State<ShopHome> {
       discardCapturedMenuPhoto(_recoveredMenuPhoto, createdByCamera: true),
     );
     _search.dispose();
+    _searchFocus.dispose();
     super.dispose();
   }
 
@@ -323,27 +325,44 @@ class _ShopHomeState extends State<ShopHome> {
               icon: const Icon(Icons.settings_outlined),
               label: Text(shopCopy(widget.myanmar, 'Settings', 'ဆက်တင်များ')),
             ),
-          ] else ...[
-            IconButton(
-              tooltip: shopCopy(
-                widget.myanmar,
-                'Recent sales',
-                'မကြာသေးမီက အရောင်းများ',
-              ),
-              icon: const Icon(Icons.receipt_long_outlined),
-              onPressed: _openRecentSales,
+          ] else
+            PopupMenuButton<String>(
+              tooltip: shopCopy(widget.myanmar, 'More', 'နောက်ထပ်'),
+              icon: const Icon(Icons.menu_rounded),
+              onSelected: (value) {
+                switch (value) {
+                  case 'sales':
+                    _openRecentSales();
+                    break;
+                  case 'stock':
+                    _openStock();
+                    break;
+                  case 'settings':
+                    _openSettings();
+                    break;
+                }
+              },
+              itemBuilder: (context) => [
+                PopupMenuItem(
+                  value: 'sales',
+                  child: Text(
+                    shopCopy(
+                      widget.myanmar,
+                      'Recent sales',
+                      'မကြာသေးမီက အရောင်းများ',
+                    ),
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'stock',
+                  child: Text(shopCopy(widget.myanmar, 'Stock', 'လက်ကျန်')),
+                ),
+                PopupMenuItem(
+                  value: 'settings',
+                  child: Text(shopCopy(widget.myanmar, 'Settings', 'ဆက်တင်များ')),
+                ),
+              ],
             ),
-            IconButton(
-              tooltip: shopCopy(widget.myanmar, 'Stock', 'လက်ကျန်'),
-              icon: const Icon(Icons.inventory_2_outlined),
-              onPressed: _openStock,
-            ),
-            IconButton(
-              tooltip: shopCopy(widget.myanmar, 'Settings', 'ဆက်တင်များ'),
-              icon: const Icon(Icons.settings_outlined),
-              onPressed: _openSettings,
-            ),
-          ],
           const SizedBox(width: 8),
         ],
       ),
@@ -579,14 +598,28 @@ class _ShopHomeState extends State<ShopHome> {
 
   Widget _searchField(List<ShopProduct> products) => TextField(
     controller: _search,
+    focusNode: _searchFocus,
+    autofocus: defaultTargetPlatform == TargetPlatform.windows,
     onChanged: (_) => setState(() {}),
     onSubmitted: (value) {
       final code = value.trim();
-      final matches = products.where((item) => item.barcode == code);
-      if (code.isNotEmpty && matches.isNotEmpty) {
-        _add(matches.first);
+      if (code.isEmpty) return;
+      final matches = products.where((item) => item.barcode == code).toList();
+      if (matches.length == 1) {
+        _add(matches.single);
         _search.clear();
         setState(() {});
+        if (defaultTargetPlatform == TargetPlatform.windows) {
+          _searchFocus.requestFocus();
+        }
+      } else if (matches.length > 1) {
+        _message(
+          shopCopy(
+            widget.myanmar,
+            'More than one product uses this barcode. Fix the product codes before selling.',
+            'ဤဘားကုဒ်ကို ကုန်ပစ္စည်းတစ်မျိုးထက်ပို၍ သုံးထားသည်။ မရောင်းမီ ဘားကုဒ်များကို ပြင်ပါ။',
+          ),
+        );
       }
     },
     decoration: InputDecoration(

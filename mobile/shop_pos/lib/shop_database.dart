@@ -611,6 +611,34 @@ class ShopDatabase extends _$ShopDatabase {
       if (resultingOnHand > 2000000000) {
         throw StateError('Stock would exceed the supported quantity.');
       }
+      if (kind == 'count') {
+        final pendingRows = await customSelect(
+          'SELECT operation_id, payment_method, request_fingerprint, total_mmk, '
+          'merchant_phone, merchant_qr_payload, basket_json, state, created_at_millis '
+          'FROM shop_wallet_checkout_intents '
+          'WHERE state = ? LIMIT 2',
+          variables: [const Variable<String>('pending')],
+        ).get();
+        if (pendingRows.length > 1) {
+          throw StateError(
+            'Resolve the pending wallet payments before counting stock.',
+          );
+        }
+        final pendingWallet = pendingRows.isEmpty
+            ? null
+            : _walletCheckoutFromRow(pendingRows.single);
+        if (pendingWallet != null) {
+          final pendingQuantity = pendingWallet.lines
+              .where((line) => line.productId == cleanProductId)
+              .fold<int>(0, (total, line) => total + line.quantity);
+          if (resultingOnHand < pendingQuantity) {
+            throw StateError(
+              'Finish or cancel the pending wallet payment before counting '
+              'this item below its saved quantity.',
+            );
+          }
+        }
+      }
       final now = DateTime.now().millisecondsSinceEpoch;
       final changed =
           await (update(shopProducts)..where(
@@ -1415,6 +1443,16 @@ class ShopDatabase extends _$ShopDatabase {
         throw StateError('Sale total changed. Review the amount again.');
       }
 
+      final activeShift = await readOpenCashShift();
+      if (activeShift != null && paymentMethod == 'cash') {
+        final review = await readCashShiftReview(activeShift.id);
+        if (totalMmk > 200000000000000 - review.expectedCashMmk) {
+          throw StateError(
+            'This cash shift reached its supported limit. Close the shift '
+            'before recording another cash sale.',
+          );
+        }
+      }
       final now = DateTime.now().millisecondsSinceEpoch;
       final saleId = cleanOperationId;
       await into(shopSales).insert(
@@ -1427,7 +1465,6 @@ class ShopDatabase extends _$ShopDatabase {
           createdAtMillis: now,
         ),
       );
-      final activeShift = await readOpenCashShift();
       if (activeShift != null) {
         await customInsert(
           'INSERT INTO shop_cash_shift_sales (sale_id, shift_id) VALUES (?, ?)',

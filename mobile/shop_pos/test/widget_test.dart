@@ -247,7 +247,9 @@ void main() {
 
     expect(await database.countSales(), 1);
     expect((await database.readActiveProducts()).single.onHand, 1);
-    await tester.tap(find.byTooltip('Recent sales'));
+    await tester.tap(find.byTooltip('More'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Recent sales'));
     await tester.pumpAndSettle();
     expect(find.text('Recent sales'), findsOneWidget);
     expect(find.text('2,500 MMK'), findsOneWidget);
@@ -282,19 +284,6 @@ void main() {
       expect(find.text('Import menu photo'), findsOneWidget);
       expect(find.text('Search or scan barcode'), findsNothing);
       expect(find.text('Current sale'), findsNothing);
-      expect(tester.takeException(), isNull);
-
-      await tester.runAsync(() async {
-        await database.addProduct(
-          id: 'tea',
-          name: 'Tea',
-          priceMmk: 2500,
-          openingStock: 2,
-        );
-      });
-      await tester.pumpAndSettle();
-      expect(find.text('Search or scan barcode'), findsOneWidget);
-      expect(find.text('Current sale'), findsOneWidget);
       expect(tester.takeException(), isNull);
     } finally {
       await tester.pumpWidget(const SizedBox.shrink());
@@ -546,6 +535,58 @@ void main() {
     await database.close();
   });
 
+  testWidgets('ambiguous barcode never adds an arbitrary product', (
+    tester,
+  ) async {
+    final database = ShopDatabase(NativeDatabase.memory());
+    try {
+      await database.addProduct(
+        id: 'tea',
+        name: 'Tea',
+        barcode: '0012345678905',
+        priceMmk: 2500,
+        openingStock: 2,
+      );
+      await database.addProduct(
+        id: 'rice',
+        name: 'Rice',
+        barcode: '0001234567890',
+        priceMmk: 12000,
+        openingStock: 2,
+      );
+      // Simulate a legacy/corrupt catalog; new product writes reject duplicates.
+      await database.customUpdate(
+        'UPDATE shop_products SET barcode = ? WHERE id = ?',
+        variables: [
+          const Variable<String>('0012345678905'),
+          const Variable<String>('rice'),
+        ],
+        updates: {database.shopProducts},
+      );
+      await tester.pumpWidget(
+        ShopApp(
+          database: database,
+          authClient: null,
+          apiBaseUrl: 'https://app.supermega.dev',
+          initialMyanmar: false,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), '0012345678905');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Review sale'), findsNothing);
+      expect(
+        find.textContaining('More than one product uses this barcode'),
+        findsOneWidget,
+      );
+      expect(await database.countSales(), 0);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await database.close();
+    }
+  });
+
   testWidgets('cashier can receive and count stock outside the sale screen', (
     tester,
   ) async {
@@ -565,7 +606,9 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Stock'));
+    await tester.tap(find.byTooltip('More'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Stock'));
     await tester.pumpAndSettle();
     expect(find.text('2 in stock'), findsOneWidget);
 
@@ -658,7 +701,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byTooltip('Settings'));
+    await tester.tap(find.byTooltip('More'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Settings'));
     await tester.pumpAndSettle();
     expect(find.text('English'), findsOneWidget);
     expect(find.text('မြန်မာ'), findsOneWidget);
