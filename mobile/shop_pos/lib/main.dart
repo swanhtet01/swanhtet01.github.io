@@ -1803,6 +1803,7 @@ class _ShopHomeState extends State<ShopHome> {
                         'Cash given (optional)',
                         'ပေးငွေ',
                       ),
+                      helperText: widget.myanmar ? 'မထည့်လည်းရ' : null,
                     ),
                   ),
                   if (tenderedMmk != null && !isShort) ...[
