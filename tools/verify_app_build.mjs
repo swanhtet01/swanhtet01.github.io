@@ -21279,9 +21279,32 @@ if (!myanmarLicense || myanmarLicense.length > 5_000 || !myanmarLicense.equals(s
 }
 const myanmarAssetBytes = (myanmarFont?.length ?? 0) + (myanmarLicense?.length ?? 0)
 if (myanmarAssetBytes > 160_000) fail(`myanmar_font_asset_budget:${myanmarAssetBytes}`)
+// The browser app uses the same licensed Inter family as the installed Shop app.
+// Keep font payload separate from application-code budgets, and pin both provenance
+// and size so a future redesign cannot silently ship an oversized replacement.
+const interFontPath = resolve(dist, 'fonts', 'inter-latin.woff2')
+const interLicensePath = resolve(dist, 'fonts', 'inter-OFL.txt')
+const interFont = await exists(interFontPath) ? await readRawFile(interFontPath) : null
+const interLicense = await exists(interLicensePath) ? await readRawFile(interLicensePath) : null
+const sourceInterLicense = await readRawFile(resolve(root, 'mobile', 'shop_pos', 'assets', 'fonts', 'Inter', 'OFL.txt'))
+if (!interFont || interFont.length !== 179_896
+  || createHash('sha256').update(interFont).digest('hex') !== '525ddba0c710e21d1a79114832100a208aba7c658ff4ef0c5604a7a5995573f1') {
+  fail('inter_font_asset_missing_or_changed')
+}
+if (!interLicense || !interLicense.equals(sourceInterLicense)
+  || createHash('sha256').update(sourceInterLicense.toString('utf8').replace(/\r\n?/g, '\n')).digest('hex') !== '5dd548d31a85f756e01d63e00d7faf1e324103ed3e9102fcbbabf2cc2db6dd39') {
+  fail('inter_font_license_missing_or_changed')
+}
+const interAssetBytes = interFont.length + interLicense.length
+if (interAssetBytes > 190_000) fail(`inter_font_asset_budget:${interAssetBytes}`)
+const fontWorkerSource = await readFile(resolve(dist, 'sw.js'), 'utf8')
+if (!fontWorkerSource.includes('"/fonts/inter-latin.woff2"')
+  || !fontWorkerSource.includes('"/fonts/noto-sans-myanmar.woff2"')) {
+  fail('app_offline_fonts_not_precached')
+}
 // Three versioned Sites designs add a bounded CSS/renderer cost after sharing and
 // minifying the export/hosted binding. Keep the separate route wire budgets below.
-if (bytes - myanmarAssetBytes > 3_254_000) fail(`artifact_total_backstop:${bytes - myanmarAssetBytes}`)
+if (bytes - myanmarAssetBytes - interAssetBytes > 3_254_000) fail(`artifact_total_backstop:${bytes - myanmarAssetBytes - interAssetBytes}`)
 
 // ---------------------------------------------------------------------------
 // THE SHOP ROUTE'S COMPRESSED WIRE COST -- what a till pays to open, measured the
