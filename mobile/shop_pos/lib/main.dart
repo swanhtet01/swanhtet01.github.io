@@ -488,11 +488,13 @@ class _ShopHomeState extends State<ShopHome> {
   PendingWalletCheckout? _pendingWalletCheckout;
   XFile? _recoveredMenuPhoto;
   final _thumbnailFutures = <String, Future<Uint8List?>>{};
+  bool _hasProductPhotos = false;
 
   @override
   void initState() {
     super.initState();
     _loadCheckoutState();
+    unawaited(_loadPhotoPresence());
     _recoverMenuPhoto();
     if (widget.addProductRequest > 0) _scheduleFirstProductDialog();
   }
@@ -558,6 +560,17 @@ class _ShopHomeState extends State<ShopHome> {
       productId,
       () => widget.database.readProductThumbnail(productId),
     );
+  }
+
+  Future<void> _loadPhotoPresence() async {
+    try {
+      final hasPhotos = await widget.database.hasActiveProductThumbnails();
+      if (mounted && hasPhotos && !_hasProductPhotos) {
+        setState(() => _hasProductPhotos = true);
+      }
+    } catch (_) {
+      // Photo metadata must never prevent a sale on this device.
+    }
   }
 
   Future<void> _chooseProductPhoto(String productId) async {
@@ -659,7 +672,7 @@ class _ShopHomeState extends State<ShopHome> {
       }
       _thumbnailFutures.remove(productId);
       if (mounted) {
-        setState(() {});
+        setState(() => _hasProductPhotos = true);
         _message(
           shopCopy(
             widget.myanmar,
@@ -1511,35 +1524,47 @@ class _ShopHomeState extends State<ShopHome> {
                 horizontal: 14,
                 vertical: 10,
               ),
-              leading: SizedBox(
-                key: ValueKey('shop-product-media:${item.id}'),
-                width: 48,
-                height: 48,
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: photoSnapshot.data == null
-                      ? ColoredBox(
-                          key: ValueKey('shop-product-no-photo:${item.id}'),
-                          color: const Color(0xfff1f3f6),
-                          child: Icon(
-                            Icons.image_outlined,
-                            size: 21,
-                            color: Theme.of(context).colorScheme.outline,
-                          ),
-                        )
-                      : SizedBox(
-                          key: ValueKey('shop-product-photo:${item.id}'),
-                          child: Image.memory(
-                            photoSnapshot.data!,
-                            width: 48,
-                            height: 48,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, error, stackTrace) =>
-                                const Icon(Icons.image_not_supported_outlined),
-                          ),
-                        ),
-                ),
-              ),
+              leading: !_hasProductPhotos &&
+                      photoSnapshot.data == null &&
+                      !photoSnapshot.hasError
+                  ? null
+                  : SizedBox(
+                      key: ValueKey('shop-product-media:${item.id}'),
+                      width: 48,
+                      height: 48,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: photoSnapshot.data == null
+                            ? ColoredBox(
+                                key: ValueKey(
+                                  'shop-product-no-photo:${item.id}',
+                                ),
+                                color: const Color(0xfff1f3f6),
+                                child: photoSnapshot.hasError
+                                    ? Icon(
+                                        Icons.broken_image_outlined,
+                                        size: 21,
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.error,
+                                      )
+                                    : const SizedBox.expand(),
+                              )
+                            : SizedBox(
+                                key: ValueKey('shop-product-photo:${item.id}'),
+                                child: Image.memory(
+                                  photoSnapshot.data!,
+                                  width: 48,
+                                  height: 48,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, error, stackTrace) =>
+                                      const Icon(
+                                        Icons.image_not_supported_outlined,
+                                      ),
+                                ),
+                              ),
+                      ),
+                    ),
               title: Text(
                 item.name,
                 maxLines: narrowProductRow ? 3 : 2,

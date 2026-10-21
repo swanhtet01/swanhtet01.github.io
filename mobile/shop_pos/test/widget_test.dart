@@ -764,6 +764,13 @@ void main() {
       find.byKey(const ValueKey('shop-product-no-photo:water')),
       findsOneWidget,
     );
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('shop-product-no-photo:water')),
+        matching: find.byType(Icon),
+      ),
+      findsNothing,
+    );
     for (final width in [390.0, 820.0]) {
       tester.view.physicalSize = Size(width, 800);
       await tester.pumpAndSettle();
@@ -785,6 +792,81 @@ void main() {
     await tester.pumpAndSettle();
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(milliseconds: 1));
+  });
+
+  testWidgets('Burmese narrow catalog only reserves media when needed', (
+    tester,
+  ) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(320, 800);
+    tester.platformDispatcher.textScaleFactorTestValue = 1.5;
+    SharedPreferences.setMockInitialValues({});
+    final database = ShopDatabase(NativeDatabase.memory());
+    addTearDown(database.close);
+    await database.addProduct(
+      id: 'rice',
+      name: 'ရက် ၉၀ ဆန်အိတ် ၁၀ ကီလိုဂရမ်',
+      priceMmk: 24900,
+      openingStock: 3,
+    );
+    await database.addProduct(
+      id: 'water',
+      name: 'ALPINE သောက်ရေသန့် ၁ လီတာ',
+      priceMmk: 1500,
+      openingStock: 8,
+    );
+    await tester.pumpWidget(
+      ShopApp(
+        initialCounter: true,
+        database: database,
+        authClient: null,
+        apiBaseUrl: 'https://app.supermega.dev',
+        initialMyanmar: true,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('shop-product-media:rice')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey('shop-product-media:water')),
+      findsNothing,
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+    await database.saveProductThumbnail(
+      'rice',
+      base64Decode(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ'
+        'AAAADUlEQVR4nGPQyNjxHwAETAJIB09U9wAAAABJRU5ErkJggg==',
+      ),
+    );
+    await tester.pumpWidget(
+      ShopApp(
+        initialCounter: true,
+        database: database,
+        authClient: null,
+        apiBaseUrl: 'https://app.supermega.dev',
+        initialMyanmar: true,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('shop-product-photo:rice')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('shop-product-no-photo:water')),
+      findsOneWidget,
+    );
+    expect(
+      tester.getTopLeft(find.text('ရက် ၉၀ ဆန်အိတ် ၁၀ ကီလိုဂရမ်')).dx,
+      tester.getTopLeft(find.text('ALPINE သောက်ရေသန့် ၁ လီတာ')).dx,
+    );
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('lost product picker result is saved as a photo, never a menu', (
@@ -1216,6 +1298,10 @@ void main() {
           }
           expect(
             find.byKey(const ValueKey('shop-product-photo:rice')),
+            findsNothing,
+          );
+          expect(
+            find.byKey(const ValueKey('shop-product-media:rice')),
             findsNothing,
           );
           expect(

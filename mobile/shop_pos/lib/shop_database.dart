@@ -604,6 +604,15 @@ class ShopDatabase extends _$ShopDatabase {
     return row?.read<Uint8List>('image_png');
   }
 
+  Future<bool> hasActiveProductThumbnails() async {
+    final row = await customSelect(
+      'SELECT 1 FROM shop_product_images AS image '
+      'JOIN shop_products AS product ON product.id = image.product_id '
+      'WHERE product.archived = 0 LIMIT 1',
+    ).getSingleOrNull();
+    return row != null;
+  }
+
   Future<void> removeProductThumbnail(String productId) => customStatement(
     'DELETE FROM shop_product_images WHERE product_id = ?',
     [productId],
