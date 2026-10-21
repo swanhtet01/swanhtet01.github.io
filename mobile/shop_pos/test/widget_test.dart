@@ -828,10 +828,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(
-      find.byKey(const ValueKey('shop-product-media:rice')),
-      findsNothing,
-    );
+    expect(find.byKey(const ValueKey('shop-product-media:rice')), findsNothing);
     expect(
       find.byKey(const ValueKey('shop-product-media:water')),
       findsNothing,

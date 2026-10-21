@@ -1524,7 +1524,8 @@ class _ShopHomeState extends State<ShopHome> {
                 horizontal: 14,
                 vertical: 10,
               ),
-              leading: !_hasProductPhotos &&
+              leading:
+                  !_hasProductPhotos &&
                       photoSnapshot.data == null &&
                       !photoSnapshot.hasError
                   ? null
@@ -1544,9 +1545,9 @@ class _ShopHomeState extends State<ShopHome> {
                                     ? Icon(
                                         Icons.broken_image_outlined,
                                         size: 21,
-                                        color: Theme.of(
-                                          context,
-                                        ).colorScheme.error,
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .error,
                                       )
                                     : const SizedBox.expand(),
                               )
