@@ -3319,3 +3319,31 @@ input, select, textarea,
   .shop-product-tile { transition: none; }
   .shop-product-tile:hover:not(:disabled) { transform: none; }
 }
+
+/* Keep the first-day Shop board readable after the sidebar takes its space. */
+@media (min-width: 1241px) and (max-width: 1599px) {
+  .shop-operations-board { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .shop-operations-rail { grid-column: 1 / -1; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .shop-operations-rail .shop-sales-pulse { grid-row: span 2; }
+  .shop-operations-rail .shop-finance-task { grid-column: 1 / -1; }
+}
+@media (max-width: 1240px) {
+  .shop-operations-board { grid-template-columns: minmax(0, 1fr); }
+  .shop-operations-rail { grid-column: auto; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .shop-operations-rail .shop-sales-pulse { grid-row: span 2; }
+  .shop-operations-rail .shop-finance-task { grid-column: 1 / -1; }
+}
+@media (max-width: 560px) {
+  .shop-operations-rail { grid-template-columns: minmax(0, 1fr); }
+  .shop-operations-rail .shop-sales-pulse { grid-row: auto; }
+  .shop-operations-rail .shop-finance-task { grid-column: auto; }
+}
+.shop-order-queue-card .shop-operating-empty { min-height: 8rem; }
+.shop-sales-pulse > header small,
+.shop-today-workspaces > summary small,
+.shop-today-workspaces > summary b {
+  font-family: inherit;
+  font-size: .75rem;
+  letter-spacing: 0;
+  text-transform: none;
+}
