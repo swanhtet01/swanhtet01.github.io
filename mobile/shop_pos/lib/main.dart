@@ -855,7 +855,7 @@ class _ShopHomeState extends State<ShopHome> {
                         ),
                       Padding(
                         padding: const EdgeInsets.fromLTRB(16, 14, 12, 10),
-                        child: _catalogHeader(hasProducts: products.isNotEmpty),
+                        child: _catalogHeader(products),
                       ),
                       if (products.isNotEmpty) ...[
                         Padding(
@@ -864,7 +864,14 @@ class _ShopHomeState extends State<ShopHome> {
                         ),
                         const SizedBox(height: 8),
                       ],
-                      Expanded(child: _productList(products)),
+                      Expanded(
+                        child: LayoutBuilder(
+                          builder: (context, constraints) => _productList(
+                            products,
+                            catalogWidth: constraints.maxWidth,
+                          ),
+                        ),
+                      ),
                     ],
                   );
                 },
