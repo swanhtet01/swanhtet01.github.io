@@ -1406,10 +1406,6 @@ void main() {
   testWidgets('settings keeps language and merchant wallet setup reachable', (
     tester,
   ) async {
-    tester.view.physicalSize = const Size(320, 720);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
     final database = ShopDatabase(NativeDatabase.memory());
     await tester.pumpWidget(
       ShopApp(
@@ -1426,6 +1422,12 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Settings'));
     await tester.pumpAndSettle();
+    tester.view.physicalSize = const Size(320, 720);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
     expect(find.text('English'), findsOneWidget);
     expect(find.text('မြန်မာ'), findsOneWidget);
     expect(find.text('Mobile money'), findsOneWidget);
