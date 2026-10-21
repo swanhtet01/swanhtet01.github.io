@@ -1432,6 +1432,7 @@ void main() {
     await tester.tap(find.text('မြန်မာ'));
     await tester.pumpAndSettle();
     expect(find.text('ဘာသာစကား'), findsOneWidget);
+    expect(tester.takeException(), isNull);
     await tester.ensureVisible(find.text('မိုဘိုင်းငွေပေးချေမှု'));
     await tester.tap(find.text('မိုဘိုင်းငွေပေးချေမှု'));
     await tester.pumpAndSettle();
