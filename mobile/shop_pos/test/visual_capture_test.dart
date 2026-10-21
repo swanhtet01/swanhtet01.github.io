@@ -119,7 +119,9 @@ void main() {
                 'goldens/shop_${screen}_${width.toInt()}_$language.png',
               ),
             );
-            await tester.pageBack();
+            // pageBack() looks for the English "Back" tooltip and misses the
+            // localized Material back control in a Burmese route.
+            expect(await tester.binding.handlePopRoute(), isTrue);
             await tester.pumpAndSettle();
           }
 
