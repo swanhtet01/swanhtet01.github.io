@@ -124,6 +124,7 @@ class _StockScreenState extends State<StockScreen> {
             if (!seenNames.add(name)) duplicateNames.add(name);
           }
           final wide = MediaQuery.sizeOf(context).width >= 700;
+          final count = shopNumber(products.length, myanmar: widget.myanmar);
           return Center(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 1100),
@@ -137,8 +138,12 @@ class _StockScreenState extends State<StockScreen> {
                         child: Text(
                           shopCopy(
                             widget.myanmar,
-                            '${shopNumber(snapshot.data!.length)} products',
-                            'ကုန်ပစ္စည်း ${shopNumber(snapshot.data!.length, myanmar: true)} မျိုး',
+                            query.isEmpty
+                                ? '$count products'
+                                : '$count matches',
+                            query.isEmpty
+                                ? 'ကုန်ပစ္စည်း $count မျိုး'
+                                : 'ကိုက်ညီမှု $count ခု',
                           ),
                           style: Theme.of(context).textTheme.titleLarge,
                         ),
@@ -220,6 +225,10 @@ class _StockScreenState extends State<StockScreen> {
                                 final compact =
                                     MediaQuery.sizeOf(context).width < 480;
                                 final textTheme = Theme.of(context).textTheme;
+                                final productTextStyle = wide
+                                    ? textTheme.titleMedium
+                                    : textTheme.bodyMedium;
+                                final colors = Theme.of(context).colorScheme;
                                 final details = Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
@@ -227,12 +236,9 @@ class _StockScreenState extends State<StockScreen> {
                                       item.name,
                                       maxLines: compact ? 3 : 2,
                                       overflow: TextOverflow.ellipsis,
-                                      style: (wide
-                                              ? textTheme.titleMedium
-                                              : textTheme.bodyMedium)
-                                          ?.copyWith(
-                                            fontWeight: FontWeight.w600,
-                                          ),
+                                      style: productTextStyle?.copyWith(
+                                        fontWeight: FontWeight.w600,
+                                      ),
                                     ),
                                     if (showReference)
                                       Text(
@@ -279,7 +285,7 @@ class _StockScreenState extends State<StockScreen> {
                                 );
                                 if (wide) {
                                   return ColoredBox(
-                                    color: Theme.of(context).colorScheme.surface,
+                                    color: colors.surface,
                                     child: Padding(
                                       padding: const EdgeInsets.symmetric(
                                         horizontal: 16,

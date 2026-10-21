@@ -1015,9 +1015,7 @@ class _ShopHomeState extends State<ShopHome> {
       final addButton = OutlinedButton.icon(
         onPressed: _showAddProduct,
         icon: const Icon(Icons.add),
-        label: Text(
-          shopCopy(widget.myanmar, 'New product', 'ကုန်ပစ္စည်းအသစ်'),
-        ),
+        label: Text(shopCopy(widget.myanmar, 'New product', 'ကုန်ပစ္စည်းအသစ်')),
       );
       if (constraints.maxWidth < 420) {
         return Column(
