@@ -470,8 +470,7 @@ void main() {
       }
     });
 
-    test('counter draft survives restart and sale commit clears it atomically',
-        () async {
+    test('counter draft survives restart and sale commit clears it atomically', () async {
       final directory = await Directory.systemTemp.createTemp(
         'supermega-shop-counter-draft-',
       );
@@ -510,8 +509,9 @@ void main() {
           ),
           throwsA(isA<StateError>()),
         );
-        expect((await persisted.readCounterSaleDraft())?.quantities,
-            {'tea': 2});
+        expect((await persisted.readCounterSaleDraft())?.quantities, {
+          'tea': 2,
+        });
         expect(await persisted.countSales(), 0);
         await persisted.saveCounterSaleDraft(
           operationId: recovered.operationId,
@@ -535,50 +535,53 @@ void main() {
         expect(replay.id, receipt.id);
         expect(await persisted.countSales(), 1);
         expect((await persisted.readActiveProducts()).single.onHand, 0);
+        expect(await persisted.countOutboxOperations(), 2);
       } finally {
         await persisted.close();
         await directory.delete(recursive: true);
       }
     });
 
-    test('wallet intent owns the basket until cancellation restores a new draft',
-        () async {
-      await database.addProduct(
-        id: 'tea',
-        name: 'Tea',
-        priceMmk: 2500,
-        openingStock: 3,
-      );
-      await database.saveCounterSaleDraft(
-        operationId: 'counter-wallet-1',
-        quantities: const {'tea': 2},
-      );
-      await database.createWalletCheckoutIntent(
-        operationId: 'counter-wallet-1',
-        merchant: MerchantWalletSetup(
-          provider: 'KBZPay',
-          merchantPhone: null,
-          officialQrPayload: _syntheticStaticMmqr(),
-          issuerConfirmed: true,
-        ),
-        lines: const [ShopSaleLineInput(productId: 'tea', quantity: 2)],
-      );
-      expect(await database.readCounterSaleDraft(), isNull);
-      expect((await database.readActiveProducts()).single.onHand, 3);
-      expect(await database.countSales(), 0);
-      expect(
-        await database.cancelWalletCheckoutIntent(
-          'counter-wallet-1',
-          resumeOperationId: 'counter-wallet-2',
-        ),
-        isTrue,
-      );
-      final draft = await database.readCounterSaleDraft();
-      expect(draft?.operationId, 'counter-wallet-2');
-      expect(draft?.quantities, {'tea': 2});
-      expect(await database.readPendingWalletCheckout(), isNull);
-      expect(await database.countSales(), 0);
-    });
+    test(
+      'wallet intent owns the basket until cancellation restores a new draft',
+      () async {
+        await database.addProduct(
+          id: 'tea',
+          name: 'Tea',
+          priceMmk: 2500,
+          openingStock: 3,
+        );
+        await database.saveCounterSaleDraft(
+          operationId: 'counter-wallet-1',
+          quantities: const {'tea': 2},
+        );
+        await database.createWalletCheckoutIntent(
+          operationId: 'counter-wallet-1',
+          merchant: MerchantWalletSetup(
+            provider: 'KBZPay',
+            merchantPhone: null,
+            officialQrPayload: _syntheticStaticMmqr(),
+            issuerConfirmed: true,
+          ),
+          lines: const [ShopSaleLineInput(productId: 'tea', quantity: 2)],
+        );
+        expect(await database.readCounterSaleDraft(), isNull);
+        expect((await database.readActiveProducts()).single.onHand, 3);
+        expect(await database.countSales(), 0);
+        expect(
+          await database.cancelWalletCheckoutIntent(
+            'counter-wallet-1',
+            resumeOperationId: 'counter-wallet-2',
+          ),
+          isTrue,
+        );
+        final draft = await database.readCounterSaleDraft();
+        expect(draft?.operationId, 'counter-wallet-2');
+        expect(draft?.quantities, {'tea': 2});
+        expect(await database.readPendingWalletCheckout(), isNull);
+        expect(await database.countSales(), 0);
+      },
+    );
 
     test(
       'stores the batch as review drafts, not active product rows',

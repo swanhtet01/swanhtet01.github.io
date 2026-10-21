@@ -101,46 +101,49 @@ void main() {
     },
   );
 
-  test('encrypted export keeps an unfinished sale without recording it', () async {
-    final source = ShopDatabase(NativeDatabase.memory());
-    try {
-      await source.addProduct(
-        id: 'water',
-        name: 'Water',
-        priceMmk: 1200,
-        openingStock: 5,
-      );
-      await source.saveCounterSaleDraft(
-        operationId: 'unfinished-backup-1',
-        quantities: const {'water': 2},
-      );
-      final draftArchive = File('${directory.path}/unfinished.smbak');
-      await ShopBackup.exportEncrypted(
-        database: source,
-        archive: draftArchive,
-        password: _password,
-        scratchRoot: directory,
-      );
-      final target = File('${directory.path}/unfinished-restored.sqlite');
-      await ShopBackup.restoreIntoEmptyDatabase(
-        archive: draftArchive,
-        target: target,
-        password: _password,
-      );
-      final restored = ShopDatabase(NativeDatabase(target));
+  test(
+    'encrypted export keeps an unfinished sale without recording it',
+    () async {
+      final source = ShopDatabase(NativeDatabase.memory());
       try {
-        final draft = await restored.readCounterSaleDraft();
-        expect(draft?.operationId, 'unfinished-backup-1');
-        expect(draft?.quantities, {'water': 2});
-        expect((await restored.readActiveProducts()).single.onHand, 5);
-        expect(await restored.countSales(), 0);
+        await source.addProduct(
+          id: 'water',
+          name: 'Water',
+          priceMmk: 1200,
+          openingStock: 5,
+        );
+        await source.saveCounterSaleDraft(
+          operationId: 'unfinished-backup-1',
+          quantities: const {'water': 2},
+        );
+        final draftArchive = File('${directory.path}/unfinished.smbak');
+        await ShopBackup.exportEncrypted(
+          database: source,
+          archive: draftArchive,
+          password: _password,
+          scratchRoot: directory,
+        );
+        final target = File('${directory.path}/unfinished-restored.sqlite');
+        await ShopBackup.restoreIntoEmptyDatabase(
+          archive: draftArchive,
+          target: target,
+          password: _password,
+        );
+        final restored = ShopDatabase(NativeDatabase(target));
+        try {
+          final draft = await restored.readCounterSaleDraft();
+          expect(draft?.operationId, 'unfinished-backup-1');
+          expect(draft?.quantities, {'water': 2});
+          expect((await restored.readActiveProducts()).single.onHand, 5);
+          expect(await restored.countSales(), 0);
+        } finally {
+          await restored.close();
+        }
       } finally {
-        await restored.close();
+        await source.close();
       }
-    } finally {
-      await source.close();
-    }
-  });
+    },
+  );
 
   test('merchant export hands only the encrypted archive to Save As', () async {
     File? handedArchive;

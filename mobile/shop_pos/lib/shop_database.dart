@@ -452,17 +452,20 @@ class ShopDatabase extends _$ShopDatabase {
     }
     final sorted = quantities.entries.toList()
       ..sort((a, b) => a.key.compareTo(b.key));
-    if (sorted.any((line) =>
-        line.key.trim().isEmpty ||
-        line.key.length > 100 ||
-        line.value < 1 ||
-        line.value > 1000)) {
+    if (sorted.any(
+      (line) =>
+          line.key.trim().isEmpty ||
+          line.key.length > 100 ||
+          line.value < 1 ||
+          line.value > 1000,
+    )) {
       throw ArgumentError('Counter draft item values are invalid.');
     }
     await transaction(() async {
-      final completed = await (select(shopSales)
-            ..where((sale) => sale.operationId.equals(cleanOperationId)))
-          .getSingleOrNull();
+      final completed =
+          await (select(shopSales)
+                ..where((sale) => sale.operationId.equals(cleanOperationId)))
+              .getSingleOrNull();
       if (completed != null) {
         throw StateError('This counter sale was already completed.');
       }
@@ -475,14 +478,16 @@ class ShopDatabase extends _$ShopDatabase {
       final previous = await readCounterSaleDraft();
       final lines = <Map<String, Object>>[];
       for (final line in sorted) {
-        final product = await (select(shopProducts)
-              ..where((row) =>
-                  row.id.equals(line.key) & row.archived.equals(false)))
-            .getSingleOrNull();
+        final product =
+            await (select(shopProducts)..where(
+                  (row) => row.id.equals(line.key) & row.archived.equals(false),
+                ))
+                .getSingleOrNull();
         lines.add({
           'productId': line.key,
           'quantity': line.value,
-          'unitPriceMmk': product?.priceMmk ??
+          'unitPriceMmk':
+              product?.priceMmk ??
               (previous?.operationId == cleanOperationId
                   ? previous?.unitPricesMmk[line.key]
                   : null) ??
@@ -496,7 +501,11 @@ class ShopDatabase extends _$ShopDatabase {
         'operation_id = excluded.operation_id, '
         'basket_json = excluded.basket_json, '
         'updated_at_millis = excluded.updated_at_millis',
-        [cleanOperationId, jsonEncode(lines), DateTime.now().millisecondsSinceEpoch],
+        [
+          cleanOperationId,
+          jsonEncode(lines),
+          DateTime.now().millisecondsSinceEpoch,
+        ],
       );
     });
   }
@@ -508,9 +517,9 @@ class ShopDatabase extends _$ShopDatabase {
     ).getSingleOrNull();
     if (row == null) return null;
     final operationId = row.read<String>('operation_id');
-    final completed = await (select(shopSales)
-          ..where((sale) => sale.operationId.equals(operationId)))
-        .getSingleOrNull();
+    final completed = await (select(
+      shopSales,
+    )..where((sale) => sale.operationId.equals(operationId))).getSingleOrNull();
     if (completed != null) {
       throw StateError('A completed sale still has a counter draft.');
     }
@@ -1313,9 +1322,10 @@ class ShopDatabase extends _$ShopDatabase {
       if (row == null) return false;
       final intent = _walletCheckoutFromRow(row);
       if (resumeOperationId != null) {
-        final priorSale = await (select(shopSales)
-              ..where((sale) => sale.operationId.equals(resumeOperationId)))
-            .getSingleOrNull();
+        final priorSale =
+            await (select(shopSales)
+                  ..where((sale) => sale.operationId.equals(resumeOperationId)))
+                .getSingleOrNull();
         final otherDraft = await readCounterSaleDraft();
         if (priorSale != null || otherDraft != null) {
           throw StateError('A different sale already uses this draft slot.');
@@ -1343,7 +1353,11 @@ class ShopDatabase extends _$ShopDatabase {
           'operation_id = excluded.operation_id, '
           'basket_json = excluded.basket_json, '
           'updated_at_millis = excluded.updated_at_millis',
-          [resumeOperationId, jsonEncode(draftLines), DateTime.now().millisecondsSinceEpoch],
+          [
+            resumeOperationId,
+            jsonEncode(draftLines),
+            DateTime.now().millisecondsSinceEpoch,
+          ],
         );
       }
       return true;

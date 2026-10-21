@@ -216,14 +216,20 @@ void main() {
       expect(find.text('Continue sale'), findsOneWidget);
       await tester.tap(find.text('Continue sale'));
       await tester.pumpAndSettle();
-      expect(find.textContaining('Review sale · 2 · 5,000 MMK'),
-          findsOneWidget);
-      expect(find.text('Unfinished sale restored on this device.'),
-          findsNothing);
+      expect(
+        find.textContaining('Review sale · 2 · 5,000 MMK'),
+        findsOneWidget,
+      );
+      expect(
+        find.text('Unfinished sale restored on this device.'),
+        findsNothing,
+      );
       await tester.tap(find.textContaining('Review sale · 2 · 5,000 MMK'));
       await tester.pumpAndSettle();
-      expect(find.text('Unfinished sale restored on this device.'),
-          findsOneWidget);
+      expect(
+        find.text('Unfinished sale restored on this device.'),
+        findsOneWidget,
+      );
       expect(tester.takeException(), isNull);
     } finally {
       await tester.pumpWidget(const SizedBox.shrink());

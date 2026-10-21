@@ -310,8 +310,7 @@ abstract final class ShopBackup {
           ? version.single['user_version'] as int
           : -1;
       final images =
-          schemaVersion >= 7 &&
-              tables.contains('shop_product_images')
+          schemaVersion >= 7 && tables.contains('shop_product_images')
           ? connection.select('SELECT image_png FROM shop_product_images')
           : const <Row>[];
       final imageTotal = images.fold<int>(0, (total, row) {
@@ -321,14 +320,15 @@ abstract final class ShopBackup {
                 ? image.length
                 : ShopDatabase.maxProductThumbnailsTotalBytes + 1);
       });
-      final drafts = schemaVersion >= 8 &&
-              tables.contains('shop_counter_drafts')
+      final drafts =
+          schemaVersion >= 8 && tables.contains('shop_counter_drafts')
           ? connection.select(
               'SELECT slot, operation_id, basket_json, updated_at_millis '
               'FROM shop_counter_drafts',
             )
           : const <Row>[];
-      final draftInvalid = drafts.length > 1 ||
+      final draftInvalid =
+          drafts.length > 1 ||
           drafts.any((row) => !_validCounterDraft(row)) ||
           (drafts.isNotEmpty &&
               connection.select(
@@ -344,10 +344,8 @@ abstract final class ShopBackup {
           integrity.single['integrity_check'] != 'ok' ||
           brokenReferences.isNotEmpty ||
           !tables.containsAll(_requiredTables) ||
-          (schemaVersion >= 7 &&
-              !tables.contains('shop_product_images')) ||
-          (schemaVersion >= 8 &&
-              !tables.contains('shop_counter_drafts')) ||
+          (schemaVersion >= 7 && !tables.contains('shop_product_images')) ||
+          (schemaVersion >= 8 && !tables.contains('shop_counter_drafts')) ||
           draftInvalid ||
           images.any((row) {
             final image = row['image_png'];
