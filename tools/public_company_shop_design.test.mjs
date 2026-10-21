@@ -140,9 +140,10 @@ assert.match(appBrandStyles, /\.core-brand-mark\s*\{ width:\s*1\.875rem; height:
 assert.match(appBrandStyles, /\.core-brand-name\s*\{ color:\s*var\(--core-ink\); font-size:\s*1rem; font-weight:\s*650; letter-spacing:\s*-\.02em;/)
 assert.doesNotMatch(companyShopStyle, /brand-icon/)
 assert.match(companyMarkup, /href="\/shop\/">Explore Shop/)
-assert.match(companyMarkup, /<p class="hero-kicker">SuperMega Shop · Myanmar<\/p>/)
-assert.match(companyMarkup, /Keep your shop day<br><span>in view\.<\/span>/)
-assert.match(companyMarkup, /Record counter sales, check stock and follow open orders in one Shop workspace\./)
+assert.match(companyMarkup, /<p class="hero-kicker">SuperMega · Myanmar<\/p>/)
+assert.match(companyMarkup, /Operating software for<br><span>Myanmar businesses\.<\/span>/)
+assert.match(companyMarkup, /SuperMega is a Myanmar software company\. Shop is our first customer product for counter sales, stock and order follow-up\./)
+assert.doesNotMatch(companyMarkup, /Keep your shop day|Record counter sales, check stock and follow open orders/)
 assert.match(companyMarkup, /class="company-product-visual"/)
 assert.match(companyMarkup, /src="\/images\/actual-shop-today\.png"/)
 assert.equal((companyMarkup.match(/class="button button-primary"/g) ?? []).length, 1)
@@ -417,10 +418,10 @@ assert.equal(publicManifest.company.headline, 'Operating software for Myanmar bu
 assert.equal(publicManifest.company.supporting, 'SuperMega is a Myanmar software company. Shop is our first customer product for counter sales, stock and order follow-up.')
 const companyHeroHeading = companyMarkup.match(/<h1 id="hero-title">([\s\S]*?)<\/h1>/)?.[1]
   ?.replace(/<br\s*\/?\s*>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
-const companyHeroSupporting = companyMarkup.match(/<p>Record counter sales, check stock and follow open orders in one Shop workspace\.<\/p>/)?.[0]
+const companyHeroSupporting = companyMarkup.match(/<p>SuperMega is a Myanmar software company\. Shop is our first customer product for counter sales, stock and order follow-up\.<\/p>/)?.[0]
   ?.replace(/^<p>|<\/p>$/g, '')
-assert.equal(companyHeroHeading, 'Keep your shop day in view.', 'the source and public hero stay aligned')
-assert.equal(companyHeroSupporting, 'Record counter sales, check stock and follow open orders in one Shop workspace.', 'the source and public supporting copy stay aligned')
+assert.equal(companyHeroHeading, publicManifest.company.headline, 'the source and public hero stay aligned')
+assert.equal(companyHeroSupporting, publicManifest.company.supporting, 'the source and public supporting copy stay aligned')
 assert.equal(publicManifest.company.statement, publicManifest.company.supporting, 'company description and summary stay aligned')
 assert.equal(publicManifest.pages.find((page) => page.route === '/').description, publicManifest.company.supporting)
 const brandGuide = readFileSync(new URL('../BRAND.md', import.meta.url), 'utf8')
