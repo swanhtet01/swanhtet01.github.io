@@ -4,9 +4,11 @@ import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
 import 'package:drift/native.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
 import 'package:supermega_shop/shop_backup.dart';
+import 'package:supermega_shop/shop_backup_export_screen.dart';
 import 'package:supermega_shop/shop_database.dart';
 
 const _password = 'correct horse battery staple';
@@ -98,6 +100,119 @@ void main() {
       }
     },
   );
+
+  test('merchant export hands only the encrypted archive to Save As', () async {
+    File? handedArchive;
+    String? suggestedName;
+    final result = await ShopBackupExporter.export(
+      database: database,
+      password: _password,
+      scratchRoot: directory,
+      encryptedRoot: directory,
+      now: DateTime(2026, 10, 22, 14, 5, 9),
+      saveArchive: (encrypted, name) async {
+        handedArchive = encrypted;
+        suggestedName = name;
+        final bytes = await encrypted.readAsBytes();
+        expect(bytes.sublist(0, 4), ascii.encode('SMBK'));
+        expect(
+          utf8.decode(bytes, allowMalformed: true),
+          isNot(contains('KAUNG')),
+        );
+        return 'chosen-document';
+      },
+    );
+    expect(result, ShopBackupExportResult.saved);
+    expect(suggestedName, 'SuperMega-Shop-20261022-140509');
+    expect(await handedArchive!.exists(), isFalse);
+    await _expectNoScratch(directory);
+  });
+
+  test('cancelling Save As removes the temporary encrypted archive', () async {
+    File? handedArchive;
+    final result = await ShopBackupExporter.export(
+      database: database,
+      password: _password,
+      scratchRoot: directory,
+      encryptedRoot: directory,
+      saveArchive: (encrypted, _) async {
+        handedArchive = encrypted;
+        return null;
+      },
+    );
+    expect(result, ShopBackupExportResult.cancelled);
+    expect(await handedArchive!.exists(), isFalse);
+    await _expectNoScratch(directory);
+  });
+
+  test('Save As failure preserves records and clears staging', () async {
+    File? handedArchive;
+    await expectLater(
+      ShopBackupExporter.export(
+        database: database,
+        password: _password,
+        scratchRoot: directory,
+        encryptedRoot: directory,
+        saveArchive: (encrypted, _) async {
+          handedArchive = encrypted;
+          throw StateError('simulated picker failure');
+        },
+      ),
+      throwsStateError,
+    );
+    expect(await handedArchive!.exists(), isFalse);
+    expect(await database.countSales(), 1);
+    await _expectNoScratch(directory);
+  });
+
+  testWidgets('export screen validates the password before opening Save As', (
+    tester,
+  ) async {
+    var pickerOpened = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ShopBackupExportScreen(
+          database: database,
+          myanmar: false,
+          scratchRoot: directory,
+          encryptedRoot: directory,
+          saveArchive: (_, _) async {
+            pickerOpened = true;
+            return null;
+          },
+        ),
+      ),
+    );
+    await tester.tap(find.text('Choose where to save'));
+    await tester.pump();
+    expect(
+      find.text('Use a password of at least 12 characters.'),
+      findsOneWidget,
+    );
+    expect(pickerOpened, isFalse);
+  });
+
+  testWidgets('cancelled export never reports that a backup was saved', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ShopBackupExportScreen(
+          database: database,
+          myanmar: false,
+          scratchRoot: directory,
+          encryptedRoot: directory,
+          saveArchive: (_, _) async => null,
+        ),
+      ),
+    );
+    await tester.enterText(find.byType(TextField).at(0), _password);
+    await tester.enterText(find.byType(TextField).at(1), _password);
+    await tester.tap(find.text('Choose where to save'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Save cancelled.'), findsOneWidget);
+    expect(find.textContaining('Backup file saved.'), findsNothing);
+  });
 
   test('wrong password never creates a target', () async {
     final target = File(
