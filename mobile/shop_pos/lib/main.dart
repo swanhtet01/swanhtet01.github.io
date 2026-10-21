@@ -99,39 +99,40 @@ class _ShopAppState extends State<ShopApp> {
           surface: Colors.white,
         ).copyWith(onSurface: ink, outline: border),
         scaffoldBackgroundColor: const Color(0xfff7f8fc),
-        textTheme: TextTheme(
-          headlineSmall: TextStyle(
-            fontSize: 28,
-            fontWeight: FontWeight.w700,
-            height: 1.2,
-            letterSpacing: tracking,
-          ),
-          titleLarge: TextStyle(
-            fontSize: 21,
-            fontWeight: FontWeight.w700,
-            height: 1.25,
-            letterSpacing: tracking,
-          ),
-          titleMedium: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-            height: 1.35,
-            letterSpacing: _myanmar ? 0 : -0.1,
-          ),
-          bodyLarge: const TextStyle(fontSize: 16, height: 1.45),
-          bodyMedium: const TextStyle(fontSize: 14, height: 1.45),
-          bodySmall: const TextStyle(fontSize: 12, height: 1.4),
-          labelLarge: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-            height: 1.25,
-          ),
-        ).apply(
-          fontFamily: fontFamily,
-          fontFamilyFallback: const ['NotoSansMyanmar'],
-          bodyColor: ink,
-          displayColor: ink,
-        ),
+        textTheme:
+            TextTheme(
+              headlineSmall: TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.w700,
+                height: 1.2,
+                letterSpacing: tracking,
+              ),
+              titleLarge: TextStyle(
+                fontSize: 21,
+                fontWeight: FontWeight.w700,
+                height: 1.25,
+                letterSpacing: tracking,
+              ),
+              titleMedium: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                height: 1.35,
+                letterSpacing: _myanmar ? 0 : -0.1,
+              ),
+              bodyLarge: const TextStyle(fontSize: 16, height: 1.45),
+              bodyMedium: const TextStyle(fontSize: 14, height: 1.45),
+              bodySmall: const TextStyle(fontSize: 12, height: 1.4),
+              labelLarge: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                height: 1.25,
+              ),
+            ).apply(
+              fontFamily: fontFamily,
+              fontFamilyFallback: const ['NotoSansMyanmar'],
+              bodyColor: ink,
+              displayColor: ink,
+            ),
         appBarTheme: AppBarTheme(
           backgroundColor: Colors.white,
           foregroundColor: ink,
@@ -309,9 +310,7 @@ class _ShopHomeState extends State<ShopHome> {
               child: TextButton.icon(
                 onPressed: _openRecentSales,
                 icon: const Icon(Icons.receipt_long_outlined),
-                label: Text(
-                  shopCopy(widget.myanmar, 'Sales', 'အရောင်းများ'),
-                ),
+                label: Text(shopCopy(widget.myanmar, 'Sales', 'အရောင်းများ')),
               ),
             ),
             TextButton.icon(
