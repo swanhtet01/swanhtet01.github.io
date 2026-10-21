@@ -2776,11 +2776,6 @@ class _ShopSettingsScreenState extends State<ShopSettingsScreen> {
             const SizedBox(height: 12),
             SegmentedButton<bool>(
               showSelectedIcon: false,
-              style: const ButtonStyle(
-                padding: WidgetStatePropertyAll(
-                  EdgeInsets.symmetric(horizontal: 4),
-                ),
-              ),
               segments: const [
                 ButtonSegment(value: false, label: Text('English')),
                 ButtonSegment(value: true, label: Text('မြန်မာ')),
@@ -2864,9 +2859,11 @@ class _ShopSettingsScreenState extends State<ShopSettingsScreen> {
                       children: [
                         const Icon(Icons.storage_outlined),
                         const SizedBox(width: 12),
-                        Text(
-                          shopCopy(_myanmar, 'On this device', 'ဤစက်တွင်'),
-                          style: Theme.of(context).textTheme.titleMedium,
+                        Expanded(
+                          child: Text(
+                            shopCopy(_myanmar, 'On this device', 'ဤစက်တွင်'),
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
                         ),
                       ],
                     ),
