@@ -255,6 +255,7 @@ class _ShopAppState extends State<ShopApp> {
           scrolledUnderElevation: 0,
           titleTextStyle: TextStyle(
             fontFamily: fontFamily,
+            fontFamilyFallback: const ['NotoSansMyanmar'],
             fontSize: _myanmar ? 18 : 20,
             fontWeight: FontWeight.w700,
             letterSpacing: tracking,
@@ -269,6 +270,7 @@ class _ShopAppState extends State<ShopApp> {
             final selected = states.contains(WidgetState.selected);
             return TextStyle(
               fontFamily: fontFamily,
+              fontFamilyFallback: const ['NotoSansMyanmar'],
               fontSize: _myanmar ? 13.5 : 13,
               fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
               height: _myanmar ? 1.45 : 1.25,
@@ -279,6 +281,7 @@ class _ShopAppState extends State<ShopApp> {
         navigationRailTheme: NavigationRailThemeData(
           selectedLabelTextStyle: TextStyle(
             fontFamily: fontFamily,
+            fontFamilyFallback: const ['NotoSansMyanmar'],
             fontSize: 14,
             fontWeight: FontWeight.w700,
             height: _myanmar ? 1.45 : 1.25,
@@ -286,6 +289,7 @@ class _ShopAppState extends State<ShopApp> {
           ),
           unselectedLabelTextStyle: TextStyle(
             fontFamily: fontFamily,
+            fontFamilyFallback: const ['NotoSansMyanmar'],
             fontSize: 14,
             fontWeight: FontWeight.w600,
             height: _myanmar ? 1.45 : 1.25,

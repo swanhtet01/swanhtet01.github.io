@@ -66,6 +66,17 @@ void main() {
               ?.fontFamily,
           'Inter',
         );
+        final theme = tester
+            .widget<MaterialApp>(find.byType(MaterialApp))
+            .theme!;
+        expect(
+          theme.appBarTheme.titleTextStyle?.fontFamilyFallback,
+          contains('NotoSansMyanmar'),
+        );
+        expect(
+          theme.navigationRailTheme.selectedLabelTextStyle?.fontFamilyFallback,
+          contains('NotoSansMyanmar'),
+        );
         expect(find.text(myanmar ? 'ယနေ့' : 'Today'), findsWidgets);
         expect(find.text(myanmar ? 'ရောင်းရန်' : 'Sell'), findsOneWidget);
         if (width >= 700) {
