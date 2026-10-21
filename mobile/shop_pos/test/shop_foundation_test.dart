@@ -675,6 +675,74 @@ void main() {
     );
   });
 
+  test(
+    'local SQLite snapshot includes sales, stock, outbox and wallet intents',
+    () async {
+      final directory = await Directory.systemTemp.createTemp('shop-snapshot-');
+      final target = File('${directory.path}/shop.sqlite');
+      final database = ShopDatabase(NativeDatabase.memory());
+      try {
+        await database.addProduct(
+          id: 'rice',
+          name: 'Rice',
+          priceMmk: 12000,
+          openingStock: 5,
+        );
+        await database.recordCashSale(
+          operationId: 'sale-snapshot-1',
+          lines: const [ShopSaleLineInput(productId: 'rice', quantity: 2)],
+        );
+        await database.customStatement(
+          'INSERT INTO shop_wallet_checkout_intents '
+          '(operation_id, payment_method, request_fingerprint, total_mmk, '
+          'merchant_phone, merchant_qr_payload, basket_json, state, '
+          'created_at_millis) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          [
+            'wallet-snapshot-1',
+            'kbzpay',
+            'synthetic',
+            0,
+            '',
+            '',
+            '[]',
+            'pending',
+            1,
+          ],
+        );
+
+        await database.exportVerifiedLocalSnapshot(target);
+        expect(await target.length(), greaterThan(0));
+        final reopened = ShopDatabase(NativeDatabase(target));
+        try {
+          expect((await reopened.readActiveProducts()).single.onHand, 3);
+          expect(await reopened.countSales(), 1);
+          expect(await reopened.countStockMovements(), 2);
+          expect(await reopened.countOutboxOperations(), 2);
+          final intents = await reopened
+              .customSelect(
+                'SELECT operation_id FROM shop_wallet_checkout_intents',
+              )
+              .get();
+          expect(
+            intents.single.read<String>('operation_id'),
+            'wallet-snapshot-1',
+          );
+        } finally {
+          await reopened.close();
+        }
+        final originalBytes = await target.readAsBytes();
+        await expectLater(
+          database.exportVerifiedLocalSnapshot(target),
+          throwsA(isA<StateError>()),
+        );
+        expect(await target.readAsBytes(), originalBytes);
+      } finally {
+        await database.close();
+        await directory.delete(recursive: true);
+      }
+    },
+  );
+
   group('bounded printer discovery', () {
     test('reprint needs a tested printer in this session', () async {
       SharedPreferences.setMockInitialValues({

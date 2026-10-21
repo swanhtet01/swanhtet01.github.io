@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:drift/drift.dart';
+import 'package:drift/native.dart';
 import 'package:drift_flutter/drift_flutter.dart';
 
 import 'shop_models.dart';
@@ -305,6 +307,46 @@ class ShopDatabase extends _$ShopDatabase {
     final rows = await customSelect('PRAGMA table_info($table)').get();
     if (rows.any((row) => row.read<String>('name') == column)) return;
     await customStatement('ALTER TABLE $table ADD COLUMN $column $declaration');
+  }
+
+  /// Create and read back a consistent local SQLite snapshot. This plaintext
+  /// file is an internal building block, not a user-shareable backup format.
+  Future<void> exportVerifiedLocalSnapshot(File target) async {
+    await target.parent.create(recursive: true);
+    if (await target.exists()) {
+      throw StateError('A snapshot already exists at this path.');
+    }
+    // Reserve the output exclusively. A concurrent creator must never have its
+    // file removed by the cleanup path below.
+    await target.create(exclusive: true);
+    try {
+      // SQLite includes all tables, including the raw wallet-intent table and
+      // pending outbox events, in one consistent point-in-time snapshot.
+      await customStatement('VACUUM INTO ?', [target.path]);
+      final snapshot = ShopDatabase(NativeDatabase(target));
+      try {
+        final version = await snapshot
+            .customSelect('PRAGMA user_version')
+            .get();
+        final integrity = await snapshot
+            .customSelect('PRAGMA integrity_check')
+            .get();
+        final brokenReferences = await snapshot
+            .customSelect('PRAGMA foreign_key_check')
+            .get();
+        if (version.single.read<int>('user_version') != schemaVersion ||
+            integrity.length != 1 ||
+            integrity.single.read<String>('integrity_check') != 'ok' ||
+            brokenReferences.isNotEmpty) {
+          throw StateError('The snapshot did not pass database checks.');
+        }
+      } finally {
+        await snapshot.close();
+      }
+    } catch (_) {
+      if (await target.exists()) await target.delete();
+      rethrow;
+    }
   }
 
   Future<void> addProduct({
