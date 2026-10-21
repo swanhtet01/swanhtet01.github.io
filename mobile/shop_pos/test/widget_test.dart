@@ -708,9 +708,13 @@ void main() {
     await database.close();
   });
 
-  testWidgets('catalog shows a saved merchant photo and a clean fallback', (
+  testWidgets('catalog aligns saved photos and products without photos', (
     tester,
   ) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 800);
     SharedPreferences.setMockInitialValues({});
     final database = ShopDatabase(NativeDatabase.memory());
     addTearDown(database.close);
@@ -756,6 +760,19 @@ void main() {
       find.byKey(const ValueKey('shop-product-photo:water')),
       findsNothing,
     );
+    expect(
+      find.byKey(const ValueKey('shop-product-no-photo:water')),
+      findsOneWidget,
+    );
+    for (final width in [390.0, 820.0]) {
+      tester.view.physicalSize = Size(width, 800);
+      await tester.pumpAndSettle();
+      expect(
+        tester.getTopLeft(find.text('Tea')).dx,
+        tester.getTopLeft(find.text('Water')).dx,
+      );
+      expect(tester.takeException(), isNull);
+    }
     await tester.tap(find.byKey(const ValueKey('shop-product-actions')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Edit product photos'));

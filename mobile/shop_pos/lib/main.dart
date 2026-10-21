@@ -1511,24 +1511,36 @@ class _ShopHomeState extends State<ShopHome> {
                 horizontal: 14,
                 vertical: 10,
               ),
-              leading: photoSnapshot.data == null
-                  ? null
-                  : SizedBox(
-                      key: ValueKey('shop-product-photo:${item.id}'),
-                      width: 48,
-                      height: 48,
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: Image.memory(
-                          photoSnapshot.data!,
-                          width: 44,
-                          height: 44,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, error, stackTrace) =>
-                              const Icon(Icons.photo_outlined),
+              leading: SizedBox(
+                key: ValueKey('shop-product-media:${item.id}'),
+                width: 48,
+                height: 48,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: photoSnapshot.data == null
+                      ? ColoredBox(
+                          key: ValueKey('shop-product-no-photo:${item.id}'),
+                          color: const Color(0xfff1f3f6),
+                          child: Icon(
+                            Icons.image_outlined,
+                            size: 21,
+                            color: Theme.of(context).colorScheme.outline,
+                          ),
+                        )
+                      : SizedBox(
+                          key: ValueKey('shop-product-photo:${item.id}'),
+                          child: Image.memory(
+                            photoSnapshot.data!,
+                            width: 48,
+                            height: 48,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, error, stackTrace) => const Icon(
+                              Icons.image_not_supported_outlined,
+                            ),
+                          ),
                         ),
-                      ),
-                    ),
+                ),
+              ),
               title: Text(
                 item.name,
                 maxLines: narrowProductRow ? 3 : 2,
