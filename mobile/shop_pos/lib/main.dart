@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
@@ -527,7 +526,7 @@ class _ShopHomeState extends State<ShopHome> {
       photo = await ImagePicker().pickImage(source: source);
       if (photo != null) await _saveProductPhoto(productId, photo);
     } catch (_) {
-      if (mounted)
+      if (mounted) {
         _message(
           shopCopy(
             widget.myanmar,
@@ -535,6 +534,7 @@ class _ShopHomeState extends State<ShopHome> {
             'ဤဓာတ်ပုံကို မထည့်နိုင်ပါ။ အခြားပုံရွေးပါ။',
           ),
         );
+      }
     } finally {
       await preferences.remove(_pendingPickerIntentKey);
       if (source == ImageSource.camera) {
@@ -576,8 +576,9 @@ class _ShopHomeState extends State<ShopHome> {
         );
         image = (await codec.getNextFrame()).image;
         final png = await image.toByteData(format: ui.ImageByteFormat.png);
-        if (png == null)
+        if (png == null) {
           throw const FormatException('Photo could not be encoded.');
+        }
         await widget.database.saveProductThumbnail(
           productId,
           png.buffer.asUint8List(png.offsetInBytes, png.lengthInBytes),
@@ -600,7 +601,7 @@ class _ShopHomeState extends State<ShopHome> {
         );
       }
     } catch (_) {
-      if (mounted)
+      if (mounted) {
         _message(
           shopCopy(
             widget.myanmar,
@@ -608,6 +609,7 @@ class _ShopHomeState extends State<ShopHome> {
             'ဤဓာတ်ပုံကို မထည့်နိုင်ပါ။ ပိုသေးသောပုံသုံးပါ။',
           ),
         );
+      }
     }
   }
 
