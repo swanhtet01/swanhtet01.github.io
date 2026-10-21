@@ -1278,7 +1278,8 @@ class _ShopHomeState extends State<ShopHome> {
             children: [
               Text(
                 snapshot?.productName ?? item.name,
-                style: const TextStyle(fontWeight: FontWeight.w700),
+                style: Theme.of(context).textTheme.bodyMedium
+                    ?.copyWith(fontWeight: FontWeight.w600),
               ),
               Text(
                 '${_mmk(snapshot?.unitPriceMmk ?? item.priceMmk)} × ${shopNumber(quantity, myanmar: widget.myanmar)}',
@@ -2457,10 +2458,14 @@ class _SetupTile extends StatelessWidget {
         backgroundColor: Theme.of(context).colorScheme.primaryContainer,
         child: Icon(icon, color: Theme.of(context).colorScheme.primary),
       ),
-      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
+      title: Text(title, style: Theme.of(context).textTheme.titleMedium),
       subtitle: Padding(
         padding: const EdgeInsets.only(top: 4),
-        child: Text(subtitle),
+        child: Text(
+          subtitle,
+          style: Theme.of(context).textTheme.bodyMedium
+              ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+        ),
       ),
       trailing: const Icon(Icons.chevron_right),
       onTap: onTap,
