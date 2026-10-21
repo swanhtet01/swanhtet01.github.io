@@ -63,7 +63,11 @@ jobs:
       - name: Capture synthetic Flutter screens with bundled fonts
         env:
           SHOP_VISUAL_CAPTURE: "1"
-        run: flutter test test/visual_capture_test.dart --update-goldens --reporter expanded
+        run: |
+          flutter_bin="$(readlink -f "$(command -v flutter)")"
+          export SHOP_MATERIAL_ICONS_FONT="$(dirname "$flutter_bin")/cache/artifacts/material_fonts/MaterialIcons-Regular.otf"
+          test -f "$SHOP_MATERIAL_ICONS_FONT"
+          flutter test test/visual_capture_test.dart --update-goldens --reporter expanded
 
       - name: Retain Flutter-rendered screens for design review
         if: always()

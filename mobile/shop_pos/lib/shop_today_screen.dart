@@ -347,6 +347,14 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
               children: [
                 if (compact) ...[
                   _heading(showNewSale: false),
+                  if (snapshot.products > 0) ...[
+                    const SizedBox(height: 16),
+                    FilledButton.icon(
+                      onPressed: _openSale,
+                      icon: const Icon(Icons.point_of_sale_outlined),
+                      label: Text(_copy('New sale', 'အရောင်းအသစ်')),
+                    ),
+                  ],
                 ] else
                   _heading(showNewSale: snapshot.products > 0),
                 if (snapshot.products > 0 ||

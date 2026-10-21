@@ -165,7 +165,7 @@ class _ShopAppState extends State<ShopApp> {
     final fontFamily = _myanmar ? 'NotoSansMyanmar' : 'Inter';
     final tracking = _myanmar ? 0.0 : -0.35;
     const ink = Color(0xff171b2c);
-    const border = Color(0xffe2e5ed);
+    const border = Color(0xffdce2ed);
     const accent = Color(0xff2563eb);
     return MaterialApp(
       title: 'SuperMega Shop',
@@ -181,11 +181,23 @@ class _ShopAppState extends State<ShopApp> {
         useMaterial3: true,
         fontFamily: fontFamily,
         fontFamilyFallback: const ['NotoSansMyanmar'],
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: accent,
-          surface: Colors.white,
-        ).copyWith(onSurface: ink, outline: border),
-        scaffoldBackgroundColor: const Color(0xfff7f8fc),
+        colorScheme:
+            ColorScheme.fromSeed(
+              seedColor: accent,
+              surface: Colors.white,
+            ).copyWith(
+              primary: accent,
+              onPrimary: Colors.white,
+              primaryContainer: const Color(0xffeaf0ff),
+              onPrimaryContainer: const Color(0xff173b93),
+              secondary: accent,
+              onSecondary: Colors.white,
+              secondaryContainer: const Color(0xffeaf0ff),
+              onSecondaryContainer: const Color(0xff173b93),
+              onSurface: ink,
+              outline: border,
+            ),
+        scaffoldBackgroundColor: const Color(0xfff5f7fb),
         textTheme:
             TextTheme(
               headlineMedium: TextStyle(
@@ -1189,20 +1201,31 @@ class _ShopHomeState extends State<ShopHome> {
                 ),
               ),
               const Divider(height: 20),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      shopCopy(widget.myanmar, 'Total', 'စုစုပေါင်း'),
-                    ),
-                  ),
-                  Text(
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final label = Text(
+                    shopCopy(widget.myanmar, 'Total', 'စုစုပေါင်း'),
+                  );
+                  final amount = Text(
                     _mmk(
                       _pendingWalletCheckout?.totalMmk ?? _cartTotal(products),
                     ),
                     style: _shopMoneyStyle(context, total: true),
-                  ),
-                ],
+                    textAlign: TextAlign.right,
+                  );
+                  if (constraints.maxWidth < 320) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [label, const SizedBox(height: 4), amount],
+                    );
+                  }
+                  return Row(
+                    children: [
+                      Expanded(child: label),
+                      amount,
+                    ],
+                  );
+                },
               ),
               const SizedBox(height: 12),
               if (_pendingWalletCheckout == null)
@@ -1277,24 +1300,23 @@ class _ShopHomeState extends State<ShopHome> {
         break;
       }
     }
-    return Row(
+    final details = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                snapshot?.productName ?? item.name,
-                style: Theme.of(context).textTheme.bodyMedium
-                    ?.copyWith(fontWeight: FontWeight.w600),
-              ),
-              Text(
-                '${_mmk(snapshot?.unitPriceMmk ?? item.priceMmk)} × ${shopNumber(quantity, myanmar: widget.myanmar)}',
-                style: _shopMoneyStyle(context),
-              ),
-            ],
-          ),
+        Text(
+          snapshot?.productName ?? item.name,
+          style: Theme.of(context).textTheme.bodyMedium
+              ?.copyWith(fontWeight: FontWeight.w600),
         ),
+        Text(
+          '${_mmk(snapshot?.unitPriceMmk ?? item.priceMmk)} × ${shopNumber(quantity, myanmar: widget.myanmar)}',
+          style: _shopMoneyStyle(context),
+        ),
+      ],
+    );
+    final controls = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
         IconButton(
           tooltip: shopCopy(widget.myanmar, 'Remove one', 'တစ်ခုလျှော့ရန်'),
           onPressed: _saving || _pendingWalletCheckout != null
@@ -1314,6 +1336,25 @@ class _ShopHomeState extends State<ShopHome> {
           icon: const Icon(Icons.add_circle_outline),
         ),
       ],
+    );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < 320) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              details,
+              Align(alignment: Alignment.centerRight, child: controls),
+            ],
+          );
+        }
+        return Row(
+          children: [
+            Expanded(child: details),
+            controls,
+          ],
+        );
+      },
     );
   }
 

@@ -246,7 +246,8 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('၂,၅၀၀ ကျပ်'), findsWidgets);
-    await tester.tap(find.text('ရောင်းရန်'));
+    expect(find.text('အရောင်းအသစ်'), findsOneWidget);
+    await tester.tap(find.text('အရောင်းအသစ်'));
     await tester.pumpAndSettle();
     expect(find.text('၂,၅၀၀ ကျပ်'), findsOneWidget);
     expect(tester.takeException(), isNull);

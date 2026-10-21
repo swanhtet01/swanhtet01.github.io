@@ -41,6 +41,18 @@ void main() {
   setUpAll(() async {
     if (!_capture) return;
     await Directory('test/goldens').create(recursive: true);
+    // Widget tests otherwise paint Material icons with the Ahem test font,
+    // making valid app icons look like missing-glyph boxes in review images.
+    final materialIconsPath = Platform.environment['SHOP_MATERIAL_ICONS_FONT'];
+    if (materialIconsPath == null || !File(materialIconsPath).existsSync()) {
+      throw StateError(
+        'SHOP_MATERIAL_ICONS_FONT must name the Flutter SDK icon font.',
+      );
+    }
+    final materialIcons = FontLoader('MaterialIcons')
+      ..addFont(
+        File(materialIconsPath).readAsBytes().then(ByteData.sublistView),
+      );
     final inter = FontLoader('Inter')
       ..addFont(rootBundle.load('assets/fonts/Inter/Inter-Variable.ttf'));
     final myanmar = FontLoader('NotoSansMyanmar')
@@ -49,8 +61,7 @@ void main() {
           'assets/fonts/NotoSansMyanmar/NotoSansMyanmar-Variable.ttf',
         ),
       );
-    await inter.load();
-    await myanmar.load();
+    await Future.wait([materialIcons.load(), inter.load(), myanmar.load()]);
   });
 
   for (final (width, height, language) in [
