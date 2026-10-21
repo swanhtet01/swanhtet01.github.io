@@ -94,8 +94,8 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
                   decoration: InputDecoration(
                     hintText: shopCopy(
                       widget.myanmar,
-                      'Search items or receipt ID',
-                      'ပစ္စည်း သို့မဟုတ် ပြေစာအမှတ် ရှာရန်',
+                      'Find by item or receipt ID',
+                      'ပစ္စည်း / ပြေစာ ရှာရန်',
                     ),
                     prefixIcon: const Icon(Icons.search),
                     suffixIcon: _query.isEmpty
@@ -193,6 +193,64 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
                               final more = sale.lines.length > 1
                                   ? ' +${sale.lines.length - 1}'
                                   : '';
+                              if (MediaQuery.sizeOf(context).width < 480) {
+                                return InkWell(
+                                  onTap: () => _showSale(sale),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 12,
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          '$firstItem$more',
+                                          maxLines: 3,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .titleMedium
+                                              ?.copyWith(
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                        ),
+                                        const SizedBox(height: 6),
+                                        Text(
+                                          shopMmk(
+                                            sale.totalMmk,
+                                            myanmar: widget.myanmar,
+                                          ),
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .titleMedium
+                                              ?.copyWith(
+                                                fontWeight: FontWeight.w700,
+                                                fontFeatures: const [
+                                                  FontFeature.tabularFigures(),
+                                                ],
+                                              ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Wrap(
+                                          spacing: 8,
+                                          runSpacing: 2,
+                                          children: [
+                                            Text(
+                                              _whenCompact(
+                                                context,
+                                                sale.createdAtMillis,
+                                              ),
+                                            ),
+                                            Text(_paymentName(sale.paymentMethod)),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              }
                               return ListTile(
                                 contentPadding: const EdgeInsets.symmetric(
                                   horizontal: 12,
@@ -292,6 +350,13 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
     final date = DateTime.fromMillisecondsSinceEpoch(millis).toLocal();
     final localizations = MaterialLocalizations.of(context);
     return '${localizations.formatMediumDate(date)} '
+        '${localizations.formatTimeOfDay(TimeOfDay.fromDateTime(date))}';
+  }
+
+  String _whenCompact(BuildContext context, int millis) {
+    final date = DateTime.fromMillisecondsSinceEpoch(millis).toLocal();
+    final localizations = MaterialLocalizations.of(context);
+    return '${localizations.formatShortDate(date)} '
         '${localizations.formatTimeOfDay(TimeOfDay.fromDateTime(date))}';
   }
 
