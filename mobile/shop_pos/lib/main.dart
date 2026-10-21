@@ -944,7 +944,8 @@ class _ShopHomeState extends State<ShopHome> {
                           ),
                           if (_cart.isNotEmpty ||
                               (products.isNotEmpty &&
-                                  (!tablet || _pendingWalletCheckout != null))) ...[
+                                  (!tablet ||
+                                      _pendingWalletCheckout != null))) ...[
                             SizedBox(width: tablet ? 12 : 18),
                             SizedBox(
                               key: const ValueKey('shop-split-basket'),
@@ -1634,7 +1635,8 @@ class _ShopHomeState extends State<ShopHome> {
               Align(
                 alignment: Alignment.centerLeft,
                 child: TextButton(
-                  onPressed: _checkoutReady &&
+                  onPressed:
+                      _checkoutReady &&
                           !_saving &&
                           !_walletStarting &&
                           !_cashConfirming &&

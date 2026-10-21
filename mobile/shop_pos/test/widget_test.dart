@@ -359,21 +359,25 @@ void main() {
       );
       expect(find.text('Check items'), findsOneWidget);
       expect(
-        tester.widget<FilledButton>(
-          find.ancestor(
-            of: find.text('Cash sale'),
-            matching: find.byType(FilledButton),
-          ),
-        ).onPressed,
+        tester
+            .widget<FilledButton>(
+              find.ancestor(
+                of: find.text('Cash sale'),
+                matching: find.byType(FilledButton),
+              ),
+            )
+            .onPressed,
         isNull,
       );
       expect(
-        tester.widget<OutlinedButton>(
-          find.ancestor(
-            of: find.text('Mobile money'),
-            matching: find.byType(OutlinedButton),
-          ),
-        ).onPressed,
+        tester
+            .widget<OutlinedButton>(
+              find.ancestor(
+                of: find.text('Mobile money'),
+                matching: find.byType(OutlinedButton),
+              ),
+            )
+            .onPressed,
         isNull,
       );
       expect(await database.countSales(), 0);
@@ -385,12 +389,14 @@ void main() {
         findsNothing,
       );
       expect(
-        tester.widget<FilledButton>(
-          find.ancestor(
-            of: find.text('Cash sale'),
-            matching: find.byType(FilledButton),
-          ),
-        ).onPressed,
+        tester
+            .widget<FilledButton>(
+              find.ancestor(
+                of: find.text('Cash sale'),
+                matching: find.byType(FilledButton),
+              ),
+            )
+            .onPressed,
         isNotNull,
       );
       expect(await database.countSales(), 0);
