@@ -119,7 +119,7 @@ check(count(coreApp, '{catalogForm}') === 1
   && coreApp.indexOf('{catalogForm}') < coreApp.indexOf('{managedTemplate ? <details className="secondary-setup-path">')
   && !coreApp.includes('</details> : catalogForm}'),
   'barcode_shared_catalog_entry_must_precede_optional_template_setup')
-check(coreApp.includes("placeholder={uiText('Search products or scan barcode')}"), 'shop_counter_keyboard_wedge_placeholder_missing')
+check(coreApp.includes("placeholder={uiText('Find or scan an item')}"), 'shop_counter_keyboard_wedge_placeholder_missing')
 check(coreApp.includes('onKeyDown={addSearchMatch}'), 'shop_counter_keyboard_wedge_handler_missing')
 check(coreApp.includes("continuous continuousMode=\"sale\" label={uiText('Find or scan an item')} onDetected={addCameraScan}"), 'shop_counter_camera_scanner_must_stay_open_for_repeated_sales_scans')
 check(coreApp.includes('onClick={() => onCreateFromBarcode(unmatchedBarcode)}'), 'unmatched_barcode_must_offer_an_explicit_add_action')

@@ -2185,6 +2185,8 @@ label.checkbox-row input { width: 1.25rem; min-width: 1.25rem; min-height: 1.25r
   .shop-counter-grid { display: block; }
   .shop-catalog-panel { overflow: visible; padding: 13px; }
   .shop-item-grid { overflow: visible; }
+  .shop-counter-category-filter { scrollbar-width: none; }
+  .shop-counter-category-filter::-webkit-scrollbar { display: none; }
   .shop-item-search input { padding-right: .8125rem; }
   .shop-search-shortcut { display: none; }
   .shop-current-sale { position: fixed; right: 6px; bottom: calc(67px + env(safe-area-inset-bottom)); z-index: 72; width: min(430px,calc(100% - 12px)); max-height: calc(100svh - 78px - env(safe-area-inset-bottom)); border-radius: 18px 18px 8px 8px; padding: 16px; opacity: 0; visibility: hidden; pointer-events: none; transform: translateY(24px) scale(.985); transition: opacity .18s ease, transform .18s ease, visibility .18s; }
