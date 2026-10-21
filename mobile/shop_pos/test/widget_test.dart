@@ -468,6 +468,8 @@ void main() {
       ),
       findsOneWidget,
     );
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 1));
   });
 
   testWidgets('lost product picker result is saved as a photo, never a menu', (
@@ -510,6 +512,8 @@ void main() {
     expect(find.text('Menu photo ready to review'), findsNothing);
     final preferences = await SharedPreferences.getInstance();
     expect(preferences.getString('shop_pending_picker_intent'), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 1));
   });
 
   testWidgets('empty catalog can make a durable cash sale', (tester) async {
