@@ -223,19 +223,19 @@ class _ShopAppState extends State<ShopApp> {
                 letterSpacing: tracking,
               ),
               titleMedium: TextStyle(
-                fontSize: 16,
+                fontSize: 17,
                 fontWeight: FontWeight.w600,
                 height: _myanmar ? 1.5 : 1.35,
                 letterSpacing: _myanmar ? 0 : -0.1,
               ),
               bodyLarge: TextStyle(fontSize: 16, height: _myanmar ? 1.6 : 1.45),
               bodyMedium: TextStyle(
-                fontSize: 14,
+                fontSize: 15,
                 height: _myanmar ? 1.6 : 1.45,
               ),
-              bodySmall: TextStyle(fontSize: 13, height: _myanmar ? 1.65 : 1.5),
+              bodySmall: TextStyle(fontSize: 14, height: _myanmar ? 1.65 : 1.5),
               labelLarge: TextStyle(
-                fontSize: 14,
+                fontSize: 15,
                 fontWeight: FontWeight.w600,
                 height: _myanmar ? 1.5 : 1.25,
               ),
@@ -277,14 +277,14 @@ class _ShopAppState extends State<ShopApp> {
         navigationRailTheme: NavigationRailThemeData(
           selectedLabelTextStyle: TextStyle(
             fontFamily: fontFamily,
-            fontSize: 13,
+            fontSize: 14,
             fontWeight: FontWeight.w700,
             height: _myanmar ? 1.45 : 1.25,
             color: accent,
           ),
           unselectedLabelTextStyle: TextStyle(
             fontFamily: fontFamily,
-            fontSize: 13,
+            fontSize: 14,
             fontWeight: FontWeight.w600,
             height: _myanmar ? 1.45 : 1.25,
             color: ink.withValues(alpha: 0.76),

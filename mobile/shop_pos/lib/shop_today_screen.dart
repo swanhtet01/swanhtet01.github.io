@@ -370,6 +370,7 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
                         label: _copy('Sales today', 'ယနေ့ရောင်းအား'),
                         value: _money(snapshot.salesMmk),
                         icon: Icons.payments_outlined,
+                        emphasized: true,
                       ),
                       if (compact)
                         _compactStats(snapshot, width: contentWidth)
@@ -383,8 +384,8 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
                         _metric(
                           width: smallCardWidth,
                           label: _copy(
-                            '5 or fewer left',
-                            '၅ ခု သို့မဟုတ် အောက် လက်ကျန်',
+                            'Low-stock products',
+                            'လက်ကျန်နည်းသော ကုန်ပစ္စည်းများ',
                           ),
                           value: _number(snapshot.stockToCheck.length),
                           icon: Icons.inventory_2_outlined,
@@ -508,12 +509,12 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
     rows: [
       for (final product in snapshot.productPreview)
         ListTile(
-          contentPadding: EdgeInsets.zero,
+          contentPadding: const EdgeInsets.symmetric(vertical: 6),
           title: Text(
             product.name,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.bodyMedium
+            style: Theme.of(context).textTheme.bodyLarge
                 ?.copyWith(fontWeight: FontWeight.w600),
           ),
           subtitle: Text(
@@ -521,7 +522,7 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
               '${_number(product.onHand)} in stock',
               'လက်ကျန် ${_number(product.onHand)} ခု',
             ),
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
               color: product.onHand <= 5
                   ? Theme.of(context).colorScheme.error
                   : Theme.of(context).colorScheme.onSurfaceVariant,
@@ -543,7 +544,7 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
     rows: [
       for (final sale in snapshot.recentSales)
         ListTile(
-          contentPadding: EdgeInsets.zero,
+          contentPadding: const EdgeInsets.symmetric(vertical: 6),
           title: Text(
             sale.lines.isEmpty
                 ? _copy('Sale', 'အရောင်း')
@@ -555,7 +556,7 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
                   ),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.bodyMedium
+            style: Theme.of(context).textTheme.bodyLarge
                 ?.copyWith(fontWeight: FontWeight.w600),
           ),
           subtitle: Text(
@@ -564,7 +565,7 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
                 DateTime.fromMillisecondsSinceEpoch(sale.createdAtMillis),
               ),
             ),
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
               color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
           ),
@@ -592,7 +593,7 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
             builder: (context, constraints) {
               final heading = Text(
                 title,
-                style: Theme.of(context).textTheme.titleMedium,
+                style: Theme.of(context).textTheme.titleLarge,
               );
               final open = TextButton(onPressed: onOpen, child: Text(action));
               if (constraints.maxWidth < 340) {
@@ -624,9 +625,11 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
     required String label,
     required String value,
     required IconData icon,
+    bool emphasized = false,
   }) => SizedBox(
     width: width,
     child: Card(
+      color: emphasized ? Theme.of(context).colorScheme.primaryContainer : null,
       child: Padding(
         padding: const EdgeInsets.all(18),
         child: Column(
@@ -676,7 +679,10 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
                   ),
                   const Divider(height: 20),
                   _compactStatRow(
-                    _copy('5 or fewer left', '၅ ခု သို့မဟုတ် အောက် လက်ကျန်'),
+                    _copy(
+                      'Low-stock products',
+                      'လက်ကျန်နည်းသော ကုန်ပစ္စည်းများ',
+                    ),
                     _number(snapshot.stockToCheck.length),
                   ),
                 ],
@@ -699,7 +705,10 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: _compactStat(
-                      _copy('5 or fewer left', '၅ ခု သို့မဟုတ် အောက် လက်ကျန်'),
+                      _copy(
+                        'Low-stock products',
+                        'လက်ကျန်နည်းသော ကုန်ပစ္စည်းများ',
+                      ),
                       _number(snapshot.stockToCheck.length),
                     ),
                   ),

@@ -207,7 +207,7 @@ void main() {
     expect(find.text('Sales today'), findsOneWidget);
     expect(find.text('2,500 MMK'), findsWidgets);
     expect(find.text('Completed sales'), findsOneWidget);
-    expect(find.text('5 or fewer left'), findsOneWidget);
+    expect(find.text('Low-stock products'), findsOneWidget);
     expect(find.text('Tea · 5'), findsOneWidget);
     expect(find.text('Mobile payment to review'), findsOneWidget);
     expect(find.text('Check stock'), findsOneWidget);
