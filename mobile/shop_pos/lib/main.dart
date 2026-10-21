@@ -75,6 +75,11 @@ class _ShopAppState extends State<ShopApp> {
 
   @override
   Widget build(BuildContext context) {
+    final fontFamily = _myanmar ? 'NotoSansMyanmar' : 'Inter';
+    final tracking = _myanmar ? 0.0 : -0.35;
+    const ink = Color(0xff171b2c);
+    const border = Color(0xffe2e5ed);
+    const accent = Color(0xff4e55df);
     return MaterialApp(
       title: 'SuperMega Shop',
       debugShowCheckedModeBanner: false,
@@ -87,22 +92,92 @@ class _ShopAppState extends State<ShopApp> {
       ],
       theme: ThemeData(
         useMaterial3: true,
-        fontFamily: _myanmar ? 'NotoSansMyanmar' : 'Inter',
+        fontFamily: fontFamily,
         fontFamilyFallback: const ['NotoSansMyanmar'],
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xff5146e5)),
-        scaffoldBackgroundColor: const Color(0xfff7f8fb),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: accent,
+          surface: Colors.white,
+        ).copyWith(onSurface: ink, outline: border),
+        scaffoldBackgroundColor: const Color(0xfff7f8fc),
+        textTheme: TextTheme(
+          headlineSmall: TextStyle(
+            fontSize: 28,
+            fontWeight: FontWeight.w700,
+            height: 1.2,
+            letterSpacing: tracking,
+          ),
+          titleLarge: TextStyle(
+            fontSize: 21,
+            fontWeight: FontWeight.w700,
+            height: 1.25,
+            letterSpacing: tracking,
+          ),
+          titleMedium: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            height: 1.35,
+            letterSpacing: _myanmar ? 0 : -0.1,
+          ),
+          bodyLarge: const TextStyle(fontSize: 16, height: 1.45),
+          bodyMedium: const TextStyle(fontSize: 14, height: 1.45),
+          bodySmall: const TextStyle(fontSize: 12, height: 1.4),
+          labelLarge: const TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            height: 1.25,
+          ),
+        ).apply(
+          fontFamily: fontFamily,
+          fontFamilyFallback: const ['NotoSansMyanmar'],
+          bodyColor: ink,
+          displayColor: ink,
+        ),
+        appBarTheme: AppBarTheme(
+          backgroundColor: Colors.white,
+          foregroundColor: ink,
+          surfaceTintColor: Colors.transparent,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          titleTextStyle: TextStyle(
+            fontFamily: fontFamily,
+            fontSize: 20,
+            fontWeight: FontWeight.w700,
+            letterSpacing: tracking,
+            color: ink,
+          ),
+        ),
         cardTheme: const CardThemeData(
           color: Colors.white,
           elevation: 0,
           margin: EdgeInsets.zero,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.all(Radius.circular(18)),
-            side: BorderSide(color: Color(0xffe4e7ef)),
+            borderRadius: BorderRadius.all(Radius.circular(16)),
+            side: BorderSide(color: border),
+          ),
+        ),
+        filledButtonTheme: FilledButtonThemeData(
+          style: FilledButton.styleFrom(
+            minimumSize: const Size(0, 48),
+            padding: const EdgeInsets.symmetric(horizontal: 18),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(11),
+            ),
+          ),
+        ),
+        outlinedButtonTheme: OutlinedButtonThemeData(
+          style: OutlinedButton.styleFrom(
+            minimumSize: const Size(0, 48),
+            padding: const EdgeInsets.symmetric(horizontal: 18),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(11),
+            ),
           ),
         ),
         inputDecorationTheme: const InputDecorationTheme(
+          contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 15),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.all(Radius.circular(12)),
+            borderSide: BorderSide(color: border),
           ),
           filled: true,
           fillColor: Colors.white,
@@ -224,25 +299,52 @@ class _ShopHomeState extends State<ShopHome> {
       appBar: AppBar(
         title: Text(shopCopy(widget.myanmar, 'Shop', 'ဆိုင်')),
         actions: [
-          IconButton(
-            tooltip: shopCopy(
-              widget.myanmar,
-              'Recent sales',
-              'မကြာသေးမီက အရောင်းများ',
+          if (width >= 1080) ...[
+            Tooltip(
+              message: shopCopy(
+                widget.myanmar,
+                'Recent sales',
+                'မကြာသေးမီက အရောင်းများ',
+              ),
+              child: TextButton.icon(
+                onPressed: _openRecentSales,
+                icon: const Icon(Icons.receipt_long_outlined),
+                label: Text(
+                  shopCopy(widget.myanmar, 'Sales', 'အရောင်းများ'),
+                ),
+              ),
             ),
-            icon: const Icon(Icons.receipt_long_outlined),
-            onPressed: _openRecentSales,
-          ),
-          IconButton(
-            tooltip: shopCopy(widget.myanmar, 'Stock', 'လက်ကျန်'),
-            icon: const Icon(Icons.inventory_2_outlined),
-            onPressed: _openStock,
-          ),
-          IconButton(
-            tooltip: shopCopy(widget.myanmar, 'Settings', 'ဆက်တင်များ'),
-            icon: const Icon(Icons.settings_outlined),
-            onPressed: _openSettings,
-          ),
+            TextButton.icon(
+              onPressed: _openStock,
+              icon: const Icon(Icons.inventory_2_outlined),
+              label: Text(shopCopy(widget.myanmar, 'Stock', 'လက်ကျန်')),
+            ),
+            TextButton.icon(
+              onPressed: _openSettings,
+              icon: const Icon(Icons.settings_outlined),
+              label: Text(shopCopy(widget.myanmar, 'Settings', 'ဆက်တင်များ')),
+            ),
+          ] else ...[
+            IconButton(
+              tooltip: shopCopy(
+                widget.myanmar,
+                'Recent sales',
+                'မကြာသေးမီက အရောင်းများ',
+              ),
+              icon: const Icon(Icons.receipt_long_outlined),
+              onPressed: _openRecentSales,
+            ),
+            IconButton(
+              tooltip: shopCopy(widget.myanmar, 'Stock', 'လက်ကျန်'),
+              icon: const Icon(Icons.inventory_2_outlined),
+              onPressed: _openStock,
+            ),
+            IconButton(
+              tooltip: shopCopy(widget.myanmar, 'Settings', 'ဆက်တင်များ'),
+              icon: const Icon(Icons.settings_outlined),
+              onPressed: _openSettings,
+            ),
+          ],
           const SizedBox(width: 8),
         ],
       ),
@@ -614,26 +716,52 @@ class _ShopHomeState extends State<ShopHome> {
           const Divider(height: 1, indent: 16, endIndent: 16),
       itemBuilder: (context, index) {
         final item = visible[index];
-        final details =
-            '${_mmk(item.priceMmk)} · ${item.onHand} ${shopCopy(widget.myanmar, 'in stock', 'ခုလက်ကျန်')}'
-            '${item.barcode == null ? '' : ' · ${item.barcode}'}';
+        final stock = item.onHand == 0
+            ? shopCopy(widget.myanmar, 'Out of stock', 'လက်ကျန်ကုန်ပါပြီ')
+            : shopCopy(
+                widget.myanmar,
+                '${item.onHand} in stock',
+                '${item.onHand} ခုလက်ကျန်',
+              );
         return ListTile(
           contentPadding: const EdgeInsets.symmetric(
             horizontal: 14,
-            vertical: 4,
+            vertical: 8,
           ),
-          title: Text(item.name, maxLines: 2, overflow: TextOverflow.ellipsis),
-          subtitle: Text(details, maxLines: 2, overflow: TextOverflow.ellipsis),
-          trailing: IconButton.filledTonal(
-            tooltip: shopCopy(
-              widget.myanmar,
-              'Add to sale',
-              'အရောင်းထဲထည့်ရန်',
+          title: Text(
+            item.name,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          subtitle: Text(
+            stock,
+            style: TextStyle(
+              color: item.onHand == 0
+                  ? Theme.of(context).colorScheme.error
+                  : Theme.of(context).colorScheme.onSurfaceVariant,
             ),
-            onPressed: item.onHand == 0 || _pendingWalletCheckout != null
-                ? null
-                : () => _add(item),
-            icon: const Icon(Icons.add),
+          ),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                _mmk(item.priceMmk),
+                style: Theme.of(context).textTheme.labelLarge,
+              ),
+              const SizedBox(width: 8),
+              IconButton.filledTonal(
+                tooltip: shopCopy(
+                  widget.myanmar,
+                  'Add to sale',
+                  'အရောင်းထဲထည့်ရန်',
+                ),
+                onPressed: item.onHand == 0 || _pendingWalletCheckout != null
+                    ? null
+                    : () => _add(item),
+                icon: const Icon(Icons.add),
+              ),
+            ],
           ),
           onTap: item.onHand == 0 || _pendingWalletCheckout != null
               ? null

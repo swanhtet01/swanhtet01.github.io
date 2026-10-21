@@ -284,12 +284,14 @@ void main() {
       expect(find.text('Current sale'), findsNothing);
       expect(tester.takeException(), isNull);
 
-      await database.addProduct(
-        id: 'tea',
-        name: 'Tea',
-        priceMmk: 2500,
-        openingStock: 2,
-      );
+      await tester.runAsync(() async {
+        await database.addProduct(
+          id: 'tea',
+          name: 'Tea',
+          priceMmk: 2500,
+          openingStock: 2,
+        );
+      });
       await tester.pumpAndSettle();
       expect(find.text('Search or scan barcode'), findsOneWidget);
       expect(find.text('Current sale'), findsOneWidget);
