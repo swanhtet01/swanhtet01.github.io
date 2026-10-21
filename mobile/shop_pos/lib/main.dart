@@ -1086,6 +1086,8 @@ class _ShopHomeState extends State<ShopHome> {
             'ဤဘားကုဒ် သို့မဟုတ် SKU ကို ကုန်ပစ္စည်းတစ်မျိုးထက်ပို၍ သုံးထားသည်။ မရောင်းမီ ကုန်ပစ္စည်းကုဒ်များကို ပြင်ပါ။',
           ),
         );
+      } else if (RegExp(r'^[0-9]{6,64}$').hasMatch(code)) {
+        unawaited(_createProductFromScannedCode(code));
       } else {
         _message(
           shopCopy(
@@ -1119,6 +1121,25 @@ class _ShopHomeState extends State<ShopHome> {
             ),
     ),
   );
+
+  Future<void> _createProductFromScannedCode(String code) async {
+    final saved = await _showAddProduct(initialBarcode: code);
+    if (!mounted) return;
+    if (saved) {
+      _search.clear();
+      setState(() {});
+    } else {
+      _search.selection = TextSelection(
+        baseOffset: 0,
+        extentOffset: _search.text.length,
+      );
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _searchFocus.canRequestFocus) {
+        _searchFocus.requestFocus();
+      }
+    });
+  }
 
   Widget _productList(List<ShopProduct> products) {
     final viewportWidth = MediaQuery.sizeOf(context).width;
@@ -2239,7 +2260,7 @@ class _ShopHomeState extends State<ShopHome> {
     );
   }
 
-  Future<void> _showAddProduct({
+  Future<bool> _showAddProduct({
     String initialName = '',
     String initialBarcode = '',
   }) async {
@@ -2251,7 +2272,7 @@ class _ShopHomeState extends State<ShopHome> {
         initialBarcode: initialBarcode,
       ),
     );
-    if (values == null) return;
+    if (values == null) return false;
     try {
       final productId = const Uuid().v4();
       await widget.database.addProduct(
@@ -2274,10 +2295,12 @@ class _ShopHomeState extends State<ShopHome> {
           ),
         );
       }
+      return true;
     } catch (error) {
       if (mounted) {
         _message(_productSaveError(error, widget.myanmar));
       }
+      return false;
     }
   }
 
