@@ -326,6 +326,10 @@ void main() {
       expect(find.text('Current sale'), findsOneWidget);
       expect(find.text('Search name, barcode or SKU'), findsOneWidget);
       expect(tester.takeException(), isNull);
+      expect(
+        tester.getSize(find.byTooltip('Add to sale')).height,
+        greaterThanOrEqualTo(56),
+      );
       await tester.tap(find.byTooltip('Add to sale'));
       await tester.pumpAndSettle();
       expect(find.text('Cash sale'), findsOneWidget);
@@ -335,6 +339,67 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump(const Duration(milliseconds: 1));
       await database.close();
+    }
+  });
+
+  testWidgets('catalog rows stay single, touch-sized targets at app widths', (
+    tester,
+  ) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    tester.view.devicePixelRatio = 1;
+    for (final width in [390.0, 820.0, 1200.0]) {
+      for (final myanmar in [false, true]) {
+        tester.view.physicalSize = Size(width, 800);
+        final database = ShopDatabase(NativeDatabase.memory());
+        await database.addProduct(
+          id: 'rice',
+          name: myanmar
+              ? 'ဆန်အိတ် အရည်အသွေးကောင်း ၁၀ ကီလိုဂရမ်'
+              : 'Premium rice 10 kg bag',
+          priceMmk: 24900,
+          openingStock: 3,
+        );
+        await tester.pumpWidget(
+          ShopApp(
+            database: database,
+            authClient: null,
+            apiBaseUrl: 'https://app.supermega.dev',
+            initialMyanmar: myanmar,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final addLabel = myanmar ? 'အရောင်းထဲထည့်ရန်' : 'Add to sale';
+        final row = find.descendant(
+          of: find.byTooltip(addLabel),
+          matching: find.byType(ListTile),
+        );
+        expect(row, findsOneWidget);
+        expect(tester.getSize(row).height, greaterThanOrEqualTo(56));
+        expect(
+          find.descendant(of: row, matching: find.byType(IconButton)),
+          findsNothing,
+        );
+        expect(find.text('24,900 MMK'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+
+        await tester.tap(row);
+        await tester.pumpAndSettle();
+        expect(
+          width >= 820
+              ? find.text(myanmar ? 'ငွေသား' : 'Cash sale')
+              : find.textContaining(
+                  myanmar ? 'အရောင်းစစ်ရန်' : 'Review sale',
+                ),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump(const Duration(milliseconds: 1));
+        await database.close();
+      }
     }
   });
 
@@ -922,12 +987,12 @@ void main() {
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
       expect(find.text('Resume payment'), findsOneWidget);
-      final addToSaleButton = find.ancestor(
-        of: find.byTooltip('Add to sale'),
-        matching: find.byType(IconButton),
+      final addToSaleRow = find.descendant(
+        of: find.byTooltip('Finish the pending payment first'),
+        matching: find.byType(ListTile),
       );
       expect(
-        tester.widget<IconButton>(addToSaleButton.first).onPressed,
+        tester.widget<ListTile>(addToSaleRow.first).onTap,
         isNull,
       );
       await tester.pumpWidget(const SizedBox.shrink());

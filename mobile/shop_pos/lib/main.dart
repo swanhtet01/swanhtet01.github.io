@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' show FontFeature;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -195,6 +196,14 @@ class _ShopAppState extends State<ShopApp> {
   }
 }
 
+TextStyle _shopMoneyStyle(BuildContext context, {bool total = false}) {
+  final type = Theme.of(context).textTheme;
+  return (total ? type.titleLarge! : type.labelLarge!).copyWith(
+    fontWeight: total ? FontWeight.w700 : FontWeight.w600,
+    fontFeatures: const [FontFeature.tabularFigures()],
+  );
+}
+
 class ShopHome extends StatefulWidget {
   const ShopHome({
     required this.database,
@@ -374,8 +383,9 @@ class _ShopHomeState extends State<ShopHome> {
           builder: (context, snapshot) {
             final products = snapshot.data ?? const <ShopProduct>[];
             if (width >= 820) {
+              final tablet = width < 1080;
               return Padding(
-                padding: const EdgeInsets.all(20),
+                padding: EdgeInsets.all(tablet ? 12 : 20),
                 child: Row(
                   children: [
                     Expanded(
@@ -396,7 +406,7 @@ class _ShopHomeState extends State<ShopHome> {
                       ),
                     ),
                     if (products.isNotEmpty) ...[
-                      const SizedBox(width: 18),
+                      SizedBox(width: tablet ? 12 : 18),
                       SizedBox(
                         width: (width * 0.36).clamp(340.0, 500.0),
                         child: _cartPanel(products),
@@ -575,8 +585,7 @@ class _ShopHomeState extends State<ShopHome> {
       Expanded(
         child: Text(
           shopCopy(widget.myanmar, 'Products', 'ကုန်ပစ္စည်းများ'),
-          style: Theme.of(context).textTheme.titleLarge
-              ?.copyWith(fontWeight: FontWeight.w800),
+          style: Theme.of(context).textTheme.titleLarge,
         ),
       ),
       if (hasProducts)
@@ -776,49 +785,64 @@ class _ShopHomeState extends State<ShopHome> {
                 '${item.onHand} in stock',
                 '${item.onHand} ခုလက်ကျန်',
               );
-        return ListTile(
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 14,
-            vertical: 8,
-          ),
-          title: Text(
-            item.name,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          subtitle: Text(
-            stock,
-            style: TextStyle(
-              color: item.onHand == 0
-                  ? Theme.of(context).colorScheme.error
-                  : Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-          ),
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                _mmk(item.priceMmk),
-                style: Theme.of(context).textTheme.labelLarge,
-              ),
-              const SizedBox(width: 8),
-              IconButton.filledTonal(
-                tooltip: shopCopy(
+        final canAdd = item.onHand > 0 && _pendingWalletCheckout == null;
+        return Tooltip(
+          message: item.onHand == 0
+              ? shopCopy(widget.myanmar, 'Out of stock', 'လက်ကျန်ကုန်ပါပြီ')
+              : _pendingWalletCheckout != null
+              ? shopCopy(
                   widget.myanmar,
-                  'Add to sale',
-                  'အရောင်းထဲထည့်ရန်',
-                ),
-                onPressed: item.onHand == 0 || _pendingWalletCheckout != null
-                    ? null
-                    : () => _add(item),
-                icon: const Icon(Icons.add),
+                  'Finish the pending payment first',
+                  'ဆိုင်းငံ့ငွေပေးချေမှုကို အရင်ပြီးစီးပါ',
+                )
+              : shopCopy(widget.myanmar, 'Add to sale', 'အရောင်းထဲထည့်ရန်'),
+          child: ListTile(
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 14,
+              vertical: 10,
+            ),
+            title: Text(
+              item.name,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            subtitle: Text(
+              stock,
+              style: TextStyle(
+                color: item.onHand == 0
+                    ? Theme.of(context).colorScheme.error
+                    : Theme.of(context).colorScheme.onSurfaceVariant,
               ),
-            ],
+            ),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(_mmk(item.priceMmk), style: _shopMoneyStyle(context)),
+                const SizedBox(width: 12),
+                ExcludeSemantics(
+                  child: Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      color: canAdd
+                          ? const Color(0xffeef3ff)
+                          : const Color(0xfff1f2f5),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(
+                      Icons.add,
+                      size: 20,
+                      color: canAdd
+                          ? Theme.of(context).colorScheme.primary
+                          : Theme.of(context).disabledColor,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            onTap: canAdd ? () => _add(item) : null,
           ),
-          onTap: item.onHand == 0 || _pendingWalletCheckout != null
-              ? null
-              : () => _add(item),
         );
       },
     );
@@ -840,8 +864,7 @@ class _ShopHomeState extends State<ShopHome> {
                 Expanded(
                   child: Text(
                     shopCopy(widget.myanmar, 'Current sale', 'လက်ရှိအရောင်း'),
-                    style: Theme.of(context).textTheme.titleLarge
-                        ?.copyWith(fontWeight: FontWeight.w800),
+                    style: Theme.of(context).textTheme.titleLarge,
                   ),
                 ),
                 if (entries.isNotEmpty)
@@ -900,8 +923,7 @@ class _ShopHomeState extends State<ShopHome> {
                     _mmk(
                       _pendingWalletCheckout?.totalMmk ?? _cartTotal(products),
                     ),
-                    style: Theme.of(context).textTheme.titleLarge
-                        ?.copyWith(fontWeight: FontWeight.w800),
+                    style: _shopMoneyStyle(context, total: true),
                   ),
                 ],
               ),
@@ -988,6 +1010,7 @@ class _ShopHomeState extends State<ShopHome> {
               ),
               Text(
                 '${_mmk(snapshot?.unitPriceMmk ?? item.priceMmk)} × $quantity',
+                style: _shopMoneyStyle(context),
               ),
             ],
           ),
@@ -1113,8 +1136,9 @@ class _ShopHomeState extends State<ShopHome> {
               const SizedBox(height: 8),
               Text(
                 _mmk(totalMmk),
-                style: Theme.of(context).textTheme.headlineSmall
-                    ?.copyWith(fontWeight: FontWeight.w800),
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
               ),
             ],
           ),
