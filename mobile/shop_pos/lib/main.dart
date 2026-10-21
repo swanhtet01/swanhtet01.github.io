@@ -603,23 +603,41 @@ class _ShopHomeState extends State<ShopHome> {
     focusNode: _searchFocus,
     autofocus: defaultTargetPlatform == TargetPlatform.windows,
     onChanged: (_) => setState(() {}),
+    // Keyboard scanners submit with Enter. Keep an already active scan field
+    // ready for the next item without opening a keyboard on an idle tablet.
+    onEditingComplete: () {},
     onSubmitted: (value) {
       final code = value.trim();
       if (code.isEmpty) return;
-      final matches = products.where((item) => item.barcode == code).toList();
+      final matches = products
+          .where((item) => item.barcode == code || item.sku == code)
+          .toList();
       if (matches.length == 1) {
+        final keepSearchFocus = _searchFocus.hasFocus;
         _add(matches.single);
         _search.clear();
         setState(() {});
-        if (defaultTargetPlatform == TargetPlatform.windows) {
-          _searchFocus.requestFocus();
+        if (keepSearchFocus) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted && _searchFocus.canRequestFocus) {
+              _searchFocus.requestFocus();
+            }
+          });
         }
       } else if (matches.length > 1) {
         _message(
           shopCopy(
             widget.myanmar,
-            'More than one product uses this barcode. Fix the product codes before selling.',
-            'ဤဘားကုဒ်ကို ကုန်ပစ္စည်းတစ်မျိုးထက်ပို၍ သုံးထားသည်။ မရောင်းမီ ဘားကုဒ်များကို ပြင်ပါ။',
+            'More than one product uses this barcode or SKU. Fix the product codes before selling.',
+            'ဤဘားကုဒ် သို့မဟုတ် SKU ကို ကုန်ပစ္စည်းတစ်မျိုးထက်ပို၍ သုံးထားသည်။ မရောင်းမီ ကုန်ပစ္စည်းကုဒ်များကို ပြင်ပါ။',
+          ),
+        );
+      } else {
+        _message(
+          shopCopy(
+            widget.myanmar,
+            'No exact barcode or SKU match. Check the code or add the product.',
+            'ဘားကုဒ် သို့မဟုတ် SKU အတိအကျ မတွေ့ပါ။ ကုဒ်ကို စစ်ပါ သို့မဟုတ် ကုန်ပစ္စည်းထည့်ပါ။',
           ),
         );
       }
@@ -628,8 +646,8 @@ class _ShopHomeState extends State<ShopHome> {
       prefixIcon: const Icon(Icons.search),
       hintText: shopCopy(
         widget.myanmar,
-        'Search or scan barcode',
-        'ရှာရန် သို့မဟုတ် ဘားကုဒ်ဖတ်ရန်',
+        'Search name, barcode or SKU',
+        'အမည်၊ ဘားကုဒ် သို့မဟုတ် SKU ရှာရန်',
       ),
       suffixIcon: _search.text.isEmpty
           ? null
@@ -655,7 +673,8 @@ class _ShopHomeState extends State<ShopHome> {
           (item) =>
               text.isEmpty ||
               item.name.toLowerCase().contains(text) ||
-              (item.barcode?.toLowerCase().contains(text) ?? false),
+              (item.barcode?.toLowerCase().contains(text) ?? false) ||
+              (item.sku?.toLowerCase().contains(text) ?? false),
         )
         .toList();
     if (visible.isEmpty) {

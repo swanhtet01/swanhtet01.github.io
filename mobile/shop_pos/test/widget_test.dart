@@ -200,7 +200,7 @@ void main() {
 
     expect(find.text('Products'), findsOneWidget);
     expect(find.text('Your catalog is empty'), findsOneWidget);
-    expect(find.text('Search or scan barcode'), findsNothing);
+    expect(find.text('Search name, barcode or SKU'), findsNothing);
     expect(find.text('MAMA Chicken Instant Noodles'), findsNothing);
 
     await tester.ensureVisible(find.text('Add first product'));
@@ -287,7 +287,7 @@ void main() {
       expect(find.text('Your catalog is empty'), findsOneWidget);
       expect(find.text('Add first product'), findsOneWidget);
       expect(find.text('Import menu photo'), findsOneWidget);
-      expect(find.text('Search or scan barcode'), findsNothing);
+      expect(find.text('Search name, barcode or SKU'), findsNothing);
       expect(find.text('Current sale'), findsNothing);
       expect(tester.takeException(), isNull);
     } finally {
@@ -324,7 +324,7 @@ void main() {
 
       expect(find.text('Tea'), findsOneWidget);
       expect(find.text('Current sale'), findsOneWidget);
-      expect(find.text('Search or scan barcode'), findsOneWidget);
+      expect(find.text('Search name, barcode or SKU'), findsOneWidget);
       expect(tester.takeException(), isNull);
       await tester.tap(find.byTooltip('Add to sale'));
       await tester.pumpAndSettle();
@@ -596,6 +596,75 @@ void main() {
         find.textContaining('More than one product uses this barcode'),
         findsOneWidget,
       );
+      expect(await database.countSales(), 0);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+      await database.close();
+    }
+  });
+
+  testWidgets('scanner resolves one exact code and keeps active search ready', (
+    tester,
+  ) async {
+    final database = ShopDatabase(NativeDatabase.memory());
+    try {
+      await database.addProduct(
+        id: 'tea',
+        name: 'Tea',
+        sku: 'SKU-1',
+        barcode: '111111',
+        priceMmk: 2500,
+        openingStock: 2,
+      );
+      await database.addProduct(
+        id: 'rice',
+        name: 'Rice',
+        sku: 'RICE-2',
+        barcode: 'SKU-1',
+        priceMmk: 5000,
+        openingStock: 2,
+      );
+      await tester.pumpWidget(
+        ShopApp(
+          database: database,
+          authClient: null,
+          apiBaseUrl: 'https://app.supermega.dev',
+          initialMyanmar: false,
+        ),
+      );
+      await tester.pumpAndSettle();
+      final search = find.byType(TextField);
+
+      await tester.enterText(search, 'SKU-1');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('More than one product uses this barcode'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Review sale'), findsNothing);
+
+      await tester.enterText(search, '999999');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('No exact barcode or SKU match'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Review sale'), findsNothing);
+
+      await tester.enterText(search, '111111');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Review sale · 1'), findsOneWidget);
+      expect(tester.widget<TextField>(search).focusNode!.hasFocus, isTrue);
+
+      await tester.enterText(search, 'RICE-2');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Review sale · 2'), findsOneWidget);
+      expect(tester.widget<TextField>(search).focusNode!.hasFocus, isTrue);
       expect(await database.countSales(), 0);
     } finally {
       await tester.pumpWidget(const SizedBox.shrink());
