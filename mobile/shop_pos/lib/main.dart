@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
@@ -1740,46 +1741,112 @@ class _ShopHomeState extends State<ShopHome> {
       return;
     }
     final totalMmk = _cartTotal(products);
+    var cashGiven = '';
     setState(() => _cashConfirming = true);
     try {
       final confirmed = await showDialog<bool>(
         context: context,
-        builder: (dialogContext) => AlertDialog(
-          title: Text(
-            shopCopy(
-              widget.myanmar,
-              'Cash received?',
-              'ငွေသားလက်ခံပြီးပြီလား။',
-            ),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                shopCopy(widget.myanmar, 'Amount to receive', 'လက်ခံရမည့်ငွေ'),
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (context, setDialogState) {
+            final entered = cashGiven.trim();
+            final asciiDigits = entered.replaceAllMapped(
+              RegExp(r'[၀-၉]'),
+              (match) => '${'၀၁၂၃၄၅၆၇၈၉'.indexOf(match.group(0)!)}',
+            );
+            final tenderedMmk = entered.isEmpty
+                ? null
+                : int.tryParse(asciiDigits);
+            final isShort = tenderedMmk != null && tenderedMmk < totalMmk;
+            final invalid = entered.isNotEmpty && tenderedMmk == null;
+            return AlertDialog(
+              scrollable: true,
+              actionsOverflowDirection: VerticalDirection.down,
+              title: Text(
+                shopCopy(widget.myanmar, 'Cash received?', 'ငွေသားရပြီလား။'),
               ),
-              const SizedBox(height: 8),
-              Text(
-                _mmk(totalMmk),
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontFeatures: const [FontFeature.tabularFigures()],
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    shopCopy(
+                      widget.myanmar,
+                      'Amount to receive',
+                      'လက်ခံရမည့်ငွေ',
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    _mmk(totalMmk),
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  TextField(
+                    key: const ValueKey('shop-cash-given'),
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r'[0-9၀-၉]')),
+                    ],
+                    onChanged: (value) =>
+                        setDialogState(() => cashGiven = value),
+                    decoration: InputDecoration(
+                      labelText: shopCopy(
+                        widget.myanmar,
+                        'Cash given (optional)',
+                        'ပေးငွေ',
+                      ),
+                      helperText: widget.myanmar ? 'မထည့်လည်းရ' : null,
+                    ),
+                  ),
+                  if (tenderedMmk != null && !isShort) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      shopCopy(
+                        widget.myanmar,
+                        'Change · ${_mmk(tenderedMmk - totalMmk)}',
+                        'ပြန်အမ်းငွေ · ${_mmk(tenderedMmk - totalMmk)}',
+                      ),
+                      key: const ValueKey('shop-cash-change'),
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                  ],
+                  if (isShort || invalid) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      shopCopy(
+                        widget.myanmar,
+                        isShort
+                            ? 'Cash given is less than the amount due.'
+                            : 'Enter a valid amount.',
+                        isShort
+                            ? 'ပေးထားသော ငွေသားမှာ ကျသင့်ငွေထက် နည်းပါသည်။'
+                            : 'မှန်ကန်သော ငွေပမာဏကို ထည့်ပါ။',
+                      ),
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                  child: Text(shopCopy(widget.myanmar, 'Back', 'ပြန်သွားရန်')),
                 ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: Text(shopCopy(widget.myanmar, 'Back', 'ပြန်သွားရန်')),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: Text(
-                shopCopy(widget.myanmar, 'Complete sale', 'အရောင်းပြီးစီးရန်'),
-              ),
-            ),
-          ],
+                FilledButton(
+                  onPressed: isShort || invalid
+                      ? null
+                      : () => Navigator.of(dialogContext).pop(true),
+                  child: Text(
+                    shopCopy(widget.myanmar, 'Complete sale', 'အတည်ပြုရန်'),
+                  ),
+                ),
+              ],
+            );
+          },
         ),
       );
       if (confirmed != true ||

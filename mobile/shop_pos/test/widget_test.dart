@@ -1078,7 +1078,7 @@ void main() {
     expect(find.text('မိုဘိုင်းငွေပေးချေမှု'), findsOneWidget);
     await tester.tap(find.text('ငွေသား'));
     await tester.pumpAndSettle();
-    expect(find.text('ငွေသားလက်ခံပြီးပြီလား။'), findsOneWidget);
+    expect(find.text('ငွေသားရပြီလား။'), findsOneWidget);
     expect(await database.countSales(), 0);
     await tester.tap(find.text('ပြန်သွားရန်'));
     await tester.pumpAndSettle();
@@ -1205,6 +1205,114 @@ void main() {
     expect(find.text('Cash received?'), findsNothing);
     await database.close();
   });
+
+  testWidgets(
+    'cash tender shows change and a short payment cannot record a sale',
+    (tester) async {
+      _usePhoneViewport(tester);
+      final database = ShopDatabase(NativeDatabase.memory());
+      await database.addProduct(
+        id: 'rice',
+        name: 'Rice',
+        priceMmk: 13500,
+        openingStock: 2,
+      );
+      await tester.pumpWidget(
+        ShopApp(
+          initialCounter: true,
+          database: database,
+          authClient: null,
+          apiBaseUrl: 'https://app.supermega.dev',
+          initialMyanmar: false,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Add to sale'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('Review sale'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Cash sale'));
+      await tester.pumpAndSettle();
+
+      expect(await database.countSales(), 0);
+      await tester.enterText(
+        find.byKey(const ValueKey('shop-cash-given')),
+        '20000',
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Change · 6,500 MMK'), findsOneWidget);
+      expect(await database.countSales(), 0);
+
+      await tester.enterText(
+        find.byKey(const ValueKey('shop-cash-given')),
+        '12000',
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Cash given is less than the amount due.'),
+        findsOneWidget,
+      );
+      final confirm = find.ancestor(
+        of: find.text('Complete sale'),
+        matching: find.byType(FilledButton),
+      );
+      expect(tester.widget<FilledButton>(confirm).onPressed, isNull);
+      expect(await database.countSales(), 0);
+      expect((await database.readActiveProducts()).single.onHand, 2);
+
+      await tester.enterText(
+        find.byKey(const ValueKey('shop-cash-given')),
+        '20000',
+      );
+      await tester.pumpAndSettle();
+      expect(tester.widget<FilledButton>(confirm).onPressed, isNotNull);
+      await tester.tap(find.text('Complete sale'));
+      await tester.pumpAndSettle();
+      expect(await database.countSales(), 1);
+      expect((await database.readActiveProducts()).single.onHand, 1);
+      await database.close();
+    },
+  );
+
+  testWidgets(
+    'Burmese cash confirmation labels the optional tender and change',
+    (tester) async {
+      _usePhoneViewport(tester);
+      final database = ShopDatabase(NativeDatabase.memory());
+      await database.addProduct(
+        id: 'rice',
+        name: 'Rice',
+        priceMmk: 13500,
+        openingStock: 2,
+      );
+      await tester.pumpWidget(
+        ShopApp(
+          initialCounter: true,
+          database: database,
+          authClient: null,
+          apiBaseUrl: 'https://app.supermega.dev',
+          initialMyanmar: true,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('အရောင်းထဲထည့်ရန်'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('အရောင်းစစ်ရန်'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('ငွေသား'));
+      await tester.pumpAndSettle();
+      expect(find.text('ပေးငွေ'), findsOneWidget);
+      expect(find.text('မထည့်လည်းရ'), findsOneWidget);
+      await tester.enterText(
+        find.byKey(const ValueKey('shop-cash-given')),
+        '၂၀၀၀၀',
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('ပြန်အမ်းငွေ · ၆,၅၀၀ ကျပ်'), findsOneWidget);
+      expect(await database.countSales(), 0);
+      await database.close();
+    },
+  );
 
   testWidgets('unknown barcode creates a product that the next scan adds', (
     tester,
