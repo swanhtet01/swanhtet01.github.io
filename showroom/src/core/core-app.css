@@ -2423,6 +2423,8 @@ label.checkbox-row input { width: 1.25rem; min-width: 1.25rem; min-height: 1.25r
 .shop-stock-attention-scroll .data-table { min-width: 35.5rem; }
 .shop-stock-next-action { display: flex; flex-direction: column; background: linear-gradient(155deg,color-mix(in srgb,var(--core-panel) 94%,var(--core-accent) 6%),var(--core-panel) 58%); }
 .shop-stock-next-item { min-width: 0; display: grid; grid-template-columns: auto minmax(0,1fr) auto; gap: .75rem; align-items: center; margin: 1rem 1rem 0; border: 1px solid color-mix(in srgb,var(--core-accent) 14%,var(--core-line)); border-radius: .875rem; padding: .75rem; background: var(--core-panel); }
+.shop-stock-workspace .product-photo-control { position: relative; width: 44px; }
+.shop-stock-workspace .product-photo-control .text-link.product-photo-remove { position: absolute; top: -.25rem; right: -.25rem; width: 1.25rem; height: 1.25rem; min-width: 1.25rem; min-height: 1.25rem; display: grid; place-items: center; border: 1px solid var(--core-line); border-radius: 50%; padding: 0; background: var(--core-panel); color: var(--core-muted); font-size: .875rem; line-height: 1; text-decoration: none; }
 .shop-stock-next-item > span { min-width: 0; display: grid; gap: .1875rem; }
 .shop-stock-next-item > span:last-child { justify-items: end; }
 .shop-stock-next-item strong { overflow: hidden; color: var(--core-ink); font-size: .75rem; text-overflow: ellipsis; white-space: nowrap; }
@@ -2464,6 +2466,9 @@ label.checkbox-row input { width: 1.25rem; min-width: 1.25rem; min-height: 1.25r
   .shop-stock-metrics > div:nth-last-child(-n+2) { border-bottom: 0; }
   .shop-stock-attention-scroll { padding-inline: .75rem; }
   .shop-stock-attention-scroll .data-table { min-width: 0; }
+  /* The receiving row already has a one-tap Receive action. Keep the phone
+     view focused on that list instead of repeating the same order in a card. */
+  .shop-stock-next-action[data-action="receive"] { display: none; }
   .shop-stock-next-item { grid-template-columns: auto minmax(0,1fr); }
   .shop-stock-next-item > span:last-child { grid-column: 2; justify-items: start; }
   .commerce-screen .product-task-tabs { grid-template-columns: repeat(4,minmax(0,1fr)); }

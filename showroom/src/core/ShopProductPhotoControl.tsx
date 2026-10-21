@@ -62,7 +62,7 @@ export function ShopProductPhotoControl({ disabled, name, scope, sku }: { disabl
       {url ? <img alt="" src={url} /> : <span aria-hidden="true" className="product-photo-placeholder">+</span>}
     </button>
     <input accept="image/*" className="sr-only" onChange={storeChosenPhoto} ref={inputRef} tabIndex={-1} type="file" />
-    {url ? <button aria-label={`Remove photo for ${name}`} className="text-link product-photo-remove" disabled={disabled || busy} onClick={removePhoto} type="button">Remove</button> : null}
+    {url ? <button aria-label={`Remove photo for ${name}`} className="text-link product-photo-remove" disabled={disabled || busy} onClick={removePhoto} title={`Remove photo for ${name}`} type="button">×</button> : null}
     {issue ? <small className="product-photo-issue" role="alert">{issue}</small> : null}
   </span>
 }
