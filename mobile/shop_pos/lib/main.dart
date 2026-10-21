@@ -1012,10 +1012,12 @@ class _ShopHomeState extends State<ShopHome> {
         onPressed: _openMenuImport,
         icon: const Icon(Icons.document_scanner_outlined),
       );
-      final addButton = FilledButton.icon(
+      final addButton = OutlinedButton.icon(
         onPressed: _showAddProduct,
         icon: const Icon(Icons.add),
-        label: Text(shopCopy(widget.myanmar, 'Add item', 'ပစ္စည်းထည့်ရန်')),
+        label: Text(
+          shopCopy(widget.myanmar, 'New product', 'ကုန်ပစ္စည်းအသစ်'),
+        ),
       );
       if (constraints.maxWidth < 420) {
         return Column(
