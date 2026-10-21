@@ -9,6 +9,7 @@ import { validateShopBusinessTemplates } from '../showroom/src/products/shop/bus
 import { activeProductContracts } from '../showroom/src/core/product-visibility.ts'
 import { APP_DESCRIPTION } from './app_metadata.mjs'
 import { parsePreviewAppBinding } from './public_preview_navigation.mjs'
+import './test_shop_photo_provenance.mjs'
 
 const root = process.cwd()
 const manifestSource = readFileSync(resolve(root, 'site-manifest.json'), 'utf8')
