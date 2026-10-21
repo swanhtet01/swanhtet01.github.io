@@ -470,6 +470,119 @@ void main() {
       }
     });
 
+    test('counter draft survives restart and sale commit clears it atomically', () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'supermega-shop-counter-draft-',
+      );
+      final file = File('${directory.path}/shop.sqlite');
+      var persisted = ShopDatabase(NativeDatabase(file));
+      try {
+        await persisted.addProduct(
+          id: 'tea',
+          name: 'Tea',
+          priceMmk: 2500,
+          openingStock: 3,
+        );
+        await persisted.saveCounterSaleDraft(
+          operationId: 'recovered-counter-1',
+          quantities: const {'tea': 2},
+        );
+        expect(await persisted.countSales(), 0);
+        expect((await persisted.readActiveProducts()).single.onHand, 3);
+        await persisted.close();
+        persisted = ShopDatabase(NativeDatabase(file));
+        final recovered = await persisted.readCounterSaleDraft();
+        expect(recovered?.operationId, 'recovered-counter-1');
+        expect(recovered?.quantities, {'tea': 2});
+        expect(recovered?.unitPricesMmk, {'tea': 2500});
+
+        await persisted.customStatement(
+          'UPDATE shop_products SET on_hand = 1, price_mmk = 3000 WHERE id = ?',
+          ['tea'],
+        );
+        await expectLater(
+          persisted.recordSale(
+            operationId: recovered!.operationId,
+            lines: const [ShopSaleLineInput(productId: 'tea', quantity: 2)],
+            paymentMethod: 'cash',
+            expectedTotalMmk: 5000,
+          ),
+          throwsA(isA<StateError>()),
+        );
+        expect((await persisted.readCounterSaleDraft())?.quantities, {
+          'tea': 2,
+        });
+        expect(await persisted.countSales(), 0);
+        await persisted.saveCounterSaleDraft(
+          operationId: recovered.operationId,
+          quantities: const {'tea': 1},
+        );
+        final receipt = await persisted.recordSale(
+          operationId: recovered.operationId,
+          lines: const [ShopSaleLineInput(productId: 'tea', quantity: 1)],
+          paymentMethod: 'cash',
+          expectedTotalMmk: 3000,
+        );
+        await persisted.close(); // Simulate a crash before widget-state clear.
+        persisted = ShopDatabase(NativeDatabase(file));
+        expect(await persisted.readCounterSaleDraft(), isNull);
+        final replay = await persisted.recordSale(
+          operationId: recovered.operationId,
+          lines: const [ShopSaleLineInput(productId: 'tea', quantity: 1)],
+          paymentMethod: 'cash',
+          expectedTotalMmk: 3000,
+        );
+        expect(replay.id, receipt.id);
+        expect(await persisted.countSales(), 1);
+        expect((await persisted.readActiveProducts()).single.onHand, 0);
+        expect(await persisted.countOutboxOperations(), 2);
+      } finally {
+        await persisted.close();
+        await directory.delete(recursive: true);
+      }
+    });
+
+    test(
+      'wallet intent owns the basket until cancellation restores a new draft',
+      () async {
+        await database.addProduct(
+          id: 'tea',
+          name: 'Tea',
+          priceMmk: 2500,
+          openingStock: 3,
+        );
+        await database.saveCounterSaleDraft(
+          operationId: 'counter-wallet-1',
+          quantities: const {'tea': 2},
+        );
+        await database.createWalletCheckoutIntent(
+          operationId: 'counter-wallet-1',
+          merchant: MerchantWalletSetup(
+            provider: 'KBZPay',
+            merchantPhone: null,
+            officialQrPayload: _syntheticStaticMmqr(),
+            issuerConfirmed: true,
+          ),
+          lines: const [ShopSaleLineInput(productId: 'tea', quantity: 2)],
+        );
+        expect(await database.readCounterSaleDraft(), isNull);
+        expect((await database.readActiveProducts()).single.onHand, 3);
+        expect(await database.countSales(), 0);
+        expect(
+          await database.cancelWalletCheckoutIntent(
+            'counter-wallet-1',
+            resumeOperationId: 'counter-wallet-2',
+          ),
+          isTrue,
+        );
+        final draft = await database.readCounterSaleDraft();
+        expect(draft?.operationId, 'counter-wallet-2');
+        expect(draft?.quantities, {'tea': 2});
+        expect(await database.readPendingWalletCheckout(), isNull);
+        expect(await database.countSales(), 0);
+      },
+    );
+
     test(
       'stores the batch as review drafts, not active product rows',
       () async {

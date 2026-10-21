@@ -62,7 +62,7 @@ void main() {
     () async {
       final bytes = await archive.readAsBytes();
       expect(bytes.sublist(0, 4), ascii.encode('SMBK'));
-      expect(bytes[5], 7);
+      expect(bytes[5], 8);
       expect(
         bytes.sublist(0, 16),
         isNot(ascii.encode('SQLite format 3\u0000')),
@@ -97,6 +97,50 @@ void main() {
         expect(intents.single.read<String>('operation_id'), 'backup-wallet-1');
       } finally {
         await reopened.close();
+      }
+    },
+  );
+
+  test(
+    'encrypted export keeps an unfinished sale without recording it',
+    () async {
+      final source = ShopDatabase(NativeDatabase.memory());
+      try {
+        await source.addProduct(
+          id: 'water',
+          name: 'Water',
+          priceMmk: 1200,
+          openingStock: 5,
+        );
+        await source.saveCounterSaleDraft(
+          operationId: 'unfinished-backup-1',
+          quantities: const {'water': 2},
+        );
+        final draftArchive = File('${directory.path}/unfinished.smbak');
+        await ShopBackup.exportEncrypted(
+          database: source,
+          archive: draftArchive,
+          password: _password,
+          scratchRoot: directory,
+        );
+        final target = File('${directory.path}/unfinished-restored.sqlite');
+        await ShopBackup.restoreIntoEmptyDatabase(
+          archive: draftArchive,
+          target: target,
+          password: _password,
+        );
+        final restored = ShopDatabase(NativeDatabase(target));
+        try {
+          final draft = await restored.readCounterSaleDraft();
+          expect(draft?.operationId, 'unfinished-backup-1');
+          expect(draft?.quantities, {'water': 2});
+          expect((await restored.readActiveProducts()).single.onHand, 5);
+          expect(await restored.countSales(), 0);
+        } finally {
+          await restored.close();
+        }
+      } finally {
+        await source.close();
       }
     },
   );
@@ -246,12 +290,13 @@ void main() {
     },
   );
 
-  test('v6 archive restores, then migrates its catalog to v7', () async {
+  test('v6 archive restores, then migrates its catalog to v8', () async {
     final legacy = File('${directory.path}/legacy-v6.sqlite');
     await database.exportVerifiedLocalSnapshot(legacy);
     final connection = sqlite3.open(legacy.path);
     try {
       connection.execute('DROP TABLE shop_product_images');
+      connection.execute('DROP TABLE shop_counter_drafts');
       connection.execute('PRAGMA user_version = 6');
     } finally {
       connection.close();
@@ -295,14 +340,38 @@ void main() {
       expect(
         (await migrated.customSelect('PRAGMA user_version').getSingle())
             .read<int>('user_version'),
-        7,
+        8,
       );
     } finally {
       await migrated.close();
     }
   });
 
-  test('v7 snapshot rejects a malformed image blob', () async {
+  test('v7 snapshot opens with a new empty counter draft table', () async {
+    final old = File('${directory.path}/legacy-v7.sqlite');
+    await database.exportVerifiedLocalSnapshot(old);
+    final connection = sqlite3.open(old.path);
+    try {
+      connection.execute('DROP TABLE shop_counter_drafts');
+      connection.execute('PRAGMA user_version = 7');
+    } finally {
+      connection.close();
+    }
+    ShopBackup.verifySnapshot(old, expectedSchemaVersion: 7);
+    final upgraded = ShopDatabase(NativeDatabase(old));
+    try {
+      expect(await upgraded.readCounterSaleDraft(), isNull);
+      expect(
+        (await upgraded.customSelect('PRAGMA user_version').getSingle())
+            .read<int>('user_version'),
+        8,
+      );
+    } finally {
+      await upgraded.close();
+    }
+  });
+
+  test('v8 snapshot rejects a malformed image blob', () async {
     final corrupt = File('${directory.path}/malformed-photo.sqlite');
     await database.exportVerifiedLocalSnapshot(corrupt);
     final connection = sqlite3.open(corrupt.path);
@@ -310,6 +379,23 @@ void main() {
       connection.execute('UPDATE shop_product_images SET image_png = ?', [
         Uint8List.fromList([1, 2, 3]),
       ]);
+    } finally {
+      connection.close();
+    }
+    expect(() => ShopBackup.verifySnapshot(corrupt), throwsFormatException);
+  });
+
+  test('v8 snapshot rejects a malformed unfinished sale', () async {
+    final corrupt = File('${directory.path}/malformed-draft.sqlite');
+    await database.exportVerifiedLocalSnapshot(corrupt);
+    final connection = sqlite3.open(corrupt.path);
+    try {
+      connection.execute(
+        'INSERT INTO shop_counter_drafts '
+        '(slot, operation_id, basket_json, updated_at_millis) '
+        'VALUES (1, ?, ?, 1)',
+        ['bad-draft', '[{"productId":"rice","quantity":0}]'],
+      );
     } finally {
       connection.close();
     }

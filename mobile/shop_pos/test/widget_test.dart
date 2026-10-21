@@ -170,6 +170,75 @@ void main() {
     }
   });
 
+  testWidgets('unfinished sale opens from Today after app restart', (
+    tester,
+  ) async {
+    _usePhoneViewport(tester);
+    final database = ShopDatabase(NativeDatabase.memory());
+    try {
+      await database.addProduct(
+        id: 'tea',
+        name: 'Tea',
+        barcode: '111111',
+        priceMmk: 2500,
+        openingStock: 3,
+      );
+      await database.saveCounterSaleDraft(
+        operationId: 'counter-before-restart',
+        quantities: const {'tea': 2},
+      );
+      await tester.pumpWidget(
+        ShopApp(
+          database: database,
+          authClient: null,
+          apiBaseUrl: 'https://app.supermega.dev',
+          initialMyanmar: false,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect((await database.readCounterSaleDraft())?.quantities, {'tea': 2});
+      expect((await database.readActiveProducts()).single.onHand, 3);
+      expect(await database.countSales(), 0);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+      await tester.pumpWidget(
+        ShopApp(
+          database: database,
+          authClient: null,
+          apiBaseUrl: 'https://app.supermega.dev',
+          initialMyanmar: false,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Continue sale'), findsOneWidget);
+      await tester.tap(find.text('Continue sale'));
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('Review sale · 2 · 5,000 MMK'),
+        findsOneWidget,
+      );
+      expect(
+        find.text('Unfinished sale restored on this device.'),
+        findsNothing,
+      );
+      await tester.tap(find.textContaining('Review sale · 2 · 5,000 MMK'));
+      await tester.pumpAndSettle();
+      final restoredNotice = find.text(
+        'Unfinished sale restored on this device.',
+      );
+      expect(restoredNotice, findsOneWidget);
+      Navigator.of(tester.element(restoredNotice)).pop();
+      await tester.pumpAndSettle();
+      expect(restoredNotice, findsNothing);
+      expect(tester.takeException(), isNull);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+      await database.close();
+    }
+  });
+
   testWidgets('Today counts only completed local sales and actual stock', (
     tester,
   ) async {

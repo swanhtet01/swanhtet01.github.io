@@ -16,7 +16,7 @@ import 'shop_database.dart';
 /// the database so an interrupted export or restore cannot retain plaintext.
 abstract final class ShopBackup {
   static const formatVersion = 1;
-  static const supportedSchemaVersion = 7;
+  static const supportedSchemaVersion = 8;
   static const oldestSupportedSchemaVersion = 6;
   static const maxSnapshotBytes = 64 * 1024 * 1024;
 
@@ -310,8 +310,7 @@ abstract final class ShopBackup {
           ? version.single['user_version'] as int
           : -1;
       final images =
-          schemaVersion == supportedSchemaVersion &&
-              tables.contains('shop_product_images')
+          schemaVersion >= 7 && tables.contains('shop_product_images')
           ? connection.select('SELECT image_png FROM shop_product_images')
           : const <Row>[];
       final imageTotal = images.fold<int>(0, (total, row) {
@@ -321,6 +320,21 @@ abstract final class ShopBackup {
                 ? image.length
                 : ShopDatabase.maxProductThumbnailsTotalBytes + 1);
       });
+      final drafts =
+          schemaVersion >= 8 && tables.contains('shop_counter_drafts')
+          ? connection.select(
+              'SELECT slot, operation_id, basket_json, updated_at_millis '
+              'FROM shop_counter_drafts',
+            )
+          : const <Row>[];
+      final draftInvalid =
+          drafts.length > 1 ||
+          drafts.any((row) => !_validCounterDraft(row)) ||
+          (drafts.isNotEmpty &&
+              connection.select(
+                'SELECT 1 FROM shop_sales WHERE operation_id = ? LIMIT 1',
+                [drafts.single['operation_id']],
+              ).isNotEmpty);
       if (version.length != 1 ||
           schemaVersion < oldestSupportedSchemaVersion ||
           schemaVersion > supportedSchemaVersion ||
@@ -330,8 +344,9 @@ abstract final class ShopBackup {
           integrity.single['integrity_check'] != 'ok' ||
           brokenReferences.isNotEmpty ||
           !tables.containsAll(_requiredTables) ||
-          (schemaVersion == supportedSchemaVersion &&
-              !tables.contains('shop_product_images')) ||
+          (schemaVersion >= 7 && !tables.contains('shop_product_images')) ||
+          (schemaVersion >= 8 && !tables.contains('shop_counter_drafts')) ||
+          draftInvalid ||
           images.any((row) {
             final image = row['image_png'];
             return image is! Uint8List ||
@@ -344,6 +359,43 @@ abstract final class ShopBackup {
       }
     } finally {
       connection.close();
+    }
+  }
+
+  static bool _validCounterDraft(Row row) {
+    final operationId = row['operation_id'];
+    if (row['slot'] != 1 ||
+        operationId is! String ||
+        operationId.isEmpty ||
+        operationId.length > 120 ||
+        row['updated_at_millis'] is! int) {
+      return false;
+    }
+    try {
+      final raw = jsonDecode(row['basket_json'] as String);
+      if (raw is! List || raw.isEmpty || raw.length > 100) return false;
+      final seen = <String>{};
+      for (final value in raw) {
+        if (value is! Map<String, dynamic>) return false;
+        final id = value['productId'];
+        final quantity = value['quantity'];
+        final price = value['unitPriceMmk'];
+        if (id is! String ||
+            id.isEmpty ||
+            id.length > 100 ||
+            !seen.add(id) ||
+            quantity is! int ||
+            quantity < 1 ||
+            quantity > 1000 ||
+            price is! int ||
+            price < 0 ||
+            price > 2000000000) {
+          return false;
+        }
+      }
+      return true;
+    } catch (_) {
+      return false;
     }
   }
 
