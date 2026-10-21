@@ -1682,11 +1682,7 @@ class _ShopHomeState extends State<ShopHome> {
               scrollable: true,
               actionsOverflowDirection: VerticalDirection.down,
               title: Text(
-                shopCopy(
-                  widget.myanmar,
-                  'Cash received?',
-                  'ငွေသားရပြီလား။',
-                ),
+                shopCopy(widget.myanmar, 'Cash received?', 'ငွေသားရပြီလား။'),
               ),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -1764,11 +1760,7 @@ class _ShopHomeState extends State<ShopHome> {
                       ? null
                       : () => Navigator.of(dialogContext).pop(true),
                   child: Text(
-                    shopCopy(
-                      widget.myanmar,
-                      'Complete sale',
-                      'အတည်ပြုရန်',
-                    ),
+                    shopCopy(widget.myanmar, 'Complete sale', 'အတည်ပြုရန်'),
                   ),
                 ),
               ],

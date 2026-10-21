@@ -23,34 +23,10 @@ Future<ShopDatabase> _sampleShop({required bool myanmar}) async {
       2950,
       8,
     ),
-    (
-      'kaung',
-      'KAUNG 90 Days Rice',
-      'KAUNG ရက် ၉၀ ဆန်',
-      12450,
-      34,
-    ),
-    (
-      'alpine',
-      'ALPINE Drinking Water',
-      'ALPINE သောက်ရေသန့်',
-      5700,
-      21,
-    ),
-    (
-      'baydar',
-      'BAYDAR Laundry Detergent',
-      'BAYDAR အဝတ်လျှော်ဆပ်ပြာ',
-      5900,
-      13,
-    ),
-    (
-      'zess',
-      'ZESS Sugar Crackers',
-      'ZESS သကြား ကရက်ကာ',
-      8000,
-      14,
-    ),
+    ('kaung', 'KAUNG 90 Days Rice', 'KAUNG ရက် ၉၀ ဆန်', 12450, 34),
+    ('alpine', 'ALPINE Drinking Water', 'ALPINE သောက်ရေသန့်', 5700, 21),
+    ('baydar', 'BAYDAR Laundry Detergent', 'BAYDAR အဝတ်လျှော်ဆပ်ပြာ', 5900, 13),
+    ('zess', 'ZESS Sugar Crackers', 'ZESS သကြား ကရက်ကာ', 8000, 14),
   ]) {
     await database.addProduct(
       id: id,
