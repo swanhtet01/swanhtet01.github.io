@@ -1462,7 +1462,8 @@ class _ShopHomeState extends State<ShopHome> {
         builder: (context, snapshot) => StatefulBuilder(
           builder: (context, refresh) => SafeArea(
             child: SizedBox(
-              height: MediaQuery.sizeOf(sheetContext).height *
+              height:
+                  MediaQuery.sizeOf(sheetContext).height *
                   (MediaQuery.sizeOf(sheetContext).width < 520 ? .92 : .72),
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
