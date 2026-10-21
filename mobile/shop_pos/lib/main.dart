@@ -359,7 +359,9 @@ class _ShopHomeState extends State<ShopHome> {
                 ),
                 PopupMenuItem(
                   value: 'settings',
-                  child: Text(shopCopy(widget.myanmar, 'Settings', 'ဆက်တင်များ')),
+                  child: Text(
+                    shopCopy(widget.myanmar, 'Settings', 'ဆက်တင်များ'),
+                  ),
                 ),
               ],
             ),
