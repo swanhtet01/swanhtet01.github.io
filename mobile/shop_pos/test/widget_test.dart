@@ -478,14 +478,13 @@ void main() {
     SharedPreferences.setMockInitialValues({
       'shop_pending_picker_intent': 'product:tea',
     });
-    final directory = await Directory.systemTemp.createTemp('shop-photo-test-');
-    addTearDown(() => directory.delete(recursive: true));
-    final image = File('${directory.path}/photo.png');
-    await image.writeAsBytes(
+    final image = XFile.fromData(
       base64Decode(
         'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ'
         'AAAADUlEQVR4nGPQyNjxHwAETAJIB09U9wAAAABJRU5ErkJggg==',
       ),
+      mimeType: 'image/png',
+      name: 'merchant-photo.png',
     );
     final database = ShopDatabase(NativeDatabase.memory());
     addTearDown(database.close);
@@ -503,12 +502,24 @@ void main() {
           apiBaseUrl: 'https://app.supermega.dev',
           myanmar: false,
           onLanguageChanged: (_) {},
-          recoverMenuPhoto: () async => XFile(image.path),
+          recoverMenuPhoto: () async => image,
         ),
       ),
     );
+    // Image decoding and SQLite use real asynchronous work. A widget test's
+    // fake clock cannot advance these operations by pumping frames alone.
+    final persisted = await tester.runAsync(() async {
+      final deadline = DateTime.now().add(const Duration(seconds: 5));
+      while (DateTime.now().isBefore(deadline)) {
+        final lookup = database.readProductThumbnail('tea');
+        final thumbnail = await lookup.timeout(const Duration(seconds: 1));
+        if (thumbnail != null) return true;
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
+      return false;
+    });
+    expect(persisted, isTrue);
     await tester.pumpAndSettle();
-    expect(await database.readProductThumbnail('tea'), isNotNull);
     expect(find.text('Menu photo ready to review'), findsNothing);
     final preferences = await SharedPreferences.getInstance();
     expect(preferences.getString('shop_pending_picker_intent'), isNull);
