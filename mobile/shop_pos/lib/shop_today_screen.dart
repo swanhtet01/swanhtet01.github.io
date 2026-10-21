@@ -74,15 +74,10 @@ class ShopTaskBottomBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final compactLargeText =
-        MediaQuery.sizeOf(context).width < 360 &&
-        MediaQuery.textScalerOf(context).scale(1) > 1.2;
     return SafeArea(
       top: false,
       child: NavigationBar(
-        labelBehavior: compactLargeText
-            ? NavigationDestinationLabelBehavior.onlyShowSelected
-            : NavigationDestinationLabelBehavior.alwaysShow,
+        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
         selectedIndex: selectedIndex,
         onDestinationSelected: onDestinationSelected,
         destinations: [
@@ -342,7 +337,8 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
     final inset = compact ? 16.0 : 24.0;
     final contentWidth = (width - inset * 2).clamp(0.0, 1180.0).toDouble();
     final threeAcross = contentWidth >= 900;
-    final smallCardWidth = threeAcross
+    final hasStockAlert = snapshot.stockToCheck.isNotEmpty;
+    final smallCardWidth = threeAcross && hasStockAlert
         ? (contentWidth - 24) / 3
         : contentWidth >= 600
         ? (contentWidth - 12) / 2
@@ -394,15 +390,16 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
                           value: _number(snapshot.saleCount),
                           icon: Icons.receipt_long_outlined,
                         ),
-                        _metric(
-                          width: smallCardWidth,
-                          label: _copy(
-                            'Low-stock products',
-                            'လက်ကျန်နည်းသော ကုန်ပစ္စည်းများ',
+                        if (hasStockAlert)
+                          _metric(
+                            width: smallCardWidth,
+                            label: _copy(
+                              'Low-stock products',
+                              'လက်ကျန်နည်းသော ကုန်ပစ္စည်းများ',
+                            ),
+                            value: _number(snapshot.stockToCheck.length),
+                            icon: Icons.inventory_2_outlined,
                           ),
-                          value: _number(snapshot.stockToCheck.length),
-                          icon: Icons.inventory_2_outlined,
-                        ),
                       ],
                     ],
                   ),
@@ -680,7 +677,12 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
         child: Card(
           child: Padding(
             padding: const EdgeInsets.all(18),
-            child: width < 330
+            child: snapshot.stockToCheck.isEmpty
+                ? _compactStatRow(
+                    _copy('Completed sales', 'ပြီးစီးသောအရောင်း'),
+                    _number(snapshot.saleCount),
+                  )
+                : width < 330
                 ? Column(
                     children: [
                       _compactStatRow(
