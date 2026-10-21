@@ -742,75 +742,78 @@ void main() {
     }
   });
 
-  testWidgets('catalog rows and photo controls stay touch-sized at app widths', (
-    tester,
-  ) async {
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
-    for (final width in [360.0, 390.0, 820.0, 1200.0]) {
-      for (final myanmar in [false, true]) {
-        tester.view.physicalSize = Size(width, 800);
-        tester.platformDispatcher.textScaleFactorTestValue = width == 360
-            ? 1.3
-            : 1.0;
-        final database = ShopDatabase(NativeDatabase.memory());
-        await database.addProduct(
-          id: 'rice',
-          name: myanmar
-              ? 'ဆန်အိတ် အရည်အသွေးကောင်း ၁၀ ကီလိုဂရမ်'
-              : 'Premium rice 10 kg bag',
-          priceMmk: 24900,
-          openingStock: 3,
-        );
-        await tester.pumpWidget(
-          ShopApp(
-            initialCounter: true,
-            database: database,
-            authClient: null,
-            apiBaseUrl: 'https://app.supermega.dev',
-            initialMyanmar: myanmar,
-          ),
-        );
-        await tester.pumpAndSettle();
+  testWidgets(
+    'catalog rows and photo controls stay touch-sized at app widths',
+    (tester) async {
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      for (final width in [360.0, 390.0, 820.0, 1200.0]) {
+        for (final myanmar in [false, true]) {
+          tester.view.physicalSize = Size(width, 800);
+          tester.platformDispatcher.textScaleFactorTestValue = width == 360
+              ? 1.3
+              : 1.0;
+          final database = ShopDatabase(NativeDatabase.memory());
+          await database.addProduct(
+            id: 'rice',
+            name: myanmar
+                ? 'ဆန်အိတ် အရည်အသွေးကောင်း ၁၀ ကီလိုဂရမ်'
+                : 'Premium rice 10 kg bag',
+            priceMmk: 24900,
+            openingStock: 3,
+          );
+          await tester.pumpWidget(
+            ShopApp(
+              initialCounter: true,
+              database: database,
+              authClient: null,
+              apiBaseUrl: 'https://app.supermega.dev',
+              initialMyanmar: myanmar,
+            ),
+          );
+          await tester.pumpAndSettle();
 
-        final addLabel = myanmar ? 'အရောင်းထဲထည့်ရန်' : 'Add to sale';
-        final row = find.descendant(
-          of: find.byTooltip(addLabel),
-          matching: find.byType(ListTile),
-        );
-        expect(row, findsOneWidget);
-        expect(tester.getSize(row).height, greaterThanOrEqualTo(56));
-        final photoButton = find.descendant(
-          of: row,
-          matching: find.byKey(const ValueKey('shop-product-photo:rice')),
-        );
-        expect(photoButton, findsOneWidget);
-        expect(tester.getSize(photoButton).width, greaterThanOrEqualTo(48));
-        expect(tester.getSize(photoButton).height, greaterThanOrEqualTo(48));
-        expect(
-          find.text(myanmar ? '၂၄,၉၀၀ ကျပ်' : '24,900 MMK'),
-          findsOneWidget,
-        );
-        expect(tester.takeException(), isNull);
+          final addLabel = myanmar ? 'အရောင်းထဲထည့်ရန်' : 'Add to sale';
+          final row = find.descendant(
+            of: find.byTooltip(addLabel),
+            matching: find.byType(ListTile),
+          );
+          expect(row, findsOneWidget);
+          expect(tester.getSize(row).height, greaterThanOrEqualTo(56));
+          final photoButton = find.descendant(
+            of: row,
+            matching: find.byKey(const ValueKey('shop-product-photo:rice')),
+          );
+          expect(photoButton, findsOneWidget);
+          expect(tester.getSize(photoButton).width, greaterThanOrEqualTo(48));
+          expect(tester.getSize(photoButton).height, greaterThanOrEqualTo(48));
+          expect(
+            find.text(myanmar ? '၂၄,၉၀၀ ကျပ်' : '24,900 MMK'),
+            findsOneWidget,
+          );
+          expect(tester.takeException(), isNull);
 
-        await tester.tap(row);
-        await tester.pumpAndSettle();
-        expect(
-          width >= 820
-              ? find.text(myanmar ? 'ငွေသား' : 'Cash sale')
-              : find.textContaining(myanmar ? 'အရောင်းစစ်ရန်' : 'Review sale'),
-          findsOneWidget,
-        );
-        expect(tester.takeException(), isNull);
+          await tester.tap(row);
+          await tester.pumpAndSettle();
+          expect(
+            width >= 820
+                ? find.text(myanmar ? 'ငွေသား' : 'Cash sale')
+                : find.textContaining(
+                    myanmar ? 'အရောင်းစစ်ရန်' : 'Review sale',
+                  ),
+            findsOneWidget,
+          );
+          expect(tester.takeException(), isNull);
 
-        await tester.pumpWidget(const SizedBox.shrink());
-        await tester.pump(const Duration(milliseconds: 1));
-        await database.close();
+          await tester.pumpWidget(const SizedBox.shrink());
+          await tester.pump(const Duration(milliseconds: 1));
+          await database.close();
+        }
       }
-    }
-  });
+    },
+  );
 
   testWidgets('Burmese cash review stays uncommitted until confirmed', (
     tester,
