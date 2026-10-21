@@ -1264,6 +1264,7 @@ class ShopDatabase extends _$ShopDatabase {
     required List<ShopSaleLineInput> lines,
     required String paymentMethod,
     String? walletCheckoutOperationId,
+    int? expectedTotalMmk,
   }) async {
     final cleanOperationId = operationId.trim();
     final cleanWalletCheckoutId = walletCheckoutOperationId?.trim();
@@ -1273,6 +1274,8 @@ class ShopDatabase extends _$ShopDatabase {
         lines.isEmpty ||
         lines.length > 100 ||
         !supportedPaymentMethods.contains(paymentMethod) ||
+        (expectedTotalMmk != null &&
+            (expectedTotalMmk < 0 || paymentMethod != 'cash')) ||
         (paymentMethod == 'cash' && cleanWalletCheckoutId != null) ||
         (paymentMethod != 'cash' &&
             cleanWalletCheckoutId != cleanOperationId)) {
@@ -1312,6 +1315,10 @@ class ShopDatabase extends _$ShopDatabase {
           throw StateError(
             'A sale operation ID was reused with different items.',
           );
+        }
+        if (expectedTotalMmk != null &&
+            priorSale.totalMmk != expectedTotalMmk) {
+          throw StateError('Sale total changed. Review the amount again.');
         }
         final priorLines =
             await (select(shopSaleLines)
@@ -1403,6 +1410,9 @@ class ShopDatabase extends _$ShopDatabase {
         }
         totalMmk += lineTotal;
         products.add(product);
+      }
+      if (expectedTotalMmk != null && totalMmk != expectedTotalMmk) {
+        throw StateError('Sale total changed. Review the amount again.');
       }
 
       final now = DateTime.now().millisecondsSinceEpoch;

@@ -371,6 +371,44 @@ void main() {
       },
     );
 
+    test(
+      'cash confirmation rejects a stale displayed total atomically',
+      () async {
+        await database.addProduct(
+          id: 'tea',
+          name: 'Tea',
+          priceMmk: 2500,
+          openingStock: 2,
+        );
+        final initialOutbox = await database.countOutboxOperations();
+        await database.customStatement(
+          'UPDATE shop_products SET price_mmk = ? WHERE id = ?',
+          [3000, 'tea'],
+        );
+        await expectLater(
+          database.recordSale(
+            operationId: 'confirmed-cash-1',
+            paymentMethod: 'cash',
+            expectedTotalMmk: 2500,
+            lines: const [ShopSaleLineInput(productId: 'tea', quantity: 1)],
+          ),
+          throwsA(isA<StateError>()),
+        );
+        expect(await database.countSales(), 0);
+        expect((await database.readActiveProducts()).single.onHand, 2);
+        expect(await database.countOutboxOperations(), initialOutbox);
+
+        final receipt = await database.recordSale(
+          operationId: 'confirmed-cash-1',
+          paymentMethod: 'cash',
+          expectedTotalMmk: 3000,
+          lines: const [ShopSaleLineInput(productId: 'tea', quantity: 1)],
+        );
+        expect(receipt.totalMmk, 3000);
+        expect(await database.countSales(), 1);
+      },
+    );
+
     test('catalog, sale, stock and outbox survive a database reopen', () async {
       final directory = await Directory.systemTemp.createTemp(
         'supermega-shop-persistent-',

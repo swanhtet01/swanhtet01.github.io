@@ -231,6 +231,18 @@ void main() {
     await tester.tap(find.text('Cash sale'));
     await tester.pumpAndSettle();
 
+    expect(find.text('Cash received?'), findsOneWidget);
+    expect(find.text('Complete sale'), findsOneWidget);
+    expect(await database.countSales(), 0);
+    expect((await database.readActiveProducts()).single.onHand, 2);
+    await tester.tap(find.text('Back'));
+    await tester.pumpAndSettle();
+    expect(await database.countSales(), 0);
+    await tester.tap(find.text('Cash sale'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Complete sale'));
+    await tester.pumpAndSettle();
+
     expect(await database.countSales(), 1);
     expect((await database.readActiveProducts()).single.onHand, 1);
     await tester.tap(find.byTooltip('Recent sales'));
@@ -241,6 +253,40 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Sale details'), findsOneWidget);
     expect(find.text('Tea × 1'), findsOneWidget);
+    await database.close();
+  });
+
+  testWidgets('Burmese cash review stays uncommitted until confirmed', (
+    tester,
+  ) async {
+    final database = ShopDatabase(NativeDatabase.memory());
+    await database.addProduct(
+      id: 'tea',
+      name: 'လက်ဖက်ရည်',
+      priceMmk: 2500,
+      openingStock: 2,
+    );
+    await tester.pumpWidget(
+      ShopApp(
+        database: database,
+        authClient: null,
+        apiBaseUrl: 'https://app.supermega.dev',
+        initialMyanmar: true,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('အရောင်းထဲထည့်ရန်'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.textContaining('အရောင်းစစ်ရန်'));
+    await tester.pumpAndSettle();
+    expect(find.text('မိုဘိုင်းငွေပေးချေမှု'), findsOneWidget);
+    await tester.tap(find.text('ငွေသား'));
+    await tester.pumpAndSettle();
+    expect(find.text('ငွေသားလက်ခံပြီးပြီလား။'), findsOneWidget);
+    expect(await database.countSales(), 0);
+    await tester.tap(find.text('ပြန်သွားရန်'));
+    await tester.pumpAndSettle();
+    expect(await database.countSales(), 0);
     await database.close();
   });
 
@@ -517,7 +563,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.textContaining('Review sale'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Wallet QR'));
+      await tester.tap(find.text('Mobile money'));
       await tester.pumpAndSettle();
 
       await tester.ensureVisible(find.byType(QrImageView).first);

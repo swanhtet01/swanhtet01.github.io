@@ -196,7 +196,7 @@ class _ShopHomeState extends State<ShopHome> {
           shopCopy(
             widget.myanmar,
             'Could not check for an unfinished wallet payment.',
-            'မပြီးသေးသော wallet ငွေပေးချေမှုကို စစ်မရပါ။',
+            'မပြီးသေးသော မိုဘိုင်းငွေပေးချေမှုကို စစ်၍မရပါ။',
           ),
         );
       }
@@ -703,7 +703,10 @@ class _ShopHomeState extends State<ShopHome> {
                     child: FilledButton.icon(
                       onPressed: _saving || _pendingWalletCheckout != null
                           ? null
-                          : () => _completeSale(closeSheet: refresh != null),
+                          : () => _confirmCashSale(
+                              products: products,
+                              closeSheet: refresh != null,
+                            ),
                       icon: _saving
                           ? const SizedBox.square(
                               dimension: 18,
@@ -725,7 +728,11 @@ class _ShopHomeState extends State<ShopHome> {
                           ),
                     icon: const Icon(Icons.qr_code_2),
                     label: Text(
-                      shopCopy(widget.myanmar, 'Wallet QR', 'Wallet QR'),
+                      shopCopy(
+                        widget.myanmar,
+                        'Mobile money',
+                        'မိုဘိုင်းငွေပေးချေမှု',
+                      ),
                     ),
                   ),
                 ],
@@ -841,6 +848,70 @@ class _ShopHomeState extends State<ShopHome> {
     _operationId = null;
   }
 
+  Future<void> _confirmCashSale({
+    required List<ShopProduct> products,
+    required bool closeSheet,
+  }) async {
+    final operationId = _operationId;
+    if (_saving || operationId == null || _cart.isEmpty) return;
+    final selected = Map<String, int>.of(_cart);
+    final knownProducts = {for (final product in products) product.id: product};
+    if (selected.keys.any((id) => !knownProducts.containsKey(id))) {
+      _message(
+        shopCopy(
+          widget.myanmar,
+          'A product changed. Review the sale again.',
+          'ကုန်ပစ္စည်းပြောင်းလဲသွားပါသည်။ အရောင်းကို ပြန်စစ်ပါ။',
+        ),
+      );
+      return;
+    }
+    final totalMmk = _cartTotal(products);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(
+          shopCopy(widget.myanmar, 'Cash received?', 'ငွေသားလက်ခံပြီးပြီလား။'),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              shopCopy(widget.myanmar, 'Amount to receive', 'လက်ခံရမည့်ငွေ'),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _mmk(totalMmk),
+              style: Theme.of(context).textTheme.headlineSmall
+                  ?.copyWith(fontWeight: FontWeight.w800),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text(shopCopy(widget.myanmar, 'Back', 'ပြန်သွားရန်')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text(
+              shopCopy(widget.myanmar, 'Complete sale', 'အရောင်းပြီးစီးရန်'),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true ||
+        !mounted ||
+        _saving ||
+        _operationId != operationId ||
+        !mapEquals(_cart, selected)) {
+      return;
+    }
+    await _completeSale(closeSheet: closeSheet, expectedTotalMmk: totalMmk);
+  }
+
   Future<void> _startWalletSale({
     required List<ShopProduct> products,
     required bool closeSheet,
@@ -925,13 +996,11 @@ class _ShopHomeState extends State<ShopHome> {
     } catch (error) {
       if (mounted) {
         _message(
-          error is StateError
-              ? error.message.toString()
-              : shopCopy(
-                  widget.myanmar,
-                  'Payment setup could not be loaded. The basket is unchanged.',
-                  'ငွေပေးချေမှုဆက်တင် မဖွင့်နိုင်ပါ။ Basket ကို မပြောင်းထားပါ။',
-                ),
+          shopCopy(
+            widget.myanmar,
+            'Could not start mobile payment. Check the basket and try again.',
+            'မိုဘိုင်းငွေပေးချေမှုကို မစတင်နိုင်ပါ။ အရောင်းစာရင်းကို စစ်ပြီး ထပ်ကြိုးစားပါ။',
+          ),
         );
       }
     }
@@ -1003,7 +1072,7 @@ class _ShopHomeState extends State<ShopHome> {
               shopCopy(
                 widget.myanmar,
                 'Check an earlier wallet payment',
-                'ယခင် wallet ငွေပေးချေမှုကို စစ်ဆေးရန်',
+                'ယခင် မိုဘိုင်းငွေပေးချေမှုကို စစ်ဆေးရန်',
               ),
             ),
             content: SizedBox(
@@ -1022,7 +1091,7 @@ class _ShopHomeState extends State<ShopHome> {
                       shopCopy(
                         widget.myanmar,
                         'The older app did not save this sale’s QR. Do not ask the customer to scan again. Check the recipient and matching incoming payment in your wallet app.',
-                        'အက်ပ်အဟောင်းတွင် ဤအရောင်း၏ QR ကို မသိမ်းခဲ့ပါ။ ဝယ်သူကို ထပ်မံ scan မလုပ်ခိုင်းပါနှင့်။ Wallet app ထဲတွင် လက်ခံသူနှင့် ကိုက်ညီသော ငွေလက်ခံမှုကို စစ်ပါ။',
+                        'အက်ပ်အဟောင်းတွင် ဤအရောင်း၏ QR ကို မသိမ်းခဲ့ပါ။ ဝယ်သူကို ထပ်မံ ဖတ်ခိုင်းခြင်း မပြုပါနှင့်။ မိုဘိုင်းငွေပေးချေမှုအက်ပ်တွင် လက်ခံသူနှင့် ကိုက်ညီသော ငွေလက်ခံမှုကို စစ်ပါ။',
                       ),
                     ),
                     CheckboxListTile(
@@ -1035,7 +1104,7 @@ class _ShopHomeState extends State<ShopHome> {
                         shopCopy(
                           widget.myanmar,
                           'I verified the matching payment in the wallet app.',
-                          'Wallet app တွင် ကိုက်ညီသော ငွေလက်ခံမှုကို စစ်ဆေးပြီးပါပြီ။',
+                          'မိုဘိုင်းငွေပေးချေမှုအက်ပ်တွင် ကိုက်ညီသော ငွေလက်ခံမှုကို စစ်ဆေးပြီးပါပြီ။',
                         ),
                       ),
                     ),
@@ -1121,7 +1190,7 @@ class _ShopHomeState extends State<ShopHome> {
           shopCopy(
             widget.myanmar,
             'Only cancel after checking the wallet and confirming no payment arrived. The sale will not be recorded.',
-            'Wallet ကိုစစ်ပြီး ငွေမဝင်ကြောင်း သေချာမှသာ ပယ်ဖျက်ပါ။ အရောင်းကို မှတ်တမ်းတင်မည်မဟုတ်ပါ။',
+            'မိုဘိုင်းငွေပေးချေမှုအက်ပ်တွင် ငွေမဝင်ကြောင်း သေချာမှသာ ပယ်ဖျက်ပါ။ အရောင်းကို မှတ်တမ်းတင်မည်မဟုတ်ပါ။',
           ),
         ),
         actions: [
@@ -1154,7 +1223,7 @@ class _ShopHomeState extends State<ShopHome> {
         shopCopy(
           widget.myanmar,
           'Unpaid checkout cancelled. The basket is still here.',
-          'ငွေမဝင်သော checkout ကို ပယ်ဖျက်ပြီးပါပြီ။ Basket ကို မဖျက်ထားပါ။',
+          'ငွေမဝင်သော ငွေပေးချေမှုကို ပယ်ဖျက်ပြီးပါပြီ။ အရောင်းစာရင်းကို မဖျက်ထားပါ။',
         ),
       );
     } catch (_) {
@@ -1174,6 +1243,7 @@ class _ShopHomeState extends State<ShopHome> {
     required bool closeSheet,
     String paymentMethod = 'cash',
     String? walletCheckoutOperationId,
+    int? expectedTotalMmk,
   }) async {
     final operationId = _operationId;
     if (_saving || operationId == null || _cart.isEmpty) return;
@@ -1182,7 +1252,7 @@ class _ShopHomeState extends State<ShopHome> {
         shopCopy(
           widget.myanmar,
           'Resume or cancel the wallet payment before recording another sale.',
-          'အခြားအရောင်းမမှတ်မီ wallet ငွေပေးချေမှုကို ပြန်စစ်ပါ သို့မဟုတ် ပယ်ဖျက်ပါ။',
+          'အခြားအရောင်းမမှတ်မီ ဆိုင်းငံ့နေသော မိုဘိုင်းငွေပေးချေမှုကို ပြန်စစ်ပါ သို့မဟုတ် ပယ်ဖျက်ပါ။',
         ),
       );
       return;
@@ -1193,6 +1263,7 @@ class _ShopHomeState extends State<ShopHome> {
         operationId: operationId,
         paymentMethod: paymentMethod,
         walletCheckoutOperationId: walletCheckoutOperationId,
+        expectedTotalMmk: expectedTotalMmk,
         lines: [
           for (final entry in _cart.entries)
             ShopSaleLineInput(productId: entry.key, quantity: entry.value),
@@ -1279,15 +1350,7 @@ class _ShopHomeState extends State<ShopHome> {
     } catch (error) {
       if (!mounted) return;
       setState(() => _saving = false);
-      _message(
-        error is StateError
-            ? error.message.toString()
-            : shopCopy(
-                widget.myanmar,
-                'Sale could not be saved. Try again.',
-                'အရောင်းသိမ်း၍မရပါ။ ထပ်ကြိုးစားပါ။',
-              ),
-      );
+      _message(_saleSaveError(error, widget.myanmar));
     }
   }
 
@@ -1483,6 +1546,39 @@ class _ShopHomeState extends State<ShopHome> {
 
 String _mmk(int amount) => shopMmk(amount);
 
+String _saleSaveError(Object error, bool myanmar) {
+  if (error is StateError) {
+    final detail = error.message.toString();
+    if (detail.startsWith('Not enough stock for ')) {
+      final item = detail.substring('Not enough stock for '.length);
+      return shopCopy(
+        myanmar,
+        'Not enough stock for $item. Review the basket.',
+        '$item လက်ကျန်မလုံလောက်ပါ။ အရောင်းစာရင်းကို ပြန်စစ်ပါ။',
+      );
+    }
+    if (detail == 'Sale total changed. Review the amount again.') {
+      return shopCopy(
+        myanmar,
+        'Price changed. Review the total before taking cash.',
+        'ဈေးနှုန်းပြောင်းလဲသွားပါသည်။ ငွေမယူမီ စုစုပေါင်းငွေကို ပြန်စစ်ပါ။',
+      );
+    }
+    if (detail.contains('pending wallet')) {
+      return shopCopy(
+        myanmar,
+        'Finish or cancel the pending mobile payment first.',
+        'ဆိုင်းငံ့နေသော မိုဘိုင်းငွေပေးချေမှုကို အရင်ပြီးစီးပါ သို့မဟုတ် ပယ်ဖျက်ပါ။',
+      );
+    }
+  }
+  return shopCopy(
+    myanmar,
+    'Could not confirm the sale. Check Recent sales before trying again.',
+    'အရောင်းအခြေအနေကို အတည်မပြုနိုင်ပါ။ ထပ်မကြိုးစားမီ မကြာသေးသောအရောင်းများကို စစ်ပါ။',
+  );
+}
+
 class _WalletCheckoutDialog extends StatefulWidget {
   const _WalletCheckoutDialog({
     required this.methods,
@@ -1553,11 +1649,19 @@ class _WalletCheckoutDialogState extends State<_WalletCheckoutDialog> {
                   container: true,
                   excludeSemantics: true,
                   image: true,
-                  label: '${_selected.provider} merchant QR',
+                  label: shopCopy(
+                    myanmar,
+                    '${_selected.provider} merchant QR',
+                    '${_selected.provider} ဆိုင်၏ ငွေလက်ခံ QR',
+                  ),
                   child: QrImageView(
                     data: payload,
                     size: 220,
-                    semanticsLabel: '${_selected.provider} merchant QR',
+                    semanticsLabel: shopCopy(
+                      myanmar,
+                      '${_selected.provider} merchant QR',
+                      '${_selected.provider} ဆိုင်၏ ငွေလက်ခံ QR',
+                    ),
                   ),
                 ),
               ),
@@ -1573,7 +1677,7 @@ class _WalletCheckoutDialogState extends State<_WalletCheckoutDialog> {
                 shopCopy(
                   myanmar,
                   'Ask the customer to scan this merchant QR and enter the amount above. Check the recipient and incoming payment in your wallet app before confirming here.',
-                  'ဝယ်သူကို ဤဆိုင် QR ကို scan လုပ်ပြီး အပေါ်ပါငွေပမာဏ ရိုက်ထည့်ခိုင်းပါ။ ဤနေရာတွင် အတည်မပြုမီ wallet app ထဲရှိ လက်ခံသူနှင့် ဝင်လာသောငွေကို စစ်ပါ။',
+                  'ဝယ်သူကို ဤဆိုင် QR ကို ဖတ်၍ အပေါ်ပါငွေပမာဏ ထည့်ခိုင်းပါ။ ဤနေရာတွင် အတည်မပြုမီ မိုဘိုင်းငွေပေးချေမှုအက်ပ်တွင် ငွေလက်ခံသူနှင့် ဝင်ငွေကို စစ်ပါ။',
                 ),
               ),
               const SizedBox(height: 8),
@@ -1587,7 +1691,7 @@ class _WalletCheckoutDialogState extends State<_WalletCheckoutDialog> {
                   shopCopy(
                     myanmar,
                     'I verified this payment in the wallet app.',
-                    'Wallet app တွင် ဤငွေပေးချေမှုကို စစ်ဆေးပြီးပါပြီ။',
+                    'မိုဘိုင်းငွေပေးချေမှုအက်ပ်တွင် ဤငွေပေးချေမှုကို စစ်ဆေးပြီးပါပြီ။',
                   ),
                 ),
               ),
