@@ -187,6 +187,10 @@ void main() {
 
   testWidgets('empty catalog can make a durable cash sale', (tester) async {
     final database = ShopDatabase(NativeDatabase.memory());
+    addTearDown(() async {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await database.close();
+    });
     await tester.pumpWidget(
       ShopApp(
         database: database,
@@ -225,7 +229,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Tea'), findsOneWidget);
-    expect(find.textContaining('0012345678905'), findsOneWidget);
+    expect(
+      (await database.readActiveProducts()).single.barcode,
+      '0012345678905',
+    );
     await tester.tap(find.byTooltip('Add to sale'));
     await tester.pumpAndSettle();
     await tester.tap(find.textContaining('Review sale'));
@@ -257,7 +264,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Sale details'), findsOneWidget);
     expect(find.text('Tea × 1'), findsOneWidget);
-    await database.close();
   });
 
   testWidgets('desktop first use shows one focused setup workspace', (
