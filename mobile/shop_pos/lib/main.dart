@@ -879,6 +879,7 @@ class _ShopHomeState extends State<ShopHome> {
   );
 
   Widget _productList(List<ShopProduct> products) {
+    final compactProductRow = MediaQuery.sizeOf(context).width < 700;
     final text = _search.text.trim().toLowerCase();
     final visible = products
         .where(
@@ -989,6 +990,23 @@ class _ShopHomeState extends State<ShopHome> {
                 '${shopNumber(item.onHand, myanmar: true)} ခုလက်ကျန်',
               );
         final canAdd = item.onHand > 0 && _pendingWalletCheckout == null;
+        final addAffordance = ExcludeSemantics(
+          child: Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: canAdd ? const Color(0xffeef3ff) : const Color(0xfff1f2f5),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(
+              Icons.add,
+              size: 20,
+              color: canAdd
+                  ? Theme.of(context).colorScheme.primary
+                  : Theme.of(context).disabledColor,
+            ),
+          ),
+        );
         return Tooltip(
           message: item.onHand == 0
               ? shopCopy(widget.myanmar, 'Out of stock', 'လက်ကျန်ကုန်ပါပြီ')
@@ -1000,6 +1018,7 @@ class _ShopHomeState extends State<ShopHome> {
                 )
               : shopCopy(widget.myanmar, 'Add to sale', 'အရောင်းထဲထည့်ရန်'),
           child: ListTile(
+            isThreeLine: compactProductRow,
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 14,
               vertical: 10,
@@ -1010,40 +1029,35 @@ class _ShopHomeState extends State<ShopHome> {
               overflow: TextOverflow.ellipsis,
               style: Theme.of(context).textTheme.titleMedium,
             ),
-            subtitle: Text(
-              stock,
-              style: TextStyle(
-                color: item.onHand == 0
-                    ? Theme.of(context).colorScheme.error
-                    : Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            ),
-            trailing: Row(
+            subtitle: Column(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(_mmk(item.priceMmk), style: _shopMoneyStyle(context)),
-                const SizedBox(width: 12),
-                ExcludeSemantics(
-                  child: Container(
-                    width: 38,
-                    height: 38,
-                    decoration: BoxDecoration(
-                      color: canAdd
-                          ? const Color(0xffeef3ff)
-                          : const Color(0xfff1f2f5),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Icon(
-                      Icons.add,
-                      size: 20,
-                      color: canAdd
-                          ? Theme.of(context).colorScheme.primary
-                          : Theme.of(context).disabledColor,
-                    ),
+                if (compactProductRow)
+                  Text(_mmk(item.priceMmk), style: _shopMoneyStyle(context)),
+                Text(
+                  stock,
+                  style: TextStyle(
+                    color: item.onHand == 0
+                        ? Theme.of(context).colorScheme.error
+                        : Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
                 ),
               ],
             ),
+            trailing: compactProductRow
+                ? addAffordance
+                : Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        _mmk(item.priceMmk),
+                        style: _shopMoneyStyle(context),
+                      ),
+                      const SizedBox(width: 12),
+                      addAffordance,
+                    ],
+                  ),
             onTap: canAdd ? () => _add(item) : null,
           ),
         );
