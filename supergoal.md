@@ -1,12 +1,12 @@
 # SuperMega Supergoal
 
-- Version: 1.8.0
+- Version: 1.8.1
 - Owner: Swan Htet, Founder
 - Maintainer: CTO, sole integration writer
-- Updated: 2026-10-20
+- Updated: 2026-10-21
 - Status: ACTIVE — acceptance in progress; not production-ready.
 
-This is SuperMega.dev's long-term operating objective. Exact source state, open gates and the next executable action belong in the founder's launch-control record. Shop is the customer product. Sites and Commerce remain internally managed, with the public storefront and customer review preserved. The product direction is app-first: Android tablet, iPad and Windows PC for daily Shop work, with a browser companion for account access, administration and supported workflows. The 20 October date is an honest readiness checkpoint, not authority to call an unaccepted build live.
+This is SuperMega.dev's long-term operating objective. Exact source state, open gates and the next executable action belong in the founder's launch-control record. Shop is the customer product. Sites and Commerce remain internally managed, with the public storefront and customer review preserved. The product direction is app-first: Android tablet, iPad and Windows PC for daily Shop work, with a browser companion for account access, administration and supported workflows. The 20 October checkpoint closed without acceptance. The launch remains NO-GO; no replacement date is inferred, and an unaccepted build is not described as live.
 
 ## Objective
 
@@ -16,7 +16,9 @@ The differentiated promise is a full English or full Burmese merchant experience
 
 The current design decision uses an **eliminate / reduce / raise / create** test against a merchant's first day. Eliminate repeated device-only warnings, dummy controls and manual message re-entry from the primary path. Reduce setup to a usable first catalog item, a first sale and an optional connected-account step; move printer, wallet, team and advanced policy setup to the point of need. Raise sale/stock correctness, discoverability, full-language quality, hardware reliability and recovery to non-negotiable release criteria. Create a reviewed photo-to-catalog path and later grounded, cited sales/stock suggestions that save measured operator time. Do not add an AI card, setting or subscription control unless it improves a named job and its failure state is clear.
 
-## Current delivery goal after the 20 October checkpoint
+## Current delivery goal: first supported merchant pilot
+
+The 20 October checkpoint closed as **NO-GO**. Readiness is now evidence-gated; no replacement launch date is inferred.
 
 Produce **one independently reviewable Shop merchant pilot**, not a broad feature-complete claim. A merchant must be able to set up a catalog, scan or find an item, finish an offline sale, print or retrieve its receipt, and recover after interruption on a named supported device. The signed-in account must show the right workspace and deny ordinary customers Sites and Commerce management at both UI and API boundaries. The public site must show current source-bound Shop screens and advertise only the platform and download paths actually verified. Sites and Commerce remain usable by internal operators under their own acceptance checks.
 
