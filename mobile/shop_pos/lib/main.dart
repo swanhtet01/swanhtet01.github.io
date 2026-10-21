@@ -2775,6 +2775,7 @@ class _ShopSettingsScreenState extends State<ShopSettingsScreen> {
             ),
             const SizedBox(height: 12),
             SegmentedButton<bool>(
+              showSelectedIcon: false,
               segments: const [
                 ButtonSegment(value: false, label: Text('English')),
                 ButtonSegment(value: true, label: Text('မြန်မာ')),
