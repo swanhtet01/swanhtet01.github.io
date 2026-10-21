@@ -659,35 +659,73 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
     ),
   );
 
-  Widget _compactStats(_TodaySnapshot snapshot, {required double width}) =>
-      SizedBox(
-        width: width,
-        child: Card(
-          child: Padding(
-            padding: const EdgeInsets.all(18),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: _compactStat(
+  Widget _compactStats(
+    _TodaySnapshot snapshot, {
+    required double width,
+  }) => SizedBox(
+    width: width,
+    child: Card(
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: width < 330
+            ? Column(
+                children: [
+                  _compactStatRow(
                     _copy('Completed sales', 'ပြီးစီးသောအရောင်း'),
                     _number(snapshot.saleCount),
                   ),
-                ),
-                const SizedBox(width: 12),
-                Container(width: 1, height: 64, color: const Color(0xffe2e5ed)),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _compactStat(
+                  const Divider(height: 20),
+                  _compactStatRow(
                     _copy('5 or fewer left', '၅ ခု သို့မဟုတ် အောက် လက်ကျန်'),
                     _number(snapshot.stockToCheck.length),
                   ),
-                ),
-              ],
-            ),
-          ),
+                ],
+              )
+            : Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: _compactStat(
+                      _copy('Completed sales', 'ပြီးစီးသောအရောင်း'),
+                      _number(snapshot.saleCount),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Container(
+                    width: 1,
+                    height: 64,
+                    color: const Color(0xffe2e5ed),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _compactStat(
+                      _copy('5 or fewer left', '၅ ခု သို့မဟုတ် အောက် လက်ကျန်'),
+                      _number(snapshot.stockToCheck.length),
+                    ),
+                  ),
+                ],
+              ),
+      ),
+    ),
+  );
+
+  Widget _compactStatRow(String label, String value) => Row(
+    children: [
+      Expanded(
+        child: Text(
+          label,
+          style: Theme.of(context).textTheme.bodyMedium
+              ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
         ),
-      );
+      ),
+      const SizedBox(width: 12),
+      Text(
+        value,
+        style: Theme.of(context).textTheme.titleLarge
+            ?.copyWith(fontFeatures: const [FontFeature.tabularFigures()]),
+      ),
+    ],
+  );
 
   Widget _compactStat(String label, String value) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,

@@ -105,6 +105,24 @@ void main() {
             ),
           );
 
+          for (final (icon, screen) in [
+            (Icons.receipt_long_outlined, 'sales'),
+            (Icons.inventory_2_outlined, 'stock'),
+            (Icons.settings_outlined, 'settings'),
+          ]) {
+            await tester.tap(find.byIcon(icon).first);
+            await tester.pumpAndSettle();
+            expect(tester.takeException(), isNull);
+            await expectLater(
+              find.byKey(_captureKey),
+              matchesGoldenFile(
+                'goldens/shop_${screen}_${width.toInt()}_$language.png',
+              ),
+            );
+            await tester.pageBack();
+            await tester.pumpAndSettle();
+          }
+
           await tester.tap(find.byIcon(Icons.point_of_sale_outlined).first);
           await tester.pumpAndSettle();
           expect(tester.takeException(), isNull);
