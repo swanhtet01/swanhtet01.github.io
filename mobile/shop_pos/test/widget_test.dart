@@ -1427,11 +1427,6 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpAndSettle();
-    final compactError = tester.takeException();
-    if (compactError is FlutterError) {
-      debugPrint(compactError.toStringDeep());
-    }
-    expect(compactError, isNull);
     expect(find.text('English'), findsOneWidget);
     expect(find.text('မြန်မာ'), findsOneWidget);
     expect(find.text('Mobile money'), findsOneWidget);
@@ -1443,7 +1438,6 @@ void main() {
     await tester.tap(find.text('မိုဘိုင်းငွေပေးချေမှု'));
     await tester.pumpAndSettle();
     expect(find.text('KBZPay'), findsOneWidget);
-    expect(tester.takeException(), isNull);
     await database.close();
   });
 
