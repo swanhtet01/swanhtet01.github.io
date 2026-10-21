@@ -657,6 +657,9 @@ class _ShopHomeState extends State<ShopHome> {
     final inWorkspace = widget.onToday != null;
     final showRail = inWorkspace && width >= 700;
     final contentWidth = width - (showRail ? (width >= 1100 ? 191 : 77) : 0);
+    // A portrait tablet can still fit two usable panes beside the compact rail.
+    // Keep narrower layouts on the single-column review-sheet path.
+    const minSplitContentWidth = 740.0;
     final cartAction = SafeArea(
       top: false,
       minimum: const EdgeInsets.fromLTRB(12, 8, 12, 10),
@@ -783,8 +786,11 @@ class _ShopHomeState extends State<ShopHome> {
                 stream: _productsStream,
                 builder: (context, snapshot) {
                   final products = snapshot.data ?? const <ShopProduct>[];
-                  if (contentWidth >= 820) {
+                  if (contentWidth >= minSplitContentWidth) {
                     final tablet = contentWidth < 1080;
+                    final cartWidth = contentWidth < 820
+                        ? 300.0
+                        : (contentWidth * 0.36).clamp(340.0, 500.0);
                     return Padding(
                       padding: EdgeInsets.all(tablet ? 12 : 20),
                       child: Row(
@@ -802,14 +808,20 @@ class _ShopHomeState extends State<ShopHome> {
                                   _pendingWalletCheckoutCard(),
                                 ],
                                 const SizedBox(height: 14),
-                                Expanded(child: _catalog(products)),
+                                Expanded(
+                                  child: SizedBox(
+                                    key: const ValueKey('shop-split-catalog'),
+                                    child: _catalog(products),
+                                  ),
+                                ),
                               ],
                             ),
                           ),
                           if (products.isNotEmpty) ...[
                             SizedBox(width: tablet ? 12 : 18),
                             SizedBox(
-                              width: (contentWidth * 0.36).clamp(340.0, 500.0),
+                              key: const ValueKey('shop-split-basket'),
+                              width: cartWidth,
                               child: _cartPanel(products),
                             ),
                           ],
@@ -865,7 +877,7 @@ class _ShopHomeState extends State<ShopHome> {
                 ),
               ],
             )
-          : contentWidth >= 820 || _cart.isEmpty
+          : contentWidth >= minSplitContentWidth || _cart.isEmpty
           ? null
           : cartAction,
     );
@@ -1100,7 +1112,10 @@ class _ShopHomeState extends State<ShopHome> {
   );
 
   Widget _productList(List<ShopProduct> products) {
-    final compactProductRow = MediaQuery.sizeOf(context).width < 700;
+    final viewportWidth = MediaQuery.sizeOf(context).width;
+    // Prices move below names on portrait tablets so the narrower catalog
+    // pane retains a readable, full-row add target.
+    final compactProductRow = viewportWidth < 900;
     final text = _search.text.trim().toLowerCase();
     final visible = products
         .where(
