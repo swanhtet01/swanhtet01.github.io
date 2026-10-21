@@ -73,32 +73,40 @@ class ShopTaskBottomBar extends StatelessWidget {
   final ValueChanged<int> onDestinationSelected;
 
   @override
-  Widget build(BuildContext context) => SafeArea(
-    top: false,
-    child: NavigationBar(
-      selectedIndex: selectedIndex,
-      onDestinationSelected: onDestinationSelected,
-      destinations: [
-        NavigationDestination(
-          icon: const Icon(Icons.home_outlined),
-          selectedIcon: const Icon(Icons.home),
-          label: shopCopy(myanmar, 'Today', 'ယနေ့'),
-        ),
-        NavigationDestination(
-          icon: const Icon(Icons.point_of_sale_outlined),
-          label: shopCopy(myanmar, 'Sell', 'ရောင်းရန်'),
-        ),
-        NavigationDestination(
-          icon: const Icon(Icons.receipt_long_outlined),
-          label: shopCopy(myanmar, 'Sales', 'အရောင်း'),
-        ),
-        NavigationDestination(
-          icon: const Icon(Icons.inventory_2_outlined),
-          label: shopCopy(myanmar, 'Stock', 'လက်ကျန်'),
-        ),
-      ],
-    ),
-  );
+  Widget build(BuildContext context) {
+    final compactLargeText =
+        MediaQuery.sizeOf(context).width < 360 &&
+        MediaQuery.textScalerOf(context).scale(1) > 1.2;
+    return SafeArea(
+      top: false,
+      child: NavigationBar(
+        labelBehavior: compactLargeText
+            ? NavigationDestinationLabelBehavior.onlyShowSelected
+            : NavigationDestinationLabelBehavior.alwaysShow,
+        selectedIndex: selectedIndex,
+        onDestinationSelected: onDestinationSelected,
+        destinations: [
+          NavigationDestination(
+            icon: const Icon(Icons.home_outlined),
+            selectedIcon: const Icon(Icons.home),
+            label: shopCopy(myanmar, 'Today', 'ယနေ့'),
+          ),
+          NavigationDestination(
+            icon: const Icon(Icons.point_of_sale_outlined),
+            label: shopCopy(myanmar, 'Sell', 'ရောင်းရန်'),
+          ),
+          NavigationDestination(
+            icon: const Icon(Icons.receipt_long_outlined),
+            label: shopCopy(myanmar, 'Sales', 'အရောင်း'),
+          ),
+          NavigationDestination(
+            icon: const Icon(Icons.inventory_2_outlined),
+            label: shopCopy(myanmar, 'Stock', 'လက်ကျန်'),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 /// A local operating view. It never presents a device sale as a synced order.
