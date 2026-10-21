@@ -1112,6 +1112,10 @@ type ShopCounterReview = {
   onCommitted: (orderId: string) => void
 }
 
+function isFutureCounterPickup(value: Date | null): value is Date {
+  return value !== null && Number.isFinite(value.getTime()) && value.getTime() > Date.now()
+}
+
 const SHOP_COUNTER_PAYMENT_METHODS = ['Cash', 'KBZPay', 'WavePay', 'AYA Pay', 'MMQR'] as const
 const SHOP_COUNTER_QUICK_PAYMENTS = [SHOP_COUNTER_PAYMENT_METHODS[0], SHOP_COUNTER_PAYMENT_METHODS[1]] as const
 const SHOP_COUNTER_OTHER_PAYMENTS = [SHOP_COUNTER_PAYMENT_METHODS[2], SHOP_COUNTER_PAYMENT_METHODS[3], SHOP_COUNTER_PAYMENT_METHODS[4]] as const
@@ -1384,7 +1388,7 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
   function reviewSale(event: MouseEvent<HTMLButtonElement>) {
     if (!lines.length || disabled || catalogChanged || recoveryPaused || !tickets.checkpoint()) return
     const promisedTime = pickupBy ? new Date(pickupBy) : null
-    if (effectiveOutcome === 'open_order' && (!promisedTime || Number.isNaN(promisedTime.getTime()) || promisedTime.getTime() <= Date.now())) {
+    if (effectiveOutcome === 'open_order' && !isFutureCounterPickup(promisedTime)) {
       setPickupIssue(uiText('Choose a future pickup time.'))
       return
     }
