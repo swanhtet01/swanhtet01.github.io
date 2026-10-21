@@ -158,7 +158,9 @@ void main() {
             ),
           );
 
-          final cashButton = find.text(language == 'my' ? 'ငွေသား' : 'Cash sale');
+          final cashButton = find.text(
+            language == 'my' ? 'ငွေသား' : 'Cash sale',
+          );
           await tester.ensureVisible(cashButton);
           await tester.tap(cashButton);
           await tester.pumpAndSettle();

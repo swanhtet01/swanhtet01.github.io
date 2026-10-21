@@ -1711,7 +1711,8 @@ class _ShopHomeState extends State<ShopHome> {
                     inputFormatters: [
                       FilteringTextInputFormatter.allow(RegExp(r'[0-9၀-၉]')),
                     ],
-                    onChanged: (value) => setDialogState(() => cashGiven = value),
+                    onChanged: (value) =>
+                        setDialogState(() => cashGiven = value),
                     decoration: InputDecoration(
                       labelText: shopCopy(
                         widget.myanmar,
@@ -1744,7 +1745,9 @@ class _ShopHomeState extends State<ShopHome> {
                             ? 'ပေးထားသော ငွေသားမှာ ကျသင့်ငွေထက် နည်းပါသည်။'
                             : 'မှန်ကန်သော ငွေပမာဏကို ထည့်ပါ။',
                       ),
-                      style: TextStyle(color: Theme.of(context).colorScheme.error),
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
                     ),
                   ],
                 ],
