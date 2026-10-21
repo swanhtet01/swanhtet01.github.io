@@ -240,6 +240,169 @@ void main() {
     }
   });
 
+  testWidgets('unfinished sale opens from Today after app restart', (
+    tester,
+  ) async {
+    _usePhoneViewport(tester);
+    final database = ShopDatabase(NativeDatabase.memory());
+    try {
+      await database.addProduct(
+        id: 'tea',
+        name: 'Tea',
+        barcode: '111111',
+        priceMmk: 2500,
+        openingStock: 3,
+      );
+      await database.saveCounterSaleDraft(
+        operationId: 'counter-before-restart',
+        quantities: const {'tea': 2},
+      );
+      await tester.pumpWidget(
+        ShopApp(
+          database: database,
+          authClient: null,
+          apiBaseUrl: 'https://app.supermega.dev',
+          initialMyanmar: false,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect((await database.readCounterSaleDraft())?.quantities, {'tea': 2});
+      expect((await database.readActiveProducts()).single.onHand, 3);
+      expect(await database.countSales(), 0);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+      await tester.pumpWidget(
+        ShopApp(
+          database: database,
+          authClient: null,
+          apiBaseUrl: 'https://app.supermega.dev',
+          initialMyanmar: false,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Continue sale'), findsOneWidget);
+      await tester.tap(find.text('Continue sale'));
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('Review sale · 2 · 5,000 MMK'),
+        findsOneWidget,
+      );
+      expect(
+        find.text('Unfinished sale restored on this device.'),
+        findsNothing,
+      );
+      await tester.tap(find.textContaining('Review sale · 2 · 5,000 MMK'));
+      await tester.pumpAndSettle();
+      final restoredNotice = find.text(
+        'Unfinished sale restored on this device.',
+      );
+      expect(restoredNotice, findsOneWidget);
+      Navigator.of(tester.element(restoredNotice)).pop();
+      await tester.pumpAndSettle();
+      expect(restoredNotice, findsNothing);
+      expect(tester.takeException(), isNull);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+      await database.close();
+    }
+  });
+
+  testWidgets('mixed saved basket blocks payment until item removed', (
+    tester,
+  ) async {
+    _usePhoneViewport(tester);
+    final database = ShopDatabase(NativeDatabase.memory());
+    try {
+      await database.addProduct(
+        id: 'tea',
+        name: 'Tea',
+        priceMmk: 2500,
+        openingStock: 3,
+      );
+      await database.addProduct(
+        id: 'water',
+        name: 'Water',
+        priceMmk: 1200,
+        openingStock: 4,
+      );
+      await database.saveCounterSaleDraft(
+        operationId: 'mixed-before-restart',
+        quantities: const {'tea': 1, 'water': 1},
+      );
+      await database.customUpdate(
+        'UPDATE shop_products SET archived = 1 WHERE id = ?',
+        variables: [const Variable<String>('water')],
+        updates: {database.shopProducts},
+      );
+      await tester.pumpWidget(
+        ShopApp(
+          database: database,
+          authClient: null,
+          apiBaseUrl: 'https://app.supermega.dev',
+          initialMyanmar: false,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Continue sale'));
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('Review sale · 2 · Check items'),
+        findsOneWidget,
+      );
+      await tester.tap(find.textContaining('Review sale · 2 · Check items'));
+      await tester.pumpAndSettle();
+      expect(
+        find.text('A saved product is unavailable. Remove it before checkout.'),
+        findsOneWidget,
+      );
+      expect(find.text('Check items'), findsOneWidget);
+      expect(
+        tester.widget<FilledButton>(
+          find.ancestor(
+            of: find.text('Cash sale'),
+            matching: find.byType(FilledButton),
+          ),
+        ).onPressed,
+        isNull,
+      );
+      expect(
+        tester.widget<OutlinedButton>(
+          find.ancestor(
+            of: find.text('Mobile money'),
+            matching: find.byType(OutlinedButton),
+          ),
+        ).onPressed,
+        isNull,
+      );
+      expect(await database.countSales(), 0);
+      await tester.tap(find.text('Remove unavailable item'));
+      await tester.pumpAndSettle();
+      expect((await database.readCounterSaleDraft())?.quantities, {'tea': 1});
+      expect(
+        find.text('A saved product is unavailable. Remove it before checkout.'),
+        findsNothing,
+      );
+      expect(
+        tester.widget<FilledButton>(
+          find.ancestor(
+            of: find.text('Cash sale'),
+            matching: find.byType(FilledButton),
+          ),
+        ).onPressed,
+        isNotNull,
+      );
+      expect(await database.countSales(), 0);
+      expect((await database.readActiveProducts()).single.onHand, 3);
+      expect(tester.takeException(), isNull);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+      await database.close();
+    }
+  });
+
   testWidgets('Today counts only completed local sales and actual stock', (
     tester,
   ) async {
