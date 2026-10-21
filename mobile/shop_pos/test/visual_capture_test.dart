@@ -157,6 +157,23 @@ void main() {
               'goldens/shop_checkout_${width.toInt()}_$language.png',
             ),
           );
+
+          final cashButton = find.text(language == 'my' ? 'ငွေသား' : 'Cash sale');
+          await tester.ensureVisible(cashButton);
+          await tester.tap(cashButton);
+          await tester.pumpAndSettle();
+          await tester.enterText(
+            find.byKey(const ValueKey('shop-cash-given')),
+            language == 'my' ? '၂၀၀၀၀' : '20000',
+          );
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+          await expectLater(
+            find.byKey(_captureKey),
+            matchesGoldenFile(
+              'goldens/shop_cash_${width.toInt()}_$language.png',
+            ),
+          );
         } finally {
           await tester.pumpWidget(const SizedBox.shrink());
           await tester.pump(const Duration(milliseconds: 1));
