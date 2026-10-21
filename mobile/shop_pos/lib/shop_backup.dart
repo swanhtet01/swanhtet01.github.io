@@ -309,21 +309,18 @@ abstract final class ShopBackup {
       final schemaVersion = version.length == 1
           ? version.single['user_version'] as int
           : -1;
-      final images = schemaVersion == supportedSchemaVersion &&
+      final images =
+          schemaVersion == supportedSchemaVersion &&
               tables.contains('shop_product_images')
-          ? connection.select(
-              'SELECT image_png FROM shop_product_images',
-            )
+          ? connection.select('SELECT image_png FROM shop_product_images')
           : const <Row>[];
-      final imageTotal = images.fold<int>(
-        0,
-        (total, row) {
-          final image = row['image_png'];
-          return total + (image is Uint8List
-              ? image.length
-              : ShopDatabase.maxProductThumbnailsTotalBytes + 1);
-        },
-      );
+      final imageTotal = images.fold<int>(0, (total, row) {
+        final image = row['image_png'];
+        return total +
+            (image is Uint8List
+                ? image.length
+                : ShopDatabase.maxProductThumbnailsTotalBytes + 1);
+      });
       if (version.length != 1 ||
           schemaVersion < oldestSupportedSchemaVersion ||
           schemaVersion > supportedSchemaVersion ||

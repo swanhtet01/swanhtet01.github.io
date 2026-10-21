@@ -114,22 +114,24 @@ void main() {
     expect(await target.exists(), isFalse);
   });
 
-  test('merchant photos stay out of sync events and reject oversized input',
-      () async {
-    expect(await database.countOutboxOperations(), 2);
-    await expectLater(
-      database.saveProductThumbnail('rice', Uint8List(193 * 1024)),
-      throwsArgumentError,
-    );
-    final brokenPng = Uint8List.fromList(_thumbnail);
-    brokenPng[50] ^= 1;
-    await expectLater(
-      database.saveProductThumbnail('rice', brokenPng),
-      throwsArgumentError,
-    );
-    expect(await database.readProductThumbnail('rice'), _thumbnail);
-    expect(await database.countOutboxOperations(), 2);
-  });
+  test(
+    'merchant photos stay out of sync events and reject oversized input',
+    () async {
+      expect(await database.countOutboxOperations(), 2);
+      await expectLater(
+        database.saveProductThumbnail('rice', Uint8List(193 * 1024)),
+        throwsArgumentError,
+      );
+      final brokenPng = Uint8List.fromList(_thumbnail);
+      brokenPng[50] ^= 1;
+      await expectLater(
+        database.saveProductThumbnail('rice', brokenPng),
+        throwsArgumentError,
+      );
+      expect(await database.readProductThumbnail('rice'), _thumbnail);
+      expect(await database.countOutboxOperations(), 2);
+    },
+  );
 
   test('v6 archive restores, then migrates its catalog to v7', () async {
     final legacy = File('${directory.path}/legacy-v6.sqlite');
@@ -172,11 +174,16 @@ void main() {
     );
     final migrated = ShopDatabase(NativeDatabase(target));
     try {
-      expect((await migrated.readActiveProducts()).single.name,
-          'KAUNG 90 Days Rice');
+      expect(
+        (await migrated.readActiveProducts()).single.name,
+        'KAUNG 90 Days Rice',
+      );
       expect(await migrated.readProductThumbnail('rice'), isNull);
-      expect((await migrated.customSelect('PRAGMA user_version').getSingle())
-          .read<int>('user_version'), 7);
+      expect(
+        (await migrated.customSelect('PRAGMA user_version').getSingle())
+            .read<int>('user_version'),
+        7,
+      );
     } finally {
       await migrated.close();
     }
@@ -187,10 +194,9 @@ void main() {
     await database.exportVerifiedLocalSnapshot(corrupt);
     final connection = sqlite3.open(corrupt.path);
     try {
-      connection.execute(
-        'UPDATE shop_product_images SET image_png = ?',
-        [Uint8List.fromList([1, 2, 3])],
-      );
+      connection.execute('UPDATE shop_product_images SET image_png = ?', [
+        Uint8List.fromList([1, 2, 3]),
+      ]);
     } finally {
       connection.close();
     }

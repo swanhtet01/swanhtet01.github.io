@@ -466,7 +466,10 @@ class _ShopHomeState extends State<ShopHome> {
       }
       if (photo == null) return;
       if (pickerIntent != null && pickerIntent.startsWith('product:')) {
-        await _saveProductPhoto(pickerIntent.substring('product:'.length), photo);
+        await _saveProductPhoto(
+          pickerIntent.substring('product:'.length),
+          photo,
+        );
         return;
       }
       if (!mounted) {
@@ -500,12 +503,16 @@ class _ShopHomeState extends State<ShopHome> {
             if (Platform.isAndroid || Platform.isIOS)
               ListTile(
                 leading: const Icon(Icons.photo_camera_outlined),
-                title: Text(shopCopy(widget.myanmar, 'Take photo', 'ဓာတ်ပုံရိုက်ရန်')),
+                title: Text(
+                  shopCopy(widget.myanmar, 'Take photo', 'ဓာတ်ပုံရိုက်ရန်'),
+                ),
                 onTap: () => Navigator.pop(sheetContext, ImageSource.camera),
               ),
             ListTile(
               leading: const Icon(Icons.photo_library_outlined),
-              title: Text(shopCopy(widget.myanmar, 'Choose photo', 'ဓာတ်ပုံရွေးရန်')),
+              title: Text(
+                shopCopy(widget.myanmar, 'Choose photo', 'ဓာတ်ပုံရွေးရန်'),
+              ),
               onTap: () => Navigator.pop(sheetContext, ImageSource.gallery),
             ),
           ],
@@ -520,9 +527,14 @@ class _ShopHomeState extends State<ShopHome> {
       photo = await ImagePicker().pickImage(source: source);
       if (photo != null) await _saveProductPhoto(productId, photo);
     } catch (_) {
-      if (mounted) _message(shopCopy(widget.myanmar,
-          'Could not add this photo. Choose another image.',
-          'ဤဓာတ်ပုံကို မထည့်နိုင်ပါ။ အခြားပုံရွေးပါ။'));
+      if (mounted)
+        _message(
+          shopCopy(
+            widget.myanmar,
+            'Could not add this photo. Choose another image.',
+            'ဤဓာတ်ပုံကို မထည့်နိုင်ပါ။ အခြားပုံရွေးပါ။',
+          ),
+        );
     } finally {
       await preferences.remove(_pendingPickerIntentKey);
       if (source == ImageSource.camera) {
@@ -545,13 +557,18 @@ class _ShopHomeState extends State<ShopHome> {
       ui.Image? image;
       try {
         descriptor = await ui.ImageDescriptor.encoded(buffer);
-        if (descriptor.width <= 0 || descriptor.height <= 0 ||
-            descriptor.width > 8192 || descriptor.height > 8192 ||
+        if (descriptor.width <= 0 ||
+            descriptor.height <= 0 ||
+            descriptor.width > 8192 ||
+            descriptor.height > 8192 ||
             descriptor.width * descriptor.height > 40000000) {
-          throw const FormatException('Photo dimensions exceed the input limit.');
+          throw const FormatException(
+            'Photo dimensions exceed the input limit.',
+          );
         }
         final longestSide = descriptor.width > descriptor.height
-            ? descriptor.width : descriptor.height;
+            ? descriptor.width
+            : descriptor.height;
         final scale = longestSide > 192 ? 192 / longestSide : 1.0;
         codec = await descriptor.instantiateCodec(
           targetWidth: (descriptor.width * scale).round().clamp(1, 192),
@@ -559,7 +576,8 @@ class _ShopHomeState extends State<ShopHome> {
         );
         image = (await codec.getNextFrame()).image;
         final png = await image.toByteData(format: ui.ImageByteFormat.png);
-        if (png == null) throw const FormatException('Photo could not be encoded.');
+        if (png == null)
+          throw const FormatException('Photo could not be encoded.');
         await widget.database.saveProductThumbnail(
           productId,
           png.buffer.asUint8List(png.offsetInBytes, png.lengthInBytes),
@@ -573,14 +591,23 @@ class _ShopHomeState extends State<ShopHome> {
       _thumbnailFutures.remove(productId);
       if (mounted) {
         setState(() {});
-        _message(shopCopy(widget.myanmar,
+        _message(
+          shopCopy(
+            widget.myanmar,
             'Product photo saved on this device.',
-            'ကုန်ပစ္စည်းဓာတ်ပုံကို ဤစက်တွင် သိမ်းပြီးပါပြီ။'));
+            'ကုန်ပစ္စည်းဓာတ်ပုံကို ဤစက်တွင် သိမ်းပြီးပါပြီ။',
+          ),
+        );
       }
     } catch (_) {
-      if (mounted) _message(shopCopy(widget.myanmar,
-          'Could not add this photo. Use a smaller image.',
-          'ဤဓာတ်ပုံကို မထည့်နိုင်ပါ။ ပိုသေးသောပုံသုံးပါ။'));
+      if (mounted)
+        _message(
+          shopCopy(
+            widget.myanmar,
+            'Could not add this photo. Use a smaller image.',
+            'ဤဓာတ်ပုံကို မထည့်နိုင်ပါ။ ပိုသေးသောပုံသုံးပါ။',
+          ),
+        );
     }
   }
 

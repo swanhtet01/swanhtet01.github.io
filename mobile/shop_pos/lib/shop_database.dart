@@ -478,12 +478,21 @@ class ShopDatabase extends _$ShopDatabase {
       if (((crc ^ 0xffffffff) & 0xffffffff) != data.getUint32(chunkEnd)) {
         return false;
       }
-      final isHeader = bytes[typeStart] == 73 && bytes[typeStart + 1] == 72 &&
-          bytes[typeStart + 2] == 68 && bytes[typeStart + 3] == 82;
-      final isImageData = bytes[typeStart] == 73 && bytes[typeStart + 1] == 68 &&
-          bytes[typeStart + 2] == 65 && bytes[typeStart + 3] == 84;
-      final isEnd = bytes[typeStart] == 73 && bytes[typeStart + 1] == 69 &&
-          bytes[typeStart + 2] == 78 && bytes[typeStart + 3] == 68;
+      final isHeader =
+          bytes[typeStart] == 73 &&
+          bytes[typeStart + 1] == 72 &&
+          bytes[typeStart + 2] == 68 &&
+          bytes[typeStart + 3] == 82;
+      final isImageData =
+          bytes[typeStart] == 73 &&
+          bytes[typeStart + 1] == 68 &&
+          bytes[typeStart + 2] == 65 &&
+          bytes[typeStart + 3] == 84;
+      final isEnd =
+          bytes[typeStart] == 73 &&
+          bytes[typeStart + 1] == 69 &&
+          bytes[typeStart + 2] == 78 &&
+          bytes[typeStart + 3] == 68;
       if (offset == 8) {
         if (!isHeader || chunkLength != 13) return false;
         final width = data.getUint32(offset + 8);
@@ -496,7 +505,9 @@ class ShopDatabase extends _$ShopDatabase {
       }
       if (isImageData) seenImageData = true;
       if (isEnd) {
-        return chunkLength == 0 && seenImageData && chunkEnd + 4 == bytes.length;
+        return chunkLength == 0 &&
+            seenImageData &&
+            chunkEnd + 4 == bytes.length;
       }
       offset = chunkEnd + 4;
     }
