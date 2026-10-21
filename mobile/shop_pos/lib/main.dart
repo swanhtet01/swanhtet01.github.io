@@ -79,7 +79,7 @@ class _ShopAppState extends State<ShopApp> {
     final tracking = _myanmar ? 0.0 : -0.35;
     const ink = Color(0xff171b2c);
     const border = Color(0xffe2e5ed);
-    const accent = Color(0xff4e55df);
+    const accent = Color(0xff2563eb);
     return MaterialApp(
       title: 'SuperMega Shop',
       debugShowCheckedModeBanner: false,
@@ -121,7 +121,7 @@ class _ShopAppState extends State<ShopApp> {
               ),
               bodyLarge: const TextStyle(fontSize: 16, height: 1.45),
               bodyMedium: const TextStyle(fontSize: 14, height: 1.45),
-              bodySmall: const TextStyle(fontSize: 12, height: 1.4),
+              bodySmall: const TextStyle(fontSize: 13, height: 1.5),
               labelLarge: const TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
