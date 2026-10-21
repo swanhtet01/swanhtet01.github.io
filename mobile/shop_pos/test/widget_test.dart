@@ -300,6 +300,46 @@ void main() {
     }
   });
 
+  testWidgets('tablet landscape keeps the sale beside the catalog', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(820, 700);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final database = ShopDatabase(NativeDatabase.memory());
+    await database.addProduct(
+      id: 'tea',
+      name: 'Tea',
+      priceMmk: 2500,
+      openingStock: 2,
+    );
+    try {
+      await tester.pumpWidget(
+        ShopApp(
+          database: database,
+          authClient: null,
+          apiBaseUrl: 'https://app.supermega.dev',
+          initialMyanmar: false,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Tea'), findsOneWidget);
+      expect(find.text('Current sale'), findsOneWidget);
+      expect(find.text('Search or scan barcode'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.tap(find.byTooltip('Add to sale'));
+      await tester.pumpAndSettle();
+      expect(find.text('Cash sale'), findsOneWidget);
+      expect(find.textContaining('Review sale'), findsNothing);
+      expect(tester.takeException(), isNull);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await database.close();
+    }
+  });
+
   testWidgets('Burmese cash review stays uncommitted until confirmed', (
     tester,
   ) async {

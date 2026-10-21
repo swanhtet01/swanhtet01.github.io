@@ -219,6 +219,7 @@ class _ShopHomeState extends State<ShopHome> {
 
   @override
   Widget build(BuildContext context) {
+    final width = MediaQuery.sizeOf(context).width;
     return Scaffold(
       appBar: AppBar(
         title: Text(shopCopy(widget.myanmar, 'Shop', 'ဆိုင်')),
@@ -250,13 +251,12 @@ class _ShopHomeState extends State<ShopHome> {
           stream: _productsStream,
           builder: (context, snapshot) {
             final products = snapshot.data ?? const <ShopProduct>[];
-            if (MediaQuery.sizeOf(context).width >= 940) {
+            if (width >= 820) {
               return Padding(
                 padding: const EdgeInsets.all(20),
                 child: Row(
                   children: [
                     Expanded(
-                      flex: 3,
                       child: Column(
                         children: [
                           if (_recoveredMenuPhoto != null) ...[
@@ -275,7 +275,10 @@ class _ShopHomeState extends State<ShopHome> {
                     ),
                     if (products.isNotEmpty) ...[
                       const SizedBox(width: 18),
-                      Expanded(child: _cartPanel(products)),
+                      SizedBox(
+                        width: (width * 0.36).clamp(340.0, 500.0),
+                        child: _cartPanel(products),
+                      ),
                     ],
                   ],
                 ),
@@ -310,7 +313,7 @@ class _ShopHomeState extends State<ShopHome> {
           },
         ),
       ),
-      bottomNavigationBar: _cart.isEmpty
+      bottomNavigationBar: width >= 820 || _cart.isEmpty
           ? null
           : SafeArea(
               top: false,
