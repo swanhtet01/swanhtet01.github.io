@@ -185,8 +185,8 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
                             itemCount: sales.length,
                             separatorBuilder: (_, _) =>
                                 MediaQuery.sizeOf(context).width < 480
-                                    ? const SizedBox(height: 10)
-                                    : const Divider(height: 1),
+                                ? const SizedBox(height: 10)
+                                : const Divider(height: 1),
                             itemBuilder: (context, index) {
                               final sale = sales[index];
                               final firstItem = sale.lines.isEmpty
@@ -220,7 +220,8 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
                                                 child: Text(
                                                   '$firstItem$more',
                                                   maxLines: 2,
-                                                  overflow: TextOverflow.ellipsis,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
                                                   style: Theme.of(context)
                                                       .textTheme
                                                       .bodyMedium
@@ -231,7 +232,10 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
                                                 ),
                                               ),
                                               const SizedBox(width: 8),
-                                              const Icon(Icons.chevron_right, size: 20),
+                                              const Icon(
+                                                Icons.chevron_right,
+                                                size: 20,
+                                              ),
                                             ],
                                           ),
                                           const SizedBox(height: 8),
@@ -265,7 +269,9 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
                                                     .bodySmall,
                                               ),
                                               Text(
-                                                _paymentName(sale.paymentMethod),
+                                                _paymentName(
+                                                  sale.paymentMethod,
+                                                ),
                                                 style: Theme.of(context)
                                                     .textTheme
                                                     .bodySmall,
