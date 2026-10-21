@@ -152,74 +152,71 @@ void main() {
       },
     );
 
-    test(
-      'AI candidates stay out of the catalog until reviewed, then commit together',
-      () async {
-        final database = ShopDatabase(NativeDatabase.memory());
-        addTearDown(database.close);
-        final client = MockClient((request) async {
-          expect(request.headers['authorization'], 'Bearer test-session');
-          return http.Response(
-            jsonEncode({
-              'schemaVersion': 1,
-              'reviewRequired': true,
-              'items': [
-                {
-                  'category': 'ကုန်စုံ',
-                  'description': 'မြန်မာဆန် ၅ ကီလို',
-                  'name': 'ဆန်',
-                  'price': 8500,
-                },
-              ],
-            }),
-            200,
-          );
-        });
-        final service = MenuImportService(
-          endpoint: Uri.https('app.supermega.dev', '/api/shop/menu-import'),
-          accessToken: () async => 'test-session',
-          client: client,
+    test('AI candidates stay out of the catalog until reviewed, then commit together', () async {
+      final database = ShopDatabase(NativeDatabase.memory());
+      addTearDown(database.close);
+      final client = MockClient((request) async {
+        expect(request.headers['authorization'], 'Bearer test-session');
+        return http.Response(
+          jsonEncode({
+            'schemaVersion': 1,
+            'reviewRequired': true,
+            'items': [
+              {
+                'category': 'ကုန်စုံ',
+                'description': 'မြန်မာဆန် ၅ ကီလို',
+                'name': 'ဆန်',
+                'price': 8500,
+              },
+            ],
+          }),
+          200,
         );
-        addTearDown(service.close);
+      });
+      final service = MenuImportService(
+        endpoint: Uri.https('app.supermega.dev', '/api/shop/menu-import'),
+        accessToken: () async => 'test-session',
+        client: client,
+      );
+      addTearDown(service.close);
 
-        final candidates = await service.parsePhoto(
-          XFile.fromData(_pngBytes(), name: 'menu.png'),
-          cloudConsent: true,
-        );
+      final candidates = await service.parsePhoto(
+        XFile.fromData(_pngBytes(), name: 'menu.png'),
+        cloudConsent: true,
+      );
 
-        expect(candidates, hasLength(1));
-        expect(candidates.single.name, 'ဆန်');
-        expect(await database.readActiveProducts(), isEmpty);
-        expect(await database.countOutboxOperations(), 0);
+      expect(candidates, hasLength(1));
+      expect(candidates.single.name, 'ဆန်');
+      expect(await database.readActiveProducts(), isEmpty);
+      expect(await database.countOutboxOperations(), 0);
 
-        const batchId = 'reviewed-photo-batch';
-        final inserted = await database.importReviewedMenuBatch(
-          batchId: batchId,
-          products: [
-            MenuDraftInput(
-              id: 'reviewed-rice-5kg',
-              batchId: batchId,
-              category: candidates.single.category,
-              name: candidates.single.name,
-              description: candidates.single.description,
-              priceMmk: candidates.single.priceMmk,
-              sku: 'RICE-5KG',
-              barcode: '0001234567890',
-              openingStock: 4,
-            ),
-          ],
-        );
+      const batchId = 'reviewed-photo-batch';
+      final inserted = await database.importReviewedMenuBatch(
+        batchId: batchId,
+        products: [
+          MenuDraftInput(
+            id: 'reviewed-rice-5kg',
+            batchId: batchId,
+            category: candidates.single.category,
+            name: candidates.single.name,
+            description: candidates.single.description,
+            priceMmk: candidates.single.priceMmk,
+            sku: 'RICE-5KG',
+            barcode: '0001234567890',
+            openingStock: 4,
+          ),
+        ],
+      );
 
-        final product = (await database.readActiveProducts()).single;
-        expect(inserted, 1);
-        expect(product.name, 'ဆန်');
-        expect(product.priceMmk, 8500);
-        expect(product.onHand, 4);
-        expect(product.barcode, '0001234567890');
-        expect(await database.countStockMovements(), 1);
-        expect(await database.countOutboxOperations(), 1);
-      },
-    );
+      final product = (await database.readActiveProducts()).single;
+      expect(inserted, 1);
+      expect(product.name, 'ဆန်');
+      expect(product.priceMmk, 8500);
+      expect(product.onHand, 4);
+      expect(product.barcode, '0001234567890');
+      expect(await database.countStockMovements(), 1);
+      expect(await database.countOutboxOperations(), 1);
+    });
 
     test(
       'rejects oversized photos before reading a token or uploading',
