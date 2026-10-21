@@ -593,6 +593,8 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('shop-photo-manage:tea')));
     await tester.pumpAndSettle();
     expect(find.text('Choose photo'), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(milliseconds: 1));
   });
