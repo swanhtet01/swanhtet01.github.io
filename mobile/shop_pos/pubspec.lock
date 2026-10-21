@@ -313,6 +313,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "7.0.1"
+  file_saver:
+    dependency: "direct main"
+    description:
+      name: file_saver
+      sha256: fdb82a10b134b6bd03c48599268eb4ca04d5424029d73b30733327f4957c4037
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.7.0"
   file_selector_linux:
     dependency: transitive
     description:
@@ -641,10 +649,10 @@ packages:
     dependency: transitive
     description:
       name: meta
-      sha256: c82594181e3312f3d0695fc95aaaf7758d75b8d4ae2bbecf223b9fd5109a059d
+      sha256: 307249ce4ff29d58a18e97f6345f539382eb9c9c29ecda628900f31de0443dd9
       url: "https://pub.dev"
     source: hosted
-    version: "1.18.3"
+    version: "1.19.0"
   mime:
     dependency: transitive
     description:
