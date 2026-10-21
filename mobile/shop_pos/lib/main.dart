@@ -1669,7 +1669,13 @@ class _ShopHomeState extends State<ShopHome> {
         builder: (dialogContext) => StatefulBuilder(
           builder: (context, setDialogState) {
             final entered = cashGiven.trim();
-            final tenderedMmk = entered.isEmpty ? null : int.tryParse(entered);
+            final asciiDigits = entered.replaceAllMapped(
+              RegExp(r'[၀-၉]'),
+              (match) => '${'၀၁၂၃၄၅၆၇၈၉'.indexOf(match.group(0)!)}',
+            );
+            final tenderedMmk = entered.isEmpty
+                ? null
+                : int.tryParse(asciiDigits);
             final isShort = tenderedMmk != null && tenderedMmk < totalMmk;
             final invalid = entered.isNotEmpty && tenderedMmk == null;
             return AlertDialog(
@@ -1702,7 +1708,9 @@ class _ShopHomeState extends State<ShopHome> {
                   TextField(
                     key: const ValueKey('shop-cash-given'),
                     keyboardType: TextInputType.number,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r'[0-9၀-၉]')),
+                    ],
                     onChanged: (value) => setDialogState(() => cashGiven = value),
                     decoration: InputDecoration(
                       labelText: shopCopy(
