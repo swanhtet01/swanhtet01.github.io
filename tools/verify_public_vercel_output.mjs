@@ -377,22 +377,26 @@ for (const staleToken of [
   if (home.includes(staleToken)) fail('stale_home_metadata_present', { token: staleToken })
 }
 if (!hasClassToken(home, 'company-hero')) fail('homepage_contract_missing', { token: 'class token company-hero' })
-for (const token of ['class="company-operating-overview"', 'href="/shop/">Explore Shop', 'href="/contact/">Contact</a>', `href="${appOrigin}/login"`]) {
+for (const token of ['href="/shop/">Explore Shop', 'href="' + appOrigin + '/login"']) {
   if (!home.includes(token)) fail('homepage_contract_missing', { token })
 }
+if (!/<a href="\/contact\/"\s*>Contact<\/a>/.test(home)) fail('homepage_contact_destination_missing')
 if (home.includes('>View every screen size') || home.includes('>See Shop on desktop and mobile')) fail('home_action_must_not_be_a_device_tour')
-for (const token of ['body[data-view="company"] .company-hero::before{opacity:0;background-image:none}', 'body[data-view="company"] .shop-only-family{grid-template-columns:minmax(0,1fr);max-width:none}', 'body[data-view="company"] .company-hero .hero-grid{grid-template-columns:minmax(0,.76fr) minmax(520px,1.24fr)']) {
+for (const token of ['body[data-view="company"] .company-hero::before{opacity:0;background-image:none}', 'body[data-view="company"] .company-hero .hero-grid{grid-template-columns:minmax(0,.76fr) minmax(520px,1.24fr)', 'body[data-view="company"] .company-product-visual']) {
   if (!home.includes(token)) fail('home_visual_contract_missing', { token })
 }
 if (home.includes('body[data-view="company"] .site-header .brand-word { color: var(--text); }')) fail('company_wordmark_light_on_light_override')
-if (!home.includes('.company-hero .hero-actions .button-primary') || !home.includes('white-space:nowrap')) fail('company_primary_action_layout_missing')
 const shopPageHtml = pages.get('/shop/').html
-if (!shopPageHtml.includes('.shop-hero .button-primary') || !shopPageHtml.includes('white-space:nowrap')) fail('shop_primary_action_layout_missing')
-if (!home.includes('<p class="hero-kicker">SuperMega · Myanmar</p>')
-  || !home.includes('Operating software<br><span>for Myanmar businesses.</span>')
-  || !home.includes('SuperMega is a Myanmar software company. Shop is our first customer product for counter sales, stock and order follow-up.')
-  || !home.includes('class="company-operating-overview"')
-  || home.includes('class="company-product-evidence"')
+for (const [route, html] of [['/', home], ['/shop/', shopPageHtml]]) {
+  if (!html.includes('width: max-content;') || !html.includes('min-height: 48px;') || !html.includes('background: #202432;') || !html.includes('.button:focus-visible')) fail('marketing_primary_action_layout_missing', { route })
+}
+if (!home.includes('<p class="hero-kicker">SuperMega Shop · Myanmar</p>')
+  || !home.includes('Keep your shop day<br><span>in view.</span>')
+  || !home.includes('Record counter sales, check stock and follow open orders in one Shop workspace.')
+  || countOccurrences(home, 'class="company-product-visual"') !== 1
+  || countOccurrences(home, 'Illustrative Shop interface · synthetic local records') !== 1
+  || home.includes('class="company-operating-overview"')
+  || home.includes('class="company-contact"')
   || /href="\/(?:website|ecommerce)\//.test(home)
   || /\bSites\b|\bCommerce\b/.test(home)) fail('home_customer_access_scope_missing')
 for (const retiredToken of [
@@ -454,15 +458,15 @@ for (const [route, html] of [['/', home], ['/shop/', pages.get('/shop/').html], 
     }
   }
   const productVisualMissing = route === '/'
-    ? !hasClassToken(body, 'company-hero') || hasClassToken(body, 'product-family') || !body.includes('Operating software<br><span>for Myanmar businesses.</span>') || !body.includes('class="company-operating-overview"') || !body.includes('class="company-product-visual"') || body.includes('class="company-product-evidence"') || body.includes('class="company-portfolio"') || body.includes('data-platform-carousel') || body.includes('Choose a Shop screen') || !body.includes('src="/images/actual-shop-today.png"') || body.includes('data-device-choice')
+    ? !hasClassToken(body, 'company-hero') || hasClassToken(body, 'product-family') || !body.includes('Keep your shop day<br><span>in view.</span>') || countOccurrences(body, 'class="company-product-visual"') !== 1 || countOccurrences(body, 'Illustrative Shop interface · synthetic local records') !== 1 || body.includes('class="company-operating-overview"') || body.includes('class="company-contact"') || body.includes('class="company-portfolio"') || body.includes('data-platform-carousel') || body.includes('Choose a Shop screen') || !body.includes('src="/images/actual-shop-today.png"') || body.includes('data-device-choice')
     : route === '/shop/'
-      ? !body.includes('class="shop-hero-app"') || !body.includes('class="shop-actual-showcase"') || !body.includes('Orders and stock. Clear next steps.') || !body.includes('class="shop-responsive-showcase"') || !body.includes('Counter sale on desktop, tablet and phone') || !body.includes('Sample catalog and example prices.') || !body.includes('src="/images/actual-shop-orders.png"') || !body.includes('src="/images/actual-shop-inventory.png"') || countOccurrences(body, 'class="platform-device-capture ') !== 3 || countOccurrences(body, '<article class="shop-workflow-card">') !== 2 || countOccurrences(body, 'src="/images/actual-shop-sell.png"') !== 1 || body.includes('Makro PRO') || body.includes('17 October 2026') || body.includes('class="pos-window"') || body.includes('class="sample-label"') || body.includes('Complete sample sale') || body.includes('shop-sample-demo.js') || body.includes('class="platform-gallery shop-gallery-all"') || body.includes('data-platform-carousel') || body.includes('data-device-choice') || body.includes('data-device-frame') || /<a\b[^>]*>\s*<img\b[^>]*src="\/images\/actual-shop-/i.test(body)
+      ? !body.includes('class="shop-hero-app"') || !body.includes('class="shop-actual-showcase"') || !body.includes('Orders and stock. Clear next steps.') || !body.includes('class="shop-responsive-showcase"') || !body.includes('class="shop-lead-capture"') || !body.includes('id="shop-sample-disclosure"') || countOccurrences(body, 'Illustrative Shop interface · synthetic local records') !== 1 || !body.includes('src="/images/actual-shop-orders.png"') || !body.includes('src="/images/actual-shop-inventory.png"') || countOccurrences(body, '<article class="shop-workflow-card">') !== 2 || countOccurrences(body, 'src="/images/actual-shop-sell.png"') !== 1 || body.includes('Makro PRO') || body.includes('17 October 2026') || body.includes('class="pos-window"') || body.includes('class="sample-label"') || body.includes('Complete sample sale') || body.includes('shop-sample-demo.js') || body.includes('class="platform-gallery shop-gallery-all"') || body.includes('data-platform-carousel') || body.includes('data-device-choice') || body.includes('data-device-frame') || /<a\b[^>]*>\s*<img\b[^>]*src="\/images\/actual-shop-/i.test(body)
       : !body.includes('class="platform-image"') || !body.includes('class="feature-line"')
   if (productVisualMissing) fail('product_visual_missing', { route })
   if (route === '/') {
     const heroIndex = body.indexOf('class="hero company-hero"')
-    const overviewIndex = body.indexOf('class="company-operating-overview"')
-    if (heroIndex < 0 || overviewIndex < heroIndex || body.includes('class="company-product-evidence"')) {
+    const visualIndex = body.indexOf('class="company-product-visual"')
+    if (heroIndex < 0 || visualIndex < heroIndex || body.includes('class="company-contact"')) {
       fail('brand_home_story_order_drift')
     }
   }
@@ -484,24 +488,28 @@ for (const [route, html] of [['/', home], ['/shop/', pages.get('/shop/').html], 
 if (countOccurrences(home, 'href="/shop/">Explore Shop') !== 1 || home.includes('class="family-link"')) fail('brand_home_primary_shop_link_invalid')
 
 const shopPage = pages.get('/shop/')?.html || ''
-for (const [desktop, mobile, tablet] of [
-  ['actual-shop-sell.png', 'actual-shop-sell-mobile.png', 'actual-shop-sell-tablet.png'],
+for (const token of [
+  'class="shop-lead-capture"',
+  'src="/images/actual-shop-sell.png"',
+  'srcset="/images/actual-shop-sell-mobile.png"',
+  'srcset="/images/actual-shop-sell-tablet.png"',
+  'src="/images/actual-shop-orders.png"',
+  'srcset="/images/actual-shop-orders-mobile.png"',
+  'src="/images/actual-shop-inventory.png"',
+  'srcset="/images/actual-shop-inventory-mobile.png"',
+  'class="shop-workflow-support"',
+  'aria-describedby="shop-sample-disclosure"',
 ]) {
-  if (!shopPage.includes(`src="/images/${desktop}"`)
-    || !shopPage.includes(`src="/images/${tablet}"`)
-    || !shopPage.includes(`src="/images/${mobile}"`)
-    || !hasClassToken(shopPage, 'platform-device-capture-desktop')
-    || !hasClassToken(shopPage, 'platform-device-capture-tablet')
-    || !hasClassToken(shopPage, 'platform-device-capture-phone')) {
-    fail('shop_device_capture_set_missing', { desktop, mobile })
-  }
+  if (!shopPage.includes(token)) fail('shop_responsive_capture_missing', { token })
 }
+const shopBody = shopPage.slice(shopPage.indexOf('<body'))
+if (shopBody.includes('platform-device-capture') || shopBody.includes('data-platform-carousel') || shopBody.includes('data-device-choice') || shopBody.includes('data-device-frame')) fail('shop_interactive_gallery_present')
 for (const [route, html] of [['/', home], ['/shop/', shopPage]]) {
   if (!html.includes('<html lang="en">')) fail('marketing_page_not_english', { route })
   if (html.includes('data-language-toggle') || html.includes('src="/site-language.js"')) fail('marketing_language_control_present', { route })
   if (html.includes('data-i18n=') || /[\u1000-\u109f]/u.test(html)) fail('marketing_myanmar_copy_present', { route })
 }
-for (const token of ['Sell at the counter.', 'Stay ahead of stock.', 'Orders and stock. Clear next steps.', 'Sample catalog and example prices.', 'Search or scan products, record a sale, and follow open orders and stock in one workspace.']) {
+for (const token of ['Sell at the counter.', 'Stay ahead of stock.', 'Orders and stock. Clear next steps.', 'Illustrative Shop interface · synthetic local records', 'Search or scan products, record a sale, and follow open orders and stock in one workspace.']) {
   if (!shopPage.includes(token)) fail('shop_page_scope_missing', { token })
 }
 if (/<section\b[^>]*class="[^"]*\bsubscription-section\b/.test(shopPage)
