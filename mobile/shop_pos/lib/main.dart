@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -13,6 +14,7 @@ import 'menu_import_service.dart';
 import 'printer_setup_screen.dart';
 import 'printer_services.dart';
 import 'recent_sales_screen.dart';
+import 'shop_cash_shift_screen.dart';
 import 'shop_copy.dart';
 import 'shop_database.dart';
 import 'shop_models.dart';
@@ -76,6 +78,13 @@ class _ShopAppState extends State<ShopApp> {
     return MaterialApp(
       title: 'SuperMega Shop',
       debugShowCheckedModeBanner: false,
+      locale: Locale(_myanmar ? 'my' : 'en'),
+      supportedLocales: const [Locale('en'), Locale('my')],
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       theme: ThemeData(
         useMaterial3: true,
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xff5146e5)),
@@ -1877,6 +1886,24 @@ class _ShopSettingsScreenState extends State<ShopSettingsScreen> {
           onTap: () => Navigator.of(context).push<void>(
             MaterialPageRoute<void>(
               builder: (_) => WalletSetupScreen(
+                database: widget.database,
+                myanmar: _myanmar,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        _SetupTile(
+          icon: Icons.point_of_sale_outlined,
+          title: shopCopy(_myanmar, 'Cash shift', 'ငွေသားတာဝန်ချိန်'),
+          subtitle: shopCopy(
+            _myanmar,
+            'Count drawer cash and record any difference.',
+            'အံဆွဲငွေသားကို ရေတွက်ပြီး ကွာခြားချက် မှတ်တမ်းတင်ပါ။',
+          ),
+          onTap: () => Navigator.of(context).push<void>(
+            MaterialPageRoute<void>(
+              builder: (_) => ShopCashShiftScreen(
                 database: widget.database,
                 myanmar: _myanmar,
               ),

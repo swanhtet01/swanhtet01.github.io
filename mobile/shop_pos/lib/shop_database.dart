@@ -142,6 +142,58 @@ class ShopSaleReceiptLine {
   final int lineTotalMmk;
 }
 
+class ShopCashShift {
+  const ShopCashShift({
+    required this.id,
+    required this.operatorLabel,
+    required this.openingFloatMmk,
+    required this.openedAtMillis,
+    required this.state,
+    this.closedAtMillis,
+    this.cashSalesCount,
+    this.cashSalesTotalMmk,
+    this.walletSalesCount,
+    this.walletSalesTotalMmk,
+    this.expectedCashMmk,
+    this.countedCashMmk,
+    this.differenceMmk,
+  });
+
+  final String id;
+  final String operatorLabel;
+  final int openingFloatMmk;
+  final int openedAtMillis;
+  final String state;
+  final int? closedAtMillis;
+  final int? cashSalesCount;
+  final int? cashSalesTotalMmk;
+  final int? walletSalesCount;
+  final int? walletSalesTotalMmk;
+  final int? expectedCashMmk;
+  final int? countedCashMmk;
+  final int? differenceMmk;
+}
+
+class ShopCashShiftReview {
+  const ShopCashShiftReview({
+    required this.shift,
+    required this.cashSalesCount,
+    required this.cashSalesTotalMmk,
+    required this.walletSalesCount,
+    required this.walletSalesTotalMmk,
+    required this.expectedCashMmk,
+  });
+
+  final ShopCashShift shift;
+  final int cashSalesCount;
+  final int cashSalesTotalMmk;
+  final int walletSalesCount;
+  final int walletSalesTotalMmk;
+  final int expectedCashMmk;
+
+  int get saleCount => cashSalesCount + walletSalesCount;
+}
+
 class WalletCheckoutLineSnapshot {
   const WalletCheckoutLineSnapshot({
     required this.productId,
@@ -233,13 +285,14 @@ class ShopDatabase extends _$ShopDatabase {
     : super(executor ?? driftDatabase(name: 'supermega_shop'));
 
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 6;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
     onCreate: (migrator) async {
       await migrator.createAll();
       await _createWalletCheckoutTable();
+      await _createCashShiftTables();
     },
     onUpgrade: (migrator, from, to) async {
       if (from < 2) {
@@ -276,6 +329,9 @@ class ShopDatabase extends _$ShopDatabase {
           "ALTER TABLE shop_wallet_checkout_intents ADD COLUMN merchant_qr_payload TEXT NOT NULL DEFAULT ''",
         );
       }
+      if (from < 6) {
+        await _createCashShiftTables();
+      }
     },
     beforeOpen: (_) => customStatement('PRAGMA foreign_keys = ON'),
   );
@@ -297,6 +353,44 @@ class ShopDatabase extends _$ShopDatabase {
       created_at_millis INTEGER NOT NULL
     )
   ''');
+  }
+
+  Future<void> _createCashShiftTables() async {
+    await customStatement('''
+      CREATE TABLE IF NOT EXISTS shop_cash_shifts (
+        id TEXT PRIMARY KEY NOT NULL,
+        open_operation_id TEXT NOT NULL UNIQUE,
+        operator_label TEXT NOT NULL CHECK (length(operator_label) BETWEEN 1 AND 80),
+        opening_float_mmk INTEGER NOT NULL CHECK (opening_float_mmk >= 0),
+        opened_at_millis INTEGER NOT NULL,
+        state TEXT NOT NULL CHECK (state IN ('open', 'closed')),
+        close_operation_id TEXT UNIQUE,
+        closed_at_millis INTEGER,
+        cash_sales_count INTEGER,
+        cash_sales_total_mmk INTEGER,
+        wallet_sales_count INTEGER,
+        wallet_sales_total_mmk INTEGER,
+        expected_cash_mmk INTEGER,
+        counted_cash_mmk INTEGER,
+        difference_mmk INTEGER,
+        review_sale_count INTEGER,
+        review_cash_total_mmk INTEGER
+      )
+    ''');
+    await customStatement('''
+      CREATE UNIQUE INDEX IF NOT EXISTS shop_cash_shifts_one_open
+      ON shop_cash_shifts(state) WHERE state = 'open'
+    ''');
+    await customStatement('''
+      CREATE TABLE IF NOT EXISTS shop_cash_shift_sales (
+        sale_id TEXT PRIMARY KEY NOT NULL REFERENCES shop_sales(id),
+        shift_id TEXT NOT NULL REFERENCES shop_cash_shifts(id)
+      )
+    ''');
+    await customStatement('''
+      CREATE INDEX IF NOT EXISTS shop_cash_shift_sales_shift_id
+      ON shop_cash_shift_sales(shift_id)
+    ''');
   }
 
   Future<void> _ensureColumn(
@@ -920,6 +1014,245 @@ class ShopDatabase extends _$ShopDatabase {
         .get();
   }
 
+  ShopCashShift _cashShiftFromRow(QueryRow row) => ShopCashShift(
+    id: row.read<String>('id'),
+    operatorLabel: row.read<String>('operator_label'),
+    openingFloatMmk: row.read<int>('opening_float_mmk'),
+    openedAtMillis: row.read<int>('opened_at_millis'),
+    state: row.read<String>('state'),
+    closedAtMillis: row.readNullable<int>('closed_at_millis'),
+    cashSalesCount: row.readNullable<int>('cash_sales_count'),
+    cashSalesTotalMmk: row.readNullable<int>('cash_sales_total_mmk'),
+    walletSalesCount: row.readNullable<int>('wallet_sales_count'),
+    walletSalesTotalMmk: row.readNullable<int>('wallet_sales_total_mmk'),
+    expectedCashMmk: row.readNullable<int>('expected_cash_mmk'),
+    countedCashMmk: row.readNullable<int>('counted_cash_mmk'),
+    differenceMmk: row.readNullable<int>('difference_mmk'),
+  );
+
+  Future<ShopCashShift?> readOpenCashShift() async {
+    final row = await customSelect(
+      "SELECT * FROM shop_cash_shifts WHERE state = 'open' LIMIT 1",
+    ).getSingleOrNull();
+    return row == null ? null : _cashShiftFromRow(row);
+  }
+
+  Future<ShopCashShift?> readLatestCashShift() async {
+    final row = await customSelect(
+      'SELECT * FROM shop_cash_shifts '
+      'ORDER BY opened_at_millis DESC, id DESC LIMIT 1',
+    ).getSingleOrNull();
+    return row == null ? null : _cashShiftFromRow(row);
+  }
+
+  Future<ShopCashShift> openCashShift({
+    required String operationId,
+    required String operatorLabel,
+    required int openingFloatMmk,
+  }) async {
+    final cleanOperationId = operationId.trim();
+    final cleanOperatorLabel = operatorLabel.trim();
+    if (cleanOperationId.isEmpty ||
+        cleanOperationId.length > 120 ||
+        cleanOperatorLabel.isEmpty ||
+        cleanOperatorLabel.length > 80 ||
+        openingFloatMmk < 0 ||
+        openingFloatMmk > 200000000000000) {
+      throw ArgumentError('Cash shift details are invalid.');
+    }
+    return transaction(() async {
+      final previous = await customSelect(
+        'SELECT * FROM shop_cash_shifts WHERE open_operation_id = ?',
+        variables: [Variable<String>(cleanOperationId)],
+      ).getSingleOrNull();
+      if (previous != null) {
+        final priorShift = _cashShiftFromRow(previous);
+        if (priorShift.operatorLabel != cleanOperatorLabel ||
+            priorShift.openingFloatMmk != openingFloatMmk) {
+          throw StateError('A shift operation ID was reused with new details.');
+        }
+        return priorShift;
+      }
+      if (await readOpenCashShift() != null) {
+        throw StateError(
+          'Close the current cash shift before starting another.',
+        );
+      }
+      final pendingWallet = await customSelect(
+        "SELECT operation_id FROM shop_wallet_checkout_intents WHERE state = 'pending' LIMIT 1",
+      ).getSingleOrNull();
+      if (pendingWallet != null) {
+        throw StateError('Finish or cancel the pending wallet checkout first.');
+      }
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final shiftId = 'shift-$cleanOperationId';
+      await customInsert(
+        'INSERT INTO shop_cash_shifts '
+        '(id, open_operation_id, operator_label, opening_float_mmk, '
+        'opened_at_millis, state) VALUES (?, ?, ?, ?, ?, ?)',
+        variables: [
+          Variable<String>(shiftId),
+          Variable<String>(cleanOperationId),
+          Variable<String>(cleanOperatorLabel),
+          Variable<int>(openingFloatMmk),
+          Variable<int>(now),
+          const Variable<String>('open'),
+        ],
+      );
+      await into(shopSyncOutbox).insert(
+        ShopSyncOutboxCompanion.insert(
+          operationId: cleanOperationId,
+          eventType: 'shop.cash_shift.opened.v1',
+          payloadJson: jsonEncode({
+            'shiftId': shiftId,
+            'operatorLabel': cleanOperatorLabel,
+            'openingFloatMmk': openingFloatMmk,
+            'openedAtMillis': now,
+          }),
+          createdAtMillis: now,
+        ),
+      );
+      return (await readOpenCashShift())!;
+    });
+  }
+
+  Future<ShopCashShiftReview> readCashShiftReview(String shiftId) async {
+    final row = await customSelect(
+      'SELECT * FROM shop_cash_shifts WHERE id = ?',
+      variables: [Variable<String>(shiftId)],
+    ).getSingleOrNull();
+    if (row == null) throw StateError('Cash shift was not found.');
+    final shift = _cashShiftFromRow(row);
+    if (shift.state != 'open') {
+      throw StateError('This cash shift is already closed.');
+    }
+    final totals = await customSelect(
+      '''
+      SELECT
+        COALESCE(SUM(CASE WHEN s.payment_method = 'cash' THEN 1 ELSE 0 END), 0) AS cash_count,
+        COALESCE(SUM(CASE WHEN s.payment_method = 'cash' THEN s.total_mmk ELSE 0 END), 0) AS cash_total,
+        COALESCE(SUM(CASE WHEN s.payment_method IN ('kbzpay', 'wavepay') THEN 1 ELSE 0 END), 0) AS wallet_count,
+        COALESCE(SUM(CASE WHEN s.payment_method IN ('kbzpay', 'wavepay') THEN s.total_mmk ELSE 0 END), 0) AS wallet_total,
+        COALESCE(SUM(CASE WHEN s.payment_method NOT IN ('cash', 'kbzpay', 'wavepay') THEN 1 ELSE 0 END), 0) AS unknown_count
+      FROM shop_cash_shift_sales link
+      JOIN shop_sales s ON s.id = link.sale_id
+      WHERE link.shift_id = ?
+    ''',
+      variables: [Variable<String>(shiftId)],
+    ).getSingle();
+    if (totals.read<int>('unknown_count') != 0) {
+      throw StateError('The shift contains an unsupported payment method.');
+    }
+    final cashTotal = totals.read<int>('cash_total');
+    if (cashTotal > 200000000000000 - shift.openingFloatMmk) {
+      throw StateError('Cash shift total exceeds the supported limit.');
+    }
+    return ShopCashShiftReview(
+      shift: shift,
+      cashSalesCount: totals.read<int>('cash_count'),
+      cashSalesTotalMmk: cashTotal,
+      walletSalesCount: totals.read<int>('wallet_count'),
+      walletSalesTotalMmk: totals.read<int>('wallet_total'),
+      expectedCashMmk: shift.openingFloatMmk + cashTotal,
+    );
+  }
+
+  Future<ShopCashShift> closeCashShift({
+    required String shiftId,
+    required String operationId,
+    required int seenSaleCount,
+    required int seenCashTotalMmk,
+    required int countedCashMmk,
+  }) async {
+    final cleanOperationId = operationId.trim();
+    if (shiftId.trim().isEmpty ||
+        cleanOperationId.isEmpty ||
+        cleanOperationId.length > 120 ||
+        seenSaleCount < 0 ||
+        seenCashTotalMmk < 0 ||
+        countedCashMmk < 0 ||
+        countedCashMmk > 200000000000000) {
+      throw ArgumentError('Cash shift close details are invalid.');
+    }
+    return transaction(() async {
+      final previous = await customSelect(
+        'SELECT * FROM shop_cash_shifts WHERE close_operation_id = ?',
+        variables: [Variable<String>(cleanOperationId)],
+      ).getSingleOrNull();
+      if (previous != null) {
+        final priorShift = _cashShiftFromRow(previous);
+        if (priorShift.id != shiftId ||
+            priorShift.countedCashMmk != countedCashMmk ||
+            previous.readNullable<int>('review_sale_count') != seenSaleCount ||
+            previous.readNullable<int>('review_cash_total_mmk') !=
+                seenCashTotalMmk) {
+          throw StateError('A shift operation ID was reused with new details.');
+        }
+        return priorShift;
+      }
+      final pendingWallet = await customSelect(
+        "SELECT operation_id FROM shop_wallet_checkout_intents WHERE state = 'pending' LIMIT 1",
+      ).getSingleOrNull();
+      if (pendingWallet != null) {
+        throw StateError('Finish or cancel the pending wallet checkout first.');
+      }
+      final review = await readCashShiftReview(shiftId);
+      if (review.saleCount != seenSaleCount ||
+          review.cashSalesTotalMmk != seenCashTotalMmk) {
+        throw StateError('Sales changed. Review the cash shift again.');
+      }
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final difference = countedCashMmk - review.expectedCashMmk;
+      final changed = await customUpdate(
+        'UPDATE shop_cash_shifts SET state = ?, close_operation_id = ?, '
+        'closed_at_millis = ?, cash_sales_count = ?, cash_sales_total_mmk = ?, '
+        'wallet_sales_count = ?, wallet_sales_total_mmk = ?, '
+        'expected_cash_mmk = ?, counted_cash_mmk = ?, difference_mmk = ?, '
+        'review_sale_count = ?, review_cash_total_mmk = ? '
+        "WHERE id = ? AND state = 'open'",
+        variables: [
+          const Variable<String>('closed'),
+          Variable<String>(cleanOperationId),
+          Variable<int>(now),
+          Variable<int>(review.cashSalesCount),
+          Variable<int>(review.cashSalesTotalMmk),
+          Variable<int>(review.walletSalesCount),
+          Variable<int>(review.walletSalesTotalMmk),
+          Variable<int>(review.expectedCashMmk),
+          Variable<int>(countedCashMmk),
+          Variable<int>(difference),
+          Variable<int>(seenSaleCount),
+          Variable<int>(seenCashTotalMmk),
+          Variable<String>(shiftId),
+        ],
+      );
+      if (changed != 1) throw StateError('Cash shift changed. Review again.');
+      await into(shopSyncOutbox).insert(
+        ShopSyncOutboxCompanion.insert(
+          operationId: cleanOperationId,
+          eventType: 'shop.cash_shift.closed.v1',
+          payloadJson: jsonEncode({
+            'shiftId': shiftId,
+            'cashSalesCount': review.cashSalesCount,
+            'cashSalesTotalMmk': review.cashSalesTotalMmk,
+            'walletSalesCount': review.walletSalesCount,
+            'walletSalesTotalMmk': review.walletSalesTotalMmk,
+            'expectedCashMmk': review.expectedCashMmk,
+            'countedCashMmk': countedCashMmk,
+            'differenceMmk': difference,
+            'closedAtMillis': now,
+          }),
+          createdAtMillis: now,
+        ),
+      );
+      final closed = await customSelect(
+        'SELECT * FROM shop_cash_shifts WHERE id = ?',
+        variables: [Variable<String>(shiftId)],
+      ).getSingle();
+      return _cashShiftFromRow(closed);
+    });
+  }
+
   Future<ShopSaleReceipt> recordCashSale({
     required String operationId,
     required List<ShopSaleLineInput> lines,
@@ -1084,6 +1417,16 @@ class ShopDatabase extends _$ShopDatabase {
           createdAtMillis: now,
         ),
       );
+      final activeShift = await readOpenCashShift();
+      if (activeShift != null) {
+        await customInsert(
+          'INSERT INTO shop_cash_shift_sales (sale_id, shift_id) VALUES (?, ?)',
+          variables: [
+            Variable<String>(saleId),
+            Variable<String>(activeShift.id),
+          ],
+        );
+      }
 
       final eventLines = <Map<String, Object>>[];
       for (var index = 0; index < canonicalLines.length; index++) {
@@ -1149,6 +1492,7 @@ class ShopDatabase extends _$ShopDatabase {
             'totalMmk': totalMmk,
             'paymentMethod': paymentMethod,
             'createdAtMillis': now,
+            if (activeShift != null) 'shiftId': activeShift.id,
             'lines': eventLines,
           }),
           createdAtMillis: now,

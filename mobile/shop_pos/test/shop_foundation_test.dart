@@ -2,7 +2,9 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -10,6 +12,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supermega_shop/menu_import_service.dart';
 import 'package:supermega_shop/printer_services.dart';
+import 'package:supermega_shop/shop_cash_shift_screen.dart';
+import 'package:supermega_shop/shop_copy.dart';
 import 'package:supermega_shop/shop_database.dart';
 import 'package:supermega_shop/shop_models.dart';
 
@@ -595,6 +599,332 @@ void main() {
         isValidStaticMyanmarMmqr(_syntheticStaticMmqr(extraFields: ['550202'])),
         isFalse,
       );
+    });
+  });
+
+  group('offline cash shift', () {
+    test('formats a negative cash difference without a misplaced comma', () {
+      expect(shopMmk(-100), '-100 MMK');
+      expect(shopMmk(-1200), '-1,200 MMK');
+    });
+
+    test(
+      'counts only assigned sales, guards stale close and replays safely',
+      () async {
+        final database = ShopDatabase(NativeDatabase.memory());
+        try {
+          await database.addProduct(
+            id: 'tea',
+            name: 'Tea',
+            priceMmk: 2500,
+            openingStock: 10,
+          );
+          final shift = await database.openCashShift(
+            operationId: 'open-shift-1',
+            operatorLabel: 'May',
+            openingFloatMmk: 10000,
+          );
+          expect(
+            (await database.openCashShift(
+              operationId: 'open-shift-1',
+              operatorLabel: 'May',
+              openingFloatMmk: 10000,
+            )).id,
+            shift.id,
+          );
+          await expectLater(
+            database.openCashShift(
+              operationId: 'open-shift-1',
+              operatorLabel: 'May',
+              openingFloatMmk: 9000,
+            ),
+            throwsA(isA<StateError>()),
+          );
+          await expectLater(
+            database.openCashShift(
+              operationId: 'another-open-shift',
+              operatorLabel: 'May',
+              openingFloatMmk: 0,
+            ),
+            throwsA(isA<StateError>()),
+          );
+          await expectLater(
+            database.recordCashSale(
+              operationId: 'failed-shift-sale',
+              lines: const [ShopSaleLineInput(productId: 'tea', quantity: 11)],
+            ),
+            throwsA(isA<StateError>()),
+          );
+          expect((await database.readCashShiftReview(shift.id)).saleCount, 0);
+          expect(await database.countSales(), 0);
+          const cashLines = [ShopSaleLineInput(productId: 'tea', quantity: 2)];
+          await database.recordCashSale(
+            operationId: 'cash-shift-1',
+            lines: cashLines,
+          );
+          await database.recordCashSale(
+            operationId: 'cash-shift-1',
+            lines: cashLines,
+          );
+          final firstReview = await database.readCashShiftReview(shift.id);
+          expect(firstReview.cashSalesCount, 1);
+          expect(firstReview.cashSalesTotalMmk, 5000);
+          expect(firstReview.expectedCashMmk, 15000);
+          expect(firstReview.walletSalesCount, 0);
+
+          const walletLines = [
+            ShopSaleLineInput(productId: 'tea', quantity: 1),
+          ];
+          await database.createWalletCheckoutIntent(
+            operationId: 'wallet-shift-1',
+            merchant: MerchantWalletSetup(
+              provider: 'KBZPay',
+              merchantPhone: null,
+              officialQrPayload: _syntheticStaticMmqr(),
+              issuerConfirmed: true,
+            ),
+            lines: walletLines,
+          );
+          await expectLater(
+            database.closeCashShift(
+              shiftId: shift.id,
+              operationId: 'close-pending',
+              seenSaleCount: 1,
+              seenCashTotalMmk: 5000,
+              countedCashMmk: 15000,
+            ),
+            throwsA(isA<StateError>()),
+          );
+          await database.recordSale(
+            operationId: 'wallet-shift-1',
+            lines: walletLines,
+            paymentMethod: 'kbzpay',
+            walletCheckoutOperationId: 'wallet-shift-1',
+          );
+          final review = await database.readCashShiftReview(shift.id);
+          expect(review.saleCount, 2);
+          expect(review.cashSalesTotalMmk, 5000);
+          expect(review.walletSalesCount, 1);
+          expect(review.walletSalesTotalMmk, 2500);
+          expect(review.expectedCashMmk, 15000);
+          await expectLater(
+            database.closeCashShift(
+              shiftId: shift.id,
+              operationId: 'close-stale',
+              seenSaleCount: firstReview.saleCount,
+              seenCashTotalMmk: firstReview.cashSalesTotalMmk,
+              countedCashMmk: 15000,
+            ),
+            throwsA(isA<StateError>()),
+          );
+          final closed = await database.closeCashShift(
+            shiftId: shift.id,
+            operationId: 'close-shift-1',
+            seenSaleCount: review.saleCount,
+            seenCashTotalMmk: review.cashSalesTotalMmk,
+            countedCashMmk: 14900,
+          );
+          expect(closed.state, 'closed');
+          expect(closed.expectedCashMmk, 15000);
+          expect(closed.countedCashMmk, 14900);
+          expect(closed.differenceMmk, -100);
+          expect(
+            (await database.closeCashShift(
+              shiftId: shift.id,
+              operationId: 'close-shift-1',
+              seenSaleCount: review.saleCount,
+              seenCashTotalMmk: review.cashSalesTotalMmk,
+              countedCashMmk: 14900,
+            )).differenceMmk,
+            -100,
+          );
+          await expectLater(
+            database.closeCashShift(
+              shiftId: shift.id,
+              operationId: 'close-shift-1',
+              seenSaleCount: review.saleCount,
+              seenCashTotalMmk: review.cashSalesTotalMmk,
+              countedCashMmk: 15000,
+            ),
+            throwsA(isA<StateError>()),
+          );
+          final saleEvent = await database
+              .customSelect(
+                'SELECT payload_json FROM shop_sync_outbox WHERE operation_id = ?',
+                variables: [const Variable<String>('cash-shift-1')],
+              )
+              .getSingle();
+          expect(
+            (jsonDecode(saleEvent.read<String>('payload_json'))
+                as Map<String, dynamic>)['shiftId'],
+            shift.id,
+          );
+          final next = await database.openCashShift(
+            operationId: 'open-shift-2',
+            operatorLabel: 'May',
+            openingFloatMmk: 0,
+          );
+          await database.recordCashSale(
+            operationId: 'cash-shift-1',
+            lines: cashLines,
+          );
+          expect((await database.readCashShiftReview(next.id)).saleCount, 0);
+          expect(await database.countSales(), 2);
+        } finally {
+          await database.close();
+        }
+      },
+    );
+
+    test('pending wallet checkout blocks opening a new shift', () async {
+      final database = ShopDatabase(NativeDatabase.memory());
+      try {
+        await database.addProduct(
+          id: 'tea',
+          name: 'Tea',
+          priceMmk: 2500,
+          openingStock: 2,
+        );
+        await database.createWalletCheckoutIntent(
+          operationId: 'pre-shift-wallet',
+          merchant: MerchantWalletSetup(
+            provider: 'KBZPay',
+            merchantPhone: null,
+            officialQrPayload: _syntheticStaticMmqr(),
+            issuerConfirmed: true,
+          ),
+          lines: const [ShopSaleLineInput(productId: 'tea', quantity: 1)],
+        );
+        await expectLater(
+          database.openCashShift(
+            operationId: 'open-with-pending',
+            operatorLabel: 'May',
+            openingFloatMmk: 0,
+          ),
+          throwsA(isA<StateError>()),
+        );
+        expect(await database.readOpenCashShift(), isNull);
+        expect(
+          await database.cancelWalletCheckoutIntent('pre-shift-wallet'),
+          isTrue,
+        );
+        expect(
+          (await database.openCashShift(
+            operationId: 'open-with-pending',
+            operatorLabel: 'May',
+            openingFloatMmk: 0,
+          )).state,
+          'open',
+        );
+      } finally {
+        await database.close();
+      }
+    });
+
+    test('v5 file gains shift tables without assigning old sales', () async {
+      final directory = await Directory.systemTemp.createTemp('shop-shift-v5-');
+      final file = File(
+        '${directory.path}${Platform.pathSeparator}shop.sqlite',
+      );
+      var database = ShopDatabase(NativeDatabase(file));
+      try {
+        await database.addProduct(
+          id: 'tea',
+          name: 'Tea',
+          priceMmk: 2500,
+          openingStock: 4,
+        );
+        await database.recordCashSale(
+          operationId: 'old-sale',
+          lines: const [ShopSaleLineInput(productId: 'tea', quantity: 1)],
+        );
+        await database.customStatement('DROP TABLE shop_cash_shift_sales');
+        await database.customStatement('DROP TABLE shop_cash_shifts');
+        await database.customStatement('PRAGMA user_version = 5');
+        await database.close();
+        database = ShopDatabase(NativeDatabase(file));
+        final shift = await database.openCashShift(
+          operationId: 'after-upgrade',
+          operatorLabel: 'May',
+          openingFloatMmk: 5000,
+        );
+        expect((await database.readCashShiftReview(shift.id)).saleCount, 0);
+        await database.recordCashSale(
+          operationId: 'new-sale',
+          lines: const [ShopSaleLineInput(productId: 'tea', quantity: 1)],
+        );
+        expect((await database.readCashShiftReview(shift.id)).saleCount, 1);
+        await database.close();
+        database = ShopDatabase(NativeDatabase(file));
+        expect((await database.readOpenCashShift())?.id, shift.id);
+        expect(
+          (await database.readCashShiftReview(shift.id)).expectedCashMmk,
+          7500,
+        );
+        expect(await database.countSales(), 2);
+        final review = await database.readCashShiftReview(shift.id);
+        await database.closeCashShift(
+          shiftId: shift.id,
+          operationId: 'close-after-upgrade',
+          seenSaleCount: review.saleCount,
+          seenCashTotalMmk: review.cashSalesTotalMmk,
+          countedCashMmk: 7500,
+        );
+        await database.close();
+        database = ShopDatabase(NativeDatabase(file));
+        final outboxCount = await database.countOutboxOperations();
+        expect((await database.readLatestCashShift())?.state, 'closed');
+        expect(
+          (await database.closeCashShift(
+            shiftId: shift.id,
+            operationId: 'close-after-upgrade',
+            seenSaleCount: review.saleCount,
+            seenCashTotalMmk: review.cashSalesTotalMmk,
+            countedCashMmk: 7500,
+          )).differenceMmk,
+          0,
+        );
+        expect(await database.countOutboxOperations(), outboxCount);
+      } finally {
+        await database.close();
+        await directory.delete(recursive: true);
+      }
+    });
+
+    testWidgets('shift opening and closing stays usable in both languages', (
+      tester,
+    ) async {
+      final database = ShopDatabase(NativeDatabase.memory());
+      try {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: ShopCashShiftScreen(database: database, myanmar: false),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.enterText(find.byType(TextField).first, 'May');
+        await tester.enterText(find.byType(TextField).last, '10000');
+        await tester.tap(find.text('Start shift'));
+        await tester.pumpAndSettle();
+        expect(find.text('Expected from recorded sales'), findsOneWidget);
+        await tester.enterText(find.byType(TextField).last, '10000');
+        await tester.tap(find.text('Close shift'));
+        await tester.pumpAndSettle();
+        await tester.scrollUntilVisible(find.text('Last closed shift'), 150);
+        expect(find.text('Last closed shift'), findsOneWidget);
+        expect(find.text('Expected from recorded sales'), findsOneWidget);
+        await tester.pumpWidget(const SizedBox());
+        await tester.pumpWidget(
+          MaterialApp(
+            home: ShopCashShiftScreen(database: database, myanmar: true),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('တာဝန်ချိန်စတင်ရန်'), findsOneWidget);
+      } finally {
+        await tester.pumpWidget(const SizedBox());
+        await database.close();
+      }
     });
   });
 
