@@ -243,7 +243,9 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
                                                 sale.createdAtMillis,
                                               ),
                                             ),
-                                            Text(_paymentName(sale.paymentMethod)),
+                                            Text(
+                                              _paymentName(sale.paymentMethod),
+                                            ),
                                           ],
                                         ),
                                       ],
