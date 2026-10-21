@@ -1481,7 +1481,7 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
               <span className="shop-product-copy"><span className="shop-product-name"><strong id={nameId} lang={readUiLocale() === 'my' && item.nameMy ? 'my' : undefined}>{readUiLocale() === 'my' && item.nameMy ? item.nameMy : item.name}</strong>{item.variant ? <small id={variantId}>{item.variant}</small> : null}</span><b id={priceId}>{formatMoney(item.price)}</b><small className={item.onHand <= item.reorderAt ? 'is-low' : ''} id={stockId}>{item.onHand ? `${item.onHand} ${uiText('in stock')}` : bi('Out of stock')}</small></span>
               {quantity
                 ? <span className="shop-product-quantity" aria-label={`${quantity} ${uiText('in sale')}`} id={quantityId}>{quantity}</span>
-                : item.onHand > 0 ? <span aria-hidden="true" className="shop-product-add-hint">+ {uiText('Add')}</span> : null}
+                : item.onHand > 0 ? <span aria-hidden="true" className="shop-product-add-hint">+</span> : null}
             </button>
           })}
         </div> : <Empty>{items.length

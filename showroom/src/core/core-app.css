@@ -3249,7 +3249,7 @@ input, select, textarea,
 .shop-product-copy > small { grid-column: 3; align-self: center; font-size: .6875rem; text-align: right; }
 .shop-product-quantity, .shop-product-add-hint { position: static; width: 3.25rem; min-width: 3.25rem; min-height: 2.75rem; display: grid; place-items: center; margin-left: auto; border: 1px solid var(--core-line); border-radius: .625rem; padding: 0 .5rem; background: var(--core-panel); color: var(--core-muted); font-size: .75rem; font-weight: 650; line-height: 1; }
 .shop-product-quantity { border-color: color-mix(in srgb, var(--core-accent) 30%, var(--core-line)); background: color-mix(in srgb, var(--core-accent) 10%, var(--core-panel)); color: var(--core-accent); }
-.shop-product-add-hint { color: var(--core-accent); opacity: 1; }
+.shop-product-add-hint { background: var(--core-green-soft); color: var(--core-accent); font-size: 1.375rem; font-weight: 500; opacity: 1; }
 .shop-payment-options { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .375rem; }
 .shop-payment-options button { min-height: 2.75rem; border-radius: .75rem; padding-inline: .4rem; font-size: .75rem; }
 .shop-payment-options .shop-payment-more { background: var(--core-panel); color: var(--core-ink); }
