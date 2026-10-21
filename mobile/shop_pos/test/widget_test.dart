@@ -717,7 +717,7 @@ void main() {
     }
   });
 
-  testWidgets('tablet landscape keeps the sale beside the catalog', (
+  testWidgets('tablet landscape opens the basket beside the catalog', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(820, 700);
@@ -744,7 +744,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Tea'), findsOneWidget);
-      expect(find.text('Current sale'), findsOneWidget);
+      expect(find.text('Current sale'), findsNothing);
       expect(find.text('Search name, barcode or SKU'), findsOneWidget);
       expect(tester.takeException(), isNull);
       expect(
@@ -753,6 +753,7 @@ void main() {
       );
       await tester.tap(find.byTooltip('Add to sale'));
       await tester.pumpAndSettle();
+      expect(find.text('Current sale'), findsOneWidget);
       expect(find.text('Cash sale'), findsOneWidget);
       expect(find.textContaining('Review sale'), findsNothing);
       expect(tester.takeException(), isNull);
@@ -763,7 +764,7 @@ void main() {
     }
   });
 
-  testWidgets('portrait tablet keeps basket visible beside catalog', (
+  testWidgets('portrait tablet reveals basket after first item', (
     tester,
   ) async {
     addTearDown(tester.view.resetPhysicalSize);
@@ -794,19 +795,24 @@ void main() {
           final catalog = find.byKey(const ValueKey('shop-split-catalog'));
           final basket = find.byKey(const ValueKey('shop-split-basket'));
           expect(catalog, findsOneWidget);
-          expect(basket, findsOneWidget);
-          final catalogRect = tester.getRect(catalog);
-          final basketRect = tester.getRect(basket);
-          // The Burmese rail can grow for longer labels while the catalog
-          // still has a phone-width, touch-safe pane beside the basket.
-          expect(catalogRect.width, greaterThanOrEqualTo(320));
-          expect(basketRect.width, greaterThanOrEqualTo(300));
-          expect(catalogRect.right, lessThan(basketRect.left));
+          expect(basket, findsNothing);
         }
         await tester.tap(
           find.byTooltip(myanmar ? 'အရောင်းထဲထည့်ရန်' : 'Add to sale'),
         );
         await tester.pumpAndSettle();
+        if (width == 820) {
+          final catalog = find.byKey(const ValueKey('shop-split-catalog'));
+          final basket = find.byKey(const ValueKey('shop-split-basket'));
+          expect(basket, findsOneWidget);
+          final catalogRect = tester.getRect(catalog);
+          final basketRect = tester.getRect(basket);
+          // The Burmese rail can grow for longer labels while the catalog
+          // still has a phone-width, touch-safe pane beside the active basket.
+          expect(catalogRect.width, greaterThanOrEqualTo(320));
+          expect(basketRect.width, greaterThanOrEqualTo(300));
+          expect(catalogRect.right, lessThan(basketRect.left));
+        }
         if (width == 800) {
           await tester.tap(
             find.textContaining(myanmar ? 'အရောင်းစစ်ရန်' : 'Review sale'),
