@@ -18,6 +18,7 @@ const outputDir=${JSON.stringify(outputDir)};
 const manifest=JSON.parse(fs.readFileSync('site-manifest.json'));
 const config=JSON.parse(fs.readFileSync(outputDir+'/config.json'));
 const release=JSON.parse(fs.readFileSync(outputDir+'/static/__release.json'));
+const retiredProductRoutes=new Set(manifest.pages.filter(p=>p.productId&&manifest.productVisibility.retainedOnlyProductIds.includes(p.productId)).map(p=>p.route));
 const mode=process.env.TEST_PUBLIC_MUTATION;
 globalThis.fetch=async input=>{
  const u=new URL(input);
@@ -32,6 +33,12 @@ globalThis.fetch=async input=>{
  if(u.pathname.startsWith('/api/pipeline-control')) return json({status:'not_found'},404);
  const redirect=config.routes.find(r=>r.status===308 && new RegExp(r.src).test(u.pathname));
  if(redirect) return new Response(null,{status:308,headers:{location:mode==='old-redirect'&&u.pathname==='/products/factory/'?'/#plant':redirect.headers.Location}});
+ if(retiredProductRoutes.has(u.pathname)) {
+  const page=manifest.pages.find(p=>p.route===u.pathname);
+  const route=config.routes.find(r=>r.status===404&&r.dest==='/404.html'&&new RegExp(r.src).test(u.pathname));
+  let html=fs.readFileSync(outputDir+'/static/'+page.file,'utf8');
+  return new Response(route&&mode!=='retired-page-served'?fs.readFileSync(outputDir+'/static/404.html'):html,{status:route&&mode!=='retired-page-served'?404:200,headers});
+ }
  if(u.pathname.startsWith('/images/')) {
   if(mode==='image-missing') return new Response('missing',{status:404});
   if(mode==='image-html') return new Response('<html>fallback</html>',{headers:{'content-type':'text/html'}});
@@ -50,7 +57,6 @@ globalThis.fetch=async input=>{
  if(mode==='missing-guided') html=html.replaceAll('>Login</a>','>REMOVED</a>');
  if(mode==='missing-assisted') html=html.replaceAll('>Contact</a>','>REMOVED</a>');
  if(mode==='plant-marketing'&&u.pathname==='/') html+='<a href="/plant/">Plant</a>';
- if(mode==='plant-indexed'&&u.pathname==='/plant/') html=html.replace('noindex,follow','index,follow');
  return new Response(html,{headers});
 };
 `
@@ -81,7 +87,7 @@ for (const [mutation, failure] of [
   ['privacy-header', 'page_security_header_wrong'], ['usb-policy', 'page_security_header_wrong'],
   ['missing-offer', 'homepage_offer_contract_missing'], ['missing-action', 'homepage_shop_action_missing'],
   ['missing-guided', 'page_shared_contract_missing'], ['missing-assisted', 'page_contact_route_missing'],
-  ['plant-marketing', 'retired_product_marketed'], ['plant-indexed', 'retired_product_boundary_missing'],
+  ['plant-marketing', 'retired_product_marketed'], ['retired-page-served', 'retired_product_route_not_found'],
   ['wrong-commit', 'release_commit_wrong'], ['contact-down', 'contact_not_accepting'],
   ['old-redirect', 'redirect_destination_wrong'],
   ['pilot-pitch', 'retired_managed_pilot_pitch_present'], ['missing-source', 'contact_trial_proof_contract_missing'],

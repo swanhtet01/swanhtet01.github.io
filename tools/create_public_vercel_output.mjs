@@ -734,8 +734,8 @@ function structuredDataHtml(schema) {
 }
 
 const publicObservabilityHosts = Object.freeze(['supermega.dev', 'www.supermega.dev'])
-const publicObservabilityPaths = Object.freeze(manifest.pages.map((page) => page.route))
-assert(publicObservabilityPaths.join(',') === '/,/shop/,/plant/,/website/,/ecommerce/,/contact/,/privacy/', 'public_observability_path_surface_changed')
+const publicObservabilityPaths = Object.freeze(discoverablePages.map((page) => page.route))
+assert(publicObservabilityPaths.join(',') === '/,/shop/,/contact/,/privacy/', 'public_observability_path_surface_changed')
 
 // Source presence is only delivery readiness. Provider-visible pageviews and
 // vitals remain unobserved until a separate read-only provider receipt proves
@@ -1164,7 +1164,7 @@ const privacyHtml = documentHtml({
   route: '/privacy/',
   title: 'Privacy | SuperMega',
   description: 'How SuperMega handles public contact requests and product implementation data.',
-  content: `<main class="frame" id="content"><section class="page-hero"><span class="eyebrow">Privacy</span><h1>Collect what the work requires. Protect the rest.</h1><p class="lede">The public site uses the details you choose to send so SuperMega can respond to your request.</p></section><div class="prose"><section><h3>Site measurement</h3><p>On the production SuperMega public site, first-party Vercel Web Analytics records aggregate page views and Speed Insights measures Core Web Vitals. Before either tool starts, SuperMega allows only the seven public page paths and removes query strings and fragments from the URL. SuperMega supplies no custom or conversion event, contact-form value, identity, free text, customer record, payment, or commercial proof in its measurement event fields. Vercel may add a timestamp, referrer, approximate location, browser, operating system, and device information to its aggregate reporting. Source code or a reachable script does not prove that provider telemetry was observed.</p></section><section><h3>Contact requests</h3><p>We receive your name, work email, company, selected product or template, request, source page, referrer, and an optional attached request summary, outcome status, and digest, plus an approved AI context digest and no-raw-record boundary when you attach them. We use them to reply, qualify the workflow, and prepare the next agreed step.</p></section><section><h3>Product data</h3><p>An attached request summary includes bounded readiness, source, behavior, reviewed-decision counts, and a digest-bound aggregate outcome. It excludes raw product records, questions, approval contents, and account details. Sending a request does not create an account or connect a source.</p></section><section><h3>AI processing</h3><p>Governed assistance is configured only against approved sources and roles. Consequential external actions remain behind explicit approval.</p></section><section><h3>Sharing</h3><p>We do not sell contact details. Service providers are used only where needed to host, secure, communicate, or deliver the agreed system.</p></section><section><h3>Deletion</h3><p>Email <a href="mailto:swanhtet@supermega.dev">swanhtet@supermega.dev</a> to request correction or deletion of a public contact record.</p></section></div></main>`,
+  content: `<main class="frame" id="content"><section class="page-hero"><span class="eyebrow">Privacy</span><h1>Collect what the work requires. Protect the rest.</h1><p class="lede">The public site uses the details you choose to send so SuperMega can respond to your request.</p></section><div class="prose"><section><h3>Site measurement</h3><p>On the production SuperMega public site, first-party Vercel Web Analytics records aggregate page views and Speed Insights measures Core Web Vitals. Before either tool starts, SuperMega allows only the four public page paths and removes query strings and fragments from the URL. SuperMega supplies no custom or conversion event, contact-form value, identity, free text, customer record, payment, or commercial proof in its measurement event fields. Vercel may add a timestamp, referrer, approximate location, browser, operating system, and device information to its aggregate reporting. Source code or a reachable script does not prove that provider telemetry was observed.</p></section><section><h3>Contact requests</h3><p>We receive your name, work email, company, selected product or template, request, source page, referrer, and an optional attached request summary, outcome status, and digest, plus an approved AI context digest and no-raw-record boundary when you attach them. We use them to reply, qualify the workflow, and prepare the next agreed step.</p></section><section><h3>Product data</h3><p>An attached request summary includes bounded readiness, source, behavior, reviewed-decision counts, and a digest-bound aggregate outcome. It excludes raw product records, questions, approval contents, and account details. Sending a request does not create an account or connect a source.</p></section><section><h3>AI processing</h3><p>Governed assistance is configured only against approved sources and roles. Consequential external actions remain behind explicit approval.</p></section><section><h3>Sharing</h3><p>We do not sell contact details. Service providers are used only where needed to host, secure, communicate, or deliver the agreed system.</p></section><section><h3>Deletion</h3><p>Email <a href="mailto:swanhtet@supermega.dev">swanhtet@supermega.dev</a> to request correction or deletion of a public contact record.</p></section></div></main>`,
 })
 
 const notFoundHtml = documentHtml({
@@ -1753,10 +1753,11 @@ const vercelConfig = {
     { src: '^/api/contact-submissions/?$', dest: '/api/contact-submissions.js' },
     { src: '^/api/health/?$', dest: '/api/health.js' },
     { src: '^/api/(.*)$', dest: '/api/not-found.js' },
+    { src: `^/(?:${manifest.productVisibility.retainedOnlyProductIds.join('|')})(?:/.*)?$`, status: 404, dest: '/404.html' },
     ...manifest.redirects.map((redirect) => ({ src: redirect.source, status: 308, headers: { Location: manifest.customerProducts.some(product => product.publicAnchor === redirect.destination && !publicProducts.includes(product)) ? `/${manifest.customerProducts.find(product => product.publicAnchor === redirect.destination).id}/` : redirect.destination } })),
     { src: '^/__release\\.json$', headers: { 'cache-control': 'no-store, max-age=0' }, continue: true },
     { src: '^/vercel-insights\\.js$', headers: { 'cache-control': 'no-store, max-age=0' }, continue: true },
-    { src: '^/(?:favicon\\.svg|site\\.webmanifest|og-card(?:-(?:shop|plant|website|ecommerce))?\\.png)$', headers: { 'cache-control': 'public, max-age=86400, stale-while-revalidate=604800' }, continue: true },
+    { src: '^/(?:favicon\\.svg|site\\.webmanifest|og-card(?:-shop)?\\.png)$', headers: { 'cache-control': 'public, max-age=86400, stale-while-revalidate=604800' }, continue: true },
     { handle: 'filesystem' },
     { src: '^/(.*)$', status: 404, dest: '/404.html' },
   ],
@@ -1817,7 +1818,12 @@ await writeStatic('platform-carousel.js', `(function(){
   window.addEventListener('hashchange',function(){var index=panels.findIndex(function(panel){return location.hash==='#'+panel.id});if(index>=0)select(index,false)});
 })();`)
 await writeFile(resolve(staticDir, 'og-card.png'), ogCardPng)
-for (const [fileName, cardPng] of productOgCards) await writeFile(resolve(staticDir, fileName), cardPng)
+for (const product of publicProducts) {
+  const fileName = `og-card-${product.id}.png`
+  const cardPng = productOgCards.get(fileName)
+  assert(cardPng, `public_og_card_missing:${product.id}`)
+  await writeFile(resolve(staticDir, fileName), cardPng)
+}
 await writeStatic('__release.json', `${JSON.stringify(release, null, 2)}\n`)
 await writeStatic('robots.txt', previewAppBinding ? 'User-agent: *\nDisallow: /\n' : 'User-agent: *\nAllow: /\nDisallow: /api/\nSitemap: https://supermega.dev/sitemap.xml\n')
 await writeStatic('sitemap.xml', `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${discoverablePages.map((page) => `  <url><loc>${escapeHtml(canonical(page.route))}</loc><lastmod>${release.generatedAt.slice(0, 10)}</lastmod><changefreq>${page.route === '/privacy/' ? 'yearly' : 'weekly'}</changefreq></url>`).join('\n')}\n</urlset>\n`)

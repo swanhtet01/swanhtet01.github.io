@@ -33,6 +33,8 @@ const verificationScope = expectedCommit ? 'exact_release' : 'availability_and_c
 const manifest = JSON.parse(await readFile(new URL('../site-manifest.json', import.meta.url), 'utf8'))
 const publicProducts = activeProductContracts(manifest)
 const activeLandingPages = manifest.pages.filter(page => publicProducts.some(product => product.id === page.productId))
+const retiredCustomerPages = manifest.pages.filter(page => page.productId && !publicProducts.some(product => product.id === page.productId))
+const retiredCustomerRoutes = new Set(retiredCustomerPages.map(page => page.route))
 const baseUrl = String(process.env.PUBLIC_BASE_URL || manifest.release.productionDomain).replace(/\/$/, '')
 const attempts = Number(process.env.PUBLIC_VERIFY_ATTEMPTS || (verifyCurrentHead ? 1 : 6))
 const retryDelayMs = Number(process.env.PUBLIC_VERIFY_RETRY_MS || 5000)
@@ -143,8 +145,19 @@ async function verifyOnce() {
     : null
   appOrigin = previewAppBinding?.origin || 'https://app.supermega.dev'
   const pendingRoutes = new Set()
-  const pageResults = await Promise.all(manifest.pages.map(async (page) => readPageOrPending(page, pendingRoutes)))
-  const pages = new Map(pageResults)
+  const pageResults = await Promise.all(manifest.pages.filter(page => !retiredCustomerRoutes.has(page.route)).map(async (page) => readPageOrPending(page, pendingRoutes)))
+  const pages = new Map([...pageResults, ...retiredCustomerPages.map(page => [page.route, null])])
+  await Promise.all(retiredCustomerPages.map(async page => {
+    const response = await request(page.route, { redirect: 'manual' })
+    if (response.status !== 404) {
+      if (expectedCommit) assert(false, 'retired_product_route_not_found', { route: page.route, status: response.status })
+      pendingRoutes.add(page.route)
+      return
+    }
+    const body = await response.text()
+    const product = manifest.customerProducts.find(item => item.id === page.productId)
+    assert(!product || !body.toLowerCase().includes(product.name.toLowerCase()), 'retired_product_content_served', { route: page.route, product: page.productId })
+  }))
   verifyCompanyHeadline(pages.get('/') || '', 'homepage_headline_wrong')
   assert(pages.get('/')?.includes(`href="${appOrigin}/login">Login</a>`), 'homepage_product_cta_missing')
   const homepage = pages.get('/') || ''
@@ -175,8 +188,6 @@ async function verifyOnce() {
   }
   for (const product of manifest.customerProducts.filter(product => !publicProducts.includes(product))) {
     assert(!homepage.includes(`href="/${product.id}/"`) && !homepage.includes(`product=${product.id}`), 'retired_product_marketed', { product: product.id })
-    const retained = pages.get(`/${product.id}/`)
-    if (retained != null) assert(retained.includes('content="noindex,follow"') && retained.includes('This product is not offered for new setup.') && !retained.includes('"@type":"Product"'), 'retired_product_boundary_missing', { product: product.id })
   }
   for (const internalLabel of ['SuperMega HQ', 'One next action for the company', 'Gated R&amp;D']) assert(!pages.get('/')?.includes(internalLabel), 'internal_system_exposed', { internalLabel })
   assert(pages.get('/')?.includes('href="/privacy/"'), 'privacy_navigation_missing')
@@ -333,7 +344,7 @@ async function verifyOnce() {
   verifyCompanyHeadline(wwwHtml, 'www_release_drift')
 
   return {
-    pages: manifest.pages.map((page) => page.route).filter((route) => !pendingRoutes.has(route)),
+    pages: manifest.pages.map((page) => page.route).filter((route) => !retiredCustomerRoutes.has(route) && !pendingRoutes.has(route)),
     pendingGatedRoutes: [...pendingRoutes],
     pendingGatedFeatures: [...pendingFeatures],
     release,

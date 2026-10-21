@@ -161,7 +161,7 @@ const expectedStaticFiles = new Set([
   'images/actual-shop-inventory-tablet.png',
   'images/actual-shop-inventory-mobile.png',
   'og-card.png',
-  ...manifest.customerProducts.map((product) => `og-card-${product.id}.png`),
+  ...publicProducts.map((product) => `og-card-${product.id}.png`),
   'robots.txt',
   'site.webmanifest',
   'sitemap.xml',
@@ -358,7 +358,7 @@ for (const [route, page] of pages) {
 const publicObservability = readStatic('vercel-insights.js')
 for (const token of [
   '["supermega.dev","www.supermega.dev"]',
-  '["/","/shop/","/plant/","/website/","/ecommerce/","/contact/","/privacy/"]',
+  '["/","/shop/","/contact/","/privacy/"]',
   "window.va('beforeSend'",
   "window.si('beforeSend'",
   "event.type !== expectedType",
@@ -562,7 +562,7 @@ for (const token of ['SuperMega terminal mark', 'd="M10 9 26 22 10 35M35 35h27"'
 }
 if (/<rect\b/i.test(favicon)) fail('brand_mark_background_present')
 
-for (const cardFile of ['og-card.png', ...manifest.customerProducts.map((product) => `og-card-${product.id}.png`)]) {
+for (const cardFile of ['og-card.png', ...publicProducts.map((product) => `og-card-${product.id}.png`)]) {
   const ogCardPath = resolve(staticDir, cardFile)
   requireFile(ogCardPath, cardFile)
   const ogCard = readFileSync(ogCardPath)
@@ -684,7 +684,13 @@ for (const route of [
   if (!config.routes.some((entry) => entry.src === route[0] && entry.dest === route[1])) fail('public_api_route_missing', { route })
 }
 if (!config.routes.some((entry) => entry.src === '^/vercel-insights\\.js$' && entry.continue === true && entry.headers?.['cache-control'] === 'no-store, max-age=0')) fail('public_observability_no_store_route_missing')
-if (!config.routes.some((entry) => entry.src === '^/(?:favicon\\.svg|site\\.webmanifest|og-card(?:-(?:shop|plant|website|ecommerce))?\\.png)$' && entry.continue === true && entry.headers?.['cache-control'])) fail('static_asset_cache_route_missing')
+if (!config.routes.some((entry) => entry.src === '^/(?:favicon\\.svg|site\\.webmanifest|og-card(?:-shop)?\\.png)$' && entry.continue === true && entry.headers?.['cache-control'])) fail('static_asset_cache_route_missing')
+const firstPublicRouteMatch = (path) => config.routes.find((entry) => typeof entry.src === 'string' && entry.continue !== true && new RegExp(entry.src).test(path))
+for (const productId of manifest.productVisibility.retainedOnlyProductIds) {
+  const route = firstPublicRouteMatch(`/${productId}/`)
+  if (route?.status !== 404 || route?.dest !== '/404.html') fail('internal_product_route_not_private', { productId, route })
+  if (existsSync(resolve(staticDir, `og-card-${productId}.png`))) fail('internal_product_share_card_public', { productId })
+}
 if (!config.routes.some((entry) => entry.handle === 'filesystem')) fail('filesystem_route_missing')
 if (!config.routes.some((entry) => entry.src === '^/(.*)$' && entry.status === 404 && entry.dest === '/404.html')) fail('not_found_route_missing')
 
