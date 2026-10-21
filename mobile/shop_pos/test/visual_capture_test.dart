@@ -157,6 +157,12 @@ void main() {
             await tester.tap(find.byIcon(Icons.shopping_basket_outlined).first);
             await tester.pumpAndSettle();
           }
+          final cashButton = find.text(
+            language == 'my' ? 'ငွေသား' : 'Cash sale',
+          );
+          if (width == 390) {
+            expect(tester.getBottomLeft(cashButton).dy, lessThan(height));
+          }
           expect(tester.takeException(), isNull);
           await expectLater(
             find.byKey(_captureKey),
@@ -165,9 +171,6 @@ void main() {
             ),
           );
 
-          final cashButton = find.text(
-            language == 'my' ? 'ငွေသား' : 'Cash sale',
-          );
           await tester.ensureVisible(cashButton);
           await tester.tap(cashButton);
           await tester.pumpAndSettle();
