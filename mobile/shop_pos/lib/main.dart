@@ -263,7 +263,8 @@ class _ShopHomeState extends State<ShopHome> {
                             const SizedBox(height: 12),
                             _recoveredMenuPhotoCard(),
                           ],
-                          if (_pendingWalletCheckout != null) ...[
+                          if (products.isEmpty &&
+                              _pendingWalletCheckout != null) ...[
                             const SizedBox(height: 12),
                             _pendingWalletCheckoutCard(),
                           ],
@@ -272,8 +273,10 @@ class _ShopHomeState extends State<ShopHome> {
                         ],
                       ),
                     ),
-                    const SizedBox(width: 18),
-                    Expanded(child: _cartPanel(products)),
+                    if (products.isNotEmpty) ...[
+                      const SizedBox(width: 18),
+                      Expanded(child: _cartPanel(products)),
+                    ],
                   ],
                 ),
               );
@@ -294,11 +297,13 @@ class _ShopHomeState extends State<ShopHome> {
                   padding: const EdgeInsets.fromLTRB(16, 14, 12, 10),
                   child: _catalogHeader(hasProducts: products.isNotEmpty),
                 ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: _searchField(products),
-                ),
-                const SizedBox(height: 8),
+                if (products.isNotEmpty) ...[
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: _searchField(products),
+                  ),
+                  const SizedBox(height: 8),
+                ],
                 Expanded(child: _productList(products)),
               ],
             );
@@ -429,8 +434,10 @@ class _ShopHomeState extends State<ShopHome> {
       child: Column(
         children: [
           _catalogHeader(hasProducts: products.isNotEmpty),
-          const SizedBox(height: 12),
-          _searchField(products),
+          if (products.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            _searchField(products),
+          ],
           const SizedBox(height: 8),
           Expanded(child: _productList(products)),
         ],
@@ -447,20 +454,22 @@ class _ShopHomeState extends State<ShopHome> {
               ?.copyWith(fontWeight: FontWeight.w800),
         ),
       ),
-      if (hasProducts) IconButton(
-        tooltip: shopCopy(
-          widget.myanmar,
-          'Import menu photo',
-          'မီနူးဓာတ်ပုံထည့်ရန်',
+      if (hasProducts)
+        IconButton(
+          tooltip: shopCopy(
+            widget.myanmar,
+            'Import menu photo',
+            'မီနူးဓာတ်ပုံထည့်ရန်',
+          ),
+          onPressed: _openMenuImport,
+          icon: const Icon(Icons.document_scanner_outlined),
         ),
-        onPressed: _openMenuImport,
-        icon: const Icon(Icons.document_scanner_outlined),
-      ),
-      if (hasProducts) FilledButton.icon(
-        onPressed: _showAddProduct,
-        icon: const Icon(Icons.add),
-        label: Text(shopCopy(widget.myanmar, 'Add item', 'ပစ္စည်းထည့်ရန်')),
-      ),
+      if (hasProducts)
+        FilledButton.icon(
+          onPressed: _showAddProduct,
+          icon: const Icon(Icons.add),
+          label: Text(shopCopy(widget.myanmar, 'Add item', 'ပစ္စည်းထည့်ရန်')),
+        ),
     ],
   );
 
@@ -675,7 +684,7 @@ class _ShopHomeState extends State<ShopHome> {
                     shopCopy(
                       widget.myanmar,
                       'Add products to start a sale.',
-                      'အရောင်းစရန် ပစ္စည်းထည့်ပါ。',
+                      'အရောင်းစရန် ပစ္စည်းထည့်ပါ။',
                     ),
                   ),
                 ),

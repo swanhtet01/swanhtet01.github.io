@@ -199,6 +199,7 @@ void main() {
 
     expect(find.text('Products'), findsOneWidget);
     expect(find.text('Your catalog is empty'), findsOneWidget);
+    expect(find.text('Search or scan barcode'), findsNothing);
     expect(find.text('MAMA Chicken Instant Noodles'), findsNothing);
 
     await tester.ensureVisible(find.text('Add first product'));
@@ -255,6 +256,48 @@ void main() {
     expect(find.text('Sale details'), findsOneWidget);
     expect(find.text('Tea × 1'), findsOneWidget);
     await database.close();
+  });
+
+  testWidgets('desktop first use shows one focused setup workspace', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final database = ShopDatabase(NativeDatabase.memory());
+    try {
+      await tester.pumpWidget(
+        ShopApp(
+          database: database,
+          authClient: null,
+          apiBaseUrl: 'https://app.supermega.dev',
+          initialMyanmar: false,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Your catalog is empty'), findsOneWidget);
+      expect(find.text('Add first product'), findsOneWidget);
+      expect(find.text('Import menu photo'), findsOneWidget);
+      expect(find.text('Search or scan barcode'), findsNothing);
+      expect(find.text('Current sale'), findsNothing);
+      expect(tester.takeException(), isNull);
+
+      await database.addProduct(
+        id: 'tea',
+        name: 'Tea',
+        priceMmk: 2500,
+        openingStock: 2,
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Search or scan barcode'), findsOneWidget);
+      expect(find.text('Current sale'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await database.close();
+    }
   });
 
   testWidgets('Burmese cash review stays uncommitted until confirmed', (
