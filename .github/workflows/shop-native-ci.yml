@@ -37,8 +37,8 @@ jobs:
 
       - name: Check changed Dart formatting
         run: |
-          dart format lib/main.dart lib/menu_import_screen.dart lib/menu_import_service.dart lib/printer_services.dart lib/recent_sales_screen.dart lib/shop_backup.dart lib/shop_cash_shift_screen.dart lib/shop_copy.dart lib/shop_database.dart lib/shop_today_screen.dart lib/stock_screen.dart test/shop_backup_test.dart test/shop_foundation_test.dart test/widget_test.dart
-          git diff --exit-code -- lib/main.dart lib/menu_import_screen.dart lib/menu_import_service.dart lib/printer_services.dart lib/recent_sales_screen.dart lib/shop_backup.dart lib/shop_cash_shift_screen.dart lib/shop_copy.dart lib/shop_database.dart lib/shop_today_screen.dart lib/stock_screen.dart test/shop_backup_test.dart test/shop_foundation_test.dart test/widget_test.dart
+          dart format lib/main.dart lib/menu_import_screen.dart lib/menu_import_service.dart lib/printer_services.dart lib/recent_sales_screen.dart lib/shop_backup.dart lib/shop_cash_shift_screen.dart lib/shop_copy.dart lib/shop_database.dart lib/shop_today_screen.dart lib/stock_screen.dart test/shop_backup_test.dart test/shop_foundation_test.dart test/visual_capture_test.dart test/widget_test.dart
+          git diff --exit-code -- lib/main.dart lib/menu_import_screen.dart lib/menu_import_service.dart lib/printer_services.dart lib/recent_sales_screen.dart lib/shop_backup.dart lib/shop_cash_shift_screen.dart lib/shop_copy.dart lib/shop_database.dart lib/shop_today_screen.dart lib/stock_screen.dart test/shop_backup_test.dart test/shop_foundation_test.dart test/visual_capture_test.dart test/widget_test.dart
 
       - name: Analyze Flutter source
         run: flutter analyze
@@ -57,6 +57,19 @@ jobs:
         with:
           name: supermega-shop-android-debug-${{ github.sha }}
           path: mobile/shop_pos/build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Capture synthetic Flutter screens with bundled fonts
+        env:
+          SHOP_VISUAL_CAPTURE: "1"
+        run: flutter test test/visual_capture_test.dart --update-goldens --reporter expanded
+
+      - name: Retain Flutter-rendered screens for design review
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: supermega-shop-flutter-renders-${{ github.sha }}
+          path: mobile/shop_pos/test/goldens/shop_*.png
           if-no-files-found: error
           retention-days: 7
 

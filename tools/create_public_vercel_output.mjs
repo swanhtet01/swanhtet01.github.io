@@ -685,7 +685,6 @@ const sharedStyle = `
   .company-operating-overview{display:grid;min-width:0;gap:12px}
   .company-operating-overview .company-product-visual{gap:8px;padding:8px;border-radius:8px;box-shadow:0 10px 28px rgba(17,24,39,.07)}
   .company-operating-overview .company-product-visual img{aspect-ratio:16/10;object-fit:contain;border-radius:5px}
-  .company-operating-proof{margin:0;color:#70798a;font-size:11px;line-height:1.45}
   body[data-view="company"] .company-product-evidence{margin-top:clamp(40px,6vw,72px);padding-top:clamp(28px,4vw,48px);border-top:1px solid #e5e4ed}
   .company-product-evidence-head{display:flex;align-items:end;justify-content:space-between;gap:24px;margin-bottom:22px}
   .company-product-evidence-head h2{margin:8px 0 0;font-size:clamp(25px,3vw,38px);letter-spacing:-.045em;line-height:1.12}
@@ -1020,7 +1019,7 @@ function shopOnlyCompanyMarkup(source) {
  return markup
 }
 function companyOperatingGraphic() {
- return `<div class="company-operating-overview" aria-label="SuperMega Shop sample screen"><figure class="company-product-visual"><img src="/images/actual-shop-today.png" alt="Shop Today dashboard showing sales, open orders, stock alerts, and next actions. Synthetic sample records." width="1440" height="900" loading="eager" fetchpriority="high" /><figcaption><strong>Shop · Today</strong><span>Sample workspace</span></figcaption></figure><p class="company-operating-proof">Sample records · no live store data.</p></div>`
+ return `<div class="company-operating-overview" aria-label="SuperMega Shop sample screen"><figure class="company-product-visual"><img src="/images/actual-shop-today.png" alt="Shop Today dashboard showing sales, open orders, stock alerts, and next actions. Synthetic sample records." width="1440" height="900" loading="eager" fetchpriority="high" /><figcaption><strong>Shop · Today</strong><span>Sample workspace</span></figcaption></figure></div>`
 }
 function replaceHomeShopShowcase(source) {
  const marker = /<section class="shop-showcase" aria-label="Shop product screens">[\s\S]*?<\/section>/g

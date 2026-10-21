@@ -108,12 +108,18 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
                     ),
                     title: Text(
                       shopMmk(sale.totalMmk, myanmar: widget.myanmar),
-                      style: const TextStyle(fontWeight: FontWeight.w700),
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
                     ),
                     subtitle: Text(
                       '${_when(context, sale.createdAtMillis)} · '
                       '${_paymentName(sale.paymentMethod)} · '
                       '${shopNumber(sale.lines.length, myanmar: widget.myanmar)} ${shopCopy(widget.myanmar, 'items', 'မျိုး')}',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
                     ),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () => _showSale(sale),
@@ -186,7 +192,10 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
                     ),
                     Text(
                       shopMmk(sale.totalMmk, myanmar: widget.myanmar),
-                      style: const TextStyle(fontWeight: FontWeight.w700),
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
                     ),
                   ],
                 ),

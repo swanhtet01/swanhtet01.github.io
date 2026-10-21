@@ -1,0 +1,130 @@
+// Synthetic Flutter renders for visual review. These are not installed-device
+// screenshots and must not be published as hardware acceptance evidence.
+import 'dart:io';
+
+import 'package:drift/native.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:supermega_shop/main.dart';
+import 'package:supermega_shop/shop_database.dart';
+
+final _capture = Platform.environment['SHOP_VISUAL_CAPTURE'] == '1';
+const _captureKey = ValueKey('native-shop-visual-capture');
+
+Future<ShopDatabase> _sampleShop() async {
+  final database = ShopDatabase(NativeDatabase.memory());
+  for (final (id, name, price, stock) in [
+    ('mama', 'MAMA Chicken Instant Noodles', 2950, 8),
+    ('kaung', 'KAUNG 90 Days Rice', 12450, 34),
+    ('alpine', 'ALPINE Drinking Water', 5700, 21),
+    ('baydar', 'BAYDAR Laundry Detergent', 5900, 13),
+    ('zess', 'ZESS Sugar Crackers', 8000, 14),
+  ]) {
+    await database.addProduct(
+      id: id,
+      name: name,
+      priceMmk: price,
+      openingStock: stock,
+    );
+  }
+  await database.recordCashSale(
+    operationId: 'synthetic-visual-capture-sale',
+    lines: const [ShopSaleLineInput(productId: 'mama', quantity: 1)],
+  );
+  return database;
+}
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  setUpAll(() async {
+    if (!_capture) return;
+    await Directory('test/goldens').create(recursive: true);
+    final inter = FontLoader('Inter')
+      ..addFont(rootBundle.load('assets/fonts/Inter/Inter-Variable.ttf'));
+    final myanmar = FontLoader('NotoSansMyanmar')
+      ..addFont(
+        rootBundle.load(
+          'assets/fonts/NotoSansMyanmar/NotoSansMyanmar-Variable.ttf',
+        ),
+      );
+    await inter.load();
+    await myanmar.load();
+  });
+
+  for (final (width, height, language) in [
+    (390.0, 844.0, 'en'),
+    (820.0, 1000.0, 'en'),
+    (1200.0, 900.0, 'en'),
+    (390.0, 844.0, 'my'),
+    (320.0, 800.0, 'my'),
+  ]) {
+    testWidgets(
+      'capture Today and Sell at ${width.toInt()}px $language',
+      skip: !_capture,
+      (tester) async {
+        tester.view.physicalSize = Size(width, height);
+        tester.view.devicePixelRatio = 1;
+        if (width == 320) {
+          tester.platformDispatcher.textScaleFactorTestValue = 1.5;
+        }
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+        final database = await _sampleShop();
+        try {
+          await tester.pumpWidget(
+            RepaintBoundary(
+              key: _captureKey,
+              child: ShopApp(
+                database: database,
+                authClient: null,
+                apiBaseUrl: 'https://example.invalid',
+                initialMyanmar: language == 'my',
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+          await expectLater(
+            find.byKey(_captureKey),
+            matchesGoldenFile(
+              'goldens/shop_today_${width.toInt()}_$language.png',
+            ),
+          );
+
+          await tester.tap(find.byIcon(Icons.point_of_sale_outlined).first);
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+          await expectLater(
+            find.byKey(_captureKey),
+            matchesGoldenFile(
+              'goldens/shop_sell_${width.toInt()}_$language.png',
+            ),
+          );
+
+          final product = find.text('MAMA Chicken Instant Noodles').first;
+          await tester.ensureVisible(product);
+          await tester.tap(product);
+          await tester.pumpAndSettle();
+          if (width < 897) {
+            await tester.tap(find.byIcon(Icons.shopping_basket_outlined).first);
+            await tester.pumpAndSettle();
+          }
+          expect(tester.takeException(), isNull);
+          await expectLater(
+            find.byKey(_captureKey),
+            matchesGoldenFile(
+              'goldens/shop_checkout_${width.toInt()}_$language.png',
+            ),
+          );
+        } finally {
+          await tester.pumpWidget(const SizedBox.shrink());
+          await tester.pump(const Duration(milliseconds: 1));
+          await database.close();
+        }
+      },
+    );
+  }
+}
