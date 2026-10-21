@@ -491,6 +491,13 @@ void main() {
     tester,
   ) async {
     final database = ShopDatabase(NativeDatabase.memory());
+    await database.addProduct(
+      id: 'tea',
+      name: 'Tea',
+      barcode: '9999999999999',
+      priceMmk: 2500,
+      openingStock: 2,
+    );
     await tester.pumpWidget(
       ShopApp(
         database: database,
@@ -531,7 +538,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      (await database.readActiveProducts()).single.barcode,
+      (await database.readActiveProducts())
+          .singleWhere((item) => item.name == 'Rice')
+          .barcode,
       '0012345678905',
     );
     expect(find.text('Rice'), findsOneWidget);
@@ -674,7 +683,9 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('လက်ကျန်'));
+      await tester.tap(find.byTooltip('နောက်ထပ်'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('လက်ကျန်'));
       await tester.pumpAndSettle();
       expect(find.text('SKU RICE-1 · ဘားကုဒ် 111111'), findsOneWidget);
       expect(find.text('SKU RICE-2 · ဘားကုဒ် 222222'), findsOneWidget);
