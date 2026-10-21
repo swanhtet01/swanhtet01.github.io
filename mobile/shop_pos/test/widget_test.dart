@@ -579,11 +579,8 @@ void main() {
       findsOneWidget,
     );
     expect(
-      find.descendant(
-        of: find.byKey(const ValueKey('shop-product-photo:water')),
-        matching: find.byIcon(Icons.photo_outlined),
-      ),
-      findsOneWidget,
+      find.byKey(const ValueKey('shop-product-photo:water')),
+      findsNothing,
     );
     await tester.tap(find.byKey(const ValueKey('shop-product-actions')));
     await tester.pumpAndSettle();
@@ -972,6 +969,25 @@ void main() {
           );
           await tester.pumpAndSettle();
 
+          if (width == 320) {
+            final newProductLabel = myanmar
+                ? 'ကုန်ပစ္စည်းအသစ်'
+                : 'New product';
+            expect(find.text(newProductLabel), findsNothing);
+            await tester.tap(find.byKey(const ValueKey('shop-product-actions')));
+            await tester.pumpAndSettle();
+            await tester.tap(find.text(newProductLabel));
+            await tester.pumpAndSettle();
+            expect(
+              find.byKey(const ValueKey('shop-product-name')),
+              findsOneWidget,
+            );
+            Navigator.of(
+              tester.element(find.byKey(const ValueKey('shop-product-name'))),
+            ).pop();
+            await tester.pumpAndSettle();
+          }
+
           final addLabel = myanmar ? 'အရောင်းထဲထည့်ရန်' : 'Add to sale';
           final row = find.descendant(
             of: find.byTooltip(addLabel),
@@ -1007,22 +1023,18 @@ void main() {
               3,
             );
           }
-          final productPhoto = find.descendant(
-            of: row,
-            matching: find.byKey(const ValueKey('shop-product-photo:rice')),
+          expect(
+            find.byKey(const ValueKey('shop-product-photo:rice')),
+            findsNothing,
           );
-          expect(productPhoto, findsOneWidget);
-          expect(tester.getSize(productPhoto).width, greaterThanOrEqualTo(48));
-          expect(tester.getSize(productPhoto).height, greaterThanOrEqualTo(48));
           expect(
             find.text(myanmar ? '၂၄,၉၀၀ ကျပ်' : '24,900 MMK'),
             findsOneWidget,
           );
           expect(tester.takeException(), isNull);
 
-          // A cashier can tap the thumbnail or the text: both add one item.
-          // Photo editing has its own product-management action.
-          await tester.tap(productPhoto);
+          // A product without a photo uses the full row as the sale action.
+          await tester.tap(row);
           await tester.pumpAndSettle();
           expect(find.text('Choose photo'), findsNothing);
           if (width == 820) {

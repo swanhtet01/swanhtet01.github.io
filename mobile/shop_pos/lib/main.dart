@@ -209,19 +209,19 @@ class _ShopAppState extends State<ShopApp> {
         textTheme:
             TextTheme(
               headlineMedium: TextStyle(
-                fontSize: _myanmar ? 30 : 34,
+                fontSize: _myanmar ? 26 : 34,
                 fontWeight: FontWeight.w700,
                 height: _myanmar ? 1.4 : 1.15,
                 letterSpacing: tracking,
               ),
               headlineSmall: TextStyle(
-                fontSize: _myanmar ? 26 : 28,
+                fontSize: _myanmar ? 22 : 28,
                 fontWeight: FontWeight.w700,
                 height: _myanmar ? 1.4 : 1.2,
                 letterSpacing: tracking,
               ),
               titleLarge: TextStyle(
-                fontSize: _myanmar ? 20 : 21,
+                fontSize: _myanmar ? 18 : 21,
                 fontWeight: FontWeight.w700,
                 height: _myanmar ? 1.45 : 1.25,
                 letterSpacing: tracking,
@@ -1042,13 +1042,22 @@ class _ShopHomeState extends State<ShopHome> {
         ),
         icon: const Icon(Icons.more_horiz),
         onSelected: (action) {
-          if (action == 'import') {
+          if (action == 'new') {
+            _showAddProduct();
+          } else if (action == 'import') {
             _openMenuImport();
           } else if (action == 'photos') {
             unawaited(_showProductPhotoManager(products));
           }
         },
         itemBuilder: (_) => [
+          if (constraints.maxWidth < 420)
+            PopupMenuItem(
+              value: 'new',
+              child: Text(
+                shopCopy(widget.myanmar, 'New product', 'ကုန်ပစ္စည်းအသစ်'),
+              ),
+            ),
           PopupMenuItem(
             value: 'import',
             child: Text(
@@ -1072,17 +1081,10 @@ class _ShopHomeState extends State<ShopHome> {
         ],
       );
       if (constraints.maxWidth < 420) {
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        return Row(
           children: [
-            title,
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(child: addButton),
-                productActions,
-              ],
-            ),
+            Expanded(child: title),
+            productActions,
           ],
         );
       }
@@ -1360,83 +1362,79 @@ class _ShopHomeState extends State<ShopHome> {
             ),
           ),
         );
-        return Tooltip(
-          message: item.onHand == 0
-              ? shopCopy(widget.myanmar, 'Out of stock', 'လက်ကျန်ကုန်ပါပြီ')
-              : _pendingWalletCheckout != null
-              ? shopCopy(
-                  widget.myanmar,
-                  'Finish the pending payment first',
-                  'ဆိုင်းငံ့ငွေပေးချေမှုကို အရင်ပြီးစီးပါ',
-                )
-              : shopCopy(widget.myanmar, 'Add to sale', 'အရောင်းထဲထည့်ရန်'),
-          child: ListTile(
-            isThreeLine: compactProductRow,
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 14,
-              vertical: 10,
-            ),
-            leading: SizedBox(
-              key: ValueKey('shop-product-photo:${item.id}'),
-              width: 48,
-              height: 48,
-              child: FutureBuilder<Uint8List?>(
-                future: _thumbnailFor(item.id),
-                builder: (context, snapshot) {
-                  final bytes = snapshot.data;
-                  if (bytes == null) {
-                    return const Icon(Icons.photo_outlined);
-                  }
-                  return ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: Image.memory(
-                      bytes,
-                      width: 44,
-                      height: 44,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, error, stackTrace) =>
-                          const Icon(Icons.photo_outlined),
-                    ),
-                  );
-                },
+        return FutureBuilder<Uint8List?>(
+          future: _thumbnailFor(item.id),
+          builder: (context, photoSnapshot) => Tooltip(
+            message: item.onHand == 0
+                ? shopCopy(widget.myanmar, 'Out of stock', 'လက်ကျန်ကုန်ပါပြီ')
+                : _pendingWalletCheckout != null
+                ? shopCopy(
+                    widget.myanmar,
+                    'Finish the pending payment first',
+                    'ဆိုင်းငံ့ငွေပေးချေမှုကို အရင်ပြီးစီးပါ',
+                  )
+                : shopCopy(widget.myanmar, 'Add to sale', 'အရောင်းထဲထည့်ရန်'),
+            child: ListTile(
+              isThreeLine: compactProductRow,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: 10,
               ),
-            ),
-            title: Text(
-              item.name,
-              maxLines: narrowProductRow ? 3 : 2,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            subtitle: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (compactProductRow)
-                  Text(_mmk(item.priceMmk), style: _shopMoneyStyle(context)),
-                Text(
-                  stock,
-                  style: TextStyle(
-                    color: item.onHand == 0
-                        ? Theme.of(context).colorScheme.error
-                        : Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
-            trailing: compactProductRow
-                ? addAffordance
-                : Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        _mmk(item.priceMmk),
-                        style: _shopMoneyStyle(context),
+              leading: photoSnapshot.data == null
+                  ? null
+                  : SizedBox(
+                      key: ValueKey('shop-product-photo:${item.id}'),
+                      width: 48,
+                      height: 48,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: Image.memory(
+                          photoSnapshot.data!,
+                          width: 44,
+                          height: 44,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, error, stackTrace) =>
+                              const Icon(Icons.photo_outlined),
+                        ),
                       ),
-                      const SizedBox(width: 12),
-                      addAffordance,
-                    ],
+                    ),
+              title: Text(
+                item.name,
+                maxLines: narrowProductRow ? 3 : 2,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              subtitle: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (compactProductRow)
+                    Text(_mmk(item.priceMmk), style: _shopMoneyStyle(context)),
+                  Text(
+                    stock,
+                    style: TextStyle(
+                      color: item.onHand == 0
+                          ? Theme.of(context).colorScheme.error
+                          : Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                   ),
-            onTap: canAdd ? () => _add(item) : null,
+                ],
+              ),
+              trailing: compactProductRow
+                  ? addAffordance
+                  : Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          _mmk(item.priceMmk),
+                          style: _shopMoneyStyle(context),
+                        ),
+                        const SizedBox(width: 12),
+                        addAffordance,
+                      ],
+                    ),
+              onTap: canAdd ? () => _add(item) : null,
+            ),
           ),
         );
       },
@@ -1760,9 +1758,17 @@ class _ShopHomeState extends State<ShopHome> {
             final invalid = entered.isNotEmpty && tenderedMmk == null;
             return AlertDialog(
               scrollable: true,
+              insetPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 24,
+              ),
+              titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+              contentPadding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+              actionsPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
               actionsOverflowDirection: VerticalDirection.down,
               title: Text(
                 shopCopy(widget.myanmar, 'Cash received?', 'ငွေသားရပြီလား။'),
+                style: Theme.of(context).textTheme.titleLarge,
               ),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -1778,11 +1784,11 @@ class _ShopHomeState extends State<ShopHome> {
                   const SizedBox(height: 8),
                   Text(
                     _mmk(totalMmk),
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
                       fontFeatures: const [FontFeature.tabularFigures()],
                     ),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 12),
                   TextField(
                     key: const ValueKey('shop-cash-given'),
                     keyboardType: TextInputType.number,
@@ -1797,7 +1803,6 @@ class _ShopHomeState extends State<ShopHome> {
                         'Cash given (optional)',
                         'ပေးငွေ',
                       ),
-                      helperText: widget.myanmar ? 'မထည့်လည်းရ' : null,
                     ),
                   ),
                   if (tenderedMmk != null && !isShort) ...[
