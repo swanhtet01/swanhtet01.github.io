@@ -395,16 +395,22 @@ void main() {
         );
       }
 
-      final first = await database.readRecentSales(limit:31);
-      final second = await database.readRecentSales(limit:31, offset: 30);
+      final first = await database.readRecentSales(limit: 31);
+      final second = await database.readRecentSales(limit: 31, offset: 30);
       expect(first, hasLength(31));
       expect(second, hasLength(3));
-      expect(first.map((sale) => sale.id).toSet().intersection(
-        second.map((sale) => sale.id).toSet(),
-      ), hasLength(1));
+      expect(
+        first
+            .map((sale) => sale.id)
+            .toSet()
+            .intersection(second.map((sale) => sale.id).toSet()),
+        hasLength(1),
+      );
       final byItem = await database.readRecentSales(query: 'tEA');
       expect(byItem.map((sale) => sale.id), ['tea-receipt']);
-      final byReceipt = await database.readRecentSales(query: 'rice-receipt-10');
+      final byReceipt = await database.readRecentSales(
+        query: 'rice-receipt-10',
+      );
       expect(byReceipt.map((sale) => sale.id), ['rice-receipt-10']);
       await expectLater(
         database.readRecentSales(offset: -1),

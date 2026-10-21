@@ -145,7 +145,11 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
                         TextButton(
                           onPressed: _reload,
                           child: Text(
-                            shopCopy(widget.myanmar, 'Try again', 'ထပ်ကြိုးစားရန်'),
+                            shopCopy(
+                              widget.myanmar,
+                              'Try again',
+                              'ထပ်ကြိုးစားရန်',
+                            ),
                           ),
                         ),
                       ],
@@ -179,7 +183,8 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
                           child: ListView.separated(
                             padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
                             itemCount: sales.length,
-                            separatorBuilder: (_, _) => const Divider(height: 1),
+                            separatorBuilder: (_, _) =>
+                                const Divider(height: 1),
                             itemBuilder: (context, index) {
                               final sale = sales[index];
                               final firstItem = sale.lines.isEmpty
@@ -218,7 +223,9 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
                                   style: Theme.of(context).textTheme.titleSmall
                                       ?.copyWith(
                                         fontWeight: FontWeight.w700,
-                                        fontFeatures: const [FontFeature.tabularFigures()],
+                                        fontFeatures: const [
+                                          FontFeature.tabularFigures(),
+                                        ],
                                       ),
                                 ),
                                 onTap: () => _showSale(sale),
@@ -242,7 +249,11 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
                                           });
                                         },
                                   child: Text(
-                                    shopCopy(widget.myanmar, 'Newer', 'အသစ်များ'),
+                                    shopCopy(
+                                      widget.myanmar,
+                                      'Newer',
+                                      'အသစ်များ',
+                                    ),
                                   ),
                                 ),
                                 TextButton(
@@ -255,7 +266,11 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
                                           });
                                         },
                                   child: Text(
-                                    shopCopy(widget.myanmar, 'Older', 'အဟောင်းများ'),
+                                    shopCopy(
+                                      widget.myanmar,
+                                      'Older',
+                                      'အဟောင်းများ',
+                                    ),
                                   ),
                                 ),
                               ],

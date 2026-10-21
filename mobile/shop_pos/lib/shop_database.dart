@@ -1742,9 +1742,9 @@ class ShopDatabase extends _$ShopDatabase {
       ).get();
       if (matchingIds.isEmpty) return const [];
       final ids = matchingIds.map((row) => row.read<String>('id')).toList();
-      final rows = await (select(shopSales)
-            ..where((sale) => sale.id.isIn(ids)))
-          .get();
+      final rows = await (select(
+        shopSales,
+      )..where((sale) => sale.id.isIn(ids))).get();
       final byId = {for (final row in rows) row.id: row};
       sales = [for (final id in ids) byId[id]!];
     }
