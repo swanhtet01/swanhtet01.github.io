@@ -1808,9 +1808,7 @@ class _ShopHomeState extends State<ShopHome> {
                   ),
                   if (tenderedMmk != null && !isShort) ...[
                     const SizedBox(height: 12),
-                    Text(
-                      shopCopy(widget.myanmar, 'Change', 'ပြန်အမ်းငွေ'),
-                    ),
+                    Text(shopCopy(widget.myanmar, 'Change', 'ပြန်အမ်းငွေ')),
                     Text(
                       _mmk(tenderedMmk - totalMmk),
                       key: const ValueKey('shop-cash-change'),
