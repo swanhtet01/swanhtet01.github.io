@@ -580,16 +580,26 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  title,
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-              ),
-              TextButton(onPressed: onOpen, child: Text(action)),
-            ],
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final heading = Text(
+                title,
+                style: Theme.of(context).textTheme.titleMedium,
+              );
+              final open = TextButton(onPressed: onOpen, child: Text(action));
+              if (constraints.maxWidth < 340) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [heading, open],
+                );
+              }
+              return Row(
+                children: [
+                  Expanded(child: heading),
+                  open,
+                ],
+              );
+            },
           ),
           const Divider(height: 8),
           for (var index = 0; index < rows.length; index++) ...[

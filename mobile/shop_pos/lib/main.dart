@@ -710,7 +710,7 @@ class _ShopHomeState extends State<ShopHome> {
     );
   }
 
-  Widget _pendingWalletCheckoutCard() {
+  Widget _pendingWalletCheckoutCard({StateSetter? refresh}) {
     final checkout = _pendingWalletCheckout!;
     final provider = checkout.paymentMethod == 'kbzpay' ? 'KBZPay' : 'WavePay';
     return Card(
@@ -741,7 +741,12 @@ class _ShopHomeState extends State<ShopHome> {
                   ),
                 ),
                 TextButton(
-                  onPressed: _saving ? null : _cancelPendingWalletCheckout,
+                  onPressed: _saving
+                      ? null
+                      : () async {
+                          await _cancelPendingWalletCheckout();
+                          refresh?.call(() {});
+                        },
                   child: Text(
                     shopCopy(
                       widget.myanmar,
@@ -1153,7 +1158,7 @@ class _ShopHomeState extends State<ShopHome> {
             ),
             const Divider(height: 24),
             if (_pendingWalletCheckout != null) ...[
-              _pendingWalletCheckoutCard(),
+              _pendingWalletCheckoutCard(refresh: refresh),
               const SizedBox(height: 8),
             ],
             if (entries.isEmpty)
@@ -1200,59 +1205,61 @@ class _ShopHomeState extends State<ShopHome> {
                 ],
               ),
               const SizedBox(height: 12),
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  final cash = FilledButton.icon(
-                    onPressed:
-                        _saving ||
-                            _cashConfirming ||
-                            _pendingWalletCheckout != null
-                        ? null
-                        : () => _confirmCashSale(
-                            products: products,
-                            closeSheet: refresh != null,
-                          ),
-                    icon: _saving
-                        ? const SizedBox.square(
-                            dimension: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.check),
-                    label: Text(
-                      shopCopy(widget.myanmar, 'Cash sale', 'ငွေသား'),
-                    ),
-                  );
-                  final wallet = OutlinedButton.icon(
-                    onPressed: _saving || _cashConfirming
-                        ? null
-                        : () => _startWalletSale(
-                            products: products,
-                            closeSheet: refresh != null,
-                          ),
-                    icon: const Icon(Icons.qr_code_2),
-                    label: Text(
-                      shopCopy(
-                        widget.myanmar,
-                        'Mobile money',
-                        'မိုဘိုင်းငွေပေးချေမှု',
+              if (_pendingWalletCheckout == null)
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final cash = FilledButton.icon(
+                      onPressed:
+                          _saving ||
+                              _cashConfirming ||
+                              _pendingWalletCheckout != null
+                          ? null
+                          : () => _confirmCashSale(
+                              products: products,
+                              closeSheet: refresh != null,
+                            ),
+                      icon: _saving
+                          ? const SizedBox.square(
+                              dimension: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.check),
+                      label: Text(
+                        shopCopy(widget.myanmar, 'Cash sale', 'ငွေသား'),
                       ),
-                    ),
-                  );
-                  if (constraints.maxWidth < 520) {
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [cash, const SizedBox(height: 8), wallet],
                     );
-                  }
-                  return Row(
-                    children: [
-                      Expanded(child: cash),
-                      const SizedBox(width: 8),
-                      Flexible(child: wallet),
-                    ],
-                  );
-                },
-              ),
+                    final wallet = OutlinedButton.icon(
+                      onPressed: _saving || _cashConfirming
+                          ? null
+                          : () => _startWalletSale(
+                              products: products,
+                              closeSheet: refresh != null,
+                              refresh: refresh,
+                            ),
+                      icon: const Icon(Icons.qr_code_2),
+                      label: Text(
+                        shopCopy(
+                          widget.myanmar,
+                          'Mobile money',
+                          'မိုဘိုင်းငွေပေးချေမှု',
+                        ),
+                      ),
+                    );
+                    if (constraints.maxWidth < 520) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [cash, const SizedBox(height: 8), wallet],
+                      );
+                    }
+                    return Row(
+                      children: [
+                        Expanded(child: cash),
+                        const SizedBox(width: 8),
+                        Flexible(child: wallet),
+                      ],
+                    );
+                  },
+                ),
             ],
           ],
         ),
@@ -1445,6 +1452,7 @@ class _ShopHomeState extends State<ShopHome> {
   Future<void> _startWalletSale({
     required List<ShopProduct> products,
     required bool closeSheet,
+    StateSetter? refresh,
   }) async {
     if (_saving || _operationId == null || _cart.isEmpty) return;
     try {
@@ -1522,6 +1530,7 @@ class _ShopHomeState extends State<ShopHome> {
       );
       if (!mounted) return;
       setState(() => _pendingWalletCheckout = intent);
+      refresh?.call(() {});
       await _showWalletCheckout(intent, selected, closeSheet: closeSheet);
     } catch (error) {
       if (mounted) {
@@ -1974,7 +1983,9 @@ class _ShopHomeState extends State<ShopHome> {
                 padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
                 child: _cartPanel(
                   snapshot.data ?? const <ShopProduct>[],
-                  refresh: refresh,
+                  refresh: (callback) {
+                    if (sheetContext.mounted) refresh(callback);
+                  },
                 ),
               ),
             ),
