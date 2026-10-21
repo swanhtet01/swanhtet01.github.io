@@ -291,6 +291,8 @@ class ShopHome extends StatefulWidget {
 }
 
 class _ShopHomeState extends State<ShopHome> {
+  String _mmk(int amount) => shopMmk(amount, myanmar: widget.myanmar);
+
   final _search = TextEditingController();
   final _searchFocus = FocusNode();
   final _cart = <String, int>{};
@@ -526,7 +528,7 @@ class _ShopHomeState extends State<ShopHome> {
                       shopCopy(
                         widget.myanmar,
                         'Review sale · $count · ${_mmk(_cartTotal(products))}',
-                        'အရောင်းစစ်ရန် · $count ခု · ${_mmk(_cartTotal(products))}',
+                        'အရောင်းစစ်ရန် · ${shopNumber(count, myanmar: true)} ခု · ${_mmk(_cartTotal(products))}',
                       ),
                     ),
                   );
@@ -1870,8 +1872,6 @@ class _ShopHomeState extends State<ShopHome> {
   }
 }
 
-String _mmk(int amount) => shopMmk(amount);
-
 String _productSaveError(Object error, bool myanmar) {
   if (error is StateError) {
     final detail = error.message.toString();
@@ -1989,7 +1989,7 @@ class _WalletCheckoutDialogState extends State<_WalletCheckoutDialog> {
                 textAlign: TextAlign.center,
               ),
               Text(
-                _mmk(widget.totalMmk),
+                shopMmk(widget.totalMmk, myanmar: myanmar),
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.headlineSmall
                     ?.copyWith(fontWeight: FontWeight.w800),

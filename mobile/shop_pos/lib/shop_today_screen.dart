@@ -57,21 +57,9 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
   String _copy(String english, String burmese) =>
       shopCopy(widget.myanmar, english, burmese);
 
-  String _number(int value) {
-    final digits = value.toString().replaceAllMapped(
-      RegExp(r'\B(?=(\d{3})+(?!\d))'),
-      (_) => ',',
-    );
-    if (!widget.myanmar) return digits;
-    const burmese = '၀၁၂၃၄၅၆၇၈၉';
-    return digits.replaceAllMapped(
-      RegExp(r'\d'),
-      (match) => burmese[int.parse(match.group(0)!)],
-    );
-  }
+  String _number(int value) => shopNumber(value, myanmar: widget.myanmar);
 
-  String _money(int value) =>
-      widget.myanmar ? '${_number(value)} ကျပ်' : '${_number(value)} MMK';
+  String _money(int value) => shopMmk(value, myanmar: widget.myanmar);
 
   Future<_TodaySnapshot> _readSnapshot() async {
     final now = DateTime.now();
@@ -273,8 +261,6 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
     final threeAcross = contentWidth >= 900;
     final smallCardWidth = threeAcross
         ? (contentWidth - 24) / 3
-        : compact && contentWidth >= 340
-        ? (contentWidth - 12) / 2
         : contentWidth >= 600
         ? (contentWidth - 12) / 2
         : contentWidth;
@@ -304,21 +290,25 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
                       value: _money(snapshot.salesMmk),
                       icon: Icons.payments_outlined,
                     ),
-                    _metric(
-                      width: smallCardWidth,
-                      label: _copy('Completed sales', 'ပြီးစီးသောအရောင်း'),
-                      value: _number(snapshot.saleCount),
-                      icon: Icons.receipt_long_outlined,
-                    ),
-                    _metric(
-                      width: smallCardWidth,
-                      label: _copy(
-                        '5 or fewer left',
-                        '၅ ခု သို့မဟုတ် အောက် လက်ကျန်',
+                    if (compact)
+                      _compactStats(snapshot, width: contentWidth)
+                    else ...[
+                      _metric(
+                        width: smallCardWidth,
+                        label: _copy('Completed sales', 'ပြီးစီးသောအရောင်း'),
+                        value: _number(snapshot.saleCount),
+                        icon: Icons.receipt_long_outlined,
                       ),
-                      value: _number(snapshot.stockToCheck.length),
-                      icon: Icons.inventory_2_outlined,
-                    ),
+                      _metric(
+                        width: smallCardWidth,
+                        label: _copy(
+                          '5 or fewer left',
+                          '၅ ခု သို့မဟုတ် အောက် လက်ကျန်',
+                        ),
+                        value: _number(snapshot.stockToCheck.length),
+                        icon: Icons.inventory_2_outlined,
+                      ),
+                    ],
                   ],
                 ),
                 if (snapshot.pendingWallet != null ||
@@ -437,20 +427,63 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
               ],
             ),
             const SizedBox(height: 14),
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerLeft,
-              child: Text(
-                value,
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontFeatures: const [FontFeature.tabularFigures()],
-                ),
+            Text(
+              value,
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                fontFeatures: const [FontFeature.tabularFigures()],
               ),
             ),
           ],
         ),
       ),
     ),
+  );
+
+  Widget _compactStats(_TodaySnapshot snapshot, {required double width}) =>
+      SizedBox(
+        width: width,
+        child: Card(
+          child: Padding(
+            padding: const EdgeInsets.all(18),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: _compactStat(
+                    _copy('Completed sales', 'ပြီးစီးသောအရောင်း'),
+                    _number(snapshot.saleCount),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Container(width: 1, height: 64, color: const Color(0xffe2e5ed)),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _compactStat(
+                    _copy('5 or fewer left', '၅ ခု သို့မဟုတ် အောက် လက်ကျန်'),
+                    _number(snapshot.stockToCheck.length),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+
+  Widget _compactStat(String label, String value) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        label,
+        style: Theme.of(context).textTheme.bodyMedium
+            ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+      ),
+      const SizedBox(height: 8),
+      Text(
+        value,
+        style: Theme.of(context).textTheme.titleLarge
+            ?.copyWith(fontFeatures: const [FontFeature.tabularFigures()]),
+      ),
+    ],
   );
 
   Widget _actionCard({

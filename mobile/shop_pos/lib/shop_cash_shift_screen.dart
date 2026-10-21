@@ -161,11 +161,11 @@ class _ShopCashShiftScreenState extends State<ShopCashShiftScreen> {
           ),
           content: Text(
             '${shopCopy(widget.myanmar, 'Expected from recorded sales', 'မှတ်တမ်းရှိ အရောင်းအရ မျှော်မှန်းငွေ')}: '
-            '${shopMmk(review.expectedCashMmk)}\n'
+            '${shopMmk(review.expectedCashMmk, myanmar: widget.myanmar)}\n'
             '${shopCopy(widget.myanmar, 'Counted', 'ရေတွက်ငွေ')}: '
-            '${shopMmk(counted)}\n'
+            '${shopMmk(counted, myanmar: widget.myanmar)}\n'
             '${shopCopy(widget.myanmar, 'Difference', 'ကွာခြားချက်')}: '
-            '${shopMmk(difference)}',
+            '${shopMmk(difference, myanmar: widget.myanmar)}',
           ),
           actions: [
             TextButton(
@@ -221,7 +221,7 @@ class _ShopCashShiftScreenState extends State<ShopCashShiftScreen> {
     child: LayoutBuilder(
       builder: (context, constraints) {
         final value = Text(
-          shopMmk(amount),
+          shopMmk(amount, myanmar: widget.myanmar),
           style: strong ? Theme.of(context).textTheme.titleMedium : null,
         );
         if (constraints.maxWidth < 430) {
@@ -247,7 +247,10 @@ class _ShopCashShiftScreenState extends State<ShopCashShiftScreen> {
         inputFormatters: [
           FilteringTextInputFormatter.allow(RegExp(r'[0-9၀-၉]')),
         ],
-        decoration: InputDecoration(labelText: label, suffixText: 'MMK'),
+        decoration: InputDecoration(
+          labelText: label,
+          suffixText: widget.myanmar ? 'ကျပ်' : 'MMK',
+        ),
       );
 
   @override
@@ -386,7 +389,7 @@ class _ShopCashShiftScreenState extends State<ShopCashShiftScreen> {
                           shopCopy(
                             widget.myanmar,
                             '${review.saleCount} sales in this shift',
-                            'ဤတာဝန်ချိန်အတွင်း အရောင်း ${review.saleCount} ခု',
+                            'ဤတာဝန်ချိန်အတွင်း အရောင်း ${shopNumber(review.saleCount, myanmar: true)} ခု',
                           ),
                         ),
                         const SizedBox(height: 24),

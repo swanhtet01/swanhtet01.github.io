@@ -29,10 +29,14 @@ void main() {
   ) async {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
     tester.view.devicePixelRatio = 1;
-    for (final width in [390.0, 820.0, 1200.0]) {
+    for (final width in [360.0, 390.0, 820.0, 1200.0]) {
       for (final myanmar in [false, true]) {
         tester.view.physicalSize = Size(width, 800);
+        tester.platformDispatcher.textScaleFactorTestValue = width == 360
+            ? 1.3
+            : 1.0;
         final database = ShopDatabase(NativeDatabase.memory());
         await tester.pumpWidget(
           ShopApp(
@@ -130,6 +134,41 @@ void main() {
     expect(find.text('Mobile payment to review'), findsOneWidget);
     expect(find.text('Check stock'), findsOneWidget);
     expect(find.textContaining('vs. yesterday'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Burmese Today and Counter show the same kyat amount', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final database = ShopDatabase(NativeDatabase.memory());
+    addTearDown(database.close);
+    await database.addProduct(
+      id: 'tea',
+      name: 'Tea',
+      priceMmk: 2500,
+      openingStock: 3,
+    );
+    await database.recordCashSale(
+      operationId: 'burmese-today-sale',
+      lines: const [ShopSaleLineInput(productId: 'tea', quantity: 1)],
+    );
+    await tester.pumpWidget(
+      ShopApp(
+        database: database,
+        authClient: null,
+        apiBaseUrl: 'https://app.supermega.dev',
+        initialMyanmar: true,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('၂,၅၀၀ ကျပ်'), findsOneWidget);
+    await tester.tap(find.text('ရောင်းရန်'));
+    await tester.pumpAndSettle();
+    expect(find.text('၂,၅၀၀ ကျပ်'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

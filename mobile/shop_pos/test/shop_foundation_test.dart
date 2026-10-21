@@ -644,6 +644,9 @@ void main() {
     test('formats a negative cash difference without a misplaced comma', () {
       expect(shopMmk(-100), '-100 MMK');
       expect(shopMmk(-1200), '-1,200 MMK');
+      expect(shopMmk(-1200, myanmar: true), '-၁,၂၀၀ ကျပ်');
+      expect(shopMmk(24900, myanmar: true), '၂၄,၉၀၀ ကျပ်');
+      expect(shopNumber(1250, myanmar: true), '၁,၂၅၀');
     });
 
     test('cash sale cannot make an open shift impossible to close', () async {

@@ -107,13 +107,13 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
                       vertical: 8,
                     ),
                     title: Text(
-                      shopMmk(sale.totalMmk),
+                      shopMmk(sale.totalMmk, myanmar: widget.myanmar),
                       style: const TextStyle(fontWeight: FontWeight.w700),
                     ),
                     subtitle: Text(
                       '${_when(context, sale.createdAtMillis)} · '
                       '${_paymentName(sale.paymentMethod)} · '
-                      '${sale.lines.length} ${shopCopy(widget.myanmar, 'items', 'မျိုး')}',
+                      '${shopNumber(sale.lines.length, myanmar: widget.myanmar)} ${shopCopy(widget.myanmar, 'items', 'မျိုး')}',
                     ),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () => _showSale(sale),
@@ -165,10 +165,14 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
                     child: Row(
                       children: [
                         Expanded(
-                          child: Text('${line.productName} × ${line.quantity}'),
+                          child: Text(
+                            '${line.productName} × ${shopNumber(line.quantity, myanmar: widget.myanmar)}',
+                          ),
                         ),
                         const SizedBox(width: 12),
-                        Text(shopMmk(line.lineTotalMmk)),
+                        Text(
+                          shopMmk(line.lineTotalMmk, myanmar: widget.myanmar),
+                        ),
                       ],
                     ),
                   ),
@@ -181,7 +185,7 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
                       ),
                     ),
                     Text(
-                      shopMmk(sale.totalMmk),
+                      shopMmk(sale.totalMmk, myanmar: widget.myanmar),
                       style: const TextStyle(fontWeight: FontWeight.w700),
                     ),
                   ],
