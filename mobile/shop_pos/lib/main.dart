@@ -2250,7 +2250,8 @@ class _ShopHomeState extends State<ShopHome> {
             // Keep a short sale near its content. Long baskets retain the
             // available height and scroll inside the existing list.
             final contentHeight =
-                (280 + 88 * _cart.length.clamp(0, 4) +
+                (280 +
+                    88 * _cart.length.clamp(0, 4) +
                     (_pendingWalletCheckout == null ? 0 : 160)) *
                 textScale;
             final height = phone
