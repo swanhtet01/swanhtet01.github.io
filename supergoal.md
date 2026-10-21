@@ -1,6 +1,6 @@
 # SuperMega Supergoal
 
-- Version: 1.8.3
+- Version: 1.8.4
 - Owner: Swan Htet, Founder
 - Maintainer: CTO, sole integration writer
 - Updated: 2026-10-21
@@ -25,6 +25,8 @@ The 20 October checkpoint closed as **NO-GO**. Readiness is now evidence-gated; 
 Produce **one independently reviewable Shop merchant pilot**, not a broad feature-complete claim. A merchant must be able to set up a catalog, scan or find an item, finish an offline sale, print or retrieve its receipt, and recover after interruption on a named supported device. The signed-in account must show the right workspace and deny ordinary customers Sites and Commerce management at both UI and API boundaries. The public site must show current source-bound Shop screens and advertise only the platform and download paths actually verified. Sites and Commerce remain usable by internal operators under their own acceptance checks.
 
 The pilot is ready for a release decision only when these five evidence packets are complete: (1) exact-build app and real-device checkout, barcode and receipt tests; (2) managed sign-in, tenant separation, save/reload, sync and restore; (3) protected-preview browser and public-claim parity; (4) passing exact-head CI/security, eligible independent review and reversible release procedure; and (5) a bounded paid-VPS agent job with restart, verifier and cost receipts. Mark each packet `PASS`, `FAIL`, `BLOCKED` or `NOT RUN` with build, device/target and evidence. A passing source test or AI critique cannot stand in for device, hosted or merchant proof. The first four packets gate the customer Shop pilot; packet five gates claims that the internal agent workcell is operational. The founder retains the separate production and commercial decisions.
+
+The **next implementation priority is the installed Shop app's first working day**, ahead of further website composition: (a) add the first real product or import and review a catalog; (b) scan both a known and an unknown barcode without a dead end; (c) complete an offline cash sale with correct stock and a retrievable receipt; (d) connect and test a printer at the point of need, then recover a saved sale after interruption. Check the same tasks on Android tablet, iPad and Windows PC with full English and full Burmese settings. For each device record task completion, operator corrections, elapsed time, tap/keystroke count, offline/restart result and exact build. Compare those measured journeys with published and, where lawful and available, hands-on incumbent workflows; do not treat a feature list or mockup as parity. Once the app journey passes, update the public website from that verified build and make download and support claims only for accepted platforms.
 
 ## AI-native operating model
 

@@ -244,6 +244,58 @@ void main() {
     await database.close();
   });
 
+  testWidgets('unknown barcode creates a product that the next scan adds', (
+    tester,
+  ) async {
+    final database = ShopDatabase(NativeDatabase.memory());
+    await tester.pumpWidget(
+      ShopApp(
+        database: database,
+        authClient: null,
+        apiBaseUrl: 'https://app.supermega.dev',
+        initialMyanmar: false,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField), '0012345678905');
+    await tester.pumpAndSettle();
+    expect(find.text('No matching products'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('shop-add-search-result')));
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<TextFormField>(
+        find.byKey(const ValueKey('shop-product-barcode')),
+      ).controller!.text,
+      '0012345678905',
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('shop-product-name')),
+      'Rice',
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('shop-product-price')),
+      '12000',
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('shop-product-stock')),
+      '3',
+    );
+    await tester.tap(find.text('Save product'));
+    await tester.pumpAndSettle();
+
+    expect(
+      (await database.readActiveProducts()).single.barcode,
+      '0012345678905',
+    );
+    expect(find.text('Rice'), findsOneWidget);
+    await tester.tap(find.byType(TextField));
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Review sale'), findsOneWidget);
+    await database.close();
+  });
+
   testWidgets('settings keeps language and merchant wallet setup reachable', (
     tester,
   ) async {

@@ -244,7 +244,6 @@ class _ShopHomeState extends State<ShopHome> {
                       flex: 3,
                       child: Column(
                         children: [
-                          _deviceNotice(),
                           if (_recoveredMenuPhoto != null) ...[
                             const SizedBox(height: 12),
                             _recoveredMenuPhotoCard(),
@@ -266,7 +265,6 @@ class _ShopHomeState extends State<ShopHome> {
             }
             return Column(
               children: [
-                _deviceNotice(),
                 if (_recoveredMenuPhoto != null)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
@@ -410,28 +408,6 @@ class _ShopHomeState extends State<ShopHome> {
     ),
   );
 
-  Widget _deviceNotice() => Material(
-    color: Theme.of(context).colorScheme.secondaryContainer,
-    child: Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-      child: Row(
-        children: [
-          const Icon(Icons.offline_bolt_outlined, size: 18),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              shopCopy(
-                widget.myanmar,
-                'Ready to sell · saved on this device',
-                'အရောင်းအတွက်အသင့် · ဤစက်တွင် သိမ်းထားသည်',
-              ),
-            ),
-          ),
-        ],
-      ),
-    ),
-  );
-
   Widget _catalog(List<ShopProduct> products) => Card(
     child: Padding(
       padding: const EdgeInsets.all(16),
@@ -545,7 +521,28 @@ class _ShopHomeState extends State<ShopHome> {
                         'ကိုက်ညီသောပစ္စည်း မတွေ့ပါ',
                       ),
               ),
-              if (text.isEmpty) ...[
+              if (text.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                FilledButton.icon(
+                  key: const ValueKey('shop-add-search-result'),
+                  onPressed: () {
+                    final query = _search.text.trim();
+                    final isBarcode = RegExp(r'^[0-9]{6,64}$').hasMatch(query);
+                    _showAddProduct(
+                      initialBarcode: isBarcode ? query : '',
+                      initialName: isBarcode ? '' : query,
+                    );
+                  },
+                  icon: const Icon(Icons.add),
+                  label: Text(
+                    shopCopy(
+                      widget.myanmar,
+                      'Add product',
+                      'ကုန်ပစ္စည်းထည့်ရန်',
+                    ),
+                  ),
+                ),
+              ] else ...[
                 const SizedBox(height: 6),
                 Text(
                   shopCopy(
@@ -1373,10 +1370,17 @@ class _ShopHomeState extends State<ShopHome> {
     );
   }
 
-  Future<void> _showAddProduct() async {
+  Future<void> _showAddProduct({
+    String initialName = '',
+    String initialBarcode = '',
+  }) async {
     final values = await showDialog<_NewShopProduct>(
       context: context,
-      builder: (_) => _NewShopProductDialog(myanmar: widget.myanmar),
+      builder: (_) => _NewShopProductDialog(
+        myanmar: widget.myanmar,
+        initialName: initialName,
+        initialBarcode: initialBarcode,
+      ),
     );
     if (values == null) return;
     try {
@@ -1611,9 +1615,15 @@ class _NewShopProduct {
 }
 
 class _NewShopProductDialog extends StatefulWidget {
-  const _NewShopProductDialog({required this.myanmar});
+  const _NewShopProductDialog({
+    required this.myanmar,
+    this.initialName = '',
+    this.initialBarcode = '',
+  });
 
   final bool myanmar;
+  final String initialName;
+  final String initialBarcode;
 
   @override
   State<_NewShopProductDialog> createState() => _NewShopProductDialogState();
@@ -1621,8 +1631,8 @@ class _NewShopProductDialog extends StatefulWidget {
 
 class _NewShopProductDialogState extends State<_NewShopProductDialog> {
   final _formKey = GlobalKey<FormState>();
-  final _name = TextEditingController();
-  final _barcode = TextEditingController();
+  late final _name = TextEditingController(text: widget.initialName);
+  late final _barcode = TextEditingController(text: widget.initialBarcode);
   final _price = TextEditingController();
   final _stock = TextEditingController(text: '0');
 
@@ -1821,6 +1831,18 @@ class _ShopSettingsScreenState extends State<ShopSettingsScreen> {
           },
         ),
         const SizedBox(height: 20),
+        ListTile(
+          leading: const Icon(Icons.storage_outlined),
+          title: Text(shopCopy(_myanmar, 'Data on this device', 'ဤစက်ရှိဒေတာ')),
+          subtitle: Text(
+            shopCopy(
+              _myanmar,
+              'Sales and products are saved locally. Cloud sync and backup are not active.',
+              'အရောင်းနှင့် ကုန်ပစ္စည်းများကို ဤစက်တွင် သိမ်းထားသည်။ Cloud ချိတ်ဆက်မှုနှင့် အရန်သိမ်းမှု မဖွင့်ထားပါ။',
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
         _SetupTile(
           icon: Icons.account_balance_wallet_outlined,
           title: shopCopy(_myanmar, 'Mobile money', 'မိုဘိုင်းငွေပေးချေမှု'),
