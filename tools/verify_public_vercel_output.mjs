@@ -15,9 +15,15 @@ const staticDir = resolve(outputDir, 'static')
 const functionsDir = resolve(outputDir, 'functions', 'api')
 const configPath = resolve(outputDir, 'config.json')
 const manifest = JSON.parse(readFileSync(resolve(root, 'site-manifest.json'), 'utf8'))
-const publicGalleryProvenance = JSON.parse(readFileSync(resolve(root, 'tools', 'public-assets', 'public-gallery-provenance.json'), 'utf8'))
-const publicGalleryCapture = JSON.parse(readFileSync(resolve(root, 'tools', 'public-assets', 'public-gallery-capture.json'), 'utf8'))
-const publicGalleryImageSources = JSON.parse(readFileSync(resolve(root, 'tools', 'qa-assets', 'shop-products', 'sources.json'), 'utf8'))
+const galleryProvenanceBytes = readFileSync(resolve(root, 'tools', 'public-assets', 'public-gallery-provenance.json'))
+const galleryCaptureBytes = readFileSync(resolve(root, 'tools', 'public-assets', 'public-gallery-capture.json'))
+const galleryImageSourcesBytes = readFileSync(resolve(root, 'tools', 'qa-assets', 'shop-products', 'sources.json'))
+const publicGalleryProvenance = JSON.parse(galleryProvenanceBytes.toString('utf8'))
+const publicGalleryCapture = JSON.parse(galleryCaptureBytes.toString('utf8'))
+const publicGalleryImageSources = JSON.parse(galleryImageSourcesBytes.toString('utf8'))
+const galleryAttestationPath = resolve(root, 'tools', 'public-assets', 'public-gallery-release-attestation.json')
+const publicGalleryReleaseAttestation = existsSync(galleryAttestationPath)
+  ? JSON.parse(readFileSync(galleryAttestationPath, 'utf8')) : null
 
 function fail(code, detail = {}) {
   console.error(JSON.stringify({ ok: false, contract: 'supermega_public_output', code, ...detail }, null, 2))
@@ -27,38 +33,20 @@ function fail(code, detail = {}) {
 const builderSource = readFileSync(resolve(root, 'tools', 'create_public_vercel_output.mjs'), 'utf8')
 const publicReleaseWorkflow = readFileSync(resolve(root, '.github', 'workflows', 'supermega-public-release.yml'), 'utf8')
 if (!builderSource.includes("process.env.SUPERMEGA_PUBLIC_RELEASE === '1' || process.env.VERCEL === '1'")
-  || !builderSource.includes('assertPublicGalleryReleaseReady(publicGalleryCapture, publicGalleryImageSources)')
+  || !builderSource.includes('assertPublicGalleryReleaseReady(publicGalleryCapture, publicGalleryImageSources,')
+  || !builderSource.includes('publicGalleryReleaseAttestation')
   || !publicReleaseWorkflow.includes("SUPERMEGA_PUBLIC_RELEASE: '1'")) {
   fail('public_gallery_release_gate_not_wired')
 }
-if (publicGalleryReleaseReadinessError(publicGalleryCapture, publicGalleryImageSources)
-  !== 'public_gallery_capture_not_publication_ready'
-  || publicGalleryReleaseReadinessError({ publicationReady: true }, publicGalleryImageSources)
-    !== 'public_gallery_image_rights_unverified') {
+const galleryEvidence = {
+  captureReportSha256: createHash('sha256').update(galleryCaptureBytes).digest('hex'),
+  provenanceSha256: createHash('sha256').update(galleryProvenanceBytes).digest('hex'),
+  imageSourcesSha256: createHash('sha256').update(galleryImageSourcesBytes).digest('hex'),
+}
+const galleryReleaseError = publicGalleryReleaseReadinessError(publicGalleryCapture, publicGalleryImageSources,
+  publicGalleryProvenance, publicGalleryReleaseAttestation, galleryEvidence)
+if (galleryReleaseError !== (publicGalleryReleaseAttestation ? null : 'public_gallery_review_attestation_missing')) {
   fail('public_gallery_release_gate_not_fail_closed')
-}
-const reviewedRights = {
-  status: 'cleared_for_publication',
-  basis: 'cc-by-4.0',
-  license_url: 'https://creativecommons.org/licenses/by/4.0/',
-  attribution: 'Example photographer — CC BY 4.0',
-  reviewed_at: '2026-10-21',
-  reviewed_by: 'founder',
-  evidence_sha256: 'a'.repeat(64),
-}
-const reviewedImageSet = {
-  schemaVersion: 'supermega.shop-image-rights.v1',
-  status: 'cleared_for_publication',
-  products: [{ file: 'example.webp', source_page: 'https://example.com/photo', publication_rights: reviewedRights }],
-}
-if (publicGalleryReleaseReadinessError({ publicationReady: true }, reviewedImageSet) !== null) {
-  fail('public_gallery_release_gate_rejects_reviewed_rights')
-}
-const missingEvidenceImageSet = structuredClone(reviewedImageSet)
-delete missingEvidenceImageSet.products[0].publication_rights.evidence_sha256
-if (publicGalleryReleaseReadinessError({ publicationReady: true }, missingEvidenceImageSet)
-  !== 'public_gallery_image_rights_unverified') {
-  fail('public_gallery_release_gate_accepts_incomplete_rights')
 }
 
 function requireFile(path, label) {

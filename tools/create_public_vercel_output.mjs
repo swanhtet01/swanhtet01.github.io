@@ -38,11 +38,22 @@ function assert(condition, message) {
   if (!condition) throw new Error(message)
 }
 
-const publicGalleryProvenance = JSON.parse(await readFile(resolve(root, 'tools', 'public-assets', 'public-gallery-provenance.json'), 'utf8'))
-const publicGalleryCapture = JSON.parse(await readFile(resolve(root, 'tools', 'public-assets', 'public-gallery-capture.json'), 'utf8'))
-const publicGalleryImageSources = JSON.parse(await readFile(resolve(root, 'tools', 'qa-assets', 'shop-products', 'sources.json'), 'utf8'))
+const galleryProvenanceBytes = await readFile(resolve(root, 'tools', 'public-assets', 'public-gallery-provenance.json'))
+const galleryCaptureBytes = await readFile(resolve(root, 'tools', 'public-assets', 'public-gallery-capture.json'))
+const galleryImageSourcesBytes = await readFile(resolve(root, 'tools', 'qa-assets', 'shop-products', 'sources.json'))
+const publicGalleryProvenance = JSON.parse(galleryProvenanceBytes.toString('utf8'))
+const publicGalleryCapture = JSON.parse(galleryCaptureBytes.toString('utf8'))
+const publicGalleryImageSources = JSON.parse(galleryImageSourcesBytes.toString('utf8'))
+const galleryAttestationPath = resolve(root, 'tools', 'public-assets', 'public-gallery-release-attestation.json')
+const publicGalleryReleaseAttestation = existsSync(galleryAttestationPath)
+  ? JSON.parse(await readFile(galleryAttestationPath, 'utf8')) : null
 if (process.env.SUPERMEGA_PUBLIC_RELEASE === '1' || process.env.VERCEL === '1') {
-  assertPublicGalleryReleaseReady(publicGalleryCapture, publicGalleryImageSources)
+  assertPublicGalleryReleaseReady(publicGalleryCapture, publicGalleryImageSources,
+    publicGalleryProvenance, publicGalleryReleaseAttestation, {
+      captureReportSha256: createHash('sha256').update(galleryCaptureBytes).digest('hex'),
+      provenanceSha256: createHash('sha256').update(galleryProvenanceBytes).digest('hex'),
+      imageSourcesSha256: createHash('sha256').update(galleryImageSourcesBytes).digest('hex'),
+    })
 }
 // Hash the checked-out source as a Git tree so a source archive is checked as
 // strictly as a Git worktree. Installed packages and build output are not part
