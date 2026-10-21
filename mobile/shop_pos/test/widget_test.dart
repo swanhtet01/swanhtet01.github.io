@@ -1406,6 +1406,10 @@ void main() {
   testWidgets('settings keeps language and merchant wallet setup reachable', (
     tester,
   ) async {
+    tester.view.physicalSize = const Size(320, 720);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     final database = ShopDatabase(NativeDatabase.memory());
     await tester.pumpWidget(
       ShopApp(
@@ -1428,6 +1432,11 @@ void main() {
     await tester.tap(find.text('မြန်မာ'));
     await tester.pumpAndSettle();
     expect(find.text('ဘာသာစကား'), findsOneWidget);
+    await tester.ensureVisible(find.text('မိုဘိုင်းငွေပေးချေမှု'));
+    await tester.tap(find.text('မိုဘိုင်းငွေပေးချေမှု'));
+    await tester.pumpAndSettle();
+    expect(find.text('KBZPay'), findsOneWidget);
+    expect(tester.takeException(), isNull);
     await database.close();
   });
 
