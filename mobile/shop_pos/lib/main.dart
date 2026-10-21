@@ -1809,13 +1809,12 @@ class _ShopHomeState extends State<ShopHome> {
                   if (tenderedMmk != null && !isShort) ...[
                     const SizedBox(height: 12),
                     Text(
-                      shopCopy(
-                        widget.myanmar,
-                        'Change · ${_mmk(tenderedMmk - totalMmk)}',
-                        'ပြန်အမ်းငွေ · ${_mmk(tenderedMmk - totalMmk)}',
-                      ),
+                      shopCopy(widget.myanmar, 'Change', 'ပြန်အမ်းငွေ'),
+                    ),
+                    Text(
+                      _mmk(tenderedMmk - totalMmk),
                       key: const ValueKey('shop-cash-change'),
-                      style: Theme.of(context).textTheme.titleMedium,
+                      style: Theme.of(context).textTheme.titleLarge,
                     ),
                   ],
                   if (isShort || invalid) ...[
@@ -2403,7 +2402,7 @@ class _ShopHomeState extends State<ShopHome> {
             // Keep a short sale near its content. Long baskets retain the
             // available height and scroll inside the existing list.
             final contentHeight =
-                (420 +
+                (350 +
                     88 * _cart.length.clamp(0, 4) +
                     (_pendingWalletCheckout == null ? 0 : 160)) *
                 textScale;

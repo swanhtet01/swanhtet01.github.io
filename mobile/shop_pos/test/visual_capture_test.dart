@@ -160,7 +160,7 @@ void main() {
           final cashButton = find.text(
             language == 'my' ? 'ငွေသား' : 'Cash sale',
           );
-          if (width == 390) {
+          if (width <= 390) {
             expect(tester.getBottomLeft(cashButton).dy, lessThan(height));
           }
           expect(tester.takeException(), isNull);

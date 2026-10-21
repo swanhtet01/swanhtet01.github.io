@@ -1253,7 +1253,8 @@ void main() {
         '20000',
       );
       await tester.pumpAndSettle();
-      expect(find.text('Change · 6,500 MMK'), findsOneWidget);
+      expect(find.text('Change'), findsOneWidget);
+      expect(find.text('6,500 MMK'), findsOneWidget);
       expect(await database.countSales(), 0);
 
       await tester.enterText(
@@ -1321,7 +1322,8 @@ void main() {
         '၂၀၀၀၀',
       );
       await tester.pumpAndSettle();
-      expect(find.text('ပြန်အမ်းငွေ · ၆,၅၀၀ ကျပ်'), findsOneWidget);
+      expect(find.text('ပြန်အမ်းငွေ'), findsOneWidget);
+      expect(find.text('၆,၅၀၀ ကျပ်'), findsOneWidget);
       expect(await database.countSales(), 0);
       await database.close();
     },
