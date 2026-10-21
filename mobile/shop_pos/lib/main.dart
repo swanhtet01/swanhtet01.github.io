@@ -2868,8 +2868,8 @@ class _ShopSettingsScreenState extends State<ShopSettingsScreen> {
               ),
               subtitle: shopCopy(
                 _myanmar,
-                'Save an encrypted file. In-app restore is not available yet.',
-                'ကုဒ်ဖြင့်ကာကွယ်ထားသောဖိုင်ကို သိမ်းပါ။ အက်ပ်အတွင်း ပြန်လည်ရယူခြင်း မရနိုင်သေးပါ။',
+                'Save an encrypted file.',
+                'စကားဝှက်ဖြင့်ကာကွယ်ထားသောဖိုင်ကို သိမ်းပါ။',
               ),
               onTap: () => Navigator.of(context).push<void>(
                 MaterialPageRoute<void>(
