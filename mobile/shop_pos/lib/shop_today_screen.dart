@@ -461,11 +461,11 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
                       ],
                     )
                   else ...[
-                    _productsPreview(snapshot),
                     if (snapshot.recentSales.isNotEmpty) ...[
-                      const SizedBox(height: 12),
                       _salesPreview(snapshot),
+                      const SizedBox(height: 12),
                     ],
+                    _productsPreview(snapshot),
                   ],
                 ],
               ],

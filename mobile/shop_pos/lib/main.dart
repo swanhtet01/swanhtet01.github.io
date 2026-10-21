@@ -166,7 +166,9 @@ class _ShopAppState extends State<ShopApp> {
 
   @override
   Widget build(BuildContext context) {
-    final fontFamily = _myanmar ? 'NotoSansMyanmar' : 'Inter';
+    // Keep Latin product names consistent in both locales. Myanmar glyphs use
+    // the bundled Noto fallback with locale-specific line height below.
+    const fontFamily = 'Inter';
     final tracking = _myanmar ? 0.0 : -0.35;
     const ink = Color(0xff171b2c);
     const border = Color(0xffdce2ed);
@@ -253,6 +255,7 @@ class _ShopAppState extends State<ShopApp> {
           scrolledUnderElevation: 0,
           titleTextStyle: TextStyle(
             fontFamily: fontFamily,
+            fontFamilyFallback: const ['NotoSansMyanmar'],
             fontSize: _myanmar ? 18 : 20,
             fontWeight: FontWeight.w700,
             letterSpacing: tracking,
@@ -267,6 +270,7 @@ class _ShopAppState extends State<ShopApp> {
             final selected = states.contains(WidgetState.selected);
             return TextStyle(
               fontFamily: fontFamily,
+              fontFamilyFallback: const ['NotoSansMyanmar'],
               fontSize: _myanmar ? 13.5 : 13,
               fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
               height: _myanmar ? 1.45 : 1.25,
@@ -277,6 +281,7 @@ class _ShopAppState extends State<ShopApp> {
         navigationRailTheme: NavigationRailThemeData(
           selectedLabelTextStyle: TextStyle(
             fontFamily: fontFamily,
+            fontFamilyFallback: const ['NotoSansMyanmar'],
             fontSize: 14,
             fontWeight: FontWeight.w700,
             height: _myanmar ? 1.45 : 1.25,
@@ -284,6 +289,7 @@ class _ShopAppState extends State<ShopApp> {
           ),
           unselectedLabelTextStyle: TextStyle(
             fontFamily: fontFamily,
+            fontFamilyFallback: const ['NotoSansMyanmar'],
             fontSize: 14,
             fontWeight: FontWeight.w600,
             height: _myanmar ? 1.45 : 1.25,
@@ -817,7 +823,10 @@ class _ShopHomeState extends State<ShopHome> {
                               ],
                             ),
                           ),
-                          if (products.isNotEmpty) ...[
+                          if (products.isNotEmpty &&
+                              (!tablet ||
+                                  _cart.isNotEmpty ||
+                                  _pendingWalletCheckout != null)) ...[
                             SizedBox(width: tablet ? 12 : 18),
                             SizedBox(
                               key: const ValueKey('shop-split-basket'),
@@ -1116,6 +1125,7 @@ class _ShopHomeState extends State<ShopHome> {
     // Prices move below names on portrait tablets so the narrower catalog
     // pane retains a readable, full-row add target.
     final compactProductRow = viewportWidth < 900;
+    final narrowProductRow = viewportWidth < 380;
     final text = _search.text.trim().toLowerCase();
     final visible = products
         .where(
@@ -1272,7 +1282,7 @@ class _ShopHomeState extends State<ShopHome> {
                 builder: (context, snapshot) {
                   final bytes = snapshot.data;
                   if (bytes == null) {
-                    return const Icon(Icons.add_photo_alternate_outlined);
+                    return const Icon(Icons.photo_outlined);
                   }
                   return ClipRRect(
                     borderRadius: BorderRadius.circular(8),
@@ -1282,7 +1292,7 @@ class _ShopHomeState extends State<ShopHome> {
                       height: 44,
                       fit: BoxFit.cover,
                       errorBuilder: (_, error, stackTrace) =>
-                          const Icon(Icons.add_photo_alternate_outlined),
+                          const Icon(Icons.photo_outlined),
                     ),
                   );
                 },
@@ -1290,7 +1300,7 @@ class _ShopHomeState extends State<ShopHome> {
             ),
             title: Text(
               item.name,
-              maxLines: 2,
+              maxLines: narrowProductRow ? 3 : 2,
               overflow: TextOverflow.ellipsis,
               style: Theme.of(context).textTheme.titleMedium,
             ),

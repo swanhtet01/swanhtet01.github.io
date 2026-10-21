@@ -57,6 +57,26 @@ void main() {
         );
         await tester.pumpAndSettle();
 
+        expect(
+          tester
+              .widget<MaterialApp>(find.byType(MaterialApp))
+              .theme
+              ?.textTheme
+              .bodyMedium
+              ?.fontFamily,
+          'Inter',
+        );
+        final theme = tester
+            .widget<MaterialApp>(find.byType(MaterialApp))
+            .theme!;
+        expect(
+          theme.appBarTheme.titleTextStyle?.fontFamilyFallback,
+          contains('NotoSansMyanmar'),
+        );
+        expect(
+          theme.navigationRailTheme.selectedLabelTextStyle?.fontFamilyFallback,
+          contains('NotoSansMyanmar'),
+        );
         expect(find.text(myanmar ? 'ယနေ့' : 'Today'), findsWidgets);
         expect(find.text(myanmar ? 'ရောင်းရန်' : 'Sell'), findsOneWidget);
         if (width >= 700) {
@@ -162,6 +182,56 @@ void main() {
         findsOneWidget,
       );
       expect(await database.countSales(), 1);
+      expect(tester.takeException(), isNull);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+      await database.close();
+    }
+  });
+
+  testWidgets('compact Today and Stock put recent work and low stock first', (
+    tester,
+  ) async {
+    _usePhoneViewport(tester);
+    final database = ShopDatabase(NativeDatabase.memory());
+    try {
+      await database.addProduct(
+        id: 'high',
+        name: 'High stock',
+        priceMmk: 2500,
+        openingStock: 20,
+      );
+      await database.addProduct(
+        id: 'low',
+        name: 'Low stock',
+        priceMmk: 1200,
+        openingStock: 2,
+      );
+      await database.recordCashSale(
+        operationId: 'recent-sale',
+        lines: const [ShopSaleLineInput(productId: 'high', quantity: 1)],
+      );
+      await tester.pumpWidget(
+        ShopApp(
+          database: database,
+          authClient: null,
+          apiBaseUrl: 'https://app.supermega.dev',
+          initialMyanmar: false,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        tester.getTopLeft(find.text('Recent sales')).dy,
+        lessThan(tester.getTopLeft(find.text('Lowest stock')).dy),
+      );
+      await tester.ensureVisible(find.text('View stock'));
+      await tester.tap(find.text('View stock'));
+      await tester.pumpAndSettle();
+      expect(
+        tester.getTopLeft(find.text('Low stock')).dy,
+        lessThan(tester.getTopLeft(find.text('High stock')).dy),
+      );
       expect(tester.takeException(), isNull);
     } finally {
       await tester.pumpWidget(const SizedBox.shrink());
@@ -471,7 +541,7 @@ void main() {
     expect(
       find.descendant(
         of: find.byKey(const ValueKey('shop-product-photo:water')),
-        matching: find.byIcon(Icons.add_photo_alternate_outlined),
+        matching: find.byIcon(Icons.photo_outlined),
       ),
       findsOneWidget,
     );
@@ -658,7 +728,7 @@ void main() {
     }
   });
 
-  testWidgets('tablet landscape keeps the sale beside the catalog', (
+  testWidgets('tablet landscape opens the basket beside the catalog', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(820, 700);
@@ -685,7 +755,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Tea'), findsOneWidget);
-      expect(find.text('Current sale'), findsOneWidget);
+      expect(find.text('Current sale'), findsNothing);
       expect(find.text('Search name, barcode or SKU'), findsOneWidget);
       expect(tester.takeException(), isNull);
       expect(
@@ -694,6 +764,7 @@ void main() {
       );
       await tester.tap(find.byTooltip('Add to sale'));
       await tester.pumpAndSettle();
+      expect(find.text('Current sale'), findsOneWidget);
       expect(find.text('Cash sale'), findsOneWidget);
       expect(find.textContaining('Review sale'), findsNothing);
       expect(tester.takeException(), isNull);
@@ -704,7 +775,7 @@ void main() {
     }
   });
 
-  testWidgets('portrait tablet keeps basket visible beside catalog', (
+  testWidgets('portrait tablet reveals basket after first item', (
     tester,
   ) async {
     addTearDown(tester.view.resetPhysicalSize);
@@ -735,19 +806,24 @@ void main() {
           final catalog = find.byKey(const ValueKey('shop-split-catalog'));
           final basket = find.byKey(const ValueKey('shop-split-basket'));
           expect(catalog, findsOneWidget);
-          expect(basket, findsOneWidget);
-          final catalogRect = tester.getRect(catalog);
-          final basketRect = tester.getRect(basket);
-          // The Burmese rail can grow for longer labels while the catalog
-          // still has a phone-width, touch-safe pane beside the basket.
-          expect(catalogRect.width, greaterThanOrEqualTo(320));
-          expect(basketRect.width, greaterThanOrEqualTo(300));
-          expect(catalogRect.right, lessThan(basketRect.left));
+          expect(basket, findsNothing);
         }
         await tester.tap(
           find.byTooltip(myanmar ? 'အရောင်းထဲထည့်ရန်' : 'Add to sale'),
         );
         await tester.pumpAndSettle();
+        if (width == 820) {
+          final catalog = find.byKey(const ValueKey('shop-split-catalog'));
+          final basket = find.byKey(const ValueKey('shop-split-basket'));
+          expect(basket, findsOneWidget);
+          final catalogRect = tester.getRect(catalog);
+          final basketRect = tester.getRect(basket);
+          // The Burmese rail can grow for longer labels while the catalog
+          // still has a phone-width, touch-safe pane beside the active basket.
+          expect(catalogRect.width, greaterThanOrEqualTo(320));
+          expect(basketRect.width, greaterThanOrEqualTo(300));
+          expect(catalogRect.right, lessThan(basketRect.left));
+        }
         if (width == 800) {
           await tester.tap(
             find.textContaining(myanmar ? 'အရောင်းစစ်ရန်' : 'Review sale'),
@@ -775,10 +851,12 @@ void main() {
       addTearDown(tester.view.resetDevicePixelRatio);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
-      for (final width in [360.0, 390.0, 820.0, 1200.0]) {
+      for (final width in [320.0, 360.0, 390.0, 820.0, 1200.0]) {
         for (final myanmar in [false, true]) {
           tester.view.physicalSize = Size(width, 800);
-          tester.platformDispatcher.textScaleFactorTestValue = width == 360
+          tester.platformDispatcher.textScaleFactorTestValue = width == 320
+              ? 1.5
+              : width == 360
               ? 1.3
               : 1.0;
           final database = ShopDatabase(NativeDatabase.memory());
@@ -808,6 +886,29 @@ void main() {
           );
           expect(row, findsOneWidget);
           expect(tester.getSize(row).height, greaterThanOrEqualTo(56));
+          if (width == 820) {
+            expect(
+              find.byKey(const ValueKey('shop-split-basket')),
+              findsNothing,
+            );
+          }
+          if (width == 320) {
+            expect(
+              tester
+                  .widget<Text>(
+                    find.descendant(
+                      of: row,
+                      matching: find.text(
+                        myanmar
+                            ? 'ဆန်အိတ် အရည်အသွေးကောင်း ၁၀ ကီလိုဂရမ်'
+                            : 'Premium rice 10 kg bag',
+                      ),
+                    ),
+                  )
+                  .maxLines,
+              3,
+            );
+          }
           final photoButton = find.descendant(
             of: row,
             matching: find.byKey(const ValueKey('shop-product-photo:rice')),
@@ -823,6 +924,12 @@ void main() {
 
           await tester.tap(row);
           await tester.pumpAndSettle();
+          if (width == 820) {
+            expect(
+              find.byKey(const ValueKey('shop-split-basket')),
+              findsOneWidget,
+            );
+          }
           expect(
             width >= 820
                 ? find.text(myanmar ? 'ငွေသား' : 'Cash sale')
