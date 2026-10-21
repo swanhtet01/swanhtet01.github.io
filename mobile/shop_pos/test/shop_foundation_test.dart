@@ -910,7 +910,8 @@ void main() {
         await tester.enterText(find.byType(TextField).last, '10000');
         await tester.tap(find.text('Close shift'));
         await tester.pumpAndSettle();
-        await tester.scrollUntilVisible(find.text('Last closed shift'), 150);
+        await tester.drag(find.byType(ListView), const Offset(0, -400));
+        await tester.pumpAndSettle();
         expect(find.text('Last closed shift'), findsOneWidget);
         expect(find.text('Expected from recorded sales'), findsOneWidget);
         await tester.pumpWidget(const SizedBox());
