@@ -1,6 +1,6 @@
 # SuperMega Supergoal
 
-- Version: 1.8.1
+- Version: 1.8.2
 - Owner: Swan Htet, Founder
 - Maintainer: CTO, sole integration writer
 - Updated: 2026-10-21
@@ -13,6 +13,8 @@ This is SuperMega.dev's long-term operating objective. Exact source state, open 
 Bring SuperMega.dev to a sellable, founder-controlled Shop launch built around a fast, reliable installed app, supported by a useful browser companion and internally managed Sites and Commerce. A merchant should be able to start selling on a tablet or PC, scan products, finish a sale, find its receipt again and recover from a printer, network or power interruption without guessing what happened. Prove one account and workspace boundary across devices, honest sync/backup and restore, role-based administration, and a public download path tied to a verified build. Use maintained open-source software as a capability and R&D supply chain. Match the accepted premium design standard in the real app, not only in website captures; maintain source-bound CI, security, device and performance evidence before an independently reviewed production release.
 
 The differentiated promise is a full English or full Burmese merchant experience that removes catalog setup, checkout and insight work while keeping money and stock explainable. AI should accelerate reviewed catalog import and grounded decisions, within consent, privacy, quality and cost limits. After customer-facing acceptance, package one complete Basic/Free offer, a capability-backed Pro offer and Assisted Launch, then build measured onboarding, sales and marketing operations and cost-controlled agents on existing paid cloud/VPS capacity.
+
+For sample catalog photography, source real product/package images online first and record the exact item, pack-size evidence, source URL and file digest. Use them in private synthetic QA only until commercial public reuse rights are documented. Public website captures must use rights-cleared product photos or merchant-owned photos; an accessible retailer image is not a reuse license. Do not replace a recognizable package with an unrelated generated approximation or claim an unreadable size was visually verified.
 
 The current design decision uses an **eliminate / reduce / raise / create** test against a merchant's first day. Eliminate repeated device-only warnings, dummy controls and manual message re-entry from the primary path. Reduce setup to a usable first catalog item, a first sale and an optional connected-account step; move printer, wallet, team and advanced policy setup to the point of need. Raise sale/stock correctness, discoverability, full-language quality, hardware reliability and recovery to non-negotiable release criteria. Create a reviewed photo-to-catalog path and later grounded, cited sales/stock suggestions that save measured operator time. Do not add an AI card, setting or subscription control unless it improves a named job and its failure state is clear.
 
