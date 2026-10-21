@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:drift/drift.dart' hide isNotNull, isNull;
 import 'package:drift/native.dart';
-import 'package:flutter/foundation.dart' show debugPrintSynchronously;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image_picker/image_picker.dart';
@@ -229,21 +228,14 @@ void main() {
         'Unfinished sale restored on this device.',
       );
       expect(restoredNotice, findsOneWidget);
-      debugPrintSynchronously('counter-recovery-test: before pop');
       Navigator.of(tester.element(restoredNotice)).pop();
-      debugPrintSynchronously('counter-recovery-test: before post-pop settle');
       await tester.pumpAndSettle();
-      debugPrintSynchronously('counter-recovery-test: after post-pop settle');
       expect(restoredNotice, findsNothing);
       expect(tester.takeException(), isNull);
     } finally {
-      debugPrintSynchronously('counter-recovery-test: before unmount');
       await tester.pumpWidget(const SizedBox.shrink());
-      debugPrintSynchronously('counter-recovery-test: before teardown pump');
       await tester.pump(const Duration(milliseconds: 1));
-      debugPrintSynchronously('counter-recovery-test: before database close');
       await database.close();
-      debugPrintSynchronously('counter-recovery-test: after database close');
     }
   });
 
