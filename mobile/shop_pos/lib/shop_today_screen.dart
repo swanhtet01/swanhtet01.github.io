@@ -192,13 +192,18 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
         )
         .getSingle();
     final products = await widget.database.readActiveProducts();
+    final productPreview = products.toList()
+      ..sort((a, b) {
+        final stockOrder = a.onHand.compareTo(b.onHand);
+        return stockOrder != 0 ? stockOrder : a.name.compareTo(b.name);
+      });
     final recentSales = await widget.database.readRecentSales(limit: 4);
     final pendingWallet = await widget.database.readPendingWalletCheckout();
     return _TodaySnapshot(
       salesMmk: saleTotals.read<int>('sales_mmk'),
       saleCount: saleTotals.read<int>('sale_count'),
       products: products.length,
-      productPreview: products.take(4).toList(),
+      productPreview: productPreview.take(4).toList(),
       recentSales: recentSales,
       // There is no configured reorder point yet. Name the exact rule in UI.
       stockToCheck: products.where((item) => item.onHand <= 5).toList(),
@@ -503,7 +508,7 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
   );
 
   Widget _productsPreview(_TodaySnapshot snapshot) => _previewPanel(
-    title: _copy('Products', 'ကုန်ပစ္စည်းများ'),
+    title: _copy('Lowest stock', 'လက်ကျန်အနည်းဆုံး'),
     action: _copy('View stock', 'လက်ကျန်ကြည့်ရန်'),
     onOpen: () => _open(widget.onStock),
     rows: [

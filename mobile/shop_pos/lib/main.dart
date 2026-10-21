@@ -205,19 +205,19 @@ class _ShopAppState extends State<ShopApp> {
         textTheme:
             TextTheme(
               headlineMedium: TextStyle(
-                fontSize: 34,
+                fontSize: _myanmar ? 30 : 34,
                 fontWeight: FontWeight.w700,
                 height: _myanmar ? 1.4 : 1.15,
                 letterSpacing: tracking,
               ),
               headlineSmall: TextStyle(
-                fontSize: 28,
+                fontSize: _myanmar ? 26 : 28,
                 fontWeight: FontWeight.w700,
                 height: _myanmar ? 1.4 : 1.2,
                 letterSpacing: tracking,
               ),
               titleLarge: TextStyle(
-                fontSize: 21,
+                fontSize: _myanmar ? 20 : 21,
                 fontWeight: FontWeight.w700,
                 height: _myanmar ? 1.45 : 1.25,
                 letterSpacing: tracking,
@@ -253,7 +253,7 @@ class _ShopAppState extends State<ShopApp> {
           scrolledUnderElevation: 0,
           titleTextStyle: TextStyle(
             fontFamily: fontFamily,
-            fontSize: 20,
+            fontSize: _myanmar ? 18 : 20,
             fontWeight: FontWeight.w700,
             letterSpacing: tracking,
             height: _myanmar ? 1.45 : 1.2,
