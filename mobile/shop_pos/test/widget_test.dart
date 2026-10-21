@@ -1130,10 +1130,10 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.enterText(find.byType(TextField), '0012345678905');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pumpAndSettle();
-    expect(find.text('No matching products'), findsOneWidget);
-    await tester.tap(find.byKey(const ValueKey('shop-add-search-result')));
-    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsOneWidget);
+    expect((await database.readActiveProducts()).length, 1);
     expect(
       tester
           .widget<TextFormField>(
@@ -1143,6 +1143,21 @@ void main() {
           .text,
       '0012345678905',
     );
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsNothing);
+    expect((await database.readActiveProducts()).length, 1);
+    expect(
+      tester.widget<TextField>(find.byType(TextField)).controller!.text,
+      '0012345678905',
+    );
+    expect(
+      tester.widget<TextField>(find.byType(TextField)).focusNode!.hasFocus,
+      isTrue,
+    );
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsOneWidget);
     await tester.enterText(
       find.byKey(const ValueKey('shop-product-name')),
       'Rice',
@@ -1165,7 +1180,11 @@ void main() {
       '0012345678905',
     );
     expect(find.text('Rice'), findsOneWidget);
-    await tester.tap(find.byType(TextField));
+    expect(
+      tester.widget<TextField>(find.byType(TextField)).focusNode!.hasFocus,
+      isTrue,
+    );
+    await tester.enterText(find.byType(TextField), '0012345678905');
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pumpAndSettle();
     expect(find.textContaining('Review sale'), findsOneWidget);
@@ -1269,7 +1288,7 @@ void main() {
       );
       expect(find.textContaining('Review sale'), findsNothing);
 
-      await tester.enterText(search, '999999');
+      await tester.enterText(search, 'NO-MATCH');
       await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pumpAndSettle();
       expect(
