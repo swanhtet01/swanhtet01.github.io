@@ -1679,11 +1679,13 @@ class _ShopHomeState extends State<ShopHome> {
             final isShort = tenderedMmk != null && tenderedMmk < totalMmk;
             final invalid = entered.isNotEmpty && tenderedMmk == null;
             return AlertDialog(
+              scrollable: true,
+              actionsOverflowDirection: VerticalDirection.down,
               title: Text(
                 shopCopy(
                   widget.myanmar,
                   'Cash received?',
-                  'ငွေသားလက်ခံပြီးပြီလား။',
+                  'ငွေသားရပြီလား။',
                 ),
               ),
               content: Column(
@@ -1717,7 +1719,7 @@ class _ShopHomeState extends State<ShopHome> {
                       labelText: shopCopy(
                         widget.myanmar,
                         'Cash given (optional)',
-                        'ပေးထားသော ငွေသား (မထည့်လည်းရ)',
+                        'ပေးငွေ (မထည့်လည်းရ)',
                       ),
                     ),
                   ),
@@ -1765,7 +1767,7 @@ class _ShopHomeState extends State<ShopHome> {
                     shopCopy(
                       widget.myanmar,
                       'Complete sale',
-                      'အရောင်းပြီးစီးရန်',
+                      'အတည်ပြုရန်',
                     ),
                   ),
                 ),

@@ -12,18 +12,49 @@ import 'package:supermega_shop/shop_database.dart';
 final _capture = Platform.environment['SHOP_VISUAL_CAPTURE'] == '1';
 const _captureKey = ValueKey('native-shop-visual-capture');
 
-Future<ShopDatabase> _sampleShop() async {
+Future<ShopDatabase> _sampleShop({required bool myanmar}) async {
   final database = ShopDatabase(NativeDatabase.memory());
-  for (final (id, name, price, stock) in [
-    ('mama', 'MAMA Chicken Instant Noodles', 2950, 8),
-    ('kaung', 'KAUNG 90 Days Rice', 12450, 34),
-    ('alpine', 'ALPINE Drinking Water', 5700, 21),
-    ('baydar', 'BAYDAR Laundry Detergent', 5900, 13),
-    ('zess', 'ZESS Sugar Crackers', 8000, 14),
+  // Display copy belongs to this synthetic fixture, not merchant catalog data.
+  for (final (id, englishName, myanmarName, price, stock) in [
+    (
+      'mama',
+      'MAMA Chicken Instant Noodles',
+      'MAMA ကြက်သား အမြန်ခေါက်ဆွဲ',
+      2950,
+      8,
+    ),
+    (
+      'kaung',
+      'KAUNG 90 Days Rice',
+      'KAUNG ရက် ၉၀ ဆန်',
+      12450,
+      34,
+    ),
+    (
+      'alpine',
+      'ALPINE Drinking Water',
+      'ALPINE သောက်ရေသန့်',
+      5700,
+      21,
+    ),
+    (
+      'baydar',
+      'BAYDAR Laundry Detergent',
+      'BAYDAR အဝတ်လျှော်ဆပ်ပြာ',
+      5900,
+      13,
+    ),
+    (
+      'zess',
+      'ZESS Sugar Crackers',
+      'ZESS သကြား ကရက်ကာ',
+      8000,
+      14,
+    ),
   ]) {
     await database.addProduct(
       id: id,
-      name: name,
+      name: myanmar ? myanmarName : englishName,
       priceMmk: price,
       openingStock: stock,
     );
@@ -84,7 +115,7 @@ void main() {
         addTearDown(tester.view.resetPhysicalSize);
         addTearDown(tester.view.resetDevicePixelRatio);
         addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
-        final database = await _sampleShop();
+        final database = await _sampleShop(myanmar: language == 'my');
         try {
           await tester.pumpWidget(
             RepaintBoundary(

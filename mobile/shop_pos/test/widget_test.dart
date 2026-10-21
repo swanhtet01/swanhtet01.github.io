@@ -1018,7 +1018,7 @@ void main() {
     expect(find.text('မိုဘိုင်းငွေပေးချေမှု'), findsOneWidget);
     await tester.tap(find.text('ငွေသား'));
     await tester.pumpAndSettle();
-    expect(find.text('ငွေသားလက်ခံပြီးပြီလား။'), findsOneWidget);
+    expect(find.text('ငွေသားရပြီလား။'), findsOneWidget);
     expect(await database.countSales(), 0);
     await tester.tap(find.text('ပြန်သွားရန်'));
     await tester.pumpAndSettle();
@@ -1241,7 +1241,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('ငွေသား'));
       await tester.pumpAndSettle();
-      expect(find.text('ပေးထားသော ငွေသား (မထည့်လည်းရ)'), findsOneWidget);
+      expect(find.text('ပေးငွေ (မထည့်လည်းရ)'), findsOneWidget);
       await tester.enterText(
         find.byKey(const ValueKey('shop-cash-given')),
         '၂၀၀၀၀',
