@@ -16,6 +16,7 @@ import 'recent_sales_screen.dart';
 import 'shop_copy.dart';
 import 'shop_database.dart';
 import 'shop_models.dart';
+import 'stock_screen.dart';
 import 'wallet_setup_screen.dart';
 
 Future<void> main() async {
@@ -218,9 +219,9 @@ class _ShopHomeState extends State<ShopHome> {
             onPressed: _openRecentSales,
           ),
           IconButton(
-            tooltip: shopCopy(widget.myanmar, 'Receipt printer', 'ပြေစာပရင်တာ'),
-            icon: const Icon(Icons.print_outlined),
-            onPressed: _openPrinter,
+            tooltip: shopCopy(widget.myanmar, 'Stock', 'လက်ကျန်'),
+            icon: const Icon(Icons.inventory_2_outlined),
+            onPressed: _openStock,
           ),
           IconButton(
             tooltip: shopCopy(widget.myanmar, 'Settings', 'ဆက်တင်များ'),
@@ -1427,9 +1428,10 @@ class _ShopHomeState extends State<ShopHome> {
     );
   }
 
-  void _openPrinter() => Navigator.of(context).push<void>(
+  void _openStock() => Navigator.of(context).push<void>(
     MaterialPageRoute<void>(
-      builder: (_) => PrinterSetupScreen(myanmar: widget.myanmar),
+      builder: (_) =>
+          StockScreen(database: widget.database, myanmar: widget.myanmar),
     ),
   );
 
@@ -1839,6 +1841,21 @@ class _ShopSettingsScreenState extends State<ShopSettingsScreen> {
               _myanmar,
               'Sales and products are saved locally. Cloud sync and backup are not active.',
               'အရောင်းနှင့် ကုန်ပစ္စည်းများကို ဤစက်တွင် သိမ်းထားသည်။ Cloud ချိတ်ဆက်မှုနှင့် အရန်သိမ်းမှု မဖွင့်ထားပါ။',
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        _SetupTile(
+          icon: Icons.print_outlined,
+          title: shopCopy(_myanmar, 'Receipt printer', 'ပြေစာပရင်တာ'),
+          subtitle: shopCopy(
+            _myanmar,
+            'Find and test a printer before printing receipts.',
+            'ပြေစာမပုံနှိပ်မီ ပရင်တာကို ရှာဖွေစမ်းသပ်ပါ။',
+          ),
+          onTap: () => Navigator.of(context).push<void>(
+            MaterialPageRoute<void>(
+              builder: (_) => PrinterSetupScreen(myanmar: _myanmar),
             ),
           ),
         ),

@@ -264,9 +264,12 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('shop-add-search-result')));
     await tester.pumpAndSettle();
     expect(
-      tester.widget<TextFormField>(
-        find.byKey(const ValueKey('shop-product-barcode')),
-      ).controller!.text,
+      tester
+          .widget<TextFormField>(
+            find.byKey(const ValueKey('shop-product-barcode')),
+          )
+          .controller!
+          .text,
       '0012345678905',
     );
     await tester.enterText(
@@ -295,6 +298,104 @@ void main() {
     expect(find.textContaining('Review sale'), findsOneWidget);
     await database.close();
   });
+
+  testWidgets('cashier can receive and count stock outside the sale screen', (
+    tester,
+  ) async {
+    final database = ShopDatabase(NativeDatabase.memory());
+    await database.addProduct(
+      id: 'rice',
+      name: 'Rice',
+      priceMmk: 12000,
+      openingStock: 2,
+    );
+    await tester.pumpWidget(
+      ShopApp(
+        database: database,
+        authClient: null,
+        apiBaseUrl: 'https://app.supermega.dev',
+        initialMyanmar: false,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Stock'));
+    await tester.pumpAndSettle();
+    expect(find.text('2 in stock'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('stock-update-rice')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('stock-change-quantity')),
+      '4',
+    );
+    await tester.tap(find.text('Save stock'));
+    await tester.pumpAndSettle();
+    expect(find.text('6 in stock'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('stock-update-rice')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Count'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('stock-change-quantity')),
+      '3',
+    );
+    await tester.tap(find.text('Save stock'));
+    await tester.pumpAndSettle();
+    expect(find.text('3 in stock'), findsOneWidget);
+    expect((await database.readActiveProducts()).single.onHand, 3);
+    await database.close();
+  });
+
+  testWidgets(
+    'stock identifies same-name variants and accepts Myanmar digits',
+    (tester) async {
+      final database = ShopDatabase(NativeDatabase.memory());
+      await database.addProduct(
+        id: 'rice-small',
+        name: 'Rice',
+        sku: 'RICE-1',
+        barcode: '111111',
+        priceMmk: 12000,
+        openingStock: 2,
+      );
+      await database.addProduct(
+        id: 'rice-large',
+        name: 'Rice',
+        sku: 'RICE-2',
+        barcode: '222222',
+        priceMmk: 18000,
+        openingStock: 2,
+      );
+      await tester.pumpWidget(
+        ShopApp(
+          database: database,
+          authClient: null,
+          apiBaseUrl: 'https://app.supermega.dev',
+          initialMyanmar: true,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('လက်ကျန်'));
+      await tester.pumpAndSettle();
+      expect(find.text('SKU RICE-1 · ဘားကုဒ် 111111'), findsOneWidget);
+      expect(find.text('SKU RICE-2 · ဘားကုဒ် 222222'), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('stock-update-rice-large')));
+      await tester.pumpAndSettle();
+      expect(find.text('SKU RICE-2 · ဘားကုဒ် 222222'), findsNWidgets(2));
+      await tester.enterText(
+        find.byKey(const ValueKey('stock-change-quantity')),
+        '၄',
+      );
+      await tester.tap(find.text('လက်ကျန်သိမ်းရန်'));
+      await tester.pumpAndSettle();
+      final products = await database.readActiveProducts();
+      expect(products.singleWhere((item) => item.id == 'rice-small').onHand, 2);
+      expect(products.singleWhere((item) => item.id == 'rice-large').onHand, 6);
+      await database.close();
+    },
+  );
 
   testWidgets('settings keeps language and merchant wallet setup reachable', (
     tester,

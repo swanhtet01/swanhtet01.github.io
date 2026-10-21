@@ -415,6 +415,113 @@ class ShopDatabase extends _$ShopDatabase {
     });
   }
 
+  /// Apply a reviewed local stock receipt or physical count exactly once.
+  /// The expected balance prevents a stale count from erasing a later sale.
+  Future<int> changeStock({
+    required String operationId,
+    required String productId,
+    required String kind,
+    required int quantity,
+    required int expectedOnHand,
+  }) async {
+    final cleanOperationId = operationId.trim();
+    final cleanProductId = productId.trim();
+    if (cleanOperationId.isEmpty ||
+        cleanOperationId.length > 100 ||
+        cleanProductId.isEmpty ||
+        cleanProductId.length > 100 ||
+        !const {'receive', 'count'}.contains(kind) ||
+        quantity < (kind == 'receive' ? 1 : 0) ||
+        quantity > 2000000000 ||
+        expectedOnHand < 0 ||
+        expectedOnHand > 2000000000) {
+      throw ArgumentError('Stock change values are invalid.');
+    }
+
+    return transaction(() async {
+      final prior =
+          await (select(shopSyncOutbox)
+                ..where((row) => row.operationId.equals(cleanOperationId)))
+              .getSingleOrNull();
+      if (prior != null) {
+        if (prior.eventType != 'shop.stock_changed.v1') {
+          throw StateError('This operation ID was already used.');
+        }
+        final payload = jsonDecode(prior.payloadJson);
+        if (payload is! Map<String, dynamic> ||
+            payload['productId'] != cleanProductId ||
+            payload['kind'] != kind ||
+            payload['quantity'] != quantity ||
+            payload['expectedOnHand'] != expectedOnHand) {
+          throw StateError('This stock change was already used differently.');
+        }
+        return payload['resultingOnHand'] as int;
+      }
+
+      final product = await (select(
+        shopProducts,
+      )..where((row) => row.id.equals(cleanProductId))).getSingleOrNull();
+      if (product == null || product.archived) {
+        throw StateError('This product is no longer available.');
+      }
+      if (product.onHand != expectedOnHand) {
+        throw StateError(
+          'Stock changed. Reopen this item and check the count.',
+        );
+      }
+      final resultingOnHand = kind == 'receive'
+          ? product.onHand + quantity
+          : quantity;
+      if (resultingOnHand > 2000000000) {
+        throw StateError('Stock would exceed the supported quantity.');
+      }
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final changed =
+          await (update(shopProducts)..where(
+                (row) =>
+                    row.id.equals(cleanProductId) &
+                    row.onHand.equals(expectedOnHand) &
+                    row.archived.equals(false),
+              ))
+              .write(
+                ShopProductsCompanion(
+                  onHand: Value(resultingOnHand),
+                  updatedAtMillis: Value(now),
+                ),
+              );
+      if (changed != 1) {
+        throw StateError('Stock changed. Reopen this item and try again.');
+      }
+      final delta = resultingOnHand - product.onHand;
+      await into(shopStockMovements).insert(
+        ShopStockMovementsCompanion.insert(
+          id: '$cleanOperationId:stock',
+          productId: cleanProductId,
+          quantityDelta: delta,
+          reason: kind == 'receive' ? 'stock_received' : 'stock_counted',
+          createdAtMillis: now,
+        ),
+      );
+      await into(shopSyncOutbox).insert(
+        ShopSyncOutboxCompanion.insert(
+          operationId: cleanOperationId,
+          eventType: 'shop.stock_changed.v1',
+          payloadJson: jsonEncode({
+            'productId': cleanProductId,
+            'kind': kind,
+            'quantity': quantity,
+            'expectedOnHand': expectedOnHand,
+            'resultingOnHand': resultingOnHand,
+            'delta': delta,
+            'createdAtMillis': now,
+          }),
+          createdAtMillis: now,
+        ),
+      );
+      return resultingOnHand;
+    });
+  }
+
   Future<int> importReviewedMenuBatch({
     required String batchId,
     required List<MenuDraftInput> products,

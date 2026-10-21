@@ -598,6 +598,83 @@ void main() {
     });
   });
 
+  group('offline stock updates', () {
+    test(
+      'receive and count are durable, idempotent and reject stale counts',
+      () async {
+        final database = ShopDatabase(NativeDatabase.memory());
+        try {
+          await database.addProduct(
+            id: 'rice',
+            name: 'Rice',
+            priceMmk: 12000,
+            openingStock: 5,
+          );
+          expect(
+            await database.changeStock(
+              operationId: 'receive-rice-1',
+              productId: 'rice',
+              kind: 'receive',
+              quantity: 3,
+              expectedOnHand: 5,
+            ),
+            8,
+          );
+          expect(
+            await database.changeStock(
+              operationId: 'receive-rice-1',
+              productId: 'rice',
+              kind: 'receive',
+              quantity: 3,
+              expectedOnHand: 5,
+            ),
+            8,
+          );
+          expect(await database.countStockMovements(), 2);
+          await database.recordCashSale(
+            operationId: 'sell-rice-1',
+            lines: const [ShopSaleLineInput(productId: 'rice', quantity: 2)],
+          );
+          await expectLater(
+            database.changeStock(
+              operationId: 'stale-rice-count',
+              productId: 'rice',
+              kind: 'count',
+              quantity: 4,
+              expectedOnHand: 8,
+            ),
+            throwsA(isA<StateError>()),
+          );
+          expect(
+            await database.changeStock(
+              operationId: 'count-rice-1',
+              productId: 'rice',
+              kind: 'count',
+              quantity: 4,
+              expectedOnHand: 6,
+            ),
+            4,
+          );
+          await expectLater(
+            database.changeStock(
+              operationId: 'count-rice-1',
+              productId: 'rice',
+              kind: 'count',
+              quantity: 3,
+              expectedOnHand: 6,
+            ),
+            throwsA(isA<StateError>()),
+          );
+          expect((await database.readActiveProducts()).single.onHand, 4);
+          expect(await database.countStockMovements(), 4);
+          expect(await database.countOutboxOperations(), 4);
+        } finally {
+          await database.close();
+        }
+      },
+    );
+  });
+
   group('bounded printer discovery', () {
     test('reprint needs a tested printer in this session', () async {
       SharedPreferences.setMockInitialValues({
