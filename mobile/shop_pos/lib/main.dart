@@ -1,4 +1,7 @@
 import 'dart:async';
+import 'dart:io';
+import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -23,6 +26,8 @@ import 'shop_models.dart';
 import 'shop_today_screen.dart';
 import 'stock_screen.dart';
 import 'wallet_setup_screen.dart';
+
+const _pendingPickerIntentKey = 'shop_pending_picker_intent';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -415,6 +420,7 @@ class _ShopHomeState extends State<ShopHome> {
   bool _cashConfirming = false;
   PendingWalletCheckout? _pendingWalletCheckout;
   XFile? _recoveredMenuPhoto;
+  final _thumbnailFutures = <String, Future<Uint8List?>>{};
 
   @override
   void initState() {
@@ -444,6 +450,8 @@ class _ShopHomeState extends State<ShopHome> {
       return;
     }
     try {
+      final preferences = await SharedPreferences.getInstance();
+      final pickerIntent = preferences.getString(_pendingPickerIntentKey);
       final XFile? photo;
       final recover = widget.recoverMenuPhoto;
       if (recover != null) {
@@ -453,7 +461,14 @@ class _ShopHomeState extends State<ShopHome> {
         final files = lost.files;
         photo = files == null || files.isEmpty ? null : files.first;
       }
+      if (pickerIntent != null) {
+        await preferences.remove(_pendingPickerIntentKey);
+      }
       if (photo == null) return;
+      if (pickerIntent != null && pickerIntent.startsWith('product:')) {
+        await _saveProductPhoto(pickerIntent.substring('product:'.length), photo);
+        return;
+      }
       if (!mounted) {
         await discardCapturedMenuPhoto(photo, createdByCamera: true);
         return;
@@ -461,6 +476,111 @@ class _ShopHomeState extends State<ShopHome> {
       setState(() => _recoveredMenuPhoto = photo);
     } catch (_) {
       // A missing camera result must never block the offline counter.
+    }
+  }
+
+  Future<Uint8List?> _thumbnailFor(String productId) {
+    if (_thumbnailFutures.length >= 64 &&
+        !_thumbnailFutures.containsKey(productId)) {
+      _thumbnailFutures.clear();
+    }
+    return _thumbnailFutures.putIfAbsent(
+      productId,
+      () => widget.database.readProductThumbnail(productId),
+    );
+  }
+
+  Future<void> _chooseProductPhoto(String productId) async {
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (Platform.isAndroid || Platform.isIOS)
+              ListTile(
+                leading: const Icon(Icons.photo_camera_outlined),
+                title: Text(shopCopy(widget.myanmar, 'Take photo', 'ဓာတ်ပုံရိုက်ရန်')),
+                onTap: () => Navigator.pop(sheetContext, ImageSource.camera),
+              ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: Text(shopCopy(widget.myanmar, 'Choose photo', 'ဓာတ်ပုံရွေးရန်')),
+              onTap: () => Navigator.pop(sheetContext, ImageSource.gallery),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (source == null || !mounted) return;
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setString(_pendingPickerIntentKey, 'product:$productId');
+    XFile? photo;
+    try {
+      photo = await ImagePicker().pickImage(source: source);
+      if (photo != null) await _saveProductPhoto(productId, photo);
+    } catch (_) {
+      if (mounted) _message(shopCopy(widget.myanmar,
+          'Could not add this photo. Choose another image.',
+          'ဤဓာတ်ပုံကို မထည့်နိုင်ပါ။ အခြားပုံရွေးပါ။'));
+    } finally {
+      await preferences.remove(_pendingPickerIntentKey);
+      if (source == ImageSource.camera) {
+        await discardCapturedMenuPhoto(photo, createdByCamera: true);
+      }
+    }
+  }
+
+  Future<void> _saveProductPhoto(String productId, XFile photo) async {
+    try {
+      // Never decode the original full resolution into a UI widget. Decode to
+      // a bounded raster and re-encode; the PNG contains no source EXIF.
+      if (await photo.length() > 8 * 1024 * 1024) {
+        throw const FormatException('Photo exceeds the input limit.');
+      }
+      final original = await photo.readAsBytes();
+      final buffer = await ui.ImmutableBuffer.fromUint8List(original);
+      ui.ImageDescriptor? descriptor;
+      ui.Codec? codec;
+      ui.Image? image;
+      try {
+        descriptor = await ui.ImageDescriptor.encoded(buffer);
+        if (descriptor.width <= 0 || descriptor.height <= 0 ||
+            descriptor.width > 8192 || descriptor.height > 8192 ||
+            descriptor.width * descriptor.height > 40000000) {
+          throw const FormatException('Photo dimensions exceed the input limit.');
+        }
+        final longestSide = descriptor.width > descriptor.height
+            ? descriptor.width : descriptor.height;
+        final scale = longestSide > 192 ? 192 / longestSide : 1.0;
+        codec = await descriptor.instantiateCodec(
+          targetWidth: (descriptor.width * scale).round().clamp(1, 192),
+          targetHeight: (descriptor.height * scale).round().clamp(1, 192),
+        );
+        image = (await codec.getNextFrame()).image;
+        final png = await image.toByteData(format: ui.ImageByteFormat.png);
+        if (png == null) throw const FormatException('Photo could not be encoded.');
+        await widget.database.saveProductThumbnail(
+          productId,
+          png.buffer.asUint8List(png.offsetInBytes, png.lengthInBytes),
+        );
+      } finally {
+        image?.dispose();
+        codec?.dispose();
+        descriptor?.dispose();
+        buffer.dispose();
+      }
+      _thumbnailFutures.remove(productId);
+      if (mounted) {
+        setState(() {});
+        _message(shopCopy(widget.myanmar,
+            'Product photo saved on this device.',
+            'ကုန်ပစ္စည်းဓာတ်ပုံကို ဤစက်တွင် သိမ်းပြီးပါပြီ။'));
+      }
+    } catch (_) {
+      if (mounted) _message(shopCopy(widget.myanmar,
+          'Could not add this photo. Use a smaller image.',
+          'ဤဓာတ်ပုံကို မထည့်နိုင်ပါ။ ပိုသေးသောပုံသုံးပါ။'));
     }
   }
 
@@ -1094,6 +1214,35 @@ class _ShopHomeState extends State<ShopHome> {
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 14,
               vertical: 10,
+            ),
+            leading: IconButton(
+              key: ValueKey('shop-product-photo:${item.id}'),
+              tooltip: shopCopy(
+                widget.myanmar,
+                'Add or change product photo',
+                'ကုန်ပစ္စည်းဓာတ်ပုံ ထည့်ရန် သို့မဟုတ် ပြောင်းရန်',
+              ),
+              onPressed: () => _chooseProductPhoto(item.id),
+              icon: FutureBuilder<Uint8List?>(
+                future: _thumbnailFor(item.id),
+                builder: (context, snapshot) {
+                  final bytes = snapshot.data;
+                  if (bytes == null) {
+                    return const Icon(Icons.add_photo_alternate_outlined);
+                  }
+                  return ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Image.memory(
+                      bytes,
+                      width: 44,
+                      height: 44,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, error, stackTrace) =>
+                          const Icon(Icons.add_photo_alternate_outlined),
+                    ),
+                  );
+                },
+              ),
             ),
             title: Text(
               item.name,
@@ -2050,8 +2199,9 @@ class _ShopHomeState extends State<ShopHome> {
     );
     if (values == null) return;
     try {
+      final productId = const Uuid().v4();
       await widget.database.addProduct(
-        id: const Uuid().v4(),
+        id: productId,
         name: values.name,
         barcode: values.barcode,
         priceMmk: values.priceMmk,
@@ -2063,6 +2213,10 @@ class _ShopHomeState extends State<ShopHome> {
             widget.myanmar,
             'Product saved on this device.',
             'ကုန်ပစ္စည်းကို ဤစက်တွင် သိမ်းပြီးပါပြီ။',
+          ),
+          action: SnackBarAction(
+            label: shopCopy(widget.myanmar, 'Add photo', 'ဓာတ်ပုံထည့်ရန်'),
+            onPressed: () => _chooseProductPhoto(productId),
           ),
         );
       }

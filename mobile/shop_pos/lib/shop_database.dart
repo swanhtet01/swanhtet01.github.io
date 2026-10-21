@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
@@ -281,11 +282,14 @@ class PendingWalletCheckout {
   ],
 )
 class ShopDatabase extends _$ShopDatabase {
+  static const maxProductThumbnailBytes = 192 * 1024;
+  static const maxProductThumbnailsTotalBytes = 32 * 1024 * 1024;
+
   ShopDatabase([QueryExecutor? executor])
     : super(executor ?? driftDatabase(name: 'supermega_shop'));
 
   @override
-  int get schemaVersion => 6;
+  int get schemaVersion => 7;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -293,6 +297,7 @@ class ShopDatabase extends _$ShopDatabase {
       await migrator.createAll();
       await _createWalletCheckoutTable();
       await _createCashShiftTables();
+      await _createProductImageTable();
     },
     onUpgrade: (migrator, from, to) async {
       if (from < 2) {
@@ -331,6 +336,9 @@ class ShopDatabase extends _$ShopDatabase {
       }
       if (from < 6) {
         await _createCashShiftTables();
+      }
+      if (from < 7) {
+        await _createProductImageTable();
       }
     },
     beforeOpen: (_) => customStatement('PRAGMA foreign_keys = ON'),
@@ -391,6 +399,108 @@ class ShopDatabase extends _$ShopDatabase {
       CREATE INDEX IF NOT EXISTS shop_cash_shift_sales_shift_id
       ON shop_cash_shift_sales(shift_id)
     ''');
+  }
+
+  Future<void> _createProductImageTable() => customStatement('''
+    CREATE TABLE IF NOT EXISTS shop_product_images (
+      product_id TEXT PRIMARY KEY NOT NULL REFERENCES shop_products(id) ON DELETE CASCADE,
+      image_png BLOB NOT NULL CHECK(length(image_png) BETWEEN 1 AND $maxProductThumbnailBytes),
+      updated_at_millis INTEGER NOT NULL
+    )
+  ''');
+
+  /// Store only bounded, metadata-free PNG thumbnails beside the local catalog.
+  /// They are included in encrypted SQLite snapshots but not in JSON sync events.
+  Future<void> saveProductThumbnail(String productId, Uint8List png) async {
+    if (productId.trim().isEmpty || !isValidProductThumbnail(png)) {
+      throw ArgumentError('The product photo is not a bounded PNG thumbnail.');
+    }
+    await transaction(() async {
+      final product = await customSelect(
+        'SELECT id FROM shop_products WHERE id = ? AND archived = 0',
+        variables: [Variable.withString(productId)],
+      ).getSingleOrNull();
+      if (product == null) throw StateError('The product no longer exists.');
+      final otherBytes = await customSelect(
+        'SELECT COALESCE(SUM(length(image_png)), 0) AS total_bytes '
+        'FROM shop_product_images WHERE product_id != ?',
+        variables: [Variable.withString(productId)],
+      ).getSingle();
+      if (otherBytes.read<int>('total_bytes') + png.length >
+          maxProductThumbnailsTotalBytes) {
+        throw StateError('The local product photo limit is full.');
+      }
+      await customStatement(
+        'INSERT INTO shop_product_images (product_id, image_png, updated_at_millis) '
+        'VALUES (?, ?, ?) ON CONFLICT(product_id) DO UPDATE SET '
+        'image_png = excluded.image_png, updated_at_millis = excluded.updated_at_millis',
+        [productId, png, DateTime.now().millisecondsSinceEpoch],
+      );
+    });
+  }
+
+  Future<Uint8List?> readProductThumbnail(String productId) async {
+    final row = await customSelect(
+      'SELECT image_png FROM shop_product_images WHERE product_id = ?',
+      variables: [Variable.withString(productId)],
+    ).getSingleOrNull();
+    return row?.read<Uint8List>('image_png');
+  }
+
+  Future<void> removeProductThumbnail(String productId) => customStatement(
+    'DELETE FROM shop_product_images WHERE product_id = ?',
+    [productId],
+  );
+
+  static bool isValidProductThumbnail(Uint8List bytes) {
+    const signature = [137, 80, 78, 71, 13, 10, 26, 10];
+    if (bytes.length < 45 || bytes.length > maxProductThumbnailBytes) {
+      return false;
+    }
+    for (var index = 0; index < signature.length; index++) {
+      if (bytes[index] != signature[index]) return false;
+    }
+    final data = ByteData.sublistView(bytes);
+    var offset = 8;
+    var seenImageData = false;
+    while (offset + 12 <= bytes.length) {
+      final chunkLength = data.getUint32(offset);
+      if (chunkLength > bytes.length - offset - 12) return false;
+      final typeStart = offset + 4;
+      final chunkEnd = offset + 8 + chunkLength;
+      var crc = 0xffffffff;
+      for (var index = typeStart; index < chunkEnd; index++) {
+        crc ^= bytes[index];
+        for (var bit = 0; bit < 8; bit++) {
+          crc = (crc >> 1) ^ ((crc & 1) == 1 ? 0xedb88320 : 0);
+        }
+      }
+      if (((crc ^ 0xffffffff) & 0xffffffff) != data.getUint32(chunkEnd)) {
+        return false;
+      }
+      final isHeader = bytes[typeStart] == 73 && bytes[typeStart + 1] == 72 &&
+          bytes[typeStart + 2] == 68 && bytes[typeStart + 3] == 82;
+      final isImageData = bytes[typeStart] == 73 && bytes[typeStart + 1] == 68 &&
+          bytes[typeStart + 2] == 65 && bytes[typeStart + 3] == 84;
+      final isEnd = bytes[typeStart] == 73 && bytes[typeStart + 1] == 69 &&
+          bytes[typeStart + 2] == 78 && bytes[typeStart + 3] == 68;
+      if (offset == 8) {
+        if (!isHeader || chunkLength != 13) return false;
+        final width = data.getUint32(offset + 8);
+        final height = data.getUint32(offset + 12);
+        if (width == 0 || height == 0 || width > 192 || height > 192) {
+          return false;
+        }
+      } else if (isHeader) {
+        return false;
+      }
+      if (isImageData) seenImageData = true;
+      if (isEnd) {
+        return chunkLength == 0 && seenImageData && chunkEnd + 4 == bytes.length;
+      }
+      offset = chunkEnd + 4;
+    }
+    return false;
   }
 
   Future<void> _ensureColumn(

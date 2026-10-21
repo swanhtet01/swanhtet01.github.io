@@ -376,6 +376,7 @@ void main() {
   testWidgets('restored Android menu photo waits for fresh cloud consent', (
     tester,
   ) async {
+    SharedPreferences.setMockInitialValues({});
     final photoPath = [
       Directory.systemTemp.path,
       'shop-menu-recovery-missing-${DateTime.now().microsecondsSinceEpoch}.jpg',
@@ -414,6 +415,66 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Menu photo ready to review'), findsNothing);
     await database.close();
+  });
+
+  testWidgets('catalog shows a saved merchant photo and a clean fallback', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final database = ShopDatabase(NativeDatabase.memory());
+    addTearDown(database.close);
+    await database.addProduct(id: 'tea', name: 'Tea', priceMmk: 2000,
+        openingStock: 5);
+    await database.addProduct(id: 'water', name: 'Water', priceMmk: 1000,
+        openingStock: 5);
+    await database.saveProductThumbnail('tea', base64Decode(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ'
+      'AAAADUlEQVR4nGPQyNjxHwAETAJIB09U9wAAAABJRU5ErkJggg==',
+    ));
+    await tester.pumpWidget(MaterialApp(home: ShopHome(
+      database: database, authClient: null,
+      apiBaseUrl: 'https://app.supermega.dev', myanmar: false,
+      onLanguageChanged: (_) {},
+    )));
+    await tester.pumpAndSettle();
+    expect(find.descendant(
+      of: find.byKey(const ValueKey('shop-product-photo:tea')),
+      matching: find.byType(Image),
+    ), findsOneWidget);
+    expect(find.descendant(
+      of: find.byKey(const ValueKey('shop-product-photo:water')),
+      matching: find.byIcon(Icons.add_photo_alternate_outlined),
+    ), findsOneWidget);
+  });
+
+  testWidgets('lost product picker result is saved as a photo, never a menu', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({
+      'shop_pending_picker_intent': 'product:tea',
+    });
+    final directory = await Directory.systemTemp.createTemp('shop-photo-test-');
+    addTearDown(() => directory.delete(recursive: true));
+    final image = File('${directory.path}/photo.png');
+    await image.writeAsBytes(base64Decode(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ'
+      'AAAADUlEQVR4nGPQyNjxHwAETAJIB09U9wAAAABJRU5ErkJggg==',
+    ));
+    final database = ShopDatabase(NativeDatabase.memory());
+    addTearDown(database.close);
+    await database.addProduct(id: 'tea', name: 'Tea', priceMmk: 2000,
+        openingStock: 5);
+    await tester.pumpWidget(MaterialApp(home: ShopHome(
+      database: database, authClient: null,
+      apiBaseUrl: 'https://app.supermega.dev', myanmar: false,
+      onLanguageChanged: (_) {},
+      recoverMenuPhoto: () async => XFile(image.path),
+    )));
+    await tester.pumpAndSettle();
+    expect(await database.readProductThumbnail('tea'), isNotNull);
+    expect(find.text('Menu photo ready to review'), findsNothing);
+    final preferences = await SharedPreferences.getInstance();
+    expect(preferences.getString('shop_pending_picker_intent'), isNull);
   });
 
   testWidgets('empty catalog can make a durable cash sale', (tester) async {
