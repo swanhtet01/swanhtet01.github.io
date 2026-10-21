@@ -316,7 +316,11 @@ void main() {
     expect(tester.takeException(), isNull, reason: 'initial compact catalog');
     await tester.tap(find.byTooltip('အရောင်းထဲထည့်ရန်'));
     await tester.pumpAndSettle();
-    expect(tester.takeException(), isNull, reason: 'compact catalog with basket');
+    expect(
+      tester.takeException(),
+      isNull,
+      reason: 'compact catalog with basket',
+    );
     await tester.tap(find.textContaining('အရောင်းစစ်ရန်'));
     await tester.pumpAndSettle();
     expect(find.text('ငွေသား'), findsOneWidget);
