@@ -80,7 +80,7 @@ class _StockScreenState extends State<StockScreen> {
             shopCopy(
               widget.myanmar,
               'Stock saved · $result on hand',
-              'လက်ကျန်သိမ်းပြီး · $result ခု',
+              'လက်ကျန်သိမ်းပြီး · ${shopNumber(result, myanmar: true)} ခု',
             ),
           ),
         ),
@@ -123,13 +123,28 @@ class _StockScreenState extends State<StockScreen> {
             final name = product.name.trim().toLowerCase();
             if (!seenNames.add(name)) duplicateNames.add(name);
           }
+          final wide = MediaQuery.sizeOf(context).width >= 700;
           return Center(
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 900),
+              constraints: const BoxConstraints(maxWidth: 1100),
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   children: [
+                    if (wide) ...[
+                      Align(
+                        alignment: AlignmentDirectional.centerStart,
+                        child: Text(
+                          shopCopy(
+                            widget.myanmar,
+                            '${shopNumber(snapshot.data!.length)} products',
+                            'ကုန်ပစ္စည်း ${shopNumber(snapshot.data!.length, myanmar: true)} မျိုး',
+                          ),
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
                     TextField(
                       key: const ValueKey('stock-search'),
                       controller: _search,
@@ -144,6 +159,34 @@ class _StockScreenState extends State<StockScreen> {
                       ),
                     ),
                     const SizedBox(height: 12),
+                    if (wide && products.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 10,
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              flex: 5,
+                              child: Text(
+                                shopCopy(
+                                  widget.myanmar,
+                                  'Product',
+                                  'ကုန်ပစ္စည်း',
+                                ),
+                              ),
+                            ),
+                            Expanded(
+                              flex: 2,
+                              child: Text(
+                                shopCopy(widget.myanmar, 'On hand', 'လက်ကျန်'),
+                              ),
+                            ),
+                            const SizedBox(width: 104),
+                          ],
+                        ),
+                      ),
                     Expanded(
                       child: products.isEmpty
                           ? Center(
@@ -161,8 +204,9 @@ class _StockScreenState extends State<StockScreen> {
                             )
                           : ListView.separated(
                               itemCount: products.length,
-                              separatorBuilder: (_, _) =>
-                                  const SizedBox(height: 8),
+                              separatorBuilder: (_, _) => wide
+                                  ? const Divider(height: 1)
+                                  : const SizedBox(height: 8),
                               itemBuilder: (context, index) {
                                 final item = products[index];
                                 final hasCode =
@@ -175,6 +219,7 @@ class _StockScreenState extends State<StockScreen> {
                                     );
                                 final compact =
                                     MediaQuery.sizeOf(context).width < 480;
+                                final textTheme = Theme.of(context).textTheme;
                                 final details = Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
@@ -182,9 +227,9 @@ class _StockScreenState extends State<StockScreen> {
                                       item.name,
                                       maxLines: compact ? 3 : 2,
                                       overflow: TextOverflow.ellipsis,
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .bodyMedium
+                                      style: (wide
+                                              ? textTheme.titleMedium
+                                              : textTheme.bodyMedium)
                                           ?.copyWith(
                                             fontWeight: FontWeight.w600,
                                           ),
@@ -212,8 +257,11 @@ class _StockScreenState extends State<StockScreen> {
                                   shopCopy(
                                     widget.myanmar,
                                     '${item.onHand} in stock',
-                                    '${item.onHand} ခု လက်ကျန်',
+                                    '${shopNumber(item.onHand, myanmar: true)} ခု လက်ကျန်',
                                   ),
+                                  style: wide
+                                      ? Theme.of(context).textTheme.titleMedium
+                                      : null,
                                 );
                                 final update = OutlinedButton(
                                   key: ValueKey('stock-update-${item.id}'),
@@ -229,6 +277,24 @@ class _StockScreenState extends State<StockScreen> {
                                     ),
                                   ),
                                 );
+                                if (wide) {
+                                  return ColoredBox(
+                                    color: Theme.of(context).colorScheme.surface,
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 16,
+                                        vertical: 14,
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          Expanded(flex: 5, child: details),
+                                          Expanded(flex: 2, child: onHand),
+                                          SizedBox(width: 104, child: update),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                }
                                 return Card(
                                   child: Padding(
                                     padding: const EdgeInsets.symmetric(
