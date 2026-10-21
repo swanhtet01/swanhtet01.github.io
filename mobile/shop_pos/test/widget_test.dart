@@ -187,10 +187,7 @@ void main() {
 
   testWidgets('empty catalog can make a durable cash sale', (tester) async {
     final database = ShopDatabase(NativeDatabase.memory());
-    addTearDown(() async {
-      await tester.pumpWidget(const SizedBox.shrink());
-      await database.close();
-    });
+    addTearDown(database.close);
     await tester.pumpWidget(
       ShopApp(
         database: database,
@@ -264,6 +261,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Sale details'), findsOneWidget);
     expect(find.text('Tea × 1'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
   });
 
   testWidgets('desktop first use shows one focused setup workspace', (
@@ -293,6 +292,7 @@ void main() {
       expect(tester.takeException(), isNull);
     } finally {
       await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
       await database.close();
     }
   });
@@ -333,6 +333,7 @@ void main() {
       expect(tester.takeException(), isNull);
     } finally {
       await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
       await database.close();
     }
   });
@@ -589,6 +590,7 @@ void main() {
       expect(await database.countSales(), 0);
     } finally {
       await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
       await database.close();
     }
   });
