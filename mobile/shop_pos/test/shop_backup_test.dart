@@ -8,7 +8,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
 import 'package:supermega_shop/shop_backup.dart';
 import 'package:supermega_shop/shop_database.dart';
-import 'package:supermega_shop/shop_models.dart';
 
 const _password = 'correct horse battery staple';
 
@@ -158,7 +157,7 @@ void main() {
         oldDatabase.execute('CREATE TABLE old_shop (id INTEGER PRIMARY KEY)');
         oldDatabase.execute('PRAGMA user_version = 1');
       } finally {
-        oldDatabase.dispose();
+        oldDatabase.close();
       }
       final oldArchive = File('${directory.path}/old.smbak');
       await _writeAuthenticatedArchive(oldArchive, await old.readAsBytes());
