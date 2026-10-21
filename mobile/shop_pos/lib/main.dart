@@ -2792,11 +2792,7 @@ class _ShopSettingsScreenState extends State<ShopSettingsScreen> {
                 children: [
                   _SetupTile(
                     icon: Icons.print_outlined,
-                    title: shopCopy(
-                      _myanmar,
-                      'Receipt printer',
-                      'ပြေစာပရင်တာ',
-                    ),
+                    title: shopCopy(_myanmar, 'Receipt printer', 'ပြေစာပရင်တာ'),
                     subtitle: shopCopy(
                       _myanmar,
                       'Find and test a printer.',
@@ -2833,11 +2829,7 @@ class _ShopSettingsScreenState extends State<ShopSettingsScreen> {
                   const Divider(height: 1, indent: 58),
                   _SetupTile(
                     icon: Icons.point_of_sale_outlined,
-                    title: shopCopy(
-                      _myanmar,
-                      'Cash shift',
-                      'ငွေသားတာဝန်ချိန်',
-                    ),
+                    title: shopCopy(_myanmar, 'Cash shift', 'ငွေသားတာဝန်ချိန်'),
                     subtitle: shopCopy(
                       _myanmar,
                       'Count drawer cash and record any difference.',
