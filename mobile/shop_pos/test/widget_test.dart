@@ -224,13 +224,13 @@ void main() {
       );
       await tester.tap(find.textContaining('Review sale · 2 · 5,000 MMK'));
       await tester.pumpAndSettle();
-      final restoredNoticeCount = find
-          .text('Unfinished sale restored on this device.')
-          .evaluate()
-          .length;
-      await tester.binding.handlePopRoute();
+      final restoredNotice = find.text(
+        'Unfinished sale restored on this device.',
+      );
+      expect(restoredNotice, findsOneWidget);
+      Navigator.of(tester.element(restoredNotice)).pop();
       await tester.pumpAndSettle();
-      expect(restoredNoticeCount, 1);
+      expect(restoredNotice, findsNothing);
       expect(tester.takeException(), isNull);
     } finally {
       await tester.pumpWidget(const SizedBox.shrink());
