@@ -57,6 +57,10 @@ void main() {
         );
         await tester.pumpAndSettle();
 
+        expect(
+          tester.widget<MaterialApp>(find.byType(MaterialApp)).theme?.fontFamily,
+          'Inter',
+        );
         expect(find.text(myanmar ? 'ယနေ့' : 'Today'), findsWidgets);
         expect(find.text(myanmar ? 'ရောင်းရန်' : 'Sell'), findsOneWidget);
         if (width >= 700) {
@@ -860,6 +864,12 @@ void main() {
           );
           expect(row, findsOneWidget);
           expect(tester.getSize(row).height, greaterThanOrEqualTo(56));
+          if (width == 820) {
+            expect(
+              find.byKey(const ValueKey('shop-split-basket')),
+              findsNothing,
+            );
+          }
           if (width == 320) {
             expect(
               tester.widget<Text>(
@@ -890,6 +900,12 @@ void main() {
 
           await tester.tap(row);
           await tester.pumpAndSettle();
+          if (width == 820) {
+            expect(
+              find.byKey(const ValueKey('shop-split-basket')),
+              findsOneWidget,
+            );
+          }
           expect(
             width >= 820
                 ? find.text(myanmar ? 'ငွေသား' : 'Cash sale')

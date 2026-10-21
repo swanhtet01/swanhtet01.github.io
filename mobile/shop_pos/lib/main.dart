@@ -166,7 +166,9 @@ class _ShopAppState extends State<ShopApp> {
 
   @override
   Widget build(BuildContext context) {
-    final fontFamily = _myanmar ? 'NotoSansMyanmar' : 'Inter';
+    // Keep Latin product names consistent in both locales. Myanmar glyphs use
+    // the bundled Noto fallback with locale-specific line height below.
+    const fontFamily = 'Inter';
     final tracking = _myanmar ? 0.0 : -0.35;
     const ink = Color(0xff171b2c);
     const border = Color(0xffdce2ed);
@@ -817,7 +819,10 @@ class _ShopHomeState extends State<ShopHome> {
                               ],
                             ),
                           ),
-                          if (products.isNotEmpty) ...[
+                          if (products.isNotEmpty &&
+                              (!tablet ||
+                                  _cart.isNotEmpty ||
+                                  _pendingWalletCheckout != null)) ...[
                             SizedBox(width: tablet ? 12 : 18),
                             SizedBox(
                               key: const ValueKey('shop-split-basket'),
