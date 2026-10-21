@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:drift/drift.dart' hide isNotNull, isNull;
 import 'package:drift/native.dart';
+import 'package:flutter/foundation.dart' show debugPrintSynchronously;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image_picker/image_picker.dart';
