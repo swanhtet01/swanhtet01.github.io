@@ -8,6 +8,7 @@ import { validatePlantBusinessTemplates } from '../showroom/src/products/plant/b
 import { validateShopBusinessTemplates } from '../showroom/src/products/shop/business-templates.ts'
 import { activeProductContracts } from '../showroom/src/core/product-visibility.ts'
 import { APP_DESCRIPTION } from './app_metadata.mjs'
+import { parsePreviewAppBinding } from './public_preview_navigation.mjs'
 
 const root = process.cwd()
 const manifestSource = readFileSync(resolve(root, 'site-manifest.json'), 'utf8')
@@ -25,6 +26,11 @@ const activeIds = activeProductContracts(manifest).map(product => product.id)
 const discoverablePages = manifest.pages.filter(page => !page.productId || activeIds.includes(page.productId))
 const config = JSON.parse(readFileSync(resolve(outputDir, 'config.json'), 'utf8'))
 const readStatic = (path) => readFileSync(resolve(staticDir, path), 'utf8')
+const builtRelease = JSON.parse(readStatic('__release.json'))
+const previewAppBinding = builtRelease.previewNavigation
+  ? parsePreviewAppBinding(JSON.stringify(builtRelease.previewNavigation), builtRelease.commit, builtRelease.commit)
+  : null
+const appOrigin = previewAppBinding?.origin || 'https://app.supermega.dev'
 const publicObservabilitySource = readStatic('vercel-insights.js')
 const publicCarouselSource = readStatic('platform-carousel.js')
 const publicGeneratorSource = readFileSync(resolve(root, 'tools/create_public_vercel_output.mjs'), 'utf8')
@@ -127,7 +133,7 @@ for (const page of sharedShellPages) {
   const activeLabel = page.route === '/shop/' ? 'Shop' : page.route === '/contact/' ? 'Contact' : null
   const activeLinks = [...header.matchAll(/<a\b[^>]*aria-current="page"[^>]*>([^<]+)<\/a>/g)].map((match) => match[1])
   check(activeLinks.join(',') === (activeLabel || ''), `shared_navigation_active_state:${page.route}`)
-  if (page.route === '/shop/') check(header.includes('https://app.supermega.dev/login?product=shop'), 'shop_navigation_preserves_login_intent')
+  if (page.route === '/shop/') check(header.includes(`${appOrigin}/login?product=shop`), 'shop_navigation_preserves_login_intent')
   if (referenceBrandMarkup === null) referenceBrandMarkup = brandMarkup
   else check(brandMarkup === referenceBrandMarkup, `shared_brand_mark:${page.route}`)
 }
@@ -240,8 +246,8 @@ for (const page of landingPages) {
     check(html.includes(`Sites &middot; Inquiry review and ownership &middot; ${interfaceDisclosure('actual-sites-inquiries.png')}`), 'landing_sites_inquiry_capture_scope_truthful')
   }
   const expectedLoginHref = page.route === '/shop/'
-    ? 'href="https://app.supermega.dev/login?product=shop"'
-    : 'href="https://app.supermega.dev/login"'
+    ? `href="${appOrigin}/login?product=shop"`
+    : `href="${appOrigin}/login"`
   check(countOccurrences(html, expectedLoginHref) === 1, `landing_login_actions:${page.route}`)
   if (page.route === '/shop/') check(html.includes('class="button button-primary" href="/contact/?product=shop">Contact the Shop team'), 'shop_primary_action_is_honest_contact')
   if (page.route === '/') check(html.includes('.company-hero .hero-actions .button-primary') && html.includes('white-space:nowrap'), 'company_primary_action_stays_compact')
@@ -284,7 +290,7 @@ for (const page of manifest.pages) {
   const html = readStatic(page.file)
   check((html.match(/<script src="\/vercel-insights\.js"><\/script>/g) || []).length === 1, `public_observability_bootstrap_once:${page.route}`)
 }
-const securityRoute = config.routes.find((route) => route.src === '^/(.*)$' && route.continue === true)
+const securityRoute = config.routes.find((route) => route.src === '^/(.*)$' && route.continue === true && route.headers?.['content-security-policy'])
 check(securityRoute?.headers?.['content-security-policy']?.includes("script-src 'self'"), 'public_observability_csp_allows_same_origin_script_only')
 const observabilityCacheRoute = config.routes.find((route) => route.src === '^/vercel-insights\\.js$')
 check(observabilityCacheRoute?.continue === true && observabilityCacheRoute.headers?.['cache-control'] === 'no-store, max-age=0', 'public_observability_bootstrap_not_stale_cached')
@@ -401,8 +407,8 @@ for (const [route, html] of [['/', home], ['/shop/', shopLanding], ...activeIds.
   const routeProduct = route === '/' ? null : route.slice(1, -1)
   const routeManifestProduct = routeProduct ? manifest.customerProducts.find(product => product.id === routeProduct) : null
   const expectedLoginHref = route === '/shop/'
-    ? 'href="https://app.supermega.dev/login?product=shop"'
-    : 'href="https://app.supermega.dev/login"'
+    ? `href="${appOrigin}/login?product=shop"`
+    : `href="${appOrigin}/login"`
   check(countOccurrences(body, expectedLoginHref) === 1, `login_action_count:${route}`)
   const carouselCount = 0
   const expectedLinks = route === '/' ? 9 : route === '/shop/' ? 9 : 5 + Number(routeManifestProduct?.status === 'available-in-app')
@@ -433,8 +439,8 @@ for (const [route, html] of [['/', home], ['/shop/', shopLanding], ...activeIds.
     check(!pattern.test(bodyWithoutCaptureDisclosure), 'no_misleading_funnel_copy:' + route + ':' + label)
   }
   const expectedContactTarget = routeManifestProduct?.status === 'available-in-app' && route !== '/shop/' ? `/contact/?product=${routeManifestProduct.id}` : null
-  const directAppLinks = [...body.matchAll(/href="(https:\/\/app\.supermega\.dev\/[^\"]+)"/g)].map(match => match[1]).filter(target => target !== 'https://app.supermega.dev/login')
-  check(directAppLinks.length === 0 || (route === '/shop/' && directAppLinks.length === 1 && directAppLinks[0] === 'https://app.supermega.dev/login?product=shop'), `app_actions_match_release_state:${route}`)
+  const directAppLinks = [...body.matchAll(/href="(https:\/\/[^\"]+)"/g)].map(match => match[1]).filter(target => target.startsWith(`${appOrigin}/`) && target !== `${appOrigin}/login`)
+  check(directAppLinks.length === 0 || (route === '/shop/' && directAppLinks.length === 1 && directAppLinks[0] === `${appOrigin}/login?product=shop`), `app_actions_match_release_state:${route}`)
   if (expectedContactTarget) check(body.includes(`href="${expectedContactTarget}">Contact SuperMega</a>`), `product_contact_action_matches_release_state:${route}`)
 }
 check(countOccurrences(home, 'href="/shop/">Explore Shop') === 1, 'home_one_focused_shop_link')
@@ -519,7 +525,7 @@ for (const productId of ['website', 'ecommerce']) {
   const html = readStatic(`${productId}/index.html`)
   check(publicFirstJobDoors(html).length === 0, `${productId}_sample_doors_removed`)
   check(!html.includes('https://app.supermega.dev/settings/?'), `${productId}_no_local_setup_detour`)
-  check(html.includes('https://app.supermega.dev/login'), `${productId}_connected_login`)
+  check(html.includes(`${appOrigin}/login`), `${productId}_connected_login`)
 }
 
 const productOnboardingSource = readFileSync(resolve(root, 'showroom', 'src', 'core', 'ProductOnboardingPage.tsx'), 'utf8')
@@ -564,7 +570,11 @@ for (const page of discoverablePages) {
   check(sitemap.includes(`<loc>${canonical}</loc>`), `sitemap_route:${page.route}`)
 }
 check(/<lastmod>\d{4}-\d{2}-\d{2}<\/lastmod>/.test(sitemap), 'sitemap_lastmod_format')
-check(readStatic('robots.txt').includes('Sitemap: https://supermega.dev/sitemap.xml'), 'robots_references_sitemap')
+if (previewAppBinding) {
+  check(readStatic('robots.txt').includes('Disallow: /'), 'preview_robots_disallow_indexing')
+} else {
+  check(readStatic('robots.txt').includes('Sitemap: https://supermega.dev/sitemap.xml'), 'robots_references_sitemap')
+}
 
 
 check(countOccurrences(home, 'class="family-link"') === 0, 'home_has_no_duplicate_company_product_section')

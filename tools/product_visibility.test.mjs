@@ -4,6 +4,7 @@ import { test } from 'node:test'
 import { resolve } from 'node:path'
 import { runInNewContext } from 'node:vm'
 import { activeProductContracts } from '../showroom/src/core/product-visibility.ts'
+import { parsePreviewAppBinding } from './public_preview_navigation.mjs'
 import { activeSetupProductContracts, productContracts, seedSetupForProduct,
   rememberProductSetup, readProductSetup, setupProductFromQuery } from '../showroom/src/core/product-setup.ts'
 import {
@@ -22,6 +23,11 @@ const publicOutputDir = isolatedOutputId
   : resolve(root, '.vercel/output/static')
 const manifest = JSON.parse(await readFile(resolve(root, 'site-manifest.json'), 'utf8'))
 const html = async path => readFile(resolve(publicOutputDir, path), 'utf8')
+const release = JSON.parse(await html('__release.json'))
+const previewAppBinding = release.previewNavigation
+  ? parsePreviewAppBinding(JSON.stringify(release.previewNavigation), release.commit, release.commit)
+  : null
+const appOrigin = previewAppBinding?.origin || 'https://app.supermega.dev'
 const main = value => value.match(/<main[\s\S]*?<\/main>/)?.[0] ?? ''
 
 test('retired direct setup stops before write-capable onboarding hooks mount', async () => {
@@ -185,9 +191,9 @@ test('generated public home and contact offer only active products', async () =>
     const page = main(await html(product.id+'/index.html'))
     const fullPage = await html(product.id+'/index.html')
     const expectedLogin = product.id === 'shop'
-      ? 'href="https://app.supermega.dev/login?product=shop"'
-      : 'href="https://app.supermega.dev/login"'
-    const loginLinks = [...fullPage.matchAll(/href="https:\/\/app\.supermega\.dev\/login[^"]*"/g)].map(([link]) => link)
+      ? `href="${appOrigin}/login?product=shop"`
+      : `href="${appOrigin}/login"`
+    const loginLinks = [...fullPage.matchAll(/href="https:\/\/[^\"]+\/login[^\"]*"/g)].map(([link]) => link).filter(link => link.startsWith(`href="${appOrigin}/`))
     assert.deepEqual(loginLinks, [expectedLogin])
     if (product.id === 'shop') assert.match(page, /class="shop-hero-app"/)
     else assert.match(page, /class="platform-image"/)

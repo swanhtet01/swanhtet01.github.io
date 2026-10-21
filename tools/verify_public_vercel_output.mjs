@@ -2,6 +2,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { join, relative, resolve } from 'node:path'
 import { activeProductContracts } from '../showroom/src/core/product-visibility.ts'
+import { parsePreviewAppBinding } from './public_preview_navigation.mjs'
 
 const root = process.cwd()
 const isolatedOutputId = process.env.SUPERMEGA_PUBLIC_OUTPUT_ID || ''
@@ -29,6 +30,12 @@ function readStatic(path) {
   requireFile(fullPath, path)
   return readFileSync(fullPath, 'utf8')
 }
+
+const release = JSON.parse(readStatic('__release.json'))
+const previewAppBinding = release.previewNavigation
+  ? parsePreviewAppBinding(JSON.stringify(release.previewNavigation), release.commit, release.commit)
+  : null
+const appOrigin = previewAppBinding?.origin || 'https://app.supermega.dev'
 
 function countOccurrences(value, token) {
   return value.split(token).length - 1
@@ -230,14 +237,15 @@ for (const [route, page] of pages) {
   const footerBrand = `<a class="brand" href="${footerHref}" aria-label="${footerLabel}"><span class="brand-mark" aria-hidden="true">`
   if (!page.html.includes(footerBrand)) fail('shared_footer_brand_missing', { route, footerHref })
   const expectedLogin = route === '/shop/'
-    ? '<a href="https://app.supermega.dev/login?product=shop">Login</a>'
-    : '<a href="https://app.supermega.dev/login">Login</a>'
+    ? `<a href="${appOrigin}/login?product=shop">Login</a>`
+    : `<a href="${appOrigin}/login">Login</a>`
   if (countOccurrences(page.html, expectedLogin) !== 1) fail('shared_login_destination_missing', { route, expectedLogin })
   const expectedActive = route === '/shop/' ? 'Shop' : route === '/contact/' ? 'Contact' : null
   const activeLinks = [...page.html.matchAll(/<a\b[^>]*aria-current="page"[^>]*>([^<]+)<\/a>/g)].map(match => match[1])
   if (activeLinks.join(',') !== (expectedActive || '')) fail('shared_navigation_active_state_drift', { route, expectedActive, activeLinks })
+  const copyWithoutExternalDestinations = page.html.replace(/\bhref="https?:\/\/[^\"]+"/gi, '')
   for (const token of forbiddenCopy) {
-    if (page.html.toLowerCase().includes(token.toLowerCase())) fail('retired_public_context_present', { route, token })
+    if (copyWithoutExternalDestinations.toLowerCase().includes(token.toLowerCase())) fail('retired_public_context_present', { route, token })
   }
   for (const marker of encodingCorruption) {
     if (page.html.includes(marker)) fail('public_copy_encoding_corrupt', { route })
@@ -341,7 +349,7 @@ for (const staleToken of [
   if (home.includes(staleToken)) fail('stale_home_metadata_present', { token: staleToken })
 }
 if (!hasClassToken(home, 'company-hero')) fail('homepage_contract_missing', { token: 'class token company-hero' })
-for (const token of ['class="company-operating-overview"', 'href="/shop/">Explore Shop', 'href="/contact/">Contact</a>', 'href="https://app.supermega.dev/login"']) {
+for (const token of ['class="company-operating-overview"', 'href="/shop/">Explore Shop', 'href="/contact/">Contact</a>', `href="${appOrigin}/login"`]) {
   if (!home.includes(token)) fail('homepage_contract_missing', { token })
 }
 if (home.includes('>View every screen size') || home.includes('>See Shop on desktop and mobile')) fail('home_action_must_not_be_a_device_tour')
@@ -391,8 +399,8 @@ for (const [route, html] of [['/', home], ['/shop/', pages.get('/shop/').html], 
   const expectedLinks = route === '/' ? 9 : route === '/shop/' ? 9 : 5 + Number(Boolean(contactActionTarget))
   if ((body.match(/<a\b/g) || []).length !== expectedLinks) fail('marketing_link_surface_drift', { route, expectedLinks })
   const expectedLogin = route === '/shop/'
-    ? 'href="https://app.supermega.dev/login?product=shop"'
-    : 'href="https://app.supermega.dev/login"'
+    ? `href="${appOrigin}/login?product=shop"`
+    : `href="${appOrigin}/login"`
   if (countOccurrences(body, expectedLogin) !== 1) fail('login_action_count_invalid', { route, expectedLogin })
   if (route === '/shop/' && (!body.includes('class="button button-primary" href="/contact/?product=shop">Contact the Shop team') || body.includes('Ask about Shop') || body.includes('Talk about Shop') || body.includes('See Shop screens') || body.includes('Need help with Shop?'))) fail('shop_primary_product_action_missing')
   if (body.includes('>Company</a>')) fail('company_page_navigation_not_consolidated')
@@ -430,11 +438,10 @@ for (const [route, html] of [['/', home], ['/shop/', pages.get('/shop/').html], 
       fail('brand_home_story_order_drift')
     }
   }
-  const directAppTargets = [...body.matchAll(/href="(https:\/\/app\.supermega\.dev\/[^\"]+)"/g)]
+  const expectedLoginTarget = `${appOrigin}/login${route === '/shop/' ? '?product=shop' : ''}`
+  const directAppTargets = [...body.matchAll(/href="(https:\/\/[^\"]+)"/g)]
     .map(match => match[1])
-    .filter(target => target !== (route === '/shop/'
-      ? 'https://app.supermega.dev/login?product=shop'
-      : 'https://app.supermega.dev/login'))
+    .filter(target => target.startsWith(`${appOrigin}/`) && target !== expectedLoginTarget)
   if (directAppTargets.length !== 0) fail('product_action_release_state_drift', { route, expected: 0, actual: directAppTargets.length })
   if (contactActionTarget && !body.includes(`href="${contactActionTarget}">Contact SuperMega</a>`)) fail('product_action_destination_drift', { route, expected: contactActionTarget })
   for (const token of ['Request assisted setup', 'Open Ecommerce', 'Open Website', 'Choose shop type', 'theme-toggle', 'Start guided trial']) {
@@ -523,7 +530,6 @@ for (const cardFile of ['og-card.png', ...manifest.customerProducts.map((product
   if (ogCard.readUInt32BE(16) !== 1200 || ogCard.readUInt32BE(20) !== 630) fail('og_card_dimensions_wrong', { cardFile, width: ogCard.readUInt32BE(16), height: ogCard.readUInt32BE(20) })
 }
 
-const release = JSON.parse(readStatic('__release.json'))
 for (const [key, value] of Object.entries({
   service: 'supermega-public-site',
   brandVersion: manifest.brand.version,
