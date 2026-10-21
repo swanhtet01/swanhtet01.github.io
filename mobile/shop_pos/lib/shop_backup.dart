@@ -16,7 +16,8 @@ import 'shop_database.dart';
 /// the database so an interrupted export or restore cannot retain plaintext.
 abstract final class ShopBackup {
   static const formatVersion = 1;
-  static const supportedSchemaVersion = 6;
+  static const supportedSchemaVersion = 7;
+  static const oldestSupportedSchemaVersion = 6;
   static const maxSnapshotBytes = 64 * 1024 * 1024;
 
   static const _saltLength = 16;
@@ -69,7 +70,7 @@ abstract final class ShopBackup {
           '${scratch.path}${Platform.pathSeparator}shop.sqlite',
         );
         await database.exportVerifiedLocalSnapshot(snapshot);
-        verifySnapshot(snapshot);
+        verifySnapshot(snapshot, expectedSchemaVersion: database.schemaVersion);
         if (await snapshot.length() > maxSnapshotBytes) {
           throw StateError(
             'The local Shop database exceeds the backup size limit.',
@@ -81,7 +82,7 @@ abstract final class ShopBackup {
         final header = Uint8List.fromList([
           ..._magic,
           formatVersion,
-          supportedSchemaVersion,
+          database.schemaVersion,
           ...salt,
           ...nonce,
         ]);
@@ -141,7 +142,8 @@ abstract final class ShopBackup {
         maxSnapshotBytes + _headerLength + _macLength) {
       throw const FormatException('The backup is too large.');
     }
-    final cleartext = await _decrypt(await archive.readAsBytes(), password);
+    final archiveBytes = await archive.readAsBytes();
+    final cleartext = await _decrypt(archiveBytes, password);
     if (cleartext.length > maxSnapshotBytes || !_hasSqliteHeader(cleartext)) {
       throw const FormatException('The backup is not a Shop database.');
     }
@@ -154,7 +156,7 @@ abstract final class ShopBackup {
           '${staging.path}${Platform.pathSeparator}shop.sqlite',
         );
         await stagedFile.writeAsBytes(cleartext, flush: true);
-        verifySnapshot(stagedFile);
+        verifySnapshot(stagedFile, expectedSchemaVersion: archiveBytes[5]);
         await _requireEmptyRestoreDestination(target);
         await stagedFile.rename(target.path);
       } finally {
@@ -294,7 +296,7 @@ abstract final class ShopBackup {
   }
 
   /// Read-only verification without Drift's automatic schema migrations.
-  static void verifySnapshot(File file) {
+  static void verifySnapshot(File file, {int? expectedSchemaVersion}) {
     final connection = sqlite3.open(file.path, mode: OpenMode.readOnly);
     try {
       final version = connection.select('PRAGMA user_version');
@@ -304,12 +306,38 @@ abstract final class ShopBackup {
           .select("SELECT name FROM sqlite_master WHERE type = 'table'")
           .map((row) => row['name'] as String)
           .toSet();
+      final schemaVersion = version.length == 1
+          ? version.single['user_version'] as int
+          : -1;
+      final images =
+          schemaVersion == supportedSchemaVersion &&
+              tables.contains('shop_product_images')
+          ? connection.select('SELECT image_png FROM shop_product_images')
+          : const <Row>[];
+      final imageTotal = images.fold<int>(0, (total, row) {
+        final image = row['image_png'];
+        return total +
+            (image is Uint8List
+                ? image.length
+                : ShopDatabase.maxProductThumbnailsTotalBytes + 1);
+      });
       if (version.length != 1 ||
-          version.single['user_version'] != supportedSchemaVersion ||
+          schemaVersion < oldestSupportedSchemaVersion ||
+          schemaVersion > supportedSchemaVersion ||
+          (expectedSchemaVersion != null &&
+              schemaVersion != expectedSchemaVersion) ||
           integrity.length != 1 ||
           integrity.single['integrity_check'] != 'ok' ||
           brokenReferences.isNotEmpty ||
-          !tables.containsAll(_requiredTables)) {
+          !tables.containsAll(_requiredTables) ||
+          (schemaVersion == supportedSchemaVersion &&
+              !tables.contains('shop_product_images')) ||
+          images.any((row) {
+            final image = row['image_png'];
+            return image is! Uint8List ||
+                !ShopDatabase.isValidProductThumbnail(image);
+          }) ||
+          imageTotal > ShopDatabase.maxProductThumbnailsTotalBytes) {
         throw const FormatException(
           'The Shop snapshot failed database checks.',
         );
@@ -324,7 +352,8 @@ abstract final class ShopBackup {
         bytes.length > maxSnapshotBytes + _headerLength + _macLength ||
         !_sameBytes(bytes.sublist(0, 4), _magic) ||
         bytes[4] != formatVersion ||
-        bytes[5] != supportedSchemaVersion) {
+        (bytes[5] < oldestSupportedSchemaVersion ||
+            bytes[5] > supportedSchemaVersion)) {
       throw const FormatException('Invalid or unsupported Shop backup.');
     }
     final header = bytes.sublist(0, _headerLength);

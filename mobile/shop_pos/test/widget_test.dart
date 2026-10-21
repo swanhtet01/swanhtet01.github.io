@@ -376,6 +376,7 @@ void main() {
   testWidgets('restored Android menu photo waits for fresh cloud consent', (
     tester,
   ) async {
+    SharedPreferences.setMockInitialValues({});
     final photoPath = [
       Directory.systemTemp.path,
       'shop-menu-recovery-missing-${DateTime.now().microsecondsSinceEpoch}.jpg',
@@ -414,6 +415,125 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Menu photo ready to review'), findsNothing);
     await database.close();
+  });
+
+  testWidgets('catalog shows a saved merchant photo and a clean fallback', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final database = ShopDatabase(NativeDatabase.memory());
+    addTearDown(database.close);
+    await database.addProduct(
+      id: 'tea',
+      name: 'Tea',
+      priceMmk: 2000,
+      openingStock: 5,
+    );
+    await database.addProduct(
+      id: 'water',
+      name: 'Water',
+      priceMmk: 1000,
+      openingStock: 5,
+    );
+    await database.saveProductThumbnail(
+      'tea',
+      base64Decode(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ'
+        'AAAADUlEQVR4nGPQyNjxHwAETAJIB09U9wAAAABJRU5ErkJggg==',
+      ),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ShopHome(
+          database: database,
+          authClient: null,
+          apiBaseUrl: 'https://app.supermega.dev',
+          myanmar: false,
+          onLanguageChanged: (_) {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('shop-product-photo:tea')),
+        matching: find.byType(Image),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('shop-product-photo:water')),
+        matching: find.byIcon(Icons.add_photo_alternate_outlined),
+      ),
+      findsOneWidget,
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 1));
+  });
+
+  testWidgets('lost product picker result is saved as a photo, never a menu', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({
+      'shop_pending_picker_intent': 'product:tea',
+    });
+    final image = XFile.fromData(
+      base64Decode(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ'
+        'AAAADUlEQVR4nGPQyNjxHwAETAJIB09U9wAAAABJRU5ErkJggg==',
+      ),
+      mimeType: 'image/png',
+      name: 'merchant-photo.png',
+    );
+    final database = ShopDatabase(NativeDatabase.memory());
+    addTearDown(database.close);
+    await database.addProduct(
+      id: 'tea',
+      name: 'Tea',
+      priceMmk: 2000,
+      openingStock: 5,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ShopHome(
+          database: database,
+          authClient: null,
+          apiBaseUrl: 'https://app.supermega.dev',
+          myanmar: false,
+          onLanguageChanged: (_) {},
+          recoverMenuPhoto: () async => image,
+        ),
+      ),
+    );
+    // Pump recovery before querying Drift. Its async write must finish before
+    // a concurrent read, and image decoding also needs real async time.
+    var photoSaved = false;
+    for (var attempt = 0; attempt < 100; attempt++) {
+      await tester.pump(const Duration(milliseconds: 50));
+      final messageVisible = find
+          .text('Product photo saved on this device.')
+          .evaluate()
+          .isNotEmpty;
+      if (messageVisible) {
+        photoSaved = true;
+        break;
+      }
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 50)),
+      );
+    }
+    expect(photoSaved, isTrue);
+    final persisted = await tester.runAsync(() async {
+      final lookup = database.readProductThumbnail('tea');
+      return lookup.timeout(const Duration(seconds: 1));
+    });
+    expect(persisted, isNotNull);
+    expect(find.text('Menu photo ready to review'), findsNothing);
+    final preferences = await SharedPreferences.getInstance();
+    expect(preferences.getString('shop_pending_picker_intent'), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 1));
   });
 
   testWidgets('empty catalog can make a durable cash sale', (tester) async {
@@ -622,72 +742,78 @@ void main() {
     }
   });
 
-  testWidgets('catalog rows stay single, touch-sized targets at app widths', (
-    tester,
-  ) async {
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
-    for (final width in [360.0, 390.0, 820.0, 1200.0]) {
-      for (final myanmar in [false, true]) {
-        tester.view.physicalSize = Size(width, 800);
-        tester.platformDispatcher.textScaleFactorTestValue = width == 360
-            ? 1.3
-            : 1.0;
-        final database = ShopDatabase(NativeDatabase.memory());
-        await database.addProduct(
-          id: 'rice',
-          name: myanmar
-              ? 'ဆန်အိတ် အရည်အသွေးကောင်း ၁၀ ကီလိုဂရမ်'
-              : 'Premium rice 10 kg bag',
-          priceMmk: 24900,
-          openingStock: 3,
-        );
-        await tester.pumpWidget(
-          ShopApp(
-            initialCounter: true,
-            database: database,
-            authClient: null,
-            apiBaseUrl: 'https://app.supermega.dev',
-            initialMyanmar: myanmar,
-          ),
-        );
-        await tester.pumpAndSettle();
+  testWidgets(
+    'catalog rows and photo controls stay touch-sized at app widths',
+    (tester) async {
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      for (final width in [360.0, 390.0, 820.0, 1200.0]) {
+        for (final myanmar in [false, true]) {
+          tester.view.physicalSize = Size(width, 800);
+          tester.platformDispatcher.textScaleFactorTestValue = width == 360
+              ? 1.3
+              : 1.0;
+          final database = ShopDatabase(NativeDatabase.memory());
+          await database.addProduct(
+            id: 'rice',
+            name: myanmar
+                ? 'ဆန်အိတ် အရည်အသွေးကောင်း ၁၀ ကီလိုဂရမ်'
+                : 'Premium rice 10 kg bag',
+            priceMmk: 24900,
+            openingStock: 3,
+          );
+          await tester.pumpWidget(
+            ShopApp(
+              initialCounter: true,
+              database: database,
+              authClient: null,
+              apiBaseUrl: 'https://app.supermega.dev',
+              initialMyanmar: myanmar,
+            ),
+          );
+          await tester.pumpAndSettle();
 
-        final addLabel = myanmar ? 'အရောင်းထဲထည့်ရန်' : 'Add to sale';
-        final row = find.descendant(
-          of: find.byTooltip(addLabel),
-          matching: find.byType(ListTile),
-        );
-        expect(row, findsOneWidget);
-        expect(tester.getSize(row).height, greaterThanOrEqualTo(56));
-        expect(
-          find.descendant(of: row, matching: find.byType(IconButton)),
-          findsNothing,
-        );
-        expect(
-          find.text(myanmar ? '၂၄,၉၀၀ ကျပ်' : '24,900 MMK'),
-          findsOneWidget,
-        );
-        expect(tester.takeException(), isNull);
+          final addLabel = myanmar ? 'အရောင်းထဲထည့်ရန်' : 'Add to sale';
+          final row = find.descendant(
+            of: find.byTooltip(addLabel),
+            matching: find.byType(ListTile),
+          );
+          expect(row, findsOneWidget);
+          expect(tester.getSize(row).height, greaterThanOrEqualTo(56));
+          final photoButton = find.descendant(
+            of: row,
+            matching: find.byKey(const ValueKey('shop-product-photo:rice')),
+          );
+          expect(photoButton, findsOneWidget);
+          expect(tester.getSize(photoButton).width, greaterThanOrEqualTo(48));
+          expect(tester.getSize(photoButton).height, greaterThanOrEqualTo(48));
+          expect(
+            find.text(myanmar ? '၂၄,၉၀၀ ကျပ်' : '24,900 MMK'),
+            findsOneWidget,
+          );
+          expect(tester.takeException(), isNull);
 
-        await tester.tap(row);
-        await tester.pumpAndSettle();
-        expect(
-          width >= 820
-              ? find.text(myanmar ? 'ငွေသား' : 'Cash sale')
-              : find.textContaining(myanmar ? 'အရောင်းစစ်ရန်' : 'Review sale'),
-          findsOneWidget,
-        );
-        expect(tester.takeException(), isNull);
+          await tester.tap(row);
+          await tester.pumpAndSettle();
+          expect(
+            width >= 820
+                ? find.text(myanmar ? 'ငွေသား' : 'Cash sale')
+                : find.textContaining(
+                    myanmar ? 'အရောင်းစစ်ရန်' : 'Review sale',
+                  ),
+            findsOneWidget,
+          );
+          expect(tester.takeException(), isNull);
 
-        await tester.pumpWidget(const SizedBox.shrink());
-        await tester.pump(const Duration(milliseconds: 1));
-        await database.close();
+          await tester.pumpWidget(const SizedBox.shrink());
+          await tester.pump(const Duration(milliseconds: 1));
+          await database.close();
+        }
       }
-    }
-  });
+    },
+  );
 
   testWidgets('Burmese cash review stays uncommitted until confirmed', (
     tester,

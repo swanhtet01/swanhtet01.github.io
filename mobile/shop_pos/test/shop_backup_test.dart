@@ -10,6 +10,10 @@ import 'package:supermega_shop/shop_backup.dart';
 import 'package:supermega_shop/shop_database.dart';
 
 const _password = 'correct horse battery staple';
+final _thumbnail = base64Decode(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ'
+  'AAAADUlEQVR4nGPQyNjxHwAETAJIB09U9wAAAABJRU5ErkJggg==',
+);
 
 void main() {
   late Directory directory;
@@ -25,6 +29,7 @@ void main() {
       priceMmk: 12000,
       openingStock: 5,
     );
+    await database.saveProductThumbnail('rice', _thumbnail);
     await database.recordCashSale(
       operationId: 'backup-sale-1',
       lines: const [ShopSaleLineInput(productId: 'rice', quantity: 2)],
@@ -55,6 +60,7 @@ void main() {
     () async {
       final bytes = await archive.readAsBytes();
       expect(bytes.sublist(0, 4), ascii.encode('SMBK'));
+      expect(bytes[5], 7);
       expect(
         bytes.sublist(0, 16),
         isNot(ascii.encode('SQLite format 3\u0000')),
@@ -77,6 +83,7 @@ void main() {
       final reopened = ShopDatabase(NativeDatabase(target));
       try {
         expect((await reopened.readActiveProducts()).single.onHand, 3);
+        expect(await reopened.readProductThumbnail('rice'), _thumbnail);
         expect(await reopened.countSales(), 1);
         expect(await reopened.countStockMovements(), 2);
         expect(await reopened.countOutboxOperations(), 2);
@@ -105,6 +112,95 @@ void main() {
       throwsFormatException,
     );
     expect(await target.exists(), isFalse);
+  });
+
+  test(
+    'merchant photos stay out of sync events and reject oversized input',
+    () async {
+      expect(await database.countOutboxOperations(), 2);
+      await expectLater(
+        database.saveProductThumbnail('rice', Uint8List(193 * 1024)),
+        throwsArgumentError,
+      );
+      final brokenPng = Uint8List.fromList(_thumbnail);
+      brokenPng[50] ^= 1;
+      await expectLater(
+        database.saveProductThumbnail('rice', brokenPng),
+        throwsArgumentError,
+      );
+      expect(await database.readProductThumbnail('rice'), _thumbnail);
+      expect(await database.countOutboxOperations(), 2);
+    },
+  );
+
+  test('v6 archive restores, then migrates its catalog to v7', () async {
+    final legacy = File('${directory.path}/legacy-v6.sqlite');
+    await database.exportVerifiedLocalSnapshot(legacy);
+    final connection = sqlite3.open(legacy.path);
+    try {
+      connection.execute('DROP TABLE shop_product_images');
+      connection.execute('PRAGMA user_version = 6');
+    } finally {
+      connection.close();
+    }
+    ShopBackup.verifySnapshot(legacy, expectedSchemaVersion: 6);
+    final legacyArchive = File('${directory.path}/legacy-v6.smbak');
+    await _writeAuthenticatedArchive(
+      legacyArchive,
+      await legacy.readAsBytes(),
+      schemaVersion: 6,
+    );
+    final mismatchedArchive = File('${directory.path}/mismatched-v7.smbak');
+    await _writeAuthenticatedArchive(
+      mismatchedArchive,
+      await legacy.readAsBytes(),
+      schemaVersion: 7,
+    );
+    final mismatchedTarget = File('${directory.path}/mismatched-v7.sqlite');
+    await expectLater(
+      ShopBackup.restoreIntoEmptyDatabase(
+        archive: mismatchedArchive,
+        target: mismatchedTarget,
+        password: _password,
+      ),
+      throwsFormatException,
+    );
+    expect(await mismatchedTarget.exists(), isFalse);
+    final target = File('${directory.path}/legacy-v6-restored.sqlite');
+    await ShopBackup.restoreIntoEmptyDatabase(
+      archive: legacyArchive,
+      target: target,
+      password: _password,
+    );
+    final migrated = ShopDatabase(NativeDatabase(target));
+    try {
+      expect(
+        (await migrated.readActiveProducts()).single.name,
+        'KAUNG 90 Days Rice',
+      );
+      expect(await migrated.readProductThumbnail('rice'), isNull);
+      expect(
+        (await migrated.customSelect('PRAGMA user_version').getSingle())
+            .read<int>('user_version'),
+        7,
+      );
+    } finally {
+      await migrated.close();
+    }
+  });
+
+  test('v7 snapshot rejects a malformed image blob', () async {
+    final corrupt = File('${directory.path}/malformed-photo.sqlite');
+    await database.exportVerifiedLocalSnapshot(corrupt);
+    final connection = sqlite3.open(corrupt.path);
+    try {
+      connection.execute('UPDATE shop_product_images SET image_png = ?', [
+        Uint8List.fromList([1, 2, 3]),
+      ]);
+    } finally {
+      connection.close();
+    }
+    expect(() => ShopBackup.verifySnapshot(corrupt), throwsFormatException);
   });
 
   test(
@@ -295,14 +391,15 @@ Future<void> _expectNoScratch(Directory parent) async {
 // only its valid AES-GCM authentication tag.
 Future<void> _writeAuthenticatedArchive(
   File target,
-  List<int> cleartext,
-) async {
+  List<int> cleartext, {
+  int schemaVersion = ShopBackup.supportedSchemaVersion,
+}) async {
   final salt = List<int>.generate(16, (index) => index + 10);
   final nonce = List<int>.generate(12, (index) => index + 30);
   final header = [
     ...ascii.encode('SMBK'),
     ShopBackup.formatVersion,
-    ShopBackup.supportedSchemaVersion,
+    schemaVersion,
     ...salt,
     ...nonce,
   ];
