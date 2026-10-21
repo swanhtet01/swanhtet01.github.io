@@ -783,31 +783,51 @@ class _ShopHomeState extends State<ShopHome> {
     ),
   );
 
-  Widget _catalogHeader({required bool hasProducts}) => Row(
-    children: [
-      Expanded(
-        child: Text(
-          shopCopy(widget.myanmar, 'Products', 'ကုန်ပစ္စည်းများ'),
-          style: Theme.of(context).textTheme.titleLarge,
+  Widget _catalogHeader({required bool hasProducts}) => LayoutBuilder(
+    builder: (context, constraints) {
+      final title = Text(
+        shopCopy(widget.myanmar, 'Products', 'ကုန်ပစ္စည်းများ'),
+        style: Theme.of(context).textTheme.titleLarge,
+      );
+      if (!hasProducts) return title;
+      final importButton = IconButton(
+        tooltip: shopCopy(
+          widget.myanmar,
+          'Import menu photo',
+          'မီနူးဓာတ်ပုံထည့်ရန်',
         ),
-      ),
-      if (hasProducts)
-        IconButton(
-          tooltip: shopCopy(
-            widget.myanmar,
-            'Import menu photo',
-            'မီနူးဓာတ်ပုံထည့်ရန်',
-          ),
-          onPressed: _openMenuImport,
-          icon: const Icon(Icons.document_scanner_outlined),
-        ),
-      if (hasProducts)
-        FilledButton.icon(
-          onPressed: _showAddProduct,
-          icon: const Icon(Icons.add),
-          label: Text(shopCopy(widget.myanmar, 'Add item', 'ပစ္စည်းထည့်ရန်')),
-        ),
-    ],
+        onPressed: _openMenuImport,
+        icon: const Icon(Icons.document_scanner_outlined),
+      );
+      final addButton = FilledButton.icon(
+        onPressed: _showAddProduct,
+        icon: const Icon(Icons.add),
+        label: Text(shopCopy(widget.myanmar, 'Add item', 'ပစ္စည်းထည့်ရန်')),
+      );
+      if (constraints.maxWidth < 420) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            title,
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                importButton,
+                const SizedBox(width: 8),
+                Expanded(child: addButton),
+              ],
+            ),
+          ],
+        );
+      }
+      return Row(
+        children: [
+          Expanded(child: title),
+          importButton,
+          addButton,
+        ],
+      );
+    },
   );
 
   Widget _searchField(List<ShopProduct> products) => TextField(
