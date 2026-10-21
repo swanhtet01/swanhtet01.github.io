@@ -1,6 +1,6 @@
 # SuperMega Supergoal
 
-- Version: 1.8.2
+- Version: 1.8.3
 - Owner: Swan Htet, Founder
 - Maintainer: CTO, sole integration writer
 - Updated: 2026-10-21
@@ -14,7 +14,7 @@ Bring SuperMega.dev to a sellable, founder-controlled Shop launch built around a
 
 The differentiated promise is a full English or full Burmese merchant experience that removes catalog setup, checkout and insight work while keeping money and stock explainable. AI should accelerate reviewed catalog import and grounded decisions, within consent, privacy, quality and cost limits. After customer-facing acceptance, package one complete Basic/Free offer, a capability-backed Pro offer and Assisted Launch, then build measured onboarding, sales and marketing operations and cost-controlled agents on existing paid cloud/VPS capacity.
 
-For sample catalog photography, source real product/package images online first and record the exact item, pack-size evidence, source URL and file digest. Use them in private synthetic QA only until commercial public reuse rights are documented. Public website captures must use rights-cleared product photos or merchant-owned photos; an accessible retailer image is not a reuse license. Do not replace a recognizable package with an unrelated generated approximation or claim an unreadable size was visually verified.
+For sample catalog photography, source real product/package images online first and record the exact item, pack-size evidence, source URL, file digest and photo credit/license. Public website captures must use rights-cleared product photos or merchant-owned photos; an accessible retailer image is not a reuse license. The current synthetic fixture has one CC BY-SA 3.0 MAMA photo and four retailer photos without a verified commercial reuse grant. Because this repository is public, the four files are already distributed as source assets; replace or remove them before commercial release, and keep the gallery publication gate closed. Do not replace a recognizable package with an unrelated generated approximation or claim an unreadable size was visually verified.
 
 The current design decision uses an **eliminate / reduce / raise / create** test against a merchant's first day. Eliminate repeated device-only warnings, dummy controls and manual message re-entry from the primary path. Reduce setup to a usable first catalog item, a first sale and an optional connected-account step; move printer, wallet, team and advanced policy setup to the point of need. Raise sale/stock correctness, discoverability, full-language quality, hardware reliability and recovery to non-negotiable release criteria. Create a reviewed photo-to-catalog path and later grounded, cited sales/stock suggestions that save measured operator time. Do not add an AI card, setting or subscription control unless it improves a named job and its failure state is clear.
 

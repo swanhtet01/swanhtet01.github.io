@@ -1,7 +1,8 @@
 {
-  "purpose": "Local synthetic Shop screenshot fixture only. These photos are not part of a customer workspace and must not be published until image reuse rights are confirmed.",
+  "purpose": "Synthetic Shop screenshot fixture only. Four retailer photos have no verified public reuse grant; the public site remains blocked.",
   "observed_at": "2026-10-20",
-  "license_status": "unknown; retailer/manufacturer pages do not establish reuse permission",
+  "photo_rights_reviewed_at": "2026-10-21",
+  "license_status": "one CC BY-SA 3.0 contributor photo; four retailer photos without verified public reuse permission",
   "products": [
     {
       "sku": "SM-1001",
@@ -19,11 +20,20 @@
       "sku": "SM-1002",
       "name": "MAMA Chicken Instant Noodles",
       "variant": "55 g × 5",
-      "file": "mama-chicken-noodles.webp",
-      "image_sha256": "869e146d8b917ce824f7bc8505ba85f5ffffe1a8926f151c50997baec3c406bc",
-      "package_visual_check": "Five MAMA chicken packets are visible; the 55 g size is not legible in this photo.",
-      "source_page": "https://www.makropro.com.mm/en/p/5naG253i-959581956494723",
-      "source_image": "https://images.mango-prod.siammakro.cloud/product-images/959581956494723-f89136ba-d446-4a2c-a67e-0d89b99e07d8.jpeg?eo-img.format=webp&eo-img.resize=w%2F1080",
+      "file": "mama-chicken-noodles.jpg",
+      "image_sha256": "5f2e2d57abe0a28199dbdaa8fb8295bc85332bc39a15dd8b087a869a63627f6c",
+      "package_visual_check": "The MAMA Chicken multipack front shows five packets and 55 g per packet; the physical pack shape is cropped.",
+      "source_page": "https://world.openfoodfacts.org/product/8850987101526",
+      "source_image": "https://images.openfoodfacts.org/images/products/885/098/710/1526/front_en.32.400.jpg",
+      "photo_license": {
+        "name": "CC BY-SA 3.0",
+        "url": "https://creativecommons.org/licenses/by-sa/3.0/",
+        "photographer": "twindel",
+        "credit_page": "https://world.openfoodfacts.org/cgi/product_image.pl?code=8850987101526&id=front_en",
+        "attribution": "Photo by twindel for Open Food Facts, CC BY-SA 3.0; original image, no edits.",
+        "note": "The contributor photo license does not clear separate package-artwork or trademark rights."
+      },
+      "price_source_page": "https://www.makropro.com.mm/en/p/5naG253i-959581956494723",
       "observed_listing_price_mmk": 3700,
       "sample_catalog_price_mmk": 2950
     },
