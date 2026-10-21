@@ -1427,7 +1427,11 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpAndSettle();
-    expect(tester.takeException(), isNull);
+    final compactError = tester.takeException();
+    if (compactError is FlutterError) {
+      debugPrint(compactError.toStringDeep());
+    }
+    expect(compactError, isNull);
     expect(find.text('English'), findsOneWidget);
     expect(find.text('မြန်မာ'), findsOneWidget);
     expect(find.text('Mobile money'), findsOneWidget);
