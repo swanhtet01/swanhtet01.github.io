@@ -374,3 +374,8 @@ test('touch category filters keep swipe scrolling without showing a horizontal s
   assert.match(css, /\.shop-counter-category-filter \{[^}]*overflow-x: auto;[^}]*overscroll-behavior-inline: contain;/)
   assert.match(css, /@media \(max-width: 840px\) \{[\s\S]*?\.shop-counter-category-filter \{ scrollbar-width: none; \}\s*\.shop-counter-category-filter::-webkit-scrollbar \{ display: none; \}/)
 })
+
+test('portrait tablet baskets show complete product names instead of truncating them', async () => {
+  const css = await readFile(resolve('showroom/src/core/core-app.css'), 'utf8')
+  assert.match(css, /@media \(min-width: 700px\) and \(max-width: 840px\) \{[\s\S]*?\.shop-cart-item strong \{[^}]*white-space: normal;[^}]*overflow-wrap: anywhere;/)
+})

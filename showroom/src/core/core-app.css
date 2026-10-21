@@ -3287,6 +3287,7 @@ input, select, textarea,
   .shop-counter-grid { display: grid; grid-template-columns: minmax(0, 1.08fr) minmax(0, .92fr); gap: .75rem; align-items: start; }
   .shop-counter-surface { padding-bottom: 0; }
   .shop-current-sale, .shop-current-sale.is-open { position: static; top: auto; right: auto; bottom: auto; left: auto; z-index: auto; width: auto; max-height: none; overflow: visible; margin: 0; border-radius: 1rem; padding: .875rem; opacity: 1; visibility: visible; pointer-events: auto; transform: none; transition: none; }
+  .shop-cart-item strong { overflow: visible; text-overflow: clip; white-space: normal; overflow-wrap: anywhere; }
   .shop-current-sale > footer { position: static; bottom: auto; z-index: auto; margin: .5rem -.875rem -.875rem; padding: .875rem; }
   .shop-cart-backdrop, .shop-cart-backdrop.is-open, .shop-mobile-cart, .shop-cart-close { display: none; }
 }
