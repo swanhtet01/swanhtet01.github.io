@@ -142,8 +142,8 @@ class ShopHome extends StatefulWidget {
 class _ShopHomeState extends State<ShopHome> {
   final _search = TextEditingController();
   final _cart = <String, int>{};
-  late final Stream<List<ShopProduct>> _productsStream =
-      widget.database.watchActiveProducts();
+  late final Stream<List<ShopProduct>> _productsStream = widget.database
+      .watchActiveProducts();
   String? _operationId;
   bool _saving = false;
   bool _cashConfirming = false;
@@ -703,7 +703,8 @@ class _ShopHomeState extends State<ShopHome> {
               LayoutBuilder(
                 builder: (context, constraints) {
                   final cash = FilledButton.icon(
-                    onPressed: _saving ||
+                    onPressed:
+                        _saving ||
                             _cashConfirming ||
                             _pendingWalletCheckout != null
                         ? null
@@ -717,7 +718,9 @@ class _ShopHomeState extends State<ShopHome> {
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : const Icon(Icons.check),
-                    label: Text(shopCopy(widget.myanmar, 'Cash sale', 'ငွေသား')),
+                    label: Text(
+                      shopCopy(widget.myanmar, 'Cash sale', 'ငွေသား'),
+                    ),
                   );
                   final wallet = OutlinedButton.icon(
                     onPressed: _saving || _cashConfirming
@@ -888,7 +891,11 @@ class _ShopHomeState extends State<ShopHome> {
         context: context,
         builder: (dialogContext) => AlertDialog(
           title: Text(
-            shopCopy(widget.myanmar, 'Cash received?', 'ငွေသားလက်ခံပြီးပြီလား။'),
+            shopCopy(
+              widget.myanmar,
+              'Cash received?',
+              'ငွေသားလက်ခံပြီးပြီလား။',
+            ),
           ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
