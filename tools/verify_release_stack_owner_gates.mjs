@@ -16,6 +16,8 @@ export const RELEASE_STACK_OWNER_GATE_CONTRACT = 'supermega.release-stack-owner-
 const root = resolve(import.meta.dirname, '..')
 const REPOSITORY = 'swanhtet01/swanhtet01.github.io'
 const REQUIRED_PRODUCTS = ['shop', 'plant', 'website', 'ecommerce']
+const CUSTOMER_PRODUCTS = ['shop']
+const INTERNAL_PRODUCTS = ['plant', 'website', 'ecommerce']
 const REQUIRED_MAIN_CHECKS = [
   'SuperMega App CI',
   'Dependency Security Audit',
@@ -434,7 +436,9 @@ export function assessReleaseStackOwnerGates(input = {}) {
       diffShortstat: gitState.diffShortstat || null,
     },
     products: {
-      customerProducts: REQUIRED_PRODUCTS,
+      customerProducts: CUSTOMER_PRODUCTS,
+      internalProducts: INTERNAL_PRODUCTS,
+      portfolioProducts: REQUIRED_PRODUCTS,
       firstPilotProduct: 'shop',
       aiIsSharedCapability: true,
     },
