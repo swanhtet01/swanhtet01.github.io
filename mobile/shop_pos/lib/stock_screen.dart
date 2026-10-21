@@ -116,7 +116,12 @@ class _StockScreenState extends State<StockScreen> {
                     item.name.toLowerCase().contains(query) ||
                     (item.barcode?.toLowerCase().contains(query) ?? false),
               )
-              .toList();
+              .toList()
+            ..sort((left, right) {
+              final stockOrder = left.onHand.compareTo(right.onHand);
+              if (stockOrder != 0) return stockOrder;
+              return left.name.toLowerCase().compareTo(right.name.toLowerCase());
+            });
           final seenNames = <String>{};
           final duplicateNames = <String>{};
           for (final product in snapshot.data!) {

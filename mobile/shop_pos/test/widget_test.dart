@@ -170,6 +170,56 @@ void main() {
     }
   });
 
+  testWidgets('compact Today and Stock put recent work and low stock first', (
+    tester,
+  ) async {
+    _usePhoneViewport(tester);
+    final database = ShopDatabase(NativeDatabase.memory());
+    try {
+      await database.addProduct(
+        id: 'high',
+        name: 'High stock',
+        priceMmk: 2500,
+        openingStock: 20,
+      );
+      await database.addProduct(
+        id: 'low',
+        name: 'Low stock',
+        priceMmk: 1200,
+        openingStock: 2,
+      );
+      await database.recordCashSale(
+        operationId: 'recent-sale',
+        lines: const [ShopSaleLineInput(productId: 'high', quantity: 1)],
+      );
+      await tester.pumpWidget(
+        ShopApp(
+          database: database,
+          authClient: null,
+          apiBaseUrl: 'https://app.supermega.dev',
+          initialMyanmar: false,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        tester.getTopLeft(find.text('Recent sales')).dy,
+        lessThan(tester.getTopLeft(find.text('Lowest stock')).dy),
+      );
+      await tester.ensureVisible(find.text('View stock'));
+      await tester.tap(find.text('View stock'));
+      await tester.pumpAndSettle();
+      expect(
+        tester.getTopLeft(find.text('Low stock')).dy,
+        lessThan(tester.getTopLeft(find.text('High stock')).dy),
+      );
+      expect(tester.takeException(), isNull);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+      await database.close();
+    }
+  });
+
   testWidgets('Today counts only completed local sales and actual stock', (
     tester,
   ) async {
@@ -471,7 +521,7 @@ void main() {
     expect(
       find.descendant(
         of: find.byKey(const ValueKey('shop-product-photo:water')),
-        matching: find.byIcon(Icons.add_photo_alternate_outlined),
+        matching: find.byIcon(Icons.photo_outlined),
       ),
       findsOneWidget,
     );
@@ -775,10 +825,12 @@ void main() {
       addTearDown(tester.view.resetDevicePixelRatio);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
-      for (final width in [360.0, 390.0, 820.0, 1200.0]) {
+      for (final width in [320.0, 360.0, 390.0, 820.0, 1200.0]) {
         for (final myanmar in [false, true]) {
           tester.view.physicalSize = Size(width, 800);
-          tester.platformDispatcher.textScaleFactorTestValue = width == 360
+          tester.platformDispatcher.textScaleFactorTestValue = width == 320
+              ? 1.5
+              : width == 360
               ? 1.3
               : 1.0;
           final database = ShopDatabase(NativeDatabase.memory());
@@ -808,6 +860,21 @@ void main() {
           );
           expect(row, findsOneWidget);
           expect(tester.getSize(row).height, greaterThanOrEqualTo(56));
+          if (width == 320) {
+            expect(
+              tester.widget<Text>(
+                find.descendant(
+                  of: row,
+                  matching: find.text(
+                    myanmar
+                        ? 'ဆန်အိတ် အရည်အသွေးကောင်း ၁၀ ကီလိုဂရမ်'
+                        : 'Premium rice 10 kg bag',
+                  ),
+                ),
+              ).maxLines,
+              3,
+            );
+          }
           final photoButton = find.descendant(
             of: row,
             matching: find.byKey(const ValueKey('shop-product-photo:rice')),

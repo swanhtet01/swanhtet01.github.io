@@ -1116,6 +1116,7 @@ class _ShopHomeState extends State<ShopHome> {
     // Prices move below names on portrait tablets so the narrower catalog
     // pane retains a readable, full-row add target.
     final compactProductRow = viewportWidth < 900;
+    final narrowProductRow = viewportWidth < 380;
     final text = _search.text.trim().toLowerCase();
     final visible = products
         .where(
@@ -1272,7 +1273,7 @@ class _ShopHomeState extends State<ShopHome> {
                 builder: (context, snapshot) {
                   final bytes = snapshot.data;
                   if (bytes == null) {
-                    return const Icon(Icons.add_photo_alternate_outlined);
+                    return const Icon(Icons.photo_outlined);
                   }
                   return ClipRRect(
                     borderRadius: BorderRadius.circular(8),
@@ -1282,7 +1283,7 @@ class _ShopHomeState extends State<ShopHome> {
                       height: 44,
                       fit: BoxFit.cover,
                       errorBuilder: (_, error, stackTrace) =>
-                          const Icon(Icons.add_photo_alternate_outlined),
+                          const Icon(Icons.photo_outlined),
                     ),
                   );
                 },
@@ -1290,7 +1291,7 @@ class _ShopHomeState extends State<ShopHome> {
             ),
             title: Text(
               item.name,
-              maxLines: 2,
+              maxLines: narrowProductRow ? 3 : 2,
               overflow: TextOverflow.ellipsis,
               style: Theme.of(context).textTheme.titleMedium,
             ),
