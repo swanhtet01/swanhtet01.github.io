@@ -138,8 +138,8 @@ class _StockScreenState extends State<StockScreen> {
                         prefixIcon: const Icon(Icons.search),
                         hintText: shopCopy(
                           widget.myanmar,
-                          'Search name or barcode',
-                          'ကုန်ပစ္စည်း / ဘားကုဒ်',
+                          'Name or barcode',
+                          'အမည် / ဘားကုဒ်',
                         ),
                       ),
                     ),

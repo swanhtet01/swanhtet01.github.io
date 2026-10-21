@@ -2607,18 +2607,6 @@ class _ShopSettingsScreenState extends State<ShopSettingsScreen> {
               },
             ),
             const SizedBox(height: 20),
-            ListTile(
-              leading: const Icon(Icons.storage_outlined),
-              title: Text(shopCopy(_myanmar, 'On this device', 'ဤစက်တွင်')),
-              subtitle: Text(
-                shopCopy(
-                  _myanmar,
-                  'Saved here. Online backup is not active.',
-                  'ဤစက်တွင်သာ သိမ်းထားသည်။ အွန်လိုင်းအရန်ကူး မရှိသေးပါ။',
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
             _SetupTile(
               icon: Icons.print_outlined,
               title: shopCopy(_myanmar, 'Receipt printer', 'ပြေစာပရင်တာ'),
@@ -2670,6 +2658,36 @@ class _ShopSettingsScreenState extends State<ShopSettingsScreen> {
                     database: widget.database,
                     myanmar: _myanmar,
                   ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.storage_outlined),
+                        const SizedBox(width: 12),
+                        Text(
+                          shopCopy(_myanmar, 'On this device', 'ဤစက်တွင်'),
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      shopCopy(
+                        _myanmar,
+                        'Saved here. Online backup is not active.',
+                        'ဤစက်တွင်သာ သိမ်းထားသည်။ အွန်လိုင်းအရန်ကူး မရှိသေးပါ။',
+                      ),
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ],
                 ),
               ),
             ),
