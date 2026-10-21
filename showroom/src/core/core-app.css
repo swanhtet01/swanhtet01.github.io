@@ -1707,7 +1707,7 @@ label.checkbox-row input { width: 1.25rem; min-width: 1.25rem; min-height: 1.25r
 .shop-empty-cart strong { color: var(--core-ink); font-size: 0.875rem; }
 .shop-empty-cart small { color: var(--core-muted); font-size: .6875rem; }
 .shop-sale-details { display: grid; gap: 7px; border-top: 1px solid var(--core-line); padding-top: 8px; }
-.shop-sale-details label { display: grid; grid-template-columns: auto 1fr; align-items: baseline; gap: 6px; font-size: .75rem; }
+.shop-sale-details label { display: grid; grid-template-columns: auto 1fr; align-items: baseline; gap: 6px; font-size: .875rem; }
 .shop-sale-details label small { color: var(--core-muted); font-size: .75rem; font-weight: var(--font-weight-medium); }
 .shop-sale-details label input { grid-column: 1/-1; min-height: 44px; }
 .shop-sale-details fieldset { min-width: 0; margin: 0; border: 0; padding: 0; }
@@ -1718,8 +1718,10 @@ label.checkbox-row input { width: 1.25rem; min-width: 1.25rem; min-height: 1.25r
 .shop-sale-details .shop-open-order-choice { min-height: 2.75rem; display: flex; align-items: flex-start; gap: 0.5625rem; border: 0.0625rem solid var(--core-line); border-radius: 0.625rem; padding: .625rem .75rem; background: var(--core-surface-soft); font-size: .75rem; cursor: pointer; }
 .shop-sale-details .shop-open-order-choice input { grid-column: auto; flex: 0 0 auto; width: 1.125rem; min-height: 1.125rem; margin: 0.0625rem 0 0; accent-color: var(--core-green); }
 .shop-open-order-choice span { min-width: 0; display: grid; gap: 0.125rem; }
-.shop-open-order-choice strong { color: var(--core-ink); font-size: 0.6875rem; }
+.shop-open-order-choice strong { color: var(--core-ink); font-size: .875rem; }
 .shop-sale-details .shop-open-order-choice small { color: var(--core-muted); font-size: .75rem; line-height: 1.45; }
+.shop-sale-details .shop-counter-pickup-time { gap: .375rem; }
+.shop-counter-pickup-time small[role="alert"] { grid-column: 1 / -1; color: var(--core-danger); }
 .shop-current-sale > footer { display: grid; gap: 7px; border-top: 1px solid var(--core-line); margin-top: 6px; padding-top: 6px; }
 .shop-current-sale > footer > div { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .shop-current-sale > footer > div span { color: var(--core-muted); font-size: 0.75rem; }
@@ -3244,9 +3246,9 @@ input, select, textarea,
 .shop-product-copy { display: grid; grid-template-columns: minmax(0, 1fr) 6.5rem 4.75rem; align-items: center; gap: .25rem .75rem; }
 .shop-product-name { grid-column: 1; min-height: 0; }
 .shop-product-name small { white-space: normal; line-height: 1.3; }
-.shop-product-copy strong { font-size: .8125rem; line-height: 1.4; }
-.shop-product-copy b { grid-column: 2; align-self: center; font-size: .8125rem; text-align: right; }
-.shop-product-copy > small { grid-column: 3; align-self: center; font-size: .6875rem; text-align: right; }
+.shop-product-copy strong { font-size: .875rem; line-height: 1.4; }
+.shop-product-copy b { grid-column: 2; align-self: center; font-size: .875rem; text-align: right; }
+.shop-product-copy > small { grid-column: 3; align-self: center; font-size: .75rem; text-align: right; }
 .shop-product-quantity, .shop-product-add-hint { position: static; width: 3.25rem; min-width: 3.25rem; min-height: 2.75rem; display: grid; place-items: center; margin-left: auto; border: 1px solid var(--core-line); border-radius: .625rem; padding: 0 .5rem; background: var(--core-panel); color: var(--core-muted); font-size: .75rem; font-weight: 650; line-height: 1; }
 .shop-product-quantity { border-color: color-mix(in srgb, var(--core-accent) 30%, var(--core-line)); background: color-mix(in srgb, var(--core-accent) 10%, var(--core-panel)); color: var(--core-accent); }
 .shop-product-add-hint { background: var(--core-green-soft); color: var(--core-accent); font-size: 1.375rem; font-weight: 500; opacity: 1; }
@@ -3278,8 +3280,8 @@ input, select, textarea,
   .shop-product-art { width: 2.75rem; height: 2.75rem; }
   .shop-product-copy { grid-template-columns: minmax(0, 1fr) auto; gap: .125rem .5rem; }
   .shop-product-name { grid-column: 1 / -1; }
-  .shop-product-copy strong { font-size: .75rem; }
-  .shop-product-copy > small { font-size: .625rem; }
+  .shop-product-copy strong { font-size: .875rem; }
+  .shop-product-copy > small { font-size: .75rem; }
   .shop-product-copy b { grid-column: 1; text-align: left; }
   .shop-product-copy > small { grid-column: 2; text-align: right; }
   .shop-product-quantity, .shop-product-add-hint { width: 3rem; min-width: 3rem; }

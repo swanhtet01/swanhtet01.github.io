@@ -1107,6 +1107,7 @@ type ShopCounterReview = {
   customer: string
   payment: string
   outcome: 'paid_handoff' | 'open_order'
+  promisedAt?: string
   beforeCommit: (orderId: string) => Promise<boolean>
   onCommitted: (orderId: string) => void
 }
@@ -1224,6 +1225,8 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
   const [categoryFilter, setCategoryFilter] = useState<ShopCounterCategoryFilter>({ kind: 'all' })
   const [scanFeedback, setScanFeedback] = useState('')
   const [unmatchedBarcode, setUnmatchedBarcode] = useState('')
+  const [pickupBy, setPickupBy] = useState('')
+  const [pickupIssue, setPickupIssue] = useState('')
   const [cartOpen, setCartOpen] = useState(false)
   const salePanelRef = useRef<HTMLElement>(null)
   const saleSearchRef = useRef<HTMLInputElement>(null)
@@ -1373,11 +1376,19 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
   function clearSale() {
     tickets.dispatch({ kind: 'save', basket: emptyCounterBasket() })
     setCartOpen(false)
+    setPickupBy('')
+    setPickupIssue('')
     setMorePaymentOptions(false)
   }
 
   function reviewSale(event: MouseEvent<HTMLButtonElement>) {
     if (!lines.length || disabled || catalogChanged || recoveryPaused || !tickets.checkpoint()) return
+    const promisedTime = pickupBy ? new Date(pickupBy) : null
+    if (effectiveOutcome === 'open_order' && (!promisedTime || Number.isNaN(promisedTime.getTime()) || promisedTime.getTime() <= Date.now())) {
+      setPickupIssue(uiText('Choose a future pickup time.'))
+      return
+    }
+    setPickupIssue('')
     const reviewedRevision = tickets.getSnapshot().state.revision
     let securedCheckoutId = ''
     onReview({
@@ -1385,6 +1396,7 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
       customer: customer.trim(),
       payment,
       outcome: effectiveOutcome,
+      ...(effectiveOutcome === 'open_order' && promisedTime ? { promisedAt: promisedTime.toISOString() } : {}),
       beforeCommit: async (orderId) => {
         if (securedCheckoutId) {
           return orderId === securedCheckoutId
@@ -1401,6 +1413,8 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
       onCommitted: (orderId) => {
         if (persistLocalDraft) tickets.dispatch({ kind: 'resolve_checkout', orderId })
         else clearSale()
+        setPickupBy('')
+        setPickupIssue('')
       },
     }, event.currentTarget)
   }
@@ -1535,6 +1549,7 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
               write; the cashier still confirms money received in the reviewed sale. */}
           {payment !== 'Cash' ? <PaymentQrButton amountDue={formatMoney(total)} method={payment} scope={paymentQrScope} settingsHint /> : null}
           {canCompleteInOneReview ? <label className="shop-open-order-choice"><input checked={outcome === 'open_order'} onChange={(event) => setOutcome(event.target.checked ? 'open_order' : 'paid_handoff')} type="checkbox" /><span><strong>{uiText('Leave unpaid')}</strong><small>{uiText('Track it in Orders and finish later.')}</small></span></label> : null}
+          {effectiveOutcome === 'open_order' ? <label className="shop-counter-pickup-time">{uiText('Pickup by')}<input aria-invalid={pickupIssue ? 'true' : undefined} onChange={(event) => { setPickupBy(event.target.value); setPickupIssue('') }} type="datetime-local" value={pickupBy} />{pickupIssue ? <small role="alert">{pickupIssue}</small> : null}</label> : null}
         </div>
         {cartLowStockLines.length ? <p className="shop-cart-stock-risk" role="status">{readUiLocale() === 'my' ? `ဤအရောင်းပြီးနောက် ပစ္စည်း ${cartLowStockLines.length} မျိုး ပြန်မှာရန် သတ်မှတ်ချက်သို့ ရောက်ပါမည်။` : `After this sale, ${cartLowStockLines.length} ${cartLowStockLines.length === 1 ? 'item reaches its' : 'items reach their'} reorder level.`} <Link to="/shop/?tab=inventory">{uiText('Review stock')}</Link></p> : null}
         <footer><div><span>{bi('Total')}</span><strong>{formatMoney(total)}</strong></div><button className="shop-review-sale" disabled={disabled || recoveryPaused || catalogChanged} onClick={reviewSale} type="button">{disabled ? bi('Sales paused') : effectiveOutcome === 'paid_handoff' ? <span className="cashier-action-label">{uiText('Review & complete sale')}</span> : bi('Review order')}<span aria-hidden="true">→</span></button></footer></> : null}
@@ -4403,7 +4418,13 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
       orderLines.push({ sku: item.sku, name: item.name, ...(item.nameMy ? { nameMy: item.nameMy } : {}), ...(item.variant ? { variant: item.variant } : {}), quantity: line.quantity, unitPriceMmk: item.price })
     }
     const orderId = uid('ORD')
-    const promisedAt = new Date(reviewedAt.getTime() + 30 * 60 * 1000).toISOString()
+    const promisedAt = review.outcome === 'open_order'
+      ? review.promisedAt
+      : new Date(reviewedAt.getTime() + 30 * 60 * 1000).toISOString()
+    if (!promisedAt || Number.isNaN(Date.parse(promisedAt)) || Date.parse(promisedAt) <= reviewedAt.getTime()) {
+      setNotice(uiText('Choose a future pickup time before reviewing this unpaid order.'))
+      return
+    }
     const order: CommerceOrder = {
       id: orderId,
       ...(activeShift ? { shiftId: activeShift.id } : {}),
@@ -4450,7 +4471,7 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
       kind: completesSale ? 'order_settle' : 'order_create',
       subjectId: order.id,
       summary: completesSale ? `Complete ${formatMoney(order.total)} counter sale` : `Create ${formatMoney(order.total)} counter order`,
-      before: `${lineReview} · ${review.payment}`,
+      before: `${lineReview} · ${review.payment}${completesSale ? '' : ` · Pickup by ${formatTime(promisedAt)}`}`,
       after: completesSale
         ? `Order ${displayReference} completed · ${review.payment} reconciled · Stock ${stockReview}${stockSourceReview ? ` · Stock source ${stockSourceReview}` : ''}`
         : `Order ${displayReference} confirmed · Reserved stock ${stockReview}${stockSourceReview ? ` · Stock source ${stockSourceReview}` : ''}`,
