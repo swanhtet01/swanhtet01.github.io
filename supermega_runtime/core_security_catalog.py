@@ -11,7 +11,7 @@ CORE_SECURITY_DIGESTS = {
     10: "5cf6ab18484f2d4d52d357faab876bd1048904312eafd257ff97a4e4e729f322",
     11: "9e37eeb42c580724e93c0155e033a3814ebcba53404746ec2844fac60bd197ef",
     12: "0cf1bd35def7c0cfdf3843435c9b7e331dca2ef516fb96286e2c9506d1f8539a",
-    13: "868e14c525efbe00e833594bb4018f26a84ac5913de263fc078184895f42af8f",
+    13: "1ae6d34fb1a066d45fb9d60858390710b6c2ce1afa3fe38f9da7cfc895bff54e",
 }
 
 
@@ -26,7 +26,8 @@ def core_security_catalog_digest(cursor):
       select p.*, l.lanname from pg_proc p join pg_namespace n on n.oid=p.pronamespace
       join pg_language l on l.oid=p.prolang
       where n.nspname='app_private' and p.proname in (
-        'supabase_session_is_active','actor_workspace_directory','workspace_is_active')
+        'supabase_session_is_active','actor_workspace_directory','workspace_is_active',
+        'workspace_access_member_active')
     ) select jsonb_build_object(
       'tables', (select jsonb_agg(jsonb_build_array(relname,relkind,relrowsecurity,
         relforcerowsecurity,relispartition,pg_get_userbyid(relowner)) order by relname) from targets),

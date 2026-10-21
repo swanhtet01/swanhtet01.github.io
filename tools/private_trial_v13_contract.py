@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PROFILE = "v13-self-serve"
 CONTRACT = "supermega_private_trial_database_v13_self_serve_v1"
 MIGRATION_PINS = {
+    "20261020175519_access_control_member_read_hardening.sql": "352605d30bcf1371b94ee50c01469b599265afe2cf69abfe1e4136016778cba3",
     "20261019103000_ecommerce_review_shared_state_lock.sql": "2e5fe0486a38cd434a8e24b1d46ddf4f5144a6f67e24834d30ab98f298cbb8c0",
     "20261019070000_ecommerce_operator_management_boundary.sql": "4028c5e571ae9d4ac8f043fe1609c7ae047d11fbfc4a65e8695d8c01f8306c8d",
     "20261015202629_ecommerce_operator_review_grant.sql": "c37a78902bae3d04fcc38d2cf044f36da06fa636ac49be6fa4e98564679f45ee",
@@ -197,6 +198,12 @@ def extend_contract(base):
     base["EXPECTED_TABLES"] |= TABLES
     base["TENANT_TABLES"] |= TABLES
     base["EXPECTED_FUNCTIONS"].update(FUNCTIONS)
+    base["EXPECTED_FUNCTIONS"]["workspace_access_member_active"] = (
+        "target_workspace_id text", "boolean")
+    base["EXPECTED_ACCESS_MEMBER_FUNCTION_FINGERPRINT"] = (
+        "bf250d35a17c027f7955e7fcb0449e163b3ab5c5303b869c384b52c18fbc8a76")
+    base["EXPECTED_POLICY_FINGERPRINTS"]["workspace_access_controls_member_read"]["qual"] = (
+        "596f605f1eb9350b353935a16dbf11d94897690c9ddf13fbe2dbdc7a3011b4ee")
     for name, table, function, kind in (
         ("billing_invoice_guard", "billing_invoices", "guard_billing_invoice", 31),
         ("billing_events_immutable", "billing_events", "reject_billing_event_mutation", 27),
@@ -242,6 +249,7 @@ def extend_contract(base):
             "check": POLICY_PINS[name] if command == "ALL" else None}
     role = "supermega_trial_backend"
     base["EXPECTED_NON_OWNER_ACL"] |= frozenset({
+        ("function", "workspace_access_member_active", role, "EXECUTE", False),
         ("table", "billing_entitlements", role, "SELECT", False),
         ("table", "self_serve_attempt_budgets", role, "SELECT", False),
         ("table", "self_serve_attempt_budgets", role, "INSERT", False),
@@ -249,6 +257,7 @@ def extend_contract(base):
         ("function", "mark_self_serve_claim_conflict", role, "EXECUTE", False),
     })
     base["EXPECTED_BACKEND_ACL_DEPENDENCIES"] |= frozenset({
+        ("function", "app_private.workspace_access_member_active(target_workspace_id text)", 0),
         ("relation", "app_private.billing_entitlements", 0),
         ("relation", "app_private.self_serve_attempt_budgets", 0),
         ("relation", "app_private.self_serve_attempt_budgets", 2),

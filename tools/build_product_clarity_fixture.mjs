@@ -40,9 +40,22 @@ const galleryMode=${JSON.stringify(galleryMode)};
 const sampleMode=${JSON.stringify(sampleMode)};
 const emptyMode=${JSON.stringify(emptyMode)};
 const samplePhotoBytes=${JSON.stringify(galleryPhotoBytes)};
-const names=galleryMode?['Paper swatch kit','Blank notebook set','Studio print consultation']
-  :['Everyday Tee','Canvas Bag','Desk Notebook','Water Bottle','Daily Planner','Ceramic Mug'];
-const commerceBase=validateCommerceState({...createEmptyCommerce(),items:createSeedCommerce().items.slice(0,names.length).map((item,i)=>({...item,sku:'QA-'+i,name:names[i],price:(i+1)*8500}))});
+// Override every product-facing field together. Reusing a seeded rice/noodle
+// variant or Burmese name for an unrelated studio item made the gallery false.
+const galleryCatalog=[
+  {name:'Paper swatch kit',nameMy:'စက္ကူနမူနာအစုံ',variant:'20 sheets',category:'Stationery',price:8500,onHand:12,reorderAt:3},
+  {name:'Blank notebook set',nameMy:'ဗလာမှတ်စုစာအုပ်အစုံ',variant:'A5 × 3',category:'Stationery',price:17000,onHand:16,reorderAt:4},
+  {name:'Studio print consultation',nameMy:'ပုံနှိပ်လုပ်ငန်း အကြံပေးဝန်ဆောင်မှု',variant:'30 min',category:'Services',price:25500,onHand:8,reorderAt:2},
+];
+const sampleCatalog=[
+  {name:'Everyday Tee',nameMy:'',variant:'M',category:'Clothing',price:8500},
+  {name:'Canvas Bag',nameMy:'',variant:'Standard',category:'Accessories',price:17000},
+  {name:'Desk Notebook',nameMy:'',variant:'A5',category:'Stationery',price:25500},
+  {name:'Water Bottle',nameMy:'',variant:'1 L',category:'Drinkware',price:34000},
+  {name:'Daily Planner',nameMy:'',variant:'2026',category:'Stationery',price:42500},
+];
+const catalog=galleryMode?galleryCatalog:sampleCatalog;
+const commerceBase=validateCommerceState({...createEmptyCommerce(),items:createSeedCommerce().items.slice(0,catalog.length).map((item,i)=>({...item,...catalog[i],sku:'QA-'+i}))});
 const commerce=sampleMode?createSeedCommerce():galleryMode?configureCommercePaymentPolicy(commerceBase,{
   adapter:'pay_on_pickup',allowedFulfilments:['pickup'],maximumOrderMmk:1000000,
   instructions:'Collect at pickup and reconcile in the synthetic Shop fixture.',status:'active',

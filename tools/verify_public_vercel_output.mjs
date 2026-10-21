@@ -2,6 +2,8 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { join, relative, resolve } from 'node:path'
 import { activeProductContracts } from '../showroom/src/core/product-visibility.ts'
+import { parsePreviewAppBinding } from './public_preview_navigation.mjs'
+import { publicGalleryReleaseReadinessError } from './public_gallery_rights.mjs'
 
 const root = process.cwd()
 const isolatedOutputId = process.env.SUPERMEGA_PUBLIC_OUTPUT_ID || ''
@@ -14,10 +16,49 @@ const functionsDir = resolve(outputDir, 'functions', 'api')
 const configPath = resolve(outputDir, 'config.json')
 const manifest = JSON.parse(readFileSync(resolve(root, 'site-manifest.json'), 'utf8'))
 const publicGalleryProvenance = JSON.parse(readFileSync(resolve(root, 'tools', 'public-assets', 'public-gallery-provenance.json'), 'utf8'))
+const publicGalleryCapture = JSON.parse(readFileSync(resolve(root, 'tools', 'public-assets', 'public-gallery-capture.json'), 'utf8'))
+const publicGalleryImageSources = JSON.parse(readFileSync(resolve(root, 'tools', 'qa-assets', 'shop-products', 'sources.json'), 'utf8'))
 
 function fail(code, detail = {}) {
   console.error(JSON.stringify({ ok: false, contract: 'supermega_public_output', code, ...detail }, null, 2))
   process.exit(1)
+}
+
+const builderSource = readFileSync(resolve(root, 'tools', 'create_public_vercel_output.mjs'), 'utf8')
+const publicReleaseWorkflow = readFileSync(resolve(root, '.github', 'workflows', 'supermega-public-release.yml'), 'utf8')
+if (!builderSource.includes("process.env.SUPERMEGA_PUBLIC_RELEASE === '1' || process.env.VERCEL === '1'")
+  || !builderSource.includes('assertPublicGalleryReleaseReady(publicGalleryCapture, publicGalleryImageSources)')
+  || !publicReleaseWorkflow.includes("SUPERMEGA_PUBLIC_RELEASE: '1'")) {
+  fail('public_gallery_release_gate_not_wired')
+}
+if (publicGalleryReleaseReadinessError(publicGalleryCapture, publicGalleryImageSources)
+  !== 'public_gallery_capture_not_publication_ready'
+  || publicGalleryReleaseReadinessError({ publicationReady: true }, publicGalleryImageSources)
+    !== 'public_gallery_image_rights_unverified') {
+  fail('public_gallery_release_gate_not_fail_closed')
+}
+const reviewedRights = {
+  status: 'cleared_for_publication',
+  basis: 'cc-by-4.0',
+  license_url: 'https://creativecommons.org/licenses/by/4.0/',
+  attribution: 'Example photographer — CC BY 4.0',
+  reviewed_at: '2026-10-21',
+  reviewed_by: 'founder',
+  evidence_sha256: 'a'.repeat(64),
+}
+const reviewedImageSet = {
+  schemaVersion: 'supermega.shop-image-rights.v1',
+  status: 'cleared_for_publication',
+  products: [{ file: 'example.webp', source_page: 'https://example.com/photo', publication_rights: reviewedRights }],
+}
+if (publicGalleryReleaseReadinessError({ publicationReady: true }, reviewedImageSet) !== null) {
+  fail('public_gallery_release_gate_rejects_reviewed_rights')
+}
+const missingEvidenceImageSet = structuredClone(reviewedImageSet)
+delete missingEvidenceImageSet.products[0].publication_rights.evidence_sha256
+if (publicGalleryReleaseReadinessError({ publicationReady: true }, missingEvidenceImageSet)
+  !== 'public_gallery_image_rights_unverified') {
+  fail('public_gallery_release_gate_accepts_incomplete_rights')
 }
 
 function requireFile(path, label) {
@@ -29,6 +70,12 @@ function readStatic(path) {
   requireFile(fullPath, path)
   return readFileSync(fullPath, 'utf8')
 }
+
+const release = JSON.parse(readStatic('__release.json'))
+const previewAppBinding = release.previewNavigation
+  ? parsePreviewAppBinding(JSON.stringify(release.previewNavigation), release.commit, release.commit)
+  : null
+const appOrigin = previewAppBinding?.origin || 'https://app.supermega.dev'
 
 function countOccurrences(value, token) {
   return value.split(token).length - 1
@@ -114,7 +161,7 @@ const expectedStaticFiles = new Set([
   'images/actual-shop-inventory-tablet.png',
   'images/actual-shop-inventory-mobile.png',
   'og-card.png',
-  ...manifest.customerProducts.map((product) => `og-card-${product.id}.png`),
+  ...publicProducts.map((product) => `og-card-${product.id}.png`),
   'robots.txt',
   'site.webmanifest',
   'sitemap.xml',
@@ -230,14 +277,15 @@ for (const [route, page] of pages) {
   const footerBrand = `<a class="brand" href="${footerHref}" aria-label="${footerLabel}"><span class="brand-mark" aria-hidden="true">`
   if (!page.html.includes(footerBrand)) fail('shared_footer_brand_missing', { route, footerHref })
   const expectedLogin = route === '/shop/'
-    ? '<a href="https://app.supermega.dev/login?product=shop">Login</a>'
-    : '<a href="https://app.supermega.dev/login">Login</a>'
+    ? `<a href="${appOrigin}/login?product=shop">Login</a>`
+    : `<a href="${appOrigin}/login">Login</a>`
   if (countOccurrences(page.html, expectedLogin) !== 1) fail('shared_login_destination_missing', { route, expectedLogin })
   const expectedActive = route === '/shop/' ? 'Shop' : route === '/contact/' ? 'Contact' : null
   const activeLinks = [...page.html.matchAll(/<a\b[^>]*aria-current="page"[^>]*>([^<]+)<\/a>/g)].map(match => match[1])
   if (activeLinks.join(',') !== (expectedActive || '')) fail('shared_navigation_active_state_drift', { route, expectedActive, activeLinks })
+  const copyWithoutExternalDestinations = page.html.replace(/\bhref="https?:\/\/[^\"]+"/gi, '')
   for (const token of forbiddenCopy) {
-    if (page.html.toLowerCase().includes(token.toLowerCase())) fail('retired_public_context_present', { route, token })
+    if (copyWithoutExternalDestinations.toLowerCase().includes(token.toLowerCase())) fail('retired_public_context_present', { route, token })
   }
   for (const marker of encodingCorruption) {
     if (page.html.includes(marker)) fail('public_copy_encoding_corrupt', { route })
@@ -310,7 +358,7 @@ for (const [route, page] of pages) {
 const publicObservability = readStatic('vercel-insights.js')
 for (const token of [
   '["supermega.dev","www.supermega.dev"]',
-  '["/","/shop/","/plant/","/website/","/ecommerce/","/contact/","/privacy/"]',
+  '["/","/shop/","/contact/","/privacy/"]',
   "window.va('beforeSend'",
   "window.si('beforeSend'",
   "event.type !== expectedType",
@@ -341,7 +389,7 @@ for (const staleToken of [
   if (home.includes(staleToken)) fail('stale_home_metadata_present', { token: staleToken })
 }
 if (!hasClassToken(home, 'company-hero')) fail('homepage_contract_missing', { token: 'class token company-hero' })
-for (const token of ['class="company-operating-overview"', 'href="/shop/">Explore Shop', 'href="/contact/">Contact</a>', 'href="https://app.supermega.dev/login"']) {
+for (const token of ['class="company-operating-overview"', 'href="/shop/">Explore Shop', 'href="/contact/">Contact</a>', `href="${appOrigin}/login"`]) {
   if (!home.includes(token)) fail('homepage_contract_missing', { token })
 }
 if (home.includes('>View every screen size') || home.includes('>See Shop on desktop and mobile')) fail('home_action_must_not_be_a_device_tour')
@@ -352,9 +400,9 @@ if (home.includes('body[data-view="company"] .site-header .brand-word { color: v
 if (!home.includes('.company-hero .hero-actions .button-primary') || !home.includes('white-space:nowrap')) fail('company_primary_action_layout_missing')
 const shopPageHtml = pages.get('/shop/').html
 if (!shopPageHtml.includes('.shop-hero .button-primary') || !shopPageHtml.includes('white-space:nowrap')) fail('shop_primary_action_layout_missing')
-if (!home.includes('<p class="hero-kicker">For Myanmar retailers</p>')
-  || !home.includes('Sell at the counter.<br><span>Keep orders and stock in view.</span>')
-  || !home.includes('SuperMega Shop brings sales, open orders and stock checks into one workspace for Myanmar retailers.')
+if (!home.includes('<p class="hero-kicker">SuperMega · Myanmar</p>')
+  || !home.includes('Operating software<br><span>for Myanmar businesses.</span>')
+  || !home.includes('SuperMega is a Myanmar software company. Shop is our first customer product for counter sales, stock and order follow-up.')
   || !home.includes('class="company-operating-overview"')
   || home.includes('class="company-product-evidence"')
   || /href="\/(?:website|ecommerce)\//.test(home)
@@ -391,8 +439,8 @@ for (const [route, html] of [['/', home], ['/shop/', pages.get('/shop/').html], 
   const expectedLinks = route === '/' ? 9 : route === '/shop/' ? 9 : 5 + Number(Boolean(contactActionTarget))
   if ((body.match(/<a\b/g) || []).length !== expectedLinks) fail('marketing_link_surface_drift', { route, expectedLinks })
   const expectedLogin = route === '/shop/'
-    ? 'href="https://app.supermega.dev/login?product=shop"'
-    : 'href="https://app.supermega.dev/login"'
+    ? `href="${appOrigin}/login?product=shop"`
+    : `href="${appOrigin}/login"`
   if (countOccurrences(body, expectedLogin) !== 1) fail('login_action_count_invalid', { route, expectedLogin })
   if (route === '/shop/' && (!body.includes('class="button button-primary" href="/contact/?product=shop">Contact the Shop team') || body.includes('Ask about Shop') || body.includes('Talk about Shop') || body.includes('See Shop screens') || body.includes('Need help with Shop?'))) fail('shop_primary_product_action_missing')
   if (body.includes('>Company</a>')) fail('company_page_navigation_not_consolidated')
@@ -418,7 +466,7 @@ for (const [route, html] of [['/', home], ['/shop/', pages.get('/shop/').html], 
     }
   }
   const productVisualMissing = route === '/'
-    ? !hasClassToken(body, 'company-hero') || hasClassToken(body, 'product-family') || !body.includes('Sell at the counter.<br><span>Keep orders and stock in view.</span>') || !body.includes('class="company-operating-overview"') || !body.includes('class="company-product-visual"') || body.includes('class="company-product-evidence"') || body.includes('class="company-portfolio"') || body.includes('data-platform-carousel') || body.includes('Choose a Shop screen') || !body.includes('src="/images/actual-shop-today.png"') || body.includes('data-device-choice')
+    ? !hasClassToken(body, 'company-hero') || hasClassToken(body, 'product-family') || !body.includes('Operating software<br><span>for Myanmar businesses.</span>') || !body.includes('class="company-operating-overview"') || !body.includes('class="company-product-visual"') || body.includes('class="company-product-evidence"') || body.includes('class="company-portfolio"') || body.includes('data-platform-carousel') || body.includes('Choose a Shop screen') || !body.includes('src="/images/actual-shop-today.png"') || body.includes('data-device-choice')
     : route === '/shop/'
       ? !body.includes('class="shop-hero-app"') || !body.includes('class="shop-actual-showcase"') || !body.includes('Orders and stock. Clear next steps.') || !body.includes('class="shop-responsive-showcase"') || !body.includes('Counter sale on desktop, tablet and phone') || !body.includes('Sample catalog and example prices.') || !body.includes('src="/images/actual-shop-orders.png"') || !body.includes('src="/images/actual-shop-inventory.png"') || countOccurrences(body, 'class="platform-device-capture ') !== 3 || countOccurrences(body, '<article class="shop-workflow-card">') !== 2 || countOccurrences(body, 'src="/images/actual-shop-sell.png"') !== 1 || body.includes('Makro PRO') || body.includes('17 October 2026') || body.includes('class="pos-window"') || body.includes('class="sample-label"') || body.includes('Complete sample sale') || body.includes('shop-sample-demo.js') || body.includes('class="platform-gallery shop-gallery-all"') || body.includes('data-platform-carousel') || body.includes('data-device-choice') || body.includes('data-device-frame') || /<a\b[^>]*>\s*<img\b[^>]*src="\/images\/actual-shop-/i.test(body)
       : !body.includes('class="platform-image"') || !body.includes('class="feature-line"')
@@ -430,11 +478,10 @@ for (const [route, html] of [['/', home], ['/shop/', pages.get('/shop/').html], 
       fail('brand_home_story_order_drift')
     }
   }
-  const directAppTargets = [...body.matchAll(/href="(https:\/\/app\.supermega\.dev\/[^\"]+)"/g)]
+  const expectedLoginTarget = `${appOrigin}/login${route === '/shop/' ? '?product=shop' : ''}`
+  const directAppTargets = [...body.matchAll(/href="(https:\/\/[^\"]+)"/g)]
     .map(match => match[1])
-    .filter(target => target !== (route === '/shop/'
-      ? 'https://app.supermega.dev/login?product=shop'
-      : 'https://app.supermega.dev/login'))
+    .filter(target => target.startsWith(`${appOrigin}/`) && target !== expectedLoginTarget)
   if (directAppTargets.length !== 0) fail('product_action_release_state_drift', { route, expected: 0, actual: directAppTargets.length })
   if (contactActionTarget && !body.includes(`href="${contactActionTarget}">Contact SuperMega</a>`)) fail('product_action_destination_drift', { route, expected: contactActionTarget })
   for (const token of ['Request assisted setup', 'Open Ecommerce', 'Open Website', 'Choose shop type', 'theme-toggle', 'Start guided trial']) {
@@ -515,7 +562,7 @@ for (const token of ['SuperMega terminal mark', 'd="M10 9 26 22 10 35M35 35h27"'
 }
 if (/<rect\b/i.test(favicon)) fail('brand_mark_background_present')
 
-for (const cardFile of ['og-card.png', ...manifest.customerProducts.map((product) => `og-card-${product.id}.png`)]) {
+for (const cardFile of ['og-card.png', ...publicProducts.map((product) => `og-card-${product.id}.png`)]) {
   const ogCardPath = resolve(staticDir, cardFile)
   requireFile(ogCardPath, cardFile)
   const ogCard = readFileSync(ogCardPath)
@@ -523,7 +570,6 @@ for (const cardFile of ['og-card.png', ...manifest.customerProducts.map((product
   if (ogCard.readUInt32BE(16) !== 1200 || ogCard.readUInt32BE(20) !== 630) fail('og_card_dimensions_wrong', { cardFile, width: ogCard.readUInt32BE(16), height: ogCard.readUInt32BE(20) })
 }
 
-const release = JSON.parse(readStatic('__release.json'))
 for (const [key, value] of Object.entries({
   service: 'supermega-public-site',
   brandVersion: manifest.brand.version,
@@ -638,8 +684,22 @@ for (const route of [
   if (!config.routes.some((entry) => entry.src === route[0] && entry.dest === route[1])) fail('public_api_route_missing', { route })
 }
 if (!config.routes.some((entry) => entry.src === '^/vercel-insights\\.js$' && entry.continue === true && entry.headers?.['cache-control'] === 'no-store, max-age=0')) fail('public_observability_no_store_route_missing')
-if (!config.routes.some((entry) => entry.src === '^/(?:favicon\\.svg|site\\.webmanifest|og-card(?:-(?:shop|plant|website|ecommerce))?\\.png)$' && entry.continue === true && entry.headers?.['cache-control'])) fail('static_asset_cache_route_missing')
-if (!config.routes.some((entry) => entry.handle === 'filesystem')) fail('filesystem_route_missing')
+if (!config.routes.some((entry) => entry.src === '^/(?:favicon\\.svg|site\\.webmanifest|og-card(?:-shop)?\\.png)$' && entry.continue === true && entry.headers?.['cache-control'])) fail('static_asset_cache_route_missing')
+const filesystemRouteIndex = config.routes.findIndex((entry) => entry.handle === 'filesystem')
+if (filesystemRouteIndex < 0) fail('filesystem_route_missing')
+const firstPublicRouteMatch = (path) => {
+  const index = config.routes.findIndex((entry) => typeof entry.src === 'string' && entry.continue !== true && new RegExp(entry.src).test(path))
+  return index < 0 ? undefined : { entry: config.routes[index], index }
+}
+for (const productId of manifest.productVisibility.retainedOnlyProductIds) {
+  for (const path of [`/${productId}`, `/${productId}/`, `/${productId}/index.html`, `/${productId}/settings/nested`]) {
+    const match = firstPublicRouteMatch(path)
+    if (!match || match.index >= filesystemRouteIndex || match.entry.status !== 404 || match.entry.dest !== '/404.html') {
+      fail('internal_product_route_not_private', { productId, path, match, filesystemRouteIndex })
+    }
+  }
+  if (existsSync(resolve(staticDir, `og-card-${productId}.png`))) fail('internal_product_share_card_public', { productId })
+}
 if (!config.routes.some((entry) => entry.src === '^/(.*)$' && entry.status === 404 && entry.dest === '/404.html')) fail('not_found_route_missing')
 
 // Retired public API surface. The legacy ops endpoints were deliberately removed

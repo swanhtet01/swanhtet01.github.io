@@ -37,9 +37,7 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          shopCopy(widget.myanmar, 'Recent sales', 'မကြာသေးမီက အရောင်းများ'),
-        ),
+        title: Text(shopCopy(widget.myanmar, 'Recent sales', 'အရောင်းများ')),
         actions: [
           IconButton(
             tooltip: shopCopy(
@@ -107,13 +105,18 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
                       vertical: 8,
                     ),
                     title: Text(
-                      shopMmk(sale.totalMmk),
-                      style: const TextStyle(fontWeight: FontWeight.w700),
+                      shopMmk(sale.totalMmk, myanmar: widget.myanmar),
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
                     ),
                     subtitle: Text(
-                      '${_when(context, sale.createdAtMillis)} · '
-                      '${_paymentName(sale.paymentMethod)} · '
-                      '${sale.lines.length} ${shopCopy(widget.myanmar, 'items', 'မျိုး')}',
+                      '${_when(context, sale.createdAtMillis)}\n'
+                      '${_paymentName(sale.paymentMethod)}',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
                     ),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () => _showSale(sale),
@@ -165,10 +168,14 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
                     child: Row(
                       children: [
                         Expanded(
-                          child: Text('${line.productName} × ${line.quantity}'),
+                          child: Text(
+                            '${line.productName} × ${shopNumber(line.quantity, myanmar: widget.myanmar)}',
+                          ),
                         ),
                         const SizedBox(width: 12),
-                        Text(shopMmk(line.lineTotalMmk)),
+                        Text(
+                          shopMmk(line.lineTotalMmk, myanmar: widget.myanmar),
+                        ),
                       ],
                     ),
                   ),
@@ -181,8 +188,11 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
                       ),
                     ),
                     Text(
-                      shopMmk(sale.totalMmk),
-                      style: const TextStyle(fontWeight: FontWeight.w700),
+                      shopMmk(sale.totalMmk, myanmar: widget.myanmar),
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
                     ),
                   ],
                 ),

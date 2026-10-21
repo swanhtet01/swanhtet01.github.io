@@ -10,6 +10,7 @@ if (isolatedOutputId && !/^[a-z0-9][a-z0-9-]{0,63}$/.test(isolatedOutputId)) thr
 const staticDir = isolatedOutputId
   ? resolve(root, '.tmp', `supermega-public-output-${isolatedOutputId}`, 'static')
   : resolve(root, '.vercel/output/static')
+const currentRelease = JSON.parse(readFileSync(resolve(staticDir, '__release.json'), 'utf8'))
 const commit = 'a'.repeat(40)
 const app = { origin: 'https://megaos-123456789-swanhtet01s-projects.vercel.app',
   projectId: 'prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG', deploymentId: 'dpl_12345678', commit }
@@ -109,7 +110,10 @@ test('Shop primary sign-in stays exact and cannot permit duplicate or mixed logi
 test('current generated pages bind isolated Login actions without production escapes', () => {
   for (const path of ['index.html', 'shop/index.html', 'website/index.html', 'ecommerce/index.html', 'contact/index.html', 'privacy/index.html']) {
     const source = readFileSync(resolve(staticDir, path), 'utf8')
-    const bound = bindPreviewNavigation(source, app)
+    const canonicalSource = currentRelease.previewNavigation
+      ? source.replaceAll(`href="${currentRelease.previewNavigation.origin}/`, 'href="https://app.supermega.dev/')
+      : source
+    const bound = bindPreviewNavigation(canonicalSource, app)
     assert.equal(validatePreviewLinks(bound, policy, products, { publicOrigin: 'https://public-preview.example' }).pairedOrigin, app.origin)
     assert.ok(!bound.includes('href="https://app.supermega.dev/'))
   }

@@ -2,7 +2,9 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:drift/drift.dart' show Variable;
 import 'package:drift/native.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -10,6 +12,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supermega_shop/menu_import_service.dart';
 import 'package:supermega_shop/printer_services.dart';
+import 'package:supermega_shop/shop_cash_shift_screen.dart';
+import 'package:supermega_shop/shop_copy.dart';
 import 'package:supermega_shop/shop_database.dart';
 import 'package:supermega_shop/shop_models.dart';
 
@@ -151,6 +155,73 @@ void main() {
         service.close();
       },
     );
+
+    test('AI candidates stay out of the catalog until reviewed, then commit together', () async {
+      final database = ShopDatabase(NativeDatabase.memory());
+      addTearDown(database.close);
+      final client = MockClient((request) async {
+        expect(request.headers['authorization'], 'Bearer test-session');
+        return http.Response(
+          jsonEncode({
+            'schemaVersion': 1,
+            'reviewRequired': true,
+            'items': [
+              {
+                'category': 'ကုန်စုံ',
+                'description': 'မြန်မာဆန် ၅ ကီလို',
+                'name': 'ဆန်',
+                'price': 8500,
+              },
+            ],
+          }),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      });
+      final service = MenuImportService(
+        endpoint: Uri.https('app.supermega.dev', '/api/shop/menu-import'),
+        accessToken: () async => 'test-session',
+        client: client,
+      );
+      addTearDown(service.close);
+
+      final candidates = await service.parsePhoto(
+        XFile.fromData(_pngBytes(), name: 'menu.png'),
+        cloudConsent: true,
+      );
+
+      expect(candidates, hasLength(1));
+      expect(candidates.single.name, 'ဆန်');
+      expect(await database.readActiveProducts(), isEmpty);
+      expect(await database.countOutboxOperations(), 0);
+
+      const batchId = 'reviewed-photo-batch';
+      final inserted = await database.importReviewedMenuBatch(
+        batchId: batchId,
+        products: [
+          MenuDraftInput(
+            id: 'reviewed-rice-5kg',
+            batchId: batchId,
+            category: candidates.single.category,
+            name: candidates.single.name,
+            description: candidates.single.description,
+            priceMmk: candidates.single.priceMmk,
+            sku: 'RICE-5KG',
+            barcode: '0001234567890',
+            openingStock: 4,
+          ),
+        ],
+      );
+
+      final product = (await database.readActiveProducts()).single;
+      expect(inserted, 1);
+      expect(product.name, 'ဆန်');
+      expect(product.priceMmk, 8500);
+      expect(product.onHand, 4);
+      expect(product.barcode, '0001234567890');
+      expect(await database.countStockMovements(), 1);
+      expect(await database.countOutboxOperations(), 1);
+    });
 
     test(
       'rejects oversized photos before reading a token or uploading',
@@ -297,6 +368,44 @@ void main() {
         expect(printLines, contains('လက်ဖက်ရည် x2'));
         expect(printLines, contains('စုစုပေါင်း: 5,000 MMK'));
         expect(printLines, contains('ငွေပေးချေမှု: CASH'));
+      },
+    );
+
+    test(
+      'cash confirmation rejects a stale displayed total atomically',
+      () async {
+        await database.addProduct(
+          id: 'tea',
+          name: 'Tea',
+          priceMmk: 2500,
+          openingStock: 2,
+        );
+        final initialOutbox = await database.countOutboxOperations();
+        await database.customStatement(
+          'UPDATE shop_products SET price_mmk = ? WHERE id = ?',
+          [3000, 'tea'],
+        );
+        await expectLater(
+          database.recordSale(
+            operationId: 'confirmed-cash-1',
+            paymentMethod: 'cash',
+            expectedTotalMmk: 2500,
+            lines: const [ShopSaleLineInput(productId: 'tea', quantity: 1)],
+          ),
+          throwsA(isA<StateError>()),
+        );
+        expect(await database.countSales(), 0);
+        expect((await database.readActiveProducts()).single.onHand, 2);
+        expect(await database.countOutboxOperations(), initialOutbox);
+
+        final receipt = await database.recordSale(
+          operationId: 'confirmed-cash-1',
+          paymentMethod: 'cash',
+          expectedTotalMmk: 3000,
+          lines: const [ShopSaleLineInput(productId: 'tea', quantity: 1)],
+        );
+        expect(receipt.totalMmk, 3000);
+        expect(await database.countSales(), 1);
       },
     );
 
@@ -531,7 +640,641 @@ void main() {
     });
   });
 
+  group('offline cash shift', () {
+    test('formats a negative cash difference without a misplaced comma', () {
+      expect(shopMmk(-100), '-100 MMK');
+      expect(shopMmk(-1200), '-1,200 MMK');
+      expect(shopMmk(-1200, myanmar: true), '-၁,၂၀၀ ကျပ်');
+      expect(shopMmk(24900, myanmar: true), '၂၄,၉၀၀ ကျပ်');
+      expect(shopNumber(1250, myanmar: true), '၁,၂၅၀');
+    });
+
+    test('cash sale cannot make an open shift impossible to close', () async {
+      final database = ShopDatabase(NativeDatabase.memory());
+      try {
+        await database.addProduct(
+          id: 'tea',
+          name: 'Tea',
+          priceMmk: 1,
+          openingStock: 1,
+        );
+        final shift = await database.openCashShift(
+          operationId: 'open-at-limit',
+          operatorLabel: 'May',
+          openingFloatMmk: 200000000000000,
+        );
+        final outboxCount = await database.countOutboxOperations();
+        final movementCount = await database.countStockMovements();
+        await expectLater(
+          database.recordCashSale(
+            operationId: 'sale-over-shift-limit',
+            lines: const [ShopSaleLineInput(productId: 'tea', quantity: 1)],
+          ),
+          throwsA(isA<StateError>()),
+        );
+        expect(await database.countSales(), 0);
+        expect(await database.countStockMovements(), movementCount);
+        expect(await database.countOutboxOperations(), outboxCount);
+        expect((await database.readActiveProducts()).single.onHand, 1);
+        final review = await database.readCashShiftReview(shift.id);
+        expect(review.expectedCashMmk, 200000000000000);
+        expect(
+          (await database.closeCashShift(
+            shiftId: shift.id,
+            operationId: 'close-at-limit',
+            seenSaleCount: review.saleCount,
+            seenCashTotalMmk: review.cashSalesTotalMmk,
+            countedCashMmk: 200000000000000,
+          )).state,
+          'closed',
+        );
+      } finally {
+        await database.close();
+      }
+    });
+
+    test(
+      'counts only assigned sales, guards stale close and replays safely',
+      () async {
+        final database = ShopDatabase(NativeDatabase.memory());
+        try {
+          await database.addProduct(
+            id: 'tea',
+            name: 'Tea',
+            priceMmk: 2500,
+            openingStock: 10,
+          );
+          final shift = await database.openCashShift(
+            operationId: 'open-shift-1',
+            operatorLabel: 'May',
+            openingFloatMmk: 10000,
+          );
+          expect(
+            (await database.openCashShift(
+              operationId: 'open-shift-1',
+              operatorLabel: 'May',
+              openingFloatMmk: 10000,
+            )).id,
+            shift.id,
+          );
+          await expectLater(
+            database.openCashShift(
+              operationId: 'open-shift-1',
+              operatorLabel: 'May',
+              openingFloatMmk: 9000,
+            ),
+            throwsA(isA<StateError>()),
+          );
+          await expectLater(
+            database.openCashShift(
+              operationId: 'another-open-shift',
+              operatorLabel: 'May',
+              openingFloatMmk: 0,
+            ),
+            throwsA(isA<StateError>()),
+          );
+          await expectLater(
+            database.recordCashSale(
+              operationId: 'failed-shift-sale',
+              lines: const [ShopSaleLineInput(productId: 'tea', quantity: 11)],
+            ),
+            throwsA(isA<StateError>()),
+          );
+          expect((await database.readCashShiftReview(shift.id)).saleCount, 0);
+          expect(await database.countSales(), 0);
+          const cashLines = [ShopSaleLineInput(productId: 'tea', quantity: 2)];
+          await database.recordCashSale(
+            operationId: 'cash-shift-1',
+            lines: cashLines,
+          );
+          await database.recordCashSale(
+            operationId: 'cash-shift-1',
+            lines: cashLines,
+          );
+          final firstReview = await database.readCashShiftReview(shift.id);
+          expect(firstReview.cashSalesCount, 1);
+          expect(firstReview.cashSalesTotalMmk, 5000);
+          expect(firstReview.expectedCashMmk, 15000);
+          expect(firstReview.walletSalesCount, 0);
+
+          const walletLines = [
+            ShopSaleLineInput(productId: 'tea', quantity: 1),
+          ];
+          await database.createWalletCheckoutIntent(
+            operationId: 'wallet-shift-1',
+            merchant: MerchantWalletSetup(
+              provider: 'KBZPay',
+              merchantPhone: null,
+              officialQrPayload: _syntheticStaticMmqr(),
+              issuerConfirmed: true,
+            ),
+            lines: walletLines,
+          );
+          await expectLater(
+            database.closeCashShift(
+              shiftId: shift.id,
+              operationId: 'close-pending',
+              seenSaleCount: 1,
+              seenCashTotalMmk: 5000,
+              countedCashMmk: 15000,
+            ),
+            throwsA(isA<StateError>()),
+          );
+          await database.recordSale(
+            operationId: 'wallet-shift-1',
+            lines: walletLines,
+            paymentMethod: 'kbzpay',
+            walletCheckoutOperationId: 'wallet-shift-1',
+          );
+          final review = await database.readCashShiftReview(shift.id);
+          expect(review.saleCount, 2);
+          expect(review.cashSalesTotalMmk, 5000);
+          expect(review.walletSalesCount, 1);
+          expect(review.walletSalesTotalMmk, 2500);
+          expect(review.expectedCashMmk, 15000);
+          await expectLater(
+            database.closeCashShift(
+              shiftId: shift.id,
+              operationId: 'close-stale',
+              seenSaleCount: firstReview.saleCount,
+              seenCashTotalMmk: firstReview.cashSalesTotalMmk,
+              countedCashMmk: 15000,
+            ),
+            throwsA(isA<StateError>()),
+          );
+          final closed = await database.closeCashShift(
+            shiftId: shift.id,
+            operationId: 'close-shift-1',
+            seenSaleCount: review.saleCount,
+            seenCashTotalMmk: review.cashSalesTotalMmk,
+            countedCashMmk: 14900,
+          );
+          expect(closed.state, 'closed');
+          expect(closed.expectedCashMmk, 15000);
+          expect(closed.countedCashMmk, 14900);
+          expect(closed.differenceMmk, -100);
+          expect(
+            (await database.closeCashShift(
+              shiftId: shift.id,
+              operationId: 'close-shift-1',
+              seenSaleCount: review.saleCount,
+              seenCashTotalMmk: review.cashSalesTotalMmk,
+              countedCashMmk: 14900,
+            )).differenceMmk,
+            -100,
+          );
+          await expectLater(
+            database.closeCashShift(
+              shiftId: shift.id,
+              operationId: 'close-shift-1',
+              seenSaleCount: review.saleCount,
+              seenCashTotalMmk: review.cashSalesTotalMmk,
+              countedCashMmk: 15000,
+            ),
+            throwsA(isA<StateError>()),
+          );
+          final saleEvent = await database
+              .customSelect(
+                'SELECT payload_json FROM shop_sync_outbox WHERE operation_id = ?',
+                variables: [const Variable<String>('cash-shift-1')],
+              )
+              .getSingle();
+          expect(
+            (jsonDecode(saleEvent.read<String>('payload_json'))
+                as Map<String, dynamic>)['shiftId'],
+            shift.id,
+          );
+          final next = await database.openCashShift(
+            operationId: 'open-shift-2',
+            operatorLabel: 'May',
+            openingFloatMmk: 0,
+          );
+          await database.recordCashSale(
+            operationId: 'cash-shift-1',
+            lines: cashLines,
+          );
+          expect((await database.readCashShiftReview(next.id)).saleCount, 0);
+          expect(await database.countSales(), 2);
+        } finally {
+          await database.close();
+        }
+      },
+    );
+
+    test('pending wallet checkout blocks opening a new shift', () async {
+      final database = ShopDatabase(NativeDatabase.memory());
+      try {
+        await database.addProduct(
+          id: 'tea',
+          name: 'Tea',
+          priceMmk: 2500,
+          openingStock: 2,
+        );
+        await database.createWalletCheckoutIntent(
+          operationId: 'pre-shift-wallet',
+          merchant: MerchantWalletSetup(
+            provider: 'KBZPay',
+            merchantPhone: null,
+            officialQrPayload: _syntheticStaticMmqr(),
+            issuerConfirmed: true,
+          ),
+          lines: const [ShopSaleLineInput(productId: 'tea', quantity: 1)],
+        );
+        await expectLater(
+          database.openCashShift(
+            operationId: 'open-with-pending',
+            operatorLabel: 'May',
+            openingFloatMmk: 0,
+          ),
+          throwsA(isA<StateError>()),
+        );
+        expect(await database.readOpenCashShift(), isNull);
+        expect(
+          await database.cancelWalletCheckoutIntent('pre-shift-wallet'),
+          isTrue,
+        );
+        expect(
+          (await database.openCashShift(
+            operationId: 'open-with-pending',
+            operatorLabel: 'May',
+            openingFloatMmk: 0,
+          )).state,
+          'open',
+        );
+      } finally {
+        await database.close();
+      }
+    });
+
+    test('v5 file gains shift tables without assigning old sales', () async {
+      final directory = await Directory.systemTemp.createTemp('shop-shift-v5-');
+      final file = File(
+        '${directory.path}${Platform.pathSeparator}shop.sqlite',
+      );
+      var database = ShopDatabase(NativeDatabase(file));
+      try {
+        await database.addProduct(
+          id: 'tea',
+          name: 'Tea',
+          priceMmk: 2500,
+          openingStock: 4,
+        );
+        await database.recordCashSale(
+          operationId: 'old-sale',
+          lines: const [ShopSaleLineInput(productId: 'tea', quantity: 1)],
+        );
+        await database.customStatement('DROP TABLE shop_cash_shift_sales');
+        await database.customStatement('DROP TABLE shop_cash_shifts');
+        await database.customStatement('PRAGMA user_version = 5');
+        await database.close();
+        database = ShopDatabase(NativeDatabase(file));
+        final shift = await database.openCashShift(
+          operationId: 'after-upgrade',
+          operatorLabel: 'May',
+          openingFloatMmk: 5000,
+        );
+        expect((await database.readCashShiftReview(shift.id)).saleCount, 0);
+        await database.recordCashSale(
+          operationId: 'new-sale',
+          lines: const [ShopSaleLineInput(productId: 'tea', quantity: 1)],
+        );
+        expect((await database.readCashShiftReview(shift.id)).saleCount, 1);
+        await database.close();
+        database = ShopDatabase(NativeDatabase(file));
+        expect((await database.readOpenCashShift())?.id, shift.id);
+        expect(
+          (await database.readCashShiftReview(shift.id)).expectedCashMmk,
+          7500,
+        );
+        expect(await database.countSales(), 2);
+        final review = await database.readCashShiftReview(shift.id);
+        await database.closeCashShift(
+          shiftId: shift.id,
+          operationId: 'close-after-upgrade',
+          seenSaleCount: review.saleCount,
+          seenCashTotalMmk: review.cashSalesTotalMmk,
+          countedCashMmk: 7500,
+        );
+        await database.close();
+        database = ShopDatabase(NativeDatabase(file));
+        final outboxCount = await database.countOutboxOperations();
+        expect((await database.readLatestCashShift())?.state, 'closed');
+        expect(
+          (await database.closeCashShift(
+            shiftId: shift.id,
+            operationId: 'close-after-upgrade',
+            seenSaleCount: review.saleCount,
+            seenCashTotalMmk: review.cashSalesTotalMmk,
+            countedCashMmk: 7500,
+          )).differenceMmk,
+          0,
+        );
+        expect(await database.countOutboxOperations(), outboxCount);
+      } finally {
+        await database.close();
+        await directory.delete(recursive: true);
+      }
+    });
+
+    testWidgets('shift opening and closing stays usable in both languages', (
+      tester,
+    ) async {
+      final database = ShopDatabase(NativeDatabase.memory());
+      try {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: ShopCashShiftScreen(database: database, myanmar: false),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.enterText(find.byType(TextField).first, 'May');
+        await tester.enterText(find.byType(TextField).last, '10000');
+        await tester.tap(find.text('Start shift'));
+        await tester.pumpAndSettle();
+        expect(find.text('Expected from recorded sales'), findsOneWidget);
+        await tester.enterText(find.byType(TextField).last, '10000');
+        await tester.tap(find.text('Close shift'));
+        await tester.pumpAndSettle();
+        await tester.drag(find.byType(ListView), const Offset(0, -400));
+        await tester.pumpAndSettle();
+        expect(find.text('Last closed shift'), findsOneWidget);
+        expect(find.text('Expected from recorded sales'), findsOneWidget);
+        await tester.pumpWidget(const SizedBox());
+        await tester.pumpWidget(
+          MaterialApp(
+            home: ShopCashShiftScreen(database: database, myanmar: true),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('တာဝန်ချိန်စတင်ရန်'), findsOneWidget);
+      } finally {
+        await tester.pumpWidget(const SizedBox());
+        await database.close();
+      }
+    });
+  });
+
+  group('offline stock updates', () {
+    test('a count preserves stock promised in a pending wallet sale', () async {
+      final database = ShopDatabase(NativeDatabase.memory());
+      try {
+        await database.addProduct(
+          id: 'tea',
+          name: 'Tea',
+          priceMmk: 2500,
+          openingStock: 2,
+        );
+        await database.createWalletCheckoutIntent(
+          operationId: 'wallet-before-count',
+          merchant: MerchantWalletSetup(
+            provider: 'KBZPay',
+            merchantPhone: null,
+            officialQrPayload: _syntheticStaticMmqr(),
+            issuerConfirmed: true,
+          ),
+          lines: const [ShopSaleLineInput(productId: 'tea', quantity: 2)],
+        );
+        final movementCount = await database.countStockMovements();
+        final outboxCount = await database.countOutboxOperations();
+        await expectLater(
+          database.changeStock(
+            operationId: 'count-below-wallet',
+            productId: 'tea',
+            kind: 'count',
+            quantity: 1,
+            expectedOnHand: 2,
+          ),
+          throwsA(isA<StateError>()),
+        );
+        expect((await database.readActiveProducts()).single.onHand, 2);
+        expect(await database.countStockMovements(), movementCount);
+        expect(await database.countOutboxOperations(), outboxCount);
+        expect(
+          await database.changeStock(
+            operationId: 'count-wallet-safe',
+            productId: 'tea',
+            kind: 'count',
+            quantity: 2,
+            expectedOnHand: 2,
+          ),
+          2,
+        );
+        expect(
+          await database.cancelWalletCheckoutIntent('wallet-before-count'),
+          isTrue,
+        );
+        expect(
+          await database.changeStock(
+            operationId: 'count-after-cancel',
+            productId: 'tea',
+            kind: 'count',
+            quantity: 1,
+            expectedOnHand: 2,
+          ),
+          1,
+        );
+      } finally {
+        await database.close();
+      }
+    });
+
+    test(
+      'receive and count are durable, idempotent and reject stale counts',
+      () async {
+        final database = ShopDatabase(NativeDatabase.memory());
+        try {
+          await database.addProduct(
+            id: 'rice',
+            name: 'Rice',
+            priceMmk: 12000,
+            openingStock: 5,
+          );
+          expect(
+            await database.changeStock(
+              operationId: 'receive-rice-1',
+              productId: 'rice',
+              kind: 'receive',
+              quantity: 3,
+              expectedOnHand: 5,
+            ),
+            8,
+          );
+          expect(
+            await database.changeStock(
+              operationId: 'receive-rice-1',
+              productId: 'rice',
+              kind: 'receive',
+              quantity: 3,
+              expectedOnHand: 5,
+            ),
+            8,
+          );
+          expect(await database.countStockMovements(), 2);
+          await database.recordCashSale(
+            operationId: 'sell-rice-1',
+            lines: const [ShopSaleLineInput(productId: 'rice', quantity: 2)],
+          );
+          await expectLater(
+            database.changeStock(
+              operationId: 'stale-rice-count',
+              productId: 'rice',
+              kind: 'count',
+              quantity: 4,
+              expectedOnHand: 8,
+            ),
+            throwsA(isA<StateError>()),
+          );
+          expect(
+            await database.changeStock(
+              operationId: 'count-rice-1',
+              productId: 'rice',
+              kind: 'count',
+              quantity: 4,
+              expectedOnHand: 6,
+            ),
+            4,
+          );
+          await expectLater(
+            database.changeStock(
+              operationId: 'count-rice-1',
+              productId: 'rice',
+              kind: 'count',
+              quantity: 3,
+              expectedOnHand: 6,
+            ),
+            throwsA(isA<StateError>()),
+          );
+          expect((await database.readActiveProducts()).single.onHand, 4);
+          expect(await database.countStockMovements(), 4);
+          expect(await database.countOutboxOperations(), 4);
+        } finally {
+          await database.close();
+        }
+      },
+    );
+  });
+
+  test(
+    'local SQLite snapshot includes sales, stock, outbox and wallet intents',
+    () async {
+      final directory = await Directory.systemTemp.createTemp('shop-snapshot-');
+      final target = File('${directory.path}/shop.sqlite');
+      final database = ShopDatabase(NativeDatabase.memory());
+      try {
+        await database.addProduct(
+          id: 'rice',
+          name: 'Rice',
+          priceMmk: 12000,
+          openingStock: 5,
+        );
+        await database.recordCashSale(
+          operationId: 'sale-snapshot-1',
+          lines: const [ShopSaleLineInput(productId: 'rice', quantity: 2)],
+        );
+        await database.customStatement(
+          'INSERT INTO shop_wallet_checkout_intents '
+          '(operation_id, payment_method, request_fingerprint, total_mmk, '
+          'merchant_phone, merchant_qr_payload, basket_json, state, '
+          'created_at_millis) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          [
+            'wallet-snapshot-1',
+            'kbzpay',
+            'synthetic',
+            0,
+            '',
+            '',
+            '[]',
+            'pending',
+            1,
+          ],
+        );
+
+        await database.exportVerifiedLocalSnapshot(target);
+        expect(await target.length(), greaterThan(0));
+        final reopened = ShopDatabase(NativeDatabase(target));
+        try {
+          expect((await reopened.readActiveProducts()).single.onHand, 3);
+          expect(await reopened.countSales(), 1);
+          expect(await reopened.countStockMovements(), 2);
+          expect(await reopened.countOutboxOperations(), 2);
+          final intents = await reopened
+              .customSelect(
+                'SELECT operation_id FROM shop_wallet_checkout_intents',
+              )
+              .get();
+          expect(
+            intents.single.read<String>('operation_id'),
+            'wallet-snapshot-1',
+          );
+        } finally {
+          await reopened.close();
+        }
+        final originalBytes = await target.readAsBytes();
+        await expectLater(
+          database.exportVerifiedLocalSnapshot(target),
+          throwsA(isA<StateError>()),
+        );
+        expect(await target.readAsBytes(), originalBytes);
+      } finally {
+        await database.close();
+        await directory.delete(recursive: true);
+      }
+    },
+  );
+
   group('bounded printer discovery', () {
+    test(
+      'paper width persists and a changed profile requires retesting',
+      () async {
+        SharedPreferences.setMockInitialValues({});
+        const range = (ip: '192.168.20.10', mask: '255.255.255.248');
+        final settings = ReceiptPrinterSettings(
+          rangeProvider: () async => range,
+          session: VerifiedPrinterSession(),
+        );
+        expect(await settings.readPaperWidth(), ReceiptPaperWidth.mm80);
+        expect(ReceiptPaperWidth.mm58.paperSize.widthPixels, 384);
+        expect(ReceiptPaperWidth.mm80.paperSize.widthPixels, 576);
+        expect(ReceiptPaperWidth.mm58.sendCutCommand, isFalse);
+        expect(ReceiptPaperWidth.mm80.sendCutCommand, isTrue);
+
+        final printer = (await PrinterDiscoveryService(
+          rangeProvider: () async => range,
+          probe: (host, port) async => host == '192.168.20.9',
+        ).scan()).printers.single;
+        await settings.saveAfterTest(
+          printer,
+          paperWidth: ReceiptPaperWidth.mm58,
+        );
+        expect(
+          (await settings.readTrustedPrinter())?.paperWidth,
+          ReceiptPaperWidth.mm58,
+        );
+        expect(
+          await ReceiptPrinterSettings(
+            rangeProvider: () async => range,
+            session: VerifiedPrinterSession(),
+          ).readPaperWidth(),
+          ReceiptPaperWidth.mm58,
+        );
+
+        final preferences = await SharedPreferences.getInstance();
+        await preferences.setString(shopReceiptPaperWidthKey, 'mm80');
+        expect(await settings.readTrustedPrinter(), isNull);
+
+        await settings.saveAfterTest(
+          printer,
+          paperWidth: ReceiptPaperWidth.mm80,
+        );
+        expect(
+          (await settings.readTrustedPrinter())?.paperWidth,
+          ReceiptPaperWidth.mm80,
+        );
+        settings.requireRetest();
+        expect(await settings.readTrustedPrinter(), isNull);
+      },
+    );
+
     test('reprint needs a tested printer in this session', () async {
       SharedPreferences.setMockInitialValues({
         shopReceiptPrinterHostKey: '192.168.20.9',

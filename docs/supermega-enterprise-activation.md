@@ -6,17 +6,18 @@ The validator is intentionally read-only. It does not apply migrations, create u
 
 ## Current reviewed preview rehearsal packet (v3)
 
-There are 32 migrations in the reviewed packet: the legacy public baseline,
-the 14 private-core migrations through schema v13, and seventeen later migrations for durable
+There are 33 migrations in the reviewed packet: the legacy public baseline,
+the 14 private-core migrations through schema v13, and eighteen later migrations for durable
 signup attempts, Website and Ecommerce review storage, entitlement proof, customer decisions,
 RLS optimization, Sites publishing, private media, inquiry follow-up, stable updates,
-six-page reviews, the internal Ecommerce management boundary, and the shared Commerce state lock.
+six-page reviews, the internal Ecommerce management boundary, the shared Commerce state lock,
+and tenant access-control read hardening.
 Core schema version 13 alone does not prove those later features exist. Historical local
 rehearsal descriptions below retain their original scope; they are not full-candidate proof.
-The source directory contains 35 SQL files. The two custom-domain migrations,
+The source directory contains 36 SQL files. The two custom-domain migrations,
 `20261014103000_website_custom_domain_bindings.sql` and
-`20261014122400_website_domain_attempt_fencing.sql`, are outside this 32-file packet and
-the observed 31-private-migration rehearsal chain. Do not infer domain lifecycle support
+`20261014122400_website_domain_attempt_fencing.sql`, are outside this 33-file packet and
+the 32-private-migration source chain. Do not infer domain lifecycle support
 or add those files to an apply operation without a separately reviewed inventory and proof.
 The additional `20261016143945_optimize_sites_inquiry_rls_initplans.sql` is also outside
 this packet; its presence in source does not authorize applying it to a preview.
@@ -145,14 +146,14 @@ powershell -ExecutionPolicy Bypass -File tools/activate_supermega_database.ps1 -
 
 If any gate fails, keep or restore `isolated_demo`, do not redeploy partial environment variables, suspend the workspace membership, and do not describe the workspace as activated. The helpers emit sanitized JSON evidence, never print database URLs or keys, and send production values to Vercel through standard input.
 
-## Existing acceptance branch: temporary runtime login
+## Clean Shop acceptance branch: temporary runtime login
 
-For the existing `twflgmlwfkykgzsxnegc` acceptance branch, reconcile current catalog and migration history first. The empty-target preflight above intentionally rejects an already initialized schema; do not remove its guards or replay migrations to satisfy it.
+Use only the data-less `aaonrwgghhdycwqbxuoi` branch for this Shop acceptance lane. The earlier `twflgmlwfkykgzsxnegc` branch remains `MIGRATIONS_FAILED` and is rejected by the acceptance tools. A branch being healthy does not prove its full migration history, a signed-in session, or tenant isolation. The empty-target preflight above intentionally rejects an already initialized schema; do not remove its guards or replay migrations to satisfy it.
 
 Inspect the runtime-role contract without applying changes:
 
 ```powershell
-python tools/provision_acceptance_runtime_role.py --expected-project-ref twflgmlwfkykgzsxnegc --admin-database-url-file .tmp/acceptance-admin-url.txt
+python tools/provision_acceptance_runtime_role.py --expected-project-ref aaonrwgghhdycwqbxuoi --admin-database-url-file .tmp/acceptance-admin-url.txt
 ```
 
 The administrative URL must use the verified project endpoint, TLS, and a direct or session connection; transaction-pooler administrative sessions are rejected. Keep it in an ignored, access-restricted file or the process-scoped `SUPERMEGA_ACCEPTANCE_ADMIN_URL` variable. Obtain connection details from this branch's dashboard, not a copied production endpoint.
@@ -161,4 +162,4 @@ Only after the owner authorizes creating the temporary login, record that decisi
 
 The authorized apply command adds `--apply --approval-file .tmp/acceptance-role-approval.json --runtime-password-file .tmp/acceptance-runtime-password.txt` to the inspection command. Use a newly generated temporary secret of at least 24 characters; never put it in command arguments or output. The same expiry controls database login validity. Production and unrelated targets are rejected, and an existing login is never rotated. An expired login role still exists: expiry is not deletion, so subsequent cleanup or renewal needs separate review.
 
-A failure result with `external_mutation_performed: null` means the outcome is uncertain. Inspect the remote role before retrying. Successful provisioning establishes the role only; it does not establish hosted sign-in, tenant isolation, persistence, recovery or customer acceptance.
+A failure result with `external_mutation_performed: null` means the outcome is uncertain. Inspect the remote role before retrying. Successful provisioning establishes the role only; it does not establish hosted sign-in, tenant isolation, persistence, recovery or customer acceptance. The matching storage-audit role needs its own exact-target approval and connection secret. Both roles are absent on the clean branch as of 21 October 2026; no role creation is implied by this runbook update.

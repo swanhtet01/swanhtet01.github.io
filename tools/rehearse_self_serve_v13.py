@@ -44,6 +44,7 @@ EXTRAS = (
     "20261015202629_ecommerce_operator_review_grant.sql",
     "20261019070000_ecommerce_operator_management_boundary.sql",
     "20261019103000_ecommerce_review_shared_state_lock.sql",
+    "20261020175519_access_control_member_read_hardening.sql",
 )
 MIGRATIONS = (*pg.MIGRATIONS, *EXTRAS)
 PRODUCTS = ("commerce", "production", "website", "ecommerce")

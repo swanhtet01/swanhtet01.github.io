@@ -24,6 +24,237 @@ Finder _merchantQrSemantics(String provider) => find.byWidgetPredicate(
 );
 
 void main() {
+  testWidgets('Today stays readable and opens Counter in both languages', (
+    tester,
+  ) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    tester.view.devicePixelRatio = 1;
+    for (final width in [320.0, 360.0, 390.0, 820.0, 1200.0]) {
+      for (final myanmar in [false, true]) {
+        tester.view.physicalSize = Size(width, 800);
+        tester.platformDispatcher.textScaleFactorTestValue = width == 320
+            ? 1.5
+            : width == 360
+            ? 1.3
+            : 1.0;
+        final database = ShopDatabase(NativeDatabase.memory());
+        await tester.pumpWidget(
+          ShopApp(
+            database: database,
+            authClient: null,
+            apiBaseUrl: 'https://app.supermega.dev',
+            initialMyanmar: myanmar,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text(myanmar ? 'ယနေ့' : 'Today'), findsWidgets);
+        expect(find.text(myanmar ? 'ရောင်းရန်' : 'Sell'), findsOneWidget);
+        if (width >= 700) {
+          expect(
+            find.text(myanmar ? 'ဆက်တင်များ' : 'Settings'),
+            findsOneWidget,
+          );
+        }
+        expect(
+          find.text(
+            myanmar ? 'ပထမကုန်ပစ္စည်းကို ထည့်ပါ' : 'Add your first product',
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.text(myanmar ? 'ယနေ့ရောင်းအား' : 'Sales today'),
+          findsNothing,
+        );
+        expect(tester.takeException(), isNull);
+
+        await tester.ensureVisible(
+          find.text(
+            myanmar ? 'ပထမကုန်ပစ္စည်းကို ထည့်ပါ' : 'Add your first product',
+          ),
+        );
+        await tester.tap(
+          find.text(
+            myanmar ? 'ပထမကုန်ပစ္စည်းကို ထည့်ပါ' : 'Add your first product',
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          find.text(myanmar ? 'ကုန်ပစ္စည်းများ' : 'Products'),
+          findsOneWidget,
+        );
+        expect(find.byType(AlertDialog), findsOneWidget);
+        expect(tester.takeException(), isNull);
+
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump(const Duration(milliseconds: 1));
+        await database.close();
+      }
+    }
+  });
+
+  testWidgets('Today and Sell keep an unfinished basket and refresh sales', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final database = ShopDatabase(NativeDatabase.memory());
+    try {
+      await database.addProduct(
+        id: 'tea',
+        name: 'Tea',
+        barcode: '111111',
+        priceMmk: 2500,
+        openingStock: 3,
+      );
+      await tester.pumpWidget(
+        ShopApp(
+          database: database,
+          authClient: null,
+          apiBaseUrl: 'https://app.supermega.dev',
+          initialMyanmar: false,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Sell'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), '111111');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('Review sale · 1 · 2,500 MMK'),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.text('Today'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Review sale'), findsNothing);
+      await tester.tap(find.text('Sell'));
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('Review sale · 1 · 2,500 MMK'),
+        findsOneWidget,
+      );
+
+      await database.recordCashSale(
+        operationId: 'outside-counter-sale',
+        lines: const [ShopSaleLineInput(productId: 'tea', quantity: 1)],
+      );
+      await tester.tap(find.text('Today'));
+      await tester.pumpAndSettle();
+      expect(find.text('2,500 MMK'), findsWidgets);
+      expect(find.text('Completed sales'), findsOneWidget);
+      await tester.tap(find.text('Sell'));
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('Review sale · 1 · 2,500 MMK'),
+        findsOneWidget,
+      );
+      expect(await database.countSales(), 1);
+      expect(tester.takeException(), isNull);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+      await database.close();
+    }
+  });
+
+  testWidgets('Today counts only completed local sales and actual stock', (
+    tester,
+  ) async {
+    final database = ShopDatabase(NativeDatabase.memory());
+    addTearDown(database.close);
+    await database.addProduct(
+      id: 'tea',
+      name: 'Tea',
+      priceMmk: 2500,
+      openingStock: 6,
+    );
+    await database.addProduct(
+      id: 'water',
+      name: 'Water',
+      priceMmk: 1200,
+      openingStock: 20,
+    );
+    await database.recordCashSale(
+      operationId: 'today-cash-sale',
+      lines: const [ShopSaleLineInput(productId: 'tea', quantity: 1)],
+    );
+    await database.createWalletCheckoutIntent(
+      operationId: 'today-pending-wallet',
+      merchant: MerchantWalletSetup(
+        provider: 'KBZPay',
+        merchantPhone: '09123456789',
+        officialQrPayload: _testStaticMmqr(),
+        issuerConfirmed: true,
+      ),
+      lines: const [ShopSaleLineInput(productId: 'tea', quantity: 1)],
+    );
+    await tester.pumpWidget(
+      ShopApp(
+        database: database,
+        authClient: null,
+        apiBaseUrl: 'https://app.supermega.dev',
+        initialMyanmar: false,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Sales today'), findsOneWidget);
+    expect(find.text('2,500 MMK'), findsWidgets);
+    expect(find.text('Completed sales'), findsOneWidget);
+    expect(find.text('5 or fewer left'), findsOneWidget);
+    expect(find.text('Tea · 5'), findsOneWidget);
+    expect(find.text('Mobile payment to review'), findsOneWidget);
+    expect(find.text('Check stock'), findsOneWidget);
+    expect(find.textContaining('vs. yesterday'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Burmese Today and Counter show the same kyat amount', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 800);
+    tester.view.devicePixelRatio = 1;
+    tester.platformDispatcher.textScaleFactorTestValue = 1.5;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    final database = ShopDatabase(NativeDatabase.memory());
+    addTearDown(database.close);
+    await database.addProduct(
+      id: 'tea',
+      name: 'Tea',
+      priceMmk: 2500,
+      openingStock: 3,
+    );
+    await database.recordCashSale(
+      operationId: 'burmese-today-sale',
+      lines: const [ShopSaleLineInput(productId: 'tea', quantity: 1)],
+    );
+    await tester.pumpWidget(
+      ShopApp(
+        database: database,
+        authClient: null,
+        apiBaseUrl: 'https://app.supermega.dev',
+        initialMyanmar: true,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('၂,၅၀၀ ကျပ်'), findsWidgets);
+    expect(find.text('အရောင်းအသစ်'), findsOneWidget);
+    await tester.tap(find.text('အရောင်းအသစ်'));
+    await tester.pumpAndSettle();
+    expect(find.text('၂,၅၀၀ ကျပ်'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 1));
+  });
+
   testWidgets('saved sale reprints without recording another sale', (
     tester,
   ) async {
@@ -187,8 +418,10 @@ void main() {
 
   testWidgets('empty catalog can make a durable cash sale', (tester) async {
     final database = ShopDatabase(NativeDatabase.memory());
+    addTearDown(database.close);
     await tester.pumpWidget(
       ShopApp(
+        initialCounter: true,
         database: database,
         authClient: null,
         apiBaseUrl: 'https://app.supermega.dev',
@@ -199,9 +432,11 @@ void main() {
 
     expect(find.text('Products'), findsOneWidget);
     expect(find.text('Your catalog is empty'), findsOneWidget);
+    expect(find.text('Search name, barcode or SKU'), findsNothing);
     expect(find.text('MAMA Chicken Instant Noodles'), findsNothing);
 
-    await tester.tap(find.text('Add item'));
+    await tester.ensureVisible(find.text('Add first product'));
+    await tester.tap(find.text('Add first product'));
     await tester.pumpAndSettle();
     await tester.enterText(
       find.byKey(const ValueKey('shop-product-name')),
@@ -223,7 +458,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Tea'), findsOneWidget);
-    expect(find.textContaining('0012345678905'), findsOneWidget);
+    expect(
+      (await database.readActiveProducts()).single.barcode,
+      '0012345678905',
+    );
     await tester.tap(find.byTooltip('Add to sale'));
     await tester.pumpAndSettle();
     await tester.tap(find.textContaining('Review sale'));
@@ -231,9 +469,23 @@ void main() {
     await tester.tap(find.text('Cash sale'));
     await tester.pumpAndSettle();
 
+    expect(find.text('Cash received?'), findsOneWidget);
+    expect(find.text('Complete sale'), findsOneWidget);
+    expect(await database.countSales(), 0);
+    expect((await database.readActiveProducts()).single.onHand, 2);
+    await tester.tap(find.text('Back'));
+    await tester.pumpAndSettle();
+    expect(await database.countSales(), 0);
+    await tester.tap(find.text('Cash sale'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Complete sale'));
+    await tester.pumpAndSettle();
+
     expect(await database.countSales(), 1);
     expect((await database.readActiveProducts()).single.onHand, 1);
-    await tester.tap(find.byTooltip('Recent sales'));
+    await tester.tap(find.byTooltip('More'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Recent sales'));
     await tester.pumpAndSettle();
     expect(find.text('Recent sales'), findsOneWidget);
     expect(find.text('2,500 MMK'), findsOneWidget);
@@ -241,15 +493,371 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Sale details'), findsOneWidget);
     expect(find.text('Tea × 1'), findsOneWidget);
-    await database.close();
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 1));
   });
 
-  testWidgets('settings keeps language and merchant wallet setup reachable', (
+  testWidgets('desktop first use shows one focused setup workspace', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final database = ShopDatabase(NativeDatabase.memory());
+    try {
+      await tester.pumpWidget(
+        ShopApp(
+          initialCounter: true,
+          database: database,
+          authClient: null,
+          apiBaseUrl: 'https://app.supermega.dev',
+          initialMyanmar: false,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Your catalog is empty'), findsOneWidget);
+      expect(find.text('Add first product'), findsOneWidget);
+      expect(find.text('Import menu photo'), findsOneWidget);
+      expect(find.text('Search name, barcode or SKU'), findsNothing);
+      expect(find.text('Current sale'), findsNothing);
+      expect(tester.takeException(), isNull);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+      await database.close();
+    }
+  });
+
+  testWidgets('tablet landscape keeps the sale beside the catalog', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(820, 700);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final database = ShopDatabase(NativeDatabase.memory());
+    await database.addProduct(
+      id: 'tea',
+      name: 'Tea',
+      priceMmk: 2500,
+      openingStock: 2,
+    );
+    try {
+      await tester.pumpWidget(
+        ShopApp(
+          initialCounter: true,
+          database: database,
+          authClient: null,
+          apiBaseUrl: 'https://app.supermega.dev',
+          initialMyanmar: false,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Tea'), findsOneWidget);
+      expect(find.text('Current sale'), findsOneWidget);
+      expect(find.text('Search name, barcode or SKU'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      expect(
+        tester.getSize(find.byTooltip('Add to sale')).height,
+        greaterThanOrEqualTo(56),
+      );
+      await tester.tap(find.byTooltip('Add to sale'));
+      await tester.pumpAndSettle();
+      expect(find.text('Cash sale'), findsOneWidget);
+      expect(find.textContaining('Review sale'), findsNothing);
+      expect(tester.takeException(), isNull);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+      await database.close();
+    }
+  });
+
+  testWidgets('normal tablet entry reaches sale and review at both layouts', (
+    tester,
+  ) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    tester.view.devicePixelRatio = 1;
+    for (final width in [820.0, 1024.0]) {
+      for (final myanmar in [false, true]) {
+        tester.view.physicalSize = Size(width, 800);
+        final database = ShopDatabase(NativeDatabase.memory());
+        await database.addProduct(
+          id: 'tea',
+          name: 'Tea',
+          priceMmk: 2500,
+          openingStock: 2,
+        );
+        await tester.pumpWidget(
+          ShopApp(
+            database: database,
+            authClient: null,
+            apiBaseUrl: 'https://app.supermega.dev',
+            initialMyanmar: myanmar,
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.text(myanmar ? 'ရောင်းရန်' : 'Sell'));
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.byTooltip(myanmar ? 'အရောင်းထဲထည့်ရန်' : 'Add to sale'),
+        );
+        await tester.pumpAndSettle();
+        if (width == 820) {
+          await tester.tap(
+            find.textContaining(myanmar ? 'အရောင်းစစ်ရန်' : 'Review sale'),
+          );
+          await tester.pumpAndSettle();
+        }
+        expect(find.text(myanmar ? 'ငွေသား' : 'Cash sale'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump(const Duration(milliseconds: 1));
+        await database.close();
+      }
+    }
+  });
+
+  testWidgets('catalog rows stay single, touch-sized targets at app widths', (
+    tester,
+  ) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    for (final width in [360.0, 390.0, 820.0, 1200.0]) {
+      for (final myanmar in [false, true]) {
+        tester.view.physicalSize = Size(width, 800);
+        tester.platformDispatcher.textScaleFactorTestValue = width == 360
+            ? 1.3
+            : 1.0;
+        final database = ShopDatabase(NativeDatabase.memory());
+        await database.addProduct(
+          id: 'rice',
+          name: myanmar
+              ? 'ဆန်အိတ် အရည်အသွေးကောင်း ၁၀ ကီလိုဂရမ်'
+              : 'Premium rice 10 kg bag',
+          priceMmk: 24900,
+          openingStock: 3,
+        );
+        await tester.pumpWidget(
+          ShopApp(
+            initialCounter: true,
+            database: database,
+            authClient: null,
+            apiBaseUrl: 'https://app.supermega.dev',
+            initialMyanmar: myanmar,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final addLabel = myanmar ? 'အရောင်းထဲထည့်ရန်' : 'Add to sale';
+        final row = find.descendant(
+          of: find.byTooltip(addLabel),
+          matching: find.byType(ListTile),
+        );
+        expect(row, findsOneWidget);
+        expect(tester.getSize(row).height, greaterThanOrEqualTo(56));
+        expect(
+          find.descendant(of: row, matching: find.byType(IconButton)),
+          findsNothing,
+        );
+        expect(
+          find.text(myanmar ? '၂၄,၉၀၀ ကျပ်' : '24,900 MMK'),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+
+        await tester.tap(row);
+        await tester.pumpAndSettle();
+        expect(
+          width >= 820
+              ? find.text(myanmar ? 'ငွေသား' : 'Cash sale')
+              : find.textContaining(myanmar ? 'အရောင်းစစ်ရန်' : 'Review sale'),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump(const Duration(milliseconds: 1));
+        await database.close();
+      }
+    }
+  });
+
+  testWidgets('Burmese cash review stays uncommitted until confirmed', (
     tester,
   ) async {
     final database = ShopDatabase(NativeDatabase.memory());
+    await database.addProduct(
+      id: 'tea',
+      name: 'လက်ဖက်ရည်',
+      priceMmk: 2500,
+      openingStock: 2,
+    );
     await tester.pumpWidget(
       ShopApp(
+        initialCounter: true,
+        database: database,
+        authClient: null,
+        apiBaseUrl: 'https://app.supermega.dev',
+        initialMyanmar: true,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('အရောင်းထဲထည့်ရန်'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.textContaining('အရောင်းစစ်ရန်'));
+    await tester.pumpAndSettle();
+    expect(find.text('၂,၅၀၀ ကျပ် × ၁'), findsOneWidget);
+    expect(find.text('၁'), findsOneWidget);
+    expect(find.text('မိုဘိုင်းငွေပေးချေမှု'), findsOneWidget);
+    await tester.tap(find.text('ငွေသား'));
+    await tester.pumpAndSettle();
+    expect(find.text('ငွေသားလက်ခံပြီးပြီလား။'), findsOneWidget);
+    expect(await database.countSales(), 0);
+    await tester.tap(find.text('ပြန်သွားရန်'));
+    await tester.pumpAndSettle();
+    expect(await database.countSales(), 0);
+    await database.close();
+  });
+
+  testWidgets('compact Burmese checkout keeps both payment actions visible', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(360, 760);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final database = ShopDatabase(NativeDatabase.memory());
+    await database.addProduct(
+      id: 'tea',
+      name: 'လက်ဖက်ရည်',
+      priceMmk: 2500,
+      openingStock: 2,
+    );
+    await tester.pumpWidget(
+      ShopApp(
+        initialCounter: true,
+        database: database,
+        authClient: null,
+        apiBaseUrl: 'https://app.supermega.dev',
+        initialMyanmar: true,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull, reason: 'initial compact catalog');
+    await tester.tap(find.byTooltip('အရောင်းထဲထည့်ရန်'));
+    await tester.pumpAndSettle();
+    expect(
+      tester.takeException(),
+      isNull,
+      reason: 'compact catalog with basket',
+    );
+    await tester.tap(find.textContaining('အရောင်းစစ်ရန်'));
+    await tester.pumpAndSettle();
+    expect(find.text('ငွေသား'), findsOneWidget);
+    expect(find.text('မိုဘိုင်းငွေပေးချေမှု'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await database.close();
+  });
+
+  testWidgets('cart sheet refreshes a changed product price before cash', (
+    tester,
+  ) async {
+    final database = ShopDatabase(NativeDatabase.memory());
+    await database.addProduct(
+      id: 'tea',
+      name: 'Tea',
+      priceMmk: 2500,
+      openingStock: 2,
+    );
+    await tester.pumpWidget(
+      ShopApp(
+        initialCounter: true,
+        database: database,
+        authClient: null,
+        apiBaseUrl: 'https://app.supermega.dev',
+        initialMyanmar: false,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Add to sale'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.textContaining('Review sale'));
+    await tester.pumpAndSettle();
+    expect(find.text('2,500 MMK'), findsWidgets);
+    await database.customUpdate(
+      'UPDATE shop_products SET price_mmk = 3000 WHERE id = ?',
+      variables: [const Variable<String>('tea')],
+      updates: {database.shopProducts},
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('3,000 MMK'), findsWidgets);
+    await tester.tap(find.text('Cash sale'));
+    await tester.pumpAndSettle();
+    expect(find.text('3,000 MMK'), findsWidgets);
+    await tester.tap(find.text('Complete sale'));
+    await tester.pumpAndSettle();
+    expect(await database.countSales(), 1);
+    expect((await database.readActiveProducts()).single.onHand, 1);
+    await database.close();
+  });
+
+  testWidgets('rapid cash taps open one confirmation and record one sale', (
+    tester,
+  ) async {
+    final database = ShopDatabase(NativeDatabase.memory());
+    await database.addProduct(
+      id: 'tea',
+      name: 'Tea',
+      priceMmk: 2500,
+      openingStock: 2,
+    );
+    await tester.pumpWidget(
+      ShopApp(
+        initialCounter: true,
+        database: database,
+        authClient: null,
+        apiBaseUrl: 'https://app.supermega.dev',
+        initialMyanmar: false,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Add to sale'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.textContaining('Review sale'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Cash sale'));
+    await tester.tap(find.text('Cash sale'));
+    await tester.pumpAndSettle();
+    expect(find.text('Cash received?'), findsOneWidget);
+    await tester.tap(find.text('Complete sale'));
+    await tester.pumpAndSettle();
+    expect(await database.countSales(), 1);
+    expect((await database.readActiveProducts()).single.onHand, 1);
+    expect(find.text('Cash received?'), findsNothing);
+    await database.close();
+  });
+
+  testWidgets('unknown barcode creates a product that the next scan adds', (
+    tester,
+  ) async {
+    final database = ShopDatabase(NativeDatabase.memory());
+    await database.addProduct(
+      id: 'tea',
+      name: 'Tea',
+      barcode: '9999999999999',
+      priceMmk: 2500,
+      openingStock: 2,
+    );
+    await tester.pumpWidget(
+      ShopApp(
+        initialCounter: true,
         database: database,
         authClient: null,
         apiBaseUrl: 'https://app.supermega.dev',
@@ -258,7 +866,297 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byTooltip('Settings'));
+    await tester.enterText(find.byType(TextField), '0012345678905');
+    await tester.pumpAndSettle();
+    expect(find.text('No matching products'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('shop-add-search-result')));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<TextFormField>(
+            find.byKey(const ValueKey('shop-product-barcode')),
+          )
+          .controller!
+          .text,
+      '0012345678905',
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('shop-product-name')),
+      'Rice',
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('shop-product-price')),
+      '12000',
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('shop-product-stock')),
+      '3',
+    );
+    await tester.tap(find.text('Save product'));
+    await tester.pumpAndSettle();
+
+    expect(
+      (await database.readActiveProducts())
+          .singleWhere((item) => item.name == 'Rice')
+          .barcode,
+      '0012345678905',
+    );
+    expect(find.text('Rice'), findsOneWidget);
+    await tester.tap(find.byType(TextField));
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Review sale'), findsOneWidget);
+    await database.close();
+  });
+
+  testWidgets('ambiguous barcode never adds an arbitrary product', (
+    tester,
+  ) async {
+    final database = ShopDatabase(NativeDatabase.memory());
+    try {
+      await database.addProduct(
+        id: 'tea',
+        name: 'Tea',
+        barcode: '0012345678905',
+        priceMmk: 2500,
+        openingStock: 2,
+      );
+      await database.addProduct(
+        id: 'rice',
+        name: 'Rice',
+        barcode: '0001234567890',
+        priceMmk: 12000,
+        openingStock: 2,
+      );
+      // Simulate a legacy/corrupt catalog; new product writes reject duplicates.
+      await database.customUpdate(
+        'UPDATE shop_products SET barcode = ? WHERE id = ?',
+        variables: [
+          const Variable<String>('0012345678905'),
+          const Variable<String>('rice'),
+        ],
+        updates: {database.shopProducts},
+      );
+      await tester.pumpWidget(
+        ShopApp(
+          initialCounter: true,
+          database: database,
+          authClient: null,
+          apiBaseUrl: 'https://app.supermega.dev',
+          initialMyanmar: false,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), '0012345678905');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Review sale'), findsNothing);
+      expect(
+        find.textContaining('More than one product uses this barcode'),
+        findsOneWidget,
+      );
+      expect(await database.countSales(), 0);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+      await database.close();
+    }
+  });
+
+  testWidgets('scanner resolves one exact code and keeps active search ready', (
+    tester,
+  ) async {
+    final database = ShopDatabase(NativeDatabase.memory());
+    try {
+      await database.addProduct(
+        id: 'tea',
+        name: 'Tea',
+        sku: 'SKU-1',
+        barcode: '111111',
+        priceMmk: 2500,
+        openingStock: 2,
+      );
+      await database.addProduct(
+        id: 'rice',
+        name: 'Rice',
+        sku: 'RICE-2',
+        barcode: 'SKU-1',
+        priceMmk: 5000,
+        openingStock: 2,
+      );
+      await tester.pumpWidget(
+        ShopApp(
+          initialCounter: true,
+          database: database,
+          authClient: null,
+          apiBaseUrl: 'https://app.supermega.dev',
+          initialMyanmar: false,
+        ),
+      );
+      await tester.pumpAndSettle();
+      final search = find.byType(TextField);
+
+      await tester.enterText(search, 'SKU-1');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('More than one product uses this barcode'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Review sale'), findsNothing);
+
+      await tester.enterText(search, '999999');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('No exact barcode or SKU match'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Review sale'), findsNothing);
+
+      await tester.enterText(search, '111111');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Review sale · 1'), findsOneWidget);
+      expect(tester.widget<TextField>(search).focusNode!.hasFocus, isTrue);
+
+      await tester.enterText(search, 'RICE-2');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Review sale · 2'), findsOneWidget);
+      expect(tester.widget<TextField>(search).focusNode!.hasFocus, isTrue);
+      expect(await database.countSales(), 0);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+      await database.close();
+    }
+  });
+
+  testWidgets('cashier can receive and count stock outside the sale screen', (
+    tester,
+  ) async {
+    final database = ShopDatabase(NativeDatabase.memory());
+    await database.addProduct(
+      id: 'rice',
+      name: 'Rice',
+      priceMmk: 12000,
+      openingStock: 2,
+    );
+    await tester.pumpWidget(
+      ShopApp(
+        initialCounter: true,
+        database: database,
+        authClient: null,
+        apiBaseUrl: 'https://app.supermega.dev',
+        initialMyanmar: false,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('More'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Stock'));
+    await tester.pumpAndSettle();
+    expect(find.text('2 in stock'), findsOneWidget);
+    expect(find.text('Reference rice'), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('stock-update-rice')));
+    await tester.pumpAndSettle();
+    expect(find.text('Reference rice'), findsNothing);
+    await tester.enterText(
+      find.byKey(const ValueKey('stock-change-quantity')),
+      '4',
+    );
+    await tester.tap(find.text('Save stock'));
+    await tester.pumpAndSettle();
+    expect(find.text('6 in stock'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('stock-update-rice')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Count'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('stock-change-quantity')),
+      '3',
+    );
+    await tester.tap(find.text('Save stock'));
+    await tester.pumpAndSettle();
+    expect(find.text('3 in stock'), findsOneWidget);
+    expect((await database.readActiveProducts()).single.onHand, 3);
+    await database.close();
+  });
+
+  testWidgets(
+    'stock identifies same-name variants and accepts Myanmar digits',
+    (tester) async {
+      final database = ShopDatabase(NativeDatabase.memory());
+      await database.addProduct(
+        id: 'rice-small',
+        name: 'Rice',
+        sku: 'RICE-1',
+        barcode: '111111',
+        priceMmk: 12000,
+        openingStock: 2,
+      );
+      await database.addProduct(
+        id: 'rice-large',
+        name: 'Rice',
+        sku: 'RICE-2',
+        barcode: '222222',
+        priceMmk: 18000,
+        openingStock: 2,
+      );
+      await tester.pumpWidget(
+        ShopApp(
+          initialCounter: true,
+          database: database,
+          authClient: null,
+          apiBaseUrl: 'https://app.supermega.dev',
+          initialMyanmar: true,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('နောက်ထပ်'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('လက်ကျန်'));
+      await tester.pumpAndSettle();
+      expect(find.text('SKU RICE-1 · ဘားကုဒ် 111111'), findsOneWidget);
+      expect(find.text('SKU RICE-2 · ဘားကုဒ် 222222'), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('stock-update-rice-large')));
+      await tester.pumpAndSettle();
+      expect(find.text('SKU RICE-2 · ဘားကုဒ် 222222'), findsNWidgets(2));
+      await tester.enterText(
+        find.byKey(const ValueKey('stock-change-quantity')),
+        '၄',
+      );
+      await tester.tap(find.text('လက်ကျန်သိမ်းရန်'));
+      await tester.pumpAndSettle();
+      final products = await database.readActiveProducts();
+      expect(products.singleWhere((item) => item.id == 'rice-small').onHand, 2);
+      expect(products.singleWhere((item) => item.id == 'rice-large').onHand, 6);
+      await database.close();
+    },
+  );
+
+  testWidgets('settings keeps language and merchant wallet setup reachable', (
+    tester,
+  ) async {
+    final database = ShopDatabase(NativeDatabase.memory());
+    await tester.pumpWidget(
+      ShopApp(
+        initialCounter: true,
+        database: database,
+        authClient: null,
+        apiBaseUrl: 'https://app.supermega.dev',
+        initialMyanmar: false,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('More'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Settings'));
     await tester.pumpAndSettle();
     expect(find.text('English'), findsOneWidget);
     expect(find.text('မြန်မာ'), findsOneWidget);
@@ -352,6 +1250,7 @@ void main() {
       );
       await tester.pumpWidget(
         ShopApp(
+          initialCounter: true,
           database: database,
           authClient: null,
           apiBaseUrl: 'https://app.supermega.dev',
@@ -364,7 +1263,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.textContaining('Review sale'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Wallet QR'));
+      await tester.tap(find.text('Mobile money'));
       await tester.pumpAndSettle();
 
       await tester.ensureVisible(find.byType(QrImageView).first);
@@ -386,20 +1285,24 @@ void main() {
       // checks UI recovery only; a separate file-backed test covers disk reopen.
       await tester.tap(find.text('Cancel'));
       await tester.pumpAndSettle();
+      expect(find.text('Resume payment'), findsWidgets);
+      expect(find.text('Cash sale'), findsNothing);
+      expect(find.text('Mobile money'), findsNothing);
+      expect(await database.readPendingWalletCheckout(), isNotNull);
+      expect(await database.countSales(), 0);
+      expect((await database.readActiveProducts()).single.onHand, 2);
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
       expect(find.text('Resume payment'), findsOneWidget);
-      final addToSaleButton = find.ancestor(
-        of: find.byTooltip('Add to sale'),
-        matching: find.byType(IconButton),
+      final addToSaleRow = find.descendant(
+        of: find.byTooltip('Finish the pending payment first'),
+        matching: find.byType(ListTile),
       );
-      expect(
-        tester.widget<IconButton>(addToSaleButton.first).onPressed,
-        isNull,
-      );
+      expect(tester.widget<ListTile>(addToSaleRow.first).onTap, isNull);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpWidget(
         ShopApp(
+          initialCounter: true,
           database: database,
           authClient: null,
           apiBaseUrl: 'https://app.supermega.dev',
@@ -473,6 +1376,7 @@ void main() {
     );
     await tester.pumpWidget(
       ShopApp(
+        initialCounter: true,
         database: database,
         authClient: null,
         apiBaseUrl: 'https://app.supermega.dev',

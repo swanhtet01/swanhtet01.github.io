@@ -4484,19 +4484,10 @@ class PostgresTrialStore:
                         )
                         existing_access = cursor.fetchone()
                         if existing_access is not None:
-                            # The membership guard above cannot see a DIFFERENT
-                            # actor's owner row: the workspace_memberships_self_read
-                            # RLS policy only exposes the caller's own membership
-                            # (actor_id = app.actor_id), so a second user claiming an
-                            # already-owned claim reads zero membership rows and the
-                            # TrialClaimConflict guard never fires. The access-control
-                            # read policy IS workspace-scoped (visible to any session
-                            # bound to this workspace GUC), so it is the authoritative
-                            # place to detect the collision. A self-serve claim is 1:1
-                            # with a workspace; an active row owned by a different actor
-                            # is a claim-code conflict and must surface as
-                            # claim_code_conflict (409 "already in use"), not the
-                            # generic durable-history transition error.
+                            # An owner or active member may see this row. Other
+                            # claimants cannot read its owner metadata under RLS;
+                            # their insert hits the workspace primary key below,
+                            # whose 23505 handler reports the same 409 conflict.
                             if (
                                 str(existing_access.get("owner_actor_id", ""))
                                 != principal.actor_id

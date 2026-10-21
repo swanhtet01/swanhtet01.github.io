@@ -125,7 +125,7 @@ test('Shop barcode identity stays separate from SKU, preserves leading zeroes, a
   assert.match(core, /resolution\.kind === 'ambiguous'[\s\S]*Correct the duplicate product codes/)
   assert.match(core, /resolution\.kind === 'not_found'[\s\S]*unmatchedBarcodeForCreation\(value, source\)/)
   assert.match(core, /function selectStockCountBarcode[\s\S]*findCommerceItemByScanCode\(commerce\.items, code\)/)
-  assert.match(core, /placeholder=\{uiText\('Search products or scan barcode'\)\}/)
+  assert.match(core, /placeholder=\{uiText\('Find or scan an item'\)\}/)
   assert.match(core, /name="product-barcode"/)
   assert.match(core, /label>SKU \/ item code \(optional\)/)
 })
@@ -367,4 +367,15 @@ test('a managed first product can complete a counter sale and leave a receipt-re
 
 test('the empty catalog state does not show a duplicate generic products link', () => {
   assert.match(today, /\{commerce\.items\.length \? <footer><Link to="\/shop\/\?tab=inventory">\{uiText\('View products'\)\}/)
+})
+
+test('touch category filters keep swipe scrolling without showing a horizontal scrollbar', async () => {
+  const css = await readFile(resolve('showroom/src/core/core-app.css'), 'utf8')
+  assert.match(css, /\.shop-counter-category-filter \{[^}]*overflow-x: auto;[^}]*overscroll-behavior-inline: contain;/)
+  assert.match(css, /@media \(max-width: 840px\) \{[\s\S]*?\.shop-counter-category-filter \{ scrollbar-width: none; \}\s*\.shop-counter-category-filter::-webkit-scrollbar \{ display: none; \}/)
+})
+
+test('portrait tablet baskets show complete product names instead of truncating them', async () => {
+  const css = await readFile(resolve('showroom/src/core/core-app.css'), 'utf8')
+  assert.match(css, /@media \(min-width: 700px\) and \(max-width: 840px\) \{[\s\S]*?\.shop-cart-item strong \{[^}]*white-space: normal;[^}]*overflow-wrap: anywhere;/)
 })

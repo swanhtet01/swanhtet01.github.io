@@ -652,6 +652,14 @@
 .shop-hero .button-primary:hover { border-color: #1d4ed8; color: #fff; background: #1d4ed8; }
 .company-hero .hero-actions .button-primary svg,
 .shop-hero .button-primary svg { display: block; width: 18px; height: 18px; max-width: none; flex: 0 0 18px; }
+.company-contact { padding-block: clamp(44px, 6vw, 80px); border-top: 1px solid #e4e7ec; background: #fff; }
+.company-contact-inner { display: grid; grid-template-columns: minmax(0, 1fr) minmax(240px, 320px); align-items: end; gap: clamp(28px, 6vw, 92px); }
+.company-contact h2 { max-width: 600px; margin: 10px 0 14px; color: var(--brand-ink); font-family: var(--display); font-size: clamp(2rem, 3.6vw, 3.25rem); font-weight: 620; letter-spacing: -.055em; line-height: 1.06; }
+.company-contact p:not(.eyebrow) { max-width: 54ch; margin: 0; color: var(--muted); font-size: .96rem; line-height: 1.65; }
+.company-contact-links { display: grid; }
+.company-contact-links a { display: flex; min-height: 52px; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid #dce2ea; color: var(--brand-ink); font-weight: 650; text-decoration: none; }
+.company-contact-links a:hover { color: var(--blue); }
+@media (max-width: 760px) { .company-contact-inner { grid-template-columns: 1fr; gap: 22px; } }
 .shop-actual-showcase { padding-block: clamp(46px, 6vw, 78px); border-bottom: 1px solid #e4e7ec; background: #fff; }
 .shop-actual-showcase .story-heading { margin-bottom: 26px; }
 .shop-actual-showcase .story-heading h2 { font-size: clamp(30px, 4vw, 48px); letter-spacing: -.045em; line-height: 1.08; }

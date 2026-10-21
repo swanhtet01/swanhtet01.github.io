@@ -4,7 +4,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 const { build } = createRequire(resolve('showroom/package.json'))('esbuild')
 const productPhotoFiles = {
   'SM-1001': 'kaung-90-days-rice.webp',
-  'SM-1002': 'mama-chicken-noodles.webp',
+  'SM-1002': 'mama-chicken-noodles.jpg',
   'SM-1003': 'alpine-water-six-pack.webp',
   'SM-1004': 'baydar-detergent.webp',
   'SM-1005': 'zess-sugar-crackers.webp',
@@ -12,6 +12,10 @@ const productPhotoFiles = {
 const productPhotoBytes = Object.fromEntries(Object.entries(productPhotoFiles).map(([sku, file]) => [
   sku,
   readFileSync(resolve('tools/qa-assets/shop-products', file)).toString('base64'),
+]))
+const productPhotoMimes = Object.fromEntries(Object.entries(productPhotoFiles).map(([sku, file]) => [
+  sku,
+  file.endsWith('.jpg') ? 'image/jpeg' : 'image/webp',
 ]))
 const managed = process.argv.includes('--managed')
 const today = process.argv.includes('--today')
@@ -34,6 +38,7 @@ Object.defineProperty(window,'localStorage',{value:memory(values)});Object.defin
 const seed=createSeedCommerce(Date.now());
 localStorage.setItem(COMMERCE_KEY,JSON.stringify(seed));
 const productPhotoBytes=${JSON.stringify(productPhotoBytes)};
+const productPhotoMimes=${JSON.stringify(productPhotoMimes)};
 const gallery=${gallery};
 const baseline=localStorage.getItem(COMMERCE_KEY);
 const syntheticIdentity={workspaceId:'11111111-1111-4111-8111-111111111111',userId:'22222222-2222-4222-8222-222222222222'};
@@ -49,7 +54,7 @@ function inspect(){const state=${managed ? 'window.__qaManaged.state' : 'JSON.pa
 document.addEventListener('keydown',event=>{if(event.key==='F8'){event.preventDefault();fail=false;inspect()}if(event.key==='F9'){event.preventDefault();inspect()}});
 function Shop(){const [tab,setTab]=useState('${today ? 'today' : 'counter'}');window.__qaGalleryTab=tab;return <><button onClick={()=>setTab('today')}>Show Today</button><button onClick={()=>setTab('counter')}>Show Counter</button><button onClick={()=>setTab('orders')}>Show Orders</button><button onClick={()=>setTab('inventory')}>Show Inventory</button><CommercePage confirmedLocalShop={${!managed}} managedIdentity={${managed ? 'syntheticIdentity' : 'null'}} tab={tab} shopCounterClientId="" shopCounterCustomer="" shopCounterSearch="" requestedRequestId={null} requestedShopTemplate={null} requestedSource={null} ecommerceCancellationNavigationIntent={null} ecommerceCorrectionNavigationIntent={null} ecommerceNavigationDraft={null} ecommerceOrderAmendmentNavigationIntent={null} ecommerceOrderRescheduleNavigationIntent={null} ecommerceReturnNavigationIntent={null} ecommerceSupportNavigationIntent={null}/></>}
 let mountId=0;function renderFixture(){root.render(<><p>Isolated real Shop page. Synthetic records only; network blocked. F8 enables synthetic writes; F9 inspects records, including while a dialog is open.</p><button onClick={()=>{fail=true;document.getElementById('evidence').textContent='Synthetic Commerce writes blocked'}}>Block synthetic writes</button><button onClick={()=>{fail=false;document.getElementById('evidence').textContent='Synthetic Commerce writes enabled'}}>Enable synthetic writes</button><button onClick={()=>{window.__qaFailAck=true}}>Fail next acknowledgement</button><button onClick={renderFixture}>Reopen synthetic Shop</button><button onClick={inspect}>Inspect synthetic records</button><button onClick={()=>void cleanup()}>Clean synthetic databases</button><output id="evidence"/><MemoryRouter key={++mountId} initialEntries={['/shop/?tab=${today ? 'today' : 'counter'}']}><Shop/></MemoryRouter></>);}
-for(const [sku,encoded] of Object.entries(productPhotoBytes)){const bytes=Uint8Array.from(atob(encoded),character=>character.charCodeAt(0));await putProductImage(productImageScopeForWorkspace(null),sku,new Blob([bytes],{type:'image/webp'}));}
+for(const [sku,encoded] of Object.entries(productPhotoBytes)){const bytes=Uint8Array.from(atob(encoded),character=>character.charCodeAt(0));await putProductImage(productImageScopeForWorkspace(null),sku,new Blob([bytes],{type:productPhotoMimes[sku]}));}
 renderFixture();
 `},plugins:[{name:'fixture-only-commerce-export',setup(b){
 if(managed)b.onLoad({filter:/managed-trial\.ts$/},a=>({loader:'ts',contents:readFileSync(a.path,'utf8')

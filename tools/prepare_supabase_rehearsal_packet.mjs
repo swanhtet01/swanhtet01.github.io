@@ -50,6 +50,7 @@ const expectedMigrationNames = [
   '20261015202629_ecommerce_operator_review_grant.sql',
   '20261019070000_ecommerce_operator_management_boundary.sql',
   '20261019103000_ecommerce_review_shared_state_lock.sql',
+  '20261020175519_access_control_member_read_hardening.sql',
 ]
 // These source-only dependent domain candidates are not part of the reviewed
 // v13 rehearsal chain. Every other unexpected SQL file still fails closed.

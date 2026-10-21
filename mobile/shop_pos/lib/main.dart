@@ -2,7 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -13,14 +15,45 @@ import 'menu_import_service.dart';
 import 'printer_setup_screen.dart';
 import 'printer_services.dart';
 import 'recent_sales_screen.dart';
+import 'shop_backup.dart';
+import 'shop_cash_shift_screen.dart';
 import 'shop_copy.dart';
 import 'shop_database.dart';
 import 'shop_models.dart';
+import 'shop_today_screen.dart';
+import 'stock_screen.dart';
 import 'wallet_setup_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final preferences = await SharedPreferences.getInstance();
+  try {
+    await ShopBackup.cleanupInterruptedStaging(
+      await getApplicationDocumentsDirectory(),
+    );
+  } catch (_) {
+    final myanmar = preferences.getBool('shop_locale_myanmar') ?? false;
+    runApp(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Text(
+                shopCopy(
+                  myanmar,
+                  'Shop could not safely check local storage. Your records were not opened. Restart the app or contact support.',
+                  'စက်တွင်းသိမ်းဆည်းမှုကို လုံခြုံစွာ စစ်၍မရပါ။ သင့်မှတ်တမ်းများကို မဖွင့်ရသေးပါ။ အက်ပ်ကို ပြန်ဖွင့်ပါ သို့မဟုတ် အကူအညီတောင်းပါ။',
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    return;
+  }
   final supabaseUrl = const String.fromEnvironment('SUPABASE_URL');
   final publishableKey = const String.fromEnvironment(
     'SUPABASE_PUBLISHABLE_KEY',
@@ -49,6 +82,7 @@ class ShopApp extends StatefulWidget {
     required this.authClient,
     required this.apiBaseUrl,
     required this.initialMyanmar,
+    this.initialCounter = false,
     super.key,
   });
 
@@ -57,12 +91,19 @@ class ShopApp extends StatefulWidget {
   final String apiBaseUrl;
   final bool initialMyanmar;
 
+  /// Opens Counter directly for a focused cashier journey or widget test.
+  final bool initialCounter;
+
   @override
   State<ShopApp> createState() => _ShopAppState();
 }
 
 class _ShopAppState extends State<ShopApp> {
   late bool _myanmar = widget.initialMyanmar;
+  int _workspaceTab = 0;
+  int _todayRefreshToken = 0;
+  int _addProductRequest = 0;
+  bool _counterOpened = false;
 
   Future<void> _setLanguage(bool myanmar) async {
     setState(() => _myanmar = myanmar);
@@ -70,41 +111,269 @@ class _ShopAppState extends State<ShopApp> {
     await preferences.setBool('shop_locale_myanmar', myanmar);
   }
 
+  Future<void> _openCounter(BuildContext context) async {
+    setState(() {
+      _counterOpened = true;
+      _workspaceTab = 1;
+    });
+  }
+
+  Future<void> _openFirstProduct(BuildContext context) async {
+    setState(() {
+      _counterOpened = true;
+      _workspaceTab = 1;
+      _addProductRequest++;
+    });
+  }
+
+  void _showToday() {
+    setState(() {
+      _workspaceTab = 0;
+      _todayRefreshToken++;
+    });
+  }
+
+  Future<void> _openSales(BuildContext context) =>
+      Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(
+          builder: (_) =>
+              RecentSalesScreen(database: widget.database, myanmar: _myanmar),
+        ),
+      );
+
+  Future<void> _openStock(BuildContext context) =>
+      Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(
+          builder: (_) =>
+              StockScreen(database: widget.database, myanmar: _myanmar),
+        ),
+      );
+
+  Future<void> _openSettings(BuildContext context) =>
+      Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(
+          builder: (_) => ShopSettingsScreen(
+            database: widget.database,
+            myanmar: _myanmar,
+            onLanguageChanged: _setLanguage,
+          ),
+        ),
+      );
+
   @override
   Widget build(BuildContext context) {
+    final fontFamily = _myanmar ? 'NotoSansMyanmar' : 'Inter';
+    final tracking = _myanmar ? 0.0 : -0.35;
+    const ink = Color(0xff171b2c);
+    const border = Color(0xffdce2ed);
+    const accent = Color(0xff2563eb);
     return MaterialApp(
       title: 'SuperMega Shop',
       debugShowCheckedModeBanner: false,
+      locale: Locale(_myanmar ? 'my' : 'en'),
+      supportedLocales: const [Locale('en'), Locale('my')],
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       theme: ThemeData(
         useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xff5146e5)),
-        scaffoldBackgroundColor: const Color(0xfff7f8fb),
+        fontFamily: fontFamily,
+        fontFamilyFallback: const ['NotoSansMyanmar'],
+        colorScheme:
+            ColorScheme.fromSeed(
+              seedColor: accent,
+              surface: Colors.white,
+            ).copyWith(
+              primary: accent,
+              onPrimary: Colors.white,
+              primaryContainer: const Color(0xffeaf0ff),
+              onPrimaryContainer: const Color(0xff173b93),
+              secondary: accent,
+              onSecondary: Colors.white,
+              secondaryContainer: const Color(0xffeaf0ff),
+              onSecondaryContainer: const Color(0xff173b93),
+              onSurface: ink,
+              outline: border,
+            ),
+        scaffoldBackgroundColor: const Color(0xfff5f7fb),
+        textTheme:
+            TextTheme(
+              headlineMedium: TextStyle(
+                fontSize: 34,
+                fontWeight: FontWeight.w700,
+                height: _myanmar ? 1.4 : 1.15,
+                letterSpacing: tracking,
+              ),
+              headlineSmall: TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.w700,
+                height: _myanmar ? 1.4 : 1.2,
+                letterSpacing: tracking,
+              ),
+              titleLarge: TextStyle(
+                fontSize: 21,
+                fontWeight: FontWeight.w700,
+                height: _myanmar ? 1.45 : 1.25,
+                letterSpacing: tracking,
+              ),
+              titleMedium: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                height: _myanmar ? 1.5 : 1.35,
+                letterSpacing: _myanmar ? 0 : -0.1,
+              ),
+              bodyLarge: TextStyle(fontSize: 16, height: _myanmar ? 1.6 : 1.45),
+              bodyMedium: TextStyle(
+                fontSize: 14,
+                height: _myanmar ? 1.6 : 1.45,
+              ),
+              bodySmall: TextStyle(fontSize: 13, height: _myanmar ? 1.65 : 1.5),
+              labelLarge: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                height: _myanmar ? 1.5 : 1.25,
+              ),
+            ).apply(
+              fontFamily: fontFamily,
+              fontFamilyFallback: const ['NotoSansMyanmar'],
+              bodyColor: ink,
+              displayColor: ink,
+            ),
+        appBarTheme: AppBarTheme(
+          backgroundColor: Colors.white,
+          foregroundColor: ink,
+          surfaceTintColor: Colors.transparent,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          titleTextStyle: TextStyle(
+            fontFamily: fontFamily,
+            fontSize: 20,
+            fontWeight: FontWeight.w700,
+            letterSpacing: tracking,
+            height: _myanmar ? 1.45 : 1.2,
+            color: ink,
+          ),
+        ),
+        navigationBarTheme: NavigationBarThemeData(
+          height: _myanmar ? 84 : 78,
+          labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+          labelTextStyle: WidgetStateProperty.resolveWith((states) {
+            final selected = states.contains(WidgetState.selected);
+            return TextStyle(
+              fontFamily: fontFamily,
+              fontSize: _myanmar ? 13.5 : 13,
+              fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+              height: _myanmar ? 1.45 : 1.25,
+              color: selected ? accent : ink.withValues(alpha: 0.76),
+            );
+          }),
+        ),
+        navigationRailTheme: NavigationRailThemeData(
+          selectedLabelTextStyle: TextStyle(
+            fontFamily: fontFamily,
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+            height: _myanmar ? 1.45 : 1.25,
+            color: accent,
+          ),
+          unselectedLabelTextStyle: TextStyle(
+            fontFamily: fontFamily,
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            height: _myanmar ? 1.45 : 1.25,
+            color: ink.withValues(alpha: 0.76),
+          ),
+        ),
         cardTheme: const CardThemeData(
           color: Colors.white,
           elevation: 0,
           margin: EdgeInsets.zero,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.all(Radius.circular(18)),
-            side: BorderSide(color: Color(0xffe4e7ef)),
+            borderRadius: BorderRadius.all(Radius.circular(16)),
+            side: BorderSide(color: border),
+          ),
+        ),
+        filledButtonTheme: FilledButtonThemeData(
+          style: FilledButton.styleFrom(
+            minimumSize: const Size(0, 48),
+            padding: const EdgeInsets.symmetric(horizontal: 18),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(11),
+            ),
+          ),
+        ),
+        outlinedButtonTheme: OutlinedButtonThemeData(
+          style: OutlinedButton.styleFrom(
+            minimumSize: const Size(0, 48),
+            padding: const EdgeInsets.symmetric(horizontal: 18),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(11),
+            ),
           ),
         ),
         inputDecorationTheme: const InputDecorationTheme(
+          contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 15),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.all(Radius.circular(12)),
+            borderSide: BorderSide(color: border),
           ),
           filled: true,
           fillColor: Colors.white,
         ),
       ),
-      home: ShopHome(
-        database: widget.database,
-        authClient: widget.authClient,
-        apiBaseUrl: widget.apiBaseUrl,
-        myanmar: _myanmar,
-        onLanguageChanged: _setLanguage,
-      ),
+      home: widget.initialCounter
+          ? ShopHome(
+              database: widget.database,
+              authClient: widget.authClient,
+              apiBaseUrl: widget.apiBaseUrl,
+              myanmar: _myanmar,
+              onLanguageChanged: _setLanguage,
+            )
+          : PopScope(
+              canPop: _workspaceTab == 0,
+              onPopInvokedWithResult: (didPop, result) {
+                if (!didPop && _workspaceTab == 1) _showToday();
+              },
+              child: IndexedStack(
+                index: _workspaceTab,
+                children: [
+                  ShopTodayScreen(
+                    database: widget.database,
+                    myanmar: _myanmar,
+                    refreshToken: _todayRefreshToken,
+                    onNewSale: _openCounter,
+                    onAddFirstProduct: _openFirstProduct,
+                    onSales: _openSales,
+                    onStock: _openStock,
+                    onSettings: _openSettings,
+                  ),
+                  if (_counterOpened)
+                    ShopHome(
+                      database: widget.database,
+                      authClient: widget.authClient,
+                      apiBaseUrl: widget.apiBaseUrl,
+                      myanmar: _myanmar,
+                      onLanguageChanged: _setLanguage,
+                      onToday: _showToday,
+                      addProductRequest: _addProductRequest,
+                    )
+                  else
+                    const SizedBox.shrink(),
+                ],
+              ),
+            ),
     );
   }
+}
+
+TextStyle _shopMoneyStyle(BuildContext context, {bool total = false}) {
+  final type = Theme.of(context).textTheme;
+  return (total ? type.titleLarge! : type.labelLarge!).copyWith(
+    fontWeight: total ? FontWeight.w700 : FontWeight.w600,
+    fontFeatures: const [FontFeature.tabularFigures()],
+  );
 }
 
 class ShopHome extends StatefulWidget {
@@ -114,6 +383,8 @@ class ShopHome extends StatefulWidget {
     required this.apiBaseUrl,
     required this.myanmar,
     required this.onLanguageChanged,
+    this.onToday,
+    this.addProductRequest = 0,
     this.recoverMenuPhoto,
     super.key,
   });
@@ -123,6 +394,8 @@ class ShopHome extends StatefulWidget {
   final String apiBaseUrl;
   final bool myanmar;
   final ValueChanged<bool> onLanguageChanged;
+  final VoidCallback? onToday;
+  final int addProductRequest;
   final Future<XFile?> Function()? recoverMenuPhoto;
 
   @override
@@ -130,10 +403,16 @@ class ShopHome extends StatefulWidget {
 }
 
 class _ShopHomeState extends State<ShopHome> {
+  String _mmk(int amount) => shopMmk(amount, myanmar: widget.myanmar);
+
   final _search = TextEditingController();
+  final _searchFocus = FocusNode();
   final _cart = <String, int>{};
+  late final Stream<List<ShopProduct>> _productsStream = widget.database
+      .watchActiveProducts();
   String? _operationId;
   bool _saving = false;
+  bool _cashConfirming = false;
   PendingWalletCheckout? _pendingWalletCheckout;
   XFile? _recoveredMenuPhoto;
 
@@ -142,6 +421,21 @@ class _ShopHomeState extends State<ShopHome> {
     super.initState();
     _loadPendingWalletCheckout();
     _recoverMenuPhoto();
+    if (widget.addProductRequest > 0) _scheduleFirstProductDialog();
+  }
+
+  @override
+  void didUpdateWidget(covariant ShopHome oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.addProductRequest > oldWidget.addProductRequest) {
+      _scheduleFirstProductDialog();
+    }
+  }
+
+  void _scheduleFirstProductDialog() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _showAddProduct();
+    });
   }
 
   Future<void> _recoverMenuPhoto() async {
@@ -186,7 +480,7 @@ class _ShopHomeState extends State<ShopHome> {
           shopCopy(
             widget.myanmar,
             'Could not check for an unfinished wallet payment.',
-            'မပြီးသေးသော wallet ငွေပေးချေမှုကို စစ်မရပါ။',
+            'မပြီးသေးသော မိုဘိုင်းငွေပေးချေမှုကို စစ်၍မရပါ။',
           ),
         );
       }
@@ -199,127 +493,236 @@ class _ShopHomeState extends State<ShopHome> {
       discardCapturedMenuPhoto(_recoveredMenuPhoto, createdByCamera: true),
     );
     _search.dispose();
+    _searchFocus.dispose();
     super.dispose();
+  }
+
+  void _returnToToday() {
+    _searchFocus.unfocus();
+    widget.onToday?.call();
   }
 
   @override
   Widget build(BuildContext context) {
+    final width = MediaQuery.sizeOf(context).width;
+    final inWorkspace = widget.onToday != null;
+    final showRail = inWorkspace && width >= 700;
+    final contentWidth = width - (showRail ? (width >= 1100 ? 191 : 77) : 0);
+    final cartAction = SafeArea(
+      top: false,
+      minimum: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+      child: StreamBuilder<List<ShopProduct>>(
+        stream: _productsStream,
+        builder: (context, snapshot) {
+          final products = snapshot.data ?? const <ShopProduct>[];
+          final count = _cart.values.fold<int>(0, (a, b) => a + b);
+          return FilledButton.icon(
+            onPressed: _saving ? null : () => _showCart(products),
+            icon: const Icon(Icons.shopping_basket_outlined),
+            label: Text(
+              shopCopy(
+                widget.myanmar,
+                'Review sale · $count · ${_mmk(_cartTotal(products))}',
+                'အရောင်းစစ်ရန် · ${shopNumber(count, myanmar: true)} ခု · ${_mmk(_cartTotal(products))}',
+              ),
+            ),
+          );
+        },
+      ),
+    );
     return Scaffold(
       appBar: AppBar(
-        title: Text(shopCopy(widget.myanmar, 'Shop', 'ဆိုင်')),
+        title: Text(
+          shopCopy(
+            widget.myanmar,
+            inWorkspace ? 'Sell' : 'Shop',
+            inWorkspace ? 'ရောင်းရန်' : 'ဆိုင်',
+          ),
+        ),
         actions: [
-          IconButton(
-            tooltip: shopCopy(
-              widget.myanmar,
-              'Recent sales',
-              'မကြာသေးမီက အရောင်းများ',
+          if (inWorkspace && width < 700)
+            IconButton(
+              tooltip: shopCopy(widget.myanmar, 'Settings', 'ဆက်တင်များ'),
+              onPressed: _openSettings,
+              icon: const Icon(Icons.settings_outlined),
             ),
-            icon: const Icon(Icons.receipt_long_outlined),
-            onPressed: _openRecentSales,
-          ),
-          IconButton(
-            tooltip: shopCopy(widget.myanmar, 'Receipt printer', 'ပြေစာပရင်တာ'),
-            icon: const Icon(Icons.print_outlined),
-            onPressed: _openPrinter,
-          ),
-          IconButton(
-            tooltip: shopCopy(widget.myanmar, 'Settings', 'ဆက်တင်များ'),
-            icon: const Icon(Icons.settings_outlined),
-            onPressed: _openSettings,
-          ),
+          if (!inWorkspace && width >= 1080) ...[
+            Tooltip(
+              message: shopCopy(
+                widget.myanmar,
+                'Recent sales',
+                'မကြာသေးမီက အရောင်းများ',
+              ),
+              child: TextButton.icon(
+                onPressed: _openRecentSales,
+                icon: const Icon(Icons.receipt_long_outlined),
+                label: Text(shopCopy(widget.myanmar, 'Sales', 'အရောင်းများ')),
+              ),
+            ),
+            TextButton.icon(
+              onPressed: _openStock,
+              icon: const Icon(Icons.inventory_2_outlined),
+              label: Text(shopCopy(widget.myanmar, 'Stock', 'လက်ကျန်')),
+            ),
+            TextButton.icon(
+              onPressed: _openSettings,
+              icon: const Icon(Icons.settings_outlined),
+              label: Text(shopCopy(widget.myanmar, 'Settings', 'ဆက်တင်များ')),
+            ),
+          ] else if (!inWorkspace)
+            PopupMenuButton<String>(
+              tooltip: shopCopy(widget.myanmar, 'More', 'နောက်ထပ်'),
+              icon: const Icon(Icons.menu_rounded),
+              onSelected: (value) {
+                switch (value) {
+                  case 'sales':
+                    _openRecentSales();
+                    break;
+                  case 'stock':
+                    _openStock();
+                    break;
+                  case 'settings':
+                    _openSettings();
+                    break;
+                }
+              },
+              itemBuilder: (context) => [
+                PopupMenuItem(
+                  value: 'sales',
+                  child: Text(
+                    shopCopy(
+                      widget.myanmar,
+                      'Recent sales',
+                      'မကြာသေးမီက အရောင်းများ',
+                    ),
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'stock',
+                  child: Text(shopCopy(widget.myanmar, 'Stock', 'လက်ကျန်')),
+                ),
+                PopupMenuItem(
+                  value: 'settings',
+                  child: Text(
+                    shopCopy(widget.myanmar, 'Settings', 'ဆက်တင်များ'),
+                  ),
+                ),
+              ],
+            ),
           const SizedBox(width: 8),
         ],
       ),
       body: SafeArea(
-        child: StreamBuilder<List<ShopProduct>>(
-          stream: widget.database.watchActiveProducts(),
-          builder: (context, snapshot) {
-            final products = snapshot.data ?? const <ShopProduct>[];
-            if (MediaQuery.sizeOf(context).width >= 940) {
-              return Padding(
-                padding: const EdgeInsets.all(20),
-                child: Row(
-                  children: [
-                    Expanded(
-                      flex: 3,
-                      child: Column(
-                        children: [
-                          _deviceNotice(),
-                          if (_recoveredMenuPhoto != null) ...[
-                            const SizedBox(height: 12),
-                            _recoveredMenuPhotoCard(),
-                          ],
-                          if (_pendingWalletCheckout != null) ...[
-                            const SizedBox(height: 12),
-                            _pendingWalletCheckoutCard(),
-                          ],
-                          const SizedBox(height: 14),
-                          Expanded(child: _catalog(products)),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 18),
-                    Expanded(child: _cartPanel(products)),
-                  ],
-                ),
-              );
-            }
-            return Column(
-              children: [
-                _deviceNotice(),
-                if (_recoveredMenuPhoto != null)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
-                    child: _recoveredMenuPhotoCard(),
-                  ),
-                if (_pendingWalletCheckout != null)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
-                    child: _pendingWalletCheckoutCard(),
-                  ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 14, 12, 10),
-                  child: _catalogHeader(),
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: _searchField(products),
-                ),
-                const SizedBox(height: 8),
-                Expanded(child: _productList(products)),
-              ],
-            );
-          },
-        ),
-      ),
-      bottomNavigationBar: _cart.isEmpty
-          ? null
-          : SafeArea(
-              top: false,
-              minimum: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+        child: Row(
+          children: [
+            if (showRail) ...[
+              ShopTaskRail(
+                myanmar: widget.myanmar,
+                extended: width >= 1100,
+                selectedIndex: 1,
+                onDestinationSelected: (index) {
+                  if (index == 0) _returnToToday();
+                  if (index == 2) _openRecentSales();
+                  if (index == 3) _openStock();
+                  if (index == 4) _openSettings();
+                },
+              ),
+              const VerticalDivider(width: 1),
+            ],
+            Expanded(
               child: StreamBuilder<List<ShopProduct>>(
-                stream: widget.database.watchActiveProducts(),
+                stream: _productsStream,
                 builder: (context, snapshot) {
                   final products = snapshot.data ?? const <ShopProduct>[];
-                  final count = _cart.values.fold<int>(0, (a, b) => a + b);
-                  return FilledButton.icon(
-                    onPressed: _saving ? null : () => _showCart(products),
-                    icon: const Icon(Icons.shopping_basket_outlined),
-                    label: Text(
-                      shopCopy(
-                        widget.myanmar,
-                        'Review sale · $count · ${_mmk(_cartTotal(products))}',
-                        'အရောင်းစစ်ရန် · $count ခု · ${_mmk(_cartTotal(products))}',
+                  if (contentWidth >= 820) {
+                    final tablet = contentWidth < 1080;
+                    return Padding(
+                      padding: EdgeInsets.all(tablet ? 12 : 20),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              children: [
+                                if (_recoveredMenuPhoto != null) ...[
+                                  const SizedBox(height: 12),
+                                  _recoveredMenuPhotoCard(),
+                                ],
+                                if (products.isEmpty &&
+                                    _pendingWalletCheckout != null) ...[
+                                  const SizedBox(height: 12),
+                                  _pendingWalletCheckoutCard(),
+                                ],
+                                const SizedBox(height: 14),
+                                Expanded(child: _catalog(products)),
+                              ],
+                            ),
+                          ),
+                          if (products.isNotEmpty) ...[
+                            SizedBox(width: tablet ? 12 : 18),
+                            SizedBox(
+                              width: (contentWidth * 0.36).clamp(340.0, 500.0),
+                              child: _cartPanel(products),
+                            ),
+                          ],
+                        ],
                       ),
-                    ),
+                    );
+                  }
+                  return Column(
+                    children: [
+                      if (_recoveredMenuPhoto != null)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+                          child: _recoveredMenuPhotoCard(),
+                        ),
+                      if (_pendingWalletCheckout != null)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+                          child: _pendingWalletCheckoutCard(),
+                        ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 14, 12, 10),
+                        child: _catalogHeader(hasProducts: products.isNotEmpty),
+                      ),
+                      if (products.isNotEmpty) ...[
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: _searchField(products),
+                        ),
+                        const SizedBox(height: 8),
+                      ],
+                      Expanded(child: _productList(products)),
+                    ],
                   );
                 },
               ),
             ),
+          ],
+        ),
+      ),
+      bottomNavigationBar: inWorkspace && width < 700
+          ? Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (_cart.isNotEmpty) cartAction,
+                ShopTaskBottomBar(
+                  myanmar: widget.myanmar,
+                  selectedIndex: 1,
+                  onDestinationSelected: (index) {
+                    if (index == 0) _returnToToday();
+                    if (index == 2) _openRecentSales();
+                    if (index == 3) _openStock();
+                  },
+                ),
+              ],
+            )
+          : contentWidth >= 820 || _cart.isEmpty
+          ? null
+          : cartAction,
     );
   }
 
-  Widget _pendingWalletCheckoutCard() {
+  Widget _pendingWalletCheckoutCard({StateSetter? refresh}) {
     final checkout = _pendingWalletCheckout!;
     final provider = checkout.paymentMethod == 'kbzpay' ? 'KBZPay' : 'WavePay';
     return Card(
@@ -350,7 +753,12 @@ class _ShopHomeState extends State<ShopHome> {
                   ),
                 ),
                 TextButton(
-                  onPressed: _saving ? null : _cancelPendingWalletCheckout,
+                  onPressed: _saving
+                      ? null
+                      : () async {
+                          await _cancelPendingWalletCheckout();
+                          refresh?.call(() {});
+                        },
                   child: Text(
                     shopCopy(
                       widget.myanmar,
@@ -410,36 +818,16 @@ class _ShopHomeState extends State<ShopHome> {
     ),
   );
 
-  Widget _deviceNotice() => Material(
-    color: Theme.of(context).colorScheme.secondaryContainer,
-    child: Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-      child: Row(
-        children: [
-          const Icon(Icons.offline_bolt_outlined, size: 18),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              shopCopy(
-                widget.myanmar,
-                'Ready to sell · saved on this device',
-                'အရောင်းအတွက်အသင့် · ဤစက်တွင် သိမ်းထားသည်',
-              ),
-            ),
-          ),
-        ],
-      ),
-    ),
-  );
-
   Widget _catalog(List<ShopProduct> products) => Card(
     child: Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
         children: [
-          _catalogHeader(),
-          const SizedBox(height: 12),
-          _searchField(products),
+          _catalogHeader(hasProducts: products.isNotEmpty),
+          if (products.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            _searchField(products),
+          ],
           const SizedBox(height: 8),
           Expanded(child: _productList(products)),
         ],
@@ -447,16 +835,14 @@ class _ShopHomeState extends State<ShopHome> {
     ),
   );
 
-  Widget _catalogHeader() => Row(
-    children: [
-      Expanded(
-        child: Text(
-          shopCopy(widget.myanmar, 'Products', 'ကုန်ပစ္စည်းများ'),
-          style: Theme.of(context).textTheme.titleLarge
-              ?.copyWith(fontWeight: FontWeight.w800),
-        ),
-      ),
-      IconButton(
+  Widget _catalogHeader({required bool hasProducts}) => LayoutBuilder(
+    builder: (context, constraints) {
+      final title = Text(
+        shopCopy(widget.myanmar, 'Products', 'ကုန်ပစ္စည်းများ'),
+        style: Theme.of(context).textTheme.titleLarge,
+      );
+      if (!hasProducts) return title;
+      final importButton = IconButton(
         tooltip: shopCopy(
           widget.myanmar,
           'Import menu photo',
@@ -464,33 +850,88 @@ class _ShopHomeState extends State<ShopHome> {
         ),
         onPressed: _openMenuImport,
         icon: const Icon(Icons.document_scanner_outlined),
-      ),
-      FilledButton.icon(
+      );
+      final addButton = FilledButton.icon(
         onPressed: _showAddProduct,
         icon: const Icon(Icons.add),
         label: Text(shopCopy(widget.myanmar, 'Add item', 'ပစ္စည်းထည့်ရန်')),
-      ),
-    ],
+      );
+      if (constraints.maxWidth < 420) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            title,
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                importButton,
+                const SizedBox(width: 8),
+                Expanded(child: addButton),
+              ],
+            ),
+          ],
+        );
+      }
+      return Row(
+        children: [
+          Expanded(child: title),
+          importButton,
+          addButton,
+        ],
+      );
+    },
   );
 
   Widget _searchField(List<ShopProduct> products) => TextField(
     controller: _search,
+    focusNode: _searchFocus,
+    autofocus: defaultTargetPlatform == TargetPlatform.windows,
     onChanged: (_) => setState(() {}),
+    // Keyboard scanners submit with Enter. Keep an already active scan field
+    // ready for the next item without opening a keyboard on an idle tablet.
+    onEditingComplete: () {},
     onSubmitted: (value) {
       final code = value.trim();
-      final matches = products.where((item) => item.barcode == code);
-      if (code.isNotEmpty && matches.isNotEmpty) {
-        _add(matches.first);
+      if (code.isEmpty) return;
+      final matches = products
+          .where((item) => item.barcode == code || item.sku == code)
+          .toList();
+      if (matches.length == 1) {
+        final keepSearchFocus = _searchFocus.hasFocus;
+        _add(matches.single);
         _search.clear();
         setState(() {});
+        if (keepSearchFocus) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted && _searchFocus.canRequestFocus) {
+              _searchFocus.requestFocus();
+            }
+          });
+        }
+      } else if (matches.length > 1) {
+        _message(
+          shopCopy(
+            widget.myanmar,
+            'More than one product uses this barcode or SKU. Fix the product codes before selling.',
+            'ဤဘားကုဒ် သို့မဟုတ် SKU ကို ကုန်ပစ္စည်းတစ်မျိုးထက်ပို၍ သုံးထားသည်။ မရောင်းမီ ကုန်ပစ္စည်းကုဒ်များကို ပြင်ပါ။',
+          ),
+        );
+      } else {
+        _message(
+          shopCopy(
+            widget.myanmar,
+            'No exact barcode or SKU match. Check the code or add the product.',
+            'ဘားကုဒ် သို့မဟုတ် SKU အတိအကျ မတွေ့ပါ။ ကုဒ်ကို စစ်ပါ သို့မဟုတ် ကုန်ပစ္စည်းထည့်ပါ။',
+          ),
+        );
       }
     },
     decoration: InputDecoration(
       prefixIcon: const Icon(Icons.search),
       hintText: shopCopy(
         widget.myanmar,
-        'Search or scan barcode',
-        'ရှာရန် သို့မဟုတ် ဘားကုဒ်ဖတ်ရန်',
+        'Search name, barcode or SKU',
+        'အမည်၊ ဘားကုဒ် သို့မဟုတ် SKU ရှာရန်',
       ),
       suffixIcon: _search.text.isEmpty
           ? null
@@ -510,21 +951,22 @@ class _ShopHomeState extends State<ShopHome> {
   );
 
   Widget _productList(List<ShopProduct> products) {
+    final compactProductRow = MediaQuery.sizeOf(context).width < 700;
     final text = _search.text.trim().toLowerCase();
     final visible = products
         .where(
           (item) =>
               text.isEmpty ||
               item.name.toLowerCase().contains(text) ||
-              (item.barcode?.toLowerCase().contains(text) ?? false),
+              (item.barcode?.toLowerCase().contains(text) ?? false) ||
+              (item.sku?.toLowerCase().contains(text) ?? false),
         )
         .toList();
     if (visible.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+      return ListView(
+        padding: const EdgeInsets.all(24),
+        children: [
+          Column(
             children: [
               Icon(
                 text.isEmpty ? Icons.inventory_2_outlined : Icons.search_off,
@@ -545,17 +987,50 @@ class _ShopHomeState extends State<ShopHome> {
                         'ကိုက်ညီသောပစ္စည်း မတွေ့ပါ',
                       ),
               ),
-              if (text.isEmpty) ...[
+              if (text.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                FilledButton.icon(
+                  key: const ValueKey('shop-add-search-result'),
+                  onPressed: () {
+                    final query = _search.text.trim();
+                    final isBarcode = RegExp(r'^[0-9]{6,64}$').hasMatch(query);
+                    _showAddProduct(
+                      initialBarcode: isBarcode ? query : '',
+                      initialName: isBarcode ? '' : query,
+                    );
+                  },
+                  icon: const Icon(Icons.add),
+                  label: Text(
+                    shopCopy(
+                      widget.myanmar,
+                      'Add product',
+                      'ကုန်ပစ္စည်းထည့်ရန်',
+                    ),
+                  ),
+                ),
+              ] else ...[
                 const SizedBox(height: 6),
                 Text(
                   shopCopy(
                     widget.myanmar,
-                    'Add an item or review a menu photo to start.',
-                    'စတင်ရန် ပစ္စည်းထည့်ပါ သို့မဟုတ် မီနူးဓာတ်ပုံကို စစ်ဆေးပါ။',
+                    'Add a name, price and starting stock to make your first sale.',
+                    'ပထမအရောင်းအတွက် အမည်၊ ဈေးနှုန်းနှင့် စတင်လက်ကျန်ကို ထည့်ပါ။',
                   ),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 12),
+                FilledButton.icon(
+                  onPressed: _showAddProduct,
+                  icon: const Icon(Icons.add),
+                  label: Text(
+                    shopCopy(
+                      widget.myanmar,
+                      'Add first product',
+                      'ပထမကုန်ပစ္စည်းထည့်ရန်',
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
                 OutlinedButton.icon(
                   onPressed: _openMenuImport,
                   icon: const Icon(Icons.document_scanner_outlined),
@@ -570,7 +1045,7 @@ class _ShopHomeState extends State<ShopHome> {
               ],
             ],
           ),
-        ),
+        ],
       );
     }
     return ListView.separated(
@@ -579,30 +1054,84 @@ class _ShopHomeState extends State<ShopHome> {
           const Divider(height: 1, indent: 16, endIndent: 16),
       itemBuilder: (context, index) {
         final item = visible[index];
-        final details =
-            '${_mmk(item.priceMmk)} · ${item.onHand} ${shopCopy(widget.myanmar, 'in stock', 'ခုလက်ကျန်')}'
-            '${item.barcode == null ? '' : ' · ${item.barcode}'}';
-        return ListTile(
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 14,
-            vertical: 4,
-          ),
-          title: Text(item.name, maxLines: 2, overflow: TextOverflow.ellipsis),
-          subtitle: Text(details, maxLines: 2, overflow: TextOverflow.ellipsis),
-          trailing: IconButton.filledTonal(
-            tooltip: shopCopy(
-              widget.myanmar,
-              'Add to sale',
-              'အရောင်းထဲထည့်ရန်',
+        final stock = item.onHand == 0
+            ? shopCopy(widget.myanmar, 'Out of stock', 'လက်ကျန်ကုန်ပါပြီ')
+            : shopCopy(
+                widget.myanmar,
+                '${item.onHand} in stock',
+                '${shopNumber(item.onHand, myanmar: true)} ခုလက်ကျန်',
+              );
+        final canAdd = item.onHand > 0 && _pendingWalletCheckout == null;
+        final addAffordance = ExcludeSemantics(
+          child: Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: canAdd ? const Color(0xffeef3ff) : const Color(0xfff1f2f5),
+              borderRadius: BorderRadius.circular(10),
             ),
-            onPressed: item.onHand == 0 || _pendingWalletCheckout != null
-                ? null
-                : () => _add(item),
-            icon: const Icon(Icons.add),
+            child: Icon(
+              Icons.add,
+              size: 20,
+              color: canAdd
+                  ? Theme.of(context).colorScheme.primary
+                  : Theme.of(context).disabledColor,
+            ),
           ),
-          onTap: item.onHand == 0 || _pendingWalletCheckout != null
-              ? null
-              : () => _add(item),
+        );
+        return Tooltip(
+          message: item.onHand == 0
+              ? shopCopy(widget.myanmar, 'Out of stock', 'လက်ကျန်ကုန်ပါပြီ')
+              : _pendingWalletCheckout != null
+              ? shopCopy(
+                  widget.myanmar,
+                  'Finish the pending payment first',
+                  'ဆိုင်းငံ့ငွေပေးချေမှုကို အရင်ပြီးစီးပါ',
+                )
+              : shopCopy(widget.myanmar, 'Add to sale', 'အရောင်းထဲထည့်ရန်'),
+          child: ListTile(
+            isThreeLine: compactProductRow,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 14,
+              vertical: 10,
+            ),
+            title: Text(
+              item.name,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            subtitle: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (compactProductRow)
+                  Text(_mmk(item.priceMmk), style: _shopMoneyStyle(context)),
+                Text(
+                  stock,
+                  style: TextStyle(
+                    color: item.onHand == 0
+                        ? Theme.of(context).colorScheme.error
+                        : Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+            trailing: compactProductRow
+                ? addAffordance
+                : Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        _mmk(item.priceMmk),
+                        style: _shopMoneyStyle(context),
+                      ),
+                      const SizedBox(width: 12),
+                      addAffordance,
+                    ],
+                  ),
+            onTap: canAdd ? () => _add(item) : null,
+          ),
         );
       },
     );
@@ -624,8 +1153,7 @@ class _ShopHomeState extends State<ShopHome> {
                 Expanded(
                   child: Text(
                     shopCopy(widget.myanmar, 'Current sale', 'လက်ရှိအရောင်း'),
-                    style: Theme.of(context).textTheme.titleLarge
-                        ?.copyWith(fontWeight: FontWeight.w800),
+                    style: Theme.of(context).textTheme.titleLarge,
                   ),
                 ),
                 if (entries.isNotEmpty)
@@ -642,7 +1170,7 @@ class _ShopHomeState extends State<ShopHome> {
             ),
             const Divider(height: 24),
             if (_pendingWalletCheckout != null) ...[
-              _pendingWalletCheckoutCard(),
+              _pendingWalletCheckoutCard(refresh: refresh),
               const SizedBox(height: 8),
             ],
             if (entries.isEmpty)
@@ -652,7 +1180,7 @@ class _ShopHomeState extends State<ShopHome> {
                     shopCopy(
                       widget.myanmar,
                       'Add products to start a sale.',
-                      'အရောင်းစရန် ပစ္စည်းထည့်ပါ。',
+                      'အရောင်းစရန် ပစ္စည်းထည့်ပါ။',
                     ),
                   ),
                 ),
@@ -673,30 +1201,46 @@ class _ShopHomeState extends State<ShopHome> {
                 ),
               ),
               const Divider(height: 20),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      shopCopy(widget.myanmar, 'Total', 'စုစုပေါင်း'),
-                    ),
-                  ),
-                  Text(
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final label = Text(
+                    shopCopy(widget.myanmar, 'Total', 'စုစုပေါင်း'),
+                  );
+                  final amount = Text(
                     _mmk(
                       _pendingWalletCheckout?.totalMmk ?? _cartTotal(products),
                     ),
-                    style: Theme.of(context).textTheme.titleLarge
-                        ?.copyWith(fontWeight: FontWeight.w800),
-                  ),
-                ],
+                    style: _shopMoneyStyle(context, total: true),
+                    textAlign: TextAlign.right,
+                  );
+                  if (constraints.maxWidth < 320) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [label, const SizedBox(height: 4), amount],
+                    );
+                  }
+                  return Row(
+                    children: [
+                      Expanded(child: label),
+                      amount,
+                    ],
+                  );
+                },
               ),
               const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: FilledButton.icon(
-                      onPressed: _saving || _pendingWalletCheckout != null
+              if (_pendingWalletCheckout == null)
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final cash = FilledButton.icon(
+                      onPressed:
+                          _saving ||
+                              _cashConfirming ||
+                              _pendingWalletCheckout != null
                           ? null
-                          : () => _completeSale(closeSheet: refresh != null),
+                          : () => _confirmCashSale(
+                              products: products,
+                              closeSheet: refresh != null,
+                            ),
                       icon: _saving
                           ? const SizedBox.square(
                               dimension: 18,
@@ -706,23 +1250,39 @@ class _ShopHomeState extends State<ShopHome> {
                       label: Text(
                         shopCopy(widget.myanmar, 'Cash sale', 'ငွေသား'),
                       ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  OutlinedButton.icon(
-                    onPressed: _saving
-                        ? null
-                        : () => _startWalletSale(
-                            products: products,
-                            closeSheet: refresh != null,
-                          ),
-                    icon: const Icon(Icons.qr_code_2),
-                    label: Text(
-                      shopCopy(widget.myanmar, 'Wallet QR', 'Wallet QR'),
-                    ),
-                  ),
-                ],
-              ),
+                    );
+                    final wallet = OutlinedButton.icon(
+                      onPressed: _saving || _cashConfirming
+                          ? null
+                          : () => _startWalletSale(
+                              products: products,
+                              closeSheet: refresh != null,
+                              refresh: refresh,
+                            ),
+                      icon: const Icon(Icons.qr_code_2),
+                      label: Text(
+                        shopCopy(
+                          widget.myanmar,
+                          'Mobile money',
+                          'မိုဘိုင်းငွေပေးချေမှု',
+                        ),
+                      ),
+                    );
+                    if (constraints.maxWidth < 520) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [cash, const SizedBox(height: 8), wallet],
+                      );
+                    }
+                    return Row(
+                      children: [
+                        Expanded(child: cash),
+                        const SizedBox(width: 8),
+                        Flexible(child: wallet),
+                      ],
+                    );
+                  },
+                ),
             ],
           ],
         ),
@@ -740,22 +1300,23 @@ class _ShopHomeState extends State<ShopHome> {
         break;
       }
     }
-    return Row(
+    final details = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                snapshot?.productName ?? item.name,
-                style: const TextStyle(fontWeight: FontWeight.w700),
-              ),
-              Text(
-                '${_mmk(snapshot?.unitPriceMmk ?? item.priceMmk)} × $quantity',
-              ),
-            ],
-          ),
+        Text(
+          snapshot?.productName ?? item.name,
+          style: Theme.of(context).textTheme.bodyMedium
+              ?.copyWith(fontWeight: FontWeight.w600),
         ),
+        Text(
+          '${_mmk(snapshot?.unitPriceMmk ?? item.priceMmk)} × ${shopNumber(quantity, myanmar: widget.myanmar)}',
+          style: _shopMoneyStyle(context),
+        ),
+      ],
+    );
+    final controls = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
         IconButton(
           tooltip: shopCopy(widget.myanmar, 'Remove one', 'တစ်ခုလျှော့ရန်'),
           onPressed: _saving || _pendingWalletCheckout != null
@@ -763,7 +1324,7 @@ class _ShopHomeState extends State<ShopHome> {
               : () => _adjust(item, -1, refresh: refresh),
           icon: const Icon(Icons.remove_circle_outline),
         ),
-        Text(quantity.toString()),
+        Text(shopNumber(quantity, myanmar: widget.myanmar)),
         IconButton(
           tooltip: shopCopy(widget.myanmar, 'Add one', 'တစ်ခုထပ်ထည့်ရန်'),
           onPressed:
@@ -775,6 +1336,25 @@ class _ShopHomeState extends State<ShopHome> {
           icon: const Icon(Icons.add_circle_outline),
         ),
       ],
+    );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < 320) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              details,
+              Align(alignment: Alignment.centerRight, child: controls),
+            ],
+          );
+        }
+        return Row(
+          children: [
+            Expanded(child: details),
+            controls,
+          ],
+        );
+      },
     );
   }
 
@@ -834,9 +1414,86 @@ class _ShopHomeState extends State<ShopHome> {
     _operationId = null;
   }
 
+  Future<void> _confirmCashSale({
+    required List<ShopProduct> products,
+    required bool closeSheet,
+  }) async {
+    final operationId = _operationId;
+    if (_saving || _cashConfirming || operationId == null || _cart.isEmpty) {
+      return;
+    }
+    final selected = Map<String, int>.of(_cart);
+    final knownProducts = {for (final product in products) product.id: product};
+    if (selected.keys.any((id) => !knownProducts.containsKey(id))) {
+      _message(
+        shopCopy(
+          widget.myanmar,
+          'A product changed. Review the sale again.',
+          'ကုန်ပစ္စည်းပြောင်းလဲသွားပါသည်။ အရောင်းကို ပြန်စစ်ပါ။',
+        ),
+      );
+      return;
+    }
+    final totalMmk = _cartTotal(products);
+    setState(() => _cashConfirming = true);
+    try {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text(
+            shopCopy(
+              widget.myanmar,
+              'Cash received?',
+              'ငွေသားလက်ခံပြီးပြီလား။',
+            ),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                shopCopy(widget.myanmar, 'Amount to receive', 'လက်ခံရမည့်ငွေ'),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                _mmk(totalMmk),
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: Text(shopCopy(widget.myanmar, 'Back', 'ပြန်သွားရန်')),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: Text(
+                shopCopy(widget.myanmar, 'Complete sale', 'အရောင်းပြီးစီးရန်'),
+              ),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true ||
+          !mounted ||
+          _saving ||
+          _operationId != operationId ||
+          !mapEquals(_cart, selected)) {
+        return;
+      }
+      await _completeSale(closeSheet: closeSheet, expectedTotalMmk: totalMmk);
+    } finally {
+      if (mounted) setState(() => _cashConfirming = false);
+    }
+  }
+
   Future<void> _startWalletSale({
     required List<ShopProduct> products,
     required bool closeSheet,
+    StateSetter? refresh,
   }) async {
     if (_saving || _operationId == null || _cart.isEmpty) return;
     try {
@@ -914,17 +1571,16 @@ class _ShopHomeState extends State<ShopHome> {
       );
       if (!mounted) return;
       setState(() => _pendingWalletCheckout = intent);
+      refresh?.call(() {});
       await _showWalletCheckout(intent, selected, closeSheet: closeSheet);
     } catch (error) {
       if (mounted) {
         _message(
-          error is StateError
-              ? error.message.toString()
-              : shopCopy(
-                  widget.myanmar,
-                  'Payment setup could not be loaded. The basket is unchanged.',
-                  'ငွေပေးချေမှုဆက်တင် မဖွင့်နိုင်ပါ။ Basket ကို မပြောင်းထားပါ။',
-                ),
+          shopCopy(
+            widget.myanmar,
+            'Could not start mobile payment. Check the basket and try again.',
+            'မိုဘိုင်းငွေပေးချေမှုကို မစတင်နိုင်ပါ။ အရောင်းစာရင်းကို စစ်ပြီး ထပ်ကြိုးစားပါ။',
+          ),
         );
       }
     }
@@ -996,7 +1652,7 @@ class _ShopHomeState extends State<ShopHome> {
               shopCopy(
                 widget.myanmar,
                 'Check an earlier wallet payment',
-                'ယခင် wallet ငွေပေးချေမှုကို စစ်ဆေးရန်',
+                'ယခင် မိုဘိုင်းငွေပေးချေမှုကို စစ်ဆေးရန်',
               ),
             ),
             content: SizedBox(
@@ -1009,13 +1665,15 @@ class _ShopHomeState extends State<ShopHome> {
                     Text('$provider · ${_mmk(intent.totalMmk)}'),
                     const SizedBox(height: 8),
                     for (final line in intent.lines)
-                      Text('${line.productName} × ${line.quantity}'),
+                      Text(
+                        '${line.productName} × ${shopNumber(line.quantity, myanmar: widget.myanmar)}',
+                      ),
                     const SizedBox(height: 12),
                     Text(
                       shopCopy(
                         widget.myanmar,
                         'The older app did not save this sale’s QR. Do not ask the customer to scan again. Check the recipient and matching incoming payment in your wallet app.',
-                        'အက်ပ်အဟောင်းတွင် ဤအရောင်း၏ QR ကို မသိမ်းခဲ့ပါ။ ဝယ်သူကို ထပ်မံ scan မလုပ်ခိုင်းပါနှင့်။ Wallet app ထဲတွင် လက်ခံသူနှင့် ကိုက်ညီသော ငွေလက်ခံမှုကို စစ်ပါ။',
+                        'အက်ပ်အဟောင်းတွင် ဤအရောင်း၏ QR ကို မသိမ်းခဲ့ပါ။ ဝယ်သူကို ထပ်မံ ဖတ်ခိုင်းခြင်း မပြုပါနှင့်။ မိုဘိုင်းငွေပေးချေမှုအက်ပ်တွင် လက်ခံသူနှင့် ကိုက်ညီသော ငွေလက်ခံမှုကို စစ်ပါ။',
                       ),
                     ),
                     CheckboxListTile(
@@ -1028,7 +1686,7 @@ class _ShopHomeState extends State<ShopHome> {
                         shopCopy(
                           widget.myanmar,
                           'I verified the matching payment in the wallet app.',
-                          'Wallet app တွင် ကိုက်ညီသော ငွေလက်ခံမှုကို စစ်ဆေးပြီးပါပြီ။',
+                          'မိုဘိုင်းငွေပေးချေမှုအက်ပ်တွင် ကိုက်ညီသော ငွေလက်ခံမှုကို စစ်ဆေးပြီးပါပြီ။',
                         ),
                       ),
                     ),
@@ -1114,7 +1772,7 @@ class _ShopHomeState extends State<ShopHome> {
           shopCopy(
             widget.myanmar,
             'Only cancel after checking the wallet and confirming no payment arrived. The sale will not be recorded.',
-            'Wallet ကိုစစ်ပြီး ငွေမဝင်ကြောင်း သေချာမှသာ ပယ်ဖျက်ပါ။ အရောင်းကို မှတ်တမ်းတင်မည်မဟုတ်ပါ။',
+            'မိုဘိုင်းငွေပေးချေမှုအက်ပ်တွင် ငွေမဝင်ကြောင်း သေချာမှသာ ပယ်ဖျက်ပါ။ အရောင်းကို မှတ်တမ်းတင်မည်မဟုတ်ပါ။',
           ),
         ),
         actions: [
@@ -1147,7 +1805,7 @@ class _ShopHomeState extends State<ShopHome> {
         shopCopy(
           widget.myanmar,
           'Unpaid checkout cancelled. The basket is still here.',
-          'ငွေမဝင်သော checkout ကို ပယ်ဖျက်ပြီးပါပြီ။ Basket ကို မဖျက်ထားပါ။',
+          'ငွေမဝင်သော ငွေပေးချေမှုကို ပယ်ဖျက်ပြီးပါပြီ။ အရောင်းစာရင်းကို မဖျက်ထားပါ။',
         ),
       );
     } catch (_) {
@@ -1167,6 +1825,7 @@ class _ShopHomeState extends State<ShopHome> {
     required bool closeSheet,
     String paymentMethod = 'cash',
     String? walletCheckoutOperationId,
+    int? expectedTotalMmk,
   }) async {
     final operationId = _operationId;
     if (_saving || operationId == null || _cart.isEmpty) return;
@@ -1175,7 +1834,7 @@ class _ShopHomeState extends State<ShopHome> {
         shopCopy(
           widget.myanmar,
           'Resume or cancel the wallet payment before recording another sale.',
-          'အခြားအရောင်းမမှတ်မီ wallet ငွေပေးချေမှုကို ပြန်စစ်ပါ သို့မဟုတ် ပယ်ဖျက်ပါ။',
+          'အခြားအရောင်းမမှတ်မီ ဆိုင်းငံ့နေသော မိုဘိုင်းငွေပေးချေမှုကို ပြန်စစ်ပါ သို့မဟုတ် ပယ်ဖျက်ပါ။',
         ),
       );
       return;
@@ -1186,6 +1845,7 @@ class _ShopHomeState extends State<ShopHome> {
         operationId: operationId,
         paymentMethod: paymentMethod,
         walletCheckoutOperationId: walletCheckoutOperationId,
+        expectedTotalMmk: expectedTotalMmk,
         lines: [
           for (final entry in _cart.entries)
             ShopSaleLineInput(productId: entry.key, quantity: entry.value),
@@ -1272,15 +1932,7 @@ class _ShopHomeState extends State<ShopHome> {
     } catch (error) {
       if (!mounted) return;
       setState(() => _saving = false);
-      _message(
-        error is StateError
-            ? error.message.toString()
-            : shopCopy(
-                widget.myanmar,
-                'Sale could not be saved. Try again.',
-                'အရောင်းသိမ်း၍မရပါ။ ထပ်ကြိုးစားပါ။',
-              ),
-      );
+      _message(_saleSaveError(error, widget.myanmar));
     }
   }
 
@@ -1359,13 +2011,24 @@ class _ShopHomeState extends State<ShopHome> {
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (sheetContext) => StatefulBuilder(
-        builder: (context, refresh) => SafeArea(
-          child: SizedBox(
-            height: MediaQuery.sizeOf(sheetContext).height * .72,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-              child: _cartPanel(products, refresh: refresh),
+      builder: (sheetContext) => StreamBuilder<List<ShopProduct>>(
+        stream: _productsStream,
+        initialData: products,
+        builder: (context, snapshot) => StatefulBuilder(
+          builder: (context, refresh) => SafeArea(
+            child: SizedBox(
+              height:
+                  MediaQuery.sizeOf(sheetContext).height *
+                  (MediaQuery.sizeOf(sheetContext).width < 520 ? .92 : .72),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+                child: _cartPanel(
+                  snapshot.data ?? const <ShopProduct>[],
+                  refresh: (callback) {
+                    if (sheetContext.mounted) refresh(callback);
+                  },
+                ),
+              ),
             ),
           ),
         ),
@@ -1373,10 +2036,17 @@ class _ShopHomeState extends State<ShopHome> {
     );
   }
 
-  Future<void> _showAddProduct() async {
+  Future<void> _showAddProduct({
+    String initialName = '',
+    String initialBarcode = '',
+  }) async {
     final values = await showDialog<_NewShopProduct>(
       context: context,
-      builder: (_) => _NewShopProductDialog(myanmar: widget.myanmar),
+      builder: (_) => _NewShopProductDialog(
+        myanmar: widget.myanmar,
+        initialName: initialName,
+        initialBarcode: initialBarcode,
+      ),
     );
     if (values == null) return;
     try {
@@ -1398,11 +2068,7 @@ class _ShopHomeState extends State<ShopHome> {
       }
     } catch (error) {
       if (mounted) {
-        _message(
-          error is StateError
-              ? error.message.toString()
-              : 'Could not save product.',
-        );
+        _message(_productSaveError(error, widget.myanmar));
       }
     }
   }
@@ -1422,6 +2088,13 @@ class _ShopHomeState extends State<ShopHome> {
       ),
     );
   }
+
+  void _openStock() => Navigator.of(context).push<void>(
+    MaterialPageRoute<void>(
+      builder: (_) =>
+          StockScreen(database: widget.database, myanmar: widget.myanmar),
+    ),
+  );
 
   void _openPrinter() => Navigator.of(context).push<void>(
     MaterialPageRoute<void>(
@@ -1460,7 +2133,63 @@ class _ShopHomeState extends State<ShopHome> {
   }
 }
 
-String _mmk(int amount) => shopMmk(amount);
+String _productSaveError(Object error, bool myanmar) {
+  if (error is StateError) {
+    final detail = error.message.toString();
+    if (detail.contains('barcode is already assigned')) {
+      return shopCopy(
+        myanmar,
+        'This barcode already belongs to another product.',
+        'ဤဘားကုဒ်ကို အခြားကုန်ပစ္စည်းတစ်ခုတွင် သုံးထားပြီးဖြစ်ပါသည်။',
+      );
+    }
+    if (detail.contains('SKU is already assigned')) {
+      return shopCopy(
+        myanmar,
+        'This SKU already belongs to another product.',
+        'ဤ SKU ကို အခြားကုန်ပစ္စည်းတစ်ခုတွင် သုံးထားပြီးဖြစ်ပါသည်။',
+      );
+    }
+  }
+  return shopCopy(
+    myanmar,
+    'Could not save the product. Check its details and try again.',
+    'ကုန်ပစ္စည်းကို မသိမ်းနိုင်ပါ။ အချက်အလက်များကို စစ်ပြီး ထပ်ကြိုးစားပါ။',
+  );
+}
+
+String _saleSaveError(Object error, bool myanmar) {
+  if (error is StateError) {
+    final detail = error.message.toString();
+    if (detail.startsWith('Not enough stock for ')) {
+      final item = detail.substring('Not enough stock for '.length);
+      return shopCopy(
+        myanmar,
+        'Not enough stock for $item. Review the basket.',
+        '$item လက်ကျန်မလုံလောက်ပါ။ အရောင်းစာရင်းကို ပြန်စစ်ပါ။',
+      );
+    }
+    if (detail == 'Sale total changed. Review the amount again.') {
+      return shopCopy(
+        myanmar,
+        'Price changed. Review the total before taking cash.',
+        'ဈေးနှုန်းပြောင်းလဲသွားပါသည်။ ငွေမယူမီ စုစုပေါင်းငွေကို ပြန်စစ်ပါ။',
+      );
+    }
+    if (detail.contains('pending wallet')) {
+      return shopCopy(
+        myanmar,
+        'Finish or cancel the pending mobile payment first.',
+        'ဆိုင်းငံ့နေသော မိုဘိုင်းငွေပေးချေမှုကို အရင်ပြီးစီးပါ သို့မဟုတ် ပယ်ဖျက်ပါ။',
+      );
+    }
+  }
+  return shopCopy(
+    myanmar,
+    'Could not confirm the sale. Check Recent sales before trying again.',
+    'အရောင်းအခြေအနေကို အတည်မပြုနိုင်ပါ။ ထပ်မကြိုးစားမီ မကြာသေးသောအရောင်းများကို စစ်ပါ။',
+  );
+}
 
 class _WalletCheckoutDialog extends StatefulWidget {
   const _WalletCheckoutDialog({
@@ -1521,7 +2250,7 @@ class _WalletCheckoutDialogState extends State<_WalletCheckoutDialog> {
                 textAlign: TextAlign.center,
               ),
               Text(
-                _mmk(widget.totalMmk),
+                shopMmk(widget.totalMmk, myanmar: myanmar),
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.headlineSmall
                     ?.copyWith(fontWeight: FontWeight.w800),
@@ -1532,11 +2261,19 @@ class _WalletCheckoutDialogState extends State<_WalletCheckoutDialog> {
                   container: true,
                   excludeSemantics: true,
                   image: true,
-                  label: '${_selected.provider} merchant QR',
+                  label: shopCopy(
+                    myanmar,
+                    '${_selected.provider} merchant QR',
+                    '${_selected.provider} ဆိုင်၏ ငွေလက်ခံ QR',
+                  ),
                   child: QrImageView(
                     data: payload,
                     size: 220,
-                    semanticsLabel: '${_selected.provider} merchant QR',
+                    semanticsLabel: shopCopy(
+                      myanmar,
+                      '${_selected.provider} merchant QR',
+                      '${_selected.provider} ဆိုင်၏ ငွေလက်ခံ QR',
+                    ),
                   ),
                 ),
               ),
@@ -1552,7 +2289,7 @@ class _WalletCheckoutDialogState extends State<_WalletCheckoutDialog> {
                 shopCopy(
                   myanmar,
                   'Ask the customer to scan this merchant QR and enter the amount above. Check the recipient and incoming payment in your wallet app before confirming here.',
-                  'ဝယ်သူကို ဤဆိုင် QR ကို scan လုပ်ပြီး အပေါ်ပါငွေပမာဏ ရိုက်ထည့်ခိုင်းပါ။ ဤနေရာတွင် အတည်မပြုမီ wallet app ထဲရှိ လက်ခံသူနှင့် ဝင်လာသောငွေကို စစ်ပါ။',
+                  'ဝယ်သူကို ဤဆိုင် QR ကို ဖတ်၍ အပေါ်ပါငွေပမာဏ ထည့်ခိုင်းပါ။ ဤနေရာတွင် အတည်မပြုမီ မိုဘိုင်းငွေပေးချေမှုအက်ပ်တွင် ငွေလက်ခံသူနှင့် ဝင်ငွေကို စစ်ပါ။',
                 ),
               ),
               const SizedBox(height: 8),
@@ -1566,7 +2303,7 @@ class _WalletCheckoutDialogState extends State<_WalletCheckoutDialog> {
                   shopCopy(
                     myanmar,
                     'I verified this payment in the wallet app.',
-                    'Wallet app တွင် ဤငွေပေးချေမှုကို စစ်ဆေးပြီးပါပြီ။',
+                    'မိုဘိုင်းငွေပေးချေမှုအက်ပ်တွင် ဤငွေပေးချေမှုကို စစ်ဆေးပြီးပါပြီ။',
                   ),
                 ),
               ),
@@ -1611,9 +2348,15 @@ class _NewShopProduct {
 }
 
 class _NewShopProductDialog extends StatefulWidget {
-  const _NewShopProductDialog({required this.myanmar});
+  const _NewShopProductDialog({
+    required this.myanmar,
+    this.initialName = '',
+    this.initialBarcode = '',
+  });
 
   final bool myanmar;
+  final String initialName;
+  final String initialBarcode;
 
   @override
   State<_NewShopProductDialog> createState() => _NewShopProductDialogState();
@@ -1621,8 +2364,8 @@ class _NewShopProductDialog extends StatefulWidget {
 
 class _NewShopProductDialogState extends State<_NewShopProductDialog> {
   final _formKey = GlobalKey<FormState>();
-  final _name = TextEditingController();
-  final _barcode = TextEditingController();
+  late final _name = TextEditingController(text: widget.initialName);
+  late final _barcode = TextEditingController(text: widget.initialBarcode);
   final _price = TextEditingController();
   final _stock = TextEditingController(text: '0');
 
@@ -1760,22 +2503,60 @@ class _SetupTile extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) => Card(
-    child: ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-      leading: CircleAvatar(
-        backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-        child: Icon(icon, color: Theme.of(context).colorScheme.primary),
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final compact =
+        MediaQuery.sizeOf(context).width < 480 ||
+        MediaQuery.textScalerOf(context).scale(1) > 1.2;
+    final leading = CircleAvatar(
+      backgroundColor: theme.colorScheme.primaryContainer,
+      child: Icon(icon, color: theme.colorScheme.primary),
+    );
+    final titleText = Text(title, style: theme.textTheme.titleMedium);
+    final subtitleText = Text(
+      subtitle,
+      style: theme.textTheme.bodyMedium?.copyWith(
+        color: theme.colorScheme.onSurfaceVariant,
       ),
-      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
-      subtitle: Padding(
-        padding: const EdgeInsets.only(top: 4),
-        child: Text(subtitle),
-      ),
-      trailing: const Icon(Icons.chevron_right),
-      onTap: onTap,
-    ),
-  );
+    );
+    return Card(
+      child: compact
+          ? InkWell(
+              onTap: onTap,
+              borderRadius: BorderRadius.circular(12),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(child: titleText),
+                        const Icon(Icons.chevron_right),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    subtitleText,
+                  ],
+                ),
+              ),
+            )
+          : ListTile(
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 18,
+                vertical: 10,
+              ),
+              leading: leading,
+              title: titleText,
+              subtitle: Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: subtitleText,
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: onTap,
+            ),
+    );
+  }
 }
 
 class ShopSettingsScreen extends StatefulWidget {
@@ -1800,45 +2581,117 @@ class _ShopSettingsScreenState extends State<ShopSettingsScreen> {
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: Text(shopCopy(_myanmar, 'Settings', 'ဆက်တင်များ'))),
-    body: ListView(
-      padding: const EdgeInsets.all(20),
-      children: [
-        Text(
-          shopCopy(_myanmar, 'Language', 'ဘာသာစကား'),
-          style: Theme.of(context).textTheme.titleLarge,
-        ),
-        const SizedBox(height: 12),
-        SegmentedButton<bool>(
-          segments: const [
-            ButtonSegment(value: false, label: Text('English')),
-            ButtonSegment(value: true, label: Text('မြန်မာ')),
-          ],
-          selected: {_myanmar},
-          onSelectionChanged: (values) {
-            final selected = values.first;
-            setState(() => _myanmar = selected);
-            widget.onLanguageChanged(selected);
-          },
-        ),
-        const SizedBox(height: 20),
-        _SetupTile(
-          icon: Icons.account_balance_wallet_outlined,
-          title: shopCopy(_myanmar, 'Mobile money', 'မိုဘိုင်းငွေပေးချေမှု'),
-          subtitle: shopCopy(
-            _myanmar,
-            'Save merchant details and provider-issued QR codes.',
-            'ဆိုင်ရှင်အချက်အလက်နှင့် ငွေပေးချေမှုပေးသူထုတ်ပေးသော QR ကို သိမ်းပါ။',
-          ),
-          onTap: () => Navigator.of(context).push<void>(
-            MaterialPageRoute<void>(
-              builder: (_) => WalletSetupScreen(
-                database: widget.database,
-                myanmar: _myanmar,
+    body: Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 720),
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            Text(
+              shopCopy(_myanmar, 'Language', 'ဘာသာစကား'),
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 12),
+            SegmentedButton<bool>(
+              segments: const [
+                ButtonSegment(value: false, label: Text('English')),
+                ButtonSegment(value: true, label: Text('မြန်မာ')),
+              ],
+              selected: {_myanmar},
+              onSelectionChanged: (values) {
+                final selected = values.first;
+                setState(() => _myanmar = selected);
+                widget.onLanguageChanged(selected);
+              },
+            ),
+            const SizedBox(height: 20),
+            _SetupTile(
+              icon: Icons.print_outlined,
+              title: shopCopy(_myanmar, 'Receipt printer', 'ပြေစာပရင်တာ'),
+              subtitle: shopCopy(
+                _myanmar,
+                'Find and test a printer.',
+                'ပရင်တာကို ရှာပြီး စမ်းသပ်ပါ။',
+              ),
+              onTap: () => Navigator.of(context).push<void>(
+                MaterialPageRoute<void>(
+                  builder: (_) => PrinterSetupScreen(myanmar: _myanmar),
+                ),
               ),
             ),
-          ),
+            const SizedBox(height: 12),
+            _SetupTile(
+              icon: Icons.account_balance_wallet_outlined,
+              title: shopCopy(
+                _myanmar,
+                'Mobile money',
+                'မိုဘိုင်းငွေပေးချေမှု',
+              ),
+              subtitle: shopCopy(
+                _myanmar,
+                'Save provider-issued payment QR codes.',
+                'ငွေပေးချေမှု QR ကို သိမ်းပါ။',
+              ),
+              onTap: () => Navigator.of(context).push<void>(
+                MaterialPageRoute<void>(
+                  builder: (_) => WalletSetupScreen(
+                    database: widget.database,
+                    myanmar: _myanmar,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            _SetupTile(
+              icon: Icons.point_of_sale_outlined,
+              title: shopCopy(_myanmar, 'Cash shift', 'ငွေသားတာဝန်ချိန်'),
+              subtitle: shopCopy(
+                _myanmar,
+                'Count drawer cash and record any difference.',
+                'ငွေသားကို ရေတွက်ပြီး ကွာခြားချက် မှတ်ပါ။',
+              ),
+              onTap: () => Navigator.of(context).push<void>(
+                MaterialPageRoute<void>(
+                  builder: (_) => ShopCashShiftScreen(
+                    database: widget.database,
+                    myanmar: _myanmar,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.storage_outlined),
+                        const SizedBox(width: 12),
+                        Text(
+                          shopCopy(_myanmar, 'On this device', 'ဤစက်တွင်'),
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      shopCopy(
+                        _myanmar,
+                        'Saved here. Online backup is not active.',
+                        'ဤစက်တွင်သာ သိမ်းထားသည်။ အွန်လိုင်းအရန်ကူး မရှိသေးပါ။',
+                      ),
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
-      ],
+      ),
     ),
   );
 }

@@ -1,20 +1,38 @@
 """Approved acceptance-only Auth fixture; credentials stay in memory, no email sends."""
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import json
 import secrets
 import urllib.error
 import urllib.request
 from uuid import UUID, uuid4
 
-PROJECT = 'twflgmlwfkykgzsxnegc'
+PROJECT = 'aaonrwgghhdycwqbxuoi'
 ORIGIN = f'https://{PROJECT}.supabase.co'
-EXPIRY = datetime(2026, 9, 29, 11, 3, tzinfo=timezone.utc)
+APPROVAL_CONTRACT = 'supermega.acceptance-auth-session.v1'
+APPROVAL_ACTION = 'create_two_synthetic_auth_users_and_workspaces'
 
 
 def require_authority(project, approved, now=None):
     now = now or datetime.now(timezone.utc)
-    if project != PROJECT or approved is not True or now >= EXPIRY:
+    if project != PROJECT or not isinstance(approved, dict):
+        raise ValueError('acceptance_authority_invalid')
+    if (approved.get('contract') != APPROVAL_CONTRACT
+            or approved.get('project_ref') != PROJECT
+            or approved.get('action') != APPROVAL_ACTION
+            or approved.get('synthetic_only') is not True
+            or approved.get('cleanup_required') is not True):
+        raise ValueError('acceptance_authority_invalid')
+    try:
+        approval_id = approved['approval_id']
+        if not isinstance(approval_id, str) or str(UUID(approval_id)) != approval_id:
+            raise ValueError()
+        issued = datetime.fromisoformat(approved['issued_at'].replace('Z', '+00:00'))
+        expiry = datetime.fromisoformat(approved['expires_at'].replace('Z', '+00:00'))
+        if (issued.tzinfo is None or expiry.tzinfo is None or now.tzinfo is None
+                or not issued <= now < expiry or expiry - issued > timedelta(hours=1)):
+            raise ValueError()
+    except (KeyError, TypeError, ValueError):
         raise ValueError('acceptance_authority_invalid')
 
 

@@ -29,6 +29,7 @@ ytf-demo.html
 artifacts
 node_modules
 tmp
+.tmp
 **/__pycache__/**
 **/*.pyc
 **/*.db-shm

@@ -308,6 +308,7 @@ const shellList = JSON.stringify([
   '/', '/favicon.svg', '/site.webmanifest', '/icon-192.png', '/icon-512.png',
   '/apple-touch-icon.png', '/icon-512-maskable.png',
   '/theme-restore.js', '/sw-register.js', '/vercel-insights.js',
+  '/fonts/inter-latin.woff2', '/fonts/noto-sans-myanmar.woff2',
 ])
 const serviceWorker = `const BUILD = 'unsealed__SUPERMEGA_PRECACHE_BUILD__'
 const SEALED = !BUILD.startsWith('unsealed')
@@ -483,6 +484,8 @@ await Promise.all([
   writeFile(resolve(publicDir, 'vercel-insights.js'), insightsScript, 'utf8'),
   writeFile(resolve(fontDir, 'noto-sans-myanmar.woff2'), await readFile(resolve(root, 'tools', 'public-assets', 'noto-sans-myanmar.woff2'))),
   writeFile(resolve(fontDir, 'noto-sans-myanmar-OFL.txt'), await readFile(resolve(root, 'tools', 'public-assets', 'noto-sans-myanmar-OFL.txt'))),
+  writeFile(resolve(fontDir, 'inter-latin.woff2'), await readFile(resolve(root, 'tools', 'public-assets', 'inter-latin.woff2'))),
+  writeFile(resolve(fontDir, 'inter-OFL.txt'), await readFile(resolve(root, 'mobile', 'shop_pos', 'assets', 'fonts', 'Inter', 'OFL.txt'))),
   ...rasterIcons.map(([name, bytes]) => writeFile(resolve(publicDir, name), bytes)),
 ])
 console.log(JSON.stringify({ ok: true, contract: 'supermega_app_release', commit: release.commit }))

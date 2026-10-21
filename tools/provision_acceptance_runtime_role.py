@@ -12,7 +12,9 @@ from pathlib import Path
 
 import provision_supermega_runtime_role as core
 
-ACCEPTANCE_REF = "twflgmlwfkykgzsxnegc"
+# Exact data-less preview for the 20 October clean Shop replay. The prior
+# acceptance branch remains blocked and must never receive this login.
+ACCEPTANCE_REF = "aaonrwgghhdycwqbxuoi"
 CONTRACT = "supermega.acceptance-runtime-role.v1"
 
 

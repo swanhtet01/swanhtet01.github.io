@@ -77,7 +77,11 @@ function managedReadiness() {
   if (!currentDatabaseMigrations.includes(ecommerceReviewSharedStateLock)) {
     currentDatabaseMigrations.push(ecommerceReviewSharedStateLock)
   }
-  assert.equal(currentDatabaseMigrations.length, 31)
+  const accessControlMemberReadHardening = '20261020175519_access_control_member_read_hardening.sql'
+  if (!currentDatabaseMigrations.includes(accessControlMemberReadHardening)) {
+    currentDatabaseMigrations.push(accessControlMemberReadHardening)
+  }
+  assert.equal(currentDatabaseMigrations.length, 32)
   const implementationDigest = sha256(JSON.stringify({
     purpose: 'ally-ceo-unit-fixture', implementationPaths, currentDatabaseMigrations,
     checkNames: Object.keys(database.checks).sort(),

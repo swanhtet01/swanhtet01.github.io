@@ -14,10 +14,13 @@ class PrinterSetupScreen extends StatefulWidget {
 class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
   final _service = PrinterDiscoveryService();
   final _settings = ReceiptPrinterSettings();
+  bool _loadingSettings = true;
   bool _busy = false;
   bool _cancelled = false;
   String? _message;
   String? _testedHost;
+  ReceiptPaperWidth? _testedWidth;
+  ReceiptPaperWidth _paperWidth = ReceiptPaperWidth.mm80;
   String? _savedHost;
   String? _previousHost;
   List<NetworkPrinterCandidate> _printers = [];
@@ -34,24 +37,29 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
     try {
       final previous = await _settings.readSavedHost();
       final active = await _settings.readHost();
+      final paperWidth = await _settings.readPaperWidth();
       if (mounted) {
         setState(() {
           _previousHost = previous;
           _savedHost = active;
+          _paperWidth = paperWidth;
         });
       }
     } catch (_) {
       // Printer discovery remains available if the local preference is unreadable.
+    } finally {
+      if (mounted) setState(() => _loadingSettings = false);
     }
   }
 
   Future<void> _findPrinters() async {
-    if (_busy) return;
+    if (_busy || _loadingSettings) return;
     setState(() {
       _busy = true;
       _cancelled = false;
       _message = null;
       _testedHost = null;
+      _testedWidth = null;
       _printers = [];
     });
     try {
@@ -72,13 +80,13 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
             : result.printers.isEmpty
             ? shopCopy(
                 widget.myanmar,
-                'No printer candidate answered on port 9100. Check the printer is on this Wi-Fi and network printing is enabled.',
-                '9100 port တွင် ပရင်တာမတွေ့ပါ။ ပရင်တာနှင့် ဤစက်သည် Wi-Fi တစ်ခုတည်းတွင်ရှိပြီး network printing ဖွင့်ထားကြောင်း စစ်ဆေးပါ။',
+                'No printer found. Check that it is on and connected to the same Wi-Fi, then try again.',
+                'ပရင်တာမတွေ့ပါ။ ဖွင့်ထားပြီး ဤစက်နှင့် Wi-Fi တစ်ခုတည်းတွင် ချိတ်ထားကြောင်း စစ်ပြီး ထပ်ရှာပါ။',
               )
             : shopCopy(
                 widget.myanmar,
-                'Found ${result.printers.length} candidate(s). A port match is not proof the device can print.',
-                'ပရင်တာဖြစ်နိုင်သော စက် ${result.printers.length} ခု တွေ့ပါသည်။ Port ဖွင့်နေခြင်းက ပရင့်ထုတ်နိုင်ကြောင်း သက်သေမဟုတ်ပါ။',
+                'Found ${result.printers.length}. Send a test receipt and check that paper comes out.',
+                '${result.printers.length} ခု တွေ့ပါသည်။ စမ်းသပ်ပြေစာပို့ပြီး စက္ကူထွက်လာကြောင်း စစ်ပါ။',
               );
       });
     } on PrinterNetworkChanged {
@@ -87,7 +95,7 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
           () => _message = shopCopy(
             widget.myanmar,
             'Wi-Fi changed during the search. Start again on the printer network.',
-            'ရှာဖွေနေစဉ် Wi-Fi ပြောင်းသွားသည်။ ပရင်တာရှိသော network တွင် ထပ်ရှာပါ။',
+            'ရှာဖွေနေစဉ် Wi-Fi ပြောင်းသွားသည်။ ပရင်တာနှင့် Wi-Fi တစ်ခုတည်းတွင် ထပ်ရှာပါ။',
           ),
         );
       }
@@ -96,8 +104,8 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
         setState(
           () => _message = shopCopy(
             widget.myanmar,
-            'Connect to a private Wi-Fi network with a supported subnet, then try again.',
-            'ထောက်ပံ့ထားသော subnet ရှိ သီးသန့် Wi-Fi သို့ ချိတ်ဆက်ပြီး ထပ်ကြိုးစားပါ။',
+            'Connect to a private Wi-Fi network, then try again.',
+            'သီးသန့် Wi-Fi သို့ ချိတ်ဆက်ပြီး ထပ်ကြိုးစားပါ။',
           ),
         );
       }
@@ -106,8 +114,8 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
         setState(
           () => _message = shopCopy(
             widget.myanmar,
-            'Could not search this Wi-Fi. Check network access and try again.',
-            'ဤ Wi-Fi ကို ရှာမရပါ။ Network ခွင့်ပြုချက်ကို စစ်ဆေးပြီး ထပ်ကြိုးစားပါ။',
+            'Could not search this Wi-Fi. Check access and try again.',
+            'ဤ Wi-Fi တွင် ရှာမရပါ။ ချိတ်ဆက်မှုကို စစ်ဆေးပြီး ထပ်ကြိုးစားပါ။',
           ),
         );
       }
@@ -117,16 +125,18 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
   }
 
   Future<void> _sendTest(NetworkPrinterCandidate printer) async {
-    if (_busy) return;
+    if (_busy || _loadingSettings) return;
+    final paperWidth = _paperWidth;
     setState(() {
       _busy = true;
       _message = null;
     });
     try {
-      await _service.sendTestReceipt(printer);
+      await _service.sendTestReceipt(printer, paperWidth: paperWidth);
       if (mounted) {
         setState(() {
           _testedHost = printer.host;
+          _testedWidth = paperWidth;
           _message = shopCopy(
             widget.myanmar,
             'Test sent to ${printer.host}. Check the paper, then choose Use for receipts.',
@@ -150,19 +160,25 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
   }
 
   Future<void> _useForReceipts(NetworkPrinterCandidate printer) async {
-    if (_busy || _testedHost != printer.host) return;
+    if (_busy ||
+        _loadingSettings ||
+        _testedHost != printer.host ||
+        _testedWidth != _paperWidth) {
+      return;
+    }
     setState(() {
       _busy = true;
       _message = null;
     });
     try {
       final range = await _service.currentWifiRange();
-      if (!Ipv4Subnet.fromAddress(range.ip, range.mask).hosts.contains(
-        printer.host,
-      )) {
+      if (!Ipv4Subnet.fromAddress(
+        range.ip,
+        range.mask,
+      ).hosts.contains(printer.host)) {
         throw const PrinterNetworkChanged();
       }
-      await _settings.saveAfterTest(printer);
+      await _settings.saveAfterTest(printer, paperWidth: _paperWidth);
       if (mounted) {
         setState(() {
           _savedHost = printer.host;
@@ -216,24 +232,56 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    shopCopy(
-                      myanmar,
-                      'Find it automatically',
-                      'အလိုအလျောက်ရှာပါ',
-                    ),
+                    shopCopy(myanmar, 'Connect a printer', 'ပရင်တာချိတ်ဆက်ရန်'),
                     style: Theme.of(context).textTheme.titleLarge,
                   ),
                   const SizedBox(height: 8),
                   Text(
                     shopCopy(
                       myanmar,
-                      'Search is limited to this private Wi-Fi network and ESC/POS port 9100. Nothing is scanned until you tap Find printers.',
-                      'ဤသီးသန့် Wi-Fi network နှင့် ESC/POS port 9100 ကိုသာ ရှာဖွေမည်။ ပရင်တာရှာရန်ကို နှိပ်မှသာ စတင်မည်။',
+                      'Turn on the printer and connect it to the same Wi-Fi as this device.',
+                      'ပရင်တာကို ဖွင့်ပြီး ဤစက်နှင့် Wi-Fi တစ်ခုတည်းတွင် ချိတ်ဆက်ပါ။',
                     ),
                   ),
                   const SizedBox(height: 14),
+                  Text(
+                    shopCopy(myanmar, 'Receipt paper', 'ပြေစာစက္ကူအကျယ်'),
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  SegmentedButton<ReceiptPaperWidth>(
+                    segments: const [
+                      ButtonSegment(
+                        value: ReceiptPaperWidth.mm58,
+                        label: Text('58 mm'),
+                      ),
+                      ButtonSegment(
+                        value: ReceiptPaperWidth.mm80,
+                        label: Text('80 mm'),
+                      ),
+                    ],
+                    selected: {_paperWidth},
+                    onSelectionChanged: _busy || _loadingSettings
+                        ? null
+                        : (selected) {
+                            if (selected.first == _paperWidth) return;
+                            _settings.requireRetest();
+                            setState(() {
+                              _paperWidth = selected.first;
+                              _testedHost = null;
+                              _testedWidth = null;
+                              _savedHost = null;
+                              _message = shopCopy(
+                                myanmar,
+                                'Paper width changed. Test the printer again before printing a sale.',
+                                'စက္ကူအကျယ်ပြောင်းပြီးပါပြီ။ အရောင်းပြေစာမထုတ်မီ ပရင်တာကို ပြန်စမ်းပါ။',
+                              );
+                            });
+                          },
+                  ),
+                  const SizedBox(height: 14),
                   FilledButton.icon(
-                    onPressed: _busy ? null : _findPrinters,
+                    onPressed: _busy || _loadingSettings ? null : _findPrinters,
                     icon: const Icon(Icons.wifi_find),
                     label: Text(
                       shopCopy(myanmar, 'Find printers', 'ပရင်တာရှာရန်'),
@@ -244,8 +292,8 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
                     Text(
                       shopCopy(
                         myanmar,
-                        'Previous printer: $_previousHost · find and test again.',
-                        'ယခင်ပရင်တာ: $_previousHost · ပြန်ရှာပြီး စမ်းသပ်ပါ။',
+                        'The saved printer needs a new test.',
+                        'သိမ်းထားသောပရင်တာကို ပြန်စမ်းသပ်ရန် လိုသည်။',
                       ),
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
@@ -292,8 +340,12 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
                   subtitle: Text(
                     shopCopy(
                       myanmar,
-                      'Candidate only · port ${printer.port}',
-                      'စမ်းသပ်ရန်သာ · port ${printer.port}',
+                      _savedHost == printer.host
+                          ? 'Ready for receipts'
+                          : 'Test before using',
+                      _savedHost == printer.host
+                          ? 'ပြေစာအတွက် အသင့်ဖြစ်သည်'
+                          : 'မသုံးမီ စမ်းသပ်ပါ',
                     ),
                   ),
                   trailing: FilledButton(
@@ -323,23 +375,37 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
                 ),
               ),
           ],
-          if (_scannedIp != null && _scannedMask != null)
-            Text(
-              shopCopy(
-                myanmar,
-                'Wi-Fi range searched: ${_scannedIp!} / ${_scannedMask!}',
-                'ရှာဖွေထားသော Wi-Fi: ${_scannedIp!} / ${_scannedMask!}',
-              ),
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
           const SizedBox(height: 12),
-          Text(
-            shopCopy(
-              myanmar,
-              'Check the test receipt by hand. A successful network connection cannot confirm that paper printed.',
-              'စမ်းသပ်ပြေစာကို ကိုယ်တိုင်စစ်ဆေးပါ။ Network ချိတ်ဆက်မှုအောင်မြင်ခြင်းက စက္ကူထွက်လာကြောင်း အတည်မပြုနိုင်ပါ။',
+          Card(
+            child: ExpansionTile(
+              title: Text(
+                shopCopy(myanmar, 'Connection help', 'ချိတ်ဆက်မှုအကူအညီ'),
+              ),
+              childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              children: [
+                Text(
+                  shopCopy(
+                    myanmar,
+                    'Search runs only when you tap Find printers. It checks ESC/POS port 9100 on this private Wi-Fi. A connection does not prove that paper printed.',
+                    'ပရင်တာရှာရန်ကို နှိပ်မှသာ ဤသီးသန့် Wi-Fi ရှိ ESC/POS port 9100 ကို ရှာမည်။ ချိတ်ဆက်မှုရှိခြင်းက စက္ကူထွက်လာကြောင်း မသေချာပါ။',
+                  ),
+                ),
+                if (_previousHost != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    shopCopy(
+                      myanmar,
+                      'Previous printer: $_previousHost',
+                      'ယခင်ပရင်တာ: $_previousHost',
+                    ),
+                  ),
+                ],
+                if (_scannedIp != null && _scannedMask != null) ...[
+                  const SizedBox(height: 8),
+                  Text('Wi-Fi: ${_scannedIp!} / ${_scannedMask!}'),
+                ],
+              ],
             ),
-            style: Theme.of(context).textTheme.bodySmall,
           ),
         ],
       ),

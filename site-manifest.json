@@ -14,10 +14,10 @@
     }
   },
   "company": {
-    "positioning": "Retail software for Myanmar.",
-    "statement": "SuperMega Shop brings sales, open orders and stock checks into one workspace for Myanmar retailers.",
-    "headline": "Sell at the counter. Keep orders and stock in view.",
-    "supporting": "SuperMega Shop brings sales, open orders and stock checks into one workspace for Myanmar retailers.",
+    "positioning": "Operating software for Myanmar businesses.",
+    "statement": "SuperMega is a Myanmar software company. Shop is our first customer product for counter sales, stock and order follow-up.",
+    "headline": "Operating software for Myanmar businesses.",
+    "supporting": "SuperMega is a Myanmar software company. Shop is our first customer product for counter sales, stock and order follow-up.",
     "publicPricing": false
   },
   "productVisibility": {
@@ -986,8 +986,8 @@
     {
       "route": "/",
       "file": "index.html",
-      "title": "SuperMega | Retail software for Myanmar",
-      "description": "SuperMega Shop brings sales, open orders and stock checks into one workspace for Myanmar retailers."
+      "title": "SuperMega | Operating software for Myanmar businesses",
+      "description": "SuperMega is a Myanmar software company. Shop is our first customer product for counter sales, stock and order follow-up."
     },
     {
       "route": "/shop/",

@@ -1107,8 +1107,13 @@ type ShopCounterReview = {
   customer: string
   payment: string
   outcome: 'paid_handoff' | 'open_order'
+  promisedAt?: string
   beforeCommit: (orderId: string) => Promise<boolean>
   onCommitted: (orderId: string) => void
+}
+
+function isFutureCounterPickup(value: Date | null): value is Date {
+  return value !== null && Number.isFinite(value.getTime()) && value.getTime() > Date.now()
 }
 
 const SHOP_COUNTER_PAYMENT_METHODS = ['Cash', 'KBZPay', 'WavePay', 'AYA Pay', 'MMQR'] as const
@@ -1224,6 +1229,8 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
   const [categoryFilter, setCategoryFilter] = useState<ShopCounterCategoryFilter>({ kind: 'all' })
   const [scanFeedback, setScanFeedback] = useState('')
   const [unmatchedBarcode, setUnmatchedBarcode] = useState('')
+  const [pickupBy, setPickupBy] = useState('')
+  const [pickupIssue, setPickupIssue] = useState('')
   const [cartOpen, setCartOpen] = useState(false)
   const salePanelRef = useRef<HTMLElement>(null)
   const saleSearchRef = useRef<HTMLInputElement>(null)
@@ -1373,11 +1380,19 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
   function clearSale() {
     tickets.dispatch({ kind: 'save', basket: emptyCounterBasket() })
     setCartOpen(false)
+    setPickupBy('')
+    setPickupIssue('')
     setMorePaymentOptions(false)
   }
 
   function reviewSale(event: MouseEvent<HTMLButtonElement>) {
     if (!lines.length || disabled || catalogChanged || recoveryPaused || !tickets.checkpoint()) return
+    const promisedTime = pickupBy ? new Date(pickupBy) : null
+    if (effectiveOutcome === 'open_order' && !isFutureCounterPickup(promisedTime)) {
+      setPickupIssue(uiText('Choose a future pickup time.'))
+      return
+    }
+    setPickupIssue('')
     const reviewedRevision = tickets.getSnapshot().state.revision
     let securedCheckoutId = ''
     onReview({
@@ -1385,6 +1400,7 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
       customer: customer.trim(),
       payment,
       outcome: effectiveOutcome,
+      ...(effectiveOutcome === 'open_order' && promisedTime ? { promisedAt: promisedTime.toISOString() } : {}),
       beforeCommit: async (orderId) => {
         if (securedCheckoutId) {
           return orderId === securedCheckoutId
@@ -1401,6 +1417,8 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
       onCommitted: (orderId) => {
         if (persistLocalDraft) tickets.dispatch({ kind: 'resolve_checkout', orderId })
         else clearSale()
+        setPickupBy('')
+        setPickupIssue('')
       },
     }, event.currentTarget)
   }
@@ -1422,7 +1440,7 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
                     : null}
             </nav>
           </div>
-          <div className="shop-item-search-row"><label className="shop-item-search"><span className="sr-only">{uiText('Find or scan an item')}</span><input ref={saleSearchRef} autoComplete="off" aria-keyshortcuts="/" onChange={(event) => { setQuery(event.target.value); setCatalogPage(0); setScanFeedback(''); setUnmatchedBarcode('') }} onKeyDown={addSearchMatch} placeholder={uiText('Search products or scan barcode')} type="search" value={query} /><kbd aria-hidden="true" className="shop-search-shortcut">/</kbd></label><BarcodeScanButton continuous continuousMode="sale" label={uiText('Find or scan an item')} onDetected={addCameraScan} /></div>
+          <div className="shop-item-search-row"><label className="shop-item-search"><span className="sr-only">{uiText('Find or scan an item')}</span><input ref={saleSearchRef} autoComplete="off" aria-keyshortcuts="/" onChange={(event) => { setQuery(event.target.value); setCatalogPage(0); setScanFeedback(''); setUnmatchedBarcode('') }} onKeyDown={addSearchMatch} placeholder={uiText('Find or scan an item')} type="search" value={query} /><kbd aria-hidden="true" className="shop-search-shortcut">/</kbd></label><BarcodeScanButton continuous continuousMode="sale" label={uiText('Find or scan an item')} onDetected={addCameraScan} /></div>
           {categories.length + Number(hasUncategorized) > 1 ? <nav aria-label={uiText('Product categories')} className="shop-counter-category-filter">
             <button aria-pressed={activeCategoryFilter.kind === 'all'} onClick={() => { setCategoryFilter({ kind: 'all' }); setCatalogPage(0) }} type="button">{uiText('All items')}</button>
             {categories.map(([key, label]) => <button aria-pressed={activeCategoryFilter.kind === 'category' && activeCategoryFilter.value === key} key={key} onClick={() => { setCategoryFilter({ kind: 'category', value: key }); setCatalogPage(0) }} type="button">{label}</button>)}
@@ -1481,7 +1499,7 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
               <span className="shop-product-copy"><span className="shop-product-name"><strong id={nameId} lang={readUiLocale() === 'my' && item.nameMy ? 'my' : undefined}>{readUiLocale() === 'my' && item.nameMy ? item.nameMy : item.name}</strong>{item.variant ? <small id={variantId}>{item.variant}</small> : null}</span><b id={priceId}>{formatMoney(item.price)}</b><small className={item.onHand <= item.reorderAt ? 'is-low' : ''} id={stockId}>{item.onHand ? `${item.onHand} ${uiText('in stock')}` : bi('Out of stock')}</small></span>
               {quantity
                 ? <span className="shop-product-quantity" aria-label={`${quantity} ${uiText('in sale')}`} id={quantityId}>{quantity}</span>
-                : item.onHand > 0 ? <span aria-hidden="true" className="shop-product-add-hint">+ {uiText('Add')}</span> : null}
+                : item.onHand > 0 ? <span aria-hidden="true" className="shop-product-add-hint">+</span> : null}
             </button>
           })}
         </div> : <Empty>{items.length
@@ -1535,6 +1553,7 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
               write; the cashier still confirms money received in the reviewed sale. */}
           {payment !== 'Cash' ? <PaymentQrButton amountDue={formatMoney(total)} method={payment} scope={paymentQrScope} settingsHint /> : null}
           {canCompleteInOneReview ? <label className="shop-open-order-choice"><input checked={outcome === 'open_order'} onChange={(event) => setOutcome(event.target.checked ? 'open_order' : 'paid_handoff')} type="checkbox" /><span><strong>{uiText('Leave unpaid')}</strong><small>{uiText('Track it in Orders and finish later.')}</small></span></label> : null}
+          {effectiveOutcome === 'open_order' ? <label className="shop-counter-pickup-time">{uiText('Pickup by')}<input aria-invalid={pickupIssue ? 'true' : undefined} onChange={(event) => { setPickupBy(event.target.value); setPickupIssue('') }} type="datetime-local" value={pickupBy} />{pickupIssue ? <small role="alert">{pickupIssue}</small> : null}</label> : null}
         </div>
         {cartLowStockLines.length ? <p className="shop-cart-stock-risk" role="status">{readUiLocale() === 'my' ? `ဤအရောင်းပြီးနောက် ပစ္စည်း ${cartLowStockLines.length} မျိုး ပြန်မှာရန် သတ်မှတ်ချက်သို့ ရောက်ပါမည်။` : `After this sale, ${cartLowStockLines.length} ${cartLowStockLines.length === 1 ? 'item reaches its' : 'items reach their'} reorder level.`} <Link to="/shop/?tab=inventory">{uiText('Review stock')}</Link></p> : null}
         <footer><div><span>{bi('Total')}</span><strong>{formatMoney(total)}</strong></div><button className="shop-review-sale" disabled={disabled || recoveryPaused || catalogChanged} onClick={reviewSale} type="button">{disabled ? bi('Sales paused') : effectiveOutcome === 'paid_handoff' ? <span className="cashier-action-label">{uiText('Review & complete sale')}</span> : bi('Review order')}<span aria-hidden="true">→</span></button></footer></> : null}
@@ -4403,7 +4422,13 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
       orderLines.push({ sku: item.sku, name: item.name, ...(item.nameMy ? { nameMy: item.nameMy } : {}), ...(item.variant ? { variant: item.variant } : {}), quantity: line.quantity, unitPriceMmk: item.price })
     }
     const orderId = uid('ORD')
-    const promisedAt = new Date(reviewedAt.getTime() + 30 * 60 * 1000).toISOString()
+    const promisedAt = review.outcome === 'open_order'
+      ? review.promisedAt
+      : new Date(reviewedAt.getTime() + 30 * 60 * 1000).toISOString()
+    if (!promisedAt || Number.isNaN(Date.parse(promisedAt)) || Date.parse(promisedAt) <= reviewedAt.getTime()) {
+      setNotice(uiText('Choose a future pickup time before reviewing this unpaid order.'))
+      return
+    }
     const order: CommerceOrder = {
       id: orderId,
       ...(activeShift ? { shiftId: activeShift.id } : {}),
@@ -4450,7 +4475,7 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
       kind: completesSale ? 'order_settle' : 'order_create',
       subjectId: order.id,
       summary: completesSale ? `Complete ${formatMoney(order.total)} counter sale` : `Create ${formatMoney(order.total)} counter order`,
-      before: `${lineReview} · ${review.payment}`,
+      before: `${lineReview} · ${review.payment}${completesSale ? '' : ` · Pickup by ${formatTime(promisedAt)}`}`,
       after: completesSale
         ? `Order ${displayReference} completed · ${review.payment} reconciled · Stock ${stockReview}${stockSourceReview ? ` · Stock source ${stockSourceReview}` : ''}`
         : `Order ${displayReference} confirmed · Reserved stock ${stockReview}${stockSourceReview ? ` · Stock source ${stockSourceReview}` : ''}`,

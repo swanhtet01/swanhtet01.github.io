@@ -7,6 +7,7 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { bindPreviewNavigation, parsePreviewAppBinding } from './public_preview_navigation.mjs'
+import { assertPublicGalleryReleaseReady } from './public_gallery_rights.mjs'
 
 import { activeProductContracts } from '../showroom/src/core/product-visibility.ts'
 import { brandFaviconSvg, companyMarkup, companyShopFooterHtml, companyShopHeaderHtml, companyShopStyle, shopMarkup } from './public_company_shop_design.mjs'
@@ -39,6 +40,10 @@ function assert(condition, message) {
 
 const publicGalleryProvenance = JSON.parse(await readFile(resolve(root, 'tools', 'public-assets', 'public-gallery-provenance.json'), 'utf8'))
 const publicGalleryCapture = JSON.parse(await readFile(resolve(root, 'tools', 'public-assets', 'public-gallery-capture.json'), 'utf8'))
+const publicGalleryImageSources = JSON.parse(await readFile(resolve(root, 'tools', 'qa-assets', 'shop-products', 'sources.json'), 'utf8'))
+if (process.env.SUPERMEGA_PUBLIC_RELEASE === '1' || process.env.VERCEL === '1') {
+  assertPublicGalleryReleaseReady(publicGalleryCapture, publicGalleryImageSources)
+}
 // Hash the checked-out source as a Git tree so a source archive is checked as
 // strictly as a Git worktree. Installed packages and build output are not part
 // of the committed showroom tree.
@@ -680,7 +685,6 @@ const sharedStyle = `
   .company-operating-overview{display:grid;min-width:0;gap:12px}
   .company-operating-overview .company-product-visual{gap:8px;padding:8px;border-radius:8px;box-shadow:0 10px 28px rgba(17,24,39,.07)}
   .company-operating-overview .company-product-visual img{aspect-ratio:16/10;object-fit:contain;border-radius:5px}
-  .company-operating-proof{margin:0;color:#70798a;font-size:11px;line-height:1.45}
   body[data-view="company"] .company-product-evidence{margin-top:clamp(40px,6vw,72px);padding-top:clamp(28px,4vw,48px);border-top:1px solid #e5e4ed}
   .company-product-evidence-head{display:flex;align-items:end;justify-content:space-between;gap:24px;margin-bottom:22px}
   .company-product-evidence-head h2{margin:8px 0 0;font-size:clamp(25px,3vw,38px);letter-spacing:-.045em;line-height:1.12}
@@ -729,8 +733,8 @@ function structuredDataHtml(schema) {
 }
 
 const publicObservabilityHosts = Object.freeze(['supermega.dev', 'www.supermega.dev'])
-const publicObservabilityPaths = Object.freeze(manifest.pages.map((page) => page.route))
-assert(publicObservabilityPaths.join(',') === '/,/shop/,/plant/,/website/,/ecommerce/,/contact/,/privacy/', 'public_observability_path_surface_changed')
+const publicObservabilityPaths = Object.freeze(discoverablePages.map((page) => page.route))
+assert(publicObservabilityPaths.join(',') === '/,/shop/,/contact/,/privacy/', 'public_observability_path_surface_changed')
 
 // Source presence is only delivery readiness. Provider-visible pageviews and
 // vitals remain unobserved until a separate read-only provider receipt proves
@@ -959,8 +963,8 @@ function removeSectionByClass(source, className, code) {
 }
 function shopOnlyCompanyMarkup(source) {
  let markup = source
- markup = replaceKnownCopyOnce(markup, ["Operating software · Myanmar", "Operating software for Myanmar companies", "Shop software for Myanmar businesses", "Shop software for Myanmar retailers", "For shops in Myanmar", "For Myanmar retailers", "Business software for Myanmar retailers", "Shop for Myanmar retailers", "Made for Myanmar retailers", "SuperMega · Operating software for Myanmar", "SUPERMEGA · MYANMAR", "SuperMega · Myanmar", "Business software for Myanmar", "Business software"], "For Myanmar retailers", "shop_only_hero_kicker")
- markup = replaceKnownCopyOnce(markup, ["Tools for<br><span>everyday work.</span>", "Run your shop.<br><span>See what’s next.</span>", "Run the counter.<br><span>See what needs attention.</span>", "Sell at the counter.<br><span>Keep orders and stock in view.</span>", "Clearer systems for<br><span>everyday business.</span>", "Sales. Stock. Orders.<br><span>Under control.</span>", "Software for<br><span>Myanmar businesses.</span>", "Sales, stock, and orders<br><span>for Myanmar shops.</span>", "Sales, stock, and orders<br><span>in one place.</span>", "Sales, stock and orders<br><span>in one place.</span>", "See what sold.<br><span>Know what needs action.</span>", "Business software<br><span>built for Myanmar.</span>", "Operating software<br><span>for Myanmar businesses.</span>", "Run your counter.<br><span>Stay ahead of stock.</span>", "Know what sold.<br><span>See what needs attention.</span>", "For Myanmar<br><span>retailers.</span>"], "Sell at the counter.<br><span>Keep orders and stock in view.</span>", "shop_only_hero_heading")
+ markup = replaceKnownCopyOnce(markup, ["Operating software · Myanmar", "Operating software for Myanmar companies", "Shop software for Myanmar businesses", "Shop software for Myanmar retailers", "For shops in Myanmar", "For Myanmar retailers", "Business software for Myanmar retailers", "Shop for Myanmar retailers", "Made for Myanmar retailers", "SuperMega · Operating software for Myanmar", "SUPERMEGA · MYANMAR", "SuperMega · Myanmar", "Business software for Myanmar", "Business software"], "SuperMega · Myanmar", "shop_only_hero_kicker")
+ markup = replaceKnownCopyOnce(markup, ["Tools for<br><span>everyday work.</span>", "Run your shop.<br><span>See what’s next.</span>", "Run the counter.<br><span>See what needs attention.</span>", "Sell at the counter.<br><span>Keep orders and stock in view.</span>", "Clearer systems for<br><span>everyday business.</span>", "Sales. Stock. Orders.<br><span>Under control.</span>", "Software for<br><span>Myanmar businesses.</span>", "Sales, stock, and orders<br><span>for Myanmar shops.</span>", "Sales, stock, and orders<br><span>in one place.</span>", "Sales, stock and orders<br><span>in one place.</span>", "See what sold.<br><span>Know what needs action.</span>", "Business software<br><span>built for Myanmar.</span>", "Operating software<br><span>for Myanmar businesses.</span>", "Run your counter.<br><span>Stay ahead of stock.</span>", "Know what sold.<br><span>See what needs attention.</span>", "For Myanmar<br><span>retailers.</span>"], "Operating software<br><span>for Myanmar businesses.</span>", "shop_only_hero_heading")
  markup = replaceKnownCopyOnce(markup, [
   "Shop brings sales and stock into one operating view. Our team manages Sites and confirms Commerce availability for each setup.",
   "Keep sales, orders and stock together in one clear MMK workflow. See what needs attention without digging through settings.",
@@ -971,6 +975,7 @@ function shopOnlyCompanyMarkup(source) {
   "Record counter sales, track stock, and follow open orders with Shop.",
   "SuperMega Shop brings counter sales, open orders, and stock tracking together for Myanmar businesses.",
   "SuperMega brings daily sales, stock, and order follow-up into one clear workspace. Start with Shop.",
+  "SuperMega is a Myanmar software company. Shop is our first customer product for counter sales, stock and order follow-up.",
   "Record counter sales, check stock and follow open orders in SuperMega Shop.",
   "Record each sale, spot low stock early, and follow every open order in SuperMega Shop, built for Myanmar retailers.",
   "Record sales, track stock and follow open orders with SuperMega Shop.",
@@ -982,7 +987,7 @@ function shopOnlyCompanyMarkup(source) {
   "SuperMega Shop brings counter sales, stock and open orders into one workspace.",
   "Record sales, track stock, and follow open orders in one Shop workspace.",
   "Shop connects counter sales, stock and open orders in one workspace.",
- ], "SuperMega Shop brings sales, open orders and stock checks into one workspace for Myanmar retailers.", "shop_only_hero_description")
+ ], "SuperMega is a Myanmar software company. Shop is our first customer product for counter sales, stock and order follow-up.", "shop_only_hero_description")
  markup = replaceKnownCopyOnce(markup, ['href="#products">Meet the product family', 'href="#products">Explore Shop', 'href="/contact/">Talk to our team', 'href="/contact/">Contact us'], 'href="/contact/">Contact us', "shop_only_hero_secondary_action")
  markup = replaceKnownCopyOnce(markup, ['href="/shop/#shop-demo">See Shop in action', 'href="/shop/#shop-demo">See Shop screens', 'href="/shop/#shop-demo">See Shop on desktop and mobile', 'href="/shop/#shop-demo">View every screen size', 'href="/shop/">See Shop', 'href="/shop/">Explore Shop'], 'href="/shop/">Explore Shop', "shop_only_hero_primary_action")
  markup = replaceOnce(markup, '<a class="text-link hero-note" href="/contact/">Contact us</a>', '', "shop_only_remove_duplicate_home_contact_action")
@@ -1014,7 +1019,7 @@ function shopOnlyCompanyMarkup(source) {
  return markup
 }
 function companyOperatingGraphic() {
- return `<div class="company-operating-overview" aria-label="Shop dashboard preview"><figure class="company-product-visual"><img src="/images/actual-shop-today.png" alt="Shop Today dashboard showing sales, open orders, stock alerts, and next actions. Synthetic sample records." width="1440" height="900" loading="eager" fetchpriority="high" /><figcaption><strong>Today</strong><span>Sales, orders, and stock that need attention</span></figcaption></figure><p class="company-operating-proof">Sample catalog, stock and prices.</p></div>`
+ return `<div class="company-operating-overview" aria-label="SuperMega Shop sample screen"><figure class="company-product-visual"><img src="/images/actual-shop-today.png" alt="Shop Today dashboard showing sales, open orders, stock alerts, and next actions. Synthetic sample records." width="1440" height="900" loading="eager" fetchpriority="high" /><figcaption><strong>Shop · Today</strong><span>Sample workspace</span></figcaption></figure></div>`
 }
 function replaceHomeShopShowcase(source) {
  const marker = /<section class="shop-showcase" aria-label="Shop product screens">[\s\S]*?<\/section>/g
@@ -1158,7 +1163,7 @@ const privacyHtml = documentHtml({
   route: '/privacy/',
   title: 'Privacy | SuperMega',
   description: 'How SuperMega handles public contact requests and product implementation data.',
-  content: `<main class="frame" id="content"><section class="page-hero"><span class="eyebrow">Privacy</span><h1>Collect what the work requires. Protect the rest.</h1><p class="lede">The public site uses the details you choose to send so SuperMega can respond to your request.</p></section><div class="prose"><section><h3>Site measurement</h3><p>On the production SuperMega public site, first-party Vercel Web Analytics records aggregate page views and Speed Insights measures Core Web Vitals. Before either tool starts, SuperMega allows only the seven public page paths and removes query strings and fragments from the URL. SuperMega supplies no custom or conversion event, contact-form value, identity, free text, customer record, payment, or commercial proof in its measurement event fields. Vercel may add a timestamp, referrer, approximate location, browser, operating system, and device information to its aggregate reporting. Source code or a reachable script does not prove that provider telemetry was observed.</p></section><section><h3>Contact requests</h3><p>We receive your name, work email, company, selected product or template, request, source page, referrer, and an optional attached request summary, outcome status, and digest, plus an approved AI context digest and no-raw-record boundary when you attach them. We use them to reply, qualify the workflow, and prepare the next agreed step.</p></section><section><h3>Product data</h3><p>An attached request summary includes bounded readiness, source, behavior, reviewed-decision counts, and a digest-bound aggregate outcome. It excludes raw product records, questions, approval contents, and account details. Sending a request does not create an account or connect a source.</p></section><section><h3>AI processing</h3><p>Governed assistance is configured only against approved sources and roles. Consequential external actions remain behind explicit approval.</p></section><section><h3>Sharing</h3><p>We do not sell contact details. Service providers are used only where needed to host, secure, communicate, or deliver the agreed system.</p></section><section><h3>Deletion</h3><p>Email <a href="mailto:swanhtet@supermega.dev">swanhtet@supermega.dev</a> to request correction or deletion of a public contact record.</p></section></div></main>`,
+  content: `<main class="frame" id="content"><section class="page-hero"><span class="eyebrow">Privacy</span><h1>Collect what the work requires. Protect the rest.</h1><p class="lede">The public site uses the details you choose to send so SuperMega can respond to your request.</p></section><div class="prose"><section><h3>Site measurement</h3><p>On the production SuperMega public site, first-party Vercel Web Analytics records aggregate page views and Speed Insights measures Core Web Vitals. Before either tool starts, SuperMega allows only the four public page paths and removes query strings and fragments from the URL. SuperMega supplies no custom or conversion event, contact-form value, identity, free text, customer record, payment, or commercial proof in its measurement event fields. Vercel may add a timestamp, referrer, approximate location, browser, operating system, and device information to its aggregate reporting. Source code or a reachable script does not prove that provider telemetry was observed.</p></section><section><h3>Contact requests</h3><p>We receive your name, work email, company, selected product or template, request, source page, referrer, and an optional attached request summary, outcome status, and digest, plus an approved AI context digest and no-raw-record boundary when you attach them. We use them to reply, qualify the workflow, and prepare the next agreed step.</p></section><section><h3>Product data</h3><p>An attached request summary includes bounded readiness, source, behavior, reviewed-decision counts, and a digest-bound aggregate outcome. It excludes raw product records, questions, approval contents, and account details. Sending a request does not create an account or connect a source.</p></section><section><h3>AI processing</h3><p>Governed assistance is configured only against approved sources and roles. Consequential external actions remain behind explicit approval.</p></section><section><h3>Sharing</h3><p>We do not sell contact details. Service providers are used only where needed to host, secure, communicate, or deliver the agreed system.</p></section><section><h3>Deletion</h3><p>Email <a href="mailto:swanhtet@supermega.dev">swanhtet@supermega.dev</a> to request correction or deletion of a public contact record.</p></section></div></main>`,
 })
 
 const notFoundHtml = documentHtml({
@@ -1747,10 +1752,11 @@ const vercelConfig = {
     { src: '^/api/contact-submissions/?$', dest: '/api/contact-submissions.js' },
     { src: '^/api/health/?$', dest: '/api/health.js' },
     { src: '^/api/(.*)$', dest: '/api/not-found.js' },
+    { src: `^/(?:${manifest.productVisibility.retainedOnlyProductIds.join('|')})(?:/.*)?$`, status: 404, dest: '/404.html' },
     ...manifest.redirects.map((redirect) => ({ src: redirect.source, status: 308, headers: { Location: manifest.customerProducts.some(product => product.publicAnchor === redirect.destination && !publicProducts.includes(product)) ? `/${manifest.customerProducts.find(product => product.publicAnchor === redirect.destination).id}/` : redirect.destination } })),
     { src: '^/__release\\.json$', headers: { 'cache-control': 'no-store, max-age=0' }, continue: true },
     { src: '^/vercel-insights\\.js$', headers: { 'cache-control': 'no-store, max-age=0' }, continue: true },
-    { src: '^/(?:favicon\\.svg|site\\.webmanifest|og-card(?:-(?:shop|plant|website|ecommerce))?\\.png)$', headers: { 'cache-control': 'public, max-age=86400, stale-while-revalidate=604800' }, continue: true },
+    { src: '^/(?:favicon\\.svg|site\\.webmanifest|og-card(?:-shop)?\\.png)$', headers: { 'cache-control': 'public, max-age=86400, stale-while-revalidate=604800' }, continue: true },
     { handle: 'filesystem' },
     { src: '^/(.*)$', status: 404, dest: '/404.html' },
   ],
@@ -1811,7 +1817,12 @@ await writeStatic('platform-carousel.js', `(function(){
   window.addEventListener('hashchange',function(){var index=panels.findIndex(function(panel){return location.hash==='#'+panel.id});if(index>=0)select(index,false)});
 })();`)
 await writeFile(resolve(staticDir, 'og-card.png'), ogCardPng)
-for (const [fileName, cardPng] of productOgCards) await writeFile(resolve(staticDir, fileName), cardPng)
+for (const product of publicProducts) {
+  const fileName = `og-card-${product.id}.png`
+  const cardPng = productOgCards.get(fileName)
+  assert(cardPng, `public_og_card_missing:${product.id}`)
+  await writeFile(resolve(staticDir, fileName), cardPng)
+}
 await writeStatic('__release.json', `${JSON.stringify(release, null, 2)}\n`)
 await writeStatic('robots.txt', previewAppBinding ? 'User-agent: *\nDisallow: /\n' : 'User-agent: *\nAllow: /\nDisallow: /api/\nSitemap: https://supermega.dev/sitemap.xml\n')
 await writeStatic('sitemap.xml', `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${discoverablePages.map((page) => `  <url><loc>${escapeHtml(canonical(page.route))}</loc><lastmod>${release.generatedAt.slice(0, 10)}</lastmod><changefreq>${page.route === '/privacy/' ? 'yearly' : 'weekly'}</changefreq></url>`).join('\n')}\n</urlset>\n`)

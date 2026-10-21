@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { activeProductContracts } from '../showroom/src/core/product-visibility.ts'
 import { brandMarkHtml } from './public_company_shop_design.mjs'
+import { parsePreviewAppBinding } from './public_preview_navigation.mjs'
 
 const verifyCurrentHead = process.argv.includes('--current-head')
 const configuredExpectedCommit = String(process.env.EXPECTED_RELEASE_COMMIT || '').trim().toLowerCase()
@@ -32,10 +33,19 @@ const verificationScope = expectedCommit ? 'exact_release' : 'availability_and_c
 const manifest = JSON.parse(await readFile(new URL('../site-manifest.json', import.meta.url), 'utf8'))
 const publicProducts = activeProductContracts(manifest)
 const activeLandingPages = manifest.pages.filter(page => publicProducts.some(product => product.id === page.productId))
+const retiredCustomerPages = manifest.pages.filter(page => page.productId && !publicProducts.some(product => product.id === page.productId))
+const retiredCustomerRoutes = new Set(retiredCustomerPages.map(page => page.route))
+const retiredCustomerPaths = retiredCustomerPages.flatMap(page => [
+  `/${page.productId}`,
+  `/${page.productId}/`,
+  `/${page.productId}/index.html`,
+  `/${page.productId}/settings/nested`,
+].map(route => ({ route, productId: page.productId })))
 const baseUrl = String(process.env.PUBLIC_BASE_URL || manifest.release.productionDomain).replace(/\/$/, '')
 const attempts = Number(process.env.PUBLIC_VERIFY_ATTEMPTS || (verifyCurrentHead ? 1 : 6))
 const retryDelayMs = Number(process.env.PUBLIC_VERIFY_RETRY_MS || 5000)
 const timeoutMs = Number(process.env.PUBLIC_VERIFY_TIMEOUT_MS || 15000)
+let appOrigin = 'https://app.supermega.dev'
 
 function assert(condition, code, detail = {}) {
   if (!condition) throw new Error(`${code}:${JSON.stringify(detail)}`)
@@ -91,13 +101,14 @@ async function readPage(route) {
     'aria-label="SuperMega home"',
     `class="brand-mark" aria-hidden="true">${brandMarkHtml}</span>`,
     route === '/shop/'
-      ? 'href="https://app.supermega.dev/login?product=shop">Login</a>'
-      : 'href="https://app.supermega.dev/login">Login</a>',
+      ? `href="${appOrigin}/login?product=shop">Login</a>`
+      : `href="${appOrigin}/login">Login</a>`,
     'href="/privacy/">Privacy</a>',
   ]) assert(html.includes(token), 'page_shared_contract_missing', { route, token })
   const contactRouteToken = 'href="/contact/">Contact</a>'
   assert(html.includes(contactRouteToken), 'page_contact_route_missing', { route, token: contactRouteToken })
-  for (const token of manifest.retiredPublicNames) assert(!html.toLowerCase().includes(token.toLowerCase()), 'retired_context_live', { route, token })
+  const copyWithoutExternalDestinations = html.replace(/\bhref="https?:\/\/[^\"]+"/gi, '')
+  for (const token of manifest.retiredPublicNames) assert(!copyWithoutExternalDestinations.toLowerCase().includes(token.toLowerCase()), 'retired_context_live', { route, token })
   return html
 }
 
@@ -133,11 +144,28 @@ async function readPageOrPending(page, pendingRoutes) {
 }
 
 async function verifyOnce() {
+  const { body: release, headers: releaseHeaders } = await readJson(manifest.release.releaseEndpoint)
+  if (expectedCommit && release.commit !== expectedCommit) assert(false, 'release_commit_wrong', { expectedCommit, actual: release.commit })
+  const previewAppBinding = release.previewNavigation
+    ? parsePreviewAppBinding(JSON.stringify(release.previewNavigation), release.commit, expectedCommit || release.commit)
+    : null
+  appOrigin = previewAppBinding?.origin || 'https://app.supermega.dev'
   const pendingRoutes = new Set()
-  const pageResults = await Promise.all(manifest.pages.map(async (page) => readPageOrPending(page, pendingRoutes)))
-  const pages = new Map(pageResults)
+  const pageResults = await Promise.all(manifest.pages.filter(page => !retiredCustomerRoutes.has(page.route)).map(async (page) => readPageOrPending(page, pendingRoutes)))
+  const pages = new Map([...pageResults, ...retiredCustomerPages.map(page => [page.route, null])])
+  await Promise.all(retiredCustomerPaths.map(async page => {
+    const response = await request(page.route, { redirect: 'manual' })
+    if (response.status !== 404) {
+      if (expectedCommit) assert(false, 'retired_product_route_not_found', { route: page.route, product: page.productId, status: response.status })
+      pendingRoutes.add(page.route)
+      return
+    }
+    const body = await response.text()
+    const product = manifest.customerProducts.find(item => item.id === page.productId)
+    assert(!product || !body.toLowerCase().includes(product.name.toLowerCase()), 'retired_product_content_served', { route: page.route, product: page.productId })
+  }))
   verifyCompanyHeadline(pages.get('/') || '', 'homepage_headline_wrong')
-  assert(pages.get('/')?.includes('href="https://app.supermega.dev/login">Login</a>'), 'homepage_product_cta_missing')
+  assert(pages.get('/')?.includes(`href="${appOrigin}/login">Login</a>`), 'homepage_product_cta_missing')
   const homepage = pages.get('/') || ''
   for (const token of ['class="company-operating-overview"', 'class="company-product-visual"', 'src="/images/actual-shop-today.png"']) {
     assert(homepage.includes(token), 'homepage_offer_contract_missing', { token })
@@ -151,8 +179,8 @@ async function verifyOnce() {
     const landing = pages.get(landingRoute)
     if (pendingRoutes.has(landingRoute) || landing == null) continue
     const guidedSampleRoute = product.id === 'shop'
-      ? 'https://app.supermega.dev/login?product=shop'
-      : 'https://app.supermega.dev/login'
+      ? `${appOrigin}/login?product=shop`
+      : `${appOrigin}/login`
     if (product.id === 'shop') {
       assert(landing.includes('class="shop-hero-app"') && landing.includes('src="/images/actual-shop-sell.png"'), 'landing_headline_missing', { product: product.id })
     } else {
@@ -166,8 +194,6 @@ async function verifyOnce() {
   }
   for (const product of manifest.customerProducts.filter(product => !publicProducts.includes(product))) {
     assert(!homepage.includes(`href="/${product.id}/"`) && !homepage.includes(`product=${product.id}`), 'retired_product_marketed', { product: product.id })
-    const retained = pages.get(`/${product.id}/`)
-    if (retained != null) assert(retained.includes('content="noindex,follow"') && retained.includes('This product is not offered for new setup.') && !retained.includes('"@type":"Product"'), 'retired_product_boundary_missing', { product: product.id })
   }
   for (const internalLabel of ['SuperMega HQ', 'One next action for the company', 'Gated R&amp;D']) assert(!pages.get('/')?.includes(internalLabel), 'internal_system_exposed', { internalLabel })
   assert(pages.get('/')?.includes('href="/privacy/"'), 'privacy_navigation_missing')
@@ -279,8 +305,7 @@ async function verifyOnce() {
     }
   }
 
-  const [{ body: release, headers: releaseHeaders }, { body: health }, { body: contact }] = await Promise.all([
-    readJson(manifest.release.releaseEndpoint),
+  const [{ body: health }, { body: contact }] = await Promise.all([
     readJson('/api/health'),
     readJson('/api/contact-submissions/status'),
   ])
@@ -325,7 +350,7 @@ async function verifyOnce() {
   verifyCompanyHeadline(wwwHtml, 'www_release_drift')
 
   return {
-    pages: manifest.pages.map((page) => page.route).filter((route) => !pendingRoutes.has(route)),
+    pages: manifest.pages.map((page) => page.route).filter((route) => !retiredCustomerRoutes.has(route) && !pendingRoutes.has(route)),
     pendingGatedRoutes: [...pendingRoutes],
     pendingGatedFeatures: [...pendingFeatures],
     release,
