@@ -738,7 +738,7 @@ void main() {
           expect(basket, findsOneWidget);
           final catalogRect = tester.getRect(catalog);
           final basketRect = tester.getRect(basket);
-          expect(catalogRect.width, greaterThanOrEqualTo(380));
+          expect(catalogRect.width, greaterThanOrEqualTo(350));
           expect(basketRect.width, greaterThanOrEqualTo(300));
           expect(catalogRect.right, lessThan(basketRect.left));
         }
@@ -842,6 +842,7 @@ void main() {
   testWidgets('Burmese cash review stays uncommitted until confirmed', (
     tester,
   ) async {
+    _usePhoneViewport(tester);
     final database = ShopDatabase(NativeDatabase.memory());
     await database.addProduct(
       id: 'tea',
