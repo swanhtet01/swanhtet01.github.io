@@ -18,6 +18,7 @@ import 'printer_setup_screen.dart';
 import 'printer_services.dart';
 import 'recent_sales_screen.dart';
 import 'shop_backup.dart';
+import 'shop_backup_export_screen.dart';
 import 'shop_cash_shift_screen.dart';
 import 'shop_copy.dart';
 import 'shop_database.dart';
@@ -2890,33 +2891,25 @@ class _ShopSettingsScreenState extends State<ShopSettingsScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: 24),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.storage_outlined),
-                        const SizedBox(width: 12),
-                        Text(
-                          shopCopy(_myanmar, 'On this device', 'ဤစက်တွင်'),
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      shopCopy(
-                        _myanmar,
-                        'Saved here. Online backup is not active.',
-                        'ဤစက်တွင်သာ သိမ်းထားသည်။ အွန်လိုင်းအရန်ကူး မရှိသေးပါ။',
-                      ),
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                  ],
+            const SizedBox(height: 12),
+            _SetupTile(
+              icon: Icons.file_download_outlined,
+              title: shopCopy(
+                _myanmar,
+                'Export backup file',
+                'အရန်ကူးဖိုင် ထုတ်ယူရန်',
+              ),
+              subtitle: shopCopy(
+                _myanmar,
+                'Save an encrypted file.',
+                'စကားဝှက်ဖြင့်ကာကွယ်ထားသောဖိုင်ကို သိမ်းပါ။',
+              ),
+              onTap: () => Navigator.of(context).push<void>(
+                MaterialPageRoute<void>(
+                  builder: (_) => ShopBackupExportScreen(
+                    database: widget.database,
+                    myanmar: _myanmar,
+                  ),
                 ),
               ),
             ),
