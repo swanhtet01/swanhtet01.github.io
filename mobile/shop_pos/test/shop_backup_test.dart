@@ -200,9 +200,7 @@ void main() {
         home: ShopBackupExportScreen(
           database: database,
           myanmar: false,
-          scratchRoot: directory,
-          encryptedRoot: directory,
-          saveArchive: (_, _) async => null,
+          exportAction: (_) async => ShopBackupExportResult.cancelled,
         ),
       ),
     );

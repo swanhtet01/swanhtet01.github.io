@@ -76,6 +76,7 @@ class ShopBackupExportScreen extends StatefulWidget {
     required this.database,
     required this.myanmar,
     this.saveArchive,
+    this.exportAction,
     this.scratchRoot,
     this.encryptedRoot,
     super.key,
@@ -87,6 +88,7 @@ class ShopBackupExportScreen extends StatefulWidget {
   /// Injectable only so cancellation and errors can be tested without an OS
   /// document picker. Production uses the native Save As dialog.
   final SaveEncryptedShopArchive? saveArchive;
+  final Future<ShopBackupExportResult> Function(String password)? exportAction;
   final Directory? scratchRoot;
   final Directory? encryptedRoot;
 
@@ -142,13 +144,15 @@ class _ShopBackupExportScreenState extends State<ShopBackupExportScreen> {
       _message = null;
     });
     try {
-      final result = await ShopBackupExporter.export(
-        database: widget.database,
-        password: password,
-        saveArchive: widget.saveArchive ?? _saveAs,
-        scratchRoot: widget.scratchRoot,
-        encryptedRoot: widget.encryptedRoot,
-      );
+      final result = await (widget.exportAction != null
+          ? widget.exportAction!(password)
+          : ShopBackupExporter.export(
+              database: widget.database,
+              password: password,
+              saveArchive: widget.saveArchive ?? _saveAs,
+              scratchRoot: widget.scratchRoot,
+              encryptedRoot: widget.encryptedRoot,
+            ));
       if (!mounted) return;
       _password.clear();
       _confirmation.clear();
