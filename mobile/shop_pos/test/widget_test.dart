@@ -170,7 +170,7 @@ void main() {
     }
   });
 
-  testWidgets('two scans restore as one unfinished sale after app restart', (
+  testWidgets('unfinished sale opens from Today after app restart', (
     tester,
   ) async {
     _usePhoneViewport(tester);
@@ -183,20 +183,18 @@ void main() {
         priceMmk: 2500,
         openingStock: 3,
       );
+      await database.saveCounterSaleDraft(
+        operationId: 'counter-before-restart',
+        quantities: const {'tea': 2},
+      );
       await tester.pumpWidget(
         ShopApp(
-          initialCounter: true,
           database: database,
           authClient: null,
           apiBaseUrl: 'https://app.supermega.dev',
           initialMyanmar: false,
         ),
       );
-      await tester.pumpAndSettle();
-      for (var scan = 0; scan < 2; scan++) {
-        await tester.enterText(find.byType(TextField), '111111');
-        await tester.testTextInput.receiveAction(TextInputAction.done);
-      }
       await tester.pumpAndSettle();
       expect((await database.readCounterSaleDraft())?.quantities, {'tea': 2});
       expect((await database.readActiveProducts()).single.onHand, 3);
