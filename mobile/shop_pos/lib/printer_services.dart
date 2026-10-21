@@ -205,10 +205,14 @@ class ReceiptReprintService {
     ReceiptPrinterSettings? settings,
     ReceiptPrintSender? send,
   }) : _settings = settings ?? ReceiptPrinterSettings(),
-       _send = send;
+       _send =
+           send ??
+           ((host, receipt, myanmar) => ShopReceiptPrinter(
+             settings: settings ?? ReceiptPrinterSettings(),
+           ).printSale(host, receipt, myanmar: myanmar));
 
   final ReceiptPrinterSettings _settings;
-  final ReceiptPrintSender? _send;
+  final ReceiptPrintSender _send;
 
   /// Returns false when setup/retest is required; it never sends to a saved,
   /// unverified host. A true result means the print request was sent, not that
@@ -219,12 +223,7 @@ class ReceiptReprintService {
   }) async {
     final host = await _settings.readHost();
     if (host == null) return false;
-    if (_send case final send?) {
-      await send(host, receipt, myanmar);
-    } else {
-      await ShopReceiptPrinter(settings: _settings)
-          .printSale(host, receipt, myanmar: myanmar);
-    }
+    await _send(host, receipt, myanmar);
     return true;
   }
 }
