@@ -107,6 +107,7 @@ class ShopTodayScreen extends StatefulWidget {
     required this.database,
     required this.myanmar,
     required this.onNewSale,
+    required this.onAddFirstProduct,
     required this.onSales,
     required this.onStock,
     required this.onSettings,
@@ -117,6 +118,7 @@ class ShopTodayScreen extends StatefulWidget {
   final ShopDatabase database;
   final bool myanmar;
   final ShopTodayDestination onNewSale;
+  final ShopTodayDestination onAddFirstProduct;
   final ShopTodayDestination onSales;
   final ShopTodayDestination onStock;
   final ShopTodayDestination onSettings;
@@ -216,6 +218,8 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
   }
 
   Future<void> _openSale() => widget.onNewSale(context);
+
+  Future<void> _openFirstProduct() => widget.onAddFirstProduct(context);
 
   @override
   Widget build(BuildContext context) {
@@ -337,45 +341,51 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
                 if (compact) ...[
                   _heading(showNewSale: false),
                 ] else
-                  _heading(showNewSale: true),
-                const SizedBox(height: 22),
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 12,
-                  children: [
-                    _metric(
-                      width: salesWidth,
-                      label: _copy('Sales today', 'ယနေ့ရောင်းအား'),
-                      value: _money(snapshot.salesMmk),
-                      icon: Icons.payments_outlined,
-                    ),
-                    if (compact)
-                      _compactStats(snapshot, width: contentWidth)
-                    else ...[
+                  _heading(showNewSale: snapshot.products > 0),
+                if (snapshot.products > 0 ||
+                    snapshot.saleCount > 0 ||
+                    snapshot.pendingWallet != null) ...[
+                  const SizedBox(height: 22),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: [
                       _metric(
-                        width: smallCardWidth,
-                        label: _copy('Completed sales', 'ပြီးစီးသောအရောင်း'),
-                        value: _number(snapshot.saleCount),
-                        icon: Icons.receipt_long_outlined,
+                        width: salesWidth,
+                        label: _copy('Sales today', 'ယနေ့ရောင်းအား'),
+                        value: _money(snapshot.salesMmk),
+                        icon: Icons.payments_outlined,
                       ),
-                      _metric(
-                        width: smallCardWidth,
-                        label: _copy(
-                          '5 or fewer left',
-                          '၅ ခု သို့မဟုတ် အောက် လက်ကျန်',
+                      if (compact)
+                        _compactStats(snapshot, width: contentWidth)
+                      else ...[
+                        _metric(
+                          width: smallCardWidth,
+                          label: _copy('Completed sales', 'ပြီးစီးသောအရောင်း'),
+                          value: _number(snapshot.saleCount),
+                          icon: Icons.receipt_long_outlined,
                         ),
-                        value: _number(snapshot.stockToCheck.length),
-                        icon: Icons.inventory_2_outlined,
-                      ),
+                        _metric(
+                          width: smallCardWidth,
+                          label: _copy(
+                            '5 or fewer left',
+                            '၅ ခု သို့မဟုတ် အောက် လက်ကျန်',
+                          ),
+                          value: _number(snapshot.stockToCheck.length),
+                          icon: Icons.inventory_2_outlined,
+                        ),
+                      ],
                     ],
-                  ],
-                ),
+                  ),
+                ],
                 if (snapshot.pendingWallet != null ||
                     snapshot.stockToCheck.isNotEmpty ||
                     snapshot.products == 0) ...[
                   const SizedBox(height: 26),
                   Text(
-                    _copy('Needs attention', 'စစ်ဆေးရန်'),
+                    snapshot.products == 0
+                        ? _copy('Get started', 'စတင်ရန်')
+                        : _copy('Needs attention', 'စစ်ဆေးရန်'),
                     style: Theme.of(context).textTheme.titleLarge,
                   ),
                   const SizedBox(height: 12),
@@ -407,15 +417,15 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
                     _actionCard(
                       icon: Icons.add_box_outlined,
                       title: _copy(
-                        'Start with one product',
-                        'ကုန်ပစ္စည်းတစ်မျိုးမှ စတင်ပါ',
+                        'Add your first product',
+                        'ပထမကုန်ပစ္စည်းကို ထည့်ပါ',
                       ),
                       detail: _copy(
-                        'Add a name, price and starting stock in Counter.',
-                        'အရောင်းကောင်တာတွင် အမည်၊ ဈေးနှုန်းနှင့် စတင်လက်ကျန်ကို ထည့်ပါ။',
+                        'Enter its name, price and starting stock.',
+                        'အမည်၊ ဈေးနှုန်းနှင့် စတင်လက်ကျန်ကို ထည့်ပါ။',
                       ),
-                      action: _copy('Open Counter', 'အရောင်းကောင်တာ ဖွင့်ရန်'),
-                      onTap: () => _openSale(),
+                      action: _copy('Add product', 'ကုန်ပစ္စည်းထည့်ရန်'),
+                      onTap: () => _openFirstProduct(),
                     ),
                 ],
               ],

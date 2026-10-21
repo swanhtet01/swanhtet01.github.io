@@ -73,6 +73,7 @@ class _ShopAppState extends State<ShopApp> {
   late bool _myanmar = widget.initialMyanmar;
   int _workspaceTab = 0;
   int _todayRefreshToken = 0;
+  int _addProductRequest = 0;
   bool _counterOpened = false;
 
   Future<void> _setLanguage(bool myanmar) async {
@@ -85,6 +86,14 @@ class _ShopAppState extends State<ShopApp> {
     setState(() {
       _counterOpened = true;
       _workspaceTab = 1;
+    });
+  }
+
+  Future<void> _openFirstProduct(BuildContext context) async {
+    setState(() {
+      _counterOpened = true;
+      _workspaceTab = 1;
+      _addProductRequest++;
     });
   }
 
@@ -288,6 +297,7 @@ class _ShopAppState extends State<ShopApp> {
                     myanmar: _myanmar,
                     refreshToken: _todayRefreshToken,
                     onNewSale: _openCounter,
+                    onAddFirstProduct: _openFirstProduct,
                     onSales: _openSales,
                     onStock: _openStock,
                     onSettings: _openSettings,
@@ -300,6 +310,7 @@ class _ShopAppState extends State<ShopApp> {
                       myanmar: _myanmar,
                       onLanguageChanged: _setLanguage,
                       onToday: _showToday,
+                      addProductRequest: _addProductRequest,
                     )
                   else
                     const SizedBox.shrink(),
@@ -326,6 +337,7 @@ class ShopHome extends StatefulWidget {
     required this.myanmar,
     required this.onLanguageChanged,
     this.onToday,
+    this.addProductRequest = 0,
     this.recoverMenuPhoto,
     super.key,
   });
@@ -336,6 +348,7 @@ class ShopHome extends StatefulWidget {
   final bool myanmar;
   final ValueChanged<bool> onLanguageChanged;
   final VoidCallback? onToday;
+  final int addProductRequest;
   final Future<XFile?> Function()? recoverMenuPhoto;
 
   @override
@@ -361,6 +374,21 @@ class _ShopHomeState extends State<ShopHome> {
     super.initState();
     _loadPendingWalletCheckout();
     _recoverMenuPhoto();
+    if (widget.addProductRequest > 0) _scheduleFirstProductDialog();
+  }
+
+  @override
+  void didUpdateWidget(covariant ShopHome oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.addProductRequest > oldWidget.addProductRequest) {
+      _scheduleFirstProductDialog();
+    }
+  }
+
+  void _scheduleFirstProductDialog() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _showAddProduct();
+    });
   }
 
   Future<void> _recoverMenuPhoto() async {

@@ -11,9 +11,9 @@ import 'shop_database.dart';
 /// An offline, password-encrypted export format for a single Shop device.
 ///
 /// This is a storage primitive, not a cloud sync or backup UI. The SQLite
-/// snapshot is briefly plaintext in the app's private temporary directory;
-/// a production export flow must handle interrupted-process cleanup before it
-/// offers the archive to a merchant.
+/// snapshot is briefly plaintext in the caller-provided scratch directory,
+/// which must be app-private. A production export flow must clean leftovers
+/// from an interrupted process before it offers the archive to a merchant.
 abstract final class ShopBackup {
   static const formatVersion = 1;
   static const supportedSchemaVersion = 6;
@@ -47,7 +47,7 @@ abstract final class ShopBackup {
     required ShopDatabase database,
     required File archive,
     required String password,
-    Directory? scratchRoot,
+    required Directory scratchRoot,
   }) async {
     _checkPassword(password);
     if (database.schemaVersion != supportedSchemaVersion) {
@@ -56,9 +56,7 @@ abstract final class ShopBackup {
     if (await archive.exists()) {
       throw StateError('The backup destination already exists.');
     }
-    final scratch = await (scratchRoot ?? Directory.systemTemp).createTemp(
-      'supermega-shop-backup-',
-    );
+    final scratch = await scratchRoot.createTemp('supermega-shop-backup-');
     var createdArchive = false;
     try {
       final snapshot = File(
@@ -117,18 +115,19 @@ abstract final class ShopBackup {
   }
 
   /// Restores only into a nonexistent database path, before ShopDatabase opens.
-  /// It never merges records or overwrites an existing database or WAL files.
+  /// It never merges records or intentionally overwrites an existing database
+  /// or WAL files. A sibling lock serializes this method's callers. Promotion
+  /// uses a same-directory rename after verification, but a process that does
+  /// not honor the lock could still create the target between the final check
+  /// and rename; Dart's rename may replace that file on some platforms.
+  /// Merchant-facing restore must remain disabled until startup owns the path.
   static Future<void> restoreIntoEmptyDatabase({
     required File archive,
     required File target,
     required String password,
   }) async {
     _checkPassword(password);
-    if (await target.exists() ||
-        await File('${target.path}-wal').exists() ||
-        await File('${target.path}-shm').exists()) {
-      throw StateError('The restore destination is not empty.');
-    }
+    await _requireEmptyRestoreDestination(target);
     if (await archive.length() >
         maxSnapshotBytes + _headerLength + _macLength) {
       throw const FormatException('The backup is too large.');
@@ -137,17 +136,39 @@ abstract final class ShopBackup {
     if (cleartext.length > maxSnapshotBytes || !_hasSqliteHeader(cleartext)) {
       throw const FormatException('The backup is not a Shop database.');
     }
-    await target.create(exclusive: true);
+    await target.parent.create(recursive: true);
+    final lock = File('${target.path}.restore.lock');
+    await lock.create(exclusive: true);
+    Directory? staging;
     try {
-      await target.writeAsBytes(cleartext, flush: true);
-      verifySnapshot(target);
-    } catch (_) {
-      if (await target.exists()) await target.delete();
-      for (final suffix in ['-wal', '-shm']) {
-        final sidecar = File('${target.path}$suffix');
-        if (await sidecar.exists()) await sidecar.delete();
+      await _requireEmptyRestoreDestination(target);
+      staging = await target.parent.createTemp('.supermega-shop-restore-');
+      final stagedFile = File(
+        '${staging.path}${Platform.pathSeparator}shop.sqlite',
+      );
+      await stagedFile.writeAsBytes(cleartext, flush: true);
+      verifySnapshot(stagedFile);
+      await _requireEmptyRestoreDestination(target);
+      await stagedFile.rename(target.path);
+    } finally {
+      try {
+        if (staging != null && await staging.exists()) {
+          await staging.delete(recursive: true);
+        }
+      } finally {
+        await lock.delete();
       }
-      rethrow;
+    }
+  }
+
+  static Future<void> _requireEmptyRestoreDestination(File target) async {
+    if (await FileSystemEntity.type(target.path, followLinks: false) !=
+            FileSystemEntityType.notFound ||
+        await FileSystemEntity.type('${target.path}-wal', followLinks: false) !=
+            FileSystemEntityType.notFound ||
+        await FileSystemEntity.type('${target.path}-shm', followLinks: false) !=
+            FileSystemEntityType.notFound) {
+      throw StateError('The restore destination is not empty.');
     }
   }
 

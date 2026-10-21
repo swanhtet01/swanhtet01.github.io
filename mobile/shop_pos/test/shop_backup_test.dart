@@ -73,6 +73,7 @@ void main() {
         password: _password,
       );
       ShopBackup.verifySnapshot(target);
+      await _expectNoRestoreScratch(directory, target);
       final reopened = ShopDatabase(NativeDatabase(target));
       try {
         expect((await reopened.readActiveProducts()).single.onHand, 3);
@@ -148,6 +149,42 @@ void main() {
     expect(await target.readAsString(), 'active records');
   });
 
+  test('existing SQLite sidecars are never removed', () async {
+    final target = File('${directory.path}/sidecar.sqlite');
+    final sidecar = File('${target.path}-wal');
+    await sidecar.writeAsString('another database owns this');
+    await expectLater(
+      ShopBackup.restoreIntoEmptyDatabase(
+        archive: archive,
+        target: target,
+        password: _password,
+      ),
+      throwsStateError,
+    );
+    expect(await target.exists(), isFalse);
+    expect(await sidecar.readAsString(), 'another database owns this');
+  });
+
+  test('a restore in progress blocks another restore', () async {
+    final target = File('${directory.path}/busy.sqlite');
+    final lock = File('${target.path}.restore.lock');
+    await lock.writeAsString('another restore');
+    try {
+      await expectLater(
+        ShopBackup.restoreIntoEmptyDatabase(
+          archive: archive,
+          target: target,
+          password: _password,
+        ),
+        throwsA(isA<FileSystemException>()),
+      );
+      expect(await target.exists(), isFalse);
+      expect(await lock.readAsString(), 'another restore');
+    } finally {
+      await lock.delete();
+    }
+  });
+
   test(
     'authenticated older schema and corrupt SQLite both fail closed',
     () async {
@@ -171,6 +208,7 @@ void main() {
         throwsFormatException,
       );
       expect(await oldTarget.exists(), isFalse);
+      await _expectNoRestoreScratch(directory, oldTarget);
 
       final corrupt = Uint8List(512);
       corrupt.setRange(0, 16, ascii.encode('SQLite format 3\u0000'));
@@ -186,8 +224,23 @@ void main() {
         throwsA(isA<Exception>()),
       );
       expect(await corruptTarget.exists(), isFalse);
+      await _expectNoRestoreScratch(directory, corruptTarget);
     },
   );
+}
+
+Future<void> _expectNoRestoreScratch(Directory parent, File target) async {
+  final entries = await parent.list().toList();
+  expect(
+    entries.where(
+      (entry) => entry.path
+          .split(Platform.pathSeparator)
+          .last
+          .startsWith('.supermega-shop-restore-'),
+    ),
+    isEmpty,
+  );
+  expect(await File('${target.path}.restore.lock').exists(), isFalse);
 }
 
 // A second encoder proves the restore path checks the decrypted database, not

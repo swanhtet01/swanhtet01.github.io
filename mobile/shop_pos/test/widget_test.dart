@@ -58,17 +58,24 @@ void main() {
         }
         expect(
           find.text(
-            myanmar ? 'ကုန်ပစ္စည်းတစ်မျိုးမှ စတင်ပါ' : 'Start with one product',
+            myanmar ? 'ပထမကုန်ပစ္စည်းကို ထည့်ပါ' : 'Add your first product',
           ),
           findsOneWidget,
         );
+        expect(
+          find.text(myanmar ? 'ယနေ့ရောင်းအား' : 'Sales today'),
+          findsNothing,
+        );
         expect(tester.takeException(), isNull);
 
+        await tester.ensureVisible(
+          find.text(
+            myanmar ? 'ပထမကုန်ပစ္စည်းကို ထည့်ပါ' : 'Add your first product',
+          ),
+        );
         await tester.tap(
           find.text(
-            width < 700
-                ? (myanmar ? 'ရောင်းရန်' : 'Sell')
-                : (myanmar ? 'အရောင်းအသစ်' : 'New sale'),
+            myanmar ? 'ပထမကုန်ပစ္စည်းကို ထည့်ပါ' : 'Add your first product',
           ),
         );
         await tester.pumpAndSettle();
@@ -76,6 +83,7 @@ void main() {
           find.text(myanmar ? 'ကုန်ပစ္စည်းများ' : 'Products'),
           findsOneWidget,
         );
+        expect(find.byType(AlertDialog), findsOneWidget);
         expect(tester.takeException(), isNull);
 
         await tester.pumpWidget(const SizedBox.shrink());
@@ -563,15 +571,65 @@ void main() {
     }
   });
 
+  testWidgets('normal tablet entry reaches sale and review at both layouts', (
+    tester,
+  ) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    tester.view.devicePixelRatio = 1;
+    for (final width in [820.0, 1024.0]) {
+      for (final myanmar in [false, true]) {
+        tester.view.physicalSize = Size(width, 800);
+        final database = ShopDatabase(NativeDatabase.memory());
+        await database.addProduct(
+          id: 'tea',
+          name: 'Tea',
+          priceMmk: 2500,
+          openingStock: 2,
+        );
+        await tester.pumpWidget(
+          ShopApp(
+            database: database,
+            authClient: null,
+            apiBaseUrl: 'https://app.supermega.dev',
+            initialMyanmar: myanmar,
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.text(myanmar ? 'ရောင်းရန်' : 'Sell'));
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.byTooltip(myanmar ? 'အရောင်းထဲထည့်ရန်' : 'Add to sale'),
+        );
+        await tester.pumpAndSettle();
+        if (width == 820) {
+          await tester.tap(
+            find.textContaining(myanmar ? 'အရောင်းစစ်ရန်' : 'Review sale'),
+          );
+          await tester.pumpAndSettle();
+        }
+        expect(find.text(myanmar ? 'ငွေသား' : 'Cash sale'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump(const Duration(milliseconds: 1));
+        await database.close();
+      }
+    }
+  });
+
   testWidgets('catalog rows stay single, touch-sized targets at app widths', (
     tester,
   ) async {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     tester.view.devicePixelRatio = 1;
-    for (final width in [390.0, 820.0, 1200.0]) {
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    for (final width in [360.0, 390.0, 820.0, 1200.0]) {
       for (final myanmar in [false, true]) {
         tester.view.physicalSize = Size(width, 800);
+        tester.platformDispatcher.textScaleFactorTestValue = width == 360
+            ? 1.3
+            : 1.0;
         final database = ShopDatabase(NativeDatabase.memory());
         await database.addProduct(
           id: 'rice',
