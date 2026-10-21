@@ -1143,6 +1143,21 @@ void main() {
           .text,
       '0012345678905',
     );
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsNothing);
+    expect((await database.readActiveProducts()).length, 1);
+    expect(
+      tester.widget<TextField>(find.byType(TextField)).controller!.text,
+      '0012345678905',
+    );
+    expect(
+      tester.widget<TextField>(find.byType(TextField)).focusNode!.hasFocus,
+      isTrue,
+    );
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsOneWidget);
     await tester.enterText(
       find.byKey(const ValueKey('shop-product-name')),
       'Rice',
