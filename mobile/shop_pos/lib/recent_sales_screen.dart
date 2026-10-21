@@ -24,13 +24,43 @@ class RecentSalesScreen extends StatefulWidget {
 }
 
 class _RecentSalesScreenState extends State<RecentSalesScreen> {
-  late Future<List<ShopSaleReceipt>> _sales = widget.database.readRecentSales();
+  static const _pageSize = 30;
+  final TextEditingController _searchController = TextEditingController();
+  Timer? _searchDebounce;
+  int _page = 0;
+  String _query = '';
+  late Future<List<ShopSaleReceipt>> _sales = _readPage();
   late final ReceiptReprintService _reprinter =
       widget.reprintService ?? ReceiptReprintService();
   bool _reprinting = false;
 
+  Future<List<ShopSaleReceipt>> _readPage() => widget.database.readRecentSales(
+    limit: _pageSize + 1,
+    offset: _page * _pageSize,
+    query: _query,
+  );
+
   void _reload() {
-    setState(() => _sales = widget.database.readRecentSales());
+    setState(() => _sales = _readPage());
+  }
+
+  void _onSearchChanged(String value) {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 250), () {
+      if (!mounted || value.trim() == _query) return;
+      setState(() {
+        _query = value.trim();
+        _page = 0;
+        _sales = _readPage();
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _searchDebounce?.cancel();
+    _searchController.dispose();
+    super.dispose();
   }
 
   @override
@@ -50,82 +80,195 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
           ),
         ],
       ),
-      body: FutureBuilder<List<ShopSaleReceipt>>(
-        future: _sales,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError) {
-            return Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    shopCopy(
-                      widget.myanmar,
-                      'Could not load sales.',
-                      'အရောင်းစာရင်းကို ဖတ်မရပါ။',
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: _reload,
-                    child: Text(
-                      shopCopy(widget.myanmar, 'Try again', 'ထပ်ကြိုးစားရန်'),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }
-          final sales = snapshot.data ?? const <ShopSaleReceipt>[];
-          if (sales.isEmpty) {
-            return Center(
-              child: Text(
-                shopCopy(
-                  widget.myanmar,
-                  'Completed sales will appear here.',
-                  'ပြီးဆုံးသော အရောင်းများကို ဤနေရာတွင် ပြပါမည်။',
-                ),
-              ),
-            );
-          }
-          return Center(
+      body: Column(
+        children: [
+          Center(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 800),
-              child: ListView.separated(
-                padding: const EdgeInsets.all(16),
-                itemCount: sales.length,
-                separatorBuilder: (_, _) => const Divider(height: 1),
-                itemBuilder: (context, index) {
-                  final sale = sales[index];
-                  return ListTile(
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                child: TextField(
+                  controller: _searchController,
+                  onChanged: _onSearchChanged,
+                  textInputAction: TextInputAction.search,
+                  decoration: InputDecoration(
+                    hintText: shopCopy(
+                      widget.myanmar,
+                      'Search items or receipt ID',
+                      'ပစ္စည်း သို့မဟုတ် ပြေစာအမှတ် ရှာရန်',
                     ),
-                    title: Text(
-                      shopMmk(sale.totalMmk, myanmar: widget.myanmar),
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                        fontFeatures: const [FontFeature.tabularFigures()],
-                      ),
-                    ),
-                    subtitle: Text(
-                      '${_when(context, sale.createdAtMillis)}\n'
-                      '${_paymentName(sale.paymentMethod)}',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => _showSale(sale),
-                  );
-                },
+                    prefixIcon: const Icon(Icons.search),
+                    suffixIcon: _query.isEmpty
+                        ? null
+                        : IconButton(
+                            tooltip: shopCopy(
+                              widget.myanmar,
+                              'Clear search',
+                              'ရှာဖွေမှု ရှင်းရန်',
+                            ),
+                            icon: const Icon(Icons.close),
+                            onPressed: () {
+                              _searchDebounce?.cancel();
+                              _searchController.clear();
+                              setState(() {
+                                _query = '';
+                                _page = 0;
+                                _sales = _readPage();
+                              });
+                            },
+                          ),
+                    border: const OutlineInputBorder(),
+                  ),
+                ),
               ),
             ),
-          );
-        },
+          ),
+          Expanded(
+            child: FutureBuilder<List<ShopSaleReceipt>>(
+              future: _sales,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState != ConnectionState.done) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (snapshot.hasError) {
+                  return Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          shopCopy(
+                            widget.myanmar,
+                            'Could not load sales.',
+                            'အရောင်းစာရင်းကို ဖတ်မရပါ။',
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: _reload,
+                          child: Text(
+                            shopCopy(widget.myanmar, 'Try again', 'ထပ်ကြိုးစားရန်'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+                final page = snapshot.data ?? const <ShopSaleReceipt>[];
+                final hasNext = page.length > _pageSize;
+                final sales = page.take(_pageSize).toList(growable: false);
+                if (sales.isEmpty) {
+                  return Center(
+                    child: Text(
+                      shopCopy(
+                        widget.myanmar,
+                        _query.isEmpty
+                            ? 'Completed sales will appear here.'
+                            : 'No matching sales.',
+                        _query.isEmpty
+                            ? 'ပြီးဆုံးသော အရောင်းများကို ဤနေရာတွင် ပြပါမည်။'
+                            : 'ကိုက်ညီသော အရောင်းမရှိပါ။',
+                      ),
+                    ),
+                  );
+                }
+                return Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 800),
+                    child: Column(
+                      children: [
+                        Expanded(
+                          child: ListView.separated(
+                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                            itemCount: sales.length,
+                            separatorBuilder: (_, _) => const Divider(height: 1),
+                            itemBuilder: (context, index) {
+                              final sale = sales[index];
+                              final firstItem = sale.lines.isEmpty
+                                  ? shopCopy(widget.myanmar, 'Sale', 'အရောင်း')
+                                  : sale.lines.first.productName;
+                              final more = sale.lines.length > 1
+                                  ? ' +${sale.lines.length - 1}'
+                                  : '';
+                              return ListTile(
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 8,
+                                ),
+                                title: Text(
+                                  '$firstItem$more',
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Theme.of(context).textTheme.titleMedium
+                                      ?.copyWith(fontWeight: FontWeight.w600),
+                                ),
+                                subtitle: Text(
+                                  '${_when(context, sale.createdAtMillis)} · '
+                                  '${_paymentName(sale.paymentMethod)}',
+                                  style: Theme.of(context).textTheme.bodyMedium
+                                      ?.copyWith(
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .onSurfaceVariant,
+                                      ),
+                                ),
+                                trailing: Text(
+                                  shopMmk(
+                                    sale.totalMmk,
+                                    myanmar: widget.myanmar,
+                                  ),
+                                  style: Theme.of(context).textTheme.titleSmall
+                                      ?.copyWith(
+                                        fontWeight: FontWeight.w700,
+                                        fontFeatures: const [FontFeature.tabularFigures()],
+                                      ),
+                                ),
+                                onTap: () => _showSale(sale),
+                              );
+                            },
+                          ),
+                        ),
+                        if (_page > 0 || hasNext)
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                TextButton(
+                                  onPressed: _page == 0
+                                      ? null
+                                      : () {
+                                          setState(() {
+                                            _page--;
+                                            _sales = _readPage();
+                                          });
+                                        },
+                                  child: Text(
+                                    shopCopy(widget.myanmar, 'Newer', 'အသစ်များ'),
+                                  ),
+                                ),
+                                TextButton(
+                                  onPressed: !hasNext
+                                      ? null
+                                      : () {
+                                          setState(() {
+                                            _page++;
+                                            _sales = _readPage();
+                                          });
+                                        },
+                                  child: Text(
+                                    shopCopy(widget.myanmar, 'Older', 'အဟောင်းများ'),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }

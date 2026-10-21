@@ -371,6 +371,47 @@ void main() {
       },
     );
 
+    test('sale history searches saved items and pages beyond 30', () async {
+      await database.addProduct(
+        id: 'tea',
+        name: 'Tea',
+        priceMmk: 2500,
+        openingStock: 2,
+      );
+      await database.addProduct(
+        id: 'rice',
+        name: 'Rice',
+        priceMmk: 5000,
+        openingStock: 32,
+      );
+      await database.recordCashSale(
+        operationId: 'tea-receipt',
+        lines: const [ShopSaleLineInput(productId: 'tea', quantity: 1)],
+      );
+      for (var i = 0; i < 32; i++) {
+        await database.recordCashSale(
+          operationId: 'rice-receipt-$i',
+          lines: const [ShopSaleLineInput(productId: 'rice', quantity: 1)],
+        );
+      }
+
+      final first = await database.readRecentSales(limit:31);
+      final second = await database.readRecentSales(limit:31, offset: 30);
+      expect(first, hasLength(31));
+      expect(second, hasLength(3));
+      expect(first.map((sale) => sale.id).toSet().intersection(
+        second.map((sale) => sale.id).toSet(),
+      ), hasLength(1));
+      final byItem = await database.readRecentSales(query: 'tEA');
+      expect(byItem.map((sale) => sale.id), ['tea-receipt']);
+      final byReceipt = await database.readRecentSales(query: 'rice-receipt-10');
+      expect(byReceipt.map((sale) => sale.id), ['rice-receipt-10']);
+      await expectLater(
+        database.readRecentSales(offset: -1),
+        throwsArgumentError,
+      );
+    });
+
     test(
       'cash confirmation rejects a stale displayed total atomically',
       () async {

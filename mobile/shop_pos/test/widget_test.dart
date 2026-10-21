@@ -262,6 +262,46 @@ void main() {
     await tester.pump(const Duration(milliseconds: 1));
   });
 
+  testWidgets('receipt list leads with items and filters offline', (
+    tester,
+  ) async {
+    final database = ShopDatabase(NativeDatabase.memory());
+    await database.addProduct(
+      id: 'tea',
+      name: 'Tea',
+      priceMmk: 2500,
+      openingStock: 1,
+    );
+    await database.addProduct(
+      id: 'rice',
+      name: 'Rice',
+      priceMmk: 5000,
+      openingStock: 1,
+    );
+    await database.recordCashSale(
+      operationId: 'tea-sale',
+      lines: const [ShopSaleLineInput(productId: 'tea', quantity: 1)],
+    );
+    await database.recordCashSale(
+      operationId: 'rice-sale',
+      lines: const [ShopSaleLineInput(productId: 'rice', quantity: 1)],
+    );
+    await tester.pumpWidget(
+      MaterialApp(home: RecentSalesScreen(database: database, myanmar: false)),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Tea'), findsOneWidget);
+    expect(find.text('Rice'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField), 'TEA');
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pumpAndSettle();
+    expect(find.text('Tea'), findsOneWidget);
+    expect(find.text('Rice'), findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await database.close();
+  });
+
   testWidgets('saved sale reprints without recording another sale', (
     tester,
   ) async {

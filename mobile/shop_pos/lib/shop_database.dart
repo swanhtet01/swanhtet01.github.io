@@ -1699,20 +1699,55 @@ class ShopDatabase extends _$ShopDatabase {
     });
   }
 
-  /// A bounded, device-local history of committed sales. The item snapshots
-  /// survive later catalog edits and make an old receipt explainable offline.
-  Future<List<ShopSaleReceipt>> readRecentSales({int limit = 30}) async {
+  /// A bounded page of device-local committed sales. Search uses saved item
+  /// names, so later catalog edits cannot make an old receipt disappear.
+  Future<List<ShopSaleReceipt>> readRecentSales({
+    int limit = 30,
+    int offset = 0,
+    String query = '',
+  }) async {
     if (limit < 1 || limit > 100) {
       throw ArgumentError.value(limit, 'limit', 'Use between 1 and 100 sales.');
     }
-    final sales =
-        await (select(shopSales)
-              ..orderBy([
-                (sale) => OrderingTerm.desc(sale.createdAtMillis),
-                (sale) => OrderingTerm.desc(sale.id),
-              ])
-              ..limit(limit))
-            .get();
+    if (offset < 0) {
+      throw ArgumentError.value(offset, 'offset', 'Use a non-negative offset.');
+    }
+    final search = query.trim();
+    late final List<ShopSale> sales;
+    if (search.isEmpty) {
+      sales =
+          await (select(shopSales)
+                ..orderBy([
+                  (sale) => OrderingTerm.desc(sale.createdAtMillis),
+                  (sale) => OrderingTerm.desc(sale.id),
+                ])
+                ..limit(limit, offset: offset))
+              .get();
+    } else {
+      final matchingIds = await customSelect(
+        'SELECT sale.id FROM shop_sales AS sale '
+        'WHERE instr(lower(sale.id), lower(?)) > 0 '
+        'OR EXISTS (SELECT 1 FROM shop_sale_lines AS line '
+        'WHERE line.sale_id = sale.id '
+        'AND instr(lower(line.product_name), lower(?)) > 0) '
+        'ORDER BY sale.created_at_millis DESC, sale.id DESC '
+        'LIMIT ? OFFSET ?',
+        variables: [
+          Variable.withString(search),
+          Variable.withString(search),
+          Variable.withInt(limit),
+          Variable.withInt(offset),
+        ],
+        readsFrom: {shopSales, shopSaleLines},
+      ).get();
+      if (matchingIds.isEmpty) return const [];
+      final ids = matchingIds.map((row) => row.read<String>('id')).toList();
+      final rows = await (select(shopSales)
+            ..where((sale) => sale.id.isIn(ids)))
+          .get();
+      final byId = {for (final row in rows) row.id: row};
+      sales = [for (final id in ids) byId[id]!];
+    }
     if (sales.isEmpty) return const [];
 
     final saleIds = sales.map((sale) => sale.id).toList(growable: false);
