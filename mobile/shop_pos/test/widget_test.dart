@@ -1422,12 +1422,21 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Settings'));
     await tester.pumpAndSettle();
+    tester.view.physicalSize = const Size(320, 720);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpAndSettle();
     expect(find.text('English'), findsOneWidget);
     expect(find.text('မြန်မာ'), findsOneWidget);
     expect(find.text('Mobile money'), findsOneWidget);
     await tester.tap(find.text('မြန်မာ'));
     await tester.pumpAndSettle();
     expect(find.text('ဘာသာစကား'), findsOneWidget);
+    await tester.ensureVisible(find.text('မိုဘိုင်းငွေပေးချေမှု'));
+    await tester.tap(find.text('မိုဘိုင်းငွေပေးချေမှု'));
+    await tester.pumpAndSettle();
+    expect(find.text('KBZPay'), findsOneWidget);
     await database.close();
   });
 
