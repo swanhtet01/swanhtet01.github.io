@@ -228,21 +228,21 @@ void main() {
         'Unfinished sale restored on this device.',
       );
       expect(restoredNotice, findsOneWidget);
-      print('counter-recovery-test: before pop');
+      debugPrintSynchronously('counter-recovery-test: before pop');
       Navigator.of(tester.element(restoredNotice)).pop();
-      print('counter-recovery-test: before post-pop settle');
+      debugPrintSynchronously('counter-recovery-test: before post-pop settle');
       await tester.pumpAndSettle();
-      print('counter-recovery-test: after post-pop settle');
+      debugPrintSynchronously('counter-recovery-test: after post-pop settle');
       expect(restoredNotice, findsNothing);
       expect(tester.takeException(), isNull);
     } finally {
-      print('counter-recovery-test: before unmount');
+      debugPrintSynchronously('counter-recovery-test: before unmount');
       await tester.pumpWidget(const SizedBox.shrink());
-      print('counter-recovery-test: before teardown pump');
+      debugPrintSynchronously('counter-recovery-test: before teardown pump');
       await tester.pump(const Duration(milliseconds: 1));
-      print('counter-recovery-test: before database close');
+      debugPrintSynchronously('counter-recovery-test: before database close');
       await database.close();
-      print('counter-recovery-test: after database close');
+      debugPrintSynchronously('counter-recovery-test: after database close');
     }
   });
 
