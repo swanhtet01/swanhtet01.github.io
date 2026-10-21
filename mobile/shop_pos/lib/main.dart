@@ -2531,8 +2531,6 @@ class _SetupTile extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        leading,
-                        const SizedBox(width: 12),
                         Expanded(child: titleText),
                         const Icon(Icons.chevron_right),
                       ],
