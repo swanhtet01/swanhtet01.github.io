@@ -107,24 +107,30 @@
     }
     .hero-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin-top: 31px; }
     .button {
-      min-height: 52px;
+      min-height: 48px;
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      gap: 11px;
-      padding: 0 21px;
-      border: 0;
-      border-radius: 999px;
+      gap: 10px;
+      width: max-content;
+      max-width: 100%;
+      padding: 0 18px;
+      border: 1px solid #d5d8df;
+      border-radius: 8px;
+      color: #252a36;
+      background: #fff;
       cursor: pointer;
-      font-size: .94rem;
-      font-weight: 720;
+      font-size: 14px;
+      font-weight: 680;
+      line-height: 1.2;
       text-decoration: none;
-      transition: background-color .18s ease, color .18s ease, transform .18s ease;
+      box-shadow: none;
+      transition: background-color .15s ease, border-color .15s ease, transform .15s ease;
     }
-    .button:hover { transform: translateY(-1px); }
-    .button-primary { color: var(--white); background: var(--blue); }
-    .button-primary:hover { background: var(--blue-dark); }
-    .button-primary svg { width: 17px; height: 17px; }
+    .button:hover { border-color: #aeb4c1; background: #f6f7f9; transform: translateY(-1px); }
+    .button.primary, .button-primary { border-color: #202432; color: #fff; background: #202432; }
+    .button.primary:hover, .button-primary:hover { border-color: #343b4e; color: #fff; background: #343b4e; }
+    .button-primary svg { display: block; width: 18px; height: 18px; flex: 0 0 18px; }
     .hero-note { color: #a9b8c7; font-size: .875rem; }
     .hero-art { position: relative; display: grid; min-width: 0; min-height: 330px; align-items: center; }
     .shop-showcase { display: grid; gap: 12px; width: min(100%, 680px); min-width: 0; margin: 0 auto; }
@@ -618,40 +624,11 @@
 .company-hero h1 span { color: var(--blue); }
 .company-hero .hero-copy > p:not(.hero-kicker) { color: var(--muted); }
 .company-hero .hero-note { color: var(--muted); }
-.company-hero .button-primary { color: var(--white); background: var(--blue); box-shadow: 0 10px 25px rgba(37,99,235,.18); }
-.company-hero .button-primary:hover { background: var(--blue-dark); }
 .company-hero .shop-showcase-nav a { color: #485168; background: rgba(255,255,255,.88); border-color: #dbeafe; }
 .company-hero .shop-showcase-nav a:hover, .company-hero .shop-showcase-nav a:focus-visible { border-color: #60a5fa; background: #eff6ff; }
 .company-hero .shop-showcase-track { scrollbar-color: rgba(59,130,246,.44) #eff6ff; }
 .company-hero .home-product-shot { border-color: #dbeafe; background: #fff; box-shadow: 0 24px 64px rgba(30,64,175,.12); }
 .company-hero .home-product-shot img { background: #f8fafc; }
-.company-hero .hero-actions .button-primary,
-.shop-hero .button-primary {
-  box-sizing: border-box;
-  display: inline-flex;
-  width: max-content;
-  max-width: 100%;
-  min-height: 52px;
-  flex: 0 1 auto;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  border: 1px solid #1d4ed8;
-  border-radius: 9px;
-  padding: 0 18px;
-  color: #fff;
-  background: #2563eb;
-  font-size: 14px;
-  font-weight: 720;
-  line-height: 1.2;
-  text-decoration: none;
-  white-space: nowrap;
-  box-shadow: 0 8px 20px rgba(37,99,235,.16);
-}
-.company-hero .hero-actions .button-primary:hover,
-.shop-hero .button-primary:hover { border-color: #1d4ed8; color: #fff; background: #1d4ed8; }
-.company-hero .hero-actions .button-primary svg,
-.shop-hero .button-primary svg { display: block; width: 18px; height: 18px; max-width: none; flex: 0 0 18px; }
 .company-contact { padding-block: clamp(44px, 6vw, 80px); border-top: 1px solid #e4e7ec; background: #fff; }
 .company-contact-inner { display: grid; grid-template-columns: minmax(0, 1fr) minmax(240px, 320px); align-items: end; gap: clamp(28px, 6vw, 92px); }
 .company-contact h2 { max-width: 600px; margin: 10px 0 14px; color: var(--brand-ink); font-family: var(--display); font-size: clamp(2rem, 3.6vw, 3.25rem); font-weight: 620; letter-spacing: -.055em; line-height: 1.06; }

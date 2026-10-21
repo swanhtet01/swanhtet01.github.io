@@ -600,15 +600,17 @@ const sharedStyle = `
   .shop-gallery-all .platform-device-capture img {border-radius:8px;box-shadow:0 5px 16px rgba(16,24,40,.08)}
   .shop-responsive-showcase {display:grid;gap:18px;min-width:0}
   .shop-hero-app {min-width:0;align-self:center}
-  .shop-hero-app .platform-device-stage {padding:clamp(10px,1.5vw,18px);border-color:#e4e7ec;border-radius:12px;background:#f6f7f9;box-shadow:none}
-  .shop-hero-app .platform-device-set {grid-template-columns:minmax(0,2.4fr) minmax(0,.85fr) minmax(0,.45fr);align-items:end}
+  .shop-lead-capture {max-width:1100px;margin:0 auto;padding:clamp(10px,1.5vw,18px);border:1px solid #e4e7ec;border-radius:12px;background:#fff;box-shadow:0 12px 34px rgba(16,24,40,.05)}
+  .shop-lead-capture picture,.shop-lead-capture img {display:block;width:100%}
+  .shop-lead-capture img {height:auto;border:1px solid #e5e8ef;border-radius:8px;background:#f7f8fb}
+  .shop-lead-capture figcaption {padding:12px 2px 2px;color:#596579;font-size:12px;line-height:1.45}
   .shop-workflow-card p {margin:0;color:#596579;font-size:14px;line-height:1.55}
   .shop-workflow-support {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
-  .shop-workflow-card {display:grid;grid-template-columns:minmax(0,1.35fr) minmax(150px,.65fr);gap:18px;align-items:center;min-width:0;margin:0;padding:14px;border:1px solid #e4e7ec;border-radius:12px;background:#fff}
-  .shop-workflow-card img {display:block;width:100%;height:auto;border:1px solid #e5e8ef;border-radius:8px;background:#f7f8fb;pointer-events:none;user-select:none}
+  .shop-workflow-card {display:grid;grid-template-columns:minmax(0,1fr);gap:16px;min-width:0;margin:0;padding:14px;border:1px solid #e4e7ec;border-radius:12px;background:#fff}
+  .shop-workflow-card picture,.shop-workflow-card img {display:block;width:100%}
+  .shop-workflow-card img {height:auto;border:1px solid #e5e8ef;border-radius:8px;background:#f7f8fb;pointer-events:none;user-select:none}
   .shop-workflow-card-copy {min-width:0}
   .shop-workflow-card h3 {margin:0 0 8px;font-size:18px;letter-spacing:-.025em}
-  .shop-sample-note {margin:0;color:#70798a;font-size:12px;line-height:1.45}
   .platform-gallery-controls {display:flex;align-items:center;justify-content:flex-end;gap:12px;min-height:40px}
   .platform-gallery-controls button {display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border:1px solid var(--line-strong);border-radius:50%;color:var(--ink);background:#fff;font-size:20px;cursor:pointer}
   .platform-gallery-controls button:hover:not(:disabled) {border-color:var(--blue);color:var(--blue);background:#eff6ff}
@@ -679,9 +681,6 @@ const sharedStyle = `
   .button.primary:hover{background:#1d4ed8}
   .company-hero{background:radial-gradient(ellipse at 84% 18%,rgba(37,99,235,.10),transparent 32%),linear-gradient(180deg,#f5f8ff,#fff 68%)}
   body[data-view="company"] .company-hero{background:linear-gradient(180deg,#f8fbff,#fff 72%)}
-  .company-hero .hero-actions .button-primary,.shop-hero .button-primary{box-sizing:border-box;display:inline-flex;width:max-content;max-width:100%;min-height:50px;flex:0 1 auto;align-items:center;justify-content:center;gap:10px;border:1px solid #1d4ed8;border-radius:8px;padding:0 18px;color:#fff;background:#2563eb;font-size:14px;font-weight:650;line-height:1.2;text-decoration:none;white-space:nowrap;box-shadow:none}
-  .company-hero .hero-actions .button-primary:hover,.shop-hero .button-primary:hover{border-color:#1d4ed8;color:#fff;background:#1d4ed8}
-  .company-hero .hero-actions .button-primary svg,.shop-hero .button-primary svg{display:block;width:18px;height:18px;max-width:none;flex:0 0 18px}
   .shop-actual-showcase{padding-block:clamp(46px,6vw,78px);border-bottom:1px solid #e4e7ec;background:#fff}
   .shop-actual-showcase .story-heading{margin-bottom:26px}
   .shop-actual-showcase .story-heading h2{font-size:clamp(30px,4vw,48px);letter-spacing:-.045em;line-height:1.08}
@@ -712,13 +711,10 @@ const sharedStyle = `
   body[data-view="company"] .shop-only-family .family-card .family-link{grid-column:3;grid-row:1/4;margin:0;padding:0;white-space:nowrap}
   @media(max-width:760px){body[data-view="company"] .shop-only-family .family-card.featured{grid-template-columns:48px minmax(0,1fr);gap:8px 16px;padding:22px}body[data-view="company"] .shop-only-family .family-icon{grid-column:1;grid-row:1/4;align-self:start}body[data-view="company"] .shop-only-family .family-card .family-link{grid-column:2;grid-row:4;justify-self:start;margin-top:8px}}
   @media(max-width:760px){.platform-device-set{grid-template-columns:minmax(0,1fr);align-items:start;gap:16px}.platform-device-capture-desktop,.platform-device-set.has-tablet .platform-device-capture-tablet{display:none}.platform-device-set .platform-device-capture-phone{grid-column:1;width:100%;max-width:none;justify-self:stretch}.platform-device-capture img{border-radius:4px;box-shadow:none}.platform-device-capture figcaption{font-size:11px}.platform-device-stage{padding:12px}.platform-gallery-controls{min-height:38px}.platform-image{padding:10px}.product-card-compact{border-radius:8px}.contact-page .contact-form{border-radius:8px}.company-product-visual{align-self:start}.company-product-evidence-head{display:block}.company-product-evidence-head p{margin-top:12px}}
-  /* The Shop hero grid has a more specific selector than the shared gallery grid. */
-  @media(min-width:761px) and (max-width:899px){body[data-view="shop"] .shop-hero-app .platform-device-set{grid-template-columns:minmax(0,1.35fr) minmax(0,.65fr)}body[data-view="shop"] .shop-hero-app .platform-device-capture-desktop{display:none}body[data-view="shop"] .shop-hero-app .platform-device-capture-phone{max-width:220px;justify-self:end}}
-  @media(max-width:760px){body[data-view="shop"] .shop-hero-app .platform-device-set{grid-template-columns:minmax(0,1fr)}body[data-view="shop"] .shop-hero-app .platform-device-capture-phone{grid-column:1;width:100%;max-width:360px;justify-self:center}}
   @media(max-width:980px){.contact-page{grid-template-columns:1fr;gap:24px;max-width:760px;padding:42px 0 70px}.contact-page .page-hero{position:static;padding:0}.contact-page .page-hero::after{display:none}.contact-page .page-hero h1{font-size:clamp(36px,7vw,52px)}}
   @media(max-width:760px){.contact-page{padding:28px 0 52px}.contact-page .page-hero h1{font-size:clamp(36px,9vw,48px)}.contact-page .contact-form{padding:20px;border-radius:8px}.brand-domain{display:none}}
   @media(max-width:1050px){body[data-view="shop"] .shop-hero .wrap{grid-template-columns:minmax(0,1fr);gap:28px}.shop-hero-app{max-width:920px}}
-  @media(max-width:760px){.shop-workflow-support{grid-template-columns:1fr}.shop-workflow-card{grid-template-columns:minmax(0,1.2fr) minmax(125px,.8fr);gap:12px;padding:12px}}
+  @media(max-width:760px){.shop-workflow-support{grid-template-columns:1fr}.shop-workflow-card{gap:12px;padding:12px}}
   @media(max-width:480px){.shop-workflow-card{grid-template-columns:minmax(0,1fr)}.shop-workflow-card h3{margin-top:6px}}
 `
 
@@ -782,29 +778,22 @@ const publicMarketingStyle = companyShopStyle + `
 .nav-links a[aria-current="page"] { border-bottom: 2px solid var(--brand-accent); border-radius: 0; color: var(--ink); background: transparent; }
 .nav-links a:hover:not([aria-current="page"]) { border-color: transparent; color: var(--brand-accent-strong); background: transparent; }
 body[data-view="shop"] .shop-showcase-nav a { border-radius: 8px; }
-.button, .button.primary, .button-primary { min-height: 48px; border: 1px solid #202432; border-radius: 8px; padding-inline: 18px; box-shadow: none; font-size: 14px; font-weight: 680; transition: background-color 150ms ease, border-color 150ms ease, transform 150ms ease; }
-.button.primary, .button-primary { border-color: #202432; color: #fff; background: #202432; }
-.button.primary:hover, .button-primary:hover { border-color: #343b4e; color: #fff; background: #343b4e; transform: translateY(-1px); }
-body[data-view="company"] .company-hero .hero-actions .button-primary,
-body[data-view="shop"] .shop-hero .button-primary { border-color: #202432; color: #fff; background: #202432; box-shadow: none; }
-body[data-view="company"] .company-hero .hero-actions .button-primary:hover,
-body[data-view="shop"] .shop-hero .button-primary:hover { border-color: #343b4e; color: #fff; background: #343b4e; box-shadow: none; }
 .button-secondary { border-color: #d5d8df; color: #252a36; background: transparent; box-shadow: none; }
 .button-secondary:hover { border-color: #aeb4c1; color: #151922; background: #f6f7f9; }
-.button:focus-visible, .button-primary:focus-visible, .nav-links a:focus-visible { outline: 3px solid rgba(37,99,235,.28); outline-offset: 3px; }
+.button:focus-visible, .button-primary:focus-visible, .nav-links a:focus-visible { outline: 3px solid #2563eb; outline-offset: 3px; }
 body[data-view="company"] .company-hero { background: #f6f5f1; }
 body[data-view="company"] .company-hero::before { display: none; }
 body[data-view="company"] .company-hero .hero-grid { min-height: 500px; align-items: start; padding-block: clamp(32px,4vw,54px); }
 body[data-view="company"] .company-hero .hero-copy { max-width: 590px; }
-body[data-view="company"] .company-hero h1 { max-width: 13ch; font-size: clamp(42px,4.8vw,62px); line-height: 1.02; letter-spacing: -.052em; }
+body[data-view="company"] .company-hero h1 { max-width: 100%; font-size: clamp(42px,4.8vw,62px); line-height: 1.02; letter-spacing: -.052em; }
 body[data-view="company"] .company-hero .hero-copy > p:not(.hero-kicker) { max-width: 44ch; font-size: 17px; line-height: 1.55; }
-body[data-view="company"] .company-product-visual { gap: 10px; padding: 12px; border-color: #dfded8; border-radius: 14px; background: #fff; box-shadow: 0 24px 58px rgba(25,28,38,.09); }
+body[data-view="company"] .company-product-visual { gap: 10px; padding: 12px; border-color: #dfded8; border-radius: 14px; background: #fff; box-shadow: 0 14px 32px rgba(25,28,38,.06); }
 body[data-view="company"] .company-product-visual img { border-color: #e4e4e1; border-radius: 8px; }
 body[data-view="shop"] .shop-hero { padding-block: clamp(34px,4vw,52px); background: #f3f5f9; }
 body[data-view="shop"] .shop-hero h1 { max-width: 24ch; font-size: clamp(40px,4.1vw,54px); line-height: 1.02; }
 body[data-view="shop"] .shop-hero-copy { display: grid; gap: 18px; align-content: center; min-width: 0; }
 body[data-view="shop"] .shop-hero-copy .eyebrow, body[data-view="shop"] .shop-hero-copy h1, body[data-view="shop"] .shop-hero-copy > p { margin: 0; }
-body[data-view="shop"] .shop-hero .button-primary { align-self: start; width: max-content; max-width: 100%; flex-wrap: nowrap; white-space: nowrap; word-break: normal; overflow-wrap: normal; }
+body[data-view="shop"] .shop-hero .button-primary { align-self: start; }
 body[data-view="shop"] .shop-hero .wrap { display: grid; grid-template-columns: minmax(0,1fr); gap: clamp(28px,4vw,48px); align-items: start; }
 body[data-view="shop"] .shop-hero-copy { max-width: 830px; }
 body[data-view="shop"] .shop-hero-app { width: 100%; max-width: none; justify-self: stretch; }
@@ -815,7 +804,7 @@ body[data-view="contact"] .contact-page .field-grid input, body[data-view="conta
 body[data-view="contact"] .contact-page .contact-form .button { width: max-content; min-width: 176px; min-height: 48px; justify-self: start; }
 @media (max-width: 760px) {
   body[data-view="company"] .company-hero .hero-grid { min-height: 0; padding-block: 32px; }
-  body[data-view="company"] .company-hero h1 { max-width: 12ch; font-size: clamp(38px,10vw,52px); }
+  body[data-view="company"] .company-hero h1 { max-width: 100%; font-size: clamp(38px,10vw,52px); }
   body[data-view="shop"] .shop-hero { padding-block: 34px; }
   body[data-view="contact"] .contact-page { padding-block: 32px 52px; }
   body[data-view="contact"] .contact-page .contact-form { padding: 20px; }
@@ -923,7 +912,9 @@ function productGallery(id,label,eagerFirst=false,showAll=false) {
 }
 function shopSupportCard({image,alt,title,description}) {
  interfaceDisclosure(image)
- return `<article class="shop-workflow-card"><img src="/images/${image}" alt="${escapeHtml(alt)} · sample records" width="1440" height="900" loading="lazy" /><div class="shop-workflow-card-copy"><h3>${escapeHtml(title)}</h3><p>${escapeHtml(description)}</p></div></article>`
+ const mobileImage = image.replace(/\.png$/, '-mobile.png')
+ interfaceDisclosure(mobileImage)
+ return `<article class="shop-workflow-card"><picture><source media="(max-width: 760px)" srcset="/images/${mobileImage}" width="390" height="844" /><img src="/images/${image}" alt="${escapeHtml(alt)} · synthetic sample records" width="1440" height="900" loading="lazy" /></picture><div class="shop-workflow-card-copy"><h3>${escapeHtml(title)}</h3><p>${escapeHtml(description)}</p></div></article>`
 }
 function shopCounterSalePreview() {
  const [image,alt] = stories.shop.screens[0]
@@ -932,12 +923,12 @@ function shopCounterSalePreview() {
  interfaceDisclosure(image)
  interfaceDisclosure(mobileImage)
  interfaceDisclosure(tabletImage)
- return `<div class="platform-device-stage">${deviceCaptureSet('Counter sale',image,mobileImage,tabletImage,alt,1440,900,'eager',' fetchpriority="high"')}</div>`
+ return `<figure class="shop-lead-capture"><picture><source media="(max-width: 760px)" srcset="/images/${mobileImage}" width="390" height="844" /><source media="(max-width: 1024px)" srcset="/images/${tabletImage}" width="768" height="1024" /><img src="/images/${image}" alt="${escapeHtml(alt)}" width="1440" height="900" loading="eager" fetchpriority="high" /></picture><figcaption id="shop-sample-disclosure">Illustrative Shop interface · synthetic local records</figcaption></figure>`
 }
 function shopResponsiveShowcase() {
  const orders = shopSupportCard({image:'actual-shop-orders.png',alt:'Shop order queue with fulfilment and payment follow-up',title:'Orders',description:'See what is ready, what is unpaid, and what needs the next step.'})
  const stock = shopSupportCard({image:'actual-shop-inventory.png',alt:'Shop inventory list with on-hand quantities and reorder signals',title:'Stock',description:'Find products that need a count or replenishment.'})
- return `<div class="shop-responsive-showcase" role="region" aria-label="Order and stock workflows"><div class="shop-workflow-support" aria-label="More Shop workflows">${orders}${stock}</div><p class="shop-sample-note">Sample catalog and example prices.</p></div>`
+ return `<div class="shop-responsive-showcase" role="region" aria-label="Order and stock workflows" aria-describedby="shop-sample-disclosure"><div class="shop-workflow-support" aria-label="More Shop workflows">${orders}${stock}</div></div>`
 }
 function productStory(id, standalone = false) {
  const item=stories[id], label=publicProducts.find(product=>product.id===id).name
@@ -949,14 +940,6 @@ function productStory(id, standalone = false) {
 function replaceOnce(source, before, after, code) {
  assert(source.split(before).length === 2, code + "_source_drift")
  return source.replace(before, after)
-}
-function replaceKnownCopyOnce(source, accepted, after, code) {
- const legacy = accepted.filter(before => before !== after && source.split(before).length === 2)
- if (legacy.length === 1) return replaceOnce(source, legacy[0], after, code)
- const hasLegacyCopy = accepted.some(before => before !== after && source.includes(before))
- if (legacy.length === 0 && !hasLegacyCopy && source.includes(after)) return source
- assert(false, code + "_source_drift")
- return source
 }
 function removeSectionByClass(source, className, code) {
  const openingTag = new RegExp(`<section\\b[^>]*class="[^"]*\\b${className}\\b[^"]*"[^>]*>`, 'g')
@@ -973,75 +956,14 @@ function removeSectionByClass(source, className, code) {
  assert.fail(code + "_section_not_closed")
 }
 function shopOnlyCompanyMarkup(source) {
- let markup = source
- markup = replaceKnownCopyOnce(markup, ["Operating software · Myanmar", "Operating software for Myanmar companies", "Shop software for Myanmar businesses", "Shop software for Myanmar retailers", "For shops in Myanmar", "For Myanmar retailers", "Business software for Myanmar retailers", "Shop for Myanmar retailers", "Made for Myanmar retailers", "SuperMega · Operating software for Myanmar", "SUPERMEGA · MYANMAR", "SuperMega · Myanmar", "Business software for Myanmar", "Business software"], "SuperMega · Myanmar", "shop_only_hero_kicker")
- markup = replaceKnownCopyOnce(markup, ["Tools for<br><span>everyday work.</span>", "Run your shop.<br><span>See what’s next.</span>", "Run the counter.<br><span>See what needs attention.</span>", "Sell at the counter.<br><span>Keep orders and stock in view.</span>", "Clearer systems for<br><span>everyday business.</span>", "Sales. Stock. Orders.<br><span>Under control.</span>", "Software for<br><span>Myanmar businesses.</span>", "Sales, stock, and orders<br><span>for Myanmar shops.</span>", "Sales, stock, and orders<br><span>in one place.</span>", "Sales, stock and orders<br><span>in one place.</span>", "See what sold.<br><span>Know what needs action.</span>", "Business software<br><span>built for Myanmar.</span>", "Operating software<br><span>for Myanmar businesses.</span>", "Run your counter.<br><span>Stay ahead of stock.</span>", "Know what sold.<br><span>See what needs attention.</span>", "For Myanmar<br><span>retailers.</span>"], "Operating software<br><span>for Myanmar businesses.</span>", "shop_only_hero_heading")
- markup = replaceKnownCopyOnce(markup, [
-  "Shop brings sales and stock into one operating view. Our team manages Sites and confirms Commerce availability for each setup.",
-  "Keep sales, orders and stock together in one clear MMK workflow. See what needs attention without digging through settings.",
-  "Keep sales, orders and stock together in one clear view. See what needs attention without digging through settings.",
-  "We build practical operating software for Myanmar businesses. Start with Shop to bring sales, stock and orders into one clear workflow.",
-  "Start with Shop to record counter sales, track stock and follow open orders in one workspace.",
-  "Record counter sales, follow open orders, and spot low-stock products in one Shop workspace.",
-  "Record counter sales, track stock, and follow open orders with Shop.",
-  "SuperMega Shop brings counter sales, open orders, and stock tracking together for Myanmar businesses.",
-  "SuperMega brings daily sales, stock, and order follow-up into one clear workspace. Start with Shop.",
-  "SuperMega is a Myanmar software company. Shop is our first customer product for counter sales, stock and order follow-up.",
-  "Record counter sales, check stock and follow open orders in SuperMega Shop.",
-  "Record each sale, spot low stock early, and follow every open order in SuperMega Shop, built for Myanmar retailers.",
-  "Record sales, track stock and follow open orders with SuperMega Shop.",
-  "See each sale, spot low stock early and keep open orders moving with SuperMega Shop.",
-  "Record sales, track stock and keep open orders moving in SuperMega Shop.",
-  "Record counter sales, follow open orders and catch low stock with SuperMega Shop.",
-  "Ring up sales, check stock and follow open orders from one Shop workspace.",
-  "SuperMega builds tools for daily operations. Shop brings counter sales, stock and open orders into one workspace.",
-  "SuperMega Shop brings counter sales, stock and open orders into one workspace.",
-  "Record sales, track stock, and follow open orders in one Shop workspace.",
-  "Shop connects counter sales, stock and open orders in one workspace.",
- ], "SuperMega is a Myanmar software company. Shop is our first customer product for counter sales, stock and order follow-up.", "shop_only_hero_description")
- markup = replaceKnownCopyOnce(markup, ['href="#products">Meet the product family', 'href="#products">Explore Shop', 'href="/contact/">Talk to our team', 'href="/contact/">Contact us'], 'href="/contact/">Contact us', "shop_only_hero_secondary_action")
- markup = replaceKnownCopyOnce(markup, ['href="/shop/#shop-demo">See Shop in action', 'href="/shop/#shop-demo">See Shop screens', 'href="/shop/#shop-demo">See Shop on desktop and mobile', 'href="/shop/#shop-demo">View every screen size', 'href="/shop/">See Shop', 'href="/shop/">Explore Shop'], 'href="/shop/">Explore Shop', "shop_only_hero_primary_action")
- markup = replaceOnce(markup, '<a class="text-link hero-note" href="/contact/">Contact us</a>', '', "shop_only_remove_duplicate_home_contact_action")
- for (const id of ["plant", "website", "ecommerce"]) {
-  const marker = '<article class="family-card" id="' + id + '">'
-  const start = markup.indexOf(marker)
-  if (start < 0) continue
-  const end = markup.indexOf("</article>", start)
-  assert(end > start && markup.indexOf(marker, start + marker.length) < 0, "shop_only_family_card_drift:" + id)
-  markup = markup.slice(0, start) + markup.slice(end + "</article>".length)
- }
- markup = replaceKnownCopyOnce(markup, ["The SuperMega product family", "Shop for local businesses", "A SuperMega product", "PRODUCTS"], "Shop", "shop_only_family_eyebrow")
- markup = replaceKnownCopyOnce(markup, ["Software for the work at hand.", "Start simple. Grow with your business.", "Built around the way local businesses work.", "Know what sold. Know what needs attention.", "Start with Shop."], "Start with Shop.", "shop_only_family_heading")
- markup = replaceKnownCopyOnce(markup, [
-  "Shop keeps counter work together. Sites and Commerce extend the customer experience with the SuperMega team.",
-  "Start with Shop. Our team can scope a business website or online ordering when you are ready for the next step.",
-  "Shop is our starting point: one clear place for sales, stock and orders, designed for the pace of daily operations.",
-  "Shop brings counter sales, stock checks and open orders together for Myanmar retailers.",
- ], "Shop brings counter sales, stock checks and open orders together for Myanmar retailers.", "shop_only_family_description")
- if (!markup.includes('<div class="product-family shop-only-family">')) {
-  markup = replaceOnce(markup, '<div class="product-family">', '<div class="product-family shop-only-family">', "shop_only_family_layout")
- }
- const principleCopy = ["One company identity, with each workflow shaped around the work.", "Built for the everyday. Clear about what comes next."]
- if (principleCopy.some((copy) => markup.includes(copy))) {
-  markup = replaceKnownCopyOnce(markup, principleCopy, "Sales · Stock · Orders", "shop_only_company_principle")
- }
- assert(!markup.includes('href="/plant/') && !markup.includes('href="/website/') && !markup.includes('href="/ecommerce/')
-  && !markup.includes('id="plant"') && !markup.includes('id="website"') && !markup.includes('id="ecommerce"'), "shop_only_inactive_product_link_remains")
- return markup
+  assert(!source.includes('class="company-portfolio"') && !source.includes('class="company-contact"'), 'home_redundant_section_remains')
+  assert(!source.includes('class="shop-showcase"'), 'home_duplicate_gallery_remains')
+  assert(!/href="\/(?:plant|website|ecommerce)\//.test(source), 'shop_only_inactive_product_link_remains')
+  assert((source.match(/class="button button-primary"/g) || []).length === 1, 'home_primary_action_count_drift')
+  assert((source.match(/Illustrative Shop interface · synthetic local records/g) || []).length === 1, 'home_capture_disclosure_count_drift')
+  return source
 }
-function companyOperatingGraphic() {
- return `<div class="company-operating-overview" aria-label="SuperMega Shop sample screen"><figure class="company-product-visual"><img src="/images/actual-shop-today.png" alt="Shop Today dashboard showing sales, open orders, stock alerts, and next actions. Synthetic sample records." width="1440" height="900" loading="eager" fetchpriority="high" /><figcaption><strong>Shop · Today</strong><span>Sample workspace</span></figcaption></figure></div>`
-}
-function replaceHomeShopShowcase(source) {
- const marker = /<section class="shop-showcase" aria-label="Shop product screens">[\s\S]*?<\/section>/g
- const matches = source.match(marker) || []
- assert(matches.length === 1, 'home_shop_showcase_source_drift')
- const companyVisual = companyOperatingGraphic()
- const markup = source.replace(marker, companyVisual)
- assert(!markup.includes('<a class="text-link hero-note" href="/contact/">Contact us</a>'), 'home_duplicate_contact_action_remains')
- return removeSectionByClass(markup, 'company-portfolio', 'home_duplicate_shop_details')
-}
-const publicHomeMarkup = replaceHomeShopShowcase(shopOnlyCompanyMarkup(companyMarkup))
+const publicHomeMarkup = shopOnlyCompanyMarkup(companyMarkup)
 const publicShopMarkup = shopMarkup
 
 function productCard(id) {
