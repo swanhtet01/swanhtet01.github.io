@@ -506,20 +506,29 @@ void main() {
         ),
       ),
     );
-    // Image decoding and SQLite use real asynchronous work. A widget test's
-    // fake clock cannot advance these operations by pumping frames alone.
-    final persisted = await tester.runAsync(() async {
-      final deadline = DateTime.now().add(const Duration(seconds: 5));
-      while (DateTime.now().isBefore(deadline)) {
-        final lookup = database.readProductThumbnail('tea');
-        final thumbnail = await lookup.timeout(const Duration(seconds: 1));
-        if (thumbnail != null) return true;
-        await Future<void>.delayed(const Duration(milliseconds: 20));
+    // Pump recovery before querying Drift. Its async write must finish before
+    // a concurrent read, and image decoding also needs real async time.
+    var photoSaved = false;
+    for (var attempt = 0; attempt < 100; attempt++) {
+      await tester.pump(const Duration(milliseconds: 50));
+      final messageVisible = find
+          .text('Product photo saved on this device.')
+          .evaluate()
+          .isNotEmpty;
+      if (messageVisible) {
+        photoSaved = true;
+        break;
       }
-      return false;
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 50)),
+      );
+    }
+    expect(photoSaved, isTrue);
+    final persisted = await tester.runAsync(() async {
+      final lookup = database.readProductThumbnail('tea');
+      return lookup.timeout(const Duration(seconds: 1));
     });
-    expect(persisted, isTrue);
-    await tester.pumpAndSettle();
+    expect(persisted, isNotNull);
     expect(find.text('Menu photo ready to review'), findsNothing);
     final preferences = await SharedPreferences.getInstance();
     expect(preferences.getString('shop_pending_picker_intent'), isNull);
@@ -733,7 +742,7 @@ void main() {
     }
   });
 
-  testWidgets('catalog rows stay single, touch-sized targets at app widths', (
+  testWidgets('catalog rows and photo controls stay touch-sized at app widths', (
     tester,
   ) async {
     addTearDown(tester.view.resetPhysicalSize);
@@ -773,10 +782,13 @@ void main() {
         );
         expect(row, findsOneWidget);
         expect(tester.getSize(row).height, greaterThanOrEqualTo(56));
-        expect(
-          find.descendant(of: row, matching: find.byType(IconButton)),
-          findsNothing,
+        final photoButton = find.descendant(
+          of: row,
+          matching: find.byKey(const ValueKey('shop-product-photo:rice')),
         );
+        expect(photoButton, findsOneWidget);
+        expect(tester.getSize(photoButton).width, greaterThanOrEqualTo(48));
+        expect(tester.getSize(photoButton).height, greaterThanOrEqualTo(48));
         expect(
           find.text(myanmar ? '၂၄,၉၀၀ ကျပ်' : '24,900 MMK'),
           findsOneWidget,
