@@ -1534,9 +1534,8 @@ class _ShopHomeState extends State<ShopHome> {
                             width: 48,
                             height: 48,
                             fit: BoxFit.cover,
-                            errorBuilder: (_, error, stackTrace) => const Icon(
-                              Icons.image_not_supported_outlined,
-                            ),
+                            errorBuilder: (_, error, stackTrace) =>
+                                const Icon(Icons.image_not_supported_outlined),
                           ),
                         ),
                 ),
