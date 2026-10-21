@@ -994,7 +994,7 @@ class _ShopHomeState extends State<ShopHome> {
       padding: const EdgeInsets.all(16),
       child: Column(
         children: [
-          _catalogHeader(hasProducts: products.isNotEmpty),
+          _catalogHeader(products),
           if (products.isNotEmpty) ...[
             const SizedBox(height: 12),
             _searchField(products),
@@ -1006,26 +1006,55 @@ class _ShopHomeState extends State<ShopHome> {
     ),
   );
 
-  Widget _catalogHeader({required bool hasProducts}) => LayoutBuilder(
+  Widget _catalogHeader(List<ShopProduct> products) => LayoutBuilder(
     builder: (context, constraints) {
       final title = Text(
         shopCopy(widget.myanmar, 'Products', 'ကုန်ပစ္စည်းများ'),
         style: Theme.of(context).textTheme.titleLarge,
       );
-      if (!hasProducts) return title;
-      final importButton = IconButton(
-        tooltip: shopCopy(
-          widget.myanmar,
-          'Import menu photo',
-          'မီနူးဓာတ်ပုံထည့်ရန်',
-        ),
-        onPressed: _openMenuImport,
-        icon: const Icon(Icons.document_scanner_outlined),
-      );
+      if (products.isEmpty) return title;
       final addButton = OutlinedButton.icon(
         onPressed: _showAddProduct,
         icon: const Icon(Icons.add),
         label: Text(shopCopy(widget.myanmar, 'New product', 'ကုန်ပစ္စည်းအသစ်')),
+      );
+      final productActions = PopupMenuButton<String>(
+        key: const ValueKey('shop-product-actions'),
+        tooltip: shopCopy(
+          widget.myanmar,
+          'Product options',
+          'ကုန်ပစ္စည်းရွေးချယ်မှုများ',
+        ),
+        icon: const Icon(Icons.more_horiz),
+        onSelected: (action) {
+          if (action == 'import') {
+            _openMenuImport();
+          } else if (action == 'photos') {
+            unawaited(_showProductPhotoManager(products));
+          }
+        },
+        itemBuilder: (_) => [
+          PopupMenuItem(
+            value: 'import',
+            child: Text(
+              shopCopy(
+                widget.myanmar,
+                'Import menu photo',
+                'မီနူးဓာတ်ပုံထည့်ရန်',
+              ),
+            ),
+          ),
+          PopupMenuItem(
+            value: 'photos',
+            child: Text(
+              shopCopy(
+                widget.myanmar,
+                'Edit product photos',
+                'ကုန်ပစ္စည်းဓာတ်ပုံများ ပြင်ရန်',
+              ),
+            ),
+          ),
+        ],
       );
       if (constraints.maxWidth < 420) {
         return Column(
@@ -1035,9 +1064,8 @@ class _ShopHomeState extends State<ShopHome> {
             const SizedBox(height: 8),
             Row(
               children: [
-                importButton,
-                const SizedBox(width: 8),
                 Expanded(child: addButton),
+                productActions,
               ],
             ),
           ],
@@ -1046,12 +1074,52 @@ class _ShopHomeState extends State<ShopHome> {
       return Row(
         children: [
           Expanded(child: title),
-          importButton,
           addButton,
+          productActions,
         ],
       );
     },
   );
+
+  Future<void> _showProductPhotoManager(List<ShopProduct> products) async {
+    final selected = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) => SafeArea(
+        child: SizedBox(
+          height: MediaQuery.sizeOf(sheetContext).height * 0.65,
+          child: Column(
+            children: [
+              ListTile(
+                title: Text(
+                  shopCopy(
+                    widget.myanmar,
+                    'Edit product photos',
+                    'ကုန်ပစ္စည်းဓာတ်ပုံများ ပြင်ရန်',
+                  ),
+                ),
+              ),
+              Expanded(
+                child: ListView.builder(
+                  itemCount: products.length,
+                  itemBuilder: (context, index) {
+                    final item = products[index];
+                    return ListTile(
+                      key: ValueKey('shop-photo-manage:${item.id}'),
+                      title: Text(item.name),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => Navigator.pop(sheetContext, item.id),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (selected != null && mounted) await _chooseProductPhoto(selected);
+  }
 
   Widget _searchField(List<ShopProduct> products) => TextField(
     controller: _search,
@@ -1291,15 +1359,11 @@ class _ShopHomeState extends State<ShopHome> {
               horizontal: 14,
               vertical: 10,
             ),
-            leading: IconButton(
+            leading: SizedBox(
               key: ValueKey('shop-product-photo:${item.id}'),
-              tooltip: shopCopy(
-                widget.myanmar,
-                'Add or change product photo',
-                'ကုန်ပစ္စည်းဓာတ်ပုံ ထည့်ရန် သို့မဟုတ် ပြောင်းရန်',
-              ),
-              onPressed: () => _chooseProductPhoto(item.id),
-              icon: FutureBuilder<Uint8List?>(
+              width: 48,
+              height: 48,
+              child: FutureBuilder<Uint8List?>(
                 future: _thumbnailFor(item.id),
                 builder: (context, snapshot) {
                   final bytes = snapshot.data;

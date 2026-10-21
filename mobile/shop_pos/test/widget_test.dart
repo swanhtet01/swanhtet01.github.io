@@ -585,6 +585,14 @@ void main() {
       ),
       findsOneWidget,
     );
+    await tester.tap(find.byKey(const ValueKey('shop-product-actions')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Edit product photos'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('shop-photo-manage:tea')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('shop-photo-manage:tea')));
+    await tester.pumpAndSettle();
+    expect(find.text('Choose photo'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(milliseconds: 1));
   });
@@ -991,21 +999,24 @@ void main() {
               3,
             );
           }
-          final photoButton = find.descendant(
+          final productPhoto = find.descendant(
             of: row,
             matching: find.byKey(const ValueKey('shop-product-photo:rice')),
           );
-          expect(photoButton, findsOneWidget);
-          expect(tester.getSize(photoButton).width, greaterThanOrEqualTo(48));
-          expect(tester.getSize(photoButton).height, greaterThanOrEqualTo(48));
+          expect(productPhoto, findsOneWidget);
+          expect(tester.getSize(productPhoto).width, greaterThanOrEqualTo(48));
+          expect(tester.getSize(productPhoto).height, greaterThanOrEqualTo(48));
           expect(
             find.text(myanmar ? '၂၄,၉၀၀ ကျပ်' : '24,900 MMK'),
             findsOneWidget,
           );
           expect(tester.takeException(), isNull);
 
-          await tester.tap(row);
+          // A cashier can tap the thumbnail or the text: both add one item.
+          // Photo editing has its own product-management action.
+          await tester.tap(productPhoto);
           await tester.pumpAndSettle();
+          expect(find.text('Choose photo'), findsNothing);
           if (width == 820) {
             expect(
               find.byKey(const ValueKey('shop-split-basket')),
