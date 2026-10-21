@@ -662,61 +662,59 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
     ),
   );
 
-  Widget _compactStats(
-    _TodaySnapshot snapshot, {
-    required double width,
-  }) => SizedBox(
-    width: width,
-    child: Card(
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: width < 330
-            ? Column(
-                children: [
-                  _compactStatRow(
-                    _copy('Completed sales', 'ပြီးစီးသောအရောင်း'),
-                    _number(snapshot.saleCount),
-                  ),
-                  const Divider(height: 20),
-                  _compactStatRow(
-                    _copy(
-                      'Low-stock products',
-                      'လက်ကျန်နည်းသော ကုန်ပစ္စည်းများ',
-                    ),
-                    _number(snapshot.stockToCheck.length),
-                  ),
-                ],
-              )
-            : Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: _compactStat(
-                      _copy('Completed sales', 'ပြီးစီးသောအရောင်း'),
-                      _number(snapshot.saleCount),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Container(
-                    width: 1,
-                    height: 64,
-                    color: const Color(0xffe2e5ed),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _compactStat(
-                      _copy(
-                        'Low-stock products',
-                        'လက်ကျန်နည်းသော ကုန်ပစ္စည်းများ',
+  Widget _compactStats(_TodaySnapshot snapshot, {required double width}) =>
+      SizedBox(
+        width: width,
+        child: Card(
+          child: Padding(
+            padding: const EdgeInsets.all(18),
+            child: width < 330
+                ? Column(
+                    children: [
+                      _compactStatRow(
+                        _copy('Completed sales', 'ပြီးစီးသောအရောင်း'),
+                        _number(snapshot.saleCount),
                       ),
-                      _number(snapshot.stockToCheck.length),
-                    ),
+                      const Divider(height: 20),
+                      _compactStatRow(
+                        _copy(
+                          'Low-stock products',
+                          'လက်ကျန်နည်းသော ကုန်ပစ္စည်းများ',
+                        ),
+                        _number(snapshot.stockToCheck.length),
+                      ),
+                    ],
+                  )
+                : Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: _compactStat(
+                          _copy('Completed sales', 'ပြီးစီးသောအရောင်း'),
+                          _number(snapshot.saleCount),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Container(
+                        width: 1,
+                        height: 64,
+                        color: const Color(0xffe2e5ed),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _compactStat(
+                          _copy(
+                            'Low-stock products',
+                            'လက်ကျန်နည်းသော ကုန်ပစ္စည်းများ',
+                          ),
+                          _number(snapshot.stockToCheck.length),
+                        ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-      ),
-    ),
-  );
+          ),
+        ),
+      );
 
   Widget _compactStatRow(String label, String value) => Row(
     children: [
