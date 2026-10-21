@@ -37,6 +37,8 @@ dependencies:
   image_picker: 1.2.4
   drift: 2.35.2
   drift_flutter: 0.3.1
+  cryptography: 2.9.0
+  sqlite3: 3.5.2
   network_info_plus: 8.2.2
   unified_esc_pos_printer: 3.4.0
   qr_flutter: 4.1.0
