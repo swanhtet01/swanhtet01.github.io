@@ -1288,7 +1288,7 @@ void main() {
       );
       expect(find.textContaining('Review sale'), findsNothing);
 
-      await tester.enterText(search, '999999');
+      await tester.enterText(search, 'NO-MATCH');
       await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pumpAndSettle();
       expect(
