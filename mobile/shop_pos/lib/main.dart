@@ -292,7 +292,7 @@ class _ShopHomeState extends State<ShopHome> {
                   ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 14, 12, 10),
-                  child: _catalogHeader(),
+                  child: _catalogHeader(hasProducts: products.isNotEmpty),
                 ),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -428,7 +428,7 @@ class _ShopHomeState extends State<ShopHome> {
       padding: const EdgeInsets.all(16),
       child: Column(
         children: [
-          _catalogHeader(),
+          _catalogHeader(hasProducts: products.isNotEmpty),
           const SizedBox(height: 12),
           _searchField(products),
           const SizedBox(height: 8),
@@ -438,7 +438,7 @@ class _ShopHomeState extends State<ShopHome> {
     ),
   );
 
-  Widget _catalogHeader() => Row(
+  Widget _catalogHeader({required bool hasProducts}) => Row(
     children: [
       Expanded(
         child: Text(
@@ -447,7 +447,7 @@ class _ShopHomeState extends State<ShopHome> {
               ?.copyWith(fontWeight: FontWeight.w800),
         ),
       ),
-      IconButton(
+      if (hasProducts) IconButton(
         tooltip: shopCopy(
           widget.myanmar,
           'Import menu photo',
@@ -456,7 +456,7 @@ class _ShopHomeState extends State<ShopHome> {
         onPressed: _openMenuImport,
         icon: const Icon(Icons.document_scanner_outlined),
       ),
-      FilledButton.icon(
+      if (hasProducts) FilledButton.icon(
         onPressed: _showAddProduct,
         icon: const Icon(Icons.add),
         label: Text(shopCopy(widget.myanmar, 'Add item', 'ပစ္စည်းထည့်ရန်')),
@@ -561,12 +561,24 @@ class _ShopHomeState extends State<ShopHome> {
                 Text(
                   shopCopy(
                     widget.myanmar,
-                    'Add an item or review a menu photo to start.',
-                    'စတင်ရန် ပစ္စည်းထည့်ပါ သို့မဟုတ် မီနူးဓာတ်ပုံကို စစ်ဆေးပါ။',
+                    'Add a name, price and starting stock to make your first sale.',
+                    'ပထမအရောင်းအတွက် အမည်၊ ဈေးနှုန်းနှင့် စတင်လက်ကျန်ကို ထည့်ပါ။',
                   ),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 12),
+                FilledButton.icon(
+                  onPressed: _showAddProduct,
+                  icon: const Icon(Icons.add),
+                  label: Text(
+                    shopCopy(
+                      widget.myanmar,
+                      'Add first product',
+                      'ပထမကုန်ပစ္စည်းထည့်ရန်',
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
                 OutlinedButton.icon(
                   onPressed: _openMenuImport,
                   icon: const Icon(Icons.document_scanner_outlined),

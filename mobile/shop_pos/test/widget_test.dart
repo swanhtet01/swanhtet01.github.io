@@ -201,7 +201,8 @@ void main() {
     expect(find.text('Your catalog is empty'), findsOneWidget);
     expect(find.text('MAMA Chicken Instant Noodles'), findsNothing);
 
-    await tester.tap(find.text('Add item'));
+    await tester.ensureVisible(find.text('Add first product'));
+    await tester.tap(find.text('Add first product'));
     await tester.pumpAndSettle();
     await tester.enterText(
       find.byKey(const ValueKey('shop-product-name')),
