@@ -88,6 +88,7 @@ flutter:
   assets:
     - assets/fonts/Inter/OFL.txt
     - assets/fonts/NotoSansMyanmar/OFL.txt
+    - assets/fonts/NotoSansMyanmarUI/OFL.txt
 
   # Bundled so the counter stays legible in English and Myanmar while offline.
   fonts:
@@ -97,6 +98,14 @@ flutter:
     - family: NotoSansMyanmar
       fonts:
         - asset: assets/fonts/NotoSansMyanmar/NotoSansMyanmar-Variable.ttf
+    - family: NotoSansMyanmarUI
+      fonts:
+        - asset: assets/fonts/NotoSansMyanmarUI/NotoSansMyanmarUI-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/NotoSansMyanmarUI/NotoSansMyanmarUI-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/NotoSansMyanmarUI/NotoSansMyanmarUI-Bold.ttf
+          weight: 700
 
   # To add assets to your application, add an assets section, like this:
   # assets:

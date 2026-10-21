@@ -188,9 +188,11 @@ class _ShopAppState extends State<ShopApp> {
 
   @override
   Widget build(BuildContext context) {
-    // Keep Latin product names consistent in both locales. Myanmar glyphs use
-    // the bundled Noto fallback with locale-specific line height below.
+    // Keep Latin product names consistent in both locales. The UI-cut Myanmar
+    // font has tighter vertical metrics for controls; the full font remains a
+    // fallback for glyphs outside that cut.
     const fontFamily = 'Inter';
+    const fontFallback = ['NotoSansMyanmarUI', 'NotoSansMyanmar'];
     final tracking = _myanmar ? 0.0 : -0.35;
     const ink = Color(0xff171b2c);
     const border = Color(0xffdce2ed);
@@ -208,7 +210,7 @@ class _ShopAppState extends State<ShopApp> {
       theme: ThemeData(
         useMaterial3: true,
         fontFamily: fontFamily,
-        fontFamilyFallback: const ['NotoSansMyanmar'],
+        fontFamilyFallback: fontFallback,
         colorScheme:
             ColorScheme.fromSeed(
               seedColor: accent,
@@ -265,7 +267,7 @@ class _ShopAppState extends State<ShopApp> {
               ),
             ).apply(
               fontFamily: fontFamily,
-              fontFamilyFallback: const ['NotoSansMyanmar'],
+              fontFamilyFallback: fontFallback,
               bodyColor: ink,
               displayColor: ink,
             ),
@@ -277,7 +279,7 @@ class _ShopAppState extends State<ShopApp> {
           scrolledUnderElevation: 0,
           titleTextStyle: TextStyle(
             fontFamily: fontFamily,
-            fontFamilyFallback: const ['NotoSansMyanmar'],
+            fontFamilyFallback: fontFallback,
             fontSize: _myanmar ? 18 : 20,
             fontWeight: FontWeight.w700,
             letterSpacing: tracking,
@@ -292,7 +294,7 @@ class _ShopAppState extends State<ShopApp> {
             final selected = states.contains(WidgetState.selected);
             return TextStyle(
               fontFamily: fontFamily,
-              fontFamilyFallback: const ['NotoSansMyanmar'],
+              fontFamilyFallback: fontFallback,
               fontSize: _myanmar ? 13.5 : 13,
               fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
               height: _myanmar ? 1.45 : 1.25,
@@ -303,7 +305,7 @@ class _ShopAppState extends State<ShopApp> {
         navigationRailTheme: NavigationRailThemeData(
           selectedLabelTextStyle: TextStyle(
             fontFamily: fontFamily,
-            fontFamilyFallback: const ['NotoSansMyanmar'],
+            fontFamilyFallback: fontFallback,
             fontSize: 14,
             fontWeight: FontWeight.w700,
             height: _myanmar ? 1.45 : 1.25,
@@ -311,7 +313,7 @@ class _ShopAppState extends State<ShopApp> {
           ),
           unselectedLabelTextStyle: TextStyle(
             fontFamily: fontFamily,
-            fontFamilyFallback: const ['NotoSansMyanmar'],
+            fontFamilyFallback: fontFallback,
             fontSize: 14,
             fontWeight: FontWeight.w600,
             height: _myanmar ? 1.45 : 1.25,
@@ -763,11 +765,11 @@ class _ShopHomeState extends State<ShopHome> {
   Widget build(BuildContext context) {
     final width = MediaQuery.sizeOf(context).width;
     final inWorkspace = widget.onToday != null;
-    final showRail = inWorkspace && width >= 700;
-    final contentWidth = width - (showRail ? (width >= 1100 ? 191 : 77) : 0);
-    // A portrait tablet can still fit two usable panes beside the compact rail.
-    // Keep narrower layouts on the single-column review-sheet path.
-    const minSplitContentWidth = 740.0;
+    final showRail = inWorkspace && width >= 1100;
+    final contentWidth = width - (showRail ? 191 : 0);
+    // A portrait tablet keeps touch navigation at the bottom while the full
+    // content width can still fit two usable panes after a product is added.
+    const minSplitContentWidth = 820.0;
     final cartAction = SafeArea(
       top: false,
       minimum: const EdgeInsets.fromLTRB(12, 8, 12, 10),
@@ -815,7 +817,7 @@ class _ShopHomeState extends State<ShopHome> {
               onPressed: _loadCheckoutState,
               icon: const Icon(Icons.refresh),
             ),
-          if (inWorkspace && width < 700)
+          if (inWorkspace && width < 1100)
             IconButton(
               tooltip: shopCopy(widget.myanmar, 'Settings', 'ဆက်တင်များ'),
               onPressed: _openSettings,
@@ -996,7 +998,7 @@ class _ShopHomeState extends State<ShopHome> {
           ],
         ),
       ),
-      bottomNavigationBar: inWorkspace && width < 700
+      bottomNavigationBar: inWorkspace && width < 1100
           ? Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -2746,8 +2748,8 @@ class _ShopHomeState extends State<ShopHome> {
             // Keep a short sale near its content. Long baskets retain the
             // available height and scroll inside the existing list.
             final contentHeight =
-                (350 +
-                    88 * _cart.length.clamp(0, 4) +
+                (300 +
+                    76 * _cart.length.clamp(0, 4) +
                     (_cartHasUnavailableProducts(
                           snapshot.data ?? const <ShopProduct>[],
                         )
@@ -3264,8 +3266,15 @@ class _SetupTile extends StatelessWidget {
         vertical: compact ? 4 : 8,
       ),
       minLeadingWidth: 28,
-      leading: Icon(icon, size: 23, color: theme.colorScheme.primary),
-      title: Text(title, style: theme.textTheme.titleMedium),
+      leading: compact
+          ? null
+          : Icon(icon, size: 23, color: theme.colorScheme.primary),
+      title: Text(
+        title,
+        style: compact
+            ? theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600)
+            : theme.textTheme.titleMedium,
+      ),
       subtitle: compact
           ? null
           : Padding(
@@ -3347,7 +3356,7 @@ class _ShopSettingsScreenState extends State<ShopSettingsScreen> {
                       ),
                     ),
                   ),
-                  const Divider(height: 1, indent: 58),
+                  const Divider(height: 1),
                   _SetupTile(
                     icon: Icons.account_balance_wallet_outlined,
                     title: shopCopy(
@@ -3369,7 +3378,7 @@ class _ShopSettingsScreenState extends State<ShopSettingsScreen> {
                       ),
                     ),
                   ),
-                  const Divider(height: 1, indent: 58),
+                  const Divider(height: 1),
                   _SetupTile(
                     icon: Icons.point_of_sale_outlined,
                     title: shopCopy(_myanmar, 'Cash shift', 'ငွေသားတာဝန်ချိန်'),
@@ -3387,7 +3396,7 @@ class _ShopSettingsScreenState extends State<ShopSettingsScreen> {
                       ),
                     ),
                   ),
-                  const Divider(height: 1, indent: 58),
+                  const Divider(height: 1),
                   _SetupTile(
                     icon: Icons.file_download_outlined,
                     title: shopCopy(
@@ -3413,34 +3422,16 @@ class _ShopSettingsScreenState extends State<ShopSettingsScreen> {
               ),
             ),
             const SizedBox(height: 16),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.storage_outlined),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            shopCopy(_myanmar, 'On this device', 'ဤစက်တွင်'),
-                            style: Theme.of(context).textTheme.titleMedium,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      shopCopy(
-                        _myanmar,
-                        'Saved here. Online backup is not active.',
-                        'ဤစက်တွင်သာ သိမ်းထားသည်။ အွန်လိုင်းအရန်ကူး မရှိသေးပါ။',
-                      ),
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                  ],
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              child: Text(
+                shopCopy(
+                  _myanmar,
+                  'Saved on this device. Online backup is not active.',
+                  'ဤစက်တွင်သာ သိမ်းထားသည်။ အွန်လိုင်းအရန်ကူး မရှိသေးပါ။',
+                ),
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
               ),
             ),

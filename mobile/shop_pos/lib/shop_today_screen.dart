@@ -244,7 +244,7 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
   @override
   Widget build(BuildContext context) {
     final width = MediaQuery.sizeOf(context).width;
-    final compact = width < 700;
+    final compact = width < 1100;
     final desktop = width >= 1100;
     return Scaffold(
       appBar: AppBar(
@@ -531,20 +531,19 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
                 ?.copyWith(fontWeight: FontWeight.w600),
           ),
           subtitle: Text(
-            _copy(
-              '${_number(product.onHand)} in stock',
-              'လက်ကျန် ${_number(product.onHand)} ခု',
-            ),
+            _copy('In stock', 'လက်ကျန်'),
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: product.onHand <= 5
-                  ? Theme.of(context).colorScheme.error
-                  : Theme.of(context).colorScheme.onSurfaceVariant,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
           ),
           trailing: Text(
-            _money(product.priceMmk),
-            style: Theme.of(context).textTheme.labelLarge
-                ?.copyWith(fontFeatures: const [FontFeature.tabularFigures()]),
+            _number(product.onHand),
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+              color: product.onHand <= 5
+                  ? Theme.of(context).colorScheme.error
+                  : Theme.of(context).colorScheme.onSurface,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
           ),
         ),
     ],

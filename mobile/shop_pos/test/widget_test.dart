@@ -1077,8 +1077,8 @@ void main() {
           expect(basket, findsOneWidget);
           final catalogRect = tester.getRect(catalog);
           final basketRect = tester.getRect(basket);
-          // The Burmese rail can grow for longer labels while the catalog
-          // still has a phone-width, touch-safe pane beside the active basket.
+          // Tablet navigation stays below the counter, leaving two
+          // touch-safe panes beside the active basket.
           expect(catalogRect.width, greaterThanOrEqualTo(320));
           expect(basketRect.width, greaterThanOrEqualTo(300));
           expect(catalogRect.right, lessThan(basketRect.left));
