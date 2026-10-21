@@ -43,6 +43,9 @@ jobs:
       - name: Analyze Flutter source
         run: flutter analyze
 
+      - name: Check first-sale widget in isolation
+        run: timeout --signal=TERM --kill-after=10s 90s flutter test test/widget_test.dart --plain-name 'empty catalog can make a durable cash sale' --reporter expanded --timeout 60s
+
       - name: Run Flutter tests
         run: timeout --signal=TERM --kill-after=10s 180s flutter test --concurrency=1 --reporter expanded --timeout 2m
 

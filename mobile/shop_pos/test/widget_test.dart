@@ -262,7 +262,7 @@ void main() {
     expect(find.text('Sale details'), findsOneWidget);
     expect(find.text('Tea × 1'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
-    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 1));
   });
 
   testWidgets('desktop first use shows one focused setup workspace', (
@@ -292,7 +292,7 @@ void main() {
       expect(tester.takeException(), isNull);
     } finally {
       await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 1));
       await database.close();
     }
   });
@@ -333,7 +333,7 @@ void main() {
       expect(tester.takeException(), isNull);
     } finally {
       await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 1));
       await database.close();
     }
   });
@@ -590,7 +590,7 @@ void main() {
       expect(await database.countSales(), 0);
     } finally {
       await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 1));
       await database.close();
     }
   });
