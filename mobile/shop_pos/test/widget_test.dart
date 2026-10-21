@@ -58,7 +58,10 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(
-          tester.widget<MaterialApp>(find.byType(MaterialApp)).theme?.fontFamily,
+          tester
+              .widget<MaterialApp>(find.byType(MaterialApp))
+              .theme
+              ?.fontFamily,
           'Inter',
         );
         expect(find.text(myanmar ? 'ယနေ့' : 'Today'), findsWidgets);
@@ -872,16 +875,18 @@ void main() {
           }
           if (width == 320) {
             expect(
-              tester.widget<Text>(
-                find.descendant(
-                  of: row,
-                  matching: find.text(
-                    myanmar
-                        ? 'ဆန်အိတ် အရည်အသွေးကောင်း ၁၀ ကီလိုဂရမ်'
-                        : 'Premium rice 10 kg bag',
-                  ),
-                ),
-              ).maxLines,
+              tester
+                  .widget<Text>(
+                    find.descendant(
+                      of: row,
+                      matching: find.text(
+                        myanmar
+                            ? 'ဆန်အိတ် အရည်အသွေးကောင်း ၁၀ ကီလိုဂရမ်'
+                            : 'Premium rice 10 kg bag',
+                      ),
+                    ),
+                  )
+                  .maxLines,
               3,
             );
           }
