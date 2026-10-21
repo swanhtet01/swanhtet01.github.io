@@ -7,6 +7,7 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { bindPreviewNavigation, parsePreviewAppBinding } from './public_preview_navigation.mjs'
+import { assertPublicGalleryReleaseReady } from './public_gallery_rights.mjs'
 
 import { activeProductContracts } from '../showroom/src/core/product-visibility.ts'
 import { brandFaviconSvg, companyMarkup, companyShopFooterHtml, companyShopHeaderHtml, companyShopStyle, shopMarkup } from './public_company_shop_design.mjs'
@@ -39,6 +40,10 @@ function assert(condition, message) {
 
 const publicGalleryProvenance = JSON.parse(await readFile(resolve(root, 'tools', 'public-assets', 'public-gallery-provenance.json'), 'utf8'))
 const publicGalleryCapture = JSON.parse(await readFile(resolve(root, 'tools', 'public-assets', 'public-gallery-capture.json'), 'utf8'))
+const publicGalleryImageSources = JSON.parse(await readFile(resolve(root, 'tools', 'qa-assets', 'shop-products', 'sources.json'), 'utf8'))
+if (process.env.SUPERMEGA_PUBLIC_RELEASE === '1' || process.env.VERCEL === '1') {
+  assertPublicGalleryReleaseReady(publicGalleryCapture, publicGalleryImageSources)
+}
 // Hash the checked-out source as a Git tree so a source archive is checked as
 // strictly as a Git worktree. Installed packages and build output are not part
 // of the committed showroom tree.

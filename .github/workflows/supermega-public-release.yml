@@ -272,6 +272,7 @@ jobs:
         env:
           SUPERMEGA_HQ_VERIFY_MODE: release-contracts
           SUPERMEGA_RELEASE_COMMIT: ${{ github.sha }}
+          SUPERMEGA_PUBLIC_RELEASE: '1'
         run: npm run public:prebuilt
 
       - name: Capture current production rollback target
