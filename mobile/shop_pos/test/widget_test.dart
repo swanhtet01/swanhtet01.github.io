@@ -187,7 +187,6 @@ void main() {
         operationId: 'counter-before-restart',
         quantities: const {'tea': 2},
       );
-      debugPrint('counter-recovery-test: saved draft');
       await tester.pumpWidget(
         ShopApp(
           database: database,
@@ -196,16 +195,13 @@ void main() {
           initialMyanmar: false,
         ),
       );
-      debugPrint('counter-recovery-test: mounted first app');
       await tester.pumpAndSettle();
-      debugPrint('counter-recovery-test: settled first app');
       expect((await database.readCounterSaleDraft())?.quantities, {'tea': 2});
       expect((await database.readActiveProducts()).single.onHand, 3);
       expect(await database.countSales(), 0);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump();
-      debugPrint('counter-recovery-test: unmounted first app');
       await tester.pumpWidget(
         ShopApp(
           database: database,
@@ -214,13 +210,10 @@ void main() {
           initialMyanmar: false,
         ),
       );
-      debugPrint('counter-recovery-test: mounted second app');
       await tester.pumpAndSettle();
-      debugPrint('counter-recovery-test: settled second app');
       expect(find.text('Continue sale'), findsOneWidget);
       await tester.tap(find.text('Continue sale'));
       await tester.pumpAndSettle();
-      debugPrint('counter-recovery-test: opened counter');
       expect(
         find.textContaining('Review sale · 2 · 5,000 MMK'),
         findsOneWidget,
@@ -231,11 +224,13 @@ void main() {
       );
       await tester.tap(find.textContaining('Review sale · 2 · 5,000 MMK'));
       await tester.pumpAndSettle();
-      debugPrint('counter-recovery-test: opened review');
-      expect(
-        find.text('Unfinished sale restored on this device.'),
-        findsOneWidget,
-      );
+      final restoredNoticeCount = find
+          .text('Unfinished sale restored on this device.')
+          .evaluate()
+          .length;
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(restoredNoticeCount, 1);
       expect(tester.takeException(), isNull);
     } finally {
       await tester.pumpWidget(const SizedBox.shrink());
