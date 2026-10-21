@@ -87,6 +87,8 @@ class _ShopAppState extends State<ShopApp> {
       ],
       theme: ThemeData(
         useMaterial3: true,
+        fontFamily: _myanmar ? 'NotoSansMyanmar' : 'Inter',
+        fontFamilyFallback: const ['NotoSansMyanmar'],
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xff5146e5)),
         scaffoldBackgroundColor: const Color(0xfff7f8fb),
         cardTheme: const CardThemeData(
@@ -509,11 +511,10 @@ class _ShopHomeState extends State<ShopHome> {
         )
         .toList();
     if (visible.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+      return ListView(
+        padding: const EdgeInsets.all(24),
+        children: [
+          Column(
             children: [
               Icon(
                 text.isEmpty ? Icons.inventory_2_outlined : Icons.search_off,
@@ -580,7 +581,7 @@ class _ShopHomeState extends State<ShopHome> {
               ],
             ],
           ),
-        ),
+        ],
       );
     }
     return ListView.separated(

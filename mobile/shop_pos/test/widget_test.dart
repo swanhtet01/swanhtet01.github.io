@@ -293,12 +293,6 @@ void main() {
   testWidgets('compact Burmese checkout keeps both payment actions visible', (
     tester,
   ) async {
-    final priorErrorHandler = FlutterError.onError;
-    FlutterError.onError = (details) {
-      debugPrint(details.toString());
-      priorErrorHandler?.call(details);
-    };
-    addTearDown(() => FlutterError.onError = priorErrorHandler);
     tester.view.physicalSize = const Size(360, 760);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -319,12 +313,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    final initialLayoutError = tester.takeException();
-    if (initialLayoutError != null) {
-      // Keep the render diagnostics in CI rather than only the matcher summary.
-      debugPrint(initialLayoutError.toString());
-    }
-    expect(initialLayoutError, isNull, reason: 'initial compact catalog');
+    expect(tester.takeException(), isNull, reason: 'initial compact catalog');
     await tester.tap(find.byTooltip('အရောင်းထဲထည့်ရန်'));
     await tester.pumpAndSettle();
     expect(
