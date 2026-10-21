@@ -1241,7 +1241,8 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('ငွေသား'));
       await tester.pumpAndSettle();
-      expect(find.text('ပေးငွေ (မထည့်လည်းရ)'), findsOneWidget);
+      expect(find.text('ပေးငွေ'), findsOneWidget);
+      expect(find.text('မထည့်လည်းရ'), findsOneWidget);
       await tester.enterText(
         find.byKey(const ValueKey('shop-cash-given')),
         '၂၀၀၀၀',

@@ -1715,8 +1715,9 @@ class _ShopHomeState extends State<ShopHome> {
                       labelText: shopCopy(
                         widget.myanmar,
                         'Cash given (optional)',
-                        'ပေးငွေ (မထည့်လည်းရ)',
+                        'ပေးငွေ',
                       ),
+                      helperText: widget.myanmar ? 'မထည့်လည်းရ' : null,
                     ),
                   ),
                   if (tenderedMmk != null && !isShort) ...[
