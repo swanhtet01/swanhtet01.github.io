@@ -794,7 +794,9 @@ class _ShopHomeState extends State<ShopHome> {
                 builder: (context, snapshot) {
                   final products = snapshot.data ?? const <ShopProduct>[];
                   if (contentWidth >= minSplitContentWidth) {
-                    final tablet = contentWidth < 1080;
+                    // Desktop keeps the current sale visible from the start;
+                    // a tablet gives the catalog room until an item is added.
+                    final tablet = width < 1100;
                     final cartWidth = contentWidth < 820
                         ? 300.0
                         : (contentWidth * 0.36).clamp(340.0, 500.0);
@@ -1000,7 +1002,12 @@ class _ShopHomeState extends State<ShopHome> {
             _searchField(products),
           ],
           const SizedBox(height: 8),
-          Expanded(child: _productList(products)),
+          Expanded(
+            child: LayoutBuilder(
+              builder: (context, constraints) =>
+                  _productList(products, catalogWidth: constraints.maxWidth),
+            ),
+          ),
         ],
       ),
     ),
@@ -1210,12 +1217,14 @@ class _ShopHomeState extends State<ShopHome> {
     });
   }
 
-  Widget _productList(List<ShopProduct> products) {
-    final viewportWidth = MediaQuery.sizeOf(context).width;
-    // Prices move below names on portrait tablets so the narrower catalog
-    // pane retains a readable, full-row add target.
-    final compactProductRow = viewportWidth < 900;
-    final narrowProductRow = viewportWidth < 380;
+  Widget _productList(
+    List<ShopProduct> products, {
+    required double catalogWidth,
+  }) {
+    // The product pane, not the full window, determines row density. A
+    // desktop basket can leave less room than a portrait tablet catalog.
+    final compactProductRow = catalogWidth < 780;
+    final narrowProductRow = catalogWidth < 380;
     final text = _search.text.trim().toLowerCase();
     final visible = products
         .where(

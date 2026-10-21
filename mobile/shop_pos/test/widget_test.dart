@@ -981,6 +981,11 @@ void main() {
               find.byKey(const ValueKey('shop-split-basket')),
               findsNothing,
             );
+          } else if (width == 1200) {
+            expect(
+              find.byKey(const ValueKey('shop-split-basket')),
+              findsOneWidget,
+            );
           }
           if (width == 320) {
             expect(
