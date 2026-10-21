@@ -744,6 +744,58 @@ void main() {
   );
 
   group('bounded printer discovery', () {
+    test(
+      'paper width persists and a changed profile requires retesting',
+      () async {
+        SharedPreferences.setMockInitialValues({});
+        const range = (ip: '192.168.20.10', mask: '255.255.255.248');
+        final settings = ReceiptPrinterSettings(
+          rangeProvider: () async => range,
+          session: VerifiedPrinterSession(),
+        );
+        expect(await settings.readPaperWidth(), ReceiptPaperWidth.mm80);
+        expect(ReceiptPaperWidth.mm58.paperSize.widthPixels, 384);
+        expect(ReceiptPaperWidth.mm80.paperSize.widthPixels, 576);
+        expect(ReceiptPaperWidth.mm58.sendCutCommand, isFalse);
+        expect(ReceiptPaperWidth.mm80.sendCutCommand, isTrue);
+
+        final printer = (await PrinterDiscoveryService(
+          rangeProvider: () async => range,
+          probe: (host, port) async => host == '192.168.20.9',
+        ).scan()).printers.single;
+        await settings.saveAfterTest(
+          printer,
+          paperWidth: ReceiptPaperWidth.mm58,
+        );
+        expect(
+          (await settings.readTrustedPrinter())?.paperWidth,
+          ReceiptPaperWidth.mm58,
+        );
+        expect(
+          await ReceiptPrinterSettings(
+            rangeProvider: () async => range,
+            session: VerifiedPrinterSession(),
+          ).readPaperWidth(),
+          ReceiptPaperWidth.mm58,
+        );
+
+        final preferences = await SharedPreferences.getInstance();
+        await preferences.setString(shopReceiptPaperWidthKey, 'mm80');
+        expect(await settings.readTrustedPrinter(), isNull);
+
+        await settings.saveAfterTest(
+          printer,
+          paperWidth: ReceiptPaperWidth.mm80,
+        );
+        expect(
+          (await settings.readTrustedPrinter())?.paperWidth,
+          ReceiptPaperWidth.mm80,
+        );
+        settings.requireRetest();
+        expect(await settings.readTrustedPrinter(), isNull);
+      },
+    );
+
     test('reprint needs a tested printer in this session', () async {
       SharedPreferences.setMockInitialValues({
         shopReceiptPrinterHostKey: '192.168.20.9',

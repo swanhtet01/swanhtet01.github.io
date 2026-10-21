@@ -8,22 +8,55 @@ import 'package:unified_esc_pos_printer/unified_esc_pos_printer.dart';
 import 'shop_database.dart';
 
 const shopReceiptPrinterHostKey = 'shop_receipt_printer_host_v1';
+const shopReceiptPaperWidthKey = 'shop_receipt_paper_width_v1';
+
+enum ReceiptPaperWidth {
+  mm58(PaperSize.mm58),
+  mm80(PaperSize.mm80);
+
+  const ReceiptPaperWidth(this.paperSize);
+
+  final PaperSize paperSize;
+
+  /// Narrow receipt printers are fed for manual tear-off; no cutter assumed.
+  bool get sendCutCommand => this == ReceiptPaperWidth.mm80;
+
+  static ReceiptPaperWidth fromSavedValue(String? value) =>
+      ReceiptPaperWidth.values.firstWhere(
+        (width) => width.name == value,
+        orElse: () => ReceiptPaperWidth.mm80,
+      );
+}
 
 class VerifiedPrinterSession {
   String? _host;
   ({String ip, String mask})? _range;
+  ReceiptPaperWidth? _paperWidth;
 
-  bool permits(String host, ({String ip, String mask}) range) =>
-      _host == host && _range?.ip == range.ip && _range?.mask == range.mask;
+  bool permits(
+    String host,
+    ({String ip, String mask}) range,
+    ReceiptPaperWidth paperWidth,
+  ) =>
+      _host == host &&
+      _range?.ip == range.ip &&
+      _range?.mask == range.mask &&
+      _paperWidth == paperWidth;
 
-  void trust(String host, ({String ip, String mask}) range) {
+  void trust(
+    String host,
+    ({String ip, String mask}) range,
+    ReceiptPaperWidth paperWidth,
+  ) {
     _host = host;
     _range = range;
+    _paperWidth = paperWidth;
   }
 
   void clear() {
     _host = null;
     _range = null;
+    _paperWidth = null;
   }
 }
 
@@ -48,17 +81,26 @@ class ReceiptPrinterSettings {
     return host;
   }
 
-  Future<String?> readHost() async {
+  Future<ReceiptPaperWidth> readPaperWidth() async =>
+      ReceiptPaperWidth.fromSavedValue(
+        (await _preferences()).getString(shopReceiptPaperWidthKey),
+      );
+
+  void requireRetest() => _session.clear();
+
+  Future<({String host, ReceiptPaperWidth paperWidth})?>
+  readTrustedPrinter() async {
     final host = await readSavedHost();
     if (host == null) {
       _session.clear();
       return null;
     }
+    final paperWidth = await readPaperWidth();
     try {
       final range = await _rangeProvider();
-      if (_session.permits(host, range) &&
+      if (_session.permits(host, range, paperWidth) &&
           Ipv4Subnet.fromAddress(range.ip, range.mask).hosts.contains(host)) {
-        return host;
+        return (host: host, paperWidth: paperWidth);
       }
     } catch (_) {
       // Network range unavailable: a saved IP cannot authorize printing.
@@ -67,7 +109,12 @@ class ReceiptPrinterSettings {
     return null;
   }
 
-  Future<void> saveAfterTest(NetworkPrinterCandidate candidate) async {
+  Future<String?> readHost() async => (await readTrustedPrinter())?.host;
+
+  Future<void> saveAfterTest(
+    NetworkPrinterCandidate candidate, {
+    ReceiptPaperWidth paperWidth = ReceiptPaperWidth.mm80,
+  }) async {
     _session.clear();
     if (candidate.port != 9100 ||
         !Ipv4Subnet.isPrivateAddress(candidate.host)) {
@@ -80,20 +127,30 @@ class ReceiptPrinterSettings {
     ).hosts.contains(candidate.host)) {
       throw const PrinterNetworkChanged();
     }
-    final saved = await (await _preferences()).setString(
+    final preferences = await _preferences();
+    final savedWidth = await preferences.setString(
+      shopReceiptPaperWidthKey,
+      paperWidth.name,
+    );
+    if (!savedWidth) throw StateError('Printer paper size could not be saved.');
+    final saved = await preferences.setString(
       shopReceiptPrinterHostKey,
       candidate.host,
     );
     if (!saved) throw StateError('Printer setup could not be saved.');
-    _session.trust(candidate.host, range);
+    _session.trust(candidate.host, range, paperWidth);
   }
 }
 
 class ShopReceiptPrinter {
-  ShopReceiptPrinter({WifiRangeProvider? rangeProvider})
-    : _rangeProvider = rangeProvider ?? _networkRangeProvider(NetworkInfo());
+  ShopReceiptPrinter({
+    WifiRangeProvider? rangeProvider,
+    ReceiptPrinterSettings? settings,
+  }) : _rangeProvider = rangeProvider ?? _networkRangeProvider(NetworkInfo()),
+       _settings = settings ?? ReceiptPrinterSettings();
 
   final WifiRangeProvider _rangeProvider;
+  final ReceiptPrinterSettings _settings;
 
   Future<void> printSale(
     String host,
@@ -102,6 +159,10 @@ class ShopReceiptPrinter {
   }) async {
     if (!Ipv4Subnet.isPrivateAddress(host)) {
       throw const FormatException('Receipt printer must be on private Wi-Fi.');
+    }
+    final trustedPrinter = await _settings.readTrustedPrinter();
+    if (trustedPrinter == null || trustedPrinter.host != host) {
+      throw const FormatException('Test this printer and paper size first.');
     }
     final range = await _rangeProvider();
     final subnet = Ipv4Subnet.fromAddress(range.ip, range.mask);
@@ -119,12 +180,11 @@ class ShopReceiptPrinter {
         ),
         timeout: const Duration(seconds: 5),
       );
-      final ticket = await Ticket.create(PaperSize.mm80);
+      final ticket = await Ticket.create(trustedPrinter.paperWidth.paperSize);
       for (final line in shopReceiptTextLines(receipt, myanmar: myanmar)) {
         await ticket.textRaster(line);
       }
-      ticket.separator();
-      ticket.cut();
+      _finishReceipt(ticket, trustedPrinter.paperWidth);
       await manager.printTicket(ticket);
     } finally {
       await manager.dispose();
@@ -145,13 +205,10 @@ class ReceiptReprintService {
     ReceiptPrinterSettings? settings,
     ReceiptPrintSender? send,
   }) : _settings = settings ?? ReceiptPrinterSettings(),
-       _send =
-           send ??
-           ((host, receipt, myanmar) =>
-               ShopReceiptPrinter().printSale(host, receipt, myanmar: myanmar));
+       _send = send;
 
   final ReceiptPrinterSettings _settings;
-  final ReceiptPrintSender _send;
+  final ReceiptPrintSender? _send;
 
   /// Returns false when setup/retest is required; it never sends to a saved,
   /// unverified host. A true result means the print request was sent, not that
@@ -162,7 +219,12 @@ class ReceiptReprintService {
   }) async {
     final host = await _settings.readHost();
     if (host == null) return false;
-    await _send(host, receipt, myanmar);
+    if (_send case final send?) {
+      await send(host, receipt, myanmar);
+    } else {
+      await ShopReceiptPrinter(settings: _settings)
+          .printSale(host, receipt, myanmar: myanmar);
+    }
     return true;
   }
 }
@@ -365,7 +427,10 @@ class PrinterDiscoveryService {
     );
   }
 
-  Future<void> sendTestReceipt(NetworkPrinterCandidate printer) async {
+  Future<void> sendTestReceipt(
+    NetworkPrinterCandidate printer, {
+    ReceiptPaperWidth paperWidth = ReceiptPaperWidth.mm80,
+  }) async {
     if (!Ipv4Subnet.isPrivateAddress(printer.host) || printer.port != 9100) {
       throw const FormatException('Select a printer found on this Wi-Fi.');
     }
@@ -398,12 +463,11 @@ class PrinterDiscoveryService {
         ),
         timeout: const Duration(seconds: 5),
       );
-      final ticket = await Ticket.create(PaperSize.mm80);
+      final ticket = await Ticket.create(paperWidth.paperSize);
       await ticket.textRaster('SuperMega Shop');
       await ticket.textRaster('Printer test');
       await ticket.textRaster('ပရင်တာ စမ်းသပ်မှု');
-      ticket.separator();
-      ticket.cut();
+      _finishReceipt(ticket, paperWidth);
       await manager.printTicket(ticket);
       await manager.disconnect();
     } finally {
@@ -416,6 +480,15 @@ class PrinterDiscoveryService {
     if (current.ip != expected.ip || current.mask != expected.mask) {
       throw const PrinterNetworkChanged();
     }
+  }
+}
+
+void _finishReceipt(Ticket ticket, ReceiptPaperWidth paperWidth) {
+  ticket.separator();
+  if (paperWidth.sendCutCommand) {
+    ticket.cut();
+  } else {
+    ticket.feed(3);
   }
 }
 

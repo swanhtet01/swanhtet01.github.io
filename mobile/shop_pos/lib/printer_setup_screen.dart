@@ -14,10 +14,13 @@ class PrinterSetupScreen extends StatefulWidget {
 class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
   final _service = PrinterDiscoveryService();
   final _settings = ReceiptPrinterSettings();
+  bool _loadingSettings = true;
   bool _busy = false;
   bool _cancelled = false;
   String? _message;
   String? _testedHost;
+  ReceiptPaperWidth? _testedWidth;
+  ReceiptPaperWidth _paperWidth = ReceiptPaperWidth.mm80;
   String? _savedHost;
   String? _previousHost;
   List<NetworkPrinterCandidate> _printers = [];
@@ -34,24 +37,29 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
     try {
       final previous = await _settings.readSavedHost();
       final active = await _settings.readHost();
+      final paperWidth = await _settings.readPaperWidth();
       if (mounted) {
         setState(() {
           _previousHost = previous;
           _savedHost = active;
+          _paperWidth = paperWidth;
         });
       }
     } catch (_) {
       // Printer discovery remains available if the local preference is unreadable.
+    } finally {
+      if (mounted) setState(() => _loadingSettings = false);
     }
   }
 
   Future<void> _findPrinters() async {
-    if (_busy) return;
+    if (_busy || _loadingSettings) return;
     setState(() {
       _busy = true;
       _cancelled = false;
       _message = null;
       _testedHost = null;
+      _testedWidth = null;
       _printers = [];
     });
     try {
@@ -117,16 +125,18 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
   }
 
   Future<void> _sendTest(NetworkPrinterCandidate printer) async {
-    if (_busy) return;
+    if (_busy || _loadingSettings) return;
+    final paperWidth = _paperWidth;
     setState(() {
       _busy = true;
       _message = null;
     });
     try {
-      await _service.sendTestReceipt(printer);
+      await _service.sendTestReceipt(printer, paperWidth: paperWidth);
       if (mounted) {
         setState(() {
           _testedHost = printer.host;
+          _testedWidth = paperWidth;
           _message = shopCopy(
             widget.myanmar,
             'Test sent to ${printer.host}. Check the paper, then choose Use for receipts.',
@@ -150,19 +160,25 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
   }
 
   Future<void> _useForReceipts(NetworkPrinterCandidate printer) async {
-    if (_busy || _testedHost != printer.host) return;
+    if (_busy ||
+        _loadingSettings ||
+        _testedHost != printer.host ||
+        _testedWidth != _paperWidth) {
+      return;
+    }
     setState(() {
       _busy = true;
       _message = null;
     });
     try {
       final range = await _service.currentWifiRange();
-      if (!Ipv4Subnet.fromAddress(range.ip, range.mask).hosts.contains(
-        printer.host,
-      )) {
+      if (!Ipv4Subnet.fromAddress(
+        range.ip,
+        range.mask,
+      ).hosts.contains(printer.host)) {
         throw const PrinterNetworkChanged();
       }
-      await _settings.saveAfterTest(printer);
+      await _settings.saveAfterTest(printer, paperWidth: _paperWidth);
       if (mounted) {
         setState(() {
           _savedHost = printer.host;
@@ -232,8 +248,44 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
                     ),
                   ),
                   const SizedBox(height: 14),
+                  Text(
+                    shopCopy(myanmar, 'Receipt paper', 'ပြေစာစက္ကူအကျယ်'),
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  SegmentedButton<ReceiptPaperWidth>(
+                    segments: const [
+                      ButtonSegment(
+                        value: ReceiptPaperWidth.mm58,
+                        label: Text('58 mm'),
+                      ),
+                      ButtonSegment(
+                        value: ReceiptPaperWidth.mm80,
+                        label: Text('80 mm'),
+                      ),
+                    ],
+                    selected: {_paperWidth},
+                    onSelectionChanged: _busy || _loadingSettings
+                        ? null
+                        : (selected) {
+                            if (selected.first == _paperWidth) return;
+                            _settings.requireRetest();
+                            setState(() {
+                              _paperWidth = selected.first;
+                              _testedHost = null;
+                              _testedWidth = null;
+                              _savedHost = null;
+                              _message = shopCopy(
+                                myanmar,
+                                'Paper width changed. Test the printer again before printing a sale.',
+                                'စက္ကူအကျယ်ပြောင်းပြီးပါပြီ။ အရောင်းပြေစာမထုတ်မီ ပရင်တာကို ပြန်စမ်းပါ။',
+                              );
+                            });
+                          },
+                  ),
+                  const SizedBox(height: 14),
                   FilledButton.icon(
-                    onPressed: _busy ? null : _findPrinters,
+                    onPressed: _busy || _loadingSettings ? null : _findPrinters,
                     icon: const Icon(Icons.wifi_find),
                     label: Text(
                       shopCopy(myanmar, 'Find printers', 'ပရင်တာရှာရန်'),
