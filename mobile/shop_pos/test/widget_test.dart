@@ -313,7 +313,12 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(tester.takeException(), isNull, reason: 'initial compact catalog');
+    final initialLayoutError = tester.takeException();
+    if (initialLayoutError != null) {
+      // Keep the render diagnostics in CI rather than only the matcher summary.
+      debugPrint(initialLayoutError.toString());
+    }
+    expect(initialLayoutError, isNull, reason: 'initial compact catalog');
     await tester.tap(find.byTooltip('အရောင်းထဲထည့်ရန်'));
     await tester.pumpAndSettle();
     expect(
