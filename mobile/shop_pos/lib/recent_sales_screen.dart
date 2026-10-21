@@ -184,7 +184,9 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
                             padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
                             itemCount: sales.length,
                             separatorBuilder: (_, _) =>
-                                const Divider(height: 1),
+                                MediaQuery.sizeOf(context).width < 480
+                                    ? const SizedBox(height: 10)
+                                    : const Divider(height: 1),
                             itemBuilder: (context, index) {
                               final sale = sales[index];
                               final firstItem = sale.lines.isEmpty
@@ -194,61 +196,84 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
                                   ? ' +${sale.lines.length - 1}'
                                   : '';
                               if (MediaQuery.sizeOf(context).width < 480) {
-                                return InkWell(
-                                  onTap: () => _showSale(sale),
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 12,
-                                    ),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          '$firstItem$more',
-                                          maxLines: 3,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .titleMedium
-                                              ?.copyWith(
-                                                fontWeight: FontWeight.w600,
+                                return Card(
+                                  child: InkWell(
+                                    borderRadius: BorderRadius.circular(16),
+                                    onTap: () => _showSale(sale),
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(14),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
+                                            children: [
+                                              Icon(
+                                                Icons.receipt_long_outlined,
+                                                size: 20,
+                                                color: Theme.of(context)
+                                                    .colorScheme
+                                                    .primary,
                                               ),
-                                        ),
-                                        const SizedBox(height: 6),
-                                        Text(
-                                          shopMmk(
-                                            sale.totalMmk,
-                                            myanmar: widget.myanmar,
+                                              const SizedBox(width: 10),
+                                              Expanded(
+                                                child: Text(
+                                                  '$firstItem$more',
+                                                  maxLines: 2,
+                                                  overflow: TextOverflow.ellipsis,
+                                                  style: Theme.of(context)
+                                                      .textTheme
+                                                      .bodyMedium
+                                                      ?.copyWith(
+                                                        fontWeight:
+                                                            FontWeight.w600,
+                                                      ),
+                                                ),
+                                              ),
+                                              const SizedBox(width: 8),
+                                              const Icon(Icons.chevron_right, size: 20),
+                                            ],
                                           ),
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .titleMedium
-                                              ?.copyWith(
-                                                fontWeight: FontWeight.w700,
-                                                fontFeatures: const [
-                                                  FontFeature.tabularFigures(),
-                                                ],
-                                              ),
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Wrap(
-                                          spacing: 8,
-                                          runSpacing: 2,
-                                          children: [
-                                            Text(
-                                              _whenCompact(
-                                                context,
-                                                sale.createdAtMillis,
-                                              ),
+                                          const SizedBox(height: 8),
+                                          Text(
+                                            shopMmk(
+                                              sale.totalMmk,
+                                              myanmar: widget.myanmar,
                                             ),
-                                            Text(
-                                              _paymentName(sale.paymentMethod),
-                                            ),
-                                          ],
-                                        ),
-                                      ],
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .titleMedium
+                                                ?.copyWith(
+                                                  fontWeight: FontWeight.w700,
+                                                  fontFeatures: const [
+                                                    FontFeature.tabularFigures(),
+                                                  ],
+                                                ),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Wrap(
+                                            spacing: 8,
+                                            runSpacing: 2,
+                                            children: [
+                                              Text(
+                                                _whenCompact(
+                                                  context,
+                                                  sale.createdAtMillis,
+                                                ),
+                                                style: Theme.of(context)
+                                                    .textTheme
+                                                    .bodySmall,
+                                              ),
+                                              Text(
+                                                _paymentName(sale.paymentMethod),
+                                                style: Theme.of(context)
+                                                    .textTheme
+                                                    .bodySmall,
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
                                     ),
                                   ),
                                 );
