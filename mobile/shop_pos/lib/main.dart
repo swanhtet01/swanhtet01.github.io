@@ -205,37 +205,37 @@ class _ShopAppState extends State<ShopApp> {
         textTheme:
             TextTheme(
               headlineMedium: TextStyle(
-                fontSize: 34,
+                fontSize: _myanmar ? 30 : 34,
                 fontWeight: FontWeight.w700,
                 height: _myanmar ? 1.4 : 1.15,
                 letterSpacing: tracking,
               ),
               headlineSmall: TextStyle(
-                fontSize: 28,
+                fontSize: _myanmar ? 26 : 28,
                 fontWeight: FontWeight.w700,
                 height: _myanmar ? 1.4 : 1.2,
                 letterSpacing: tracking,
               ),
               titleLarge: TextStyle(
-                fontSize: 21,
+                fontSize: _myanmar ? 20 : 21,
                 fontWeight: FontWeight.w700,
                 height: _myanmar ? 1.45 : 1.25,
                 letterSpacing: tracking,
               ),
               titleMedium: TextStyle(
-                fontSize: 16,
+                fontSize: 17,
                 fontWeight: FontWeight.w600,
                 height: _myanmar ? 1.5 : 1.35,
                 letterSpacing: _myanmar ? 0 : -0.1,
               ),
               bodyLarge: TextStyle(fontSize: 16, height: _myanmar ? 1.6 : 1.45),
               bodyMedium: TextStyle(
-                fontSize: 14,
+                fontSize: 15,
                 height: _myanmar ? 1.6 : 1.45,
               ),
-              bodySmall: TextStyle(fontSize: 13, height: _myanmar ? 1.65 : 1.5),
+              bodySmall: TextStyle(fontSize: 14, height: _myanmar ? 1.65 : 1.5),
               labelLarge: TextStyle(
-                fontSize: 14,
+                fontSize: 15,
                 fontWeight: FontWeight.w600,
                 height: _myanmar ? 1.5 : 1.25,
               ),
@@ -253,7 +253,7 @@ class _ShopAppState extends State<ShopApp> {
           scrolledUnderElevation: 0,
           titleTextStyle: TextStyle(
             fontFamily: fontFamily,
-            fontSize: 20,
+            fontSize: _myanmar ? 18 : 20,
             fontWeight: FontWeight.w700,
             letterSpacing: tracking,
             height: _myanmar ? 1.45 : 1.2,
@@ -277,14 +277,14 @@ class _ShopAppState extends State<ShopApp> {
         navigationRailTheme: NavigationRailThemeData(
           selectedLabelTextStyle: TextStyle(
             fontFamily: fontFamily,
-            fontSize: 13,
+            fontSize: 14,
             fontWeight: FontWeight.w700,
             height: _myanmar ? 1.45 : 1.25,
             color: accent,
           ),
           unselectedLabelTextStyle: TextStyle(
             fontFamily: fontFamily,
-            fontSize: 13,
+            fontSize: 14,
             fontWeight: FontWeight.w600,
             height: _myanmar ? 1.45 : 1.25,
             color: ink.withValues(alpha: 0.76),
@@ -657,6 +657,9 @@ class _ShopHomeState extends State<ShopHome> {
     final inWorkspace = widget.onToday != null;
     final showRail = inWorkspace && width >= 700;
     final contentWidth = width - (showRail ? (width >= 1100 ? 191 : 77) : 0);
+    // A portrait tablet can still fit two usable panes beside the compact rail.
+    // Keep narrower layouts on the single-column review-sheet path.
+    const minSplitContentWidth = 740.0;
     final cartAction = SafeArea(
       top: false,
       minimum: const EdgeInsets.fromLTRB(12, 8, 12, 10),
@@ -783,8 +786,11 @@ class _ShopHomeState extends State<ShopHome> {
                 stream: _productsStream,
                 builder: (context, snapshot) {
                   final products = snapshot.data ?? const <ShopProduct>[];
-                  if (contentWidth >= 820) {
+                  if (contentWidth >= minSplitContentWidth) {
                     final tablet = contentWidth < 1080;
+                    final cartWidth = contentWidth < 820
+                        ? 300.0
+                        : (contentWidth * 0.36).clamp(340.0, 500.0);
                     return Padding(
                       padding: EdgeInsets.all(tablet ? 12 : 20),
                       child: Row(
@@ -802,14 +808,20 @@ class _ShopHomeState extends State<ShopHome> {
                                   _pendingWalletCheckoutCard(),
                                 ],
                                 const SizedBox(height: 14),
-                                Expanded(child: _catalog(products)),
+                                Expanded(
+                                  child: SizedBox(
+                                    key: const ValueKey('shop-split-catalog'),
+                                    child: _catalog(products),
+                                  ),
+                                ),
                               ],
                             ),
                           ),
                           if (products.isNotEmpty) ...[
                             SizedBox(width: tablet ? 12 : 18),
                             SizedBox(
-                              width: (contentWidth * 0.36).clamp(340.0, 500.0),
+                              key: const ValueKey('shop-split-basket'),
+                              width: cartWidth,
                               child: _cartPanel(products),
                             ),
                           ],
@@ -865,7 +877,7 @@ class _ShopHomeState extends State<ShopHome> {
                 ),
               ],
             )
-          : contentWidth >= 820 || _cart.isEmpty
+          : contentWidth >= minSplitContentWidth || _cart.isEmpty
           ? null
           : cartAction,
     );
@@ -1000,10 +1012,10 @@ class _ShopHomeState extends State<ShopHome> {
         onPressed: _openMenuImport,
         icon: const Icon(Icons.document_scanner_outlined),
       );
-      final addButton = FilledButton.icon(
+      final addButton = OutlinedButton.icon(
         onPressed: _showAddProduct,
         icon: const Icon(Icons.add),
-        label: Text(shopCopy(widget.myanmar, 'Add item', 'ပစ္စည်းထည့်ရန်')),
+        label: Text(shopCopy(widget.myanmar, 'New product', 'ကုန်ပစ္စည်းအသစ်')),
       );
       if (constraints.maxWidth < 420) {
         return Column(
@@ -1100,7 +1112,10 @@ class _ShopHomeState extends State<ShopHome> {
   );
 
   Widget _productList(List<ShopProduct> products) {
-    final compactProductRow = MediaQuery.sizeOf(context).width < 700;
+    final viewportWidth = MediaQuery.sizeOf(context).width;
+    // Prices move below names on portrait tablets so the narrower catalog
+    // pane retains a readable, full-row add target.
+    final compactProductRow = viewportWidth < 900;
     final text = _search.text.trim().toLowerCase();
     final visible = products
         .where(

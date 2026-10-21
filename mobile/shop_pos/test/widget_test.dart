@@ -23,6 +23,13 @@ Finder _merchantQrSemantics(String provider) => find.byWidgetPredicate(
   description: '$provider merchant QR semantic image',
 );
 
+void _usePhoneViewport(WidgetTester tester) {
+  tester.view.physicalSize = const Size(390, 800);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
+}
+
 void main() {
   testWidgets('Today stays readable and opens Counter in both languages', (
     tester,
@@ -207,7 +214,7 @@ void main() {
     expect(find.text('Sales today'), findsOneWidget);
     expect(find.text('2,500 MMK'), findsWidgets);
     expect(find.text('Completed sales'), findsOneWidget);
-    expect(find.text('5 or fewer left'), findsOneWidget);
+    expect(find.text('Low-stock products'), findsOneWidget);
     expect(find.text('Tea · 5'), findsOneWidget);
     expect(find.text('Mobile payment to review'), findsOneWidget);
     expect(find.text('Check stock'), findsOneWidget);
@@ -537,6 +544,7 @@ void main() {
   });
 
   testWidgets('empty catalog can make a durable cash sale', (tester) async {
+    _usePhoneViewport(tester);
     final database = ShopDatabase(NativeDatabase.memory());
     addTearDown(database.close);
     await tester.pumpWidget(
@@ -696,13 +704,13 @@ void main() {
     }
   });
 
-  testWidgets('normal tablet entry reaches sale and review at both layouts', (
+  testWidgets('portrait tablet keeps basket visible beside catalog', (
     tester,
   ) async {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     tester.view.devicePixelRatio = 1;
-    for (final width in [820.0, 1024.0]) {
+    for (final width in [800.0, 820.0, 1024.0]) {
       for (final myanmar in [false, true]) {
         tester.view.physicalSize = Size(width, 800);
         final database = ShopDatabase(NativeDatabase.memory());
@@ -723,15 +731,33 @@ void main() {
         await tester.pumpAndSettle();
         await tester.tap(find.text(myanmar ? 'ရောင်းရန်' : 'Sell'));
         await tester.pumpAndSettle();
+        if (width == 820) {
+          final catalog = find.byKey(const ValueKey('shop-split-catalog'));
+          final basket = find.byKey(const ValueKey('shop-split-basket'));
+          expect(catalog, findsOneWidget);
+          expect(basket, findsOneWidget);
+          final catalogRect = tester.getRect(catalog);
+          final basketRect = tester.getRect(basket);
+          // The Burmese rail can grow for longer labels while the catalog
+          // still has a phone-width, touch-safe pane beside the basket.
+          expect(catalogRect.width, greaterThanOrEqualTo(320));
+          expect(basketRect.width, greaterThanOrEqualTo(300));
+          expect(catalogRect.right, lessThan(basketRect.left));
+        }
         await tester.tap(
           find.byTooltip(myanmar ? 'အရောင်းထဲထည့်ရန်' : 'Add to sale'),
         );
         await tester.pumpAndSettle();
-        if (width == 820) {
+        if (width == 800) {
           await tester.tap(
             find.textContaining(myanmar ? 'အရောင်းစစ်ရန်' : 'Review sale'),
           );
           await tester.pumpAndSettle();
+        } else if (width == 820) {
+          expect(
+            find.textContaining(myanmar ? 'အရောင်းစစ်ရန်' : 'Review sale'),
+            findsNothing,
+          );
         }
         expect(find.text(myanmar ? 'ငွေသား' : 'Cash sale'), findsOneWidget);
         expect(tester.takeException(), isNull);
@@ -818,6 +844,7 @@ void main() {
   testWidgets('Burmese cash review stays uncommitted until confirmed', (
     tester,
   ) async {
+    _usePhoneViewport(tester);
     final database = ShopDatabase(NativeDatabase.memory());
     await database.addProduct(
       id: 'tea',
@@ -895,6 +922,7 @@ void main() {
   testWidgets('cart sheet refreshes a changed product price before cash', (
     tester,
   ) async {
+    _usePhoneViewport(tester);
     final database = ShopDatabase(NativeDatabase.memory());
     await database.addProduct(
       id: 'tea',
@@ -937,6 +965,7 @@ void main() {
   testWidgets('rapid cash taps open one confirmation and record one sale', (
     tester,
   ) async {
+    _usePhoneViewport(tester);
     final database = ShopDatabase(NativeDatabase.memory());
     await database.addProduct(
       id: 'tea',
@@ -973,6 +1002,7 @@ void main() {
   testWidgets('unknown barcode creates a product that the next scan adds', (
     tester,
   ) async {
+    _usePhoneViewport(tester);
     final database = ShopDatabase(NativeDatabase.memory());
     await database.addProduct(
       id: 'tea',
@@ -1092,6 +1122,7 @@ void main() {
   testWidgets('scanner resolves one exact code and keeps active search ready', (
     tester,
   ) async {
+    _usePhoneViewport(tester);
     final database = ShopDatabase(NativeDatabase.memory());
     try {
       await database.addProduct(
@@ -1358,6 +1389,7 @@ void main() {
   testWidgets(
     'wallet QR checkout writes only after the cashier verifies payment',
     (tester) async {
+      _usePhoneViewport(tester);
       final database = ShopDatabase(NativeDatabase.memory());
       await database.addProduct(
         id: 'tea',

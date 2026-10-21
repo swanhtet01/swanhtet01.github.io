@@ -69,6 +69,7 @@ void main() {
     (820.0, 1000.0, 'en'),
     (1200.0, 900.0, 'en'),
     (390.0, 844.0, 'my'),
+    (820.0, 1000.0, 'my'),
     (320.0, 800.0, 'my'),
   ]) {
     testWidgets(
@@ -141,7 +142,11 @@ void main() {
           await tester.ensureVisible(product);
           await tester.tap(product);
           await tester.pumpAndSettle();
-          if (width < 897) {
+          final hasPersistentBasket = find
+              .byKey(const ValueKey('shop-split-basket'))
+              .evaluate()
+              .isNotEmpty;
+          if (!hasPersistentBasket) {
             await tester.tap(find.byIcon(Icons.shopping_basket_outlined).first);
             await tester.pumpAndSettle();
           }
