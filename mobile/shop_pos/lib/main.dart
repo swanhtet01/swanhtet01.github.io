@@ -1435,6 +1435,12 @@ class _ShopHomeState extends State<ShopHome> {
     ),
   );
 
+  void _openPrinter() => Navigator.of(context).push<void>(
+    MaterialPageRoute<void>(
+      builder: (_) => PrinterSetupScreen(myanmar: widget.myanmar),
+    ),
+  );
+
   void _openRecentSales() => Navigator.of(context).push<void>(
     MaterialPageRoute<void>(
       builder: (_) =>
