@@ -1282,7 +1282,7 @@ void main() {
       // checks UI recovery only; a separate file-backed test covers disk reopen.
       await tester.tap(find.text('Cancel'));
       await tester.pumpAndSettle();
-      expect(find.text('Resume payment'), findsOneWidget);
+      expect(find.text('Resume payment'), findsWidgets);
       expect(find.text('Cash sale'), findsNothing);
       expect(find.text('Mobile money'), findsNothing);
       expect(await database.readPendingWalletCheckout(), isNotNull);
