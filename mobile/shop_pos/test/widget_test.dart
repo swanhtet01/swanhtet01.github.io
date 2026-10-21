@@ -23,6 +23,13 @@ Finder _merchantQrSemantics(String provider) => find.byWidgetPredicate(
   description: '$provider merchant QR semantic image',
 );
 
+void _usePhoneViewport(WidgetTester tester) {
+  tester.view.physicalSize = const Size(390, 800);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
+}
+
 void main() {
   testWidgets('Today stays readable and opens Counter in both languages', (
     tester,
@@ -537,6 +544,7 @@ void main() {
   });
 
   testWidgets('empty catalog can make a durable cash sale', (tester) async {
+    _usePhoneViewport(tester);
     final database = ShopDatabase(NativeDatabase.memory());
     addTearDown(database.close);
     await tester.pumpWidget(
@@ -911,6 +919,7 @@ void main() {
   testWidgets('cart sheet refreshes a changed product price before cash', (
     tester,
   ) async {
+    _usePhoneViewport(tester);
     final database = ShopDatabase(NativeDatabase.memory());
     await database.addProduct(
       id: 'tea',
@@ -953,6 +962,7 @@ void main() {
   testWidgets('rapid cash taps open one confirmation and record one sale', (
     tester,
   ) async {
+    _usePhoneViewport(tester);
     final database = ShopDatabase(NativeDatabase.memory());
     await database.addProduct(
       id: 'tea',
@@ -989,6 +999,7 @@ void main() {
   testWidgets('unknown barcode creates a product that the next scan adds', (
     tester,
   ) async {
+    _usePhoneViewport(tester);
     final database = ShopDatabase(NativeDatabase.memory());
     await database.addProduct(
       id: 'tea',
@@ -1108,6 +1119,7 @@ void main() {
   testWidgets('scanner resolves one exact code and keeps active search ready', (
     tester,
   ) async {
+    _usePhoneViewport(tester);
     final database = ShopDatabase(NativeDatabase.memory());
     try {
       await database.addProduct(
@@ -1374,6 +1386,7 @@ void main() {
   testWidgets(
     'wallet QR checkout writes only after the cashier verifies payment',
     (tester) async {
+      _usePhoneViewport(tester);
       final database = ShopDatabase(NativeDatabase.memory());
       await database.addProduct(
         id: 'tea',
