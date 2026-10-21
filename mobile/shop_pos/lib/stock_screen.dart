@@ -58,13 +58,17 @@ class _StockScreenState extends State<StockScreen> {
     super.dispose();
   }
 
-  Future<void> _changeStock(ShopProduct product) async {
+  Future<void> _changeStock(
+    ShopProduct product, {
+    required bool showReference,
+  }) async {
     final result = await showDialog<int>(
       context: context,
       builder: (_) => _StockChangeDialog(
         database: widget.database,
         product: product,
         myanmar: widget.myanmar,
+        showReference: showReference,
       ),
     );
     if (!mounted || result == null) return;
@@ -113,6 +117,12 @@ class _StockScreenState extends State<StockScreen> {
                     (item.barcode?.toLowerCase().contains(query) ?? false),
               )
               .toList();
+          final seenNames = <String>{};
+          final duplicateNames = <String>{};
+          for (final product in snapshot.data!) {
+            final name = product.name.trim().toLowerCase();
+            if (!seenNames.add(name)) duplicateNames.add(name);
+          }
           return Center(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 900),
@@ -128,8 +138,8 @@ class _StockScreenState extends State<StockScreen> {
                         prefixIcon: const Icon(Icons.search),
                         hintText: shopCopy(
                           widget.myanmar,
-                          'Find a product or scan barcode',
-                          'ကုန်ပစ္စည်းရှာရန် သို့မဟုတ် ဘားကုဒ်ဖတ်ရန်',
+                          'Search name or barcode',
+                          'ကုန်ပစ္စည်း / ဘားကုဒ်',
                         ),
                       ),
                     ),
@@ -155,73 +165,104 @@ class _StockScreenState extends State<StockScreen> {
                                   const SizedBox(height: 8),
                               itemBuilder: (context, index) {
                                 final item = products[index];
+                                final hasCode =
+                                    (item.sku?.trim().isNotEmpty ?? false) ||
+                                    (item.barcode?.trim().isNotEmpty ?? false);
+                                final showReference =
+                                    hasCode ||
+                                    duplicateNames.contains(
+                                      item.name.trim().toLowerCase(),
+                                    );
+                                final compact =
+                                    MediaQuery.sizeOf(context).width < 480;
+                                final details = Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      item.name,
+                                      maxLines: compact ? 3 : 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodyMedium
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                    ),
+                                    if (showReference)
+                                      Text(
+                                        _stockProductReference(
+                                          item,
+                                          widget.myanmar,
+                                        ),
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodySmall
+                                            ?.copyWith(
+                                              color: Theme.of(context)
+                                                  .colorScheme
+                                                  .onSurfaceVariant,
+                                            ),
+                                      ),
+                                  ],
+                                );
+                                final onHand = Text(
+                                  shopCopy(
+                                    widget.myanmar,
+                                    '${item.onHand} in stock',
+                                    '${item.onHand} ခု လက်ကျန်',
+                                  ),
+                                );
+                                final update = OutlinedButton(
+                                  key: ValueKey('stock-update-${item.id}'),
+                                  onPressed: () => _changeStock(
+                                    item,
+                                    showReference: showReference,
+                                  ),
+                                  child: Text(
+                                    shopCopy(
+                                      widget.myanmar,
+                                      'Update',
+                                      'ပြင်ရန်',
+                                    ),
+                                  ),
+                                );
                                 return Card(
                                   child: Padding(
                                     padding: const EdgeInsets.symmetric(
                                       horizontal: 12,
                                       vertical: 8,
                                     ),
-                                    child: Row(
-                                      children: [
-                                        Expanded(
-                                          child: Column(
+                                    child: compact
+                                        ? Column(
                                             crossAxisAlignment:
-                                                CrossAxisAlignment.start,
+                                                CrossAxisAlignment.stretch,
                                             children: [
-                                              Text(
-                                                item.name,
-                                                maxLines: 2,
-                                                overflow: TextOverflow.ellipsis,
-                                                style: Theme.of(context)
-                                                    .textTheme
-                                                    .bodyMedium
-                                                    ?.copyWith(
-                                                      fontWeight:
-                                                          FontWeight.w600,
-                                                    ),
-                                              ),
-                                              Text(
-                                                _stockProductReference(
-                                                  item,
-                                                  widget.myanmar,
-                                                ),
-                                                maxLines: 2,
-                                                overflow: TextOverflow.ellipsis,
-                                                style: Theme.of(context)
-                                                    .textTheme
-                                                    .bodySmall
-                                                    ?.copyWith(
-                                                      color: Theme.of(context)
-                                                          .colorScheme
-                                                          .onSurfaceVariant,
-                                                    ),
-                                              ),
-                                              Text(
-                                                shopCopy(
-                                                  widget.myanmar,
-                                                  '${item.onHand} in stock',
-                                                  '${item.onHand} ခု လက်ကျန်',
-                                                ),
+                                              details,
+                                              const SizedBox(height: 8),
+                                              Row(
+                                                children: [
+                                                  Expanded(child: onHand),
+                                                  update,
+                                                ],
                                               ),
                                             ],
+                                          )
+                                        : Row(
+                                            children: [
+                                              Expanded(
+                                                child: Column(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
+                                                  children: [details, onHand],
+                                                ),
+                                              ),
+                                              const SizedBox(width: 8),
+                                              update,
+                                            ],
                                           ),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        OutlinedButton(
-                                          key: ValueKey(
-                                            'stock-update-${item.id}',
-                                          ),
-                                          onPressed: () => _changeStock(item),
-                                          child: Text(
-                                            shopCopy(
-                                              widget.myanmar,
-                                              'Update',
-                                              'ပြင်ရန်',
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
                                   ),
                                 );
                               },
@@ -243,11 +284,13 @@ class _StockChangeDialog extends StatefulWidget {
     required this.database,
     required this.product,
     required this.myanmar,
+    required this.showReference,
   });
 
   final ShopDatabase database;
   final ShopProduct product;
   final bool myanmar;
+  final bool showReference;
 
   @override
   State<_StockChangeDialog> createState() => _StockChangeDialogState();
@@ -313,8 +356,10 @@ class _StockChangeDialogState extends State<_StockChangeDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(_stockProductReference(widget.product, widget.myanmar)),
-            const SizedBox(height: 8),
+            if (widget.showReference) ...[
+              Text(_stockProductReference(widget.product, widget.myanmar)),
+              const SizedBox(height: 8),
+            ],
             Text(
               shopCopy(
                 widget.myanmar,

@@ -1058,9 +1058,11 @@ void main() {
     await tester.tap(find.text('Stock'));
     await tester.pumpAndSettle();
     expect(find.text('2 in stock'), findsOneWidget);
+    expect(find.text('Reference rice'), findsNothing);
 
     await tester.tap(find.byKey(const ValueKey('stock-update-rice')));
     await tester.pumpAndSettle();
+    expect(find.text('Reference rice'), findsNothing);
     await tester.enterText(
       find.byKey(const ValueKey('stock-change-quantity')),
       '4',

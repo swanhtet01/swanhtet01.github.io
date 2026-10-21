@@ -37,9 +37,7 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          shopCopy(widget.myanmar, 'Recent sales', 'မကြာသေးမီက အရောင်းများ'),
-        ),
+        title: Text(shopCopy(widget.myanmar, 'Recent sales', 'အရောင်းများ')),
         actions: [
           IconButton(
             tooltip: shopCopy(
@@ -114,9 +112,8 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
                       ),
                     ),
                     subtitle: Text(
-                      '${_when(context, sale.createdAtMillis)} · '
-                      '${_paymentName(sale.paymentMethod)} · '
-                      '${shopNumber(sale.lines.length, myanmar: widget.myanmar)} ${shopCopy(widget.myanmar, 'items', 'မျိုး')}',
+                      '${_when(context, sale.createdAtMillis)}\n'
+                      '${_paymentName(sale.paymentMethod)}',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),

@@ -2503,26 +2503,62 @@ class _SetupTile extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) => Card(
-    child: ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-      leading: CircleAvatar(
-        backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-        child: Icon(icon, color: Theme.of(context).colorScheme.primary),
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final compact =
+        MediaQuery.sizeOf(context).width < 480 ||
+        MediaQuery.textScalerOf(context).scale(1) > 1.2;
+    final leading = CircleAvatar(
+      backgroundColor: theme.colorScheme.primaryContainer,
+      child: Icon(icon, color: theme.colorScheme.primary),
+    );
+    final titleText = Text(title, style: theme.textTheme.titleMedium);
+    final subtitleText = Text(
+      subtitle,
+      style: theme.textTheme.bodyMedium?.copyWith(
+        color: theme.colorScheme.onSurfaceVariant,
       ),
-      title: Text(title, style: Theme.of(context).textTheme.titleMedium),
-      subtitle: Padding(
-        padding: const EdgeInsets.only(top: 4),
-        child: Text(
-          subtitle,
-          style: Theme.of(context).textTheme.bodyMedium
-              ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
-        ),
-      ),
-      trailing: const Icon(Icons.chevron_right),
-      onTap: onTap,
-    ),
-  );
+    );
+    return Card(
+      child: compact
+          ? InkWell(
+              onTap: onTap,
+              borderRadius: BorderRadius.circular(12),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        leading,
+                        const SizedBox(width: 12),
+                        Expanded(child: titleText),
+                        const Icon(Icons.chevron_right),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    subtitleText,
+                  ],
+                ),
+              ),
+            )
+          : ListTile(
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 18,
+                vertical: 10,
+              ),
+              leading: leading,
+              title: titleText,
+              subtitle: Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: subtitleText,
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: onTap,
+            ),
+    );
+  }
 }
 
 class ShopSettingsScreen extends StatefulWidget {
@@ -2547,90 +2583,99 @@ class _ShopSettingsScreenState extends State<ShopSettingsScreen> {
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: Text(shopCopy(_myanmar, 'Settings', 'ဆက်တင်များ'))),
-    body: ListView(
-      padding: const EdgeInsets.all(20),
-      children: [
-        Text(
-          shopCopy(_myanmar, 'Language', 'ဘာသာစကား'),
-          style: Theme.of(context).textTheme.titleLarge,
-        ),
-        const SizedBox(height: 12),
-        SegmentedButton<bool>(
-          segments: const [
-            ButtonSegment(value: false, label: Text('English')),
-            ButtonSegment(value: true, label: Text('မြန်မာ')),
+    body: Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 720),
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            Text(
+              shopCopy(_myanmar, 'Language', 'ဘာသာစကား'),
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 12),
+            SegmentedButton<bool>(
+              segments: const [
+                ButtonSegment(value: false, label: Text('English')),
+                ButtonSegment(value: true, label: Text('မြန်မာ')),
+              ],
+              selected: {_myanmar},
+              onSelectionChanged: (values) {
+                final selected = values.first;
+                setState(() => _myanmar = selected);
+                widget.onLanguageChanged(selected);
+              },
+            ),
+            const SizedBox(height: 20),
+            ListTile(
+              leading: const Icon(Icons.storage_outlined),
+              title: Text(shopCopy(_myanmar, 'On this device', 'ဤစက်တွင်')),
+              subtitle: Text(
+                shopCopy(
+                  _myanmar,
+                  'Saved here. Online backup is not active.',
+                  'ဤစက်တွင်သာ သိမ်းထားသည်။ အွန်လိုင်းအရန်ကူး မရှိသေးပါ။',
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            _SetupTile(
+              icon: Icons.print_outlined,
+              title: shopCopy(_myanmar, 'Receipt printer', 'ပြေစာပရင်တာ'),
+              subtitle: shopCopy(
+                _myanmar,
+                'Find and test a printer.',
+                'ပရင်တာကို ရှာပြီး စမ်းသပ်ပါ။',
+              ),
+              onTap: () => Navigator.of(context).push<void>(
+                MaterialPageRoute<void>(
+                  builder: (_) => PrinterSetupScreen(myanmar: _myanmar),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            _SetupTile(
+              icon: Icons.account_balance_wallet_outlined,
+              title: shopCopy(
+                _myanmar,
+                'Mobile money',
+                'မိုဘိုင်းငွေပေးချေမှု',
+              ),
+              subtitle: shopCopy(
+                _myanmar,
+                'Save provider-issued payment QR codes.',
+                'ငွေပေးချေမှု QR ကို သိမ်းပါ။',
+              ),
+              onTap: () => Navigator.of(context).push<void>(
+                MaterialPageRoute<void>(
+                  builder: (_) => WalletSetupScreen(
+                    database: widget.database,
+                    myanmar: _myanmar,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            _SetupTile(
+              icon: Icons.point_of_sale_outlined,
+              title: shopCopy(_myanmar, 'Cash shift', 'ငွေသားတာဝန်ချိန်'),
+              subtitle: shopCopy(
+                _myanmar,
+                'Count drawer cash and record any difference.',
+                'ငွေသားကို ရေတွက်ပြီး ကွာခြားချက် မှတ်ပါ။',
+              ),
+              onTap: () => Navigator.of(context).push<void>(
+                MaterialPageRoute<void>(
+                  builder: (_) => ShopCashShiftScreen(
+                    database: widget.database,
+                    myanmar: _myanmar,
+                  ),
+                ),
+              ),
+            ),
           ],
-          selected: {_myanmar},
-          onSelectionChanged: (values) {
-            final selected = values.first;
-            setState(() => _myanmar = selected);
-            widget.onLanguageChanged(selected);
-          },
         ),
-        const SizedBox(height: 20),
-        ListTile(
-          leading: const Icon(Icons.storage_outlined),
-          title: Text(shopCopy(_myanmar, 'Data on this device', 'ဤစက်ရှိဒေတာ')),
-          subtitle: Text(
-            shopCopy(
-              _myanmar,
-              'Sales and products are saved locally. Cloud sync and backup are not active.',
-              'အရောင်းနှင့် ကုန်ပစ္စည်းများကို ဤစက်တွင် သိမ်းထားသည်။ Cloud ချိတ်ဆက်မှုနှင့် အရန်သိမ်းမှု မဖွင့်ထားပါ။',
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        _SetupTile(
-          icon: Icons.print_outlined,
-          title: shopCopy(_myanmar, 'Receipt printer', 'ပြေစာပရင်တာ'),
-          subtitle: shopCopy(
-            _myanmar,
-            'Find and test a printer before printing receipts.',
-            'ပြေစာမပုံနှိပ်မီ ပရင်တာကို ရှာဖွေစမ်းသပ်ပါ။',
-          ),
-          onTap: () => Navigator.of(context).push<void>(
-            MaterialPageRoute<void>(
-              builder: (_) => PrinterSetupScreen(myanmar: _myanmar),
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        _SetupTile(
-          icon: Icons.account_balance_wallet_outlined,
-          title: shopCopy(_myanmar, 'Mobile money', 'မိုဘိုင်းငွေပေးချေမှု'),
-          subtitle: shopCopy(
-            _myanmar,
-            'Save merchant details and provider-issued QR codes.',
-            'ဆိုင်ရှင်အချက်အလက်နှင့် ငွေပေးချေမှုပေးသူထုတ်ပေးသော QR ကို သိမ်းပါ။',
-          ),
-          onTap: () => Navigator.of(context).push<void>(
-            MaterialPageRoute<void>(
-              builder: (_) => WalletSetupScreen(
-                database: widget.database,
-                myanmar: _myanmar,
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        _SetupTile(
-          icon: Icons.point_of_sale_outlined,
-          title: shopCopy(_myanmar, 'Cash shift', 'ငွေသားတာဝန်ချိန်'),
-          subtitle: shopCopy(
-            _myanmar,
-            'Count drawer cash and record any difference.',
-            'အံဆွဲငွေသားကို ရေတွက်ပြီး ကွာခြားချက် မှတ်တမ်းတင်ပါ။',
-          ),
-          onTap: () => Navigator.of(context).push<void>(
-            MaterialPageRoute<void>(
-              builder: (_) => ShopCashShiftScreen(
-                database: widget.database,
-                myanmar: _myanmar,
-              ),
-            ),
-          ),
-        ),
-      ],
+      ),
     ),
   );
 }
