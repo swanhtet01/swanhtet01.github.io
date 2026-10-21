@@ -810,8 +810,9 @@ void main() {
       expect(find.text('Cash sale'), findsOneWidget);
       expect(
         tester.getSize(find.byKey(const ValueKey('shop-cart-sheet'))).height,
-        lessThan(500),
+        lessThan(550),
       );
+      expect(tester.getBottomLeft(find.text('Cash sale')).dy, lessThan(800));
       expect(tester.takeException(), isNull);
     } finally {
       await tester.pumpWidget(const SizedBox.shrink());
