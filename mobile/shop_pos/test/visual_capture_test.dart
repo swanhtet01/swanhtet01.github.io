@@ -104,7 +104,9 @@ void main() {
             ),
           );
 
-          final product = find.text('MAMA Chicken Instant Noodles').first;
+          final product = find
+              .byTooltip(language == 'my' ? 'အရောင်းထဲထည့်ရန်' : 'Add to sale')
+              .first;
           await tester.ensureVisible(product);
           await tester.tap(product);
           await tester.pumpAndSettle();
