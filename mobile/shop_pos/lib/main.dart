@@ -2240,22 +2240,38 @@ class _ShopHomeState extends State<ShopHome> {
         stream: _productsStream,
         initialData: products,
         builder: (context, snapshot) => StatefulBuilder(
-          builder: (context, refresh) => SafeArea(
-            child: SizedBox(
-              height:
-                  MediaQuery.sizeOf(sheetContext).height *
-                  (MediaQuery.sizeOf(sheetContext).width < 520 ? .92 : .72),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-                child: _cartPanel(
-                  snapshot.data ?? const <ShopProduct>[],
-                  refresh: (callback) {
-                    if (sheetContext.mounted) refresh(callback);
-                  },
+          builder: (context, refresh) {
+            final size = MediaQuery.sizeOf(sheetContext);
+            final phone = size.width < 520;
+            final maxHeight = size.height * (phone ? .92 : .72);
+            final textScale = MediaQuery.textScalerOf(sheetContext)
+                .scale(1)
+                .clamp(1.0, 1.6);
+            // Keep a short sale near its content. Long baskets retain the
+            // available height and scroll inside the existing list.
+            final contentHeight =
+                (280 + 88 * _cart.length.clamp(0, 4) +
+                    (_pendingWalletCheckout == null ? 0 : 160)) *
+                textScale;
+            final height = phone
+                ? contentHeight.clamp(320.0, maxHeight).toDouble()
+                : maxHeight;
+            return SafeArea(
+              child: SizedBox(
+                key: const ValueKey('shop-cart-sheet'),
+                height: height,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+                  child: _cartPanel(
+                    snapshot.data ?? const <ShopProduct>[],
+                    refresh: (callback) {
+                      if (sheetContext.mounted) refresh(callback);
+                    },
+                  ),
                 ),
               ),
-            ),
-          ),
+            );
+          },
         ),
       ),
     );

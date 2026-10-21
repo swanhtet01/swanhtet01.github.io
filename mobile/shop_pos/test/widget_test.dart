@@ -768,6 +768,48 @@ void main() {
     }
   });
 
+  testWidgets('one-item phone basket does not fill the screen', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final database = ShopDatabase(NativeDatabase.memory());
+    await database.addProduct(
+      id: 'tea',
+      name: 'Tea',
+      priceMmk: 2500,
+      openingStock: 2,
+    );
+    try {
+      await tester.pumpWidget(
+        ShopApp(
+          initialCounter: true,
+          database: database,
+          authClient: null,
+          apiBaseUrl: 'https://app.supermega.dev',
+          initialMyanmar: false,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Add to sale'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('Review sale'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Current sale'), findsOneWidget);
+      expect(find.text('Cash sale'), findsOneWidget);
+      expect(
+        tester.getSize(find.byKey(const ValueKey('shop-cart-sheet'))).height,
+        lessThan(500),
+      );
+      expect(tester.takeException(), isNull);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+      await database.close();
+    }
+  });
+
   testWidgets('tablet landscape opens the basket beside the catalog', (
     tester,
   ) async {
