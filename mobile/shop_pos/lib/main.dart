@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -14,6 +15,7 @@ import 'menu_import_service.dart';
 import 'printer_setup_screen.dart';
 import 'printer_services.dart';
 import 'recent_sales_screen.dart';
+import 'shop_backup.dart';
 import 'shop_cash_shift_screen.dart';
 import 'shop_copy.dart';
 import 'shop_database.dart';
@@ -25,6 +27,33 @@ import 'wallet_setup_screen.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final preferences = await SharedPreferences.getInstance();
+  try {
+    await ShopBackup.cleanupInterruptedStaging(
+      await getApplicationDocumentsDirectory(),
+    );
+  } catch (_) {
+    final myanmar = preferences.getBool('shop_locale_myanmar') ?? false;
+    runApp(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Text(
+                shopCopy(
+                  myanmar,
+                  'Shop could not safely check local storage. Your records were not opened. Restart the app or contact support.',
+                  'စက်တွင်းသိမ်းဆည်းမှုကို လုံခြုံစွာ စစ်၍မရပါ။ သင့်မှတ်တမ်းများကို မဖွင့်ရသေးပါ။ အက်ပ်ကို ပြန်ဖွင့်ပါ သို့မဟုတ် အကူအညီတောင်းပါ။',
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    return;
+  }
   final supabaseUrl = const String.fromEnvironment('SUPABASE_URL');
   final publishableKey = const String.fromEnvironment(
     'SUPABASE_PUBLISHABLE_KEY',
@@ -159,6 +188,12 @@ class _ShopAppState extends State<ShopApp> {
         scaffoldBackgroundColor: const Color(0xfff7f8fc),
         textTheme:
             TextTheme(
+              headlineMedium: TextStyle(
+                fontSize: 34,
+                fontWeight: FontWeight.w700,
+                height: _myanmar ? 1.4 : 1.15,
+                letterSpacing: tracking,
+              ),
               headlineSmall: TextStyle(
                 fontSize: 28,
                 fontWeight: FontWeight.w700,

@@ -144,7 +144,7 @@ void main() {
       );
       await tester.tap(find.text('Today'));
       await tester.pumpAndSettle();
-      expect(find.text('2,500 MMK'), findsOneWidget);
+      expect(find.text('2,500 MMK'), findsWidgets);
       expect(find.text('Completed sales'), findsOneWidget);
       await tester.tap(find.text('Sell'));
       await tester.pumpAndSettle();
@@ -241,7 +241,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('၂,၅၀၀ ကျပ်'), findsOneWidget);
+    expect(find.text('၂,၅၀၀ ကျပ်'), findsWidgets);
     await tester.tap(find.text('ရောင်းရန်'));
     await tester.pumpAndSettle();
     expect(find.text('၂,၅၀၀ ကျပ်'), findsOneWidget);

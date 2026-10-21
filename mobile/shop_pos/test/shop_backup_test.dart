@@ -73,7 +73,7 @@ void main() {
         password: _password,
       );
       ShopBackup.verifySnapshot(target);
-      await _expectNoRestoreScratch(directory, target);
+      await _expectNoScratch(directory);
       final reopened = ShopDatabase(NativeDatabase(target));
       try {
         expect((await reopened.readActiveProducts()).single.onHand, 3);
@@ -165,24 +165,74 @@ void main() {
     expect(await sidecar.readAsString(), 'another database owns this');
   });
 
-  test('a restore in progress blocks another restore', () async {
+  test('concurrent cleanup fails fast and releases its lock', () async {
+    final lock = File('${directory.path}/.supermega-shop-backup.lock');
+    expect(await lock.exists(), isTrue);
+    final first = ShopBackup.cleanupInterruptedStaging(directory);
+    await expectLater(
+      ShopBackup.cleanupInterruptedStaging(directory),
+      throwsStateError,
+    );
+    await first;
+    await ShopBackup.cleanupInterruptedStaging(directory);
+    expect(await lock.exists(), isTrue);
+  });
+
+  test('stale legacy restore lock does not block a new restore', () async {
     final target = File('${directory.path}/busy.sqlite');
-    final lock = File('${target.path}.restore.lock');
-    await lock.writeAsString('another restore');
+    final oldLock = File('${target.path}.restore.lock');
+    await oldLock.writeAsString('interrupted old restore');
+    await ShopBackup.restoreIntoEmptyDatabase(
+      archive: archive,
+      target: target,
+      password: _password,
+    );
+    ShopBackup.verifySnapshot(target);
+    expect(await oldLock.readAsString(), 'interrupted old restore');
+    await _expectNoScratch(directory);
+  });
+
+  test('startup cleanup removes only recognized plaintext staging', () async {
+    final staleExport = await directory.createTemp('supermega-shop-backup-');
+    final staleRestore = await directory.createTemp('.supermega-shop-restore-');
+    final unrelated = await directory.createTemp('merchant-data-');
+    final exportPlaintext = File('${staleExport.path}/shop.sqlite');
+    final restorePlaintext = File('${staleRestore.path}/shop.sqlite');
+    final unrelatedFile = File('${unrelated.path}/keep.txt');
+    await exportPlaintext.writeAsString('private export');
+    await restorePlaintext.writeAsString('private restore');
+    await unrelatedFile.writeAsString('keep');
+
+    await ShopBackup.cleanupInterruptedStaging(directory);
+
+    expect(await staleExport.exists(), isFalse);
+    expect(await staleRestore.exists(), isFalse);
+    expect(await unrelatedFile.readAsString(), 'keep');
+    expect(await archive.exists(), isTrue);
+    await _expectNoScratch(directory);
+  });
+
+  test('cleanup refuses a staging symlink and preserves its target', () async {
+    final outside = await directory.createTemp('merchant-data-');
+    final keep = File('${outside.path}/keep.txt');
+    await keep.writeAsString('never delete');
+    final stagingLink = Link('${directory.path}/supermega-shop-backup-link');
+    try {
+      await stagingLink.create(outside.path);
+    } on FileSystemException {
+      // Creating symlinks requires a privilege on some Windows test runners.
+      return;
+    }
     try {
       await expectLater(
-        ShopBackup.restoreIntoEmptyDatabase(
-          archive: archive,
-          target: target,
-          password: _password,
-        ),
-        throwsA(isA<FileSystemException>()),
+        ShopBackup.cleanupInterruptedStaging(directory),
+        throwsStateError,
       );
-      expect(await target.exists(), isFalse);
-      expect(await lock.readAsString(), 'another restore');
+      expect(await keep.readAsString(), 'never delete');
     } finally {
-      await lock.delete();
+      await stagingLink.delete();
     }
+    await ShopBackup.cleanupInterruptedStaging(directory);
   });
 
   test(
@@ -208,7 +258,7 @@ void main() {
         throwsFormatException,
       );
       expect(await oldTarget.exists(), isFalse);
-      await _expectNoRestoreScratch(directory, oldTarget);
+      await _expectNoScratch(directory);
 
       final corrupt = Uint8List(512);
       corrupt.setRange(0, 16, ascii.encode('SQLite format 3\u0000'));
@@ -224,23 +274,21 @@ void main() {
         throwsA(isA<Exception>()),
       );
       expect(await corruptTarget.exists(), isFalse);
-      await _expectNoRestoreScratch(directory, corruptTarget);
+      await _expectNoScratch(directory);
     },
   );
 }
 
-Future<void> _expectNoRestoreScratch(Directory parent, File target) async {
-  final entries = await parent.list().toList();
+Future<void> _expectNoScratch(Directory parent) async {
+  final entries = await parent.list(followLinks: false).toList();
   expect(
-    entries.where(
-      (entry) => entry.path
-          .split(Platform.pathSeparator)
-          .last
-          .startsWith('.supermega-shop-restore-'),
-    ),
+    entries.where((entry) {
+      final name = entry.path.split(Platform.pathSeparator).last;
+      return name.startsWith('.supermega-shop-restore-') ||
+          name.startsWith('supermega-shop-backup-');
+    }),
     isEmpty,
   );
-  expect(await File('${target.path}.restore.lock').exists(), isFalse);
 }
 
 // A second encoder proves the restore path checks the decrypted database, not

@@ -12,8 +12,8 @@ import 'shop_database.dart';
 ///
 /// This is a storage primitive, not a cloud sync or backup UI. The SQLite
 /// snapshot is briefly plaintext in the caller-provided scratch directory,
-/// which must be app-private. A production export flow must clean leftovers
-/// from an interrupted process before it offers the archive to a merchant.
+/// which must be app-private. Call [cleanupInterruptedStaging] before opening
+/// the database so an interrupted export or restore cannot retain plaintext.
 abstract final class ShopBackup {
   static const formatVersion = 1;
   static const supportedSchemaVersion = 6;
@@ -34,6 +34,10 @@ abstract final class ShopBackup {
   };
 
   static final _cipher = AesGcm.with256bits();
+  static final Set<String> _activeRoots = <String>{};
+  static const _lockName = '.supermega-shop-backup.lock';
+  static const _exportPrefix = 'supermega-shop-backup-';
+  static const _restorePrefix = '.supermega-shop-restore-';
   static final _kdf = Argon2id(
     memory: 19 * 1024,
     parallelism: 1,
@@ -56,67 +60,72 @@ abstract final class ShopBackup {
     if (await archive.exists()) {
       throw StateError('The backup destination already exists.');
     }
-    final scratch = await scratchRoot.createTemp('supermega-shop-backup-');
-    var createdArchive = false;
-    try {
-      final snapshot = File(
-        '${scratch.path}${Platform.pathSeparator}shop.sqlite',
-      );
-      await database.exportVerifiedLocalSnapshot(snapshot);
-      verifySnapshot(snapshot);
-      if (await snapshot.length() > maxSnapshotBytes) {
-        throw StateError(
-          'The local Shop database exceeds the backup size limit.',
-        );
-      }
-      final cleartext = await snapshot.readAsBytes();
-      final salt = _randomBytes(_saltLength);
-      final nonce = _cipher.newNonce();
-      final header = Uint8List.fromList([
-        ..._magic,
-        formatVersion,
-        supportedSchemaVersion,
-        ...salt,
-        ...nonce,
-      ]);
-      final key = await _kdf.deriveKeyFromPassword(
-        password: password,
-        nonce: salt,
-      );
-      final box = await _cipher.encrypt(
-        cleartext,
-        secretKey: key,
-        nonce: nonce,
-        aad: header,
-      );
-      final bytes = Uint8List.fromList([
-        ...header,
-        ...box.cipherText,
-        ...box.mac.bytes,
-      ]);
-      await archive.create(exclusive: true);
-      createdArchive = true;
-      await archive.writeAsBytes(bytes, flush: true);
-      final readback = await _decrypt(await archive.readAsBytes(), password);
-      if (!_sameBytes(cleartext, readback)) {
-        throw StateError('The encrypted backup failed readback verification.');
-      }
-    } catch (_) {
-      if (createdArchive && await archive.exists()) await archive.delete();
-      rethrow;
-    } finally {
+    await _withRootLock(scratchRoot, () async {
+      await _removeInterruptedStaging(scratchRoot);
+      final scratch = await scratchRoot.createTemp(_exportPrefix);
+      var createdArchive = false;
       try {
-        await scratch.delete(recursive: true);
+        final snapshot = File(
+          '${scratch.path}${Platform.pathSeparator}shop.sqlite',
+        );
+        await database.exportVerifiedLocalSnapshot(snapshot);
+        verifySnapshot(snapshot);
+        if (await snapshot.length() > maxSnapshotBytes) {
+          throw StateError(
+            'The local Shop database exceeds the backup size limit.',
+          );
+        }
+        final cleartext = await snapshot.readAsBytes();
+        final salt = _randomBytes(_saltLength);
+        final nonce = _cipher.newNonce();
+        final header = Uint8List.fromList([
+          ..._magic,
+          formatVersion,
+          supportedSchemaVersion,
+          ...salt,
+          ...nonce,
+        ]);
+        final key = await _kdf.deriveKeyFromPassword(
+          password: password,
+          nonce: salt,
+        );
+        final box = await _cipher.encrypt(
+          cleartext,
+          secretKey: key,
+          nonce: nonce,
+          aad: header,
+        );
+        final bytes = Uint8List.fromList([
+          ...header,
+          ...box.cipherText,
+          ...box.mac.bytes,
+        ]);
+        await archive.create(exclusive: true);
+        createdArchive = true;
+        await archive.writeAsBytes(bytes, flush: true);
+        final readback = await _decrypt(await archive.readAsBytes(), password);
+        if (!_sameBytes(cleartext, readback)) {
+          throw StateError(
+            'The encrypted backup failed readback verification.',
+          );
+        }
       } catch (_) {
         if (createdArchive && await archive.exists()) await archive.delete();
-        throw StateError('Could not remove the plaintext backup snapshot.');
+        rethrow;
+      } finally {
+        try {
+          await _deleteScratchDirectory(scratchRoot, scratch);
+        } catch (_) {
+          if (createdArchive && await archive.exists()) await archive.delete();
+          throw StateError('Could not remove the plaintext backup snapshot.');
+        }
       }
-    }
+    });
   }
 
   /// Restores only into a nonexistent database path, before ShopDatabase opens.
   /// It never merges records or intentionally overwrites an existing database
-  /// or WAL files. A sibling lock serializes this method's callers. Promotion
+  /// or WAL files. An OS file lock serializes this method's callers. Promotion
   /// uses a same-directory rename after verification, but a process that does
   /// not honor the lock could still create the target between the final check
   /// and rename; Dart's rename may replace that file on some platforms.
@@ -136,30 +145,142 @@ abstract final class ShopBackup {
     if (cleartext.length > maxSnapshotBytes || !_hasSqliteHeader(cleartext)) {
       throw const FormatException('The backup is not a Shop database.');
     }
-    await target.parent.create(recursive: true);
-    final lock = File('${target.path}.restore.lock');
-    await lock.create(exclusive: true);
-    Directory? staging;
+    await _withRootLock(target.parent, () async {
+      await _removeInterruptedStaging(target.parent);
+      await _requireEmptyRestoreDestination(target);
+      final staging = await target.parent.createTemp(_restorePrefix);
+      try {
+        final stagedFile = File(
+          '${staging.path}${Platform.pathSeparator}shop.sqlite',
+        );
+        await stagedFile.writeAsBytes(cleartext, flush: true);
+        verifySnapshot(stagedFile);
+        await _requireEmptyRestoreDestination(target);
+        await stagedFile.rename(target.path);
+      } finally {
+        await _deleteScratchDirectory(target.parent, staging);
+      }
+    });
+  }
+
+  /// Removes only Shop's recognized plaintext staging directories in an
+  /// app-private parent. Safe to call before opening the database on startup.
+  static Future<void> cleanupInterruptedStaging(Directory privateRoot) =>
+      _withRootLock(privateRoot, () => _removeInterruptedStaging(privateRoot));
+
+  static Future<T> _withRootLock<T>(
+    Directory root,
+    Future<T> Function() operation,
+  ) async {
+    final rootPath = _pathKey(root.absolute.path);
+    if (!_activeRoots.add(rootPath)) {
+      throw StateError('Another Shop backup or restore is in progress.');
+    }
+    RandomAccessFile? handle;
+    var locked = false;
     try {
-      await _requireEmptyRestoreDestination(target);
-      staging = await target.parent.createTemp('.supermega-shop-restore-');
-      final stagedFile = File(
-        '${staging.path}${Platform.pathSeparator}shop.sqlite',
+      await _requireRealDirectory(root);
+      final lock = File('${root.path}${Platform.pathSeparator}$_lockName');
+      final lockType = await FileSystemEntity.type(
+        lock.path,
+        followLinks: false,
       );
-      await stagedFile.writeAsBytes(cleartext, flush: true);
-      verifySnapshot(stagedFile);
-      await _requireEmptyRestoreDestination(target);
-      await stagedFile.rename(target.path);
+      if (lockType != FileSystemEntityType.notFound &&
+          lockType != FileSystemEntityType.file) {
+        throw StateError('The Shop backup lock path is not a regular file.');
+      }
+      handle = await lock.open(mode: FileMode.append);
+      try {
+        // FileLock.exclusive fails immediately; blockingExclusive can freeze
+        // startup behind a stalled backup process.
+        await handle.lock(FileLock.exclusive);
+        locked = true;
+      } on FileSystemException {
+        throw StateError('Another Shop backup or restore is in progress.');
+      }
+      return await operation();
     } finally {
       try {
-        if (staging != null && await staging.exists()) {
-          await staging.delete(recursive: true);
-        }
+        if (locked) await handle!.unlock();
       } finally {
-        await lock.delete();
+        try {
+          await handle?.close();
+        } finally {
+          _activeRoots.remove(rootPath);
+        }
       }
     }
   }
+
+  static Future<void> _requireRealDirectory(Directory root) async {
+    final type = await FileSystemEntity.type(root.path, followLinks: false);
+    if (type == FileSystemEntityType.notFound) {
+      await root.create(recursive: true);
+    } else if (type != FileSystemEntityType.directory) {
+      throw StateError('The Shop staging root must be a real directory.');
+    }
+    if (await FileSystemEntity.type(root.path, followLinks: false) !=
+        FileSystemEntityType.directory) {
+      throw StateError('The Shop staging root must be a real directory.');
+    }
+  }
+
+  static Future<void> _removeInterruptedStaging(Directory root) async {
+    await for (final entity in root.list(followLinks: false)) {
+      final name = entity.path.split(Platform.pathSeparator).last;
+      if (!name.startsWith(_exportPrefix) && !name.startsWith(_restorePrefix)) {
+        continue;
+      }
+      if (_pathKey(File(entity.path).parent.absolute.path) !=
+          _pathKey(root.absolute.path)) {
+        throw StateError('Shop staging escaped its private directory.');
+      }
+      final type = await FileSystemEntity.type(entity.path, followLinks: false);
+      if (type == FileSystemEntityType.file) continue;
+      if (type != FileSystemEntityType.directory) {
+        throw StateError('Shop staging contains an unexpected path.');
+      }
+      await _deleteScratchDirectory(root, Directory(entity.path));
+    }
+  }
+
+  static Future<void> _deleteScratchDirectory(
+    Directory root,
+    Directory scratch,
+  ) async {
+    final name = scratch.path.split(Platform.pathSeparator).last;
+    if (_pathKey(scratch.parent.absolute.path) !=
+            _pathKey(root.absolute.path) ||
+        (!name.startsWith(_exportPrefix) && !name.startsWith(_restorePrefix))) {
+      throw StateError('Refusing to remove an unexpected Shop staging path.');
+    }
+    if (await FileSystemEntity.type(scratch.path, followLinks: false) ==
+        FileSystemEntityType.notFound) {
+      return;
+    }
+    await _deleteVerifiedTree(scratch);
+  }
+
+  static Future<void> _deleteVerifiedTree(Directory directory) async {
+    if (await FileSystemEntity.type(directory.path, followLinks: false) !=
+        FileSystemEntityType.directory) {
+      throw StateError('Shop staging contains an unexpected path.');
+    }
+    await for (final entry in directory.list(followLinks: false)) {
+      final type = await FileSystemEntity.type(entry.path, followLinks: false);
+      if (type == FileSystemEntityType.directory) {
+        await _deleteVerifiedTree(Directory(entry.path));
+      } else if (type == FileSystemEntityType.file) {
+        await File(entry.path).delete();
+      } else {
+        throw StateError('Shop staging contains an unexpected path.');
+      }
+    }
+    await directory.delete();
+  }
+
+  static String _pathKey(String path) =>
+      Platform.isWindows ? path.toLowerCase() : path;
 
   static Future<void> _requireEmptyRestoreDestination(File target) async {
     if (await FileSystemEntity.type(target.path, followLinks: false) !=

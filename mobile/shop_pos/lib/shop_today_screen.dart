@@ -133,6 +133,8 @@ class _TodaySnapshot {
     required this.salesMmk,
     required this.saleCount,
     required this.products,
+    required this.productPreview,
+    required this.recentSales,
     required this.stockToCheck,
     required this.pendingWallet,
   });
@@ -140,6 +142,8 @@ class _TodaySnapshot {
   final int salesMmk;
   final int saleCount;
   final int products;
+  final List<ShopProduct> productPreview;
+  final List<ShopSaleReceipt> recentSales;
   final List<ShopProduct> stockToCheck;
   final PendingWalletCheckout? pendingWallet;
 }
@@ -188,11 +192,14 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
         )
         .getSingle();
     final products = await widget.database.readActiveProducts();
+    final recentSales = await widget.database.readRecentSales(limit: 4);
     final pendingWallet = await widget.database.readPendingWalletCheckout();
     return _TodaySnapshot(
       salesMmk: saleTotals.read<int>('sales_mmk'),
       saleCount: saleTotals.read<int>('sale_count'),
       products: products.length,
+      productPreview: products.take(4).toList(),
+      recentSales: recentSales,
       // There is no configured reorder point yet. Name the exact rule in UI.
       stockToCheck: products.where((item) => item.onHand <= 5).toList(),
       pendingWallet: pendingWallet,
@@ -428,6 +435,25 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
                       onTap: () => _openFirstProduct(),
                     ),
                 ],
+                if (snapshot.products > 0) ...[
+                  const SizedBox(height: 24),
+                  if (contentWidth >= 760 && snapshot.recentSales.isNotEmpty)
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(child: _productsPreview(snapshot)),
+                        const SizedBox(width: 12),
+                        Expanded(child: _salesPreview(snapshot)),
+                      ],
+                    )
+                  else ...[
+                    _productsPreview(snapshot),
+                    if (snapshot.recentSales.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      _salesPreview(snapshot),
+                    ],
+                  ],
+                ],
               ],
             ),
           ),
@@ -445,8 +471,7 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
           children: [
             Text(
               _copy('Today', 'ယနေ့'),
-              style: Theme.of(context).textTheme.headlineSmall
-                  ?.copyWith(fontSize: 34),
+              style: Theme.of(context).textTheme.headlineMedium,
             ),
             const SizedBox(height: 4),
             Text(
@@ -466,6 +491,114 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
           label: Text(_copy('New sale', 'အရောင်းအသစ်')),
         ),
     ],
+  );
+
+  Widget _productsPreview(_TodaySnapshot snapshot) => _previewPanel(
+    title: _copy('Products', 'ကုန်ပစ္စည်းများ'),
+    action: _copy('View stock', 'လက်ကျန်ကြည့်ရန်'),
+    onOpen: () => _open(widget.onStock),
+    rows: [
+      for (final product in snapshot.productPreview)
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          title: Text(
+            product.name,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.bodyMedium
+                ?.copyWith(fontWeight: FontWeight.w600),
+          ),
+          subtitle: Text(
+            _copy(
+              '${_number(product.onHand)} in stock',
+              'လက်ကျန် ${_number(product.onHand)} ခု',
+            ),
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: product.onHand <= 5
+                  ? Theme.of(context).colorScheme.error
+                  : Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+          trailing: Text(
+            _money(product.priceMmk),
+            style: Theme.of(context).textTheme.labelLarge
+                ?.copyWith(fontFeatures: const [FontFeature.tabularFigures()]),
+          ),
+        ),
+    ],
+  );
+
+  Widget _salesPreview(_TodaySnapshot snapshot) => _previewPanel(
+    title: _copy('Recent sales', 'မကြာသေးမီက အရောင်းများ'),
+    action: _copy('View sales', 'အရောင်းကြည့်ရန်'),
+    onOpen: () => _open(widget.onSales),
+    rows: [
+      for (final sale in snapshot.recentSales)
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          title: Text(
+            sale.lines.isEmpty
+                ? _copy('Sale', 'အရောင်း')
+                : sale.lines.length == 1
+                ? '${sale.lines.first.productName} × ${_number(sale.lines.first.quantity)}'
+                : _copy(
+                    '${sale.lines.length} products',
+                    'ကုန်ပစ္စည်း ${_number(sale.lines.length)} မျိုး',
+                  ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.bodyMedium
+                ?.copyWith(fontWeight: FontWeight.w600),
+          ),
+          subtitle: Text(
+            MaterialLocalizations.of(context).formatTimeOfDay(
+              TimeOfDay.fromDateTime(
+                DateTime.fromMillisecondsSinceEpoch(sale.createdAtMillis),
+              ),
+            ),
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+          trailing: Text(
+            _money(sale.totalMmk),
+            style: Theme.of(context).textTheme.labelLarge
+                ?.copyWith(fontFeatures: const [FontFeature.tabularFigures()]),
+          ),
+        ),
+    ],
+  );
+
+  Widget _previewPanel({
+    required String title,
+    required String action,
+    required VoidCallback onOpen,
+    required List<Widget> rows,
+  }) => Card(
+    child: Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  title,
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ),
+              TextButton(onPressed: onOpen, child: Text(action)),
+            ],
+          ),
+          const Divider(height: 8),
+          for (var index = 0; index < rows.length; index++) ...[
+            rows[index],
+            if (index < rows.length - 1) const Divider(height: 1),
+          ],
+        ],
+      ),
+    ),
   );
 
   Widget _metric({
