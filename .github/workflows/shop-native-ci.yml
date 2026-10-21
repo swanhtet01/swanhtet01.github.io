@@ -44,7 +44,7 @@ jobs:
         run: flutter analyze
 
       - name: Run Flutter tests
-        run: flutter test --reporter expanded --timeout 2m
+        run: timeout --signal=TERM --kill-after=10s 180s flutter test --reporter expanded --timeout 2m
 
       - name: Build Android debug APK
         run: flutter build apk --debug --no-pub
