@@ -35,6 +35,12 @@ const publicProducts = activeProductContracts(manifest)
 const activeLandingPages = manifest.pages.filter(page => publicProducts.some(product => product.id === page.productId))
 const retiredCustomerPages = manifest.pages.filter(page => page.productId && !publicProducts.some(product => product.id === page.productId))
 const retiredCustomerRoutes = new Set(retiredCustomerPages.map(page => page.route))
+const retiredCustomerPaths = retiredCustomerPages.flatMap(page => [
+  `/${page.productId}`,
+  `/${page.productId}/`,
+  `/${page.productId}/index.html`,
+  `/${page.productId}/settings/nested`,
+].map(route => ({ route, productId: page.productId })))
 const baseUrl = String(process.env.PUBLIC_BASE_URL || manifest.release.productionDomain).replace(/\/$/, '')
 const attempts = Number(process.env.PUBLIC_VERIFY_ATTEMPTS || (verifyCurrentHead ? 1 : 6))
 const retryDelayMs = Number(process.env.PUBLIC_VERIFY_RETRY_MS || 5000)
@@ -147,10 +153,10 @@ async function verifyOnce() {
   const pendingRoutes = new Set()
   const pageResults = await Promise.all(manifest.pages.filter(page => !retiredCustomerRoutes.has(page.route)).map(async (page) => readPageOrPending(page, pendingRoutes)))
   const pages = new Map([...pageResults, ...retiredCustomerPages.map(page => [page.route, null])])
-  await Promise.all(retiredCustomerPages.map(async page => {
+  await Promise.all(retiredCustomerPaths.map(async page => {
     const response = await request(page.route, { redirect: 'manual' })
     if (response.status !== 404) {
-      if (expectedCommit) assert(false, 'retired_product_route_not_found', { route: page.route, status: response.status })
+      if (expectedCommit) assert(false, 'retired_product_route_not_found', { route: page.route, product: page.productId, status: response.status })
       pendingRoutes.add(page.route)
       return
     }

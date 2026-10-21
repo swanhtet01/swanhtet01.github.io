@@ -687,8 +687,10 @@ if (!config.routes.some((entry) => entry.src === '^/vercel-insights\\.js$' && en
 if (!config.routes.some((entry) => entry.src === '^/(?:favicon\\.svg|site\\.webmanifest|og-card(?:-shop)?\\.png)$' && entry.continue === true && entry.headers?.['cache-control'])) fail('static_asset_cache_route_missing')
 const firstPublicRouteMatch = (path) => config.routes.find((entry) => typeof entry.src === 'string' && entry.continue !== true && new RegExp(entry.src).test(path))
 for (const productId of manifest.productVisibility.retainedOnlyProductIds) {
-  const route = firstPublicRouteMatch(`/${productId}/`)
-  if (route?.status !== 404 || route?.dest !== '/404.html') fail('internal_product_route_not_private', { productId, route })
+  for (const path of [`/${productId}`, `/${productId}/`, `/${productId}/index.html`, `/${productId}/settings/nested`]) {
+    const route = firstPublicRouteMatch(path)
+    if (route?.status !== 404 || route?.dest !== '/404.html') fail('internal_product_route_not_private', { productId, path, route })
+  }
   if (existsSync(resolve(staticDir, `og-card-${productId}.png`))) fail('internal_product_share_card_public', { productId })
 }
 if (!config.routes.some((entry) => entry.handle === 'filesystem')) fail('filesystem_route_missing')

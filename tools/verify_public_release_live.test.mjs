@@ -18,8 +18,8 @@ const outputDir=${JSON.stringify(outputDir)};
 const manifest=JSON.parse(fs.readFileSync('site-manifest.json'));
 const config=JSON.parse(fs.readFileSync(outputDir+'/config.json'));
 const release=JSON.parse(fs.readFileSync(outputDir+'/static/__release.json'));
-const retiredProductRoutes=new Set(manifest.pages.filter(p=>p.productId&&manifest.productVisibility.retainedOnlyProductIds.includes(p.productId)).map(p=>p.route));
 const mode=process.env.TEST_PUBLIC_MUTATION;
+const firstPageRoute=path=>config.routes.find(r=>typeof r.src==='string'&&r.continue!==true&&new RegExp(r.src).test(path));
 globalThis.fetch=async input=>{
  const u=new URL(input);
  if(!['supermega.dev','www.supermega.dev'].includes(u.hostname)) throw Error('offline_fixture_unexpected_host');
@@ -31,14 +31,16 @@ globalThis.fetch=async input=>{
  if(u.pathname==='/api/health') return json({ok:true,status:'ready',service:'supermega-public-site',brand_version:release.brandVersion,context_version:release.contextVersion,catalog_version:release.catalogVersion});
  if(u.pathname==='/api/contact-submissions/status') return json({status:mode==='contact-down'?'unavailable':'ready',accepting:true,controls:{idempotency:'required',edge_rate_limit:'required',trial_proof:'optional_client_provided'}});
  if(u.pathname.startsWith('/api/pipeline-control')) return json({status:'not_found'},404);
+ const retiredProductId=manifest.productVisibility.retainedOnlyProductIds.find(id=>new RegExp('^/'+id+'(?:/|$)').test(u.pathname));
+ if(retiredProductId) {
+  const page=manifest.pages.find(p=>p.productId===retiredProductId);
+  const route=firstPageRoute(u.pathname);
+  if(mode==='retired-page-served'||mode==='retired-page-served:'+u.pathname) return new Response(fs.readFileSync(outputDir+'/static/'+page.file,'utf8'),{status:200,headers});
+  if(route?.status===404&&route.dest==='/404.html') return new Response(fs.readFileSync(outputDir+'/static/404.html','utf8'),{status:404,headers});
+  return new Response(fs.readFileSync(outputDir+'/static/'+page.file,'utf8'),{status:200,headers});
+ }
  const redirect=config.routes.find(r=>r.status===308 && new RegExp(r.src).test(u.pathname));
  if(redirect) return new Response(null,{status:308,headers:{location:mode==='old-redirect'&&u.pathname==='/products/factory/'?'/#plant':redirect.headers.Location}});
- if(retiredProductRoutes.has(u.pathname)) {
-  const page=manifest.pages.find(p=>p.route===u.pathname);
-  const route=config.routes.find(r=>r.status===404&&r.dest==='/404.html'&&new RegExp(r.src).test(u.pathname));
-  let html=fs.readFileSync(outputDir+'/static/'+page.file,'utf8');
-  return new Response(route&&mode!=='retired-page-served'?fs.readFileSync(outputDir+'/static/404.html'):html,{status:route&&mode!=='retired-page-served'?404:200,headers});
- }
  if(u.pathname.startsWith('/images/')) {
   if(mode==='image-missing') return new Response('missing',{status:404});
   if(mode==='image-html') return new Response('<html>fallback</html>',{headers:{'content-type':'text/html'}});
@@ -87,7 +89,7 @@ for (const [mutation, failure] of [
   ['privacy-header', 'page_security_header_wrong'], ['usb-policy', 'page_security_header_wrong'],
   ['missing-offer', 'homepage_offer_contract_missing'], ['missing-action', 'homepage_shop_action_missing'],
   ['missing-guided', 'page_shared_contract_missing'], ['missing-assisted', 'page_contact_route_missing'],
-  ['plant-marketing', 'retired_product_marketed'], ['retired-page-served', 'retired_product_route_not_found'],
+  ['plant-marketing', 'retired_product_marketed'],
   ['wrong-commit', 'release_commit_wrong'], ['contact-down', 'contact_not_accepting'],
   ['old-redirect', 'redirect_destination_wrong'],
   ['pilot-pitch', 'retired_managed_pilot_pitch_present'], ['missing-source', 'contact_trial_proof_contract_missing'],
@@ -98,3 +100,13 @@ for (const [mutation, failure] of [
   assert.equal(result.status, 1, result.output)
   assert.ok(result.output.includes(failure), result.output)
 })
+
+for (const productId of JSON.parse(readFileSync(resolve(root, 'site-manifest.json'), 'utf8')).productVisibility.retainedOnlyProductIds) {
+  for (const route of [`/${productId}`, `/${productId}/`, `/${productId}/index.html`, `/${productId}/settings/nested`]) {
+    test(`rejects a served retained page at ${route}`, () => {
+      const result = run(`retired-page-served:${route}`)
+      assert.equal(result.status, 1, result.output)
+      assert.ok(result.output.includes('retired_product_route_not_found'), result.output)
+    })
+  }
+}
