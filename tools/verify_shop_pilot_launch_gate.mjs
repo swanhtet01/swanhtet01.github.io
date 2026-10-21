@@ -19,13 +19,14 @@ import {
 } from './prepare_shop_pilot_private_intake_packet.mjs'
 import { verifyShopPilotPublicBoundary, verifyShopPilotPublicBoundaryFiles } from './verify_shop_pilot_public_boundary.mjs'
 
-export const SHOP_PILOT_LAUNCH_GATE_CONTRACT = 'supermega.shop-pilot-launch-gate.v1'
+export const SHOP_PILOT_LAUNCH_GATE_CONTRACT = 'supermega.shop-pilot-launch-gate.v2'
 
 const root = resolve(import.meta.dirname, '..')
 const REPOSITORY = 'swanhtet01/swanhtet01.github.io'
 const REQUIRED_PRODUCTS = ['shop', 'plant', 'website', 'ecommerce']
 const CUSTOMER_PRODUCTS = ['shop']
-const INTERNAL_PRODUCTS = ['plant', 'website', 'ecommerce']
+const INTERNAL_PRODUCTS = ['website', 'ecommerce']
+const RETAINED_NONCUSTOMER_PRODUCTS = ['plant']
 const REQUIRED_BLOCKING_GATES = ['preview_rehearsal', 'managed_persistence', 'storage_privacy', 'security', 'pilot_evidence', 'production_activation']
 const REQUIRED_PILOT_DAY_INDEXES = [1, 2, 3, 4, 5]
 const REQUIRED_PILOT_CALENDAR_DATES = 5
@@ -421,6 +422,7 @@ export function assessShopPilotLaunchGate(input = {}) {
     products: {
       customerProducts: CUSTOMER_PRODUCTS,
       internalProducts: INTERNAL_PRODUCTS,
+      retainedNonCustomerProducts: RETAINED_NONCUSTOMER_PRODUCTS,
       portfolioProducts: REQUIRED_PRODUCTS,
       firstPilotProduct: 'shop',
       aiIsSharedCapability: true,

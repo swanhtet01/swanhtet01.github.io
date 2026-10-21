@@ -11,13 +11,14 @@ import { validateGitHubMainProtectionPacket } from './prepare_github_main_protec
 import { validateSupabasePreviewRehearsalProposal } from './prepare_supabase_preview_rehearsal_proposal.mjs'
 import { validateTechnicalEstate } from './manage_technical_estate.mjs'
 
-export const RELEASE_STACK_OWNER_GATE_CONTRACT = 'supermega.release-stack-owner-gate.v1'
+export const RELEASE_STACK_OWNER_GATE_CONTRACT = 'supermega.release-stack-owner-gate.v2'
 
 const root = resolve(import.meta.dirname, '..')
 const REPOSITORY = 'swanhtet01/swanhtet01.github.io'
 const REQUIRED_PRODUCTS = ['shop', 'plant', 'website', 'ecommerce']
 const CUSTOMER_PRODUCTS = ['shop']
-const INTERNAL_PRODUCTS = ['plant', 'website', 'ecommerce']
+const INTERNAL_PRODUCTS = ['website', 'ecommerce']
+const RETAINED_NONCUSTOMER_PRODUCTS = ['plant']
 const REQUIRED_MAIN_CHECKS = [
   'SuperMega App CI',
   'Dependency Security Audit',
@@ -438,6 +439,7 @@ export function assessReleaseStackOwnerGates(input = {}) {
     products: {
       customerProducts: CUSTOMER_PRODUCTS,
       internalProducts: INTERNAL_PRODUCTS,
+      retainedNonCustomerProducts: RETAINED_NONCUSTOMER_PRODUCTS,
       portfolioProducts: REQUIRED_PRODUCTS,
       firstPilotProduct: 'shop',
       aiIsSharedCapability: true,
