@@ -970,11 +970,11 @@ void main() {
           await tester.pumpAndSettle();
 
           if (width == 320) {
-            final newProductLabel = myanmar
-                ? 'ကုန်ပစ္စည်းအသစ်'
-                : 'New product';
+            final newProductLabel = myanmar ? 'ကုန်ပစ္စည်းအသစ်' : 'New product';
             expect(find.text(newProductLabel), findsNothing);
-            await tester.tap(find.byKey(const ValueKey('shop-product-actions')));
+            await tester.tap(
+              find.byKey(const ValueKey('shop-product-actions')),
+            );
             await tester.pumpAndSettle();
             await tester.tap(find.text(newProductLabel));
             await tester.pumpAndSettle();
