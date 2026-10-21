@@ -68,7 +68,28 @@ void main() {
           'assets/fonts/NotoSansMyanmar/NotoSansMyanmar-Variable.ttf',
         ),
       );
-    await Future.wait([materialIcons.load(), inter.load(), myanmar.load()]);
+    final myanmarUi = FontLoader('NotoSansMyanmarUI')
+      ..addFont(
+        rootBundle.load(
+          'assets/fonts/NotoSansMyanmarUI/NotoSansMyanmarUI-Regular.ttf',
+        ),
+      )
+      ..addFont(
+        rootBundle.load(
+          'assets/fonts/NotoSansMyanmarUI/NotoSansMyanmarUI-SemiBold.ttf',
+        ),
+      )
+      ..addFont(
+        rootBundle.load(
+          'assets/fonts/NotoSansMyanmarUI/NotoSansMyanmarUI-Bold.ttf',
+        ),
+      );
+    await Future.wait([
+      materialIcons.load(),
+      inter.load(),
+      myanmar.load(),
+      myanmarUi.load(),
+    ]);
   });
 
   for (final (width, height, language) in [
