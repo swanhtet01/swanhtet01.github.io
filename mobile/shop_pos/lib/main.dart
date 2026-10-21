@@ -18,6 +18,7 @@ import 'shop_cash_shift_screen.dart';
 import 'shop_copy.dart';
 import 'shop_database.dart';
 import 'shop_models.dart';
+import 'shop_today_screen.dart';
 import 'stock_screen.dart';
 import 'wallet_setup_screen.dart';
 
@@ -52,6 +53,7 @@ class ShopApp extends StatefulWidget {
     required this.authClient,
     required this.apiBaseUrl,
     required this.initialMyanmar,
+    this.initialCounter = false,
     super.key,
   });
 
@@ -60,18 +62,72 @@ class ShopApp extends StatefulWidget {
   final String apiBaseUrl;
   final bool initialMyanmar;
 
+  /// Opens Counter directly for a focused cashier journey or widget test.
+  final bool initialCounter;
+
   @override
   State<ShopApp> createState() => _ShopAppState();
 }
 
 class _ShopAppState extends State<ShopApp> {
   late bool _myanmar = widget.initialMyanmar;
+  late final ValueNotifier<bool> _routeLanguage = ValueNotifier(_myanmar);
 
   Future<void> _setLanguage(bool myanmar) async {
     setState(() => _myanmar = myanmar);
+    _routeLanguage.value = myanmar;
     final preferences = await SharedPreferences.getInstance();
     await preferences.setBool('shop_locale_myanmar', myanmar);
   }
+
+  @override
+  void dispose() {
+    _routeLanguage.dispose();
+    super.dispose();
+  }
+
+  Future<void> _openCounter(BuildContext context) =>
+      Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(
+          builder: (_) => ValueListenableBuilder<bool>(
+            valueListenable: _routeLanguage,
+            builder: (_, myanmar, _) => ShopHome(
+              database: widget.database,
+              authClient: widget.authClient,
+              apiBaseUrl: widget.apiBaseUrl,
+              myanmar: myanmar,
+              onLanguageChanged: _setLanguage,
+            ),
+          ),
+        ),
+      );
+
+  Future<void> _openSales(BuildContext context) =>
+      Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(
+          builder: (_) =>
+              RecentSalesScreen(database: widget.database, myanmar: _myanmar),
+        ),
+      );
+
+  Future<void> _openStock(BuildContext context) =>
+      Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(
+          builder: (_) =>
+              StockScreen(database: widget.database, myanmar: _myanmar),
+        ),
+      );
+
+  Future<void> _openSettings(BuildContext context) =>
+      Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(
+          builder: (_) => ShopSettingsScreen(
+            database: widget.database,
+            myanmar: _myanmar,
+            onLanguageChanged: _setLanguage,
+          ),
+        ),
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -184,13 +240,22 @@ class _ShopAppState extends State<ShopApp> {
           fillColor: Colors.white,
         ),
       ),
-      home: ShopHome(
-        database: widget.database,
-        authClient: widget.authClient,
-        apiBaseUrl: widget.apiBaseUrl,
-        myanmar: _myanmar,
-        onLanguageChanged: _setLanguage,
-      ),
+      home: widget.initialCounter
+          ? ShopHome(
+              database: widget.database,
+              authClient: widget.authClient,
+              apiBaseUrl: widget.apiBaseUrl,
+              myanmar: _myanmar,
+              onLanguageChanged: _setLanguage,
+            )
+          : ShopTodayScreen(
+              database: widget.database,
+              myanmar: _myanmar,
+              onNewSale: _openCounter,
+              onSales: _openSales,
+              onStock: _openStock,
+              onSettings: _openSettings,
+            ),
     );
   }
 }

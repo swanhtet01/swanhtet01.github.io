@@ -24,6 +24,115 @@ Finder _merchantQrSemantics(String provider) => find.byWidgetPredicate(
 );
 
 void main() {
+  testWidgets('Today stays readable and opens Counter in both languages', (
+    tester,
+  ) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    tester.view.devicePixelRatio = 1;
+    for (final width in [390.0, 820.0, 1200.0]) {
+      for (final myanmar in [false, true]) {
+        tester.view.physicalSize = Size(width, 800);
+        final database = ShopDatabase(NativeDatabase.memory());
+        await tester.pumpWidget(
+          ShopApp(
+            database: database,
+            authClient: null,
+            apiBaseUrl: 'https://app.supermega.dev',
+            initialMyanmar: myanmar,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text(myanmar ? 'ယနေ့' : 'Today'), findsWidgets);
+        expect(find.text(myanmar ? 'ရောင်းရန်' : 'Sell'), findsOneWidget);
+        if (width >= 700) {
+          expect(
+            find.text(myanmar ? 'ဆက်တင်များ' : 'Settings'),
+            findsOneWidget,
+          );
+        }
+        expect(
+          find.text(
+            myanmar ? 'ကုန်ပစ္စည်းတစ်မျိုးမှ စတင်ပါ' : 'Start with one product',
+          ),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+
+        await tester.tap(
+          find.text(
+            width < 700
+                ? (myanmar ? 'ရောင်းရန်' : 'Sell')
+                : (myanmar ? 'အရောင်းအသစ်' : 'New sale'),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          find.text(myanmar ? 'ကုန်ပစ္စည်းများ' : 'Products'),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump(const Duration(milliseconds: 1));
+        await database.close();
+      }
+    }
+  });
+
+  testWidgets('Today counts only completed local sales and actual stock', (
+    tester,
+  ) async {
+    final database = ShopDatabase(NativeDatabase.memory());
+    addTearDown(database.close);
+    await database.addProduct(
+      id: 'tea',
+      name: 'Tea',
+      priceMmk: 2500,
+      openingStock: 6,
+    );
+    await database.addProduct(
+      id: 'water',
+      name: 'Water',
+      priceMmk: 1200,
+      openingStock: 20,
+    );
+    await database.recordCashSale(
+      operationId: 'today-cash-sale',
+      lines: const [ShopSaleLineInput(productId: 'tea', quantity: 1)],
+    );
+    await database.createWalletCheckoutIntent(
+      operationId: 'today-pending-wallet',
+      merchant: MerchantWalletSetup(
+        provider: 'KBZPay',
+        merchantPhone: '09123456789',
+        officialQrPayload: _testStaticMmqr(),
+        issuerConfirmed: true,
+      ),
+      lines: const [ShopSaleLineInput(productId: 'tea', quantity: 1)],
+    );
+    await tester.pumpWidget(
+      ShopApp(
+        database: database,
+        authClient: null,
+        apiBaseUrl: 'https://app.supermega.dev',
+        initialMyanmar: false,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Sales today'), findsOneWidget);
+    expect(find.text('2,500 MMK'), findsWidgets);
+    expect(find.text('Completed sales'), findsOneWidget);
+    expect(find.text('5 or fewer left'), findsOneWidget);
+    expect(find.text('Tea · 5'), findsOneWidget);
+    expect(find.text('Mobile payment to review'), findsOneWidget);
+    expect(find.text('Check stock'), findsOneWidget);
+    expect(find.textContaining('vs. yesterday'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('saved sale reprints without recording another sale', (
     tester,
   ) async {
@@ -190,6 +299,7 @@ void main() {
     addTearDown(database.close);
     await tester.pumpWidget(
       ShopApp(
+        initialCounter: true,
         database: database,
         authClient: null,
         apiBaseUrl: 'https://app.supermega.dev',
@@ -276,6 +386,7 @@ void main() {
     try {
       await tester.pumpWidget(
         ShopApp(
+          initialCounter: true,
           database: database,
           authClient: null,
           apiBaseUrl: 'https://app.supermega.dev',
@@ -314,6 +425,7 @@ void main() {
     try {
       await tester.pumpWidget(
         ShopApp(
+          initialCounter: true,
           database: database,
           authClient: null,
           apiBaseUrl: 'https://app.supermega.dev',
@@ -362,6 +474,7 @@ void main() {
         );
         await tester.pumpWidget(
           ShopApp(
+            initialCounter: true,
             database: database,
             authClient: null,
             apiBaseUrl: 'https://app.supermega.dev',
@@ -413,6 +526,7 @@ void main() {
     );
     await tester.pumpWidget(
       ShopApp(
+        initialCounter: true,
         database: database,
         authClient: null,
         apiBaseUrl: 'https://app.supermega.dev',
@@ -451,6 +565,7 @@ void main() {
     );
     await tester.pumpWidget(
       ShopApp(
+        initialCounter: true,
         database: database,
         authClient: null,
         apiBaseUrl: 'https://app.supermega.dev',
@@ -486,6 +601,7 @@ void main() {
     );
     await tester.pumpWidget(
       ShopApp(
+        initialCounter: true,
         database: database,
         authClient: null,
         apiBaseUrl: 'https://app.supermega.dev',
@@ -527,6 +643,7 @@ void main() {
     );
     await tester.pumpWidget(
       ShopApp(
+        initialCounter: true,
         database: database,
         authClient: null,
         apiBaseUrl: 'https://app.supermega.dev',
@@ -563,6 +680,7 @@ void main() {
     );
     await tester.pumpWidget(
       ShopApp(
+        initialCounter: true,
         database: database,
         authClient: null,
         apiBaseUrl: 'https://app.supermega.dev',
@@ -644,6 +762,7 @@ void main() {
       );
       await tester.pumpWidget(
         ShopApp(
+          initialCounter: true,
           database: database,
           authClient: null,
           apiBaseUrl: 'https://app.supermega.dev',
@@ -690,6 +809,7 @@ void main() {
       );
       await tester.pumpWidget(
         ShopApp(
+          initialCounter: true,
           database: database,
           authClient: null,
           apiBaseUrl: 'https://app.supermega.dev',
@@ -748,6 +868,7 @@ void main() {
     );
     await tester.pumpWidget(
       ShopApp(
+        initialCounter: true,
         database: database,
         authClient: null,
         apiBaseUrl: 'https://app.supermega.dev',
@@ -808,6 +929,7 @@ void main() {
       );
       await tester.pumpWidget(
         ShopApp(
+          initialCounter: true,
           database: database,
           authClient: null,
           apiBaseUrl: 'https://app.supermega.dev',
@@ -844,6 +966,7 @@ void main() {
     final database = ShopDatabase(NativeDatabase.memory());
     await tester.pumpWidget(
       ShopApp(
+        initialCounter: true,
         database: database,
         authClient: null,
         apiBaseUrl: 'https://app.supermega.dev',
@@ -948,6 +1071,7 @@ void main() {
       );
       await tester.pumpWidget(
         ShopApp(
+          initialCounter: true,
           database: database,
           authClient: null,
           apiBaseUrl: 'https://app.supermega.dev',
@@ -993,6 +1117,7 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpWidget(
         ShopApp(
+          initialCounter: true,
           database: database,
           authClient: null,
           apiBaseUrl: 'https://app.supermega.dev',
@@ -1066,6 +1191,7 @@ void main() {
     );
     await tester.pumpWidget(
       ShopApp(
+        initialCounter: true,
         database: database,
         authClient: null,
         apiBaseUrl: 'https://app.supermega.dev',
