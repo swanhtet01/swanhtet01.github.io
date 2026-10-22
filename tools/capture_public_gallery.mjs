@@ -499,14 +499,10 @@ async function main() {
       { fixturePath: '/shop/', tab: 'orders', selector: '.orders-module', forbiddenText: ['Payment and handoff recorded'] }))
     await clickText(cdp, sessionId, 'Show Inventory')
     await waitFor(cdp, sessionId, 'Inventory')
-    await clickSelector(cdp, sessionId, '.stock-catalog-disclosure summary')
-    await waitForSelector(cdp, sessionId, '.stock-catalog-disclosure[open]')
-    captures.push(await capture(cdp, sessionId, output, 'actual-shop-inventory', ['Inventory', 'Stock', 'Other products', 'Red onions (500 g)'],
+    captures.push(await capture(cdp, sessionId, output, 'actual-shop-inventory', ['Inventory', 'Stock', 'Other products', 'Red apple (each)'],
       { fixturePath: '/shop/', tab: 'inventory', selector: '.shop-stock-module', forbiddenText: ['Payment and handoff recorded'] }))
-    captures.push(await captureTablet(cdp, sessionId, output, 'actual-shop-inventory-tablet', ['Inventory', 'Stock', 'Other products', 'Red onions (500 g)'],
+    captures.push(await captureTablet(cdp, sessionId, output, 'actual-shop-inventory-tablet', ['Inventory', 'Stock', 'Other products', 'Red apple (each)'],
       { fixturePath: '/shop/', tab: 'inventory', selector: '.shop-stock-module', forbiddenText: ['Payment and handoff recorded'] }))
-    await clickSelector(cdp, sessionId, '.stock-catalog-disclosure summary')
-    await waitForSelector(cdp, sessionId, '.stock-catalog-disclosure:not([open])')
     captures.push(await captureMobile(cdp, sessionId, output, 'actual-shop-inventory-mobile', ['Inventory', 'Stock'],
       { fixturePath: '/shop/', tab: 'inventory', selector: '.shop-stock-module', forbiddenText: ['Payment and handoff recorded'] }))
     await assertShopMobileFits(cdp, sessionId, '.shop-stock-module')
