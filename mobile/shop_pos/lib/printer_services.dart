@@ -174,7 +174,7 @@ class ShopReceiptPrinter {
     try {
       await manager.connect(
         NetworkPrinterDevice(
-          name: 'SuperMega Shop receipt printer',
+          name: 'Shop receipt printer',
           host: host,
           port: 9100,
         ),
@@ -456,14 +456,14 @@ class PrinterDiscoveryService {
     try {
       await manager.connect(
         NetworkPrinterDevice(
-          name: 'SuperMega Shop test',
+          name: 'Shop test',
           host: printer.host,
           port: printer.port,
         ),
         timeout: const Duration(seconds: 5),
       );
       final ticket = await Ticket.create(paperWidth.paperSize);
-      await ticket.textRaster('SuperMega Shop');
+      await ticket.textRaster('Shop');
       await ticket.textRaster('Printer test');
       await ticket.textRaster('ပရင်တာ စမ်းသပ်မှု');
       _finishReceipt(ticket, paperWidth);
