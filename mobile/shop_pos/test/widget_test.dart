@@ -935,6 +935,66 @@ void main() {
     }
   });
 
+  for (final width in [320.0, 390.0]) {
+    for (final myanmar in [false, true]) {
+      testWidgets(
+        '${width.toInt()}px ${myanmar ? 'Burmese' : 'English'} Today puts totals and stock action above navigation',
+        (tester) async {
+          tester.view.physicalSize = Size(width, 800);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.resetPhysicalSize);
+          addTearDown(tester.view.resetDevicePixelRatio);
+          final database = ShopDatabase(NativeDatabase.memory());
+          try {
+            await database.addProduct(
+              id: 'tea',
+              name: 'Tea',
+              priceMmk: 2500,
+              openingStock: 2,
+            );
+            await database.recordCashSale(
+              operationId: 'compact-today-sale',
+              lines: const [ShopSaleLineInput(productId: 'tea', quantity: 1)],
+            );
+            await tester.pumpWidget(
+              ShopApp(
+                database: database,
+                authClient: null,
+                apiBaseUrl: 'https://example.invalid',
+                initialMyanmar: myanmar,
+              ),
+            );
+            await tester.pumpAndSettle();
+
+            final navigationTop = tester.getTopLeft(find.byType(NavigationBar)).dy;
+            for (final label in [
+              myanmar ? 'ယနေ့ရောင်းအား' : 'Sales today',
+              myanmar ? 'ပြီးစီးသောအရောင်း' : 'Completed sales',
+              myanmar ? 'လက်ကျန်နည်း' : 'Low stock',
+              myanmar ? 'လက်ကျန်စစ်ရန်' : 'Check stock',
+            ]) {
+              expect(find.text(label), findsOneWidget);
+              expect(tester.getBottomRight(find.text(label)).dy, lessThan(navigationTop));
+            }
+            final stockAction = find.byTooltip(
+              myanmar ? 'လက်ကျန်ဖွင့်ရန်' : 'Open stock',
+            );
+            expect(tester.getSize(stockAction).height, greaterThanOrEqualTo(44));
+            expect(
+              find.text(myanmar ? 'အရောင်းအသစ်' : 'New sale'),
+              findsOneWidget,
+            );
+            expect(tester.takeException(), isNull);
+          } finally {
+            await tester.pumpWidget(const SizedBox.shrink());
+            await tester.pump(const Duration(milliseconds: 1));
+            await database.close();
+          }
+        },
+      );
+    }
+  }
+
   testWidgets('320px Burmese Today keeps a large sale readable', (
     tester,
   ) async {
