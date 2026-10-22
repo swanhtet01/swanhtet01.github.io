@@ -31,13 +31,19 @@ $accent = ColorFromHex $manifest.brand.colors.accent           # #0b745e
 $muted = ColorFromHex '#526078'                                # --muted in the shared page style
 $borderOuter = ColorFromHex '#e1e6f0'                          # measured from the committed og-card.png
 $borderCore = ColorFromHex '#cbd3e3'
-$tagline = (@('shop', 'website', 'ecommerce') | ForEach-Object {
+$activeProductIds = @($manifest.productVisibility.activeProductIds)
+$tagline = ($activeProductIds | ForEach-Object {
   $productId = $_
   ($manifest.customerProducts | Where-Object { $_.id -eq $productId }).name
 }) -join ' / '
 
 function New-OgCard {
-  param([string]$Name, [string]$Headline, [string]$OutPath)
+  param(
+    [string]$Name,
+    [string]$Headline,
+    [string]$OutPath,
+    [string]$HeadlineFontFamily = 'Segoe UI'
+  )
 
   $bmp = [System.Drawing.Bitmap]::new(1200, 630, [System.Drawing.Imaging.PixelFormat]::Format24bppRgb)
   $g = [System.Drawing.Graphics]::FromImage($bmp)
@@ -60,7 +66,7 @@ function New-OgCard {
     $markFont = [System.Drawing.Font]::new('Consolas', 46, [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
     $wordmarkFont = [System.Drawing.Font]::new('Segoe UI', 36, [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
     $nameFont = [System.Drawing.Font]::new('Segoe UI', 66, [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
-    $descriptionFont = [System.Drawing.Font]::new('Segoe UI', 31, [System.Drawing.FontStyle]::Regular, [System.Drawing.GraphicsUnit]::Pixel)
+    $descriptionFont = [System.Drawing.Font]::new($HeadlineFontFamily, 31, [System.Drawing.FontStyle]::Regular, [System.Drawing.GraphicsUnit]::Pixel)
     $footerFont = [System.Drawing.Font]::new('Consolas', 30, [System.Drawing.FontStyle]::Regular, [System.Drawing.GraphicsUnit]::Pixel)
     try {
       # ">_ SUPERMEGA" mark, same coordinates as the generic card.
@@ -93,8 +99,10 @@ function New-OgCard {
   Write-Output ("wrote {0} ({1} bytes)" -f $OutPath, $bytes)
 }
 
-foreach ($product in $manifest.customerProducts) {
+foreach ($product in ($manifest.customerProducts | Where-Object { $activeProductIds -contains $_.id })) {
   New-OgCard -Name $product.name -Headline $product.headline -OutPath (Join-Path $assetDir ('og-card-' + $product.id + '.png'))
 }
 
-New-OgCard -Name 'Less busywork.' -Headline 'More business.' -OutPath (Join-Path $assetDir 'og-card.png')
+New-OgCard -Name 'Shop' -Headline 'ရှင်းရှင်းလင်းလင်း ရောင်းပါ။ ကုန်လက်ကျန်ကို သိပါ။' -HeadlineFontFamily 'Myanmar Text' -OutPath (Join-Path $assetDir 'og-card-shop-my.png')
+
+New-OgCard -Name 'SuperMega' -Headline 'Software for Myanmar businesses.' -OutPath (Join-Path $assetDir 'og-card.png')

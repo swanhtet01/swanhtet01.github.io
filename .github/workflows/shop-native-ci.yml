@@ -1,0 +1,165 @@
+name: Shop native POS checks
+
+on:
+  pull_request:
+    paths:
+      - "mobile/shop_pos/**"
+      - ".github/workflows/shop-native-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: shop-native-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android:
+    name: Analyze, test, and build Android
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: mobile/shop_pos
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          channel: stable
+          cache: true
+
+      - name: Resolve locked dependencies
+        run: flutter pub get --enforce-lockfile
+
+      - name: Check changed Dart formatting
+        run: |
+          dart format lib/main.dart lib/menu_import_screen.dart lib/menu_import_service.dart lib/printer_services.dart lib/recent_sales_screen.dart lib/shop_backup.dart lib/shop_cash_shift_screen.dart lib/shop_copy.dart lib/shop_database.dart lib/shop_startup.dart lib/shop_today_screen.dart lib/stock_screen.dart test/shop_backup_test.dart test/shop_foundation_test.dart test/visual_capture_test.dart test/widget_test.dart
+          git diff --exit-code -- lib/main.dart lib/menu_import_screen.dart lib/menu_import_service.dart lib/printer_services.dart lib/recent_sales_screen.dart lib/shop_backup.dart lib/shop_cash_shift_screen.dart lib/shop_copy.dart lib/shop_database.dart lib/shop_startup.dart lib/shop_today_screen.dart lib/stock_screen.dart test/shop_backup_test.dart test/shop_foundation_test.dart test/visual_capture_test.dart test/widget_test.dart
+
+      - name: Analyze Flutter source
+        run: flutter analyze
+
+      - name: Check first-sale widget in isolation
+        run: timeout --signal=TERM --kill-after=10s 90s flutter test test/widget_test.dart --plain-name 'empty catalog can make a durable cash sale' --reporter expanded --timeout 60s
+
+      - name: Run Flutter tests
+        run: timeout --signal=TERM --kill-after=10s 180s flutter test --concurrency=1 --reporter expanded --timeout 2m
+
+      - name: Capture synthetic Flutter screens with bundled fonts
+        env:
+          SHOP_VISUAL_CAPTURE: "1"
+        run: |
+          flutter_bin="$(readlink -f "$(command -v flutter)")"
+          export SHOP_MATERIAL_ICONS_FONT="$(dirname "$flutter_bin")/cache/artifacts/material_fonts/MaterialIcons-Regular.otf"
+          test -f "$SHOP_MATERIAL_ICONS_FONT"
+          rm -f test/goldens/shop_*.png
+          timeout --signal=TERM --kill-after=10s 180s flutter test test/visual_capture_test.dart --update-goldens --reporter expanded --timeout 60s
+
+      - name: Retain Flutter-rendered screens for design review
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: supermega-shop-flutter-renders-${{ github.sha }}
+          path: mobile/shop_pos/test/goldens/shop_*.png
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Build Android debug APK
+        run: flutter build apk --debug --no-pub
+
+      - name: Retain Android debug APK for device QA
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: supermega-shop-android-debug-${{ github.sha }}
+          path: mobile/shop_pos/build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error
+          retention-days: 7
+
+  ios:
+    name: Build iPad/iOS app
+    needs: android
+    runs-on: macos-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: mobile/shop_pos
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          channel: stable
+          cache: true
+
+      - name: Resolve locked dependencies
+        run: flutter pub get --enforce-lockfile
+
+      - name: Build iOS app without signing
+        run: flutter build ios --debug --no-codesign --no-pub
+
+      - name: Retain unsigned iOS app for simulator and signing QA
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: supermega-shop-ios-unsigned-${{ github.sha }}
+          path: mobile/shop_pos/build/ios/iphoneos/Runner.app
+          if-no-files-found: error
+          retention-days: 7
+
+  windows:
+    name: Build Windows PC app
+    needs: android
+    runs-on: windows-latest
+    timeout-minutes: 35
+    defaults:
+      run:
+        working-directory: mobile/shop_pos
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          channel: stable
+          cache: true
+
+      - name: Generate Windows runner without touching the app lockfile
+        shell: pwsh
+        run: |
+          $lockBefore = (Get-FileHash -Algorithm SHA256 -LiteralPath 'pubspec.lock').Hash
+          $runnerSource = Join-Path $env:RUNNER_TEMP 'supermega_shop_windows_runner'
+          flutter create --platforms=windows --no-pub --project-name supermega_shop $runnerSource
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Copy-Item -LiteralPath (Join-Path $runnerSource 'windows') -Destination 'windows' -Recurse
+          & .\scripts\build_windows_icon.ps1
+          $lockAfter = (Get-FileHash -Algorithm SHA256 -LiteralPath 'pubspec.lock').Hash
+          if ($lockBefore -ne $lockAfter) { throw 'Windows runner generation changed the committed pubspec.lock.' }
+
+      - name: Resolve locked dependencies
+        run: flutter pub get --enforce-lockfile
+
+      - name: Prove backup restore and no-replace behavior on Windows
+        run: flutter test test/shop_backup_test.dart --reporter expanded --timeout 2m
+
+      - name: Build unsigned Windows app
+        run: flutter build windows --release --no-pub
+
+      - name: Package complete Windows app for device QA
+        shell: pwsh
+        run: |
+          $releaseDir = 'build/windows/x64/runner/Release'
+          if (-not (Test-Path -LiteralPath $releaseDir)) { throw 'Windows release directory is missing.' }
+          Compress-Archive -Path (Join-Path $releaseDir '*') -DestinationPath 'build/supermega-shop-windows-unsigned.zip'
+
+      - name: Retain Windows QA package
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: supermega-shop-windows-unsigned-${{ github.sha }}
+          path: mobile/shop_pos/build/supermega-shop-windows-unsigned.zip
+          if-no-files-found: error
+          retention-days: 7

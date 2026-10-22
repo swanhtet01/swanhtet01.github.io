@@ -228,6 +228,24 @@ try {
   assert.equal(conflict.status, 409)
   assert.equal(conflict.body.reason, 'idempotency_conflict')
 
+  const shopAccepted = await invoke({
+    body: { ...validSubmission, product: 'shop', template: 'mini-mart', plan: 'shop-pilot' },
+    headers: withKey(19, { 'x-forwarded-for': '203.0.113.29' }),
+  })
+  assert.equal(shopAccepted.status, 202)
+  const shopEvent = JSON.parse(delivered.options.body)
+  assert.equal(shopEvent.record.workflow, 'commerce')
+  assert.equal(shopEvent.record.requested_package, 'mini-mart')
+  assert.equal(shopEvent.record.raw.plan, 'shop-pilot')
+  for (const unavailablePlan of ['shop-managed', 'shop-multisite', 'assisted-launch', 'shop-core', 'shop-pro']) {
+    const rejected = await invoke({
+      body: { ...validSubmission, product: 'shop', template: 'mini-mart', plan: unavailablePlan },
+      headers: withKey(30 + unavailablePlan.length, { 'x-forwarded-for': '203.0.113.' + (30 + unavailablePlan.length) }),
+    })
+    assert.equal(rejected.status, 400)
+    assert.equal(rejected.body.reason, 'invalid_request')
+  }
+
   const websiteAccepted = await invoke({
     body: {
       ...validSubmission,
@@ -313,7 +331,7 @@ try {
       verification: 'client_provided_digest',
     },
   })
-  assert.equal(proofEvent.record.raw.contact_idempotency.version, 3)
+  assert.equal(proofEvent.record.raw.contact_idempotency.version, 4)
   assert.equal(JSON.stringify(proofEvent.record.raw).includes('private-fragment'), false)
 
   const tamperedProof = await invoke({
@@ -434,7 +452,8 @@ try {
     return { ok: true, status: 200, json: async () => ({ id: 'email-' + resendMail.length }) }
   }
   const resendHandler = loadHandler({ fresh: true })
-  const ackAccepted = await invoke({ body: { ...validSubmission, trial_claim_code: 'SM-2CDE-4FGH' }, headers: withKey(400, { 'x-forwarded-for': '203.0.113.40' }), activeHandler: resendHandler })
+  const shopPlanSubmission = { ...validSubmission, product: 'shop', template: 'mini-mart', plan: 'shop-pilot' }
+  const ackAccepted = await invoke({ body: { ...shopPlanSubmission, trial_claim_code: 'SM-2CDE-4FGH' }, headers: withKey(400, { 'x-forwarded-for': '203.0.113.40' }), activeHandler: resendHandler })
   assert.equal(ackAccepted.status, 202)
   assert.equal(resendMail.length, 2)
   const founderNotify = resendMail[0]
@@ -442,7 +461,9 @@ try {
   assert.deepEqual(founderNotify.body.to, ['swanhtet@supermega.dev'])
   assert.equal(founderNotify.body.reply_to, validSubmission.email)
   assert.ok(founderNotify.body.text.includes('Trial claim code: SM-2CDE-4FGH'))
-  assert.match(founderNotify.body.text, /Operator next step: Validate the operating workflow, accountable roles and sample boundary/)
+  assert.match(founderNotify.body.text, /Template: mini-mart/)
+  assert.match(founderNotify.body.text, /Plan: shop-pilot/)
+  assert.match(founderNotify.body.text, /Operator next step: Validate the Shop trade, import source and first-sale workflow/)
   assert.match(founderNotify.body.text, /Customer brief:/)
   assert.deepEqual(customerAck.body.to, [validSubmission.email])
   assert.equal(customerAck.body.reply_to, 'swanhtet@supermega.dev')
@@ -451,6 +472,7 @@ try {
   assert.ok(customerAck.body.text.includes('Workspace reference: SM-2CDE-4FGH'))
   assert.ok(customerAck.body.subject.includes('We received your request'))
   assert.match(customerAck.body.text, /confirm scope, price and timing/)
+  assert.match(customerAck.body.text, /your catalog, stock and sales workflow/)
   assert.match(customerAck.body.text, /Please do not include passwords or customer records/)
   assert.doesNotMatch(customerAck.body.text.split('\n').slice(1).join('\n'), /demo|preview|trial|account created|payment received/i)
   assert.doesNotMatch(customerAck.body.text, /one business day|founder|trial keeps working/)
@@ -576,7 +598,7 @@ try {
   const durableRecord = storeRequests[0].record
   assert.equal(durableRecord.lead_id, durableAccepted.body.request_id)
   assert.deepEqual(durableRecord.raw.contact_idempotency, {
-    version: 3,
+    version: 4,
     algorithm: 'sha256',
     payload_fingerprint: durableRecord.raw.contact_idempotency.payload_fingerprint,
   })
@@ -608,6 +630,39 @@ try {
     durableRecord.raw.contact_idempotency.payload_fingerprint,
   )
 
+  // Version 3 predates the separate plan field. An exact no-plan retry still
+  // replays, while adding a plan under the same key must conflict.
+  const v3Accepted = await invoke({
+    activeHandler: loadHandler({ fresh: true }),
+    body: validSubmission,
+    headers: withKey(204, { 'x-forwarded-for': '203.0.113.98' }),
+  })
+  assert.equal(v3Accepted.status, 202)
+  const v3Record = persistedLeads.get(v3Accepted.body.request_id)
+  const v3Projection = {
+    name: validSubmission.name,
+    email: validSubmission.email.toLowerCase(),
+    company: validSubmission.company,
+    product: validSubmission.product,
+    template: validSubmission.template,
+    goal: validSubmission.goal,
+    source_url: 'https://supermega.dev/contact/',
+    referrer: '',
+    trial_proof: null,
+  }
+  v3Record.raw.contact_idempotency = {
+    version: 3,
+    algorithm: 'sha256',
+    payload_fingerprint: createHash('sha256').update('supermega.contact.payload.v3\n' + JSON.stringify(v3Projection)).digest('hex'),
+  }
+  delete v3Record.raw.plan
+  const v3Replay = await invoke({ activeHandler: loadHandler({ fresh: true }), body: validSubmission, headers: withKey(204) })
+  assert.equal(v3Replay.status, 202)
+  assert.equal(v3Replay.headers['x-idempotent-replay'], 'true')
+  const v3PlanRejected = await invoke({ activeHandler: loadHandler({ fresh: true }), body: { ...validSubmission, plan: 'shop-pilot' }, headers: withKey(204) })
+  assert.equal(v3PlanRejected.status, 400)
+  assert.equal(v3PlanRejected.body.reason, 'invalid_request')
+
   const durableProofSubmission = {
     ...validSubmission,
     ...trialProofFields(),
@@ -622,7 +677,7 @@ try {
   assert.equal(durableProofAccepted.status, 202)
   assert.equal(durableProofAccepted.body.proof_bound, true)
   const durableProofRecord = persistedLeads.get(durableProofAccepted.body.request_id)
-  assert.equal(durableProofRecord.raw.contact_idempotency.version, 3)
+  assert.equal(durableProofRecord.raw.contact_idempotency.version, 4)
   assert.equal(durableProofRecord.raw.trial_proof.verification, 'client_provided_summary')
   assert.equal(durableProofRecord.raw.trial_proof.summary_digest, durableProofSubmission.proof_digest)
   assert.equal(durableProofRecord.raw.trial_proof.raw_records_included, false)

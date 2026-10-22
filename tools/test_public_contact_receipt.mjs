@@ -1,25 +1,43 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { runInNewContext } from 'node:vm'
 import test from 'node:test'
 
-const html = readFileSync('.vercel/output/static/contact/index.html', 'utf8')
+const isolatedOutputId = process.env.SUPERMEGA_PUBLIC_OUTPUT_ID || ''
+if (isolatedOutputId && !/^[a-z0-9][a-z0-9-]{0,63}$/.test(isolatedOutputId)) throw new Error('public_output_id_invalid')
+const outputDir = isolatedOutputId
+  ? resolve('.tmp', `supermega-public-output-${isolatedOutputId}`, 'static')
+  : resolve('.vercel/output/static')
+const html = readFileSync(resolve(outputDir, 'contact/index.html'), 'utf8')
+const myanmarHtml = readFileSync(resolve(outputDir, 'my/contact/index.html'), 'utf8')
+const page = html.match(/<main\b[\s\S]*?<\/main>/)?.[0] ?? ''
+const myanmarPage = myanmarHtml.match(/<main\b[\s\S]*?<\/main>/)?.[0] ?? ''
+const formHtml = page.match(/<form class="contact-form"[\s\S]*?<\/form>/)?.[0] ?? ''
 const script = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
   .map(match => match[1]).find(value => value.includes('[data-contact-form]'))
 assert.ok(script, 'actual generated contact script exists')
+assert.equal([...myanmarHtml.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(match => match[1]).find(value => value.includes('[data-contact-form]')), script, 'English and Burmese reuse one receipt contract')
 
-test('service brief asks for a business result without requiring template knowledge', () => {
-  assert.match(html, /Tell us what your business needs\./)
-  assert.match(html, /What to include/)
-  assert.match(html, /scope, price and timing/)
-  assert.match(html, /We use your email to reply about this request\./)
-  assert.match(html, /<input type="hidden" name="template" maxlength="120"/)
-  assert.doesNotMatch(html, /Template, if known|>Send workflow<|>Send the workflow</)
-  assert.match(html, />Send message<\/button>/)
-  assert.match(html, /name="goal" required maxlength="4000"/)
+test('contact form stays concise and does not make customers classify the request', () => {
+  assert.match(page, /<h1 data-contact-heading>Contact<\/h1>/)
+  assert.match(page, /Tell us about your business and the workflow you want to improve\. We will reply by email\./)
+  assert.doesNotMatch(page, /English and Burmese are both welcome|lang="my"|[\u1000-\u109f]/u)
+  assert.doesNotMatch(formHtml, /Your reference number confirms receipt/)
+  assert.match(formHtml, /<label>Email<input name="email"/)
+  assert.match(formHtml, /Company \(optional\)/)
+  assert.match(formHtml, /<label class="wide">Message<textarea/)
+  assert.match(formHtml, /placeholder="Tell us what your business needs\."/)
+  assert.match(formHtml, /<input type="hidden" name="product" value="guide"/)
+  assert.doesNotMatch(page, /<select\b|trial-proof-summary|Attached request details|What to include|Readiness|Behavior|Decisions|Reply email|What would you like us to prepare\?|Do not paste|Brief tips|Your brief|request summary/)
+  assert.match(formHtml, /<input type="hidden" name="template" maxlength="120"/)
+  assert.match(formHtml, /<input type="hidden" name="plan" maxlength="120"/)
+  assert.doesNotMatch(page, /Template, if known|>Send workflow<|>Send the workflow</)
+  assert.match(formHtml, />Send message<\/button>/)
+  assert.match(formHtml, /name="goal" required maxlength="4000"/)
 })
 
-function harness(responses, search = '', hash = '') {
+function harness(responses, search = '', hash = '', locale = 'en') {
   const fields = new Map()
   const events = new Map()
   const windowEvents = new Map()
@@ -28,11 +46,13 @@ function harness(responses, search = '', hash = '') {
   const timers = new Map()
   const headings = new Map()
   const historyCalls = []
-  const location = { search, hash, pathname: '/contact/', href: 'https://supermega.dev/contact/' + search + hash }
+  const route = locale === 'my' ? '/my/contact/' : '/contact/'
+  const location = { origin: 'https://supermega.dev', search, hash, pathname: route, href: 'https://supermega.dev' + route + search + hash }
+  const languageSwitch = { href: locale === 'my' ? '/contact/' : '/my/contact/' }
   let timerId = 0
   const form = {
     querySelector(selector) {
-      if (!fields.has(selector)) fields.set(selector, { open: true, value: selector === '[name="product"]' ? 'guide' : '', selectedOptions: [], addEventListener(name, callback) { events.set(selector + ':' + name, callback) } })
+      if (!fields.has(selector)) fields.set(selector, { open: true, hidden: selector === '[data-contact-selection]', textContent: '', value: selector === '[name="product"]' ? 'guide' : '', placeholder: selector === '[name="goal"]' ? 'Tell us what your business needs.' : '', selectedOptions: [], validity: { typeMismatch: false }, setCustomValidity(message) { this.validationMessage = message }, addEventListener(name, callback) { events.set(selector + ':' + name, callback) } })
       return fields.get(selector)
     },
     addEventListener(name, callback) { if (name === 'submit') handler = callback; else events.set('form:' + name, callback) },
@@ -41,10 +61,12 @@ function harness(responses, search = '', hash = '') {
   let keys = 0
   const crypto = { randomUUID: () => 'local-retry-key-' + ++keys }
   runInNewContext(script, {
-    document: { querySelector: selector => {
+    document: { documentElement: { lang: locale }, querySelector: selector => {
       if (selector === '[data-contact-form]') return form
-      if (['[data-contact-heading]', '[data-contact-lede]', '[data-contact-copy-heading]', '[data-contact-copy]'].includes(selector)) {
-        if (!headings.has(selector)) headings.set(selector, { textContent: '' })
+      if (selector === '[data-language-switch]') return languageSwitch
+      if (['[data-contact-selection]', '[data-contact-selection-label]', '[data-contact-selection-value]', '[data-contact-selection-clear]'].includes(selector)) return form.querySelector(selector)
+      if (['[data-contact-heading]', '[data-contact-lede]'].includes(selector)) {
+        if (!headings.has(selector)) headings.set(selector, { textContent: selector === '[data-contact-heading]' ? (locale === 'my' ? 'ဆက်သွယ်ရန်' : 'Contact') : 'Tell us about your business and the workflow you want to improve. We will reply by email.' })
         return headings.get(selector)
       }
       return null
@@ -55,7 +77,7 @@ function harness(responses, search = '', hash = '') {
       Object.assign(location, { href: next.href, hash: next.hash, search: next.search, pathname: next.pathname })
     } },
     location,
-    URLSearchParams, window: { crypto, addEventListener(name, callback) { windowEvents.set(name, callback) }, removeEventListener(name, callback) { if (windowEvents.get(name) === callback) windowEvents.delete(name) } }, crypto,
+    URL, URLSearchParams, window: { crypto, addEventListener(name, callback) { windowEvents.set(name, callback) }, removeEventListener(name, callback) { if (windowEvents.get(name) === callback) windowEvents.delete(name) } }, crypto,
     AbortController,
     setTimeout(callback, delay) { assert.equal(delay, 20000); timers.set(++timerId, callback); return timerId },
     clearTimeout(id) { timers.delete(id) },
@@ -74,65 +96,145 @@ function harness(responses, search = '', hash = '') {
     },
   })
   if (!hash) form.querySelector('[name="goal"]').value = 'Please build my business website'
-  return { invalid: field => events.get('form:invalid')({ target: form.querySelector('[name="' + field + '"]') }), reset: () => form.reset(), fields, headings, calls, timers, windowEvents, historyCalls, location, changeProduct: value => { form.querySelector('[name="product"]').value = value; events.get('[name="product"]:change')() }, expire: () => { for (const callback of [...timers.values()]) callback() }, submit: () => handler({ preventDefault() {} }), resets: () => resets }
+  return { invalid: field => events.get('form:invalid')?.({ target: form.querySelector('[name="' + field + '"]') }), input: field => events.get('form:input')?.({ target: form.querySelector('[name="' + field + '"]') }), reset: () => form.reset(), fields, headings, calls, timers, windowEvents, historyCalls, location, languageSwitch, clearSetup: () => events.get('[data-contact-selection-clear]:click')?.({ preventDefault() {} }), changeProduct: value => { form.querySelector('[name="product"]').value = value; events.get('[name="product"]:change')() }, expire: () => { for (const callback of [...timers.values()]) callback() }, submit: () => handler({ preventDefault() {} }), resets: () => resets }
 }
 
-test('complete assisted briefs collapse the editable service choice only', () => {
-  assert.match(html, /data-contact-service open/)
+test('only active public product links set product context; internal routes fall back to the general brief', () => {
+  assert.doesNotMatch(html, /<select name="product"/)
+  const shop = harness([], '?product=shop&source=shop-brief', '#company=Example&goal=Prepare%20our%20shop')
+  assert.equal(shop.fields.get('[name="product"]').value, 'shop')
+  assert.equal(shop.headings.get('[data-contact-heading]').textContent, 'Request a Shop pilot')
+  assert.equal(shop.headings.get('[data-contact-lede]').textContent, 'Tell us what you sell and how you work today. We will reply by email.')
+  assert.equal(shop.fields.get('[name="goal"]').value, 'Prepare our shop')
+  assert.equal(shop.calls.length, 0)
   for (const product of ['website', 'ecommerce']) {
     const state = harness([], `?product=${product}&source=${product}-brief`, '#company=Example&goal=Prepare%20our%20site')
-    assert.equal(state.fields.get('[data-contact-service]').open, false)
-    assert.equal(state.fields.get('[data-contact-service-summary]').textContent, { website: 'Sites', ecommerce: 'Commerce' }[product])
-    state.changeProduct('shop')
-    assert.equal(state.fields.get('[data-contact-service-summary]').textContent, 'Shop')
-    assert.equal(state.headings.get('[data-contact-heading]').textContent, 'Finish your Shop request.')
+    assert.equal(state.fields.get('[name="product"]').value, 'guide')
+    assert.equal(state.fields.get('[name="template"]').value, '')
+    assert.equal(state.headings.get('[data-contact-heading]').textContent, 'Contact')
     assert.equal(state.fields.get('[name="goal"]').value, 'Prepare our site')
     assert.equal(state.calls.length, 0)
   }
-  for (const [search, hash] of [['', ''], ['?product=website', '#company=Example&goal=Prepare'], ['?product=website&source=website-brief', '#company=Example']]) {
-    assert.equal(harness([], search, hash).fields.get('[data-contact-service]').open, true)
-  }
+  assert.doesNotMatch(html, /<details/)
 })
 
-test('prefilled brief does not claim that customer setup is complete', () => {
-  const state = harness([], '?product=website', '#company=Example&goal=Prepare%20our%20website')
-  assert.equal(state.headings.get('[data-contact-copy-heading]').textContent, 'Your brief is ready to review.')
+test('prefilled message stays editable and does not claim setup is complete', () => {
+  const state = harness([], '?product=shop', '#company=Example&goal=Prepare%20our%20shop')
+  assert.equal(state.headings.get('[data-contact-heading]').textContent, 'Request a Shop pilot')
   assert.equal(state.fields.get('[name="company"]').value, 'Example')
   assert.equal(state.calls.length, 0)
   assert.doesNotMatch(script, /Your setup is ready\./)
 })
 
-test('product handoffs prefill hidden context and product changes discard stale templates only', () => {
-  for (const product of ['shop', 'ecommerce', 'website']) {
-    const state = harness([], '?product=' + product + '&template=example-template')
-    assert.equal(state.fields.get('[name="product"]').value, product)
-    assert.equal(state.fields.get('[name="template"]').value, 'example-template')
-    state.fields.get('[name="company"]').value = 'Example business'
-    state.changeProduct(product === 'shop' ? 'website' : 'shop')
-    assert.equal(state.fields.get('[name="template"]').value, '')
-    assert.equal(state.fields.get('[name="company"]').value, 'Example business')
-    assert.equal(state.fields.get('[name="goal"]').value, 'Please build my business website')
-    assert.equal(state.calls.length, 0)
+test('Shop handoffs show an allowlisted setup and unsupported routes cannot set one', () => {
+  const state = harness([], '?product=shop&template=mini-mart&plan=shop-pilot&utm_source=shop-page&private=discard')
+  assert.equal(state.fields.get('[name="product"]').value, 'shop')
+  assert.equal(state.fields.get('[name="template"]').value, 'mini-mart')
+  assert.equal(state.fields.get('[name="plan"]').value, 'shop-pilot')
+  assert.equal(state.fields.get('[data-contact-selection]').hidden, false)
+  assert.equal(state.fields.get('[data-contact-selection-label]').textContent, 'Selected setup:')
+  assert.equal(state.fields.get('[data-contact-selection-value]').textContent, 'Mini-mart & grocery · Local pilot')
+  assert.equal(state.languageSwitch.href, '/my/contact/?product=shop&template=mini-mart&plan=shop-pilot&utm_source=shop-page')
+  state.clearSetup()
+  assert.equal(state.fields.get('[name="template"]').value, '')
+  assert.equal(state.fields.get('[name="plan"]').value, '')
+  assert.equal(state.fields.get('[data-contact-selection]').hidden, true)
+  assert.equal(state.location.search, '?product=shop&utm_source=shop-page&private=discard')
+  state.fields.get('[name="company"]').value = 'Example business'
+  state.changeProduct('guide')
+  assert.equal(state.fields.get('[name="template"]').value, '')
+  assert.equal(state.fields.get('[name="plan"]').value, '')
+  assert.equal(state.fields.get('[name="company"]').value, 'Example business')
+  assert.equal(state.fields.get('[name="goal"]').value, 'Please build my business website')
+  assert.equal(state.calls.length, 0)
+  for (const product of ['website', 'ecommerce']) {
+    const internal = harness([], `?product=${product}&template=mini-mart&plan=shop-pilot`)
+    assert.equal(internal.fields.get('[name="product"]').value, 'guide')
+    assert.equal(internal.fields.get('[name="template"]').value, '')
+    assert.equal(internal.fields.get('[name="plan"]').value, '')
+    assert.equal(internal.headings.get('[data-contact-heading]').textContent, 'Contact')
   }
-  for (const search of ['?product=unknown&template=example', '?product=guide&template=example', '?product=website&template=' + 'a'.repeat(121), '?product=website&template=%3Cbad%3E']) {
-    assert.equal(harness([], search).fields.get('[name="template"]').value, '')
+  for (const search of ['?product=unknown&template=mini-mart&plan=shop-pilot', '?product=guide&template=mini-mart&plan=shop-pilot', '?product=shop&template=made-up&plan=made-up', '?product=shop&plan=shop-managed', '?product=shop&plan=assisted-launch', '?product=shop&plan=shop-core', '?product=website&template=' + 'a'.repeat(121), '?product=website&plan=%3Cbad%3E']) {
+    const invalid = harness([], search)
+    assert.equal(invalid.fields.get('[name="template"]').value, '')
+    assert.equal(invalid.fields.get('[name="plan"]').value, '')
   }
+  const legacyTemplate = harness([], '?product=shop&template=mini-mart-grocery')
+  assert.equal(legacyTemplate.fields.get('[name="template"]').value, 'mini-mart')
+  const legacyPlan = harness([], '?product=shop&template=shop-basic')
+  assert.equal(legacyPlan.fields.get('[name="template"]').value, '')
+  assert.equal(legacyPlan.fields.get('[name="plan"]').value, 'shop-pilot')
+})
+
+test('legacy setup aliases cannot silently rewrite attached managed proof', () => {
+  const proofHash = template => '#' + new URLSearchParams({
+    proof_contract: 'supermega.managed_trial_proof.v2',
+    proof_version: '2',
+    proof_digest: 'sha256:' + 'a'.repeat(64),
+    proof_product: 'shop',
+    proof_template: template,
+    proof_readiness: '67',
+    proof_sources: '12',
+    proof_behavior: '4',
+    proof_decisions: '2',
+    proof_outcome: 'improved',
+    proof_outcome_digest: 'sha256:' + 'b'.repeat(64),
+    proof_outcome_accepted: 'true',
+    proof_raw_records: 'false',
+  }).toString()
+
+  const canonical = harness([], '?product=shop&template=mini-mart', proofHash('mini-mart'))
+  assert.equal(canonical.fields.get('[name="proof_template"]').value, 'mini-mart')
+  assert.equal(canonical.fields.get('[data-form-status]').textContent, 'Helpful context attached. Nothing has been sent.')
+
+  const legacy = harness([], '?product=shop&template=mini-mart-grocery', proofHash('mini-mart-grocery'))
+  assert.equal(legacy.fields.get('[name="template"]').value, 'mini-mart')
+  assert.equal(legacy.fields.has('[name="proof_template"]'), false)
+  assert.equal(legacy.fields.has('[name="proof_digest"]'), false)
+  assert.equal(legacy.fields.get('[data-form-status]').textContent, 'Attached context could not be verified and was left out.')
+  assert.equal(legacy.location.hash, '')
+  assert.equal(legacy.calls.length, 0)
 })
 
 const receipt = { status: 'ready', request_id: 'LEAD-0123456789ABCDEF', proof_bound: false }
-test('product-specific brief guidance preserves drafts and never sends on selection', () => {
-  const expectations = { website: 'what should visitors do?', ecommerce: 'how should you receive customer requests?', shop: 'which devices do staff use', guide: 'help choose the right service' }
-  for (const [product, hint] of Object.entries(expectations)) {
+test('Burmese contact route keeps the same safe receipt contract with Burmese controls and states', async () => {
+  for (const token of ['<label>အမည်<input', '<label>အီးမေးလ်<input', '<label class="wide">စာ<textarea', '>စာပို့ရန်</button>']) assert.match(myanmarPage, new RegExp(token))
+  assert.doesNotMatch(myanmarPage, />Send message<\/button>|>Company \(optional\)<input/)
+  const state = harness([new Error('connection lost'), { body: receipt }], '?product=shop&template=mini-mart&plan=shop-pilot&utm_source=example&private=discard', '', 'my')
+  assert.equal(state.headings.get('[data-contact-heading]').textContent, 'Shop စမ်းသုံးရန် တောင်းဆိုပါ')
+  assert.equal(state.headings.get('[data-contact-lede]').textContent, 'သင်ရောင်းချသော ပစ္စည်းများနှင့် လက်ရှိအလုပ်လုပ်ပုံကို ပြောပြပါ။ အီးမေးလ်ဖြင့် ပြန်လည်ဆက်သွယ်ပါမည်။')
+  assert.equal(state.fields.get('[data-contact-selection-value]').textContent, 'မီနီမတ်နှင့် ကုန်စုံဆိုင် · ဒေသတွင်း စမ်းသပ်သုံးစွဲမှု')
+  assert.equal(state.languageSwitch.href, '/contact/?product=shop&template=mini-mart&plan=shop-pilot&utm_source=example')
+  state.invalid('name')
+  assert.equal(state.fields.get('[name="name"]').validationMessage, 'ဤအချက်အလက်ကို ဖြည့်ပါ။')
+  state.input('name')
+  assert.equal(state.fields.get('[name="name"]').validationMessage, '')
+  state.input('email')
+  state.fields.get('[name="email"]').validity.typeMismatch = true
+  state.invalid('email')
+  assert.equal(state.fields.get('[name="email"]').validationMessage, 'မှန်ကန်သော အီးမေးလ်လိပ်စာကို ဖြည့်ပါ။')
+  state.input('email')
+  await state.submit()
+  assert.match(state.fields.get('[data-form-status]').textContent, /သင့်စာကို လက်ခံရရှိခဲ့ကြောင်း အတည်မပြုနိုင်သေးပါ/)
+  await state.submit()
+  assert.equal(state.calls[0].body, state.calls[1].body)
+  assert.equal(JSON.parse(state.calls[0].body).source_url, 'https://supermega.dev/my/contact/?product=shop&template=mini-mart&plan=shop-pilot&utm_source=example&private=discard')
+  assert.match(state.fields.get('[data-form-status]').textContent, /စာလက်ခံရရှိပါပြီ: LEAD-0123456789ABCDEF/)
+  assert.equal(state.headings.get('[data-contact-heading]').textContent, 'စာပို့ပြီးပါပြီ။')
+  assert.equal(state.fields.get('button[type="submit"]').textContent, 'နောက်ထပ်စာပို့ရန်')
+})
+test('one clear message prompt stays consistent across product links', () => {
+  for (const product of ['website', 'ecommerce', 'shop', 'guide']) {
     const state = harness([], '?product=' + product)
     const goal = state.fields.get('[name="goal"]')
-    assert.ok(goal.placeholder.includes(hint))
-    assert.match(goal.placeholder, /Do not paste/)
+    assert.equal(goal.placeholder, 'Tell us what your business needs.')
+    assert.doesNotMatch(goal.placeholder, /Do not paste/)
     goal.value = 'Keep my own brief exactly as written'
     state.changeProduct('website')
     assert.equal(goal.value, 'Keep my own brief exactly as written')
-    assert.ok(goal.placeholder.includes(expectations.website))
+    assert.equal(goal.placeholder, 'Tell us what your business needs.')
     state.changeProduct('unknown')
-    assert.ok(goal.placeholder.includes(expectations.guide))
+    assert.equal(goal.placeholder, 'Tell us what your business needs.')
     assert.equal(state.calls.length, 0)
   }
 })
@@ -152,7 +254,7 @@ test('navigation warning exists only during pending or unconfirmed delivery', as
   finish(new Error('response lost'))
   await attempt
   assert.equal(state.windowEvents.get('beforeunload'), warning)
-  assert.match(state.fields.get('[data-form-status]').textContent, /reloading or closing it loses this retry state/)
+  assert.match(state.fields.get('[data-form-status]').textContent, /Retry checks the original message first\. New edits remain unsent\./)
   await state.submit()
   assert.equal(state.windowEvents.size, 0)
   assert.equal(state.calls[0].body, state.calls[1].body)
@@ -163,8 +265,8 @@ test('navigation warning exists only during pending or unconfirmed delivery', as
   await rejected.submit()
   assert.equal(rejected.windowEvents.size, 0)
 })
-test('three service-first doors retain product identity through uncertain delivery and confirmation', async () => {
-  for (const product of ['website', 'ecommerce', 'shop']) {
+test('Shop handoff retains identity through uncertain delivery and confirmation', async () => {
+  for (const product of ['shop']) {
     const state = harness([new Error('connection lost'), { body: receipt }], '?product=' + product + '&source=' + product + '-preview')
     assert.equal(state.calls.length, 0, 'opening a door does not send a brief')
     state.fields.get('[name="company"]').value = 'Synthetic service business'
@@ -177,15 +279,15 @@ test('three service-first doors retain product identity through uncertain delive
     assert.equal(original.template, '', 'no fabricated template or builder prerequisite')
     assert.equal(original.goal, 'Prepare our ' + product + ' for owner review')
     assert.equal(original.idempotency_key, state.calls[0].headers['x-idempotency-key'])
-    assert.doesNotMatch(state.fields.get('[data-form-status]').textContent, /Request received/)
+    assert.doesNotMatch(state.fields.get('[data-form-status]').textContent, /Message received/)
     await state.submit()
     assert.equal(state.calls[1].body, state.calls[0].body)
     assert.equal(state.calls[1].headers['x-idempotency-key'], state.calls[0].headers['x-idempotency-key'])
-    assert.match(state.fields.get('[data-form-status]').textContent, /Request received: LEAD-0123456789ABCDEF/)
-    assert.match(state.fields.get('[data-form-status]').textContent, /Keep this reference/)
-    assert.match(state.fields.get('[data-form-status]').textContent, /Next: review of scope, price and timing/)
+    assert.match(state.fields.get('[data-form-status]').textContent, /Message received: LEAD-0123456789ABCDEF/)
+    assert.match(state.fields.get('[data-form-status]').textContent, /Keep this reference if you need to follow up/ )
+    assert.doesNotMatch(state.fields.get('[data-form-status]').textContent, /Next: review of scope/)
     assert.doesNotMatch(state.fields.get('[data-form-status]').textContent, /account created|payment received|website published/i)
-    assert.doesNotMatch(state.fields.get('[data-form-status]').textContent, /No action is needed now|will .*reply|email (sent|delivered)/i)
+    assert.doesNotMatch(state.fields.get('[data-form-status]').textContent, /No action is needed now|will .*reply|email/i)
     assert.equal(state.resets(), 1)
   }
 })
@@ -195,7 +297,7 @@ test('only explicit pre-delivery validation failures unlock a corrected brief', 
     await state.submit()
     assert.equal(state.resets(), 0)
     assert.equal(state.fields.get('[name="idempotency_key"]').value, '')
-    assert.doesNotMatch(state.fields.get('[data-form-status]').textContent, /Request received|Retry sends/)
+    assert.doesNotMatch(state.fields.get('[data-form-status]').textContent, /Message received|Retry sends/)
     state.fields.get('[name="goal"]').value = 'Corrected brief'
     await state.submit()
     assert.equal(JSON.parse(state.calls[1].body).goal, 'Corrected brief')
@@ -221,14 +323,14 @@ test('late edits survive confirmation and uncertain retries resend the original 
     finish(failFirst ? new Error('network') : { body: receipt })
     await first
     if (failFirst) {
-      assert.match(state.fields.get('[data-form-status]').textContent, /Retry sends the original brief/)
+      assert.match(state.fields.get('[data-form-status]').textContent, /Retry checks the original message first/)
       await state.submit()
       assert.equal(state.calls[0].body, state.calls[1].body)
       assert.equal(state.calls[0].headers['x-idempotency-key'], state.calls[1].headers['x-idempotency-key'])
     }
     assert.equal(state.resets(), 0)
     assert.equal(state.fields.get('[name="goal"]').value, 'Revised brief not yet sent')
-    assert.match(state.fields.get('[data-form-status]').textContent, /later edits.*have not been sent/)
+    assert.match(state.fields.get('[data-form-status]').textContent, /Later edits remain unsent/)
     await state.submit()
     assert.equal(JSON.parse(state.calls.at(-1).body).goal, 'Revised brief not yet sent')
     assert.notEqual(state.calls.at(-1).headers['x-idempotency-key'], state.calls[0].headers['x-idempotency-key'])
@@ -260,18 +362,16 @@ test('valid generated receipt confirms and clears the brief', async () => {
   assert.equal(state.resets(), 1)
   assert.equal(state.timers.size, 0)
   assert.equal(state.fields.get('[name="idempotency_key"]').value, '')
-  assert.match(state.fields.get('[data-form-status]').textContent, /Request received: LEAD-0123456789ABCDEF/)
+  assert.match(state.fields.get('[data-form-status]').textContent, /Message received: LEAD-0123456789ABCDEF/)
 })
 
 test('confirmed reset refreshes guidance and clears attached-summary fields for the next brief', async () => {
   const state = harness([{ body: receipt }], '?product=ecommerce')
-  assert.match(state.fields.get('[name="goal"]').placeholder, /receive customer requests/)
+  assert.equal(state.fields.get('[name="goal"]').placeholder, 'Tell us what your business needs.')
   state.fields.set('[name="proof_digest"]', { value: 'synthetic-old-summary' })
   await state.submit()
   assert.equal(state.resets(), 1)
-  assert.equal(state.fields.get('[data-contact-service]').open, true)
-  assert.equal(state.fields.get('[data-contact-service-summary]').textContent, 'Choose a service')
-  assert.match(state.fields.get('[name="goal"]').placeholder, /help choose the right service/)
+  assert.equal(state.fields.get('[name="goal"]').placeholder, 'Tell us what your business needs.')
   assert.equal(state.fields.get('[name="proof_digest"]').value, '')
   assert.equal(state.calls.length, 1)
 })
@@ -330,7 +430,7 @@ test('ambiguous and rejected responses retain brief and reuse the exact retry ke
     await state.submit()
     assert.equal(state.resets(), 0)
     assert.equal(state.fields.get('[name="goal"]').value, 'Please build my business website')
-    assert.doesNotMatch(state.fields.get('[data-form-status]').textContent, /Request received/)
+    assert.doesNotMatch(state.fields.get('[data-form-status]').textContent, /Message received/)
     assert.equal(state.fields.get('button[type="submit"]').disabled, false)
     await state.submit()
     assert.equal(state.resets(), 1)
@@ -342,7 +442,7 @@ test('ambiguous and rejected responses retain brief and reuse the exact retry ke
 })
 
 
-test('actual business brief handoff preserves Myanmar text and reference through contact retry', async () => {
+test('legacy internal product brief handoff preserves Myanmar text while contact stays on the general route', async () => {
   const source = readFileSync('showroom/src/products/AssistedDeliveryScope.tsx', 'utf8')
   const submit = source.match(/<form onSubmit=\{event => \{([\s\S]*?)\n    \}\}>/)?.[1]
   assert.ok(submit, 'actual business brief submit handler found')
@@ -362,12 +462,12 @@ test('actual business brief handoff preserves Myanmar text and reference through
     assert.equal(state.calls.length, 0)
     assert.equal(state.fields.get('[name="company"]').value, company.trim())
     assert.equal(state.fields.get('[name="goal"]').value, goal)
-    assert.equal(state.fields.get('[name="product"]').value, product)
+    assert.equal(state.fields.get('[name="product"]').value, 'guide')
     await state.submit()
     const payload = JSON.parse(state.calls[0].body)
     assert.equal(payload.company, company.trim())
     assert.equal(payload.goal, goal)
-    assert.equal(payload.product, product)
+    assert.equal(payload.product, 'guide')
     await state.submit()
     assert.equal(state.calls[1].body, state.calls[0].body)
     assert.equal(state.resets(), 1)
@@ -385,14 +485,13 @@ test('confirmed handoff resets entry guidance only when no later edits remain', 
     await state.submit()
     assert.equal(state.calls[0].body, state.calls[1].body)
     assert.equal(state.resets(), edited ? 0 : 1)
-    assert.equal(state.headings.get('[data-contact-heading]').textContent, edited ? originalHeading : 'Request received.')
-    assert.equal(state.headings.get('[data-contact-copy-heading]').textContent, edited ? 'Your brief is ready to review.' : 'What to include')
+    assert.equal(state.headings.get('[data-contact-heading]').textContent, edited ? originalHeading : 'Message sent.')
     if (edited) assert.equal(state.fields.get('[name="goal"]').value, 'Later unsent brief')
     else {
-      assert.equal(state.fields.get('button[type="submit"]').textContent, 'Send another request')
-      assert.equal(state.headings.get('[data-contact-lede]').textContent, 'Reference: '+receipt.request_id+'. Keep this for follow-up.')
+      assert.equal(state.fields.get('button[type="submit"]').textContent, 'Send another message.')
+      assert.equal(state.headings.get('[data-contact-lede]').textContent, 'Reference: '+receipt.request_id+'. Keep it for follow-up.')
     }
-    assert.match(state.fields.get('[data-form-status]').textContent, /Request received: LEAD-/)
+    assert.match(state.fields.get('[data-form-status]').textContent, /Message received: LEAD-/)
   }
 })
 
@@ -424,35 +523,31 @@ test('Myanmar brief handoff preserves text and clears the fragment before submis
 test('a failed second request cannot retain the earlier success heading', async () => {
   const state = harness([{ body: receipt }, new Error('offline'), { body: { ...receipt, request_id: 'LEAD-FEDCBA9876543210' } }])
   await state.submit()
-  assert.equal(state.headings.get('[data-contact-heading]').textContent, 'Request received.')
+  assert.equal(state.headings.get('[data-contact-heading]').textContent, 'Message sent.')
   state.fields.get('[name="goal"]').value = 'A separate new brief'
   await state.submit()
-  assert.equal(state.headings.get('[data-contact-heading]').textContent, 'Send another request.')
-  assert.match(state.headings.get('[data-contact-lede]').textContent, /^Previous request — Reference: LEAD-0123456789ABCDEF/)
-  assert.match(state.fields.get('[data-form-status]').textContent, /could not confirm receipt/)
+  assert.equal(state.headings.get('[data-contact-heading]').textContent, 'Send another message.')
+  assert.match(state.headings.get('[data-contact-lede]').textContent, /^Previous message — Reference: LEAD-0123456789ABCDEF/)
+  assert.match(state.fields.get('[data-form-status]').textContent, /couldn’t confirm that your message was received/)
   assert.notEqual(state.calls[0].headers['x-idempotency-key'], state.calls[1].headers['x-idempotency-key'])
   await state.submit()
   assert.equal(state.calls[1].body, state.calls[2].body)
-  assert.equal(state.headings.get('[data-contact-heading]').textContent, 'Request received.')
+  assert.equal(state.headings.get('[data-contact-heading]').textContent, 'Message sent.')
   assert.match(state.headings.get('[data-contact-lede]').textContent, /^Reference: LEAD-FEDCBA9876543210/)
 })
 
- test('complete three-product briefs stay editable and reveal invalid fields', () => {
-  assert.match(html, /data-contact-brief open/)
+test('product links preserve prefilled business details as editable fields', () => {
+  assert.match(formHtml, /<label class="wide">Company \(optional\)<input/)
   for (const product of ['shop', 'website', 'ecommerce']) {
     const state = harness([], `?product=${product}`, '#company=Example&goal=Prepare%20our%20business')
-    assert.equal(state.fields.get('[data-contact-brief]').open, false)
-    assert.equal(state.fields.get('[data-contact-brief-summary]').textContent, 'Review brief — Example')
-    state.invalid('goal')
-    assert.equal(state.fields.get('[data-contact-brief]').open, true)
+    assert.equal(state.fields.get('[name="company"]').value, 'Example')
+    assert.equal(state.fields.get('[name="goal"]').value, 'Prepare our business')
     state.reset()
-    assert.equal(state.fields.get('[data-contact-brief-summary]').textContent, 'Business brief')
     assert.equal(state.calls.length, 0)
   }
   const incomplete = harness([], '?product=website', '#company=Example')
-  assert.equal(incomplete.fields.get('[data-contact-brief]').open, true)
+  assert.equal(incomplete.fields.get('[name="company"]').value, 'Example')
 })
-
 
 test('synthetic business briefs survive service corrections without repeat entry', async () => {
   const briefs = [
@@ -462,10 +557,10 @@ test('synthetic business briefs survive service corrections without repeat entry
   ]
   for (const brief of briefs) {
     const state = harness([{ body: receipt }], `?product=${brief.product}&template=original`, '#' + new URLSearchParams({ company: brief.company, goal: brief.goal }))
-    assert.equal(state.fields.get('[data-contact-brief]').open, false)
+    assert.equal(state.fields.get('[name="company"]').value, brief.company)
     const corrected = brief.product === 'shop' ? 'ecommerce' : 'shop'
     state.changeProduct(corrected)
-    assert.equal(state.fields.get('[data-contact-brief]').open, true, 'show the existing brief when its service changes')
+    assert.equal(state.fields.get('[name="product"]').value, corrected)
     assert.equal(state.fields.get('[name="company"]').value, brief.company)
     assert.equal(state.fields.get('[name="goal"]').value, brief.goal)
     assert.equal(state.fields.get('[name="template"]').value, '')
@@ -488,5 +583,5 @@ test('legacy intelligence links retain normal contact presentation and source at
   assert.doesNotMatch(script, /Request managed pilot|Request managed company intelligence/)
   await legacy.submit()
   assert.equal(JSON.parse(legacy.calls[0].body).source_url, 'https://supermega.dev/contact/?source=managed-intelligence')
-  assert.match(legacy.fields.get('[data-form-status]').textContent, /Request received/)
+  assert.match(legacy.fields.get('[data-form-status]').textContent, /Message received/)
 })

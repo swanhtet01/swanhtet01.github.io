@@ -433,11 +433,12 @@ requireContract('coordinated release avoids redundant local app install',
 requireContract('remote security inputs are included', generator.includes("'!.env.app.example'"))
 requireContract('canonical output directory', config.outputDirectory === 'showroom/dist')
 requireContract('canonical SPA routes use one filesystem-first fallback behind the header floor',
-  config.routes?.length === 4
+  config.routes?.length === 5
   && config.routes[0]?.src === '/(.*)' && config.routes[0]?.continue === true && !config.routes[0]?.dest
-  && config.routes[1]?.src === '/api/(.*)' && config.routes[1]?.dest === '/api/app.py'
-  && config.routes[2]?.handle === 'filesystem'
-  && config.routes[3]?.src === '/(.*)' && config.routes[3]?.dest === '/index.html')
+  && config.routes[1]?.src === '/api/shop/menu-import' && config.routes[1]?.dest === '/api/shop/menu-import.js'
+  && config.routes[2]?.src === '/api/(.*)' && config.routes[2]?.dest === '/api/app.py'
+  && config.routes[3]?.handle === 'filesystem'
+  && config.routes[4]?.src === '/(.*)' && config.routes[4]?.dest === '/index.html')
 // The app keeps a client's catalog, orders, and evidence in browser storage. It
 // shipped with no response headers at all while the kernel already had a full
 // set, so it was framable and ran under no content policy.
@@ -481,7 +482,17 @@ requireContract('app shell carries the same policy for hosts that cannot set hea
   && !appShellPolicy.includes('frame-ancestors'))
 requireContract('app shell carries no inline script the policy would refuse',
   ![...appShell.matchAll(/<script(?![^>]*\ssrc=)[^>]*>([\s\S]*?)<\/script>/g)].some((match) => match[1].trim().length))
-requireContract('canonical API function', config.routes?.[1]?.dest === '/api/app.py' && JSON.stringify(Object.keys(config.functions || {}).sort()) === JSON.stringify(['api/app.py']) && config.functions?.['api/app.py']?.maxDuration === 60 && config.functions?.['api/app.py']?.includeFiles === 'supermega_runtime/**' && generator.includes('maxDuration: 60') && generator.includes("includeFiles: 'supermega_runtime/**'"))
+requireContract('canonical Python and Shop menu API functions',
+  config.routes?.[1]?.dest === '/api/shop/menu-import.js'
+  && config.routes?.[2]?.dest === '/api/app.py'
+  && JSON.stringify(Object.keys(config.functions || {}).sort()) === JSON.stringify(['api/app.py', 'api/shop/menu-import.js'])
+  && config.functions?.['api/app.py']?.maxDuration === 60
+  && config.functions?.['api/app.py']?.includeFiles === 'supermega_runtime/**'
+  && config.functions?.['api/shop/menu-import.js']?.maxDuration === 60
+  && generator.includes("'api/shop/menu-import.js': {")
+  && generator.includes("src: '/api/shop/menu-import'")
+  && generator.includes('maxDuration: 60')
+  && generator.includes("includeFiles: 'supermega_runtime/**'"))
 requireContract('canonical Python function cold imports from included runtime only', canonicalPythonBundle.status === 0 && canonicalPythonBundle.stdout.includes('canonical-python-bundle-import-ok'))
 requireContract('native Git deployment disabled in config', config.git?.deploymentEnabled === false && /deploymentEnabled:\s*false/.test(generator))
 requireContract('Python dependencies and entrypoint probe trigger app review',

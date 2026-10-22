@@ -1,0 +1,143 @@
+{
+  "schema": "supermega.public-native-shop-gallery.v1",
+  "classification": "synthetic_flutter_widget_capture",
+  "records": "synthetic_sample_data",
+  "productionDeviceProof": false,
+  "sourceHead": "e734e098b21756defc15506355d91e9bf40a1412",
+  "ciMergeCommit": "e734e098b21756defc15506355d91e9bf40a1412",
+  "nativeTree": "178788c138ea88e23e231223bc5cb47d480cf5b9",
+  "workflowRun": 39851060031,
+  "artifactId": 12456609717,
+  "artifactName": "supermega-shop-flutter-renders-e734e098b21756defc15506355d91e9bf40a1412",
+  "artifactArchiveSha256": "a15fd056d530de5339d138032484a9c2c4e6c111a8acc311cb4b91c393d75a15",
+  "photoLedgerPath": "mobile/shop_pos/test/assets/grocery_photos/ledger.json",
+  "photoLedgerSha256": "c5ffc8e76ecae6575eeec712f46be811120d5c37f0f936dc744876f58811fc46",
+  "assets": [
+    {
+      "file": "shop_checkout_1200_en.png",
+      "width": 1200,
+      "height": 900,
+      "sha256": "d30b6708ea8acdc9b114a6a606c31d2096471bfaed3984176d311d9d6673ec7f",
+      "sourceFile": "mobile/shop_pos/test/goldens/shop_checkout_1200_en.png"
+    },
+    {
+      "file": "shop_checkout_1200_my.png",
+      "width": 1200,
+      "height": 900,
+      "sha256": "5ff1b0b8e9946d3317e7c432052de03df36883f8d7ef4380c5f285e4dd6931ea",
+      "sourceFile": "mobile/shop_pos/test/goldens/shop_checkout_1200_my.png"
+    },
+    {
+      "file": "shop_checkout_390_en.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "b31f0aa84d27407ec7f5b407aa7bd7b505faf36bdc9eaca758795dbe4a2cf9b0",
+      "sourceFile": "mobile/shop_pos/test/goldens/shop_checkout_390_en.png"
+    },
+    {
+      "file": "shop_checkout_390_my.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "61ad169e0315e3e1333d19fb4616c506844eb9d07438eca90dd58062295755ab",
+      "sourceFile": "mobile/shop_pos/test/goldens/shop_checkout_390_my.png"
+    },
+    {
+      "file": "shop_checkout_820_en.png",
+      "width": 820,
+      "height": 1000,
+      "sha256": "502f2d08eaf854843b345d1058bb2651e32bf8bfd11e4a70cd20062555610eaa",
+      "sourceFile": "mobile/shop_pos/test/goldens/shop_checkout_820_en.png"
+    },
+    {
+      "file": "shop_checkout_820_my.png",
+      "width": 820,
+      "height": 1000,
+      "sha256": "8184709307ebd3721a03fde96557525924c9869e859012f37219d7a315eaa296",
+      "sourceFile": "mobile/shop_pos/test/goldens/shop_checkout_820_my.png"
+    },
+    {
+      "file": "shop_sell_390_en.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "cca78100469bfa14321169ea4874d31f3843016d84f63bf56874adc88c94d699",
+      "sourceFile": "mobile/shop_pos/test/goldens/shop_sell_390_en.png"
+    },
+    {
+      "file": "shop_sell_390_my.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "c16951a43c9506ca87db012061a9931e9f4e4cf673c40da31d564852689d90e8",
+      "sourceFile": "mobile/shop_pos/test/goldens/shop_sell_390_my.png"
+    },
+    {
+      "file": "shop_stock_1200_en.png",
+      "width": 1200,
+      "height": 900,
+      "sha256": "1f0ec48eb8f6659d124deb77d890800ddaf66448ff2129f7624945bb0ba60ff4",
+      "sourceFile": "mobile/shop_pos/test/goldens/shop_stock_1200_en.png"
+    },
+    {
+      "file": "shop_stock_390_en.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "8b07aa3c46fa09440623601e43b5f034fe4e5c01414c583db763ab7a7d5e7234",
+      "sourceFile": "mobile/shop_pos/test/goldens/shop_stock_390_en.png"
+    },
+    {
+      "file": "shop_stock_390_my.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "cb532208717a97283b1c1ad5e159e7a38bc72faddb7b363735223d9325d9435b",
+      "sourceFile": "mobile/shop_pos/test/goldens/shop_stock_390_my.png"
+    },
+    {
+      "file": "shop_stock_820_en.png",
+      "width": 820,
+      "height": 1000,
+      "sha256": "12e7851c24173134a12acc38569e6fd5e3607a6a1dff74b4d76048f5a129cc2c",
+      "sourceFile": "mobile/shop_pos/test/goldens/shop_stock_820_en.png"
+    },
+    {
+      "file": "shop_stock_820_my.png",
+      "width": 820,
+      "height": 1000,
+      "sha256": "0bff70b2da943ea748203dc76c41db90a0681f813464702a97db7f02033fe1e7",
+      "sourceFile": "mobile/shop_pos/test/goldens/shop_stock_820_my.png"
+    },
+    {
+      "file": "shop_today_1200_en.png",
+      "width": 1200,
+      "height": 900,
+      "sha256": "6e011f42459ce8c3ceb10ca9afd5914e0d3c6d7bec556d2482d548c86c3ff64e",
+      "sourceFile": "mobile/shop_pos/test/goldens/shop_today_1200_en.png"
+    },
+    {
+      "file": "shop_today_390_en.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "a6397b90e2d6e96bfae19ec55172fbc6e5d6562ba55a0989bd02fe7dc7a88342",
+      "sourceFile": "mobile/shop_pos/test/goldens/shop_today_390_en.png"
+    },
+    {
+      "file": "shop_today_390_my.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "2c3f51ccc9f821a1c6e1e1458cbe9b883f60c4bc0c8640ba914c969c2899d9fb",
+      "sourceFile": "mobile/shop_pos/test/goldens/shop_today_390_my.png"
+    },
+    {
+      "file": "shop_today_820_en.png",
+      "width": 820,
+      "height": 1000,
+      "sha256": "e7ef9229e26af01506274b621e3ffe54c05adfef05e23bb5f47d1f73bccfa84e",
+      "sourceFile": "mobile/shop_pos/test/goldens/shop_today_820_en.png"
+    },
+    {
+      "file": "shop_today_820_my.png",
+      "width": 820,
+      "height": 1000,
+      "sha256": "38740b050f5df0b79ffd5bac3f39844dad7cfeb617b8ca61022120bcff701833",
+      "sourceFile": "mobile/shop_pos/test/goldens/shop_today_820_my.png"
+    }
+  ]
+}

@@ -74,10 +74,10 @@ test('launcher consumes active policy without discarding retained or assigned ac
   assert.match(source, /Workspace unavailable/)
 })
 
-test('one source policy declares exactly three active acquisition doors', () => {
+test('one source policy exposes Shop publicly while preserving internal setup contracts', () => {
   const before = JSON.stringify(manifest)
-  assert.deepEqual(activeProductContracts(manifest).map(p => p.id), ['shop', 'ecommerce', 'website'])
-  assert.deepEqual(activeSetupProductContracts.map(p => p.id), ['commerce', 'ecommerce', 'website'])
+  assert.deepEqual(activeProductContracts(manifest).map(p => p.id), ['shop'])
+  assert.deepEqual(activeSetupProductContracts.map(p => p.id), ['commerce'])
   assert.equal(JSON.stringify(manifest), before)
   assert.deepEqual(Object.keys(productContracts), ['commerce', 'production', 'website', 'ecommerce'])
 })
@@ -110,19 +110,84 @@ test('saved Plant setup survives visibility projection byte-for-byte', () => {
   assert.ok(productContracts.production.templates.length > 0)
 })
 
-test('generated public home and contact offer only active products', async () => {
-  const home = main(await html('index.html')), contact = main(await html('contact/index.html'))
-  assert.equal((home.match(/class="product-story"/g)??[]).length, 3)
-  assert.doesNotMatch(home, /Plant|all four|href="[^\"]*(?:\/plant\/|product=plant)/)
-  assert.deepEqual([...contact.matchAll(/<option value="([^"]+)">/g)].map(m=>m[1]), ['guide','shop','ecommerce','website'])
+test('generated public entry and contact expose only Shop', async () => {
+  const home = await html('index.html'), contactSource = await html('contact/index.html'), contact = main(contactSource)
+  assert.match(home, /url=\/shop\//)
+  assert.match(home, /rel="canonical" href="https:\/\/supermega\.dev\/shop\/"/)
+  assert.match(home, /name="robots" content="noindex,follow"/)
+  assert.doesNotMatch(home, /class="product-story"|Plant|all four/)
+  assert.doesNotMatch(contact, /<select|<option|product=ecommerce|product=website|product=plant/)
+  assert.match(contact, /name="product" value="guide"/)
+  assert.match(contact, new RegExp(manifest.company.statement.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
   for (const product of activeProductContracts(manifest)) {
     const page = main(await html(product.id+'/index.html'))
     const fullPage = await html(product.id+'/index.html')
     assert.equal((fullPage.match(/href="https:\/\/app\.supermega\.dev\/login"/g) ?? []).length, 1)
-    assert.match(page, /class="platform-image"/)
-    assert.doesNotMatch(page, /Request assisted setup|Open Shop|Open Ecommerce|Open Website/)
+    assert.doesNotMatch(fullPage, /aria-label="SuperMega Shop"/)
+    assert.match(page, /src="\/images\/native-shop\/shop_checkout_1200_en\.png"/)
+    assert.match(page, /srcset="\/images\/native-shop\/shop_sell_390_en\.png"/)
+    assert.match(page, /srcset="\/images\/native-shop\/shop_checkout_820_en\.png"/)
+    assert.match(page, />Shop<\/p>/)
+    assert.match(page, />Local pilot</)
+    assert.match(page, />Managed</)
+    assert.match(page, />Multi-site</)
+    assert.match(page, /Assisted Launch is a one-time setup service/)
+    assert.match(page, /Taking pilot requests/)
+    assert.match(page, /Choose your shop type\. Start with one pilot\./)
+    assert.match(page, /Managed and Multi-site are roadmap options, not available subscriptions\./)
+    for (const templateId of ['mini-mart', 'tea-coffee', 'fashion', 'beauty-spa']) {
+      assert.match(page, new RegExp(`href="/contact/\\?product=shop&template=${templateId}&plan=shop-pilot"`))
+    }
+    assert.equal((page.match(/class="shop-plan shop-plan-current"/g) ?? []).length, 1)
+    assert.equal((page.match(/class="shop-roadmap-item"/g) ?? []).length, 2)
+    assert.equal((page.match(/<span>Planned<\/span>/g) ?? []).length, 2)
+    assert.doesNotMatch(page, /Scan or tap to sell/)
+    assert.doesNotMatch(fullPage, /\.nav-sign-in\s*\{\s*display:\s*none/)
+    assert.doesNotMatch(page, /SuperMega Shop|Shop phone|>Phone</)
+    assert.doesNotMatch(page, /data-platform-carousel|Open Ecommerce|Open Website/)
     assert.doesNotMatch(page, /product=plant|href="\/plant\//)
   }
+  const myShop = main(await html('my/shop/index.html'))
+  const myContactSource = await html('my/contact/index.html')
+  assert.match(myShop, /src="\/images\/native-shop\/shop_checkout_1200_my\.png"/)
+  assert.match(myShop, /srcset="\/images\/native-shop\/shop_sell_390_my\.png"/)
+  assert.match(myShop, /srcset="\/images\/native-shop\/shop_checkout_820_my\.png"/)
+  assert.match(myShop, />Shop<\/p>/)
+  assert.match(myShop, />ဒေသတွင်း စမ်းသပ်သုံးစွဲမှု</)
+  assert.match(myShop, />စီမံပေးသောအစီအစဉ်</)
+  assert.match(myShop, />ဆိုင်ခွဲအစီအစဉ်</)
+  assert.match(myShop, /တပ်ဆင်ကူညီမှုသည် တစ်ကြိမ်သာ ပေးသော ဝန်ဆောင်မှုဖြစ်သည်/)
+  assert.equal((myShop.match(/>စီစဉ်ထားဆဲ<\/span>/g) ?? []).length, 2)
+  for (const templateId of ['mini-mart', 'tea-coffee', 'fashion', 'beauty-spa']) {
+    assert.match(myShop, new RegExp(`href="/my/contact/\\?product=shop&template=${templateId}&plan=shop-pilot"`))
+  }
+  assert.equal((myShop.match(/class="shop-plan shop-plan-current"/g) ?? []).length, 1)
+  assert.equal((myShop.match(/class="shop-roadmap-item"/g) ?? []).length, 2)
+  assert.doesNotMatch(myShop, /Shop Basic|Assisted Launch|Shop Pro|>Local pilot<|>Managed<|>Multi-site</)
+  assert.doesNotMatch(myShop, /ဖုန်းမျက်နှာပြင်/)
+  assert.match(myContactSource, /လက်ရှိအလုပ်လုပ်ပုံကို ပြောပြပါ/)
+  assert.doesNotMatch(myContactSource, /အသုံးပြုမည့်စက်များ/)
+
+  const publicPages = [
+    ['shop/index.html', '>Company<', 'SuperMega is a Myanmar software company and the maker of Shop.'],
+    ['contact/index.html', '>Company<', 'SuperMega is a Myanmar software company and the maker of Shop.'],
+    ['privacy/index.html', '>Company<', 'SuperMega is a Myanmar software company and the maker of Shop.'],
+    ['my/shop/index.html', '>ကုမ္ပဏီ<', 'SuperMega သည် မြန်မာနိုင်ငံမှ ဆော့ဖ်ဝဲကုမ္ပဏီဖြစ်ပြီး Shop အက်ပ်ကို ဖန်တီးပါသည်။'],
+    ['my/contact/index.html', '>ကုမ္ပဏီ<', 'SuperMega သည် မြန်မာနိုင်ငံမှ ဆော့ဖ်ဝဲကုမ္ပဏီဖြစ်ပြီး Shop အက်ပ်ကို ဖန်တီးပါသည်။'],
+    ['my/privacy/index.html', '>ကုမ္ပဏီ<', 'SuperMega သည် မြန်မာနိုင်ငံမှ ဆော့ဖ်ဝဲကုမ္ပဏီဖြစ်ပြီး Shop အက်ပ်ကို ဖန်တီးပါသည်။'],
+  ]
+  for (const [path, forbiddenLabel, companyStatement] of publicPages) {
+    const source = await html(path)
+    const header = source.match(/<header\b[\s\S]*?<\/header>/)?.[0] ?? ''
+    const footer = source.match(/<footer\b[\s\S]*?<\/footer>/)?.[0] ?? ''
+    assert.ok(header && footer, `public chrome missing: ${path}`)
+    assert.doesNotMatch(header, new RegExp(forbiddenLabel))
+    assert.doesNotMatch(header, /href="\/"/)
+    assert.match(footer, new RegExp(companyStatement.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+  }
+
+  const config = JSON.parse(await readFile(resolve(root,'.vercel/output/config.json'),'utf8'))
+  assert.ok(config.routes.some(route => route.src === '^/(?:index\\.html)?$' && route.status === 308 && route.headers?.Location === '/shop/'))
 })
 
 test('Plant public route becomes compatibility-only, not sales or new setup', async () => {
@@ -130,7 +195,7 @@ test('Plant public route becomes compatibility-only, not sales or new setup', as
   assert.match(page, /name="robots" content="noindex,follow"/)
   assert.match(content, /not offered for new setup/)
   assert.match(content, /Existing workspace records are preserved/)
-  assert.match(content, /href="\/#products">View current products/)
+  assert.match(content, /href="\/shop\/">View Shop/)
   assert.doesNotMatch(content, /Open retained workspace|href="[^\"]*\/plant\//)
   assert.doesNotMatch(content, /first-job-templates|Start free sample|Request assisted setup|product=plant|\?template=|\?pack=/)
   assert.doesNotMatch(await html('sitemap.xml'), /<loc>https:\/\/supermega.dev\/plant\/<\/loc>/)

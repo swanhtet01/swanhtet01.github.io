@@ -14,8 +14,20 @@ const cliEnv = vercelToken ? { ...process.env, VERCEL_TOKEN: vercelToken } : pro
 const maxAttempts = 6
 const linkOptions = { publicOrigin: baseUrl, shopTemplateIds: validateShopBusinessTemplates().map(item => item.id) }
 const retryWaitBuffer = new Int32Array(new SharedArrayBuffer(4))
+const publicRoutes = ['/shop/', '/contact/', '/privacy/', '/my/shop/', '/my/contact/', '/my/privacy/']
+const retiredRoutes = ['/plant/', '/website/', '/ecommerce/']
+const expectedProjectId = 'prj_Yaf0cZYbiFXcLkMcKaAm4alPWMhR'
+const expectedOrgId = 'team_wI4l7ZgSxcEztQPSlCCYVeJ5'
 
 if (!baseUrl.startsWith('https://')) throw new Error('public_preview_url_required')
+let projectLink
+try {
+  projectLink = JSON.parse(await readFile(new URL('../.vercel/project.json', import.meta.url), 'utf8'))
+} catch { throw new Error('public_preview_project_link_missing') }
+if (projectLink.projectId !== expectedProjectId || projectLink.orgId !== expectedOrgId
+  || (process.env.VERCEL_PROJECT_ID && process.env.VERCEL_PROJECT_ID !== expectedProjectId)) {
+  throw new Error('public_preview_project_link_wrong')
+}
 if (policy.app && (!/^https:\/\/supermega-public-[a-z0-9]{9}-swanhtet01s-projects\.vercel\.app$/.test(baseUrl)
   || !/^dpl_[A-Za-z0-9]{8,80}$/.test(process.env.PUBLIC_PREVIEW_DEPLOYMENT_ID || ''))) throw new Error('public_preview_identity_required')
 
@@ -54,13 +66,31 @@ function get(path) {
   throw new Error(`protected_preview_request_failed:${path}:attempts=${maxAttempts}:${lastFailure}`)
 }
 
-for (const page of manifest.pages) {
+function status(path) {
+  const nullDevice = process.platform === 'win32' ? 'NUL' : '/dev/null'
+  const npxArgs = ['--yes', 'vercel@56.1.0', 'curl', path, '--deployment', baseUrl,
+    '--', '--output', nullDevice, '--write-out', '%{http_code}']
+  const executable = process.platform === 'win32' ? process.execPath : 'npx'
+  const executableArgs = process.platform === 'win32'
+    ? [resolve(dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npx-cli.js'), ...npxArgs]
+    : npxArgs
+  const result = execFileSync(executable, executableArgs, {
+    encoding: 'utf8', env: cliEnv, maxBuffer: 1024 * 1024, timeout: 15000,
+    killSignal: 'SIGKILL', stdio: ['ignore', 'pipe', 'pipe'],
+  }).trim()
+  if (!/^\d{3}$/.test(result)) throw new Error(`protected_preview_status_invalid:${path}`)
+  return Number(result)
+}
+
+const publicPages = publicRoutes.map(route => manifest.pages.find(page => page.route === route))
+if (publicPages.some(page => !page)) throw new Error('public_preview_active_page_manifest_missing')
+for (const page of publicPages) {
   const html = get(page.route)
   validatePreviewLinks(html, policy, manifest.customerProducts, { ...linkOptions, requireActions: false })
   for (const token of [
     `meta name="supermega-brand-version" content="${manifest.brand.version}"`,
     `meta name="supermega-context-version" content="${manifest.contextVersion}"`,
-    'aria-label="SuperMega home"',
+    page.language === 'my' ? 'aria-label="SuperMega ဆိုင်"' : 'aria-label="SuperMega Shop"',
   ]) {
     if (!html.includes(token)) throw new Error(`preview_shared_contract_missing:${page.route}:${token}`)
   }
@@ -69,8 +99,11 @@ for (const page of manifest.pages) {
   }
 }
 
-const homepage = get('/')
-const navigation = validatePreviewLinks(homepage, policy, manifest.customerProducts, linkOptions)
+if (status('/') !== 308) throw new Error('public_preview_root_redirect_missing')
+for (const route of retiredRoutes) {
+  if (status(route) !== 404) throw new Error(`public_preview_internal_route_exposed:${route}`)
+}
+const navigation = validatePreviewLinks(get('/shop/'), policy, manifest.customerProducts, linkOptions)
 
 const release = JSON.parse(get(manifest.release.releaseEndpoint))
 if (release.brandVersion !== manifest.brand.version) throw new Error('preview_brand_version_wrong')
@@ -119,5 +152,5 @@ const expectedFunctions = ['api/contact-submissions.js', 'api/health.js', 'api/n
 if (JSON.stringify(deploymentFunctions) !== JSON.stringify(expectedFunctions)) throw new Error(`deployment_function_surface_wrong:${deploymentFunctions.join(',')}`)
 
 console.log(JSON.stringify({ ok: true, contract: 'supermega_public_preview.v2', profile: policy.profile, baseUrl,
-  pages: manifest.pages.map((page) => page.route), release, contact: contact.status, navigation, deploymentFunctions,
+  pages: publicRoutes, retiredRoutesChecked: retiredRoutes, release, contact: contact.status, navigation, deploymentFunctions,
   browserTransitionProven: false, environmentIsolationProven: false, hostedCustomerAcceptanceProven: false }, null, 2))

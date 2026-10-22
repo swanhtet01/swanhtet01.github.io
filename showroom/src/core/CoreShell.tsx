@@ -1,6 +1,7 @@
 import { createContext, lazy, Suspense, type ReactNode, useContext, useEffect, useRef, useState } from 'react'
 import { Link, Navigate, NavLink, Outlet, useLocation, useOutletContext } from 'react-router'
 import { productionEntryDecision } from './production-entry'
+import { superMegaBrandIdentity, superMegaBrandMark } from './brand-mark'
 
 import './core-app.css'
 import { RouteErrorBoundary } from './RouteErrorBoundary'
@@ -379,7 +380,11 @@ function useRuntimeHealth() {
 function Brand() {
   return (
     <Link className="core-brand" to="/" aria-label="SuperMega app home">
-      <span className="core-brand-mark" aria-hidden="true">&gt;_</span>
+      <span className="core-brand-mark" aria-hidden="true">
+        <svg viewBox={superMegaBrandMark.viewBox} width={superMegaBrandMark.width} height={superMegaBrandMark.height} focusable="false">
+          <path d={superMegaBrandMark.path} fill="none" stroke={superMegaBrandIdentity.accent} strokeWidth={superMegaBrandMark.strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </span>
       <span className="core-brand-name">SUPERMEGA</span>
     </Link>
   )
