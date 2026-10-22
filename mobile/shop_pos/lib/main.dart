@@ -1175,6 +1175,8 @@ class _ShopHomeState extends State<ShopHome> {
                                                   height: _catalogHeight(
                                                     products,
                                                     constraints.maxHeight,
+                                                    catalogWidth:
+                                                        constraints.maxWidth,
                                                   ),
                                                   child: _catalog(products),
                                                 ),
@@ -1399,7 +1401,11 @@ class _ShopHomeState extends State<ShopHome> {
     ),
   );
 
-  double _catalogHeight(List<ShopProduct> products, double maxHeight) {
+  double _catalogHeight(
+    List<ShopProduct> products,
+    double maxHeight, {
+    required double catalogWidth,
+  }) {
     if (products.isEmpty) return maxHeight;
     final matchingCount = _visibleProducts(products).length;
     final textScale = MediaQuery.textScalerOf(context).scale(1.0);
@@ -1408,9 +1414,12 @@ class _ShopHomeState extends State<ShopHome> {
     // Burmese's three-line product rows need the same vertical budget as EN.
     // A shorter estimate clips the last row while empty tablet space remains.
     const rowHeight = 96.0;
+    // Compact tablet headers wrap product actions into a second line. Give
+    // that header its own height before allocating the scrollable product row.
+    final headerHeight = catalogWidth < 450 ? 228.0 : 148.0;
     final desiredHeight = matchingCount == 0
         ? 360.0
-        : 148.0 + matchingCount * rowHeight * textScale;
+        : headerHeight + matchingCount * rowHeight * textScale;
     return desiredHeight.clamp(0.0, maxHeight).toDouble();
   }
 
