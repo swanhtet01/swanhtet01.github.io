@@ -391,6 +391,20 @@ class _StockScreenState extends State<StockScreen> {
                                     ? textTheme.titleMedium
                                     : textTheme.bodyMedium;
                                 final colors = Theme.of(context).colorScheme;
+                                final priceLabel = shopCopy(
+                                  widget.myanmar,
+                                  '${shopNumber(item.priceMmk, myanmar: false)} MMK',
+                                  '${shopNumber(item.priceMmk, myanmar: true)} ကျပ်',
+                                );
+                                final conciseReference = [
+                                  if (item.sku?.trim().isNotEmpty ?? false)
+                                    item.sku!.trim(),
+                                  if (item.barcode?.trim().isNotEmpty ?? false)
+                                    item.barcode!.trim(),
+                                ].join(' / ');
+                                final displayReference = conciseReference.isEmpty
+                                    ? item.id
+                                    : conciseReference;
                                 final details = Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
@@ -404,11 +418,11 @@ class _StockScreenState extends State<StockScreen> {
                                       ),
                                     ),
                                     Text(
-                                      shopCopy(
-                                        widget.myanmar,
-                                        '${shopNumber(item.priceMmk, myanmar: false)} MMK',
-                                        '${shopNumber(item.priceMmk, myanmar: true)} ကျပ်',
-                                      ),
+                                      compact && showReference
+                                          ? '$priceLabel · $displayReference'
+                                          : priceLabel,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
                                       style: textTheme.bodySmall?.copyWith(
                                         color: colors.onSurfaceVariant,
                                         fontWeight: FontWeight.w500,
@@ -417,7 +431,7 @@ class _StockScreenState extends State<StockScreen> {
                                         ],
                                       ),
                                     ),
-                                    if (showReference)
+                                    if (showReference && wide)
                                       Text(
                                         _stockProductReference(
                                           item,
@@ -510,23 +524,44 @@ class _StockScreenState extends State<StockScreen> {
                                   item,
                                   showReference: showReference,
                                 );
-                                final update = OutlinedButton(
-                                  key: ValueKey('stock-update-${item.id}'),
-                                  onPressed: openStockChange,
-                                  style: OutlinedButton.styleFrom(
-                                    minimumSize: const Size(0, 48),
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
+                                final fullAdjustLabel = shopCopy(
+                                  widget.myanmar,
+                                  'Adjust stock',
+                                  'လက်ကျန်ပြင်ရန်',
+                                );
+                                final narrowPhone =
+                                    MediaQuery.sizeOf(context).width < 360;
+                                final update = Tooltip(
+                                  message: fullAdjustLabel,
+                                  excludeFromSemantics: true,
+                                  child: OutlinedButton(
+                                    key: ValueKey('stock-update-${item.id}'),
+                                    onPressed: openStockChange,
+                                    style: OutlinedButton.styleFrom(
+                                      minimumSize: const Size(0, 48),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                      ),
                                     ),
-                                  ),
-                                  child: Text(
-                                    shopCopy(
-                                      widget.myanmar,
-                                      'Adjust stock',
-                                      'လက်ကျန်ပြင်ရန်',
+                                    child: Semantics(
+                                      label: narrowPhone
+                                          ? fullAdjustLabel
+                                          : null,
+                                      child: ExcludeSemantics(
+                                        excluding: narrowPhone,
+                                        child: Text(
+                                          narrowPhone
+                                              ? shopCopy(
+                                                  widget.myanmar,
+                                                  'Adjust',
+                                                  'ပြင်ရန်',
+                                                )
+                                              : fullAdjustLabel,
+                                          maxLines: 1,
+                                          textAlign: TextAlign.center,
+                                        ),
+                                      ),
                                     ),
-                                    maxLines: 2,
-                                    textAlign: TextAlign.center,
                                   ),
                                 );
                                 final more = PopupMenuButton<String>(
