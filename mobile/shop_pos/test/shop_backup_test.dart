@@ -62,7 +62,7 @@ void main() {
     () async {
       final bytes = await archive.readAsBytes();
       expect(bytes.sublist(0, 4), ascii.encode('SMBK'));
-      expect(bytes[5], 8);
+      expect(bytes[5], 9);
       expect(
         bytes.sublist(0, 16),
         isNot(ascii.encode('SQLite format 3\u0000')),
@@ -290,11 +290,12 @@ void main() {
     },
   );
 
-  test('v6 archive restores, then migrates its catalog to v8', () async {
+  test('v6 archive restores, then migrates its catalog to v9', () async {
     final legacy = File('${directory.path}/legacy-v6.sqlite');
     await database.exportVerifiedLocalSnapshot(legacy);
     final connection = sqlite3.open(legacy.path);
     try {
+      connection.execute('ALTER TABLE shop_products DROP COLUMN reorder_level');
       connection.execute('DROP TABLE shop_product_images');
       connection.execute('DROP TABLE shop_counter_drafts');
       connection.execute('PRAGMA user_version = 6');
@@ -336,11 +337,12 @@ void main() {
         (await migrated.readActiveProducts()).single.name,
         'KAUNG 90 Days Rice',
       );
+      expect((await migrated.readActiveProducts()).single.reorderLevel, 5);
       expect(await migrated.readProductThumbnail('rice'), isNull);
       expect(
         (await migrated.customSelect('PRAGMA user_version').getSingle())
             .read<int>('user_version'),
-        8,
+        9,
       );
     } finally {
       await migrated.close();
@@ -352,6 +354,7 @@ void main() {
     await database.exportVerifiedLocalSnapshot(old);
     final connection = sqlite3.open(old.path);
     try {
+      connection.execute('ALTER TABLE shop_products DROP COLUMN reorder_level');
       connection.execute('DROP TABLE shop_counter_drafts');
       connection.execute('PRAGMA user_version = 7');
     } finally {
@@ -364,11 +367,123 @@ void main() {
       expect(
         (await upgraded.customSelect('PRAGMA user_version').getSingle())
             .read<int>('user_version'),
-        8,
+        9,
       );
     } finally {
       await upgraded.close();
     }
+  });
+
+  test(
+    'v8 catalog gains the documented alert default without stock writes',
+    () async {
+      final old = File('${directory.path}/legacy-v8.sqlite');
+      await database.exportVerifiedLocalSnapshot(old);
+      final connection = sqlite3.open(old.path);
+      try {
+        connection.execute(
+          'ALTER TABLE shop_products DROP COLUMN reorder_level',
+        );
+        connection.execute('PRAGMA user_version = 8');
+      } finally {
+        connection.close();
+      }
+      ShopBackup.verifySnapshot(old, expectedSchemaVersion: 8);
+      final migrated = ShopDatabase(NativeDatabase(old));
+      try {
+        expect((await migrated.readActiveProducts()).single.reorderLevel, 5);
+        expect(await migrated.countStockMovements(), 2);
+        expect(await migrated.countOutboxOperations(), 2);
+        expect(
+          (await migrated.customSelect('PRAGMA user_version').getSingle())
+              .read<int>('user_version'),
+          9,
+        );
+      } finally {
+        await migrated.close();
+      }
+      ShopBackup.verifySnapshot(old, expectedSchemaVersion: 9);
+    },
+  );
+
+  test('v9 backup preserves custom and disabled low-stock alerts', () async {
+    final source = ShopDatabase(NativeDatabase.memory());
+    try {
+      await source.addProduct(
+        id: 'custom',
+        name: 'Rice',
+        priceMmk: 12000,
+        openingStock: 8,
+      );
+      await source.addProduct(
+        id: 'off',
+        name: 'Water',
+        priceMmk: 1000,
+        openingStock: 2,
+      );
+      await source.setReorderLevel(
+        productId: 'custom',
+        expectedReorderLevel: 5,
+        reorderLevel: 12,
+      );
+      await source.setReorderLevel(
+        productId: 'off',
+        expectedReorderLevel: 5,
+        reorderLevel: null,
+      );
+      final export = File('${directory.path}/alerts.smbak');
+      await ShopBackup.exportEncrypted(
+        database: source,
+        archive: export,
+        password: _password,
+        scratchRoot: directory,
+      );
+      final restored = File('${directory.path}/alerts-restored.sqlite');
+      await ShopBackup.restoreIntoEmptyDatabase(
+        archive: export,
+        target: restored,
+        password: _password,
+      );
+      ShopBackup.verifySnapshot(restored, expectedSchemaVersion: 9);
+      final reopened = ShopDatabase(NativeDatabase(restored));
+      try {
+        final products = {
+          for (final item in await reopened.readActiveProducts()) item.id: item,
+        };
+        expect(products['custom']?.reorderLevel, 12);
+        expect(products['off']?.reorderLevel, isNull);
+        expect(products['custom']?.onHand, 8);
+        expect(products['off']?.onHand, 2);
+      } finally {
+        await reopened.close();
+      }
+    } finally {
+      await source.close();
+    }
+  });
+
+  test('v9 snapshots reject missing or invalid alert settings', () async {
+    final missing = File('${directory.path}/missing-reorder.sqlite');
+    await database.exportVerifiedLocalSnapshot(missing);
+    final missingConnection = sqlite3.open(missing.path);
+    try {
+      missingConnection.execute(
+        'ALTER TABLE shop_products DROP COLUMN reorder_level',
+      );
+    } finally {
+      missingConnection.close();
+    }
+    expect(() => ShopBackup.verifySnapshot(missing), throwsFormatException);
+
+    final invalid = File('${directory.path}/invalid-reorder.sqlite');
+    await database.exportVerifiedLocalSnapshot(invalid);
+    final invalidConnection = sqlite3.open(invalid.path);
+    try {
+      invalidConnection.execute('UPDATE shop_products SET reorder_level = -1');
+    } finally {
+      invalidConnection.close();
+    }
+    expect(() => ShopBackup.verifySnapshot(invalid), throwsFormatException);
   });
 
   test('v8 snapshot rejects a malformed image blob', () async {
