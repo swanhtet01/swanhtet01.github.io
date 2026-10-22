@@ -223,7 +223,7 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
                             separatorBuilder: (_, _) =>
                                 MediaQuery.sizeOf(context).width < 480
                                 ? const SizedBox(height: 10)
-                                : const Divider(height: 1),
+                                : const SizedBox(height: 8),
                             itemBuilder: (context, index) {
                               final sale = sales[index];
                               final firstItem = sale.lines.isEmpty
@@ -321,9 +321,11 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
                                   ),
                                 );
                               }
-                              return ListTile(
+                              return Card(
+                                clipBehavior: Clip.antiAlias,
+                                child: ListTile(
                                 contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
+                                  horizontal: 16,
                                   vertical: 8,
                                 ),
                                 title: Text(
@@ -343,20 +345,30 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
                                             .onSurfaceVariant,
                                       ),
                                 ),
-                                trailing: Text(
-                                  shopMmk(
-                                    sale.totalMmk,
-                                    myanmar: widget.myanmar,
-                                  ),
-                                  style: Theme.of(context).textTheme.titleSmall
-                                      ?.copyWith(
-                                        fontWeight: FontWeight.w700,
-                                        fontFeatures: const [
-                                          FontFeature.tabularFigures(),
-                                        ],
+                                trailing: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      shopMmk(
+                                        sale.totalMmk,
+                                        myanmar: widget.myanmar,
                                       ),
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleSmall
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.w700,
+                                            fontFeatures: const [
+                                              FontFeature.tabularFigures(),
+                                            ],
+                                          ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    const Icon(Icons.chevron_right, size: 20),
+                                  ],
                                 ),
                                 onTap: () => _showSale(sale),
+                                ),
                               );
                             },
                           ),

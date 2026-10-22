@@ -646,7 +646,7 @@ void main() {
           );
           await tester.pumpAndSettle();
           expect(
-            find.text(myanmar ? '၅ ခုနှင့်အောက် သတိပေး' : 'Low at 5'),
+            find.text(myanmar ? 'ပြန်မှာရန်: ၅ ခု' : 'Reorder at 5'),
             findsOneWidget,
           );
           expect(tester.takeException(), isNull);
@@ -658,6 +658,59 @@ void main() {
       }
     },
   );
+
+  testWidgets('Stock puts a reorder item before a lower healthy count', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 900);
+    tester.view.devicePixelRatio = 1;
+    tester.platformDispatcher.textScaleFactorTestValue = 1.5;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    final database = ShopDatabase(NativeDatabase.memory());
+    try {
+      await database.addProduct(
+        id: 'healthy',
+        name: 'Healthy item',
+        priceMmk: 3000,
+        openingStock: 2,
+      );
+      await database.addProduct(
+        id: 'needs-order',
+        name: 'Needs order',
+        priceMmk: 3000,
+        openingStock: 20,
+      );
+      await database.setReorderLevel(
+        productId: 'healthy',
+        expectedReorderLevel: 5,
+        reorderLevel: null,
+      );
+      await database.setReorderLevel(
+        productId: 'needs-order',
+        expectedReorderLevel: 5,
+        reorderLevel: 30,
+      );
+      await tester.pumpWidget(
+        MaterialApp(home: StockScreen(database: database, myanmar: false)),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        tester.getTopLeft(find.byKey(const ValueKey('stock-row-needs-order'))).dy,
+        lessThan(
+          tester.getTopLeft(find.byKey(const ValueKey('stock-row-healthy'))).dy,
+        ),
+      );
+      expect(find.text('20 in stock'), findsOneWidget);
+      expect(find.text('Reorder at 30'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+      await database.close();
+    }
+  });
 
   testWidgets('unfinished sale opens from Today after app restart', (
     tester,

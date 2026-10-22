@@ -128,6 +128,15 @@ class _StockScreenState extends State<StockScreen> {
                   )
                   .toList()
                 ..sort((left, right) {
+                  final leftNeedsAttention =
+                      left.reorderLevel != null &&
+                      left.onHand <= left.reorderLevel!;
+                  final rightNeedsAttention =
+                      right.reorderLevel != null &&
+                      right.onHand <= right.reorderLevel!;
+                  if (leftNeedsAttention != rightNeedsAttention) {
+                    return leftNeedsAttention ? -1 : 1;
+                  }
                   final stockOrder = left.onHand.compareTo(right.onHand);
                   if (stockOrder != 0) return stockOrder;
                   return left.name.toLowerCase().compareTo(
@@ -292,18 +301,6 @@ class _StockScreenState extends State<StockScreen> {
                                                   .onSurfaceVariant,
                                             ),
                                       ),
-                                    if (lowAlertLevel != null)
-                                      Text(
-                                        shopCopy(
-                                          widget.myanmar,
-                                          'Low at ${shopNumber(lowAlertLevel, myanmar: false)}',
-                                          '${shopNumber(lowAlertLevel, myanmar: true)} ခုနှင့်အောက် သတိပေး',
-                                        ),
-                                        style: textTheme.bodySmall?.copyWith(
-                                          color: colors.error,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
                                   ],
                                 );
                                 final onHand = Text(
@@ -312,10 +309,30 @@ class _StockScreenState extends State<StockScreen> {
                                     '${item.onHand} in stock',
                                     '${shopNumber(item.onHand, myanmar: true)} ခု လက်ကျန်',
                                   ),
-                                  style: wide
-                                      ? Theme.of(context).textTheme.titleMedium
-                                      : null,
+                                  style: (wide
+                                          ? textTheme.titleMedium
+                                          : textTheme.bodyMedium)
+                                      ?.copyWith(
+                                        fontWeight: FontWeight.w700,
+                                        color: lowAlertLevel == null
+                                            ? colors.onSurface
+                                            : item.onHand == 0
+                                            ? colors.error
+                                            : const Color(0xff88530e),
+                                      ),
                                 );
+                                final reorderNote = lowAlertLevel == null
+                                    ? null
+                                    : Text(
+                                        shopCopy(
+                                          widget.myanmar,
+                                          'Reorder at ${shopNumber(lowAlertLevel, myanmar: false)}',
+                                          'ပြန်မှာရန်: ${shopNumber(lowAlertLevel, myanmar: true)} ခု',
+                                        ),
+                                        style: textTheme.bodySmall?.copyWith(
+                                          color: colors.onSurfaceVariant,
+                                        ),
+                                      );
                                 Future<void> openStockChange() => _changeStock(
                                   item,
                                   showReference: showReference,
@@ -365,7 +382,18 @@ class _StockScreenState extends State<StockScreen> {
                                       child: Row(
                                         children: [
                                           Expanded(flex: 5, child: details),
-                                          Expanded(flex: 2, child: onHand),
+                                          Expanded(
+                                            flex: 2,
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                onHand,
+                                                if (reorderNote != null)
+                                                  reorderNote,
+                                              ],
+                                            ),
+                                          ),
                                           SizedBox(width: 168, child: update),
                                         ],
                                       ),
@@ -401,9 +429,15 @@ class _StockScreenState extends State<StockScreen> {
                                                         children: [
                                                           details,
                                                           const SizedBox(
-                                                            height: 4,
+                                                            height: 8,
                                                           ),
                                                           onHand,
+                                                          if (reorderNote != null) ...[
+                                                            const SizedBox(
+                                                              height: 2,
+                                                            ),
+                                                            reorderNote,
+                                                          ],
                                                         ],
                                                       ),
                                                     ),
@@ -430,7 +464,12 @@ class _StockScreenState extends State<StockScreen> {
                                                 child: Column(
                                                   crossAxisAlignment:
                                                       CrossAxisAlignment.start,
-                                                  children: [details, onHand],
+                                                    children: [
+                                                      details,
+                                                      onHand,
+                                                      if (reorderNote != null)
+                                                        reorderNote,
+                                                    ],
                                                 ),
                                               ),
                                               const SizedBox(width: 8),
