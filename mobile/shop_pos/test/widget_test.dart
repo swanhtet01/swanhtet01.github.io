@@ -2138,6 +2138,16 @@ void main() {
       ),
       findsOneWidget,
     );
+    final teaMedia = find.byKey(const ValueKey('shop-product-media:tea'));
+    expect(tester.getSize(teaMedia).width, tester.getSize(teaMedia).height);
+    expect(
+      tester
+          .widget<Image>(
+            find.descendant(of: teaMedia, matching: find.byType(Image)),
+          )
+          .fit,
+      BoxFit.contain,
+    );
     expect(
       find.byKey(const ValueKey('shop-product-photo:water')),
       findsNothing,
@@ -2806,6 +2816,32 @@ void main() {
             find.text(myanmar ? '၂၄,၉၀၀ ကျပ်' : '24,900 MMK'),
             findsOneWidget,
           );
+          if (width <= 390) {
+            final name = find.descendant(
+              of: row,
+              matching: find.text(
+                myanmar
+                    ? 'ဆန်အိတ် အရည်အသွေးကောင်း ၁၀ ကီလိုဂရမ်'
+                    : 'Premium rice 10 kg bag',
+              ),
+            );
+            final price = find.descendant(
+              of: row,
+              matching: find.text(myanmar ? '၂၄,၉၀၀ ကျပ်' : '24,900 MMK'),
+            );
+            final stock = find.descendant(
+              of: row,
+              matching: find.text(myanmar ? '၃ ကျန်' : '3 left'),
+            );
+            expect(tester.getTopLeft(price).dx, tester.getTopLeft(name).dx);
+            expect(tester.getTopLeft(stock).dx, tester.getTopLeft(name).dx);
+            expect(
+              tester.getTopLeft(
+                find.byKey(const ValueKey('shop-add-affordance:rice')),
+              ).dx,
+              greaterThan(tester.getTopRight(name).dx),
+            );
+          }
           expect(tester.takeException(), isNull);
 
           // The labeled target and the rest of the row both add the product.
