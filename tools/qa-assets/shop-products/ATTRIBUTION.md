@@ -4,8 +4,8 @@ The `Red apple (each)` capture fixture uses the original, unmodified
 [`Red apple on a plate 2017 A.jpg`](https://commons.wikimedia.org/wiki/File:Red_apple_on_a_plate_2017_A.jpg)
 by **Fructibus**. The Commons file page says it is the uploader's own work,
 dedicated under [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/).
-The 4,494 × 3,371 JPEG is stored as `red-apple-each.jpg` without a crop or
-re-encode; SHA-256:
+The 4,494 × 3,371 JPEG is stored as `red-apple-each.jpg` without a re-encode;
+the Shop thumbnail crops it with CSS. SHA-256 of the original bytes:
 `4de1eb5c433f10867327d8b6303bfc45635028e8c0eb416f167f10ddf3dbdf08`.
 This is an unbranded, single red apple, matching the fixture product name.
 `MMK 1,500` is an illustrative fixture amount, not a merchant or live price.

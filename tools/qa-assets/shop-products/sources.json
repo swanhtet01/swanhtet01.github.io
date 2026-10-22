@@ -18,7 +18,7 @@
         "url": "https://creativecommons.org/publicdomain/zero/1.0/",
         "photographer": "Fructibus",
         "attribution": "Photo by Fructibus / Wikimedia Commons, CC0 1.0 (optional credit).",
-        "crop": "none; original JPEG bytes retained",
+        "crop": "original JPEG bytes retained; the Shop thumbnail uses CSS object-fit cropping",
         "review_note": "Commons lists the uploader's own work and CC0 dedication. This is a candidate source check, not a release attestation."
       },
       "sample_catalog_price_mmk": 1500,
