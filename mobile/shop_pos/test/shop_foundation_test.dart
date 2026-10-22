@@ -636,21 +636,26 @@ void main() {
       expect(receipt.lines.first.productName, 'Original tea');
       expect(receipt.lines.first.unitPriceMmk, 2500);
       expect(receipt.lines.first.lineTotalMmk, 5000);
-      final archivedStock = await database.customSelect(
-        'SELECT on_hand FROM shop_products WHERE id = ?',
-        variables: [const Variable<String>('tea')],
-      ).getSingle();
+      final archivedStock = await database
+          .customSelect(
+            'SELECT on_hand FROM shop_products WHERE id = ?',
+            variables: [const Variable<String>('tea')],
+          )
+          .getSingle();
       expect(archivedStock.read<int>('on_hand'), 1);
       expect((await database.readActiveProducts()).single.onHand, 1);
       expect(await database.countSales(), 1);
       expect(await database.countOutboxOperations(), beforeOutbox + 1);
       expect(await database.readPendingWalletCheckout(), isNull);
-      final event = await database.customSelect(
-        'SELECT payload_json FROM shop_sync_outbox WHERE operation_id = ?',
-        variables: [const Variable<String>('archived-wallet-sale')],
-      ).getSingle();
-      final payload = jsonDecode(event.read<String>('payload_json'))
-          as Map<String, dynamic>;
+      final event = await database
+          .customSelect(
+            'SELECT payload_json FROM shop_sync_outbox WHERE operation_id = ?',
+            variables: [const Variable<String>('archived-wallet-sale')],
+          )
+          .getSingle();
+      final payload = jsonDecode(
+        event.read<String>('payload_json'),
+      ) as Map<String, dynamic>;
       expect(payload['totalMmk'], 6200);
       expect((payload['lines'] as List).first['productName'], 'Original tea');
       expect((payload['lines'] as List).first['unitPriceMmk'], 2500);
@@ -725,11 +730,110 @@ void main() {
       expect(await database.countSales(), 0);
       expect(await database.countOutboxOperations(), beforeOutbox);
       expect((await database.readActiveProducts()).single.onHand, 3);
+      final state = await database
+          .customSelect(
+            'SELECT state FROM shop_wallet_checkout_intents WHERE operation_id = ?',
+            variables: [const Variable<String>('wallet-total-tamper')],
+          )
+          .getSingle();
+      expect(state.read<String>('state'), 'pending');
+    });
+
+    test('saved wallet basket mismatch cannot record a smaller sale', () async {
+      await database.addProduct(
+        id: 'tea',
+        name: 'Tea',
+        priceMmk: 2500,
+        openingStock: 3,
+      );
+      await database.addProduct(
+        id: 'water',
+        name: 'Water',
+        priceMmk: 1200,
+        openingStock: 3,
+      );
+      await database.createWalletCheckoutIntent(
+        operationId: 'wallet-basket-tamper',
+        merchant: MerchantWalletSetup(
+          provider: 'KBZPay',
+          merchantPhone: null,
+          officialQrPayload: _syntheticStaticMmqr(),
+          issuerConfirmed: true,
+        ),
+        lines: const [
+          ShopSaleLineInput(productId: 'tea', quantity: 2),
+          ShopSaleLineInput(productId: 'water', quantity: 1),
+        ],
+      );
+      final beforeOutbox = await database.countOutboxOperations();
+      await database.customStatement(
+        'UPDATE shop_wallet_checkout_intents SET request_fingerprint = ? '
+        'WHERE operation_id = ?',
+        [
+          jsonEncode({
+            'paymentMethod': 'kbzpay',
+            'lines': [
+              {'productId': 'tea', 'quantity': 2},
+            ],
+          }),
+          'wallet-basket-tamper',
+        ],
+      );
+      await expectLater(
+        database.recordSale(
+          operationId: 'wallet-basket-tamper',
+          lines: const [ShopSaleLineInput(productId: 'tea', quantity: 2)],
+          paymentMethod: 'kbzpay',
+          walletCheckoutOperationId: 'wallet-basket-tamper',
+        ),
+        throwsA(isA<StateError>()),
+      );
+      expect(await database.countSales(), 0);
+      expect(await database.countOutboxOperations(), beforeOutbox);
+      expect((await database.readActiveProducts()).every((p) => p.onHand == 3), isTrue);
       final state = await database.customSelect(
         'SELECT state FROM shop_wallet_checkout_intents WHERE operation_id = ?',
-        variables: [const Variable<String>('wallet-total-tamper')],
+        variables: [const Variable<String>('wallet-basket-tamper')],
       ).getSingle();
       expect(state.read<String>('state'), 'pending');
+    });
+
+    test('archived wallet sale rolls back when stock is gone', () async {
+      await database.addProduct(
+        id: 'tea',
+        name: 'Tea',
+        priceMmk: 2500,
+        openingStock: 1,
+      );
+      await database.createWalletCheckoutIntent(
+        operationId: 'archived-wallet-no-stock',
+        merchant: MerchantWalletSetup(
+          provider: 'KBZPay',
+          merchantPhone: null,
+          officialQrPayload: _syntheticStaticMmqr(),
+          issuerConfirmed: true,
+        ),
+        lines: const [ShopSaleLineInput(productId: 'tea', quantity: 1)],
+      );
+      await database.customStatement(
+        'UPDATE shop_products SET archived = 1, on_hand = 0 WHERE id = ?',
+        ['tea'],
+      );
+      final beforeOutbox = await database.countOutboxOperations();
+      final beforeMovements = await database.countStockMovements();
+      await expectLater(
+        database.recordSale(
+          operationId: 'archived-wallet-no-stock',
+          lines: const [ShopSaleLineInput(productId: 'tea', quantity: 1)],
+          paymentMethod: 'kbzpay',
+          walletCheckoutOperationId: 'archived-wallet-no-stock',
+        ),
+        throwsA(isA<StateError>()),
+      );
+      expect(await database.countSales(), 0);
+      expect(await database.countOutboxOperations(), beforeOutbox);
+      expect(await database.countStockMovements(), beforeMovements);
+      expect((await database.readPendingWalletCheckout())?.state, 'pending');
     });
 
     test(

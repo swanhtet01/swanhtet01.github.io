@@ -1742,6 +1742,7 @@ class ShopDatabase extends _$ShopDatabase {
       }
 
       Map<String, WalletCheckoutLineSnapshot>? walletSnapshots;
+      int? walletIntentTotalMmk;
       if (paymentMethod != 'cash') {
         final intentRow = await customSelect(
           'SELECT operation_id, payment_method, request_fingerprint, total_mmk, '
@@ -1761,6 +1762,13 @@ class ShopDatabase extends _$ShopDatabase {
             intent.requestFingerprint != fingerprint) {
           throw StateError('The pending checkout does not match this sale.');
         }
+        if (intent.lines.length != canonicalLines.length ||
+            intent.lines.any(
+              (line) => productQuantities[line.productId] != line.quantity,
+            )) {
+          throw StateError('The pending checkout basket does not match this sale.');
+        }
+        walletIntentTotalMmk = intent.totalMmk;
         walletSnapshots = {
           for (final line in intent.lines) line.productId: line,
         };
@@ -1799,6 +1807,9 @@ class ShopDatabase extends _$ShopDatabase {
       }
       if (expectedTotalMmk != null && totalMmk != expectedTotalMmk) {
         throw StateError('Sale total changed. Review the amount again.');
+      }
+      if (walletIntentTotalMmk != null && totalMmk != walletIntentTotalMmk) {
+        throw StateError('The saved wallet amount does not match this sale.');
       }
 
       final activeShift = await readOpenCashShift();

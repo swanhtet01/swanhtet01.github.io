@@ -2260,9 +2260,7 @@ void main() {
           expect(await database.countSales(), 0);
 
           await tester.tap(
-            find.text(
-              shopCopy(myanmar, 'Resume payment', 'ပြန်စစ်ဆေးရန်'),
-            ),
+            find.text(shopCopy(myanmar, 'Resume payment', 'ပြန်စစ်ဆေးရန်')),
           );
           await tester.pumpAndSettle();
           final dialogLine = find.descendant(
@@ -2296,6 +2294,80 @@ void main() {
           await tester.pump(const Duration(milliseconds: 1));
           await database.close();
         }
+      }
+    }
+  });
+
+  testWidgets('large pending basket keeps recovery actions reachable', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    for (final width in [320.0, 1200.0]) {
+      tester.view.physicalSize = Size(width, 800);
+      final count = width == 320 ? 100 : 10;
+      final database = ShopDatabase(NativeDatabase.memory());
+      try {
+        final lines = <ShopSaleLineInput>[];
+        for (var index = 0; index < count; index++) {
+          final id = 'item-${index.toString().padLeft(3, '0')}';
+          await database.addProduct(
+            id: id,
+            name: 'Product $index',
+            priceMmk: 100,
+            openingStock: 2,
+          );
+          lines.add(ShopSaleLineInput(productId: id, quantity: 1));
+        }
+        await database.createWalletCheckoutIntent(
+          operationId: 'large-wallet-$count',
+          merchant: MerchantWalletSetup(
+            provider: 'KBZPay',
+            merchantPhone: null,
+            officialQrPayload: _testStaticMmqr(),
+            issuerConfirmed: true,
+          ),
+          lines: lines,
+        );
+        await tester.pumpWidget(
+          ShopApp(
+            initialCounter: true,
+            database: database,
+            authClient: null,
+            apiBaseUrl: 'https://app.supermega.dev',
+            initialMyanmar: false,
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('shop-pending-wallet-line:item-000')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('shop-pending-wallet-line:item-002')),
+          findsNothing,
+        );
+        expect(find.text('+${count - 2} more items in payment review'), findsOneWidget);
+        final resume = find.text('Resume payment');
+        expect(resume, findsOneWidget);
+        expect(tester.getRect(resume).bottom, lessThan(800));
+        await tester.tap(resume);
+        await tester.pumpAndSettle();
+        final lastId = 'item-${(count - 1).toString().padLeft(3, '0')}';
+        final lastLine = find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.byKey(ValueKey('shop-pending-wallet-line:$lastId')),
+        );
+        expect(lastLine, findsOneWidget);
+        await tester.ensureVisible(lastLine);
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        expect(await database.countSales(), 0);
+      } finally {
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump(const Duration(milliseconds: 1));
+        await database.close();
       }
     }
   });

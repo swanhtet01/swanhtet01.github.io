@@ -1103,7 +1103,20 @@ class _ShopHomeState extends State<ShopHome> {
             const SizedBox(height: 4),
             Text('$provider · ${_mmk(checkout.totalMmk)}'),
             const SizedBox(height: 8),
-            _savedWalletLines(context, checkout.lines, myanmar: widget.myanmar),
+            _savedWalletLines(
+              context,
+              checkout.lines.take(2).toList(),
+              myanmar: widget.myanmar,
+            ),
+            if (checkout.lines.length > 2)
+              Text(
+                shopCopy(
+                  widget.myanmar,
+                  '+${checkout.lines.length - 2} more items in payment review',
+                  'ငွေပေးချေမှုစစ်ဆေးရာတွင် နောက်ထပ် ${shopNumber(checkout.lines.length - 2, myanmar: true)} မျိုးရှိပါသည်',
+                ),
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
