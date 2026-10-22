@@ -162,6 +162,37 @@ class _ShopAppState extends State<ShopApp> {
     });
   }
 
+  Future<void> _addProductFromStock(BuildContext context) async {
+    try {
+      final productId = await _createShopProduct(
+        context: context,
+        database: widget.database,
+        myanmar: _myanmar,
+      );
+      if (productId == null || !context.mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              shopCopy(
+                _myanmar,
+                'Product added to stock.',
+                'ကုန်ပစ္စည်းကို လက်ကျန်စာရင်းတွင် ထည့်ပြီးပါပြီ။',
+              ),
+            ),
+          ),
+        );
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(content: Text(_productSaveError(error, _myanmar))),
+        );
+    }
+  }
+
   void _showToday() {
     _selectTask(0);
   }
@@ -484,6 +515,9 @@ class _ShopAppState extends State<ShopApp> {
                                       database: widget.database,
                                       myanmar: _myanmar,
                                       embeddedTaskShell: true,
+                                      onAddProduct: () => unawaited(
+                                        _addProductFromStock(context),
+                                      ),
                                     )
                                   else
                                     const SizedBox.shrink(),
@@ -3226,24 +3260,15 @@ class _ShopHomeState extends State<ShopHome> {
     String initialName = '',
     String initialBarcode = '',
   }) async {
-    final values = await showDialog<_NewShopProduct>(
-      context: context,
-      builder: (_) => _NewShopProductDialog(
+    try {
+      final productId = await _createShopProduct(
+        context: context,
+        database: widget.database,
         myanmar: widget.myanmar,
         initialName: initialName,
         initialBarcode: initialBarcode,
-      ),
-    );
-    if (values == null) return false;
-    try {
-      final productId = const Uuid().v4();
-      await widget.database.addProduct(
-        id: productId,
-        name: values.name,
-        barcode: values.barcode,
-        priceMmk: values.priceMmk,
-        openingStock: values.openingStock,
       );
+      if (productId == null) return false;
       if (mounted) {
         _message(
           shopCopy(
@@ -3289,8 +3314,11 @@ class _ShopHomeState extends State<ShopHome> {
     }
     Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
-        builder: (_) =>
-            StockScreen(database: widget.database, myanmar: widget.myanmar),
+        builder: (_) => StockScreen(
+          database: widget.database,
+          myanmar: widget.myanmar,
+          onAddProduct: () => unawaited(_showAddProduct()),
+        ),
       ),
     );
   }
@@ -3338,6 +3366,33 @@ class _ShopHomeState extends State<ShopHome> {
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(content: Text(text), action: action));
   }
+}
+
+Future<String?> _createShopProduct({
+  required BuildContext context,
+  required ShopDatabase database,
+  required bool myanmar,
+  String initialName = '',
+  String initialBarcode = '',
+}) async {
+  final values = await showDialog<_NewShopProduct>(
+    context: context,
+    builder: (_) => _NewShopProductDialog(
+      myanmar: myanmar,
+      initialName: initialName,
+      initialBarcode: initialBarcode,
+    ),
+  );
+  if (values == null) return null;
+  final productId = const Uuid().v4();
+  await database.addProduct(
+    id: productId,
+    name: values.name,
+    barcode: values.barcode,
+    priceMmk: values.priceMmk,
+    openingStock: values.openingStock,
+  );
+  return productId;
 }
 
 String _productSaveError(Object error, bool myanmar) {
