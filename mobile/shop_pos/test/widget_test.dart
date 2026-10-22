@@ -1201,6 +1201,45 @@ void main() {
     await database.close();
   });
 
+  testWidgets('large Burmese sale total fits enlarged phone and tablet views', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 900);
+    tester.view.devicePixelRatio = 1;
+    tester.platformDispatcher.textScaleFactorTestValue = 1.5;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    final database = ShopDatabase(NativeDatabase.memory());
+    try {
+      await database.addProduct(
+        id: 'expensive',
+        name: 'High value item',
+        priceMmk: 1000000000,
+        openingStock: 1,
+      );
+      await database.recordCashSale(
+        operationId: 'large-burmese-sale',
+        lines: const [ShopSaleLineInput(productId: 'expensive', quantity: 1)],
+      );
+      for (final width in [320.0, 820.0]) {
+        tester.view.physicalSize = Size(width, 900);
+        await tester.pumpWidget(
+          MaterialApp(
+            home: RecentSalesScreen(database: database, myanmar: true),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('၁,၀၀၀,၀၀၀,၀၀၀ ကျပ်'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      }
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+      await database.close();
+    }
+  });
+
   testWidgets('recent sales dates stay in Burmese when the host uses English', (
     tester,
   ) async {
