@@ -2142,6 +2142,7 @@ class _ShopHomeState extends State<ShopHome> {
     bool narrowPane = false,
   }) {
     final compactCart = narrowPane || MediaQuery.sizeOf(context).width < 520;
+    final pinCheckoutFooter = compactCart && refresh != null;
     final byId = {for (final item in products) item.id: item};
     final hasUnavailableProducts = _cartHasUnavailableProducts(products);
     final entries = _pendingWalletCheckout != null
@@ -2173,6 +2174,105 @@ class _ShopHomeState extends State<ShopHome> {
         final entry = entries[index];
         return _cartLine(byId[entry.key]!, entry.value, refresh: refresh);
       },
+    );
+    final checkoutFooter = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Divider(height: 20),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final label = Text(
+              shopCopy(widget.myanmar, 'Total', 'စုစုပေါင်း'),
+            );
+            final amount = Text(
+              hasUnavailableProducts
+                  ? shopCopy(widget.myanmar, 'Check items', 'ပစ္စည်းစစ်ရန်')
+                  : _mmk(
+                      _pendingWalletCheckout?.totalMmk ??
+                          _cartTotal(products),
+                    ),
+              style: _shopMoneyStyle(context, total: true),
+              textAlign: TextAlign.right,
+            );
+            if (constraints.maxWidth < 320) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [label, const SizedBox(height: 4), amount],
+              );
+            }
+            return Row(
+              children: [
+                Expanded(child: label),
+                amount,
+              ],
+            );
+          },
+        ),
+        const SizedBox(height: 12),
+        if (_pendingWalletCheckout == null)
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final cash = FilledButton.icon(
+                key: const ValueKey('shop-cash-sale'),
+                onPressed:
+                    !_checkoutReady ||
+                        hasUnavailableProducts ||
+                        _walletStarting ||
+                        _saving ||
+                        _cashConfirming ||
+                        _pendingWalletCheckout != null
+                    ? null
+                    : () => _confirmCashSale(
+                        products: products,
+                        closeSheet: refresh != null,
+                      ),
+                icon: _saving
+                    ? const SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.check),
+                label: Text(shopCopy(widget.myanmar, 'Cash sale', 'ငွေသား')),
+              );
+              final wallet = OutlinedButton.icon(
+                key: const ValueKey('shop-wallet-sale'),
+                onPressed:
+                    !_checkoutReady ||
+                        hasUnavailableProducts ||
+                        _walletStarting ||
+                        _saving ||
+                        _cashConfirming
+                    ? null
+                    : () => _startWalletSale(
+                        products: products,
+                        closeSheet: refresh != null,
+                        refresh: refresh,
+                      ),
+                icon: const Icon(Icons.qr_code_2),
+                label: Text(
+                  shopCopy(
+                    widget.myanmar,
+                    'Mobile money',
+                    'မိုဘိုင်းငွေပေးချေမှု',
+                  ),
+                ),
+              );
+              if (constraints.maxWidth < 520) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [cash, const SizedBox(height: 8), wallet],
+                );
+              }
+              return Row(
+                children: [
+                  Expanded(child: cash),
+                  const SizedBox(width: 8),
+                  Flexible(child: wallet),
+                ],
+              );
+            },
+          ),
+      ],
     );
     final content = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2273,106 +2373,37 @@ class _ShopHomeState extends State<ShopHome> {
           compactCart ? emptyMessage : Expanded(child: emptyMessage)
         else ...[
           compactCart ? cartLines : Expanded(child: cartLines),
-          const Divider(height: 20),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final label = Text(
-                shopCopy(widget.myanmar, 'Total', 'စုစုပေါင်း'),
-              );
-              final amount = Text(
-                hasUnavailableProducts
-                    ? shopCopy(widget.myanmar, 'Check items', 'ပစ္စည်းစစ်ရန်')
-                    : _mmk(
-                        _pendingWalletCheckout?.totalMmk ??
-                            _cartTotal(products),
-                      ),
-                style: _shopMoneyStyle(context, total: true),
-                textAlign: TextAlign.right,
-              );
-              if (constraints.maxWidth < 320) {
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [label, const SizedBox(height: 4), amount],
-                );
-              }
-              return Row(
-                children: [
-                  Expanded(child: label),
-                  amount,
-                ],
-              );
-            },
-          ),
-          const SizedBox(height: 12),
-          if (_pendingWalletCheckout == null)
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final cash = FilledButton.icon(
-                  onPressed:
-                      !_checkoutReady ||
-                          hasUnavailableProducts ||
-                          _walletStarting ||
-                          _saving ||
-                          _cashConfirming ||
-                          _pendingWalletCheckout != null
-                      ? null
-                      : () => _confirmCashSale(
-                          products: products,
-                          closeSheet: refresh != null,
-                        ),
-                  icon: _saving
-                      ? const SizedBox.square(
-                          dimension: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.check),
-                  label: Text(shopCopy(widget.myanmar, 'Cash sale', 'ငွေသား')),
-                );
-                final wallet = OutlinedButton.icon(
-                  onPressed:
-                      !_checkoutReady ||
-                          hasUnavailableProducts ||
-                          _walletStarting ||
-                          _saving ||
-                          _cashConfirming
-                      ? null
-                      : () => _startWalletSale(
-                          products: products,
-                          closeSheet: refresh != null,
-                          refresh: refresh,
-                        ),
-                  icon: const Icon(Icons.qr_code_2),
-                  label: Text(
-                    shopCopy(
-                      widget.myanmar,
-                      'Mobile money',
-                      'မိုဘိုင်းငွေပေးချေမှု',
-                    ),
-                  ),
-                );
-                if (constraints.maxWidth < 520) {
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [cash, const SizedBox(height: 8), wallet],
-                  );
-                }
-                return Row(
-                  children: [
-                    Expanded(child: cash),
-                    const SizedBox(width: 8),
-                    Flexible(child: wallet),
-                  ],
-                );
-              },
-            ),
+          if (!pinCheckoutFooter) checkoutFooter,
         ],
       ],
     );
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: compactCart ? SingleChildScrollView(child: content) : content,
-      ),
+      clipBehavior: Clip.antiAlias,
+      child: pinCheckoutFooter
+          ? Column(
+              children: [
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(18, 18, 18, 0),
+                    child: content,
+                  ),
+                ),
+                if (entries.isNotEmpty)
+                  ColoredBox(
+                    color: Theme.of(context).colorScheme.surface,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
+                      child: checkoutFooter,
+                    ),
+                  ),
+              ],
+            )
+          : Padding(
+              padding: const EdgeInsets.all(18),
+              child: compactCart
+                  ? SingleChildScrollView(child: content)
+                  : content,
+            ),
     );
   }
 

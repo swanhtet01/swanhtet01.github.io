@@ -503,15 +503,26 @@ void main() {
 
           final sheet = find.byKey(const ValueKey('shop-cart-sheet'));
           final holdSale = find.byKey(const ValueKey('shop-hold-sale'));
+          final cashSale = find.byKey(const ValueKey('shop-cash-sale'));
+          final walletSale = find.byKey(const ValueKey('shop-wallet-sale'));
           expect(sheet, findsOneWidget);
           expect(holdSale, findsOneWidget);
+          expect(cashSale, findsOneWidget);
+          expect(walletSale, findsOneWidget);
           final sheetBounds = tester.getRect(sheet);
-          final holdBounds = tester.getRect(holdSale);
           expect(sheetBounds.height, lessThanOrEqualTo(height * .92 + .1));
-          expect(holdBounds.top, greaterThanOrEqualTo(sheetBounds.top));
-          expect(holdBounds.bottom, lessThanOrEqualTo(sheetBounds.bottom));
-          expect(holdSale.hitTestable(), findsOneWidget);
+          for (final action in [holdSale, cashSale, walletSale]) {
+            final bounds = tester.getRect(action);
+            expect(bounds.top, greaterThanOrEqualTo(sheetBounds.top));
+            expect(bounds.bottom, lessThanOrEqualTo(sheetBounds.bottom));
+            expect(action.hitTestable(), findsOneWidget);
+          }
           expect(tester.widget<TextButton>(holdSale).onPressed, isNotNull);
+          expect(tester.widget<FilledButton>(cashSale).onPressed, isNotNull);
+          expect(
+            tester.widget<OutlinedButton>(walletSale).onPressed,
+            isNotNull,
+          );
           expect(tester.takeException(), isNull);
         } finally {
           await tester.pumpWidget(const SizedBox.shrink());
