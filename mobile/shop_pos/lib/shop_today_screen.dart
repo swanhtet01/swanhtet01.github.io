@@ -22,33 +22,42 @@ class ShopTaskPageHeader extends StatelessWidget {
   final Widget? trailing;
 
   @override
-  Widget build(BuildContext context) => Row(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Expanded(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              title,
-              style: Theme.of(context).textTheme.headlineSmall
-                  ?.copyWith(fontSize: myanmar ? 23 : 26),
-            ),
-            if (subtitle != null) ...[
-              const SizedBox(height: 4),
+  Widget build(BuildContext context) {
+    final width = MediaQuery.sizeOf(context).width;
+    final headingSize = width >= 1100
+        ? (myanmar ? 29.0 : 34.0)
+        : width >= 820
+        ? (myanmar ? 26.0 : 30.0)
+        : (myanmar ? 23.0 : 26.0);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
               Text(
-                subtitle!,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                title,
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  fontSize: headingSize,
                 ),
               ),
+              if (subtitle != null) ...[
+                const SizedBox(height: 4),
+                Text(
+                  subtitle!,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
-      ),
-      if (trailing != null) ...[const SizedBox(width: 12), trailing!],
-    ],
-  );
+        if (trailing != null) ...[const SizedBox(width: 12), trailing!],
+      ],
+    );
+  }
 }
 
 /// Keeps the same operator map visible on Today and Counter.

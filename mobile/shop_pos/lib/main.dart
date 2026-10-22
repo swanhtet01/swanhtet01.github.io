@@ -1165,8 +1165,9 @@ class _ShopHomeState extends State<ShopHome> {
                       builder: (context, snapshot) {
                         final products = snapshot.data ?? const <ShopProduct>[];
                         if (contentWidth >= minSplitContentWidth) {
-                          // Desktop keeps the current sale visible from the start;
-                          // a tablet gives the catalog room until an item is added.
+                          // Desktop keeps a compact sale summary visible from
+                          // the start; a tablet gives the catalog room until
+                          // an item is added.
                           final tablet = width < 1100;
                           final cartWidth = contentWidth < 820
                               ? 300.0
@@ -1208,7 +1209,11 @@ class _ShopHomeState extends State<ShopHome> {
                                   SizedBox(
                                     key: const ValueKey('shop-split-basket'),
                                     width: cartWidth,
-                                    child: _cartPanel(products),
+                                    child: _cart.isEmpty &&
+                                            !_recoveredDraft &&
+                                            _pendingWalletCheckout == null
+                                        ? _emptyCartPanel()
+                                        : _cartPanel(products),
                                   ),
                                 ],
                               ],
@@ -1611,11 +1616,17 @@ class _ShopHomeState extends State<ShopHome> {
           ? const EdgeInsets.symmetric(horizontal: 12, vertical: 8)
           : null,
       prefixIcon: const Icon(Icons.search),
-      hintText: shopCopy(
-        widget.myanmar,
-        'Search name, barcode or SKU',
-        'အမည်၊ ဘားကုဒ် သို့မဟုတ် ကုန်ပစ္စည်းကုဒ် ရှာရန်',
-      ),
+      hintText: MediaQuery.sizeOf(context).width < 420
+          ? shopCopy(
+              widget.myanmar,
+              'Search or scan',
+              'ပစ္စည်း၊ ဘားကုဒ် ရှာရန်',
+            )
+          : shopCopy(
+              widget.myanmar,
+              'Search name, barcode or SKU',
+              'အမည်၊ ဘားကုဒ် သို့မဟုတ် ကုန်ပစ္စည်းကုဒ် ရှာရန်',
+            ),
       suffixIcon: _search.text.isEmpty
           ? null
           : IconButton(
@@ -1770,6 +1781,11 @@ class _ShopHomeState extends State<ShopHome> {
                 '${item.onHand} in stock',
                 '${shopNumber(item.onHand, myanmar: true)} ခုလက်ကျန်',
               );
+        final stockStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
+          color: item.onHand == 0
+              ? Theme.of(context).colorScheme.error
+              : Theme.of(context).colorScheme.onSurfaceVariant,
+        );
         final canAdd =
             _checkoutReady &&
             !_saving &&
@@ -1884,24 +1900,14 @@ class _ShopHomeState extends State<ShopHome> {
                         ),
                         Text(
                           stock,
-                          style: TextStyle(
-                            color: item.onHand == 0
-                                ? Theme.of(context).colorScheme.error
-                                : Theme.of(context)
-                                      .colorScheme
-                                      .onSurfaceVariant,
-                          ),
+                          style: stockStyle,
                         ),
                       ],
                     )
                   else
                     Text(
                       stock,
-                      style: TextStyle(
-                        color: item.onHand == 0
-                            ? Theme.of(context).colorScheme.error
-                            : Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
+                      style: stockStyle,
                     ),
                 ],
               ),
@@ -1925,6 +1931,36 @@ class _ShopHomeState extends State<ShopHome> {
       },
     );
   }
+
+  Widget _emptyCartPanel() => Align(
+    alignment: Alignment.topCenter,
+    child: Card(
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              shopCopy(widget.myanmar, 'Current sale', 'လက်ရှိအရောင်း'),
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              shopCopy(
+                widget.myanmar,
+                'Scan a barcode or select a product to begin.',
+                'စတင်ရန် ဘားကုဒ်ဖတ်ပါ သို့မဟုတ် ပစ္စည်းရွေးပါ။',
+              ),
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
 
   Widget _cartPanel(List<ShopProduct> products, {StateSetter? refresh}) {
     final byId = {for (final item in products) item.id: item};
