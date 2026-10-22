@@ -38,7 +38,7 @@ export function verifyCurrentReleaseAssets({
     ['launcher', assetCorpus, ['SUPERMEGA', 'Switch product', 'Login', 'supermega.last-product.v1', 'Your workspace', 'Shop', 'Sales, stock and your daily totals.', 'Welcome back', 'Sign in to your business.', manifest.brand.colors.accent, manifest.brand.colors.ink]],
     ['guided_outcomes', productOnboardingChunk, ['Add your first product', 'Continue to catalog', 'Run a sample production job', 'Create Plant and open the job', 'Prepare your business website', 'Continue to website setup', 'Set up your online store', 'Continue to store setup']],
     ['onboarding', productOnboardingChunk, ['Make ', ' yours', 'One step', 'Name your workspace', 'Prepare your business content to continue.', 'First useful result:', 'Saves your setup, then opens the first task.', 'Enter a business name to continue.', 'This setup affects', 'Opening it will not run setup again.', 'Nothing is sent or published.', 'Need help bringing real data?', 'Ask SuperMega to set up ', 'product_requested']],
-    ['shop', operationsChunk, ['Review & complete sale', 'Complete sale', 'Leave unpaid', 'Create order', 'Counter context', 'Cashier set at review', 'After this sale,', 'Close shift', 'This device records the sale, payment review, handoff and stock.', 'It does not charge or message anyone']],
+    ['shop', operationsChunk, ['Review & complete sale', 'Complete sale', 'Reserve for pickup', 'Create order', 'Counter context', 'Cashier set at review', 'After this sale,', 'Close shift', 'This device records the sale, payment review, handoff and stock.', 'It does not charge or message anyone']],
     ['secondary_tools', productSystemNavigatorChunk, ['Next steps', 'More workflows or your data', 'Keep working in ', 'Choose a workflow or import your data.', 'Make ', ' mine', 'Your data', 'Upload your CSV to review and import your data.', 'Use my Shop data', 'Use my Plant data', 'Use my website content', 'Use my store data', 'next_steps_opened', 'data_setup_opened']],
     ['settings', settingsChunk, ['supermega_trial_evidence', 'Premium company learning', 'Advanced controls', 'Save, export, restore, or reset.', 'Export full evidence', 'Selected product only', 'activation journey', 'Shows where this browser stopped between next steps, own data, and a product request.']],
     ['activation_learning', assetCorpus, ['supermega.product_activation_funnel.v1']],
@@ -225,7 +225,7 @@ if (artifactSelfTest) {
     }
     if (!rejected) throw new Error(`launcher_mutation_not_rejected:${expected}`)
   }
-  const shopRequirements = ['Leave unpaid', 'After this sale,']
+  const shopRequirements = ['Reserve for pickup', 'After this sale,']
   for (const text of shopRequirements) {
     const expected = `missing_current_release_asset:shop:${text}`
     let rejected = false
