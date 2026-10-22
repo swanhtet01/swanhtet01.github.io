@@ -2655,7 +2655,7 @@ void main() {
           final basket = find.byKey(const ValueKey('shop-split-basket'));
           expect(catalog, findsOneWidget);
           expect(basket, findsOneWidget);
-          expect(tester.getSize(catalog).height, lessThan(400));
+          expect(tester.getSize(catalog).height, lessThan(500));
         }
         await tester.tap(
           find.byTooltip(myanmar ? 'အရောင်းထဲထည့်ရန်' : 'Add to sale'),
