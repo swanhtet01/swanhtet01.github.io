@@ -2065,12 +2065,40 @@ class _ShopHomeState extends State<ShopHome> {
     final entries = _pendingWalletCheckout != null
         ? const <MapEntry<String, int>>[]
         : _cart.entries.where((entry) => byId.containsKey(entry.key)).toList();
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
+    final emptyMessage = Center(
+      child: Text(
+        shopCopy(
+          widget.myanmar,
+          _pendingWalletCheckout != null
+              ? 'Review the saved sale above before checking payment.'
+              : _cart.isEmpty
+              ? 'Add products to start a sale.'
+              : 'A saved product is no longer available. Clear this sale and start again.',
+          _pendingWalletCheckout != null
+              ? 'ငွေပေးချေမှုမစစ်မီ အပေါ်ပါသိမ်းထားသောအရောင်းကို စစ်ပါ။'
+              : _cart.isEmpty
+              ? 'အရောင်းစရန် ပစ္စည်းထည့်ပါ။'
+              : 'သိမ်းထားသော ပစ္စည်းတစ်ခု မရှိတော့ပါ။ ဤအရောင်းကို ဖျက်ပြီး ပြန်စပါ။',
+        ),
+      ),
+    );
+    final cartLines = ListView.separated(
+      shrinkWrap: compactCart,
+      physics: compactCart ? const NeverScrollableScrollPhysics() : null,
+      itemCount: entries.length,
+      separatorBuilder: (_, _) => const Divider(height: 16),
+      itemBuilder: (context, index) {
+        final entry = entries[index];
+        return _cartLine(
+          byId[entry.key]!,
+          entry.value,
+          refresh: refresh,
+        );
+      },
+    );
+    final content = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
             Row(
               children: [
                 Expanded(
@@ -2162,40 +2190,9 @@ class _ShopHomeState extends State<ShopHome> {
               ),
             ],
             if (entries.isEmpty)
-              Expanded(
-                child: Center(
-                  child: Text(
-                    shopCopy(
-                      widget.myanmar,
-                      _pendingWalletCheckout != null
-                          ? 'Review the saved sale above before checking payment.'
-                          : _cart.isEmpty
-                          ? 'Add products to start a sale.'
-                          : 'A saved product is no longer available. Clear this sale and start again.',
-                      _pendingWalletCheckout != null
-                          ? 'ငွေပေးချေမှုမစစ်မီ အပေါ်ပါသိမ်းထားသောအရောင်းကို စစ်ပါ။'
-                          : _cart.isEmpty
-                          ? 'အရောင်းစရန် ပစ္စည်းထည့်ပါ။'
-                          : 'သိမ်းထားသော ပစ္စည်းတစ်ခု မရှိတော့ပါ။ ဤအရောင်းကို ဖျက်ပြီး ပြန်စပါ။',
-                    ),
-                  ),
-                ),
-              )
+              compactCart ? emptyMessage : Expanded(child: emptyMessage)
             else ...[
-              Expanded(
-                child: ListView.separated(
-                  itemCount: entries.length,
-                  separatorBuilder: (_, _) => const Divider(height: 16),
-                  itemBuilder: (context, index) {
-                    final entry = entries[index];
-                    return _cartLine(
-                      byId[entry.key]!,
-                      entry.value,
-                      refresh: refresh,
-                    );
-                  },
-                ),
-              ),
+              compactCart ? cartLines : Expanded(child: cartLines),
               const Divider(height: 20),
               LayoutBuilder(
                 builder: (context, constraints) {
@@ -2324,7 +2321,13 @@ class _ShopHomeState extends State<ShopHome> {
                 ),
             ],
           ],
-        ),
+    );
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: compactCart
+            ? SingleChildScrollView(child: content)
+            : content,
       ),
     );
   }
