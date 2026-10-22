@@ -2,9 +2,10 @@ import { createRequire } from 'node:module'
 import { isAbsolute, relative, resolve, sep } from 'node:path'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 const { build } = createRequire(resolve('showroom/package.json'))('esbuild')
-const productPhotoFiles = {
-  'SM-1002': 'mama-chicken-noodles.jpg',
-}
+const gallery = process.argv.includes('--gallery')
+const productPhotoFiles = gallery ? {
+  'SM-1006': 'red-apple-each.jpg',
+} : {}
 const productPhotoBytes = Object.fromEntries(Object.entries(productPhotoFiles).map(([sku, file]) => [
   sku,
   readFileSync(resolve('tools/qa-assets/shop-products', file)).toString('base64'),
@@ -15,7 +16,6 @@ const productPhotoMimes = Object.fromEntries(Object.entries(productPhotoFiles).m
 ]))
 const managed = process.argv.includes('--managed')
 const today = process.argv.includes('--today')
-const gallery = process.argv.includes('--gallery')
 const galleryMyanmar = process.argv.includes('--gallery-myanmar')
 const requestedOutput = process.env.SUPERMEGA_QA_FIXTURE_OUTPUT_DIR
 const out = resolve(requestedOutput || (managed ? '.tmp/qa-managed-shop' : '.tmp/qa-shop'))
@@ -37,12 +37,13 @@ const gallery=${gallery};
 const galleryMyanmar=${galleryMyanmar};
 const seed=createSeedCommerce(Date.now());
 if(gallery){
+ seed.items.unshift({sku:'SM-1006',name:'Red apple (each)',nameMy:'ပန်းသီးနီ (တစ်လုံး)',variant:'each',category:'Produce',onHand:24,reorderAt:6,price:1500});
  const completedSeedIds=new Set(seed.orders.filter(order=>order.status==='completed').map(order=>order.id));
  seed.orders=seed.orders.filter(order=>!completedSeedIds.has(order.id));
  seed.movements=seed.movements.filter(movement=>!completedSeedIds.has(movement.orderId));
 }
 if(galleryMyanmar){
- const categories={Pantry:'အစားအသောက်',Drinks:'သောက်စရာ','Home care':'အိမ်သုံးပစ္စည်း'};
+ const categories={Pantry:'အစားအသောက်',Drinks:'သောက်စရာ','Home care':'အိမ်သုံးပစ္စည်း',Produce:'သစ်သီး'};
  seed.items=seed.items.map(item=>({...item,category:categories[item.category]??item.category}));
  await setUiLocale('my');
 }

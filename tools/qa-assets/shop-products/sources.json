@@ -1,9 +1,29 @@
 {
-  "purpose": "Synthetic Shop screenshot fixture only. Retailer images are excluded because public reuse permission is absent; the public site remains blocked pending exact-capture review and all image rights.",
-  "observed_at": "2026-10-20",
-  "photo_rights_reviewed_at": "2026-10-21",
-  "license_status": "one CC BY-SA 3.0 contributor photo retained; four retailer photos removed from the current source tree and capture fixture",
+  "purpose": "Synthetic Shop screenshot fixture only. The unbranded red apple photo is a CC0 candidate; MAMA package art and four retailer images are excluded. Public use remains blocked pending exact-capture and rights review.",
+  "observed_at": "2026-10-22",
+  "license_status": "one CC0 1.0 unbranded apple photo candidate; MAMA package photo and four retailer photos removed from the capture fixture",
   "products": [
+    {
+      "sku": "SM-1006",
+      "name": "Red apple (each)",
+      "name_my": "ပန်းသီးနီ (တစ်လုံး)",
+      "variant": "each",
+      "file": "red-apple-each.jpg",
+      "photo_status": "cc0_candidate_capture_only_not_publication_approval",
+      "image_sha256": "4de1eb5c433f10867327d8b6303bfc45635028e8c0eb416f167f10ddf3dbdf08",
+      "source_page": "https://commons.wikimedia.org/wiki/File:Red_apple_on_a_plate_2017_A.jpg",
+      "source_image": "https://upload.wikimedia.org/wikipedia/commons/0/04/Red_apple_on_a_plate_2017_A.jpg",
+      "photo_license": {
+        "name": "CC0 1.0",
+        "url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "photographer": "Fructibus",
+        "attribution": "Photo by Fructibus / Wikimedia Commons, CC0 1.0 (optional credit).",
+        "crop": "none; original JPEG bytes retained",
+        "review_note": "Commons lists the uploader's own work and CC0 dedication. This is a candidate source check, not a release attestation."
+      },
+      "sample_catalog_price_mmk": 1500,
+      "price_status": "synthetic_illustration_only_not_a_market_or_live_price"
+    },
     {
       "sku": "SM-1001",
       "name": "KAUNG 90 Days Rice",
@@ -16,20 +36,10 @@
       "sku": "SM-1002",
       "name": "MAMA Chicken Instant Noodles",
       "variant": "55 g × 5",
-      "file": "mama-chicken-noodles.jpg",
-      "photo_status": "contributor_photo_license_review_needed_for_public_use",
-      "image_sha256": "5f2e2d57abe0a28199dbdaa8fb8295bc85332bc39a15dd8b087a869a63627f6c",
+      "photo_status": "not_included_package_artwork_unreviewed",
       "package_visual_check": "The MAMA Chicken multipack front shows five packets and 55 g per packet; the physical pack shape is cropped.",
       "source_page": "https://world.openfoodfacts.org/product/8850987101526",
-      "source_image": "https://images.openfoodfacts.org/images/products/885/098/710/1526/front_en.32.400.jpg",
-      "photo_license": {
-        "name": "CC BY-SA 3.0",
-        "url": "https://creativecommons.org/licenses/by-sa/3.0/",
-        "photographer": "twindel",
-        "credit_page": "https://world.openfoodfacts.org/cgi/product_image.pl?code=8850987101526&id=front_en",
-        "attribution": "Photo by twindel for Open Food Facts, CC BY-SA 3.0; original image, no edits.",
-        "note": "The contributor photo license does not clear separate package-artwork or trademark rights."
-      },
+      "photo_rights_note": "Open Food Facts contributor photo licensing does not clear the package artwork; the image is excluded from this capture fixture.",
       "sample_catalog_price_mmk": 2950
     },
     {

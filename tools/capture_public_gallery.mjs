@@ -395,11 +395,11 @@ async function main() {
     if (saleBasket.added.length !== 3 || saleBasket.lines !== 3) {
       throw new Error(`counter_multi_item_basket_missing:${JSON.stringify(saleBasket)}`)
     }
-    captures.push(await capture(cdp, sessionId, output, 'actual-shop-sell', ['Products', 'Current sale', 'KAUNG 90 Days Rice'],
+    captures.push(await capture(cdp, sessionId, output, 'actual-shop-sell', ['Products', 'Current sale', 'KAUNG 90 Days Rice', 'Red apple (each)'],
       { fixturePath: '/shop/', tab: 'counter', selector: '.shop-current-sale', imageSelector: '.shop-product-art.shop-product-photo', images: 1 }))
-    captures.push(await captureTablet(cdp, sessionId, output, 'actual-shop-sell-tablet', ['Products', 'Current sale', 'KAUNG 90 Days Rice'],
+    captures.push(await captureTablet(cdp, sessionId, output, 'actual-shop-sell-tablet', ['Products', 'Current sale', 'KAUNG 90 Days Rice', 'Red apple (each)'],
       { fixturePath: '/shop/', tab: 'counter', selector: '.shop-counter-grid', scrollToTop: true, imageSelector: '.shop-product-art.shop-product-photo', images: 1 }))
-    captures.push(await captureMobile(cdp, sessionId, output, 'actual-shop-sell-mobile', ['Products', 'KAUNG 90 Days Rice'],
+    captures.push(await captureMobile(cdp, sessionId, output, 'actual-shop-sell-mobile', ['Products', 'KAUNG 90 Days Rice', 'Red apple (each)'],
       { fixturePath: '/shop/', tab: 'counter', selector: '.shop-counter-grid', imageSelector: '.shop-product-art.shop-product-photo', images: 1 }))
     await clickSelector(cdp, sessionId, '.shop-review-sale')
     await waitFor(cdp, sessionId, 'Review counter sale')
@@ -493,12 +493,12 @@ async function main() {
     })()`)
     if (mySaleBasket.added.length !== 3 || mySaleBasket.lines !== 3)
       throw new Error(`myanmar_counter_multi_item_basket_missing:${JSON.stringify(mySaleBasket)}`)
-    captures.push(await captureMyanmarDesktop(cdp, sessionId, output, 'actual-shop-sell-my', ['ကုန်ပစ္စည်းများ', 'လက်ရှိ အရောင်း', 'ငွေသား', 'သောက်စရာ', 'အိမ်သုံးပစ္စည်း', 'အစားအသောက်'],
+    captures.push(await captureMyanmarDesktop(cdp, sessionId, output, 'actual-shop-sell-my', ['ကုန်ပစ္စည်းများ', 'လက်ရှိ အရောင်း', 'ငွေသား', 'သောက်စရာ', 'အိမ်သုံးပစ္စည်း', 'အစားအသောက်', 'ပန်းသီးနီ (တစ်လုံး)'],
       { fixturePath: '/shop-my/', tab: 'counter', uiLocale: 'my', selector: '.shop-current-sale', imageSelector: '.shop-product-art.shop-product-photo', images: 1,
         forbiddenText: ['Drinks', 'Home care', 'Pantry', 'Cash'] }))
-    captures.push(await captureTablet(cdp, sessionId, output, 'actual-shop-sell-my-tablet', ['ကုန်ပစ္စည်းများ', 'လက်ရှိ အရောင်း'],
+    captures.push(await captureTablet(cdp, sessionId, output, 'actual-shop-sell-my-tablet', ['ကုန်ပစ္စည်းများ', 'လက်ရှိ အရောင်း', 'ပန်းသီးနီ (တစ်လုံး)'],
       { fixturePath: '/shop-my/', tab: 'counter', uiLocale: 'my', selector: '.shop-counter-grid', scrollToTop: true, imageSelector: '.shop-product-art.shop-product-photo', images: 1 }))
-    captures.push(await captureMobile(cdp, sessionId, output, 'actual-shop-sell-my-mobile', ['ကုန်ပစ္စည်းများ', 'လက်ရှိ အရောင်း'],
+    captures.push(await captureMobile(cdp, sessionId, output, 'actual-shop-sell-my-mobile', ['ကုန်ပစ္စည်းများ', 'လက်ရှိ အရောင်း', 'ပန်းသီးနီ (တစ်လုံး)'],
       { fixturePath: '/shop-my/', tab: 'counter', uiLocale: 'my', selector: '.shop-counter-grid', imageSelector: '.shop-product-art.shop-product-photo', images: 1 }))
     await assertShopMobileFits(cdp, sessionId, '.shop-counter-grid')
     await clickText(cdp, sessionId, 'Clean synthetic databases')
