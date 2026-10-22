@@ -105,11 +105,16 @@ class ShopApp extends StatefulWidget {
 }
 
 class _ShopAppState extends State<ShopApp> {
+  final _navigatorKey = GlobalKey<NavigatorState>();
+  final _counterKey = GlobalKey<_ShopHomeState>();
   late bool _myanmar = widget.initialMyanmar;
   int _workspaceTab = 0;
   int _todayRefreshToken = 0;
+  int _salesRefreshToken = 0;
   int _addProductRequest = 0;
   bool _counterOpened = false;
+  bool _salesOpened = false;
+  bool _stockOpened = false;
   bool _hasCounterDraft = false;
 
   @override
@@ -137,10 +142,7 @@ class _ShopAppState extends State<ShopApp> {
   }
 
   Future<void> _openCounter(BuildContext context) async {
-    setState(() {
-      _counterOpened = true;
-      _workspaceTab = 1;
-    });
+    _selectTask(1);
   }
 
   Future<void> _openFirstProduct(BuildContext context) async {
@@ -152,39 +154,55 @@ class _ShopAppState extends State<ShopApp> {
   }
 
   void _showToday() {
-    setState(() {
-      _workspaceTab = 0;
-      _todayRefreshToken++;
-    });
-    unawaited(_refreshCounterDraft());
+    _selectTask(0);
   }
 
-  Future<void> _openSales(BuildContext context) =>
-      Navigator.of(context).push<void>(
-        MaterialPageRoute<void>(
-          builder: (_) =>
-              RecentSalesScreen(database: widget.database, myanmar: _myanmar),
-        ),
-      );
+  void _restoreScannerFocusAfterFrame() {
+    if (defaultTargetPlatform != TargetPlatform.windows) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _workspaceTab == 1) {
+        _counterKey.currentState?._focusScannerIfReady();
+      }
+    });
+  }
 
-  Future<void> _openStock(BuildContext context) =>
-      Navigator.of(context).push<void>(
-        MaterialPageRoute<void>(
-          builder: (_) =>
-              StockScreen(database: widget.database, myanmar: _myanmar),
-        ),
-      );
+  void _selectTask(int index) {
+    if (index == 4) {
+      unawaited(_openSettings(context));
+      return;
+    }
+    if (index != 1) FocusManager.instance.primaryFocus?.unfocus();
+    setState(() {
+      _workspaceTab = index;
+      if (index == 0) _todayRefreshToken++;
+      if (index == 1) _counterOpened = true;
+      if (index == 2) {
+        _salesOpened = true;
+        _salesRefreshToken++;
+      }
+      if (index == 3) _stockOpened = true;
+    });
+    if (index == 0) unawaited(_refreshCounterDraft());
+    if (index == 1) _restoreScannerFocusAfterFrame();
+  }
 
-  Future<void> _openSettings(BuildContext context) =>
-      Navigator.of(context).push<void>(
-        MaterialPageRoute<void>(
-          builder: (_) => ShopSettingsScreen(
-            database: widget.database,
-            myanmar: _myanmar,
-            onLanguageChanged: _setLanguage,
+  Future<void> _openSales(BuildContext context) async => _selectTask(2);
+
+  Future<void> _openStock(BuildContext context) async => _selectTask(3);
+
+  Future<void> _openSettings(BuildContext context) async {
+    await (Navigator.maybeOf(context) ?? _navigatorKey.currentState!)
+        .push<void>(
+          MaterialPageRoute<void>(
+            builder: (_) => ShopSettingsScreen(
+              database: widget.database,
+              myanmar: _myanmar,
+              onLanguageChanged: _setLanguage,
+            ),
           ),
-        ),
-      );
+        );
+    _restoreScannerFocusAfterFrame();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -198,6 +216,7 @@ class _ShopAppState extends State<ShopApp> {
     const border = Color(0xffdce2ed);
     const accent = Color(0xff2563eb);
     return MaterialApp(
+      navigatorKey: _navigatorKey,
       title: 'SuperMega Shop',
       debugShowCheckedModeBanner: false,
       locale: Locale(_myanmar ? 'my' : 'en'),
@@ -368,66 +387,148 @@ class _ShopAppState extends State<ShopApp> {
           : PopScope(
               canPop: _workspaceTab == 0,
               onPopInvokedWithResult: (didPop, result) {
-                if (!didPop && _workspaceTab == 1) _showToday();
+                if (!didPop && _workspaceTab != 0) _showToday();
               },
-              child: IndexedStack(
-                index: _workspaceTab,
-                children: [
-                  Column(
-                    children: [
-                      if (_hasCounterDraft)
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                          child: Card(
-                            child: ListTile(
-                              title: Text(
-                                shopCopy(
-                                  _myanmar,
-                                  'Unfinished sale',
-                                  'မပြီးသေးသော အရောင်း',
-                                ),
-                              ),
-                              trailing: TextButton(
-                                onPressed: () =>
-                                    unawaited(_openCounter(context)),
-                                child: Text(
-                                  shopCopy(
-                                    _myanmar,
-                                    'Continue sale',
-                                    'အရောင်းဆက်ရန်',
+              child: Builder(
+                builder: (context) {
+                  final width = MediaQuery.sizeOf(context).width;
+                  final desktop = width >= 1100;
+                  return Scaffold(
+                    appBar: AppBar(
+                      title: Text(
+                        shopCopy(_myanmar, 'SuperMega Shop', 'SuperMega ဆိုင်'),
+                      ),
+                      actions: [
+                        if (!desktop)
+                          IconButton(
+                            tooltip: shopCopy(
+                              _myanmar,
+                              'Settings',
+                              'ဆက်တင်များ',
+                            ),
+                            onPressed: () => unawaited(_openSettings(context)),
+                            icon: const Icon(Icons.settings_outlined),
+                          ),
+                        const SizedBox(width: 8),
+                      ],
+                    ),
+                    body: SafeArea(
+                      child: Row(
+                        children: [
+                          if (desktop) ...[
+                            ShopTaskRail(
+                              myanmar: _myanmar,
+                              extended: true,
+                              selectedIndex: _workspaceTab,
+                              onDestinationSelected: _selectTask,
+                            ),
+                            const VerticalDivider(width: 1),
+                          ],
+                          Expanded(
+                            child: LayoutBuilder(
+                              builder: (context, constraints) => IndexedStack(
+                                index: _workspaceTab,
+                                children: [
+                                  Column(
+                                    children: [
+                                      if (_hasCounterDraft)
+                                        Padding(
+                                          padding: const EdgeInsets.fromLTRB(
+                                            16,
+                                            12,
+                                            16,
+                                            0,
+                                          ),
+                                          child: Card(
+                                            child: ListTile(
+                                              title: Text(
+                                                shopCopy(
+                                                  _myanmar,
+                                                  'Unfinished sale',
+                                                  'မပြီးသေးသော အရောင်း',
+                                                ),
+                                              ),
+                                              trailing: TextButton(
+                                                onPressed: () => unawaited(
+                                                  _openCounter(context),
+                                                ),
+                                                child: Text(
+                                                  shopCopy(
+                                                    _myanmar,
+                                                    'Continue sale',
+                                                    'အရောင်းဆက်ရန်',
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      Expanded(
+                                        child: ShopTodayScreen(
+                                          database: widget.database,
+                                          myanmar: _myanmar,
+                                          embeddedTaskShell: true,
+                                          refreshToken: _todayRefreshToken,
+                                          onNewSale: _openCounter,
+                                          onAddFirstProduct: _openFirstProduct,
+                                          onSales: _openSales,
+                                          onStock: _openStock,
+                                          onSettings: _openSettings,
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                ),
+                                  if (_counterOpened)
+                                    ShopHome(
+                                      key: _counterKey,
+                                      database: widget.database,
+                                      authClient: widget.authClient,
+                                      apiBaseUrl: widget.apiBaseUrl,
+                                      myanmar: _myanmar,
+                                      onLanguageChanged: _setLanguage,
+                                      onToday: _showToday,
+                                      onSales: () => _selectTask(2),
+                                      onStock: () => _selectTask(3),
+                                      embeddedTaskShell: true,
+                                      workspaceContentWidth:
+                                          constraints.maxWidth,
+                                      addProductRequest: _addProductRequest,
+                                    )
+                                  else
+                                    const SizedBox.shrink(),
+                                  if (_salesOpened)
+                                    RecentSalesScreen(
+                                      database: widget.database,
+                                      myanmar: _myanmar,
+                                      embeddedTaskShell: true,
+                                      refreshToken: _salesRefreshToken,
+                                    )
+                                  else
+                                    const SizedBox.shrink(),
+                                  if (_stockOpened)
+                                    StockScreen(
+                                      database: widget.database,
+                                      myanmar: _myanmar,
+                                      embeddedTaskShell: true,
+                                    )
+                                  else
+                                    const SizedBox.shrink(),
+                                ],
                               ),
                             ),
                           ),
-                        ),
-                      Expanded(
-                        child: ShopTodayScreen(
-                          database: widget.database,
-                          myanmar: _myanmar,
-                          refreshToken: _todayRefreshToken,
-                          onNewSale: _openCounter,
-                          onAddFirstProduct: _openFirstProduct,
-                          onSales: _openSales,
-                          onStock: _openStock,
-                          onSettings: _openSettings,
-                        ),
+                        ],
                       ),
-                    ],
-                  ),
-                  if (_counterOpened)
-                    ShopHome(
-                      database: widget.database,
-                      authClient: widget.authClient,
-                      apiBaseUrl: widget.apiBaseUrl,
-                      myanmar: _myanmar,
-                      onLanguageChanged: _setLanguage,
-                      onToday: _showToday,
-                      addProductRequest: _addProductRequest,
-                    )
-                  else
-                    const SizedBox.shrink(),
-                ],
+                    ),
+                    bottomNavigationBar: desktop
+                        ? null
+                        : ShopTaskBottomBar(
+                            myanmar: _myanmar,
+                            selectedIndex: _workspaceTab,
+                            onDestinationSelected: _selectTask,
+                          ),
+                  );
+                },
               ),
             ),
     );
@@ -498,6 +599,10 @@ class ShopHome extends StatefulWidget {
     required this.myanmar,
     required this.onLanguageChanged,
     this.onToday,
+    this.onSales,
+    this.onStock,
+    this.embeddedTaskShell = false,
+    this.workspaceContentWidth,
     this.addProductRequest = 0,
     this.recoverMenuPhoto,
     super.key,
@@ -509,6 +614,10 @@ class ShopHome extends StatefulWidget {
   final bool myanmar;
   final ValueChanged<bool> onLanguageChanged;
   final VoidCallback? onToday;
+  final VoidCallback? onSales;
+  final VoidCallback? onStock;
+  final bool embeddedTaskShell;
+  final double? workspaceContentWidth;
   final int addProductRequest;
   final Future<XFile?> Function()? recoverMenuPhoto;
 
@@ -518,6 +627,19 @@ class ShopHome extends StatefulWidget {
 
 class _ShopHomeState extends State<ShopHome> {
   String _mmk(int amount) => shopMmk(amount, myanmar: widget.myanmar);
+
+  void _focusScannerIfReady() {
+    if (!mounted ||
+        !_checkoutReady ||
+        _saving ||
+        _cashConfirming ||
+        _walletStarting ||
+        _pendingWalletCheckout != null ||
+        ModalRoute.of(context)?.isCurrent != true) {
+      return;
+    }
+    if (_searchFocus.canRequestFocus) _searchFocus.requestFocus();
+  }
 
   final _search = TextEditingController();
   final _searchFocus = FocusNode();
@@ -826,8 +948,9 @@ class _ShopHomeState extends State<ShopHome> {
   Widget build(BuildContext context) {
     final width = MediaQuery.sizeOf(context).width;
     final inWorkspace = widget.onToday != null;
-    final showRail = inWorkspace && width >= 1100;
-    final contentWidth = width - (showRail ? 191 : 0);
+    final showRail = inWorkspace && !widget.embeddedTaskShell && width >= 1100;
+    final contentWidth =
+        widget.workspaceContentWidth ?? width - (showRail ? 191 : 0);
     // A portrait tablet keeps touch navigation at the bottom while the full
     // content width can still fit two usable panes after a product is added.
     const minSplitContentWidth = 820.0;
@@ -859,223 +982,281 @@ class _ShopHomeState extends State<ShopHome> {
       ),
     );
     return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          shopCopy(
-            widget.myanmar,
-            inWorkspace ? 'Sell' : 'Shop',
-            inWorkspace ? 'ရောင်းရန်' : 'ဆိုင်',
-          ),
-        ),
-        actions: [
-          if (_checkoutLoadFailed)
-            IconButton(
-              tooltip: shopCopy(
-                widget.myanmar,
-                'Retry sale recovery',
-                'အရောင်းပြန်ဖတ်ရန် ထပ်စမ်းပါ',
+      appBar: widget.embeddedTaskShell
+          ? null
+          : AppBar(
+              title: Text(
+                shopCopy(
+                  widget.myanmar,
+                  inWorkspace ? 'Sell' : 'Shop',
+                  inWorkspace ? 'ရောင်းရန်' : 'ဆိုင်',
+                ),
               ),
-              onPressed: _loadCheckoutState,
-              icon: const Icon(Icons.refresh),
-            ),
-          if (inWorkspace && width < 1100)
-            IconButton(
-              tooltip: shopCopy(widget.myanmar, 'Settings', 'ဆက်တင်များ'),
-              onPressed: _openSettings,
-              icon: const Icon(Icons.settings_outlined),
-            ),
-          if (!inWorkspace && width >= 1080) ...[
-            Tooltip(
-              message: shopCopy(
-                widget.myanmar,
-                'Recent sales',
-                'မကြာသေးမီက အရောင်းများ',
-              ),
-              child: TextButton.icon(
-                onPressed: _openRecentSales,
-                icon: const Icon(Icons.receipt_long_outlined),
-                label: Text(shopCopy(widget.myanmar, 'Sales', 'အရောင်းများ')),
-              ),
-            ),
-            TextButton.icon(
-              onPressed: _openStock,
-              icon: const Icon(Icons.inventory_2_outlined),
-              label: Text(shopCopy(widget.myanmar, 'Stock', 'လက်ကျန်')),
-            ),
-            TextButton.icon(
-              onPressed: _openSettings,
-              icon: const Icon(Icons.settings_outlined),
-              label: Text(shopCopy(widget.myanmar, 'Settings', 'ဆက်တင်များ')),
-            ),
-          ] else if (!inWorkspace)
-            PopupMenuButton<String>(
-              tooltip: shopCopy(widget.myanmar, 'More', 'နောက်ထပ်'),
-              icon: const Icon(Icons.menu_rounded),
-              onSelected: (value) {
-                switch (value) {
-                  case 'sales':
-                    _openRecentSales();
-                    break;
-                  case 'stock':
-                    _openStock();
-                    break;
-                  case 'settings':
-                    _openSettings();
-                    break;
-                }
-              },
-              itemBuilder: (context) => [
-                PopupMenuItem(
-                  value: 'sales',
-                  child: Text(
-                    shopCopy(
+              actions: [
+                if (_checkoutLoadFailed)
+                  IconButton(
+                    tooltip: shopCopy(
+                      widget.myanmar,
+                      'Retry sale recovery',
+                      'အရောင်းပြန်ဖတ်ရန် ထပ်စမ်းပါ',
+                    ),
+                    onPressed: _loadCheckoutState,
+                    icon: const Icon(Icons.refresh),
+                  ),
+                if (inWorkspace && width < 1100)
+                  IconButton(
+                    tooltip: shopCopy(widget.myanmar, 'Settings', 'ဆက်တင်များ'),
+                    onPressed: _openSettings,
+                    icon: const Icon(Icons.settings_outlined),
+                  ),
+                if (!inWorkspace && width >= 1080) ...[
+                  Tooltip(
+                    message: shopCopy(
                       widget.myanmar,
                       'Recent sales',
                       'မကြာသေးမီက အရောင်းများ',
                     ),
-                  ),
-                ),
-                PopupMenuItem(
-                  value: 'stock',
-                  child: Text(shopCopy(widget.myanmar, 'Stock', 'လက်ကျန်')),
-                ),
-                PopupMenuItem(
-                  value: 'settings',
-                  child: Text(
-                    shopCopy(widget.myanmar, 'Settings', 'ဆက်တင်များ'),
-                  ),
-                ),
-              ],
-            ),
-          const SizedBox(width: 8),
-        ],
-      ),
-      body: SafeArea(
-        child: Row(
-          children: [
-            if (showRail) ...[
-              ShopTaskRail(
-                myanmar: widget.myanmar,
-                extended: width >= 1100,
-                selectedIndex: 1,
-                onDestinationSelected: (index) {
-                  if (index == 0) _returnToToday();
-                  if (index == 2) _openRecentSales();
-                  if (index == 3) _openStock();
-                  if (index == 4) _openSettings();
-                },
-              ),
-              const VerticalDivider(width: 1),
-            ],
-            Expanded(
-              child: StreamBuilder<List<ShopProduct>>(
-                stream: _productsStream,
-                builder: (context, snapshot) {
-                  final products = snapshot.data ?? const <ShopProduct>[];
-                  if (contentWidth >= minSplitContentWidth) {
-                    // Desktop keeps the current sale visible from the start;
-                    // a tablet gives the catalog room until an item is added.
-                    final tablet = width < 1100;
-                    final cartWidth = contentWidth < 820
-                        ? 300.0
-                        : (contentWidth * 0.36).clamp(340.0, 500.0);
-                    return Padding(
-                      padding: EdgeInsets.all(tablet ? 12 : 20),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              children: [
-                                if (_recoveredMenuPhoto != null) ...[
-                                  const SizedBox(height: 12),
-                                  _recoveredMenuPhotoCard(),
-                                ],
-                                if (products.isEmpty &&
-                                    _pendingWalletCheckout != null) ...[
-                                  const SizedBox(height: 12),
-                                  _pendingWalletCheckoutCard(),
-                                ],
-                                const SizedBox(height: 14),
-                                Expanded(
-                                  child: SizedBox(
-                                    key: const ValueKey('shop-split-catalog'),
-                                    child: _catalog(products),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          if (_cart.isNotEmpty ||
-                              (products.isNotEmpty &&
-                                  (!tablet ||
-                                      _pendingWalletCheckout != null))) ...[
-                            SizedBox(width: tablet ? 12 : 18),
-                            SizedBox(
-                              key: const ValueKey('shop-split-basket'),
-                              width: cartWidth,
-                              child: _cartPanel(products),
-                            ),
-                          ],
-                        ],
+                    child: TextButton.icon(
+                      onPressed: _openRecentSales,
+                      icon: const Icon(Icons.receipt_long_outlined),
+                      label: Text(
+                        shopCopy(widget.myanmar, 'Sales', 'အရောင်းများ'),
                       ),
-                    );
-                  }
-                  return Column(
-                    children: [
-                      if (_recoveredMenuPhoto != null)
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
-                          child: _recoveredMenuPhotoCard(),
-                        ),
-                      if (_pendingWalletCheckout != null)
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
-                          child: _pendingWalletCheckoutCard(),
-                        ),
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 14, 12, 10),
-                        child: _catalogHeader(products),
-                      ),
-                      if (products.isNotEmpty) ...[
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          child: _searchField(products),
-                        ),
-                        const SizedBox(height: 8),
-                      ],
-                      Expanded(
-                        child: LayoutBuilder(
-                          builder: (context, constraints) => _productList(
-                            products,
-                            catalogWidth: constraints.maxWidth,
+                    ),
+                  ),
+                  TextButton.icon(
+                    onPressed: _openStock,
+                    icon: const Icon(Icons.inventory_2_outlined),
+                    label: Text(shopCopy(widget.myanmar, 'Stock', 'လက်ကျန်')),
+                  ),
+                  TextButton.icon(
+                    onPressed: _openSettings,
+                    icon: const Icon(Icons.settings_outlined),
+                    label: Text(
+                      shopCopy(widget.myanmar, 'Settings', 'ဆက်တင်များ'),
+                    ),
+                  ),
+                ] else if (!inWorkspace)
+                  PopupMenuButton<String>(
+                    tooltip: shopCopy(widget.myanmar, 'More', 'နောက်ထပ်'),
+                    icon: const Icon(Icons.menu_rounded),
+                    onSelected: (value) {
+                      switch (value) {
+                        case 'sales':
+                          _openRecentSales();
+                          break;
+                        case 'stock':
+                          _openStock();
+                          break;
+                        case 'settings':
+                          _openSettings();
+                          break;
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      PopupMenuItem(
+                        value: 'sales',
+                        child: Text(
+                          shopCopy(
+                            widget.myanmar,
+                            'Recent sales',
+                            'မကြာသေးမီက အရောင်းများ',
                           ),
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'stock',
+                        child: Text(
+                          shopCopy(widget.myanmar, 'Stock', 'လက်ကျန်'),
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'settings',
+                        child: Text(
+                          shopCopy(widget.myanmar, 'Settings', 'ဆက်တင်များ'),
                         ),
                       ),
                     ],
-                  );
-                },
+                  ),
+                const SizedBox(width: 8),
+              ],
+            ),
+      body: SafeArea(
+        child: Column(
+          children: [
+            if (widget.embeddedTaskShell)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+                child: ShopTaskPageHeader(
+                  title: shopCopy(widget.myanmar, 'Sell', 'ရောင်းရန်'),
+                  myanmar: widget.myanmar,
+                  trailing: _checkoutLoadFailed
+                      ? IconButton(
+                          tooltip: shopCopy(
+                            widget.myanmar,
+                            'Retry sale recovery',
+                            'အရောင်းပြန်ဖတ်ရန် ထပ်စမ်းပါ',
+                          ),
+                          onPressed: _loadCheckoutState,
+                          icon: const Icon(Icons.refresh),
+                        )
+                      : null,
+                ),
+              ),
+            Expanded(
+              child: Row(
+                children: [
+                  if (showRail) ...[
+                    ShopTaskRail(
+                      myanmar: widget.myanmar,
+                      extended: width >= 1100,
+                      selectedIndex: 1,
+                      onDestinationSelected: (index) {
+                        if (index == 0) _returnToToday();
+                        if (index == 2) _openRecentSales();
+                        if (index == 3) _openStock();
+                        if (index == 4) _openSettings();
+                      },
+                    ),
+                    const VerticalDivider(width: 1),
+                  ],
+                  Expanded(
+                    child: StreamBuilder<List<ShopProduct>>(
+                      stream: _productsStream,
+                      builder: (context, snapshot) {
+                        final products = snapshot.data ?? const <ShopProduct>[];
+                        if (contentWidth >= minSplitContentWidth) {
+                          // Desktop keeps the current sale visible from the start;
+                          // a tablet gives the catalog room until an item is added.
+                          final tablet = width < 1100;
+                          final cartWidth = contentWidth < 820
+                              ? 300.0
+                              : (contentWidth * 0.36).clamp(340.0, 500.0);
+                          return Padding(
+                            padding: EdgeInsets.all(tablet ? 12 : 20),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    children: [
+                                      if (_recoveredMenuPhoto != null) ...[
+                                        const SizedBox(height: 12),
+                                        _recoveredMenuPhotoCard(),
+                                      ],
+                                      if (products.isEmpty &&
+                                          _pendingWalletCheckout != null) ...[
+                                        const SizedBox(height: 12),
+                                        _pendingWalletCheckoutCard(),
+                                      ],
+                                      const SizedBox(height: 14),
+                                      Expanded(
+                                        child: SizedBox(
+                                          key: const ValueKey(
+                                            'shop-split-catalog',
+                                          ),
+                                          child: _catalog(products),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                if (_cart.isNotEmpty ||
+                                    (products.isNotEmpty &&
+                                        (!tablet ||
+                                            _pendingWalletCheckout !=
+                                                null))) ...[
+                                  SizedBox(width: tablet ? 12 : 18),
+                                  SizedBox(
+                                    key: const ValueKey('shop-split-basket'),
+                                    width: cartWidth,
+                                    child: _cartPanel(products),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          );
+                        }
+                        return Column(
+                          children: [
+                            if (_recoveredMenuPhoto != null)
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(
+                                  12,
+                                  10,
+                                  12,
+                                  0,
+                                ),
+                                child: _recoveredMenuPhotoCard(),
+                              ),
+                            if (_pendingWalletCheckout != null)
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(
+                                  12,
+                                  10,
+                                  12,
+                                  0,
+                                ),
+                                child: _pendingWalletCheckoutCard(),
+                              ),
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(
+                                16,
+                                14,
+                                12,
+                                10,
+                              ),
+                              child: _catalogHeader(products),
+                            ),
+                            if (products.isNotEmpty) ...[
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                ),
+                                child: _searchField(products),
+                              ),
+                              const SizedBox(height: 8),
+                            ],
+                            Expanded(
+                              child: LayoutBuilder(
+                                builder: (context, constraints) => _productList(
+                                  products,
+                                  catalogWidth: constraints.maxWidth,
+                                ),
+                              ),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
         ),
       ),
       bottomNavigationBar: inWorkspace && width < 1100
-          ? Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (_cart.isNotEmpty && contentWidth < minSplitContentWidth)
-                  cartAction,
-                ShopTaskBottomBar(
-                  myanmar: widget.myanmar,
-                  selectedIndex: 1,
-                  onDestinationSelected: (index) {
-                    if (index == 0) _returnToToday();
-                    if (index == 2) _openRecentSales();
-                    if (index == 3) _openStock();
-                  },
-                ),
-              ],
-            )
+          ? widget.embeddedTaskShell
+                ? (_cart.isNotEmpty && contentWidth < minSplitContentWidth
+                      ? cartAction
+                      : null)
+                : Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (_cart.isNotEmpty &&
+                          contentWidth < minSplitContentWidth)
+                        cartAction,
+                      ShopTaskBottomBar(
+                        myanmar: widget.myanmar,
+                        selectedIndex: 1,
+                        onDestinationSelected: (index) {
+                          if (index == 0) _returnToToday();
+                          if (index == 2) _openRecentSales();
+                          if (index == 3) _openStock();
+                        },
+                      ),
+                    ],
+                  )
           : contentWidth >= minSplitContentWidth || _cart.isEmpty
           ? null
           : cartAction,
@@ -2964,12 +3145,18 @@ class _ShopHomeState extends State<ShopHome> {
     );
   }
 
-  void _openStock() => Navigator.of(context).push<void>(
-    MaterialPageRoute<void>(
-      builder: (_) =>
-          StockScreen(database: widget.database, myanmar: widget.myanmar),
-    ),
-  );
+  void _openStock() {
+    if (widget.onStock != null) {
+      widget.onStock!();
+      return;
+    }
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) =>
+            StockScreen(database: widget.database, myanmar: widget.myanmar),
+      ),
+    );
+  }
 
   void _openPrinter() => Navigator.of(context).push<void>(
     MaterialPageRoute<void>(
@@ -2977,12 +3164,20 @@ class _ShopHomeState extends State<ShopHome> {
     ),
   );
 
-  void _openRecentSales() => Navigator.of(context).push<void>(
-    MaterialPageRoute<void>(
-      builder: (_) =>
-          RecentSalesScreen(database: widget.database, myanmar: widget.myanmar),
-    ),
-  );
+  void _openRecentSales() {
+    if (widget.onSales != null) {
+      widget.onSales!();
+      return;
+    }
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => RecentSalesScreen(
+          database: widget.database,
+          myanmar: widget.myanmar,
+        ),
+      ),
+    );
+  }
 
   void _openSettings() => Navigator.of(context).push<void>(
     MaterialPageRoute<void>(

@@ -6,18 +6,23 @@ import 'printer_services.dart';
 import 'printer_setup_screen.dart';
 import 'shop_copy.dart';
 import 'shop_database.dart';
+import 'shop_today_screen.dart';
 
 class RecentSalesScreen extends StatefulWidget {
   const RecentSalesScreen({
     required this.database,
     required this.myanmar,
     this.reprintService,
+    this.embeddedTaskShell = false,
+    this.refreshToken = 0,
     super.key,
   });
 
   final ShopDatabase database;
   final bool myanmar;
   final ReceiptReprintService? reprintService;
+  final bool embeddedTaskShell;
+  final int refreshToken;
 
   @override
   State<RecentSalesScreen> createState() => _RecentSalesScreenState();
@@ -44,6 +49,12 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
     setState(() => _sales = _readPage());
   }
 
+  @override
+  void didUpdateWidget(RecentSalesScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.refreshToken != widget.refreshToken) _sales = _readPage();
+  }
+
   void _onSearchChanged(String value) {
     _searchDebounce?.cancel();
     _searchDebounce = Timer(const Duration(milliseconds: 250), () {
@@ -66,22 +77,48 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(shopCopy(widget.myanmar, 'Recent sales', 'အရောင်းများ')),
-        actions: [
-          IconButton(
-            tooltip: shopCopy(
-              widget.myanmar,
-              'Refresh sales',
-              'အရောင်းစာရင်း ပြန်ဖတ်ရန်',
+      appBar: widget.embeddedTaskShell
+          ? null
+          : AppBar(
+              title: Text(
+                shopCopy(widget.myanmar, 'Recent sales', 'အရောင်းများ'),
+              ),
+              actions: [
+                IconButton(
+                  tooltip: shopCopy(
+                    widget.myanmar,
+                    'Refresh sales',
+                    'အရောင်းစာရင်း ပြန်ဖတ်ရန်',
+                  ),
+                  icon: const Icon(Icons.refresh),
+                  onPressed: _reload,
+                ),
+              ],
             ),
-            icon: const Icon(Icons.refresh),
-            onPressed: _reload,
-          ),
-        ],
-      ),
       body: Column(
         children: [
+          if (widget.embeddedTaskShell)
+            Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 800),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                  child: ShopTaskPageHeader(
+                    title: shopCopy(widget.myanmar, 'Sales', 'အရောင်း'),
+                    myanmar: widget.myanmar,
+                    trailing: IconButton(
+                      tooltip: shopCopy(
+                        widget.myanmar,
+                        'Refresh sales',
+                        'အရောင်းစာရင်း ပြန်ဖတ်ရန်',
+                      ),
+                      icon: const Icon(Icons.refresh),
+                      onPressed: _reload,
+                    ),
+                  ),
+                ),
+              ),
+            ),
           Center(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 800),

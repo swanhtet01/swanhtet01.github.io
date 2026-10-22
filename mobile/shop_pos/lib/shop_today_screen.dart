@@ -6,6 +6,51 @@ import 'shop_database.dart';
 
 typedef ShopTodayDestination = Future<void> Function(BuildContext context);
 
+/// One heading scale for the four daily tasks, in either app language.
+class ShopTaskPageHeader extends StatelessWidget {
+  const ShopTaskPageHeader({
+    required this.title,
+    required this.myanmar,
+    this.subtitle,
+    this.trailing,
+    super.key,
+  });
+
+  final String title;
+  final bool myanmar;
+  final String? subtitle;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: Theme.of(context).textTheme.headlineSmall
+                  ?.copyWith(fontSize: myanmar ? 23 : 26),
+            ),
+            if (subtitle != null) ...[
+              const SizedBox(height: 4),
+              Text(
+                subtitle!,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+      if (trailing != null) ...[const SizedBox(width: 12), trailing!],
+    ],
+  );
+}
+
 /// Keeps the same operator map visible on Today and Counter.
 class ShopTaskRail extends StatelessWidget {
   const ShopTaskRail({
@@ -130,6 +175,7 @@ class ShopTodayScreen extends StatefulWidget {
     required this.onStock,
     required this.onSettings,
     this.refreshToken = 0,
+    this.embeddedTaskShell = false,
     super.key,
   });
 
@@ -141,6 +187,7 @@ class ShopTodayScreen extends StatefulWidget {
   final ShopTodayDestination onStock;
   final ShopTodayDestination onSettings;
   final int refreshToken;
+  final bool embeddedTaskShell;
 
   @override
   State<ShopTodayScreen> createState() => _ShopTodayScreenState();
@@ -254,22 +301,24 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
     final compact = width < 1100;
     final desktop = width >= 1100;
     return Scaffold(
-      appBar: AppBar(
-        title: Text(_copy('SuperMega Shop', 'SuperMega ဆိုင်')),
-        actions: compact
-            ? [
-                IconButton(
-                  tooltip: _copy('Settings', 'ဆက်တင်များ'),
-                  onPressed: () => _open(widget.onSettings),
-                  icon: const Icon(Icons.settings_outlined),
-                ),
-                const SizedBox(width: 8),
-              ]
-            : null,
-      ),
+      appBar: widget.embeddedTaskShell
+          ? null
+          : AppBar(
+              title: Text(_copy('SuperMega Shop', 'SuperMega ဆိုင်')),
+              actions: compact
+                  ? [
+                      IconButton(
+                        tooltip: _copy('Settings', 'ဆက်တင်များ'),
+                        onPressed: () => _open(widget.onSettings),
+                        icon: const Icon(Icons.settings_outlined),
+                      ),
+                      const SizedBox(width: 8),
+                    ]
+                  : null,
+            ),
       body: Row(
         children: [
-          if (!compact) ...[
+          if (!compact && !widget.embeddedTaskShell) ...[
             ShopTaskRail(
               myanmar: widget.myanmar,
               extended: desktop,
@@ -327,7 +376,7 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
           ),
         ],
       ),
-      bottomNavigationBar: compact
+      bottomNavigationBar: compact && !widget.embeddedTaskShell
           ? ShopTaskBottomBar(
               myanmar: widget.myanmar,
               selectedIndex: 0,
@@ -359,7 +408,7 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
     final salesWidth = phoneLayout ? contentWidth : smallCardWidth;
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
-      padding: EdgeInsets.fromLTRB(inset, compact ? 18 : 30, inset, 32),
+      padding: EdgeInsets.fromLTRB(inset, 16, inset, 32),
       children: [
         Center(
           child: ConstrainedBox(
@@ -479,35 +528,18 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
     );
   }
 
-  Widget _heading({required bool showNewSale}) => Row(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Expanded(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              _copy('Today', 'ယနေ့'),
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
-            const SizedBox(height: 4),
-            Text(
-              MaterialLocalizations.of(context)
-                  .formatMediumDate(DateTime.now()),
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
-      ),
-      if (showNewSale)
-        FilledButton.icon(
-          onPressed: () => _openSale(),
-          icon: const Icon(Icons.add),
-          label: Text(_copy('New sale', 'အရောင်းအသစ်')),
-        ),
-    ],
+  Widget _heading({required bool showNewSale}) => ShopTaskPageHeader(
+    title: _copy('Today', 'ယနေ့'),
+    myanmar: widget.myanmar,
+    subtitle: MaterialLocalizations.of(context)
+        .formatMediumDate(DateTime.now()),
+    trailing: showNewSale
+        ? FilledButton.icon(
+            onPressed: () => _openSale(),
+            icon: const Icon(Icons.add),
+            label: Text(_copy('New sale', 'အရောင်းအသစ်')),
+          )
+        : null,
   );
 
   Widget _salesPreview(_TodaySnapshot snapshot) => _previewPanel(

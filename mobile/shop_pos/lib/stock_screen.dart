@@ -6,6 +6,7 @@ import 'package:uuid/uuid.dart';
 
 import 'shop_copy.dart';
 import 'shop_database.dart';
+import 'shop_today_screen.dart';
 
 int? parseStockQuantity(String? value) {
   final input = value?.trim() ?? '';
@@ -33,10 +34,16 @@ String _stockProductReference(ShopProduct product, bool myanmar) {
 }
 
 class StockScreen extends StatefulWidget {
-  const StockScreen({required this.database, required this.myanmar, super.key});
+  const StockScreen({
+    required this.database,
+    required this.myanmar,
+    this.embeddedTaskShell = false,
+    super.key,
+  });
 
   final ShopDatabase database;
   final bool myanmar;
+  final bool embeddedTaskShell;
 
   @override
   State<StockScreen> createState() => _StockScreenState();
@@ -89,7 +96,9 @@ class _StockScreenState extends State<StockScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: Text(shopCopy(widget.myanmar, 'Stock', 'လက်ကျန်'))),
+    appBar: widget.embeddedTaskShell
+        ? null
+        : AppBar(title: Text(shopCopy(widget.myanmar, 'Stock', 'လက်ကျန်'))),
     body: SafeArea(
       child: StreamBuilder<List<ShopProduct>>(
         stream: _products,
@@ -140,6 +149,13 @@ class _StockScreenState extends State<StockScreen> {
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   children: [
+                    if (widget.embeddedTaskShell) ...[
+                      ShopTaskPageHeader(
+                        title: shopCopy(widget.myanmar, 'Stock', 'လက်ကျန်'),
+                        myanmar: widget.myanmar,
+                      ),
+                      const SizedBox(height: 12),
+                    ],
                     if (wide) ...[
                       Align(
                         alignment: AlignmentDirectional.centerStart,
@@ -153,7 +169,12 @@ class _StockScreenState extends State<StockScreen> {
                                 ? 'ကုန်ပစ္စည်း $count မျိုး'
                                 : 'ကိုက်ညီမှု $count ခု',
                           ),
-                          style: Theme.of(context).textTheme.titleLarge,
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant,
+                              ),
                         ),
                       ),
                       const SizedBox(height: 16),

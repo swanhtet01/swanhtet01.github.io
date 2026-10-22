@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:drift/drift.dart' hide isNotNull, isNull;
 import 'package:drift/native.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image_picker/image_picker.dart';
@@ -14,6 +15,7 @@ import 'package:supermega_shop/recent_sales_screen.dart';
 import 'package:supermega_shop/shop_copy.dart';
 import 'package:supermega_shop/shop_database.dart';
 import 'package:supermega_shop/shop_models.dart';
+import 'package:supermega_shop/shop_today_screen.dart';
 import 'package:supermega_shop/wallet_setup_screen.dart';
 
 Finder _merchantQrSemantics(String provider) => find.byWidgetPredicate(
@@ -32,6 +34,200 @@ void _usePhoneViewport(WidgetTester tester) {
 }
 
 void main() {
+  testWidgets('Windows scanner focus returns after switching tasks', (
+    tester,
+  ) async {
+    final previousPlatform = debugDefaultTargetPlatformOverride;
+    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+    addTearDown(() => debugDefaultTargetPlatformOverride = previousPlatform);
+    tester.view.physicalSize = const Size(1200, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final database = ShopDatabase(NativeDatabase.memory());
+    try {
+      await database.addProduct(
+        id: 'tea',
+        name: 'Tea',
+        barcode: '111111',
+        priceMmk: 2500,
+        openingStock: 3,
+      );
+      await tester.pumpWidget(
+        ShopApp(
+          database: database,
+          authClient: null,
+          apiBaseUrl: 'https://app.supermega.dev',
+          initialMyanmar: false,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      Future<void> visit(String label) async {
+        await tester.tap(
+          find.descendant(
+            of: find.byType(NavigationRail),
+            matching: find.text(label),
+          ),
+        );
+        await tester.pumpAndSettle();
+      }
+
+      await visit('Sell');
+      expect(
+        tester
+            .widget<EditableText>(find.byType(EditableText))
+            .focusNode
+            .hasFocus,
+        isTrue,
+      );
+      await visit('Sales');
+      await visit('Sell');
+      expect(
+        tester
+            .widget<EditableText>(find.byType(EditableText))
+            .focusNode
+            .hasFocus,
+        isTrue,
+      );
+      await visit('Settings');
+      expect(find.byType(ShopSettingsScreen), findsOneWidget);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<EditableText>(find.byType(EditableText))
+            .focusNode
+            .hasFocus,
+        isTrue,
+      );
+      await tester.testTextInput.enterText('111111');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect((await database.readCounterSaleDraft())?.quantities, {'tea': 1});
+      expect(tester.takeException(), isNull);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+      await database.close();
+    }
+  });
+
+  testWidgets(
+    'task shell preserves sale and selected navigation at each size',
+    (tester) async {
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      tester.view.devicePixelRatio = 1;
+      const english = ['Today', 'Sell', 'Sales', 'Stock'];
+      const burmese = ['ယနေ့', 'ရောင်းရန်', 'အရောင်း', 'လက်ကျန်'];
+      for (final width in [320.0, 820.0, 1200.0]) {
+        for (final myanmar in [false, true]) {
+          tester.view.physicalSize = Size(width, 900);
+          tester.platformDispatcher.textScaleFactorTestValue = width == 320
+              ? 1.3
+              : 1.0;
+          final labels = myanmar ? burmese : english;
+          final database = ShopDatabase(NativeDatabase.memory());
+          try {
+            await database.addProduct(
+              id: 'tea',
+              name: 'Tea',
+              barcode: '111111',
+              priceMmk: 2500,
+              openingStock: 3,
+            );
+            await tester.pumpWidget(
+              ShopApp(
+                database: database,
+                authClient: null,
+                apiBaseUrl: 'https://app.supermega.dev',
+                initialMyanmar: myanmar,
+              ),
+            );
+            await tester.pumpAndSettle();
+            expect(tester.takeException(), isNull);
+
+            Future<void> select(int index) async {
+              final navigation = width >= 1100
+                  ? find.byType(NavigationRail)
+                  : find.byType(NavigationBar);
+              expect(navigation, findsOneWidget);
+              await tester.tap(
+                find.descendant(
+                  of: navigation,
+                  matching: find.text(labels[index]),
+                ),
+              );
+              await tester.pumpAndSettle();
+              if (width >= 1100) {
+                expect(
+                  tester.widget<NavigationRail>(navigation).selectedIndex,
+                  index,
+                );
+              } else {
+                expect(
+                  tester.widget<NavigationBar>(navigation).selectedIndex,
+                  index,
+                );
+              }
+              expect(
+                find.descendant(
+                  of: find.byType(ShopTaskPageHeader),
+                  matching: find.text(labels[index]),
+                ),
+                findsOneWidget,
+              );
+              expect(tester.takeException(), isNull);
+            }
+
+            await select(1);
+            await tester.enterText(find.byType(TextField).first, '111111');
+            await tester.testTextInput.receiveAction(TextInputAction.done);
+            await tester.pumpAndSettle();
+            expect((await database.readCounterSaleDraft())?.quantities, {
+              'tea': 1,
+            });
+            await select(3);
+            expect(find.byKey(const ValueKey('stock-search')), findsOneWidget);
+            await select(2);
+            expect(find.byType(RecentSalesScreen), findsOneWidget);
+            await select(0);
+            await select(1);
+            expect((await database.readCounterSaleDraft())?.quantities, {
+              'tea': 1,
+            });
+            expect(await database.countSales(), 0);
+            if (width >= 1100) {
+              await tester.tap(
+                find.descendant(
+                  of: find.byType(NavigationRail),
+                  matching: find.text(myanmar ? 'ဆက်တင်များ' : 'Settings'),
+                ),
+              );
+              await tester.pumpAndSettle();
+              expect(find.byType(ShopSettingsScreen), findsOneWidget);
+              await tester.pageBack();
+              await tester.pumpAndSettle();
+              expect(
+                tester
+                    .widget<NavigationRail>(find.byType(NavigationRail))
+                    .selectedIndex,
+                1,
+              );
+              expect(tester.takeException(), isNull);
+            }
+          } finally {
+            await tester.pumpWidget(const SizedBox.shrink());
+            await tester.pump(const Duration(milliseconds: 1));
+            await database.close();
+          }
+        }
+      }
+    },
+  );
+
   testWidgets('Today stays readable and opens Counter in both languages', (
     tester,
   ) async {
