@@ -30,12 +30,113 @@ abstract final class ShopBackup {
   static const _headerLength = 4 + 1 + 1 + _saltLength + _nonceLength;
   static const _magic = [0x53, 0x4d, 0x42, 0x4b]; // SMBK
   static const _requiredTables = {
+    'menu_import_drafts',
+    'merchant_wallet_profiles',
     'shop_products',
     'shop_sales',
+    'shop_sale_lines',
     'shop_stock_movements',
     'shop_sync_outbox',
     'shop_wallet_checkout_intents',
     'shop_cash_shifts',
+    'shop_cash_shift_sales',
+  };
+  static const _requiredColumns = <String, Set<String>>{
+    'menu_import_drafts': {
+      'id',
+      'batch_id',
+      'category',
+      'name',
+      'description',
+      'price_mmk',
+      'sku',
+      'barcode',
+      'opening_stock',
+      'review_state',
+      'created_at_millis',
+    },
+    'merchant_wallet_profiles': {
+      'provider',
+      'merchant_phone',
+      'official_qr_payload',
+      'issuer_confirmed',
+      'updated_at_millis',
+    },
+    'shop_products': {
+      'id',
+      'name',
+      'category',
+      'description',
+      'sku',
+      'barcode',
+      'price_mmk',
+      'on_hand',
+      'updated_at_millis',
+      'archived',
+    },
+    'shop_sales': {
+      'id',
+      'operation_id',
+      'request_fingerprint',
+      'total_mmk',
+      'payment_method',
+      'created_at_millis',
+    },
+    'shop_sale_lines': {
+      'id',
+      'sale_id',
+      'product_id',
+      'product_name',
+      'unit_price_mmk',
+      'quantity',
+      'line_total_mmk',
+    },
+    'shop_stock_movements': {
+      'id',
+      'sale_id',
+      'product_id',
+      'quantity_delta',
+      'reason',
+      'created_at_millis',
+    },
+    'shop_sync_outbox': {
+      'operation_id',
+      'event_type',
+      'payload_json',
+      'state',
+      'created_at_millis',
+    },
+    'shop_wallet_checkout_intents': {
+      'operation_id',
+      'payment_method',
+      'request_fingerprint',
+      'total_mmk',
+      'merchant_phone',
+      'merchant_qr_payload',
+      'basket_json',
+      'state',
+      'created_at_millis',
+    },
+    'shop_cash_shifts': {
+      'id',
+      'open_operation_id',
+      'operator_label',
+      'opening_float_mmk',
+      'opened_at_millis',
+      'state',
+      'close_operation_id',
+      'closed_at_millis',
+      'cash_sales_count',
+      'cash_sales_total_mmk',
+      'wallet_sales_count',
+      'wallet_sales_total_mmk',
+      'expected_cash_mmk',
+      'counted_cash_mmk',
+      'difference_mmk',
+      'review_sale_count',
+      'review_cash_total_mmk',
+    },
+    'shop_cash_shift_sales': {'sale_id', 'shift_id'},
   };
 
   static final _cipher = AesGcm.with256bits();
@@ -132,8 +233,9 @@ abstract final class ShopBackup {
 
   /// Restores only into a nonexistent database path, before ShopDatabase opens.
   /// It never merges records or intentionally overwrites an existing database
-  /// or WAL files. An OS file lock serializes cooperating callers. A same-
-  /// volume hard link publishes the verified file without replacing a target
+  /// or SQLite rollback/WAL sidecars. An OS file lock serializes cooperating
+  /// callers. A same-volume hard link publishes the verified file without
+  /// replacing a target
   /// created by another process after the empty-path check. Startup must call
   /// [cleanupInterruptedStaging] and honor [restoreMarkerFor] before opening
   /// the database. A marker left after publication blocks a mixed DB/sidecar.
@@ -212,7 +314,7 @@ abstract final class ShopBackup {
     });
   }
 
-  /// A published DB with this marker may have raced a WAL/SHM writer. Startup
+  /// A published DB with this marker may have raced a SQLite sidecar writer.
   /// must not open it until a separate recovery has checked the bytes.
   static File restoreMarkerFor(File target) =>
       File('${target.path}.restore-in-progress');
@@ -461,6 +563,8 @@ abstract final class ShopBackup {
   }
 
   static Future<bool> _hasSidecars(File target) async =>
+      await FileSystemEntity.type('${target.path}-journal', followLinks: false) !=
+          FileSystemEntityType.notFound ||
       await FileSystemEntity.type('${target.path}-wal', followLinks: false) !=
           FileSystemEntityType.notFound ||
       await FileSystemEntity.type('${target.path}-shm', followLinks: false) !=
@@ -486,8 +590,59 @@ abstract final class ShopBackup {
       final schemaVersion = version.length == 1
           ? version.single['user_version'] as int
           : -1;
-      final images =
-          schemaVersion >= 7 && tables.contains('shop_product_images')
+      final baseSchemaValid = _requiredColumns.entries.every(
+        (entry) =>
+            tables.contains(entry.key) &&
+            _tableHasColumns(connection, entry.key, entry.value),
+      );
+      final schemaValid =
+          baseSchemaValid &&
+          (schemaVersion < 7 ||
+              (tables.contains('shop_product_images') &&
+                  _tableHasColumns(connection, 'shop_product_images', const {
+                    'product_id',
+                    'image_png',
+                    'updated_at_millis',
+                  }))) &&
+          (schemaVersion < 8 ||
+              (tables.contains('shop_counter_drafts') &&
+                  _tableHasColumns(connection, 'shop_counter_drafts', const {
+                    'slot',
+                    'operation_id',
+                    'basket_json',
+                    'updated_at_millis',
+                  }))) &&
+          (schemaVersion < 10 ||
+              (tables.contains('shop_held_sales') &&
+                  _tableHasColumns(connection, 'shop_held_sales', const {
+                    'id',
+                    'name',
+                    'operation_id',
+                    'basket_json',
+                    'created_at_millis',
+                    'updated_at_millis',
+                  })));
+      final walletIntents = schemaValid
+          ? connection.select(
+              'SELECT operation_id, payment_method, request_fingerprint, '
+              'total_mmk, merchant_phone, merchant_qr_payload, basket_json, '
+              'state, created_at_millis '
+              'FROM shop_wallet_checkout_intents',
+            )
+          : const <Row>[];
+      final pendingWallets = walletIntents
+          .where((row) => row['state'] == 'pending')
+          .toList(growable: false);
+      final walletInvalid =
+          walletIntents.any((row) => !_validWalletIntent(row)) ||
+          pendingWallets.length > 1 ||
+          pendingWallets.any(
+            (row) => connection.select(
+              'SELECT 1 FROM shop_sales WHERE operation_id = ? LIMIT 1',
+              [row['operation_id']],
+            ).isNotEmpty,
+          );
+      final images = schemaValid && schemaVersion >= 7
           ? connection.select('SELECT image_png FROM shop_product_images')
           : const <Row>[];
       final imageTotal = images.fold<int>(0, (total, row) {
@@ -497,8 +652,7 @@ abstract final class ShopBackup {
                 ? image.length
                 : ShopDatabase.maxProductThumbnailsTotalBytes + 1);
       });
-      final drafts =
-          schemaVersion >= 8 && tables.contains('shop_counter_drafts')
+      final drafts = schemaValid && schemaVersion >= 8
           ? connection.select(
               'SELECT slot, operation_id, basket_json, updated_at_millis '
               'FROM shop_counter_drafts',
@@ -512,8 +666,7 @@ abstract final class ShopBackup {
                 'SELECT 1 FROM shop_sales WHERE operation_id = ? LIMIT 1',
                 [drafts.single['operation_id']],
               ).isNotEmpty);
-      final heldSales =
-          schemaVersion >= 10 && tables.contains('shop_held_sales')
+      final heldSales = schemaValid && schemaVersion >= 10
           ? connection.select(
               'SELECT id, name, operation_id, basket_json, '
               'created_at_millis, updated_at_millis FROM shop_held_sales',
@@ -569,6 +722,8 @@ abstract final class ShopBackup {
           integrity.single['integrity_check'] != 'ok' ||
           brokenReferences.isNotEmpty ||
           !tables.containsAll(_requiredTables) ||
+          !schemaValid ||
+          walletInvalid ||
           (schemaVersion >= 7 && !tables.contains('shop_product_images')) ||
           (schemaVersion >= 8 && !tables.contains('shop_counter_drafts')) ||
           (schemaVersion >= 9 && !hasReorderLevel) ||
@@ -601,6 +756,70 @@ abstract final class ShopBackup {
       return false;
     }
     return _validBasketJson(row['basket_json']);
+  }
+
+  static bool _tableHasColumns(
+    Database connection,
+    String table,
+    Set<String> required,
+  ) {
+    final columns = connection
+        .select('PRAGMA table_info($table)')
+        .map((row) => row['name'])
+        .whereType<String>()
+        .toSet();
+    return columns.containsAll(required);
+  }
+
+  static bool _validWalletIntent(Row row) {
+    try {
+      final operationId = row['operation_id'];
+      final paymentMethod = row['payment_method'];
+      final requestFingerprint = row['request_fingerprint'];
+      final totalMmk = row['total_mmk'];
+      final merchantPhone = row['merchant_phone'];
+      final merchantQrPayload = row['merchant_qr_payload'];
+      final state = row['state'];
+      if (operationId is! String ||
+          operationId.trim().isEmpty ||
+          operationId.length > 120 ||
+          !const {'kbzpay', 'wavepay'}.contains(paymentMethod) ||
+          requestFingerprint is! String ||
+          requestFingerprint.isEmpty ||
+          totalMmk is! int ||
+          totalMmk < 0 ||
+          totalMmk > 200000000000000 ||
+          merchantPhone is! String ||
+          merchantPhone.length > 40 ||
+          merchantQrPayload is! String ||
+          !const {'pending', 'completed', 'cancelled'}.contains(state) ||
+          row['created_at_millis'] is! int) {
+        return false;
+      }
+      final rawLines = jsonDecode(row['basket_json'] as String);
+      if (rawLines is! List || rawLines.isEmpty || rawLines.length > 100) {
+        return false;
+      }
+      final seen = <String>{};
+      var calculatedTotal = 0;
+      for (final rawLine in rawLines) {
+        if (rawLine is! Map<String, dynamic>) return false;
+        final line = WalletCheckoutLineSnapshot.fromJson(rawLine);
+        if (line.productId.length > 100 ||
+            line.productName.length > 160 ||
+            line.unitPriceMmk > 2000000000 ||
+            line.quantity > 1000 ||
+            line.lineTotalMmk > 2000000000000 ||
+            !seen.add(line.productId) ||
+            calculatedTotal > 200000000000000 - line.lineTotalMmk) {
+          return false;
+        }
+        calculatedTotal += line.lineTotalMmk;
+      }
+      return calculatedTotal == totalMmk;
+    } catch (_) {
+      return false;
+    }
   }
 
   static bool _validBasketJson(Object? value) {

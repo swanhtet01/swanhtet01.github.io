@@ -11,6 +11,7 @@ import 'package:sqlite3/sqlite3.dart';
 import 'package:supermega_shop/shop_backup.dart';
 import 'package:supermega_shop/shop_backup_export_screen.dart';
 import 'package:supermega_shop/shop_database.dart';
+import 'package:supermega_shop/shop_models.dart';
 import 'package:supermega_shop/shop_startup.dart';
 
 const _password = 'correct horse battery staple';
@@ -58,12 +59,15 @@ void main() {
       operationId: 'backup-sale-1',
       lines: const [ShopSaleLineInput(productId: 'rice', quantity: 2)],
     );
-    await database.customStatement(
-      'INSERT INTO shop_wallet_checkout_intents '
-      '(operation_id, payment_method, request_fingerprint, total_mmk, '
-      'merchant_phone, merchant_qr_payload, basket_json, state, '
-      'created_at_millis) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      ['backup-wallet-1', 'kbzpay', 'synthetic', 0, '', '', '[]', 'pending', 1],
+    await database.createWalletCheckoutIntent(
+      operationId: 'backup-wallet-1',
+      merchant: MerchantWalletSetup(
+        provider: 'KBZPay',
+        merchantPhone: '09123456789',
+        officialQrPayload: _syntheticStaticMmqr(),
+        issuerConfirmed: true,
+      ),
+      lines: const [ShopSaleLineInput(productId: 'rice', quantity: 1)],
     );
     archive = File('${directory.path}${Platform.pathSeparator}shop.smbak');
     await ShopBackup.exportEncrypted(
@@ -165,6 +169,56 @@ void main() {
         }
       } finally {
         await source.close();
+      }
+    },
+  );
+
+  test(
+    'restored pending wallet blocks other sales and completes only once',
+    () async {
+      final target = File('${directory.path}/wallet-restored.sqlite');
+      await ShopBackup.restoreIntoEmptyDatabase(
+        archive: archive,
+        target: target,
+        password: _password,
+      );
+      final restored = ShopDatabase(NativeDatabase(target));
+      try {
+        final pending = await restored.readPendingWalletCheckout();
+        expect(pending?.operationId, 'backup-wallet-1');
+        expect(pending?.paymentMethod, 'kbzpay');
+        expect(pending?.totalMmk, 12000);
+        expect(pending?.lines.single.productId, 'rice');
+        expect(pending?.lines.single.quantity, 1);
+
+        await expectLater(
+          restored.recordCashSale(
+            operationId: 'sale-during-restored-wallet',
+            lines: const [ShopSaleLineInput(productId: 'rice', quantity: 1)],
+          ),
+          throwsStateError,
+        );
+        expect(await restored.countSales(), 1);
+        expect((await restored.readActiveProducts()).single.onHand, 3);
+
+        final first = await restored.recordSale(
+          operationId: 'backup-wallet-1',
+          lines: const [ShopSaleLineInput(productId: 'rice', quantity: 1)],
+          paymentMethod: 'kbzpay',
+          walletCheckoutOperationId: 'backup-wallet-1',
+        );
+        final retry = await restored.recordSale(
+          operationId: 'backup-wallet-1',
+          lines: const [ShopSaleLineInput(productId: 'rice', quantity: 1)],
+          paymentMethod: 'kbzpay',
+          walletCheckoutOperationId: 'backup-wallet-1',
+        );
+        expect(retry.id, first.id);
+        expect(await restored.countSales(), 2);
+        expect((await restored.readActiveProducts()).single.onHand, 2);
+        expect(await restored.readPendingWalletCheckout(), isNull);
+      } finally {
+        await restored.close();
       }
     },
   );
@@ -628,6 +682,21 @@ void main() {
     expect(() => ShopBackup.verifySnapshot(corrupt), throwsFormatException);
   });
 
+  test('v10 snapshot rejects a malformed pending wallet basket', () async {
+    final corrupt = File('${directory.path}/malformed-wallet.sqlite');
+    await database.exportVerifiedLocalSnapshot(corrupt);
+    final connection = sqlite3.open(corrupt.path);
+    try {
+      connection.execute(
+        "UPDATE shop_wallet_checkout_intents SET basket_json = '[]' "
+        "WHERE state = 'pending'",
+      );
+    } finally {
+      connection.close();
+    }
+    expect(() => ShopBackup.verifySnapshot(corrupt), throwsFormatException);
+  });
+
   test(
     'changed ciphertext and truncated archive never create a target',
     () async {
@@ -686,6 +755,25 @@ void main() {
     expect(await sidecar.readAsString(), 'another database owns this');
   });
 
+  test(
+    'an existing rollback journal blocks restore and is never removed',
+    () async {
+      final target = File('${directory.path}/rollback.sqlite');
+      final journal = File('${target.path}-journal');
+      await journal.writeAsString('another database owns this');
+      await expectLater(
+        ShopBackup.restoreIntoEmptyDatabase(
+          archive: archive,
+          target: target,
+          password: _password,
+        ),
+        throwsStateError,
+      );
+      expect(await target.exists(), isFalse);
+      expect(await journal.readAsString(), 'another database owns this');
+    },
+  );
+
   test('late database and WAL creator wins without being replaced', () async {
     final target = File('${directory.path}/late.sqlite');
     final wal = File('${target.path}-wal');
@@ -707,7 +795,7 @@ void main() {
     await _expectNoScratch(directory);
   });
 
-  for (final suffix in const ['-wal', '-shm']) {
+  for (final suffix in const ['-journal', '-wal', '-shm']) {
     for (final timing in const ['before', 'after']) {
       test(
         'late $suffix creator $timing publication leaves recovery marker',
@@ -1092,6 +1180,37 @@ void main() {
     }
   });
 
+  testWidgets(
+    'orphaned rollback journal blocks first-run actions without deletion',
+    (tester) async {
+      final documents = Directory.systemTemp.createTempSync(
+        'shop-orphan-journal-',
+      );
+      try {
+        final target = ShopDatabase.privateDatabaseFile(documents);
+        final sidecar = File('${target.path}-journal');
+        sidecar.writeAsStringSync('preserve this file');
+        await tester.pumpWidget(
+          ShopStartup(
+            documents: documents,
+            importScratchRoot: documents,
+            initialMyanmar: false,
+            buildShop: (_, _) => const SizedBox.shrink(),
+          ),
+        );
+        await _pumpUntil(tester, find.textContaining('cannot safely open'));
+        expect(find.textContaining('cannot safely open'), findsOneWidget);
+        expect(find.text('Start new Shop'), findsNothing);
+        expect(find.text('Restore backup'), findsNothing);
+        expect(sidecar.readAsStringSync(), 'preserve this file');
+        expect(target.existsSync(), isFalse);
+      } finally {
+        await tester.pumpWidget(const SizedBox.shrink());
+        documents.deleteSync(recursive: true);
+      }
+    },
+  );
+
   testWidgets('published recovery marker blocks opening an existing Shop', (
     tester,
   ) async {
@@ -1242,6 +1361,43 @@ void main() {
       await _expectNoScratch(directory);
     },
   );
+
+  test(
+    'authenticated incomplete Shop schema fails before publication',
+    () async {
+      final incomplete = File('${directory.path}/incomplete-schema.sqlite');
+      await database.exportVerifiedLocalSnapshot(incomplete);
+      final connection = sqlite3.open(incomplete.path);
+      try {
+        connection.execute(
+          'ALTER TABLE shop_wallet_checkout_intents '
+          'RENAME COLUMN request_fingerprint TO legacy_fingerprint',
+        );
+      } finally {
+        connection.close();
+      }
+      final incompleteArchive = File(
+        '${directory.path}/incomplete-schema.smbak',
+      );
+      await _writeAuthenticatedArchive(
+        incompleteArchive,
+        await incomplete.readAsBytes(),
+      );
+      final target = File(
+        '${directory.path}/incomplete-schema-restored.sqlite',
+      );
+      await expectLater(
+        ShopBackup.restoreIntoEmptyDatabase(
+          archive: incompleteArchive,
+          target: target,
+          password: _password,
+        ),
+        throwsFormatException,
+      );
+      expect(await target.exists(), isFalse);
+      await _expectNoScratch(directory);
+    },
+  );
 }
 
 Future<void> _expectNoScratch(Directory parent) async {
@@ -1285,4 +1441,37 @@ Future<void> _writeAuthenticatedArchive(
     aad: header,
   );
   await target.writeAsBytes([...header, ...box.cipherText, ...box.mac.bytes]);
+}
+
+String _syntheticStaticMmqr() {
+  String field(String id, String value) =>
+      '$id${utf8.encode(value).length.toString().padLeft(2, '0')}$value';
+
+  final merchant = [
+    field('00', 'MM.COM.MMQR'),
+    field('01', '999999999999999'),
+    field('02', '000000'),
+  ].join();
+  final language = [field('00', 'my'), field('01', 'ဆိုင်')].join();
+  final body = [
+    field('00', '01'),
+    field('01', '11'),
+    field('26', merchant),
+    field('52', '5411'),
+    field('53', '104'),
+    field('58', 'MM'),
+    field('59', 'TEST STORE'),
+    field('60', 'Yangon'),
+    field('64', language),
+    '6304',
+  ].join();
+  var crc = 0xffff;
+  for (final byte in utf8.encode(body)) {
+    crc ^= byte << 8;
+    for (var bit = 0; bit < 8; bit++) {
+      crc = (crc & 0x8000) != 0 ? ((crc << 1) ^ 0x1021) : crc << 1;
+      crc &= 0xffff;
+    }
+  }
+  return '$body${crc.toRadixString(16).toUpperCase().padLeft(4, '0')}';
 }

@@ -64,7 +64,7 @@ class _ShopStartupState extends State<ShopStartup> {
   }
 
   Future<bool> _hasSidecar() async {
-    for (final suffix in const ['-wal', '-shm']) {
+    for (final suffix in const ['-journal', '-wal', '-shm']) {
       if (await FileSystemEntity.type(
             '${_databaseFile.path}$suffix',
             followLinks: false,
