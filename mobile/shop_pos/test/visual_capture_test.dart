@@ -230,10 +230,11 @@ void main() {
         expect(stock, findsOneWidget);
         expect(tester.widget<TextFormField>(stock).controller!.text, isEmpty);
         expect(barcode, findsNothing);
-        expect(
-          find.byKey(const ValueKey('shop-product-add-barcode')),
-          findsOneWidget,
+        final addBarcode = find.byKey(
+          const ValueKey('shop-product-add-barcode'),
         );
+        expect(addBarcode, findsOneWidget);
+        expect(tester.getSize(addBarcode).height, greaterThanOrEqualTo(48));
         expect(
           tester.getTopLeft(name).dy,
           lessThan(tester.getTopLeft(price).dy),
