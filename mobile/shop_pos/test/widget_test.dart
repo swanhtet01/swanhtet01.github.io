@@ -2930,6 +2930,10 @@ void main() {
   testWidgets(
     'wallet setup shows saved status and opens one editor at a time',
     (tester) async {
+      tester.view.physicalSize = const Size(800, 1200);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
       final database = ShopDatabase(NativeDatabase.memory());
       await database.saveWalletSetup(
         MerchantWalletSetup(
@@ -2975,12 +2979,14 @@ void main() {
       expect(find.textContaining('checksum'), findsNothing);
       final safetyDisclosure = find.text('Why check this QR?');
       await tester.ensureVisible(safetyDisclosure);
+      await tester.pumpAndSettle();
       await tester.tap(safetyDisclosure);
       await tester.pumpAndSettle();
       expect(find.textContaining('checksum'), findsOneWidget);
 
       final waveRow = find.byKey(const ValueKey('wallet-provider-WavePay'));
       await tester.ensureVisible(waveRow);
+      await tester.pumpAndSettle();
       await tester.tap(waveRow);
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('wallet-payload-KBZPay')), findsNothing);
@@ -3044,6 +3050,10 @@ void main() {
   testWidgets('editing a merchant QR clears its prior issuer confirmation', (
     tester,
   ) async {
+    tester.view.physicalSize = const Size(800, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     final database = ShopDatabase(NativeDatabase.memory());
     final revisedPayload = _testStaticMmqr(merchantName: 'REVISED STORE');
     await database.saveWalletSetup(
@@ -3081,6 +3091,7 @@ void main() {
     expect(payloadConfirmation.value, isFalse);
     final providerRow = find.byKey(const ValueKey('wallet-provider-KBZPay'));
     await tester.ensureVisible(providerRow);
+    await tester.pumpAndSettle();
     await tester.tap(providerRow);
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('wallet-payload-KBZPay')), findsNothing);
