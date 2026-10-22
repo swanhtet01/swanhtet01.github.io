@@ -8039,31 +8039,31 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
       </dl>
       {stockCountDraft && stocktakeScopeReady && <form aria-labelledby="stock-count-title" className="stock-receipt-editor stock-count-editor" id="stock-count-editor" onSubmit={reviewStockCount} ref={stockCountEditorRef}>
         <div className="stock-receipt-copy">
-          <span className="core-eyebrow">Stock check</span>
-          <h3 id="stock-count-title">Review a stocktake</h3>
-          <small id="stock-count-help">{commerce.inventoryFoundation
+          <span className="core-eyebrow">{uiText('Stock check')}</span>
+          <h3 id="stock-count-title">{uiText('Review a stocktake')}</h3>
+          <small id="stock-count-help">{uiText(commerce.inventoryFoundation
             ? 'Scan each item and lot, then enter its physical count including reserved units. Nothing changes until you review the full stocktake.'
-            : 'Scan each item and enter its sellable count. Repeat scans add one unit; nothing changes until you review the full stocktake.'}</small>
+            : 'Scan each item and enter its sellable count. Repeat scans add one unit; nothing changes until you review the full stocktake.')}</small>
           <strong aria-live="polite" id="stock-count-preview">{commerce.inventoryFoundation
             ? !stockCountBalance || !stockCountItem
-              ? 'Choose one location and lot'
+              ? uiText('Choose one location and lot')
               : stockCountQuantityResult === null
-                ? `${stockCountBalance.onHand.toLocaleString()} physical · ${stockCountBalance.reserved.toLocaleString()} reserved · enter at least ${stockCountBalance.reserved.toLocaleString()}`
-                : `${stockCountBalance.onHand.toLocaleString()} physical → ${stockCountQuantityResult.toLocaleString()} counted · ${(stockCountItem.onHand + stockCountQuantityResult - stockCountBalance.onHand).toLocaleString()} total available after count`
+                ? inventoryLocale === 'my' ? `မူလ ${stockCountBalance.onHand.toLocaleString()} ခု · သီးသန့်ထား ${stockCountBalance.reserved.toLocaleString()} ခု · အနည်းဆုံး ${stockCountBalance.reserved.toLocaleString()} ခု ထည့်ပါ` : `${stockCountBalance.onHand.toLocaleString()} physical · ${stockCountBalance.reserved.toLocaleString()} reserved · enter at least ${stockCountBalance.reserved.toLocaleString()}`
+                : inventoryLocale === 'my' ? `မူလ ${stockCountBalance.onHand.toLocaleString()} ခု → ရေတွက်ပြီး ${stockCountQuantityResult.toLocaleString()} ခု · လက်ကျန်စုစုပေါင်း ${(stockCountItem.onHand + stockCountQuantityResult - stockCountBalance.onHand).toLocaleString()} ခု` : `${stockCountBalance.onHand.toLocaleString()} physical → ${stockCountQuantityResult.toLocaleString()} counted · ${(stockCountItem.onHand + stockCountQuantityResult - stockCountBalance.onHand).toLocaleString()} total available after count`
             : !stockCountItem
-              ? 'Choose one item'
+              ? uiText('Choose one item')
               : stockCountQuantityResult === null
-                ? `${stockCountItem.onHand.toLocaleString()} recorded · enter counted units`
-                : `${stockCountItem.onHand.toLocaleString()} recorded → ${stockCountQuantityResult.toLocaleString()} counted · ${stockCountQuantityResult === stockCountItem.onHand ? 'no variance' : `${stockCountQuantityResult > stockCountItem.onHand ? '+' : ''}${(stockCountQuantityResult - stockCountItem.onHand).toLocaleString()} variance`}`}</strong>
+                ? inventoryLocale === 'my' ? `မှတ်တမ်းရှိ ${stockCountItem.onHand.toLocaleString()} ခု · ရေတွက်ပြီး အရေအတွက် ထည့်ပါ` : `${stockCountItem.onHand.toLocaleString()} recorded · enter counted units`
+                : inventoryLocale === 'my' ? `မှတ်တမ်းရှိ ${stockCountItem.onHand.toLocaleString()} ခု → ရေတွက်ပြီး ${stockCountQuantityResult.toLocaleString()} ခု · ကွာခြားချက် ${(stockCountQuantityResult - stockCountItem.onHand).toLocaleString()} ခု` : `${stockCountItem.onHand.toLocaleString()} recorded → ${stockCountQuantityResult.toLocaleString()} counted · ${stockCountQuantityResult === stockCountItem.onHand ? 'no variance' : `${stockCountQuantityResult > stockCountItem.onHand ? '+' : ''}${(stockCountQuantityResult - stockCountItem.onHand).toLocaleString()} variance`}`}</strong>
         </div>
-        <div className="sku-scan-row"><label>Scan item code · press Enter<input autoComplete="off" disabled={commerceControlsDisabled} maxLength={80} onChange={(event) => setStockCountBarcode(event.target.value)} onKeyDown={(event) => {
+        <div className="sku-scan-row"><label>{uiText('Scan item code · press Enter')}<input autoComplete="off" disabled={commerceControlsDisabled} maxLength={80} onChange={(event) => setStockCountBarcode(event.target.value)} onKeyDown={(event) => {
           if (event.key !== 'Enter') return
           event.preventDefault()
           selectStockCountBarcode(stockCountBarcode)
-        }} placeholder="Scan barcode or type SKU" value={stockCountBarcode} /></label><BarcodeScanButton disabled={commerceControlsDisabled} label="Scan a product barcode for this stock count" onDetected={selectStockCountBarcode} /></div>
-        {(stockCountBatchDrafts.length || stockCountDraft.quantity.trim()) ? <section aria-label="Counts ready for review" className="shop-stock-attention-card">
-          <header><span><span className="core-eyebrow">Stocktake</span><h3>Counts ready for review</h3></span><b>{stockCountBatchDrafts.length + (stockCountDraft.quantity.trim() ? 1 : 0)}</b></header>
-          <div className="data-table" role="list" aria-label="Stocktake counts">
+        }} placeholder={uiText('Scan barcode or type SKU')} value={stockCountBarcode} /></label><BarcodeScanButton disabled={commerceControlsDisabled} label={uiText('Scan a product barcode for this stock count')} onDetected={selectStockCountBarcode} /></div>
+        {(stockCountBatchDrafts.length || stockCountDraft.quantity.trim()) ? <section aria-label={uiText('Counts ready for review')} className="shop-stock-attention-card">
+          <header><span><span className="core-eyebrow">{uiText('Stocktake')}</span><h3>{uiText('Counts ready for review')}</h3></span><b>{stockCountBatchDrafts.length + (stockCountDraft.quantity.trim() ? 1 : 0)}</b></header>
+          <div className="data-table" role="list" aria-label={uiText('Stocktake counts')}>
             {[...stockCountBatchDrafts, ...(stockCountDraft.quantity.trim() ? [stockCountDraft] : [])].map((draft) => {
               const item = commerce.items.find((candidate) => candidate.sku === draft.sku)
               const key = stockCountDraftKey(draft)
@@ -8072,19 +8072,19 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
                 ? managedInventoryProjection?.balances.find((candidate) => candidate.stockUnitId === draft.stockUnitId && candidate.locationId === draft.locationId)
                 : undefined
               const locationName = targetBalance && managedInventoryProjection?.locations.find((location) => location.id === targetBalance.locationId)?.name
-              return <div className="data-row" key={key} role="listitem"><span><strong>{item?.name ?? draft.sku}</strong><small>{commerce.inventoryFoundation ? `${locationName ?? targetBalance?.locationId ?? 'Location'} · ${targetBalance?.trackingCode ?? 'Lot'}` : draft.sku}</small></span><strong>{Number(draft.quantity).toLocaleString()} counted</strong>{isCurrent ? <small>Current count</small> : <button className="core-button" disabled={Boolean(pendingAction)} onClick={() => setStockCountBatchDrafts((entries) => entries.filter((entry) => stockCountDraftKey(entry) !== key))} type="button">Remove</button>}</div>
+              return <div className="data-row" key={key} role="listitem"><span><strong>{inventoryLocale === 'my' && item?.nameMy?.trim() ? item.nameMy : item?.name ?? draft.sku}</strong><small>{commerce.inventoryFoundation ? `${locationName ?? targetBalance?.locationId ?? uiText('Location')} · ${targetBalance?.trackingCode ?? uiText('Lot')}` : draft.sku}</small></span><strong>{Number(draft.quantity).toLocaleString()} {uiText('counted')}</strong>{isCurrent ? <small>{uiText('Current count')}</small> : <button className="core-button" disabled={Boolean(pendingAction)} onClick={() => setStockCountBatchDrafts((entries) => entries.filter((entry) => stockCountDraftKey(entry) !== key))} type="button">{uiText('Remove')}</button>}</div>
             })}
           </div>
         </section> : null}
-        <label>{commerce.inventoryFoundation ? 'Location and lot' : 'Item'}<select aria-describedby="stock-count-help" disabled={commerceControlsDisabled || Boolean(commerce.inventoryFoundation && !managedInventoryProjection)} id="stock-count-sku" onChange={(event) => selectStockCountTarget(event.target.value)} required={!stockCountBatchDrafts.length} value={commerce.inventoryFoundation ? stockCountTargetValue : stockCountDraft.sku}><option value="">{commerce.inventoryFoundation ? 'Choose location and lot' : 'Choose an item'}</option>{commerce.inventoryFoundation
+        <label>{uiText(commerce.inventoryFoundation ? 'Location and lot' : 'Item')}<select aria-describedby="stock-count-help" disabled={commerceControlsDisabled || Boolean(commerce.inventoryFoundation && !managedInventoryProjection)} id="stock-count-sku" onChange={(event) => selectStockCountTarget(event.target.value)} required={!stockCountBatchDrafts.length} value={commerce.inventoryFoundation ? stockCountTargetValue : stockCountDraft.sku}><option value="">{uiText(commerce.inventoryFoundation ? 'Choose location and lot' : 'Choose an item')}</option>{commerce.inventoryFoundation
           ? managedInventoryProjection?.balances.map((balance) => {
               const item = commerce.items.find((candidate) => candidate.sku === balance.sku)
               const location = managedInventoryProjection.locations.find((candidate) => candidate.id === balance.locationId)
-              return <option key={`${balance.stockUnitId}|${balance.locationId}`} value={`${balance.stockUnitId}|${balance.locationId}`}>{item?.name ?? balance.sku} · {location?.name ?? balance.locationId} · {balance.trackingCode} · {balance.onHand.toLocaleString()} physical{balance.reserved ? ` · ${balance.reserved.toLocaleString()} reserved` : ''}</option>
+              return <option key={`${balance.stockUnitId}|${balance.locationId}`} value={`${balance.stockUnitId}|${balance.locationId}`}>{inventoryLocale === 'my' && item?.nameMy?.trim() ? item.nameMy : item?.name ?? balance.sku} · {location?.name ?? balance.locationId} · {balance.trackingCode} · {balance.onHand.toLocaleString()} {uiText('physical')}{balance.reserved ? ` · ${balance.reserved.toLocaleString()} ${uiText('reserved')}` : ''}</option>
             })
-          : commerce.items.map((item) => <option key={item.sku} value={item.sku}>{item.name} · {item.sku}</option>)}</select></label>
-        <label>{commerce.inventoryFoundation ? 'Counted physical units' : 'Counted available units'}<input aria-describedby="stock-count-help stock-count-preview" aria-invalid={Boolean(stockCountQuantityText) && stockCountQuantityResult === null} disabled={commerceControlsDisabled || !stockCountItem || Boolean(commerce.inventoryFoundation && !stockCountBalance)} id="stock-count-quantity" inputMode="numeric" max={stockCountBalance?.tracking === 'serial' ? 1 : Number.MAX_SAFE_INTEGER} min={stockCountBalance?.reserved ?? 0} onChange={(event) => setStockCountDraft((current) => current ? { ...current, quantity: event.target.value } : current)} placeholder="0" required={!stockCountBatchDrafts.length} step="1" type="number" value={stockCountDraft.quantity} /></label>
-        <div className="form-actions"><button className="core-button" disabled={Boolean(pendingAction)} onClick={cancelStockCount} type="button">Cancel stocktake</button><button className="core-button primary" disabled={commerceControlsDisabled || ((!stockCountBatchDrafts.length || Boolean(stockCountDraft.quantity.trim())) && stockCountQuantityResult === null) || Boolean(commerce.inventoryFoundation && stockCountDraft.quantity.trim() && !stockCountBalance)} type="submit">Review stocktake ({stockCountBatchDrafts.length + (stockCountDraft.quantity.trim() ? 1 : 0)})</button></div>
+          : commerce.items.map((item) => <option key={item.sku} value={item.sku}>{inventoryLocale === 'my' && item.nameMy?.trim() ? item.nameMy : item.name} · {item.sku}</option>)}</select></label>
+        <label>{uiText(commerce.inventoryFoundation ? 'Counted physical units' : 'Counted available units')}<input aria-describedby="stock-count-help stock-count-preview" aria-invalid={Boolean(stockCountQuantityText) && stockCountQuantityResult === null} disabled={commerceControlsDisabled || !stockCountItem || Boolean(commerce.inventoryFoundation && !stockCountBalance)} id="stock-count-quantity" inputMode="numeric" max={stockCountBalance?.tracking === 'serial' ? 1 : Number.MAX_SAFE_INTEGER} min={stockCountBalance?.reserved ?? 0} onChange={(event) => setStockCountDraft((current) => current ? { ...current, quantity: event.target.value } : current)} placeholder="0" required={!stockCountBatchDrafts.length} step="1" type="number" value={stockCountDraft.quantity} /></label>
+        <div className="form-actions"><button className="core-button" disabled={Boolean(pendingAction)} onClick={cancelStockCount} type="button">{uiText('Cancel stocktake')}</button><button className="core-button primary" disabled={commerceControlsDisabled || ((!stockCountBatchDrafts.length || Boolean(stockCountDraft.quantity.trim())) && stockCountQuantityResult === null) || Boolean(commerce.inventoryFoundation && stockCountDraft.quantity.trim() && !stockCountBalance)} type="submit">{uiText('Review stocktake')} ({stockCountBatchDrafts.length + (stockCountDraft.quantity.trim() ? 1 : 0)})</button></div>
       </form>}
       <div className="shop-stock-grid">
         <section aria-labelledby="shop-stock-attention-title" className="shop-stock-attention-card">

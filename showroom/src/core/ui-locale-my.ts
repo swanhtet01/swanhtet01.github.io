@@ -3,6 +3,23 @@
 // Keep a whole phrase as the translation unit. These labels are a source draft;
 // native review and full route coverage remain launch checks.
 export const UI_TRANSLATIONS: Readonly<Record<string, string>> = {
+  'Stock check': 'ကုန်လက်ကျန် စစ်ဆေးခြင်း',
+  'Review a stocktake': 'လက်ကျန်ရေတွက်မှုကို စစ်ဆေးရန်',
+  'Scan each item and lot, then enter its physical count including reserved units. Nothing changes until you review the full stocktake.': 'ပစ္စည်းနှင့် အသုတ်ကို စကန်ဖတ်ပြီး သီးသန့်ထားသော အရေအတွက်ပါဝင်သည့် ရေတွက်ချက်ကို ထည့်ပါ။ ရေတွက်မှုတစ်ခုလုံးကို စစ်ဆေးပြီးမှသာ မှတ်တမ်းပြောင်းမည်။',
+  'Scan each item and enter its sellable count. Repeat scans add one unit; nothing changes until you review the full stocktake.': 'ပစ္စည်းကို စကန်ဖတ်ပြီး ရောင်းချနိုင်သော အရေအတွက်ကို ထည့်ပါ။ ထပ်စကန်ဖတ်တိုင်း တစ်ခုတိုးသည်။ ရေတွက်မှုတစ်ခုလုံးကို စစ်ဆေးပြီးမှသာ မှတ်တမ်းပြောင်းမည်။',
+  'Choose one location and lot': 'နေရာနှင့် အသုတ်တစ်ခု ရွေးပါ',
+  'Choose one item': 'ပစ္စည်းတစ်မျိုး ရွေးပါ',
+  'Scan item code · press Enter': 'ပစ္စည်းကုဒ် စကန်ဖတ်ပြီး Enter နှိပ်ပါ',
+  'Scan barcode or type SKU': 'ဘားကုဒ် စကန်ဖတ်ပါ သို့မဟုတ် SKU ရိုက်ထည့်ပါ',
+  'Scan a product barcode for this stock count': 'လက်ကျန်ရေတွက်ရန် ပစ္စည်းဘားကုဒ်ကို စကန်ဖတ်ပါ',
+  'Stocktake': 'လက်ကျန်ရေတွက်မှု', 'Counts ready for review': 'စစ်ဆေးရန် အသင့်ဖြစ်သော ရေတွက်ချက်များ',
+  'Stocktake counts': 'ရေတွက်ထားသော လက်ကျန်များ',
+  'Location': 'နေရာ', 'Lot': 'အသုတ်', 'counted': 'ရေတွက်ပြီး',
+  'Current count': 'လက်ရှိ ရေတွက်ချက်', 'Location and lot': 'နေရာနှင့် အသုတ်',
+  'physical': 'အမှန်တကယ်ရှိ', 'reserved': 'သီးသန့်ထား',
+  'Counted physical units': 'ရေတွက်ပြီး အမှန်တကယ်ရှိသော အရေအတွက်',
+  'Counted available units': 'ရေတွက်ပြီး ရောင်းချနိုင်သော အရေအတွက်',
+  'Cancel stocktake': 'ရေတွက်မှု ပယ်ဖျက်ရန်', 'Review stocktake': 'ရေတွက်မှု စစ်ဆေးရန်',
   'Shop catalog setup': 'Shop ကုန်ပစ္စည်းစာရင်း စတင်ပြင်ဆင်မှု',
   'First sale': 'ပထမဆုံးအရောင်း', 'Catalog import': 'ကုန်ပစ္စည်းစာရင်း ထည့်သွင်းရန်',
   'Add one product or import a list': 'ပစ္စည်းတစ်မျိုး ထည့်ပါ သို့မဟုတ် စာရင်းတင်ပါ',

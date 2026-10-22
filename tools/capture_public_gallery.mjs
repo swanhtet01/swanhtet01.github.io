@@ -287,6 +287,20 @@ async function captureTablet(cdp, sessionId, output, name, expectedTexts, view) 
       return { viewport: innerWidth, page: document.documentElement.scrollWidth };
     })()`)
     if (layout.page > layout.viewport + 1) throw new Error(`tablet_capture_horizontal_overflow:${name}:${JSON.stringify(layout)}`)
+    if (name === 'actual-shop-inventory-tablet' || name === 'actual-shop-inventory-my-tablet') {
+      const stockLayout = await evaluate(cdp, sessionId, `(() => {
+        const action=document.querySelector('.shop-stock-attention-card');
+        const metrics=document.querySelector('.shop-stock-metrics');
+        const row=document.querySelector('.stock-attention-table .data-row:not(.table-head)');
+        return {actionTop:action?.getBoundingClientRect().top,metricsTop:metrics?.getBoundingClientRect().top,
+          rowFont:parseFloat(getComputedStyle(row).fontSize),
+          metadataFont:parseFloat(getComputedStyle(row.querySelector('small')).fontSize),
+          labelFont:parseFloat(getComputedStyle(row.children[1],'::before').fontSize)};
+      })()`)
+      if (!(stockLayout.actionTop < stockLayout.metricsTop && stockLayout.rowFont >= 14
+        && stockLayout.metadataFont >= 13 && stockLayout.labelFont >= 13))
+        throw new Error(`tablet_inventory_action_or_type_hierarchy:${name}:${JSON.stringify(stockLayout)}`)
+    }
     if (name === 'actual-shop-sell-my-tablet') {
       const categories = await evaluate(cdp, sessionId, `(() => {
         const node=document.querySelector('.shop-counter-category-filter');
@@ -547,6 +561,12 @@ async function main() {
     captures.push(await captureMobile(cdp, sessionId, output, 'actual-shop-inventory-my-mobile', ['ကုန်ပစ္စည်းလက်ကျန်', 'ပန်းသီးနီ (တစ်လုံး)'],
       { fixturePath: '/shop-my/', tab: 'inventory', uiLocale: 'my', selector: '.shop-stock-workspace', imageSelector: '.stock-product-photo', images: 1 }))
     await assertShopMobileFits(cdp, sessionId, '.shop-stock-workspace')
+    await evaluate(cdp, sessionId, `document.querySelector('.shop-stock-heading > button')?.click()`)
+    await waitFor(cdp, sessionId, 'လက်ကျန်ရေတွက်မှုကို စစ်ဆေးရန်')
+    const myStocktakeText = await evaluate(cdp, sessionId, `document.querySelector('#stock-count-editor')?.innerText || ''`)
+    if (/Stock check|Review a stocktake|Scan each item|Choose one item|Counted available units|Cancel stocktake|Review stocktake/.test(myStocktakeText))
+      throw new Error('myanmar_stocktake_primary_form_contains_english')
+    await evaluate(cdp, sessionId, `document.querySelector('#stock-count-editor .form-actions button:first-child')?.click()`)
     await clickText(cdp, sessionId, 'Clean synthetic databases')
 
     await cdp.send('Page.navigate', { url: `${origin}/workspaces/` }, sessionId)
