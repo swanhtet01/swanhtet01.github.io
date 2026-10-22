@@ -534,7 +534,7 @@ async function main() {
     await clickText(cdp, sessionId, 'Show Inventory')
     await waitFor(cdp, sessionId, 'ကုန်ပစ္စည်းလက်ကျန်')
     const myInventoryText = await evaluate(cdp, sessionId, `document.querySelector('.shop-stock-workspace')?.innerText || ''`)
-    if (/Inventory|Stock alerts|Count stock|Other products|Red apple \(each\)|Purchasing & locations/.test(myInventoryText))
+    if (/Inventory|Stock alerts|Count stock|Other products|Red apple \(each\)|Purchasing & locations|Supplier to confirm/.test(myInventoryText))
       throw new Error('myanmar_inventory_default_view_contains_english')
     const myStockLabels = await evaluate(cdp, sessionId, `(() => {
       const row=document.querySelector('.stock-attention-table .data-row:not(.table-head)');

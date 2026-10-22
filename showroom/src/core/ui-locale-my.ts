@@ -248,4 +248,5 @@ export const UI_TRANSLATIONS: Readonly<Record<string, string>> = {
   'Purchasing & locations': 'ဝယ်ယူမှုနှင့် နေရာခွဲများ',
   'Supplier planning, location stock, and available-to-promise': 'ပေးသွင်းသူ၊ နေရာအလိုက် လက်ကျန်နှင့် ရောင်းနိုင်သည့် လက်ကျန်',
   'Open when needed': 'လိုအပ်မှ ဖွင့်ရန်',
+  'Supplier to confirm': 'ပေးသွင်းသူ မသတ်မှတ်ရသေး',
 }

@@ -7470,7 +7470,7 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
             : 'Review'
   const stockNextReasonVisible = inventoryLocale !== 'my' ? stockNextReason
     : stockNextActionKind === 'receive' && stockNextPurchaseRow
-      ? `${stockNextPurchaseRow.purchaseOrder.supplier} ထံမှ ${stockNextPurchaseRow.progress.remaining.toLocaleString()} ခု လက်ခံရန် ကျန်သည်။`
+      ? `${uiText(stockNextPurchaseRow.purchaseOrder.supplier)} ထံမှ ${stockNextPurchaseRow.progress.remaining.toLocaleString()} ခု လက်ခံရန် ကျန်သည်။`
       : stockNextItem && stockNextItem.onHand <= stockNextItem.reorderAt
         ? `${stockNextItem.nameMy?.trim() || stockNextItem.name} ပြန်မှာရန် သတ်မှတ်ချက်သို့ ရောက်နေသည်။`
         : uiText(stockNextReason)
