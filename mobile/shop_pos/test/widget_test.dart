@@ -157,6 +157,15 @@ void main() {
         findsOneWidget,
       );
       expect(tester.takeException(), isNull);
+      await tester.tap(
+        find.byKey(const ValueKey('shop-held-reopen:compact-ticket')),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        (await database.readCounterSaleDraft())?.operationId,
+        'held-compact',
+      );
+      expect(await database.readHeldSaleTickets(), isEmpty);
     } finally {
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump(const Duration(milliseconds: 1));
