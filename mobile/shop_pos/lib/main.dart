@@ -14,6 +14,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 
 import 'camera_barcode_scanner.dart';
+import 'connected_orders_screen.dart';
 import 'menu_import_screen.dart';
 import 'menu_import_service.dart';
 import 'printer_setup_screen.dart';
@@ -31,6 +32,11 @@ import 'stock_screen.dart';
 import 'wallet_setup_screen.dart';
 
 const _pendingPickerIntentKey = 'shop_pending_picker_intent';
+// Enable only after the scoped server route passes hosted two-tenant acceptance.
+const _connectedOrdersEnabled = bool.fromEnvironment(
+  'SHOP_CONNECTED_ORDERS_ENABLED',
+  defaultValue: false,
+);
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -236,6 +242,8 @@ class _ShopAppState extends State<ShopApp> {
           MaterialPageRoute<void>(
             builder: (_) => ShopSettingsScreen(
               database: widget.database,
+              authClient: widget.authClient,
+              apiBaseUrl: widget.apiBaseUrl,
               myanmar: _myanmar,
               onLanguageChanged: _setLanguage,
             ),
@@ -3814,6 +3822,8 @@ class _ShopHomeState extends State<ShopHome> {
     MaterialPageRoute<void>(
       builder: (_) => ShopSettingsScreen(
         database: widget.database,
+        authClient: widget.authClient,
+        apiBaseUrl: widget.apiBaseUrl,
         myanmar: widget.myanmar,
         onLanguageChanged: widget.onLanguageChanged,
       ),
@@ -4295,10 +4305,14 @@ class ShopSettingsScreen extends StatefulWidget {
     required this.database,
     required this.myanmar,
     required this.onLanguageChanged,
+    this.authClient,
+    this.apiBaseUrl = 'https://app.supermega.dev',
     super.key,
   });
 
   final ShopDatabase database;
+  final SupabaseClient? authClient;
+  final String apiBaseUrl;
   final bool myanmar;
   final ValueChanged<bool> onLanguageChanged;
 
@@ -4343,6 +4357,31 @@ class _ShopSettingsScreenState extends State<ShopSettingsScreen> {
             Card(
               child: Column(
                 children: [
+                  if (_connectedOrdersEnabled) ...[
+                    _SetupTile(
+                      icon: Icons.inventory_2_outlined,
+                      title: shopCopy(
+                        _myanmar,
+                        'Connected orders',
+                        'ချိတ်ဆက်အော်ဒါများ',
+                      ),
+                      subtitle: shopCopy(
+                        _myanmar,
+                        'Read confirmed orders for your account.',
+                        'သင့်အကောင့်၏ အတည်ပြုပြီး အော်ဒါများကို ကြည့်ပါ။',
+                      ),
+                      onTap: () => Navigator.of(context).push<void>(
+                        MaterialPageRoute<void>(
+                          builder: (_) => ConnectedOrdersScreen(
+                            myanmar: _myanmar,
+                            authClient: widget.authClient,
+                            apiBaseUrl: widget.apiBaseUrl,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const Divider(height: 1),
+                  ],
                   _SetupTile(
                     icon: Icons.print_outlined,
                     title: shopCopy(_myanmar, 'Receipt printer', 'ပြေစာပရင်တာ'),
