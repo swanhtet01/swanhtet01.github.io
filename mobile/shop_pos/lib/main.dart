@@ -1127,20 +1127,21 @@ class _ShopHomeState extends State<ShopHome> {
                                       const SizedBox(height: 14),
                                       Expanded(
                                         child: LayoutBuilder(
-                                          builder: (context, constraints) => Align(
-                                            alignment: Alignment.topCenter,
-                                            child: SizedBox(
-                                              key: const ValueKey(
-                                                'shop-split-catalog',
+                                          builder: (context, constraints) =>
+                                              Align(
+                                                alignment: Alignment.topCenter,
+                                                child: SizedBox(
+                                                  key: const ValueKey(
+                                                    'shop-split-catalog',
+                                                  ),
+                                                  width: double.infinity,
+                                                  height: _catalogHeight(
+                                                    products,
+                                                    constraints.maxHeight,
+                                                  ),
+                                                  child: _catalog(products),
+                                                ),
                                               ),
-                                              width: double.infinity,
-                                              height: _catalogHeight(
-                                                products,
-                                                constraints.maxHeight,
-                                              ),
-                                              child: _catalog(products),
-                                            ),
-                                          ),
                                         ),
                                       ),
                                     ],

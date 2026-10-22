@@ -1027,14 +1027,14 @@ void main() {
         );
         return tester.getBottomLeft(metricCard).dy;
       }
+
       final burmeseSalesBottom = cardBottom('ယနေ့ရောင်းအား');
       expect(
         (burmeseSalesBottom - cardBottom('ပြီးစီးသောအရောင်း')).abs(),
         lessThan(4),
       );
       expect(
-        (burmeseSalesBottom -
-                cardBottom('လက်ကျန်နည်းသော ကုန်ပစ္စည်းများ'))
+        (burmeseSalesBottom - cardBottom('လက်ကျန်နည်းသော ကုန်ပစ္စည်းများ'))
             .abs(),
         lessThan(4),
       );
