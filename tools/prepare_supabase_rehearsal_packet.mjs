@@ -58,6 +58,9 @@ const dormantCandidateNames = new Set([
   '20261014103000_website_custom_domain_bindings.sql',
   '20261014122400_website_domain_attempt_fencing.sql',
   '20261016143945_optimize_sites_inquiry_rls_initplans.sql',
+  // Rehearsed separately on disposable PostgreSQL 17; not in the reviewed
+  // v13 provider application packet.
+  '20261022052731_shop_sale_operation_sync.sql',
 ])
 
 export function validateRehearsalMigrationNames(names) {
