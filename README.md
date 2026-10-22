@@ -62,6 +62,19 @@ npm run public:verify
 These checks validate source and public artifact contracts. They do not replace
 installed device, scanner, printer, merchant, signing, or production evidence.
 
+## Retained browser-platform development
+
+The parked browser platform remains testable for maintenance work:
+
+```bash
+npm run dev
+```
+
+This starts the canonical FastAPI runtime and Vite together on loopback. The
+default launcher clears managed provider configuration, so managed writes remain disabled.
+Running this retained surface does not put its older products or release path
+into the active Shop scope.
+
 ## Release policy
 
 Use one integration lane and the gates in the Shop release runbook. Production
