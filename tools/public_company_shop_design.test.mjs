@@ -265,12 +265,16 @@ assert.match(generator, /const homeHtml = `<!doctype html>/)
 assert.match(generator, /const publicShopMarkup = shopMarkup/)
 assert.doesNotMatch(generator, /function addShopHeroPreview|shop-hero-preview/)
 assert.match(shopCaptureFixture, /putProductImage\(productImageScopeForWorkspace\(null\),sku,new Blob\(\[bytes\],\{type:productPhotoMimes\[sku\]\}\)\)/)
-assert.match(shopCaptureFixture, /SM-1001': 'kaung-90-days-rice\.webp/)
 assert.match(shopCaptureFixture, /SM-1002': 'mama-chicken-noodles\.jpg/)
+assert.doesNotMatch(shopCaptureFixture, /SM-1001': 'kaung-90-days-rice\.webp/)
 assert.match(shopCaptureFixture, /persisted:async\(\)=>gallery/)
 assert.equal(shopProductSources.products.length, 5, 'capture fixture uses five real locally sourced shop products')
-assert.match(shopProductSources.license_status, /without verified public reuse permission/)
+assert.match(shopProductSources.license_status, /four retailer photos removed/)
 for (const product of shopProductSources.products) {
+  if (!product.file) {
+    assert.equal(product.photo_status, 'not_included_no_public_reuse_grant')
+    continue
+  }
   const image = readFileSync(new URL(`./qa-assets/shop-products/${product.file}`, import.meta.url))
   if (product.file.endsWith('.webp')) {
     assert.equal(image.subarray(0, 4).toString(), 'RIFF', `${product.file} is a WebP image`)

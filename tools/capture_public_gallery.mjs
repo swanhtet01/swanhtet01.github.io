@@ -378,11 +378,11 @@ async function main() {
       throw new Error(`counter_multi_item_basket_missing:${JSON.stringify(saleBasket)}`)
     }
     captures.push(await capture(cdp, sessionId, output, 'actual-shop-sell', ['Products', 'Current sale', 'KAUNG 90 Days Rice'],
-      { fixturePath: '/shop/', tab: 'counter', selector: '.shop-current-sale', imageSelector: '.shop-product-art.shop-product-photo', images: 5 }))
+      { fixturePath: '/shop/', tab: 'counter', selector: '.shop-current-sale', imageSelector: '.shop-product-art.shop-product-photo', images: 1 }))
     captures.push(await captureTablet(cdp, sessionId, output, 'actual-shop-sell-tablet', ['Products', 'Current sale', 'KAUNG 90 Days Rice'],
-      { fixturePath: '/shop/', tab: 'counter', selector: '.shop-counter-grid', scrollToTop: true, imageSelector: '.shop-product-art.shop-product-photo', images: 5 }))
+      { fixturePath: '/shop/', tab: 'counter', selector: '.shop-counter-grid', scrollToTop: true, imageSelector: '.shop-product-art.shop-product-photo', images: 1 }))
     captures.push(await captureMobile(cdp, sessionId, output, 'actual-shop-sell-mobile', ['Products', 'KAUNG 90 Days Rice'],
-      { fixturePath: '/shop/', tab: 'counter', selector: '.shop-counter-grid', imageSelector: '.shop-product-art.shop-product-photo', images: 5 }))
+      { fixturePath: '/shop/', tab: 'counter', selector: '.shop-counter-grid', imageSelector: '.shop-product-art.shop-product-photo', images: 1 }))
     await clickSelector(cdp, sessionId, '.shop-review-sale')
     await waitFor(cdp, sessionId, 'Review counter sale')
     await typeInto(cdp, sessionId, '.accountable-action-gate input', 'Synthetic cashier')

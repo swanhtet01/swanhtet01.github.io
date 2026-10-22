@@ -3,11 +3,7 @@ import { isAbsolute, relative, resolve, sep } from 'node:path'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 const { build } = createRequire(resolve('showroom/package.json'))('esbuild')
 const productPhotoFiles = {
-  'SM-1001': 'kaung-90-days-rice.webp',
   'SM-1002': 'mama-chicken-noodles.jpg',
-  'SM-1003': 'alpine-water-six-pack.webp',
-  'SM-1004': 'baydar-detergent.webp',
-  'SM-1005': 'zess-sugar-crackers.webp',
 }
 const productPhotoBytes = Object.fromEntries(Object.entries(productPhotoFiles).map(([sku, file]) => [
   sku,
