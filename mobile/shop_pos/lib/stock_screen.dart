@@ -181,8 +181,8 @@ class _StockScreenState extends State<StockScreen> {
                       ShopTaskPageHeader(
                         title: shopCopy(widget.myanmar, 'Stock', 'လက်ကျန်'),
                         myanmar: widget.myanmar,
-                        trailing: widget.onAddProduct == null ||
-                                products.isEmpty
+                        trailing:
+                            widget.onAddProduct == null || products.isEmpty
                             ? null
                             : MediaQuery.sizeOf(context).width < 360 &&
                                   MediaQuery.textScalerOf(context).scale(1) >
