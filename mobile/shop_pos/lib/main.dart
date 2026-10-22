@@ -323,6 +323,12 @@ class _ShopAppState extends State<ShopApp> {
                 height: _myanmar ? 1.5 : 1.35,
                 letterSpacing: _myanmar ? 0 : -0.1,
               ),
+              titleSmall: TextStyle(
+                fontSize: _myanmar ? 15 : 16,
+                fontWeight: FontWeight.w600,
+                height: _myanmar ? 1.5 : 1.3,
+                letterSpacing: _myanmar ? 0 : -0.1,
+              ),
               bodyLarge: TextStyle(fontSize: 16, height: _myanmar ? 1.6 : 1.45),
               bodyMedium: TextStyle(
                 fontSize: 15,
@@ -333,6 +339,11 @@ class _ShopAppState extends State<ShopApp> {
                 fontSize: 15,
                 fontWeight: FontWeight.w600,
                 height: _myanmar ? 1.5 : 1.25,
+              ),
+              labelMedium: TextStyle(
+                fontSize: _myanmar ? 14 : 13,
+                fontWeight: FontWeight.w600,
+                height: _myanmar ? 1.45 : 1.25,
               ),
             ).apply(
               fontFamily: fontFamily,
