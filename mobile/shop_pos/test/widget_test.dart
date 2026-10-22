@@ -1864,7 +1864,7 @@ void main() {
     }
   });
 
-  testWidgets('catalog aligns saved photos and products without photos', (
+  testWidgets('catalog shows a real photo without empty media placeholders', (
     tester,
   ) async {
     addTearDown(tester.view.resetPhysicalSize);
@@ -1917,14 +1917,7 @@ void main() {
       findsNothing,
     );
     expect(
-      find.byKey(const ValueKey('shop-product-no-photo:water')),
-      findsOneWidget,
-    );
-    expect(
-      find.descendant(
-        of: find.byKey(const ValueKey('shop-product-no-photo:water')),
-        matching: find.byType(Icon),
-      ),
+      find.byKey(const ValueKey('shop-product-media:water')),
       findsNothing,
     );
     for (final width in [390.0, 820.0]) {
@@ -1932,7 +1925,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(
         tester.getTopLeft(find.text('Tea')).dx,
-        tester.getTopLeft(find.text('Water')).dx,
+        greaterThan(tester.getTopLeft(find.text('Water')).dx),
       );
       expect(tester.takeException(), isNull);
     }
@@ -2013,12 +2006,12 @@ void main() {
       findsOneWidget,
     );
     expect(
-      find.byKey(const ValueKey('shop-product-no-photo:water')),
-      findsOneWidget,
+      find.byKey(const ValueKey('shop-product-media:water')),
+      findsNothing,
     );
     expect(
       tester.getTopLeft(find.text('ရက် ၉၀ ဆန်အိတ် ၁၀ ကီလိုဂရမ်')).dx,
-      tester.getTopLeft(find.text('ALPINE သောက်ရေသန့် ၁ လီတာ')).dx,
+      greaterThan(tester.getTopLeft(find.text('ALPINE သောက်ရေသန့် ၁ လီတာ')).dx),
     );
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
