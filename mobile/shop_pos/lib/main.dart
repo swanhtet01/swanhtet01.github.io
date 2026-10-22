@@ -1962,9 +1962,8 @@ class _ShopHomeState extends State<ShopHome> {
                 overflow: TextOverflow.ellipsis,
                 semanticsLabel: item.name,
                 style: enlargedNarrowRow
-                    ? Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      )
+                    ? Theme.of(context).textTheme.bodyMedium
+                          ?.copyWith(fontWeight: FontWeight.w600)
                     : Theme.of(context).textTheme.titleMedium,
               ),
               subtitle: Column(
