@@ -1868,6 +1868,13 @@ class _ShopHomeState extends State<ShopHome> {
               ? Theme.of(context).colorScheme.error
               : Theme.of(context).colorScheme.onSurfaceVariant,
         );
+        final compactStock = item.onHand == 0
+            ? shopCopy(widget.myanmar, 'Out of stock', 'လက်ကျန်ကုန်ပါပြီ')
+            : shopCopy(
+                widget.myanmar,
+                '${item.onHand} left',
+                '${shopNumber(item.onHand, myanmar: true)} ကျန်',
+              );
         final canAdd =
             _checkoutReady &&
             !_saving &&
@@ -1918,9 +1925,8 @@ class _ShopHomeState extends State<ShopHome> {
                         width: photoExtent,
                         height: photoExtent,
                         fit: BoxFit.cover,
-                        errorBuilder: (_, error, stackTrace) => const Icon(
-                          Icons.image_not_supported_outlined,
-                        ),
+                        errorBuilder: (_, error, stackTrace) =>
+                            const Icon(Icons.image_not_supported_outlined),
                       ),
                     ),
                   ),
@@ -1965,11 +1971,18 @@ class _ShopHomeState extends State<ShopHome> {
                                   style: Theme.of(context).textTheme.bodyMedium
                                       ?.copyWith(fontWeight: FontWeight.w600),
                                 ),
-                                Text(
-                                  _mmk(item.priceMmk),
-                                  style: _shopMoneyStyle(context),
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 0,
+                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                  children: [
+                                    Text(
+                                      _mmk(item.priceMmk),
+                                      style: _shopMoneyStyle(context),
+                                    ),
+                                    Text(compactStock, style: stockStyle),
+                                  ],
                                 ),
-                                Text(stock, style: stockStyle),
                               ],
                             ),
                           ),
