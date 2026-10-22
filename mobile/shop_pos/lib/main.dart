@@ -2089,245 +2089,231 @@ class _ShopHomeState extends State<ShopHome> {
       separatorBuilder: (_, _) => const Divider(height: 16),
       itemBuilder: (context, index) {
         final entry = entries[index];
-        return _cartLine(
-          byId[entry.key]!,
-          entry.value,
-          refresh: refresh,
-        );
+        return _cartLine(byId[entry.key]!, entry.value, refresh: refresh);
       },
     );
     final content = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    shopCopy(widget.myanmar, 'Current sale', 'လက်ရှိအရောင်း'),
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                ),
-                if (!compactCart &&
-                    _cart.isNotEmpty &&
-                    _pendingWalletCheckout == null)
-                  TextButton.icon(
-                    key: const ValueKey('shop-hold-sale'),
-                    onPressed:
-                        !_checkoutReady ||
-                            _walletStarting ||
-                            _cashConfirming ||
-                            _saving
-                        ? null
-                        : () => _holdCurrentSale(refresh: refresh),
-                    icon: const Icon(Icons.bookmark_add_outlined),
-                    label: Text(shopCopy(widget.myanmar, 'Hold', 'ခဏသိမ်း')),
-                  ),
-                if (_cart.isNotEmpty)
-                  TextButton(
-                    onPressed:
-                        !_checkoutReady ||
-                            _walletStarting ||
-                            _cashConfirming ||
-                            _saving ||
-                            _pendingWalletCheckout != null
-                        ? null
-                        : () => _discardCounterDraft(refresh: refresh),
-                    child: Text(shopCopy(widget.myanmar, 'Clear', 'ဖျက်ရန်')),
-                  ),
-              ],
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                shopCopy(widget.myanmar, 'Current sale', 'လက်ရှိအရောင်း'),
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
             ),
-            const Divider(height: 24),
-            if (_recoveredDraft) ...[
-              Text(
+            if (!compactCart &&
+                _cart.isNotEmpty &&
+                _pendingWalletCheckout == null)
+              TextButton.icon(
+                key: const ValueKey('shop-hold-sale'),
+                onPressed:
+                    !_checkoutReady ||
+                        _walletStarting ||
+                        _cashConfirming ||
+                        _saving
+                    ? null
+                    : () => _holdCurrentSale(refresh: refresh),
+                icon: const Icon(Icons.bookmark_add_outlined),
+                label: Text(shopCopy(widget.myanmar, 'Hold', 'ခဏသိမ်း')),
+              ),
+            if (_cart.isNotEmpty)
+              TextButton(
+                onPressed:
+                    !_checkoutReady ||
+                        _walletStarting ||
+                        _cashConfirming ||
+                        _saving ||
+                        _pendingWalletCheckout != null
+                    ? null
+                    : () => _discardCounterDraft(refresh: refresh),
+                child: Text(shopCopy(widget.myanmar, 'Clear', 'ဖျက်ရန်')),
+              ),
+          ],
+        ),
+        const Divider(height: 24),
+        if (_recoveredDraft) ...[
+          Text(
+            shopCopy(
+              widget.myanmar,
+              _recoveredDraftNeedsReview
+                  ? 'Sale restored. Review changed stock or price before checkout.'
+                  : 'Unfinished sale restored on this device.',
+              _recoveredDraftNeedsReview
+                  ? 'အရောင်းကို ပြန်ဖတ်ထားပါသည်။ ငွေမရှင်းမီ လက်ကျန်နှင့် ဈေးနှုန်းပြောင်းလဲမှုကို စစ်ပါ။'
+                  : 'မပြီးသေးသော အရောင်းကို ဤစက်တွင် ပြန်ဖတ်ထားပါသည်။',
+            ),
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 8),
+        ],
+        if (_pendingWalletCheckout != null) ...[
+          _pendingWalletCheckoutCard(refresh: refresh),
+          const SizedBox(height: 8),
+        ],
+        if (hasUnavailableProducts && entries.isNotEmpty) ...[
+          Text(
+            shopCopy(
+              widget.myanmar,
+              'A saved product is unavailable. Remove it before checkout.',
+              'သိမ်းထားသော ပစ္စည်းတစ်ခု မရနိုင်တော့ပါ။ ငွေမရှင်းမီ ဖယ်ရှားပါ။',
+            ),
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton(
+              onPressed:
+                  _checkoutReady &&
+                      !_saving &&
+                      !_walletStarting &&
+                      !_cashConfirming &&
+                      _pendingWalletCheckout == null
+                  ? () =>
+                        _removeUnavailableFromDraft(products, refresh: refresh)
+                  : null,
+              child: Text(
                 shopCopy(
                   widget.myanmar,
-                  _recoveredDraftNeedsReview
-                      ? 'Sale restored. Review changed stock or price before checkout.'
-                      : 'Unfinished sale restored on this device.',
-                  _recoveredDraftNeedsReview
-                      ? 'အရောင်းကို ပြန်ဖတ်ထားပါသည်။ ငွေမရှင်းမီ လက်ကျန်နှင့် ဈေးနှုန်းပြောင်းလဲမှုကို စစ်ပါ။'
-                      : 'မပြီးသေးသော အရောင်းကို ဤစက်တွင် ပြန်ဖတ်ထားပါသည်။',
+                  'Remove unavailable item',
+                  'မရနိုင်သော ပစ္စည်းကို ဖယ်ရန်',
                 ),
-                style: Theme.of(context).textTheme.bodySmall,
               ),
-              const SizedBox(height: 8),
-            ],
-            if (_pendingWalletCheckout != null) ...[
-              _pendingWalletCheckoutCard(refresh: refresh),
-              const SizedBox(height: 8),
-            ],
-            if (hasUnavailableProducts && entries.isNotEmpty) ...[
-              Text(
-                shopCopy(
-                  widget.myanmar,
-                  'A saved product is unavailable. Remove it before checkout.',
-                  'သိမ်းထားသော ပစ္စည်းတစ်ခု မရနိုင်တော့ပါ။ ငွေမရှင်းမီ ဖယ်ရှားပါ။',
-                ),
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton(
+            ),
+          ),
+        ],
+        if (entries.isEmpty)
+          compactCart ? emptyMessage : Expanded(child: emptyMessage)
+        else ...[
+          compactCart ? cartLines : Expanded(child: cartLines),
+          const Divider(height: 20),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final label = Text(
+                shopCopy(widget.myanmar, 'Total', 'စုစုပေါင်း'),
+              );
+              final amount = Text(
+                hasUnavailableProducts
+                    ? shopCopy(widget.myanmar, 'Check items', 'ပစ္စည်းစစ်ရန်')
+                    : _mmk(
+                        _pendingWalletCheckout?.totalMmk ??
+                            _cartTotal(products),
+                      ),
+                style: _shopMoneyStyle(context, total: true),
+                textAlign: TextAlign.right,
+              );
+              if (constraints.maxWidth < 320) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [label, const SizedBox(height: 4), amount],
+                );
+              }
+              return Row(
+                children: [
+                  Expanded(child: label),
+                  amount,
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: 12),
+          if (_pendingWalletCheckout == null)
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final cash = FilledButton.icon(
                   onPressed:
-                      _checkoutReady &&
-                          !_saving &&
-                          !_walletStarting &&
-                          !_cashConfirming &&
-                          _pendingWalletCheckout == null
-                      ? () => _removeUnavailableFromDraft(
-                          products,
-                          refresh: refresh,
+                      !_checkoutReady ||
+                          hasUnavailableProducts ||
+                          _walletStarting ||
+                          _saving ||
+                          _cashConfirming ||
+                          _pendingWalletCheckout != null
+                      ? null
+                      : () => _confirmCashSale(
+                          products: products,
+                          closeSheet: refresh != null,
+                        ),
+                  icon: _saving
+                      ? const SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : null,
-                  child: Text(
+                      : const Icon(Icons.check),
+                  label: Text(shopCopy(widget.myanmar, 'Cash sale', 'ငွေသား')),
+                );
+                final wallet = OutlinedButton.icon(
+                  onPressed:
+                      !_checkoutReady ||
+                          hasUnavailableProducts ||
+                          _walletStarting ||
+                          _saving ||
+                          _cashConfirming
+                      ? null
+                      : () => _startWalletSale(
+                          products: products,
+                          closeSheet: refresh != null,
+                          refresh: refresh,
+                        ),
+                  icon: const Icon(Icons.qr_code_2),
+                  label: Text(
                     shopCopy(
                       widget.myanmar,
-                      'Remove unavailable item',
-                      'မရနိုင်သော ပစ္စည်းကို ဖယ်ရန်',
+                      'Mobile money',
+                      'မိုဘိုင်းငွေပေးချေမှု',
                     ),
                   ),
-                ),
-              ),
-            ],
-            if (entries.isEmpty)
-              compactCart ? emptyMessage : Expanded(child: emptyMessage)
-            else ...[
-              compactCart ? cartLines : Expanded(child: cartLines),
-              const Divider(height: 20),
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  final label = Text(
-                    shopCopy(widget.myanmar, 'Total', 'စုစုပေါင်း'),
-                  );
-                  final amount = Text(
-                    hasUnavailableProducts
-                        ? shopCopy(
-                            widget.myanmar,
-                            'Check items',
-                            'ပစ္စည်းစစ်ရန်',
-                          )
-                        : _mmk(
-                            _pendingWalletCheckout?.totalMmk ??
-                                _cartTotal(products),
-                          ),
-                    style: _shopMoneyStyle(context, total: true),
-                    textAlign: TextAlign.right,
-                  );
-                  if (constraints.maxWidth < 320) {
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [label, const SizedBox(height: 4), amount],
-                    );
-                  }
-                  return Row(
+                );
+                if (constraints.maxWidth < 520) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Expanded(child: label),
-                      amount,
-                    ],
-                  );
-                },
-              ),
-              const SizedBox(height: 12),
-              if (_pendingWalletCheckout == null)
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    final cash = FilledButton.icon(
-                      onPressed:
-                          !_checkoutReady ||
-                              hasUnavailableProducts ||
-                              _walletStarting ||
-                              _saving ||
-                              _cashConfirming ||
-                              _pendingWalletCheckout != null
-                          ? null
-                          : () => _confirmCashSale(
-                              products: products,
-                              closeSheet: refresh != null,
-                            ),
-                      icon: _saving
-                          ? const SizedBox.square(
-                              dimension: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.check),
-                      label: Text(
-                        shopCopy(widget.myanmar, 'Cash sale', 'ငွေသား'),
-                      ),
-                    );
-                    final wallet = OutlinedButton.icon(
-                      onPressed:
-                          !_checkoutReady ||
-                              hasUnavailableProducts ||
-                              _walletStarting ||
-                              _saving ||
-                              _cashConfirming
-                          ? null
-                          : () => _startWalletSale(
-                              products: products,
-                              closeSheet: refresh != null,
-                              refresh: refresh,
-                            ),
-                      icon: const Icon(Icons.qr_code_2),
-                      label: Text(
-                        shopCopy(
-                          widget.myanmar,
-                          'Mobile money',
-                          'မိုဘိုင်းငွေပေးချေမှု',
-                        ),
-                      ),
-                    );
-                    if (constraints.maxWidth < 520) {
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          cash,
-                          const SizedBox(height: 8),
-                          wallet,
-                          if (compactCart && _cart.isNotEmpty) ...[
-                            const SizedBox(height: 4),
-                            Align(
-                              alignment: Alignment.centerRight,
-                              child: TextButton.icon(
-                                key: const ValueKey('shop-hold-sale'),
-                                onPressed:
-                                    !_checkoutReady ||
-                                        _walletStarting ||
-                                        _cashConfirming ||
-                                        _saving
-                                    ? null
-                                    : () => _holdCurrentSale(refresh: refresh),
-                                icon: const Icon(Icons.bookmark_add_outlined),
-                                label: Text(
-                                  shopCopy(
-                                    widget.myanmar,
-                                    'Hold sale',
-                                    'အရောင်း ခဏသိမ်း',
-                                  ),
-                                ),
+                      cash,
+                      const SizedBox(height: 8),
+                      wallet,
+                      if (compactCart && _cart.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton.icon(
+                            key: const ValueKey('shop-hold-sale'),
+                            onPressed:
+                                !_checkoutReady ||
+                                    _walletStarting ||
+                                    _cashConfirming ||
+                                    _saving
+                                ? null
+                                : () => _holdCurrentSale(refresh: refresh),
+                            icon: const Icon(Icons.bookmark_add_outlined),
+                            label: Text(
+                              shopCopy(
+                                widget.myanmar,
+                                'Hold sale',
+                                'အရောင်း ခဏသိမ်း',
                               ),
                             ),
-                          ],
-                        ],
-                      );
-                    }
-                    return Row(
-                      children: [
-                        Expanded(child: cash),
-                        const SizedBox(width: 8),
-                        Flexible(child: wallet),
+                          ),
+                        ),
                       ],
-                    );
-                  },
-                ),
-            ],
-          ],
+                    ],
+                  );
+                }
+                return Row(
+                  children: [
+                    Expanded(child: cash),
+                    const SizedBox(width: 8),
+                    Flexible(child: wallet),
+                  ],
+                );
+              },
+            ),
+        ],
+      ],
     );
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(18),
-        child: compactCart
-            ? SingleChildScrollView(child: content)
-            : content,
+        child: compactCart ? SingleChildScrollView(child: content) : content,
       ),
     );
   }
