@@ -565,6 +565,7 @@ else {
 }
 if (!indexSource.includes('<link rel="apple-touch-icon" href="/apple-touch-icon.png" />')
   || !await exists(resolve(dist, 'apple-touch-icon.png'))) fail('missing_apple_touch_icon')
+if (/\b(?:Sites|Commerce|online presence)\b/i.test(APP_DESCRIPTION)) fail('app_metadata_internal_product_claim')
 if (!indexSource.includes('<title>SuperMega</title>')
   || !indexSource.includes(APP_DESCRIPTION)
   || indexSource.includes('SuperMega Company OS')
