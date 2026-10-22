@@ -240,9 +240,7 @@ void main() {
         findsOneWidget,
       );
       expect(
-        find.text(
-          'Sale restored. Review changed items before checkout.',
-        ),
+        find.text('Sale restored. Review changed items before checkout.'),
         findsNothing,
       );
       expect(
@@ -2994,30 +2992,44 @@ void main() {
     final database = ShopDatabase(NativeDatabase.memory());
     try {
       await database.addProduct(
-        id: 'tea', name: 'Tea', priceMmk: 2500, openingStock: 2,
+        id: 'tea',
+        name: 'Tea',
+        priceMmk: 2500,
+        openingStock: 2,
       );
       await database.saveCounterSaleDraft(
-        operationId: 'held-rename', quantities: const {'tea': 1},
+        operationId: 'held-rename',
+        quantities: const {'tea': 1},
       );
       await database.holdCounterSaleDraft(
-        id: 'held-rename-ticket', name: 'Customer May',
+        id: 'held-rename-ticket',
+        name: 'Customer May',
         operationId: 'held-rename',
       );
-      expect((await database.readHeldSaleTickets()).single.draft.productNames,
-          {'tea': 'Tea'});
+      expect((await database.readHeldSaleTickets()).single.draft.productNames, {
+        'tea': 'Tea',
+      });
       await database.updateProductDetails(
-        operationId: 'rename-held-tea', productId: 'tea',
-        expectedName: 'Tea', expectedPriceMmk: 2500,
-        expectedBarcode: null, name: 'Tea large',
-        priceMmk: 2500, barcode: null,
+        operationId: 'rename-held-tea',
+        productId: 'tea',
+        expectedName: 'Tea',
+        expectedPriceMmk: 2500,
+        expectedBarcode: null,
+        name: 'Tea large',
+        priceMmk: 2500,
+        barcode: null,
       );
-      await tester.pumpWidget(MaterialApp(
-        home: ShopHome(
-          database: database, authClient: null,
-          apiBaseUrl: 'https://example.invalid', myanmar: false,
-          onLanguageChanged: (_) {},
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ShopHome(
+            database: database,
+            authClient: null,
+            apiBaseUrl: 'https://example.invalid',
+            myanmar: false,
+            onLanguageChanged: (_) {},
+          ),
         ),
-      ));
+      );
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('shop-held-sales-open')));
       await tester.pumpAndSettle();
@@ -3025,19 +3037,23 @@ void main() {
         find.byKey(const ValueKey('shop-held-reopen:held-rename-ticket')),
       );
       await tester.pumpAndSettle();
-      expect((await database.readCounterSaleDraft())?.productNames,
-          {'tea': 'Tea'});
+      expect((await database.readCounterSaleDraft())?.productNames, {
+        'tea': 'Tea',
+      });
       await tester.tap(find.textContaining('Review sale'));
       await tester.pumpAndSettle();
       expect(find.text('Tea large'), findsWidgets);
-      expect(find.text('Sale restored. Review changed items before checkout.'),
-          findsOneWidget);
+      expect(
+        find.text('Sale restored. Review changed items before checkout.'),
+        findsOneWidget,
+      );
       await tester.tap(find.text('Cash sale'));
       await tester.pumpAndSettle();
       expect(find.text('Cash received?'), findsNothing);
       expect(await database.countSales(), 0);
-      expect((await database.readCounterSaleDraft())?.productNames,
-          {'tea': 'Tea large'});
+      expect((await database.readCounterSaleDraft())?.productNames, {
+        'tea': 'Tea large',
+      });
       await tester.tap(find.text('Cash sale'));
       await tester.pumpAndSettle();
       expect(find.text('Cash received?'), findsOneWidget);
@@ -3054,47 +3070,69 @@ void main() {
     }
   });
 
-  test('cash commit rejects offsetting line-price changes at the same total',
-      () async {
-    final database = ShopDatabase(NativeDatabase.memory());
-    try {
-      await database.addProduct(
-        id: 'a', name: 'A', priceMmk: 2000, openingStock: 2,
-      );
-      await database.addProduct(
-        id: 'b', name: 'B', priceMmk: 3000, openingStock: 2,
-      );
-      await database.updateProductDetails(
-        operationId: 'edit-a-price', productId: 'a',
-        expectedName: 'A', expectedPriceMmk: 2000,
-        expectedBarcode: null, name: 'A', priceMmk: 2500, barcode: null,
-      );
-      await database.updateProductDetails(
-        operationId: 'edit-b-price', productId: 'b',
-        expectedName: 'B', expectedPriceMmk: 3000,
-        expectedBarcode: null, name: 'B', priceMmk: 2500, barcode: null,
-      );
-      final salesBefore = await database.countSales();
-      final stockBefore = await database.countStockMovements();
-      await expectLater(
-        database.recordSale(
-          operationId: 'offset-price-sale', paymentMethod: 'cash',
-          lines: const [
-            ShopSaleLineInput(productId: 'a', quantity: 1),
-            ShopSaleLineInput(productId: 'b', quantity: 1),
-          ],
-          expectedTotalMmk: 5000,
-          expectedUnitPricesMmk: const {'a': 2000, 'b': 3000},
-        ),
-        throwsStateError,
-      );
-      expect(await database.countSales(), salesBefore);
-      expect(await database.countStockMovements(), stockBefore);
-      expect((await database.readActiveProducts()).every((p) => p.onHand == 2), isTrue);
-    } finally {
-      await database.close();
-    }
-  });
+  test(
+    'cash commit rejects offsetting line-price changes at the same total',
+    () async {
+      final database = ShopDatabase(NativeDatabase.memory());
+      try {
+        await database.addProduct(
+          id: 'a',
+          name: 'A',
+          priceMmk: 2000,
+          openingStock: 2,
+        );
+        await database.addProduct(
+          id: 'b',
+          name: 'B',
+          priceMmk: 3000,
+          openingStock: 2,
+        );
+        await database.updateProductDetails(
+          operationId: 'edit-a-price',
+          productId: 'a',
+          expectedName: 'A',
+          expectedPriceMmk: 2000,
+          expectedBarcode: null,
+          name: 'A',
+          priceMmk: 2500,
+          barcode: null,
+        );
+        await database.updateProductDetails(
+          operationId: 'edit-b-price',
+          productId: 'b',
+          expectedName: 'B',
+          expectedPriceMmk: 3000,
+          expectedBarcode: null,
+          name: 'B',
+          priceMmk: 2500,
+          barcode: null,
+        );
+        final salesBefore = await database.countSales();
+        final stockBefore = await database.countStockMovements();
+        await expectLater(
+          database.recordSale(
+            operationId: 'offset-price-sale',
+            paymentMethod: 'cash',
+            lines: const [
+              ShopSaleLineInput(productId: 'a', quantity: 1),
+              ShopSaleLineInput(productId: 'b', quantity: 1),
+            ],
+            expectedTotalMmk: 5000,
+            expectedUnitPricesMmk: const {'a': 2000, 'b': 3000},
+          ),
+          throwsStateError,
+        );
+        expect(await database.countSales(), salesBefore);
+        expect(await database.countStockMovements(), stockBefore);
+        expect(
+          (await database.readActiveProducts()).every((p) => p.onHand == 2),
+          isTrue,
+        );
+      } finally {
+        await database.close();
+      }
+    },
+  );
 
   testWidgets('rapid cash taps open one confirmation and record one sale', (
     tester,
@@ -3523,12 +3561,18 @@ void main() {
     final database = ShopDatabase(NativeDatabase.memory());
     try {
       await database.addProduct(
-        id: 'apple', name: 'Red apple', priceMmk: 2800,
-        openingStock: 3, barcode: '111111',
+        id: 'apple',
+        name: 'Red apple',
+        priceMmk: 2800,
+        openingStock: 3,
+        barcode: '111111',
       );
       await database.addProduct(
-        id: 'banana', name: 'Banana', priceMmk: 2500,
-        openingStock: 3, barcode: '222222',
+        id: 'banana',
+        name: 'Banana',
+        priceMmk: 2500,
+        openingStock: 3,
+        barcode: '222222',
       );
       final receipt = await database.recordCashSale(
         operationId: 'sold-before-edit',
@@ -3545,18 +3589,27 @@ void main() {
         required int price,
         required String? barcode,
       }) => database.updateProductDetails(
-        operationId: operationId, productId: 'apple',
-        expectedName: expectedName, expectedPriceMmk: expectedPrice,
-        expectedBarcode: expectedBarcode, name: name,
-        priceMmk: price, barcode: barcode,
+        operationId: operationId,
+        productId: 'apple',
+        expectedName: expectedName,
+        expectedPriceMmk: expectedPrice,
+        expectedBarcode: expectedBarcode,
+        name: name,
+        priceMmk: price,
+        barcode: barcode,
       );
       await edit(
-        operationId: 'edit-apple', expectedName: 'Red apple',
-        expectedPrice: 2800, expectedBarcode: '111111',
-        name: 'Apple 1 pc', price: 3200, barcode: '333333',
+        operationId: 'edit-apple',
+        expectedName: 'Red apple',
+        expectedPrice: 2800,
+        expectedBarcode: '111111',
+        name: 'Apple 1 pc',
+        price: 3200,
+        barcode: '333333',
       );
-      final apple = (await database.readActiveProducts())
-          .singleWhere((product) => product.id == 'apple');
+      final apple = (await database.readActiveProducts()).singleWhere(
+        (product) => product.id == 'apple',
+      );
       expect(apple.name, 'Apple 1 pc');
       expect(apple.priceMmk, 3200);
       expect(apple.barcode, '333333');
@@ -3566,29 +3619,45 @@ void main() {
       expect(receipt.lines.single.productName, 'Red apple');
       expect(receipt.lines.single.unitPriceMmk, 2800);
       await edit(
-        operationId: 'edit-apple', expectedName: 'Red apple',
-        expectedPrice: 2800, expectedBarcode: '111111',
-        name: 'Apple 1 pc', price: 3200, barcode: '333333',
+        operationId: 'edit-apple',
+        expectedName: 'Red apple',
+        expectedPrice: 2800,
+        expectedBarcode: '111111',
+        name: 'Apple 1 pc',
+        price: 3200,
+        barcode: '333333',
       );
       expect(await database.countOutboxOperations(), outboxCount + 1);
       await expectLater(
         edit(
-          operationId: 'duplicate-barcode', expectedName: 'Apple 1 pc',
-          expectedPrice: 3200, expectedBarcode: '333333',
-          name: 'Apple 1 pc', price: 3500, barcode: '222222',
+          operationId: 'duplicate-barcode',
+          expectedName: 'Apple 1 pc',
+          expectedPrice: 3200,
+          expectedBarcode: '333333',
+          name: 'Apple 1 pc',
+          price: 3500,
+          barcode: '222222',
         ),
         throwsStateError,
       );
       await expectLater(
         edit(
-          operationId: 'stale-edit', expectedName: 'Red apple',
-          expectedPrice: 2800, expectedBarcode: '111111',
-          name: 'Stale apple', price: 2900, barcode: '444444',
+          operationId: 'stale-edit',
+          expectedName: 'Red apple',
+          expectedPrice: 2800,
+          expectedBarcode: '111111',
+          name: 'Stale apple',
+          price: 2900,
+          barcode: '444444',
         ),
         throwsStateError,
       );
-      expect((await database.readActiveProducts())
-          .singleWhere((product) => product.id == 'apple').priceMmk, 3200);
+      expect(
+        (await database.readActiveProducts())
+            .singleWhere((product) => product.id == 'apple')
+            .priceMmk,
+        3200,
+      );
       expect(await database.countOutboxOperations(), outboxCount + 1);
     } finally {
       await database.close();
@@ -3599,18 +3668,26 @@ void main() {
     final database = ShopDatabase(NativeDatabase.memory());
     try {
       await database.addProduct(
-        id: 'tea', name: 'Tea', priceMmk: 2500, openingStock: 2,
+        id: 'tea',
+        name: 'Tea',
+        priceMmk: 2500,
+        openingStock: 2,
       );
       await database.updateProductDetails(
-        operationId: 'rename-for-cash', productId: 'tea',
-        expectedName: 'Tea', expectedPriceMmk: 2500,
-        expectedBarcode: null, name: 'Tea large',
-        priceMmk: 2500, barcode: null,
+        operationId: 'rename-for-cash',
+        productId: 'tea',
+        expectedName: 'Tea',
+        expectedPriceMmk: 2500,
+        expectedBarcode: null,
+        name: 'Tea large',
+        priceMmk: 2500,
+        barcode: null,
       );
       final stockMovements = await database.countStockMovements();
       await expectLater(
         database.recordSale(
-          operationId: 'cash-before-rename-review', paymentMethod: 'cash',
+          operationId: 'cash-before-rename-review',
+          paymentMethod: 'cash',
           lines: const [ShopSaleLineInput(productId: 'tea', quantity: 1)],
           expectedTotalMmk: 2500,
           expectedUnitPricesMmk: const {'tea': 2500},
@@ -3626,62 +3703,80 @@ void main() {
     }
   });
 
-  test('pending wallet intent keeps its product snapshot after catalog edit',
-      () async {
-    final database = ShopDatabase(NativeDatabase.memory());
-    try {
-      await database.addProduct(
-        id: 'tea', name: 'Tea', priceMmk: 2500, openingStock: 2,
-      );
-      await database.createWalletCheckoutIntent(
-        operationId: 'wallet-before-edit',
-        merchant: MerchantWalletSetup(
-          provider: 'KBZPay', merchantPhone: '09123456789',
-          officialQrPayload: _testStaticMmqr(), issuerConfirmed: true,
-        ),
-        lines: const [ShopSaleLineInput(productId: 'tea', quantity: 1)],
-      );
-      await database.updateProductDetails(
-        operationId: 'edit-after-wallet', productId: 'tea',
-        expectedName: 'Tea', expectedPriceMmk: 2500,
-        expectedBarcode: null, name: 'Tea large',
-        priceMmk: 3000, barcode: null,
-      );
-      final intent = (await database.readPendingWalletCheckout())!;
-      expect(intent.totalMmk, 2500);
-      expect(intent.lines.single.productName, 'Tea');
-      expect(intent.lines.single.unitPriceMmk, 2500);
-      final receipt = await database.recordSale(
-        operationId: intent.operationId, paymentMethod: 'kbzpay',
-        walletCheckoutOperationId: intent.operationId,
-        lines: const [ShopSaleLineInput(productId: 'tea', quantity: 1)],
-      );
-      expect(receipt.totalMmk, 2500);
-      expect(receipt.lines.single.productName, 'Tea');
-      expect(receipt.lines.single.unitPriceMmk, 2500);
-      expect((await database.readActiveProducts()).single.onHand, 1);
-    } finally {
-      await database.close();
-    }
-  });
+  test(
+    'pending wallet intent keeps its product snapshot after catalog edit',
+    () async {
+      final database = ShopDatabase(NativeDatabase.memory());
+      try {
+        await database.addProduct(
+          id: 'tea',
+          name: 'Tea',
+          priceMmk: 2500,
+          openingStock: 2,
+        );
+        await database.createWalletCheckoutIntent(
+          operationId: 'wallet-before-edit',
+          merchant: MerchantWalletSetup(
+            provider: 'KBZPay',
+            merchantPhone: '09123456789',
+            officialQrPayload: _testStaticMmqr(),
+            issuerConfirmed: true,
+          ),
+          lines: const [ShopSaleLineInput(productId: 'tea', quantity: 1)],
+        );
+        await database.updateProductDetails(
+          operationId: 'edit-after-wallet',
+          productId: 'tea',
+          expectedName: 'Tea',
+          expectedPriceMmk: 2500,
+          expectedBarcode: null,
+          name: 'Tea large',
+          priceMmk: 3000,
+          barcode: null,
+        );
+        final intent = (await database.readPendingWalletCheckout())!;
+        expect(intent.totalMmk, 2500);
+        expect(intent.lines.single.productName, 'Tea');
+        expect(intent.lines.single.unitPriceMmk, 2500);
+        final receipt = await database.recordSale(
+          operationId: intent.operationId,
+          paymentMethod: 'kbzpay',
+          walletCheckoutOperationId: intent.operationId,
+          lines: const [ShopSaleLineInput(productId: 'tea', quantity: 1)],
+        );
+        expect(receipt.totalMmk, 2500);
+        expect(receipt.lines.single.productName, 'Tea');
+        expect(receipt.lines.single.unitPriceMmk, 2500);
+        expect((await database.readActiveProducts()).single.onHand, 1);
+      } finally {
+        await database.close();
+      }
+    },
+  );
 
   for (final myanmar in [false, true]) {
-    testWidgets('Stock edits a product in ${myanmar ? 'MY' : 'EN'}',
-        (tester) async {
+    testWidgets('Stock edits a product in ${myanmar ? 'MY' : 'EN'}', (
+      tester,
+    ) async {
       _usePhoneViewport(tester);
       final database = ShopDatabase(NativeDatabase.memory());
       try {
         await database.addProduct(
-          id: 'apple', name: 'Red apple', priceMmk: 2800,
-          openingStock: 7, barcode: '111111',
+          id: 'apple',
+          name: 'Red apple',
+          priceMmk: 2800,
+          openingStock: 7,
+          barcode: '111111',
         );
         await database.saveProductThumbnail(
           'apple',
           await File('test/assets/grocery_photos/apple.png').readAsBytes(),
         );
-        await tester.pumpWidget(MaterialApp(
-          home: StockScreen(database: database, myanmar: myanmar),
-        ));
+        await tester.pumpWidget(
+          MaterialApp(
+            home: StockScreen(database: database, myanmar: myanmar),
+          ),
+        );
         await tester.pumpAndSettle();
         expect(find.byKey(const ValueKey('stock-photo-apple')), findsOneWidget);
         await tester.tap(find.byKey(const ValueKey('stock-edit-apple')));
@@ -3692,12 +3787,18 @@ void main() {
         expect((await database.readActiveProducts()).single.priceMmk, 2800);
         await tester.tap(find.byKey(const ValueKey('stock-edit-apple')));
         await tester.pumpAndSettle();
-        await tester.enterText(find.byKey(const ValueKey('stock-edit-name')), 'Apple 1 pc');
+        await tester.enterText(
+          find.byKey(const ValueKey('stock-edit-name')),
+          'Apple 1 pc',
+        );
         await tester.enterText(
           find.byKey(const ValueKey('stock-edit-price')),
           myanmar ? '၃၂၀၀' : '3200',
         );
-        await tester.enterText(find.byKey(const ValueKey('stock-edit-barcode')), '333333');
+        await tester.enterText(
+          find.byKey(const ValueKey('stock-edit-barcode')),
+          '333333',
+        );
         await tester.tap(find.byKey(const ValueKey('stock-edit-save')));
         await tester.pumpAndSettle();
         final apple = (await database.readActiveProducts()).single;
@@ -3713,8 +3814,9 @@ void main() {
     });
   }
 
-  testWidgets('tablet Stock shows a photographed item and its price in MY',
-      (tester) async {
+  testWidgets('tablet Stock shows a photographed item and its price in MY', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(820, 900);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -3722,16 +3824,18 @@ void main() {
     final database = ShopDatabase(NativeDatabase.memory());
     try {
       await database.addProduct(
-        id: 'apple', name: 'ပန်းသီး', priceMmk: 2800,
+        id: 'apple',
+        name: 'ပန်းသီး',
+        priceMmk: 2800,
         openingStock: 7,
       );
       await database.saveProductThumbnail(
         'apple',
         await File('test/assets/grocery_photos/apple.png').readAsBytes(),
       );
-      await tester.pumpWidget(MaterialApp(
-        home: StockScreen(database: database, myanmar: true),
-      ));
+      await tester.pumpWidget(
+        MaterialApp(home: StockScreen(database: database, myanmar: true)),
+      );
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('stock-photo-apple')), findsOneWidget);
       expect(find.textContaining('၂,၈၀၀'), findsWidgets);
@@ -3789,7 +3893,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('ပြင်ရန်'), findsNothing);
     expect(find.byKey(const ValueKey('stock-row-rice-phone')), findsOneWidget);
-    expect(find.byKey(const ValueKey('stock-photo-rice-phone')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('stock-photo-rice-phone')),
+      findsOneWidget,
+    );
     expect(find.bySemanticsLabel(RegExp('၂.*RICE-L')), findsOneWidget);
     expect(find.bySemanticsLabel(RegExp('၄.*RICE-S')), findsOneWidget);
     expect(tester.takeException(), isNull);

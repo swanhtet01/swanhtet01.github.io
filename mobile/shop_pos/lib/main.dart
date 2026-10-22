@@ -2934,7 +2934,9 @@ class _ShopHomeState extends State<ShopHome> {
         return;
       }
       final totalMmk = _cartTotal(currentProducts);
-      final currentById = {for (final product in currentProducts) product.id: product};
+      final currentById = {
+        for (final product in currentProducts) product.id: product,
+      };
       final shownById = {for (final product in products) product.id: product};
       final draft = await widget.database.readCounterSaleDraft();
       if (!mounted) return;

@@ -128,6 +128,7 @@ class CounterSaleDraft {
   final String operationId;
   final Map<String, int> quantities;
   final Map<String, int> unitPricesMmk;
+
   /// Names seen when this basket was last saved; old drafts without names
   /// require an explicit review before cash checkout.
   final Map<String, String?> productNames;
@@ -1113,15 +1114,16 @@ class ShopDatabase extends _$ShopDatabase {
       throw ArgumentError('Product values are invalid.');
     }
     await transaction(() async {
-      final product = await (select(shopProducts)
-            ..where((row) => row.id.equals(cleanProductId)))
-          .getSingleOrNull();
+      final product = await (select(
+        shopProducts,
+      )..where((row) => row.id.equals(cleanProductId))).getSingleOrNull();
       if (product == null || product.archived) {
         throw StateError('This product is no longer available.');
       }
-      final previousEvent = await (select(shopSyncOutbox)
-            ..where((row) => row.operationId.equals(cleanOperationId)))
-          .getSingleOrNull();
+      final previousEvent =
+          await (select(shopSyncOutbox)
+                ..where((row) => row.operationId.equals(cleanOperationId)))
+              .getSingleOrNull();
       if (previousEvent != null) {
         final data = jsonDecode(previousEvent.payloadJson);
         if (previousEvent.eventType == 'catalog.product.updated.v1' &&
@@ -1148,33 +1150,33 @@ class ShopDatabase extends _$ShopDatabase {
         return;
       }
       if (cleanBarcode != null) {
-        final matches = await (select(shopProducts)
-              ..where((row) => row.barcode.equals(cleanBarcode)))
-            .get();
+        final matches = await (select(
+          shopProducts,
+        )..where((row) => row.barcode.equals(cleanBarcode))).get();
         if (matches.any((row) => row.id != cleanProductId)) {
           throw StateError('That barcode is already assigned to a product.');
         }
       }
       final now = DateTime.now().millisecondsSinceEpoch;
-      final changed = await (update(shopProducts)
-            ..where(
-              (row) =>
-                  row.id.equals(cleanProductId) &
-                  row.archived.equals(false) &
-                  row.name.equals(expectedName) &
-                  row.priceMmk.equals(expectedPriceMmk) &
-                  (oldBarcode == null
-                      ? row.barcode.isNull()
-                      : row.barcode.equals(oldBarcode)),
-            ))
-          .write(
-            ShopProductsCompanion(
-              name: Value(cleanName),
-              priceMmk: Value(priceMmk),
-              barcode: Value(cleanBarcode),
-              updatedAtMillis: Value(now),
-            ),
-          );
+      final changed =
+          await (update(shopProducts)..where(
+                (row) =>
+                    row.id.equals(cleanProductId) &
+                    row.archived.equals(false) &
+                    row.name.equals(expectedName) &
+                    row.priceMmk.equals(expectedPriceMmk) &
+                    (oldBarcode == null
+                        ? row.barcode.isNull()
+                        : row.barcode.equals(oldBarcode)),
+              ))
+              .write(
+                ShopProductsCompanion(
+                  name: Value(cleanName),
+                  priceMmk: Value(priceMmk),
+                  barcode: Value(cleanBarcode),
+                  updatedAtMillis: Value(now),
+                ),
+              );
       if (changed != 1) {
         throw StateError('Product changed. Reopen this item.');
       }
@@ -2148,7 +2150,8 @@ class ShopDatabase extends _$ShopDatabase {
         }
         if (expectedProductNames != null &&
             priorLines.any(
-              (line) => expectedProductNames[line.productId] != line.productName,
+              (line) =>
+                  expectedProductNames[line.productId] != line.productName,
             )) {
           throw StateError('Sale item changed. Review each line again.');
         }

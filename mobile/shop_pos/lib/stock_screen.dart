@@ -409,7 +409,9 @@ class _StockScreenState extends State<StockScreen> {
                                       ),
                                       style: textTheme.bodySmall?.copyWith(
                                         color: colors.onSurfaceVariant,
-                                        fontFeatures: const [FontFeature.tabularFigures()],
+                                        fontFeatures: const [
+                                          FontFeature.tabularFigures(),
+                                        ],
                                       ),
                                     ),
                                     if (showReference)
@@ -437,19 +439,30 @@ class _StockScreenState extends State<StockScreen> {
                                       future: _thumbnailFor(item.id),
                                       builder: (context, image) {
                                         final bytes = image.data;
-                                        if (bytes == null) return const SizedBox.shrink();
+                                        if (bytes == null)
+                                          return const SizedBox.shrink();
                                         return Padding(
-                                          padding: const EdgeInsets.only(right: 10),
+                                          padding: const EdgeInsets.only(
+                                            right: 10,
+                                          ),
                                           child: ClipRRect(
-                                            borderRadius: BorderRadius.circular(8),
+                                            borderRadius: BorderRadius.circular(
+                                              8,
+                                            ),
                                             child: Image.memory(
                                               bytes,
-                                              key: ValueKey('stock-photo-${item.id}'),
+                                              key: ValueKey(
+                                                'stock-photo-${item.id}',
+                                              ),
                                               width: 44,
                                               height: 44,
                                               fit: BoxFit.cover,
-                                              errorBuilder: (_, error, stackTrace) =>
-                                                  const SizedBox(width: 44, height: 44),
+                                              errorBuilder:
+                                                  (_, error, stackTrace) =>
+                                                      const SizedBox(
+                                                        width: 44,
+                                                        height: 44,
+                                                      ),
                                             ),
                                           ),
                                         );
@@ -552,7 +565,10 @@ class _StockScreenState extends State<StockScreen> {
                                       ),
                                       child: Row(
                                         children: [
-                                          Expanded(flex: 5, child: detailsWithPhoto),
+                                          Expanded(
+                                            flex: 5,
+                                            child: detailsWithPhoto,
+                                          ),
                                           Expanded(
                                             flex: 2,
                                             child: Column(
@@ -675,7 +691,9 @@ class _EditProductDialogState extends State<_EditProductDialog> {
   final _formKey = GlobalKey<FormState>();
   final _operationId = const Uuid().v4();
   late final _name = TextEditingController(text: widget.product.name);
-  late final _barcode = TextEditingController(text: widget.product.barcode ?? '');
+  late final _barcode = TextEditingController(
+    text: widget.product.barcode ?? '',
+  );
   late final _price = TextEditingController(
     text: widget.product.priceMmk.toString(),
   );
@@ -712,8 +730,10 @@ class _EditProductDialogState extends State<_EditProductDialog> {
       if (!mounted) return;
       setState(() {
         _saving = false;
-        _error = error is StateError &&
-                error.message == 'That barcode is already assigned to a product.'
+        _error =
+            error is StateError &&
+                error.message ==
+                    'That barcode is already assigned to a product.'
             ? shopCopy(
                 widget.myanmar,
                 'That barcode already belongs to another product.',
@@ -738,7 +758,9 @@ class _EditProductDialogState extends State<_EditProductDialog> {
   @override
   Widget build(BuildContext context) => AlertDialog(
     scrollable: true,
-    title: Text(shopCopy(widget.myanmar, 'Edit product', 'ကုန်ပစ္စည်း ပြင်ရန်')),
+    title: Text(
+      shopCopy(widget.myanmar, 'Edit product', 'ကုန်ပစ္စည်း ပြင်ရန်'),
+    ),
     content: Form(
       key: _formKey,
       child: Column(
@@ -752,7 +774,8 @@ class _EditProductDialogState extends State<_EditProductDialog> {
             decoration: InputDecoration(
               labelText: shopCopy(widget.myanmar, 'Name', 'အမည်'),
             ),
-            validator: (value) => value == null ||
+            validator: (value) =>
+                value == null ||
                     value.trim().isEmpty ||
                     value.trim().length > 160
                 ? shopCopy(
@@ -772,7 +795,11 @@ class _EditProductDialogState extends State<_EditProductDialog> {
               FilteringTextInputFormatter.allow(RegExp('[0-9\u1040-\u1049]')),
             ],
             decoration: InputDecoration(
-              labelText: shopCopy(widget.myanmar, 'Price · MMK', 'ဈေးနှုန်း · ကျပ်'),
+              labelText: shopCopy(
+                widget.myanmar,
+                'Price · MMK',
+                'ဈေးနှုန်း · ကျပ်',
+              ),
             ),
             validator: (value) {
               final amount = parseStockQuantity(value);
