@@ -678,6 +678,23 @@ body[data-view="shop"] .shop-hero-copy { max-width: 900px; gap: 12px; }
 body[data-view="shop"] .shop-hero h1 { max-width: none; }
 body[data-view="shop"] .shop-hero-copy > p { max-width: 52ch; }
 body[data-view="shop"] .shop-hero-app { width: 100%; max-width: 1100px; justify-self: center; }
+body[data-view="shop"] .native-shop-shots-pair, body[data-view="shop"] .native-shop-shots-my .native-shop-shots-pair { grid-template-columns: repeat(2,minmax(0,1fr)); }
+body[data-view="shop"] .native-shop-caption { font-size: 14px; }
+body[data-view="shop"] .shop-start { padding-block: clamp(48px,6vw,78px); border-top: 1px solid #e4e7ec; background: #fff; }
+body[data-view="shop"] .shop-start-head { display: grid; grid-template-columns: minmax(0,.82fr) minmax(280px,.58fr); align-items: end; gap: clamp(24px,5vw,72px); }
+body[data-view="shop"] .shop-start h2 { max-width: 720px; margin: 10px 0 0; color: #121826; font-size: clamp(32px,4vw,52px); font-weight: 650; letter-spacing: -.045em; line-height: 1.06; }
+body[data-view="shop"] .shop-start-summary { margin: 0; color: #4f5b6e; font-size: 16px; line-height: 1.65; }
+body[data-view="shop"] .shop-template-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 28px; }
+body[data-view="shop"] .shop-template-list span { display: inline-flex; min-height: 42px; align-items: center; padding: 8px 14px; border: 1px solid #d9dee8; border-radius: 999px; color: #344054; background: #f9fafb; font-size: 14px; font-weight: 620; }
+body[data-view="shop"] .shop-plan-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); margin-top: 34px; border-block: 1px solid #dfe3ea; }
+body[data-view="shop"] .shop-plan { display: grid; align-content: start; min-width: 0; padding: 26px 24px 24px 0; }
+body[data-view="shop"] .shop-plan + .shop-plan { border-left: 1px solid #dfe3ea; padding-left: 24px; }
+body[data-view="shop"] .shop-plan-kicker { margin: 0; color: #2563eb; font-size: 12px; font-weight: 750; letter-spacing: .07em; text-transform: uppercase; }
+body[data-view="shop"] .shop-plan h3 { margin: 10px 0 8px; color: #121826; font-size: 23px; font-weight: 650; letter-spacing: -.025em; line-height: 1.15; }
+body[data-view="shop"] .shop-plan > p:not(.shop-plan-kicker) { margin: 0; color: #536175; font-size: 15px; line-height: 1.6; }
+body[data-view="shop"] .shop-plan-status { align-self: end; width: max-content; margin-top: 22px; color: #475467; font-size: 13px; font-weight: 650; }
+body[data-view="shop"] .shop-custom-note { margin: 22px 0 0; color: #536175; font-size: 15px; }
+body[data-view="shop"] .shop-custom-note a { color: #1d4ed8; font-weight: 650; }
 body[data-view="shop"] .shop-lead-capture { max-width: none; margin: 0; padding: 10px; border-color: #dfe5ee; border-radius: 13px; box-shadow: 0 20px 44px rgba(20,35,65,.10); }
 body[data-view="shop"] .shop-inventory-proof { padding-block: clamp(44px,6vw,78px); background: #fff; }
 body[data-view="shop"] .shop-inventory-proof .wrap { display: grid; grid-template-columns: minmax(220px,.7fr) minmax(0,1fr); align-items: center; gap: clamp(28px,5vw,76px); }
@@ -697,13 +714,23 @@ body[data-view="contact"] .contact-page .contact-form .button { width: max-conte
   body[data-view="company"] .company-hero .hero-grid { min-height: 0; padding-block: 32px; }
   body[data-view="company"] .company-hero h1 { max-width: 100%; font-size: clamp(38px,10vw,52px); }
   body[data-view="shop"] .shop-hero { padding-block: 24px 20px; }
-  body[data-view="shop"] .shop-hero h1 { max-width: 16ch; font-size: clamp(38px,10vw,48px); }
+  body[data-view="shop"] .shop-hero h1 { max-width: 16ch; font-size: clamp(34px,9vw,42px); line-height: 1.12; }
+  body[data-view="shop"] .shop-hero-copy > p { font-size: 17px; line-height: 1.62; }
   body[data-view="shop"] .shop-hero .button-primary { width: 100%; justify-content: center; }
   body[data-view="shop"] .shop-inventory-proof .wrap { grid-template-columns: 1fr; }
   body[data-view="shop"] .shop-inventory-proof-copy { max-width: 540px; }
+  body[data-view="shop"] .shop-start-head { grid-template-columns: 1fr; gap: 14px; }
+  body[data-view="shop"] .shop-plan-grid { grid-template-columns: 1fr; }
+  body[data-view="shop"] .shop-plan { padding: 22px 0; }
+  body[data-view="shop"] .shop-plan + .shop-plan { border-top: 1px solid #dfe3ea; border-left: 0; padding-left: 0; }
   body[data-view="contact"] .contact-page { padding-block: 32px 52px; }
   body[data-view="contact"] .contact-page .contact-form { padding: 20px; }
   body[data-view="contact"] .contact-page .contact-form .button { width: 100%; }
+}
+@media (max-width: 650px) {
+  body[data-view="shop"] .native-shop-shot { width: 100%; max-width: 620px; }
+  body[data-view="shop"] .native-shop-shots-pair, body[data-view="shop"] .native-shop-shots-my .native-shop-shots-pair { display: none; }
+  body[data-view="shop"] .native-shop-shot figcaption { font-size: 14px; }
 }
 @media (max-width: 1100px) {
   body[data-view="shop"] .shop-hero .wrap { grid-template-columns: minmax(0,1fr); gap: 28px; }
@@ -718,6 +745,11 @@ const myanmarPublicStyle = `
   @media (min-width: 761px) { html:lang(my) body[data-view="shop"] .shop-hero h1 { max-width: min(100%, 740px); font-size: clamp(29px, 2.3vw, 32px); line-height: 1.38; font-weight: 600; } }
   html:lang(my) body[data-view="shop"] .shop-hero-copy > p:not(.eyebrow) { max-width: 100%; font-size: 17px; line-height: 1.85; }
   html:lang(my) body[data-view="shop"] .shop-hero-app { max-width: 1000px; }
+  html:lang(my) body[data-view="shop"] .shop-start h2 { max-width: 100%; font-size: clamp(28px, 3.2vw, 38px); font-weight: 600; letter-spacing: 0; line-height: 1.55; }
+  html:lang(my) body[data-view="shop"] .shop-start-summary, html:lang(my) body[data-view="shop"] .shop-plan > p:not(.shop-plan-kicker), html:lang(my) body[data-view="shop"] .shop-custom-note { line-height: 1.8; }
+  html:lang(my) body[data-view="shop"] .shop-template-list span { min-height: 48px; font-size: 15px; line-height: 1.7; }
+  html:lang(my) body[data-view="shop"] .shop-plan-kicker { letter-spacing: 0; text-transform: none; }
+  html:lang(my) body[data-view="shop"] .shop-plan h3 { font-size: 21px; font-weight: 600; letter-spacing: 0; line-height: 1.65; }
   html:lang(my) body[data-view="shop"] .shop-lead-capture figcaption { line-height: 1.8; }
   html:lang(my) body[data-view="contact"] .contact-page .page-hero h1 { max-width: 100%; margin-bottom: 22px; font-size: clamp(32px, 3vw, 38px); line-height: 1.6; letter-spacing: 0; }
   html:lang(my) body[data-view="contact"] .contact-company-intro { max-width: 480px; font-size: 16px; line-height: 1.85; }
@@ -734,7 +766,7 @@ const myanmarPublicStyle = `
   html:lang(my) body:not([data-view]) .prose h2, html:lang(my) body:not([data-view]) .prose h3 { font-size: 18px; line-height: 1.6; letter-spacing: 0; }
   html:lang(my) body:not([data-view]) .prose p { font-size: 16px; line-height: 1.9; }
   @media (max-width: 760px) {
-    html:lang(my) body[data-view="shop"] .shop-hero h1 { font-size: 30px; line-height: 1.45; }
+    html:lang(my) body[data-view="shop"] .shop-hero h1 { font-size: 28px; line-height: 1.58; }
     html:lang(my) body[data-view="contact"] .contact-page .page-hero h1 { font-size: 32px; line-height: 1.6; }
     html:lang(my) body:not([data-view]) .page-hero { padding-block: 52px 48px; }
     html:lang(my) body:not([data-view]) .page-hero h1 { font-size: 28px; line-height: 1.6; }
@@ -856,10 +888,28 @@ function nativeShopShot(file, alt, label, loading = 'lazy', mobileFile = null) {
 }
 function nativeShopHero(locale = 'en') {
  const my = locale === 'my'
- const desktop = nativeShopShot(my ? 'shop_checkout_1200_my.png' : 'shop_checkout_1200_en.png', my ? 'မြန်မာဘာသာဖြင့် ကုန်ပစ္စည်းပုံ၊ ဈေးနှုန်းနှင့် ကုန်လက်ကျန်ကို ပြထားသော ဆိုင်အက်ပ်' : 'Shop product catalog with photos, prices and stock', my ? 'ကောင်တာအရောင်း' : 'Counter sale', 'eager', `shop_sell_390_${my ? 'my' : 'en'}.png`)
- const tablet = nativeShopShot(`shop_stock_820_${my ? 'my' : 'en'}.png`, my ? 'မြန်မာဘာသာဖြင့် ကုန်လက်ကျန်နှင့် ပြန်မှာယူရန် အဆင့်ကို ပြထားသော ဆိုင်အက်ပ်၏ တက်ဘလက်မျက်နှာပြင်' : 'Shop tablet Stock screen with product photos, on-hand quantities and reorder levels', my ? 'ကုန်လက်ကျန်' : 'Stock', 'lazy', `shop_stock_390_${my ? 'my' : 'en'}.png`)
- const phone = nativeShopShot(`shop_today_390_${my ? 'my' : 'en'}.png`, my ? 'မြန်မာဘာသာဖြင့် ယနေ့အရောင်းနှင့် ကုန်လက်ကျန် သတိပေးချက်ကို ပြထားသော ဆိုင်အက်ပ်၏ ဖုန်းမျက်နှာပြင်' : 'Shop phone Today screen with sales and stock attention', my ? 'ယနေ့' : 'Today')
- return `<section class="native-shop-gallery" aria-label="${my ? 'ဆိုင်အက်ပ် နမူနာမျက်နှာပြင်များ' : 'Shop app previews'}"><div class="wrap"><div class="native-shop-shots${my ? ' native-shop-shots-my' : ''}">${desktop}<div class="native-shop-shots-pair">${tablet}${phone}</div></div><p class="native-shop-caption" id="shop-sample-disclosure">${my ? 'နမူနာအချက်အလက်နှင့် ဈေးနှုန်းများဖြင့် ပြထားသော ဆိုင်အက်ပ်မျက်နှာပြင်များ။' : 'Shop app preview with sample data and prices.'}</p></div></section>`
+ const desktop = nativeShopShot(my ? 'shop_checkout_1200_my.png' : 'shop_checkout_1200_en.png', my ? 'မြန်မာဘာသာဖြင့် ကုန်ပစ္စည်းပုံ၊ ဈေးနှုန်းနှင့် ကုန်လက်ကျန်ကို ပြထားသော ဆိုင်အက်ပ်' : 'Shop product catalog with photos, prices and stock', my ? 'ကောင်တာအရောင်း' : 'Counter', 'eager', `shop_checkout_820_${my ? 'my' : 'en'}.png`)
+ const stock = nativeShopShot(`shop_stock_820_${my ? 'my' : 'en'}.png`, my ? 'မြန်မာဘာသာဖြင့် ကုန်လက်ကျန်နှင့် ပြန်မှာယူရန် အဆင့်ကို ပြထားသော ဆိုင်အက်ပ်' : 'Shop Stock screen with product photos, on-hand quantities and reorder levels', my ? 'ကုန်လက်ကျန်' : 'Stock')
+ const today = nativeShopShot(`shop_today_820_${my ? 'my' : 'en'}.png`, my ? 'မြန်မာဘာသာဖြင့် ယနေ့အရောင်းနှင့် ကုန်လက်ကျန် သတိပေးချက်ကို ပြထားသော ဆိုင်အက်ပ်' : 'Shop Today screen with sales and stock attention', my ? 'ယနေ့' : 'Today')
+ return `<section class="native-shop-gallery" aria-label="${my ? 'ဆိုင်အက်ပ် နမူနာမျက်နှာပြင်များ' : 'Shop app previews'}"><div class="wrap"><div class="native-shop-shots${my ? ' native-shop-shots-my' : ''}">${desktop}<div class="native-shop-shots-pair">${stock}${today}</div></div><p class="native-shop-caption" id="shop-sample-disclosure">${my ? 'နမူနာအချက်အလက်ဖြင့် ပြထားသော အက်ပ်နမူနာ။' : 'App preview with sample data.'}</p></div></section>`
+}
+
+function shopOfferSection(locale = 'en') {
+ const my = locale === 'my'
+ const templates = my
+  ? ['မီနီမတ်နှင့် ကုန်စုံဆိုင်', 'ကဖေးနှင့် ပါဆယ်ဆိုင်', 'အဝတ်အထည်နှင့် အသုံးအဆောင်', 'အလှကုန်နှင့် အိမ်သုံးပစ္စည်း']
+  : ['Mini-mart & grocery', 'Café & takeaway', 'Fashion & accessories', 'Beauty & household']
+ const plans = my ? [
+  ['Shop Basic', 'ဆိုင်တစ်ဆိုင်ကို စီမံပါ', 'ကောင်တာအရောင်း၊ ကုန်ပစ္စည်း၊ ကုန်လက်ကျန်၊ ပြေစာနှင့် ကာကွယ်ထားသော ထုတ်ယူမှု။', 'စမ်းသပ်အသုံးပြုနိုင်'],
+  ['Assisted Launch', 'ကျွန်ုပ်တို့နှင့်အတူ စတင်ပါ', 'ကုန်ပစ္စည်းစာရင်းပြင်ဆင်ခြင်း၊ အသုံးပြုနိုင်သော စက်များတပ်ဆင်ခြင်းနှင့် ပထမနေ့ စစ်ဆေးမှု။', 'စမ်းသပ်အသုံးပြုနိုင်'],
+  ['Shop Pro', 'အဖွဲ့ဖြင့် တိုးချဲ့ပါ', 'အကောင့်များ၊ တာဝန်ခွဲဝေမှု၊ အွန်လိုင်းအရန်သိမ်းဆည်းမှုနှင့် ချိတ်ဆက်ထားသော အော်ဒါများ။', 'စီစဉ်ထားဆဲ'],
+ ] : [
+  ['Shop Basic', 'Run one shop', 'Counter sales, products, stock, receipts and protected export.', 'Pilot access'],
+  ['Assisted Launch', 'Start with our team', 'Catalog preparation, supported device setup and first-day checks.', 'Pilot access'],
+  ['Shop Pro', 'Grow to a team', 'Accounts, roles, cloud recovery and connected orders.', 'Planned'],
+ ]
+ const contactHref = my ? '/my/contact/?product=shop' : '/contact/?product=shop'
+ return `<section class="shop-start" id="plans" aria-labelledby="shop-start-heading"><div class="wrap"><div class="shop-start-head"><div><p class="eyebrow">${my ? 'သင့်လုပ်ငန်းပုံစံအတိုင်း စတင်ပါ' : 'Set up around your business'}</p><h2 id="shop-start-heading">${my ? 'အစမှာ ရိုးရှင်းစွာ သုံးပါ။ လိုအပ်မှသာ ထပ်တိုးပါ။' : 'Start simple. Add more when you need it.'}</h2></div><p class="shop-start-summary">${my ? 'သင့်ဆိုင်အမျိုးအစားအလိုက် စတင်ပုံကို ရွေးပါ။ အချက်အလက်နှင့် အလုပ်စဉ်ကို Shop အက်ပ်တစ်ခုတည်းတွင် ထိန်းထားပါ။' : 'Choose a starting setup for your business. Your products, sales and records stay in the same Shop app.'}</p></div><div class="shop-template-list" aria-label="${my ? 'လုပ်ငန်းပုံစံ နမူနာများ' : 'Business setup templates'}">${templates.map(item => `<span>${escapeHtml(item)}</span>`).join('')}</div><div class="shop-plan-grid">${plans.map(([name,title,body,status]) => `<article class="shop-plan"><p class="shop-plan-kicker">${escapeHtml(name)}</p><h3>${escapeHtml(title)}</h3><p>${escapeHtml(body)}</p><span class="shop-plan-status">${escapeHtml(status)}</span></article>`).join('')}</div><p class="shop-custom-note">${my ? 'သင်အသုံးပြုနေသော စနစ်နှင့် ချိတ်ဆက်ရန် လိုပါသလား။' : 'Need a supported integration?'} <a href="${contactHref}">${my ? 'သင်အသုံးပြုသည့်အရာကို ပြောပြပါ။' : 'Tell us what you use.'}</a></p></div></section>`
 }
 function productStory(id, standalone = false) {
  const item=stories[id], label=publicProducts.find(product=>product.id===id).name
@@ -882,7 +932,7 @@ function productCard(id) {
 }
 // Static hosts and saved copies still give a no-JavaScript route to Shop.
 // Vercel's exact root and /index.html routes return the 308 below.
-const homeHtml = `<!doctype html><html lang="en"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><title>${escapeHtml(homePage.title)}</title><meta name="robots" content="noindex,follow" /><link rel="canonical" href="${escapeHtml(canonical(homePage.redirectTo))}" /><meta http-equiv="refresh" content="0; url=${homePage.redirectTo}" /></head><body><main><h1>SuperMega Shop</h1><p>This page has moved. <a href="${homePage.redirectTo}">Continue to Shop</a>.</p></main></body></html>`
+const homeHtml = `<!doctype html><html lang="en"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><title>${escapeHtml(homePage.title)}</title><meta name="robots" content="noindex,follow" /><link rel="canonical" href="${escapeHtml(canonical(homePage.redirectTo))}" /><meta http-equiv="refresh" content="0; url=${homePage.redirectTo}" /></head><body><main><h1>Shop</h1><p>This page has moved. <a href="${homePage.redirectTo}">Continue to Shop</a>.</p></main></body></html>`
 
 function productAction(product) {
  if (product.status !== 'available-in-app' || product.id === 'shop') return ''
@@ -895,14 +945,14 @@ function shopLandingHtml(product, page, locale = 'en') {
  const isMyanmar = locale === 'my'
  let heroWithPreview = publicShopMarkup
  if (isMyanmar) {
-  heroWithPreview = replaceOnce(heroWithPreview, '<p class="eyebrow">SuperMega Shop</p>', '<p class="eyebrow">SuperMega ဆိုင်</p>', 'my_shop_eyebrow')
-  heroWithPreview = replaceOnce(heroWithPreview, 'Sell. See what’s in stock.', 'ရောင်းပါ။ ကုန်လက်ကျန်ကို ကြည့်ပါ။', 'my_shop_headline')
-  heroWithPreview = replaceOnce(heroWithPreview, 'Add products. Scan or tap to sell. Find a receipt and check stock.', 'ကုန်ပစ္စည်း ထည့်ပါ။ ဘားကုဒ်ဖတ် သို့မဟုတ် ရွေး၍ ရောင်းပါ။ ပြေစာရှာပြီး ကုန်လက်ကျန်ကို စစ်ပါ။', 'my_shop_description')
-  heroWithPreview = replaceOnce(heroWithPreview, 'href="/contact/?product=shop">Request a Shop walkthrough', 'href="/my/contact/?product=shop">ဆိုင်အက်ပ် အသုံးပြုပုံကို မေးမြန်းရန်', 'my_shop_cta')
+  heroWithPreview = replaceOnce(heroWithPreview, '<p class="eyebrow">Shop</p>', '<p class="eyebrow">ဆိုင်</p>', 'my_shop_eyebrow')
+  heroWithPreview = replaceOnce(heroWithPreview, 'Sell clearly. Know what is in stock.', 'ရှင်းရှင်းလင်းလင်း ရောင်းပါ။ ကုန်လက်ကျန်ကို သိပါ။', 'my_shop_headline')
+  heroWithPreview = replaceOnce(heroWithPreview, 'Add products once. Scan or tap to sell. Receipts, sales and stock stay together.', 'ကုန်ပစ္စည်းကို တစ်ကြိမ်ထည့်ပါ။ ဘားကုဒ်ဖတ် သို့မဟုတ် ရွေး၍ ရောင်းပါ။ ပြေစာ၊ အရောင်းနှင့် ကုန်လက်ကျန်ကို တစ်နေရာတည်းတွင် ကြည့်ပါ။', 'my_shop_description')
+  heroWithPreview = replaceOnce(heroWithPreview, 'href="/contact/?product=shop">Start with Shop', 'href="/my/contact/?product=shop">Shop စတင်သုံးရန်', 'my_shop_cta')
  }
  return documentHtml({route:page.route,title:page.title,description,shareImage:`/og-card-${product.id}.png`,locale,
   schema:{'@type':'Product',name:product.name,description,url:canonical(page.route)},
-  content:`<main id="content">${heroWithPreview}${nativeShopHero(locale)}</main>${productAction(product)}`})
+  content:`<main id="content">${heroWithPreview}${nativeShopHero(locale)}${shopOfferSection(locale)}</main>${productAction(product)}`})
 }
 
 function productLandingHtml(product,page) {
@@ -920,8 +970,8 @@ const contactUiCopy = {
     proofNoteContext: 'Attached from this browser. The owner-approved context digest is included and raw records remain excluded; this does not verify a managed account.',
     proofNote: 'Attached from this browser. The outcome is a client-provided, digest-bound aggregate summary; it does not verify a managed account.',
     detached: 'Attached context removed because the product changed.',
-    headingShop: 'Request a Shop walkthrough', headingServiceStart: 'Contact our ', headingServiceEnd: ' team.', headingDefault: 'Contact',
-    ledeShop: 'Tell us what you sell and which devices you use. We will reply by email to discuss a Shop walkthrough.',
+    headingShop: 'Start with Shop', headingServiceStart: 'Contact our ', headingServiceEnd: ' team.', headingDefault: 'Contact',
+    ledeShop: 'Tell us what you sell and which devices you use. We will reply by email.',
     ledeDefault: 'Tell us about your business and the workflow you want to improve. We will reply by email.',
     contextAttached: 'Helpful context attached. Nothing has been sent.', contextInvalid: 'Attached context could not be verified and was left out.',
     messageSent: 'Message sent.', sendAnother: 'Send another message.', previous: 'Previous message — ', sendMessage: 'Send message', sending: 'Sending...',
@@ -937,8 +987,8 @@ const contactUiCopy = {
     proofNoteContext: 'ဤဘရောက်ဇာမှ အကြောင်းအရာကို ပူးတွဲထားပါသည်။ ပိုင်ရှင်အတည်ပြုထားသော အနှစ်ချုပ်၏ အမှတ်အသားသာ ပါဝင်ပြီး မူရင်းမှတ်တမ်းများ မပါဝင်ပါ။ စီမံထားသော အကောင့်ရှိကြောင်း အတည်မပြုနိုင်ပါ။',
     proofNote: 'ဤဘရောက်ဇာမှ အကြောင်းအရာကို ပူးတွဲထားပါသည်။ ရလဒ်သည် သုံးစွဲသူပေးပို့သော စုစည်းအနှစ်ချုပ်သာ ဖြစ်ပြီး စီမံထားသော အကောင့်ရှိကြောင်း အတည်မပြုနိုင်ပါ။',
     detached: 'ကုန်ပစ္စည်းရွေးချယ်မှု ပြောင်းလဲသဖြင့် ပူးတွဲအကြောင်းအရာကို ဖယ်ရှားလိုက်ပါသည်။',
-    headingShop: 'ဆိုင်အက်ပ် အသုံးပြုပုံကို မေးမြန်းရန်', headingServiceStart: '', headingServiceEnd: ' အဖွဲ့ထံ ဆက်သွယ်ရန်', headingDefault: 'ဆက်သွယ်ရန်',
-    ledeShop: 'သင်ရောင်းချသော ပစ္စည်းများနှင့် အသုံးပြုမည့်စက်များကို ပြောပြပါ။ ဆိုင်အက်ပ် အသုံးပြုပုံကို ဆွေးနွေးရန် အီးမေးလ်ဖြင့် ပြန်လည်ဆက်သွယ်ပါမည်။',
+    headingShop: 'Shop စတင်သုံးရန်', headingServiceStart: '', headingServiceEnd: ' အဖွဲ့ထံ ဆက်သွယ်ရန်', headingDefault: 'ဆက်သွယ်ရန်',
+    ledeShop: 'သင်ရောင်းချသော ပစ္စည်းများနှင့် အသုံးပြုမည့်စက်များကို ပြောပြပါ။ အီးမေးလ်ဖြင့် ပြန်လည်ဆက်သွယ်ပါမည်။',
     ledeDefault: 'သင့်လုပ်ငန်းလိုအပ်ချက်ကို ပြောပြပါ၊ SuperMega က အီးမေးလ်ဖြင့် ပြန်လည်ဆက်သွယ်ပါမည်။',
     contextAttached: 'အထောက်အကူဖြစ်စေမည့် အကြောင်းအရာကို ပူးတွဲထားပါသည်။ မပို့ရသေးပါ။', contextInvalid: 'ပူးတွဲအကြောင်းအရာကို အတည်မပြုနိုင်သဖြင့် မထည့်သွင်းခဲ့ပါ။',
     messageSent: 'စာပို့ပြီးပါပြီ။', sendAnother: 'နောက်ထပ်စာပို့ရန်', previous: 'ယခင်စာ — ', sendMessage: 'စာပို့ရန်', sending: 'ပို့နေပါသည်...',

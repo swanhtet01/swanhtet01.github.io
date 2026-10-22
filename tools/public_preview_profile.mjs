@@ -52,7 +52,7 @@ export function validatePreviewLinks(html, policy, products, options = {}) {
     else if (!['/', '/shop/', '/contact/', '/privacy/', '/my/shop/', '/my/contact/', '/my/privacy/'].includes(url.pathname)) throw new Error('public_preview_public_route_invalid')
   }
   if (options.requireActions !== false
-    && !html.includes('<a class="button button-primary" href="/contact/?product=shop">Request a Shop walkthrough</a>')) {
+    && !html.includes('<a class="button button-primary" href="/contact/?product=shop">')) {
     throw new Error('public_preview_action_missing:shop_walkthrough')
   }
   const signInCount = hrefs.filter(href => href === origin + '/login').length
