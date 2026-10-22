@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supermega_shop/main.dart';
@@ -75,6 +76,7 @@ void main() {
       }
 
       await visit('Sell');
+      expect(find.byKey(const ValueKey('shop-camera-scan')), findsNothing);
       expect(
         tester
             .widget<EditableText>(find.byType(EditableText))
@@ -106,6 +108,170 @@ void main() {
       await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pumpAndSettle();
       expect((await database.readCounterSaleDraft())?.quantities, {'tea': 1});
+      expect(tester.takeException(), isNull);
+    } finally {
+      debugDefaultTargetPlatformOverride = previousPlatform;
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+      await database.close();
+    }
+  });
+
+  testWidgets('camera frames add one known barcode to the offline sale draft', (
+    tester,
+  ) async {
+    _usePhoneViewport(tester);
+    final previousPlatform = debugDefaultTargetPlatformOverride;
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    final database = ShopDatabase(NativeDatabase.memory());
+    try {
+      await database.addProduct(
+        id: 'tea',
+        name: 'Tea',
+        barcode: '0012345678905',
+        priceMmk: 2500,
+        openingStock: 3,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ShopHome(
+            database: database,
+            authClient: null,
+            apiBaseUrl: 'https://example.invalid',
+            myanmar: false,
+            onLanguageChanged: (_) {},
+            cameraViewBuilder: (context, onScanned, onError) => Center(
+              child: FilledButton(
+                key: const ValueKey('fake-camera-detect'),
+                onPressed: () {
+                  onScanned('0012345678905');
+                  onScanned('0012345678905');
+                },
+                child: const Text('Detect'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('shop-camera-scan')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('fake-camera-detect')));
+      await tester.pumpAndSettle();
+      expect((await database.readCounterSaleDraft())?.quantities, {'tea': 1});
+      expect(await database.countSales(), 0);
+      expect(tester.takeException(), isNull);
+    } finally {
+      debugDefaultTargetPlatformOverride = previousPlatform;
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+      await database.close();
+    }
+  });
+
+  testWidgets('unknown camera barcode opens Add product with its code', (
+    tester,
+  ) async {
+    _usePhoneViewport(tester);
+    final previousPlatform = debugDefaultTargetPlatformOverride;
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    final database = ShopDatabase(NativeDatabase.memory());
+    try {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ShopHome(
+            database: database,
+            authClient: null,
+            apiBaseUrl: 'https://example.invalid',
+            myanmar: false,
+            onLanguageChanged: (_) {},
+            cameraViewBuilder: (context, onScanned, onError) => Center(
+              child: FilledButton(
+                key: const ValueKey('fake-camera-detect'),
+                onPressed: () => onScanned('0012345678905'),
+                child: const Text('Detect'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('shop-camera-scan')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('fake-camera-detect')));
+      await tester.pumpAndSettle();
+      expect(find.byType(AlertDialog), findsOneWidget);
+      expect(
+        tester
+            .widget<TextFormField>(
+              find.byKey(const ValueKey('shop-product-barcode')),
+            )
+            .controller!
+            .text,
+        '0012345678905',
+      );
+      expect(await database.readCounterSaleDraft(), isNull);
+      expect(await database.countSales(), 0);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(await database.readCounterSaleDraft(), isNull);
+      expect(tester.takeException(), isNull);
+    } finally {
+      debugDefaultTargetPlatformOverride = previousPlatform;
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+      await database.close();
+    }
+  });
+
+  testWidgets('cancel and camera denial return to Sell without a sale write', (
+    tester,
+  ) async {
+    _usePhoneViewport(tester);
+    final previousPlatform = debugDefaultTargetPlatformOverride;
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    final database = ShopDatabase(NativeDatabase.memory());
+    try {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ShopHome(
+            database: database,
+            authClient: null,
+            apiBaseUrl: 'https://example.invalid',
+            myanmar: false,
+            onLanguageChanged: (_) {},
+            cameraViewBuilder: (context, onScanned, onError) => Center(
+              child: FilledButton(
+                key: const ValueKey('fake-camera-deny'),
+                onPressed: () =>
+                    onError(MobileScannerErrorCode.permissionDenied),
+                child: const Text('Deny camera'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('shop-camera-scan')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Cancel scan'));
+      await tester.pumpAndSettle();
+      expect(find.text('Products'), findsOneWidget);
+      expect(await database.readCounterSaleDraft(), isNull);
+
+      await tester.tap(find.byKey(const ValueKey('shop-camera-scan')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('fake-camera-deny')));
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Camera access was denied. No item was added.'),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Return to Sell'));
+      await tester.pumpAndSettle();
+      expect(find.text('Products'), findsOneWidget);
+      expect(await database.readCounterSaleDraft(), isNull);
+      expect(await database.countSales(), 0);
       expect(tester.takeException(), isNull);
     } finally {
       debugDefaultTargetPlatformOverride = previousPlatform;

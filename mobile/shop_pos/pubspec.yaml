@@ -35,6 +35,8 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
   image_picker: 1.2.4
+  # Bundled Android ML Kit and on-device Apple Vision keep barcode scans offline.
+  mobile_scanner: 7.4.2
   drift: 2.35.2
   drift_flutter: 0.3.1
   path_provider: 2.1.6
