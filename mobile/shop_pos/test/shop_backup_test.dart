@@ -568,21 +568,23 @@ void main() {
     expect(await target.exists(), isFalse);
   });
 
-  test('startup keeps an uncertain committing marker even without DB',
-      () async {
-    final target = File('${directory.path}/uncertain.sqlite');
-    final marker = ShopBackup.restoreMarkerFor(target);
-    await marker.writeAsString('committing-v1\n');
-    await ShopBackup.cleanupInterruptedStaging(
-      directory,
-      restoreTarget: target,
-    );
-    expect(await marker.exists(), isTrue);
-    expect(
-      await ShopBackup.inspectStore(target),
-      ShopStorePresence.interrupted,
-    );
-  });
+  test(
+    'startup keeps an uncertain committing marker even without DB',
+    () async {
+      final target = File('${directory.path}/uncertain.sqlite');
+      final marker = ShopBackup.restoreMarkerFor(target);
+      await marker.writeAsString('committing-v1\n');
+      await ShopBackup.cleanupInterruptedStaging(
+        directory,
+        restoreTarget: target,
+      );
+      expect(await marker.exists(), isTrue);
+      expect(
+        await ShopBackup.inspectStore(target),
+        ShopStorePresence.interrupted,
+      );
+    },
+  );
 
   test('startup retains a published restore marker', () async {
     final target = File('${directory.path}/marked.sqlite');
@@ -602,36 +604,40 @@ void main() {
     expect(await target.readAsBytes(), original);
   });
 
-  test('new Shop reservation prevents a later restore from replacing it',
-      () async {
-    final target = File('${directory.path}/new-shop.sqlite');
-    expect(await ShopBackup.inspectStore(target), ShopStorePresence.empty);
-    await ShopBackup.reserveNewStore(target);
-    expect(await ShopBackup.inspectStore(target), ShopStorePresence.existing);
-    await expectLater(
-      ShopBackup.restoreIntoEmptyDatabase(
+  test(
+    'new Shop reservation prevents a later restore from replacing it',
+    () async {
+      final target = File('${directory.path}/new-shop.sqlite');
+      expect(await ShopBackup.inspectStore(target), ShopStorePresence.empty);
+      await ShopBackup.reserveNewStore(target);
+      expect(await ShopBackup.inspectStore(target), ShopStorePresence.existing);
+      await expectLater(
+        ShopBackup.restoreIntoEmptyDatabase(
+          archive: archive,
+          target: target,
+          password: _password,
+        ),
+        throwsStateError,
+      );
+      expect(await target.length(), 0);
+    },
+  );
+
+  test(
+    'restore after empty inspection prevents a stale new-Shop choice',
+    () async {
+      final target = File('${directory.path}/restore-wins.sqlite');
+      expect(await ShopBackup.inspectStore(target), ShopStorePresence.empty);
+      await ShopBackup.restoreIntoEmptyDatabase(
         archive: archive,
         target: target,
         password: _password,
-      ),
-      throwsStateError,
-    );
-    expect(await target.length(), 0);
-  });
-
-  test('restore after empty inspection prevents a stale new-Shop choice',
-      () async {
-    final target = File('${directory.path}/restore-wins.sqlite');
-    expect(await ShopBackup.inspectStore(target), ShopStorePresence.empty);
-    await ShopBackup.restoreIntoEmptyDatabase(
-      archive: archive,
-      target: target,
-      password: _password,
-    );
-    final bytes = await target.readAsBytes();
-    await expectLater(ShopBackup.reserveNewStore(target), throwsStateError);
-    expect(await target.readAsBytes(), bytes);
-  });
+      );
+      final bytes = await target.readAsBytes();
+      await expectLater(ShopBackup.reserveNewStore(target), throwsStateError);
+      expect(await target.readAsBytes(), bytes);
+    },
+  );
 
   test('startup cleanup leaves a fully published database intact', () async {
     final target = File('${directory.path}/published.sqlite');
