@@ -102,7 +102,7 @@ test('only active public product links set product context; internal routes fall
   const shop = harness([], '?product=shop&source=shop-brief', '#company=Example&goal=Prepare%20our%20shop')
   assert.equal(shop.fields.get('[name="product"]').value, 'shop')
   assert.equal(shop.headings.get('[data-contact-heading]').textContent, 'Request a Shop walkthrough')
-  assert.equal(shop.headings.get('[data-contact-lede]').textContent, 'Tell us what you sell and how you work today. We will reply with Shop walkthrough and setup options.')
+  assert.equal(shop.headings.get('[data-contact-lede]').textContent, 'The Shop browser sample shows counter sales, orders and inventory. Tell us about your catalog, devices and receipt needs to plan a guided pilot.')
   assert.equal(shop.fields.get('[name="goal"]').value, 'Prepare our shop')
   assert.equal(shop.calls.length, 0)
   for (const product of ['website', 'ecommerce']) {

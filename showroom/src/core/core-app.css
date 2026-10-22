@@ -2515,8 +2515,10 @@ html:lang(my) .shop-stock-workspace .stock-attention-table .data-row:not(.table-
 @media (max-width: 560px) {
   .shop-stock-workspace { padding: .875rem; }
   .shop-stock-heading { align-items: stretch; flex-direction: column; }
+  html:lang(my) .shop-stock-heading h2 { font-size: 1.65rem; line-height: 1.2; letter-spacing: 0; }
   .shop-stock-heading-actions { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); }
   .shop-stock-heading-actions > .core-button { width: 100%; min-height: 44px; padding-inline: .5rem; font-size: .8125rem; text-align: center; white-space: normal; }
+  html:lang(my) .shop-stock-heading-actions > .core-button { font-size: .875rem; line-height: 1.35; }
   /* Phone operators need the actionable stock row first; the detailed metrics
      remain available in the larger workspaces. */
   .shop-stock-metrics { display: none; }

@@ -1,9 +1,28 @@
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
+import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import { assertPublicGalleryReleaseReady, publicGalleryReleaseReadinessError } from './public_gallery_rights.mjs'
 
 const sha = value => createHash('sha256').update(JSON.stringify(value)).digest('hex')
+
+test('hosted gallery gate accounts for every source-bound capture, including Burmese Inventory', () => {
+  const workflow = readFileSync(new URL('../.github/workflows/showroom-ci.yml', import.meta.url), 'utf8')
+  const capture = JSON.parse(readFileSync(new URL('./public-assets/public-gallery-capture.json', import.meta.url), 'utf8'))
+  const declaredCount = workflow.match(/assert len\(captures\) == (\d+)/)
+  assert.ok(declaredCount, 'hosted gallery count contract exists')
+  assert.equal(Number(declaredCount[1]), capture.captures.length)
+  assert.equal(new Set(capture.captures.map(item => item.file)).size, capture.captures.length)
+  for (const file of ['actual-shop-inventory-my-tablet.png', 'actual-shop-inventory-my-mobile.png']) {
+    const item = capture.captures.find(entry => entry.file === file)
+    assert.ok(item, `${file} is captured`)
+    assert.equal(item.fixturePath, '/shop-my/')
+    assert.equal(item.routeState, 'inventory')
+    assert.equal(item.uiLocale, 'my')
+    assert.ok(workflow.includes(`'${file}': ('/shop-my/', 'inventory')`), `${file} has a hosted state guard`)
+  }
+  assert.match(workflow, /startswith\(\('actual-shop-sell-my', 'actual-shop-inventory-my'\)\)/)
+})
 
 function fixture() {
   const asset = { file: 'actual-shop-today.png', width: 1440, height: 900, sha256: 'd'.repeat(64) }
