@@ -2543,6 +2543,20 @@ void main() {
                   .maxLines,
               2,
             );
+            final addAffordance = find.byKey(
+              const ValueKey('shop-add-affordance:rice'),
+            );
+            expect(
+              find.descendant(
+                of: addAffordance,
+                matching: find.text(myanmar ? 'ထည့်' : 'Add'),
+              ),
+              findsOneWidget,
+            );
+            expect(
+              tester.getSize(addAffordance).height,
+              greaterThanOrEqualTo(44),
+            );
           }
           expect(
             find.byKey(const ValueKey('shop-product-photo:rice')),
@@ -2558,8 +2572,12 @@ void main() {
           );
           expect(tester.takeException(), isNull);
 
-          // A product without a photo uses the full row as the sale action.
-          await tester.tap(row);
+          // The labeled target and the rest of the row both add the product.
+          await tester.tap(
+            width == 320
+                ? find.byKey(const ValueKey('shop-add-affordance:rice'))
+                : row,
+          );
           await tester.pumpAndSettle();
           expect(find.text('Choose photo'), findsNothing);
           if (width == 820) {
@@ -2600,12 +2618,12 @@ void main() {
     },
   );
 
-  testWidgets('320px Burmese Sell keeps three catalog rows above navigation', (
+  testWidgets('320px Burmese Sell keeps four labeled rows above navigation', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(320, 800);
     tester.view.devicePixelRatio = 1;
-    tester.platformDispatcher.textScaleFactorTestValue = 1.3;
+    tester.platformDispatcher.textScaleFactorTestValue = 1.5;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
@@ -2624,6 +2642,13 @@ void main() {
           openingStock: 20,
         );
       }
+      await database.saveProductThumbnail(
+        'water',
+        base64Decode(
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ'
+          'AAAADUlEQVR4nGPQyNjxHwAETAJIB09U9wAAAABJRU5ErkJggg==',
+        ),
+      );
       await tester.pumpWidget(
         ShopApp(
           database: database,
@@ -2653,17 +2678,29 @@ void main() {
         findsNothing,
       );
       final thirdRow = find.byKey(const ValueKey('shop-catalog-row:rice'));
-      expect(thirdRow, findsOneWidget);
+      final fourthRow = find.byKey(const ValueKey('shop-catalog-row:noodles'));
       expect(
-        tester.getBottomLeft(thirdRow).dy,
-        lessThan(tester.getTopLeft(find.byType(NavigationBar)).dy),
+        find.byKey(const ValueKey('shop-product-photo:water')),
+        findsOneWidget,
       );
+      expect(thirdRow, findsOneWidget);
+      expect(fourthRow, findsOneWidget);
+      final navigationTop = tester.getTopLeft(find.byType(NavigationBar)).dy;
+      expect(tester.getBottomLeft(thirdRow).dy, lessThan(navigationTop));
+      expect(tester.getBottomLeft(fourthRow).dy, lessThan(navigationTop));
       expect(tester.getSize(thirdRow).height, greaterThanOrEqualTo(44));
       expect(
         tester
             .getSize(find.byKey(const ValueKey('shop-add-affordance:rice')))
             .height,
         greaterThanOrEqualTo(44),
+      );
+      expect(
+        find.descendant(
+          of: fourthRow,
+          matching: find.text('ထည့်'),
+        ),
+        findsOneWidget,
       );
       expect(
         tester

@@ -1753,7 +1753,11 @@ class _ShopHomeState extends State<ShopHome> {
     final enlargedNarrowRow =
         narrowProductRow && MediaQuery.textScalerOf(context).scale(1) > 1.2;
     final touchCompactRow = MediaQuery.sizeOf(context).width >= 820;
-    final photoExtent = narrowProductRow ? 48.0 : 58.0;
+    final photoExtent = enlargedNarrowRow
+        ? 40.0
+        : narrowProductRow
+        ? 48.0
+        : 58.0;
     final text = _search.text.trim().toLowerCase();
     final visible = _visibleProducts(products).toList();
     if (visible.isEmpty) {
@@ -1860,6 +1864,11 @@ class _ShopHomeState extends State<ShopHome> {
               ? Theme.of(context).colorScheme.error
               : Theme.of(context).colorScheme.onSurfaceVariant,
         );
+        final compactStock = shopCopy(
+          widget.myanmar,
+          '${item.onHand} left',
+          '${shopNumber(item.onHand, myanmar: true)} ကျန်',
+        );
         final canAdd =
             _checkoutReady &&
             !_saving &&
@@ -1870,31 +1879,23 @@ class _ShopHomeState extends State<ShopHome> {
         final addAffordance = ExcludeSemantics(
           child: Container(
             key: ValueKey('shop-add-affordance:${item.id}'),
-            width: enlargedNarrowRow ? 44 : 52,
+            width: enlargedNarrowRow ? 80 : 52,
             height: 44,
             decoration: BoxDecoration(
               color: canAdd ? const Color(0xffeef3ff) : const Color(0xfff1f2f5),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Center(
-              child: enlargedNarrowRow
-                  ? Icon(
-                      Icons.add_rounded,
-                      size: 22,
-                      color: canAdd
-                          ? Theme.of(context).colorScheme.primary
-                          : Theme.of(context).disabledColor,
-                    )
-                  : Text(
-                      shopCopy(widget.myanmar, 'Add', 'ထည့်'),
-                      maxLines: 1,
-                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                        color: canAdd
-                            ? Theme.of(context).colorScheme.primary
-                            : Theme.of(context).disabledColor,
-                      ),
-                    ),
+              child: Text(
+                shopCopy(widget.myanmar, 'Add', 'ထည့်'),
+                maxLines: 1,
+                style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: canAdd
+                      ? Theme.of(context).colorScheme.primary
+                      : Theme.of(context).disabledColor,
+                ),
+              ),
             ),
           ),
         );
@@ -1912,10 +1913,14 @@ class _ShopHomeState extends State<ShopHome> {
                 : shopCopy(widget.myanmar, 'Add to sale', 'အရောင်းထဲထည့်ရန်'),
             child: ListTile(
               key: ValueKey('shop-catalog-row:${item.id}'),
-              isThreeLine: compactProductRow,
+              isThreeLine: compactProductRow && !enlargedNarrowRow,
+              dense: enlargedNarrowRow,
+              horizontalTitleGap: enlargedNarrowRow ? 8 : null,
               contentPadding: EdgeInsets.symmetric(
-                horizontal: 14,
-                vertical: touchCompactRow
+                horizontal: enlargedNarrowRow ? 8 : 14,
+                vertical: enlargedNarrowRow
+                    ? 0
+                    : touchCompactRow
                     ? 2
                     : narrowProductRow
                     ? 0
@@ -1961,28 +1966,48 @@ class _ShopHomeState extends State<ShopHome> {
                           ?.copyWith(fontWeight: FontWeight.w600)
                     : Theme.of(context).textTheme.titleMedium,
               ),
-              subtitle: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (compactProductRow)
-                    Wrap(
-                      spacing: 10,
-                      runSpacing: 2,
-                      crossAxisAlignment: WrapCrossAlignment.center,
+              subtitle: enlargedNarrowRow
+                  ? Text(_mmk(item.priceMmk), style: _shopMoneyStyle(context))
+                  : Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          _mmk(item.priceMmk),
-                          style: _shopMoneyStyle(context),
-                        ),
-                        Text(stock, style: stockStyle),
+                        if (compactProductRow)
+                          Wrap(
+                            spacing: 10,
+                            runSpacing: 2,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              Text(
+                                _mmk(item.priceMmk),
+                                style: _shopMoneyStyle(context),
+                              ),
+                              Text(stock, style: stockStyle),
+                            ],
+                          )
+                        else
+                          Text(stock, style: stockStyle),
                       ],
+                    ),
+              trailing: enlargedNarrowRow
+                  ? SizedBox(
+                      width: 80,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Text(
+                            compactStock,
+                            maxLines: 1,
+                            textAlign: TextAlign.center,
+                            style: stockStyle,
+                          ),
+                          const SizedBox(height: 2),
+                          addAffordance,
+                        ],
+                      ),
                     )
-                  else
-                    Text(stock, style: stockStyle),
-                ],
-              ),
-              trailing: compactProductRow
+                  : compactProductRow
                   ? addAffordance
                   : Row(
                       mainAxisSize: MainAxisSize.min,
@@ -2862,6 +2887,7 @@ class _ShopHomeState extends State<ShopHome> {
       }
       final selected = Map<String, int>.of(_cart);
       final currentProducts = await widget.database.readActiveProducts();
+      if (!mounted) return;
       if (_cartHasUnavailableProducts(currentProducts)) {
         _message(
           shopCopy(
