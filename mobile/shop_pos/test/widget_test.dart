@@ -537,6 +537,12 @@ void main() {
       tester.view.devicePixelRatio = 1;
       const english = ['Today', 'Sell', 'Sales', 'Stock'];
       const burmese = ['ယနေ့', 'ရောင်းရန်', 'အရောင်း', 'လက်ကျန်'];
+      const destinationIcons = [
+        Icons.home_outlined,
+        Icons.point_of_sale_outlined,
+        Icons.receipt_long_outlined,
+        Icons.inventory_2_outlined,
+      ];
       for (final width in [320.0, 820.0, 1200.0]) {
         for (final myanmar in [false, true]) {
           tester.view.physicalSize = Size(width, 900);
@@ -572,7 +578,9 @@ void main() {
               await tester.tap(
                 find.descendant(
                   of: navigation,
-                  matching: find.text(labels[index]),
+                  matching: width >= 1100
+                      ? find.text(labels[index])
+                      : find.byIcon(destinationIcons[index]),
                 ),
               );
               await tester.pumpAndSettle();
@@ -2673,7 +2681,7 @@ void main() {
         expect(await database.countOutboxOperations(), 0);
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox.shrink());
-        await tester.pump();
+        await tester.pump(const Duration(seconds: 5));
       });
     }
   }
