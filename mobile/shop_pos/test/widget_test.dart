@@ -37,6 +37,155 @@ void _usePhoneViewport(WidgetTester tester) {
 }
 
 void main() {
+  for (final myanmar in [false, true]) {
+    testWidgets(
+      'cashier holds and reopens a local sale in ${myanmar ? 'MY' : 'EN'}',
+      (tester) async {
+        _usePhoneViewport(tester);
+        final database = ShopDatabase(NativeDatabase.memory());
+        try {
+          await database.addProduct(
+            id: 'tea',
+            name: 'Tea',
+            priceMmk: 2500,
+            openingStock: 3,
+          );
+          await tester.pumpWidget(
+            MaterialApp(
+              home: ShopHome(
+                database: database,
+                authClient: null,
+                apiBaseUrl: 'https://example.invalid',
+                myanmar: myanmar,
+                onLanguageChanged: (_) {},
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          await tester.tap(find.byKey(const ValueKey('shop-catalog-row:tea')));
+          await tester.pumpAndSettle();
+          final original = await database.readCounterSaleDraft();
+          expect(original?.quantities, {'tea': 1});
+          await tester.tap(
+            find.textContaining(myanmar ? 'အရောင်းစစ်ရန်' : 'Review sale'),
+          );
+          await tester.pumpAndSettle();
+          expect(
+            find.text(myanmar ? 'အရောင်း ခဏသိမ်း' : 'Hold sale'),
+            findsOneWidget,
+          );
+          await tester.ensureVisible(
+            find.byKey(const ValueKey('shop-hold-sale')),
+          );
+          await tester.tap(find.byKey(const ValueKey('shop-hold-sale')));
+          await tester.pumpAndSettle();
+          await tester.enterText(
+            find.byKey(const ValueKey('shop-held-sale-name')),
+            'Customer A',
+          );
+          await tester.pumpAndSettle();
+          await tester.tap(
+            find.byKey(const ValueKey('shop-held-sale-confirm')),
+          );
+          await tester.pumpAndSettle();
+          expect(await database.readCounterSaleDraft(), isNull);
+          expect(
+            (await database.readHeldSaleTickets()).single.draft.operationId,
+            original!.operationId,
+          );
+          expect((await database.readActiveProducts()).single.onHand, 3);
+          expect(await database.countSales(), 0);
+
+          await tester.tap(find.byKey(const ValueKey('shop-held-sales-open')));
+          await tester.pumpAndSettle();
+          expect(find.text('Customer A'), findsOneWidget);
+          final ticket = (await database.readHeldSaleTickets()).single;
+          await tester.tap(
+            find.byKey(ValueKey('shop-held-reopen:${ticket.id}')),
+          );
+          await tester.pumpAndSettle();
+          expect(
+            (await database.readCounterSaleDraft())?.operationId,
+            original.operationId,
+          );
+          expect(await database.readHeldSaleTickets(), isEmpty);
+          expect(tester.takeException(), isNull);
+        } finally {
+          await tester.pumpWidget(const SizedBox.shrink());
+          await tester.pump(const Duration(milliseconds: 1));
+          await database.close();
+        }
+      },
+    );
+  }
+
+  testWidgets('held-sale picker fits a 320px phone at enlarged text', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 800);
+    tester.view.devicePixelRatio = 1;
+    tester.platformDispatcher.textScaleFactorTestValue = 1.5;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    final database = ShopDatabase(NativeDatabase.memory());
+    try {
+      await database.addProduct(
+        id: 'tea',
+        name: 'Tea',
+        priceMmk: 2500,
+        openingStock: 3,
+      );
+      await database.saveCounterSaleDraft(
+        operationId: 'held-compact',
+        quantities: const {'tea': 1},
+      );
+      await database.holdCounterSaleDraft(
+        id: 'compact-ticket',
+        name: 'Customer May',
+        operationId: 'held-compact',
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ShopHome(
+            database: database,
+            authClient: null,
+            apiBaseUrl: 'https://example.invalid',
+            myanmar: true,
+            onLanguageChanged: (_) {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('shop-held-sales-open')));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('shop-held-reopen:compact-ticket')),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+      await tester.tap(
+        find.byKey(const ValueKey('shop-held-reopen:compact-ticket')),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        (await database.readCounterSaleDraft())?.operationId,
+        'held-compact',
+      );
+      expect(await database.readHeldSaleTickets(), isEmpty);
+      await tester.ensureVisible(find.textContaining('အရောင်းစစ်ရန်'));
+      await tester.tap(find.textContaining('အရောင်းစစ်ရန်'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byKey(const ValueKey('shop-hold-sale')));
+      expect(find.text('အရောင်း ခဏသိမ်း'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+      await database.close();
+    }
+  });
+
   testWidgets('Windows scanner focus returns after switching tasks', (
     tester,
   ) async {

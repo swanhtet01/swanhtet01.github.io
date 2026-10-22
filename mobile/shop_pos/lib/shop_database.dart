@@ -130,6 +130,22 @@ class CounterSaleDraft {
   final int updatedAtMillis;
 }
 
+/// A named, device-local basket set aside by the cashier. Holding a ticket
+/// never reserves stock, creates an order, or records a payment.
+class HeldSaleTicket {
+  const HeldSaleTicket({
+    required this.id,
+    required this.name,
+    required this.draft,
+    required this.createdAtMillis,
+  });
+
+  final String id;
+  final String name;
+  final CounterSaleDraft draft;
+  final int createdAtMillis;
+}
+
 class ShopSaleReceipt {
   const ShopSaleReceipt({
     required this.id,
@@ -321,7 +337,7 @@ class ShopDatabase extends _$ShopDatabase {
     : super(executor ?? driftDatabase(name: 'supermega_shop'));
 
   @override
-  int get schemaVersion => 9;
+  int get schemaVersion => 10;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -331,6 +347,7 @@ class ShopDatabase extends _$ShopDatabase {
       await _createCashShiftTables();
       await _createProductImageTable();
       await _createCounterDraftTable();
+      await _createHeldSaleTable();
     },
     onUpgrade: (migrator, from, to) async {
       if (from < 2) {
@@ -383,6 +400,9 @@ class ShopDatabase extends _$ShopDatabase {
           'INTEGER DEFAULT 5 CHECK (reorder_level IS NULL OR '
               'reorder_level BETWEEN 0 AND 2000000000)',
         );
+      }
+      if (from < 10) {
+        await _createHeldSaleTable();
       }
     },
     beforeOpen: (_) => customStatement('PRAGMA foreign_keys = ON'),
@@ -462,6 +482,23 @@ class ShopDatabase extends _$ShopDatabase {
     )
   ''');
 
+  Future<void> _createHeldSaleTable() async {
+    await customStatement('''
+      CREATE TABLE IF NOT EXISTS shop_held_sales (
+        id TEXT PRIMARY KEY NOT NULL CHECK (length(id) BETWEEN 1 AND 120),
+        name TEXT NOT NULL CHECK (length(name) BETWEEN 1 AND 80),
+        operation_id TEXT NOT NULL UNIQUE CHECK (length(operation_id) BETWEEN 1 AND 120),
+        basket_json TEXT NOT NULL,
+        created_at_millis INTEGER NOT NULL,
+        updated_at_millis INTEGER NOT NULL
+      )
+    ''');
+    await customStatement('''
+      CREATE INDEX IF NOT EXISTS shop_held_sales_updated
+      ON shop_held_sales(updated_at_millis DESC)
+    ''');
+  }
+
   /// Persist the next basket before showing it to the operator. No stock or
   /// outbox row changes until recordSale commits the actual sale.
   Future<void> saveCounterSaleDraft({
@@ -499,6 +536,13 @@ class ShopDatabase extends _$ShopDatabase {
       ).getSingleOrNull();
       if (pending != null) {
         throw StateError('Finish the pending wallet checkout first.');
+      }
+      final held = await customSelect(
+        'SELECT 1 FROM shop_held_sales WHERE operation_id = ? LIMIT 1',
+        variables: [Variable.withString(cleanOperationId)],
+      ).getSingleOrNull();
+      if (held != null) {
+        throw StateError('This sale is held. Reopen it before editing.');
       }
       final previous = await readCounterSaleDraft();
       final lines = <Map<String, Object>>[];
@@ -548,7 +592,22 @@ class ShopDatabase extends _$ShopDatabase {
     if (completed != null) {
       throw StateError('A completed sale still has a counter draft.');
     }
-    final raw = jsonDecode(row.read<String>('basket_json'));
+    return _decodeCounterDraft(
+      operationId: operationId,
+      basketJson: row.read<String>('basket_json'),
+      updatedAtMillis: row.read<int>('updated_at_millis'),
+    );
+  }
+
+  CounterSaleDraft _decodeCounterDraft({
+    required String operationId,
+    required String basketJson,
+    required int updatedAtMillis,
+  }) {
+    if (operationId.trim().isEmpty || operationId.length > 120) {
+      throw const FormatException('Counter draft operation is invalid.');
+    }
+    final raw = jsonDecode(basketJson);
     if (raw is! List || raw.isEmpty || raw.length > 100) {
       throw const FormatException('Counter draft is invalid.');
     }
@@ -580,8 +639,145 @@ class ShopDatabase extends _$ShopDatabase {
       operationId: operationId,
       quantities: Map.unmodifiable(quantities),
       unitPricesMmk: Map.unmodifiable(prices),
-      updatedAtMillis: row.read<int>('updated_at_millis'),
+      updatedAtMillis: updatedAtMillis,
     );
+  }
+
+  Future<List<HeldSaleTicket>> readHeldSaleTickets() async {
+    final rows = await customSelect(
+      'SELECT id, name, operation_id, basket_json, created_at_millis, '
+      'updated_at_millis FROM shop_held_sales '
+      'ORDER BY updated_at_millis DESC, id ASC',
+    ).get();
+    if (rows.length > 30) {
+      throw StateError('The held-sale limit was exceeded.');
+    }
+    final tickets = <HeldSaleTicket>[];
+    for (final row in rows) {
+      final id = row.read<String>('id');
+      final name = row.read<String>('name');
+      final operationId = row.read<String>('operation_id');
+      if (id.isEmpty ||
+          id.length > 120 ||
+          name.trim().isEmpty ||
+          name.runes.length > 80) {
+        throw const FormatException('Held sale is invalid.');
+      }
+      final completed =
+          await (select(shopSales)
+                ..where((sale) => sale.operationId.equals(operationId)))
+              .getSingleOrNull();
+      if (completed != null) {
+        throw StateError('A completed sale still has a held ticket.');
+      }
+      final active = await customSelect(
+        'SELECT 1 FROM shop_counter_drafts WHERE operation_id = ? LIMIT 1',
+        variables: [Variable.withString(operationId)],
+      ).getSingleOrNull();
+      if (active != null) {
+        throw StateError('A sale cannot be active and held at the same time.');
+      }
+      tickets.add(
+        HeldSaleTicket(
+          id: id,
+          name: name,
+          draft: _decodeCounterDraft(
+            operationId: operationId,
+            basketJson: row.read<String>('basket_json'),
+            updatedAtMillis: row.read<int>('updated_at_millis'),
+          ),
+          createdAtMillis: row.read<int>('created_at_millis'),
+        ),
+      );
+    }
+    return List.unmodifiable(tickets);
+  }
+
+  /// Move the only active basket into a named ticket in one SQLite transaction.
+  Future<void> holdCounterSaleDraft({
+    required String id,
+    required String name,
+    required String operationId,
+  }) async {
+    final cleanId = id.trim();
+    final cleanName = name.trim();
+    if (cleanId.isEmpty ||
+        cleanId.length > 120 ||
+        cleanName.isEmpty ||
+        cleanName.runes.length > 80 ||
+        RegExp(r'[\x00-\x1f\x7f]').hasMatch(cleanName)) {
+      throw ArgumentError('Give the held sale a short name.');
+    }
+    await transaction(() async {
+      final pending = await customSelect(
+        "SELECT 1 FROM shop_wallet_checkout_intents WHERE state = 'pending' LIMIT 1",
+      ).getSingleOrNull();
+      if (pending != null) {
+        throw StateError('Finish the pending wallet checkout first.');
+      }
+      final draft = await readCounterSaleDraft();
+      if (draft == null || draft.operationId != operationId) {
+        throw StateError('The current sale changed. Review it before holding.');
+      }
+      final count = await customSelect(
+        'SELECT COUNT(*) AS total FROM shop_held_sales',
+      ).getSingle();
+      if (count.read<int>('total') >= 30) {
+        throw StateError(
+          'Reopen or discard a held sale before adding another.',
+        );
+      }
+      final now = DateTime.now().millisecondsSinceEpoch;
+      await customStatement(
+        'INSERT INTO shop_held_sales '
+        '(id, name, operation_id, basket_json, created_at_millis, updated_at_millis) '
+        'SELECT ?, ?, operation_id, basket_json, ?, ? '
+        'FROM shop_counter_drafts WHERE slot = 1 AND operation_id = ?',
+        [cleanId, cleanName, now, now, operationId],
+      );
+      await clearCounterSaleDraft(operationId);
+    });
+  }
+
+  /// A held basket may reopen only into an empty counter. The same operation
+  /// ID travels with it, preserving sale retry idempotency.
+  Future<CounterSaleDraft> reopenHeldSaleTicket(String id) async =>
+      transaction(() async {
+        final current = await readCounterSaleDraft();
+        if (current != null) {
+          throw StateError(
+            'Hold or clear the current sale before reopening another.',
+          );
+        }
+        final pending = await customSelect(
+          "SELECT 1 FROM shop_wallet_checkout_intents WHERE state = 'pending' LIMIT 1",
+        ).getSingleOrNull();
+        if (pending != null) {
+          throw StateError('Finish the pending wallet checkout first.');
+        }
+        final rows = await readHeldSaleTickets();
+        final matches = rows.where((ticket) => ticket.id == id).toList();
+        if (matches.length != 1) throw StateError('Held sale is unavailable.');
+        final ticket = matches.single;
+        await customStatement(
+          'INSERT INTO shop_counter_drafts '
+          '(slot, operation_id, basket_json, updated_at_millis) '
+          'SELECT 1, operation_id, basket_json, ? '
+          'FROM shop_held_sales WHERE id = ?',
+          [DateTime.now().millisecondsSinceEpoch, id],
+        );
+        await customStatement('DELETE FROM shop_held_sales WHERE id = ?', [id]);
+        return ticket.draft;
+      });
+
+  Future<void> discardHeldSaleTicket(String id) async {
+    await transaction(() async {
+      final rows = await readHeldSaleTickets();
+      if (!rows.any((ticket) => ticket.id == id)) {
+        throw StateError('Held sale is unavailable.');
+      }
+      await customStatement('DELETE FROM shop_held_sales WHERE id = ?', [id]);
+    });
   }
 
   Future<void> clearCounterSaleDraft(String operationId) async {
@@ -589,6 +785,16 @@ class ShopDatabase extends _$ShopDatabase {
       'DELETE FROM shop_counter_drafts WHERE slot = 1 AND operation_id = ?',
       [operationId],
     );
+  }
+
+  Future<void> _rejectHeldSaleOperation(String operationId) async {
+    final held = await customSelect(
+      'SELECT 1 FROM shop_held_sales WHERE operation_id = ? LIMIT 1',
+      variables: [Variable.withString(operationId)],
+    ).getSingleOrNull();
+    if (held != null) {
+      throw StateError('Reopen the held sale before checkout.');
+    }
   }
 
   /// Store only bounded, metadata-free PNG thumbnails beside the local catalog.
@@ -1249,6 +1455,7 @@ class ShopDatabase extends _$ShopDatabase {
     });
 
     return transaction(() async {
+      await _rejectHeldSaleOperation(cleanOperationId);
       final existingIntent = await customSelect(
         'SELECT operation_id, payment_method, request_fingerprint, total_mmk, '
         'merchant_phone, merchant_qr_payload, basket_json, state, created_at_millis '
@@ -1760,6 +1967,7 @@ class ShopDatabase extends _$ShopDatabase {
           });
 
     return transaction(() async {
+      await _rejectHeldSaleOperation(cleanOperationId);
       final priorSale =
           await (select(shopSales)
                 ..where((sale) => sale.operationId.equals(cleanOperationId)))
