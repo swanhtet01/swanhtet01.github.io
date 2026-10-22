@@ -1114,6 +1114,8 @@ void main() {
     await tester.enterText(find.byKey(const ValueKey('stock-search')), 'Rice');
     await tester.pumpAndSettle();
     expect(find.text('ကိုက်ညီမှု ၁ ခု'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 1));
   });
 
   testWidgets(
