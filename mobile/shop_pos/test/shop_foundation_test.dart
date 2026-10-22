@@ -506,35 +506,6 @@ void main() {
       expect(recent.reversal?.id, reversal.id);
       expect(recent.lines.single.productName, 'Original Tea');
 
-      final review = await database.readCashShiftReview(shift.id);
-      expect(review.cashSalesTotalMmk, 5000);
-      expect(review.cashReversalCount, 1);
-      expect(review.cashReversalTotalMmk, 5000);
-      expect(review.cashDrawerOutflowMmk, 5000);
-      expect(review.expectedCashMmk, 10000);
-      await expectLater(
-        database.closeCashShift(
-          shiftId: shift.id,
-          operationId: 'cash-reversal-stale-close',
-          seenSaleCount: reviewedBeforeReversal.saleCount,
-          seenCashTotalMmk: reviewedBeforeReversal.cashSalesTotalMmk,
-          countedCashMmk: 10000,
-        ),
-        throwsA(isA<StateError>()),
-      );
-      final closed = await database.closeCashShift(
-        shiftId: shift.id,
-        operationId: 'cash-reversal-close',
-        seenSaleCount: review.saleCount,
-        seenCashTotalMmk: review.cashSalesTotalMmk,
-        seenCashReversalCount: review.cashReversalCount,
-        seenCashDrawerOutflowMmk: review.cashDrawerOutflowMmk,
-        countedCashMmk: 10000,
-      );
-      expect(closed.cashReversalCount, 1);
-      expect(closed.cashDrawerOutflowMmk, 5000);
-      expect(closed.differenceMmk, 0);
-
       final movementCount = await database.countStockMovements();
       final outboxCount = await database.countOutboxOperations();
       final changedCommand = await database.previewFullSaleReversal(
@@ -567,6 +538,35 @@ void main() {
       );
       expect(await database.countStockMovements(), movementCount);
       expect(await database.countOutboxOperations(), outboxCount);
+
+      final review = await database.readCashShiftReview(shift.id);
+      expect(review.cashSalesTotalMmk, 5000);
+      expect(review.cashReversalCount, 1);
+      expect(review.cashReversalTotalMmk, 5000);
+      expect(review.cashDrawerOutflowMmk, 5000);
+      expect(review.expectedCashMmk, 10000);
+      await expectLater(
+        database.closeCashShift(
+          shiftId: shift.id,
+          operationId: 'cash-reversal-stale-close',
+          seenSaleCount: reviewedBeforeReversal.saleCount,
+          seenCashTotalMmk: reviewedBeforeReversal.cashSalesTotalMmk,
+          countedCashMmk: 10000,
+        ),
+        throwsA(isA<StateError>()),
+      );
+      final closed = await database.closeCashShift(
+        shiftId: shift.id,
+        operationId: 'cash-reversal-close',
+        seenSaleCount: review.saleCount,
+        seenCashTotalMmk: review.cashSalesTotalMmk,
+        seenCashReversalCount: review.cashReversalCount,
+        seenCashDrawerOutflowMmk: review.cashDrawerOutflowMmk,
+        countedCashMmk: 10000,
+      );
+      expect(closed.cashReversalCount, 1);
+      expect(closed.cashDrawerOutflowMmk, 5000);
+      expect(closed.differenceMmk, 0);
     });
 
     test(
@@ -2044,6 +2044,26 @@ void main() {
           operationId: 'old-sale',
           lines: const [ShopSaleLineInput(productId: 'tea', quantity: 1)],
         );
+        for (final table in const [
+          'shop_sale_reversals',
+          'shop_sale_reversal_lines',
+          'shop_wallet_reversal_reconciliations',
+          'shop_sales',
+          'shop_sale_lines',
+          'shop_stock_movements',
+        ]) {
+          await database.customStatement(
+            'DROP TRIGGER IF EXISTS ${table}_no_update',
+          );
+          await database.customStatement(
+            'DROP TRIGGER IF EXISTS ${table}_no_delete',
+          );
+        }
+        await database.customStatement(
+          'DROP TABLE shop_wallet_reversal_reconciliations',
+        );
+        await database.customStatement('DROP TABLE shop_sale_reversal_lines');
+        await database.customStatement('DROP TABLE shop_sale_reversals');
         await database.customStatement('DROP TABLE shop_cash_shift_sales');
         await database.customStatement('DROP TABLE shop_cash_shifts');
         await database.customStatement('PRAGMA user_version = 5');
