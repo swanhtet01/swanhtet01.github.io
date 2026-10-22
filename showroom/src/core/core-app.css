@@ -2477,10 +2477,9 @@ html:lang(my) .stock-attention-table .data-row:not(.table-head) > span:nth-child
   .shop-stock-workspace { padding: .875rem; }
   .shop-stock-heading { align-items: stretch; flex-direction: column; }
   .shop-stock-heading > .core-button { width: 100%; }
-  .shop-stock-metrics { grid-template-columns: repeat(2,minmax(0,1fr)); }
-  .shop-stock-metrics > div, .shop-stock-metrics > div:nth-child(2) { min-height: 5.5rem; border-right: 1px solid var(--core-line); border-bottom: 1px solid var(--core-line); padding: .75rem; }
-  .shop-stock-metrics > div:nth-child(2n) { border-right: 0; }
-  .shop-stock-metrics > div:nth-last-child(-n+2) { border-bottom: 0; }
+  /* Phone operators need the actionable stock row first; the detailed metrics
+     remain available in the larger workspaces. */
+  .shop-stock-metrics { display: none; }
   .shop-stock-attention-scroll { padding-inline: .75rem; }
   .shop-stock-attention-scroll .data-table { min-width: 0; }
   .shop-stock-workspace .data-row:not(.table-head):not(.stock-empty-row) { min-height: 0; grid-template-columns: repeat(3,minmax(0,1fr)); grid-template-rows: auto auto auto; gap: .75rem .5rem; margin-inline: 0; padding: .75rem; }
