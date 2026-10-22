@@ -3755,9 +3755,12 @@ class _ShopHomeState extends State<ShopHome> {
                 .clamp(1.0, 1.6);
             // Keep a short sale near its content. Long baskets retain the
             // available height and scroll inside the existing list.
-            // Both locales need enough room for two 48 px payment actions on
-            // narrow phones while the sheet itself remains capped below.
-            final compactBaseHeight = phone ? 356.0 : 300.0;
+            // Both locales need enough room for two payment actions on narrow
+            // phones. Myanmar labels use a taller line box, so reserve that
+            // space before applying the same viewport cap and scroll fallback.
+            final compactBaseHeight = phone
+                ? (widget.myanmar ? 396.0 : 356.0)
+                : 300.0;
             final contentHeight =
                 (compactBaseHeight +
                     76 * _cart.length.clamp(0, 4) +
