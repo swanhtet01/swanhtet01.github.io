@@ -7,7 +7,7 @@
     "readinessContract": "supermega.managed-pilot-readiness.v5",
     "securityAuditAsOf": "2026-08-20T17:02:04.312+06:30"
   },
-  "sourceDigest": "sha256:1314dc9ffcf0383973af1c86c1237c4858aafc5519fa5079c73ff14e853b3d51",
+  "sourceDigest": "sha256:3b8572f002f6cda171ac90347c4b3fe5dda1298a7023667c620e38534a99d939",
   "canonicalSource": {
     "repository": "swanhtet01/swanhtet01.github.io",
     "activeBranch": "main",
@@ -27,7 +27,7 @@
           "www.supermega.dev"
         ],
         "buildScript": "node tools/create_public_vercel_output.mjs",
-        "verifyScript": "node tools/verify_public_vercel_artifact_budget.mjs && node tools/verify_public_vercel_output.mjs && node --test tools/product_visibility.test.mjs && node --test --test-concurrency=1 tools/verify_public_release_live.test.mjs && node --test --test-concurrency=1 tools/public_preview_profile.test.mjs && node tools/test_public_contact_function.mjs && node --test tools/test_public_contact_receipt.mjs && node tools/test_public_retired_api_function.mjs && node tools/test_public_landing_pages.mjs && npm run vercel:contracts:test && npm run hq:verify",
+        "verifyScript": "node tools/verify_public_vercel_artifact_budget.mjs && node tools/verify_public_vercel_output.mjs && node --test tools/public_native_shop_gallery.test.mjs && node --test tools/product_visibility.test.mjs && node --test --test-concurrency=1 tools/verify_public_release_live.test.mjs && node --test --test-concurrency=1 tools/public_preview_profile.test.mjs && node tools/test_public_contact_function.mjs && node --test tools/test_public_contact_receipt.mjs && node tools/test_public_retired_api_function.mjs && node tools/test_public_landing_pages.mjs && npm run vercel:contracts:test && npm run hq:verify",
         "output": ".vercel/output",
         "productionPromotion": "owner-approved coordinated workflow only"
       },
@@ -242,7 +242,7 @@
     },
     {
       "path": "package.json",
-      "digest": "sha256:ca837d73d193aa662fdb0adfcd4cf4cefc9b295a27da72473490bc9af0de716e"
+      "digest": "sha256:94ce6bfd5e2adcc24d318d6d2180ce25d3ce2859315d55461c35cdbce18de56b"
     },
     {
       "path": "hq/readiness/supabase-security-advisor-audit.json",
