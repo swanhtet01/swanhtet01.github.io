@@ -369,8 +369,10 @@ check(myShop.includes('နမူနာမှတ်တမ်းများနှ
 check(/<img src="\/images\/actual-shop-sell-my\.png"[^>]*width="1000" height="900"/.test(myShop)
   && readFileSync(resolve(staticDir, 'images/actual-shop-sell-my.png')).readUInt32BE(16) === 1000,
   'myanmar_shop_hero_uses_readable_real_two_pane_viewport')
-check(!myShop.includes('class="shop-support-proof"')
-  && !/\/images\/actual-shop-(?:orders|inventory)[^" ]*/.test(myShop), 'myanmar_shop_has_one_localized_capture')
+check(myShop.includes('src="/images/actual-shop-inventory-my-tablet.png"')
+  && myShop.includes('srcset="/images/actual-shop-inventory-my-mobile.png"')
+  && myShop.includes('ပြန်ဖြည့်ရန် လိုသည့်ပစ္စည်းကို သိပါ။')
+  && !/\/images\/actual-shop-(?:orders|inventory)(?!-my)[^" ]*/.test(myShop), 'myanmar_shop_has_localized_inventory_capture')
 check(countOccurrences(myShop, 'class="shop-photo-credit"') === 1
   && myShop.includes('id="shop-image-credits"') && myShop.includes('ဓာတ်ပုံရင်းမြစ်:')
   && ['Fructibus', 'ZooFari', 'Nat1620', 'Eoin Kilfeather', 'Saidismailanik'].every(author => myShop.includes(author))

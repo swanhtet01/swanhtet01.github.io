@@ -15,6 +15,7 @@ export const PUBLIC_SHOP_GALLERY_ASSETS = Object.freeze([
   'actual-shop-sell-my.png', 'actual-shop-sell-my-tablet.png', 'actual-shop-sell-my-mobile.png',
   'actual-shop-orders.png', 'actual-shop-orders-tablet.png', 'actual-shop-orders-mobile.png',
   'actual-shop-inventory.png', 'actual-shop-inventory-tablet.png', 'actual-shop-inventory-mobile.png',
+  'actual-shop-inventory-my-tablet.png', 'actual-shop-inventory-my-mobile.png',
 ])
 
 function isHttpsUrl(value) {

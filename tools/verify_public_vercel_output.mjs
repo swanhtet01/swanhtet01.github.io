@@ -161,6 +161,8 @@ const expectedStaticFiles = new Set([
   'images/actual-shop-inventory.png',
   'images/actual-shop-inventory-tablet.png',
   'images/actual-shop-inventory-mobile.png',
+  'images/actual-shop-inventory-my-tablet.png',
+  'images/actual-shop-inventory-my-mobile.png',
   'og-card.png',
   ...publicProducts.map((product) => `og-card-${product.id}.png`),
   'robots.txt',
@@ -541,7 +543,10 @@ if (myShop.includes('src="/images/actual-shop-sell.png"') || shopPage.includes('
   fail('shop_hero_capture_locale_mismatch')
 if (!/<img src="\/images\/actual-shop-sell-my\.png"[^>]*width="1000" height="900"/.test(myShop))
   fail('myanmar_shop_hero_dimensions_invalid')
-if (/\/images\/actual-shop-(?:orders|inventory)[^" ]*/.test(myShop)) fail('myanmar_shop_displays_english_support_capture')
+if (/\/images\/actual-shop-(?:orders|inventory)(?!-my)[^" ]*/.test(myShop)) fail('myanmar_shop_displays_english_support_capture')
+for (const token of ['src="/images/actual-shop-inventory-my-tablet.png"', 'srcset="/images/actual-shop-inventory-my-mobile.png"', 'ပြန်ဖြည့်ရန် လိုသည့်ပစ္စည်းကို သိပါ။']) {
+  if (!myShop.includes(token)) fail('myanmar_shop_inventory_capture_or_translation_missing', { token })
+}
 if (countOccurrences(myShop, 'class="shop-photo-credit"') !== 1
   || !myShop.includes('id="shop-image-credits"') || !myShop.includes('ဓာတ်ပုံရင်းမြစ်:')
   || publicGalleryImageSources.products.some(product => !myShop.includes(product.source_author))
@@ -583,6 +588,7 @@ const publicGalleryFiles = [
   'actual-shop-sell-my.png', 'actual-shop-sell-my-tablet.png', 'actual-shop-sell-my-mobile.png',
   'actual-shop-orders.png', 'actual-shop-orders-tablet.png', 'actual-shop-orders-mobile.png',
   'actual-shop-inventory.png', 'actual-shop-inventory-tablet.png', 'actual-shop-inventory-mobile.png',
+  'actual-shop-inventory-my-tablet.png', 'actual-shop-inventory-my-mobile.png',
 ]
 const sourceGalleryByFile = new Map(publicGalleryProvenance.assets?.map(asset => [asset.file, asset]) ?? [])
 const expectedPublicGalleryEvidence = {

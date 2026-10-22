@@ -103,6 +103,7 @@ const sourceGalleryAssetNames = [
   'actual-shop-orders.png', 'actual-shop-orders-tablet.png', 'actual-shop-orders-mobile.png',
   'actual-shop-inventory.png', 'actual-shop-inventory-tablet.png', 'actual-shop-inventory-mobile.png',
   'actual-shop-sell-my.png', 'actual-shop-sell-my-tablet.png', 'actual-shop-sell-my-mobile.png',
+  'actual-shop-inventory-my-tablet.png', 'actual-shop-inventory-my-mobile.png',
   'actual-sites-editor.png', 'actual-sites-editor-tablet.png', 'actual-sites-editor-mobile.png',
   'actual-sites-inquiries.png', 'actual-sites-inquiries-tablet.png', 'actual-sites-inquiries-mobile.png',
   'actual-commerce-catalog.png', 'actual-commerce-catalog-tablet.png', 'actual-commerce-catalog-mobile.png',
@@ -166,7 +167,7 @@ const sourceGalleryAssetEvidence = await Promise.all(publicGalleryProvenance.ass
     && capture.fixturePath === reportCapture.fixturePath
     && capture.routeState === reportCapture.routeState
     && capture.uiLocale === reportCapture.uiLocale
-    && capture.uiLocale === (file.startsWith('actual-shop-sell-my') ? 'my' : 'en')
+    && capture.uiLocale === (file.startsWith('actual-shop-sell-my') || file.startsWith('actual-shop-inventory-my') ? 'my' : 'en')
     && capture.visibleSelector === reportCapture.visibleSelector
     && capture.loadedImages === reportCapture.loadedImages
     && capture.captureMode === 'clean-commit-review'
@@ -1002,12 +1003,17 @@ function shopCounterSalePreview(locale = 'en') {
  const credit = `${locale === 'my' ? 'ဓာတ်ပုံရင်းမြစ်' : 'Photo sources'}: ${photographers} / Wikimedia Commons`
  return `<figure class="shop-lead-capture"><picture><source media="(max-width: 760px)" srcset="/images/${mobileImage}" width="390" height="844" /><source media="(max-width: 1024px)" srcset="/images/${tabletImage}" width="768" height="1024" /><img src="/images/${image}" alt="${escapeHtml(imageAlt)}" width="${locale === 'my' ? 1000 : 1440}" height="900" loading="eager" fetchpriority="high" /></picture><figcaption id="shop-sample-disclosure"><span>${disclosure}</span><span class="shop-photo-credit" id="shop-image-credits">${credit}</span></figcaption></figure>`
 }
-function shopInventoryProof() {
- const tabletImage = 'actual-shop-inventory-tablet.png'
- const mobileImage = 'actual-shop-inventory-mobile.png'
+function shopInventoryProof(locale = 'en') {
+ const isMyanmar = locale === 'my'
+ const tabletImage = `actual-shop-inventory${isMyanmar ? '-my' : ''}-tablet.png`
+ const mobileImage = `actual-shop-inventory${isMyanmar ? '-my' : ''}-mobile.png`
  interfaceDisclosure(tabletImage)
  interfaceDisclosure(mobileImage)
- return `<section class="shop-inventory-proof" aria-labelledby="shop-inventory-proof-title"><div class="wrap"><div class="shop-inventory-proof-copy"><p class="eyebrow">Inventory</p><h2 id="shop-inventory-proof-title">Know what needs restocking.</h2><p>See on-hand quantities, reorder levels and incoming stock.</p></div><figure aria-describedby="shop-sample-disclosure"><picture><source media="(max-width: 600px)" srcset="/images/${mobileImage}" width="390" height="844" /><img src="/images/${tabletImage}" alt="Shop inventory showing low stock, product photos and stock to receive" width="768" height="1024" loading="lazy" /></picture><figcaption>Shop inventory</figcaption></figure></div></section>`
+ const eyebrow = isMyanmar ? 'ကုန်လက်ကျန်' : 'Inventory'
+ const title = isMyanmar ? 'ပြန်ဖြည့်ရန် လိုသည့်ပစ္စည်းကို သိပါ။' : 'Know what needs restocking.'
+ const description = isMyanmar ? 'လက်ကျန်အရေအတွက်၊ ပြန်မှာယူရန် သတ်မှတ်ချက်နှင့် ဝင်လာမည့်ကုန်ကို တစ်နေရာတည်းတွင် စစ်ဆေးပါ။' : 'See on-hand quantities, reorder levels and incoming stock.'
+ const alt = isMyanmar ? 'ကုန်လက်ကျန်၊ ပစ္စည်းဓာတ်ပုံများနှင့် လက်ခံရန်ကုန်များကို မြန်မာဘာသာဖြင့် ပြထားသော Shop မျက်နှာပြင်' : 'Shop inventory showing low stock, product photos and stock to receive'
+ return `<section class="shop-inventory-proof" aria-labelledby="shop-inventory-proof-title"><div class="wrap"><div class="shop-inventory-proof-copy"><p class="eyebrow">${eyebrow}</p><h2 id="shop-inventory-proof-title">${title}</h2><p>${description}</p></div><figure aria-describedby="shop-sample-disclosure"><picture><source media="(max-width: 600px)" srcset="/images/${mobileImage}" width="390" height="844" /><img src="/images/${tabletImage}" alt="${alt}" width="768" height="1024" loading="lazy" /></picture><figcaption>${eyebrow}</figcaption></figure></div></section>`
 }
 function productStory(id, standalone = false) {
  const item=stories[id], label=publicProducts.find(product=>product.id===id).name
@@ -1065,7 +1071,7 @@ function shopLandingHtml(product, page, locale = 'en') {
  const shopWithRemovedMocks = removeSectionByClass(removeSectionByClass(heroWithPreview, 'demo-section', 'shop_interactive_mock'), 'benefits-section', 'shop_mock_benefits')
  return documentHtml({route:page.route,title:page.title,description,shareImage:`/og-card-${product.id}.png`,locale,
   schema:{'@type':'Product',name:product.name,description,url:canonical(page.route)},
-  content:`<main id="content">${shopWithRemovedMocks}${isMyanmar ? '' : shopInventoryProof()}</main>${productAction(product)}`})
+  content:`<main id="content">${shopWithRemovedMocks}${shopInventoryProof(locale)}</main>${productAction(product)}`})
 }
 
 function productLandingHtml(product,page) {
