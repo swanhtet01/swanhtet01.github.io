@@ -131,43 +131,33 @@ class ShopTaskBottomBar extends StatelessWidget {
     final compactLargeText =
         MediaQuery.sizeOf(context).width < 360 &&
         MediaQuery.textScalerOf(context).scale(1) > 1.2;
-    final navigationTheme = Theme.of(context).navigationBarTheme;
-    return NavigationBarTheme(
-      data: navigationTheme.copyWith(
-        labelTextStyle: compactLargeText
-            ? WidgetStateProperty.resolveWith<TextStyle?>(
-                (states) => navigationTheme.labelTextStyle
-                    ?.resolve(states)
-                    ?.copyWith(fontSize: 11.5),
-              )
-            : null,
-      ),
-      child: SafeArea(
-        top: false,
-        child: NavigationBar(
-          labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-          selectedIndex: selectedIndex,
-          onDestinationSelected: onDestinationSelected,
-          destinations: [
-            NavigationDestination(
-              icon: const Icon(Icons.home_outlined),
-              selectedIcon: const Icon(Icons.home),
-              label: shopCopy(myanmar, 'Today', 'ယနေ့'),
-            ),
-            NavigationDestination(
-              icon: const Icon(Icons.point_of_sale_outlined),
-              label: shopCopy(myanmar, 'Sell', 'ရောင်းရန်'),
-            ),
-            NavigationDestination(
-              icon: const Icon(Icons.receipt_long_outlined),
-              label: shopCopy(myanmar, 'Sales', 'အရောင်း'),
-            ),
-            NavigationDestination(
-              icon: const Icon(Icons.inventory_2_outlined),
-              label: shopCopy(myanmar, 'Stock', 'လက်ကျန်'),
-            ),
-          ],
-        ),
+    return SafeArea(
+      top: false,
+      child: NavigationBar(
+        labelBehavior: compactLargeText
+            ? NavigationDestinationLabelBehavior.onlyShowSelected
+            : NavigationDestinationLabelBehavior.alwaysShow,
+        selectedIndex: selectedIndex,
+        onDestinationSelected: onDestinationSelected,
+        destinations: [
+          NavigationDestination(
+            icon: const Icon(Icons.home_outlined),
+            selectedIcon: const Icon(Icons.home),
+            label: shopCopy(myanmar, 'Today', 'ယနေ့'),
+          ),
+          NavigationDestination(
+            icon: const Icon(Icons.point_of_sale_outlined),
+            label: shopCopy(myanmar, 'Sell', 'ရောင်းရန်'),
+          ),
+          NavigationDestination(
+            icon: const Icon(Icons.receipt_long_outlined),
+            label: shopCopy(myanmar, 'Sales', 'အရောင်း'),
+          ),
+          NavigationDestination(
+            icon: const Icon(Icons.inventory_2_outlined),
+            label: shopCopy(myanmar, 'Stock', 'လက်ကျန်'),
+          ),
+        ],
       ),
     );
   }
@@ -348,7 +338,7 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
       appBar: widget.embeddedTaskShell
           ? null
           : AppBar(
-              title: Text(_copy('SuperMega Shop', 'SuperMega ဆိုင်')),
+              title: Text(_copy('Shop', 'ဆိုင်')),
               actions: compact
                   ? [
                       IconButton(

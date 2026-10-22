@@ -1110,6 +1110,11 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    expect(find.text('ဆိုင်'), findsOneWidget);
+    expect(
+      tester.widget<NavigationBar>(find.byType(NavigationBar)).labelBehavior,
+      NavigationDestinationLabelBehavior.onlyShowSelected,
+    );
     final salesTotal = find.textContaining('၁၂,၄၅၀,၀၀၀').first;
     expect(
       tester.getBottomRight(salesTotal).dy,
