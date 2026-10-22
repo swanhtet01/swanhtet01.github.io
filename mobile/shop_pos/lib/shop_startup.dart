@@ -355,6 +355,30 @@ class _ShopStartupState extends State<ShopStartup> {
           surface: Colors.white,
         ),
         scaffoldBackgroundColor: const Color(0xfff5f7fb),
+        textTheme: TextTheme(
+          headlineMedium: TextStyle(
+            fontSize: _myanmar ? 24 : 30,
+            fontWeight: _myanmar ? FontWeight.w600 : FontWeight.w700,
+            height: _myanmar ? 1.4 : 1.15,
+            letterSpacing: _myanmar ? 0 : -0.4,
+          ),
+        ),
+        filledButtonTheme: FilledButtonThemeData(
+          style: FilledButton.styleFrom(
+            minimumSize: const Size(0, 48),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(11),
+            ),
+          ),
+        ),
+        outlinedButtonTheme: OutlinedButtonThemeData(
+          style: OutlinedButton.styleFrom(
+            minimumSize: const Size(0, 48),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(11),
+            ),
+          ),
+        ),
       ),
       home: Scaffold(
         body: Center(
@@ -367,9 +391,11 @@ class _ShopStartupState extends State<ShopStartup> {
                 children: [
                   const Icon(Icons.storefront_outlined, size: 40),
                   const SizedBox(height: 24),
-                  Text(
-                    shopCopy(_myanmar, 'Start Shop', 'Shop စတင်ရန်'),
-                    style: Theme.of(context).textTheme.headlineMedium,
+                  Builder(
+                    builder: (startupContext) => Text(
+                      shopCopy(_myanmar, 'Start Shop', 'Shop စတင်ရန်'),
+                      style: Theme.of(startupContext).textTheme.headlineMedium,
+                    ),
                   ),
                   const SizedBox(height: 16),
                   if (_checking) ...[

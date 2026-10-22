@@ -253,7 +253,7 @@ class _ShopAppState extends State<ShopApp> {
     final fontFallback = _myanmar
         ? const ['NotoSansMyanmar', 'Inter']
         : const ['NotoSansMyanmarUI', 'NotoSansMyanmar'];
-    final tracking = _myanmar ? 0.0 : -0.35;
+    final tracking = _myanmar ? 0.0 : -0.4;
     const ink = Color(0xff171b2c);
     const border = Color(0xffdce2ed);
     const accent = Color(0xff2563eb);
@@ -292,19 +292,19 @@ class _ShopAppState extends State<ShopApp> {
         textTheme:
             TextTheme(
               headlineMedium: TextStyle(
-                fontSize: _myanmar ? 26 : 34,
+                fontSize: _myanmar ? 24 : 30,
                 fontWeight: _myanmar ? FontWeight.w600 : FontWeight.w700,
                 height: _myanmar ? 1.4 : 1.15,
                 letterSpacing: tracking,
               ),
               headlineSmall: TextStyle(
-                fontSize: _myanmar ? 22 : 28,
+                fontSize: _myanmar ? 21 : 25,
                 fontWeight: _myanmar ? FontWeight.w600 : FontWeight.w700,
                 height: _myanmar ? 1.4 : 1.2,
                 letterSpacing: tracking,
               ),
               titleLarge: TextStyle(
-                fontSize: _myanmar ? 18 : 21,
+                fontSize: _myanmar ? 18 : 20,
                 fontWeight: _myanmar ? FontWeight.w600 : FontWeight.w700,
                 height: _myanmar ? 1.45 : 1.25,
                 letterSpacing: tracking,
@@ -341,7 +341,7 @@ class _ShopAppState extends State<ShopApp> {
           titleTextStyle: TextStyle(
             fontFamily: fontFamily,
             fontFamilyFallback: fontFallback,
-            fontSize: _myanmar ? 18 : 20,
+            fontSize: 18,
             fontWeight: _myanmar ? FontWeight.w600 : FontWeight.w700,
             letterSpacing: tracking,
             height: _myanmar ? 1.45 : 1.2,
