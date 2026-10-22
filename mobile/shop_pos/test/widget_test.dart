@@ -176,9 +176,7 @@ void main() {
       await tester.ensureVisible(find.textContaining('အရောင်းစစ်ရန်'));
       await tester.tap(find.textContaining('အရောင်းစစ်ရန်'));
       await tester.pumpAndSettle();
-      await tester.ensureVisible(
-        find.byKey(const ValueKey('shop-hold-sale')),
-      );
+      await tester.ensureVisible(find.byKey(const ValueKey('shop-hold-sale')));
       expect(find.text('အရောင်း ခဏသိမ်း'), findsOneWidget);
       expect(tester.takeException(), isNull);
     } finally {
