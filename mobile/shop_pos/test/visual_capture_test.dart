@@ -60,6 +60,25 @@ Future<ShopDatabase> _sampleShop({required bool myanmar}) async {
   return database;
 }
 
+Future<void> _resolveVisibleProductPhotos(WidgetTester tester) async {
+  final images = tester.widgetList<Image>(find.byType(Image)).toList();
+  expect(images, isNotEmpty);
+  final context = tester.element(find.byKey(_captureKey));
+  // Image.memory decodes outside the widget test's fake clock. A settled frame
+  // can still contain empty image slots unless those providers are resolved.
+  final resolved = await tester.runAsync(() async {
+    await Future.wait([
+      for (final image in images) precacheImage(image.image, context),
+    ]);
+    return true;
+  });
+  expect(resolved, isTrue);
+  await tester.pumpAndSettle();
+  final rendered = tester.widgetList<RawImage>(find.byType(RawImage)).toList();
+  expect(rendered, isNotEmpty);
+  expect(rendered.every((image) => image.image != null), isTrue);
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -284,6 +303,8 @@ void main() {
             find.byKey(const ValueKey('shop-product-photo:apple')),
             findsOneWidget,
           );
+          await _resolveVisibleProductPhotos(tester);
+          checkpoint('sell photos decoded');
           if (width == 320 || width == 820) {
             final camera = find.byKey(const ValueKey('shop-camera-scan'));
             expect(camera, findsOneWidget);
