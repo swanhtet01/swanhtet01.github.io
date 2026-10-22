@@ -2333,9 +2333,8 @@ class _ShopHomeState extends State<ShopHome> {
               'Only ${item.onHand} available',
               '${shopNumber(item.onHand, myanmar: true)} ခုသာ ရနိုင်သည်',
             ),
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: Theme.of(context).colorScheme.error,
-            ),
+            style: Theme.of(context).textTheme.bodySmall
+                ?.copyWith(color: Theme.of(context).colorScheme.error),
           ),
       ],
     );
@@ -2793,8 +2792,7 @@ class _ShopHomeState extends State<ShopHome> {
   bool _cartHasUnavailableProducts(List<ShopProduct> products) {
     final byId = {for (final item in products) item.id: item};
     return _cart.entries.any(
-      (line) =>
-          byId[line.key] == null || line.value > byId[line.key]!.onHand,
+      (line) => byId[line.key] == null || line.value > byId[line.key]!.onHand,
     );
   }
 
