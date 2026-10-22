@@ -3820,6 +3820,51 @@ void main() {
     });
   }
 
+  testWidgets('Stock refreshes a photo when returning from Sell', (
+    tester,
+  ) async {
+    _usePhoneViewport(tester);
+    final database = ShopDatabase(NativeDatabase.memory());
+    final firstPhoto = base64Decode(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ'
+      'AAAADUlEQVR4nGPQyNjxHwAETAJIB09U9wAAAABJRU5ErkJggg==',
+    );
+    final nextPhoto =
+        File('test/assets/grocery_photos/apple.png').readAsBytesSync();
+    try {
+      await database.addProduct(
+        id: 'apple',
+        name: 'Apple',
+        priceMmk: 2800,
+        openingStock: 7,
+      );
+      await database.saveProductThumbnail('apple', firstPhoto);
+      Widget screen({required bool active}) => MaterialApp(
+        home: StockScreen(
+          database: database,
+          myanmar: false,
+          active: active,
+        ),
+      );
+      await tester.pumpWidget(screen(active: true));
+      await tester.pumpAndSettle();
+      Image photo() => tester.widget<Image>(
+        find.byKey(const ValueKey('stock-photo-apple')),
+      );
+      expect((photo().image as MemoryImage).bytes, orderedEquals(firstPhoto));
+
+      await tester.pumpWidget(screen(active: false));
+      await database.saveProductThumbnail('apple', nextPhoto);
+      await tester.pumpWidget(screen(active: true));
+      await tester.pumpAndSettle();
+      expect((photo().image as MemoryImage).bytes, orderedEquals(nextPhoto));
+      expect(tester.takeException(), isNull);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await database.close();
+    }
+  });
+
   testWidgets('tablet Stock shows a photographed item and its price in MY', (
     tester,
   ) async {

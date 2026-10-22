@@ -37,6 +37,7 @@ class StockScreen extends StatefulWidget {
   const StockScreen({
     required this.database,
     required this.myanmar,
+    this.active = true,
     this.embeddedTaskShell = false,
     this.onAddProduct,
     super.key,
@@ -44,6 +45,7 @@ class StockScreen extends StatefulWidget {
 
   final ShopDatabase database;
   final bool myanmar;
+  final bool active;
   final bool embeddedTaskShell;
   final VoidCallback? onAddProduct;
 
@@ -76,10 +78,12 @@ class _StockScreenState extends State<StockScreen> {
   @override
   void didUpdateWidget(covariant StockScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // A product photo can be changed from Sell while Stock stays mounted.
-    _thumbnailFutures.clear();
     if (oldWidget.database != widget.database) {
       _products = widget.database.watchActiveProducts();
+      _thumbnailFutures.clear();
+    } else if (!oldWidget.active && widget.active) {
+      // A photo can change in Sell while this page stays in the task stack.
+      _thumbnailFutures.clear();
     }
   }
 

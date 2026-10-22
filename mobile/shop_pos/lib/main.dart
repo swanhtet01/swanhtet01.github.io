@@ -514,6 +514,7 @@ class _ShopAppState extends State<ShopApp> {
                                     StockScreen(
                                       database: widget.database,
                                       myanmar: _myanmar,
+                                      active: _workspaceTab == 3,
                                       embeddedTaskShell: true,
                                       onAddProduct: () => unawaited(
                                         _addProductFromStock(context),
