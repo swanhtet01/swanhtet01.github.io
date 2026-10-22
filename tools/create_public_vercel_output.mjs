@@ -842,6 +842,33 @@ body[data-view="contact"] .contact-page .contact-form .button { width: max-conte
 @media (min-width: 761px) and (max-width: 1100px) { body[data-view="shop"] .shop-hero-copy { margin-inline: auto; text-align: center; justify-items: center; } body[data-view="shop"] .shop-hero h1 { max-width: 22ch; } }
 `
 
+const myanmarPublicStyle = `
+  html:lang(my) .nav-links a, html:lang(my) .button, html:lang(my) .footer-links a { line-height: 1.7; }
+  html:lang(my) body[data-view="shop"] .shop-hero h1 { max-width: 100%; font-size: clamp(30px, 2.65vw, 36px); line-height: 1.55; letter-spacing: 0; }
+  html:lang(my) body[data-view="shop"] .shop-hero-copy > p:not(.eyebrow) { max-width: 100%; font-size: 17px; line-height: 1.85; }
+  html:lang(my) body[data-view="shop"] .shop-workflow-card h3 { line-height: 1.55; letter-spacing: 0; }
+  html:lang(my) body[data-view="shop"] .shop-workflow-card p, html:lang(my) body[data-view="shop"] .shop-lead-capture figcaption { line-height: 1.8; }
+  html:lang(my) body[data-view="contact"] .contact-page .page-hero h1 { max-width: 100%; margin-bottom: 22px; font-size: clamp(32px, 3vw, 38px); line-height: 1.6; letter-spacing: 0; }
+  html:lang(my) body[data-view="contact"] .contact-company-intro { max-width: 480px; font-size: 16px; line-height: 1.85; }
+  html:lang(my) body[data-view="contact"] .contact-page .page-hero .lede { max-width: 480px; font-size: 18px; line-height: 1.85; }
+  html:lang(my) body[data-view="contact"] .contact-page .field-grid label { font-size: 15px; line-height: 1.75; }
+  html:lang(my) body[data-view="contact"] .contact-page .field-grid input, html:lang(my) body[data-view="contact"] .contact-page .field-grid textarea { min-height: 56px; font-size: 16px; line-height: 1.7; }
+  html:lang(my) body[data-view="contact"] .contact-page .field-grid textarea { min-height: 136px; }
+  html:lang(my) body[data-view="contact"] .contact-page .form-note { font-size: 14px; line-height: 1.75; }
+  html:lang(my) body:not([data-view]) .page-hero { max-width: 900px; padding-block: 72px 58px; }
+  html:lang(my) body:not([data-view]) .page-hero h1 { max-width: 880px; margin-bottom: 24px; font-size: clamp(32px, 3vw, 40px); line-height: 1.6; letter-spacing: 0; }
+  html:lang(my) body:not([data-view]) .page-hero .lede { max-width: 780px; font-size: 18px; line-height: 1.85; }
+  html:lang(my) body:not([data-view]) .prose { max-width: 900px; }
+  html:lang(my) body:not([data-view]) .prose h2, html:lang(my) body:not([data-view]) .prose h3 { font-size: 18px; line-height: 1.6; letter-spacing: 0; }
+  html:lang(my) body:not([data-view]) .prose p { font-size: 16px; line-height: 1.9; }
+  @media (max-width: 760px) {
+    html:lang(my) body[data-view="shop"] .shop-hero h1 { font-size: 30px; line-height: 1.55; }
+    html:lang(my) body[data-view="contact"] .contact-page .page-hero h1 { font-size: 32px; line-height: 1.6; }
+    html:lang(my) body:not([data-view]) .page-hero { padding-block: 52px 48px; }
+    html:lang(my) body:not([data-view]) .page-hero h1 { font-size: 28px; line-height: 1.6; }
+  }
+`
+
 function documentHtml({ route, title, description, content, schema = null, robots = 'index,follow', shareImage = '/og-card.png', locale = 'en' }) {
   const url = canonical(route)
   const shareImageUrl = canonical(shareImage)
@@ -851,6 +878,7 @@ function documentHtml({ route, title, description, content, schema = null, robot
   const alternateLinks = myanmarRoute ? `\n    <link rel="alternate" hreflang="en" href="${escapeHtml(canonical(baseRoute))}" />\n    <link rel="alternate" hreflang="my" href="${escapeHtml(canonical(myanmarRoute))}" />\n    <link rel="alternate" hreflang="x-default" href="${escapeHtml(canonical(baseRoute))}" />` : ''
   const themeColor = view === 'shop' ? '#f7f9fc' : '#ffffff'
   const pageStyle = view ? `<style>${publicMarketingStyle}</style>` : ''
+  const localeStyle = locale === 'my' ? `<style>${myanmarPublicStyle}</style>` : ''
   const viewAttribute = view ? ` data-view="${view}"` : ''
   return `<!doctype html>
 <html lang="${locale}">
@@ -876,7 +904,7 @@ function documentHtml({ route, title, description, content, schema = null, robot
     <meta property="og:image:height" content="${OG_CARD_HEIGHT}" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:image" content="${escapeHtml(shareImageUrl)}" />${structuredDataHtml(schema)}
-    <style>${sharedStyle}</style>${pageStyle}
+    <style>${sharedStyle}</style>${pageStyle}${localeStyle}
   </head>
   <body data-brand-version="${escapeHtml(brand.version)}" data-context-version="${escapeHtml(manifest.contextVersion)}"${viewAttribute}>
     <a class="skip-link" href="#content">${locale === 'my' ? 'အကြောင်းအရာသို့ သွားရန်' : 'Skip to content'}</a>
