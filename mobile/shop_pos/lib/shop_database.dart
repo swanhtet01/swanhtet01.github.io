@@ -2990,8 +2990,8 @@ class ShopDatabase extends _$ShopDatabase {
         ) ||
         authorization.issuedAtMillis <= 0 ||
         authorization.expiresAtMillis <= authorization.issuedAtMillis ||
-        authorization.expiresAtMillis - authorization.issuedAtMillis >
-            const Duration(minutes: 10).inMilliseconds ||
+        authorization.expiresAtMillis - authorization.issuedAtMillis !=
+            const Duration(minutes: 5).inMilliseconds ||
         authorization.issuedAtMillis > now ||
         authorization.expiresAtMillis < now) {
       throw StateError('Correction authorization is missing or invalid.');

@@ -777,6 +777,105 @@ void main() {
     });
 
     test(
+      'database rejects a self-consistent non-five-minute authorization without writes',
+      () async {
+        await _attachTestWorkspace(database);
+        await database.addProduct(
+          id: 'receipt-ttl-product',
+          name: 'Receipt TTL item',
+          priceMmk: 2000,
+          openingStock: 3,
+        );
+        final shift = await database.openCashShift(
+          operationId: 'receipt-ttl-shift',
+          operatorLabel: 'May',
+          openingFloatMmk: 10000,
+        );
+        final sale = await database.recordCashSale(
+          operationId: 'receipt-ttl-sale',
+          lines: const [
+            ShopSaleLineInput(productId: 'receipt-ttl-product', quantity: 1),
+          ],
+        );
+        final command = await database.previewFullSaleReversal(
+          operationId: 'receipt-ttl-reversal',
+          saleId: sale.id,
+          restockItems: true,
+          reason: 'Customer returned the complete sale',
+          confirmCashReturned: true,
+        );
+        final issuedAtMillis = DateTime.now().millisecondsSinceEpoch - 1000;
+        final expiresAtMillis =
+            issuedAtMillis + const Duration(minutes: 6).inMilliseconds;
+        const receiptId = 'receipt-with-six-minute-ttl';
+        const workspaceId = 'workspace-shop-test';
+        const actorId = 'owner-test';
+        const actorLabel = 'Test owner';
+        const actorRole = 'owner';
+        const capability = 'shop.sale.reverse';
+        const source = 'managed_membership_receipt_v1';
+        final authorization = ShopCorrectionAuthorization(
+          receiptId: receiptId,
+          receiptDigest: shopCorrectionAuthorizationReceiptDigest(
+            source: source,
+            receiptId: receiptId,
+            workspaceId: workspaceId,
+            actorId: actorId,
+            actorLabel: actorLabel,
+            actorRole: actorRole,
+            capability: capability,
+            commandDigest: command.commandDigest,
+            issuedAtMillis: issuedAtMillis,
+            expiresAtMillis: expiresAtMillis,
+          ),
+          workspaceId: workspaceId,
+          actorId: actorId,
+          actorLabel: actorLabel,
+          actorRole: actorRole,
+          capability: capability,
+          source: source,
+          commandDigest: command.commandDigest,
+          issuedAtMillis: issuedAtMillis,
+          expiresAtMillis: expiresAtMillis,
+        );
+        final movementCount = await database.countStockMovements();
+        final outboxCount = await database.countOutboxOperations();
+        final reviewBefore = await database.readCashShiftReview(shift.id);
+
+        await expectLater(
+          database.recordAuthorizedFullSaleReversal(
+            command: command,
+            authorization: authorization,
+          ),
+          throwsA(isA<StateError>()),
+        );
+
+        expect(await database.readSaleReversalForSale(sale.id), isNull);
+        expect(await database.countStockMovements(), movementCount);
+        expect(await database.countOutboxOperations(), outboxCount);
+        expect(
+          (await database
+                  .customSelect(
+                    'SELECT on_hand FROM shop_products WHERE id = ?',
+                    variables: const [
+                      Variable<String>('receipt-ttl-product'),
+                    ],
+                  )
+                  .getSingle())
+              .read<int>('on_hand'),
+          2,
+        );
+        final reviewAfter = await database.readCashShiftReview(shift.id);
+        expect(reviewAfter.cashReversalCount, reviewBefore.cashReversalCount);
+        expect(
+          reviewAfter.cashDrawerOutflowMmk,
+          reviewBefore.cashDrawerOutflowMmk,
+        );
+        expect(reviewAfter.expectedCashMmk, reviewBefore.expectedCashMmk);
+      },
+    );
+
+    test(
       'cash reversal cannot reopen exhausted gross shift capacity',
       () async {
         await _attachTestWorkspace(database);
