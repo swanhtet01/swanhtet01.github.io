@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto'
 import { join, relative, resolve } from 'node:path'
 import { activeProductContracts } from '../showroom/src/core/product-visibility.ts'
 import { parsePreviewAppBinding } from './public_preview_navigation.mjs'
-import { publicGalleryReleaseReadinessError } from './public_gallery_rights.mjs'
+import { publicGalleryReleaseReadinessError, PUBLIC_SHOP_GALLERY_ASSETS } from './public_gallery_rights.mjs'
 
 const root = process.cwd()
 const isolatedOutputId = process.env.SUPERMEGA_PUBLIC_OUTPUT_ID || ''
@@ -42,6 +42,12 @@ const galleryEvidence = {
   captureReportSha256: createHash('sha256').update(galleryCaptureBytes).digest('hex'),
   provenanceSha256: createHash('sha256').update(galleryProvenanceBytes).digest('hex'),
   imageSourcesSha256: createHash('sha256').update(galleryImageSourcesBytes).digest('hex'),
+  publicAssetNames: PUBLIC_SHOP_GALLERY_ASSETS,
+  imageFileSha256: Object.fromEntries(publicGalleryImageSources.products.filter(product => product.file != null).map(product => {
+    if (!/^[a-z0-9][a-z0-9._-]*\.(?:png|jpe?g|webp)$/i.test(product.file)) fail('public_gallery_image_file_invalid')
+    const bytes = readFileSync(resolve(root, 'tools', 'qa-assets', 'shop-products', product.file))
+    return [product.file, createHash('sha256').update(bytes).digest('hex')]
+  })),
 }
 const galleryReleaseError = publicGalleryReleaseReadinessError(publicGalleryCapture, publicGalleryImageSources,
   publicGalleryProvenance, publicGalleryReleaseAttestation, galleryEvidence)

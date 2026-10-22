@@ -7,7 +7,7 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { bindPreviewNavigation, parsePreviewAppBinding } from './public_preview_navigation.mjs'
-import { assertPublicGalleryReleaseReady } from './public_gallery_rights.mjs'
+import { assertPublicGalleryReleaseReady, PUBLIC_SHOP_GALLERY_ASSETS } from './public_gallery_rights.mjs'
 
 import { activeProductContracts } from '../showroom/src/core/product-visibility.ts'
 import { brandFaviconSvg, companyShopFooterHtml, companyShopHeaderHtml, companyShopStyle, shopMarkup } from './public_company_shop_design.mjs'
@@ -47,12 +47,22 @@ const publicGalleryImageSources = JSON.parse(galleryImageSourcesBytes.toString('
 const galleryAttestationPath = resolve(root, 'tools', 'public-assets', 'public-gallery-release-attestation.json')
 const publicGalleryReleaseAttestation = existsSync(galleryAttestationPath)
   ? JSON.parse(await readFile(galleryAttestationPath, 'utf8')) : null
+const publicGalleryAssetNames = PUBLIC_SHOP_GALLERY_ASSETS
 if (process.env.SUPERMEGA_PUBLIC_RELEASE === '1' || process.env.VERCEL === '1') {
+  const imageFileSha256 = Object.fromEntries(await Promise.all(publicGalleryImageSources.products
+    .filter(product => product.file != null)
+    .map(async product => {
+      if (!/^[a-z0-9][a-z0-9._-]*\.(?:png|jpe?g|webp)$/i.test(product.file)) throw new Error('public_gallery_image_file_invalid')
+      const bytes = await readFile(resolve(root, 'tools', 'qa-assets', 'shop-products', product.file))
+      return [product.file, createHash('sha256').update(bytes).digest('hex')]
+    })))
   assertPublicGalleryReleaseReady(publicGalleryCapture, publicGalleryImageSources,
     publicGalleryProvenance, publicGalleryReleaseAttestation, {
       captureReportSha256: createHash('sha256').update(galleryCaptureBytes).digest('hex'),
       provenanceSha256: createHash('sha256').update(galleryProvenanceBytes).digest('hex'),
       imageSourcesSha256: createHash('sha256').update(galleryImageSourcesBytes).digest('hex'),
+      publicAssetNames: publicGalleryAssetNames,
+      imageFileSha256,
     })
 }
 // Hash the checked-out source as a Git tree so a source archive is checked as
@@ -100,13 +110,6 @@ const sourceGalleryAssetNames = [
 ]
 // Keep the complete capture set and provenance available to internal review,
 // while exposing only the approved Shop customer surface in the public bundle.
-const publicGalleryAssetNames = [
-  'actual-shop-today.png',
-  'actual-shop-sell.png', 'actual-shop-sell-tablet.png', 'actual-shop-sell-mobile.png',
-  'actual-shop-sell-my.png', 'actual-shop-sell-my-tablet.png', 'actual-shop-sell-my-mobile.png',
-  'actual-shop-orders.png', 'actual-shop-orders-tablet.png', 'actual-shop-orders-mobile.png',
-  'actual-shop-inventory.png', 'actual-shop-inventory-tablet.png', 'actual-shop-inventory-mobile.png',
-]
 assert(publicGalleryProvenance.schemaVersion === 'supermega.public-gallery-provenance.v1', 'public_gallery_provenance_schema_unsupported')
 assert(publicGalleryProvenance.status === 'local_component_capture' && publicGalleryProvenance.records === 'synthetic'
   && typeof publicGalleryProvenance.capturedAt === 'string'

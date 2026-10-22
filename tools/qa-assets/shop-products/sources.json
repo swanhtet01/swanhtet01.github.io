@@ -1,7 +1,9 @@
 {
-  "purpose": "Synthetic Shop screenshot fixture only. The unbranded red apple photo is a CC0 candidate; MAMA package art and four retailer images are excluded. Public use remains blocked pending exact-capture and rights review.",
+  "schemaVersion": "supermega.shop-image-rights.v1",
+  "status": "cleared_for_publication",
+  "purpose": "Image-rights ledger for the synthetic Shop screenshot fixture. Only the unbranded red apple photo has a checked reuse basis. Gallery publication remains blocked pending separate exact-capture and provenance review.",
   "observed_at": "2026-10-22",
-  "license_status": "one CC0 1.0 unbranded apple photo candidate; MAMA package photo and four retailer photos removed from the capture fixture",
+  "license_status": "one CC0 1.0 unbranded apple photo source checked; MAMA package photo and four retailer photos removed from the capture fixture",
   "products": [
     {
       "sku": "SM-1006",
@@ -9,7 +11,7 @@
       "name_my": "ပန်းသီးနီ (တစ်လုံး)",
       "variant": "each",
       "file": "red-apple-each.jpg",
-      "photo_status": "cc0_candidate_capture_only_not_publication_approval",
+      "photo_status": "cc0_source_license_checked_gallery_review_pending",
       "image_sha256": "4de1eb5c433f10867327d8b6303bfc45635028e8c0eb416f167f10ddf3dbdf08",
       "source_page": "https://commons.wikimedia.org/wiki/File:Red_apple_on_a_plate_2017_A.jpg",
       "source_image": "https://upload.wikimedia.org/wikipedia/commons/0/04/Red_apple_on_a_plate_2017_A.jpg",
@@ -21,6 +23,16 @@
         "crop": "original JPEG bytes retained; the Shop thumbnail uses CSS object-fit cropping",
         "review_note": "Commons lists the uploader's own work and CC0 dedication. This is a candidate source check, not a release attestation."
       },
+      "publication_rights": {
+        "status": "cleared_for_publication",
+        "basis": "cc0-1.0",
+        "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "attribution": "Photo by Fructibus / Wikimedia Commons, CC0 1.0 (optional credit).",
+        "reviewed_at": "2026-10-22",
+        "reviewed_by": "Codex source-license review",
+        "evidence_sha256": "4de1eb5c433f10867327d8b6303bfc45635028e8c0eb416f167f10ddf3dbdf08",
+        "evidence_note": "Digest binds this rights entry to the original JPEG; the source page identifies Fructibus, own work, and CC0 1.0. This does not attest the rendered gallery capture."
+      },
       "sample_catalog_price_mmk": 1500,
       "price_status": "synthetic_illustration_only_not_a_market_or_live_price"
     },
@@ -29,6 +41,7 @@
       "name": "KAUNG 90 Days Rice",
       "variant": "6 kg",
       "photo_status": "not_included_no_public_reuse_grant",
+      "image_use": "text_only_no_image",
       "source_page": "https://www.makropro.com.mm/en/p/UGzIQDaq-655742229162369",
       "sample_catalog_price_mmk": 12450
     },
@@ -37,6 +50,7 @@
       "name": "MAMA Chicken Instant Noodles",
       "variant": "55 g × 5",
       "photo_status": "not_included_package_artwork_unreviewed",
+      "image_use": "text_only_no_image",
       "package_visual_check": "The MAMA Chicken multipack front shows five packets and 55 g per packet; the physical pack shape is cropped.",
       "source_page": "https://world.openfoodfacts.org/product/8850987101526",
       "photo_rights_note": "Open Food Facts contributor photo licensing does not clear the package artwork; the image is excluded from this capture fixture.",
@@ -47,6 +61,7 @@
       "name": "ALPINE Drinking Water",
       "variant": "1 L × 6",
       "photo_status": "not_included_no_public_reuse_grant",
+      "image_use": "text_only_no_image",
       "source_page": "https://www.makropro.com.mm/en/p/8ZJsp9nm-350193912914762",
       "sample_catalog_price_mmk": 5700
     },
@@ -55,6 +70,7 @@
       "name": "BAYDAR Laundry Detergent",
       "variant": "700 g",
       "photo_status": "not_included_no_public_reuse_grant",
+      "image_use": "text_only_no_image",
       "source_page": "https://www.makropro.com.mm/en/p/S7kSD2ZS-553565729514833",
       "sample_catalog_price_mmk": 5900
     },
@@ -63,6 +79,7 @@
       "name": "ZESS Sugar Crackers",
       "variant": "192 g",
       "photo_status": "not_included_no_public_reuse_grant",
+      "image_use": "text_only_no_image",
       "source_page": "https://www.makropro.com.mm/en/p/ETuOUnrc-858707669623079",
       "sample_catalog_price_mmk": 8000
     }

@@ -3,9 +3,14 @@ import { isAbsolute, relative, resolve, sep } from 'node:path'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 const { build } = createRequire(resolve('showroom/package.json'))('esbuild')
 const gallery = process.argv.includes('--gallery')
-const productPhotoFiles = gallery ? {
-  'SM-1006': 'red-apple-each.jpg',
-} : {}
+// The gallery loads exactly the photos declared in the rights ledger.
+const productSources = gallery ? JSON.parse(readFileSync(resolve('tools/qa-assets/shop-products/sources.json'), 'utf8')) : null
+const productPhotoFiles = gallery ? Object.fromEntries(productSources.products
+  .filter(product => product.file)
+  .map(product => {
+    if (!/^[a-z0-9][a-z0-9._-]*\.(?:png|jpe?g|webp)$/i.test(product.file)) throw new Error('gallery_photo_file_invalid')
+    return [product.sku, product.file]
+  })) : {}
 const productPhotoBytes = Object.fromEntries(Object.entries(productPhotoFiles).map(([sku, file]) => [
   sku,
   readFileSync(resolve('tools/qa-assets/shop-products', file)).toString('base64'),
@@ -44,7 +49,8 @@ if(gallery){
 }
 if(galleryMyanmar){
  const categories={Pantry:'အစားအသောက်',Drinks:'သောက်စရာ','Home care':'အိမ်သုံးပစ္စည်း',Produce:'သစ်သီး'};
- seed.items=seed.items.map(item=>({...item,category:categories[item.category]??item.category}));
+ const variants={'SM-1006':'တစ်လုံး','SM-1001':'၆ ကီလိုဂရမ်','SM-1002':'၅၅ ဂရမ် × ၅ ထုပ်','SM-1003':'၁ လီတာ × ၆ ဘူး','SM-1004':'၇၀၀ ဂရမ်','SM-1005':'၁၉၂ ဂရမ်'};
+ seed.items=seed.items.map(item=>({...item,category:categories[item.category]??item.category,variant:variants[item.sku]??item.variant}));
  await setUiLocale('my');
 }
 localStorage.setItem(COMMERCE_KEY,JSON.stringify(seed));

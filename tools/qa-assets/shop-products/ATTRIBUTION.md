@@ -10,8 +10,8 @@ the Shop thumbnail crops it with CSS. SHA-256 of the original bytes:
 This is an unbranded, single red apple, matching the fixture product name.
 `MMK 1,500` is an illustrative fixture amount, not a merchant or live price.
 Credit Fructibus and link this file page in any public display even though CC0
-does not require attribution. The source check is a candidate, not an owner
-attestation for the generated gallery.
+does not require attribution. `sources.json` records the checked CC0 image
+rights; this is not an owner attestation for the generated gallery.
 
 The MAMA Chicken pack photo has been removed from the current fixture and
 source tree. The [Open Food Facts license guidance](https://openfoodfacts.github.io/documentation/docs/Product-Opener/api/tutorials/license-be-on-the-legal-side/)

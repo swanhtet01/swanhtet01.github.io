@@ -7,6 +7,15 @@ const CREATIVE_COMMONS_LICENSES = new Map([
   ['cc-by-sa-4.0', 'https://creativecommons.org/licenses/by-sa/4.0/'],
 ])
 const PERMISSION_BASES = new Set(['owner-owned', 'written-permission'])
+// These are the Shop PNGs copied into the public bundle; the capture report also
+// contains internal Sites and Commerce views for source review.
+export const PUBLIC_SHOP_GALLERY_ASSETS = Object.freeze([
+  'actual-shop-today.png',
+  'actual-shop-sell.png', 'actual-shop-sell-tablet.png', 'actual-shop-sell-mobile.png',
+  'actual-shop-sell-my.png', 'actual-shop-sell-my-tablet.png', 'actual-shop-sell-my-mobile.png',
+  'actual-shop-orders.png', 'actual-shop-orders-tablet.png', 'actual-shop-orders-mobile.png',
+  'actual-shop-inventory.png', 'actual-shop-inventory-tablet.png', 'actual-shop-inventory-mobile.png',
+])
 
 function isHttpsUrl(value) {
   try {
@@ -68,18 +77,28 @@ function galleryReviewError(capture, provenance, attestation, evidence) {
   const captureAssets = capture.captures
   const provenanceAssets = provenance?.assets
   const approvedAssets = attestation.assets
+  const publicAssetNames = evidence?.publicAssetNames
   if (!Array.isArray(provenanceAssets) || !Array.isArray(approvedAssets)
+    || !Array.isArray(publicAssetNames) || publicAssetNames.length === 0
+    || new Set(publicAssetNames).size !== publicAssetNames.length
+    || publicAssetNames.some(file => typeof file !== 'string' || !/^[a-z0-9][a-z0-9._-]*\.png$/i.test(file))
     || captureAssets.length !== provenanceAssets.length
-    || captureAssets.length !== approvedAssets.length) return 'public_gallery_review_assets_invalid'
+    || approvedAssets.length !== publicAssetNames.length) return 'public_gallery_review_assets_invalid'
   const sourceByFile = new Map(captureAssets.map(asset => [asset.file, asset]))
   const provenanceByFile = new Map(provenanceAssets.map(asset => [asset.file, asset]))
   const reviewedFiles = new Set()
   if (sourceByFile.size !== captureAssets.length || provenanceByFile.size !== provenanceAssets.length) {
     return 'public_gallery_review_assets_invalid'
   }
+  for (const [file, source] of sourceByFile) {
+    const proven = provenanceByFile.get(file)
+    if (!proven || source.sha256 !== proven.sha256 || source.width !== proven.width
+      || source.height !== proven.height) return 'public_gallery_review_assets_invalid'
+  }
+  const publicFiles = new Set(publicAssetNames)
   for (const asset of approvedAssets) {
     if (!asset || typeof asset.file !== 'string' || reviewedFiles.has(asset.file)
-      || !isSha256(asset.sha256)) return 'public_gallery_review_assets_invalid'
+      || !publicFiles.has(asset.file) || !isSha256(asset.sha256)) return 'public_gallery_review_assets_invalid'
     reviewedFiles.add(asset.file)
     const source = sourceByFile.get(asset.file)
     const proven = provenanceByFile.get(asset.file)
@@ -89,6 +108,7 @@ function galleryReviewError(capture, provenance, attestation, evidence) {
       return 'public_gallery_review_assets_invalid'
     }
   }
+  if (reviewedFiles.size !== publicFiles.size) return 'public_gallery_review_assets_invalid'
   return null
 }
 
@@ -105,11 +125,25 @@ export function publicGalleryReleaseReadinessError(capture, imageSources, proven
     || imageSources.products.length === 0) return 'public_gallery_image_rights_unverified'
 
   const seenFiles = new Set()
+  const seenSkus = new Set()
   for (const product of imageSources.products) {
-    if (!product || typeof product.file !== 'string'
+    if (!product || typeof product.sku !== 'string' || !product.sku.trim()
+      || seenSkus.has(product.sku) || !isHttpsUrl(product.source_page))
+      return 'public_gallery_image_rights_unverified'
+    seenSkus.add(product.sku)
+    if (product.file == null) {
+      if (product.image_use !== 'text_only_no_image'
+        || !/^not_included_(?:no_public_reuse_grant|package_artwork_unreviewed)$/.test(product.photo_status)
+        || product.source_image != null || product.image_sha256 != null
+        || product.publication_rights != null) return 'public_gallery_image_rights_unverified'
+      continue
+    }
+    if (typeof product.file !== 'string'
       || !/^[a-z0-9][a-z0-9._-]*\.(?:png|jpe?g|webp)$/i.test(product.file)
-      || seenFiles.has(product.file)
-      || !isHttpsUrl(product.source_page)) return 'public_gallery_image_rights_unverified'
+      || seenFiles.has(product.file) || product.image_use === 'text_only_no_image'
+      || !isHttpsUrl(product.source_image) || !isSha256(product.image_sha256)
+      || evidence?.imageFileSha256?.[product.file] !== product.image_sha256)
+      return 'public_gallery_image_rights_unverified'
     seenFiles.add(product.file)
 
     const rights = product.publication_rights
@@ -120,7 +154,7 @@ export function publicGalleryReleaseReadinessError(capture, imageSources, proven
       || !reviewedAt
       || typeof rights.reviewed_by !== 'string'
       || !rights.reviewed_by.trim()
-      || !/^[0-9a-f]{64}$/.test(rights.evidence_sha256)
+      || rights.evidence_sha256 !== product.image_sha256
       || typeof rights.attribution !== 'string'
       || !rights.attribution.trim()) return 'public_gallery_image_rights_unverified'
 
@@ -134,6 +168,9 @@ export function publicGalleryReleaseReadinessError(capture, imageSources, proven
       || typeof rights.permission_ref !== 'string'
       || !rights.permission_ref.trim()) return 'public_gallery_image_rights_unverified'
   }
+
+  if (seenFiles.size === 0 || Object.keys(evidence?.imageFileSha256 ?? {}).length !== seenFiles.size)
+    return 'public_gallery_image_rights_unverified'
 
   return null
 }

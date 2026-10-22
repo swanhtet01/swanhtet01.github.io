@@ -481,18 +481,24 @@ async function main() {
     await clickText(cdp, sessionId, 'Show Counter')
     const mySaleBasket = await evaluate(cdp, sessionId, `(async () => {
       const added=[];
+      const variants=[...document.querySelectorAll('button.shop-product-tile .shop-product-name small')]
+        .map(node=>node.textContent?.trim());
       for (let index=0; index<3; index+=1) {
         const tile=[...document.querySelectorAll('button.shop-product-tile')]
           .find(candidate=>!candidate.querySelector('.shop-product-quantity'));
-        if (!tile) return {added,lines:document.querySelectorAll('.shop-cart-lines article').length};
+        if (!tile) return {added,lines:document.querySelectorAll('.shop-cart-lines article').length,variants};
         added.push(tile.querySelector('.shop-product-name strong')?.textContent?.trim()||'unnamed product');
         tile.click();
         await new Promise(resolve=>setTimeout(resolve,100));
       }
-      return {added,lines:document.querySelectorAll('.shop-cart-lines article').length};
+      return {added,lines:document.querySelectorAll('.shop-cart-lines article').length,variants};
     })()`)
     if (mySaleBasket.added.length !== 3 || mySaleBasket.lines !== 3)
       throw new Error(`myanmar_counter_multi_item_basket_missing:${JSON.stringify(mySaleBasket)}`)
+    const expectedMyanmarVariants = ['တစ်လုံး', '၆ ကီလိုဂရမ်', '၅၅ ဂရမ် × ၅ ထုပ်', '၁ လီတာ × ၆ ဘူး', '၇၀၀ ဂရမ်', '၁၉၂ ဂရမ်']
+    if (mySaleBasket.variants.length !== expectedMyanmarVariants.length
+      || !expectedMyanmarVariants.every(variant => mySaleBasket.variants.includes(variant)))
+      throw new Error(`myanmar_counter_variants_untranslated:${JSON.stringify(mySaleBasket.variants)}`)
     captures.push(await captureMyanmarDesktop(cdp, sessionId, output, 'actual-shop-sell-my', ['ကုန်ပစ္စည်းများ', 'လက်ရှိ အရောင်း', 'ငွေသား', 'သောက်စရာ', 'အိမ်သုံးပစ္စည်း', 'အစားအသောက်', 'ပန်းသီးနီ (တစ်လုံး)'],
       { fixturePath: '/shop-my/', tab: 'counter', uiLocale: 'my', selector: '.shop-current-sale', imageSelector: '.shop-product-art.shop-product-photo', images: 1,
         forbiddenText: ['Drinks', 'Home care', 'Pantry', 'Cash'] }))

@@ -7,9 +7,11 @@ const fixture = readFileSync(new URL('./build_shop_browser_fixture.mjs', import.
 const manifest = JSON.parse(readFileSync(source, 'utf8'))
 
 assert.equal(manifest.products.length, 6)
+assert.equal(manifest.schemaVersion, 'supermega.shop-image-rights.v1')
 assert.match(manifest.license_status, /MAMA package photo and four retailer photos removed/)
 assert.match(fixture, /file\.endsWith\('\.jpg'\) \? 'image\/jpeg' : 'image\/webp'/)
 assert.match(fixture, /type:productPhotoMimes\[sku\]/)
+assert.match(fixture, /productSources\.products\s*\.filter\(product => product\.file\)/)
 assert.equal(manifest.products.filter(product => product.file).length, 1)
 for (const product of manifest.products) {
   assert.match(product.source_page, /^https:\/\//)
@@ -17,10 +19,10 @@ for (const product of manifest.products) {
   assert.ok(Number.isSafeInteger(product.sample_catalog_price_mmk))
   if (!product.file) {
     assert.match(product.photo_status, /^not_included_(?:no_public_reuse_grant|package_artwork_unreviewed)$/)
+    assert.equal(product.image_use, 'text_only_no_image')
     assert.equal(product.source_image, undefined)
     assert.equal(product.image_sha256, undefined)
     assert.equal(product.observed_listing_price_mmk, undefined)
-    assert.ok(!fixture.includes(`'${product.sku}':`))
     continue
   }
   assert.equal(product.name, 'Red apple (each)')
@@ -29,7 +31,10 @@ for (const product of manifest.products) {
   assert.match(product.source_image, /^https:\/\//)
   assert.match(product.image_sha256, /^[0-9a-f]{64}$/)
   const bytes = readFileSync(new URL(`./qa-assets/shop-products/${product.file}`, import.meta.url))
-  assert.equal(product.photo_status, 'cc0_candidate_capture_only_not_publication_approval')
+  assert.equal(product.photo_status, 'cc0_source_license_checked_gallery_review_pending')
+  assert.equal(product.publication_rights?.status, 'cleared_for_publication')
+  assert.equal(product.publication_rights?.basis, 'cc0-1.0')
+  assert.equal(product.publication_rights?.evidence_sha256, product.image_sha256)
   assert.equal(bytes.subarray(0, 3).toString('hex'), 'ffd8ff')
   assert.equal(product.photo_license?.name, 'CC0 1.0')
   assert.equal(product.photo_license?.url, 'https://creativecommons.org/publicdomain/zero/1.0/')
@@ -37,7 +42,6 @@ for (const product of manifest.products) {
   assert.match(product.photo_license?.crop, /original JPEG bytes retained;.*CSS object-fit cropping/)
   assert.match(product.photo_license?.attribution, /Fructibus.*Wikimedia Commons/)
   assert.equal(createHash('sha256').update(bytes).digest('hex'), product.image_sha256)
-  assert.ok(fixture.includes(`'${product.sku}': '${product.file}'`))
 }
 
 console.log('One CC0 exact-match apple photo remains a candidate; the MAMA pack and four retailer photos are excluded.')

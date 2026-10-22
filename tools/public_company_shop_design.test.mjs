@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs'
 import { runInNewContext } from 'node:vm'
 import { inflateSync } from 'node:zlib'
 import { brandFaviconSvg, brandMarkHtml, companyShopFooterHtml, companyShopHeaderHtml, companyShopStyle, shopDemoScript, shopMarkup } from './public_company_shop_design.mjs'
+import { PUBLIC_SHOP_GALLERY_ASSETS } from './public_gallery_rights.mjs'
 import { superMegaBrandIdentity } from '../showroom/src/core/brand-mark.ts'
 
 const generator = readFileSync(new URL('./create_public_vercel_output.mjs', import.meta.url), 'utf8')
@@ -279,15 +280,18 @@ assert.match(generator, /const homeHtml = `<!doctype html>/)
 assert.match(generator, /const publicShopMarkup = shopMarkup/)
 assert.doesNotMatch(generator, /function addShopHeroPreview|shop-hero-preview/)
 assert.match(shopCaptureFixture, /putProductImage\(productImageScopeForWorkspace\(null\),sku,new Blob\(\[bytes\],\{type:productPhotoMimes\[sku\]\}\)\)/)
-assert.match(shopCaptureFixture, /SM-1006': 'red-apple-each\.jpg/)
+assert.match(shopCaptureFixture, /productSources\.products\s*\.filter\(product => product\.file\)/)
 assert.match(shopCaptureFixture, /name:'Red apple \(each\)',nameMy:'ပန်းသီးနီ \(တစ်လုံး\)'/)
+assert.match(shopCaptureFixture, /'SM-1006':'တစ်လုံး'.*'SM-1001':'၆ ကီလိုဂရမ်'.*'SM-1002':'၅၅ ဂရမ် × ၅ ထုပ်'/)
 assert.doesNotMatch(shopCaptureFixture, /SM-1001': 'kaung-90-days-rice\.webp/)
 assert.match(shopCaptureFixture, /persisted:async\(\)=>gallery/)
-assert.equal(shopProductSources.products.length, 6, 'capture fixture includes one unbranded apple with five text-only products')
+assert.equal(shopProductSources.schemaVersion, 'supermega.shop-image-rights.v1')
+assert.equal(shopProductSources.products.length, 6, 'rights ledger includes one apple photo and five text-only products')
 assert.match(shopProductSources.license_status, /MAMA package photo and four retailer photos removed/)
 for (const product of shopProductSources.products) {
   if (!product.file) {
     assert.match(product.photo_status, /^not_included_(?:no_public_reuse_grant|package_artwork_unreviewed)$/)
+    assert.equal(product.image_use, 'text_only_no_image')
     continue
   }
   const image = readFileSync(new URL(`./qa-assets/shop-products/${product.file}`, import.meta.url))
@@ -298,7 +302,6 @@ for (const product of shopProductSources.products) {
   } else {
     assert.match(image.subarray(0, 3).toString('hex'), /^ffd8ff$/, `${product.file} is a JPEG image`)
   }
-  assert.ok(shopCaptureFixture.includes(product.file), `${product.file} is seeded into the isolated capture`)
 }
 assert.doesNotMatch(generator, /const publicHomeMarkup/)
 assert.doesNotMatch(generator, /function companyOperatingGraphic\(\)/)
@@ -443,7 +446,8 @@ assert.match(brandGuide, /Business software for Myanmar\./)
 assert.match(generator, /contact-page \.contact-form[^}]*border-radius:8px/)
 assert.match(generator, /Actual app interface · sample data/)
 assert.match(generator, /content:[^\n]*<main id="content">/)
-assert.match(generator, /const publicGalleryAssetNames = \[\s*'actual-shop-today\.png'/)
+assert.match(generator, /const publicGalleryAssetNames = PUBLIC_SHOP_GALLERY_ASSETS/)
+assert.equal(PUBLIC_SHOP_GALLERY_ASSETS.length, 13, 'only the 13 bundled Shop captures need gallery review')
 assert.match(outputVerifier, /'images\/actual-shop-today\.png'/)
 assert.match(outputVerifier, /'actual-shop-today\.png',[\s\S]*?'actual-shop-sell\.png'/)
 assert.match(outputVerifier, /redirect_in_sitemap/)
