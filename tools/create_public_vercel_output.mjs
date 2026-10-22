@@ -259,6 +259,8 @@ if (previewAppBinding) release.previewNavigation = previewAppBinding
 const faviconSvg = brandFaviconSvg(manifest.brand.colors.accent)
 
 const sharedStyle = `
+  @font-face { font-family: "Inter"; src: url("/fonts/inter-latin.woff2") format("woff2"); font-style: normal; font-weight: 100 900; font-display: swap; }
+  @font-face { font-family: "SuperMega Noto Myanmar"; src: url("/fonts/noto-sans-myanmar.woff2") format("woff2"); font-style: normal; font-weight: 100 900; font-display: swap; }
   @font-face { font-family: "SuperMega Noto Sans"; src: url("/fonts/noto-sans-latin.woff2") format("woff2"); font-style: normal; font-weight: 100 900; font-display: swap; }
   :root {
     color-scheme: light;
@@ -285,7 +287,7 @@ const sharedStyle = `
     --blue-soft: rgba(37,99,235, .1);
     --shadow: 0 18px 48px rgba(15,23,42, .08);
     --radius: 8px;
-    --font-latin: "SuperMega Noto Sans", "Noto Sans", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI";
+    --font-latin: "Inter", "SuperMega Noto Myanmar", "SuperMega Noto Sans", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI";
   }
   * { box-sizing: border-box; }
   html { min-width: 320px; scroll-behavior: smooth; background: var(--bg); }
@@ -1730,6 +1732,10 @@ for (const [relativePath, content] of pageFiles) await writeStatic(relativePath,
 for (const image of publicGalleryAssetNames) await writeStatic(`images/${image}`, await readFile(resolve(root,'tools/public-assets',image)))
 await writeStatic('fonts/noto-sans-latin.woff2', await readFile(resolve(root,'tools/public-assets/noto-sans-latin.woff2')))
 await writeStatic('fonts/noto-sans-latin-OFL.txt', await readFile(resolve(root,'tools/public-assets/noto-sans-latin-OFL.txt')))
+await writeStatic('fonts/inter-latin.woff2', await readFile(resolve(root,'tools/public-assets/inter-latin.woff2')))
+await writeStatic('fonts/inter-OFL.txt', await readFile(resolve(root,'mobile/shop_pos/assets/fonts/Inter/OFL.txt')))
+await writeStatic('fonts/noto-sans-myanmar.woff2', await readFile(resolve(root,'tools/public-assets/noto-sans-myanmar.woff2')))
+await writeStatic('fonts/noto-sans-myanmar-OFL.txt', await readFile(resolve(root,'tools/public-assets/noto-sans-myanmar-OFL.txt')))
 await writeStatic('favicon.svg', faviconSvg)
 await writeStatic('vercel-insights.js', publicObservabilityScript)
 await writeStatic('platform-carousel.js', `(function(){
