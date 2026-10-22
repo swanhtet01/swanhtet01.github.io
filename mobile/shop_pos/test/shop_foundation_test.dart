@@ -684,6 +684,44 @@ void main() {
       }
     });
 
+    test('a pending wallet checkout blocks ticket moves without replacing baskets', () async {
+      final database = ShopDatabase(NativeDatabase.memory());
+      try {
+        await database.addProduct(
+          id: 'tea', name: 'Tea', priceMmk: 2500, openingStock: 3,
+        );
+        await database.saveCounterSaleDraft(
+          operationId: 'wallet-guard-basket',
+          quantities: const {'tea': 1},
+        );
+        await database.holdCounterSaleDraft(
+          id: 'guarded-ticket', name: 'May',
+          operationId: 'wallet-guard-basket',
+        );
+        await database.customStatement(
+          'INSERT INTO shop_wallet_checkout_intents '
+          '(operation_id, payment_method, request_fingerprint, total_mmk, '
+          'merchant_phone, merchant_qr_payload, basket_json, state, '
+          'created_at_millis) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          ['other-wallet', 'kbzpay', 'synthetic', 0, '', '', '[]', 'pending', 1],
+        );
+        await expectLater(
+          database.reopenHeldSaleTicket('guarded-ticket'),
+          throwsStateError,
+        );
+        expect(await database.readCounterSaleDraft(), isNull);
+        expect((await database.readHeldSaleTickets()).length, 1);
+        await database.customStatement(
+          "UPDATE shop_wallet_checkout_intents SET state = 'cancelled' "
+          "WHERE operation_id = 'other-wallet'",
+        );
+        expect((await database.reopenHeldSaleTicket('guarded-ticket')).operationId,
+            'wallet-guard-basket');
+      } finally {
+        await database.close();
+      }
+    });
+
     test('verified saved wallet sale survives a later product archive', () async {
       await database.addProduct(
         id: 'tea',
