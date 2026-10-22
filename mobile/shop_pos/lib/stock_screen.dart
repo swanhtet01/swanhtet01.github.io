@@ -402,7 +402,8 @@ class _StockScreenState extends State<StockScreen> {
                                   if (item.barcode?.trim().isNotEmpty ?? false)
                                     item.barcode!.trim(),
                                 ].join(' / ');
-                                final displayReference = conciseReference.isEmpty
+                                final displayReference =
+                                    conciseReference.isEmpty
                                     ? item.id
                                     : conciseReference;
                                 final details = Column(
