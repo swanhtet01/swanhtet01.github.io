@@ -2024,10 +2024,8 @@ class _ShopHomeState extends State<ShopHome> {
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       semanticsLabel: item.name,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        height: 1.3,
-                      ),
+                      style: Theme.of(context).textTheme.titleMedium
+                          ?.copyWith(fontWeight: FontWeight.w600, height: 1.3),
                     ),
                     subtitle: Column(
                       mainAxisSize: MainAxisSize.min,
