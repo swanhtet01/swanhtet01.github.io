@@ -277,7 +277,7 @@ class _StockScreenState extends State<StockScreen> {
                                       ? Theme.of(context).textTheme.titleMedium
                                       : null,
                                 );
-                                final openStockChange = () => _changeStock(
+                                Future<void> openStockChange() => _changeStock(
                                   item,
                                   showReference: showReference,
                                 );
