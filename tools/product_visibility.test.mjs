@@ -143,7 +143,7 @@ test('generated public entry and contact expose only Shop', async () => {
   const myContactSource = await html('my/contact/index.html')
   assert.match(myShop, /src="\/images\/native-shop\/shop_checkout_1200_my\.png"/)
   assert.match(myShop, /srcset="\/images\/native-shop\/shop_checkout_820_my\.png"/)
-  assert.match(myShop, />ဆိုင်<\/p>/)
+  assert.match(myShop, />Shop<\/p>/)
   assert.match(myShop, /အခြေခံအစီအစဉ်/)
   assert.match(myShop, /တပ်ဆင်ကူညီမှု/)
   assert.match(myShop, /အဆင့်မြင့်အစီအစဉ်/)
