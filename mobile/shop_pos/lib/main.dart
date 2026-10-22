@@ -13,6 +13,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 
+import 'camera_barcode_scanner.dart';
 import 'menu_import_screen.dart';
 import 'menu_import_service.dart';
 import 'printer_setup_screen.dart';
@@ -578,6 +579,7 @@ class ShopHome extends StatefulWidget {
     this.workspaceContentWidth,
     this.addProductRequest = 0,
     this.recoverMenuPhoto,
+    this.cameraViewBuilder,
     super.key,
   });
 
@@ -593,6 +595,7 @@ class ShopHome extends StatefulWidget {
   final double? workspaceContentWidth;
   final int addProductRequest;
   final Future<XFile?> Function()? recoverMenuPhoto;
+  final ShopCameraViewBuilder? cameraViewBuilder;
 
   @override
   State<ShopHome> createState() => _ShopHomeState();
@@ -1404,7 +1407,28 @@ class _ShopHomeState extends State<ShopHome> {
             ? Theme.of(context).textTheme.titleMedium
             : Theme.of(context).textTheme.titleLarge,
       );
-      if (products.isEmpty) return title;
+      final cameraButton = shopCameraScanningSupported
+          ? IconButton.filledTonal(
+              key: const ValueKey('shop-camera-scan'),
+              tooltip: shopCopy(
+                widget.myanmar,
+                'Scan with camera',
+                'ကင်မရာဖြင့် ဖတ်ရန်',
+              ),
+              onPressed: _canAcceptScan
+                  ? () => unawaited(_openCameraScanner())
+                  : null,
+              icon: const Icon(Icons.camera_alt_outlined),
+            )
+          : null;
+      if (products.isEmpty) {
+        return Row(
+          children: [
+            Expanded(child: title),
+            ?cameraButton,
+          ],
+        );
+      }
       final addButton = OutlinedButton.icon(
         onPressed: _showAddProduct,
         icon: const Icon(Icons.add),
@@ -1461,6 +1485,7 @@ class _ShopHomeState extends State<ShopHome> {
         return Row(
           children: [
             Expanded(child: title),
+            ?cameraButton,
             productActions,
           ],
         );
@@ -1468,6 +1493,7 @@ class _ShopHomeState extends State<ShopHome> {
       return Row(
         children: [
           Expanded(child: title),
+          ?cameraButton,
           addButton,
           productActions,
         ],
@@ -1515,6 +1541,90 @@ class _ShopHomeState extends State<ShopHome> {
     if (selected != null && mounted) await _chooseProductPhoto(selected);
   }
 
+  bool get _canAcceptScan =>
+      _checkoutReady &&
+      !_saving &&
+      !_cashConfirming &&
+      !_walletStarting &&
+      _pendingWalletCheckout == null;
+
+  Future<void> _openCameraScanner() async {
+    if (!shopCameraScanningSupported || !_canAcceptScan) return;
+    final code = await Navigator.of(context).push<String>(
+      MaterialPageRoute<String>(
+        builder: (_) => CameraBarcodeScanner(
+          myanmar: widget.myanmar,
+          cameraViewBuilder: widget.cameraViewBuilder,
+        ),
+      ),
+    );
+    if (!mounted || code == null || !_canAcceptScan) return;
+    try {
+      final products = await widget.database.readActiveProducts();
+      if (mounted) _acceptScannedCode(code, products, fromCamera: true);
+    } catch (_) {
+      if (mounted) {
+        _message(
+          shopCopy(
+            widget.myanmar,
+            'Could not check the local catalog. Try the scan again.',
+            'စက်တွင်းကုန်ပစ္စည်းစာရင်းကို မစစ်နိုင်ပါ။ ထပ်ဖတ်ကြည့်ပါ။',
+          ),
+        );
+      }
+    }
+  }
+
+  void _acceptScannedCode(
+    String value,
+    List<ShopProduct> products, {
+    bool fromCamera = false,
+  }) {
+    if (!_canAcceptScan) return;
+    final code = value.trim();
+    if (code.isEmpty) return;
+    final matches = products
+        .where((item) => item.barcode == code || item.sku == code)
+        .toList();
+    if (matches.length == 1) {
+      final keepSearchFocus = !fromCamera && _searchFocus.hasFocus;
+      _add(matches.single);
+      _search.clear();
+      setState(() {});
+      if (keepSearchFocus) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _searchFocus.canRequestFocus) {
+            _searchFocus.requestFocus();
+          }
+        });
+      }
+    } else if (matches.length > 1) {
+      _message(
+        shopCopy(
+          widget.myanmar,
+          'More than one product uses this barcode or SKU. Fix the product codes before selling.',
+          'ဤဘားကုဒ် သို့မဟုတ် ကုန်ပစ္စည်းကုဒ်ကို ကုန်ပစ္စည်းတစ်မျိုးထက်ပို၍ သုံးထားသည်။ မရောင်းမီ ကုန်ပစ္စည်းကုဒ်များကို ပြင်ပါ။',
+        ),
+      );
+    } else if (RegExp(r'^[0-9]{6,64}$').hasMatch(code) ||
+        (fromCamera &&
+            RegExp(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$').hasMatch(code))) {
+      if (fromCamera) {
+        _search.text = code;
+        setState(() {});
+      }
+      unawaited(_createProductFromScannedCode(code));
+    } else {
+      _message(
+        shopCopy(
+          widget.myanmar,
+          'No exact barcode or SKU match. Check the code or add the product.',
+          'ဘားကုဒ် သို့မဟုတ် ကုန်ပစ္စည်းကုဒ် အတိအကျ မတွေ့ပါ။ ကုဒ်ကို စစ်ပါ သို့မဟုတ် ကုန်ပစ္စည်းထည့်ပါ။',
+        ),
+      );
+    }
+  }
+
   Widget _searchField(List<ShopProduct> products) => TextField(
     controller: _search,
     focusNode: _searchFocus,
@@ -1523,51 +1633,7 @@ class _ShopHomeState extends State<ShopHome> {
     // Keyboard scanners submit with Enter. Keep an already active scan field
     // ready for the next item without opening a keyboard on an idle tablet.
     onEditingComplete: () {},
-    onSubmitted: (value) {
-      if (!_checkoutReady ||
-          _saving ||
-          _cashConfirming ||
-          _walletStarting ||
-          _pendingWalletCheckout != null) {
-        return;
-      }
-      final code = value.trim();
-      if (code.isEmpty) return;
-      final matches = products
-          .where((item) => item.barcode == code || item.sku == code)
-          .toList();
-      if (matches.length == 1) {
-        final keepSearchFocus = _searchFocus.hasFocus;
-        _add(matches.single);
-        _search.clear();
-        setState(() {});
-        if (keepSearchFocus) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted && _searchFocus.canRequestFocus) {
-              _searchFocus.requestFocus();
-            }
-          });
-        }
-      } else if (matches.length > 1) {
-        _message(
-          shopCopy(
-            widget.myanmar,
-            'More than one product uses this barcode or SKU. Fix the product codes before selling.',
-            'ဤဘားကုဒ် သို့မဟုတ် ကုန်ပစ္စည်းကုဒ်ကို ကုန်ပစ္စည်းတစ်မျိုးထက်ပို၍ သုံးထားသည်။ မရောင်းမီ ကုန်ပစ္စည်းကုဒ်များကို ပြင်ပါ။',
-          ),
-        );
-      } else if (RegExp(r'^[0-9]{6,64}$').hasMatch(code)) {
-        unawaited(_createProductFromScannedCode(code));
-      } else {
-        _message(
-          shopCopy(
-            widget.myanmar,
-            'No exact barcode or SKU match. Check the code or add the product.',
-            'ဘားကုဒ် သို့မဟုတ် ကုန်ပစ္စည်းကုဒ် အတိအကျ မတွေ့ပါ။ ကုဒ်ကို စစ်ပါ သို့မဟုတ် ကုန်ပစ္စည်းထည့်ပါ။',
-          ),
-        );
-      }
-    },
+    onSubmitted: (value) => _acceptScannedCode(value, products),
     decoration: InputDecoration(
       isDense: MediaQuery.sizeOf(context).width < 380,
       contentPadding: MediaQuery.sizeOf(context).width < 380

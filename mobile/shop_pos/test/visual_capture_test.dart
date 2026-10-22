@@ -3,9 +3,11 @@
 import 'dart:io';
 
 import 'package:drift/native.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:supermega_shop/camera_barcode_scanner.dart';
 import 'package:supermega_shop/main.dart';
 import 'package:supermega_shop/shop_database.dart';
 
@@ -100,6 +102,7 @@ void main() {
   });
 
   for (final (width, height, language) in [
+    (320.0, 800.0, 'en'),
     (390.0, 844.0, 'en'),
     (820.0, 1000.0, 'en'),
     (1200.0, 900.0, 'en'),
@@ -194,6 +197,15 @@ void main() {
           await tester.tap(saleDestination.first);
           await tester.pumpAndSettle();
           expect(tester.takeException(), isNull);
+          if (width == 320 || width == 820) {
+            final camera = find.byKey(const ValueKey('shop-camera-scan'));
+            expect(camera, findsOneWidget);
+            final bounds = tester.getRect(camera);
+            expect(bounds.left, greaterThanOrEqualTo(0));
+            expect(bounds.right, lessThanOrEqualTo(width));
+            expect(bounds.height, greaterThanOrEqualTo(48));
+            expect(tester.widget<IconButton>(camera).onPressed, isNotNull);
+          }
           await expectLater(
             find.byKey(_captureKey),
             matchesGoldenFile(
@@ -261,6 +273,68 @@ void main() {
           await tester.pumpWidget(const SizedBox.shrink());
           await tester.pump(const Duration(milliseconds: 1));
           await database.close();
+        }
+      },
+    );
+  }
+
+  for (final (width, language) in [
+    (320.0, 'en'),
+    (320.0, 'my'),
+    (820.0, 'en'),
+    (820.0, 'my'),
+  ]) {
+    testWidgets(
+      'capture synthetic camera scanner at ${width.toInt()}px $language',
+      skip: !_capture,
+      (tester) async {
+        tester.view.physicalSize = Size(width, 900);
+        tester.view.devicePixelRatio = 1;
+        if (width == 320) {
+          tester.platformDispatcher.textScaleFactorTestValue = 1.5;
+        }
+        final previousPlatform = debugDefaultTargetPlatformOverride;
+        debugDefaultTargetPlatformOverride = TargetPlatform.android;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+        try {
+          await tester.pumpWidget(
+            RepaintBoundary(
+              key: _captureKey,
+              child: MaterialApp(
+                theme: ThemeData(
+                  fontFamily: language == 'my' ? 'NotoSansMyanmarUI' : 'Inter',
+                  fontFamilyFallback: const ['Inter'],
+                ),
+                home: CameraBarcodeScanner(
+                  myanmar: language == 'my',
+                  cameraViewBuilder: (context, onScanned, onError) =>
+                      const ColoredBox(
+                        color: Color(0xff20252a),
+                        child: Center(
+                          child: Text(
+                            'Synthetic camera preview',
+                            style: TextStyle(color: Colors.white70),
+                          ),
+                        ),
+                      ),
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+          await expectLater(
+            find.byKey(_captureKey),
+            matchesGoldenFile(
+              'goldens/shop_camera_${width.toInt()}_$language.png',
+            ),
+          );
+        } finally {
+          debugDefaultTargetPlatformOverride = previousPlatform;
+          await tester.pumpWidget(const SizedBox.shrink());
+          await tester.pump(const Duration(milliseconds: 1));
         }
       },
     );
