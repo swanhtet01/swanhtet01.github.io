@@ -208,7 +208,8 @@ void main() {
               );
               await tester.pumpAndSettle();
               expect(find.byType(ShopSettingsScreen), findsOneWidget);
-              await tester.pageBack();
+              Navigator.of(tester.element(find.byType(ShopSettingsScreen)))
+                  .pop();
               await tester.pumpAndSettle();
               expect(
                 tester
