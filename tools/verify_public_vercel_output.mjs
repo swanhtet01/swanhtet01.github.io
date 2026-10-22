@@ -399,7 +399,7 @@ for (const [route, html] of [['/shop/', pages.get('/shop/').html], ...publicProd
     ? `/contact/?product=${routeProduct.id}`
     : null
   const galleryViews = { shop: 3, website: 2, ecommerce: 2 }
-  const expectedLinks = route === '/shop/' ? 12 : 5 + Number(Boolean(contactActionTarget))
+  const expectedLinks = route === '/shop/' ? 11 : 5 + Number(Boolean(contactActionTarget))
   if ((body.match(/<a\b/g) || []).length !== expectedLinks) fail('marketing_link_surface_drift', { route, expectedLinks })
   const publicLogin = `href="${appOrigin}/login?product=shop"`
   if (countOccurrences(body, publicLogin) !== 0) fail('public_login_action_present', { route })
@@ -428,7 +428,7 @@ for (const [route, html] of [['/shop/', pages.get('/shop/').html], ...publicProd
     }
   }
   const productVisualMissing = route === '/shop/'
-      ? !body.includes('class="shop-hero-app"') || !body.includes('class="shop-actual-showcase"') || !body.includes('aria-label="Orders and stock"') || body.includes('Orders and stock. Clear next steps.') || !body.includes('class="shop-responsive-showcase"') || !body.includes('class="shop-support-proof"') || !body.includes('class="shop-lead-capture"') || !body.includes('id="shop-sample-disclosure"') || countOccurrences(body, 'Shop browser workspace · synthetic local records') !== 1 || /\/images\/actual-shop-(?:orders|inventory)[^" ]*/.test(body) || body.includes('<article class="shop-workflow-card">') || countOccurrences(body, 'src="/images/actual-shop-sell.png"') !== 1 || body.includes('Makro PRO') || body.includes('17 October 2026') || body.includes('class="pos-window"') || body.includes('class="sample-label"') || body.includes('Complete sample sale') || body.includes('shop-sample-demo.js') || body.includes('class="platform-gallery shop-gallery-all"') || body.includes('data-platform-carousel') || body.includes('data-device-choice') || body.includes('data-device-frame') || /<a\b[^>]*>\s*<img\b[^>]*src="\/images\/actual-shop-/i.test(body)
+      ? !body.includes('class="shop-hero-app" id="shop-demo"') || body.includes('class="shop-actual-showcase"') || body.includes('class="shop-support-proof"') || !body.includes('class="shop-lead-capture"') || !body.includes('id="shop-sample-disclosure"') || countOccurrences(body, 'Shop browser view · sample records') !== 1 || /\/images\/actual-shop-(?:orders|inventory)[^" ]*/.test(body) || body.includes('<article class="shop-workflow-card">') || countOccurrences(body, 'src="/images/actual-shop-sell.png"') !== 1 || body.includes('Makro PRO') || body.includes('17 October 2026') || body.includes('class="pos-window"') || body.includes('class="sample-label"') || body.includes('Complete sample sale') || body.includes('shop-sample-demo.js') || body.includes('class="platform-gallery shop-gallery-all"') || body.includes('data-platform-carousel') || body.includes('data-device-choice') || body.includes('data-device-frame') || /<a\b[^>]*>\s*<img\b[^>]*src="\/images\/actual-shop-/i.test(body)
       : !body.includes('class="platform-image"') || !body.includes('class="feature-line"')
   if (productVisualMissing) fail('product_visual_missing', { route })
   const directAppTargets = [...body.matchAll(/href="(https:\/\/[^\"]+)"/g)]
@@ -453,8 +453,7 @@ for (const token of [
   'src="/images/actual-shop-sell.png"',
   'srcset="/images/actual-shop-sell-mobile.png"',
   'srcset="/images/actual-shop-sell-tablet.png"',
-  'class="shop-support-proof"',
-  'href="#shop-image-credits"',
+  'class="shop-hero-app" id="shop-demo"',
   'id="shop-image-credits"',
   'aria-describedby="shop-sample-disclosure"',
 ]) {
@@ -468,7 +467,7 @@ for (const [route, html] of [['/', home], ['/shop/', shopPage]]) {
   const withoutLanguageSwitch = html.replace(/<a href="\/my\/(?:shop|contact|privacy)\/" data-language-switch hreflang="my">မြန်မာ<\/a>/g, '')
   if (html.includes('data-i18n=') || /[\u1000-\u109f]/u.test(withoutLanguageSwitch)) fail('marketing_myanmar_copy_outside_switch', { route })
 }
-for (const token of ['Sell at the counter.', 'Stay ahead of stock.', 'aria-label="Orders and stock"', 'Shop browser workspace · synthetic local records', 'See recorded orders and stock in the Shop browser workspace.']) {
+for (const token of ['Sell at the counter.', 'Stay ahead of stock.', 'Shop browser view · sample records', 'See recorded orders and stock in the Shop browser workspace.']) {
   if (!shopPage.includes(token)) fail('shop_page_scope_missing', { token })
 }
 if (/<section\b[^>]*class="[^"]*\bsubscription-section\b/.test(shopPage)
@@ -499,7 +498,9 @@ for (const token of [
 for (const token of ['Request managed company intelligence.', "submit.textContent='Request managed pilot'", 'managedIntelligenceRequest']) {
   if (contact.includes(token)) fail('retired_managed_pilot_pitch_present', { token })
 }
-if (contact.includes('mailto:') || contact.includes('tel:') || contact.includes('Email swanhtet@supermega.dev')) fail('contact_bypass_links_returned')
+if (countOccurrences(contactMain, 'href="mailto:swanhtet@supermega.dev"') !== 1
+  || !contactMain.includes('<form class="contact-form" hidden action="/api/contact-submissions"')
+  || !contact.includes('form.hidden=false;') || contactMain.includes('tel:')) fail('contact_fallback_or_form_readiness_missing')
 if (!contact.includes('source.value=location.href')) fail('contact_source_attribution_missing')
 
 if (/<(?:input|textarea)\b(?=[^>]*\bname="(?:name|email|company|template|goal)")(?=[^>]*\bvalue=)[^>]*>/i.test(contact)
@@ -523,8 +524,7 @@ for (const [route, englishRoute, switchHref] of [['/my/shop/', '/shop/', '/shop/
 const myContact = pages.get('/my/contact/')?.html || ''
 const myShop = pages.get('/my/shop/')?.html || ''
 for (const token of ['src="/images/actual-shop-sell-my.png"', 'srcset="/images/actual-shop-sell-my-tablet.png"',
-  'srcset="/images/actual-shop-sell-my-mobile.png"', 'မြန်မာဘာသာ နမူနာမျက်နှာပြင်',
-  'class="shop-support-proof"', 'အော်ဒါနှင့် ကုန်လက်ကျန်']) {
+  'srcset="/images/actual-shop-sell-my-mobile.png"', 'Shop ဘရောက်ဇာမျက်နှာပြင် · နမူနာမှတ်တမ်းများ']) {
   if (!myShop.includes(token)) fail('myanmar_shop_capture_or_language_scope_missing', { token })
 }
 if (myShop.includes('src="/images/actual-shop-sell.png"') || shopPage.includes('src="/images/actual-shop-sell-my.png"'))
@@ -533,7 +533,7 @@ if (!/<img src="\/images\/actual-shop-sell-my\.png"[^>]*width="1000" height="900
   fail('myanmar_shop_hero_dimensions_invalid')
 if (/\/images\/actual-shop-(?:orders|inventory)[^" ]*/.test(myShop)) fail('myanmar_shop_displays_english_support_capture')
 if (countOccurrences(myShop, 'class="shop-photo-credit"') !== 1
-  || !myShop.includes('href="#shop-image-credits"') || !myShop.includes('MAMA ဓာတ်ပုံ:') || !myShop.includes('twindel / Open Food Facts')
+  || !myShop.includes('id="shop-image-credits"') || !myShop.includes('MAMA ဓာတ်ပုံ:') || !myShop.includes('twindel / Open Food Facts')
   || !myShop.includes('https://creativecommons.org/licenses/by-sa/3.0/')) fail('myanmar_shop_photo_attribution_missing')
 for (const token of ['action="/api/contact-submissions"', 'name="idempotency_key"', 'name="source_url"', '>အမည်<input', '>အီးမေးလ်<input', '>စာပို့ရန်</button>', 'စာလက်ခံရရှိပါပြီ']) {
   if (!myContact.includes(token)) fail('myanmar_contact_contract_missing', { token })
