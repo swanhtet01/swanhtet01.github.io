@@ -37,13 +37,17 @@ class StockScreen extends StatefulWidget {
   const StockScreen({
     required this.database,
     required this.myanmar,
+    this.active = true,
     this.embeddedTaskShell = false,
+    this.onAddProduct,
     super.key,
   });
 
   final ShopDatabase database;
   final bool myanmar;
+  final bool active;
   final bool embeddedTaskShell;
+  final VoidCallback? onAddProduct;
 
   @override
   State<StockScreen> createState() => _StockScreenState();
@@ -51,12 +55,36 @@ class StockScreen extends StatefulWidget {
 
 class _StockScreenState extends State<StockScreen> {
   final _search = TextEditingController();
-  late final Stream<List<ShopProduct>> _products;
+  final _thumbnailFutures = <String, Future<Uint8List?>>{};
+  late Stream<List<ShopProduct>> _products;
+
+  Future<Uint8List?> _thumbnailFor(String productId) {
+    if (_thumbnailFutures.length >= 64 &&
+        !_thumbnailFutures.containsKey(productId)) {
+      _thumbnailFutures.clear();
+    }
+    return _thumbnailFutures.putIfAbsent(
+      productId,
+      () => widget.database.readProductThumbnail(productId),
+    );
+  }
 
   @override
   void initState() {
     super.initState();
     _products = widget.database.watchActiveProducts();
+  }
+
+  @override
+  void didUpdateWidget(covariant StockScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.database != widget.database) {
+      _products = widget.database.watchActiveProducts();
+      _thumbnailFutures.clear();
+    } else if (!oldWidget.active && widget.active) {
+      // A photo can change in Sell while this page stays in the task stack.
+      _thumbnailFutures.clear();
+    }
   }
 
   @override
@@ -94,11 +122,51 @@ class _StockScreenState extends State<StockScreen> {
       );
   }
 
+  Future<void> _editProduct(ShopProduct product) async {
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (_) => _EditProductDialog(
+        database: widget.database,
+        product: product,
+        myanmar: widget.myanmar,
+      ),
+    );
+    if (!mounted || saved != true) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            shopCopy(
+              widget.myanmar,
+              'Product details saved.',
+              'ကုန်ပစ္စည်းအချက်အလက်များ သိမ်းပြီးပါပြီ။',
+            ),
+          ),
+        ),
+      );
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: widget.embeddedTaskShell
         ? null
-        : AppBar(title: Text(shopCopy(widget.myanmar, 'Stock', 'လက်ကျန်'))),
+        : AppBar(
+            title: Text(shopCopy(widget.myanmar, 'Stock', 'လက်ကျန်')),
+            actions: [
+              if (widget.onAddProduct != null)
+                IconButton(
+                  key: const ValueKey('stock-add-product'),
+                  tooltip: shopCopy(
+                    widget.myanmar,
+                    'Add product',
+                    'ကုန်ပစ္စည်းထည့်ရန်',
+                  ),
+                  onPressed: widget.onAddProduct,
+                  icon: const Icon(Icons.add),
+                ),
+            ],
+          ),
     body: SafeArea(
       child: StreamBuilder<List<ShopProduct>>(
         stream: _products,
@@ -164,6 +232,34 @@ class _StockScreenState extends State<StockScreen> {
                       ShopTaskPageHeader(
                         title: shopCopy(widget.myanmar, 'Stock', 'လက်ကျန်'),
                         myanmar: widget.myanmar,
+                        trailing:
+                            widget.onAddProduct == null || products.isEmpty
+                            ? null
+                            : MediaQuery.sizeOf(context).width < 360 &&
+                                  MediaQuery.textScalerOf(context).scale(1) >
+                                      1.2
+                            ? IconButton.filledTonal(
+                                key: const ValueKey('stock-add-product'),
+                                tooltip: shopCopy(
+                                  widget.myanmar,
+                                  'Add product',
+                                  'ကုန်ပစ္စည်းထည့်ရန်',
+                                ),
+                                onPressed: widget.onAddProduct,
+                                icon: const Icon(Icons.add),
+                              )
+                            : OutlinedButton.icon(
+                                key: const ValueKey('stock-add-product'),
+                                onPressed: widget.onAddProduct,
+                                icon: const Icon(Icons.add),
+                                label: Text(
+                                  shopCopy(
+                                    widget.myanmar,
+                                    'Add product',
+                                    'ကုန်ပစ္စည်းထည့်ရန်',
+                                  ),
+                                ),
+                              ),
                       ),
                       const SizedBox(height: 12),
                     ],
@@ -235,16 +331,38 @@ class _StockScreenState extends State<StockScreen> {
                     Expanded(
                       child: products.isEmpty
                           ? Center(
-                              child: Text(
-                                shopCopy(
-                                  widget.myanmar,
-                                  query.isEmpty
-                                      ? 'No products yet'
-                                      : 'No matching products',
-                                  query.isEmpty
-                                      ? 'ကုန်ပစ္စည်း မရှိသေးပါ'
-                                      : 'ကိုက်ညီသောပစ္စည်း မတွေ့ပါ',
-                                ),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    shopCopy(
+                                      widget.myanmar,
+                                      query.isEmpty
+                                          ? 'No products yet'
+                                          : 'No matching products',
+                                      query.isEmpty
+                                          ? 'ကုန်ပစ္စည်း မရှိသေးပါ'
+                                          : 'ကိုက်ညီသောပစ္စည်း မတွေ့ပါ',
+                                    ),
+                                  ),
+                                  if (widget.embeddedTaskShell &&
+                                      widget.onAddProduct != null &&
+                                      query.isEmpty) ...[
+                                    const SizedBox(height: 12),
+                                    FilledButton.icon(
+                                      key: const ValueKey('stock-add-product'),
+                                      onPressed: widget.onAddProduct,
+                                      icon: const Icon(Icons.add),
+                                      label: Text(
+                                        shopCopy(
+                                          widget.myanmar,
+                                          'Add first product',
+                                          'ပထမကုန်ပစ္စည်းထည့်ရန်',
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
                               ),
                             )
                           : ListView.separated(
@@ -286,6 +404,19 @@ class _StockScreenState extends State<StockScreen> {
                                         fontWeight: FontWeight.w600,
                                       ),
                                     ),
+                                    Text(
+                                      shopCopy(
+                                        widget.myanmar,
+                                        '${shopNumber(item.priceMmk, myanmar: false)} MMK',
+                                        '${shopNumber(item.priceMmk, myanmar: true)} ကျပ်',
+                                      ),
+                                      style: textTheme.bodySmall?.copyWith(
+                                        color: colors.onSurfaceVariant,
+                                        fontFeatures: const [
+                                          FontFeature.tabularFigures(),
+                                        ],
+                                      ),
+                                    ),
                                     if (showReference)
                                       Text(
                                         _stockProductReference(
@@ -303,6 +434,45 @@ class _StockScreenState extends State<StockScreen> {
                                                   .onSurfaceVariant,
                                             ),
                                       ),
+                                  ],
+                                );
+                                final detailsWithPhoto = Row(
+                                  children: [
+                                    FutureBuilder<Uint8List?>(
+                                      future: _thumbnailFor(item.id),
+                                      builder: (context, image) {
+                                        final bytes = image.data;
+                                        if (bytes == null) {
+                                          return const SizedBox.shrink();
+                                        }
+                                        return Padding(
+                                          padding: const EdgeInsets.only(
+                                            right: 10,
+                                          ),
+                                          child: ClipRRect(
+                                            borderRadius: BorderRadius.circular(
+                                              8,
+                                            ),
+                                            child: Image.memory(
+                                              bytes,
+                                              key: ValueKey(
+                                                'stock-photo-${item.id}',
+                                              ),
+                                              width: 44,
+                                              height: 44,
+                                              fit: BoxFit.cover,
+                                              errorBuilder:
+                                                  (_, error, stackTrace) =>
+                                                      const SizedBox(
+                                                        width: 44,
+                                                        height: 44,
+                                                      ),
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                    Expanded(child: details),
                                   ],
                                 );
                                 final onHand = Text(
@@ -351,6 +521,64 @@ class _StockScreenState extends State<StockScreen> {
                                     ),
                                   ),
                                 );
+                                final edit = Tooltip(
+                                  message: shopCopy(
+                                    widget.myanmar,
+                                    'Edit product',
+                                    'ကုန်ပစ္စည်း ပြင်ရန်',
+                                  ),
+                                  child: TextButton.icon(
+                                    key: ValueKey('stock-edit-${item.id}'),
+                                    onPressed: () => _editProduct(item),
+                                    icon: const Icon(Icons.edit_outlined),
+                                    label: Text(
+                                      shopCopy(
+                                        widget.myanmar,
+                                        'Edit',
+                                        'ပြင်ရန်',
+                                      ),
+                                    ),
+                                  ),
+                                );
+                                final compactEdit = Tooltip(
+                                  message: shopCopy(
+                                    widget.myanmar,
+                                    'Edit product',
+                                    'ကုန်ပစ္စည်း ပြင်ရန်',
+                                  ),
+                                  child: TextButton(
+                                    key: ValueKey('stock-edit-${item.id}'),
+                                    onPressed: () => _editProduct(item),
+                                    style: TextButton.styleFrom(
+                                      minimumSize: const Size(70, 56),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 4,
+                                        vertical: 4,
+                                      ),
+                                    ),
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Icon(
+                                          Icons.edit_outlined,
+                                          size: 19,
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          shopCopy(
+                                            widget.myanmar,
+                                            'Edit',
+                                            'ပြင်ရန်',
+                                          ),
+                                          style: textTheme.labelSmall?.copyWith(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
                                 final stockActionLabel = [
                                   shopCopy(
                                     widget.myanmar,
@@ -384,7 +612,10 @@ class _StockScreenState extends State<StockScreen> {
                                       ),
                                       child: Row(
                                         children: [
-                                          Expanded(flex: 5, child: details),
+                                          Expanded(
+                                            flex: 5,
+                                            child: detailsWithPhoto,
+                                          ),
                                           Expanded(
                                             flex: 2,
                                             child: Column(
@@ -394,6 +625,7 @@ class _StockScreenState extends State<StockScreen> {
                                             ),
                                           ),
                                           SizedBox(width: 168, child: update),
+                                          edit,
                                         ],
                                       ),
                                     ),
@@ -402,31 +634,30 @@ class _StockScreenState extends State<StockScreen> {
                                 return Card(
                                   clipBehavior: Clip.antiAlias,
                                   child: compact
-                                      ? Semantics(
-                                          button: true,
-                                          label: stockActionLabel,
-                                          onTap: openStockChange,
-                                          child: ExcludeSemantics(
-                                            child: InkWell(
-                                              key: ValueKey(
-                                                'stock-row-${item.id}',
-                                              ),
-                                              onTap: openStockChange,
-                                              child: Padding(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                      horizontal: 12,
-                                                      vertical: 12,
-                                                    ),
-                                                child: Row(
-                                                  children: [
-                                                    Expanded(
+                                      ? Padding(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                            vertical: 12,
+                                          ),
+                                          child: Row(
+                                            children: [
+                                              Expanded(
+                                                child: Semantics(
+                                                  button: true,
+                                                  label: stockActionLabel,
+                                                  onTap: openStockChange,
+                                                  child: ExcludeSemantics(
+                                                    child: InkWell(
+                                                      key: ValueKey(
+                                                        'stock-row-${item.id}',
+                                                      ),
+                                                      onTap: openStockChange,
                                                       child: Column(
                                                         crossAxisAlignment:
                                                             CrossAxisAlignment
                                                                 .start,
                                                         children: [
-                                                          details,
+                                                          detailsWithPhoto,
                                                           const SizedBox(
                                                             height: 8,
                                                           ),
@@ -441,16 +672,12 @@ class _StockScreenState extends State<StockScreen> {
                                                         ],
                                                       ),
                                                     ),
-                                                    const SizedBox(width: 8),
-                                                    Icon(
-                                                      Icons.chevron_right,
-                                                      color: colors
-                                                          .onSurfaceVariant,
-                                                    ),
-                                                  ],
+                                                  ),
                                                 ),
                                               ),
-                                            ),
+                                              const SizedBox(width: 8),
+                                              compactEdit,
+                                            ],
                                           ),
                                         )
                                       : Padding(
@@ -465,7 +692,7 @@ class _StockScreenState extends State<StockScreen> {
                                                   crossAxisAlignment:
                                                       CrossAxisAlignment.start,
                                                   children: [
-                                                    details,
+                                                    detailsWithPhoto,
                                                     onHand,
                                                     ?reorderNote,
                                                   ],
@@ -473,6 +700,7 @@ class _StockScreenState extends State<StockScreen> {
                                               ),
                                               const SizedBox(width: 8),
                                               update,
+                                              edit,
                                             ],
                                           ),
                                         ),
@@ -488,6 +716,199 @@ class _StockScreenState extends State<StockScreen> {
         },
       ),
     ),
+  );
+}
+
+class _EditProductDialog extends StatefulWidget {
+  const _EditProductDialog({
+    required this.database,
+    required this.product,
+    required this.myanmar,
+  });
+
+  final ShopDatabase database;
+  final ShopProduct product;
+  final bool myanmar;
+
+  @override
+  State<_EditProductDialog> createState() => _EditProductDialogState();
+}
+
+class _EditProductDialogState extends State<_EditProductDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final _operationId = const Uuid().v4();
+  late final _name = TextEditingController(text: widget.product.name);
+  late final _barcode = TextEditingController(
+    text: widget.product.barcode ?? '',
+  );
+  late final _price = TextEditingController(
+    text: widget.product.priceMmk.toString(),
+  );
+  bool _saving = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _barcode.dispose();
+    _price.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (_saving || !(_formKey.currentState?.validate() ?? false)) return;
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      await widget.database.updateProductDetails(
+        operationId: _operationId,
+        productId: widget.product.id,
+        expectedName: widget.product.name,
+        expectedPriceMmk: widget.product.priceMmk,
+        expectedBarcode: widget.product.barcode,
+        name: _name.text,
+        priceMmk: parseStockQuantity(_price.text)!,
+        barcode: _barcode.text,
+      );
+      if (mounted) Navigator.of(context).pop(true);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _error =
+            error is StateError &&
+                error.message ==
+                    'That barcode is already assigned to a product.'
+            ? shopCopy(
+                widget.myanmar,
+                'That barcode already belongs to another product.',
+                'ဤဘားကုဒ်ကို အခြားပစ္စည်းတွင် သုံးထားပြီးပါပြီ။',
+              )
+            : error is StateError &&
+                  error.message == 'Product changed. Reopen this item.'
+            ? shopCopy(
+                widget.myanmar,
+                'Product changed. Reopen it and check the details.',
+                'ပစ္စည်းအချက်အလက် ပြောင်းသွားပါပြီ။ ပြန်ဖွင့်ပြီး စစ်ဆေးပါ။',
+              )
+            : shopCopy(
+                widget.myanmar,
+                'Could not save this product. Check the details and try again.',
+                'ပစ္စည်းကို မသိမ်းနိုင်ပါ။ အချက်အလက်များစစ်ပြီး ထပ်စမ်းပါ။',
+              );
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    scrollable: true,
+    title: Text(
+      shopCopy(widget.myanmar, 'Edit product', 'ကုန်ပစ္စည်း ပြင်ရန်'),
+    ),
+    content: Form(
+      key: _formKey,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextFormField(
+            key: const ValueKey('stock-edit-name'),
+            controller: _name,
+            enabled: !_saving,
+            decoration: InputDecoration(
+              labelText: shopCopy(widget.myanmar, 'Name', 'အမည်'),
+            ),
+            validator: (value) =>
+                value == null ||
+                    value.trim().isEmpty ||
+                    value.trim().length > 160
+                ? shopCopy(
+                    widget.myanmar,
+                    'Enter a product name.',
+                    'ကုန်ပစ္စည်းအမည် ထည့်ပါ။',
+                  )
+                : null,
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            key: const ValueKey('stock-edit-price'),
+            controller: _price,
+            enabled: !_saving,
+            keyboardType: TextInputType.number,
+            inputFormatters: [
+              FilteringTextInputFormatter.allow(RegExp('[0-9\u1040-\u1049]')),
+            ],
+            decoration: InputDecoration(
+              labelText: shopCopy(
+                widget.myanmar,
+                'Price · MMK',
+                'ဈေးနှုန်း · ကျပ်',
+              ),
+            ),
+            validator: (value) {
+              final amount = parseStockQuantity(value);
+              return amount == null || amount < 0 || amount > 2000000000
+                  ? shopCopy(
+                      widget.myanmar,
+                      'Enter a whole MMK amount.',
+                      'ကျပ်ဈေးနှုန်းကို ဂဏန်းအပြည့်ထည့်ပါ။',
+                    )
+                  : null;
+            },
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            key: const ValueKey('stock-edit-barcode'),
+            controller: _barcode,
+            enabled: !_saving,
+            decoration: InputDecoration(
+              labelText: shopCopy(
+                widget.myanmar,
+                'Barcode (optional)',
+                'ဘားကုဒ် (မဖြစ်မနေမဟုတ်ပါ)',
+              ),
+            ),
+            validator: (value) => (value?.trim().length ?? 0) > 64
+                ? shopCopy(
+                    widget.myanmar,
+                    'Barcode is too long.',
+                    'ဘားကုဒ် ရှည်လွန်းပါသည်။',
+                  )
+                : null,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            shopCopy(
+              widget.myanmar,
+              'To change the quantity, use Adjust stock.',
+              'အရေအတွက်ပြောင်းရန် လက်ကျန်ပြင်ရန်ကို သုံးပါ။',
+            ),
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          if (_error != null) ...[
+            const SizedBox(height: 12),
+            Text(
+              _error!,
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+          ],
+        ],
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: _saving ? null : () => Navigator.of(context).pop(false),
+        child: Text(shopCopy(widget.myanmar, 'Cancel', 'မလုပ်တော့ပါ')),
+      ),
+      FilledButton(
+        key: const ValueKey('stock-edit-save'),
+        onPressed: _saving ? null : _save,
+        child: Text(shopCopy(widget.myanmar, 'Save', 'သိမ်းရန်')),
+      ),
+    ],
   );
 }
 

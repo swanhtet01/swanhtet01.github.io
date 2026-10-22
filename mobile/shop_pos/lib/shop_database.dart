@@ -121,13 +121,34 @@ class CounterSaleDraft {
     required this.operationId,
     required this.quantities,
     required this.unitPricesMmk,
+    required this.productNames,
     required this.updatedAtMillis,
   });
 
   final String operationId;
   final Map<String, int> quantities;
   final Map<String, int> unitPricesMmk;
+
+  /// Names seen when this basket was last saved; old drafts without names
+  /// require an explicit review before cash checkout.
+  final Map<String, String?> productNames;
   final int updatedAtMillis;
+}
+
+/// A named, device-local basket set aside by the cashier. Holding a ticket
+/// never reserves stock, creates an order, or records a payment.
+class HeldSaleTicket {
+  const HeldSaleTicket({
+    required this.id,
+    required this.name,
+    required this.draft,
+    required this.createdAtMillis,
+  });
+
+  final String id;
+  final String name;
+  final CounterSaleDraft draft;
+  final int createdAtMillis;
 }
 
 class ShopSaleReceipt {
@@ -321,7 +342,7 @@ class ShopDatabase extends _$ShopDatabase {
     : super(executor ?? driftDatabase(name: 'supermega_shop'));
 
   @override
-  int get schemaVersion => 9;
+  int get schemaVersion => 10;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -331,6 +352,7 @@ class ShopDatabase extends _$ShopDatabase {
       await _createCashShiftTables();
       await _createProductImageTable();
       await _createCounterDraftTable();
+      await _createHeldSaleTable();
     },
     onUpgrade: (migrator, from, to) async {
       if (from < 2) {
@@ -383,6 +405,9 @@ class ShopDatabase extends _$ShopDatabase {
           'INTEGER DEFAULT 5 CHECK (reorder_level IS NULL OR '
               'reorder_level BETWEEN 0 AND 2000000000)',
         );
+      }
+      if (from < 10) {
+        await _createHeldSaleTable();
       }
     },
     beforeOpen: (_) => customStatement('PRAGMA foreign_keys = ON'),
@@ -462,6 +487,23 @@ class ShopDatabase extends _$ShopDatabase {
     )
   ''');
 
+  Future<void> _createHeldSaleTable() async {
+    await customStatement('''
+      CREATE TABLE IF NOT EXISTS shop_held_sales (
+        id TEXT PRIMARY KEY NOT NULL CHECK (length(id) BETWEEN 1 AND 120),
+        name TEXT NOT NULL CHECK (length(name) BETWEEN 1 AND 80),
+        operation_id TEXT NOT NULL UNIQUE CHECK (length(operation_id) BETWEEN 1 AND 120),
+        basket_json TEXT NOT NULL,
+        created_at_millis INTEGER NOT NULL,
+        updated_at_millis INTEGER NOT NULL
+      )
+    ''');
+    await customStatement('''
+      CREATE INDEX IF NOT EXISTS shop_held_sales_updated
+      ON shop_held_sales(updated_at_millis DESC)
+    ''');
+  }
+
   /// Persist the next basket before showing it to the operator. No stock or
   /// outbox row changes until recordSale commits the actual sale.
   Future<void> saveCounterSaleDraft({
@@ -500,8 +542,15 @@ class ShopDatabase extends _$ShopDatabase {
       if (pending != null) {
         throw StateError('Finish the pending wallet checkout first.');
       }
+      final held = await customSelect(
+        'SELECT 1 FROM shop_held_sales WHERE operation_id = ? LIMIT 1',
+        variables: [Variable.withString(cleanOperationId)],
+      ).getSingleOrNull();
+      if (held != null) {
+        throw StateError('This sale is held. Reopen it before editing.');
+      }
       final previous = await readCounterSaleDraft();
-      final lines = <Map<String, Object>>[];
+      final lines = <Map<String, Object?>>[];
       for (final line in sorted) {
         final product =
             await (select(shopProducts)..where(
@@ -517,6 +566,11 @@ class ShopDatabase extends _$ShopDatabase {
                   ? previous?.unitPricesMmk[line.key]
                   : null) ??
               0,
+          'productName':
+              product?.name ??
+              (previous?.operationId == cleanOperationId
+                  ? previous?.productNames[line.key]
+                  : null),
         });
       }
       await customStatement(
@@ -548,12 +602,28 @@ class ShopDatabase extends _$ShopDatabase {
     if (completed != null) {
       throw StateError('A completed sale still has a counter draft.');
     }
-    final raw = jsonDecode(row.read<String>('basket_json'));
+    return _decodeCounterDraft(
+      operationId: operationId,
+      basketJson: row.read<String>('basket_json'),
+      updatedAtMillis: row.read<int>('updated_at_millis'),
+    );
+  }
+
+  CounterSaleDraft _decodeCounterDraft({
+    required String operationId,
+    required String basketJson,
+    required int updatedAtMillis,
+  }) {
+    if (operationId.trim().isEmpty || operationId.length > 120) {
+      throw const FormatException('Counter draft operation is invalid.');
+    }
+    final raw = jsonDecode(basketJson);
     if (raw is! List || raw.isEmpty || raw.length > 100) {
       throw const FormatException('Counter draft is invalid.');
     }
     final quantities = <String, int>{};
     final prices = <String, int>{};
+    final names = <String, String?>{};
     for (final value in raw) {
       if (value is! Map<String, dynamic>) {
         throw const FormatException('Counter draft is invalid.');
@@ -561,6 +631,7 @@ class ShopDatabase extends _$ShopDatabase {
       final id = value['productId'];
       final quantity = value['quantity'];
       final price = value['unitPriceMmk'];
+      final name = value['productName'];
       if (id is! String ||
           id.isEmpty ||
           id.length > 100 ||
@@ -570,18 +641,159 @@ class ShopDatabase extends _$ShopDatabase {
           price is! int ||
           price < 0 ||
           price > 2000000000 ||
+          (name != null &&
+              (name is! String || name.isEmpty || name.length > 160)) ||
           quantities.containsKey(id)) {
         throw const FormatException('Counter draft is invalid.');
       }
       quantities[id] = quantity;
       prices[id] = price;
+      names[id] = name as String?;
     }
     return CounterSaleDraft(
       operationId: operationId,
       quantities: Map.unmodifiable(quantities),
       unitPricesMmk: Map.unmodifiable(prices),
-      updatedAtMillis: row.read<int>('updated_at_millis'),
+      productNames: Map.unmodifiable(names),
+      updatedAtMillis: updatedAtMillis,
     );
+  }
+
+  Future<List<HeldSaleTicket>> readHeldSaleTickets() async {
+    final rows = await customSelect(
+      'SELECT id, name, operation_id, basket_json, created_at_millis, '
+      'updated_at_millis FROM shop_held_sales '
+      'ORDER BY updated_at_millis DESC, id ASC',
+    ).get();
+    if (rows.length > 30) {
+      throw StateError('The held-sale limit was exceeded.');
+    }
+    final tickets = <HeldSaleTicket>[];
+    for (final row in rows) {
+      final id = row.read<String>('id');
+      final name = row.read<String>('name');
+      final operationId = row.read<String>('operation_id');
+      if (id.isEmpty ||
+          id.length > 120 ||
+          name.trim().isEmpty ||
+          name.runes.length > 80) {
+        throw const FormatException('Held sale is invalid.');
+      }
+      final completed =
+          await (select(shopSales)
+                ..where((sale) => sale.operationId.equals(operationId)))
+              .getSingleOrNull();
+      if (completed != null) {
+        throw StateError('A completed sale still has a held ticket.');
+      }
+      final active = await customSelect(
+        'SELECT 1 FROM shop_counter_drafts WHERE operation_id = ? LIMIT 1',
+        variables: [Variable.withString(operationId)],
+      ).getSingleOrNull();
+      if (active != null) {
+        throw StateError('A sale cannot be active and held at the same time.');
+      }
+      tickets.add(
+        HeldSaleTicket(
+          id: id,
+          name: name,
+          draft: _decodeCounterDraft(
+            operationId: operationId,
+            basketJson: row.read<String>('basket_json'),
+            updatedAtMillis: row.read<int>('updated_at_millis'),
+          ),
+          createdAtMillis: row.read<int>('created_at_millis'),
+        ),
+      );
+    }
+    return List.unmodifiable(tickets);
+  }
+
+  /// Move the only active basket into a named ticket in one SQLite transaction.
+  Future<void> holdCounterSaleDraft({
+    required String id,
+    required String name,
+    required String operationId,
+  }) async {
+    final cleanId = id.trim();
+    final cleanName = name.trim();
+    if (cleanId.isEmpty ||
+        cleanId.length > 120 ||
+        cleanName.isEmpty ||
+        cleanName.runes.length > 80 ||
+        RegExp(r'[\x00-\x1f\x7f]').hasMatch(cleanName)) {
+      throw ArgumentError('Give the held sale a short name.');
+    }
+    await transaction(() async {
+      final pending = await customSelect(
+        "SELECT 1 FROM shop_wallet_checkout_intents WHERE state = 'pending' LIMIT 1",
+      ).getSingleOrNull();
+      if (pending != null) {
+        throw StateError('Finish the pending wallet checkout first.');
+      }
+      final draft = await readCounterSaleDraft();
+      if (draft == null || draft.operationId != operationId) {
+        throw StateError('The current sale changed. Review it before holding.');
+      }
+      final count = await customSelect(
+        'SELECT COUNT(*) AS total FROM shop_held_sales',
+      ).getSingle();
+      if (count.read<int>('total') >= 30) {
+        throw StateError(
+          'Reopen or discard a held sale before adding another.',
+        );
+      }
+      final now = DateTime.now().millisecondsSinceEpoch;
+      await customStatement(
+        'INSERT INTO shop_held_sales '
+        '(id, name, operation_id, basket_json, created_at_millis, updated_at_millis) '
+        'SELECT ?, ?, operation_id, basket_json, ?, ? '
+        'FROM shop_counter_drafts WHERE slot = 1 AND operation_id = ?',
+        [cleanId, cleanName, now, now, operationId],
+      );
+      await clearCounterSaleDraft(operationId);
+    });
+  }
+
+  /// A held basket may reopen only into an empty counter. The same operation
+  /// ID travels with it, preserving sale retry idempotency.
+  Future<CounterSaleDraft> reopenHeldSaleTicket(String id) async =>
+      transaction(() async {
+        final current = await readCounterSaleDraft();
+        if (current != null) {
+          throw StateError(
+            'Hold or clear the current sale before reopening another.',
+          );
+        }
+        final pending = await customSelect(
+          "SELECT 1 FROM shop_wallet_checkout_intents WHERE state = 'pending' LIMIT 1",
+        ).getSingleOrNull();
+        if (pending != null) {
+          throw StateError('Finish the pending wallet checkout first.');
+        }
+        final rows = await readHeldSaleTickets();
+        final matches = rows.where((ticket) => ticket.id == id).toList();
+        if (matches.length != 1) throw StateError('Held sale is unavailable.');
+        final ticket = matches.single;
+        await customStatement(
+          'INSERT INTO shop_counter_drafts '
+          '(slot, operation_id, basket_json, updated_at_millis) '
+          'SELECT 1, operation_id, basket_json, ? '
+          'FROM shop_held_sales WHERE id = ?',
+          [DateTime.now().millisecondsSinceEpoch, id],
+        );
+        await customStatement('DELETE FROM shop_held_sales WHERE id = ?', [id]);
+        return ticket.draft;
+      });
+
+  Future<void> discardHeldSaleTicket(String id) async {
+    await transaction(() async {
+      final rows = await readHeldSaleTickets();
+      if (!rows.any((ticket) => ticket.id == id)) {
+        throw StateError('Held sale is unavailable.');
+      }
+      await customStatement('DELETE FROM shop_held_sales WHERE id = ?', [id]);
+    });
   }
 
   Future<void> clearCounterSaleDraft(String operationId) async {
@@ -589,6 +801,16 @@ class ShopDatabase extends _$ShopDatabase {
       'DELETE FROM shop_counter_drafts WHERE slot = 1 AND operation_id = ?',
       [operationId],
     );
+  }
+
+  Future<void> _rejectHeldSaleOperation(String operationId) async {
+    final held = await customSelect(
+      'SELECT 1 FROM shop_held_sales WHERE operation_id = ? LIMIT 1',
+      variables: [Variable.withString(operationId)],
+    ).getSingleOrNull();
+    if (held != null) {
+      throw StateError('Reopen the held sale before checkout.');
+    }
   }
 
   /// Store only bounded, metadata-free PNG thumbnails beside the local catalog.
@@ -856,6 +1078,120 @@ class ShopDatabase extends _$ShopDatabase {
             'barcode': cleanBarcode,
             'priceMmk': priceMmk,
             'openingStock': openingStock,
+          }),
+          createdAtMillis: now,
+        ),
+      );
+    });
+  }
+
+  /// Change catalog details without changing stock or rewriting prior sales.
+  /// The expected values keep a stale edit sheet from replacing a newer edit.
+  Future<void> updateProductDetails({
+    required String operationId,
+    required String productId,
+    required String expectedName,
+    required int expectedPriceMmk,
+    required String? expectedBarcode,
+    required String name,
+    required int priceMmk,
+    required String? barcode,
+  }) async {
+    final cleanOperationId = operationId.trim();
+    final cleanProductId = productId.trim();
+    final cleanName = name.trim();
+    final cleanBarcode = _optionalText(barcode);
+    final oldBarcode = _optionalText(expectedBarcode);
+    if (cleanOperationId.isEmpty ||
+        cleanOperationId.length > 120 ||
+        cleanProductId.isEmpty ||
+        cleanProductId.length > 100 ||
+        cleanName.isEmpty ||
+        cleanName.length > 160 ||
+        priceMmk < 0 ||
+        priceMmk > 2000000000 ||
+        (cleanBarcode != null && cleanBarcode.length > 64)) {
+      throw ArgumentError('Product values are invalid.');
+    }
+    await transaction(() async {
+      final product = await (select(
+        shopProducts,
+      )..where((row) => row.id.equals(cleanProductId))).getSingleOrNull();
+      if (product == null || product.archived) {
+        throw StateError('This product is no longer available.');
+      }
+      final previousEvent =
+          await (select(shopSyncOutbox)
+                ..where((row) => row.operationId.equals(cleanOperationId)))
+              .getSingleOrNull();
+      if (previousEvent != null) {
+        final data = jsonDecode(previousEvent.payloadJson);
+        if (previousEvent.eventType == 'catalog.product.updated.v1' &&
+            data is Map<String, dynamic> &&
+            data['productId'] == cleanProductId &&
+            data['name'] == cleanName &&
+            data['priceMmk'] == priceMmk &&
+            data['barcode'] == cleanBarcode &&
+            product.name == cleanName &&
+            product.priceMmk == priceMmk &&
+            product.barcode == cleanBarcode) {
+          return;
+        }
+        throw StateError('This product edit was already used differently.');
+      }
+      if (product.name != expectedName ||
+          product.priceMmk != expectedPriceMmk ||
+          product.barcode != oldBarcode) {
+        throw StateError('Product changed. Reopen this item.');
+      }
+      if (product.name == cleanName &&
+          product.priceMmk == priceMmk &&
+          product.barcode == cleanBarcode) {
+        return;
+      }
+      if (cleanBarcode != null) {
+        final matches = await (select(
+          shopProducts,
+        )..where((row) => row.barcode.equals(cleanBarcode))).get();
+        if (matches.any((row) => row.id != cleanProductId)) {
+          throw StateError('That barcode is already assigned to a product.');
+        }
+      }
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final changed =
+          await (update(shopProducts)..where(
+                (row) =>
+                    row.id.equals(cleanProductId) &
+                    row.archived.equals(false) &
+                    row.name.equals(expectedName) &
+                    row.priceMmk.equals(expectedPriceMmk) &
+                    (oldBarcode == null
+                        ? row.barcode.isNull()
+                        : row.barcode.equals(oldBarcode)),
+              ))
+              .write(
+                ShopProductsCompanion(
+                  name: Value(cleanName),
+                  priceMmk: Value(priceMmk),
+                  barcode: Value(cleanBarcode),
+                  updatedAtMillis: Value(now),
+                ),
+              );
+      if (changed != 1) {
+        throw StateError('Product changed. Reopen this item.');
+      }
+      await into(shopSyncOutbox).insert(
+        ShopSyncOutboxCompanion.insert(
+          operationId: cleanOperationId,
+          eventType: 'catalog.product.updated.v1',
+          payloadJson: jsonEncode({
+            'productId': cleanProductId,
+            'name': cleanName,
+            'priceMmk': priceMmk,
+            'barcode': cleanBarcode,
+            'previousName': product.name,
+            'previousPriceMmk': product.priceMmk,
+            'previousBarcode': product.barcode,
           }),
           createdAtMillis: now,
         ),
@@ -1249,6 +1585,7 @@ class ShopDatabase extends _$ShopDatabase {
     });
 
     return transaction(() async {
+      await _rejectHeldSaleOperation(cleanOperationId);
       final existingIntent = await customSelect(
         'SELECT operation_id, payment_method, request_fingerprint, total_mmk, '
         'merchant_phone, merchant_qr_payload, basket_json, state, created_at_millis '
@@ -1719,6 +2056,8 @@ class ShopDatabase extends _$ShopDatabase {
     required String paymentMethod,
     String? walletCheckoutOperationId,
     int? expectedTotalMmk,
+    Map<String, int>? expectedUnitPricesMmk,
+    Map<String, String>? expectedProductNames,
   }) async {
     final cleanOperationId = operationId.trim();
     final cleanWalletCheckoutId = walletCheckoutOperationId?.trim();
@@ -1730,6 +2069,8 @@ class ShopDatabase extends _$ShopDatabase {
         !supportedPaymentMethods.contains(paymentMethod) ||
         (expectedTotalMmk != null &&
             (expectedTotalMmk < 0 || paymentMethod != 'cash')) ||
+        (expectedUnitPricesMmk != null && paymentMethod != 'cash') ||
+        (expectedProductNames != null && paymentMethod != 'cash') ||
         (paymentMethod == 'cash' && cleanWalletCheckoutId != null) ||
         (paymentMethod != 'cash' &&
             cleanWalletCheckoutId != cleanOperationId)) {
@@ -1748,6 +2089,26 @@ class ShopDatabase extends _$ShopDatabase {
     }
     final canonicalLines = productQuantities.entries.toList()
       ..sort((a, b) => a.key.compareTo(b.key));
+    if (expectedUnitPricesMmk != null &&
+        (expectedUnitPricesMmk.length != productQuantities.length ||
+            productQuantities.keys.any(
+              (id) =>
+                  expectedUnitPricesMmk[id] == null ||
+                  expectedUnitPricesMmk[id]! < 0 ||
+                  expectedUnitPricesMmk[id]! > 2000000000,
+            ))) {
+      throw ArgumentError('Reviewed sale prices are invalid.');
+    }
+    if (expectedProductNames != null &&
+        (expectedProductNames.length != productQuantities.length ||
+            productQuantities.keys.any(
+              (id) =>
+                  expectedProductNames[id] == null ||
+                  expectedProductNames[id]!.isEmpty ||
+                  expectedProductNames[id]!.length > 160,
+            ))) {
+      throw ArgumentError('Reviewed sale items are invalid.');
+    }
     final fingerprintLines = [
       for (final line in canonicalLines)
         {'productId': line.key, 'quantity': line.value},
@@ -1760,6 +2121,7 @@ class ShopDatabase extends _$ShopDatabase {
           });
 
     return transaction(() async {
+      await _rejectHeldSaleOperation(cleanOperationId);
       final priorSale =
           await (select(shopSales)
                 ..where((sale) => sale.operationId.equals(cleanOperationId)))
@@ -1779,6 +2141,20 @@ class ShopDatabase extends _$ShopDatabase {
                   ..where((line) => line.saleId.equals(priorSale.id))
                   ..orderBy([(line) => OrderingTerm.asc(line.productName)]))
                 .get();
+        if (expectedUnitPricesMmk != null &&
+            priorLines.any(
+              (line) =>
+                  expectedUnitPricesMmk[line.productId] != line.unitPriceMmk,
+            )) {
+          throw StateError('Sale price changed. Review the amount again.');
+        }
+        if (expectedProductNames != null &&
+            priorLines.any(
+              (line) =>
+                  expectedProductNames[line.productId] != line.productName,
+            )) {
+          throw StateError('Sale item changed. Review each line again.');
+        }
         await clearCounterSaleDraft(cleanOperationId);
         return ShopSaleReceipt(
           id: priorSale.id,
@@ -1874,6 +2250,14 @@ class ShopDatabase extends _$ShopDatabase {
           throw StateError('The sale does not match the saved checkout.');
         }
         final unitPriceMmk = snapshot?.unitPriceMmk ?? product.priceMmk;
+        if (expectedUnitPricesMmk != null &&
+            expectedUnitPricesMmk[line.key] != unitPriceMmk) {
+          throw StateError('Sale price changed. Review the amount again.');
+        }
+        if (expectedProductNames != null &&
+            expectedProductNames[line.key] != product.name) {
+          throw StateError('Sale item changed. Review each line again.');
+        }
         final lineTotal = unitPriceMmk * line.value;
         if (lineTotal > 2000000000000 ||
             totalMmk > 200000000000000 - lineTotal) {

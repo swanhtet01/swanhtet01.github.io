@@ -230,7 +230,7 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
                                   ? shopCopy(widget.myanmar, 'Sale', 'အရောင်း')
                                   : sale.lines.first.productName;
                               final more = sale.lines.length > 1
-                                  ? ' +${sale.lines.length - 1}'
+                                  ? ' +${shopNumber(sale.lines.length - 1, myanmar: widget.myanmar)}'
                                   : '';
                               if (MediaQuery.sizeOf(context).width < 480) {
                                 return Card(

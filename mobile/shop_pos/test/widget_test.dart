@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supermega_shop/main.dart';
@@ -35,7 +36,254 @@ void _usePhoneViewport(WidgetTester tester) {
   addTearDown(tester.view.resetDevicePixelRatio);
 }
 
+Future<int> _settleStock(WidgetTester tester) => tester.pumpAndSettle(
+  const Duration(milliseconds: 100),
+  EnginePhase.sendSemanticsUpdate,
+  const Duration(seconds: 5),
+);
+
 void main() {
+  for (final myanmar in [false, true]) {
+    testWidgets(
+      'cashier holds and reopens a local sale in ${myanmar ? 'MY' : 'EN'}',
+      (tester) async {
+        _usePhoneViewport(tester);
+        final database = ShopDatabase(NativeDatabase.memory());
+        try {
+          await database.addProduct(
+            id: 'tea',
+            name: 'Tea',
+            priceMmk: 2500,
+            openingStock: 3,
+          );
+          await tester.pumpWidget(
+            MaterialApp(
+              home: ShopHome(
+                database: database,
+                authClient: null,
+                apiBaseUrl: 'https://example.invalid',
+                myanmar: myanmar,
+                onLanguageChanged: (_) {},
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          await tester.tap(find.byKey(const ValueKey('shop-catalog-row:tea')));
+          await tester.pumpAndSettle();
+          final original = await database.readCounterSaleDraft();
+          expect(original?.quantities, {'tea': 1});
+          await tester.tap(
+            find.textContaining(myanmar ? 'အရောင်းစစ်ရန်' : 'Review sale'),
+          );
+          await tester.pumpAndSettle();
+          expect(
+            find.text(myanmar ? 'အရောင်း ခဏသိမ်း' : 'Hold sale'),
+            findsOneWidget,
+          );
+          await tester.ensureVisible(
+            find.byKey(const ValueKey('shop-hold-sale')),
+          );
+          await tester.tap(find.byKey(const ValueKey('shop-hold-sale')));
+          await tester.pumpAndSettle();
+          await tester.enterText(
+            find.byKey(const ValueKey('shop-held-sale-name')),
+            'Customer A',
+          );
+          await tester.pumpAndSettle();
+          await tester.tap(
+            find.byKey(const ValueKey('shop-held-sale-confirm')),
+          );
+          await tester.pumpAndSettle();
+          expect(await database.readCounterSaleDraft(), isNull);
+          expect(
+            (await database.readHeldSaleTickets()).single.draft.operationId,
+            original!.operationId,
+          );
+          expect((await database.readActiveProducts()).single.onHand, 3);
+          expect(await database.countSales(), 0);
+
+          await tester.tap(find.byKey(const ValueKey('shop-held-sales-open')));
+          await tester.pumpAndSettle();
+          expect(find.text('Customer A'), findsOneWidget);
+          final ticket = (await database.readHeldSaleTickets()).single;
+          await tester.tap(
+            find.byKey(ValueKey('shop-held-reopen:${ticket.id}')),
+          );
+          await tester.pumpAndSettle();
+          expect(
+            (await database.readCounterSaleDraft())?.operationId,
+            original.operationId,
+          );
+          expect(await database.readHeldSaleTickets(), isEmpty);
+          expect(tester.takeException(), isNull);
+        } finally {
+          await tester.pumpWidget(const SizedBox.shrink());
+          await tester.pump(const Duration(milliseconds: 1));
+          await database.close();
+        }
+      },
+    );
+  }
+
+  testWidgets('held-sale picker fits a 320px phone at enlarged text', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 800);
+    tester.view.devicePixelRatio = 1;
+    tester.platformDispatcher.textScaleFactorTestValue = 1.5;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    final database = ShopDatabase(NativeDatabase.memory());
+    try {
+      await database.addProduct(
+        id: 'tea',
+        name: 'Tea',
+        priceMmk: 2500,
+        openingStock: 3,
+      );
+      await database.saveCounterSaleDraft(
+        operationId: 'held-compact',
+        quantities: const {'tea': 1},
+      );
+      await database.holdCounterSaleDraft(
+        id: 'compact-ticket',
+        name: 'Customer May',
+        operationId: 'held-compact',
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ShopHome(
+            database: database,
+            authClient: null,
+            apiBaseUrl: 'https://example.invalid',
+            myanmar: true,
+            onLanguageChanged: (_) {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('shop-held-sales-open')));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('shop-held-reopen:compact-ticket')),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+      await tester.tap(
+        find.byKey(const ValueKey('shop-held-reopen:compact-ticket')),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        (await database.readCounterSaleDraft())?.operationId,
+        'held-compact',
+      );
+      expect(await database.readHeldSaleTickets(), isEmpty);
+      await tester.ensureVisible(find.textContaining('အရောင်းစစ်ရန်'));
+      await tester.tap(find.textContaining('အရောင်းစစ်ရန်'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byKey(const ValueKey('shop-hold-sale')));
+      expect(find.text('အရောင်း ခဏသိမ်း'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+      await database.close();
+    }
+  });
+
+  testWidgets('reopened held sale waits when another sale used its stock', (
+    tester,
+  ) async {
+    _usePhoneViewport(tester);
+    final database = ShopDatabase(NativeDatabase.memory());
+    try {
+      await database.addProduct(
+        id: 'tea',
+        name: 'Tea',
+        priceMmk: 2500,
+        openingStock: 4,
+      );
+      await database.saveCounterSaleDraft(
+        operationId: 'held-stock-a',
+        quantities: const {'tea': 3},
+      );
+      await database.holdCounterSaleDraft(
+        id: 'held-stock-ticket',
+        name: 'Customer A',
+        operationId: 'held-stock-a',
+      );
+      await database.recordSale(
+        operationId: 'other-customer',
+        paymentMethod: 'cash',
+        lines: const [ShopSaleLineInput(productId: 'tea', quantity: 2)],
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ShopHome(
+            database: database,
+            authClient: null,
+            apiBaseUrl: 'https://example.invalid',
+            myanmar: false,
+            onLanguageChanged: (_) {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('shop-held-sales-open')));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('shop-held-reopen:held-stock-ticket')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('Review sale'));
+      await tester.pumpAndSettle();
+      expect(find.text('Only 2 available'), findsOneWidget);
+      expect(
+        find.text(
+          'Stock changed. Match this sale to available quantities before payment.',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.text('Sale restored. Review changed items before checkout.'),
+        findsNothing,
+      );
+      expect(
+        tester
+            .widget<FilledButton>(
+              find.ancestor(
+                of: find.text('Cash sale'),
+                matching: find.byType(FilledButton),
+              ),
+            )
+            .onPressed,
+        isNull,
+      );
+      expect(await database.countSales(), 1);
+      await tester.tap(find.text('Match available stock'));
+      await tester.pumpAndSettle();
+      expect((await database.readCounterSaleDraft())?.quantities, {'tea': 2});
+      expect(
+        tester
+            .widget<FilledButton>(
+              find.ancestor(
+                of: find.text('Cash sale'),
+                matching: find.byType(FilledButton),
+              ),
+            )
+            .onPressed,
+        isNotNull,
+      );
+      expect(await database.countSales(), 1);
+      expect(tester.takeException(), isNull);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+      await database.close();
+    }
+  });
+
   testWidgets('Windows scanner focus returns after switching tasks', (
     tester,
   ) async {
@@ -75,6 +323,7 @@ void main() {
       }
 
       await visit('Sell');
+      expect(find.byKey(const ValueKey('shop-camera-scan')), findsNothing);
       expect(
         tester
             .widget<EditableText>(find.byType(EditableText))
@@ -106,6 +355,170 @@ void main() {
       await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pumpAndSettle();
       expect((await database.readCounterSaleDraft())?.quantities, {'tea': 1});
+      expect(tester.takeException(), isNull);
+    } finally {
+      debugDefaultTargetPlatformOverride = previousPlatform;
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+      await database.close();
+    }
+  });
+
+  testWidgets('camera frames add one known barcode to the offline sale draft', (
+    tester,
+  ) async {
+    _usePhoneViewport(tester);
+    final previousPlatform = debugDefaultTargetPlatformOverride;
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    final database = ShopDatabase(NativeDatabase.memory());
+    try {
+      await database.addProduct(
+        id: 'tea',
+        name: 'Tea',
+        barcode: '0012345678905',
+        priceMmk: 2500,
+        openingStock: 3,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ShopHome(
+            database: database,
+            authClient: null,
+            apiBaseUrl: 'https://example.invalid',
+            myanmar: false,
+            onLanguageChanged: (_) {},
+            cameraViewBuilder: (context, onScanned, onError) => Center(
+              child: FilledButton(
+                key: const ValueKey('fake-camera-detect'),
+                onPressed: () {
+                  onScanned('0012345678905');
+                  onScanned('0012345678905');
+                },
+                child: const Text('Detect'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('shop-camera-scan')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('fake-camera-detect')));
+      await tester.pumpAndSettle();
+      expect((await database.readCounterSaleDraft())?.quantities, {'tea': 1});
+      expect(await database.countSales(), 0);
+      expect(tester.takeException(), isNull);
+    } finally {
+      debugDefaultTargetPlatformOverride = previousPlatform;
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+      await database.close();
+    }
+  });
+
+  testWidgets('unknown camera barcode opens Add product with its code', (
+    tester,
+  ) async {
+    _usePhoneViewport(tester);
+    final previousPlatform = debugDefaultTargetPlatformOverride;
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    final database = ShopDatabase(NativeDatabase.memory());
+    try {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ShopHome(
+            database: database,
+            authClient: null,
+            apiBaseUrl: 'https://example.invalid',
+            myanmar: false,
+            onLanguageChanged: (_) {},
+            cameraViewBuilder: (context, onScanned, onError) => Center(
+              child: FilledButton(
+                key: const ValueKey('fake-camera-detect'),
+                onPressed: () => onScanned('SKU-NEW-1'),
+                child: const Text('Detect'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('shop-camera-scan')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('fake-camera-detect')));
+      await tester.pumpAndSettle();
+      expect(find.byType(AlertDialog), findsOneWidget);
+      expect(
+        tester
+            .widget<TextFormField>(
+              find.byKey(const ValueKey('shop-product-barcode')),
+            )
+            .controller!
+            .text,
+        'SKU-NEW-1',
+      );
+      expect(await database.readCounterSaleDraft(), isNull);
+      expect(await database.countSales(), 0);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(await database.readCounterSaleDraft(), isNull);
+      expect(tester.takeException(), isNull);
+    } finally {
+      debugDefaultTargetPlatformOverride = previousPlatform;
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+      await database.close();
+    }
+  });
+
+  testWidgets('cancel and camera denial return to Sell without a sale write', (
+    tester,
+  ) async {
+    _usePhoneViewport(tester);
+    final previousPlatform = debugDefaultTargetPlatformOverride;
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    final database = ShopDatabase(NativeDatabase.memory());
+    try {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ShopHome(
+            database: database,
+            authClient: null,
+            apiBaseUrl: 'https://example.invalid',
+            myanmar: false,
+            onLanguageChanged: (_) {},
+            cameraViewBuilder: (context, onScanned, onError) => Center(
+              child: FilledButton(
+                key: const ValueKey('fake-camera-deny'),
+                onPressed: () =>
+                    onError(MobileScannerErrorCode.permissionDenied),
+                child: const Text('Deny camera'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('shop-camera-scan')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Cancel scan'));
+      await tester.pumpAndSettle();
+      expect(find.text('Products'), findsOneWidget);
+      expect(await database.readCounterSaleDraft(), isNull);
+
+      await tester.tap(find.byKey(const ValueKey('shop-camera-scan')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('fake-camera-deny')));
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Camera access was denied. No item was added.'),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Return to Sell'));
+      await tester.pumpAndSettle();
+      expect(find.text('Products'), findsOneWidget);
+      expect(await database.readCounterSaleDraft(), isNull);
+      expect(await database.countSales(), 0);
       expect(tester.takeException(), isNull);
     } finally {
       debugDefaultTargetPlatformOverride = previousPlatform;
@@ -237,6 +650,69 @@ void main() {
       }
     },
   );
+
+  testWidgets('Stock adds a product without switching tasks or making a sale', (
+    tester,
+  ) async {
+    _usePhoneViewport(tester);
+    final database = ShopDatabase(NativeDatabase.memory());
+    try {
+      await tester.pumpWidget(
+        ShopApp(
+          database: database,
+          authClient: null,
+          apiBaseUrl: 'https://app.supermega.dev',
+          initialMyanmar: false,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.descendant(
+          of: find.byType(NavigationBar),
+          matching: find.text('Stock'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('No products yet'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('stock-add-product')));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('shop-product-name')),
+        'Tea 500 g',
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('shop-product-barcode')),
+        '1234567890123',
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('shop-product-price')),
+        '3500',
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('shop-product-stock')),
+        '8',
+      );
+      await tester.tap(find.text('Save product'));
+      await tester.pumpAndSettle();
+      expect(find.text('Tea 500 g'), findsOneWidget);
+      expect(find.byKey(const ValueKey('stock-add-product')), findsOneWidget);
+      expect((await database.readActiveProducts()).single.onHand, 8);
+      expect(await database.countSales(), 0);
+      await tester.tap(
+        find.descendant(
+          of: find.byType(NavigationBar),
+          matching: find.text('Sell'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Tea 500 g'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+      await database.close();
+    }
+  });
 
   testWidgets('Today stays readable and opens Counter in both languages', (
     tester,
@@ -435,6 +911,10 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Recent sales'), findsOneWidget);
       expect(find.text('Check stock'), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.text('Check stock')).dy,
+        lessThan(tester.getTopLeft(find.text('Recent sales')).dy),
+      );
       expect(find.text('Stock to check'), findsNothing);
       await tester.ensureVisible(find.text('Check stock'));
       await tester.tap(find.text('Check stock'));
@@ -615,6 +1095,37 @@ void main() {
         await database.close();
       }
     }
+  });
+
+  testWidgets('stock counts use Burmese digits on tablet', (tester) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(820, 800);
+    final database = ShopDatabase(NativeDatabase.memory());
+    addTearDown(database.close);
+    await database.addProduct(
+      id: 'rice',
+      name: 'Rice',
+      priceMmk: 12000,
+      openingStock: 8,
+    );
+    await database.addProduct(
+      id: 'tea',
+      name: 'Tea',
+      priceMmk: 2500,
+      openingStock: 4,
+    );
+    await tester.pumpWidget(
+      MaterialApp(home: StockScreen(database: database, myanmar: true)),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('ကုန်ပစ္စည်း ၂ မျိုး'), findsOneWidget);
+    await tester.enterText(find.byKey(const ValueKey('stock-search')), 'Rice');
+    await tester.pumpAndSettle();
+    expect(find.text('ကိုက်ညီမှု ၁ ခု'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 1));
   });
 
   testWidgets(
@@ -897,7 +1408,9 @@ void main() {
       await tester.tap(find.textContaining('Review sale · 2 · Check items'));
       await tester.pumpAndSettle();
       expect(
-        find.text('A saved product is unavailable. Remove it before checkout.'),
+        find.text(
+          'Stock changed. Match this sale to available quantities before payment.',
+        ),
         findsOneWidget,
       );
       expect(find.text('Check items'), findsOneWidget);
@@ -924,11 +1437,13 @@ void main() {
         isNull,
       );
       expect(await database.countSales(), 0);
-      await tester.tap(find.text('Remove unavailable item'));
+      await tester.tap(find.text('Match available stock'));
       await tester.pumpAndSettle();
       expect((await database.readCounterSaleDraft())?.quantities, {'tea': 1});
       expect(
-        find.text('A saved product is unavailable. Remove it before checkout.'),
+        find.text(
+          'Stock changed. Match this sale to available quantities before payment.',
+        ),
         findsNothing,
       );
       expect(
@@ -1250,9 +1765,18 @@ void main() {
       priceMmk: 2500,
       openingStock: 1,
     );
+    await database.addProduct(
+      id: 'coffee',
+      name: 'Coffee',
+      priceMmk: 3000,
+      openingStock: 1,
+    );
     await database.recordCashSale(
       operationId: 'burmese-date',
-      lines: const [ShopSaleLineInput(productId: 'tea', quantity: 1)],
+      lines: const [
+        ShopSaleLineInput(productId: 'tea', quantity: 1),
+        ShopSaleLineInput(productId: 'coffee', quantity: 1),
+      ],
     );
     await tester.pumpWidget(
       MaterialApp(
@@ -1261,6 +1785,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    expect(find.textContaining(' +၁'), findsOneWidget);
     expect(
       find.textContaining(
         RegExp(r'[၀-၉]{2}/[၀-၉]{2}/[၀-၉]{4} [၀-၉]{2}:[၀-၉]{2}'),
@@ -1486,7 +2011,7 @@ void main() {
     }
   });
 
-  testWidgets('catalog aligns saved photos and products without photos', (
+  testWidgets('catalog shows a real photo without empty media placeholders', (
     tester,
   ) async {
     addTearDown(tester.view.resetPhysicalSize);
@@ -1539,14 +2064,7 @@ void main() {
       findsNothing,
     );
     expect(
-      find.byKey(const ValueKey('shop-product-no-photo:water')),
-      findsOneWidget,
-    );
-    expect(
-      find.descendant(
-        of: find.byKey(const ValueKey('shop-product-no-photo:water')),
-        matching: find.byType(Icon),
-      ),
+      find.byKey(const ValueKey('shop-product-media:water')),
       findsNothing,
     );
     for (final width in [390.0, 820.0]) {
@@ -1554,7 +2072,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(
         tester.getTopLeft(find.text('Tea')).dx,
-        tester.getTopLeft(find.text('Water')).dx,
+        greaterThan(tester.getTopLeft(find.text('Water')).dx),
       );
       expect(tester.takeException(), isNull);
     }
@@ -1606,6 +2124,14 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField &&
+            widget.decoration?.hintText == 'ရှာ / စကင်ဖတ်',
+      ),
+      findsOneWidget,
+    );
     expect(find.byKey(const ValueKey('shop-product-media:rice')), findsNothing);
     expect(
       find.byKey(const ValueKey('shop-product-media:water')),
@@ -1635,12 +2161,12 @@ void main() {
       findsOneWidget,
     );
     expect(
-      find.byKey(const ValueKey('shop-product-no-photo:water')),
-      findsOneWidget,
+      find.byKey(const ValueKey('shop-product-media:water')),
+      findsNothing,
     );
     expect(
       tester.getTopLeft(find.text('ရက် ၉၀ ဆန်အိတ် ၁၀ ကီလိုဂရမ်')).dx,
-      tester.getTopLeft(find.text('ALPINE သောက်ရေသန့် ၁ လီတာ')).dx,
+      greaterThan(tester.getTopLeft(find.text('ALPINE သောက်ရေသန့် ၁ လီတာ')).dx),
     );
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
@@ -1711,6 +2237,84 @@ void main() {
     await tester.pump(const Duration(milliseconds: 1));
   });
 
+  for (final myanmar in [false, true]) {
+    testWidgets(
+      'empty ${myanmar ? 'MY' : 'EN'} catalog scans a first product without a sale',
+      (tester) async {
+        _usePhoneViewport(tester);
+        final database = ShopDatabase(NativeDatabase.memory());
+        addTearDown(database.close);
+        await tester.pumpWidget(
+          ShopApp(
+            initialCounter: true,
+            database: database,
+            authClient: null,
+            apiBaseUrl: 'https://app.supermega.dev',
+            initialMyanmar: myanmar,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final search = find.byType(TextField);
+        expect(
+          tester.widget<TextField>(search).decoration?.hintText,
+          myanmar ? 'ဘားကုဒ် ဖတ်ပါ' : 'Scan a barcode',
+        );
+        await tester.enterText(search, '0012345678905');
+        await tester.testTextInput.receiveAction(TextInputAction.done);
+        await tester.pumpAndSettle();
+        expect(find.byType(AlertDialog), findsOneWidget);
+        expect(
+          tester
+              .widget<TextFormField>(
+                find.byKey(const ValueKey('shop-product-barcode')),
+              )
+              .controller!
+              .text,
+          '0012345678905',
+        );
+        await tester.tap(find.text(myanmar ? 'မလုပ်တော့ပါ' : 'Cancel'));
+        await tester.pumpAndSettle();
+        expect(await database.readActiveProducts(), isEmpty);
+        expect(await database.readCounterSaleDraft(), isNull);
+
+        await tester.testTextInput.receiveAction(TextInputAction.done);
+        await tester.pumpAndSettle();
+        expect(find.byType(AlertDialog), findsOneWidget);
+        await tester.enterText(
+          find.byKey(const ValueKey('shop-product-name')),
+          'Rice',
+        );
+        await tester.enterText(
+          find.byKey(const ValueKey('shop-product-price')),
+          '12000',
+        );
+        await tester.enterText(
+          find.byKey(const ValueKey('shop-product-stock')),
+          '3',
+        );
+        await tester.tap(find.text(myanmar ? 'သိမ်းရန်' : 'Save product'));
+        await tester.pumpAndSettle();
+        final products = await database.readActiveProducts();
+        expect(products, hasLength(1));
+        expect(products.single.barcode, '0012345678905');
+        expect(await database.readCounterSaleDraft(), isNull);
+
+        await tester.enterText(search, '0012345678905');
+        await tester.testTextInput.receiveAction(TextInputAction.done);
+        await tester.pumpAndSettle();
+        expect((await database.readCounterSaleDraft())?.quantities, {
+          products.single.id: 1,
+        });
+        expect(await database.countSales(), 0);
+        expect((await database.readActiveProducts()).single.onHand, 3);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump(const Duration(milliseconds: 1));
+      },
+    );
+  }
+
   testWidgets('empty catalog can make a durable cash sale', (tester) async {
     _usePhoneViewport(tester);
     final database = ShopDatabase(NativeDatabase.memory());
@@ -1728,7 +2332,10 @@ void main() {
 
     expect(find.text('Products'), findsOneWidget);
     expect(find.text('Your catalog is empty'), findsOneWidget);
-    expect(find.text('Search name, barcode or SKU'), findsNothing);
+    expect(
+      tester.widget<TextField>(find.byType(TextField)).decoration?.hintText,
+      'Scan a barcode',
+    );
     expect(find.text('MAMA Chicken Instant Noodles'), findsNothing);
 
     await tester.ensureVisible(find.text('Add first product'));
@@ -1816,7 +2423,10 @@ void main() {
       expect(find.text('Your catalog is empty'), findsOneWidget);
       expect(find.text('Add first product'), findsOneWidget);
       expect(find.text('Import menu photo'), findsOneWidget);
-      expect(find.text('Search name, barcode or SKU'), findsNothing);
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).decoration?.hintText,
+        'Scan a barcode',
+      );
       expect(find.text('Current sale'), findsNothing);
       expect(tester.takeException(), isNull);
     } finally {
@@ -1963,6 +2573,18 @@ void main() {
           expect(catalogRect.width, greaterThanOrEqualTo(320));
           expect(basketRect.width, greaterThanOrEqualTo(300));
           expect(catalogRect.right, lessThan(basketRect.left));
+          if (myanmar) {
+            final title = find.text('လက်ရှိအရောင်း');
+            final hold = find.byKey(const ValueKey('shop-hold-sale'));
+            expect(title, findsOneWidget);
+            expect(hold, findsOneWidget);
+            expect(tester.getSize(title).height, lessThan(42));
+            expect(tester.widget<TextButton>(hold).onPressed, isNotNull);
+            expect(
+              tester.getRect(title).overlaps(tester.getRect(hold)),
+              isFalse,
+            );
+          }
         }
         if (width == 800) {
           await tester.tap(
@@ -2047,11 +2669,9 @@ void main() {
           }
 
           final addLabel = myanmar ? 'အရောင်းထဲထည့်ရန်' : 'Add to sale';
-          final row = find.descendant(
-            of: find.byTooltip(addLabel),
-            matching: find.byType(ListTile),
-          );
+          final row = find.byKey(const ValueKey('shop-catalog-row:rice'));
           expect(row, findsOneWidget);
+          expect(find.byTooltip(addLabel), findsOneWidget);
           expect(tester.getSize(row).height, greaterThanOrEqualTo(56));
           if (width == 820) {
             expect(
@@ -2080,6 +2700,20 @@ void main() {
                   .maxLines,
               2,
             );
+            final addAffordance = find.byKey(
+              const ValueKey('shop-add-affordance:rice'),
+            );
+            expect(
+              find.descendant(
+                of: addAffordance,
+                matching: find.text(myanmar ? 'ထည့်' : 'Add'),
+              ),
+              findsOneWidget,
+            );
+            expect(
+              tester.getSize(addAffordance).height,
+              greaterThanOrEqualTo(44),
+            );
           }
           expect(
             find.byKey(const ValueKey('shop-product-photo:rice')),
@@ -2095,8 +2729,12 @@ void main() {
           );
           expect(tester.takeException(), isNull);
 
-          // A product without a photo uses the full row as the sale action.
-          await tester.tap(row);
+          // The labeled target and the rest of the row both add the product.
+          await tester.tap(
+            width == 320
+                ? find.byKey(const ValueKey('shop-add-affordance:rice'))
+                : row,
+          );
           await tester.pumpAndSettle();
           expect(find.text('Choose photo'), findsNothing);
           if (width == 820) {
@@ -2137,12 +2775,12 @@ void main() {
     },
   );
 
-  testWidgets('320px Burmese Sell keeps three catalog rows above navigation', (
+  testWidgets('320px Burmese Sell shows three rows and scrolls to a fourth', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(320, 800);
     tester.view.devicePixelRatio = 1;
-    tester.platformDispatcher.textScaleFactorTestValue = 1.3;
+    tester.platformDispatcher.textScaleFactorTestValue = 1.5;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
@@ -2161,6 +2799,13 @@ void main() {
           openingStock: 20,
         );
       }
+      await database.saveProductThumbnail(
+        'water',
+        base64Decode(
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ'
+          'AAAADUlEQVR4nGPQyNjxHwAETAJIB09U9wAAAABJRU5ErkJggg==',
+        ),
+      );
       await tester.pumpWidget(
         ShopApp(
           database: database,
@@ -2190,17 +2835,28 @@ void main() {
         findsNothing,
       );
       final thirdRow = find.byKey(const ValueKey('shop-catalog-row:rice'));
-      expect(thirdRow, findsOneWidget);
+      final fourthRow = find.byKey(const ValueKey('shop-catalog-row:noodles'));
       expect(
-        tester.getBottomLeft(thirdRow).dy,
-        lessThan(tester.getTopLeft(find.byType(NavigationBar)).dy),
+        find.byKey(const ValueKey('shop-product-photo:water')),
+        findsOneWidget,
       );
+      expect(thirdRow, findsOneWidget);
+      expect(fourthRow, findsOneWidget);
+      final navigationTop = tester.getTopLeft(find.byType(NavigationBar)).dy;
+      expect(tester.getBottomLeft(thirdRow).dy, lessThan(navigationTop));
+      await tester.ensureVisible(fourthRow);
+      await tester.pumpAndSettle();
+      expect(tester.getBottomLeft(fourthRow).dy, lessThan(navigationTop + 1));
       expect(tester.getSize(thirdRow).height, greaterThanOrEqualTo(44));
       expect(
         tester
             .getSize(find.byKey(const ValueKey('shop-add-affordance:rice')))
             .height,
         greaterThanOrEqualTo(44),
+      );
+      expect(
+        find.descendant(of: fourthRow, matching: find.text('ထည့်')),
+        findsOneWidget,
       );
       expect(
         tester
@@ -2334,6 +2990,11 @@ void main() {
     expect(find.text('3,000 MMK'), findsWidgets);
     await tester.tap(find.text('Cash sale'));
     await tester.pumpAndSettle();
+    expect(find.text('Cash received?'), findsNothing);
+    expect(await database.countSales(), 0);
+    await tester.tap(find.text('Cash sale'));
+    await tester.pumpAndSettle();
+    expect(find.text('Cash received?'), findsOneWidget);
     expect(find.text('3,000 MMK'), findsWidgets);
     await tester.tap(find.text('Complete sale'));
     await tester.pumpAndSettle();
@@ -2341,6 +3002,161 @@ void main() {
     expect((await database.readActiveProducts()).single.onHand, 1);
     await database.close();
   });
+
+  testWidgets('reopened held sale reviews a renamed item before cash', (
+    tester,
+  ) async {
+    _usePhoneViewport(tester);
+    final database = ShopDatabase(NativeDatabase.memory());
+    try {
+      await database.addProduct(
+        id: 'tea',
+        name: 'Tea',
+        priceMmk: 2500,
+        openingStock: 2,
+      );
+      await database.saveCounterSaleDraft(
+        operationId: 'held-rename',
+        quantities: const {'tea': 1},
+      );
+      await database.holdCounterSaleDraft(
+        id: 'held-rename-ticket',
+        name: 'Customer May',
+        operationId: 'held-rename',
+      );
+      expect((await database.readHeldSaleTickets()).single.draft.productNames, {
+        'tea': 'Tea',
+      });
+      await database.updateProductDetails(
+        operationId: 'rename-held-tea',
+        productId: 'tea',
+        expectedName: 'Tea',
+        expectedPriceMmk: 2500,
+        expectedBarcode: null,
+        name: 'Tea large',
+        priceMmk: 2500,
+        barcode: null,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ShopHome(
+            database: database,
+            authClient: null,
+            apiBaseUrl: 'https://example.invalid',
+            myanmar: false,
+            onLanguageChanged: (_) {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('shop-held-sales-open')));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('shop-held-reopen:held-rename-ticket')),
+      );
+      await tester.pumpAndSettle();
+      expect((await database.readCounterSaleDraft())?.productNames, {
+        'tea': 'Tea',
+      });
+      await tester.tap(find.textContaining('Review sale'));
+      await tester.pumpAndSettle();
+      expect(find.text('Tea large'), findsWidgets);
+      expect(
+        find.text('Sale restored. Review changed items before checkout.'),
+        findsOneWidget,
+      );
+      await tester.ensureVisible(find.text('Cash sale'));
+      await tester.pumpAndSettle();
+      expect(find.text('Cash sale').hitTestable(), findsOneWidget);
+      await tester.tap(find.text('Cash sale'));
+      await tester.pumpAndSettle();
+      expect(find.text('Cash received?'), findsNothing);
+      expect(await database.countSales(), 0);
+      expect((await database.readCounterSaleDraft())?.productNames, {
+        'tea': 'Tea large',
+      });
+      await tester.ensureVisible(find.text('Cash sale'));
+      await tester.pumpAndSettle();
+      expect(find.text('Cash sale').hitTestable(), findsOneWidget);
+      await tester.tap(find.text('Cash sale'));
+      await tester.pumpAndSettle();
+      expect(find.text('Cash received?'), findsOneWidget);
+      await tester.tap(find.text('Complete sale'));
+      await tester.pumpAndSettle();
+      final sale = await database.select(database.shopSaleLines).getSingle();
+      expect(sale.productName, 'Tea large');
+      expect(await database.countSales(), 1);
+      expect(tester.takeException(), isNull);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+      await database.close();
+    }
+  });
+
+  test(
+    'cash commit rejects offsetting line-price changes at the same total',
+    () async {
+      final database = ShopDatabase(NativeDatabase.memory());
+      try {
+        await database.addProduct(
+          id: 'a',
+          name: 'A',
+          priceMmk: 2000,
+          openingStock: 2,
+        );
+        await database.addProduct(
+          id: 'b',
+          name: 'B',
+          priceMmk: 3000,
+          openingStock: 2,
+        );
+        await database.updateProductDetails(
+          operationId: 'edit-a-price',
+          productId: 'a',
+          expectedName: 'A',
+          expectedPriceMmk: 2000,
+          expectedBarcode: null,
+          name: 'A',
+          priceMmk: 2500,
+          barcode: null,
+        );
+        await database.updateProductDetails(
+          operationId: 'edit-b-price',
+          productId: 'b',
+          expectedName: 'B',
+          expectedPriceMmk: 3000,
+          expectedBarcode: null,
+          name: 'B',
+          priceMmk: 2500,
+          barcode: null,
+        );
+        final salesBefore = await database.countSales();
+        final stockBefore = await database.countStockMovements();
+        await expectLater(
+          database.recordSale(
+            operationId: 'offset-price-sale',
+            paymentMethod: 'cash',
+            lines: const [
+              ShopSaleLineInput(productId: 'a', quantity: 1),
+              ShopSaleLineInput(productId: 'b', quantity: 1),
+            ],
+            expectedTotalMmk: 5000,
+            expectedUnitPricesMmk: const {'a': 2000, 'b': 3000},
+          ),
+          throwsStateError,
+        );
+        expect(await database.countSales(), salesBefore);
+        expect(await database.countStockMovements(), stockBefore);
+        expect(
+          (await database.readActiveProducts()).every((p) => p.onHand == 2),
+          isTrue,
+        );
+      } finally {
+        await database.close();
+      }
+    },
+  );
 
   testWidgets('rapid cash taps open one confirmation and record one sale', (
     tester,
@@ -2765,6 +3581,377 @@ void main() {
     await database.close();
   });
 
+  test('editing a catalog item preserves stock and prior receipts', () async {
+    final database = ShopDatabase(NativeDatabase.memory());
+    try {
+      await database.addProduct(
+        id: 'apple',
+        name: 'Red apple',
+        priceMmk: 2800,
+        openingStock: 3,
+        barcode: '111111',
+      );
+      await database.addProduct(
+        id: 'banana',
+        name: 'Banana',
+        priceMmk: 2500,
+        openingStock: 3,
+        barcode: '222222',
+      );
+      final receipt = await database.recordCashSale(
+        operationId: 'sold-before-edit',
+        lines: const [ShopSaleLineInput(productId: 'apple', quantity: 1)],
+      );
+      final movementCount = await database.countStockMovements();
+      final outboxCount = await database.countOutboxOperations();
+      Future<void> edit({
+        required String operationId,
+        required String expectedName,
+        required int expectedPrice,
+        required String? expectedBarcode,
+        required String name,
+        required int price,
+        required String? barcode,
+      }) => database.updateProductDetails(
+        operationId: operationId,
+        productId: 'apple',
+        expectedName: expectedName,
+        expectedPriceMmk: expectedPrice,
+        expectedBarcode: expectedBarcode,
+        name: name,
+        priceMmk: price,
+        barcode: barcode,
+      );
+      await edit(
+        operationId: 'edit-apple',
+        expectedName: 'Red apple',
+        expectedPrice: 2800,
+        expectedBarcode: '111111',
+        name: 'Apple 1 pc',
+        price: 3200,
+        barcode: '333333',
+      );
+      final apple = (await database.readActiveProducts()).singleWhere(
+        (product) => product.id == 'apple',
+      );
+      expect(apple.name, 'Apple 1 pc');
+      expect(apple.priceMmk, 3200);
+      expect(apple.barcode, '333333');
+      expect(apple.onHand, 2);
+      expect(await database.countStockMovements(), movementCount);
+      expect(await database.countOutboxOperations(), outboxCount + 1);
+      expect(receipt.lines.single.productName, 'Red apple');
+      expect(receipt.lines.single.unitPriceMmk, 2800);
+      await edit(
+        operationId: 'edit-apple',
+        expectedName: 'Red apple',
+        expectedPrice: 2800,
+        expectedBarcode: '111111',
+        name: 'Apple 1 pc',
+        price: 3200,
+        barcode: '333333',
+      );
+      expect(await database.countOutboxOperations(), outboxCount + 1);
+      await expectLater(
+        edit(
+          operationId: 'duplicate-barcode',
+          expectedName: 'Apple 1 pc',
+          expectedPrice: 3200,
+          expectedBarcode: '333333',
+          name: 'Apple 1 pc',
+          price: 3500,
+          barcode: '222222',
+        ),
+        throwsStateError,
+      );
+      await expectLater(
+        edit(
+          operationId: 'stale-edit',
+          expectedName: 'Red apple',
+          expectedPrice: 2800,
+          expectedBarcode: '111111',
+          name: 'Stale apple',
+          price: 2900,
+          barcode: '444444',
+        ),
+        throwsStateError,
+      );
+      expect(
+        (await database.readActiveProducts())
+            .singleWhere((product) => product.id == 'apple')
+            .priceMmk,
+        3200,
+      );
+      expect(await database.countOutboxOperations(), outboxCount + 1);
+    } finally {
+      await database.close();
+    }
+  });
+
+  test('cash commit rejects an unreviewed rename at the same price', () async {
+    final database = ShopDatabase(NativeDatabase.memory());
+    try {
+      await database.addProduct(
+        id: 'tea',
+        name: 'Tea',
+        priceMmk: 2500,
+        openingStock: 2,
+      );
+      await database.updateProductDetails(
+        operationId: 'rename-for-cash',
+        productId: 'tea',
+        expectedName: 'Tea',
+        expectedPriceMmk: 2500,
+        expectedBarcode: null,
+        name: 'Tea large',
+        priceMmk: 2500,
+        barcode: null,
+      );
+      final stockMovements = await database.countStockMovements();
+      await expectLater(
+        database.recordSale(
+          operationId: 'cash-before-rename-review',
+          paymentMethod: 'cash',
+          lines: const [ShopSaleLineInput(productId: 'tea', quantity: 1)],
+          expectedTotalMmk: 2500,
+          expectedUnitPricesMmk: const {'tea': 2500},
+          expectedProductNames: const {'tea': 'Tea'},
+        ),
+        throwsStateError,
+      );
+      expect(await database.countSales(), 0);
+      expect(await database.countStockMovements(), stockMovements);
+      expect((await database.readActiveProducts()).single.onHand, 2);
+    } finally {
+      await database.close();
+    }
+  });
+
+  test(
+    'pending wallet intent keeps its product snapshot after catalog edit',
+    () async {
+      final database = ShopDatabase(NativeDatabase.memory());
+      try {
+        await database.addProduct(
+          id: 'tea',
+          name: 'Tea',
+          priceMmk: 2500,
+          openingStock: 2,
+        );
+        await database.createWalletCheckoutIntent(
+          operationId: 'wallet-before-edit',
+          merchant: MerchantWalletSetup(
+            provider: 'KBZPay',
+            merchantPhone: '09123456789',
+            officialQrPayload: _testStaticMmqr(),
+            issuerConfirmed: true,
+          ),
+          lines: const [ShopSaleLineInput(productId: 'tea', quantity: 1)],
+        );
+        await database.updateProductDetails(
+          operationId: 'edit-after-wallet',
+          productId: 'tea',
+          expectedName: 'Tea',
+          expectedPriceMmk: 2500,
+          expectedBarcode: null,
+          name: 'Tea large',
+          priceMmk: 3000,
+          barcode: null,
+        );
+        final intent = (await database.readPendingWalletCheckout())!;
+        expect(intent.totalMmk, 2500);
+        expect(intent.lines.single.productName, 'Tea');
+        expect(intent.lines.single.unitPriceMmk, 2500);
+        final receipt = await database.recordSale(
+          operationId: intent.operationId,
+          paymentMethod: 'kbzpay',
+          walletCheckoutOperationId: intent.operationId,
+          lines: const [ShopSaleLineInput(productId: 'tea', quantity: 1)],
+        );
+        expect(receipt.totalMmk, 2500);
+        expect(receipt.lines.single.productName, 'Tea');
+        expect(receipt.lines.single.unitPriceMmk, 2500);
+        expect((await database.readActiveProducts()).single.onHand, 1);
+      } finally {
+        await database.close();
+      }
+    },
+  );
+
+  for (final myanmar in [false, true]) {
+    testWidgets('Stock edits a product in ${myanmar ? 'MY' : 'EN'}', (
+      tester,
+    ) async {
+      _usePhoneViewport(tester);
+      final database = ShopDatabase(NativeDatabase.memory());
+      try {
+        await database.addProduct(
+          id: 'apple',
+          name: 'Red apple',
+          priceMmk: 2800,
+          openingStock: 7,
+          barcode: '111111',
+        );
+        await database.saveProductThumbnail(
+          'apple',
+          File('test/assets/grocery_photos/apple.png').readAsBytesSync(),
+        );
+        await tester.pumpWidget(
+          MaterialApp(
+            home: StockScreen(database: database, myanmar: myanmar),
+          ),
+        );
+        await _settleStock(tester);
+        expect(find.byKey(const ValueKey('stock-photo-apple')), findsOneWidget);
+        expect(find.text(myanmar ? 'ပြင်ရန်' : 'Edit'), findsOneWidget);
+        await tester.tap(find.byKey(const ValueKey('stock-edit-apple')));
+        await _settleStock(tester);
+        expect(find.byKey(const ValueKey('stock-edit-name')), findsOneWidget);
+        await tester.tap(find.text(myanmar ? 'မလုပ်တော့ပါ' : 'Cancel'));
+        await _settleStock(tester);
+        expect((await database.readActiveProducts()).single.priceMmk, 2800);
+        await tester.tap(find.byKey(const ValueKey('stock-edit-apple')));
+        await _settleStock(tester);
+        await tester.enterText(
+          find.byKey(const ValueKey('stock-edit-name')),
+          'Apple 1 pc',
+        );
+        await tester.enterText(
+          find.byKey(const ValueKey('stock-edit-price')),
+          myanmar ? '၃၂၀၀' : '3200',
+        );
+        await tester.enterText(
+          find.byKey(const ValueKey('stock-edit-barcode')),
+          '333333',
+        );
+        await tester.tap(find.byKey(const ValueKey('stock-edit-save')));
+        await _settleStock(tester);
+        final apple = (await database.readActiveProducts()).single;
+        expect(apple.name, 'Apple 1 pc');
+        expect(apple.priceMmk, 3200);
+        expect(apple.barcode, '333333');
+        expect(apple.onHand, 7);
+        expect(tester.takeException(), isNull);
+      } finally {
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump(const Duration(milliseconds: 1));
+        await database.close();
+      }
+    });
+  }
+
+  testWidgets('Stock refreshes a photo when returning from Sell', (
+    tester,
+  ) async {
+    _usePhoneViewport(tester);
+    final database = ShopDatabase(NativeDatabase.memory());
+    final firstPhoto = base64Decode(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ'
+      'AAAADUlEQVR4nGPQyNjxHwAETAJIB09U9wAAAABJRU5ErkJggg==',
+    );
+    final nextPhoto = File('test/assets/grocery_photos/apple.png')
+        .readAsBytesSync();
+    try {
+      await database.addProduct(
+        id: 'apple',
+        name: 'Apple',
+        priceMmk: 2800,
+        openingStock: 7,
+      );
+      await database.saveProductThumbnail('apple', firstPhoto);
+      Widget screen({required bool active}) => MaterialApp(
+        home: StockScreen(database: database, myanmar: false, active: active),
+      );
+      await tester.pumpWidget(screen(active: true));
+      await _settleStock(tester);
+      Image photo() =>
+          tester.widget<Image>(find.byKey(const ValueKey('stock-photo-apple')));
+      expect((photo().image as MemoryImage).bytes, orderedEquals(firstPhoto));
+
+      await tester.pumpWidget(screen(active: false));
+      await database.saveProductThumbnail('apple', nextPhoto);
+      await tester.pumpWidget(screen(active: true));
+      await _settleStock(tester);
+      expect((photo().image as MemoryImage).bytes, orderedEquals(nextPhoto));
+      expect(tester.takeException(), isNull);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+      await database.close();
+    }
+  });
+
+  testWidgets('Stock switches mounted catalogs with its database', (
+    tester,
+  ) async {
+    _usePhoneViewport(tester);
+    final first = ShopDatabase(NativeDatabase.memory());
+    final second = ShopDatabase(NativeDatabase.memory());
+    try {
+      await first.addProduct(
+        id: 'apple',
+        name: 'Apple',
+        priceMmk: 2800,
+        openingStock: 7,
+      );
+      await second.addProduct(
+        id: 'orange',
+        name: 'Orange',
+        priceMmk: 3200,
+        openingStock: 4,
+      );
+      Widget screen(ShopDatabase database) =>
+          MaterialApp(home: StockScreen(database: database, myanmar: false));
+      await tester.pumpWidget(screen(first));
+      await _settleStock(tester);
+      expect(find.text('Apple'), findsOneWidget);
+      await tester.pumpWidget(screen(second));
+      await _settleStock(tester);
+      expect(find.text('Orange'), findsOneWidget);
+      expect(find.text('Apple'), findsNothing);
+      expect(tester.takeException(), isNull);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+      await first.close();
+      await second.close();
+    }
+  });
+
+  testWidgets('tablet Stock shows a photographed item and its price in MY', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(820, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final database = ShopDatabase(NativeDatabase.memory());
+    try {
+      await database.addProduct(
+        id: 'apple',
+        name: 'ပန်းသီး',
+        priceMmk: 2800,
+        openingStock: 7,
+      );
+      await database.saveProductThumbnail(
+        'apple',
+        File('test/assets/grocery_photos/apple.png').readAsBytesSync(),
+      );
+      await tester.pumpWidget(
+        MaterialApp(home: StockScreen(database: database, myanmar: true)),
+      );
+      await _settleStock(tester);
+      expect(find.byKey(const ValueKey('stock-photo-apple')), findsOneWidget);
+      expect(find.textContaining('၂,၈၀၀'), findsWidgets);
+      expect(find.byKey(const ValueKey('stock-edit-apple')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+      await database.close();
+    }
+  });
+
   testWidgets('phone stock row opens adjustment and cancel keeps the count', (
     tester,
   ) async {
@@ -2790,6 +3977,10 @@ void main() {
       priceMmk: 6000,
       openingStock: 4,
     );
+    await database.saveProductThumbnail(
+      'rice-phone',
+      File('test/assets/grocery_photos/apple.png').readAsBytesSync(),
+    );
     await tester.pumpWidget(
       ShopApp(
         initialCounter: true,
@@ -2799,22 +3990,32 @@ void main() {
         initialMyanmar: true,
       ),
     );
-    await tester.pumpAndSettle();
+    await _settleStock(tester);
     await tester.tap(find.byTooltip('နောက်ထပ်'));
-    await tester.pumpAndSettle();
+    await _settleStock(tester);
     await tester.tap(find.text('လက်ကျန်'));
-    await tester.pumpAndSettle();
-    expect(find.text('ပြင်ရန်'), findsNothing);
+    await _settleStock(tester);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('stock-edit-rice-phone')),
+        matching: find.text('ပြင်ရန်'),
+      ),
+      findsOneWidget,
+    );
     expect(find.byKey(const ValueKey('stock-row-rice-phone')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('stock-photo-rice-phone')),
+      findsOneWidget,
+    );
     expect(find.bySemanticsLabel(RegExp('၂.*RICE-L')), findsOneWidget);
     expect(find.bySemanticsLabel(RegExp('၄.*RICE-S')), findsOneWidget);
     expect(tester.takeException(), isNull);
 
     await tester.tap(find.byKey(const ValueKey('stock-row-rice-phone')));
-    await tester.pumpAndSettle();
+    await _settleStock(tester);
     expect(find.text('လက်ခံရန်'), findsOneWidget);
     await tester.tap(find.text('မလုပ်တော့ပါ'));
-    await tester.pumpAndSettle();
+    await _settleStock(tester);
     expect(
       (await database.readActiveProducts())
           .singleWhere((item) => item.id == 'rice-phone')
@@ -2927,9 +4128,133 @@ void main() {
     await database.close();
   });
 
+  testWidgets(
+    'wallet setup shows saved status and opens one editor at a time',
+    (tester) async {
+      tester.view.physicalSize = const Size(800, 1200);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final database = ShopDatabase(NativeDatabase.memory());
+      await database.saveWalletSetup(
+        MerchantWalletSetup(
+          provider: 'KBZPay',
+          merchantPhone: '09123456789',
+          officialQrPayload: _testStaticMmqr(),
+          issuerConfirmed: true,
+        ),
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: WalletSetupScreen(database: database, myanmar: false),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Ready to show QR'), findsOneWidget);
+      expect(find.text('No merchant QR saved'), findsOneWidget);
+      expect(find.byType(TextField), findsNothing);
+      expect(find.byType(QrImageView), findsNothing);
+      expect(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is Semantics &&
+              widget.properties.label == 'KBZPay, Ready to show QR' &&
+              widget.properties.button == true &&
+              widget.properties.onTap != null,
+        ),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.byKey(const ValueKey('wallet-provider-KBZPay')));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('wallet-payload-KBZPay')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('wallet-payload-WavePay')),
+        findsNothing,
+      );
+      expect(_merchantQrSemantics('KBZPay'), findsOneWidget);
+      expect(find.textContaining('checksum'), findsNothing);
+      final safetyDisclosure = find.text('Why check this QR?');
+      await tester.ensureVisible(safetyDisclosure);
+      await tester.pumpAndSettle();
+      await tester.tap(safetyDisclosure);
+      await tester.pumpAndSettle();
+      expect(find.textContaining('checksum'), findsOneWidget);
+
+      final waveRow = find.byKey(const ValueKey('wallet-provider-WavePay'));
+      await tester.ensureVisible(waveRow);
+      await tester.pumpAndSettle();
+      await tester.tap(waveRow);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('wallet-payload-KBZPay')), findsNothing);
+      expect(
+        find.byKey(const ValueKey('wallet-payload-WavePay')),
+        findsOneWidget,
+      );
+      expect(find.byType(QrImageView), findsNothing);
+      expect(_merchantQrSemantics('KBZPay'), findsNothing);
+      await database.close();
+    },
+  );
+
+  for (final (width, myanmar) in [
+    (320.0, false),
+    (320.0, true),
+    (820.0, false),
+    (820.0, true),
+  ]) {
+    testWidgets(
+      'wallet setup fits ${width.toInt()}px ${myanmar ? 'my' : 'en'}',
+      (tester) async {
+        tester.view.physicalSize = Size(width, 800);
+        tester.view.devicePixelRatio = 1;
+        if (width == 320) {
+          tester.platformDispatcher.textScaleFactorTestValue = 1.5;
+        }
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+        final database = ShopDatabase(NativeDatabase.memory());
+        await tester.pumpWidget(
+          MaterialApp(
+            home: WalletSetupScreen(database: database, myanmar: myanmar),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        expect(find.byType(TextField), findsNothing);
+
+        await tester.tap(find.byKey(const ValueKey('wallet-provider-KBZPay')));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        await tester.ensureVisible(
+          find.byKey(const ValueKey('wallet-payload-KBZPay')),
+        );
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        await tester.ensureVisible(
+          find.text(
+            myanmar ? 'ငွေပေးချေမှုကို သိမ်းရန်' : 'Save payment setup',
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        await database.close();
+      },
+    );
+  }
+
   testWidgets('editing a merchant QR clears its prior issuer confirmation', (
     tester,
   ) async {
+    tester.view.physicalSize = const Size(800, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     final database = ShopDatabase(NativeDatabase.memory());
     final revisedPayload = _testStaticMmqr(merchantName: 'REVISED STORE');
     await database.saveWalletSetup(
@@ -2945,6 +4270,10 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    expect(find.text('Ready to show QR'), findsOneWidget);
+    expect(find.byType(QrImageView), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('wallet-provider-KBZPay')));
+    await tester.pumpAndSettle();
     final qrWidget = find.byType(QrImageView).first;
     await tester.ensureVisible(qrWidget);
     await tester.pumpAndSettle();
@@ -2956,16 +4285,42 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(_merchantQrSemantics('KBZPay'), findsNothing);
+    expect(find.text('Unsaved changes'), findsOneWidget);
     final payloadConfirmation = tester.widget<CheckboxListTile>(
       find.byType(CheckboxListTile).first,
     );
     expect(payloadConfirmation.value, isFalse);
+    final providerRow = find.byKey(const ValueKey('wallet-provider-KBZPay'));
+    await tester.ensureVisible(providerRow);
+    await tester.pumpAndSettle();
+    await tester.tap(providerRow);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('wallet-payload-KBZPay')), findsNothing);
+    expect(find.text('Unsaved changes'), findsOneWidget);
+    final storedBeforeSave = (await database.readWalletSetups()).single;
+    expect(storedBeforeSave.officialQrPayload, _testStaticMmqr());
+    expect(storedBeforeSave.issuerConfirmed, isTrue);
+    await tester.tap(providerRow);
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<TextField>(
+            find.byKey(const ValueKey('wallet-payload-KBZPay')),
+          )
+          .controller!
+          .text,
+      revisedPayload,
+    );
+    expect(_merchantQrSemantics('KBZPay'), findsNothing);
+    await tester.ensureVisible(find.text('Save payment setup'));
     await tester.tap(find.text('Save payment setup').first);
     await tester.pumpAndSettle();
     final saved = (await database.readWalletSetups()).single;
     expect(saved.officialQrPayload, revisedPayload);
     expect(saved.issuerConfirmed, isFalse);
+    expect(find.text('Saved · confirm merchant QR'), findsOneWidget);
 
+    await tester.ensureVisible(find.byType(CheckboxListTile).first);
     await tester.tap(find.byType(CheckboxListTile).first);
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.byType(QrImageView).first);
@@ -2981,6 +4336,7 @@ void main() {
       find.byType(CheckboxListTile).first,
     );
     expect(phoneConfirmation.value, isFalse);
+    await tester.ensureVisible(find.text('Save payment setup'));
     await tester.tap(find.text('Save payment setup').first);
     await tester.pumpAndSettle();
     final savedAfterPhoneEdit = (await database.readWalletSetups()).single;
@@ -3005,9 +4361,15 @@ void main() {
       MaterialApp(home: WalletSetupScreen(database: database, myanmar: true)),
     );
     await tester.pumpAndSettle();
-    expect(find.textContaining('ငွေကိုင်က အတည်ပြုရမည်'), findsOneWidget);
+    expect(find.textContaining('ဆိုင်ငွေလက်ခံ QR ထည့်ရန်'), findsOneWidget);
     expect(find.textContaining('payment QR'), findsNothing);
+    expect(find.text('QR ပြသရန် အသင့်ဖြစ်ပြီ'), findsOneWidget);
+    expect(find.byType(QrImageView), findsNothing);
 
+    await tester.tap(find.byKey(const ValueKey('wallet-provider-KBZPay')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('ငွေကိုင်က အတည်ပြုရမည်'), findsOneWidget);
+    expect(find.text('ဤ QR ကို ဘာကြောင့် စစ်ဆေးရသနည်း။'), findsOneWidget);
     await tester.ensureVisible(find.byType(QrImageView).first);
     await tester.pumpAndSettle();
     expect(

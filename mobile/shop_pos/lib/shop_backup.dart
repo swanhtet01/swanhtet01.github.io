@@ -20,7 +20,7 @@ enum ShopStorePresence { empty, existing, interrupted, unsafe }
 /// the database so an interrupted export or restore cannot retain plaintext.
 abstract final class ShopBackup {
   static const formatVersion = 1;
-  static const supportedSchemaVersion = 9;
+  static const supportedSchemaVersion = 10;
   static const oldestSupportedSchemaVersion = 6;
   static const maxSnapshotBytes = 64 * 1024 * 1024;
 
@@ -512,6 +512,40 @@ abstract final class ShopBackup {
                 'SELECT 1 FROM shop_sales WHERE operation_id = ? LIMIT 1',
                 [drafts.single['operation_id']],
               ).isNotEmpty);
+      final heldSales =
+          schemaVersion >= 10 && tables.contains('shop_held_sales')
+          ? connection.select(
+              'SELECT id, name, operation_id, basket_json, '
+              'created_at_millis, updated_at_millis FROM shop_held_sales',
+            )
+          : const <Row>[];
+      final heldInvalid =
+          heldSales.length > 30 ||
+          heldSales.any((row) {
+            final id = row['id'];
+            final name = row['name'];
+            final operationId = row['operation_id'];
+            if (id is! String ||
+                id.isEmpty ||
+                id.length > 120 ||
+                name is! String ||
+                name.trim().isEmpty ||
+                name.runes.length > 80 ||
+                RegExp(r'[\x00-\x1f\x7f]').hasMatch(name) ||
+                operationId is! String ||
+                operationId.isEmpty ||
+                operationId.length > 120 ||
+                row['created_at_millis'] is! int ||
+                row['updated_at_millis'] is! int ||
+                !_validBasketJson(row['basket_json'])) {
+              return true;
+            }
+            return connection.select(
+                  'SELECT 1 FROM shop_sales WHERE operation_id = ? LIMIT 1',
+                  [operationId],
+                ).isNotEmpty ||
+                drafts.any((draft) => draft['operation_id'] == operationId);
+          });
       final hasReorderLevel =
           schemaVersion >= 9 &&
           tables.contains('shop_products') &&
@@ -538,8 +572,10 @@ abstract final class ShopBackup {
           (schemaVersion >= 7 && !tables.contains('shop_product_images')) ||
           (schemaVersion >= 8 && !tables.contains('shop_counter_drafts')) ||
           (schemaVersion >= 9 && !hasReorderLevel) ||
+          (schemaVersion >= 10 && !tables.contains('shop_held_sales')) ||
           invalidReorderLevel ||
           draftInvalid ||
+          heldInvalid ||
           images.any((row) {
             final image = row['image_png'];
             return image is! Uint8List ||
@@ -564,8 +600,13 @@ abstract final class ShopBackup {
         row['updated_at_millis'] is! int) {
       return false;
     }
+    return _validBasketJson(row['basket_json']);
+  }
+
+  static bool _validBasketJson(Object? value) {
+    if (value is! String) return false;
     try {
-      final raw = jsonDecode(row['basket_json'] as String);
+      final raw = jsonDecode(value);
       if (raw is! List || raw.isEmpty || raw.length > 100) return false;
       final seen = <String>{};
       for (final value in raw) {

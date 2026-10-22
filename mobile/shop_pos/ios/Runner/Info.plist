@@ -9,7 +9,7 @@
 	<key>CFBundleDisplayName</key>
 	<string>SuperMega Shop</string>
 	<key>NSCameraUsageDescription</key>
-	<string>Take a photo of your paper menu to prepare product drafts.</string>
+	<string>Scan product barcodes for sales and take a photo of a paper menu to prepare product drafts.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Use a selected menu photo to prepare product drafts.</string>
 	<key>NSLocalNetworkUsageDescription</key>
