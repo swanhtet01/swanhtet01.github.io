@@ -834,6 +834,7 @@ void main() {
       findsNothing,
     );
     await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 1));
     await database.saveProductThumbnail(
       'rice',
       base64Decode(
@@ -864,6 +865,8 @@ void main() {
       tester.getTopLeft(find.text('ALPINE သောက်ရေသန့် ၁ လီတာ')).dx,
     );
     expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 1));
   });
 
   testWidgets('lost product picker result is saved as a photo, never a menu', (
