@@ -4145,7 +4145,9 @@ class _NewShopProductDialogState extends State<_NewShopProductDialog> {
         horizontal: compact ? 16 : 40,
         vertical: 24,
       ),
-      title: Text(shopCopy(widget.myanmar, 'Add product', 'ကုန်ပစ္စည်းထည့်ရန်')),
+      title: Text(
+        shopCopy(widget.myanmar, 'Add product', 'ကုန်ပစ္စည်းထည့်ရန်'),
+      ),
       titleTextStyle: Theme.of(context).textTheme.headlineSmall,
       content: SizedBox(
         width: 360,
@@ -4226,10 +4228,15 @@ class _NewShopProductDialogState extends State<_NewShopProductDialog> {
                     alignment: Alignment.centerLeft,
                     child: TextButton.icon(
                       key: const ValueKey('shop-product-add-barcode'),
-                      onPressed: () => setState(() => _showManualBarcode = true),
+                      onPressed: () =>
+                          setState(() => _showManualBarcode = true),
                       icon: const Icon(Icons.qr_code_2_outlined),
                     label: Text(
-                      shopCopy(widget.myanmar, 'Add barcode', 'ဘားကုဒ်ထည့်ရန်'),
+                      shopCopy(
+                        widget.myanmar,
+                        'Add barcode',
+                        'ဘားကုဒ်ထည့်ရန်',
+                      ),
                     ),
                     ),
                   ),
@@ -4281,7 +4288,9 @@ class _NewShopProductDialogState extends State<_NewShopProductDialog> {
               ),
               FilledButton(
                 onPressed: _saveProduct,
-                child: Text(shopCopy(widget.myanmar, 'Save product', 'သိမ်းရန်')),
+                child: Text(
+                  shopCopy(widget.myanmar, 'Save product', 'သိမ်းရန်'),
+                ),
               ),
             ],
     );
