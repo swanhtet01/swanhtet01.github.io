@@ -71,8 +71,10 @@ from supermega_runtime.trial_store import (
     PRODUCT_ACCEPTANCE_SURFACES,
     SURFACE_WRITE_CAPABILITIES,
     ApprovalRecord,
-    PostgresTrialStore,
     CommandResult,
+    PostgresTrialStore,
+    ShopCorrectionAuthorizationReceipt,
+    TrialAuthorizationExpired,
     TrialClaimConflict,
     TrialIdempotencyConflict,
     TrialHumanApprovalRequired,
@@ -104,6 +106,9 @@ TRIAL_SURFACE_ORDER = ("company", "commerce", "production", "website", "setup")
 
 SELF_SERVE_ACTIVATION_WINDOW_ENV = "SUPERMEGA_SELF_SERVE_ACTIVATION_WINDOW"
 SELF_SERVE_ACTIVATION_CONTRACT = "supermega.self_serve_workspace_activation.v1"
+SHOP_CORRECTION_AUTHORIZATION_WINDOW_ENV = (
+    "SUPERMEGA_SHOP_CORRECTION_AUTHORIZATION_WINDOW"
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -151,6 +156,13 @@ def self_serve_activation_window_open() -> bool:
     """
 
     return os.environ.get(SELF_SERVE_ACTIVATION_WINDOW_ENV) == "open"
+
+
+def shop_correction_authorization_window_open() -> bool:
+    """Keep connected Shop correction authorization dark until explicitly opened."""
+
+    return os.environ.get(SHOP_CORRECTION_AUTHORIZATION_WINDOW_ENV) == "open"
+
 
 _YANGON_TIME_ZONE = timezone(timedelta(hours=6, minutes=30))
 
@@ -208,6 +220,14 @@ class TrialProductAcceptanceRequest(_StrictRequest):
     product: Literal["commerce", "production", "website", "ecommerce"]
     release_commit: str = Field(pattern=r"^[0-9a-f]{40}$")
     confirmation: Literal["RECORD HOSTED PRODUCT ACCEPTANCE"]
+
+
+class TrialShopCorrectionAuthorizationRequest(_StrictRequest):
+    authorization_request_id: UUID
+    capability: Literal["shop.sale.reverse", "shop.sale.reconcile_wallet"]
+    command_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    request_fingerprint: str = Field(min_length=2, max_length=4096)
+    confirmation: str = Field(min_length=1, max_length=40)
 
 
 class TrialSelfServeWorkspaceRequest(_StrictRequest):
@@ -512,25 +532,26 @@ async def _bounded_json_body(
     request: Request,
     *,
     maximum_bytes: int = CLIENT_IMPORT_MAX_PACKAGE_BYTES,
+    error_prefix: str = "client_import",
 ) -> object:
     """Read one JSON package without trusting Content-Length or buffering unbounded input."""
 
     content_type = request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
     if content_type != "application/json":
-        raise _error(415, "client_import_json_required")
+        raise _error(415, f"{error_prefix}_json_required")
 
     content_length = request.headers.get("content-length")
     if content_length:
         try:
             declared_size = int(content_length)
         except ValueError as exc:
-            raise _error(400, "client_import_invalid_content_length") from exc
+            raise _error(400, f"{error_prefix}_invalid_content_length") from exc
         if declared_size < 0:
-            raise _error(400, "client_import_invalid_content_length")
+            raise _error(400, f"{error_prefix}_invalid_content_length")
         if declared_size > maximum_bytes:
             raise _error(
                 413,
-                "client_import_too_large",
+                f"{error_prefix}_too_large",
                 maximum_bytes=maximum_bytes,
             )
 
@@ -542,7 +563,7 @@ async def _bounded_json_body(
             if total > maximum_bytes:
                 raise _error(
                     413,
-                    "client_import_too_large",
+                    f"{error_prefix}_too_large",
                     maximum_bytes=maximum_bytes,
                 )
             chunks.append(chunk)
@@ -554,7 +575,7 @@ async def _bounded_json_body(
     except HTTPException:
         raise
     except (ValueError, UnicodeDecodeError, RecursionError) as exc:
-        raise _error(422, "client_import_invalid_json") from exc
+        raise _error(422, f"{error_prefix}_invalid_json") from exc
 
 
 def _invoke(operation: Callable[[], ResultT]) -> ResultT:
@@ -584,6 +605,12 @@ def _invoke(operation: Callable[[], ResultT]) -> ResultT:
         ) from exc
     except TrialIdempotencyConflict as exc:
         raise _error(409, "trial_idempotency_conflict", command_id=exc.command_id) from exc
+    except TrialAuthorizationExpired as exc:
+        raise _error(
+            409,
+            "shop_correction_authorization_expired",
+            authorization_request_id=exc.authorization_request_id,
+        ) from exc
     except TrialInvalidTransition as exc:
         raise _error(409, "trial_invalid_transition") from exc
     except TrialClaimConflict as exc:
@@ -2417,6 +2444,44 @@ def create_trial_router(
             **_command_response(result),
         }
 
+    @router.post("/shop/correction-authorizations")
+    async def issue_shop_correction_authorization(request: Request) -> JSONResponse:
+        # Keep the source shippable while the hosted authorization/deployment
+        # gate remains closed. Check this before auth, parsing, or storage.
+        if not shop_correction_authorization_window_open():
+            raise _error(503, "shop_correction_authorization_window_closed")
+        principal = _resolve_principal(request, resolve_principal)
+        raw_body = await _bounded_json_body(
+            request,
+            maximum_bytes=8192,
+            error_prefix="shop_correction_authorization",
+        )
+        try:
+            body = TrialShopCorrectionAuthorizationRequest.model_validate(raw_body)
+        except ValidationError as exc:
+            raise _error(422, "shop_correction_authorization_request_invalid") from exc
+        receipt: ShopCorrectionAuthorizationReceipt = _invoke(
+            lambda: store.issue_shop_correction_authorization(
+                principal,
+                authorization_request_id=body.authorization_request_id,
+                capability=body.capability,
+                command_digest=body.command_digest,
+                request_fingerprint=body.request_fingerprint,
+                confirmation=body.confirmation,
+            )
+        )
+        return JSONResponse(
+            {
+                "authorization": receipt.to_dict(),
+                "idempotent_replay": receipt.idempotent_replay,
+                "local_mutation_performed": False,
+                "money_returned": False,
+                "external_writes_performed": not receipt.idempotent_replay,
+                "secret_values_exposed": False,
+            },
+            headers={"Cache-Control": "private, no-store", "Pragma": "no-cache"},
+        )
+
     @router.post("/product-acceptance")
     def record_product_acceptance(
         request: Request,
@@ -2736,6 +2801,7 @@ __all__ = [
     "PrincipalResolver",
     "SELF_SERVE_ACTIVATION_CONTRACT",
     "SELF_SERVE_ACTIVATION_WINDOW_ENV",
+    "SHOP_CORRECTION_AUTHORIZATION_WINDOW_ENV",
     "SignupSessionResolver",
     "TRIAL_API_PREFIX",
     "TrialApprovalDecisionRequest",
@@ -2743,7 +2809,9 @@ __all__ = [
     "TrialCommandRequest",
     "TrialProductAcceptanceRequest",
     "TrialSelfServeWorkspaceRequest",
+    "TrialShopCorrectionAuthorizationRequest",
     "TrialSignupSession",
     "create_trial_router",
     "self_serve_activation_window_open",
+    "shop_correction_authorization_window_open",
 ]
