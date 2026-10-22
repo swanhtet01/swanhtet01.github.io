@@ -298,37 +298,40 @@ void main() {
         addTearDown(tester.view.resetPhysicalSize);
         addTearDown(tester.view.resetDevicePixelRatio);
         addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
-        addTearDown(
-          () => debugDefaultTargetPlatformOverride = previousPlatform,
-        );
-        await tester.pumpWidget(
-          RepaintBoundary(
-            key: _captureKey,
-            child: MaterialApp(
-              home: CameraBarcodeScanner(
-                myanmar: language == 'my',
-                cameraViewBuilder: (context, onScanned, onError) =>
-                    const ColoredBox(
-                      color: Color(0xff20252a),
-                      child: Center(
-                        child: Text(
-                          'Synthetic camera preview',
-                          style: TextStyle(color: Colors.white70),
+        try {
+          await tester.pumpWidget(
+            RepaintBoundary(
+              key: _captureKey,
+              child: MaterialApp(
+                home: CameraBarcodeScanner(
+                  myanmar: language == 'my',
+                  cameraViewBuilder: (context, onScanned, onError) =>
+                      const ColoredBox(
+                        color: Color(0xff20252a),
+                        child: Center(
+                          child: Text(
+                            'Synthetic camera preview',
+                            style: TextStyle(color: Colors.white70),
+                          ),
                         ),
                       ),
-                    ),
+                ),
               ),
             ),
-          ),
-        );
-        await tester.pumpAndSettle();
-        expect(tester.takeException(), isNull);
-        await expectLater(
-          find.byKey(_captureKey),
-          matchesGoldenFile(
-            'goldens/shop_camera_${width.toInt()}_$language.png',
-          ),
-        );
+          );
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+          await expectLater(
+            find.byKey(_captureKey),
+            matchesGoldenFile(
+              'goldens/shop_camera_${width.toInt()}_$language.png',
+            ),
+          );
+        } finally {
+          debugDefaultTargetPlatformOverride = previousPlatform;
+          await tester.pumpWidget(const SizedBox.shrink());
+          await tester.pump(const Duration(milliseconds: 1));
+        }
       },
     );
   }
