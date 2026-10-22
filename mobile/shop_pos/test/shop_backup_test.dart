@@ -485,29 +485,33 @@ void main() {
 
   for (final suffix in const ['-wal', '-shm']) {
     for (final timing in const ['before', 'after']) {
-      test('late $suffix creator $timing publication leaves recovery marker', () async {
-        final target = File(
-          '${directory.path}/late-sidecar-$timing-${suffix.substring(1)}.sqlite',
-        );
-        final sidecar = File('${target.path}$suffix');
-        Future<void> createSidecar() async {
-          await sidecar.writeAsString('other writer');
-        }
-        await expectLater(
-          ShopBackup.restoreIntoEmptyDatabase(
-            archive: archive,
-            target: target,
-            password: _password,
-            beforePublishForTest: timing == 'before' ? createSidecar : null,
-            afterPublishForTest: timing == 'after' ? createSidecar : null,
-          ),
-          throwsStateError,
-        );
-        expect(await sidecar.readAsString(), 'other writer');
-        expect(await target.exists(), isTrue);
-        expect(await ShopBackup.restoreMarkerFor(target).exists(), isTrue);
-        await _expectNoScratch(directory);
-      });
+      test(
+        'late $suffix creator $timing publication leaves recovery marker',
+        () async {
+          final target = File(
+            '${directory.path}/late-sidecar-$timing-'
+            '${suffix.substring(1)}.sqlite',
+          );
+          final sidecar = File('${target.path}$suffix');
+          Future<void> createSidecar() async {
+            await sidecar.writeAsString('other writer');
+          }
+          await expectLater(
+            ShopBackup.restoreIntoEmptyDatabase(
+              archive: archive,
+              target: target,
+              password: _password,
+              beforePublishForTest: timing == 'before' ? createSidecar : null,
+              afterPublishForTest: timing == 'after' ? createSidecar : null,
+            ),
+            throwsStateError,
+          );
+          expect(await sidecar.readAsString(), 'other writer');
+          expect(await target.exists(), isTrue);
+          expect(await ShopBackup.restoreMarkerFor(target).exists(), isTrue);
+          await _expectNoScratch(directory);
+        },
+      );
     }
   }
 
@@ -544,19 +548,29 @@ void main() {
     final staging = await directory.createTemp('.supermega-shop-restore-');
     await File('${staging.path}/shop.sqlite').writeAsString('plaintext');
     await marker.writeAsString('preparing-v1\n');
-    await ShopBackup.cleanupInterruptedStaging(directory, restoreTarget: target);
+    await ShopBackup.cleanupInterruptedStaging(
+      directory,
+      restoreTarget: target,
+    );
     expect(await staging.exists(), isFalse);
     expect(await marker.exists(), isFalse);
     expect(await target.exists(), isFalse);
   });
 
-  test('startup keeps an uncertain committing marker even without DB', () async {
+  test('startup keeps an uncertain committing marker even without DB',
+      () async {
     final target = File('${directory.path}/uncertain.sqlite');
     final marker = ShopBackup.restoreMarkerFor(target);
     await marker.writeAsString('committing-v1\n');
-    await ShopBackup.cleanupInterruptedStaging(directory, restoreTarget: target);
+    await ShopBackup.cleanupInterruptedStaging(
+      directory,
+      restoreTarget: target,
+    );
     expect(await marker.exists(), isTrue);
-    expect(await ShopBackup.inspectStore(target), ShopStorePresence.interrupted);
+    expect(
+      await ShopBackup.inspectStore(target),
+      ShopStorePresence.interrupted,
+    );
   });
 
   test('startup retains a published restore marker', () async {
@@ -569,12 +583,16 @@ void main() {
     final original = await target.readAsBytes();
     final marker = ShopBackup.restoreMarkerFor(target);
     await marker.writeAsString('interrupted after commit');
-    await ShopBackup.cleanupInterruptedStaging(directory, restoreTarget: target);
+    await ShopBackup.cleanupInterruptedStaging(
+      directory,
+      restoreTarget: target,
+    );
     expect(await marker.exists(), isTrue);
     expect(await target.readAsBytes(), original);
   });
 
-  test('new Shop reservation prevents a later restore from replacing it', () async {
+  test('new Shop reservation prevents a later restore from replacing it',
+      () async {
     final target = File('${directory.path}/new-shop.sqlite');
     expect(await ShopBackup.inspectStore(target), ShopStorePresence.empty);
     await ShopBackup.reserveNewStore(target);
@@ -590,7 +608,8 @@ void main() {
     expect(await target.length(), 0);
   });
 
-  test('restore after empty inspection prevents a stale new-Shop choice', () async {
+  test('restore after empty inspection prevents a stale new-Shop choice',
+      () async {
     final target = File('${directory.path}/restore-wins.sqlite');
     expect(await ShopBackup.inspectStore(target), ShopStorePresence.empty);
     await ShopBackup.restoreIntoEmptyDatabase(
@@ -685,7 +704,10 @@ void main() {
       await tester.tap(find.text('Start new Shop'));
       await tester.pumpAndSettle();
       expect(find.text('Opened Shop'), findsOneWidget);
-      expect(await ShopDatabase.privateDatabaseFile(documents).exists(), isTrue);
+      expect(
+        await ShopDatabase.privateDatabaseFile(documents).exists(),
+        isTrue,
+      );
       expect(await opened!.readActiveProducts(), isEmpty);
     } finally {
       await tester.pumpWidget(const SizedBox.shrink());

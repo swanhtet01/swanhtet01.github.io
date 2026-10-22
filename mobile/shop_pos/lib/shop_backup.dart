@@ -235,7 +235,8 @@ abstract final class ShopBackup {
         if (type == FileSystemEntityType.file) {
           return ShopStorePresence.existing;
         }
-        if (type != FileSystemEntityType.notFound || await _hasSidecars(target)) {
+        if (type != FileSystemEntityType.notFound ||
+            await _hasSidecars(target)) {
           return ShopStorePresence.unsafe;
         }
         return ShopStorePresence.empty;
