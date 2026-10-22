@@ -961,9 +961,9 @@ class _ShopHomeState extends State<ShopHome> {
     final showRail = inWorkspace && !widget.embeddedTaskShell && width >= 1100;
     final contentWidth =
         widget.workspaceContentWidth ?? width - (showRail ? 191 : 0);
-    // A portrait tablet keeps touch navigation at the bottom while the full
-    // content width can still fit two usable panes after a product is added.
-    const minSplitContentWidth = 820.0;
+    // A portrait tablet keeps touch navigation at the bottom while a 300 px
+    // basket and a usable compact catalog fit beside each other at 768 px.
+    const minSplitContentWidth = 740.0;
     final cartAction = SafeArea(
       top: false,
       minimum: const EdgeInsets.fromLTRB(12, 8, 12, 10),
@@ -1175,6 +1175,8 @@ class _ShopHomeState extends State<ShopHome> {
                                                   height: _catalogHeight(
                                                     products,
                                                     constraints.maxHeight,
+                                                    catalogWidth:
+                                                        constraints.maxWidth,
                                                   ),
                                                   child: _catalog(products),
                                                 ),
@@ -1195,6 +1197,14 @@ class _ShopHomeState extends State<ShopHome> {
                                             !_recoveredDraft &&
                                             _pendingWalletCheckout == null
                                         ? _emptyCartPanel()
+                                        : cartWidth < 320
+                                        ? Align(
+                                            alignment: Alignment.topCenter,
+                                            child: _cartPanel(
+                                              products,
+                                              narrowPane: true,
+                                            ),
+                                          )
                                         : _cartPanel(products),
                                   ),
                                 ],
@@ -1396,7 +1406,11 @@ class _ShopHomeState extends State<ShopHome> {
     ),
   );
 
-  double _catalogHeight(List<ShopProduct> products, double maxHeight) {
+  double _catalogHeight(
+    List<ShopProduct> products,
+    double maxHeight, {
+    required double catalogWidth,
+  }) {
     if (products.isEmpty) return maxHeight;
     final matchingCount = _visibleProducts(products).length;
     final textScale = MediaQuery.textScalerOf(context).scale(1.0);
@@ -1405,9 +1419,12 @@ class _ShopHomeState extends State<ShopHome> {
     // Burmese's three-line product rows need the same vertical budget as EN.
     // A shorter estimate clips the last row while empty tablet space remains.
     const rowHeight = 96.0;
+    // Compact tablet headers wrap product actions into a second line. Give
+    // that header its own height before allocating the scrollable product row.
+    final headerHeight = catalogWidth < 500 ? 324.0 : 148.0;
     final desiredHeight = matchingCount == 0
         ? 360.0
-        : 148.0 + matchingCount * rowHeight * textScale;
+        : headerHeight + matchingCount * rowHeight * textScale;
     return desiredHeight.clamp(0.0, maxHeight).toDouble();
   }
 
@@ -2075,8 +2092,12 @@ class _ShopHomeState extends State<ShopHome> {
     ),
   );
 
-  Widget _cartPanel(List<ShopProduct> products, {StateSetter? refresh}) {
-    final compactCart = MediaQuery.sizeOf(context).width < 520;
+  Widget _cartPanel(
+    List<ShopProduct> products, {
+    StateSetter? refresh,
+    bool narrowPane = false,
+  }) {
+    final compactCart = narrowPane || MediaQuery.sizeOf(context).width < 520;
     final byId = {for (final item in products) item.id: item};
     final hasUnavailableProducts = _cartHasUnavailableProducts(products);
     final entries = _pendingWalletCheckout != null

@@ -2629,7 +2629,7 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     tester.view.devicePixelRatio = 1;
-    for (final width in [800.0, 820.0, 1024.0]) {
+    for (final width in [768.0, 800.0, 820.0, 1024.0]) {
       for (final myanmar in [false, true]) {
         tester.view.physicalSize = Size(width, 800);
         final database = ShopDatabase(NativeDatabase.memory());
@@ -2650,18 +2650,18 @@ void main() {
         await tester.pumpAndSettle();
         await tester.tap(find.text(myanmar ? 'ရောင်းရန်' : 'Sell'));
         await tester.pumpAndSettle();
-        if (width == 820) {
+        if (width <= 820) {
           final catalog = find.byKey(const ValueKey('shop-split-catalog'));
           final basket = find.byKey(const ValueKey('shop-split-basket'));
           expect(catalog, findsOneWidget);
           expect(basket, findsOneWidget);
-          expect(tester.getSize(catalog).height, lessThan(400));
+          expect(tester.getSize(catalog).height, lessThan(500));
         }
         await tester.tap(
           find.byTooltip(myanmar ? 'အရောင်းထဲထည့်ရန်' : 'Add to sale'),
         );
         await tester.pumpAndSettle();
-        if (width == 820) {
+        if (width <= 820) {
           final catalog = find.byKey(const ValueKey('shop-split-catalog'));
           final basket = find.byKey(const ValueKey('shop-split-basket'));
           expect(basket, findsOneWidget);
@@ -2685,12 +2685,7 @@ void main() {
             );
           }
         }
-        if (width == 800) {
-          await tester.tap(
-            find.textContaining(myanmar ? 'အရောင်းစစ်ရန်' : 'Review sale'),
-          );
-          await tester.pumpAndSettle();
-        } else if (width == 820) {
+        if (width <= 820) {
           expect(
             find.textContaining(myanmar ? 'အရောင်းစစ်ရန်' : 'Review sale'),
             findsNothing,

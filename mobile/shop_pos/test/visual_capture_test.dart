@@ -302,6 +302,97 @@ void main() {
     tester.platformDispatcher.clearTextScaleFactorTestValue();
   });
 
+  for (final (language, textScale) in [
+    ('en', 1.0),
+    ('my', 1.0),
+    ('en', 1.3),
+    ('my', 1.3),
+  ]) {
+    testWidgets(
+      '768px portrait tablet keeps catalog and basket at $language ${textScale}x',
+      (tester) async {
+        const width = 768.0;
+        const height = 1024.0;
+        tester.view.physicalSize = const Size(width, height);
+        tester.view.devicePixelRatio = 1;
+        tester.platformDispatcher.textScaleFactorTestValue = textScale;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+        final database = await _sampleShop(myanmar: language == 'my');
+        try {
+          await tester.pumpWidget(
+            RepaintBoundary(
+              key: _captureKey,
+              child: ShopApp(
+                initialCounter: true,
+                database: database,
+                authClient: null,
+                apiBaseUrl: 'https://example.invalid',
+                initialMyanmar: language == 'my',
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          final catalog = find.byKey(const ValueKey('shop-split-catalog'));
+          final basket = find.byKey(const ValueKey('shop-split-basket'));
+          expect(catalog, findsOneWidget);
+          expect(basket, findsOneWidget);
+          final catalogBounds = tester.getRect(catalog);
+          final basketBounds = tester.getRect(basket);
+          expect(catalogBounds.width, greaterThanOrEqualTo(390));
+          expect(basketBounds.width, 300);
+          expect(catalogBounds.right, lessThan(basketBounds.left));
+          expect(basketBounds.right, lessThanOrEqualTo(width));
+          expect(tester.takeException(), isNull);
+          if (_capture) {
+            await _resolveVisibleProductPhotos(tester);
+            await expectLater(
+              find.byKey(_captureKey),
+              matchesGoldenFile(
+                'goldens/shop_tablet_sell_768_${language}_${textScale == 1.0 ? 'normal' : 'large'}.png',
+              ),
+            );
+          }
+
+          await tester.tap(
+            find
+                .byTooltip(
+                  language == 'my' ? 'အရောင်းထဲထည့်ရန်' : 'Add to sale',
+                )
+                .first,
+          );
+          await tester.pumpAndSettle();
+          expect(basket, findsOneWidget);
+          expect(
+            tester.getRect(basket).top,
+            lessThanOrEqualTo(catalogBounds.top + 12),
+          );
+          final cash = find.widgetWithText(
+            FilledButton,
+            language == 'my' ? 'ငွေသား' : 'Cash sale',
+          );
+          expect(cash, findsOneWidget);
+          expect(tester.getRect(cash).height, greaterThanOrEqualTo(48));
+          expect(tester.getRect(cash).bottom, lessThanOrEqualTo(height));
+          expect(tester.takeException(), isNull);
+          if (_capture) {
+            await expectLater(
+              find.byKey(_captureKey),
+              matchesGoldenFile(
+                'goldens/shop_tablet_checkout_768_${language}_${textScale == 1.0 ? 'normal' : 'large'}.png',
+              ),
+            );
+          }
+        } finally {
+          await tester.pumpWidget(const SizedBox.shrink());
+          await tester.pump(const Duration(milliseconds: 1));
+          await database.close();
+        }
+      },
+    );
+  }
+
   for (final (width, height, language) in [
     (320.0, 800.0, 'en'),
     (390.0, 844.0, 'en'),
