@@ -2181,15 +2181,12 @@ class _ShopHomeState extends State<ShopHome> {
         const Divider(height: 20),
         LayoutBuilder(
           builder: (context, constraints) {
-            final label = Text(
-              shopCopy(widget.myanmar, 'Total', 'စုစုပေါင်း'),
-            );
+            final label = Text(shopCopy(widget.myanmar, 'Total', 'စုစုပေါင်း'));
             final amount = Text(
               hasUnavailableProducts
                   ? shopCopy(widget.myanmar, 'Check items', 'ပစ္စည်းစစ်ရန်')
                   : _mmk(
-                      _pendingWalletCheckout?.totalMmk ??
-                          _cartTotal(products),
+                      _pendingWalletCheckout?.totalMmk ?? _cartTotal(products),
                     ),
               style: _shopMoneyStyle(context, total: true),
               textAlign: TextAlign.right,
