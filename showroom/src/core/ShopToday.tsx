@@ -210,7 +210,7 @@ export function ShopToday({ accountingExport = null, batchProfitControl, catalog
         <div className="shop-operating-list">
           {activeOrders.length ? activeOrders.map((order) => <Link key={order.id} to={shopOrderLink(order.id)}>
             <span><strong>{order.item}</strong><small>{privacySafeQueueCustomer(order.customer)} · {order.quantity} {uiText(order.quantity === 1 ? 'item' : 'items')}</small></span>
-            <span className="shop-order-queue-meta"><b>{formatMmk(order.total)}</b><small>{uiText(order.status)} <em data-payment-due={order.paymentStatus === 'pending'}>{uiText(order.paymentStatus === 'pending' ? 'Payment due' : 'Paid')}</em></small></span>
+            <span className="shop-order-queue-meta"><b>{formatMmk(order.total)}</b><small>{uiText(order.status)} <em data-payment-pending={order.paymentStatus === 'pending'}>{uiText(order.paymentStatus === 'pending' ? 'Unpaid' : 'Paid')}</em></small></span>
           </Link>) : <p className="shop-operating-empty"><strong>{uiText('Queue clear')}</strong><span>{uiText('No open orders need fulfilment.')}</span></p>}
         </div>
         <footer><Link to="/shop/?tab=orders#shop-order-queue">{uiText('Open all orders')} <span aria-hidden="true">→</span></Link></footer>
