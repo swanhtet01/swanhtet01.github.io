@@ -3900,7 +3900,7 @@ class PostgresTrialStore:
                  not function_record.prosecdef
                  and function_record.provolatile = 's'
                  and function_record.proconfig = array['search_path=pg_catalog, app_private']::text[]
-                 and md5(replace(function_record.prosrc, E'\r\n', E'\n')) =
+                 and md5(replace(function_record.prosrc, E'\\r\\n', E'\\n')) =
                    '08bd03394dacc60070d1c200f022fee0'
                  and has_function_privilege('supermega_trial_backend', function_record.oid, 'EXECUTE')
                  and not has_function_privilege('anon', function_record.oid, 'EXECUTE')
