@@ -450,6 +450,47 @@ void main() {
     }
   });
 
+  testWidgets('320px Burmese Today keeps the latest item above navigation', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 800);
+    tester.view.devicePixelRatio = 1;
+    tester.platformDispatcher.textScaleFactorTestValue = 1.5;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    final database = ShopDatabase(NativeDatabase.memory());
+    addTearDown(database.close);
+    await database.addProduct(
+      id: 'mama',
+      name: 'MAMA ကြက်သား အမြန်ခေါက်ဆွဲ',
+      priceMmk: 2950,
+      openingStock: 8,
+    );
+    await database.recordCashSale(
+      operationId: 'today-narrow-burmese-sale',
+      lines: const [ShopSaleLineInput(productId: 'mama', quantity: 1)],
+    );
+    await tester.pumpWidget(
+      ShopApp(
+        database: database,
+        authClient: null,
+        apiBaseUrl: 'https://example.invalid',
+        initialMyanmar: true,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final latestItem = find.textContaining('MAMA ကြက်သား');
+    expect(latestItem, findsOneWidget);
+    expect(
+      tester.getBottomRight(latestItem).dy,
+      lessThan(tester.getTopLeft(find.byType(NavigationBar)).dy),
+    );
+    expect(find.byTooltip('အရောင်းကြည့်ရန်'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('unfinished sale opens from Today after app restart', (
     tester,
   ) async {
