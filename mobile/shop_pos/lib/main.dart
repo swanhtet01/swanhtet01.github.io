@@ -1704,10 +1704,10 @@ class _ShopHomeState extends State<ShopHome> {
   }) {
     // The product pane, not the full window, determines row density. A
     // desktop basket can leave less room than a portrait tablet catalog.
-    // The split counter gives the catalog roughly 600 px on desktop. Use a
-    // proper price column there; keep price under the name only when a tablet
-    // or phone catalog is too narrow for name, price and the add target.
-    final compactProductRow = catalogWidth < 560;
+    // The split counter gives the catalog roughly 550 px inside its card on
+    // desktop. Use a price column there; place price under the name only when
+    // the pane is too narrow for name, price and the add target.
+    final compactProductRow = catalogWidth < 520;
     final narrowProductRow = catalogWidth < 380;
     final touchCompactRow = MediaQuery.sizeOf(context).width >= 820;
     final text = _search.text.trim().toLowerCase();
