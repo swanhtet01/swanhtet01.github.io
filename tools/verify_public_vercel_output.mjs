@@ -453,7 +453,7 @@ for (const [route, html] of [['/', home], ['/shop/', shopPage]]) {
   if (html.includes('data-language-toggle') || html.includes('src="/site-language.js"')) fail('marketing_language_control_present', { route })
   if (html.includes('data-i18n=') || /[\u1000-\u109f]/u.test(html)) fail('marketing_myanmar_copy_present', { route })
 }
-for (const token of ['Sell at the counter.', 'Stay ahead of stock.', 'aria-label="Orders and stock"', 'Shop browser workspace · synthetic local records', 'See counter sales, recorded orders and stock in the Shop browser workspace.']) {
+for (const token of ['Sell at the counter.', 'Stay ahead of stock.', 'aria-label="Orders and stock"', 'Shop browser workspace · synthetic local records', 'See recorded orders and stock in the Shop browser workspace.']) {
   if (!shopPage.includes(token)) fail('shop_page_scope_missing', { token })
 }
 if (/<section\b[^>]*class="[^"]*\bsubscription-section\b/.test(shopPage)

@@ -789,15 +789,21 @@ body[data-view="company"] .company-hero h1 { max-width: 100%; font-size: clamp(4
 body[data-view="company"] .company-hero .hero-copy > p:not(.hero-kicker) { max-width: 44ch; font-size: 17px; line-height: 1.55; }
 body[data-view="company"] .company-product-visual { gap: 10px; padding: 12px; border-color: #dfded8; border-radius: 14px; background: #fff; box-shadow: 0 14px 32px rgba(25,28,38,.06); }
 body[data-view="company"] .company-product-visual img { border-color: #e4e4e1; border-radius: 8px; }
-body[data-view="shop"] .shop-hero { padding-block: clamp(34px,4vw,52px); background: #f3f5f9; }
-body[data-view="shop"] .shop-hero h1 { max-width: 24ch; font-size: clamp(40px,4.1vw,54px); line-height: 1.02; }
-body[data-view="shop"] .shop-hero-copy { display: grid; gap: 18px; align-content: center; min-width: 0; }
+body[data-view="shop"] .shop-hero { padding-block: clamp(40px,4.5vw,64px); background: #f6f8fc; }
+body[data-view="shop"] .shop-hero h1 { max-width: 12ch; font-size: clamp(42px,4.1vw,58px); line-height: 1.02; }
+body[data-view="shop"] .shop-hero-copy { display: grid; gap: 20px; align-content: center; min-width: 0; }
 body[data-view="shop"] .shop-hero-copy .eyebrow, body[data-view="shop"] .shop-hero-copy h1, body[data-view="shop"] .shop-hero-copy > p { margin: 0; }
-body[data-view="shop"] .shop-hero .button-primary { align-self: start; }
-body[data-view="shop"] .shop-hero .wrap { display: grid; grid-template-columns: minmax(0,1fr); gap: clamp(28px,4vw,48px); align-items: start; }
-body[data-view="shop"] .shop-hero-copy { max-width: 830px; }
+body[data-view="shop"] .shop-hero-copy > p { max-width: 41ch; font-size: 16px; line-height: 1.55; }
+body[data-view="shop"] .shop-hero .button-primary { align-self: start; min-height: 50px; margin-top: 6px; padding-inline: 22px; border-color: #2563eb; border-radius: 8px; background: #2563eb; box-shadow: none; }
+body[data-view="shop"] .shop-hero .button-primary:hover { border-color: #1d4ed8; background: #1d4ed8; }
+body[data-view="shop"] .shop-hero .wrap { display: grid; grid-template-columns: minmax(0,.68fr) minmax(0,1.32fr); gap: clamp(32px,4vw,60px); align-items: center; }
+body[data-view="shop"] .shop-hero-copy { max-width: 460px; }
 body[data-view="shop"] .shop-hero-app { width: 100%; max-width: none; justify-self: stretch; }
-body[data-view="shop"] .shop-actual-showcase { background: #fff; }
+body[data-view="shop"] .shop-lead-capture { max-width: none; margin: 0; padding: 10px; border-color: #dfe5ee; border-radius: 13px; box-shadow: 0 20px 44px rgba(20,35,65,.10); }
+body[data-view="shop"] .shop-actual-showcase { padding-block: clamp(30px,3.5vw,48px); background: #fff; }
+body[data-view="shop"] .shop-workflow-card { gap: 10px; padding: 10px; border-color: #e3e7ee; box-shadow: 0 8px 22px rgba(16,24,40,.035); }
+body[data-view="shop"] .shop-workflow-card-copy { padding: 2px 4px 5px; }
+body[data-view="shop"] .shop-workflow-card h3 { margin: 0; font-size: 16px; }
 body[data-view="contact"] .contact-page { padding-block: clamp(48px,6vw,78px); }
 body[data-view="contact"] .contact-page .contact-form { gap: 16px; padding: 26px; border-color: #e1e3e8; border-radius: 12px; background: #fafbfc; box-shadow: none; }
 body[data-view="contact"] .contact-page .field-grid input, body[data-view="contact"] .contact-page .field-grid textarea { border-radius: 7px; }
@@ -806,10 +812,17 @@ body[data-view="contact"] .contact-page .contact-form .button { width: max-conte
   body[data-view="company"] .company-hero .hero-grid { min-height: 0; padding-block: 32px; }
   body[data-view="company"] .company-hero h1 { max-width: 100%; font-size: clamp(38px,10vw,52px); }
   body[data-view="shop"] .shop-hero { padding-block: 34px; }
+  body[data-view="shop"] .shop-hero h1 { max-width: 16ch; font-size: clamp(38px,10vw,48px); }
+  body[data-view="shop"] .shop-hero .button-primary { width: 100%; justify-content: center; }
   body[data-view="contact"] .contact-page { padding-block: 32px 52px; }
   body[data-view="contact"] .contact-page .contact-form { padding: 20px; }
   body[data-view="contact"] .contact-page .contact-form .button { width: 100%; }
 }
+@media (max-width: 1100px) {
+  body[data-view="shop"] .shop-hero .wrap { grid-template-columns: minmax(0,1fr); gap: 28px; }
+  body[data-view="shop"] .shop-hero-copy { max-width: 720px; }
+}
+@media (min-width: 761px) and (max-width: 1100px) { body[data-view="shop"] .shop-hero h1 { max-width: 22ch; } }
 `
 
 function documentHtml({ route, title, description, content, schema = null, robots = 'index,follow', shareImage = '/og-card.png' }) {
@@ -910,11 +923,11 @@ function productGallery(id,label,eagerFirst=false,showAll=false) {
  if (item.screens.length === 1) return `<div class="platform-gallery" data-product-gallery="${id}" data-single role="region" aria-label="${label} interface view"><div class="platform-slides">${slides}</div></div>`
  return `<div class="platform-gallery" data-product-gallery="${id}" data-platform-carousel role="region" aria-roledescription="carousel" aria-label="${label} interface views"><div class="platform-slides" tabindex="0">${slides}</div><div class="platform-gallery-controls"><button type="button" data-gallery-previous aria-label="Previous ${label} screen" disabled>&lsaquo;</button><span class="platform-gallery-status" data-gallery-status aria-live="polite">1 of ${item.screens.length}</span><button type="button" data-gallery-next aria-label="Next ${label} screen">&rsaquo;</button></div></div>`
 }
-function shopSupportCard({image,alt,title,description}) {
+function shopSupportCard({image,alt,title}) {
  interfaceDisclosure(image)
  const mobileImage = image.replace(/\.png$/, '-mobile.png')
  interfaceDisclosure(mobileImage)
- return `<article class="shop-workflow-card"><picture><source media="(max-width: 760px)" srcset="/images/${mobileImage}" width="390" height="844" /><img src="/images/${image}" alt="${escapeHtml(alt)} · synthetic sample records" width="1440" height="900" loading="lazy" /></picture><div class="shop-workflow-card-copy"><h3>${escapeHtml(title)}</h3><p>${escapeHtml(description)}</p></div></article>`
+ return `<article class="shop-workflow-card"><picture><source media="(max-width: 760px)" srcset="/images/${mobileImage}" width="390" height="844" /><img src="/images/${image}" alt="${escapeHtml(alt)} · synthetic sample records" width="1440" height="900" loading="lazy" /></picture><div class="shop-workflow-card-copy"><h3>${escapeHtml(title)}</h3></div></article>`
 }
 function shopCounterSalePreview() {
  const [image,alt] = stories.shop.screens[0]
@@ -926,8 +939,8 @@ function shopCounterSalePreview() {
  return `<figure class="shop-lead-capture"><picture><source media="(max-width: 760px)" srcset="/images/${mobileImage}" width="390" height="844" /><source media="(max-width: 1024px)" srcset="/images/${tabletImage}" width="768" height="1024" /><img src="/images/${image}" alt="${escapeHtml(alt)}" width="1440" height="900" loading="eager" fetchpriority="high" /></picture><figcaption id="shop-sample-disclosure">Shop browser workspace · synthetic local records<span class="shop-photo-credit">MAMA photo: <a href="https://world.openfoodfacts.org/cgi/product_image.pl?code=8850987101526&amp;id=front_en">twindel / Open Food Facts</a> · <a href="https://creativecommons.org/licenses/by-sa/3.0/">CC BY-SA 3.0</a></span></figcaption></figure>`
 }
 function shopResponsiveShowcase() {
- const orders = shopSupportCard({image:'actual-shop-orders.png',alt:'Shop browser order queue with fulfilment and payment follow-up',title:'Orders',description:'See what is ready, what is unpaid, and what needs the next step.'})
- const stock = shopSupportCard({image:'actual-shop-inventory.png',alt:'Shop browser inventory list with on-hand quantities and reorder signals',title:'Stock',description:'Find products that need a count or replenishment.'})
+ const orders = shopSupportCard({image:'actual-shop-orders.png',alt:'Shop browser order queue with fulfilment and payment follow-up',title:'Orders to finish'})
+ const stock = shopSupportCard({image:'actual-shop-inventory.png',alt:'Shop browser inventory list with on-hand quantities and reorder signals',title:'Stock to replenish'})
  return `<div class="shop-responsive-showcase"><div class="shop-workflow-support">${orders}${stock}</div></div>`
 }
 function productStory(id, standalone = false) {

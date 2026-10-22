@@ -388,7 +388,7 @@ check(shopManifest?.status === 'release-candidate-local', 'shop_public_status_ma
 check(shopManifest?.primaryCta?.url === '/shop/#shop-demo', 'shop_primary_action_opens_real_screen_gallery')
 check(shopLanding.includes('Sell at the counter.') && shopLanding.includes('Stay ahead of stock.'), 'shop_hero_matches_the_operating_job')
 check(shopLanding.includes('.shop-hero .button-primary') && shopLanding.includes('white-space:nowrap'), 'shop_primary_action_stays_compact')
-check(shopLanding.includes('See counter sales, recorded orders and stock in the Shop browser workspace.')
+check(shopLanding.includes('See recorded orders and stock in the Shop browser workspace.')
   && !shopLanding.includes('follow open orders and stock in one workspace.'), 'shop_hero_does_not_imply_native_orders_parity')
 check(!/<section\b[^>]*class="[^"]*\bsubscription-section\b/.test(shopLanding)
   && !shopLanding.includes('no setup fee') && !shopLanding.includes('printer-sourcing markup'), 'shop_page_omits_unverified_pricing_and_hardware_promises')
