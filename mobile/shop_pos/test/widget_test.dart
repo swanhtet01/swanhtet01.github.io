@@ -450,7 +450,7 @@ void main() {
     }
   });
 
-  testWidgets('320px Burmese Today keeps the latest item above navigation', (
+  testWidgets('320px Burmese Today keeps a large sale readable', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(320, 800);
@@ -464,7 +464,7 @@ void main() {
     await database.addProduct(
       id: 'mama',
       name: 'MAMA ကြက်သား အမြန်ခေါက်ဆွဲ',
-      priceMmk: 2950,
+      priceMmk: 12450000,
       openingStock: 8,
     );
     await database.recordCashSale(
@@ -488,6 +488,7 @@ void main() {
       lessThan(tester.getTopLeft(find.byType(NavigationBar)).dy),
     );
     expect(find.byTooltip('အရောင်းကြည့်ရန်'), findsOneWidget);
+    expect(find.textContaining('၁၂,၄၅၀,၀၀၀'), findsWidgets);
     expect(tester.takeException(), isNull);
   });
 

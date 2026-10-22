@@ -607,12 +607,11 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
           children: [
             title,
             const SizedBox(height: 4),
-            Row(
-              children: [
-                time,
-                const Spacer(),
-                amount,
-              ],
+            OverflowBar(
+              alignment: MainAxisAlignment.spaceBetween,
+              overflowAlignment: OverflowBarAlignment.end,
+              overflowSpacing: 4,
+              children: [time, amount],
             ),
           ],
         ),
