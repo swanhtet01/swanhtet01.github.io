@@ -265,4 +265,79 @@ void main() {
       },
     );
   }
+
+  for (final (width, height, language) in [
+    (320.0, 800.0, 'en'),
+    (320.0, 800.0, 'my'),
+    (820.0, 1000.0, 'en'),
+    (820.0, 1000.0, 'my'),
+  ]) {
+    testWidgets(
+      'capture wallet setup at ${width.toInt()}px $language',
+      skip: !_capture,
+      (tester) async {
+        tester.view.physicalSize = Size(width, height);
+        tester.view.devicePixelRatio = 1;
+        if (width == 320) {
+          tester.platformDispatcher.textScaleFactorTestValue = 1.5;
+        }
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+        final database = await _sampleShop(myanmar: language == 'my');
+        try {
+          await tester.pumpWidget(
+            RepaintBoundary(
+              key: _captureKey,
+              child: ShopApp(
+                database: database,
+                authClient: null,
+                apiBaseUrl: 'https://example.invalid',
+                initialMyanmar: language == 'my',
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          await tester.tap(
+            find
+                .descendant(
+                  of: find.byType(AppBar),
+                  matching: find.byIcon(Icons.settings_outlined),
+                )
+                .first,
+          );
+          await tester.pumpAndSettle();
+          final walletEntry = find.text(
+            language == 'my' ? 'မိုဘိုင်းငွေပေးချေမှု' : 'Mobile money',
+          );
+          await tester.ensureVisible(walletEntry);
+          await tester.tap(walletEntry);
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+          await expectLater(
+            find.byKey(_captureKey),
+            matchesGoldenFile(
+              'goldens/shop_wallet_${width.toInt()}_$language.png',
+            ),
+          );
+
+          await tester.tap(
+            find.byKey(const ValueKey('wallet-provider-KBZPay')),
+          );
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+          await expectLater(
+            find.byKey(_captureKey),
+            matchesGoldenFile(
+              'goldens/shop_wallet_edit_${width.toInt()}_$language.png',
+            ),
+          );
+        } finally {
+          await tester.pumpWidget(const SizedBox.shrink());
+          await tester.pump(const Duration(milliseconds: 1));
+          await database.close();
+        }
+      },
+    );
+  }
 }
