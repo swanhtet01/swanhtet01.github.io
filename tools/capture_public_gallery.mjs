@@ -557,7 +557,7 @@ async function main() {
     captures.push(await captureMobile(cdp, sessionId, output, 'actual-shop-inventory-my-mobile', ['ကုန်ပစ္စည်းလက်ကျန်', 'ပန်းသီးနီ (တစ်လုံး)'],
       { fixturePath: '/shop-my/', tab: 'inventory', uiLocale: 'my', selector: '.shop-stock-workspace', imageSelector: '.stock-product-photo', images: 1 }))
     await assertShopMobileFits(cdp, sessionId, '.shop-stock-workspace')
-    await evaluate(cdp, sessionId, `document.querySelector('.shop-stock-heading > button')?.click()`)
+    await evaluate(cdp, sessionId, `document.querySelector('.shop-stock-heading-actions > button')?.click()`)
     await waitFor(cdp, sessionId, 'လက်ကျန်ရေတွက်မှုကို စစ်ဆေးရန်')
     const myStocktakeText = await evaluate(cdp, sessionId, `document.querySelector('#stock-count-editor')?.innerText || ''`)
     if (/Stock check|Review a stocktake|Scan each item|Choose one item|Counted available units|Cancel stocktake|Review stocktake/.test(myStocktakeText))
