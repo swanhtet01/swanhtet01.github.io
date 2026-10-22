@@ -369,10 +369,12 @@ void main() {
           );
           await tester.pumpAndSettle();
           await tester.tap(
-            find.descendant(
-              of: find.byType(AppBar),
-              matching: find.byIcon(Icons.settings_outlined),
-            ).first,
+            find
+                .descendant(
+                  of: find.byType(AppBar),
+                  matching: find.byIcon(Icons.settings_outlined),
+                )
+                .first,
           );
           await tester.pumpAndSettle();
           if (language == 'my') {

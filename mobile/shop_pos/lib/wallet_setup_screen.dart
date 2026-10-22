@@ -37,8 +37,8 @@ class _WalletSetupScreenState extends State<WalletSetupScreen> {
             child: Text(
               shopCopy(
                 myanmar,
-                'Choose a wallet to add its merchant QR. The cashier confirms each payment.',
-                'ဆိုင်ငွေလက်ခံ QR ထည့်ရန် ငွေပေးချေမှုအကောင့်ကို ရွေးပါ။ ငွေလက်ခံရရှိမှုကို ငွေကိုင်က အတည်ပြုရမည်။',
+                'Choose a wallet to add its merchant QR.',
+                'ဆိုင်ငွေလက်ခံ QR ထည့်ရန် ငွေပေးချေမှုအကောင့်ကို ရွေးပါ။',
               ),
               style: Theme.of(context).textTheme.bodyLarge,
             ),
@@ -270,8 +270,8 @@ class _WalletEditorState extends State<_WalletEditor> {
                     decoration: InputDecoration(
                       labelText: shopCopy(
                         myanmar,
-                        'Merchant number',
-                        'ဆိုင်ရှင်ဖုန်းနံပါတ်',
+                      'Merchant number (optional)',
+                      'ဆိုင်ရှင်ဖုန်းနံပါတ် (မထည့်လည်းရ)',
                       ),
                     ),
                     onChanged: (_) => setState(() {
@@ -356,10 +356,32 @@ class _WalletEditorState extends State<_WalletEditor> {
                   Text(
                     shopCopy(
                       myanmar,
-                      'The app checks MMQR structure and checksum, not who issued it. Check the merchant name in the wallet app. Showing or scanning this QR never marks a sale paid; the cashier confirms receipt.',
-                      'အက်ပ်သည် MMQR ၏ ဖွဲ့စည်းပုံနှင့် စစ်ဆေးဂဏန်းကိုသာ စစ်ဆေးပြီး ထုတ်ပေးသူကို မစစ်ဆေးပါ။ ငွေပေးချေမှုအက်ပ်တွင် ဆိုင်အမည်ကို တိုက်စစ်ပါ။ ဤ QR ကို ပြသခြင်း သို့မဟုတ် ဖတ်ခြင်းဖြင့် အရောင်းကို ငွေချေပြီးဟု မမှတ်ပါ။ ငွေလက်ခံရရှိမှုကို ငွေကိုင်က အတည်ပြုရမည်။',
+                      'The cashier confirms each payment before completing the sale.',
+                      'အရောင်းမပြီးစီးမီ ငွေလက်ခံရရှိမှုကို ငွေကိုင်က အတည်ပြုရမည်။',
                     ),
                     style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  ExpansionTile(
+                    key: ValueKey('wallet-safety-${widget.provider}'),
+                    tilePadding: EdgeInsets.zero,
+                    childrenPadding: const EdgeInsets.only(bottom: 8),
+                    title: Text(
+                      shopCopy(
+                        myanmar,
+                        'Why check this QR?',
+                        'ဤ QR ကို ဘာကြောင့် စစ်ဆေးရသနည်း။',
+                      ),
+                    ),
+                    children: [
+                      Text(
+                        shopCopy(
+                          myanmar,
+                          'The app checks MMQR structure and checksum, but cannot verify the issuer. Compare the merchant name in the wallet app. Displaying or scanning this QR does not mark a sale paid.',
+                          'အက်ပ်သည် MMQR ၏ ဖွဲ့စည်းပုံနှင့် စစ်ဆေးဂဏန်းကို စစ်ဆေးသော်လည်း ထုတ်ပေးသူကို မအတည်ပြုနိုင်ပါ။ ငွေပေးချေမှုအက်ပ်တွင် ဆိုင်အမည်ကို တိုက်စစ်ပါ။ ဤ QR ကို ပြသခြင်း သို့မဟုတ် ဖတ်ခြင်းဖြင့် အရောင်းကို ငွေချေပြီးဟု မမှတ်ပါ။',
+                        ),
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
                   ),
                   if (_message != null) ...[
                     const SizedBox(height: 8),
