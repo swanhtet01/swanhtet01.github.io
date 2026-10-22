@@ -3047,6 +3047,9 @@ void main() {
         find.text('Sale restored. Review changed items before checkout.'),
         findsOneWidget,
       );
+      await tester.ensureVisible(find.text('Cash sale'));
+      await tester.pumpAndSettle();
+      expect(find.text('Cash sale').hitTestable(), findsOneWidget);
       await tester.tap(find.text('Cash sale'));
       await tester.pumpAndSettle();
       expect(find.text('Cash received?'), findsNothing);
@@ -3054,6 +3057,9 @@ void main() {
       expect((await database.readCounterSaleDraft())?.productNames, {
         'tea': 'Tea large',
       });
+      await tester.ensureVisible(find.text('Cash sale'));
+      await tester.pumpAndSettle();
+      expect(find.text('Cash sale').hitTestable(), findsOneWidget);
       await tester.tap(find.text('Cash sale'));
       await tester.pumpAndSettle();
       expect(find.text('Cash received?'), findsOneWidget);
