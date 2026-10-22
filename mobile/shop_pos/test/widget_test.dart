@@ -195,7 +195,7 @@ void main() {
     }
   });
 
-  testWidgets('compact Today and Stock put recent work and low stock first', (
+  testWidgets('compact Today shows one low-stock action and recent sales', (
     tester,
   ) async {
     _usePhoneViewport(tester);
@@ -226,12 +226,11 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(
-        tester.getTopLeft(find.text('Recent sales')).dy,
-        lessThan(tester.getTopLeft(find.text('Lowest stock')).dy),
-      );
-      await tester.ensureVisible(find.text('View stock'));
-      await tester.tap(find.text('View stock'));
+      expect(find.text('Recent sales'), findsOneWidget);
+      expect(find.text('Check stock'), findsOneWidget);
+      expect(find.text('Stock to check'), findsNothing);
+      await tester.ensureVisible(find.text('Check stock'));
+      await tester.tap(find.text('Check stock'));
       await tester.pumpAndSettle();
       expect(
         tester.getTopLeft(find.text('Low stock')).dy,
@@ -433,7 +432,7 @@ void main() {
     );
     await database.recordCashSale(
       operationId: 'today-cash-sale',
-      lines: const [ShopSaleLineInput(productId: 'tea', quantity: 1)],
+      lines: const [ShopSaleLineInput(productId: 'water', quantity: 1)],
     );
     await database.createWalletCheckoutIntent(
       operationId: 'today-pending-wallet',
@@ -456,12 +455,12 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Sales today'), findsOneWidget);
-    expect(find.text('2,500 MMK'), findsWidgets);
+    expect(find.text('1,200 MMK'), findsOneWidget);
     expect(find.text('Completed sales'), findsOneWidget);
-    expect(find.text('Low-stock products'), findsOneWidget);
-    expect(find.text('Tea · 5'), findsOneWidget);
+    expect(find.text('Low-stock products'), findsNothing);
+    expect(find.text('Stock to check'), findsNothing);
     expect(find.text('Mobile payment to review'), findsOneWidget);
-    expect(find.text('Check stock'), findsOneWidget);
+    expect(find.text('Check stock'), findsNothing);
     expect(find.textContaining('vs. yesterday'), findsNothing);
     expect(tester.takeException(), isNull);
   });

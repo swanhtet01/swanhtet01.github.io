@@ -151,7 +151,6 @@ class _TodaySnapshot {
     required this.salesMmk,
     required this.saleCount,
     required this.products,
-    required this.productPreview,
     required this.recentSales,
     required this.stockToCheck,
     required this.pendingWallet,
@@ -160,7 +159,6 @@ class _TodaySnapshot {
   final int salesMmk;
   final int saleCount;
   final int products;
-  final List<ShopProduct> productPreview;
   final List<ShopSaleReceipt> recentSales;
   final List<ShopProduct> stockToCheck;
   final PendingWalletCheckout? pendingWallet;
@@ -210,7 +208,7 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
         )
         .getSingle();
     final products = await widget.database.readActiveProducts();
-    final productPreview = products.toList()
+    final stockToCheck = products.where((item) => item.onHand <= 5).toList()
       ..sort((a, b) {
         final stockOrder = a.onHand.compareTo(b.onHand);
         return stockOrder != 0 ? stockOrder : a.name.compareTo(b.name);
@@ -221,10 +219,9 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
       salesMmk: saleTotals.read<int>('sales_mmk'),
       saleCount: saleTotals.read<int>('sale_count'),
       products: products.length,
-      productPreview: productPreview.take(4).toList(),
       recentSales: recentSales,
       // There is no configured reorder point yet. Name the exact rule in UI.
-      stockToCheck: products.where((item) => item.onHand <= 5).toList(),
+      stockToCheck: stockToCheck,
       pendingWallet: pendingWallet,
     );
   }
@@ -469,24 +466,9 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
                       onTap: () => _openFirstProduct(),
                     ),
                 ],
-                if (snapshot.products > 0) ...[
+                if (snapshot.recentSales.isNotEmpty) ...[
                   const SizedBox(height: 24),
-                  if (contentWidth >= 760 && snapshot.recentSales.isNotEmpty)
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(child: _productsPreview(snapshot)),
-                        const SizedBox(width: 12),
-                        Expanded(child: _salesPreview(snapshot)),
-                      ],
-                    )
-                  else ...[
-                    if (snapshot.recentSales.isNotEmpty) ...[
-                      _salesPreview(snapshot),
-                      const SizedBox(height: 12),
-                    ],
-                    _productsPreview(snapshot),
-                  ],
+                  _salesPreview(snapshot),
                 ],
               ],
             ),
@@ -523,40 +505,6 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
           onPressed: () => _openSale(),
           icon: const Icon(Icons.add),
           label: Text(_copy('New sale', 'အရောင်းအသစ်')),
-        ),
-    ],
-  );
-
-  Widget _productsPreview(_TodaySnapshot snapshot) => _previewPanel(
-    title: _copy('Lowest stock', 'လက်ကျန်အနည်းဆုံး'),
-    action: _copy('View stock', 'လက်ကျန်ကြည့်ရန်'),
-    onOpen: () => _open(widget.onStock),
-    rows: [
-      for (final product in snapshot.productPreview)
-        ListTile(
-          contentPadding: const EdgeInsets.symmetric(vertical: 6),
-          title: Text(
-            product.name,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.bodyLarge
-                ?.copyWith(fontWeight: FontWeight.w600),
-          ),
-          subtitle: Text(
-            _copy('In stock', 'လက်ကျန်'),
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-          ),
-          trailing: Text(
-            _number(product.onHand),
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              color: product.onHand <= 5
-                  ? Theme.of(context).colorScheme.error
-                  : Theme.of(context).colorScheme.onSurface,
-              fontFeatures: const [FontFeature.tabularFigures()],
-            ),
-          ),
         ),
     ],
   );
