@@ -58,11 +58,12 @@ for (const command of [
 
 for (const [path, token, failure] of [
   ['tools/verify_public_preview_live.mjs', 'validatePreviewContact(contact, policy)', 'preview_contact_readiness_not_verified'],
+  ['tools/verify_public_preview_live.mjs', 'public_preview_project_link_wrong', 'preview_project_link_guard_missing'],
   ['tools/public_preview_profile.mjs', 'contact.accepting !== accepting', 'preview_contact_policy_missing'],
   ['tools/public_preview_profile.mjs', "contact.status !== (accepting ? 'ready' : 'attention')", 'preview_contact_policy_missing'],
   ['tools/public_preview_profile.mjs', "contact.controls?.idempotency !== 'required'", 'preview_contact_policy_missing'],
   ['tools/public_preview_profile.mjs', "contact.controls?.edge_rate_limit !== 'required'", 'preview_contact_policy_missing'],
-  ['tools/verify_public_preview_live.mjs', 'validatePreviewLinks(homepage, policy, manifest.customerProducts, linkOptions)', 'preview_navigation_consumer_missing'],
+  ['tools/verify_public_preview_live.mjs', "validatePreviewLinks(get('/shop/'), policy, manifest.customerProducts, linkOptions)", 'preview_navigation_consumer_missing'],
   ['tools/verify_public_preview_live.mjs', 'validatePreviewLinks(html, policy, manifest.customerProducts,', 'preview_navigation_consumer_missing'],
   ['tools/public_preview_profile.mjs', 'public_preview_production_escape', 'preview_navigation_policy_missing'],
   ['tools/public_preview_profile.mjs', 'public_preview_retired_entry', 'preview_navigation_policy_missing'],
