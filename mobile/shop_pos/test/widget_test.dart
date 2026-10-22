@@ -1987,6 +1987,7 @@ void main() {
       SharedPreferences.setMockInitialValues({});
       final database = ShopDatabase(NativeDatabase.memory());
       try {
+        await _attachWidgetWorkspace(database);
         await database.addProduct(
           id: 'reversed-tea',
           name: 'Tea',
@@ -2067,6 +2068,7 @@ void main() {
     (tester) async {
       final database = ShopDatabase(NativeDatabase.memory());
       try {
+        await _attachWidgetWorkspace(database);
         await database.addProduct(
           id: 'wallet-reversed-water',
           name: 'Water',
@@ -2139,6 +2141,7 @@ void main() {
     ) async {
       final database = ShopDatabase(NativeDatabase.memory());
       try {
+        await _attachWidgetWorkspace(database);
         final operationPrefix = 'widget-wallet-$outcome';
         final productId = '$operationPrefix-water';
         await database.addProduct(
@@ -5869,6 +5872,15 @@ class _RecentSalesFixtureDatabase extends ShopDatabase {
     String query = '',
   }) async => sales.skip(offset).take(limit).toList(growable: false);
 }
+
+Future<ShopManagedWorkspaceBinding> _attachWidgetWorkspace(
+  ShopDatabase database,
+) => database.attachAuthenticatedManagedWorkspace(
+  const ShopAuthenticatedWorkspaceSelection(
+    workspaceId: 'workspace-widget-test',
+    actorId: 'owner-widget-test',
+  ),
+);
 
 ShopCorrectionAuthorization _widgetCorrectionAuthorization(
   String commandDigest, {

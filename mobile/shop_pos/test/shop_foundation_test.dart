@@ -365,6 +365,98 @@ void main() {
       await database.close();
     });
 
+    test('managed workspace attachment is explicit and immutable', () async {
+      expect(await database.readManagedWorkspaceBinding(), isNull);
+      await expectLater(
+        database.customStatement(
+          "INSERT INTO shop_sale_reversals (authorization_workspace_id) VALUES ('workspace-shop-test')",
+        ),
+        throwsA(
+          predicate(
+            (error) => error.toString().contains(
+              'Shop correction requires the bound workspace',
+            ),
+          ),
+        ),
+      );
+      await expectLater(
+        database.attachAuthenticatedManagedWorkspace(
+          const ShopAuthenticatedWorkspaceSelection(
+            workspaceId: 'workspace-shop-test',
+            actorId: 'owner-test',
+            directoryContract: 'untrusted.workspace_directory.v1',
+          ),
+        ),
+        throwsArgumentError,
+      );
+      expect(await database.readManagedWorkspaceBinding(), isNull);
+
+      final attached = await _attachTestWorkspace(database);
+      await expectLater(
+        database.customStatement(
+          "INSERT INTO shop_sale_reversals (authorization_workspace_id) VALUES ('workspace-other')",
+        ),
+        throwsA(
+          predicate(
+            (error) => error.toString().contains(
+              'Shop correction requires the bound workspace',
+            ),
+          ),
+        ),
+      );
+      await expectLater(
+        database.customStatement(
+          'INSERT INTO shop_wallet_reversal_reconciliations '
+          '(reversal_id, authorization_workspace_id) '
+          "VALUES ('missing-reversal', 'workspace-shop-test')",
+        ),
+        throwsA(
+          predicate(
+            (error) => error.toString().contains(
+              'Shop reconciliation requires the bound workspace',
+            ),
+          ),
+        ),
+      );
+      final replay = await database.attachAuthenticatedManagedWorkspace(
+        const ShopAuthenticatedWorkspaceSelection(
+          workspaceId: 'workspace-shop-test',
+          actorId: 'successor-owner',
+        ),
+      );
+      expect(replay.workspaceId, attached.workspaceId);
+      expect(replay.attachedActorId, 'owner-test');
+      expect(replay.attachedAtMillis, attached.attachedAtMillis);
+
+      await expectLater(
+        database.attachAuthenticatedManagedWorkspace(
+          const ShopAuthenticatedWorkspaceSelection(
+            workspaceId: 'workspace-other',
+            actorId: 'owner-other',
+          ),
+        ),
+        throwsA(isA<StateError>()),
+      );
+      for (final statement in [
+        "UPDATE shop_managed_workspace_binding SET workspace_id = 'workspace-other'",
+        'DELETE FROM shop_managed_workspace_binding',
+        "INSERT OR REPLACE INTO shop_managed_workspace_binding "
+            '(singleton, workspace_id, discovery_contract, '
+            'attached_actor_id, attached_at_millis) VALUES '
+            "(1, 'workspace-other', '$shopManagedWorkspaceDirectoryContract', "
+            "'owner-other', 1)",
+      ]) {
+        await expectLater(
+          database.customStatement(statement),
+          throwsA(anything),
+        );
+      }
+      expect(
+        (await database.readManagedWorkspaceBinding())?.workspaceId,
+        'workspace-shop-test',
+      );
+    });
+
     test(
       'sale receipt keeps immutable item lines for print and reprint',
       () async {
@@ -454,6 +546,29 @@ void main() {
         capability: 'shop.sale.reverse',
         receiptId: 'cash-reversal-receipt',
       );
+      await expectLater(
+        database.recordAuthorizedFullSaleReversal(
+          command: command,
+          authorization: authorization,
+        ),
+        throwsA(isA<StateError>()),
+      );
+      expect(await database.readManagedWorkspaceBinding(), isNull);
+      expect(await database.readSaleReversalForSale(sale.id), isNull);
+      await _attachTestWorkspace(database);
+      await expectLater(
+        database.recordAuthorizedFullSaleReversal(
+          command: command,
+          authorization: _correctionAuthorization(
+            command.commandDigest,
+            capability: 'shop.sale.reverse',
+            receiptId: 'foreign-workspace-receipt',
+            workspaceId: 'workspace-other',
+          ),
+        ),
+        throwsA(isA<StateError>()),
+      );
+      expect(await database.readSaleReversalForSale(sale.id), isNull);
       for (final tamperedAuthorization in [
         ShopCorrectionAuthorization(
           receiptId: authorization.receiptId,
@@ -529,6 +644,18 @@ void main() {
       final replay = await database.recordAuthorizedFullSaleReversal(
         command: command,
         authorization: authorization,
+      );
+      await expectLater(
+        database.recordAuthorizedFullSaleReversal(
+          command: command,
+          authorization: _correctionAuthorization(
+            command.commandDigest,
+            capability: 'shop.sale.reverse',
+            receiptId: authorization.receiptId,
+            workspaceId: 'workspace-other',
+          ),
+        ),
+        throwsA(isA<StateError>()),
       );
       await expectLater(
         database.recordAuthorizedFullSaleReversal(
@@ -652,6 +779,7 @@ void main() {
     test(
       'cash reversal cannot reopen exhausted gross shift capacity',
       () async {
+        await _attachTestWorkspace(database);
         const maximumShiftCashMmk = 200000000000000;
         await database.addProduct(
           id: 'gross-cap-product',
@@ -719,6 +847,7 @@ void main() {
     test(
       'cash reversal authorization stays bound to the reviewed shift',
       () async {
+        await _attachTestWorkspace(database);
         await database.addProduct(
           id: 'shift-bound-return-product',
           name: 'Shift-bound item',
@@ -783,6 +912,7 @@ void main() {
     );
 
     test('wallet reversal stays externally pending until separate reconciliation', () async {
+      await _attachTestWorkspace(database);
       await database.addProduct(
         id: 'wallet-reversal-product',
         name: 'Water',
@@ -902,6 +1032,23 @@ void main() {
         reconciliation.commandDigest,
         capability: 'shop.sale.reconcile_wallet',
         receiptId: 'wallet-confirmation-receipt',
+      );
+      await expectLater(
+        database.recordAuthorizedWalletReconciliation(
+          command: reconciliation,
+          authorization: _correctionAuthorization(
+            reconciliation.commandDigest,
+            capability: 'shop.sale.reconcile_wallet',
+            receiptId: 'foreign-wallet-confirmation-receipt',
+            workspaceId: 'workspace-other',
+          ),
+        ),
+        throwsA(isA<StateError>()),
+      );
+      expect(
+        (await database.readSaleReversalForSale(sale.id))
+            ?.walletReconciliationPending,
+        isTrue,
       );
       await expectLater(
         database.recordAuthorizedWalletReconciliation(
@@ -2184,6 +2331,18 @@ void main() {
           operationId: 'old-sale',
           lines: const [ShopSaleLineInput(productId: 'tea', quantity: 1)],
         );
+        for (final trigger in const [
+          'shop_managed_workspace_binding_no_update',
+          'shop_managed_workspace_binding_no_delete',
+          'shop_managed_workspace_binding_insert_guard',
+          'shop_sale_reversals_require_workspace_binding',
+          'shop_wallet_reversal_reconciliations_require_workspace_binding',
+        ]) {
+          await database.customStatement('DROP TRIGGER $trigger');
+        }
+        await database.customStatement(
+          'DROP TABLE shop_managed_workspace_binding',
+        );
         for (final table in const [
           'shop_sale_reversals',
           'shop_sale_reversal_lines',
@@ -2806,11 +2965,11 @@ ShopCorrectionAuthorization _correctionAuthorization(
   String commandDigest, {
   required String capability,
   required String receiptId,
+  String workspaceId = 'workspace-shop-test',
 }) {
   final now = DateTime.now().millisecondsSinceEpoch;
   final issuedAtMillis = now - 1000;
   final expiresAtMillis = now + const Duration(minutes: 5).inMilliseconds;
-  const workspaceId = 'workspace-shop-test';
   const actorId = 'owner-test';
   const actorLabel = 'Test owner';
   const actorRole = 'owner';
@@ -2840,6 +2999,16 @@ ShopCorrectionAuthorization _correctionAuthorization(
     expiresAtMillis: expiresAtMillis,
   );
 }
+
+Future<ShopManagedWorkspaceBinding> _attachTestWorkspace(
+  ShopDatabase database,
+) =>
+    database.attachAuthenticatedManagedWorkspace(
+      const ShopAuthenticatedWorkspaceSelection(
+        workspaceId: 'workspace-shop-test',
+        actorId: 'owner-test',
+      ),
+    );
 
 Uint8List _pngBytes() {
   return Uint8List.fromList([

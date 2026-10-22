@@ -1,0 +1,566 @@
+import 'dart:async';
+import 'dart:convert';
+
+import 'package:crypto/crypto.dart' as crypto;
+import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+import 'package:supermega_shop/shop_correction_authorization_service.dart';
+import 'package:supermega_shop/shop_database.dart';
+
+const _requestId = '11ecf4e2-f7ac-4e1d-8d5f-6edb796550dc';
+const _receiptId = '784900b0-0293-4e0a-82e9-419e7dd543da';
+const _workspaceId = 'workspace-shop-a';
+const _ownerId = '2f8d24d8-308c-4dc8-a352-7b61df756728';
+const _capability = 'shop.sale.reverse';
+const _fingerprint =
+    '{"operationId":"reversal-1","saleId":"sale-1",'
+    '"saleSnapshotDigest":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+    'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",'
+    '"restockItems":true,"reason":"Customer returned the complete sale",'
+    '"cashReturnConfirmed":true,"expectedCashShiftId":"shift-1",'
+    '"paymentResolution":"cash_returned_now"}';
+final _commandDigest = crypto.sha256
+    .convert(utf8.encode(_fingerprint))
+    .toString();
+final _now = DateTime.utc(2026, 10, 22, 12);
+
+String _repeat(String value, int count) => List.filled(count, value).join();
+
+Map<String, Object?> _receipt({
+  String contract = shopCorrectionAuthorizationReceiptContract,
+  String receiptId = _receiptId,
+  String workspaceId = _workspaceId,
+  String actorId = _ownerId,
+  String actorLabel = 'Workspace owner',
+  String capability = _capability,
+  String? commandDigest,
+  int? issuedAtMillis,
+  int? expiresAtMillis,
+}) {
+  final issued = issuedAtMillis ?? _now.millisecondsSinceEpoch - 1000;
+  final expires = expiresAtMillis ?? issued + 300000;
+  final digest = commandDigest ?? _commandDigest;
+  const source = 'managed_membership_receipt_v1';
+  const role = 'owner';
+  return {
+    'contract': contract,
+    'receiptId': receiptId,
+    'receiptDigest': shopCorrectionAuthorizationReceiptDigest(
+      source: source,
+      receiptId: receiptId,
+      workspaceId: workspaceId,
+      actorId: actorId,
+      actorLabel: actorLabel,
+      actorRole: role,
+      capability: capability,
+      commandDigest: digest,
+      issuedAtMillis: issued,
+      expiresAtMillis: expires,
+    ),
+    'workspaceId': workspaceId,
+    'actorId': actorId,
+    'actorLabel': actorLabel,
+    'actorRole': role,
+    'capability': capability,
+    'source': source,
+    'commandDigest': digest,
+    'issuedAtMillis': issued,
+    'expiresAtMillis': expires,
+  };
+}
+
+Map<String, Object?> _envelope({
+  Map<String, Object?>? receipt,
+  bool replay = false,
+}) => {
+  'authorization': receipt ?? _receipt(),
+  'idempotent_replay': replay,
+  'local_mutation_performed': false,
+  'money_returned': false,
+  'external_writes_performed': !replay,
+  'secret_values_exposed': false,
+};
+
+http.Response _jsonResponse(Object? body, int status) => http.Response(
+  jsonEncode(body),
+  status,
+  headers: {
+    'content-type': 'application/json; charset=utf-8',
+    'cache-control': 'private, no-store',
+    'pragma': 'no-cache',
+  },
+);
+
+Matcher _throwsCode(String code) => throwsA(
+  isA<ShopCorrectionAuthorizationException>().having(
+    (error) => error.code,
+    'code',
+    code,
+  ),
+);
+
+ShopCorrectionAuthorizationService _service(
+  http.Client client, {
+  Future<String?> Function()? accessToken,
+  Future<String?> Function()? currentUserId,
+  DateTime Function()? clock,
+  Uri? endpoint,
+  Duration requestTimeout = const Duration(seconds: 15),
+}) => ShopCorrectionAuthorizationService(
+  endpoint:
+      endpoint ??
+      shopCorrectionAuthorizationEndpoint('https://app.supermega.dev')!,
+  accessToken: accessToken ?? () async => 'short-lived-session',
+  currentUserId: currentUserId ?? () async => _ownerId,
+  clock: clock ?? () => _now,
+  client: client,
+  requestTimeout: requestTimeout,
+);
+
+Future<ShopCorrectionAuthorizationResult> _authorize(
+  ShopCorrectionAuthorizationService service, {
+  String workspaceId = _workspaceId,
+  String capability = _capability,
+  String? commandDigest,
+  String requestFingerprint = _fingerprint,
+}) => service.authorize(
+  authorizationRequestId: _requestId,
+  workspaceId: workspaceId,
+  capability: capability,
+  commandDigest: commandDigest ?? _commandDigest,
+  requestFingerprint: requestFingerprint,
+);
+
+void main() {
+  test('endpoint is fixed under a clean HTTPS origin', () {
+    expect(
+      shopCorrectionAuthorizationEndpoint('https://app.supermega.dev')
+          .toString(),
+      'https://app.supermega.dev$shopCorrectionAuthorizationPath',
+    );
+    expect(
+      shopCorrectionAuthorizationEndpoint('https://app.supermega.dev:443/')
+          .toString(),
+      'https://app.supermega.dev$shopCorrectionAuthorizationPath',
+    );
+    for (final value in [
+      'http://app.supermega.dev',
+      'https://app.supermega.dev:444',
+      'https://user@app.supermega.dev',
+      'https://evil.invalid',
+      'https://app.supermega.dev/other',
+      'https://app.supermega.dev?workspace=other',
+      'https://app.supermega.dev/#fragment',
+      'not a url',
+    ]) {
+      expect(
+        shopCorrectionAuthorizationEndpoint(value),
+        isNull,
+        reason: value,
+      );
+    }
+  });
+
+  test(
+    'a directly supplied insecure endpoint fails before network use',
+    () async {
+      var calls = 0;
+      final service = _service(
+        MockClient((_) async {
+          calls++;
+          return _jsonResponse(_envelope(), 200);
+        }),
+        endpoint: Uri.parse(
+          'http://app.supermega.dev$shopCorrectionAuthorizationPath',
+        ),
+      );
+      await expectLater(
+        _authorize(service),
+        _throwsCode('endpoint_unavailable'),
+      );
+      expect(calls, 0);
+    },
+  );
+
+  test('a directly supplied foreign HTTPS endpoint fails before token use', () async {
+    var tokenReads = 0;
+    var calls = 0;
+    final service = _service(
+      MockClient((_) async {
+        calls++;
+        return _jsonResponse(_envelope(), 200);
+      }),
+      accessToken: () async {
+        tokenReads++;
+        return 'must-not-leave-device';
+      },
+      endpoint: Uri.parse(
+        'https://evil.invalid$shopCorrectionAuthorizationPath',
+      ),
+    );
+    await expectLater(_authorize(service), _throwsCode('endpoint_unavailable'));
+    expect(tokenReads, 0);
+    expect(calls, 0);
+  });
+
+  test('the end-to-end deadline bounds a stalled session lookup', () async {
+    var calls = 0;
+    final stalledUser = Completer<String?>();
+    final service = _service(
+      MockClient((_) async {
+        calls++;
+        return _jsonResponse(_envelope(), 200);
+      }),
+      currentUserId: () => stalledUser.future,
+      requestTimeout: const Duration(milliseconds: 10),
+    );
+    await expectLater(
+      _authorize(service),
+      _throwsCode('authorization_unavailable'),
+    );
+    expect(calls, 0);
+  });
+
+  test('success sends exact command and returns a bound receipt', () async {
+    var calls = 0;
+    late http.Request sent;
+    final service = _service(
+      MockClient((request) async {
+        calls++;
+        sent = request;
+        return _jsonResponse(_envelope(), 200);
+      }),
+    );
+
+    final result = await _authorize(service);
+
+    expect(calls, 1);
+    expect(sent.method, 'POST');
+    expect(sent.url.path, shopCorrectionAuthorizationPath);
+    expect(sent.followRedirects, isFalse);
+    expect(sent.headers['authorization'], 'Bearer short-lived-session');
+    expect(sent.headers['x-supermega-workspace-id'], _workspaceId);
+    expect(sent.headers['cache-control'], 'no-store');
+    expect(sent.headers['pragma'], 'no-cache');
+    expect(jsonDecode(sent.body), {
+      'authorization_request_id': _requestId,
+      'capability': _capability,
+      'command_digest': _commandDigest,
+      'request_fingerprint': _fingerprint,
+      'confirmation': 'AUTHORIZE FULL SALE REVERSAL',
+    });
+    expect(result.idempotentReplay, isFalse);
+    expect(result.externalWritesPerformed, isTrue);
+    expect(result.authorization.receiptId, _receiptId);
+    expect(result.authorization.workspaceId, _workspaceId);
+    expect(result.authorization.actorId, _ownerId);
+    expect(result.authorization.commandDigest, _commandDigest);
+  });
+
+  test('exact replay preserves the receipt and reports no new write', () async {
+    final service = _service(
+      MockClient((_) async => _jsonResponse(_envelope(replay: true), 200)),
+    );
+    final result = await _authorize(service);
+    expect(result.idempotentReplay, isTrue);
+    expect(result.externalWritesPerformed, isFalse);
+    expect(result.authorization.receiptId, _receiptId);
+  });
+
+  test(
+    'wallet reconciliation uses its narrow capability and confirmation',
+    () async {
+      const fingerprint =
+          '{"operationId":"wallet-reconciliation-1",'
+          '"reversalId":"reversal-1","originalPaymentMethod":"kbzpay",'
+          '"originalTotalMmk":15000,"outcome":"money_returned",'
+          '"evidenceReference":"Provider case 123"}';
+      final digest = crypto.sha256.convert(utf8.encode(fingerprint)).toString();
+      late http.Request sent;
+      final service = _service(
+        MockClient((request) async {
+          sent = request;
+          return _jsonResponse(
+            _envelope(
+              receipt: _receipt(
+                capability: 'shop.sale.reconcile_wallet',
+                commandDigest: digest,
+              ),
+            ),
+            200,
+          );
+        }),
+      );
+
+      final result = await _authorize(
+        service,
+        capability: 'shop.sale.reconcile_wallet',
+        commandDigest: digest,
+        requestFingerprint: fingerprint,
+      );
+
+      final body = jsonDecode(sent.body) as Map<String, dynamic>;
+      expect(body['confirmation'], 'AUTHORIZE WALLET RECONCILIATION');
+      expect(result.authorization.capability, 'shop.sale.reconcile_wallet');
+    },
+  );
+
+  test('missing session fails before a request is sent', () async {
+    var calls = 0;
+    final client = MockClient((_) async {
+      calls++;
+      return _jsonResponse(_envelope(), 200);
+    });
+    await expectLater(
+      _authorize(_service(client, currentUserId: () async => null)),
+      _throwsCode('sign_in_required'),
+    );
+    await expectLater(
+      _authorize(_service(client, accessToken: () async => null)),
+      _throwsCode('sign_in_required'),
+    );
+    expect(calls, 0);
+  });
+
+  test('session change before or after the request fails closed', () async {
+    Future<String?> changingUser(List<String> values) async =>
+        values.removeAt(0);
+
+    final beforeSend = <String>[_ownerId, 'different-user'];
+    var calls = 0;
+    await expectLater(
+      _authorize(
+        _service(
+          MockClient((_) async {
+            calls++;
+            return _jsonResponse(_envelope(), 200);
+          }),
+          currentUserId: () => changingUser(beforeSend),
+        ),
+      ),
+      _throwsCode('session_changed'),
+    );
+    expect(calls, 0);
+
+    final afterSend = <String>[_ownerId, _ownerId, 'different-user'];
+    await expectLater(
+      _authorize(
+        _service(
+          MockClient((_) async {
+            calls++;
+            return _jsonResponse(_envelope(), 200);
+          }),
+          currentUserId: () => changingUser(afterSend),
+        ),
+      ),
+      _throwsCode('session_changed'),
+    );
+    expect(calls, 1);
+  });
+
+  test('redirect is never followed', () async {
+    late http.Request sent;
+    final service = _service(
+      MockClient((request) async {
+        sent = request;
+        return http.Response(
+          '',
+          302,
+          headers: {'location': 'https://evil.invalid'},
+        );
+      }),
+    );
+    await expectLater(_authorize(service), _throwsCode('redirect_rejected'));
+    expect(sent.followRedirects, isFalse);
+  });
+
+  test('oversized and malformed responses fail without body leakage', () async {
+    final oversized = _service(
+      MockClient(
+        (_) async => http.Response(
+          _repeat('x', 17000),
+          200,
+          headers: {
+            'content-type': 'application/json',
+            'cache-control': 'private, no-store',
+            'pragma': 'no-cache',
+          },
+        ),
+      ),
+    );
+    await expectLater(_authorize(oversized), _throwsCode('response_too_large'));
+
+    final malformed = _service(
+      MockClient(
+        (_) async => http.Response(
+          '{"private":"do-not-surface"',
+          200,
+          headers: {
+            'content-type': 'application/json',
+            'cache-control': 'private, no-store',
+            'pragma': 'no-cache',
+          },
+        ),
+      ),
+    );
+    try {
+      await _authorize(malformed);
+      fail('Expected an invalid response.');
+    } on ShopCorrectionAuthorizationException catch (error) {
+      expect(error.code, 'invalid_response');
+      expect(error.toString(), isNot(contains('do-not-surface')));
+    }
+  });
+
+  test('extra envelope or receipt keys fail closed', () async {
+    final extraEnvelope = _envelope()..['unexpected'] = true;
+    await expectLater(
+      _authorize(
+        _service(MockClient((_) async => _jsonResponse(extraEnvelope, 200))),
+      ),
+      _throwsCode('invalid_response'),
+    );
+
+    final extraReceipt = _receipt()..['unexpected'] = true;
+    await expectLater(
+      _authorize(
+        _service(
+          MockClient(
+            (_) async => _jsonResponse(_envelope(receipt: extraReceipt), 200),
+          ),
+        ),
+      ),
+      _throwsCode('invalid_response'),
+    );
+  });
+
+  test(
+    'wrong contract, digest, TTL, capability, actor, or workspace fails',
+    () async {
+      final cases = <String, Map<String, Object?>>{
+        'contract': _receipt(contract: 'wrong.contract'),
+        'digest': {..._receipt(), 'receiptDigest': _repeat('0', 64)},
+        'command': _receipt(commandDigest: _repeat('0', 64)),
+        'ttl': _receipt(
+          issuedAtMillis: _now.millisecondsSinceEpoch - 1000,
+          expiresAtMillis: _now.millisecondsSinceEpoch + 300001,
+        ),
+        'capability': _receipt(capability: 'shop.sale.reconcile_wallet'),
+        'actor': _receipt(actorId: 'different-owner'),
+        'workspace': _receipt(workspaceId: 'workspace-shop-b'),
+      };
+      for (final entry in cases.entries) {
+        await expectLater(
+          _authorize(
+            _service(
+              MockClient(
+                (_) async => _jsonResponse(
+                  _envelope(receipt: entry.value),
+                  200,
+                ),
+              ),
+            ),
+          ),
+          _throwsCode('invalid_response'),
+          reason: entry.key,
+        );
+      }
+    },
+  );
+
+  test('future and expired receipts fail with bounded clock errors', () async {
+    final futureIssued = _now.millisecondsSinceEpoch + 1;
+    await expectLater(
+      _authorize(
+        _service(
+          MockClient(
+            (_) async => _jsonResponse(
+              _envelope(
+                receipt: _receipt(issuedAtMillis: futureIssued),
+              ),
+              200,
+            ),
+          ),
+        ),
+      ),
+      _throwsCode('device_clock_invalid'),
+    );
+
+    final expiredIssued = _now.millisecondsSinceEpoch - 300001;
+    await expectLater(
+      _authorize(
+        _service(
+          MockClient(
+            (_) async => _jsonResponse(
+              _envelope(
+                receipt: _receipt(issuedAtMillis: expiredIssued),
+              ),
+              200,
+            ),
+          ),
+        ),
+      ),
+      _throwsCode('authorization_expired'),
+    );
+  });
+
+  test('safe status mapping never exposes a server response', () async {
+    final scenarios = <(int, String, String?)>[
+      (401, 'sign_in_required', null),
+      (403, 'owner_authorization_required', null),
+      (409, 'authorization_conflict', null),
+      (409, 'authorization_expired', 'shop_correction_authorization_expired'),
+      (422, 'request_invalid', null),
+      (503, 'authorization_unavailable', null),
+      (
+        503,
+        'authorization_window_closed',
+        'shop_correction_authorization_window_closed',
+      ),
+    ];
+    for (final (status, expected, serverCode) in scenarios) {
+      final body = {
+        'detail': {
+          'code': serverCode ?? 'private-server-detail',
+          'message': 'private-do-not-surface',
+        },
+      };
+      final service = _service(
+        MockClient((_) async => _jsonResponse(body, status)),
+      );
+      try {
+        await _authorize(service);
+        fail('Expected status $status to fail.');
+      } on ShopCorrectionAuthorizationException catch (error) {
+        expect(error.code, expected, reason: '$status/$serverCode');
+        expect(error.toString(), isNot(contains('private-do-not-surface')));
+      }
+    }
+  });
+
+  test('invalid caller input fails before the network', () async {
+    var calls = 0;
+    final service = _service(
+      MockClient((_) async {
+        calls++;
+        return _jsonResponse(_envelope(), 200);
+      }),
+    );
+    await expectLater(
+      service.authorize(
+        authorizationRequestId: 'not-a-uuid',
+        workspaceId: _workspaceId,
+        capability: _capability,
+        commandDigest: _commandDigest,
+        requestFingerprint: _fingerprint,
+      ),
+      _throwsCode('request_invalid'),
+    );
+    await expectLater(
+      _authorize(service, commandDigest: _repeat('0', 64)),
+      _throwsCode('request_invalid'),
+    );
+    expect(calls, 0);
+  });
+}

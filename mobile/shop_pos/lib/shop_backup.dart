@@ -21,7 +21,7 @@ enum ShopStorePresence { empty, existing, interrupted, unsafe }
 /// the database so an interrupted export or restore cannot retain plaintext.
 abstract final class ShopBackup {
   static const formatVersion = 1;
-  static const supportedSchemaVersion = 11;
+  static const supportedSchemaVersion = 12;
   static const oldestSupportedSchemaVersion = 6;
   static const maxSnapshotBytes = 64 * 1024 * 1024;
 
@@ -209,6 +209,15 @@ abstract final class ShopBackup {
     'cash_drawer_outflow_mmk',
     'review_cash_reversal_count',
     'review_cash_drawer_outflow_mmk',
+  };
+  static const _v12RequiredColumns = <String, Set<String>>{
+    'shop_managed_workspace_binding': {
+      'singleton',
+      'workspace_id',
+      'discovery_contract',
+      'attached_actor_id',
+      'attached_at_millis',
+    },
   };
 
   static final _cipher = AesGcm.with256bits();
@@ -669,6 +678,10 @@ abstract final class ShopBackup {
           schemaVersion >= oldestSupportedSchemaVersion &&
           schemaVersion < 11 &&
           !_legacyV11ObjectsAbsent(connection, tables);
+      final legacyHasReservedV12Objects =
+          schemaVersion >= oldestSupportedSchemaVersion &&
+          schemaVersion < 12 &&
+          !_legacyV12ObjectsAbsent(connection);
       final baseSchemaValid = _requiredColumns.entries.every(
         (entry) =>
             tables.contains(entry.key) &&
@@ -712,7 +725,13 @@ abstract final class ShopBackup {
                     'shop_cash_shifts',
                     _v11CashShiftColumns,
                   ) &&
-                  _v11CashShiftColumnDefinitionsValid(connection)));
+                  _v11CashShiftColumnDefinitionsValid(connection))) &&
+          (schemaVersion < 12 ||
+              _v12RequiredColumns.entries.every(
+                (entry) =>
+                    tables.contains(entry.key) &&
+                    _tableHasColumns(connection, entry.key, entry.value),
+              ));
       final walletIntents = schemaValid
           ? connection.select(
               'SELECT operation_id, payment_method, request_fingerprint, '
@@ -808,7 +827,10 @@ abstract final class ShopBackup {
           schemaVersion >= 11 &&
           (!schemaValid ||
               !_v11ReversalAuditValid(connection) ||
-              !_v11SchemaDefinitionsValid(connection));
+              !_schemaDefinitionsValid(connection, schemaVersion));
+      final workspaceBindingInvalid =
+          schemaVersion >= 12 &&
+          (!schemaValid || !_v12WorkspaceBindingValid(connection));
       if (version.length != 1 ||
           schemaVersion < oldestSupportedSchemaVersion ||
           schemaVersion > supportedSchemaVersion ||
@@ -820,12 +842,14 @@ abstract final class ShopBackup {
           !tables.containsAll(_requiredTables) ||
           !schemaValid ||
           legacyHasReservedV11Objects ||
+          legacyHasReservedV12Objects ||
           walletInvalid ||
           (schemaVersion >= 7 && !tables.contains('shop_product_images')) ||
           (schemaVersion >= 8 && !tables.contains('shop_counter_drafts')) ||
           (schemaVersion >= 9 && !hasReorderLevel) ||
           (schemaVersion >= 10 && !tables.contains('shop_held_sales')) ||
           (schemaVersion >= 11 && reversalAuditInvalid) ||
+          (schemaVersion >= 12 && workspaceBindingInvalid) ||
           invalidReorderLevel ||
           draftInvalid ||
           heldInvalid ||
@@ -923,6 +947,26 @@ abstract final class ShopBackup {
     'shop_wallet_reversal_reconciliations',
   };
 
+  static Map<String, String> get _v12SchemaDefinitions => <String, String>{
+    'shop_managed_workspace_binding': shopManagedWorkspaceBindingV12Sql,
+    'shop_managed_workspace_binding_no_update': shopImmutableTriggerV11Sql(
+      table: 'shop_managed_workspace_binding',
+      operation: 'update',
+      message: 'Managed Shop workspace binding is immutable',
+    ),
+    'shop_managed_workspace_binding_no_delete': shopImmutableTriggerV11Sql(
+      table: 'shop_managed_workspace_binding',
+      operation: 'delete',
+      message: 'Managed Shop workspace binding is immutable',
+    ),
+    'shop_managed_workspace_binding_insert_guard':
+        shopManagedWorkspaceBindingInsertGuardV12Sql,
+    'shop_sale_reversals_require_workspace_binding':
+        shopSaleReversalsRequireWorkspaceBindingV12Sql,
+    'shop_wallet_reversal_reconciliations_require_workspace_binding':
+        shopWalletReversalReconciliationsRequireWorkspaceBindingV12Sql,
+  };
+
   static bool _legacyV11ObjectsAbsent(Database connection, Set<String> tables) {
     final reservedNames = _v11SchemaDefinitions.keys
         .map((name) => name.toLowerCase())
@@ -945,7 +989,23 @@ abstract final class ShopBackup {
     return columns.intersection(_v11CashShiftColumns).isEmpty;
   }
 
-  static bool _v11SchemaDefinitionsValid(Database connection) {
+  static bool _legacyV12ObjectsAbsent(Database connection) {
+    final reservedNames = _v12SchemaDefinitions.keys
+        .map((name) => name.toLowerCase())
+        .toSet();
+    final existingNames = connection
+        .select('SELECT name FROM sqlite_master')
+        .map((row) => row['name'])
+        .whereType<String>()
+        .map((name) => name.toLowerCase())
+        .toSet();
+    return existingNames.intersection(reservedNames).isEmpty;
+  }
+
+  static bool _schemaDefinitionsValid(
+    Database connection,
+    int schemaVersion,
+  ) {
     final actualSql = <String, String>{};
     final actualTypes = <String, String>{};
     final triggerTables = <String, String>{};
@@ -967,10 +1027,17 @@ abstract final class ShopBackup {
       }
     }
 
-    final definitions = _v11SchemaDefinitions;
+    final definitions = <String, String>{
+      ..._v11SchemaDefinitions,
+      if (schemaVersion >= 12) ..._v12SchemaDefinitions,
+    };
+    final expectedTableNames = <String>{
+      ..._v11AuditTableNames,
+      if (schemaVersion >= 12) 'shop_managed_workspace_binding',
+    };
     for (final entry in definitions.entries) {
       final name = entry.key.toLowerCase();
-      final expectedType = _v11AuditTableNames.contains(name)
+      final expectedType = expectedTableNames.contains(name)
           ? 'table'
           : 'trigger';
       if (actualTypes[name] != expectedType ||
@@ -983,7 +1050,7 @@ abstract final class ShopBackup {
 
     final expectedTriggerNames = definitions.keys
         .map((name) => name.toLowerCase())
-        .where((name) => !_v11AuditTableNames.contains(name))
+        .where((name) => !expectedTableNames.contains(name))
         .toSet();
     final actualTriggerNames = triggerTables.keys.toSet();
     return actualTriggerNames.length == expectedTriggerNames.length &&
@@ -1046,6 +1113,58 @@ abstract final class ShopBackup {
 
   static String _sha256Hex(String value) =>
       crypto.sha256.convert(utf8.encode(value)).toString();
+
+  static bool _v12WorkspaceBindingValid(Database connection) {
+    try {
+      final bindings = connection.select(
+        'SELECT singleton, workspace_id, discovery_contract, '
+        'attached_actor_id, attached_at_millis '
+        'FROM shop_managed_workspace_binding',
+      );
+      if (bindings.length > 1) return false;
+
+      final correctionWorkspaces = connection
+          .select(
+            'SELECT authorization_workspace_id AS workspace_id '
+            'FROM shop_sale_reversals UNION '
+            'SELECT authorization_workspace_id AS workspace_id '
+            'FROM shop_wallet_reversal_reconciliations',
+          )
+          .map((row) => row['workspace_id'])
+          .toList(growable: false);
+      final id = RegExp(r'^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$');
+      if (correctionWorkspaces.any(
+        (workspaceId) => workspaceId is! String || !id.hasMatch(workspaceId),
+      )) {
+        return false;
+      }
+      if (bindings.isEmpty) {
+        // A v11 database migrates without inventing attach authority and its
+        // history remains readable, but it cannot become a v12 backup until a
+        // matching authenticated selection is attached. This strict rule also
+        // makes deletion of an established binding detectable when correction
+        // history exists.
+        return correctionWorkspaces.isEmpty;
+      }
+
+      final binding = bindings.single;
+      final workspaceId = binding['workspace_id'];
+      final actorId = binding['attached_actor_id'];
+      final attachedAtMillis = binding['attached_at_millis'];
+      return binding['singleton'] == 1 &&
+          workspaceId is String &&
+          id.hasMatch(workspaceId) &&
+          binding['discovery_contract'] ==
+              shopManagedWorkspaceDirectoryContract &&
+          actorId is String &&
+          id.hasMatch(actorId) &&
+          attachedAtMillis is int &&
+          attachedAtMillis > 0 &&
+          correctionWorkspaces.every((value) => value == workspaceId);
+    } on Object {
+      return false;
+    }
+  }
 
   static bool _jsonObjectMatches(
     Object? encoded,
@@ -1685,6 +1804,7 @@ abstract final class ShopBackup {
       FROM shop_wallet_reversal_reconciliations w
       JOIN shop_sale_reversals r ON r.id = w.reversal_id
       WHERE r.original_payment_method = 'cash'
+         OR w.authorization_workspace_id != r.authorization_workspace_id
          OR length(w.evidence_reference) NOT BETWEEN 1 AND 160
          OR length(w.authorization_receipt_digest) != 64
          OR w.authorization_receipt_digest GLOB '*[^0-9a-f]*'

@@ -300,6 +300,40 @@ class ShopCorrectionAuthorization {
   final int expiresAtMillis;
 }
 
+const shopManagedWorkspaceDirectoryContract =
+    'supermega.managed_workspace_directory.v1';
+
+/// A workspace chosen from a freshly authenticated managed-workspace listing.
+///
+/// This value is deliberately narrower than a raw workspace ID. A future
+/// connected client must create it only after authenticated discovery; it is
+/// not a correction authorization and must never be inferred from one.
+class ShopAuthenticatedWorkspaceSelection {
+  const ShopAuthenticatedWorkspaceSelection({
+    required this.workspaceId,
+    required this.actorId,
+    this.directoryContract = shopManagedWorkspaceDirectoryContract,
+  });
+
+  final String workspaceId;
+  final String actorId;
+  final String directoryContract;
+}
+
+class ShopManagedWorkspaceBinding {
+  const ShopManagedWorkspaceBinding({
+    required this.workspaceId,
+    required this.attachedActorId,
+    required this.discoveryContract,
+    required this.attachedAtMillis,
+  });
+
+  final String workspaceId;
+  final String attachedActorId;
+  final String discoveryContract;
+  final int attachedAtMillis;
+}
+
 class ShopFullSaleReversalCommand {
   const ShopFullSaleReversalCommand({
     required this.operationId,
@@ -676,6 +710,83 @@ const shopWalletReversalReconciliationsV11Sql = '''
   )
 ''';
 
+const shopManagedWorkspaceBindingV12Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_managed_workspace_binding (
+    singleton INTEGER PRIMARY KEY NOT NULL CHECK (singleton = 1),
+    workspace_id TEXT NOT NULL UNIQUE CHECK (
+      typeof(workspace_id) = 'text'
+      AND length(workspace_id) BETWEEN 1 AND 128
+      AND workspace_id = trim(workspace_id)
+      AND substr(workspace_id, 1, 1) GLOB '[A-Za-z0-9]'
+      AND workspace_id NOT GLOB '*[^A-Za-z0-9._:-]*'
+    ),
+    discovery_contract TEXT NOT NULL CHECK (
+      discovery_contract = 'supermega.managed_workspace_directory.v1'
+    ),
+    attached_actor_id TEXT NOT NULL CHECK (
+      typeof(attached_actor_id) = 'text'
+      AND length(attached_actor_id) BETWEEN 1 AND 128
+      AND attached_actor_id = trim(attached_actor_id)
+      AND substr(attached_actor_id, 1, 1) GLOB '[A-Za-z0-9]'
+      AND attached_actor_id NOT GLOB '*[^A-Za-z0-9._:-]*'
+    ),
+    attached_at_millis INTEGER NOT NULL CHECK (
+      typeof(attached_at_millis) = 'integer' AND attached_at_millis > 0
+    )
+  )
+''';
+
+const shopManagedWorkspaceBindingInsertGuardV12Sql = '''
+  CREATE TRIGGER IF NOT EXISTS shop_managed_workspace_binding_insert_guard
+  BEFORE INSERT ON shop_managed_workspace_binding
+  WHEN EXISTS (SELECT 1 FROM shop_managed_workspace_binding)
+    OR EXISTS (
+      SELECT 1 FROM shop_sale_reversals
+      WHERE authorization_workspace_id != NEW.workspace_id
+    )
+    OR EXISTS (
+      SELECT 1 FROM shop_wallet_reversal_reconciliations
+      WHERE authorization_workspace_id != NEW.workspace_id
+    )
+  BEGIN
+    SELECT RAISE(
+      ABORT,
+      'Managed Shop workspace binding is immutable or conflicts with correction history'
+    );
+  END
+''';
+
+const shopSaleReversalsRequireWorkspaceBindingV12Sql = '''
+  CREATE TRIGGER IF NOT EXISTS shop_sale_reversals_require_workspace_binding
+  BEFORE INSERT ON shop_sale_reversals
+  WHEN NOT EXISTS (
+    SELECT 1 FROM shop_managed_workspace_binding
+    WHERE singleton = 1
+      AND workspace_id = NEW.authorization_workspace_id
+  )
+  BEGIN
+    SELECT RAISE(ABORT, 'Shop correction requires the bound workspace');
+  END
+''';
+
+const shopWalletReversalReconciliationsRequireWorkspaceBindingV12Sql = '''
+  CREATE TRIGGER IF NOT EXISTS shop_wallet_reversal_reconciliations_require_workspace_binding
+  BEFORE INSERT ON shop_wallet_reversal_reconciliations
+  WHEN NOT EXISTS (
+    SELECT 1 FROM shop_managed_workspace_binding
+    WHERE singleton = 1
+      AND workspace_id = NEW.authorization_workspace_id
+  )
+    OR NOT EXISTS (
+      SELECT 1 FROM shop_sale_reversals
+      WHERE id = NEW.reversal_id
+        AND authorization_workspace_id = NEW.authorization_workspace_id
+    )
+  BEGIN
+    SELECT RAISE(ABORT, 'Shop reconciliation requires the bound workspace');
+  END
+''';
+
 String shopImmutableTriggerV11Sql({
   required String table,
   required String operation,
@@ -720,7 +831,7 @@ class ShopDatabase extends _$ShopDatabase {
     : super(executor ?? driftDatabase(name: 'supermega_shop'));
 
   @override
-  int get schemaVersion => 11;
+  int get schemaVersion => 12;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -732,10 +843,14 @@ class ShopDatabase extends _$ShopDatabase {
       await _createCounterDraftTable();
       await _createHeldSaleTable();
       await _createSaleReversalTables();
+      await _createManagedWorkspaceBinding();
     },
     onUpgrade: (migrator, from, to) async {
       if (from < 11) {
         await _requireNoReservedV11Objects();
+      }
+      if (from < 12) {
+        await _requireNoReservedV12Objects();
       }
       if (from < 2) {
         await migrator.createTable(shopProducts);
@@ -818,6 +933,12 @@ class ShopDatabase extends _$ShopDatabase {
           'INTEGER',
         );
         await _createSaleReversalTables();
+      }
+      if (from < 12) {
+        // A legacy correction receipt is audit evidence, not workspace attach
+        // authority. Leave the migrated database unbound until an explicit
+        // authenticated selection is attached.
+        await _createManagedWorkspaceBinding();
       }
     },
     beforeOpen: (_) => customStatement('PRAGMA foreign_keys = ON'),
@@ -955,6 +1076,104 @@ class ShopDatabase extends _$ShopDatabase {
         );
       }
     }
+  }
+
+  Future<void> _createManagedWorkspaceBinding() async {
+    await customStatement(shopManagedWorkspaceBindingV12Sql);
+    for (final operation in const ['update', 'delete']) {
+      await customStatement(
+        shopImmutableTriggerV11Sql(
+          table: 'shop_managed_workspace_binding',
+          operation: operation,
+          message: 'Managed Shop workspace binding is immutable',
+        ),
+      );
+    }
+    await customStatement(shopManagedWorkspaceBindingInsertGuardV12Sql);
+    await customStatement(shopSaleReversalsRequireWorkspaceBindingV12Sql);
+    await customStatement(
+      shopWalletReversalReconciliationsRequireWorkspaceBindingV12Sql,
+    );
+  }
+
+  ShopManagedWorkspaceBinding _managedWorkspaceBindingFromRow(QueryRow row) =>
+      ShopManagedWorkspaceBinding(
+        workspaceId: row.read<String>('workspace_id'),
+        attachedActorId: row.read<String>('attached_actor_id'),
+        discoveryContract: row.read<String>('discovery_contract'),
+        attachedAtMillis: row.read<int>('attached_at_millis'),
+      );
+
+  Future<ShopManagedWorkspaceBinding?> readManagedWorkspaceBinding() async {
+    final row = await customSelect(
+      'SELECT workspace_id, attached_actor_id, discovery_contract, '
+      'attached_at_millis FROM shop_managed_workspace_binding '
+      'WHERE singleton = 1',
+    ).getSingleOrNull();
+    return row == null ? null : _managedWorkspaceBindingFromRow(row);
+  }
+
+  /// Irreversibly attaches this database to an authenticated discovery choice.
+  ///
+  /// Correction receipts are intentionally not accepted here. The caller must
+  /// supply a workspace selection produced by authenticated workspace
+  /// discovery. Reattaching the same workspace is idempotent; switching a
+  /// database to another workspace is never allowed.
+  Future<ShopManagedWorkspaceBinding> attachAuthenticatedManagedWorkspace(
+    ShopAuthenticatedWorkspaceSelection authenticatedSelection,
+  ) {
+    return transaction(() async {
+      final id = RegExp(r'^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$');
+      if (!id.hasMatch(authenticatedSelection.workspaceId) ||
+          !id.hasMatch(authenticatedSelection.actorId) ||
+          authenticatedSelection.directoryContract !=
+              shopManagedWorkspaceDirectoryContract) {
+        throw ArgumentError(
+          'The authenticated managed-workspace selection is invalid.',
+        );
+      }
+
+      final existing = await readManagedWorkspaceBinding();
+      if (existing != null) {
+        if (existing.workspaceId != authenticatedSelection.workspaceId) {
+          throw StateError(
+            'This Shop database is already attached to another workspace.',
+          );
+        }
+        return existing;
+      }
+
+      final conflictingHistory = await customSelect(
+        'SELECT 1 FROM ('
+        'SELECT authorization_workspace_id AS workspace_id '
+        'FROM shop_sale_reversals UNION ALL '
+        'SELECT authorization_workspace_id AS workspace_id '
+        'FROM shop_wallet_reversal_reconciliations'
+        ') WHERE workspace_id != ? LIMIT 1',
+        variables: [
+          Variable<String>(authenticatedSelection.workspaceId),
+        ],
+      ).getSingleOrNull();
+      if (conflictingHistory != null) {
+        throw StateError(
+          'Existing correction history belongs to another workspace.',
+        );
+      }
+
+      final now = DateTime.now().millisecondsSinceEpoch;
+      await customInsert(
+        'INSERT INTO shop_managed_workspace_binding '
+        '(singleton, workspace_id, discovery_contract, attached_actor_id, '
+        'attached_at_millis) VALUES (1, ?, ?, ?, ?)',
+        variables: [
+          Variable<String>(authenticatedSelection.workspaceId),
+          Variable<String>(authenticatedSelection.directoryContract),
+          Variable<String>(authenticatedSelection.actorId),
+          Variable<int>(now),
+        ],
+      );
+      return (await readManagedWorkspaceBinding())!;
+    });
   }
 
   /// Persist the next basket before showing it to the operator. No stock or
@@ -1430,6 +1649,27 @@ class ShopDatabase extends _$ShopDatabase {
     if (hasReservedObject || hasReservedShiftColumn) {
       throw StateError(
         'This legacy Shop database contains reserved future audit objects.',
+      );
+    }
+  }
+
+  Future<void> _requireNoReservedV12Objects() async {
+    const reservedNames = {
+      'shop_managed_workspace_binding',
+      'shop_managed_workspace_binding_no_update',
+      'shop_managed_workspace_binding_no_delete',
+      'shop_managed_workspace_binding_insert_guard',
+      'shop_sale_reversals_require_workspace_binding',
+      'shop_wallet_reversal_reconciliations_require_workspace_binding',
+    };
+    final objects = await customSelect(
+      "SELECT name FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'",
+    ).get();
+    if (objects.any(
+      (row) => reservedNames.contains(row.read<String>('name').toLowerCase()),
+    )) {
+      throw StateError(
+        'This legacy Shop database contains reserved future workspace objects.',
       );
     }
   }
@@ -2800,6 +3040,32 @@ class ShopDatabase extends _$ShopDatabase {
     }
   }
 
+  Future<void> _requireBoundCorrectionWorkspace(
+    String authorizationWorkspaceId, {
+    String? reversalId,
+  }) async {
+    final binding = await readManagedWorkspaceBinding();
+    if (binding == null ||
+        binding.workspaceId != authorizationWorkspaceId) {
+      throw StateError(
+        'Correction authorization does not match this Shop workspace.',
+      );
+    }
+    if (reversalId == null) return;
+    final reversal = await customSelect(
+      'SELECT authorization_workspace_id FROM shop_sale_reversals '
+      'WHERE id = ? LIMIT 1',
+      variables: [Variable<String>(reversalId)],
+    ).getSingleOrNull();
+    if (reversal == null ||
+        reversal.read<String>('authorization_workspace_id') !=
+            binding.workspaceId) {
+      throw StateError(
+        'Wallet reconciliation does not match this Shop workspace.',
+      );
+    }
+  }
+
   Future<ShopSaleReversal> _saleReversalFromRow(QueryRow row) async {
     final reversalId = row.read<String>('id');
     final lineRows = await customSelect(
@@ -2866,6 +3132,7 @@ class ShopDatabase extends _$ShopDatabase {
     required ShopCorrectionAuthorization authorization,
   }) {
     return transaction(() async {
+      await _requireBoundCorrectionWorkspace(authorization.workspaceId);
       final prior = await customSelect(
         'SELECT * FROM shop_sale_reversals WHERE operation_id = ? LIMIT 1',
         variables: [Variable<String>(command.operationId)],
@@ -3161,6 +3428,10 @@ class ShopDatabase extends _$ShopDatabase {
     required ShopCorrectionAuthorization authorization,
   }) {
     return transaction(() async {
+      await _requireBoundCorrectionWorkspace(
+        authorization.workspaceId,
+        reversalId: command.reversalId,
+      );
       final prior = await customSelect(
         'SELECT * FROM shop_wallet_reversal_reconciliations '
         'WHERE operation_id = ? LIMIT 1',
