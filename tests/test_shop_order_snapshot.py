@@ -117,6 +117,7 @@ def test_endpoint_is_tenant_scoped_and_requires_shop_user_session():
     path = "/api/trial/v1/shop/orders"
 
     assert client.get(path).status_code == 401
+    assert client.get(path + "?workspace_id=shop-b").status_code == 401
     assert client.get(path, headers={"x-test-user": "gateway"}).status_code == 401
     assert client.get(path, headers={"x-test-user": "agent"}).status_code == 401
     ecommerce_response = client.get(path, headers={"x-test-user": "carol"})

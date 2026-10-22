@@ -1419,11 +1419,11 @@ def create_trial_router(
 
         headers = {"Cache-Control": "private, no-store", "Pragma": "no-cache"}
         try:
-            if request.query_params:
-                raise _error(422, "shop_orders_request_invalid")
             principal = _resolve_principal(request, resolve_principal)
             if principal.actor_kind != "human" or principal.identity_provider != "supabase":
                 raise _error(401, "shop_orders_user_session_required")
+            if request.query_params:
+                raise _error(422, "shop_orders_request_invalid")
             readiness = _readiness(store, principal)
             _require_read_ready(readiness)
             if not readiness.role_ready:
