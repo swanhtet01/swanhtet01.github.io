@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import 'shop_copy.dart';
 import 'shop_database.dart';
+import 'stock_screen.dart';
 
 typedef ShopTodayDestination = Future<void> Function(BuildContext context);
 
@@ -311,6 +312,33 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
 
   Future<void> _openFirstProduct() => widget.onAddFirstProduct(context);
 
+  Future<void> _openLowStockProduct(ShopProduct product) async {
+    // Keep the current counter and its draft in the task shell while the
+    // operator reviews this specific alert. Back returns to Today.
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => StockScreen(
+          database: widget.database,
+          myanmar: widget.myanmar,
+          initialFocusProduct: product,
+        ),
+      ),
+    );
+    if (mounted) await _refresh();
+  }
+
+  String _stockAlertDetail(List<ShopProduct> products) {
+    final first = products.first;
+    final detail = '${first.name} · ${_number(first.onHand)}';
+    final remaining = products.length - 1;
+    if (remaining == 0) return detail;
+    final suffix = _copy(
+      '$remaining more',
+      'နောက်ထပ် ${_number(remaining)} မျိုး',
+    );
+    return '$detail · $suffix';
+  }
+
   @override
   Widget build(BuildContext context) {
     final width = MediaQuery.sizeOf(context).width;
@@ -538,12 +566,9 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
           _compactAction(
             icon: Icons.inventory_2_outlined,
             title: _copy('Check stock', 'လက်ကျန်စစ်ရန်'),
-            detail: snapshot.stockToCheck
-                .take(3)
-                .map((item) => '${item.name} · ${_number(item.onHand)}')
-                .join('   '),
+            detail: _stockAlertDetail(snapshot.stockToCheck),
             action: _copy('Open stock', 'လက်ကျန်ဖွင့်ရန်'),
-            onTap: () => _open(widget.onStock),
+            onTap: () => _openLowStockProduct(snapshot.stockToCheck.first),
           ),
       ];
     }
@@ -571,12 +596,9 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
         _actionCard(
           icon: Icons.inventory_2_outlined,
           title: _copy('Check stock', 'လက်ကျန်စစ်ရန်'),
-          detail: snapshot.stockToCheck
-              .take(3)
-              .map((item) => '${item.name} · ${_number(item.onHand)}')
-              .join('   '),
+          detail: _stockAlertDetail(snapshot.stockToCheck),
           action: _copy('Open stock', 'လက်ကျန်ဖွင့်ရန်'),
-          onTap: () => _open(widget.onStock),
+          onTap: () => _openLowStockProduct(snapshot.stockToCheck.first),
         ),
       if (snapshot.products == 0)
         _actionCard(

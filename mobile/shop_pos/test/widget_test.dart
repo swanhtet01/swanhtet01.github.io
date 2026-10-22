@@ -899,6 +899,12 @@ void main() {
         priceMmk: 1200,
         openingStock: 2,
       );
+      await database.addProduct(
+        id: 'other-low',
+        name: 'Other low',
+        priceMmk: 1300,
+        openingStock: 3,
+      );
       await database.recordCashSale(
         operationId: 'recent-sale',
         lines: const [ShopSaleLineInput(productId: 'high', quantity: 1)],
@@ -914,6 +920,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Recent sales'), findsOneWidget);
       expect(find.text('Check stock'), findsOneWidget);
+      expect(find.textContaining('Low stock · 2 · 1 more'), findsOneWidget);
       expect(
         tester.getTopLeft(find.text('Check stock')).dy,
         lessThan(tester.getTopLeft(find.text('Recent sales')).dy),
@@ -926,10 +933,76 @@ void main() {
       await tester.ensureVisible(find.text('Check stock'));
       await tester.tap(find.text('Check stock'));
       await tester.pumpAndSettle();
-      expect(
-        tester.getTopLeft(find.text('Low stock')).dy,
-        lessThan(tester.getTopLeft(find.text('High stock')).dy),
+      expect(find.byType(StockScreen), findsOneWidget);
+      expect(find.byKey(const ValueKey('stock-update-low')), findsOneWidget);
+      expect(find.byKey(const ValueKey('stock-update-high')), findsNothing);
+      await tester.tap(find.byTooltip('Show all stock'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('stock-update-high')), findsOneWidget);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.text('Check stock'), findsOneWidget);
+      expect(await database.countSales(), 1);
+      expect(tester.takeException(), isNull);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+      await database.close();
+    }
+  });
+
+  testWidgets('Burmese Today focuses the exact low-stock item', (tester) async {
+    _usePhoneViewport(tester);
+    final database = ShopDatabase(NativeDatabase.memory());
+    try {
+      await database.addProduct(
+        id: 'low-rice',
+        name: 'ဆန်',
+        priceMmk: 2500,
+        openingStock: 2,
       );
+      await database.addProduct(
+        id: 'full-rice',
+        name: 'ဆန်',
+        priceMmk: 2500,
+        openingStock: 20,
+      );
+      await database.addProduct(
+        id: 'other-low-rice',
+        name: 'ပဲ',
+        priceMmk: 2500,
+        openingStock: 3,
+      );
+      await tester.pumpWidget(
+        ShopApp(
+          database: database,
+          authClient: null,
+          apiBaseUrl: 'https://example.invalid',
+          initialMyanmar: true,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.textContaining('ဆန် · ၂ · နောက်ထပ် ၁ မျိုး'), findsOneWidget);
+      await tester.tap(find.byTooltip('လက်ကျန်ဖွင့်ရန်'));
+      await tester.pumpAndSettle();
+      expect(find.byType(StockScreen), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('stock-update-low-rice')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('stock-update-full-rice')),
+        findsNothing,
+      );
+      await tester.tap(find.byTooltip('လက်ကျန်အားလုံးပြရန်'));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('stock-update-full-rice')),
+        findsOneWidget,
+      );
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.text('လက်ကျန်စစ်ရန်'), findsOneWidget);
       expect(tester.takeException(), isNull);
     } finally {
       await tester.pumpWidget(const SizedBox.shrink());

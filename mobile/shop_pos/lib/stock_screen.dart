@@ -39,6 +39,7 @@ class StockScreen extends StatefulWidget {
     required this.myanmar,
     this.active = true,
     this.embeddedTaskShell = false,
+    this.initialFocusProduct,
     this.onAddProduct,
     super.key,
   });
@@ -47,6 +48,7 @@ class StockScreen extends StatefulWidget {
   final bool myanmar;
   final bool active;
   final bool embeddedTaskShell;
+  final ShopProduct? initialFocusProduct;
   final VoidCallback? onAddProduct;
 
   @override
@@ -55,6 +57,7 @@ class StockScreen extends StatefulWidget {
 
 class _StockScreenState extends State<StockScreen> {
   final _search = TextEditingController();
+  String? _focusedProductId;
   final _thumbnailFutures = <String, Future<Uint8List?>>{};
   late Stream<List<ShopProduct>> _products;
 
@@ -72,12 +75,18 @@ class _StockScreenState extends State<StockScreen> {
   @override
   void initState() {
     super.initState();
+    _focusedProductId = widget.initialFocusProduct?.id;
+    _search.text = widget.initialFocusProduct?.name ?? '';
     _products = widget.database.watchActiveProducts();
   }
 
   @override
   void didUpdateWidget(covariant StockScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.initialFocusProduct?.id != widget.initialFocusProduct?.id) {
+      _focusedProductId = widget.initialFocusProduct?.id;
+      _search.text = widget.initialFocusProduct?.name ?? '';
+    }
     if (oldWidget.database != widget.database) {
       _products = widget.database.watchActiveProducts();
       _thumbnailFutures.clear();
@@ -189,10 +198,12 @@ class _StockScreenState extends State<StockScreen> {
           final products =
               snapshot.data!
                   .where(
-                    (item) =>
-                        query.isEmpty ||
-                        item.name.toLowerCase().contains(query) ||
-                        (item.barcode?.toLowerCase().contains(query) ?? false),
+                    (item) => _focusedProductId != null
+                        ? item.id == _focusedProductId
+                        : query.isEmpty ||
+                              item.name.toLowerCase().contains(query) ||
+                              (item.barcode?.toLowerCase().contains(query) ??
+                                  false),
                   )
                   .toList()
                 ..sort((left, right) {
@@ -289,9 +300,25 @@ class _StockScreenState extends State<StockScreen> {
                     TextField(
                       key: const ValueKey('stock-search'),
                       controller: _search,
-                      onChanged: (_) => setState(() {}),
+                      onChanged: (_) => setState(() {
+                        _focusedProductId = null;
+                      }),
                       decoration: InputDecoration(
                         prefixIcon: const Icon(Icons.search),
+                        suffixIcon: query.isEmpty
+                            ? null
+                            : IconButton(
+                                tooltip: shopCopy(
+                                  widget.myanmar,
+                                  'Show all stock',
+                                  'လက်ကျန်အားလုံးပြရန်',
+                                ),
+                                onPressed: () => setState(() {
+                                  _search.clear();
+                                  _focusedProductId = null;
+                                }),
+                                icon: const Icon(Icons.close),
+                              ),
                         hintText: shopCopy(
                           widget.myanmar,
                           'Name or barcode',
