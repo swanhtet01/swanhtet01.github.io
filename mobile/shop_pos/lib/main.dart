@@ -1394,7 +1394,9 @@ class _ShopHomeState extends State<ShopHome> {
     final textScale = MediaQuery.textScalerOf(context).scale(1.0);
     // A short catalog should end near its final row. Larger catalogs retain
     // the available scroll area, and text scaling may grow the rows freely.
-    final rowHeight = widget.myanmar ? 82.0 : 96.0;
+    // Burmese's three-line product rows need the same vertical budget as EN.
+    // A shorter estimate clips the last row while empty tablet space remains.
+    const rowHeight = 96.0;
     final desiredHeight = matchingCount == 0
         ? 360.0
         : 148.0 + matchingCount * rowHeight * textScale;
