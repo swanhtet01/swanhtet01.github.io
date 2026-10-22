@@ -1101,9 +1101,9 @@ class _ShopHomeState extends State<ShopHome> {
                       builder: (context, snapshot) {
                         final products = snapshot.data ?? const <ShopProduct>[];
                         if (contentWidth >= minSplitContentWidth) {
-                          // Desktop keeps a compact sale summary visible from
-                          // the start; a tablet gives the catalog room until
-                          // an item is added.
+                          // Keep the current sale visible beside the catalog
+                          // on tablets and desktop, including before the first
+                          // item is selected.
                           final tablet = width < 1100;
                           final cartWidth = contentWidth < 820
                               ? 300.0
@@ -1136,11 +1136,7 @@ class _ShopHomeState extends State<ShopHome> {
                                     ],
                                   ),
                                 ),
-                                if (_cart.isNotEmpty ||
-                                    (products.isNotEmpty &&
-                                        (!tablet ||
-                                            _pendingWalletCheckout !=
-                                                null))) ...[
+                                if (_cart.isNotEmpty || products.isNotEmpty) ...[
                                   SizedBox(width: tablet ? 12 : 18),
                                   SizedBox(
                                     key: const ValueKey('shop-split-basket'),

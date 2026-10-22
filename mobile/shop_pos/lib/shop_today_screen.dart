@@ -414,7 +414,9 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
     final inset = compact ? 16.0 : 24.0;
     final contentWidth = (width - inset * 2).clamp(0.0, 1180.0).toDouble();
     final phoneLayout = compact && contentWidth < 600;
-    final threeAcross = contentWidth >= 900;
+    // A tablet has room for three concise metrics when stock needs attention.
+    // Keep narrower and text-scaled phone layouts on their existing path.
+    final threeAcross = contentWidth >= 780;
     final hasStockAlert = snapshot.stockToCheck.isNotEmpty;
     final smallCardWidth = threeAcross && hasStockAlert
         ? (contentWidth - 24) / 3

@@ -968,6 +968,49 @@ void main() {
     }
   });
 
+  testWidgets('tablet Today aligns a configured stock alert with sales', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(820, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final database = ShopDatabase(NativeDatabase.memory());
+    try {
+      await database.addProduct(
+        id: 'water',
+        name: 'Water',
+        priceMmk: 1200,
+        openingStock: 7,
+        reorderLevel: 10,
+      );
+      await database.recordCashSale(
+        operationId: 'tablet-stock-alert-sale',
+        lines: const [ShopSaleLineInput(productId: 'water', quantity: 1)],
+      );
+      await tester.pumpWidget(
+        ShopApp(
+          database: database,
+          authClient: null,
+          apiBaseUrl: 'https://app.supermega.dev',
+          initialMyanmar: false,
+        ),
+      );
+      await tester.pumpAndSettle();
+      final salesY = tester.getTopLeft(find.text('Sales today')).dy;
+      final completedY = tester.getTopLeft(find.text('Completed sales')).dy;
+      final stockY = tester.getTopLeft(find.text('Low-stock products')).dy;
+      expect((salesY - completedY).abs(), lessThan(4));
+      expect((salesY - stockY).abs(), lessThan(4));
+      expect(find.text('Check stock'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+      await database.close();
+    }
+  });
+
   testWidgets('Burmese Today and Counter show the same kyat amount', (
     tester,
   ) async {
@@ -1677,7 +1720,7 @@ void main() {
     }
   });
 
-  testWidgets('tablet landscape opens the basket beside the catalog', (
+  testWidgets('tablet landscape keeps the basket beside the catalog', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(820, 700);
@@ -1704,7 +1747,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Tea'), findsOneWidget);
-      expect(find.text('Current sale'), findsNothing);
+      expect(find.text('Current sale'), findsOneWidget);
       expect(find.text('Search name, barcode or SKU'), findsOneWidget);
       expect(tester.takeException(), isNull);
       expect(
@@ -1724,7 +1767,7 @@ void main() {
     }
   });
 
-  testWidgets('portrait tablet reveals basket after first item', (
+  testWidgets('portrait tablet keeps basket beside catalog', (
     tester,
   ) async {
     addTearDown(tester.view.resetPhysicalSize);
@@ -1755,7 +1798,7 @@ void main() {
           final catalog = find.byKey(const ValueKey('shop-split-catalog'));
           final basket = find.byKey(const ValueKey('shop-split-basket'));
           expect(catalog, findsOneWidget);
-          expect(basket, findsNothing);
+          expect(basket, findsOneWidget);
         }
         await tester.tap(
           find.byTooltip(myanmar ? 'အရောင်းထဲထည့်ရန်' : 'Add to sale'),
@@ -1865,7 +1908,7 @@ void main() {
           if (width == 820) {
             expect(
               find.byKey(const ValueKey('shop-split-basket')),
-              findsNothing,
+              findsOneWidget,
             );
           } else if (width == 1200) {
             expect(
