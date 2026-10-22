@@ -325,14 +325,33 @@ class _ConnectedOrdersScreenState extends State<ConnectedOrdersScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
+            Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 12,
+              runSpacing: 4,
               children: [
-                Expanded(child: Text(order.id, style: type.titleMedium)),
-                Text(shopMmk(order.totalMmk, myanmar: widget.myanmar), style: type.titleMedium),
+                Text(
+                  order.id,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: type.labelMedium?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                Text(
+                  shopMmk(order.totalMmk, myanmar: widget.myanmar),
+                  style: type.titleMedium?.copyWith(
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 6),
-            Text('${_stateLabel(order)} · ${_paymentLabel(order)}'),
+            Text(
+              '${_stateLabel(order)} · ${_paymentLabel(order)}',
+              style: type.bodyMedium,
+            ),
             const SizedBox(height: 6),
             Text(
               order.lineSnapshotsAvailable
@@ -340,7 +359,7 @@ class _ConnectedOrdersScreenState extends State<ConnectedOrdersScreen> {
                   : shopCopy(widget.myanmar, 'Item details unavailable for this older order', 'အော်ဒါဟောင်းအတွက် ပစ္စည်းအသေးစိတ် မရှိပါ'),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: type.bodySmall,
+              style: type.bodyMedium,
             ),
             if (order.paymentDueAt != null) ...[
               const SizedBox(height: 4),
