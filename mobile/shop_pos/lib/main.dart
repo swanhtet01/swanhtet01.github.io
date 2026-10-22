@@ -214,11 +214,13 @@ class _ShopAppState extends State<ShopApp> {
 
   @override
   Widget build(BuildContext context) {
-    // Keep Latin product names consistent in both locales. The UI-cut Myanmar
-    // font has tighter vertical metrics for controls; the full font remains a
-    // fallback for glyphs outside that cut.
-    const fontFamily = 'Inter';
-    const fontFallback = ['NotoSansMyanmarUI', 'NotoSansMyanmar'];
+    // Give each locale its own UI metrics. Latin product names still use Inter
+    // through fallback on Myanmar screens, while Myanmar labels shape together
+    // in one font instead of being split across a Latin-first fallback chain.
+    final fontFamily = _myanmar ? 'NotoSansMyanmarUI' : 'Inter';
+    final fontFallback = _myanmar
+        ? const ['NotoSansMyanmar', 'Inter']
+        : const ['NotoSansMyanmarUI', 'NotoSansMyanmar'];
     final tracking = _myanmar ? 0.0 : -0.35;
     const ink = Color(0xff171b2c);
     const border = Color(0xffdce2ed);
@@ -437,83 +439,17 @@ class _ShopAppState extends State<ShopApp> {
                               builder: (context, constraints) => IndexedStack(
                                 index: _workspaceTab,
                                 children: [
-                                  Column(
-                                    children: [
-                                      if (_hasCounterDraft)
-                                        Padding(
-                                          padding: const EdgeInsets.fromLTRB(
-                                            16,
-                                            12,
-                                            16,
-                                            0,
-                                          ),
-                                          child: Card(
-                                            child: Padding(
-                                              padding: const EdgeInsets.all(12),
-                                              child: LayoutBuilder(
-                                                builder: (context, size) {
-                                                  final title = Text(
-                                                    shopCopy(
-                                                      _myanmar,
-                                                      'Unfinished sale',
-                                                      'မပြီးသေးသော အရောင်း',
-                                                    ),
-                                                    style: Theme.of(context)
-                                                        .textTheme
-                                                        .titleSmall,
-                                                  );
-                                                  final action = TextButton(
-                                                    onPressed: () => unawaited(
-                                                      _openCounter(context),
-                                                    ),
-                                                    child: Text(
-                                                      shopCopy(
-                                                        _myanmar,
-                                                        'Continue sale',
-                                                        'အရောင်းဆက်ရန်',
-                                                      ),
-                                                    ),
-                                                  );
-                                                  if (size.maxWidth < 420) {
-                                                    return Column(
-                                                      crossAxisAlignment:
-                                                          CrossAxisAlignment
-                                                              .start,
-                                                      children: [
-                                                        title,
-                                                        Align(
-                                                          alignment: Alignment
-                                                              .centerRight,
-                                                          child: action,
-                                                        ),
-                                                      ],
-                                                    );
-                                                  }
-                                                  return Row(
-                                                    children: [
-                                                      Expanded(child: title),
-                                                      action,
-                                                    ],
-                                                  );
-                                                },
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      Expanded(
-                                        child: ShopTodayScreen(
-                                          database: widget.database,
-                                          myanmar: _myanmar,
-                                          embeddedTaskShell: true,
-                                          refreshToken: _todayRefreshToken,
-                                          onNewSale: _openCounter,
-                                          onAddFirstProduct: _openFirstProduct,
-                                          onSales: _openSales,
-                                          onStock: _openStock,
-                                          onSettings: _openSettings,
-                                        ),
-                                      ),
-                                    ],
+                                  ShopTodayScreen(
+                                    database: widget.database,
+                                    myanmar: _myanmar,
+                                    hasCounterDraft: _hasCounterDraft,
+                                    embeddedTaskShell: true,
+                                    refreshToken: _todayRefreshToken,
+                                    onNewSale: _openCounter,
+                                    onAddFirstProduct: _openFirstProduct,
+                                    onSales: _openSales,
+                                    onStock: _openStock,
+                                    onSettings: _openSettings,
                                   ),
                                   if (_counterOpened)
                                     ShopHome(
@@ -1165,8 +1101,9 @@ class _ShopHomeState extends State<ShopHome> {
                       builder: (context, snapshot) {
                         final products = snapshot.data ?? const <ShopProduct>[];
                         if (contentWidth >= minSplitContentWidth) {
-                          // Desktop keeps the current sale visible from the start;
-                          // a tablet gives the catalog room until an item is added.
+                          // Desktop keeps a compact sale summary visible from
+                          // the start; a tablet gives the catalog room until
+                          // an item is added.
                           final tablet = width < 1100;
                           final cartWidth = contentWidth < 820
                               ? 300.0
@@ -1208,7 +1145,12 @@ class _ShopHomeState extends State<ShopHome> {
                                   SizedBox(
                                     key: const ValueKey('shop-split-basket'),
                                     width: cartWidth,
-                                    child: _cartPanel(products),
+                                    child:
+                                        _cart.isEmpty &&
+                                            !_recoveredDraft &&
+                                            _pendingWalletCheckout == null
+                                        ? _emptyCartPanel()
+                                        : _cartPanel(products),
                                   ),
                                 ],
                               ],
@@ -1611,11 +1553,17 @@ class _ShopHomeState extends State<ShopHome> {
           ? const EdgeInsets.symmetric(horizontal: 12, vertical: 8)
           : null,
       prefixIcon: const Icon(Icons.search),
-      hintText: shopCopy(
-        widget.myanmar,
-        'Search name, barcode or SKU',
-        'အမည်၊ ဘားကုဒ် သို့မဟုတ် ကုန်ပစ္စည်းကုဒ် ရှာရန်',
-      ),
+      hintText: MediaQuery.sizeOf(context).width < 420
+          ? shopCopy(
+              widget.myanmar,
+              'Search or scan',
+              'ပစ္စည်း၊ ဘားကုဒ် ရှာရန်',
+            )
+          : shopCopy(
+              widget.myanmar,
+              'Search name, barcode or SKU',
+              'အမည်၊ ဘားကုဒ် သို့မဟုတ် ကုန်ပစ္စည်းကုဒ် ရှာရန်',
+            ),
       suffixIcon: _search.text.isEmpty
           ? null
           : IconButton(
@@ -1770,6 +1718,11 @@ class _ShopHomeState extends State<ShopHome> {
                 '${item.onHand} in stock',
                 '${shopNumber(item.onHand, myanmar: true)} ခုလက်ကျန်',
               );
+        final stockStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
+          color: item.onHand == 0
+              ? Theme.of(context).colorScheme.error
+              : Theme.of(context).colorScheme.onSurfaceVariant,
+        );
         final canAdd =
             _checkoutReady &&
             !_saving &&
@@ -1780,18 +1733,23 @@ class _ShopHomeState extends State<ShopHome> {
         final addAffordance = ExcludeSemantics(
           child: Container(
             key: ValueKey('shop-add-affordance:${item.id}'),
-            width: 44,
+            width: 52,
             height: 44,
             decoration: BoxDecoration(
               color: canAdd ? const Color(0xffeef3ff) : const Color(0xfff1f2f5),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: Icon(
-              Icons.add,
-              size: 20,
-              color: canAdd
-                  ? Theme.of(context).colorScheme.primary
-                  : Theme.of(context).disabledColor,
+            child: Center(
+              child: Text(
+                shopCopy(widget.myanmar, 'Add', 'ထည့်'),
+                maxLines: 1,
+                style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: canAdd
+                      ? Theme.of(context).colorScheme.primary
+                      : Theme.of(context).disabledColor,
+                ),
+              ),
             ),
           ),
         );
@@ -1882,27 +1840,11 @@ class _ShopHomeState extends State<ShopHome> {
                           _mmk(item.priceMmk),
                           style: _shopMoneyStyle(context),
                         ),
-                        Text(
-                          stock,
-                          style: TextStyle(
-                            color: item.onHand == 0
-                                ? Theme.of(context).colorScheme.error
-                                : Theme.of(context)
-                                      .colorScheme
-                                      .onSurfaceVariant,
-                          ),
-                        ),
+                        Text(stock, style: stockStyle),
                       ],
                     )
                   else
-                    Text(
-                      stock,
-                      style: TextStyle(
-                        color: item.onHand == 0
-                            ? Theme.of(context).colorScheme.error
-                            : Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                    ),
+                    Text(stock, style: stockStyle),
                 ],
               ),
               trailing: compactProductRow
@@ -1925,6 +1867,36 @@ class _ShopHomeState extends State<ShopHome> {
       },
     );
   }
+
+  Widget _emptyCartPanel() => Align(
+    alignment: Alignment.topCenter,
+    child: Card(
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              shopCopy(widget.myanmar, 'Current sale', 'လက်ရှိအရောင်း'),
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              shopCopy(
+                widget.myanmar,
+                'Scan a barcode or select a product to begin.',
+                'စတင်ရန် ဘားကုဒ်ဖတ်ပါ သို့မဟုတ် ပစ္စည်းရွေးပါ။',
+              ),
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
 
   Widget _cartPanel(List<ShopProduct> products, {StateSetter? refresh}) {
     final byId = {for (final item in products) item.id: item};

@@ -346,8 +346,10 @@ class _ShopStartupState extends State<ShopStartup> {
       ],
       theme: ThemeData(
         useMaterial3: true,
-        fontFamily: 'Inter',
-        fontFamilyFallback: const ['NotoSansMyanmarUI', 'NotoSansMyanmar'],
+        fontFamily: _myanmar ? 'NotoSansMyanmarUI' : 'Inter',
+        fontFamilyFallback: _myanmar
+            ? const ['NotoSansMyanmar', 'Inter']
+            : const ['NotoSansMyanmarUI', 'NotoSansMyanmar'],
         colorScheme: ColorScheme.fromSeed(
           seedColor: const Color(0xff2563eb),
           surface: Colors.white,

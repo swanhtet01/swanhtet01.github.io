@@ -308,8 +308,8 @@ class _StockScreenState extends State<StockScreen> {
                                   child: Text(
                                     shopCopy(
                                       widget.myanmar,
-                                      'Update',
-                                      'ပြင်ရန်',
+                                      'Adjust stock',
+                                      'လက်ကျန်ပြင်ရန်',
                                     ),
                                   ),
                                 );
@@ -342,7 +342,7 @@ class _StockScreenState extends State<StockScreen> {
                                         children: [
                                           Expanded(flex: 5, child: details),
                                           Expanded(flex: 2, child: onHand),
-                                          SizedBox(width: 104, child: update),
+                                          SizedBox(width: 168, child: update),
                                         ],
                                       ),
                                     ),

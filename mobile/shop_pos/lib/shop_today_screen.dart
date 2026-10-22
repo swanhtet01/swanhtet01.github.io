@@ -22,33 +22,41 @@ class ShopTaskPageHeader extends StatelessWidget {
   final Widget? trailing;
 
   @override
-  Widget build(BuildContext context) => Row(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Expanded(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              title,
-              style: Theme.of(context).textTheme.headlineSmall
-                  ?.copyWith(fontSize: myanmar ? 23 : 26),
-            ),
-            if (subtitle != null) ...[
-              const SizedBox(height: 4),
+  Widget build(BuildContext context) {
+    final width = MediaQuery.sizeOf(context).width;
+    final headingSize = width >= 1100
+        ? (myanmar ? 29.0 : 34.0)
+        : width >= 820
+        ? (myanmar ? 26.0 : 30.0)
+        : (myanmar ? 23.0 : 26.0);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
               Text(
-                subtitle!,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
+                title,
+                style: Theme.of(context).textTheme.headlineSmall
+                    ?.copyWith(fontSize: headingSize),
               ),
+              if (subtitle != null) ...[
+                const SizedBox(height: 4),
+                Text(
+                  subtitle!,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
-      ),
-      if (trailing != null) ...[const SizedBox(width: 12), trailing!],
-    ],
-  );
+        if (trailing != null) ...[const SizedBox(width: 12), trailing!],
+      ],
+    );
+  }
 }
 
 /// Keeps the same operator map visible on Today and Counter.
@@ -169,6 +177,7 @@ class ShopTodayScreen extends StatefulWidget {
   const ShopTodayScreen({
     required this.database,
     required this.myanmar,
+    required this.hasCounterDraft,
     required this.onNewSale,
     required this.onAddFirstProduct,
     required this.onSales,
@@ -181,6 +190,7 @@ class ShopTodayScreen extends StatefulWidget {
 
   final ShopDatabase database;
   final bool myanmar;
+  final bool hasCounterDraft;
   final ShopTodayDestination onNewSale;
   final ShopTodayDestination onAddFirstProduct;
   final ShopTodayDestination onSales;
@@ -408,7 +418,7 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
     final salesWidth = phoneLayout ? contentWidth : smallCardWidth;
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
-      padding: EdgeInsets.fromLTRB(inset, 16, inset, 32),
+      padding: EdgeInsets.fromLTRB(inset, phoneLayout ? 12 : 16, inset, 32),
       children: [
         Center(
           child: ConstrainedBox(
@@ -419,19 +429,30 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
                 if (phoneLayout) ...[
                   _heading(showNewSale: false),
                   if (snapshot.products > 0) ...[
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 12),
                     FilledButton.icon(
                       onPressed: _openSale,
-                      icon: const Icon(Icons.point_of_sale_outlined),
-                      label: Text(_copy('New sale', 'အရောင်းအသစ်')),
+                      icon: Icon(
+                        widget.hasCounterDraft
+                            ? Icons.play_arrow_rounded
+                            : Icons.point_of_sale_outlined,
+                      ),
+                      label: Text(_saleActionLabel),
                     ),
                   ],
                 ] else
                   _heading(showNewSale: snapshot.products > 0),
+                // On a phone, completed transactions are the first useful
+                // evidence of today's work. Keep the latest sale above the
+                // summary cards so it remains visible with large text.
+                if (phoneLayout && snapshot.recentSales.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  _salesPreview(snapshot),
+                ],
                 if (snapshot.products > 0 ||
                     snapshot.saleCount > 0 ||
                     snapshot.pendingWallet != null) ...[
-                  const SizedBox(height: 22),
+                  SizedBox(height: phoneLayout ? 16 : 22),
                   Wrap(
                     spacing: 12,
                     runSpacing: 12,
@@ -516,7 +537,7 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
                       onTap: () => _openFirstProduct(),
                     ),
                 ],
-                if (snapshot.recentSales.isNotEmpty) ...[
+                if (!phoneLayout && snapshot.recentSales.isNotEmpty) ...[
                   const SizedBox(height: 24),
                   _salesPreview(snapshot),
                 ],
@@ -536,51 +557,80 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
     trailing: showNewSale
         ? FilledButton.icon(
             onPressed: () => _openSale(),
-            icon: const Icon(Icons.add),
-            label: Text(_copy('New sale', 'အရောင်းအသစ်')),
+            icon: Icon(
+              widget.hasCounterDraft ? Icons.play_arrow_rounded : Icons.add,
+            ),
+            label: Text(_saleActionLabel),
           )
         : null,
   );
+
+  String get _saleActionLabel => widget.hasCounterDraft
+      ? _copy('Continue sale', 'အရောင်းဆက်ရန်')
+      : _copy('New sale', 'အရောင်းအသစ်');
 
   Widget _salesPreview(_TodaySnapshot snapshot) => _previewPanel(
     title: _copy('Recent sales', 'မကြာသေးမီက အရောင်းများ'),
     action: _copy('View sales', 'အရောင်းကြည့်ရန်'),
     onOpen: () => _open(widget.onSales),
-    rows: [
-      for (final sale in snapshot.recentSales)
-        ListTile(
-          contentPadding: const EdgeInsets.symmetric(vertical: 6),
-          title: Text(
-            sale.lines.isEmpty
-                ? _copy('Sale', 'အရောင်း')
-                : sale.lines.length == 1
-                ? '${sale.lines.first.productName} × ${_number(sale.lines.first.quantity)}'
-                : _copy(
-                    '${sale.lines.length} products',
-                    'ကုန်ပစ္စည်း ${_number(sale.lines.length)} မျိုး',
-                  ),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.bodyLarge
-                ?.copyWith(fontWeight: FontWeight.w600),
-          ),
-          subtitle: Text(
-            MaterialLocalizations.of(context).formatTimeOfDay(
-              TimeOfDay.fromDateTime(
-                DateTime.fromMillisecondsSinceEpoch(sale.createdAtMillis),
+    rows: [for (final sale in snapshot.recentSales) _recentSaleRow(sale)],
+  );
+
+  Widget _recentSaleRow(ShopSaleReceipt sale) => LayoutBuilder(
+    builder: (context, constraints) {
+      final title = Text(
+        sale.lines.isEmpty
+            ? _copy('Sale', 'အရောင်း')
+            : sale.lines.length == 1
+            ? '${sale.lines.first.productName} × ${_number(sale.lines.first.quantity)}'
+            : _copy(
+                '${sale.lines.length} products',
+                'ကုန်ပစ္စည်း ${_number(sale.lines.length)} မျိုး',
               ),
-            ),
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-          ),
-          trailing: Text(
-            _money(sale.totalMmk),
-            style: Theme.of(context).textTheme.labelLarge
-                ?.copyWith(fontFeatures: const [FontFeature.tabularFigures()]),
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+        style: Theme.of(context).textTheme.bodyLarge
+            ?.copyWith(fontWeight: FontWeight.w600),
+      );
+      final time = Text(
+        MaterialLocalizations.of(context).formatTimeOfDay(
+          TimeOfDay.fromDateTime(
+            DateTime.fromMillisecondsSinceEpoch(sale.createdAtMillis),
           ),
         ),
-    ],
+        style: Theme.of(context).textTheme.bodyMedium
+            ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+      );
+      final amount = Text(
+        _money(sale.totalMmk),
+        style: Theme.of(context).textTheme.labelLarge
+            ?.copyWith(fontFeatures: const [FontFeature.tabularFigures()]),
+      );
+      if (constraints.maxWidth >= 340) {
+        return ListTile(
+          contentPadding: const EdgeInsets.symmetric(vertical: 6),
+          title: title,
+          subtitle: time,
+          trailing: amount,
+        );
+      }
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            title,
+            const SizedBox(height: 4),
+            OverflowBar(
+              alignment: MainAxisAlignment.spaceBetween,
+              overflowAlignment: OverflowBarAlignment.end,
+              overflowSpacing: 4,
+              children: [time, amount],
+            ),
+          ],
+        ),
+      );
+    },
   );
 
   Widget _previewPanel({
@@ -598,15 +648,23 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
             builder: (context, constraints) {
               final heading = Text(
                 title,
-                style: Theme.of(context).textTheme.titleLarge,
+                style: constraints.maxWidth < 340
+                    ? Theme.of(context).textTheme.titleMedium
+                    : Theme.of(context).textTheme.titleLarge,
               );
-              final open = TextButton(onPressed: onOpen, child: Text(action));
               if (constraints.maxWidth < 340) {
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [heading, open],
+                return Row(
+                  children: [
+                    Expanded(child: heading),
+                    IconButton(
+                      tooltip: action,
+                      onPressed: onOpen,
+                      icon: const Icon(Icons.arrow_forward),
+                    ),
+                  ],
                 );
               }
+              final open = TextButton(onPressed: onOpen, child: Text(action));
               return Row(
                 children: [
                   Expanded(child: heading),

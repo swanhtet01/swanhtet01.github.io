@@ -270,7 +270,7 @@ void main() {
               ?.textTheme
               .bodyMedium
               ?.fontFamily,
-          'Inter',
+          myanmar ? 'NotoSansMyanmarUI' : 'Inter',
         );
         final theme = tester
             .widget<MaterialApp>(find.byType(MaterialApp))
@@ -450,6 +450,48 @@ void main() {
     }
   });
 
+  testWidgets('320px Burmese Today keeps a large sale readable', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 800);
+    tester.view.devicePixelRatio = 1;
+    tester.platformDispatcher.textScaleFactorTestValue = 1.5;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    final database = ShopDatabase(NativeDatabase.memory());
+    addTearDown(database.close);
+    await database.addProduct(
+      id: 'mama',
+      name: 'MAMA ကြက်သား အမြန်ခေါက်ဆွဲ',
+      priceMmk: 12450000,
+      openingStock: 8,
+    );
+    await database.recordCashSale(
+      operationId: 'today-narrow-burmese-sale',
+      lines: const [ShopSaleLineInput(productId: 'mama', quantity: 1)],
+    );
+    await tester.pumpWidget(
+      ShopApp(
+        database: database,
+        authClient: null,
+        apiBaseUrl: 'https://example.invalid',
+        initialMyanmar: true,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final latestItem = find.textContaining('MAMA ကြက်သား');
+    expect(latestItem, findsOneWidget);
+    expect(
+      tester.getBottomRight(latestItem).dy,
+      lessThan(tester.getTopLeft(find.byType(NavigationBar)).dy),
+    );
+    expect(find.byTooltip('အရောင်းကြည့်ရန်'), findsOneWidget);
+    expect(find.textContaining('၁၂,၄၅၀,၀၀၀'), findsWidgets);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('unfinished sale opens from Today after app restart', (
     tester,
   ) async {
@@ -492,6 +534,8 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.text('Continue sale'), findsOneWidget);
+      expect(find.text('New sale'), findsNothing);
+      expect(find.text('Unfinished sale'), findsNothing);
       await tester.tap(find.text('Continue sale'));
       await tester.pumpAndSettle();
       expect(
@@ -511,6 +555,53 @@ void main() {
       Navigator.of(tester.element(restoredNotice)).pop();
       await tester.pumpAndSettle();
       expect(restoredNotice, findsNothing);
+      expect(tester.takeException(), isNull);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+      await database.close();
+    }
+  });
+
+  testWidgets('Burmese tablet Today continues one saved sale', (tester) async {
+    tester.view.physicalSize = const Size(820, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final database = ShopDatabase(NativeDatabase.memory());
+    try {
+      await database.addProduct(
+        id: 'water',
+        name: 'ရေသန့်',
+        priceMmk: 1500,
+        openingStock: 5,
+      );
+      await database.saveCounterSaleDraft(
+        operationId: 'burmese-saved-sale',
+        quantities: const {'water': 2},
+      );
+      await tester.pumpWidget(
+        ShopApp(
+          database: database,
+          authClient: null,
+          apiBaseUrl: 'https://example.invalid',
+          initialMyanmar: true,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('အရောင်းဆက်ရန်'), findsOneWidget);
+      expect(find.text('အရောင်းအသစ်'), findsNothing);
+      expect(find.text('မပြီးသေးသော အရောင်း'), findsNothing);
+      await tester.tap(find.text('အရောင်းဆက်ရန်'));
+      await tester.pumpAndSettle();
+      // A tablet resumes into the visible two-pane basket, while phones use
+      // the bottom Review sale action to open the same sale.
+      expect(find.byKey(const ValueKey('shop-split-basket')), findsOneWidget);
+      expect(find.text('လက်ရှိအရောင်း'), findsOneWidget);
+      expect(find.textContaining('၃,၀၀၀'), findsWidgets);
+      expect(find.text('ငွေသား'), findsOneWidget);
+      expect((await database.readCounterSaleDraft())?.quantities, {'water': 2});
+      expect(await database.countSales(), 0);
       expect(tester.takeException(), isNull);
     } finally {
       await tester.pumpWidget(const SizedBox.shrink());
@@ -2220,6 +2311,10 @@ void main() {
   testWidgets('cashier can receive and count stock outside the sale screen', (
     tester,
   ) async {
+    tester.view.physicalSize = const Size(820, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     final database = ShopDatabase(NativeDatabase.memory());
     await database.addProduct(
       id: 'rice',
@@ -2243,6 +2338,15 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('2 in stock'), findsOneWidget);
     expect(find.text('Reference rice'), findsNothing);
+    expect(find.text('Adjust stock'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('stock-update-rice')));
+    await tester.pumpAndSettle();
+    expect(find.text('Receive'), findsOneWidget);
+    expect(find.text('Count'), findsOneWidget);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect((await database.readActiveProducts()).single.onHand, 2);
 
     await tester.tap(find.byKey(const ValueKey('stock-update-rice')));
     await tester.pumpAndSettle();
@@ -2365,6 +2469,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('လက်ကျန်'));
       await tester.pumpAndSettle();
+      expect(find.text('လက်ကျန်ပြင်ရန်'), findsNWidgets(2));
       expect(
         find.text('ကုန်ပစ္စည်းကုဒ် RICE-1 · ဘားကုဒ် 111111'),
         findsOneWidget,
