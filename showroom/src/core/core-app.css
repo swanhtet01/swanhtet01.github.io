@@ -2482,7 +2482,14 @@ html:lang(my) .shop-stock-workspace .stock-attention-table .data-row:not(.table-
   .shop-stock-workspace .inventory-tools-disclosure > summary strong, .shop-stock-workspace .inventory-tools-disclosure > summary small,
   .shop-stock-workspace .inventory-tools-disclosure > summary b { font-size: .8125rem; line-height: 1.35; }
   .shop-stock-module .purchase-order-list article small { font-size: .8125rem; }
-  .shop-stock-module .catalog-onboarding-bridge p { font-size: .8125rem; line-height: 1.45; }
+  .shop-stock-workspace > .inventory-tools-disclosure,
+  .shop-stock-workspace > .purchase-order-history,
+  .shop-stock-workspace > .catalog-onboarding-bridge { border: 0; border-top: 1px solid var(--core-line); border-radius: 0; background: transparent; box-shadow: none; }
+  .shop-stock-workspace > .inventory-tools-disclosure > summary small,
+  .shop-stock-workspace > .catalog-onboarding-bridge .core-eyebrow,
+  .shop-stock-workspace > .catalog-onboarding-bridge p { display: none; }
+  .shop-stock-workspace > .purchase-order-history > summary { width: 100%; min-height: 3.25rem; display: flex; justify-content: space-between; border: 0; border-radius: 0; padding: .625rem 1rem; font-size: .8125rem; }
+  .shop-stock-workspace > .catalog-onboarding-bridge { min-height: 3.75rem; margin-top: 0; padding: .625rem 1rem; }
   .shop-stock-workspace .stock-catalog-content .data-table { min-width: 0; }
   .shop-operations-board { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .shop-operations-rail { grid-column: 1 / -1; grid-template-columns: repeat(2,minmax(0,1fr)); }
