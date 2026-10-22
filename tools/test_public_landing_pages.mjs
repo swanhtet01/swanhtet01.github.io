@@ -196,20 +196,23 @@ for (const page of landingPages) {
   check(html.includes('<meta name="robots" content="index,follow" />'), `landing_indexable:${page.route}`)
   check((html.match(/<h1\b/g) || []).length === 1, `landing_single_headline:${page.route}`)
   if (page.productId === 'shop') {
-    const captureDisclosure = 'Sample catalog and example prices.'
+    const captureDisclosure = 'Shop browser workspace · synthetic local records'
     check(html.includes('class="shop-actual-showcase"') && html.includes(captureDisclosure), 'landing_shop_actual_showcase_disclosed')
     check(!html.includes('class="pos-window"') && !html.includes('class="sample-label"') && !html.includes('Complete sample sale') && !html.includes('shop-sample-demo.js'), 'landing_shop_no_simulated_pos')
     check(html.includes('class="shop-hero-app"') && html.includes('class="shop-responsive-showcase"') && html.includes('class="shop-workflow-support"'), 'landing_shop_three_workflows_visible')
-    check(countOccurrences(html, '<figure class="platform-device-capture ') === 3 && countOccurrences(html, '<article class="shop-workflow-card">') === 2, 'landing_shop_primary_device_set_and_two_supporting_workflows')
+    check(countOccurrences(html, '<figure class="shop-lead-capture">') === 1 && countOccurrences(html, '<article class="shop-workflow-card">') === 2, 'landing_shop_one_responsive_lead_and_two_supporting_workflows')
     check(html.includes('aria-label="Orders and stock"') && html.includes(captureDisclosure), 'landing_shop_capture_disclosure')
     check(!html.includes('Orders and stock. Clear next steps.') && !html.includes('Follow orders that need fulfilment or payment. See which products need a count or reorder.'), 'landing_shop_no_repeated_workflow_pitch')
     check(!html.includes('actual-shop-today') && !html.includes('DEVICE-ONLY DATA') && !html.includes('Export backup'), 'landing_shop_gallery_omits_storage_warning')
-    check(html.includes('platform-device-capture-desktop') && html.includes('platform-device-capture-tablet') && html.includes('platform-device-capture-phone') && !html.includes('data-device-choice'), 'landing_shop_device_captures_present_without_switcher')
+    check(html.includes('src="/images/actual-shop-sell.png"')
+      && html.includes('srcset="/images/actual-shop-sell-tablet.png"')
+      && html.includes('srcset="/images/actual-shop-sell-mobile.png"')
+      && !html.includes('platform-device-capture') && !html.includes('data-device-choice'), 'landing_shop_responsive_capture_without_switcher')
     check(!html.includes('data-gallery-previous') && !html.includes('data-gallery-next') && !html.includes('data-platform-carousel'), 'landing_shop_all_views_without_carousel')
     check(!html.includes('<script src="/platform-carousel.js" defer></script>'), 'landing_shop_needs_no_gallery_script')
     check(!/<a\b[^>]*>\s*<img\b[^>]*src="\/images\/actual-shop-/i.test(html), 'landing_shop_screens_are_not_raw_image_links')
     check(!html.includes('Makro PRO') && !html.includes('17 October 2026'), 'landing_shop_no_dated_retail_price_claim')
-    for (const screen of ['actual-shop-sell.png', 'actual-shop-sell-tablet.png', 'actual-shop-sell-mobile.png', 'actual-shop-orders.png', 'actual-shop-inventory.png']) check(html.includes(`/images/${screen}`), `landing_shop_workflow_capture:${screen}`)
+    for (const screen of ['actual-shop-sell.png', 'actual-shop-sell-tablet.png', 'actual-shop-sell-mobile.png', 'actual-shop-orders.png', 'actual-shop-orders-mobile.png', 'actual-shop-inventory.png', 'actual-shop-inventory-mobile.png']) check(html.includes(`/images/${screen}`), `landing_shop_workflow_capture:${screen}`)
   } else {
     check(html.includes('class="platform-gallery"') && html.includes('class="platform-image"') && html.includes('class="product-proof"') && html.includes('class="feature-line"'), `landing_interface_and_features:${page.route}`)
     check(countOccurrences(html, '<figure class="platform-image') === productScreens[page.productId]?.length, `landing_product_views:${page.route}`)
@@ -360,10 +363,10 @@ check(!shopLanding.includes('class="shop-hero-preview"') && !shopLanding.include
   && shopLanding.includes('class="shop-actual-showcase"'), 'shop_hero_does_not_repeat_home_dashboard_or_gallery')
 for (const token of [
   'aria-label="Orders and stock"',
-  'Sample catalog and example prices.',
-  'Shop counter sale with product search and a live basket',
-  'Shop order queue with fulfilment and payment follow-up',
-  'Shop inventory list with on-hand quantities and reorder signals',
+  'Shop browser workspace · synthetic local records',
+  'Shop browser counter sale with product search and a live basket',
+  'Shop browser order queue with fulfilment and payment follow-up',
+  'Shop browser inventory list with on-hand quantities and reorder signals',
 ]) check(shopLanding.includes(token), `shop_gallery_describes_verified_view:${token}`)
 check(!shopLanding.includes('Makro PRO') && !shopLanding.includes('17 October 2026')
   && !/<a\b[^>]*>\s*<img\b[^>]*src="\/images\/actual-shop-/i.test(shopLanding), 'shop_prices_not_dated_and_screens_not_raw_links')
@@ -377,13 +380,14 @@ check(shopLanding.includes('class="shop-hero-app"')
 check(!shopLanding.includes('class="pos-window"') && !shopLanding.includes('class="sample-label"')
   && !shopLanding.includes('Complete sample sale') && !shopLanding.includes('Sample receipt')
   && !shopLanding.includes('shop-sample-demo.js'), 'shop_public_page_has_no_simulated_pos')
-check(countOccurrences(shopLanding, '<figure class="platform-device-capture ') === 3
+check(countOccurrences(shopLanding, '<figure class="shop-lead-capture">') === 1
   && countOccurrences(shopLanding, '<article class="shop-workflow-card">') === 2, 'shop_one_device_set_plus_two_distinct_workflows')
 check(shopManifest?.status === 'release-candidate-local', 'shop_public_status_matches_unhosted_candidate')
 check(shopManifest?.primaryCta?.url === '/shop/#shop-demo', 'shop_primary_action_opens_real_screen_gallery')
 check(shopLanding.includes('Sell at the counter.') && shopLanding.includes('Stay ahead of stock.'), 'shop_hero_matches_the_operating_job')
 check(shopLanding.includes('.shop-hero .button-primary') && shopLanding.includes('white-space:nowrap'), 'shop_primary_action_stays_compact')
-check(shopLanding.includes('Search or scan products, record a sale, and follow open orders and stock in one workspace.'), 'shop_hero_copy_matches_visible_features')
+check(shopLanding.includes('See counter sales, recorded orders and stock in the Shop browser workspace.')
+  && !shopLanding.includes('follow open orders and stock in one workspace.'), 'shop_hero_does_not_imply_native_orders_parity')
 check(!/<section\b[^>]*class="[^"]*\bsubscription-section\b/.test(shopLanding)
   && !shopLanding.includes('no setup fee') && !shopLanding.includes('printer-sourcing markup'), 'shop_page_omits_unverified_pricing_and_hardware_promises')
 check(!/KBZPay|WavePay|Appointment book|General ledger|3-way invoice match|Tax engine|Supplier scoring|Customer credit/.test(JSON.stringify(shopManifest?.modules || [])), 'shop_public_manifest_excludes_unverified_enterprise_claims')
@@ -406,8 +410,8 @@ for (const [route, html] of [['/shop/', shopLanding], ...activeIds.filter(id => 
   check(figures === (route === '/shop/' ? 0 : productScreens[routeProduct]?.length || 0), `marketing_interface_figures:${route}`)
   const expectedCaptureScreens = productScreens[routeProduct] || []
   if (route === '/shop/') {
-    check(body.includes('Sample catalog and example prices.')
-      && countOccurrences(body, 'Sample catalog and example prices.') === 1, 'shop_shared_capture_disclosure_once')
+    check(body.includes('Shop browser workspace · synthetic local records')
+      && countOccurrences(body, 'Shop browser workspace · synthetic local records') === 1, 'shop_shared_capture_disclosure_once')
   } else {
     for (const screen of expectedCaptureScreens) check(body.includes(interfaceDisclosure(screen)), `interface_disclosure_per_image:${route}:${screen}`)
   }

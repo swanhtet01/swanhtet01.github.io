@@ -62,7 +62,7 @@
       "status": "release-candidate-local",
       "eyebrow": "Shop operations for Myanmar businesses",
       "headline": "Sell at the counter. Keep orders and stock in view.",
-      "description": "Search the catalog, review a sale, follow recorded orders and see which products need attention in one Shop workspace.",
+      "description": "See counter sales, recorded orders and stock in the Shop browser workspace.",
       "firstOperatingLoop": [
         "Open Today to see daily sales, open orders and low-stock items.",
         "Find a product by name, SKU or barcode and build a sale.",

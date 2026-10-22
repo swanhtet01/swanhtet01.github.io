@@ -857,7 +857,7 @@ assert(typeof homePage.title === 'string' && homePage.title.includes('SuperMega'
 assert(typeof homePage.description === 'string' && homePage.description.length >= 40, 'home_page_description_invalid')
 
 const stories = {
- shop: {title:'Sell at the counter. Keep stock and orders in view.', body:'Search or scan a product, build a sale, and see order and stock follow-up in the same Shop workspace.', screens:[['actual-shop-sell.png','Shop counter sale with product search and a live basket','Counter sale'],['actual-shop-orders.png','Shop order queue showing order status and the next follow-up','Orders and fulfilment'],['actual-shop-inventory.png','Shop inventory workspace showing stock levels and the count, receive, and reorder workflow','Inventory and replenishment']], proof:[['Find','Search or scan the right product'],['Sell','Review each item and the MMK total'],['Follow up','See order status and stock needs']]},
+ shop: {title:'Sell at the counter. Keep stock and orders in view.', body:'The Shop browser workspace shows counter sales, recorded orders and stock.', screens:[['actual-shop-sell.png','Shop browser counter sale with product search and a live basket','Counter sale'],['actual-shop-orders.png','Shop browser order queue showing order status and the next follow-up','Orders and fulfilment'],['actual-shop-inventory.png','Shop browser inventory workspace showing stock levels and the count, receive, and reorder workflow','Inventory and replenishment']], proof:[['Find','Search or scan the right product'],['Sell','Review each item and the MMK total'],['Follow up','See order status and stock needs']]},
  website: {title:'Build clear pages. Review inquiries in one place.', body:'Our team manages pages, readiness checks and customer inquiries in one workspace.', screens:[['actual-sites-editor.png','Sites editor showing page navigation, focused content editing and readiness checks','Page workspace and readiness'],['actual-sites-inquiries.png','Sites inquiry workspace showing a synthetic customer request, ownership and decision controls','Inquiry review and ownership']], proof:[['Record','Pages, services and metadata'],['Action','Edit, check and prepare to publish'],['Result','Qualified inquiries in one inbox']]},
  ecommerce: {title:'Show your catalog. Review each request.', body:'Our team reviews each catalog request before Shop records an order or payment.', screens:[['actual-commerce-catalog.png','Commerce catalog showing available products, local pricing and customer ordering','Store catalog and availability'],['actual-commerce-order-request.png','Commerce Store showing a locally saved customer request awaiting Shop confirmation','Request saved locally']], proof:[['Record','Catalog, customer and request'],['Action','Review before an order is confirmed'],['Result','A clear next step for fulfilment']]},
 }
@@ -921,11 +921,11 @@ function shopCounterSalePreview() {
  interfaceDisclosure(image)
  interfaceDisclosure(mobileImage)
  interfaceDisclosure(tabletImage)
- return `<figure class="shop-lead-capture"><picture><source media="(max-width: 760px)" srcset="/images/${mobileImage}" width="390" height="844" /><source media="(max-width: 1024px)" srcset="/images/${tabletImage}" width="768" height="1024" /><img src="/images/${image}" alt="${escapeHtml(alt)}" width="1440" height="900" loading="eager" fetchpriority="high" /></picture><figcaption id="shop-sample-disclosure">Illustrative Shop interface · synthetic local records</figcaption></figure>`
+ return `<figure class="shop-lead-capture"><picture><source media="(max-width: 760px)" srcset="/images/${mobileImage}" width="390" height="844" /><source media="(max-width: 1024px)" srcset="/images/${tabletImage}" width="768" height="1024" /><img src="/images/${image}" alt="${escapeHtml(alt)}" width="1440" height="900" loading="eager" fetchpriority="high" /></picture><figcaption id="shop-sample-disclosure">Shop browser workspace · synthetic local records</figcaption></figure>`
 }
 function shopResponsiveShowcase() {
- const orders = shopSupportCard({image:'actual-shop-orders.png',alt:'Shop order queue with fulfilment and payment follow-up',title:'Orders',description:'See what is ready, what is unpaid, and what needs the next step.'})
- const stock = shopSupportCard({image:'actual-shop-inventory.png',alt:'Shop inventory list with on-hand quantities and reorder signals',title:'Stock',description:'Find products that need a count or replenishment.'})
+ const orders = shopSupportCard({image:'actual-shop-orders.png',alt:'Shop browser order queue with fulfilment and payment follow-up',title:'Orders',description:'See what is ready, what is unpaid, and what needs the next step.'})
+ const stock = shopSupportCard({image:'actual-shop-inventory.png',alt:'Shop browser inventory list with on-hand quantities and reorder signals',title:'Stock',description:'Find products that need a count or replenishment.'})
  return `<div class="shop-responsive-showcase"><div class="shop-workflow-support">${orders}${stock}</div></div>`
 }
 function productStory(id, standalone = false) {
@@ -973,7 +973,7 @@ function productAction(product) {
 
 function shopLandingHtml(product, page) {
  const description = page.description || product.description
- const heroWithPreview = replaceOnce(publicShopMarkup, '<div class="shop-hero-app" aria-label="Counter sale interface preview"></div>', '<div class="shop-hero-app" aria-label="Counter sale interface preview">' + shopCounterSalePreview() + '</div>', 'shop_hero_app_capture')
+ const heroWithPreview = replaceOnce(publicShopMarkup, '<div class="shop-hero-app" aria-label="Shop browser counter sale preview"></div>', '<div class="shop-hero-app" aria-label="Shop browser counter sale preview">' + shopCounterSalePreview() + '</div>', 'shop_hero_app_capture')
  const shopShowcase = `<section class="shop-actual-showcase" id="shop-demo" aria-label="Orders and stock" aria-describedby="shop-sample-disclosure"><div class="wrap">${shopResponsiveShowcase()}</div></section>`
  let shopContent = heroWithPreview
  const showcaseAnchor = /<\/section>(\r?\n)([ \t]*)<section class="demo-section"/g
