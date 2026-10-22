@@ -787,6 +787,16 @@ class ShopDatabase extends _$ShopDatabase {
     );
   }
 
+  Future<void> _rejectHeldSaleOperation(String operationId) async {
+    final held = await customSelect(
+      'SELECT 1 FROM shop_held_sales WHERE operation_id = ? LIMIT 1',
+      variables: [Variable.withString(operationId)],
+    ).getSingleOrNull();
+    if (held != null) {
+      throw StateError('Reopen the held sale before checkout.');
+    }
+  }
+
   /// Store only bounded, metadata-free PNG thumbnails beside the local catalog.
   /// They are included in encrypted SQLite snapshots but not in JSON sync events.
   Future<void> saveProductThumbnail(String productId, Uint8List png) async {
@@ -1445,6 +1455,7 @@ class ShopDatabase extends _$ShopDatabase {
     });
 
     return transaction(() async {
+      await _rejectHeldSaleOperation(cleanOperationId);
       final existingIntent = await customSelect(
         'SELECT operation_id, payment_method, request_fingerprint, total_mmk, '
         'merchant_phone, merchant_qr_payload, basket_json, state, created_at_millis '
@@ -1956,6 +1967,7 @@ class ShopDatabase extends _$ShopDatabase {
           });
 
     return transaction(() async {
+      await _rejectHeldSaleOperation(cleanOperationId);
       final priorSale =
           await (select(shopSales)
                 ..where((sale) => sale.operationId.equals(cleanOperationId)))

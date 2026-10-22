@@ -636,6 +636,28 @@ void main() {
           );
           expect(await database.countSales(), 0);
           expect(await database.countOutboxOperations(), outboxBeforeHold);
+          await expectLater(
+            database.recordCashSale(
+              operationId: 'customer-a',
+              lines: const [ShopSaleLineInput(productId: 'tea', quantity: 2)],
+            ),
+            throwsStateError,
+          );
+          await expectLater(
+            database.createWalletCheckoutIntent(
+              operationId: 'customer-a',
+              merchant: MerchantWalletSetup(
+                provider: 'KBZPay',
+                merchantPhone: null,
+                officialQrPayload: _syntheticStaticMmqr(),
+                issuerConfirmed: true,
+              ),
+              lines: const [ShopSaleLineInput(productId: 'tea', quantity: 2)],
+            ),
+            throwsStateError,
+          );
+          expect(await database.countSales(), 0);
+          expect(await database.countOutboxOperations(), outboxBeforeHold);
           expect(
             (await database.readActiveProducts())
                 .firstWhere((product) => product.id == 'tea')

@@ -2414,8 +2414,9 @@ class _ShopHomeState extends State<ShopHome> {
         _saving ||
         _walletStarting ||
         _cashConfirming ||
-        _pendingWalletCheckout != null)
+        _pendingWalletCheckout != null) {
       return;
+    }
     var ticketName = '';
     final name = await showDialog<String>(
       context: context,
@@ -2438,8 +2439,9 @@ class _ShopHomeState extends State<ShopHome> {
             ),
             onChanged: (value) => update(() => ticketName = value.trim()),
             onSubmitted: (_) {
-              if (ticketName.isNotEmpty)
+              if (ticketName.isNotEmpty) {
                 Navigator.pop(dialogContext, ticketName);
+              }
             },
           ),
           actions: [
@@ -2480,7 +2482,7 @@ class _ShopHomeState extends State<ShopHome> {
         ),
       );
     } catch (_) {
-      if (mounted)
+      if (mounted) {
         _message(
           shopCopy(
             widget.myanmar,
@@ -2488,6 +2490,7 @@ class _ShopHomeState extends State<ShopHome> {
             'အရောင်းကို ခဏမသိမ်းနိုင်ပါ။ လက်ရှိစာရင်း မပျောက်ပါ။',
           ),
         );
+      }
     } finally {
       if (mounted) setState(() => _saving = false);
       _focusScannerIfReady();
@@ -2621,8 +2624,9 @@ class _ShopHomeState extends State<ShopHome> {
     if (_cart.isNotEmpty ||
         _pendingWalletCheckout != null ||
         _saving ||
-        !_checkoutReady)
+        !_checkoutReady) {
       return;
+    }
     await _draftWrites;
     if (!mounted || _cart.isNotEmpty || _pendingWalletCheckout != null) return;
     setState(() => _saving = true);
@@ -2631,7 +2635,7 @@ class _ShopHomeState extends State<ShopHome> {
       await _loadCheckoutState();
       if (mounted && _checkoutReady) Navigator.of(context).pop();
     } catch (_) {
-      if (mounted)
+      if (mounted) {
         _message(
           shopCopy(
             widget.myanmar,
@@ -2639,6 +2643,7 @@ class _ShopHomeState extends State<ShopHome> {
             'ဤအရောင်းကို ပြန်မဖွင့်နိုင်ပါ။ လက်ရှိစာရင်း မပြောင်းပါ။',
           ),
         );
+      }
     } finally {
       if (mounted) setState(() => _saving = false);
       _focusScannerIfReady();
@@ -2684,7 +2689,7 @@ class _ShopHomeState extends State<ShopHome> {
         refresh?.call(() {});
       }
     } catch (_) {
-      if (mounted)
+      if (mounted) {
         _message(
           shopCopy(
             widget.myanmar,
@@ -2692,6 +2697,7 @@ class _ShopHomeState extends State<ShopHome> {
             'သိမ်းထားသောအရောင်းကို မဖျက်နိုင်ပါ။',
           ),
         );
+      }
     }
   }
 
