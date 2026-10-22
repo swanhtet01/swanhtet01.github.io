@@ -3,6 +3,14 @@
 // Keep a whole phrase as the translation unit. These labels are a source draft;
 // native review and full route coverage remain launch checks.
 export const UI_TRANSLATIONS: Readonly<Record<string, string>> = {
+  'Shop catalog setup': 'Shop ကုန်ပစ္စည်းစာရင်း စတင်ပြင်ဆင်မှု',
+  'First sale': 'ပထမဆုံးအရောင်း', 'Catalog import': 'ကုန်ပစ္စည်းစာရင်း ထည့်သွင်းရန်',
+  'Add one product or import a list': 'ပစ္စည်းတစ်မျိုး ထည့်ပါ သို့မဟုတ် စာရင်းတင်ပါ',
+  'Add products from a CSV': 'CSV ဖိုင်မှ ပစ္စည်းများ ထည့်ရန်',
+  'Start with one item and its current stock. Import a spreadsheet when you are ready.': 'ပစ္စည်းတစ်မျိုးနှင့် လက်ရှိလက်ကျန်ကို စတင်ထည့်ပါ။ အဆင်သင့်ဖြစ်ချိန်တွင် စာရင်းဖိုင်ကို တင်နိုင်ပါသည်။',
+  'Review a CSV before adding products in bulk.': 'ပစ္စည်းများ အများအပြားမထည့်မီ CSV ဖိုင်ကို စစ်ဆေးပါ။',
+  'Add first product': 'ပထမဆုံးပစ္စည်း ထည့်ရန်', 'Import a CSV': 'CSV ဖိုင်တင်ရန်',
+  'Close import': 'ဖိုင်တင်ခြင်း ပိတ်ရန်', 'Loading import...': 'ဖိုင်တင်ရန် ပြင်ဆင်နေသည်...',
   'Today': 'ယနေ့', 'Sell': 'ရောင်းရန်', 'Orders': 'အော်ဒါများ', 'Stock': 'ကုန်လက်ကျန်',
   'Products': 'ကုန်ပစ္စည်းများ', 'Product': 'ကုန်ပစ္စည်း', 'Price': 'ဈေးနှုန်း',
   'Shop': 'ဆိုင်', 'Workspace': 'လုပ်ငန်းနေရာ', 'Settings': 'ဆက်တင်များ',
