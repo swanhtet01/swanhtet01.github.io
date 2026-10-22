@@ -285,7 +285,11 @@ class _StockScreenState extends State<StockScreen> {
                                   key: ValueKey('stock-update-${item.id}'),
                                   onPressed: openStockChange,
                                   child: Text(
-                                    shopCopy(widget.myanmar, 'Update', 'ပြင်ရန်'),
+                                    shopCopy(
+                                      widget.myanmar,
+                                      'Update',
+                                      'ပြင်ရန်',
+                                    ),
                                   ),
                                 );
                                 final stockActionLabel = [
