@@ -20,27 +20,35 @@ export function brandFaviconSvg(accent) {
 </svg>\n`;
 }
 
-export function companyShopHeaderHtml(route) {
-  const shopActive = route === '/shop/';
-  const contactActive = route === '/contact/';
+export function companyShopHeaderHtml(route, locale = 'en') {
+  const isMyanmar = locale === 'my';
+  const baseRoute = route.startsWith('/my/') ? route.slice(3) : route;
+  const shopActive = baseRoute === '/shop/';
+  const contactActive = baseRoute === '/contact/';
+  const shopHref = isMyanmar ? '/my/shop/' : '/shop/';
+  const contactHref = isMyanmar ? '/my/contact/' : '/contact/';
+  const switchHref = ['/shop/', '/contact/', '/privacy/'].includes(baseRoute)
+    ? (isMyanmar ? baseRoute : `/my${baseRoute}`) : '/my/shop/';
   const loginHref = 'https://app.supermega.dev/login?product=shop';
   return `<header class="site-header"><div class="wrap header-inner">
-    <a class="brand" href="/shop/" aria-label="${superMegaBrandIdentity.name} Shop">
+    <a class="brand" href="${shopHref}" aria-label="${superMegaBrandIdentity.name} ${isMyanmar ? 'ဆိုင်' : 'Shop'}">
       <span class="brand-mark" aria-hidden="true">${brandMarkHtml}</span>
       <span class="brand-word">${superMegaBrandIdentity.name}</span>
     </a>
-    <nav class="nav-links" aria-label="Main navigation">
-      <a href="/shop/" ${shopActive ? 'aria-current="page"' : ''}>Shop</a>
-      <a href="/contact/" ${contactActive ? 'aria-current="page"' : ''}>Contact</a>
-      <a href="${loginHref}">Login</a>
+    <nav class="nav-links" aria-label="${isMyanmar ? 'အဓိက လမ်းညွှန်' : 'Main navigation'}">
+      <a href="${shopHref}" ${shopActive ? 'aria-current="page"' : ''}>${isMyanmar ? 'ဆိုင်' : 'Shop'}</a>
+      <a href="${contactHref}" ${contactActive ? 'aria-current="page"' : ''}>${isMyanmar ? 'ဆက်သွယ်ရန်' : 'Contact'}</a>
+      <a href="${loginHref}">${isMyanmar ? 'အကောင့်ဝင်ရန်' : 'Login'}</a>
+      <a href="${switchHref}" data-language-switch hreflang="${isMyanmar ? 'en' : 'my'}">${isMyanmar ? 'အင်္ဂလိပ်' : 'မြန်မာ'}</a>
     </nav>
   </div></header>`;
 }
 
-export function companyShopFooterHtml(_route, year) {
-  const home = '/shop/';
+export function companyShopFooterHtml(_route, year, locale = 'en') {
+  const isMyanmar = locale === 'my';
+  const home = isMyanmar ? '/my/shop/' : '/shop/';
   return `<footer class="footer"><div class="wrap footer-row">
-    <a class="brand" href="${home}" aria-label="${superMegaBrandIdentity.name} Shop"><span class="brand-mark" aria-hidden="true">${brandMarkHtml}</span><span class="brand-word">${superMegaBrandIdentity.name}</span></a>
-    <nav class="footer-links" aria-label="Footer"><a href="/contact/">Contact</a><a href="/privacy/">Privacy</a><span>&copy; ${year} ${superMegaBrandIdentity.name}</span></nav>
+    <a class="brand" href="${home}" aria-label="${superMegaBrandIdentity.name} ${isMyanmar ? 'ဆိုင်' : 'Shop'}"><span class="brand-mark" aria-hidden="true">${brandMarkHtml}</span><span class="brand-word">${superMegaBrandIdentity.name}</span></a>
+    <nav class="footer-links" aria-label="${isMyanmar ? 'အောက်ခြေ လမ်းညွှန်' : 'Footer'}"><a href="${isMyanmar ? '/my/contact/' : '/contact/'}">${isMyanmar ? 'ဆက်သွယ်ရန်' : 'Contact'}</a><a href="${isMyanmar ? '/my/privacy/' : '/privacy/'}">${isMyanmar ? 'ကိုယ်ရေးအချက်အလက် မူဝါဒ' : 'Privacy'}</a><span>&copy; ${year} ${superMegaBrandIdentity.name}</span></nav>
   </div></footer>`;
 }

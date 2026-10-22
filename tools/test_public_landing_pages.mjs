@@ -322,7 +322,7 @@ for (const [hostname, protocol] of [['preview.vercel.app', 'https:'], ['supermeg
   check(execution.appended.length === 0 && execution.window.vaq === undefined && execution.window.siq === undefined, `public_observability_non_production_inert:${protocol}//${hostname}`)
 }
 const privacy = readStatic('privacy/index.html')
-for (const token of ['Site measurement', 'three public page paths', 'removes query strings and fragments', 'SuperMega supplies no custom or conversion event', 'Vercel may add a timestamp, referrer', 'Source code or a reachable script does not prove that provider telemetry was observed.']) {
+for (const token of ['Site measurement', 'six public page paths', 'removes query strings and fragments', 'SuperMega supplies no custom or conversion event', 'Vercel may add a timestamp, referrer', 'Source code or a reachable script does not prove that provider telemetry was observed.']) {
   check(privacy.includes(token), `public_observability_privacy_disclosure:${token}`)
 }
 
@@ -335,6 +335,30 @@ for (const token of ['Message received:', 'Keep this reference if you need to fo
 for (const token of ['No action is needed now.', 'SuperMega will review your brief and reply with one scoped next step.', 'We’ll reply by email', 'We’ll follow up by email']) {
   check(!contact.includes(token), `contact_no_unproven_delivery_promise:${token}`)
 }
+for (const [englishRoute, myanmarRoute] of [['/shop/', '/my/shop/'], ['/contact/', '/my/contact/'], ['/privacy/', '/my/privacy/']]) {
+  const english = readStatic(englishRoute.slice(1) + 'index.html')
+  const myanmar = readStatic(myanmarRoute.slice(1) + 'index.html')
+  for (const [route, html, locale, switchRoute] of [[englishRoute, english, 'en', myanmarRoute], [myanmarRoute, myanmar, 'my', englishRoute]]) {
+    check(html.includes(`<html lang="${locale}">`), `locale_document_language:${route}`)
+    check(html.includes(`<link rel="canonical" href="https://supermega.dev${route}" />`), `locale_canonical:${route}`)
+    check(html.includes(`<link rel="alternate" hreflang="en" href="https://supermega.dev${englishRoute}" />`), `locale_english_alternate:${route}`)
+    check(html.includes(`<link rel="alternate" hreflang="my" href="https://supermega.dev${myanmarRoute}" />`), `locale_myanmar_alternate:${route}`)
+    check(html.includes(`href="${switchRoute}" data-language-switch`), `locale_switch_destination:${route}`)
+  }
+  check(myanmar.includes('href="/my/contact/">ဆက်သွယ်ရန်</a>') && myanmar.includes('href="/my/privacy/">ကိုယ်ရေးအချက်အလက် မူဝါဒ</a>'), `myanmar_navigation_persists_locale:${myanmarRoute}`)
+}
+const myShop = readStatic('my/shop/index.html')
+check(myShop.includes('href="/my/contact/?product=shop"') && myShop.includes('Shop ဘရောက်ဇာလုပ်ငန်းခွင်'), 'myanmar_shop_contact_and_browser_claim')
+check(myShop.includes('မျက်နှာပြင်အတွင်း စာသားများသည် အင်္ဂလိပ်ဘာသာဖြစ်သည်'), 'myanmar_shop_capture_language_disclosed')
+check(!myShop.includes('Complete sample sale') && !myShop.includes('class="pos-window"'), 'myanmar_shop_does_not_claim_public_simulator')
+const myContact = readStatic('my/contact/index.html')
+const myContactMain = myContact.match(/<main\b[\s\S]*?<\/main>/)?.[0] || ''
+for (const token of ['>အမည်<input', '>အီးမေးလ်<input', '>စာ<textarea', '>စာပို့ရန်</button>', 'action="/api/contact-submissions"', 'name="idempotency_key"']) {
+  check(myContactMain.includes(token), `myanmar_contact_form:${token}`)
+}
+check(!/>Send message<\/button>|>Company \(optional\)<input/.test(myContactMain), 'myanmar_contact_has_no_english_controls')
+check(readStatic('my/privacy/index.html').includes('ခြောက်ခုကိုသာ ခွင့်ပြု'), 'myanmar_privacy_keeps_measurement_scope')
+check(readStatic('fonts/noto-sans-myanmar-OFL.txt').includes('SIL OPEN FONT LICENSE'), 'myanmar_font_license_bundled')
 
 // The root moves directly to Shop; the static fallback still works without JavaScript.
 const home = readStatic('index.html')
@@ -401,7 +425,7 @@ for (const [route, html] of [['/shop/', shopLanding], ...activeIds.filter(id => 
   const expectedLoginHref = `href="${appOrigin}/login?product=shop"`
   check(countOccurrences(body, expectedLoginHref) === 1, `login_action_count:${route}`)
   const carouselCount = 0
-  const expectedLinks = route === '/shop/' ? 9 : 5 + Number(routeManifestProduct?.status === 'available-in-app')
+  const expectedLinks = route === '/shop/' ? 10 : 6 + Number(routeManifestProduct?.status === 'available-in-app')
   check((body.match(/<a\b/g) || []).length === expectedLinks, `marketing_link_surface:${route}`)
   const viewportGalleryCount = countOccurrences(body, 'data-viewport-gallery')
   const expectedButtons = viewportGalleryCount * 3 + carouselCount * 2
@@ -545,6 +569,10 @@ check(homeSchemaBlocks.length === 0, 'redirect_has_no_structured_data')
 
 // Sitemap covers every public route exactly once with a well-formed lastmod.
 const sitemap = readStatic('sitemap.xml')
+for (const [englishRoute, myanmarRoute] of [['/shop/', '/my/shop/'], ['/contact/', '/my/contact/'], ['/privacy/', '/my/privacy/']]) {
+  check(sitemap.includes(`<xhtml:link rel="alternate" hreflang="en" href="https://supermega.dev${englishRoute}"/>`), `sitemap_english_alternate:${englishRoute}`)
+  check(sitemap.includes(`<xhtml:link rel="alternate" hreflang="my" href="https://supermega.dev${myanmarRoute}"/>`), `sitemap_myanmar_alternate:${myanmarRoute}`)
+}
 check((sitemap.match(/<url>/g) || []).length === discoverablePages.length, 'sitemap_url_count')
 check(!sitemap.includes('<loc>https://supermega.dev/</loc>'), 'redirect_root_not_discoverable')
 check(!sitemap.includes('<loc>https://supermega.dev/plant/</loc>'), 'retained_plant_not_discoverable')
