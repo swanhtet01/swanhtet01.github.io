@@ -657,7 +657,7 @@ void main() {
   });
 
   testWidgets('fresh install restores before Shop opens', (tester) async {
-    final documents = await Directory.systemTemp.createTemp('shop-first-run-');
+    final documents = Directory.systemTemp.createTempSync('shop-first-run-');
     ShopDatabase? opened;
     try {
       await tester.pumpWidget(
@@ -675,36 +675,42 @@ void main() {
       await _pumpUntil(tester, find.text('Start new Shop'));
       expect(find.text('Start new Shop'), findsOneWidget);
       expect(
-        await ShopDatabase.privateDatabaseFile(documents).exists(),
+        ShopDatabase.privateDatabaseFile(documents).existsSync(),
         isFalse,
       );
       await tester.tap(find.text('Restore backup'));
       await _pumpUntil(tester, find.text('Restore and open Shop'));
       expect(
-        await ShopDatabase.privateDatabaseFile(documents).exists(),
+        ShopDatabase.privateDatabaseFile(documents).existsSync(),
         isFalse,
       );
       await tester.enterText(find.byType(TextField), _password);
       await tester.tap(find.text('Restore and open Shop'));
       await _pumpUntil(tester, find.text('Opened Shop'));
       expect(find.text('Opened Shop'), findsOneWidget);
-      expect((await opened!.readActiveProducts()).single.onHand, 3);
-      expect(await opened!.countSales(), 1);
+      final products = await tester.runAsync(
+        () => opened!.readActiveProducts(),
+      );
+      final sales = await tester.runAsync(() => opened!.countSales());
+      expect(products!.single.onHand, 3);
+      expect(sales, 1);
       expect(
-        await ShopDatabase.privateDatabaseFile(documents).exists(),
+        ShopDatabase.privateDatabaseFile(documents).existsSync(),
         isTrue,
       );
     } finally {
       await tester.pumpWidget(const SizedBox.shrink());
-      await opened?.close();
-      await documents.delete(recursive: true);
+      await tester.runAsync(() async {
+        await opened?.close();
+      });
+      documents.deleteSync(recursive: true);
     }
   });
 
   testWidgets('Start new reserves the exact Drift database path', (
     tester,
   ) async {
-    final documents = await Directory.systemTemp.createTemp('shop-new-');
+    final documents = Directory.systemTemp.createTempSync('shop-new-');
     ShopDatabase? opened;
     try {
       await tester.pumpWidget(
@@ -723,21 +729,28 @@ void main() {
       await _pumpUntil(tester, find.text('Opened Shop'));
       expect(find.text('Opened Shop'), findsOneWidget);
       expect(
-        await ShopDatabase.privateDatabaseFile(documents).exists(),
+        ShopDatabase.privateDatabaseFile(documents).existsSync(),
         isTrue,
       );
-      expect(await opened!.readActiveProducts(), isEmpty);
+      final products = await tester.runAsync(
+        () => opened!.readActiveProducts(),
+      );
+      expect(products, isEmpty);
     } finally {
       await tester.pumpWidget(const SizedBox.shrink());
-      await opened?.close();
-      await documents.delete(recursive: true);
+      await tester.runAsync(() async {
+        await opened?.close();
+      });
+      documents.deleteSync(recursive: true);
     }
   });
 
   testWidgets('wrong password keeps restore choice and local data empty', (
     tester,
   ) async {
-    final documents = await Directory.systemTemp.createTemp('shop-wrong-pass-');
+    final documents = Directory.systemTemp.createTempSync(
+      'shop-wrong-pass-',
+    );
     ShopDatabase? opened;
     try {
       await tester.pumpWidget(
@@ -761,7 +774,7 @@ void main() {
       expect(find.textContaining('Could not restore'), findsOneWidget);
       expect(find.text('Restore and open Shop'), findsOneWidget);
       expect(
-        await ShopDatabase.privateDatabaseFile(documents).exists(),
+        ShopDatabase.privateDatabaseFile(documents).existsSync(),
         isFalse,
       );
       await tester.enterText(find.byType(TextField), _password);
@@ -770,15 +783,17 @@ void main() {
       expect(find.text('Opened Shop'), findsOneWidget);
     } finally {
       await tester.pumpWidget(const SizedBox.shrink());
-      await opened?.close();
-      await documents.delete(recursive: true);
+      await tester.runAsync(() async {
+        await opened?.close();
+      });
+      documents.deleteSync(recursive: true);
     }
   });
 
   testWidgets('cancelled restore cannot create a Shop database', (
     tester,
   ) async {
-    final documents = await Directory.systemTemp.createTemp('shop-cancel-');
+    final documents = Directory.systemTemp.createTempSync('shop-cancel-');
     try {
       await tester.pumpWidget(
         ShopStartup(
@@ -794,24 +809,26 @@ void main() {
       await tester.pump();
       expect(find.text('Shop အသစ် စတင်ရန်'), findsOneWidget);
       expect(
-        await ShopDatabase.privateDatabaseFile(documents).exists(),
+        ShopDatabase.privateDatabaseFile(documents).existsSync(),
         isFalse,
       );
       expect(tester.takeException(), isNull);
     } finally {
       await tester.pumpWidget(const SizedBox.shrink());
-      await documents.delete(recursive: true);
+      documents.deleteSync(recursive: true);
     }
   });
 
   testWidgets('existing Shop opens without offering restore', (tester) async {
-    final documents = await Directory.systemTemp.createTemp('shop-existing-');
+    final documents = Directory.systemTemp.createTempSync('shop-existing-');
     ShopDatabase? opened;
     try {
-      await ShopBackup.restoreIntoEmptyDatabase(
-        archive: archive,
-        target: ShopDatabase.privateDatabaseFile(documents),
-        password: _password,
+      await tester.runAsync(
+        () => ShopBackup.restoreIntoEmptyDatabase(
+          archive: archive,
+          target: ShopDatabase.privateDatabaseFile(documents),
+          password: _password,
+        ),
       );
       await tester.pumpWidget(
         ShopStartup(
@@ -827,22 +844,29 @@ void main() {
       await _pumpUntil(tester, find.text('Opened Shop'));
       expect(find.text('Opened Shop'), findsOneWidget);
       expect(find.text('Restore backup'), findsNothing);
-      expect((await opened!.readActiveProducts()).single.onHand, 3);
+      final products = await tester.runAsync(
+        () => opened!.readActiveProducts(),
+      );
+      expect(products!.single.onHand, 3);
     } finally {
       await tester.pumpWidget(const SizedBox.shrink());
-      await opened?.close();
-      await documents.delete(recursive: true);
+      await tester.runAsync(() async {
+        await opened?.close();
+      });
+      documents.deleteSync(recursive: true);
     }
   });
 
   testWidgets('orphaned WAL blocks first-run actions without deletion', (
     tester,
   ) async {
-    final documents = await Directory.systemTemp.createTemp('shop-orphan-wal-');
+    final documents = Directory.systemTemp.createTempSync(
+      'shop-orphan-wal-',
+    );
     try {
       final target = ShopDatabase.privateDatabaseFile(documents);
       final sidecar = File('${target.path}-wal');
-      await sidecar.writeAsString('preserve this file');
+      sidecar.writeAsStringSync('preserve this file');
       await tester.pumpWidget(
         ShopStartup(
           documents: documents,
@@ -855,27 +879,29 @@ void main() {
       expect(find.textContaining('cannot safely open'), findsOneWidget);
       expect(find.text('Start new Shop'), findsNothing);
       expect(find.text('Restore backup'), findsNothing);
-      expect(await sidecar.readAsString(), 'preserve this file');
-      expect(await target.exists(), isFalse);
+      expect(sidecar.readAsStringSync(), 'preserve this file');
+      expect(target.existsSync(), isFalse);
     } finally {
       await tester.pumpWidget(const SizedBox.shrink());
-      await documents.delete(recursive: true);
+      documents.deleteSync(recursive: true);
     }
   });
 
   testWidgets('published recovery marker blocks opening an existing Shop', (
     tester,
   ) async {
-    final documents = await Directory.systemTemp.createTemp('shop-marked-');
+    final documents = Directory.systemTemp.createTempSync('shop-marked-');
     var opened = false;
     try {
       final target = ShopDatabase.privateDatabaseFile(documents);
-      await ShopBackup.restoreIntoEmptyDatabase(
-        archive: archive,
-        target: target,
-        password: _password,
+      await tester.runAsync(
+        () => ShopBackup.restoreIntoEmptyDatabase(
+          archive: archive,
+          target: target,
+          password: _password,
+        ),
       );
-      await ShopBackup.restoreMarkerFor(target).writeAsString('interrupted');
+      ShopBackup.restoreMarkerFor(target).writeAsStringSync('interrupted');
       await tester.pumpWidget(
         ShopStartup(
           documents: documents,
@@ -892,10 +918,10 @@ void main() {
       expect(find.textContaining('restore was interrupted'), findsOneWidget);
       expect(find.text('Start new Shop'), findsNothing);
       expect(find.text('Restore backup'), findsNothing);
-      expect(await target.exists(), isTrue);
+      expect(target.existsSync(), isTrue);
     } finally {
       await tester.pumpWidget(const SizedBox.shrink());
-      await documents.delete(recursive: true);
+      documents.deleteSync(recursive: true);
     }
   });
 
