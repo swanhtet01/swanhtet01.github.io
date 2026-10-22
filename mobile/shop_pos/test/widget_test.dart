@@ -2542,6 +2542,8 @@ void main() {
       MaterialApp(home: WalletSetupScreen(database: database, myanmar: true)),
     );
     await tester.pumpAndSettle();
+    expect(find.textContaining('ငွေကိုင်က အတည်ပြုရမည်'), findsOneWidget);
+    expect(find.textContaining('payment QR'), findsNothing);
 
     await tester.ensureVisible(find.byType(QrImageView).first);
     await tester.pumpAndSettle();
