@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -439,8 +438,9 @@ class _StockScreenState extends State<StockScreen> {
                                       future: _thumbnailFor(item.id),
                                       builder: (context, image) {
                                         final bytes = image.data;
-                                        if (bytes == null)
+                                        if (bytes == null) {
                                           return const SizedBox.shrink();
+                                        }
                                         return Padding(
                                           padding: const EdgeInsets.only(
                                             right: 10,
@@ -476,11 +476,6 @@ class _StockScreenState extends State<StockScreen> {
                                     widget.myanmar,
                                     '${item.onHand} in stock',
                                     '${shopNumber(item.onHand, myanmar: true)} ခု လက်ကျန်',
-                                  ),
-                                  shopCopy(
-                                    widget.myanmar,
-                                    '${shopNumber(item.priceMmk, myanmar: false)} MMK',
-                                    '${shopNumber(item.priceMmk, myanmar: true)} ကျပ်',
                                   ),
                                   style:
                                       (wide

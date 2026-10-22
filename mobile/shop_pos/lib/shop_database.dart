@@ -550,7 +550,7 @@ class ShopDatabase extends _$ShopDatabase {
         throw StateError('This sale is held. Reopen it before editing.');
       }
       final previous = await readCounterSaleDraft();
-      final lines = <Map<String, Object>>[];
+      final lines = <Map<String, Object?>>[];
       for (final line in sorted) {
         final product =
             await (select(shopProducts)..where(
