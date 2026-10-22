@@ -1760,6 +1760,11 @@ class _ShopHomeState extends State<ShopHome> {
         narrowProductRow && MediaQuery.textScalerOf(context).scale(1) > 1.2;
     final touchCompactRow = MediaQuery.sizeOf(context).width >= 820;
     final photoExtent = narrowProductRow ? 48.0 : 58.0;
+    final catalogPriceStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
+      color: Theme.of(context).colorScheme.onSurfaceVariant,
+      fontWeight: FontWeight.w500,
+      fontFeatures: const [FontFeature.tabularFigures()],
+    );
     final text = _search.text.trim().toLowerCase();
     final visible = _visibleProducts(products).toList();
     if (visible.isEmpty) {
@@ -1862,6 +1867,7 @@ class _ShopHomeState extends State<ShopHome> {
                 '${shopNumber(item.onHand, myanmar: true)} ခုလက်ကျန်',
               );
         final stockStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
+          fontWeight: item.onHand == 0 ? FontWeight.w600 : FontWeight.w500,
           color: item.onHand == 0
               ? Theme.of(context).colorScheme.error
               : Theme.of(context).colorScheme.onSurfaceVariant,
@@ -1884,7 +1890,7 @@ class _ShopHomeState extends State<ShopHome> {
           child: Container(
             key: ValueKey('shop-add-affordance:${item.id}'),
             width: enlargedNarrowRow ? 72 : 52,
-            height: 44,
+            height: 48,
             decoration: BoxDecoration(
               color: canAdd ? const Color(0xffeef3ff) : const Color(0xfff1f2f5),
               borderRadius: BorderRadius.circular(10),
@@ -1967,11 +1973,14 @@ class _ShopHomeState extends State<ShopHome> {
                                   overflow: TextOverflow.ellipsis,
                                   semanticsLabel: item.name,
                                   style: Theme.of(context).textTheme.bodyMedium
-                                      ?.copyWith(fontWeight: FontWeight.w600),
+                                      ?.copyWith(
+                                        fontWeight: FontWeight.w600,
+                                        height: 1.3,
+                                      ),
                                 ),
                                 Text(
                                   _mmk(item.priceMmk),
-                                  style: _shopMoneyStyle(context),
+                                  style: catalogPriceStyle,
                                 ),
                               ],
                             ),
@@ -2015,7 +2024,8 @@ class _ShopHomeState extends State<ShopHome> {
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       semanticsLabel: item.name,
-                      style: Theme.of(context).textTheme.titleMedium,
+                      style: Theme.of(context).textTheme.titleMedium
+                          ?.copyWith(fontWeight: FontWeight.w600, height: 1.3),
                     ),
                     subtitle: Column(
                       mainAxisSize: MainAxisSize.min,
@@ -2029,7 +2039,7 @@ class _ShopHomeState extends State<ShopHome> {
                             children: [
                               Text(
                                 _mmk(item.priceMmk),
-                                style: _shopMoneyStyle(context),
+                                style: catalogPriceStyle,
                               ),
                               Text(stock, style: stockStyle),
                             ],
@@ -2045,7 +2055,7 @@ class _ShopHomeState extends State<ShopHome> {
                             children: [
                               Text(
                                 _mmk(item.priceMmk),
-                                style: _shopMoneyStyle(context),
+                                style: catalogPriceStyle,
                               ),
                               const SizedBox(width: 12),
                               addAffordance,
@@ -4238,9 +4248,10 @@ class _SetupTile extends StatelessWidget {
         MediaQuery.textScalerOf(context).scale(1) > 1.2;
     return ListTile(
       contentPadding: EdgeInsets.symmetric(
-        horizontal: 16,
+        horizontal: compact ? 12 : 16,
         vertical: compact ? 4 : 8,
       ),
+      horizontalTitleGap: compact ? 8 : 16,
       minLeadingWidth: 28,
       leading: compact
           ? null
@@ -4262,7 +4273,7 @@ class _SetupTile extends StatelessWidget {
                 ),
               ),
             ),
-      trailing: const Icon(Icons.chevron_right, size: 20),
+      trailing: Icon(Icons.chevron_right, size: compact ? 18 : 20),
       onTap: onTap,
     );
   }
@@ -4303,6 +4314,9 @@ class _ShopSettingsScreenState extends State<ShopSettingsScreen> {
             const SizedBox(height: 12),
             SegmentedButton<bool>(
               showSelectedIcon: false,
+              style: const ButtonStyle(
+                minimumSize: WidgetStatePropertyAll(Size(0, 48)),
+              ),
               segments: const [
                 ButtonSegment(value: false, label: Text('English')),
                 ButtonSegment(value: true, label: Text('မြန်မာ')),
@@ -4378,7 +4392,7 @@ class _ShopSettingsScreenState extends State<ShopSettingsScreen> {
                     title: shopCopy(
                       _myanmar,
                       'Export backup file',
-                      'အရန်ကူးဖိုင် ထုတ်ယူရန်',
+                      'အရန်ကူးဖိုင် ထုတ်ရန်',
                     ),
                     subtitle: shopCopy(
                       _myanmar,
@@ -4403,8 +4417,8 @@ class _ShopSettingsScreenState extends State<ShopSettingsScreen> {
               child: Text(
                 shopCopy(
                   _myanmar,
-                  'Saved on this device. Online backup is not active.',
-                  'ဤစက်တွင်သာ သိမ်းထားသည်။ အွန်လိုင်းအရန်ကူး မရှိသေးပါ။',
+                  'On this device only. No online backup.',
+                  'ဤစက်တွင်သာ သိမ်းသည်။ အွန်လိုင်းအရန်ကူး မရှိပါ။',
                 ),
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
