@@ -1168,6 +1168,18 @@ class $ShopProductsTable extends ShopProducts
     type: DriftSqlType.int,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _reorderLevelMeta = const VerificationMeta(
+    'reorderLevel',
+  );
+  @override
+  late final GeneratedColumn<int> reorderLevel = GeneratedColumn<int>(
+    'reorder_level',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(5),
+  );
   static const VerificationMeta _updatedAtMillisMeta = const VerificationMeta(
     'updatedAtMillis',
   );
@@ -1204,6 +1216,7 @@ class $ShopProductsTable extends ShopProducts
     barcode,
     priceMmk,
     onHand,
+    reorderLevel,
     updatedAtMillis,
     archived,
   ];
@@ -1275,6 +1288,15 @@ class $ShopProductsTable extends ShopProducts
     } else if (isInserting) {
       context.missing(_onHandMeta);
     }
+    if (data.containsKey('reorder_level')) {
+      context.handle(
+        _reorderLevelMeta,
+        reorderLevel.isAcceptableOrUnknown(
+          data['reorder_level']!,
+          _reorderLevelMeta,
+        ),
+      );
+    }
     if (data.containsKey('updated_at_millis')) {
       context.handle(
         _updatedAtMillisMeta,
@@ -1333,6 +1355,10 @@ class $ShopProductsTable extends ShopProducts
         DriftSqlType.int,
         data['${effectivePrefix}on_hand'],
       )!,
+      reorderLevel: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}reorder_level'],
+      ),
       updatedAtMillis: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}updated_at_millis'],
@@ -1359,6 +1385,7 @@ class ShopProduct extends DataClass implements Insertable<ShopProduct> {
   final String? barcode;
   final int priceMmk;
   final int onHand;
+  final int? reorderLevel;
   final int updatedAtMillis;
   final bool archived;
   const ShopProduct({
@@ -1370,6 +1397,7 @@ class ShopProduct extends DataClass implements Insertable<ShopProduct> {
     this.barcode,
     required this.priceMmk,
     required this.onHand,
+    this.reorderLevel,
     required this.updatedAtMillis,
     required this.archived,
   });
@@ -1388,6 +1416,9 @@ class ShopProduct extends DataClass implements Insertable<ShopProduct> {
     }
     map['price_mmk'] = Variable<int>(priceMmk);
     map['on_hand'] = Variable<int>(onHand);
+    if (!nullToAbsent || reorderLevel != null) {
+      map['reorder_level'] = Variable<int>(reorderLevel);
+    }
     map['updated_at_millis'] = Variable<int>(updatedAtMillis);
     map['archived'] = Variable<bool>(archived);
     return map;
@@ -1405,6 +1436,9 @@ class ShopProduct extends DataClass implements Insertable<ShopProduct> {
           : Value(barcode),
       priceMmk: Value(priceMmk),
       onHand: Value(onHand),
+      reorderLevel: reorderLevel == null && nullToAbsent
+          ? const Value.absent()
+          : Value(reorderLevel),
       updatedAtMillis: Value(updatedAtMillis),
       archived: Value(archived),
     );
@@ -1424,6 +1458,7 @@ class ShopProduct extends DataClass implements Insertable<ShopProduct> {
       barcode: serializer.fromJson<String?>(json['barcode']),
       priceMmk: serializer.fromJson<int>(json['priceMmk']),
       onHand: serializer.fromJson<int>(json['onHand']),
+      reorderLevel: serializer.fromJson<int?>(json['reorderLevel']),
       updatedAtMillis: serializer.fromJson<int>(json['updatedAtMillis']),
       archived: serializer.fromJson<bool>(json['archived']),
     );
@@ -1440,6 +1475,7 @@ class ShopProduct extends DataClass implements Insertable<ShopProduct> {
       'barcode': serializer.toJson<String?>(barcode),
       'priceMmk': serializer.toJson<int>(priceMmk),
       'onHand': serializer.toJson<int>(onHand),
+      'reorderLevel': serializer.toJson<int?>(reorderLevel),
       'updatedAtMillis': serializer.toJson<int>(updatedAtMillis),
       'archived': serializer.toJson<bool>(archived),
     };
@@ -1454,6 +1490,7 @@ class ShopProduct extends DataClass implements Insertable<ShopProduct> {
     Value<String?> barcode = const Value.absent(),
     int? priceMmk,
     int? onHand,
+    Value<int?> reorderLevel = const Value.absent(),
     int? updatedAtMillis,
     bool? archived,
   }) => ShopProduct(
@@ -1465,6 +1502,7 @@ class ShopProduct extends DataClass implements Insertable<ShopProduct> {
     barcode: barcode.present ? barcode.value : this.barcode,
     priceMmk: priceMmk ?? this.priceMmk,
     onHand: onHand ?? this.onHand,
+    reorderLevel: reorderLevel.present ? reorderLevel.value : this.reorderLevel,
     updatedAtMillis: updatedAtMillis ?? this.updatedAtMillis,
     archived: archived ?? this.archived,
   );
@@ -1480,6 +1518,9 @@ class ShopProduct extends DataClass implements Insertable<ShopProduct> {
       barcode: data.barcode.present ? data.barcode.value : this.barcode,
       priceMmk: data.priceMmk.present ? data.priceMmk.value : this.priceMmk,
       onHand: data.onHand.present ? data.onHand.value : this.onHand,
+      reorderLevel: data.reorderLevel.present
+          ? data.reorderLevel.value
+          : this.reorderLevel,
       updatedAtMillis: data.updatedAtMillis.present
           ? data.updatedAtMillis.value
           : this.updatedAtMillis,
@@ -1498,6 +1539,7 @@ class ShopProduct extends DataClass implements Insertable<ShopProduct> {
           ..write('barcode: $barcode, ')
           ..write('priceMmk: $priceMmk, ')
           ..write('onHand: $onHand, ')
+          ..write('reorderLevel: $reorderLevel, ')
           ..write('updatedAtMillis: $updatedAtMillis, ')
           ..write('archived: $archived')
           ..write(')'))
@@ -1514,6 +1556,7 @@ class ShopProduct extends DataClass implements Insertable<ShopProduct> {
     barcode,
     priceMmk,
     onHand,
+    reorderLevel,
     updatedAtMillis,
     archived,
   );
@@ -1529,6 +1572,7 @@ class ShopProduct extends DataClass implements Insertable<ShopProduct> {
           other.barcode == this.barcode &&
           other.priceMmk == this.priceMmk &&
           other.onHand == this.onHand &&
+          other.reorderLevel == this.reorderLevel &&
           other.updatedAtMillis == this.updatedAtMillis &&
           other.archived == this.archived);
 }
@@ -1542,6 +1586,7 @@ class ShopProductsCompanion extends UpdateCompanion<ShopProduct> {
   final Value<String?> barcode;
   final Value<int> priceMmk;
   final Value<int> onHand;
+  final Value<int?> reorderLevel;
   final Value<int> updatedAtMillis;
   final Value<bool> archived;
   final Value<int> rowid;
@@ -1554,6 +1599,7 @@ class ShopProductsCompanion extends UpdateCompanion<ShopProduct> {
     this.barcode = const Value.absent(),
     this.priceMmk = const Value.absent(),
     this.onHand = const Value.absent(),
+    this.reorderLevel = const Value.absent(),
     this.updatedAtMillis = const Value.absent(),
     this.archived = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -1567,6 +1613,7 @@ class ShopProductsCompanion extends UpdateCompanion<ShopProduct> {
     this.barcode = const Value.absent(),
     required int priceMmk,
     required int onHand,
+    this.reorderLevel = const Value.absent(),
     required int updatedAtMillis,
     this.archived = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -1584,6 +1631,7 @@ class ShopProductsCompanion extends UpdateCompanion<ShopProduct> {
     Expression<String>? barcode,
     Expression<int>? priceMmk,
     Expression<int>? onHand,
+    Expression<int>? reorderLevel,
     Expression<int>? updatedAtMillis,
     Expression<bool>? archived,
     Expression<int>? rowid,
@@ -1597,6 +1645,7 @@ class ShopProductsCompanion extends UpdateCompanion<ShopProduct> {
       if (barcode != null) 'barcode': barcode,
       if (priceMmk != null) 'price_mmk': priceMmk,
       if (onHand != null) 'on_hand': onHand,
+      if (reorderLevel != null) 'reorder_level': reorderLevel,
       if (updatedAtMillis != null) 'updated_at_millis': updatedAtMillis,
       if (archived != null) 'archived': archived,
       if (rowid != null) 'rowid': rowid,
@@ -1612,6 +1661,7 @@ class ShopProductsCompanion extends UpdateCompanion<ShopProduct> {
     Value<String?>? barcode,
     Value<int>? priceMmk,
     Value<int>? onHand,
+    Value<int?>? reorderLevel,
     Value<int>? updatedAtMillis,
     Value<bool>? archived,
     Value<int>? rowid,
@@ -1625,6 +1675,7 @@ class ShopProductsCompanion extends UpdateCompanion<ShopProduct> {
       barcode: barcode ?? this.barcode,
       priceMmk: priceMmk ?? this.priceMmk,
       onHand: onHand ?? this.onHand,
+      reorderLevel: reorderLevel ?? this.reorderLevel,
       updatedAtMillis: updatedAtMillis ?? this.updatedAtMillis,
       archived: archived ?? this.archived,
       rowid: rowid ?? this.rowid,
@@ -1658,6 +1709,9 @@ class ShopProductsCompanion extends UpdateCompanion<ShopProduct> {
     if (onHand.present) {
       map['on_hand'] = Variable<int>(onHand.value);
     }
+    if (reorderLevel.present) {
+      map['reorder_level'] = Variable<int>(reorderLevel.value);
+    }
     if (updatedAtMillis.present) {
       map['updated_at_millis'] = Variable<int>(updatedAtMillis.value);
     }
@@ -1681,6 +1735,7 @@ class ShopProductsCompanion extends UpdateCompanion<ShopProduct> {
           ..write('barcode: $barcode, ')
           ..write('priceMmk: $priceMmk, ')
           ..write('onHand: $onHand, ')
+          ..write('reorderLevel: $reorderLevel, ')
           ..write('updatedAtMillis: $updatedAtMillis, ')
           ..write('archived: $archived, ')
           ..write('rowid: $rowid')
@@ -4034,6 +4089,7 @@ typedef $$ShopProductsTableCreateCompanionBuilder =
       Value<String?> barcode,
       required int priceMmk,
       required int onHand,
+      Value<int?> reorderLevel,
       required int updatedAtMillis,
       Value<bool> archived,
       Value<int> rowid,
@@ -4048,6 +4104,7 @@ typedef $$ShopProductsTableUpdateCompanionBuilder =
       Value<String?> barcode,
       Value<int> priceMmk,
       Value<int> onHand,
+      Value<int?> reorderLevel,
       Value<int> updatedAtMillis,
       Value<bool> archived,
       Value<int> rowid,
@@ -4143,6 +4200,11 @@ class $$ShopProductsTableFilterComposer
 
   ColumnFilters<int> get onHand => $composableBuilder(
     column: $table.onHand,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get reorderLevel => $composableBuilder(
+    column: $table.reorderLevel,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -4256,6 +4318,11 @@ class $$ShopProductsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get reorderLevel => $composableBuilder(
+    column: $table.reorderLevel,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get updatedAtMillis => $composableBuilder(
     column: $table.updatedAtMillis,
     builder: (column) => ColumnOrderings(column),
@@ -4301,6 +4368,11 @@ class $$ShopProductsTableAnnotationComposer
 
   GeneratedColumn<int> get onHand =>
       $composableBuilder(column: $table.onHand, builder: (column) => column);
+
+  GeneratedColumn<int> get reorderLevel => $composableBuilder(
+    column: $table.reorderLevel,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<int> get updatedAtMillis => $composableBuilder(
     column: $table.updatedAtMillis,
@@ -4401,6 +4473,7 @@ class $$ShopProductsTableTableManager
                 Value<String?> barcode = const Value.absent(),
                 Value<int> priceMmk = const Value.absent(),
                 Value<int> onHand = const Value.absent(),
+                Value<int?> reorderLevel = const Value.absent(),
                 Value<int> updatedAtMillis = const Value.absent(),
                 Value<bool> archived = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -4413,6 +4486,7 @@ class $$ShopProductsTableTableManager
                 barcode: barcode,
                 priceMmk: priceMmk,
                 onHand: onHand,
+                reorderLevel: reorderLevel,
                 updatedAtMillis: updatedAtMillis,
                 archived: archived,
                 rowid: rowid,
@@ -4427,6 +4501,7 @@ class $$ShopProductsTableTableManager
                 Value<String?> barcode = const Value.absent(),
                 required int priceMmk,
                 required int onHand,
+                Value<int?> reorderLevel = const Value.absent(),
                 required int updatedAtMillis,
                 Value<bool> archived = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -4439,6 +4514,7 @@ class $$ShopProductsTableTableManager
                 barcode: barcode,
                 priceMmk: priceMmk,
                 onHand: onHand,
+                reorderLevel: reorderLevel,
                 updatedAtMillis: updatedAtMillis,
                 archived: archived,
                 rowid: rowid,

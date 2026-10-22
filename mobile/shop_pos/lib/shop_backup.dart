@@ -20,7 +20,7 @@ enum ShopStorePresence { empty, existing, interrupted, unsafe }
 /// the database so an interrupted export or restore cannot retain plaintext.
 abstract final class ShopBackup {
   static const formatVersion = 1;
-  static const supportedSchemaVersion = 8;
+  static const supportedSchemaVersion = 9;
   static const oldestSupportedSchemaVersion = 6;
   static const maxSnapshotBytes = 64 * 1024 * 1024;
 
@@ -512,6 +512,20 @@ abstract final class ShopBackup {
                 'SELECT 1 FROM shop_sales WHERE operation_id = ? LIMIT 1',
                 [drafts.single['operation_id']],
               ).isNotEmpty);
+      final hasReorderLevel =
+          schemaVersion >= 9 &&
+          tables.contains('shop_products') &&
+          connection
+              .select('PRAGMA table_info(shop_products)')
+              .any((row) => row['name'] == 'reorder_level');
+      final invalidReorderLevel =
+          hasReorderLevel &&
+          connection.select(
+            'SELECT 1 FROM shop_products WHERE reorder_level IS NOT NULL '
+            'AND (typeof(reorder_level) != ? OR reorder_level < 0 '
+            'OR reorder_level > 2000000000) LIMIT 1',
+            ['integer'],
+          ).isNotEmpty;
       if (version.length != 1 ||
           schemaVersion < oldestSupportedSchemaVersion ||
           schemaVersion > supportedSchemaVersion ||
@@ -523,6 +537,8 @@ abstract final class ShopBackup {
           !tables.containsAll(_requiredTables) ||
           (schemaVersion >= 7 && !tables.contains('shop_product_images')) ||
           (schemaVersion >= 8 && !tables.contains('shop_counter_drafts')) ||
+          (schemaVersion >= 9 && !hasReorderLevel) ||
+          invalidReorderLevel ||
           draftInvalid ||
           images.any((row) {
             final image = row['image_png'];
