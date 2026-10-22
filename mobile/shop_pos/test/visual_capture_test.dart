@@ -39,6 +39,13 @@ Future<ShopDatabase> _sampleShop({required bool myanmar}) async {
     operationId: 'synthetic-visual-capture-sale',
     lines: const [ShopSaleLineInput(productId: 'mama', quantity: 1)],
   );
+  // The sample sale leaves seven packs. Make the merchant's alert visible in
+  // Today and Stock captures without changing checkout or fixture stock.
+  await database.setReorderLevel(
+    productId: 'mama',
+    expectedReorderLevel: 5,
+    reorderLevel: 10,
+  );
   return database;
 }
 
@@ -154,6 +161,14 @@ void main() {
             await tester.tap(destination.first);
             await tester.pumpAndSettle();
             expect(tester.takeException(), isNull);
+            if (screen == 'stock') {
+              expect(
+                find.textContaining(
+                  language == 'my' ? 'ခုနှင့်အောက် သတိပေး' : 'Low at 10',
+                ),
+                findsOneWidget,
+              );
+            }
             await expectLater(
               find.byKey(_captureKey),
               matchesGoldenFile(

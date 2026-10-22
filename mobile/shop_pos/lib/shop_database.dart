@@ -49,6 +49,10 @@ class ShopProducts extends Table {
   TextColumn get barcode => text().nullable()();
   IntColumn get priceMmk => integer()();
   IntColumn get onHand => integer()();
+  // Five is the visible starting alert for new and migrated products. Null
+  // means the merchant turned this product's low-stock alert off.
+  IntColumn get reorderLevel =>
+      integer().nullable().withDefault(const Constant(5))();
   IntColumn get updatedAtMillis => integer()();
   BoolColumn get archived => boolean().withDefault(const Constant(false))();
 
@@ -317,7 +321,7 @@ class ShopDatabase extends _$ShopDatabase {
     : super(executor ?? driftDatabase(name: 'supermega_shop'));
 
   @override
-  int get schemaVersion => 8;
+  int get schemaVersion => 9;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -371,6 +375,14 @@ class ShopDatabase extends _$ShopDatabase {
       }
       if (from < 8) {
         await _createCounterDraftTable();
+      }
+      if (from < 9) {
+        await _ensureColumn(
+          'shop_products',
+          'reorder_level',
+          'INTEGER DEFAULT 5 CHECK (reorder_level IS NULL OR '
+              'reorder_level BETWEEN 0 AND 2000000000)',
+        );
       }
     },
     beforeOpen: (_) => customStatement('PRAGMA foreign_keys = ON'),
@@ -1404,6 +1416,56 @@ class ShopDatabase extends _$ShopDatabase {
           ..where((row) => row.archived.equals(false))
           ..orderBy([(row) => OrderingTerm.asc(row.name)]))
         .get();
+  }
+
+  /// Change only this product's local alert setting. A stale settings dialog
+  /// cannot overwrite a newer choice, and stock movements are unaffected.
+  Future<void> setReorderLevel({
+    required String productId,
+    required int? expectedReorderLevel,
+    required int? reorderLevel,
+  }) async {
+    final cleanProductId = productId.trim();
+    if (cleanProductId.isEmpty ||
+        cleanProductId.length > 100 ||
+        (expectedReorderLevel != null &&
+            (expectedReorderLevel < 0 || expectedReorderLevel > 2000000000)) ||
+        (reorderLevel != null &&
+            (reorderLevel < 0 || reorderLevel > 2000000000))) {
+      throw ArgumentError('Low-stock alert values are invalid.');
+    }
+
+    await transaction(() async {
+      final product = await (select(
+        shopProducts,
+      )..where((row) => row.id.equals(cleanProductId))).getSingleOrNull();
+      if (product == null || product.archived) {
+        throw StateError('This product is no longer available.');
+      }
+      if (product.reorderLevel != expectedReorderLevel) {
+        throw StateError('Low-stock alert changed. Reopen this item.');
+      }
+      if (product.reorderLevel == reorderLevel) return;
+
+      final changed =
+          await (update(shopProducts)..where(
+                (row) =>
+                    row.id.equals(cleanProductId) &
+                    row.archived.equals(false) &
+                    (expectedReorderLevel == null
+                        ? row.reorderLevel.isNull()
+                        : row.reorderLevel.equals(expectedReorderLevel)),
+              ))
+              .write(
+                ShopProductsCompanion(
+                  reorderLevel: Value(reorderLevel),
+                  updatedAtMillis: Value(DateTime.now().millisecondsSinceEpoch),
+                ),
+              );
+      if (changed != 1) {
+        throw StateError('Low-stock alert changed. Reopen this item.');
+      }
+    });
   }
 
   ShopCashShift _cashShiftFromRow(QueryRow row) => ShopCashShift(
