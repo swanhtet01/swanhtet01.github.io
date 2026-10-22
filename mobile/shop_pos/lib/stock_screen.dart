@@ -615,7 +615,11 @@ class _StockChangeDialogState extends State<_StockChangeDialog> {
               key: const ValueKey('stock-alert-edit'),
               contentPadding: EdgeInsets.zero,
               title: Text(
-                shopCopy(widget.myanmar, 'Low-stock alert', 'လက်ကျန်နည်း သတိပေးချက်'),
+                shopCopy(
+                  widget.myanmar,
+                  'Low-stock alert',
+                  'လက်ကျန်နည်း သတိပေးချက်',
+                ),
               ),
               subtitle: Text(
                 _reorderLevel == null
@@ -714,7 +718,8 @@ class _ReorderLevelDialogState extends State<_ReorderLevelDialog> {
       if (!mounted) return;
       setState(() {
         _saving = false;
-        _error = error is StateError &&
+        _error =
+            error is StateError &&
                 error.message.toString().startsWith('Low-stock alert changed.')
             ? shopCopy(
                 widget.myanmar,
@@ -732,7 +737,9 @@ class _ReorderLevelDialogState extends State<_ReorderLevelDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-    title: Text(shopCopy(widget.myanmar, 'Low-stock alert', 'လက်ကျန်နည်း သတိပေးချက်')),
+    title: Text(
+      shopCopy(widget.myanmar, 'Low-stock alert', 'လက်ကျန်နည်း သတိပေးချက်'),
+    ),
     content: Form(
       key: _formKey,
       child: Column(
@@ -791,7 +798,9 @@ class _ReorderLevelDialogState extends State<_ReorderLevelDialog> {
       ),
       FilledButton(
         onPressed: _saving ? null : _save,
-        child: Text(shopCopy(widget.myanmar, 'Save alert', 'သတိပေးချက်သိမ်းရန်')),
+        child: Text(
+          shopCopy(widget.myanmar, 'Save alert', 'သတိပေးချက်သိမ်းရန်'),
+        ),
       ),
     ],
   );

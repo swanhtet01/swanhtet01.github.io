@@ -255,16 +255,18 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
         )
         .getSingle();
     final products = await widget.database.readActiveProducts();
-    final stockToCheck = products
-        .where(
-          (item) =>
-              item.reorderLevel != null && item.onHand <= item.reorderLevel!,
-        )
-        .toList()
-      ..sort((a, b) {
-        final stockOrder = a.onHand.compareTo(b.onHand);
-        return stockOrder != 0 ? stockOrder : a.name.compareTo(b.name);
-      });
+    final stockToCheck =
+        products
+            .where(
+              (item) =>
+                  item.reorderLevel != null &&
+                  item.onHand <= item.reorderLevel!,
+            )
+            .toList()
+          ..sort((a, b) {
+            final stockOrder = a.onHand.compareTo(b.onHand);
+            return stockOrder != 0 ? stockOrder : a.name.compareTo(b.name);
+          });
     final recentSales = await widget.database.readRecentSales(limit: 4);
     final pendingWallet = await widget.database.readPendingWalletCheckout();
     return _TodaySnapshot(

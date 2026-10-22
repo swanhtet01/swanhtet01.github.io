@@ -51,7 +51,8 @@ class ShopProducts extends Table {
   IntColumn get onHand => integer()();
   // Five is the visible starting alert for new and migrated products. Null
   // means the merchant turned this product's low-stock alert off.
-  IntColumn get reorderLevel => integer().nullable().withDefault(const Constant(5))();
+  IntColumn get reorderLevel =>
+      integer().nullable().withDefault(const Constant(5))();
   IntColumn get updatedAtMillis => integer()();
   BoolColumn get archived => boolean().withDefault(const Constant(false))();
 
@@ -1422,9 +1423,9 @@ class ShopDatabase extends _$ShopDatabase {
     }
 
     await transaction(() async {
-      final product = await (select(shopProducts)
-            ..where((row) => row.id.equals(cleanProductId)))
-          .getSingleOrNull();
+      final product = await (select(
+        shopProducts,
+      )..where((row) => row.id.equals(cleanProductId))).getSingleOrNull();
       if (product == null || product.archived) {
         throw StateError('This product is no longer available.');
       }
@@ -1433,17 +1434,21 @@ class ShopDatabase extends _$ShopDatabase {
       }
       if (product.reorderLevel == reorderLevel) return;
 
-      final changed = await (update(shopProducts)
-            ..where((row) =>
-                row.id.equals(cleanProductId) &
-                row.archived.equals(false) &
-                (expectedReorderLevel == null
-                    ? row.reorderLevel.isNull()
-                    : row.reorderLevel.equals(expectedReorderLevel))))
-          .write(ShopProductsCompanion(
-            reorderLevel: Value(reorderLevel),
-            updatedAtMillis: Value(DateTime.now().millisecondsSinceEpoch),
-          ));
+      final changed =
+          await (update(shopProducts)..where(
+                (row) =>
+                    row.id.equals(cleanProductId) &
+                    row.archived.equals(false) &
+                    (expectedReorderLevel == null
+                        ? row.reorderLevel.isNull()
+                        : row.reorderLevel.equals(expectedReorderLevel)),
+              ))
+              .write(
+                ShopProductsCompanion(
+                  reorderLevel: Value(reorderLevel),
+                  updatedAtMillis: Value(DateTime.now().millisecondsSinceEpoch),
+                ),
+              );
       if (changed != 1) {
         throw StateError('Low-stock alert changed. Reopen this item.');
       }

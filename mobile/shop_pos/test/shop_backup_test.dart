@@ -374,32 +374,37 @@ void main() {
     }
   });
 
-  test('v8 catalog gains the documented alert default without stock writes', () async {
-    final old = File('${directory.path}/legacy-v8.sqlite');
-    await database.exportVerifiedLocalSnapshot(old);
-    final connection = sqlite3.open(old.path);
-    try {
-      connection.execute('ALTER TABLE shop_products DROP COLUMN reorder_level');
-      connection.execute('PRAGMA user_version = 8');
-    } finally {
-      connection.close();
-    }
-    ShopBackup.verifySnapshot(old, expectedSchemaVersion: 8);
-    final migrated = ShopDatabase(NativeDatabase(old));
-    try {
-      expect((await migrated.readActiveProducts()).single.reorderLevel, 5);
-      expect(await migrated.countStockMovements(), 2);
-      expect(await migrated.countOutboxOperations(), 2);
-      expect(
-        (await migrated.customSelect('PRAGMA user_version').getSingle())
-            .read<int>('user_version'),
-        9,
-      );
-    } finally {
-      await migrated.close();
-    }
-    ShopBackup.verifySnapshot(old, expectedSchemaVersion: 9);
-  });
+  test(
+    'v8 catalog gains the documented alert default without stock writes',
+    () async {
+      final old = File('${directory.path}/legacy-v8.sqlite');
+      await database.exportVerifiedLocalSnapshot(old);
+      final connection = sqlite3.open(old.path);
+      try {
+        connection.execute(
+          'ALTER TABLE shop_products DROP COLUMN reorder_level',
+        );
+        connection.execute('PRAGMA user_version = 8');
+      } finally {
+        connection.close();
+      }
+      ShopBackup.verifySnapshot(old, expectedSchemaVersion: 8);
+      final migrated = ShopDatabase(NativeDatabase(old));
+      try {
+        expect((await migrated.readActiveProducts()).single.reorderLevel, 5);
+        expect(await migrated.countStockMovements(), 2);
+        expect(await migrated.countOutboxOperations(), 2);
+        expect(
+          (await migrated.customSelect('PRAGMA user_version').getSingle())
+              .read<int>('user_version'),
+          9,
+        );
+      } finally {
+        await migrated.close();
+      }
+      ShopBackup.verifySnapshot(old, expectedSchemaVersion: 9);
+    },
+  );
 
   test('v9 backup preserves custom and disabled low-stock alerts', () async {
     final source = ShopDatabase(NativeDatabase.memory());
@@ -442,7 +447,9 @@ void main() {
       ShopBackup.verifySnapshot(restored, expectedSchemaVersion: 9);
       final reopened = ShopDatabase(NativeDatabase(restored));
       try {
-        final products = {for (final item in await reopened.readActiveProducts()) item.id: item};
+        final products = {
+          for (final item in await reopened.readActiveProducts()) item.id: item,
+        };
         expect(products['custom']?.reorderLevel, 12);
         expect(products['off']?.reorderLevel, isNull);
         expect(products['custom']?.onHand, 8);
@@ -460,7 +467,9 @@ void main() {
     await database.exportVerifiedLocalSnapshot(missing);
     final missingConnection = sqlite3.open(missing.path);
     try {
-      missingConnection.execute('ALTER TABLE shop_products DROP COLUMN reorder_level');
+      missingConnection.execute(
+        'ALTER TABLE shop_products DROP COLUMN reorder_level',
+      );
     } finally {
       missingConnection.close();
     }

@@ -336,11 +336,13 @@ abstract final class ShopBackup {
                 [drafts.single['operation_id']],
               ).isNotEmpty);
       final hasReorderLevel =
-          schemaVersion >= 9 && tables.contains('shop_products') &&
+          schemaVersion >= 9 &&
+          tables.contains('shop_products') &&
           connection
               .select('PRAGMA table_info(shop_products)')
               .any((row) => row['name'] == 'reorder_level');
-      final invalidReorderLevel = hasReorderLevel &&
+      final invalidReorderLevel =
+          hasReorderLevel &&
           connection.select(
             'SELECT 1 FROM shop_products WHERE reorder_level IS NOT NULL '
             'AND (typeof(reorder_level) != ? OR reorder_level < 0 '

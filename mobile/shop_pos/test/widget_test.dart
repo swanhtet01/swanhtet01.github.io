@@ -479,12 +479,14 @@ void main() {
         expectedReorderLevel: 5,
         reorderLevel: null,
       );
-      await tester.pumpWidget(ShopApp(
-        database: database,
-        authClient: null,
-        apiBaseUrl: 'https://app.supermega.dev',
-        initialMyanmar: false,
-      ));
+      await tester.pumpWidget(
+        ShopApp(
+          database: database,
+          authClient: null,
+          apiBaseUrl: 'https://app.supermega.dev',
+          initialMyanmar: false,
+        ),
+      );
       await tester.pumpAndSettle();
       expect(find.text('Check stock'), findsOneWidget);
       expect(find.textContaining('Custom alert · 8'), findsOneWidget);
@@ -497,7 +499,9 @@ void main() {
     }
   });
 
-  testWidgets('stock alert setting works in English and Burmese', (tester) async {
+  testWidgets('stock alert setting works in English and Burmese', (
+    tester,
+  ) async {
     for (final myanmar in [false, true]) {
       final database = ShopDatabase(NativeDatabase.memory());
       try {
@@ -507,9 +511,11 @@ void main() {
           priceMmk: 12000,
           openingStock: 8,
         );
-        await tester.pumpWidget(MaterialApp(
-          home: StockScreen(database: database, myanmar: myanmar),
-        ));
+        await tester.pumpWidget(
+          MaterialApp(
+            home: StockScreen(database: database, myanmar: myanmar),
+          ),
+        );
         await tester.pumpAndSettle();
         await tester.tap(find.byKey(const ValueKey('stock-update-rice')));
         await tester.pumpAndSettle();
@@ -527,7 +533,9 @@ void main() {
           find.byKey(const ValueKey('reorder-level-input')),
           myanmar ? '၁၀' : '10',
         );
-        await tester.tap(find.text(myanmar ? 'သတိပေးချက်သိမ်းရန်' : 'Save alert'));
+        await tester.tap(
+          find.text(myanmar ? 'သတိပေးချက်သိမ်းရန်' : 'Save alert'),
+        );
         await tester.pumpAndSettle();
         expect((await database.readActiveProducts()).single.reorderLevel, 10);
         expect((await database.readActiveProducts()).single.onHand, 8);
@@ -538,9 +546,14 @@ void main() {
           find.byKey(const ValueKey('reorder-level-input')),
           '',
         );
-        await tester.tap(find.text(myanmar ? 'သတိပေးချက်သိမ်းရန်' : 'Save alert'));
+        await tester.tap(
+          find.text(myanmar ? 'သတိပေးချက်သိမ်းရန်' : 'Save alert'),
+        );
         await tester.pumpAndSettle();
-        expect((await database.readActiveProducts()).single.reorderLevel, isNull);
+        expect(
+          (await database.readActiveProducts()).single.reorderLevel,
+          isNull,
+        );
         expect(tester.takeException(), isNull);
       } finally {
         await tester.pumpWidget(const SizedBox.shrink());
