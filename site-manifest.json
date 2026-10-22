@@ -57,7 +57,7 @@
       "runtimeId": "commerce",
       "kind": "operating-product",
       "name": "Shop",
-      "publicAnchor": "/#shop",
+      "publicAnchor": "/shop/",
       "appRoute": "https://app.supermega.dev/shop/",
       "status": "release-candidate-local",
       "eyebrow": "Shop operations for Myanmar businesses",

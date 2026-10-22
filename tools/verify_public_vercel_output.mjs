@@ -261,7 +261,7 @@ for (const [route, page] of pages) {
     if (!page.html.includes(token)) fail('shared_brand_contract_missing', { route, token })
   }
   const footerHref = '/shop/'
-  const footerLabel = route === '/shop/' ? 'SuperMega Shop, back to top' : 'SuperMega, back to top'
+  const footerLabel = 'SuperMega Shop'
   const footerBrand = `<a class="brand" href="${footerHref}" aria-label="${footerLabel}"><span class="brand-mark" aria-hidden="true">`
   if (!page.html.includes(footerBrand)) fail('shared_footer_brand_missing', { route, footerHref })
   const expectedLogin = `<a href="${appOrigin}/login?product=shop">Login</a>`

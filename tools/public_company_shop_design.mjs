@@ -7,7 +7,6 @@ const designDirectory = resolve(dirname(fileURLToPath(import.meta.url)), 'public
 const readDesignSource = (filename) => readFileSync(resolve(designDirectory, filename), 'utf8');
 
 export const companyShopStyle = readDesignSource('company.css');
-export const companyMarkup = readDesignSource('company-home.html');
 export const shopMarkup = readDesignSource('shop-page.html');
 export const shopDemoScript = readDesignSource('shop-sample-demo.js');
 
@@ -38,11 +37,10 @@ export function companyShopHeaderHtml(route) {
   </div></header>`;
 }
 
-export function companyShopFooterHtml(route, year) {
-  const label = route === '/shop/' ? `${superMegaBrandIdentity.name} Shop` : superMegaBrandIdentity.name;
+export function companyShopFooterHtml(_route, year) {
   const home = '/shop/';
   return `<footer class="footer"><div class="wrap footer-row">
-    <a class="brand" href="${home}" aria-label="${label}, back to top"><span class="brand-mark" aria-hidden="true">${brandMarkHtml}</span><span class="brand-word">${superMegaBrandIdentity.name}</span></a>
+    <a class="brand" href="${home}" aria-label="${superMegaBrandIdentity.name} Shop"><span class="brand-mark" aria-hidden="true">${brandMarkHtml}</span><span class="brand-word">${superMegaBrandIdentity.name}</span></a>
     <nav class="footer-links" aria-label="Footer"><a href="/contact/">Contact</a><a href="/privacy/">Privacy</a><span>&copy; ${year} ${superMegaBrandIdentity.name}</span></nav>
   </div></footer>`;
 }
