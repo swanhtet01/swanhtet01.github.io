@@ -3767,7 +3767,6 @@ void main() {
       _usePhoneViewport(tester);
       final database = ShopDatabase(NativeDatabase.memory());
       try {
-        debugPrintSynchronously('STOCK_EDIT_STAGE:starting:$myanmar');
         await database.addProduct(
           id: 'apple',
           name: 'Red apple',
@@ -3775,34 +3774,25 @@ void main() {
           openingStock: 7,
           barcode: '111111',
         );
-        debugPrintSynchronously('STOCK_EDIT_STAGE:product-added:$myanmar');
-        final photoBytes =
-            await File('test/assets/grocery_photos/apple.png').readAsBytes();
-        debugPrintSynchronously('STOCK_EDIT_STAGE:photo-read:$myanmar');
         await database.saveProductThumbnail(
           'apple',
-          photoBytes,
+          File('test/assets/grocery_photos/apple.png').readAsBytesSync(),
         );
-        debugPrintSynchronously('STOCK_EDIT_STAGE:photo-saved:$myanmar');
         await tester.pumpWidget(
           MaterialApp(
             home: StockScreen(database: database, myanmar: myanmar),
           ),
         );
         await tester.pumpAndSettle();
-        debugPrintSynchronously('STOCK_EDIT_STAGE:screen-settled:$myanmar');
         expect(find.byKey(const ValueKey('stock-photo-apple')), findsOneWidget);
         await tester.tap(find.byKey(const ValueKey('stock-edit-apple')));
         await tester.pumpAndSettle();
-        debugPrintSynchronously('STOCK_EDIT_STAGE:dialog-open:$myanmar');
         expect(find.byKey(const ValueKey('stock-edit-name')), findsOneWidget);
         await tester.tap(find.text(myanmar ? 'မလုပ်တော့ပါ' : 'Cancel'));
         await tester.pumpAndSettle();
-        debugPrintSynchronously('STOCK_EDIT_STAGE:dialog-cancelled:$myanmar');
         expect((await database.readActiveProducts()).single.priceMmk, 2800);
         await tester.tap(find.byKey(const ValueKey('stock-edit-apple')));
         await tester.pumpAndSettle();
-        debugPrintSynchronously('STOCK_EDIT_STAGE:dialog-reopened:$myanmar');
         await tester.enterText(
           find.byKey(const ValueKey('stock-edit-name')),
           'Apple 1 pc',
@@ -3817,7 +3807,6 @@ void main() {
         );
         await tester.tap(find.byKey(const ValueKey('stock-edit-save')));
         await tester.pumpAndSettle();
-        debugPrintSynchronously('STOCK_EDIT_STAGE:edit-saved:$myanmar');
         final apple = (await database.readActiveProducts()).single;
         expect(apple.name, 'Apple 1 pc');
         expect(apple.priceMmk, 3200);
@@ -3848,7 +3837,7 @@ void main() {
       );
       await database.saveProductThumbnail(
         'apple',
-        await File('test/assets/grocery_photos/apple.png').readAsBytes(),
+        File('test/assets/grocery_photos/apple.png').readAsBytesSync(),
       );
       await tester.pumpWidget(
         MaterialApp(home: StockScreen(database: database, myanmar: true)),
@@ -3892,7 +3881,7 @@ void main() {
     );
     await database.saveProductThumbnail(
       'rice-phone',
-      await File('test/assets/grocery_photos/apple.png').readAsBytes(),
+      File('test/assets/grocery_photos/apple.png').readAsBytesSync(),
     );
     await tester.pumpWidget(
       ShopApp(
