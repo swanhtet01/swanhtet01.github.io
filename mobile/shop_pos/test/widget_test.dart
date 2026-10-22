@@ -2660,10 +2660,7 @@ void main() {
         ]) {
           final template = find.byKey(ValueKey('shop-business-template:$id'));
           await tester.scrollUntilVisible(template, 160);
-          expect(
-            template,
-            findsOneWidget,
-          );
+          expect(template, findsOneWidget);
         }
         expect(
           find.byWidgetPredicate((widget) => widget is DropdownButton<Object?>),
