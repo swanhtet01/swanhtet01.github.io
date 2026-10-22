@@ -1,73 +1,77 @@
 # >_ SuperMega
 
-SuperMega builds operating software for Myanmar businesses. The product portfolio is deliberately focused:
+SuperMega is building dependable operating software for Myanmar businesses.
+The active launch focus is **SuperMega Shop**, a native, offline-first point of
+sale and stock application for Android tablet, iPad, and Windows PC.
 
-- **Shop** — channel orders, catalogue, stock, fulfilment, payment status, close, and operating exceptions.
-- **Plant** — jobs, output, equipment observations, materials, quality, maintenance, and shift handoffs.
-- **Website** — a finite, reviewable business website and retained site artifact.
-- **Ecommerce** — a Shop-backed storefront and accountable customer-request handoff.
+Shop currently has a verified internal release candidate. It is not yet a
+signed public release, a production deployment, or a merchant-accepted product.
+See [`supergoal.md`](supergoal.md) for the objective and
+[`CURRENT.md`](CURRENT.md) for the exact candidate and open gates.
 
-`>_` is the operating signature: direct, evidence-led, and ready for action. AI assistance is shared infrastructure inside the four products, not a fifth product; a named person remains accountable for consequential actions.
+## Start here
 
-## Canonical surfaces
+- [`DOCUMENTATION-INDEX.md`](DOCUMENTATION-INDEX.md) — authority and navigation
+- [`AGENTS.md`](AGENTS.md) — repository working contract
+- [`SKILLS.md`](SKILLS.md) — recurring capability routes and handoffs
+- [`mobile/shop_pos/README.md`](mobile/shop_pos/README.md) — native Shop behavior
+  and developer setup
+- [`docs/SHOP-RELEASE-RUNBOOK.md`](docs/SHOP-RELEASE-RUNBOOK.md) — release gates
+- [`docs/FOUNDER-OPERATING-MODEL.md`](docs/FOUNDER-OPERATING-MODEL.md) — Swan and
+  Vivian coordination
 
-| Surface | Domain | Routes | Purpose |
-| --- | --- | --- | --- |
-| Public site | `supermega.dev` | `/`, `/contact/`, `/privacy/` | One product story, trust boundary, qualified contact intake, and privacy |
-| Product app | `app.supermega.dev` | `/`, `/shop/`, `/plant/`, `/website/`, `/ecommerce/`, `/work/`, `/settings/` | Four customer products plus internal HQ, setup, evidence, and controls |
+## Active repository areas
 
-Client-specific deployments, legacy demos, and old product names are not part of the current public or application authority.
+| Path | Purpose |
+| --- | --- |
+| `mobile/shop_pos/` | Flutter Shop app, Drift/SQLite data, platform builds, and tests |
+| `tools/public-assets/` and public build inputs | Honest public Shop/product evidence |
+| `tools/public_native_shop_gallery.mjs` | Native screenshot provenance contract |
+| `.github/workflows/shop-native-ci.yml` | Android, iPad/iOS, and Windows candidate checks |
+| `docs/` | Release, operating, acceptance, and durable product guidance |
 
-## Source authority
+The repository also retains a larger browser platform, older products, HQ
+experiments, and company research. They are historical or parked during this
+Shop launch cycle; their presence does not put them into release scope.
 
-- `DESIGN.md` — portable product-door, design-loop, review-rubric, and
-  rendered-evidence contract for agents and human reviewers; detailed design
-  history remains in `hq/strategy/DESIGN-PROGRAM.md`.
-- `CURRENT.md` — company, product, domain, context, and release authority.
-- `site-manifest.json` — canonical four-product registry, workflow templates, shared-capability boundary, versioning, and legacy redirects.
-- `showroom/src/core/CoreApp.tsx` — canonical application experience.
-- `api/app.py` — the only Vercel function entrypoint.
-- `supermega_runtime/runtime.py` — canonical FastAPI application runtime.
-- `supermega_runtime/trial_runtime.py` and `supermega_runtime/trial_store.py` — managed-trial identity, workspace, capability, state, event, and approval boundaries.
-- `supermega_runtime/cloud_runtime.py` — bounded hosted agent scheduler.
-- `SUPERMEGA_TRIAL_AND_AGENT_OPERATING_MODEL.md` — agent roles and managed-trial controls.
-- `SUPERMEGA_LAUNCH_AND_TRIAL_PLAYBOOK.md` — qualification, demo, onboarding, trial, KPI, and communications lifecycle.
+## Native Shop development
 
-## Local verification
+From `mobile/shop_pos/`:
 
-Requirements: Node.js 24 and Python 3.12.
-
-```powershell
-npm.cmd --prefix showroom ci
-python -m pip install -r requirements-test.txt
-python -m unittest discover -s tests -p 'test_*.py' -v
-npm.cmd run app:build:checked
-npm.cmd run public:prebuilt
-npm.cmd audit --omit=dev
-npm.cmd --prefix showroom audit --omit=dev
+```bash
+flutter pub get
+dart run build_runner build
+flutter analyze
+flutter test
 ```
 
-Run the product app locally:
+Read the nested [`mobile/shop_pos/AGENTS.md`](mobile/shop_pos/AGENTS.md) before
+changing native code. Exact-head native CI remains required for a release
+candidate. If Flutter is unavailable locally, report that limit rather than
+claiming a local result.
 
-```powershell
-npm.cmd run dev
+## Public Shop verification
+
+From the repository root:
+
+```bash
+npm run public:build
+npm run public:verify
 ```
 
-This starts the canonical FastAPI runtime and Vite together on loopback (`127.0.0.1:8788` and `127.0.0.1:5173`). The default command clears database, hosted-auth, model, and external-worker configuration, so managed writes remain disabled. Use the separately gated rehearsal workflow for any managed database testing.
+These checks validate source and public artifact contracts. They do not replace
+installed device, scanner, printer, merchant, signing, or production evidence.
 
 ## Release policy
 
-Production releases come only from reviewed `main` commits through:
+Use one integration lane and the gates in the Shop release runbook. Production
+deployment, live database/IAM changes, secrets, spending, customer contact,
+pricing commitments, and public launch require their named human decisions.
+Never commit credentials or private customer data.
 
-- `.github/workflows/supermega-public-release.yml`, the single coordinated release owner for `app.supermega.dev` / `megaos` and `supermega.dev` / `supermega-public`.
-- `.github/workflows/supermega-app-deploy.yml`, a non-deploying guard that reruns the shared runtime, RLS, and paired-release contracts when app paths change.
+The first complete Shop proof is:
 
-The coordinated workflow builds both immutable candidates, verifies matching commit, brand, context, and catalogue identity, promotes both, verifies production as a pair, and rolls both domains back if either verification fails. Direct local production deployment is blocked.
+> catalog → sale → stock → correction or refund → close → export → restart →
+> restore
 
-The public contact endpoint also fails closed unless its dedicated idempotency secret and at least one delivery channel are configured. Durable lead records include a SHA-256 payload fingerprint, so same-payload retries remain idempotent while changed cold-start replays conflict. The public release workflow verifies the active Vercel Firewall rule that limits contact POSTs to five requests per IP per ten minutes. The former Cloud Run deployment workflow is retired; Vercel is the sole production owner of both canonical domains.
-
-## Managed-trial boundary
-
-The deployed app is safe to use as an isolated browser-local demo. It is not a customer system of record until the historical schema v1 and additive v2 migration are rehearsed on non-production data and the dedicated non-`BYPASSRLS` login, high-entropy signed identity, named memberships, least-privilege capabilities, immutable audit, backup, restore, acceptance, and human approval gates pass.
-
-Follow `docs/supermega-enterprise-activation.md`. Managed writes default to disabled and fail closed.
+Passing CI is an important step toward that outcome, not the outcome itself.
