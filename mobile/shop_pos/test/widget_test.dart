@@ -575,46 +575,47 @@ void main() {
     }
   });
 
-  testWidgets('Stock shows only active low-stock thresholds on phone and tablet', (
-    tester,
-  ) async {
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    for (final (width, myanmar) in [(320.0, true), (820.0, false)]) {
-      tester.view.physicalSize = Size(width, 900);
-      final database = ShopDatabase(NativeDatabase.memory());
-      try {
-        await database.addProduct(
-          id: 'low',
-          name: 'Low item',
-          priceMmk: 3000,
-          openingStock: 3,
-        );
-        await database.addProduct(
-          id: 'healthy',
-          name: 'Healthy item',
-          priceMmk: 4000,
-          openingStock: 8,
-        );
-        await tester.pumpWidget(
-          MaterialApp(
-            home: StockScreen(database: database, myanmar: myanmar),
-          ),
-        );
-        await tester.pumpAndSettle();
-        expect(
-          find.text(myanmar ? '၅ ခုနှင့်အောက် သတိပေး' : 'Low at 5'),
-          findsOneWidget,
-        );
-        expect(tester.takeException(), isNull);
-      } finally {
-        await tester.pumpWidget(const SizedBox.shrink());
-        await tester.pump(const Duration(milliseconds: 1));
-        await database.close();
+  testWidgets(
+    'Stock shows only active low-stock thresholds on phone and tablet',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      for (final (width, myanmar) in [(320.0, true), (820.0, false)]) {
+        tester.view.physicalSize = Size(width, 900);
+        final database = ShopDatabase(NativeDatabase.memory());
+        try {
+          await database.addProduct(
+            id: 'low',
+            name: 'Low item',
+            priceMmk: 3000,
+            openingStock: 3,
+          );
+          await database.addProduct(
+            id: 'healthy',
+            name: 'Healthy item',
+            priceMmk: 4000,
+            openingStock: 8,
+          );
+          await tester.pumpWidget(
+            MaterialApp(
+              home: StockScreen(database: database, myanmar: myanmar),
+            ),
+          );
+          await tester.pumpAndSettle();
+          expect(
+            find.text(myanmar ? '၅ ခုနှင့်အောက် သတိပေး' : 'Low at 5'),
+            findsOneWidget,
+          );
+          expect(tester.takeException(), isNull);
+        } finally {
+          await tester.pumpWidget(const SizedBox.shrink());
+          await tester.pump(const Duration(milliseconds: 1));
+          await database.close();
+        }
       }
-    }
-  });
+    },
+  );
 
   testWidgets('unfinished sale opens from Today after app restart', (
     tester,

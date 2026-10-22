@@ -245,7 +245,8 @@ class _StockScreenState extends State<StockScreen> {
                                 final item = products[index];
                                 final threshold = item.reorderLevel;
                                 final lowAlertLevel =
-                                    threshold != null && item.onHand <= threshold
+                                    threshold != null &&
+                                        item.onHand <= threshold
                                     ? threshold
                                     : null;
                                 final hasCode =
@@ -732,7 +733,9 @@ class _StockChangeDialogState extends State<_StockChangeDialog> {
                 enabled: !_saving && !_savingAlert,
                 keyboardType: TextInputType.number,
                 inputFormatters: [
-                  FilteringTextInputFormatter.allow(RegExp('[0-9\u1040-\u1049]')),
+                  FilteringTextInputFormatter.allow(
+                    RegExp('[0-9\u1040-\u1049]'),
+                  ),
                 ],
                 decoration: InputDecoration(
                   labelText: shopCopy(
