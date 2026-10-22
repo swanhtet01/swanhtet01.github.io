@@ -33,7 +33,7 @@
           const disabled = stock === 0 || limitReached ? "disabled" : "";
           return `<button class="product-card" type="button" data-add="${product.id}" aria-label="Add ${product.name}, ${formatMMK(product.price)}, ${stockLabel}" ${disabled}>
             <span class="product-icon"><img src="${product.photo}" width="192" height="192" alt="" /></span>
-            <span class="product-copy"><span class="product-name">${product.name}${product.myanmar ? `<span class="myanmar" lang="my">${product.myanmar}</span>` : ""}</span>
+            <span class="product-copy"><span class="product-name">${product.name}</span>
             <span class="product-meta"><span class="product-price">${formatMMK(product.price)}</span><span class="product-stock">${stockLabel}</span></span></span>
           </button>`;
         }).join("");
