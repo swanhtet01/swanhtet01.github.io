@@ -54,7 +54,8 @@ for (const token of ["policy.profile === 'production-contract'", 'contact.accept
 }
 if (!previewVerifier.includes('deployment_function_surface_wrong')) failures.push('preview_function_inventory_not_verified')
 if (!previewVerifier.includes('const maxAttempts = 6') || !previewVerifier.includes('protected_preview_retry:')) failures.push('preview_propagation_retry_missing')
-for (const token of ['validatePreviewLinks(homepage, policy, manifest.customerProducts, linkOptions)',
+if (!previewVerifier.includes('public_preview_project_link_wrong') || !previewVerifier.includes('projectLink.projectId !== expectedProjectId')) failures.push('preview_project_link_guard_missing')
+for (const token of ["validatePreviewLinks(get('/shop/'), policy, manifest.customerProducts, linkOptions)",
   'validatePreviewLinks(html, policy, manifest.customerProducts,']) {
   requireToken(previewVerifier, token, 'preview_navigation_consumer_missing')
 }
