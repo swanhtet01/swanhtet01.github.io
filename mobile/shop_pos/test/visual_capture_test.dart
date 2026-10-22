@@ -185,6 +185,106 @@ void main() {
     ]);
   });
 
+  testWidgets('first product keeps required fields first and a scan visible', (
+    tester,
+  ) async {
+    for (final (width, language) in [
+      (320.0, 'en'),
+      (320.0, 'my'),
+      (820.0, 'en'),
+      (820.0, 'my'),
+    ]) {
+      tester.view.physicalSize = Size(width, width == 320 ? 800 : 1000);
+      tester.view.devicePixelRatio = 1;
+      tester.platformDispatcher.textScaleFactorTestValue = width == 320
+          ? 1.5
+          : 1.0;
+      final database = ShopDatabase(NativeDatabase.memory());
+      try {
+        await tester.pumpWidget(
+          RepaintBoundary(
+            key: _captureKey,
+            child: ShopApp(
+              initialCounter: true,
+              database: database,
+              authClient: null,
+              apiBaseUrl: 'https://example.invalid',
+              initialMyanmar: language == 'my',
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final firstProduct = find.text(
+          language == 'my' ? 'ပထမကုန်ပစ္စည်းထည့်ရန်' : 'Add first product',
+        );
+        await tester.ensureVisible(firstProduct);
+        await tester.tap(firstProduct);
+        await tester.pumpAndSettle();
+
+        final name = find.byKey(const ValueKey('shop-product-name'));
+        final price = find.byKey(const ValueKey('shop-product-price'));
+        final stock = find.byKey(const ValueKey('shop-product-stock'));
+        final barcode = find.byKey(const ValueKey('shop-product-barcode'));
+        expect(name, findsOneWidget);
+        expect(price, findsOneWidget);
+        expect(stock, findsOneWidget);
+        expect(barcode, findsOneWidget);
+        expect(
+          tester.getTopLeft(name).dy,
+          lessThan(tester.getTopLeft(price).dy),
+        );
+        expect(
+          tester.getTopLeft(price).dy,
+          lessThan(tester.getTopLeft(stock).dy),
+        );
+        expect(
+          tester.getTopLeft(stock).dy,
+          lessThan(tester.getTopLeft(barcode).dy),
+        );
+        expect(tester.takeException(), isNull);
+        if (_capture) {
+          await expectLater(
+            find.byKey(_captureKey),
+            matchesGoldenFile(
+              'goldens/shop_first_product_${width.toInt()}_$language.png',
+            ),
+          );
+        }
+
+        await tester.tap(
+          find.text(language == 'my' ? 'မလုပ်တော့ပါ' : 'Cancel'),
+        );
+        await tester.pumpAndSettle();
+        final scanInput = find.byType(TextField).first;
+        await tester.enterText(scanInput, '0012345678905');
+        await tester.testTextInput.receiveAction(TextInputAction.done);
+        await tester.pumpAndSettle();
+        expect(find.byType(AlertDialog), findsOneWidget);
+        expect(
+          tester.widget<TextFormField>(barcode).controller!.text,
+          '0012345678905',
+        );
+        expect(
+          tester.getTopLeft(name).dy,
+          lessThan(tester.getTopLeft(barcode).dy),
+        );
+        expect(
+          tester.getTopLeft(barcode).dy,
+          lessThan(tester.getTopLeft(price).dy),
+        );
+        expect(await database.countSales(), 0);
+        expect(tester.takeException(), isNull);
+      } finally {
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump(const Duration(milliseconds: 1));
+        await database.close();
+      }
+    }
+    tester.view.resetPhysicalSize();
+    tester.view.resetDevicePixelRatio();
+    tester.platformDispatcher.clearTextScaleFactorTestValue();
+  });
+
   for (final (width, height, language) in [
     (320.0, 800.0, 'en'),
     (390.0, 844.0, 'en'),
