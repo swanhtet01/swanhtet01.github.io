@@ -440,10 +440,7 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
       if (hasStockAlert)
         _metric(
           width: smallCardWidth,
-          label: _copy(
-            'Low-stock products',
-            'လက်ကျန်နည်းသော ကုန်ပစ္စည်းများ',
-          ),
+          label: _copy('Low-stock products', 'လက်ကျန်နည်းသော ကုန်ပစ္စည်းများ'),
           value: _number(snapshot.stockToCheck.length),
           icon: Icons.inventory_2_outlined,
         ),
@@ -787,9 +784,8 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
           const SizedBox(height: 4),
           Text(
             _money(snapshot.salesMmk),
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-              fontFeatures: const [FontFeature.tabularFigures()],
-            ),
+            style: Theme.of(context).textTheme.headlineSmall
+                ?.copyWith(fontFeatures: const [FontFeature.tabularFigures()]),
           ),
           const Divider(height: 22),
           Row(
@@ -858,7 +854,10 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(title, style: Theme.of(context).textTheme.titleSmall),
+                        Text(
+                          title,
+                          style: Theme.of(context).textTheme.titleSmall,
+                        ),
                         Text(
                           detail,
                           maxLines: 1,
