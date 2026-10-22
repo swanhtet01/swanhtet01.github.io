@@ -37,9 +37,13 @@ Future<ShopDatabase> _sampleShop({required bool myanmar}) async {
       openingStock: item['opening_stock'] as int,
     );
     final photoPath = '$_photoFixtureDir/${item['thumbnail']}';
-    await database.saveProductThumbnail(
-      id,
-      await File(photoPath).readAsBytes(),
+    // The always-on fixture test below checks the public validation/write API.
+    // Bulk synthetic renders load already-checked bytes without recomputing
+    // per-byte PNG CRCs for every language, width, and secondary screen.
+    await database.customStatement(
+      'INSERT INTO shop_product_images '
+      '(product_id, image_png, updated_at_millis) VALUES (?, ?, ?)',
+      [id, await File(photoPath).readAsBytes(), 0],
     );
   }
   await database.recordCashSale(
@@ -63,6 +67,8 @@ void main() {
     'grocery photo fixture is pinned and safe for the local catalog',
     () async {
       final items = await _groceryFixture();
+      final database = ShopDatabase(NativeDatabase.memory());
+      addTearDown(database.close);
       expect(items.length, 5);
       expect(items.map((item) => item['id']).toSet().length, 5);
       for (final item in items) {
@@ -100,6 +106,15 @@ void main() {
         expect(chunks.first, 'IHDR');
         expect(chunks.last, 'IEND');
         expect(chunks.every({'IHDR', 'IDAT', 'IEND'}.contains), isTrue);
+        final id = item['id'] as String;
+        await database.addProduct(
+          id: id,
+          name: item['name_en'] as String,
+          priceMmk: item['price_mmk'] as int,
+          openingStock: item['opening_stock'] as int,
+        );
+        await database.saveProductThumbnail(id, photo);
+        expect(await database.readProductThumbnail(id), orderedEquals(photo));
       }
     },
   );
