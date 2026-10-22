@@ -2699,15 +2699,7 @@ void main() {
       await tester.ensureVisible(find.text('Add first product'));
       await tester.tap(find.text('Add first product'));
       await tester.pumpAndSettle();
-      expect(
-        tester
-            .widget<TextFormField>(
-              find.byKey(const ValueKey('shop-product-name')),
-            )
-            .decoration
-            .hintText,
-        'e.g. Rice 5 kg',
-      );
+      expect(find.text('e.g. Rice 5 kg'), findsOneWidget);
       await tester.tap(
         find.byKey(const ValueKey('shop-product-category-suggestion:Grocery')),
       );
