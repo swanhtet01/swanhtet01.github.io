@@ -6,6 +6,51 @@ import 'shop_database.dart';
 
 typedef ShopTodayDestination = Future<void> Function(BuildContext context);
 
+/// One heading scale for the four daily tasks, in either app language.
+class ShopTaskPageHeader extends StatelessWidget {
+  const ShopTaskPageHeader({
+    required this.title,
+    required this.myanmar,
+    this.subtitle,
+    this.trailing,
+    super.key,
+  });
+
+  final String title;
+  final bool myanmar;
+  final String? subtitle;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: Theme.of(context).textTheme.headlineSmall
+                  ?.copyWith(fontSize: myanmar ? 23 : 26),
+            ),
+            if (subtitle != null) ...[
+              const SizedBox(height: 4),
+              Text(
+                subtitle!,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+      if (trailing != null) ...[const SizedBox(width: 12), trailing!],
+    ],
+  );
+}
+
 /// Keeps the same operator map visible on Today and Counter.
 class ShopTaskRail extends StatelessWidget {
   const ShopTaskRail({
@@ -73,32 +118,50 @@ class ShopTaskBottomBar extends StatelessWidget {
   final ValueChanged<int> onDestinationSelected;
 
   @override
-  Widget build(BuildContext context) => SafeArea(
-    top: false,
-    child: NavigationBar(
-      selectedIndex: selectedIndex,
-      onDestinationSelected: onDestinationSelected,
-      destinations: [
-        NavigationDestination(
-          icon: const Icon(Icons.home_outlined),
-          selectedIcon: const Icon(Icons.home),
-          label: shopCopy(myanmar, 'Today', 'ယနေ့'),
+  Widget build(BuildContext context) {
+    final compactLargeText =
+        MediaQuery.sizeOf(context).width < 360 &&
+        MediaQuery.textScalerOf(context).scale(1) > 1.2;
+    final navigationTheme = Theme.of(context).navigationBarTheme;
+    return NavigationBarTheme(
+      data: navigationTheme.copyWith(
+        labelTextStyle: compactLargeText
+            ? WidgetStateProperty.resolveWith<TextStyle?>(
+                (states) => navigationTheme.labelTextStyle
+                    ?.resolve(states)
+                    ?.copyWith(fontSize: 11.5),
+              )
+            : null,
+      ),
+      child: SafeArea(
+        top: false,
+        child: NavigationBar(
+          labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+          selectedIndex: selectedIndex,
+          onDestinationSelected: onDestinationSelected,
+          destinations: [
+            NavigationDestination(
+              icon: const Icon(Icons.home_outlined),
+              selectedIcon: const Icon(Icons.home),
+              label: shopCopy(myanmar, 'Today', 'ယနေ့'),
+            ),
+            NavigationDestination(
+              icon: const Icon(Icons.point_of_sale_outlined),
+              label: shopCopy(myanmar, 'Sell', 'ရောင်းရန်'),
+            ),
+            NavigationDestination(
+              icon: const Icon(Icons.receipt_long_outlined),
+              label: shopCopy(myanmar, 'Sales', 'အရောင်း'),
+            ),
+            NavigationDestination(
+              icon: const Icon(Icons.inventory_2_outlined),
+              label: shopCopy(myanmar, 'Stock', 'လက်ကျန်'),
+            ),
+          ],
         ),
-        NavigationDestination(
-          icon: const Icon(Icons.point_of_sale_outlined),
-          label: shopCopy(myanmar, 'Sell', 'ရောင်းရန်'),
-        ),
-        NavigationDestination(
-          icon: const Icon(Icons.receipt_long_outlined),
-          label: shopCopy(myanmar, 'Sales', 'အရောင်း'),
-        ),
-        NavigationDestination(
-          icon: const Icon(Icons.inventory_2_outlined),
-          label: shopCopy(myanmar, 'Stock', 'လက်ကျန်'),
-        ),
-      ],
-    ),
-  );
+      ),
+    );
+  }
 }
 
 /// A local operating view. It never presents a device sale as a synced order.
@@ -112,6 +175,7 @@ class ShopTodayScreen extends StatefulWidget {
     required this.onStock,
     required this.onSettings,
     this.refreshToken = 0,
+    this.embeddedTaskShell = false,
     super.key,
   });
 
@@ -123,6 +187,7 @@ class ShopTodayScreen extends StatefulWidget {
   final ShopTodayDestination onStock;
   final ShopTodayDestination onSettings;
   final int refreshToken;
+  final bool embeddedTaskShell;
 
   @override
   State<ShopTodayScreen> createState() => _ShopTodayScreenState();
@@ -133,7 +198,6 @@ class _TodaySnapshot {
     required this.salesMmk,
     required this.saleCount,
     required this.products,
-    required this.productPreview,
     required this.recentSales,
     required this.stockToCheck,
     required this.pendingWallet,
@@ -142,7 +206,6 @@ class _TodaySnapshot {
   final int salesMmk;
   final int saleCount;
   final int products;
-  final List<ShopProduct> productPreview;
   final List<ShopSaleReceipt> recentSales;
   final List<ShopProduct> stockToCheck;
   final PendingWalletCheckout? pendingWallet;
@@ -192,7 +255,7 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
         )
         .getSingle();
     final products = await widget.database.readActiveProducts();
-    final productPreview = products.toList()
+    final stockToCheck = products.where((item) => item.onHand <= 5).toList()
       ..sort((a, b) {
         final stockOrder = a.onHand.compareTo(b.onHand);
         return stockOrder != 0 ? stockOrder : a.name.compareTo(b.name);
@@ -203,10 +266,9 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
       salesMmk: saleTotals.read<int>('sales_mmk'),
       saleCount: saleTotals.read<int>('sale_count'),
       products: products.length,
-      productPreview: productPreview.take(4).toList(),
       recentSales: recentSales,
       // There is no configured reorder point yet. Name the exact rule in UI.
-      stockToCheck: products.where((item) => item.onHand <= 5).toList(),
+      stockToCheck: stockToCheck,
       pendingWallet: pendingWallet,
     );
   }
@@ -236,25 +298,27 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
   @override
   Widget build(BuildContext context) {
     final width = MediaQuery.sizeOf(context).width;
-    final compact = width < 700;
+    final compact = width < 1100;
     final desktop = width >= 1100;
     return Scaffold(
-      appBar: AppBar(
-        title: Text(_copy('SuperMega Shop', 'SuperMega ဆိုင်')),
-        actions: compact
-            ? [
-                IconButton(
-                  tooltip: _copy('Settings', 'ဆက်တင်များ'),
-                  onPressed: () => _open(widget.onSettings),
-                  icon: const Icon(Icons.settings_outlined),
-                ),
-                const SizedBox(width: 8),
-              ]
-            : null,
-      ),
+      appBar: widget.embeddedTaskShell
+          ? null
+          : AppBar(
+              title: Text(_copy('SuperMega Shop', 'SuperMega ဆိုင်')),
+              actions: compact
+                  ? [
+                      IconButton(
+                        tooltip: _copy('Settings', 'ဆက်တင်များ'),
+                        onPressed: () => _open(widget.onSettings),
+                        icon: const Icon(Icons.settings_outlined),
+                      ),
+                      const SizedBox(width: 8),
+                    ]
+                  : null,
+            ),
       body: Row(
         children: [
-          if (!compact) ...[
+          if (!compact && !widget.embeddedTaskShell) ...[
             ShopTaskRail(
               myanmar: widget.myanmar,
               extended: desktop,
@@ -312,7 +376,7 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
           ),
         ],
       ),
-      bottomNavigationBar: compact
+      bottomNavigationBar: compact && !widget.embeddedTaskShell
           ? ShopTaskBottomBar(
               myanmar: widget.myanmar,
               selectedIndex: 0,
@@ -333,16 +397,18 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
   }) {
     final inset = compact ? 16.0 : 24.0;
     final contentWidth = (width - inset * 2).clamp(0.0, 1180.0).toDouble();
+    final phoneLayout = compact && contentWidth < 600;
     final threeAcross = contentWidth >= 900;
-    final smallCardWidth = threeAcross
+    final hasStockAlert = snapshot.stockToCheck.isNotEmpty;
+    final smallCardWidth = threeAcross && hasStockAlert
         ? (contentWidth - 24) / 3
         : contentWidth >= 600
         ? (contentWidth - 12) / 2
         : contentWidth;
-    final salesWidth = compact ? contentWidth : smallCardWidth;
+    final salesWidth = phoneLayout ? contentWidth : smallCardWidth;
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
-      padding: EdgeInsets.fromLTRB(inset, compact ? 18 : 30, inset, 32),
+      padding: EdgeInsets.fromLTRB(inset, 16, inset, 32),
       children: [
         Center(
           child: ConstrainedBox(
@@ -350,7 +416,7 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                if (compact) ...[
+                if (phoneLayout) ...[
                   _heading(showNewSale: false),
                   if (snapshot.products > 0) ...[
                     const SizedBox(height: 16),
@@ -377,7 +443,7 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
                         icon: Icons.payments_outlined,
                         emphasized: true,
                       ),
-                      if (compact)
+                      if (phoneLayout)
                         _compactStats(snapshot, width: contentWidth)
                       else ...[
                         _metric(
@@ -386,15 +452,16 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
                           value: _number(snapshot.saleCount),
                           icon: Icons.receipt_long_outlined,
                         ),
-                        _metric(
-                          width: smallCardWidth,
-                          label: _copy(
-                            'Low-stock products',
-                            'လက်ကျန်နည်းသော ကုန်ပစ္စည်းများ',
+                        if (hasStockAlert)
+                          _metric(
+                            width: smallCardWidth,
+                            label: _copy(
+                              'Low-stock products',
+                              'လက်ကျန်နည်းသော ကုန်ပစ္စည်းများ',
+                            ),
+                            value: _number(snapshot.stockToCheck.length),
+                            icon: Icons.inventory_2_outlined,
                           ),
-                          value: _number(snapshot.stockToCheck.length),
-                          icon: Icons.inventory_2_outlined,
-                        ),
                       ],
                     ],
                   ),
@@ -449,24 +516,9 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
                       onTap: () => _openFirstProduct(),
                     ),
                 ],
-                if (snapshot.products > 0) ...[
+                if (snapshot.recentSales.isNotEmpty) ...[
                   const SizedBox(height: 24),
-                  if (contentWidth >= 760 && snapshot.recentSales.isNotEmpty)
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(child: _productsPreview(snapshot)),
-                        const SizedBox(width: 12),
-                        Expanded(child: _salesPreview(snapshot)),
-                      ],
-                    )
-                  else ...[
-                    _productsPreview(snapshot),
-                    if (snapshot.recentSales.isNotEmpty) ...[
-                      const SizedBox(height: 12),
-                      _salesPreview(snapshot),
-                    ],
-                  ],
+                  _salesPreview(snapshot),
                 ],
               ],
             ),
@@ -476,70 +528,18 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
     );
   }
 
-  Widget _heading({required bool showNewSale}) => Row(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Expanded(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              _copy('Today', 'ယနေ့'),
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
-            const SizedBox(height: 4),
-            Text(
-              MaterialLocalizations.of(context)
-                  .formatMediumDate(DateTime.now()),
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
-      ),
-      if (showNewSale)
-        FilledButton.icon(
-          onPressed: () => _openSale(),
-          icon: const Icon(Icons.add),
-          label: Text(_copy('New sale', 'အရောင်းအသစ်')),
-        ),
-    ],
-  );
-
-  Widget _productsPreview(_TodaySnapshot snapshot) => _previewPanel(
-    title: _copy('Lowest stock', 'လက်ကျန်အနည်းဆုံး'),
-    action: _copy('View stock', 'လက်ကျန်ကြည့်ရန်'),
-    onOpen: () => _open(widget.onStock),
-    rows: [
-      for (final product in snapshot.productPreview)
-        ListTile(
-          contentPadding: const EdgeInsets.symmetric(vertical: 6),
-          title: Text(
-            product.name,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.bodyLarge
-                ?.copyWith(fontWeight: FontWeight.w600),
-          ),
-          subtitle: Text(
-            _copy(
-              '${_number(product.onHand)} in stock',
-              'လက်ကျန် ${_number(product.onHand)} ခု',
-            ),
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: product.onHand <= 5
-                  ? Theme.of(context).colorScheme.error
-                  : Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-          ),
-          trailing: Text(
-            _money(product.priceMmk),
-            style: Theme.of(context).textTheme.labelLarge
-                ?.copyWith(fontFeatures: const [FontFeature.tabularFigures()]),
-          ),
-        ),
-    ],
+  Widget _heading({required bool showNewSale}) => ShopTaskPageHeader(
+    title: _copy('Today', 'ယနေ့'),
+    myanmar: widget.myanmar,
+    subtitle: MaterialLocalizations.of(context)
+        .formatMediumDate(DateTime.now()),
+    trailing: showNewSale
+        ? FilledButton.icon(
+            onPressed: () => _openSale(),
+            icon: const Icon(Icons.add),
+            label: Text(_copy('New sale', 'အရောင်းအသစ်')),
+          )
+        : null,
   );
 
   Widget _salesPreview(_TodaySnapshot snapshot) => _previewPanel(
@@ -673,7 +673,12 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
         child: Card(
           child: Padding(
             padding: const EdgeInsets.all(18),
-            child: width < 330
+            child: snapshot.stockToCheck.isEmpty
+                ? _compactStatRow(
+                    _copy('Completed sales', 'ပြီးစီးသောအရောင်း'),
+                    _number(snapshot.saleCount),
+                  )
+                : width < 330
                 ? Column(
                     children: [
                       _compactStatRow(

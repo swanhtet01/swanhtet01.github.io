@@ -107,7 +107,7 @@ class _MenuImportScreenState extends State<MenuImportScreen> {
         () => _message = shopCopy(
           widget.myanmar,
           'Cloud sign-in is not configured. Local setup remains available.',
-          'Cloud sign-in မသတ်မှတ်ရသေးပါ။ စက်တွင်းပြင်ဆင်မှုကို ဆက်လက်အသုံးပြုနိုင်သည်။',
+          'အွန်လိုင်းအကောင့် ဝင်ရောက်မှုကို မသတ်မှတ်ရသေးပါ။ စက်တွင်းပြင်ဆင်မှုကို ဆက်လက်အသုံးပြုနိုင်သည်။',
         ),
       );
       return false;
@@ -129,7 +129,7 @@ class _MenuImportScreenState extends State<MenuImportScreen> {
         () => _message = shopCopy(
           widget.myanmar,
           'Choose cloud consent before sending this menu photo.',
-          'မီနူးဓာတ်ပုံပေးပို့ရန် Cloud သဘောတူညီချက်ကို ရွေးပါ။',
+          'မီနူးဓာတ်ပုံပေးပို့ရန် အွန်လိုင်းဖတ်ရှုခွင့်ကို သဘောတူပါ။',
         ),
       );
       return;
@@ -210,7 +210,7 @@ class _MenuImportScreenState extends State<MenuImportScreen> {
       'menu_import_not_enabled' => shopCopy(
         myanmar,
         'AI menu import is not enabled for this account yet.',
-        'ဤအကောင့်တွင် AI မီနူးတင်သွင်းမှုကို မဖွင့်ရသေးပါ။',
+        'ဤအကောင့်တွင် ဉာဏ်ရည်တုဖြင့် မီနူးတင်သွင်းမှုကို မဖွင့်ရသေးပါ။',
       ),
       'menu_import_rate_limited' => shopCopy(
         myanmar,
@@ -220,12 +220,12 @@ class _MenuImportScreenState extends State<MenuImportScreen> {
       'photo_size_invalid' || 'unsupported_or_oversized_image' => shopCopy(
         myanmar,
         'Use a clear photo under 2.4 MB.',
-        '2.4 MB အောက်ရှိ ရှင်းလင်းသောဓာတ်ပုံကို အသုံးပြုပါ။',
+        '၂.၄ မီဂါဘိုက်အောက်ရှိ ရှင်းလင်းသောဓာတ်ပုံကို အသုံးပြုပါ။',
       ),
       'consent_required' => shopCopy(
         myanmar,
         'Choose cloud consent before sending the photo.',
-        'ဓာတ်ပုံမပေးပို့မီ Cloud သဘောတူညီချက်ကို ရွေးပါ။',
+        'ဓာတ်ပုံမပေးပို့မီ အွန်လိုင်းဖတ်ရှုခွင့်ကို သဘောတူပါ။',
       ),
       _ => shopCopy(
         myanmar,
@@ -320,7 +320,7 @@ class _MenuImportScreenState extends State<MenuImportScreen> {
                     shopCopy(
                       myanmar,
                       'The photo is sent to SuperMega and OpenAI only after you agree and tap Read menu. It is not kept in the app database.',
-                      'သဘောတူပြီး မီနူးဖတ်ရန်ကို နှိပ်မှသာ ဓာတ်ပုံကို SuperMega နှင့် OpenAI သို့ ပေးပို့မည်။ App database တွင် မသိမ်းပါ။',
+                      'သဘောတူပြီး မီနူးဖတ်ရန်ကို နှိပ်မှသာ ဓာတ်ပုံကို SuperMega နှင့် OpenAI သို့ ပေးပို့မည်။ အက်ပ်ဒေတာဘေ့စ်တွင် မသိမ်းပါ။',
                     ),
                   ),
                   const SizedBox(height: 14),
@@ -372,7 +372,7 @@ class _MenuImportScreenState extends State<MenuImportScreen> {
                       shopCopy(
                         myanmar,
                         'I agree to send this photo to cloud AI for reading.',
-                        'ဖတ်ရှုရန် ဤဓာတ်ပုံကို Cloud AI သို့ပေးပို့ရန် သဘောတူပါသည်။',
+                        'ဖတ်ရှုရန် ဤဓာတ်ပုံကို အွန်လိုင်း ဉာဏ်ရည်တုစနစ်သို့ ပေးပို့ရန် သဘောတူပါသည်။',
                       ),
                     ),
                     controlAffinity: ListTileControlAffinity.leading,
@@ -523,8 +523,8 @@ class _CandidateCard extends StatelessWidget {
             'အမည်',
             'အမျိုးအစား',
             'ဖော်ပြချက်',
-            'ဈေးနှုန်း MMK',
-            'SKU',
+            'ဈေးနှုန်း (ကျပ်)',
+            'ကုန်ပစ္စည်းကုဒ်',
             'ဘားကုဒ်',
             'စတင်လက်ကျန်',
           ]
@@ -554,7 +554,7 @@ class _CandidateCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              (index + 1).toString(),
+              shopNumber(index + 1, myanmar: myanmar),
               style: Theme.of(context).textTheme.labelLarge,
             ),
             const SizedBox(height: 8),
@@ -626,7 +626,7 @@ class _EmailCodeSignInScreenState extends State<EmailCodeSignInScreen> {
           _message = shopCopy(
             widget.myanmar,
             'Check your email for the sign-in code.',
-            'ဝင်ရောက်ရန် code ကို အီးမေးလ်စစ်ဆေးပါ။',
+            'ဝင်ရောက်ရန်ကုဒ်ကို အီးမေးလ်တွင် စစ်ဆေးပါ။',
           );
         });
       }
@@ -636,7 +636,7 @@ class _EmailCodeSignInScreenState extends State<EmailCodeSignInScreen> {
           () => _message = shopCopy(
             widget.myanmar,
             'Could not send a code. Check the email and try again.',
-            'Code ပို့မရပါ။ အီးမေးလ်စစ်ပြီး ထပ်ကြိုးစားပါ။',
+            'ကုဒ်မပို့နိုင်ပါ။ အီးမေးလ်ကို စစ်ပြီး ထပ်ကြိုးစားပါ။',
           ),
         );
       }
@@ -666,7 +666,7 @@ class _EmailCodeSignInScreenState extends State<EmailCodeSignInScreen> {
           () => _message = shopCopy(
             widget.myanmar,
             'That code did not work. Request a new one and try again.',
-            'Code မမှန်ပါ။ အသစ်တောင်းပြီး ထပ်ကြိုးစားပါ။',
+            'ကုဒ်မမှန်ပါ။ အသစ်တောင်းပြီး ထပ်ကြိုးစားပါ။',
           ),
         );
       }
@@ -707,7 +707,7 @@ class _EmailCodeSignInScreenState extends State<EmailCodeSignInScreen> {
               controller: _code,
               keyboardType: TextInputType.number,
               decoration: InputDecoration(
-                labelText: shopCopy(myanmar, 'Email code', 'အီးမေးလ် code'),
+                labelText: shopCopy(myanmar, 'Email code', 'အီးမေးလ်ကုဒ်'),
               ),
             ),
           ],
@@ -724,7 +724,7 @@ class _EmailCodeSignInScreenState extends State<EmailCodeSignInScreen> {
                   : shopCopy(
                       myanmar,
                       _sent ? 'Verify code' : 'Email me a code',
-                      _sent ? 'Code အတည်ပြုရန်' : 'Code ပို့ရန်',
+                      _sent ? 'ကုဒ်အတည်ပြုရန်' : 'ကုဒ်ပို့ရန်',
                     ),
             ),
           ),
@@ -732,7 +732,7 @@ class _EmailCodeSignInScreenState extends State<EmailCodeSignInScreen> {
             TextButton(
               onPressed: _busy ? null : _sendCode,
               child: Text(
-                shopCopy(myanmar, 'Send another code', 'Code ထပ်ပို့ရန်'),
+                shopCopy(myanmar, 'Send another code', 'ကုဒ်ထပ်ပို့ရန်'),
               ),
             ),
         ],

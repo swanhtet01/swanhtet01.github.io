@@ -38,6 +38,7 @@ dependencies:
   drift: 2.35.2
   drift_flutter: 0.3.1
   path_provider: 2.1.6
+  file_saver: 0.7.0
   cryptography: 2.9.0
   sqlite3: 3.5.2
   network_info_plus: 8.2.2
@@ -87,6 +88,7 @@ flutter:
   assets:
     - assets/fonts/Inter/OFL.txt
     - assets/fonts/NotoSansMyanmar/OFL.txt
+    - assets/fonts/NotoSansMyanmarUI/OFL.txt
 
   # Bundled so the counter stays legible in English and Myanmar while offline.
   fonts:
@@ -96,6 +98,14 @@ flutter:
     - family: NotoSansMyanmar
       fonts:
         - asset: assets/fonts/NotoSansMyanmar/NotoSansMyanmar-Variable.ttf
+    - family: NotoSansMyanmarUI
+      fonts:
+        - asset: assets/fonts/NotoSansMyanmarUI/NotoSansMyanmarUI-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/NotoSansMyanmarUI/NotoSansMyanmarUI-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/NotoSansMyanmarUI/NotoSansMyanmarUI-Bold.ttf
+          weight: 700
 
   # To add assets to your application, add an assets section, like this:
   # assets:

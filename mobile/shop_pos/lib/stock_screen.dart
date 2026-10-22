@@ -6,6 +6,7 @@ import 'package:uuid/uuid.dart';
 
 import 'shop_copy.dart';
 import 'shop_database.dart';
+import 'shop_today_screen.dart';
 
 int? parseStockQuantity(String? value) {
   final input = value?.trim() ?? '';
@@ -22,7 +23,7 @@ int? parseStockQuantity(String? value) {
 String _stockProductReference(ShopProduct product, bool myanmar) {
   final parts = <String>[];
   if (product.sku case final String sku when sku.trim().isNotEmpty) {
-    parts.add('SKU ${sku.trim()}');
+    parts.add('${shopCopy(myanmar, 'SKU', 'ကုန်ပစ္စည်းကုဒ်')} ${sku.trim()}');
   }
   if (product.barcode case final String barcode
       when barcode.trim().isNotEmpty) {
@@ -33,10 +34,16 @@ String _stockProductReference(ShopProduct product, bool myanmar) {
 }
 
 class StockScreen extends StatefulWidget {
-  const StockScreen({required this.database, required this.myanmar, super.key});
+  const StockScreen({
+    required this.database,
+    required this.myanmar,
+    this.embeddedTaskShell = false,
+    super.key,
+  });
 
   final ShopDatabase database;
   final bool myanmar;
+  final bool embeddedTaskShell;
 
   @override
   State<StockScreen> createState() => _StockScreenState();
@@ -89,7 +96,9 @@ class _StockScreenState extends State<StockScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: Text(shopCopy(widget.myanmar, 'Stock', 'လက်ကျန်'))),
+    appBar: widget.embeddedTaskShell
+        ? null
+        : AppBar(title: Text(shopCopy(widget.myanmar, 'Stock', 'လက်ကျန်'))),
     body: SafeArea(
       child: StreamBuilder<List<ShopProduct>>(
         stream: _products,
@@ -109,14 +118,22 @@ class _StockScreenState extends State<StockScreen> {
             return const Center(child: CircularProgressIndicator());
           }
           final query = _search.text.trim().toLowerCase();
-          final products = snapshot.data!
-              .where(
-                (item) =>
-                    query.isEmpty ||
-                    item.name.toLowerCase().contains(query) ||
-                    (item.barcode?.toLowerCase().contains(query) ?? false),
-              )
-              .toList();
+          final products =
+              snapshot.data!
+                  .where(
+                    (item) =>
+                        query.isEmpty ||
+                        item.name.toLowerCase().contains(query) ||
+                        (item.barcode?.toLowerCase().contains(query) ?? false),
+                  )
+                  .toList()
+                ..sort((left, right) {
+                  final stockOrder = left.onHand.compareTo(right.onHand);
+                  if (stockOrder != 0) return stockOrder;
+                  return left.name.toLowerCase().compareTo(
+                    right.name.toLowerCase(),
+                  );
+                });
           final seenNames = <String>{};
           final duplicateNames = <String>{};
           for (final product in snapshot.data!) {
@@ -132,6 +149,13 @@ class _StockScreenState extends State<StockScreen> {
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   children: [
+                    if (widget.embeddedTaskShell) ...[
+                      ShopTaskPageHeader(
+                        title: shopCopy(widget.myanmar, 'Stock', 'လက်ကျန်'),
+                        myanmar: widget.myanmar,
+                      ),
+                      const SizedBox(height: 12),
+                    ],
                     if (wide) ...[
                       Align(
                         alignment: AlignmentDirectional.centerStart,
@@ -145,7 +169,12 @@ class _StockScreenState extends State<StockScreen> {
                                 ? 'ကုန်ပစ္စည်း $count မျိုး'
                                 : 'ကိုက်ညီမှု $count ခု',
                           ),
-                          style: Theme.of(context).textTheme.titleLarge,
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant,
+                              ),
                         ),
                       ),
                       const SizedBox(height: 16),
@@ -269,12 +298,13 @@ class _StockScreenState extends State<StockScreen> {
                                       ? Theme.of(context).textTheme.titleMedium
                                       : null,
                                 );
+                                Future<void> openStockChange() => _changeStock(
+                                  item,
+                                  showReference: showReference,
+                                );
                                 final update = OutlinedButton(
                                   key: ValueKey('stock-update-${item.id}'),
-                                  onPressed: () => _changeStock(
-                                    item,
-                                    showReference: showReference,
-                                  ),
+                                  onPressed: openStockChange,
                                   child: Text(
                                     shopCopy(
                                       widget.myanmar,
@@ -283,6 +313,23 @@ class _StockScreenState extends State<StockScreen> {
                                     ),
                                   ),
                                 );
+                                final stockActionLabel = [
+                                  shopCopy(
+                                    widget.myanmar,
+                                    'Adjust stock for ${item.name}',
+                                    '${item.name} ၏ လက်ကျန် ပြင်ရန်',
+                                  ),
+                                  shopCopy(
+                                    widget.myanmar,
+                                    '${item.onHand} in stock',
+                                    '${shopNumber(item.onHand, myanmar: true)} ခု လက်ကျန်',
+                                  ),
+                                  if (showReference)
+                                    _stockProductReference(
+                                      item,
+                                      widget.myanmar,
+                                    ),
+                                ].join('. ');
                                 if (wide) {
                                   return ColoredBox(
                                     color: colors.surface,
@@ -302,27 +349,58 @@ class _StockScreenState extends State<StockScreen> {
                                   );
                                 }
                                 return Card(
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 8,
-                                    ),
-                                    child: compact
-                                        ? Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.stretch,
-                                            children: [
-                                              details,
-                                              const SizedBox(height: 8),
-                                              Row(
-                                                children: [
-                                                  Expanded(child: onHand),
-                                                  update,
-                                                ],
+                                  clipBehavior: Clip.antiAlias,
+                                  child: compact
+                                      ? Semantics(
+                                          button: true,
+                                          label: stockActionLabel,
+                                          onTap: openStockChange,
+                                          child: ExcludeSemantics(
+                                            child: InkWell(
+                                              key: ValueKey(
+                                                'stock-row-${item.id}',
                                               ),
-                                            ],
-                                          )
-                                        : Row(
+                                              onTap: openStockChange,
+                                              child: Padding(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 12,
+                                                      vertical: 12,
+                                                    ),
+                                                child: Row(
+                                                  children: [
+                                                    Expanded(
+                                                      child: Column(
+                                                        crossAxisAlignment:
+                                                            CrossAxisAlignment
+                                                                .start,
+                                                        children: [
+                                                          details,
+                                                          const SizedBox(
+                                                            height: 4,
+                                                          ),
+                                                          onHand,
+                                                        ],
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 8),
+                                                    Icon(
+                                                      Icons.chevron_right,
+                                                      color: colors
+                                                          .onSurfaceVariant,
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        )
+                                      : Padding(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                            vertical: 8,
+                                          ),
+                                          child: Row(
                                             children: [
                                               Expanded(
                                                 child: Column(
@@ -335,7 +413,7 @@ class _StockScreenState extends State<StockScreen> {
                                               update,
                                             ],
                                           ),
-                                  ),
+                                        ),
                                 );
                               },
                             ),
@@ -436,7 +514,7 @@ class _StockChangeDialogState extends State<_StockChangeDialog> {
               shopCopy(
                 widget.myanmar,
                 '${widget.product.onHand} currently in stock',
-                'လက်ရှိ ${widget.product.onHand} ခု လက်ကျန်',
+                'လက်ရှိ ${shopNumber(widget.product.onHand, myanmar: true)} ခု လက်ကျန်',
               ),
             ),
             const SizedBox(height: 16),

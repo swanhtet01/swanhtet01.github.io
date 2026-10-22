@@ -12,18 +12,25 @@ import 'package:supermega_shop/shop_database.dart';
 final _capture = Platform.environment['SHOP_VISUAL_CAPTURE'] == '1';
 const _captureKey = ValueKey('native-shop-visual-capture');
 
-Future<ShopDatabase> _sampleShop() async {
+Future<ShopDatabase> _sampleShop({required bool myanmar}) async {
   final database = ShopDatabase(NativeDatabase.memory());
-  for (final (id, name, price, stock) in [
-    ('mama', 'MAMA Chicken Instant Noodles', 2950, 8),
-    ('kaung', 'KAUNG 90 Days Rice', 12450, 34),
-    ('alpine', 'ALPINE Drinking Water', 5700, 21),
-    ('baydar', 'BAYDAR Laundry Detergent', 5900, 13),
-    ('zess', 'ZESS Sugar Crackers', 8000, 14),
+  // Display copy belongs to this synthetic fixture, not merchant catalog data.
+  for (final (id, englishName, myanmarName, price, stock) in [
+    (
+      'mama',
+      'MAMA Chicken Instant Noodles',
+      'MAMA ကြက်သား အမြန်ခေါက်ဆွဲ',
+      2950,
+      8,
+    ),
+    ('kaung', 'KAUNG 90 Days Rice', 'KAUNG ရက် ၉၀ ဆန်', 12450, 34),
+    ('alpine', 'ALPINE Drinking Water', 'ALPINE သောက်ရေသန့်', 5700, 21),
+    ('baydar', 'BAYDAR Laundry Detergent', 'BAYDAR အဝတ်လျှော်ဆပ်ပြာ', 5900, 13),
+    ('zess', 'ZESS Sugar Crackers', 'ZESS သကြား ကရက်ကာ', 8000, 14),
   ]) {
     await database.addProduct(
       id: id,
-      name: name,
+      name: myanmar ? myanmarName : englishName,
       priceMmk: price,
       openingStock: stock,
     );
@@ -61,7 +68,28 @@ void main() {
           'assets/fonts/NotoSansMyanmar/NotoSansMyanmar-Variable.ttf',
         ),
       );
-    await Future.wait([materialIcons.load(), inter.load(), myanmar.load()]);
+    final myanmarUi = FontLoader('NotoSansMyanmarUI')
+      ..addFont(
+        rootBundle.load(
+          'assets/fonts/NotoSansMyanmarUI/NotoSansMyanmarUI-Regular.ttf',
+        ),
+      )
+      ..addFont(
+        rootBundle.load(
+          'assets/fonts/NotoSansMyanmarUI/NotoSansMyanmarUI-SemiBold.ttf',
+        ),
+      )
+      ..addFont(
+        rootBundle.load(
+          'assets/fonts/NotoSansMyanmarUI/NotoSansMyanmarUI-Bold.ttf',
+        ),
+      );
+    await Future.wait([
+      materialIcons.load(),
+      inter.load(),
+      myanmar.load(),
+      myanmarUi.load(),
+    ]);
   });
 
   for (final (width, height, language) in [
@@ -84,7 +112,7 @@ void main() {
         addTearDown(tester.view.resetPhysicalSize);
         addTearDown(tester.view.resetDevicePixelRatio);
         addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
-        final database = await _sampleShop();
+        final database = await _sampleShop(myanmar: language == 'my');
         try {
           await tester.pumpWidget(
             RepaintBoundary(
@@ -111,7 +139,19 @@ void main() {
             (Icons.inventory_2_outlined, 'stock'),
             (Icons.settings_outlined, 'settings'),
           ]) {
-            await tester.tap(find.byIcon(icon).first);
+            final Finder navigation;
+            if (width >= 1100) {
+              navigation = find.byType(NavigationRail);
+            } else if (icon == Icons.settings_outlined) {
+              navigation = find.byType(AppBar);
+            } else {
+              navigation = find.byType(NavigationBar);
+            }
+            final destination = find.descendant(
+              of: navigation,
+              matching: find.byIcon(icon),
+            );
+            await tester.tap(destination.first);
             await tester.pumpAndSettle();
             expect(tester.takeException(), isNull);
             await expectLater(
@@ -126,7 +166,17 @@ void main() {
             await tester.pumpAndSettle();
           }
 
-          await tester.tap(find.byIcon(Icons.point_of_sale_outlined).first);
+          final Finder saleNavigation;
+          if (width >= 1100) {
+            saleNavigation = find.byType(NavigationRail);
+          } else {
+            saleNavigation = find.byType(NavigationBar);
+          }
+          final saleDestination = find.descendant(
+            of: saleNavigation,
+            matching: find.byIcon(Icons.point_of_sale_outlined),
+          );
+          await tester.tap(saleDestination.first);
           await tester.pumpAndSettle();
           expect(tester.takeException(), isNull);
           await expectLater(
@@ -142,6 +192,19 @@ void main() {
           await tester.ensureVisible(product);
           await tester.tap(product);
           await tester.pumpAndSettle();
+          // A realistic tablet/desktop basket exposes line spacing and the
+          // checkout hierarchy better than a single-item fixture.
+          if (width >= 820) {
+            final extraProducts = language == 'my'
+                ? ['BAYDAR အဝတ်လျှော်ဆပ်ပြာ', 'MAMA ကြက်သား အမြန်ခေါက်ဆွဲ']
+                : ['BAYDAR Laundry Detergent', 'MAMA Chicken Instant Noodles'];
+            for (final name in extraProducts) {
+              final nextProduct = find.text(name).first;
+              await tester.ensureVisible(nextProduct);
+              await tester.tap(nextProduct);
+              await tester.pumpAndSettle();
+            }
+          }
           final hasPersistentBasket = find
               .byKey(const ValueKey('shop-split-basket'))
               .evaluate()
@@ -150,11 +213,33 @@ void main() {
             await tester.tap(find.byIcon(Icons.shopping_basket_outlined).first);
             await tester.pumpAndSettle();
           }
+          final cashButton = find.text(
+            language == 'my' ? 'ငွေသား' : 'Cash sale',
+          );
+          if (width <= 390) {
+            expect(tester.getBottomLeft(cashButton).dy, lessThan(height));
+          }
           expect(tester.takeException(), isNull);
           await expectLater(
             find.byKey(_captureKey),
             matchesGoldenFile(
               'goldens/shop_checkout_${width.toInt()}_$language.png',
+            ),
+          );
+
+          await tester.ensureVisible(cashButton);
+          await tester.tap(cashButton);
+          await tester.pumpAndSettle();
+          await tester.enterText(
+            find.byKey(const ValueKey('shop-cash-given')),
+            language == 'my' ? '၂၀၀၀၀' : '20000',
+          );
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+          await expectLater(
+            find.byKey(_captureKey),
+            matchesGoldenFile(
+              'goldens/shop_cash_${width.toInt()}_$language.png',
             ),
           );
         } finally {
