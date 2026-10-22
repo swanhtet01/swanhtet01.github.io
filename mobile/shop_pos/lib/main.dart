@@ -4223,12 +4223,14 @@ class _SetupTile extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.onTap,
+    this.narrowTitle,
   });
 
   final IconData icon;
   final String title;
   final String subtitle;
   final VoidCallback onTap;
+  final String? narrowTitle;
 
   @override
   Widget build(BuildContext context) {
@@ -4236,17 +4238,21 @@ class _SetupTile extends StatelessWidget {
     final compact =
         MediaQuery.sizeOf(context).width < 480 ||
         MediaQuery.textScalerOf(context).scale(1) > 1.2;
+    final narrowWithLargeText =
+        MediaQuery.sizeOf(context).width < 360 &&
+        MediaQuery.textScalerOf(context).scale(1) > 1.2;
     return ListTile(
       contentPadding: EdgeInsets.symmetric(
-        horizontal: 16,
+        horizontal: compact ? 12 : 16,
         vertical: compact ? 4 : 8,
       ),
+      horizontalTitleGap: compact ? 8 : 16,
       minLeadingWidth: 28,
       leading: compact
           ? null
           : Icon(icon, size: 23, color: theme.colorScheme.primary),
       title: Text(
-        title,
+        narrowWithLargeText ? narrowTitle ?? title : title,
         style: compact
             ? theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600)
             : theme.textTheme.titleMedium,
@@ -4262,7 +4268,7 @@ class _SetupTile extends StatelessWidget {
                 ),
               ),
             ),
-      trailing: const Icon(Icons.chevron_right, size: 20),
+      trailing: Icon(Icons.chevron_right, size: compact ? 18 : 20),
       onTap: onTap,
     );
   }
@@ -4303,6 +4309,9 @@ class _ShopSettingsScreenState extends State<ShopSettingsScreen> {
             const SizedBox(height: 12),
             SegmentedButton<bool>(
               showSelectedIcon: false,
+              style: const ButtonStyle(
+                minimumSize: WidgetStatePropertyAll(Size(0, 48)),
+              ),
               segments: const [
                 ButtonSegment(value: false, label: Text('English')),
                 ButtonSegment(value: true, label: Text('မြန်မာ')),
@@ -4380,6 +4389,7 @@ class _ShopSettingsScreenState extends State<ShopSettingsScreen> {
                       'Export backup file',
                       'အရန်ကူးဖိုင် ထုတ်ယူရန်',
                     ),
+                    narrowTitle: _myanmar ? 'အရန်ကူးဖိုင်\nထုတ်ယူရန်' : null,
                     subtitle: shopCopy(
                       _myanmar,
                       'Save an encrypted file.',
@@ -4399,15 +4409,24 @@ class _ShopSettingsScreenState extends State<ShopSettingsScreen> {
             ),
             const SizedBox(height: 16),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              child: Text(
-                shopCopy(
-                  _myanmar,
-                  'Saved on this device. Online backup is not active.',
-                  'ဤစက်တွင်သာ သိမ်းထားသည်။ အွန်လိုင်းအရန်ကူး မရှိသေးပါ။',
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surfaceContainerLow,
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Text(
+                    shopCopy(
+                      _myanmar,
+                      'Saved on this device. Online backup is not active.',
+                      'ဤစက်တွင်သာ သိမ်းထားသည်။ အွန်လိုင်းအရန်ကူး မရှိသေးပါ။',
+                    ),
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
                 ),
               ),
             ),
