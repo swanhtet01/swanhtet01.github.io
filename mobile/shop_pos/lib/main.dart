@@ -1889,19 +1889,6 @@ class _ShopHomeState extends State<ShopHome> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 8),
-                OutlinedButton.icon(
-                  key: const ValueKey('shop-business-setup-empty'),
-                  onPressed: _openBusinessSetup,
-                  icon: const Icon(Icons.storefront_outlined),
-                  label: Text(
-                    shopCopy(
-                      widget.myanmar,
-                      'Set up for your business',
-                      'သင့်လုပ်ငန်းအတွက် ပြင်ဆင်ရန်',
-                    ),
-                  ),
-                ),
                 const SizedBox(height: 4),
                 TextButton.icon(
                   onPressed: _openMenuImport,
@@ -3850,15 +3837,6 @@ class _ShopHomeState extends State<ShopHome> {
       ),
     );
   }
-
-  void _openBusinessSetup() => Navigator.of(context).push<void>(
-    MaterialPageRoute<void>(
-      builder: (_) => ShopBusinessProfileScreen(
-        database: widget.database,
-        myanmar: widget.myanmar,
-      ),
-    ),
-  );
 
   void _openStock() {
     if (widget.onStock != null) {

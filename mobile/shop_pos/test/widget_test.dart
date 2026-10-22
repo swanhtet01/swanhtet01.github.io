@@ -2620,6 +2620,7 @@ void main() {
       expect(find.text('Your catalog is empty'), findsOneWidget);
       expect(find.text('Add first product'), findsOneWidget);
       expect(find.text('Import menu photo'), findsOneWidget);
+      expect(find.text('Set up for your business'), findsNothing);
       expect(
         tester.widget<TextField>(find.byType(TextField)).decoration?.hintText,
         'Scan a barcode',
@@ -2648,20 +2649,15 @@ void main() {
         final database = ShopDatabase(NativeDatabase.memory());
         addTearDown(database.close);
         await tester.pumpWidget(
-          ShopApp(
-            initialCounter: true,
-            database: database,
-            authClient: null,
-            apiBaseUrl: 'https://example.invalid',
-            initialMyanmar: myanmar,
+          MaterialApp(
+            home: ShopBusinessProfileScreen(
+              database: database,
+              myanmar: myanmar,
+            ),
           ),
         );
         await tester.pumpAndSettle();
 
-        final setup = find.byKey(const ValueKey('shop-business-setup-empty'));
-        await tester.ensureVisible(setup);
-        await tester.tap(setup);
-        await tester.pumpAndSettle();
         expect(find.byType(ShopBusinessProfileScreen), findsOneWidget);
         for (final id in const [
           'mini-mart',
