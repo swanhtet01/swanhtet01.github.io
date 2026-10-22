@@ -4116,89 +4116,104 @@ class _NewShopProductDialogState extends State<_NewShopProductDialog> {
     super.dispose();
   }
 
+  Widget _barcodeField() => TextFormField(
+    key: const ValueKey('shop-product-barcode'),
+    controller: _barcode,
+    decoration: InputDecoration(
+      labelText: shopCopy(widget.myanmar, 'Barcode', 'ဘားကုဒ်'),
+      helperText: shopCopy(widget.myanmar, 'Optional', 'မဖြစ်မနေမဟုတ်ပါ'),
+    ),
+  );
+
   @override
   Widget build(BuildContext context) => AlertDialog(
+    insetPadding: EdgeInsets.symmetric(
+      horizontal: MediaQuery.sizeOf(context).width < 380 ? 16 : 40,
+      vertical: 24,
+    ),
     title: Text(shopCopy(widget.myanmar, 'Add product', 'ကုန်ပစ္စည်းထည့်ရန်')),
-    content: Form(
-      key: _formKey,
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextFormField(
-              key: const ValueKey('shop-product-name'),
-              controller: _name,
-              autofocus: true,
-              decoration: InputDecoration(
-                labelText: shopCopy(
-                  widget.myanmar,
-                  'Product name',
-                  'ကုန်ပစ္စည်းအမည်',
+    content: SizedBox(
+      width: 360,
+      child: Form(
+        key: _formKey,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextFormField(
+                key: const ValueKey('shop-product-name'),
+                controller: _name,
+                autofocus: true,
+                decoration: InputDecoration(
+                  labelText: shopCopy(
+                    widget.myanmar,
+                    'Product name',
+                    'ကုန်ပစ္စည်းအမည်',
+                  ),
                 ),
+                validator: (value) => value == null || value.trim().isEmpty
+                    ? shopCopy(widget.myanmar, 'Enter a name.', 'အမည်ထည့်ပါ။')
+                    : null,
               ),
-              validator: (value) => value == null || value.trim().isEmpty
-                  ? shopCopy(widget.myanmar, 'Enter a name.', 'အမည်ထည့်ပါ။')
-                  : null,
-            ),
-            const SizedBox(height: 10),
-            TextFormField(
-              key: const ValueKey('shop-product-barcode'),
-              controller: _barcode,
-              decoration: InputDecoration(
-                labelText: shopCopy(
-                  widget.myanmar,
-                  'Barcode (optional)',
-                  'ဘားကုဒ် (မဖြစ်မနေမဟုတ်ပါ)',
+              // A scanned code stays visible near the name so the cashier can
+              // verify it. During manual entry, keep the three required fields
+              // together before asking for an optional barcode.
+              if (widget.initialBarcode.trim().isNotEmpty) ...[
+                const SizedBox(height: 10),
+                _barcodeField(),
+              ],
+              const SizedBox(height: 10),
+              TextFormField(
+                key: const ValueKey('shop-product-price'),
+                controller: _price,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: shopCopy(
+                    widget.myanmar,
+                    'Price · MMK',
+                    'ဈေးနှုန်း · ကျပ်',
+                  ),
                 ),
+                validator: (value) {
+                  final amount = int.tryParse(value?.trim() ?? '');
+                  return amount == null || amount < 0 || amount > 2000000000
+                      ? shopCopy(
+                          widget.myanmar,
+                          'Enter a whole MMK amount.',
+                          'ကျပ်ဈေးနှုန်းကို ဂဏန်းအပြည့်ထည့်ပါ။',
+                        )
+                      : null;
+                },
               ),
-            ),
-            const SizedBox(height: 10),
-            TextFormField(
-              key: const ValueKey('shop-product-price'),
-              controller: _price,
-              keyboardType: TextInputType.number,
-              decoration: InputDecoration(
-                labelText: shopCopy(
-                  widget.myanmar,
-                  'Price · MMK',
-                  'ဈေးနှုန်း · ကျပ်',
+              const SizedBox(height: 10),
+              TextFormField(
+                key: const ValueKey('shop-product-stock'),
+                controller: _stock,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: shopCopy(
+                    widget.myanmar,
+                    'Opening stock',
+                    'စတင်လက်ကျန်',
+                  ),
                 ),
+                validator: (value) {
+                  final count = int.tryParse(value?.trim() ?? '');
+                  return count == null || count < 0 || count > 2000000000
+                      ? shopCopy(
+                          widget.myanmar,
+                          'Enter a whole stock count.',
+                          'လက်ကျန်အရေအတွက်ကို ဂဏန်းအပြည့်ထည့်ပါ။',
+                        )
+                      : null;
+                },
               ),
-              validator: (value) {
-                final amount = int.tryParse(value?.trim() ?? '');
-                return amount == null || amount < 0 || amount > 2000000000
-                    ? shopCopy(
-                        widget.myanmar,
-                        'Enter a whole MMK amount.',
-                        'ကျပ်ဈေးနှုန်းကို ဂဏန်းအပြည့်ထည့်ပါ။',
-                      )
-                    : null;
-              },
-            ),
-            const SizedBox(height: 10),
-            TextFormField(
-              key: const ValueKey('shop-product-stock'),
-              controller: _stock,
-              keyboardType: TextInputType.number,
-              decoration: InputDecoration(
-                labelText: shopCopy(
-                  widget.myanmar,
-                  'Opening stock',
-                  'စတင်လက်ကျန်',
-                ),
-              ),
-              validator: (value) {
-                final count = int.tryParse(value?.trim() ?? '');
-                return count == null || count < 0 || count > 2000000000
-                    ? shopCopy(
-                        widget.myanmar,
-                        'Enter a whole stock count.',
-                        'လက်ကျန်အရေအတွက်ကို ဂဏန်းအပြည့်ထည့်ပါ။',
-                      )
-                    : null;
-              },
-            ),
-          ],
+              if (widget.initialBarcode.trim().isEmpty) ...[
+                const SizedBox(height: 10),
+                _barcodeField(),
+              ],
+            ],
+          ),
         ),
       ),
     ),
