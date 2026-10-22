@@ -39,7 +39,6 @@ void main() {
   ) async {
     final previousPlatform = debugDefaultTargetPlatformOverride;
     debugDefaultTargetPlatformOverride = TargetPlatform.windows;
-    addTearDown(() => debugDefaultTargetPlatformOverride = previousPlatform);
     tester.view.physicalSize = const Size(1200, 900);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -107,6 +106,7 @@ void main() {
       expect((await database.readCounterSaleDraft())?.quantities, {'tea': 1});
       expect(tester.takeException(), isNull);
     } finally {
+      debugDefaultTargetPlatformOverride = previousPlatform;
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump(const Duration(milliseconds: 1));
       await database.close();

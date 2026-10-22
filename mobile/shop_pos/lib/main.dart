@@ -440,25 +440,54 @@ class _ShopAppState extends State<ShopApp> {
                                             0,
                                           ),
                                           child: Card(
-                                            child: ListTile(
-                                              title: Text(
-                                                shopCopy(
-                                                  _myanmar,
-                                                  'Unfinished sale',
-                                                  'မပြီးသေးသော အရောင်း',
-                                                ),
-                                              ),
-                                              trailing: TextButton(
-                                                onPressed: () => unawaited(
-                                                  _openCounter(context),
-                                                ),
-                                                child: Text(
-                                                  shopCopy(
-                                                    _myanmar,
-                                                    'Continue sale',
-                                                    'အရောင်းဆက်ရန်',
-                                                  ),
-                                                ),
+                                            child: Padding(
+                                              padding: const EdgeInsets.all(12),
+                                              child: LayoutBuilder(
+                                                builder: (context, size) {
+                                                  final title = Text(
+                                                    shopCopy(
+                                                      _myanmar,
+                                                      'Unfinished sale',
+                                                      'မပြီးသေးသော အရောင်း',
+                                                    ),
+                                                    style: Theme.of(context)
+                                                        .textTheme
+                                                        .titleSmall,
+                                                  );
+                                                  final action = TextButton(
+                                                    onPressed: () => unawaited(
+                                                      _openCounter(context),
+                                                    ),
+                                                    child: Text(
+                                                      shopCopy(
+                                                        _myanmar,
+                                                        'Continue sale',
+                                                        'အရောင်းဆက်ရန်',
+                                                      ),
+                                                    ),
+                                                  );
+                                                  if (size.maxWidth < 420) {
+                                                    return Column(
+                                                      crossAxisAlignment:
+                                                          CrossAxisAlignment
+                                                              .start,
+                                                      children: [
+                                                        title,
+                                                        Align(
+                                                          alignment: Alignment
+                                                              .centerRight,
+                                                          child: action,
+                                                        ),
+                                                      ],
+                                                    );
+                                                  }
+                                                  return Row(
+                                                    children: [
+                                                      Expanded(child: title),
+                                                      action,
+                                                    ],
+                                                  );
+                                                },
                                               ),
                                             ),
                                           ),
