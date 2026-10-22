@@ -2606,9 +2606,13 @@ class _ShopHomeState extends State<ShopHome> {
       showDragHandle: true,
       builder: (sheetContext) => StatefulBuilder(
         builder: (sheetContext, refresh) => SafeArea(
-          child: SizedBox(
-            height: MediaQuery.sizeOf(sheetContext).height * .68,
+          child: ConstrainedBox(
+            key: const ValueKey('shop-held-sales-sheet'),
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.sizeOf(sheetContext).height * .68,
+            ),
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Padding(
@@ -2633,8 +2637,9 @@ class _ShopHomeState extends State<ShopHome> {
                       ),
                     ),
                   ),
-                Expanded(
+                Flexible(
                   child: ListView.separated(
+                    shrinkWrap: true,
                     itemCount: _heldTickets.length,
                     separatorBuilder: (_, _) => const Divider(height: 1),
                     itemBuilder: (context, index) {
@@ -4682,8 +4687,8 @@ class _ShopSettingsScreenState extends State<ShopSettingsScreen> {
               child: Text(
                 shopCopy(
                   _myanmar,
-                  'On this device only. No online backup.',
-                  'ဤစက်တွင်သာ သိမ်းသည်။ အွန်လိုင်းအရန်ကူး မရှိပါ။',
+                  'Sales and settings stay on this device. Export an encrypted backup file regularly and keep it somewhere safe.',
+                  'အရောင်းမှတ်တမ်းများနှင့် ဆက်တင်များကို ဤစက်တွင် သိမ်းထားသည်။ စကားဝှက်ဖြင့်ကာကွယ်ထားသော အရန်ကူးဖိုင်ကို ပုံမှန်ထုတ်ပြီး လုံခြုံသောနေရာတွင် သိမ်းပါ။',
                 ),
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,

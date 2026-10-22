@@ -133,7 +133,7 @@ void main() {
   testWidgets('held-sale picker fits a 320px phone at enlarged text', (
     tester,
   ) async {
-    tester.view.physicalSize = const Size(320, 800);
+    tester.view.physicalSize = const Size(320, 820);
     tester.view.devicePixelRatio = 1;
     tester.platformDispatcher.textScaleFactorTestValue = 1.5;
     addTearDown(tester.view.resetPhysicalSize);
@@ -170,6 +170,9 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('shop-held-sales-open')));
       await tester.pumpAndSettle();
+      final heldSheet = find.byKey(const ValueKey('shop-held-sales-sheet'));
+      expect(heldSheet, findsOneWidget);
+      expect(tester.getSize(heldSheet).height, lessThan(410));
       expect(
         find.byKey(const ValueKey('shop-held-reopen:compact-ticket')),
         findsOneWidget,
@@ -553,7 +556,7 @@ void main() {
         Icons.receipt_long_outlined,
         Icons.inventory_2_outlined,
       ];
-      for (final width in [320.0, 820.0, 1200.0]) {
+      for (final width in [320.0, 768.0, 820.0, 1200.0]) {
         for (final myanmar in [false, true]) {
           tester.view.physicalSize = Size(width, 900);
           tester.platformDispatcher.textScaleFactorTestValue = width == 320
@@ -623,6 +626,24 @@ void main() {
             }
 
             await select(1);
+            if (width == 768) {
+              final navigation = find.byType(NavigationBar);
+              expect(navigation, findsOneWidget);
+              for (final icon in destinationIcons) {
+                expect(
+                  find.descendant(of: navigation, matching: find.byIcon(icon)),
+                  findsOneWidget,
+                );
+              }
+              expect(
+                find.byKey(const ValueKey('shop-split-catalog')),
+                findsOneWidget,
+              );
+              expect(
+                find.byKey(const ValueKey('shop-split-basket')),
+                findsOneWidget,
+              );
+            }
             await tester.enterText(find.byType(TextField).first, '111111');
             await tester.testTextInput.receiveAction(TextInputAction.done);
             await tester.pumpAndSettle();
@@ -4591,8 +4612,8 @@ void main() {
       );
       final storageStatus = find.text(
         myanmar
-            ? 'ဤစက်တွင်သာ သိမ်းသည်။ အွန်လိုင်းအရန်ကူး မရှိပါ။'
-            : 'On this device only. No online backup.',
+            ? 'အရောင်းမှတ်တမ်းများနှင့် ဆက်တင်များကို ဤစက်တွင် သိမ်းထားသည်။ စကားဝှက်ဖြင့်ကာကွယ်ထားသော အရန်ကူးဖိုင်ကို ပုံမှန်ထုတ်ပြီး လုံခြုံသောနေရာတွင် သိမ်းပါ။'
+            : 'Sales and settings stay on this device. Export an encrypted backup file regularly and keep it somewhere safe.',
       );
       await tester.scrollUntilVisible(storageStatus, 120);
       expect(storageStatus, findsOneWidget);
