@@ -101,7 +101,7 @@ void main() {
             .hasFocus,
         isTrue,
       );
-      await tester.testTextInput.enterText('111111');
+      tester.testTextInput.enterText('111111');
       await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pumpAndSettle();
       expect((await database.readCounterSaleDraft())?.quantities, {'tea': 1});
