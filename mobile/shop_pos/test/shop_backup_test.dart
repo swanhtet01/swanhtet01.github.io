@@ -507,6 +507,7 @@ void main() {
           Future<void> createSidecar() async {
             await sidecar.writeAsString('other writer');
           }
+
           await expectLater(
             ShopBackup.restoreIntoEmptyDatabase(
               archive: archive,

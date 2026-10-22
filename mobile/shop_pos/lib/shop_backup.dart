@@ -219,28 +219,26 @@ abstract final class ShopBackup {
 
   /// Inspect under the same lock as restore. An existing DB is never offered
   /// for overwrite; sidecars without a DB and interrupted commits stay closed.
-  static Future<ShopStorePresence> inspectStore(File target) =>
-      _withRootLock(target.parent, () async {
-        if (await FileSystemEntity.type(
-              restoreMarkerFor(target).path,
-              followLinks: false,
-            ) !=
-            FileSystemEntityType.notFound) {
-          return ShopStorePresence.interrupted;
-        }
-        final type = await FileSystemEntity.type(
-          target.path,
-          followLinks: false,
-        );
-        if (type == FileSystemEntityType.file) {
-          return ShopStorePresence.existing;
-        }
-        if (type != FileSystemEntityType.notFound ||
-            await _hasSidecars(target)) {
-          return ShopStorePresence.unsafe;
-        }
-        return ShopStorePresence.empty;
-      });
+  static Future<ShopStorePresence> inspectStore(File target) => _withRootLock(
+    target.parent,
+    () async {
+      if (await FileSystemEntity.type(
+            restoreMarkerFor(target).path,
+            followLinks: false,
+          ) !=
+          FileSystemEntityType.notFound) {
+        return ShopStorePresence.interrupted;
+      }
+      final type = await FileSystemEntity.type(target.path, followLinks: false);
+      if (type == FileSystemEntityType.file) {
+        return ShopStorePresence.existing;
+      }
+      if (type != FileSystemEntityType.notFound || await _hasSidecars(target)) {
+        return ShopStorePresence.unsafe;
+      }
+      return ShopStorePresence.empty;
+    },
+  );
 
   /// Reserve a new DB pathname under the restore lock. Drift initializes the
   /// empty SQLite file when Shop opens it; a concurrent restore must then fail.
