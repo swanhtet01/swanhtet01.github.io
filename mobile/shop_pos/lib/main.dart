@@ -1113,10 +1113,9 @@ class _ShopHomeState extends State<ShopHome> {
       body: SafeArea(
         child: Column(
           children: [
-            // The compact catalog already has its own Products heading; the
-            // selected bottom destination supplies the Sell task label.
-            if (widget.embeddedTaskShell &&
-                (width >= 420 || _checkoutLoadFailed))
+            // The catalog has its own Products heading; the selected task
+            // destination supplies the Sell label at every screen width.
+            if (widget.embeddedTaskShell && _checkoutLoadFailed)
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
                 child: ShopTaskPageHeader(

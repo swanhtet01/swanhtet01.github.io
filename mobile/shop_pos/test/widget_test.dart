@@ -173,7 +173,7 @@ void main() {
                   index,
                 );
               }
-              if (index == 1 && width < 420) {
+              if (index == 1) {
                 expect(
                   find.text(myanmar ? 'ကုန်ပစ္စည်းများ' : 'Products'),
                   findsOneWidget,
@@ -1672,12 +1672,14 @@ void main() {
         ('rice', 'KAUNG ရန်ကုန် ဆန်', 12450),
         ('noodles', 'MAMA ကြက်သား အမြန်ခေါက်ဆွဲ', 2950),
       ]) {
+        debugPrint('density fixture: adding $id');
         await database.addProduct(
           id: id,
           name: name,
           priceMmk: price,
           openingStock: 20,
         );
+        debugPrint('density fixture: added $id');
       }
       debugPrint('density fixture: products added');
       await tester.pumpWidget(
@@ -1688,7 +1690,7 @@ void main() {
           initialMyanmar: true,
         ),
       );
-      await tester.pumpAndSettle(timeout: const Duration(seconds: 15));
+      await tester.pumpAndSettle();
       debugPrint('density fixture: Shop mounted');
       await tester.tap(
         find.descendant(
@@ -1697,7 +1699,7 @@ void main() {
         ),
       );
       debugPrint('density fixture: Sell tapped');
-      await tester.pumpAndSettle(timeout: const Duration(seconds: 15));
+      await tester.pumpAndSettle();
       debugPrint('density fixture: Sell settled');
       expect(find.text('ကုန်ပစ္စည်းများ'), findsOneWidget);
       expect(
