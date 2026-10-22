@@ -1,0 +1,105 @@
+{
+  "schemaVersion": "supermega.public-gallery-release-attestation.v1",
+  "publicationReady": true,
+  "reviewScope": "public_shop_gallery",
+  "reviewedSurface": "browser_component_synthetic",
+  "reviewedAt": "2026-10-22T08:43:16.718Z",
+  "reviewedBy": "Codex independent gallery reviewer",
+  "reviewRef": "https://github.com/swanhtet01/swanhtet01.github.io/pull/726",
+  "sourceBinding": {
+    "sourceCommit": "06a8f2de66b1851152ca5e63acb71d18337d9cf8",
+    "showroomTree": "1152950a62567a66171ab18914a1ad7e778c524b",
+    "captureInputsSha256": "fb933be70ea9a64722ee19bdae6ba366a55351091694ca74f0c248eca912d845",
+    "capturedAt": "2026-10-22T08:25:23.247Z",
+    "captureReportSha256": "d9fc8f5a3b7abfe7d692dd9a8fe938faa6d8345bb95530d8ecc1d3dbd20c2938",
+    "provenanceSha256": "95149744a57d5316a2c1e999fb2be65f977b979e129958b04261c8a962556b73",
+    "imageSourcesSha256": "28acc9493e7aaf7ad3193f3b4215c480895359cd4ff3434cdb56c3fe0a0db6be"
+  },
+  "assets": [
+    {
+      "file": "actual-shop-today.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "98a8426eb5856efc4c73c4f7c0a623def665ea66a9bf3bca82eb170b7655e457"
+    },
+    {
+      "file": "actual-shop-sell.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "e91246f2e0aa0e285ae89bc0959746c55ca954cee764eb7b310c90584039203c"
+    },
+    {
+      "file": "actual-shop-sell-tablet.png",
+      "width": 768,
+      "height": 1024,
+      "sha256": "d89dcf609a22fc177b10e56e97547032631a46389de99aacb4829fade48b9e5e"
+    },
+    {
+      "file": "actual-shop-sell-mobile.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "758e0f34352e0f2c6938d3fe4e53ab421537fe6599b77e7bcdd165ca29238cc6"
+    },
+    {
+      "file": "actual-shop-sell-my.png",
+      "width": 1000,
+      "height": 900,
+      "sha256": "596bb426f65d7513d213e47508ca75e8b516fdf09855515d0a88c2108c9b6caf"
+    },
+    {
+      "file": "actual-shop-sell-my-tablet.png",
+      "width": 768,
+      "height": 1024,
+      "sha256": "1b57f00f04c87068163c204fcdfbc6eb9d4e586b0586a44695c950e39970e92b"
+    },
+    {
+      "file": "actual-shop-sell-my-mobile.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "5dd3ca3075708c6ed6abda11bd01865b0450670dd39125e74420d1ab683f3f2c"
+    },
+    {
+      "file": "actual-shop-orders.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "f966a2d9ad7900a112b6428cc4f37af13f923a1887922189adf129431e97f621"
+    },
+    {
+      "file": "actual-shop-orders-tablet.png",
+      "width": 768,
+      "height": 1024,
+      "sha256": "d63c512aa9a12312037da08538f2e1ec7b1af1b527bbb31bf9c40a4bb2e39d3c"
+    },
+    {
+      "file": "actual-shop-orders-mobile.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "f6a5243c1e7346514329db853431e789b2afce211e5ed462890645aa95f14729"
+    },
+    {
+      "file": "actual-shop-inventory.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "3753ec41b412d896fe5f424c120b998254f9d0f6dc7e6a97e0ff36c54b3cbc39"
+    },
+    {
+      "file": "actual-shop-inventory-tablet.png",
+      "width": 768,
+      "height": 1024,
+      "sha256": "112b99dcfacf0cefeb629e91436d0d747395cf7d5f0913df3c22a33ed17270d7"
+    },
+    {
+      "file": "actual-shop-inventory-mobile.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "897349897d9a8287069c74eb177c5c523f0fbc23146bea244a211b5707b8ceb2"
+    }
+  ],
+  "limitations": [
+    "Approval covers the 13 source-bound synthetic browser capture PNGs and their five licensed product photographs only; it is not production deployment, hosted behavior, customer acceptance, or commercial readiness.",
+    "Counter and Inventory appear on the English Shop landing; Orders screenshots are shipped as directly accessible assets but are not featured because the current Orders UI remains cluttered.",
+    "The Burmese Shop landing shows the localized Counter capture only. Burmese Inventory and Orders UI/captures remain a separate parity gap.",
+    "No native Flutter installation, barcode hardware, receipt printer, offline synchronization, wallet integration, or physical-device behavior is attested.",
+    "Product records and prices are synthetic examples, not a live Myanmar retail price feed."
+  ]
+}
