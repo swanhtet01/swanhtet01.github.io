@@ -223,7 +223,7 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
                             separatorBuilder: (_, _) =>
                                 MediaQuery.sizeOf(context).width < 480
                                 ? const SizedBox(height: 10)
-                                : const Divider(height: 1),
+                                : const SizedBox(height: 8),
                             itemBuilder: (context, index) {
                               final sale = sales[index];
                               final firstItem = sale.lines.isEmpty
@@ -321,42 +321,58 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
                                   ),
                                 );
                               }
-                              return ListTile(
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 8,
-                                ),
-                                title: Text(
-                                  '$firstItem$more',
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: Theme.of(context).textTheme.titleMedium
-                                      ?.copyWith(fontWeight: FontWeight.w600),
-                                ),
-                                subtitle: Text(
-                                  '${_when(context, sale.createdAtMillis)} · '
-                                  '${_paymentName(sale.paymentMethod)}',
-                                  style: Theme.of(context).textTheme.bodyMedium
-                                      ?.copyWith(
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .onSurfaceVariant,
-                                      ),
-                                ),
-                                trailing: Text(
-                                  shopMmk(
-                                    sale.totalMmk,
-                                    myanmar: widget.myanmar,
+                              return Card(
+                                clipBehavior: Clip.antiAlias,
+                                child: ListTile(
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 8,
                                   ),
-                                  style: Theme.of(context).textTheme.titleSmall
-                                      ?.copyWith(
-                                        fontWeight: FontWeight.w700,
-                                        fontFeatures: const [
-                                          FontFeature.tabularFigures(),
-                                        ],
+                                  title: Text(
+                                    '$firstItem$more',
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleMedium
+                                        ?.copyWith(fontWeight: FontWeight.w600),
+                                  ),
+                                  subtitle: Text(
+                                    '${_when(context, sale.createdAtMillis)} · '
+                                    '${_paymentName(sale.paymentMethod)}',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodyMedium
+                                        ?.copyWith(
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onSurfaceVariant,
+                                        ),
+                                  ),
+                                  trailing: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        shopMmk(
+                                          sale.totalMmk,
+                                          myanmar: widget.myanmar,
+                                        ),
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .titleSmall
+                                            ?.copyWith(
+                                              fontWeight: FontWeight.w700,
+                                              fontFeatures: const [
+                                                FontFeature.tabularFigures(),
+                                              ],
+                                            ),
                                       ),
+                                      const SizedBox(width: 12),
+                                      const Icon(Icons.chevron_right, size: 20),
+                                    ],
+                                  ),
+                                  onTap: () => _showSale(sale),
                                 ),
-                                onTap: () => _showSale(sale),
                               );
                             },
                           ),

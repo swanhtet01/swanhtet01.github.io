@@ -164,7 +164,7 @@ void main() {
             if (screen == 'stock') {
               expect(
                 find.textContaining(
-                  language == 'my' ? 'ခုနှင့်အောက် သတိပေး' : 'Low at 10',
+                  language == 'my' ? 'ပြန်မှာရန်: ၁၀ ခု' : 'Reorder at 10',
                 ),
                 findsOneWidget,
               );

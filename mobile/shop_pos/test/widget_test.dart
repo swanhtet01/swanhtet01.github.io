@@ -646,7 +646,7 @@ void main() {
           );
           await tester.pumpAndSettle();
           expect(
-            find.text(myanmar ? '၅ ခုနှင့်အောက် သတိပေး' : 'Low at 5'),
+            find.text(myanmar ? 'ပြန်မှာရန်: ၅ ခု' : 'Reorder at 5'),
             findsOneWidget,
           );
           expect(tester.takeException(), isNull);
@@ -658,6 +658,81 @@ void main() {
       }
     },
   );
+
+  testWidgets('Stock puts a reorder item before a lower healthy count', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 900);
+    tester.view.devicePixelRatio = 1;
+    tester.platformDispatcher.textScaleFactorTestValue = 1.5;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    final database = ShopDatabase(NativeDatabase.memory());
+    try {
+      await database.addProduct(
+        id: 'healthy',
+        name: 'Healthy item',
+        priceMmk: 3000,
+        openingStock: 2,
+      );
+      await database.addProduct(
+        id: 'needs-order',
+        name: 'Needs order',
+        priceMmk: 3000,
+        openingStock: 20,
+      );
+      await database.addProduct(
+        id: 'out',
+        name: 'Out of stock',
+        priceMmk: 3000,
+        openingStock: 0,
+      );
+      await database.setReorderLevel(
+        productId: 'healthy',
+        expectedReorderLevel: 5,
+        reorderLevel: null,
+      );
+      await database.setReorderLevel(
+        productId: 'needs-order',
+        expectedReorderLevel: 5,
+        reorderLevel: 30,
+      );
+      await database.setReorderLevel(
+        productId: 'out',
+        expectedReorderLevel: 5,
+        reorderLevel: null,
+      );
+      await tester.pumpWidget(
+        MaterialApp(home: StockScreen(database: database, myanmar: false)),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        tester.getTopLeft(find.byKey(const ValueKey('stock-row-out'))).dy,
+        lessThan(
+          tester
+              .getTopLeft(find.byKey(const ValueKey('stock-row-needs-order')))
+              .dy,
+        ),
+      );
+      expect(
+        tester
+            .getTopLeft(find.byKey(const ValueKey('stock-row-needs-order')))
+            .dy,
+        lessThan(
+          tester.getTopLeft(find.byKey(const ValueKey('stock-row-healthy'))).dy,
+        ),
+      );
+      expect(find.text('20 in stock'), findsOneWidget);
+      expect(find.text('0 in stock'), findsOneWidget);
+      expect(find.text('Reorder at 30'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+      await database.close();
+    }
+  });
 
   testWidgets('unfinished sale opens from Today after app restart', (
     tester,
@@ -1124,6 +1199,45 @@ void main() {
     expect(find.text('Rice'), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
     await database.close();
+  });
+
+  testWidgets('large Burmese sale total fits enlarged phone and tablet views', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 900);
+    tester.view.devicePixelRatio = 1;
+    tester.platformDispatcher.textScaleFactorTestValue = 1.5;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    final database = ShopDatabase(NativeDatabase.memory());
+    try {
+      await database.addProduct(
+        id: 'expensive',
+        name: 'High value item',
+        priceMmk: 1000000000,
+        openingStock: 1,
+      );
+      await database.recordCashSale(
+        operationId: 'large-burmese-sale',
+        lines: const [ShopSaleLineInput(productId: 'expensive', quantity: 1)],
+      );
+      for (final width in [320.0, 820.0]) {
+        tester.view.physicalSize = Size(width, 900);
+        await tester.pumpWidget(
+          MaterialApp(
+            home: RecentSalesScreen(database: database, myanmar: true),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('၁,၀၀၀,၀၀၀,၀၀၀ ကျပ်'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      }
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+      await database.close();
+    }
   });
 
   testWidgets('recent sales dates stay in Burmese when the host uses English', (
