@@ -893,7 +893,8 @@ class _ShopHomeState extends State<ShopHome> {
               final product = byId[line.key];
               return product == null ||
                   product.onHand < line.value ||
-                  product.priceMmk != draft.unitPricesMmk[line.key];
+                  product.priceMmk != draft.unitPricesMmk[line.key] ||
+                  product.name != draft.productNames[line.key];
             });
         _checkoutReady = true;
         _checkoutLoadFailed = false;
@@ -2172,10 +2173,10 @@ class _ShopHomeState extends State<ShopHome> {
             shopCopy(
               widget.myanmar,
               _recoveredDraftNeedsReview
-                  ? 'Sale restored. Review changed stock or price before checkout.'
+                  ? 'Sale restored. Review changed items before checkout.'
                   : 'Unfinished sale restored on this device.',
               _recoveredDraftNeedsReview
-                  ? 'အရောင်းကို ပြန်ဖတ်ထားပါသည်။ ငွေမရှင်းမီ လက်ကျန်နှင့် ဈေးနှုန်းပြောင်းလဲမှုကို စစ်ပါ။'
+                  ? 'အရောင်းကို ပြန်ဖတ်ထားပါသည်။ ငွေမရှင်းမီ ပစ္စည်းပြောင်းလဲမှုကို စစ်ပါ။'
                   : 'မပြီးသေးသော အရောင်းကို ဤစက်တွင် ပြန်ဖတ်ထားပါသည်။',
             ),
             style: Theme.of(context).textTheme.bodySmall,
@@ -2933,12 +2934,31 @@ class _ShopHomeState extends State<ShopHome> {
         return;
       }
       final totalMmk = _cartTotal(currentProducts);
-      if (totalMmk != _cartTotal(products)) {
+      final currentById = {for (final product in currentProducts) product.id: product};
+      final shownById = {for (final product in products) product.id: product};
+      final draft = await widget.database.readCounterSaleDraft();
+      if (!mounted) return;
+      final itemsChanged = _cart.keys.any(
+        (id) =>
+            currentById[id]?.priceMmk != shownById[id]?.priceMmk ||
+            currentById[id]?.name != shownById[id]?.name ||
+            (draft?.operationId == operationId &&
+                (currentById[id]?.priceMmk != draft?.unitPricesMmk[id] ||
+                    currentById[id]?.name != draft?.productNames[id])),
+      );
+      if (itemsChanged) {
+        // Refresh the saved draft only after stopping checkout. The cashier
+        // sees the current line details and must choose Cash sale again.
+        await widget.database.saveCounterSaleDraft(
+          operationId: operationId,
+          quantities: selected,
+        );
+        if (mounted) setState(() => _recoveredDraftNeedsReview = false);
         _message(
           shopCopy(
             widget.myanmar,
-            'A price changed. Review the total before accepting cash.',
-            'ဈေးနှုန်းပြောင်းသွားပါသည်။ ငွေမယူမီ စုစုပေါင်းကို ပြန်စစ်ပါ။',
+            'An item changed. Review each line, then tap Cash sale again.',
+            'ပစ္စည်းအချက်အလက် ပြောင်းသွားပါသည်။ တစ်ကြောင်းချင်းစစ်ပြီး ငွေသားအရောင်းကို ထပ်နှိပ်ပါ။',
           ),
         );
         return;
@@ -3062,7 +3082,16 @@ class _ShopHomeState extends State<ShopHome> {
           !mapEquals(_cart, selected)) {
         return;
       }
-      await _completeSale(closeSheet: closeSheet, expectedTotalMmk: totalMmk);
+      await _completeSale(
+        closeSheet: closeSheet,
+        expectedTotalMmk: totalMmk,
+        expectedUnitPricesMmk: {
+          for (final id in selected.keys) id: currentById[id]!.priceMmk,
+        },
+        expectedProductNames: {
+          for (final id in selected.keys) id: currentById[id]!.name,
+        },
+      );
     } catch (error) {
       if (mounted) _message(_saleSaveError(error, widget.myanmar));
     } finally {
@@ -3434,6 +3463,8 @@ class _ShopHomeState extends State<ShopHome> {
     String paymentMethod = 'cash',
     String? walletCheckoutOperationId,
     int? expectedTotalMmk,
+    Map<String, int>? expectedUnitPricesMmk,
+    Map<String, String>? expectedProductNames,
   }) async {
     await _draftWrites;
     final operationId = _operationId;
@@ -3457,6 +3488,8 @@ class _ShopHomeState extends State<ShopHome> {
         paymentMethod: paymentMethod,
         walletCheckoutOperationId: walletCheckoutOperationId,
         expectedTotalMmk: expectedTotalMmk,
+        expectedUnitPricesMmk: expectedUnitPricesMmk,
+        expectedProductNames: expectedProductNames,
         lines: [
           for (final entry in _cart.entries)
             ShopSaleLineInput(productId: entry.key, quantity: entry.value),
@@ -3844,11 +3877,13 @@ String _saleSaveError(Object error, bool myanmar) {
         '$item လက်ကျန်မလုံလောက်ပါ။ အရောင်းစာရင်းကို ပြန်စစ်ပါ။',
       );
     }
-    if (detail == 'Sale total changed. Review the amount again.') {
+    if (detail == 'Sale total changed. Review the amount again.' ||
+        detail == 'Sale price changed. Review the amount again.' ||
+        detail == 'Sale item changed. Review each line again.') {
       return shopCopy(
         myanmar,
-        'Price changed. Review the total before taking cash.',
-        'ဈေးနှုန်းပြောင်းလဲသွားပါသည်။ ငွေမယူမီ စုစုပေါင်းငွေကို ပြန်စစ်ပါ။',
+        'An item changed. Review each line before taking cash.',
+        'ပစ္စည်းအချက်အလက် ပြောင်းသွားပါသည်။ ငွေမယူမီ တစ်ခုချင်းစီကို ပြန်စစ်ပါ။',
       );
     }
     if (detail.contains('pending wallet')) {

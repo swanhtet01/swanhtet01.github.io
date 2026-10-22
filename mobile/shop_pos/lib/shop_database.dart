@@ -121,12 +121,16 @@ class CounterSaleDraft {
     required this.operationId,
     required this.quantities,
     required this.unitPricesMmk,
+    required this.productNames,
     required this.updatedAtMillis,
   });
 
   final String operationId;
   final Map<String, int> quantities;
   final Map<String, int> unitPricesMmk;
+  /// Names seen when this basket was last saved; old drafts without names
+  /// require an explicit review before cash checkout.
+  final Map<String, String?> productNames;
   final int updatedAtMillis;
 }
 
@@ -561,6 +565,11 @@ class ShopDatabase extends _$ShopDatabase {
                   ? previous?.unitPricesMmk[line.key]
                   : null) ??
               0,
+          'productName':
+              product?.name ??
+              (previous?.operationId == cleanOperationId
+                  ? previous?.productNames[line.key]
+                  : null),
         });
       }
       await customStatement(
@@ -613,6 +622,7 @@ class ShopDatabase extends _$ShopDatabase {
     }
     final quantities = <String, int>{};
     final prices = <String, int>{};
+    final names = <String, String?>{};
     for (final value in raw) {
       if (value is! Map<String, dynamic>) {
         throw const FormatException('Counter draft is invalid.');
@@ -620,6 +630,7 @@ class ShopDatabase extends _$ShopDatabase {
       final id = value['productId'];
       final quantity = value['quantity'];
       final price = value['unitPriceMmk'];
+      final name = value['productName'];
       if (id is! String ||
           id.isEmpty ||
           id.length > 100 ||
@@ -629,16 +640,20 @@ class ShopDatabase extends _$ShopDatabase {
           price is! int ||
           price < 0 ||
           price > 2000000000 ||
+          (name != null &&
+              (name is! String || name.isEmpty || name.length > 160)) ||
           quantities.containsKey(id)) {
         throw const FormatException('Counter draft is invalid.');
       }
       quantities[id] = quantity;
       prices[id] = price;
+      names[id] = name as String?;
     }
     return CounterSaleDraft(
       operationId: operationId,
       quantities: Map.unmodifiable(quantities),
       unitPricesMmk: Map.unmodifiable(prices),
+      productNames: Map.unmodifiable(names),
       updatedAtMillis: updatedAtMillis,
     );
   }
@@ -1062,6 +1077,119 @@ class ShopDatabase extends _$ShopDatabase {
             'barcode': cleanBarcode,
             'priceMmk': priceMmk,
             'openingStock': openingStock,
+          }),
+          createdAtMillis: now,
+        ),
+      );
+    });
+  }
+
+  /// Change catalog details without changing stock or rewriting prior sales.
+  /// The expected values keep a stale edit sheet from replacing a newer edit.
+  Future<void> updateProductDetails({
+    required String operationId,
+    required String productId,
+    required String expectedName,
+    required int expectedPriceMmk,
+    required String? expectedBarcode,
+    required String name,
+    required int priceMmk,
+    required String? barcode,
+  }) async {
+    final cleanOperationId = operationId.trim();
+    final cleanProductId = productId.trim();
+    final cleanName = name.trim();
+    final cleanBarcode = _optionalText(barcode);
+    final oldBarcode = _optionalText(expectedBarcode);
+    if (cleanOperationId.isEmpty ||
+        cleanOperationId.length > 120 ||
+        cleanProductId.isEmpty ||
+        cleanProductId.length > 100 ||
+        cleanName.isEmpty ||
+        cleanName.length > 160 ||
+        priceMmk < 0 ||
+        priceMmk > 2000000000 ||
+        (cleanBarcode != null && cleanBarcode.length > 64)) {
+      throw ArgumentError('Product values are invalid.');
+    }
+    await transaction(() async {
+      final product = await (select(shopProducts)
+            ..where((row) => row.id.equals(cleanProductId)))
+          .getSingleOrNull();
+      if (product == null || product.archived) {
+        throw StateError('This product is no longer available.');
+      }
+      final previousEvent = await (select(shopSyncOutbox)
+            ..where((row) => row.operationId.equals(cleanOperationId)))
+          .getSingleOrNull();
+      if (previousEvent != null) {
+        final data = jsonDecode(previousEvent.payloadJson);
+        if (previousEvent.eventType == 'catalog.product.updated.v1' &&
+            data is Map<String, dynamic> &&
+            data['productId'] == cleanProductId &&
+            data['name'] == cleanName &&
+            data['priceMmk'] == priceMmk &&
+            data['barcode'] == cleanBarcode &&
+            product.name == cleanName &&
+            product.priceMmk == priceMmk &&
+            product.barcode == cleanBarcode) {
+          return;
+        }
+        throw StateError('This product edit was already used differently.');
+      }
+      if (product.name != expectedName ||
+          product.priceMmk != expectedPriceMmk ||
+          product.barcode != oldBarcode) {
+        throw StateError('Product changed. Reopen this item.');
+      }
+      if (product.name == cleanName &&
+          product.priceMmk == priceMmk &&
+          product.barcode == cleanBarcode) {
+        return;
+      }
+      if (cleanBarcode != null) {
+        final matches = await (select(shopProducts)
+              ..where((row) => row.barcode.equals(cleanBarcode)))
+            .get();
+        if (matches.any((row) => row.id != cleanProductId)) {
+          throw StateError('That barcode is already assigned to a product.');
+        }
+      }
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final changed = await (update(shopProducts)
+            ..where(
+              (row) =>
+                  row.id.equals(cleanProductId) &
+                  row.archived.equals(false) &
+                  row.name.equals(expectedName) &
+                  row.priceMmk.equals(expectedPriceMmk) &
+                  (oldBarcode == null
+                      ? row.barcode.isNull()
+                      : row.barcode.equals(oldBarcode)),
+            ))
+          .write(
+            ShopProductsCompanion(
+              name: Value(cleanName),
+              priceMmk: Value(priceMmk),
+              barcode: Value(cleanBarcode),
+              updatedAtMillis: Value(now),
+            ),
+          );
+      if (changed != 1) {
+        throw StateError('Product changed. Reopen this item.');
+      }
+      await into(shopSyncOutbox).insert(
+        ShopSyncOutboxCompanion.insert(
+          operationId: cleanOperationId,
+          eventType: 'catalog.product.updated.v1',
+          payloadJson: jsonEncode({
+            'productId': cleanProductId,
+            'name': cleanName,
+            'priceMmk': priceMmk,
+            'barcode': cleanBarcode,
+            'previousName': product.name,
+            'previousPriceMmk': product.priceMmk,
+            'previousBarcode': product.barcode,
           }),
           createdAtMillis: now,
         ),
@@ -1926,6 +2054,8 @@ class ShopDatabase extends _$ShopDatabase {
     required String paymentMethod,
     String? walletCheckoutOperationId,
     int? expectedTotalMmk,
+    Map<String, int>? expectedUnitPricesMmk,
+    Map<String, String>? expectedProductNames,
   }) async {
     final cleanOperationId = operationId.trim();
     final cleanWalletCheckoutId = walletCheckoutOperationId?.trim();
@@ -1937,6 +2067,8 @@ class ShopDatabase extends _$ShopDatabase {
         !supportedPaymentMethods.contains(paymentMethod) ||
         (expectedTotalMmk != null &&
             (expectedTotalMmk < 0 || paymentMethod != 'cash')) ||
+        (expectedUnitPricesMmk != null && paymentMethod != 'cash') ||
+        (expectedProductNames != null && paymentMethod != 'cash') ||
         (paymentMethod == 'cash' && cleanWalletCheckoutId != null) ||
         (paymentMethod != 'cash' &&
             cleanWalletCheckoutId != cleanOperationId)) {
@@ -1955,6 +2087,26 @@ class ShopDatabase extends _$ShopDatabase {
     }
     final canonicalLines = productQuantities.entries.toList()
       ..sort((a, b) => a.key.compareTo(b.key));
+    if (expectedUnitPricesMmk != null &&
+        (expectedUnitPricesMmk.length != productQuantities.length ||
+            productQuantities.keys.any(
+              (id) =>
+                  expectedUnitPricesMmk[id] == null ||
+                  expectedUnitPricesMmk[id]! < 0 ||
+                  expectedUnitPricesMmk[id]! > 2000000000,
+            ))) {
+      throw ArgumentError('Reviewed sale prices are invalid.');
+    }
+    if (expectedProductNames != null &&
+        (expectedProductNames.length != productQuantities.length ||
+            productQuantities.keys.any(
+              (id) =>
+                  expectedProductNames[id] == null ||
+                  expectedProductNames[id]!.isEmpty ||
+                  expectedProductNames[id]!.length > 160,
+            ))) {
+      throw ArgumentError('Reviewed sale items are invalid.');
+    }
     final fingerprintLines = [
       for (final line in canonicalLines)
         {'productId': line.key, 'quantity': line.value},
@@ -1987,6 +2139,19 @@ class ShopDatabase extends _$ShopDatabase {
                   ..where((line) => line.saleId.equals(priorSale.id))
                   ..orderBy([(line) => OrderingTerm.asc(line.productName)]))
                 .get();
+        if (expectedUnitPricesMmk != null &&
+            priorLines.any(
+              (line) =>
+                  expectedUnitPricesMmk[line.productId] != line.unitPriceMmk,
+            )) {
+          throw StateError('Sale price changed. Review the amount again.');
+        }
+        if (expectedProductNames != null &&
+            priorLines.any(
+              (line) => expectedProductNames[line.productId] != line.productName,
+            )) {
+          throw StateError('Sale item changed. Review each line again.');
+        }
         await clearCounterSaleDraft(cleanOperationId);
         return ShopSaleReceipt(
           id: priorSale.id,
@@ -2082,6 +2247,14 @@ class ShopDatabase extends _$ShopDatabase {
           throw StateError('The sale does not match the saved checkout.');
         }
         final unitPriceMmk = snapshot?.unitPriceMmk ?? product.priceMmk;
+        if (expectedUnitPricesMmk != null &&
+            expectedUnitPricesMmk[line.key] != unitPriceMmk) {
+          throw StateError('Sale price changed. Review the amount again.');
+        }
+        if (expectedProductNames != null &&
+            expectedProductNames[line.key] != product.name) {
+          throw StateError('Sale item changed. Review each line again.');
+        }
         final lineTotal = unitPriceMmk * line.value;
         if (lineTotal > 2000000000000 ||
             totalMmk > 200000000000000 - lineTotal) {
