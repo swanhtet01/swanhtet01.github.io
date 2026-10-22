@@ -1113,7 +1113,10 @@ class _ShopHomeState extends State<ShopHome> {
       body: SafeArea(
         child: Column(
           children: [
-            if (widget.embeddedTaskShell)
+            // The compact catalog already has its own Products heading; the
+            // selected bottom destination supplies the Sell task label.
+            if (widget.embeddedTaskShell &&
+                (width >= 420 || _checkoutLoadFailed))
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
                 child: ShopTaskPageHeader(
@@ -1765,8 +1768,9 @@ class _ShopHomeState extends State<ShopHome> {
             _pendingWalletCheckout == null;
         final addAffordance = ExcludeSemantics(
           child: Container(
-            width: 38,
-            height: 38,
+            key: ValueKey('shop-add-affordance:${item.id}'),
+            width: 44,
+            height: 44,
             decoration: BoxDecoration(
               color: canAdd ? const Color(0xffeef3ff) : const Color(0xfff1f2f5),
               borderRadius: BorderRadius.circular(10),
@@ -1793,10 +1797,15 @@ class _ShopHomeState extends State<ShopHome> {
                   )
                 : shopCopy(widget.myanmar, 'Add to sale', 'အရောင်းထဲထည့်ရန်'),
             child: ListTile(
+              key: ValueKey('shop-catalog-row:${item.id}'),
               isThreeLine: compactProductRow,
               contentPadding: EdgeInsets.symmetric(
                 horizontal: 14,
-                vertical: touchCompactRow ? 2 : 10,
+                vertical: touchCompactRow
+                    ? 2
+                    : narrowProductRow
+                    ? 4
+                    : 10,
               ),
               leading:
                   !_hasProductPhotos &&
@@ -1842,8 +1851,9 @@ class _ShopHomeState extends State<ShopHome> {
                     ),
               title: Text(
                 item.name,
-                maxLines: narrowProductRow ? 3 : 2,
+                maxLines: 2,
                 overflow: TextOverflow.ellipsis,
+                semanticsLabel: item.name,
                 style: Theme.of(context).textTheme.titleMedium,
               ),
               subtitle: Column(
@@ -1851,15 +1861,36 @@ class _ShopHomeState extends State<ShopHome> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   if (compactProductRow)
-                    Text(_mmk(item.priceMmk), style: _shopMoneyStyle(context)),
-                  Text(
-                    stock,
-                    style: TextStyle(
-                      color: item.onHand == 0
-                          ? Theme.of(context).colorScheme.error
-                          : Theme.of(context).colorScheme.onSurfaceVariant,
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 2,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Text(
+                          _mmk(item.priceMmk),
+                          style: _shopMoneyStyle(context),
+                        ),
+                        Text(
+                          stock,
+                          style: TextStyle(
+                            color: item.onHand == 0
+                                ? Theme.of(context).colorScheme.error
+                                : Theme.of(context)
+                                      .colorScheme
+                                      .onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    )
+                  else
+                    Text(
+                      stock,
+                      style: TextStyle(
+                        color: item.onHand == 0
+                            ? Theme.of(context).colorScheme.error
+                            : Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
                     ),
-                  ),
                 ],
               ),
               trailing: compactProductRow

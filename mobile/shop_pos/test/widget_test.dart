@@ -1589,7 +1589,7 @@ void main() {
                     ),
                   )
                   .maxLines,
-              3,
+              2,
             );
           }
           expect(
@@ -1647,6 +1647,85 @@ void main() {
       }
     },
   );
+
+  testWidgets('320px Burmese Sell keeps three catalog rows above navigation', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 800);
+    tester.view.devicePixelRatio = 1;
+    tester.platformDispatcher.textScaleFactorTestValue = 1.3;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    final database = ShopDatabase(NativeDatabase.memory());
+    try {
+      for (final (id, name, price) in [
+        ('water', 'ALPINE သောက်ရေသန့်', 5700),
+        ('soap', 'BAYDAR အဝတ်လျှော်ဆပ်ပြာ', 5900),
+        ('rice', 'KAUNG ရန်ကုန် ဆန်', 12450),
+        ('noodles', 'MAMA ကြက်သား အမြန်ခေါက်ဆွဲ', 2950),
+      ]) {
+        await database.addProduct(
+          id: id,
+          name: name,
+          priceMmk: price,
+          openingStock: 20,
+        );
+      }
+      await tester.pumpWidget(
+        ShopApp(
+          database: database,
+          authClient: null,
+          apiBaseUrl: 'https://example.invalid',
+          initialMyanmar: true,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.descendant(
+          of: find.byType(NavigationBar),
+          matching: find.text('ရောင်းရန်'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('ကုန်ပစ္စည်းများ'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(ShopTaskPageHeader),
+          matching: find.text('ရောင်းရန်'),
+        ),
+        findsNothing,
+      );
+      final thirdRow = find.byKey(const ValueKey('shop-catalog-row:rice'));
+      expect(thirdRow, findsOneWidget);
+      expect(
+        tester.getBottomLeft(thirdRow).dy,
+        lessThan(tester.getTopLeft(find.byType(NavigationBar)).dy),
+      );
+      expect(tester.getSize(thirdRow).height, greaterThanOrEqualTo(44));
+      expect(
+        tester
+            .getSize(find.byKey(const ValueKey('shop-add-affordance:rice')))
+            .height,
+        greaterThanOrEqualTo(44),
+      );
+      expect(
+        tester
+            .widget<Text>(
+              find.descendant(
+                of: thirdRow,
+                matching: find.text('KAUNG ရန်ကုန် ဆန်'),
+              ),
+            )
+            .semanticsLabel,
+        'KAUNG ရန်ကုန် ဆန်',
+      );
+      expect(tester.takeException(), isNull);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await database.close();
+    }
+  });
 
   testWidgets('Burmese cash review stays uncommitted until confirmed', (
     tester,
