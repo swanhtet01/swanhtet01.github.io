@@ -267,7 +267,7 @@ class _ShopAppState extends State<ShopApp> {
     const accent = Color(0xff2563eb);
     return MaterialApp(
       navigatorKey: _navigatorKey,
-      title: 'SuperMega Shop',
+      title: shopCopy(_myanmar, 'Shop', 'ဆိုင်'),
       debugShowCheckedModeBanner: false,
       locale: Locale(_myanmar ? 'my' : 'en'),
       supportedLocales: const [Locale('en'), Locale('my')],
@@ -457,7 +457,7 @@ class _ShopAppState extends State<ShopApp> {
                   return Scaffold(
                     appBar: AppBar(
                       title: Text(
-                        shopCopy(_myanmar, 'SuperMega Shop', 'SuperMega ဆိုင်'),
+                        shopCopy(_myanmar, 'Shop', 'ဆိုင်'),
                       ),
                       actions: [
                         if (!desktop)
@@ -3750,8 +3750,11 @@ class _ShopHomeState extends State<ShopHome> {
                 .clamp(1.0, 1.6);
             // Keep a short sale near its content. Long baskets retain the
             // available height and scroll inside the existing list.
+            // Burmese action labels wrap on narrow phones. Reserve that extra
+            // line while the sheet itself remains capped below.
+            final compactBaseHeight = widget.myanmar && phone ? 356.0 : 300.0;
             final contentHeight =
-                (300 +
+                (compactBaseHeight +
                     76 * _cart.length.clamp(0, 4) +
                     (_cartHasUnavailableProducts(
                           snapshot.data ?? const <ShopProduct>[],
@@ -4380,7 +4383,7 @@ class _SetupTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final compact =
-        MediaQuery.sizeOf(context).width < 480 ||
+        MediaQuery.sizeOf(context).width < 360 ||
         MediaQuery.textScalerOf(context).scale(1) > 1.2;
     return ListTile(
       contentPadding: EdgeInsets.symmetric(

@@ -420,6 +420,111 @@ void main() {
     );
   }
 
+  for (final (width, height, textScale, language) in [
+    (390.0, 844.0, 1.0, 'en'),
+    (390.0, 844.0, 1.0, 'my'),
+    (320.0, 800.0, 1.5, 'en'),
+    (320.0, 800.0, 1.5, 'my'),
+  ]) {
+    testWidgets(
+      'compact checkout keeps every action reachable at ${width.toInt()}px $language',
+      (tester) async {
+        tester.view.physicalSize = Size(width, height);
+        tester.view.devicePixelRatio = 1;
+        tester.platformDispatcher.textScaleFactorTestValue = textScale;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+        final database = await _sampleShop(myanmar: language == 'my');
+        try {
+          await tester.pumpWidget(
+            ShopApp(
+              database: database,
+              authClient: null,
+              apiBaseUrl: 'https://example.invalid',
+              initialMyanmar: language == 'my',
+            ),
+          );
+          await tester.pumpAndSettle();
+
+          final expectedTitle = language == 'my' ? 'ဆိုင်' : 'Shop';
+          expect(
+            tester.widget<MaterialApp>(find.byType(MaterialApp)).title,
+            expectedTitle,
+          );
+          expect(
+            find.descendant(
+              of: find.byType(AppBar),
+              matching: find.text(expectedTitle),
+            ),
+            findsOneWidget,
+          );
+
+          if (width == 390) {
+            await tester.tap(
+              find
+                  .descendant(
+                    of: find.byType(AppBar),
+                    matching: find.byIcon(Icons.settings_outlined),
+                  )
+                  .first,
+            );
+            await tester.pumpAndSettle();
+            expect(find.byIcon(Icons.print_outlined), findsOneWidget);
+            expect(
+              find.text(
+                language == 'my'
+                    ? 'ပရင်တာကို ရှာပြီး စမ်းသပ်ပါ။'
+                    : 'Find and test a printer.',
+              ),
+              findsOneWidget,
+            );
+            expect(await tester.binding.handlePopRoute(), isTrue);
+            await tester.pumpAndSettle();
+          }
+
+          await tester.tap(
+            find
+                .descendant(
+                  of: find.byType(NavigationBar),
+                  matching: find.byIcon(Icons.point_of_sale_outlined),
+                )
+                .first,
+          );
+          await tester.pumpAndSettle();
+          final product = find
+              .byTooltip(language == 'my' ? 'အရောင်းထဲထည့်ရန်' : 'Add to sale')
+              .first;
+          await tester.ensureVisible(product);
+          await tester.tap(product);
+          await tester.pumpAndSettle();
+          await tester.tap(find.byIcon(Icons.shopping_basket_outlined).first);
+          await tester.pumpAndSettle();
+
+          final sheet = find.byKey(const ValueKey('shop-cart-sheet'));
+          final holdSale = find.byKey(const ValueKey('shop-hold-sale'));
+          expect(sheet, findsOneWidget);
+          expect(holdSale, findsOneWidget);
+          final sheetBounds = tester.getRect(sheet);
+          final holdBounds = tester.getRect(holdSale);
+          expect(sheetBounds.height, lessThanOrEqualTo(height * .92 + .1));
+          expect(holdBounds.top, greaterThanOrEqualTo(sheetBounds.top));
+          expect(holdBounds.bottom, lessThanOrEqualTo(sheetBounds.bottom));
+          expect(holdSale.hitTestable(), findsOneWidget);
+          expect(
+            tester.widget<TextButton>(holdSale).onPressed,
+            isNotNull,
+          );
+          expect(tester.takeException(), isNull);
+        } finally {
+          await tester.pumpWidget(const SizedBox.shrink());
+          await tester.pump(const Duration(milliseconds: 1));
+          await database.close();
+        }
+      },
+    );
+  }
+
   for (final (width, height, language) in [
     (320.0, 800.0, 'en'),
     (390.0, 844.0, 'en'),
