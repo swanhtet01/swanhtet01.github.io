@@ -2753,7 +2753,7 @@ void main() {
     },
   );
 
-  testWidgets('320px Burmese Sell keeps four labeled rows above navigation', (
+  testWidgets('320px Burmese Sell shows three rows and scrolls to a fourth', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(320, 800);
@@ -2822,7 +2822,9 @@ void main() {
       expect(fourthRow, findsOneWidget);
       final navigationTop = tester.getTopLeft(find.byType(NavigationBar)).dy;
       expect(tester.getBottomLeft(thirdRow).dy, lessThan(navigationTop));
-      expect(tester.getBottomLeft(fourthRow).dy, lessThan(navigationTop));
+      await tester.ensureVisible(fourthRow);
+      await tester.pumpAndSettle();
+      expect(tester.getBottomLeft(fourthRow).dy, lessThan(navigationTop + 1));
       expect(tester.getSize(thirdRow).height, greaterThanOrEqualTo(44));
       expect(
         tester
