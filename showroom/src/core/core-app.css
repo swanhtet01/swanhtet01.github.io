@@ -3177,7 +3177,7 @@ input, select, textarea,
 .shop-product-list > a[data-low-stock="true"] small { color: var(--core-warning); }
 .shop-order-queue-meta small { display: flex; align-items: center; justify-content: flex-end; gap: .4rem; }
 .shop-order-queue-meta em { border-radius: 999px; padding: .15rem .4rem; background: color-mix(in srgb,var(--core-success) 12%,var(--core-panel)); color: var(--core-success); font-size: .625rem; font-style: normal; font-weight: 700; text-transform: none; }
-.shop-order-queue-meta em[data-payment-due="true"] { background: color-mix(in srgb,var(--core-warning) 12%,var(--core-panel)); color: var(--core-warning); }
+.shop-order-queue-meta em[data-payment-pending="true"] { background: color-mix(in srgb,var(--core-muted) 9%,var(--core-panel)); color: var(--core-muted); }
 .shop-operations-card > footer a { font-size: .8125rem; }
 .shop-sales-pulse > header strong { font-family: inherit; font-size: 1.35rem; font-variant-numeric: tabular-nums; }
 .shop-sales-pulse > header > b, .shop-sales-pulse > p { font-size: .75rem; }
