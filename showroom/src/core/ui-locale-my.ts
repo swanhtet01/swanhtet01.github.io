@@ -85,6 +85,7 @@ export const UI_TRANSLATIONS: Readonly<Record<string, string>> = {
   'Advanced controls': 'အဆင့်မြင့် စီမံမှု', 'Costs, trends and operations': 'ကုန်ကျစရိတ်၊ အရောင်းလမ်းကြောင်းနှင့် လုပ်ငန်းများ',
   'Explore': 'ကြည့်ရန်', 'Reorder': 'ထပ်မှာရန်', 'Payment due': 'ငွေပေးရန် ကျန်',
   'Order late': 'အော်ဒါ နောက်ကျနေ',
+  'Order due soon': 'ပေးအပ်ချိန် နီးလာ',
   'Paid': 'ငွေပေးပြီး', 'Customer': 'ဖောက်သည်', 'Walk-in': 'ဆိုင်လာဝယ်သူ',
   'No sales yesterday': 'မနေ့က အရောင်းမရှိပါ', 'Level with yesterday': 'မနေ့ကနှင့် တူညီပါသည်',
   'Up': 'တိုး', 'Down': 'လျော့', 'vs yesterday': 'မနေ့ကထက်',

@@ -23,6 +23,7 @@ test('language choice survives refresh and follows another tab without mixing la
     assert.equal(locale.uiText('Products'), 'ကုန်ပစ္စည်းများ')
     assert.equal(locale.uiText('Unpaid'), 'ငွေမပေးရသေး')
     assert.equal(locale.uiText('due soon'), 'မကြာမီ ရောက်မည်')
+    assert.equal(locale.uiText('Order due soon'), 'ပေးအပ်ချိန် နီးလာ')
     assert.equal(locale.uiText('Account changed in another tab'), 'အခြားတဘ်တွင် အကောင့် ပြောင်းထားသည်')
     assert.equal(locale.uiText('Shop task shortcuts'), 'ဆိုင်လုပ်ငန်း အမြန်လမ်းကြောင်းများ')
     assert.equal(locale.uiText('Customer receipt'), 'ဖောက်သည်ပြေစာ')

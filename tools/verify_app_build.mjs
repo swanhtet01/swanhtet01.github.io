@@ -5112,7 +5112,7 @@ if (!commerceSource.includes("CommerceOrderPromiseUrgency = 'late' | 'due_soon' 
   || !shopOrderAttentionSource.includes("order.paymentStatus === 'pending') labels.push({ kind: 'payment', text: 'Unpaid', tone: 'pending' })")
   || !shopOrderAttentionSource.includes("order.refundStatus === 'due'")
   || !shopOrderAttentionSource.includes("if (promiseUrgency === 'late') labels.push({ kind: 'promise', text: 'Order late', tone: 'late' })")
-  || !shopOrderAttentionSource.includes("text: 'due soon', tone: 'pending'")
+  || !shopOrderAttentionSource.includes("text: 'Order due soon', tone: 'pending'")
   || !shopOrderAttentionSource.includes("text: 'promise not recorded', tone: 'pending'")) fail('commerce_order_promise_urgency_missing')
 if (!commerceSource.includes("CommercePurchaseOrderArrivalUrgency = 'late' | 'due_soon' | 'scheduled' | 'unrecorded' | 'closed'")
   || !commerceSource.includes('export function commercePurchaseOrderArrivalUrgency')
