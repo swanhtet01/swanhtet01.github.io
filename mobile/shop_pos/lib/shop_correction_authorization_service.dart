@@ -126,18 +126,19 @@ class ShopCorrectionAuthorizationService {
     required String capability,
     required String commandDigest,
     required String requestFingerprint,
-  }) => _authorize(
-    authorizationRequestId: authorizationRequestId,
-    workspaceId: workspaceId,
-    capability: capability,
-    commandDigest: commandDigest,
-    requestFingerprint: requestFingerprint,
-  ).timeout(
-    requestTimeout,
-    onTimeout: () => throw const ShopCorrectionAuthorizationException(
-      'authorization_unavailable',
-    ),
-  );
+  }) =>
+      _authorize(
+        authorizationRequestId: authorizationRequestId,
+        workspaceId: workspaceId,
+        capability: capability,
+        commandDigest: commandDigest,
+        requestFingerprint: requestFingerprint,
+      ).timeout(
+        requestTimeout,
+        onTimeout: () => throw const ShopCorrectionAuthorizationException(
+          'authorization_unavailable',
+        ),
+      );
 
   Future<ShopCorrectionAuthorizationResult> _authorize({
     required String authorizationRequestId,
@@ -147,9 +148,7 @@ class ShopCorrectionAuthorizationService {
     required String requestFingerprint,
   }) async {
     if (!_validEndpoint(endpoint)) {
-      throw const ShopCorrectionAuthorizationException(
-        'endpoint_unavailable',
-      );
+      throw const ShopCorrectionAuthorizationException('endpoint_unavailable');
     }
     _validateRequest(
       authorizationRequestId: authorizationRequestId,
@@ -207,9 +206,7 @@ class ShopCorrectionAuthorizationService {
     try {
       final response = await _client.send(request).timeout(requestTimeout);
       if (response.statusCode >= 300 && response.statusCode < 400) {
-        throw const ShopCorrectionAuthorizationException(
-          'redirect_rejected',
-        );
+        throw const ShopCorrectionAuthorizationException('redirect_rejected');
       }
       final responseBytes = await _readBounded(response);
       if (response.statusCode != 200) {
@@ -251,9 +248,7 @@ class ShopCorrectionAuthorizationService {
     await for (final chunk in response.stream.timeout(requestTimeout)) {
       length += chunk.length;
       if (length > _maximumResponseBytes) {
-        throw const ShopCorrectionAuthorizationException(
-          'response_too_large',
-        );
+        throw const ShopCorrectionAuthorizationException('response_too_large');
       }
       bytes.add(chunk);
     }
@@ -321,14 +316,10 @@ class ShopCorrectionAuthorizationService {
     }
     final now = _clock().millisecondsSinceEpoch;
     if (issuedAtMillis > now) {
-      throw const ShopCorrectionAuthorizationException(
-        'device_clock_invalid',
-      );
+      throw const ShopCorrectionAuthorizationException('device_clock_invalid');
     }
     if (expiresAtMillis < now) {
-      throw const ShopCorrectionAuthorizationException(
-        'authorization_expired',
-      );
+      throw const ShopCorrectionAuthorizationException('authorization_expired');
     }
     if (!shopCorrectionAuthorizationReceiptDigestMatches(
       receiptDigest: receiptDigest,

@@ -1206,10 +1206,7 @@ void main() {
           '${directory.path}/legacy-v11-migrated-attached.sqlite',
         );
         await migrated.exportVerifiedLocalSnapshot(attachedSnapshot);
-        ShopBackup.verifySnapshot(
-          attachedSnapshot,
-          expectedSchemaVersion: 12,
-        );
+        ShopBackup.verifySnapshot(attachedSnapshot, expectedSchemaVersion: 12);
       } finally {
         await migrated.close();
       }
@@ -1315,10 +1312,7 @@ void main() {
         connection.close();
       }
       expect(
-        () => ShopBackup.verifySnapshot(
-          legacy,
-          expectedSchemaVersion: 11,
-        ),
+        () => ShopBackup.verifySnapshot(legacy, expectedSchemaVersion: 11),
         throwsFormatException,
       );
       final upgrading = ShopDatabase(NativeDatabase(legacy));
@@ -2378,13 +2372,12 @@ void _removeV12ObjectsForLegacyFixture(Database connection) {
 
 Future<ShopManagedWorkspaceBinding> _attachBackupWorkspace(
   ShopDatabase database,
-) =>
-    database.attachAuthenticatedManagedWorkspace(
-      const ShopAuthenticatedWorkspaceSelection(
-        workspaceId: 'workspace-backup-test',
-        actorId: 'owner-backup-test',
-      ),
-    );
+) => database.attachAuthenticatedManagedWorkspace(
+  const ShopAuthenticatedWorkspaceSelection(
+    workspaceId: 'workspace-backup-test',
+    actorId: 'owner-backup-test',
+  ),
+);
 
 ShopCorrectionAuthorization _backupAuthorization(
   String commandDigest, {

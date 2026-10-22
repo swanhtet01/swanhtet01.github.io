@@ -1150,9 +1150,7 @@ class ShopDatabase extends _$ShopDatabase {
         'SELECT authorization_workspace_id AS workspace_id '
         'FROM shop_wallet_reversal_reconciliations'
         ') WHERE workspace_id != ? LIMIT 1',
-        variables: [
-          Variable<String>(authenticatedSelection.workspaceId),
-        ],
+        variables: [Variable<String>(authenticatedSelection.workspaceId)],
       ).getSingleOrNull();
       if (conflictingHistory != null) {
         throw StateError(
@@ -3045,8 +3043,7 @@ class ShopDatabase extends _$ShopDatabase {
     String? reversalId,
   }) async {
     final binding = await readManagedWorkspaceBinding();
-    if (binding == null ||
-        binding.workspaceId != authorizationWorkspaceId) {
+    if (binding == null || binding.workspaceId != authorizationWorkspaceId) {
       throw StateError(
         'Correction authorization does not match this Shop workspace.',
       );

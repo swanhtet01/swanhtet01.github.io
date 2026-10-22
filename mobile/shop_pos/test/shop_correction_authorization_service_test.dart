@@ -154,11 +154,7 @@ void main() {
       'https://app.supermega.dev/#fragment',
       'not a url',
     ]) {
-      expect(
-        shopCorrectionAuthorizationEndpoint(value),
-        isNull,
-        reason: value,
-      );
+      expect(shopCorrectionAuthorizationEndpoint(value), isNull, reason: value);
     }
   });
 
@@ -183,26 +179,32 @@ void main() {
     },
   );
 
-  test('a directly supplied foreign HTTPS endpoint fails before token use', () async {
-    var tokenReads = 0;
-    var calls = 0;
-    final service = _service(
-      MockClient((_) async {
-        calls++;
-        return _jsonResponse(_envelope(), 200);
-      }),
-      accessToken: () async {
-        tokenReads++;
-        return 'must-not-leave-device';
-      },
-      endpoint: Uri.parse(
-        'https://evil.invalid$shopCorrectionAuthorizationPath',
-      ),
-    );
-    await expectLater(_authorize(service), _throwsCode('endpoint_unavailable'));
-    expect(tokenReads, 0);
-    expect(calls, 0);
-  });
+  test(
+    'a directly supplied foreign HTTPS endpoint fails before token use',
+    () async {
+      var tokenReads = 0;
+      var calls = 0;
+      final service = _service(
+        MockClient((_) async {
+          calls++;
+          return _jsonResponse(_envelope(), 200);
+        }),
+        accessToken: () async {
+          tokenReads++;
+          return 'must-not-leave-device';
+        },
+        endpoint: Uri.parse(
+          'https://evil.invalid$shopCorrectionAuthorizationPath',
+        ),
+      );
+      await expectLater(
+        _authorize(service),
+        _throwsCode('endpoint_unavailable'),
+      );
+      expect(tokenReads, 0);
+      expect(calls, 0);
+    },
+  );
 
   test('the end-to-end deadline bounds a stalled session lookup', () async {
     var calls = 0;
@@ -455,10 +457,8 @@ void main() {
           _authorize(
             _service(
               MockClient(
-                (_) async => _jsonResponse(
-                  _envelope(receipt: entry.value),
-                  200,
-                ),
+                (_) async =>
+                    _jsonResponse(_envelope(receipt: entry.value), 200),
               ),
             ),
           ),
@@ -476,9 +476,7 @@ void main() {
         _service(
           MockClient(
             (_) async => _jsonResponse(
-              _envelope(
-                receipt: _receipt(issuedAtMillis: futureIssued),
-              ),
+              _envelope(receipt: _receipt(issuedAtMillis: futureIssued)),
               200,
             ),
           ),
@@ -493,9 +491,7 @@ void main() {
         _service(
           MockClient(
             (_) async => _jsonResponse(
-              _envelope(
-                receipt: _receipt(issuedAtMillis: expiredIssued),
-              ),
+              _envelope(receipt: _receipt(issuedAtMillis: expiredIssued)),
               200,
             ),
           ),

@@ -3002,13 +3002,12 @@ ShopCorrectionAuthorization _correctionAuthorization(
 
 Future<ShopManagedWorkspaceBinding> _attachTestWorkspace(
   ShopDatabase database,
-) =>
-    database.attachAuthenticatedManagedWorkspace(
-      const ShopAuthenticatedWorkspaceSelection(
-        workspaceId: 'workspace-shop-test',
-        actorId: 'owner-test',
-      ),
-    );
+) => database.attachAuthenticatedManagedWorkspace(
+  const ShopAuthenticatedWorkspaceSelection(
+    workspaceId: 'workspace-shop-test',
+    actorId: 'owner-test',
+  ),
+);
 
 Uint8List _pngBytes() {
   return Uint8List.fromList([

@@ -1002,10 +1002,7 @@ abstract final class ShopBackup {
     return existingNames.intersection(reservedNames).isEmpty;
   }
 
-  static bool _schemaDefinitionsValid(
-    Database connection,
-    int schemaVersion,
-  ) {
+  static bool _schemaDefinitionsValid(Database connection, int schemaVersion) {
     final actualSql = <String, String>{};
     final actualTypes = <String, String>{};
     final triggerTables = <String, String>{};
