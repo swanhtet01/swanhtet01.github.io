@@ -128,7 +128,8 @@ details:not([open]) > :not(summary) { display: none; }
 .core-skip:focus { top: 10px; }
 
 .core-brand { min-height: 38px; display: inline-flex; align-items: center; gap: 11px; text-decoration: none; }
-.core-brand-mark { color: var(--core-green); font-family: var(--core-mono); font-size: 1.375rem; font-weight: var(--font-weight-black); letter-spacing: -.14em; }
+.core-brand-mark { display: inline-flex; align-items: center; flex: none; }
+.core-brand-mark svg { display: block; }
 .core-brand-name { color: var(--core-ink); font-size: 0.75rem; font-weight: var(--font-weight-black); letter-spacing: .12em; }
 .core-nav { display: grid; gap: var(--space-1); margin-top: 2.125rem; }
 .core-nav a { min-height: 2.75rem; display: flex; align-items: center; border: 1px solid transparent; border-radius: .6875rem; padding: 0 .8125rem; color: var(--core-muted); font-size: 0.8125rem; font-weight: var(--font-weight-semibold); text-decoration: none; }
