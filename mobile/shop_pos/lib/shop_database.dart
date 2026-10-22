@@ -1154,11 +1154,24 @@ class ShopDatabase extends _$ShopDatabase {
           return WalletCheckoutLineSnapshot.fromJson(line);
         })
         .toList(growable: false);
+    final savedTotalMmk = row.read<int>('total_mmk');
+    final seenProductIds = <String>{};
+    var calculatedTotalMmk = 0;
+    for (final line in lines) {
+      if (!seenProductIds.add(line.productId) ||
+          calculatedTotalMmk > 200000000000000 - line.lineTotalMmk) {
+        throw const FormatException('Wallet checkout snapshot is invalid.');
+      }
+      calculatedTotalMmk += line.lineTotalMmk;
+    }
+    if (calculatedTotalMmk != savedTotalMmk) {
+      throw const FormatException('Wallet checkout snapshot is invalid.');
+    }
     return PendingWalletCheckout(
       operationId: row.read<String>('operation_id'),
       paymentMethod: row.read<String>('payment_method'),
       requestFingerprint: row.read<String>('request_fingerprint'),
-      totalMmk: row.read<int>('total_mmk'),
+      totalMmk: savedTotalMmk,
       merchantPhone: row.read<String>('merchant_phone').isEmpty
           ? null
           : row.read<String>('merchant_phone'),
@@ -1756,9 +1769,15 @@ class ShopDatabase extends _$ShopDatabase {
       final products = <ShopProduct>[];
       var totalMmk = 0;
       for (final line in canonicalLines) {
+        // A persisted wallet intent freezes a sale while awaiting payment.
+        // Archiving its product later hides it from new sales, but must not
+        // strand a verified payment. The saved intent and stock check remain
+        // the authority for this completion path.
         final product =
             await (select(shopProducts)..where(
-                  (row) => row.id.equals(line.key) & row.archived.equals(false),
+                  (row) => walletSnapshots == null
+                      ? row.id.equals(line.key) & row.archived.equals(false)
+                      : row.id.equals(line.key),
                 ))
                 .getSingleOrNull();
         if (product == null) {
@@ -1826,12 +1845,13 @@ class ShopDatabase extends _$ShopDatabase {
         final changedRows = await customUpdate(
           'UPDATE shop_products '
           'SET on_hand = on_hand - ?, updated_at_millis = ? '
-          'WHERE id = ? AND archived = 0 AND on_hand >= ?',
+          'WHERE id = ? AND on_hand >= ? AND (archived = 0 OR ? = 1)',
           variables: [
             Variable<int>(quantity),
             Variable<int>(now),
             Variable<String>(product.id),
             Variable<int>(quantity),
+            Variable<int>(walletSnapshots == null ? 0 : 1),
           ],
         );
         if (changedRows != 1) {

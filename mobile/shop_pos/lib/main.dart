@@ -442,6 +442,54 @@ TextStyle _shopMoneyStyle(BuildContext context, {bool total = false}) {
   );
 }
 
+Widget _savedWalletLines(
+  BuildContext context,
+  List<WalletCheckoutLineSnapshot> lines, {
+  required bool myanmar,
+}) {
+  final theme = Theme.of(context);
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      for (final line in lines)
+        Padding(
+          key: ValueKey('shop-pending-wallet-line:${line.productId}'),
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      line.productName,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    Text(
+                      '${shopMmk(line.unitPriceMmk, myanmar: myanmar)} × '
+                      '${shopNumber(line.quantity, myanmar: myanmar)}',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                shopMmk(line.lineTotalMmk, myanmar: myanmar),
+                style: _shopMoneyStyle(context),
+              ),
+            ],
+          ),
+        ),
+    ],
+  );
+}
+
 class ShopHome extends StatefulWidget {
   const ShopHome({
     required this.database,
@@ -1055,6 +1103,8 @@ class _ShopHomeState extends State<ShopHome> {
             const SizedBox(height: 4),
             Text('$provider · ${_mmk(checkout.totalMmk)}'),
             const SizedBox(height: 8),
+            _savedWalletLines(context, checkout.lines, myanmar: widget.myanmar),
+            const SizedBox(height: 8),
             Wrap(
               spacing: 8,
               children: [
@@ -1613,9 +1663,9 @@ class _ShopHomeState extends State<ShopHome> {
   Widget _cartPanel(List<ShopProduct> products, {StateSetter? refresh}) {
     final byId = {for (final item in products) item.id: item};
     final hasUnavailableProducts = _cartHasUnavailableProducts(products);
-    final entries = _cart.entries
-        .where((entry) => byId.containsKey(entry.key))
-        .toList();
+    final entries = _pendingWalletCheckout != null
+        ? const <MapEntry<String, int>>[]
+        : _cart.entries.where((entry) => byId.containsKey(entry.key)).toList();
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(18),
@@ -1703,8 +1753,16 @@ class _ShopHomeState extends State<ShopHome> {
                   child: Text(
                     shopCopy(
                       widget.myanmar,
-                      _cart.isEmpty ? 'Add products to start a sale.' : 'A saved product is no longer available. Clear this sale and start again.',
-                      _cart.isEmpty ? 'အရောင်းစရန် ပစ္စည်းထည့်ပါ။' : 'သိမ်းထားသော ပစ္စည်းတစ်ခု မရှိတော့ပါ။ ဤအရောင်းကို ဖျက်ပြီး ပြန်စပါ။',
+                      _pendingWalletCheckout != null
+                          ? 'Review the saved sale above before checking payment.'
+                          : _cart.isEmpty
+                          ? 'Add products to start a sale.'
+                          : 'A saved product is no longer available. Clear this sale and start again.',
+                      _pendingWalletCheckout != null
+                          ? 'ငွေပေးချေမှုမစစ်မီ အပေါ်ပါသိမ်းထားသောအရောင်းကို စစ်ပါ။'
+                          : _cart.isEmpty
+                          ? 'အရောင်းစရန် ပစ္စည်းထည့်ပါ။'
+                          : 'သိမ်းထားသော ပစ္စည်းတစ်ခု မရှိတော့ပါ။ ဤအရောင်းကို ဖျက်ပြီး ပြန်စပါ။',
                     ),
                   ),
                 ),
@@ -1853,7 +1911,7 @@ class _ShopHomeState extends State<ShopHome> {
           Text(
             _mmk(lineTotalMmk),
             key: ValueKey('shop-cart-line-total:${item.id}'),
-            style: _shopMoneyStyle(context, total: true),
+            style: _shopMoneyStyle(context),
           ),
         Text(
           '${_mmk(unitPriceMmk)} × ${shopNumber(quantity, myanmar: widget.myanmar)}',
@@ -2505,6 +2563,7 @@ class _ShopHomeState extends State<ShopHome> {
       builder: (_) => _WalletCheckoutDialog(
         methods: [method],
         totalMmk: intent.totalMmk,
+        lines: intent.lines,
         myanmar: widget.myanmar,
       ),
     );
@@ -2998,11 +3057,13 @@ class _WalletCheckoutDialog extends StatefulWidget {
   const _WalletCheckoutDialog({
     required this.methods,
     required this.totalMmk,
+    required this.lines,
     required this.myanmar,
   });
 
   final List<MerchantWalletSetup> methods;
   final int totalMmk;
+  final List<WalletCheckoutLineSnapshot> lines;
   final bool myanmar;
 
   @override
@@ -3058,6 +3119,8 @@ class _WalletCheckoutDialogState extends State<_WalletCheckoutDialog> {
                 style: Theme.of(context).textTheme.headlineSmall
                     ?.copyWith(fontWeight: FontWeight.w800),
               ),
+              const SizedBox(height: 8),
+              _savedWalletLines(context, widget.lines, myanmar: myanmar),
               const SizedBox(height: 8),
               Center(
                 child: Semantics(

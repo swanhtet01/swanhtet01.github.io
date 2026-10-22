@@ -11,6 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supermega_shop/main.dart';
 import 'package:supermega_shop/printer_services.dart';
 import 'package:supermega_shop/recent_sales_screen.dart';
+import 'package:supermega_shop/shop_copy.dart';
 import 'package:supermega_shop/shop_database.dart';
 import 'package:supermega_shop/shop_models.dart';
 import 'package:supermega_shop/wallet_setup_screen.dart';
@@ -2195,6 +2196,109 @@ void main() {
       await database.close();
     },
   );
+
+  testWidgets('restarted wallet review shows frozen items on phone and PC', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    for (final width in [320.0, 1200.0]) {
+      for (final myanmar in [false, true]) {
+        tester.view.physicalSize = Size(width, 800);
+        final database = ShopDatabase(NativeDatabase.memory());
+        try {
+          await database.addProduct(
+            id: 'tea',
+            name: 'Tea before archive',
+            priceMmk: 2500,
+            openingStock: 3,
+          );
+          await database.createWalletCheckoutIntent(
+            operationId: 'wallet-restart-$width-$myanmar',
+            merchant: MerchantWalletSetup(
+              provider: 'KBZPay',
+              merchantPhone: '09123456789',
+              officialQrPayload: _testStaticMmqr(),
+              issuerConfirmed: true,
+            ),
+            lines: const [ShopSaleLineInput(productId: 'tea', quantity: 2)],
+          );
+          await database.customUpdate(
+            'UPDATE shop_products SET archived = 1 WHERE id = ?',
+            variables: [const Variable<String>('tea')],
+            updates: {database.shopProducts},
+          );
+          await tester.pumpWidget(
+            ShopApp(
+              initialCounter: true,
+              database: database,
+              authClient: null,
+              apiBaseUrl: 'https://app.supermega.dev',
+              initialMyanmar: myanmar,
+            ),
+          );
+          await tester.pumpAndSettle();
+          final savedLine = find.byKey(
+            const ValueKey('shop-pending-wallet-line:tea'),
+          );
+          expect(savedLine, findsOneWidget);
+          expect(
+            find.descendant(
+              of: savedLine,
+              matching: find.text('Tea before archive'),
+            ),
+            findsOneWidget,
+          );
+          expect(
+            find.descendant(
+              of: savedLine,
+              matching: find.text(shopMmk(5000, myanmar: myanmar)),
+            ),
+            findsOneWidget,
+          );
+          expect(await database.countSales(), 0);
+
+          await tester.tap(
+            find.text(
+              shopCopy(myanmar, 'Resume payment', 'ပြန်စစ်ဆေးရန်'),
+            ),
+          );
+          await tester.pumpAndSettle();
+          final dialogLine = find.descendant(
+            of: find.byType(AlertDialog),
+            matching: savedLine,
+          );
+          expect(dialogLine, findsOneWidget);
+          expect(
+            find.descendant(
+              of: dialogLine,
+              matching: find.text('Tea before archive'),
+            ),
+            findsOneWidget,
+          );
+          final confirmation = tester.widget<FilledButton>(
+            find.widgetWithText(
+              FilledButton,
+              shopCopy(
+                myanmar,
+                'Confirm received',
+                'ငွေလက်ခံပြီးကြောင်း အတည်ပြုရန်',
+              ),
+            ),
+          );
+          expect(confirmation.onPressed, isNull);
+          expect(await database.countSales(), 0);
+          expect(await database.readPendingWalletCheckout(), isNotNull);
+          expect(tester.takeException(), isNull);
+        } finally {
+          await tester.pumpWidget(const SizedBox.shrink());
+          await tester.pump(const Duration(milliseconds: 1));
+          await database.close();
+        }
+      }
+    }
+  });
 
   testWidgets('older wallet intent without a saved QR needs manual check', (
     tester,
