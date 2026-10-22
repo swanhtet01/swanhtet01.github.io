@@ -7399,9 +7399,6 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
     ?? stockNextPurchaseRow?.item
     ?? lowStock[0]
     ?? commerce.items[0]
-  const stockNextDemand = stockNextItem
-    ? shopDemandIntelligence.rows.find((row) => row.sku === stockNextItem.sku)
-    : undefined
   const stockNextPurchaseUrgency = stockNextPurchaseRow
     ? commercePurchaseOrderArrivalUrgency(stockNextPurchaseRow.purchaseOrder, stockNextPurchaseRow.progress, purchaseOrderClock)
     : null
@@ -8102,7 +8099,7 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
         </section>
         <aside aria-labelledby="shop-stock-next-title" className="shop-stock-next-action" data-action={stockNextActionKind}>
           <header><span><span className="core-eyebrow">Next stock action</span><h3 id="shop-stock-next-title">{stockNextActionTitle}</h3></span><b>{stockNextTrack}</b></header>
-          {stockNextItem ? <div className="shop-stock-next-item"><ProductPhoto className="stock-product-photo" fallback={null} scope={productImageScope} sku={stockNextItem.sku} /><span><strong>{stockNextItem.name}</strong><small>{stockNextItem.sku}{stockNextDemand?.projectedDaysOfCover === null || stockNextDemand?.projectedDaysOfCover === undefined ? '' : ` · ${stockNextDemand.projectedDaysOfCover}d projected cover`}</small></span><span><strong>{stockNextItem.onHand.toLocaleString()}</strong><small>available</small></span></div> : null}
+          {stockNextItem ? <div className="shop-stock-next-item"><ProductPhoto className="stock-product-photo" fallback={null} scope={productImageScope} sku={stockNextItem.sku} /><span><strong>{stockNextItem.name}</strong><small>{stockNextItem.sku}</small></span><span><strong>{stockNextItem.onHand.toLocaleString()}</strong><small>available</small></span></div> : null}
           <div className="shop-stock-next-guidance"><div><span>Why now</span><p>{stockNextReason}</p></div><div><span>Owner check</span><p>{stockNextOwnerCheck}</p></div></div>
           <footer><small>Record → recommendation → owner check → action → closure</small>{stockNextActionKind === 'catalog'
             ? <Link className="core-button primary" to="/shop/?tab=inventory#shop-catalog-import">Add products</Link>
