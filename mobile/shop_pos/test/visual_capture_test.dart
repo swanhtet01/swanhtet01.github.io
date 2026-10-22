@@ -303,6 +303,10 @@ void main() {
             RepaintBoundary(
               key: _captureKey,
               child: MaterialApp(
+                theme: ThemeData(
+                  fontFamily: language == 'my' ? 'NotoSansMyanmarUI' : 'Inter',
+                  fontFamilyFallback: const ['Inter'],
+                ),
                 home: CameraBarcodeScanner(
                   myanmar: language == 'my',
                   cameraViewBuilder: (context, onScanned, onError) =>
