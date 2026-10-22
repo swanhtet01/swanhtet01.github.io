@@ -543,6 +543,7 @@ if (!securityRoute) fail('public_security_header_route_missing')
 const csp = securityRoute.headers['content-security-policy']
 const scriptBody = contact.match(/<script>([\s\S]*?)<\/script>/)?.[1] ?? ''
 const styleBodies = [home, ...[...pages.values()].map((page) => page.html)].flatMap((page) => [...page.matchAll(/<style>([\s\S]*?)<\/style>/g)].map((match) => match[1]))
+if (styleBodies.some((styleBody) => styleBody.includes('\r'))) fail('public_inline_style_noncanonical_newlines')
 const expectedStyleHashes = [...new Set(styleBodies.map((styleBody) => `'sha256-${createHash('sha256').update(styleBody).digest('base64')}'`))]
 const expectedScriptHash = `'sha256-${createHash('sha256').update(scriptBody).digest('base64')}'`
 for (const token of ["default-src 'self'", "base-uri 'none'", "object-src 'none'", "frame-ancestors 'none'", "form-action 'self'", "script-src-attr 'none'", "style-src-attr 'none'", expectedScriptHash]) {

@@ -643,7 +643,7 @@ const publicObservabilityScript = `(function () {
 })()
 `
 
-const publicMarketingStyle = companyShopStyle + `
+const publicMarketingStyle = (companyShopStyle + `
 /* One quiet, consistent public identity. The company page is editorial; Shop is product-led. */
 .nav-links a { min-height: 44px; border-radius: 6px; padding-inline: 13px; transition: color 160ms ease, border-color 160ms ease; }
 .nav-links a[aria-current="page"] { border-bottom: 2px solid var(--brand-accent); border-radius: 0; color: var(--ink); background: transparent; }
@@ -710,7 +710,7 @@ body[data-view="contact"] .contact-page .contact-form .button { width: max-conte
   body[data-view="shop"] .shop-hero-copy { max-width: 720px; }
 }
 @media (min-width: 761px) and (max-width: 1100px) { body[data-view="shop"] .shop-hero-copy { margin-inline: auto; text-align: center; justify-items: center; } body[data-view="shop"] .shop-hero h1 { max-width: 22ch; } }
-`
+`).replace(/\r\n?/g, '\n')
 
 const myanmarPublicStyle = `
   html:lang(my) .nav-links a, html:lang(my) .button, html:lang(my) .footer-links a { line-height: 1.7; }
