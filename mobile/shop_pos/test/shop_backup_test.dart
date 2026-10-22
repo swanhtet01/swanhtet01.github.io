@@ -902,6 +902,9 @@ void main() {
       );
       await _pumpUntil(tester, find.text('Start new Shop'));
       expect(find.text('Start new Shop'), findsOneWidget);
+      expect(tester.widget<Text>(find.text('Start Shop')).style?.fontSize, 30);
+      final startButton = find.widgetWithText(FilledButton, 'Start new Shop');
+      expect(tester.getSize(startButton).height, greaterThanOrEqualTo(48));
       expect(ShopDatabase.privateDatabaseFile(documents).existsSync(), isFalse);
       await tester.tap(find.text('Restore backup'));
       await _pumpUntil(tester, find.text('Restore and open Shop'));
