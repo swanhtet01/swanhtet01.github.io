@@ -94,9 +94,9 @@ async function readPage(route) {
     `meta name="supermega-context-version" content="${manifest.contextVersion}"`,
     'aria-label="SuperMega Shop"',
     `class="brand-mark" aria-hidden="true">${brandMarkHtml}</span>`,
-    `href="${appOrigin}/login?product=shop">Login</a>`,
     'href="/privacy/">Privacy</a>',
   ]) assert(html.includes(token), 'page_shared_contract_missing', { route, token })
+  assert(!/<a\b[^>]*\bhref="https:\/\/[^\"]+\/login\b[^\"]*"[^>]*>/i.test(html), 'page_public_login_present', { route })
   const contactRouteToken = 'href="/contact/">Contact</a>'
   assert(html.includes(contactRouteToken), 'page_contact_route_missing', { route, token: contactRouteToken })
   const copyWithoutExternalDestinations = html.replace(/\bhref="https?:\/\/[^\"]+"/gi, '')
@@ -171,15 +171,12 @@ async function verifyOnce() {
     const landingRoute = `/${product.id}/`
     const landing = pages.get(landingRoute)
     if (pendingRoutes.has(landingRoute) || landing == null) continue
-    const guidedSampleRoute = product.id === 'shop'
-      ? `${appOrigin}/login?product=shop`
-      : `${appOrigin}/login`
     if (product.id === 'shop') {
       assert(landing.includes('class="shop-hero-app"') && landing.includes('src="/images/actual-shop-sell.png"'), 'landing_headline_missing', { product: product.id })
     } else {
       assert(landing.includes('class="platform-image"'), 'landing_headline_missing', { product: product.id })
     }
-    assert(landing.includes(`href="${guidedSampleRoute}"`), 'landing_login_route_missing', { product: product.id })
+    assert(!landing.includes(`href="${appOrigin}/`), 'landing_public_app_action_present', { product: product.id })
     if (product.id === 'shop') assert(landing.includes('href="/contact/?product=shop">Request a Shop walkthrough'), 'shop_contact_action_missing')
     assert(!landing.includes(shopAction), 'retired_shop_action_present')
     assert(landing.includes('href="/contact/">Contact</a>'), 'landing_contact_route_missing', { product: product.id })

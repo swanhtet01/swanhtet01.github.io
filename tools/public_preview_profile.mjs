@@ -37,9 +37,7 @@ export function validatePreviewLinks(html, policy, products, options = {}) {
       return String.fromCodePoint(parseInt(entity.slice(entity[2].toLowerCase() === 'x' ? 3 : 2, -1), entity[2].toLowerCase() === 'x' ? 16 : 10))
     })
   })
-  // Shop links carry product intent so sign-in opens the correct workspace.
-  // Keep that route exact: no other product selectors or query parameters pass.
-  const appPaths = new Set(['/login', '/login?product=shop'])
+  // Public pages do not offer managed sign-in before account activation.
   // Full-size gallery links are static, local PNGs. Keep this exact allowlist
   // separate from page routes so previews cannot turn an image into an escape.
   const galleryPaths = new Set([
@@ -59,19 +57,14 @@ export function validatePreviewLinks(html, policy, products, options = {}) {
     if (href === 'mailto:swanhtet@supermega.dev') continue
     const url = new URL(href, publicOrigin)
     if (url.username || url.password || url.protocol !== 'https:') throw new Error('public_preview_href_unsafe')
-    if (url.origin === origin) {
-      if (!appPaths.has(url.pathname + url.search + url.hash)) throw new Error('public_preview_app_route_invalid')
-    } else if (url.origin !== publicOrigin) throw new Error('public_preview_production_escape')
+    if (url.origin === origin) throw new Error('public_preview_app_route_invalid')
+    else if (url.origin !== publicOrigin) throw new Error('public_preview_production_escape')
     else if (!['/', '/shop/', '/website/', '/ecommerce/', '/contact/', '/privacy/'].includes(url.pathname)
       && !(galleryPaths.has(url.pathname) && !url.search && !url.hash)) throw new Error('public_preview_public_route_invalid')
   }
-  const loginPaths = new Set([`${origin}/login`, `${origin}/login?product=shop`])
-  const loginLinks = hrefs.filter(href => loginPaths.has(href))
-  const hasShopSignIn = html.includes(`<a class="button button-primary" href="${origin}/login?product=shop">Sign in to Shop`)
-  const expectedLoginCount = hasShopSignIn ? 2 : 1
-  if (options.requireActions !== false && (loginLinks.length !== expectedLoginCount
-    || (hasShopSignIn && !loginLinks.every(href => href === `${origin}/login?product=shop`)))) {
-    throw new Error('public_preview_action_missing:login_actions')
+  if (options.requireActions !== false
+    && !html.includes('<a class="button button-primary" href="/contact/?product=shop">Request a Shop walkthrough</a>')) {
+    throw new Error('public_preview_action_missing:shop_walkthrough')
   }
   return { activeProducts: active.map(product => product.id), pairedOrigin: origin }
 }

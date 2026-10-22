@@ -118,7 +118,7 @@ for (const page of landingPages) {
 check(config.routes.at(-1)?.dest === '/404.html' && config.routes.at(-1)?.status === 404, 'not_found_fallback_last')
 
 // Every public route shares the same navigation and brand mark. Route-specific
-// Active state is the only header difference; every public login opens Shop.
+// active state is the only header difference; managed login is not advertised.
 const sharedShellRoutes = new Set(['/shop/', '/contact/', '/privacy/'])
 const sharedShellPages = manifest.pages.filter((page) => sharedShellRoutes.has(page.route))
 let referenceBrandMarkup = null
@@ -127,14 +127,14 @@ for (const page of sharedShellPages) {
   const header = html.match(/<header\b[\s\S]*?<\/header>/)?.[0] || ''
   const brandMarkup = header.match(/<a class="brand"[\s\S]*?<\/a>/)?.[0] || ''
   check(header.includes('<nav class="nav-links" aria-label="Main navigation">'), `shared_public_navigation:${page.route}`)
-  for (const label of ['Shop', 'Contact', 'Login']) {
+  for (const label of ['Shop', 'Contact']) {
     check(header.includes(`>${label}</a>`), `shared_navigation_label:${page.route}:${label}`)
   }
   check(!header.includes('>Company</a>'), `company_navigation_removed:${page.route}`)
   const activeLabel = page.route === '/shop/' ? 'Shop' : page.route === '/contact/' ? 'Contact' : null
   const activeLinks = [...header.matchAll(/<a\b[^>]*aria-current="page"[^>]*>([^<]+)<\/a>/g)].map((match) => match[1])
   check(activeLinks.join(',') === (activeLabel || ''), `shared_navigation_active_state:${page.route}`)
-  check(header.includes(`${appOrigin}/login?product=shop`), `navigation_preserves_shop_login_intent:${page.route}`)
+  check(!header.includes('>Login</a>') && !header.includes(`href="${appOrigin}/`), `navigation_has_no_public_login:${page.route}`)
   if (referenceBrandMarkup === null) referenceBrandMarkup = brandMarkup
   else check(brandMarkup === referenceBrandMarkup, `shared_brand_mark:${page.route}`)
 }
@@ -253,7 +253,7 @@ for (const page of landingPages) {
     check(html.includes(`Sites &middot; Inquiry review and ownership &middot; ${interfaceDisclosure('actual-sites-inquiries.png')}`), 'landing_sites_inquiry_capture_scope_truthful')
   }
   const expectedLoginHref = `href="${appOrigin}/login?product=shop"`
-  check(countOccurrences(html, expectedLoginHref) === 1, `landing_login_actions:${page.route}`)
+  check(countOccurrences(html, expectedLoginHref) === 0, `landing_login_actions_absent:${page.route}`)
   if (page.route === '/shop/') check(html.includes('class="button button-primary" href="/contact/?product=shop">Request a Shop walkthrough'), 'shop_primary_action_is_honest_contact')
   check(!html.includes('Request assisted setup') && !html.includes('id="first-loop"'), `landing_no_setup_funnel:${page.route}`)
   for (const unsupportedClaim of ['AI may help prepare drafts', 'AI assisted', 'Ranked next actions', 'approved AI context']) {
@@ -267,7 +267,7 @@ for (const page of landingPages) {
     check(html.includes('class="home-contact product-action"'), `landing_available_product_action:${page.route}`)
     check(html.includes(`href="${expectedContactTarget}">Contact SuperMega</a>`), `landing_available_product_destination:${page.route}`)
   }
-  check(!/href="https:\/\/app\.supermega\.dev\/(?!login(?:\?product=shop)?")/.test(html), `landing_product_has_no_direct_app_action:${page.route}`)
+  check(!html.includes(`href="${appOrigin}/`), `landing_product_has_no_direct_app_action:${page.route}`)
   check(html.includes('href="/contact/">Contact</a>') && html.includes('href="/privacy/">Privacy</a>'), `landing_footer_parity:${page.route}`)
   check(html.includes('aria-label="SuperMega Shop"'), `landing_shop_navigation:${page.route}`)
 }
@@ -401,9 +401,9 @@ for (const [route, html] of [['/shop/', shopLanding], ...activeIds.filter(id => 
   const routeProduct = route.slice(1, -1)
   const routeManifestProduct = routeProduct ? manifest.customerProducts.find(product => product.id === routeProduct) : null
   const expectedLoginHref = `href="${appOrigin}/login?product=shop"`
-  check(countOccurrences(body, expectedLoginHref) === 1, `login_action_count:${route}`)
+  check(countOccurrences(body, expectedLoginHref) === 0, `public_login_action_absent:${route}`)
   const carouselCount = 0
-  const expectedLinks = route === '/shop/' ? 11 : 5 + Number(routeManifestProduct?.status === 'available-in-app')
+  const expectedLinks = route === '/shop/' ? 10 : 4 + Number(routeManifestProduct?.status === 'available-in-app')
   check((body.match(/<a\b/g) || []).length === expectedLinks, `marketing_link_surface:${route}`)
   const viewportGalleryCount = countOccurrences(body, 'data-viewport-gallery')
   const expectedButtons = viewportGalleryCount * 3 + carouselCount * 2
@@ -431,7 +431,7 @@ for (const [route, html] of [['/shop/', shopLanding], ...activeIds.filter(id => 
     check(!pattern.test(bodyWithoutCaptureDisclosure), 'no_misleading_funnel_copy:' + route + ':' + label)
   }
   const expectedContactTarget = routeManifestProduct?.status === 'available-in-app' && route !== '/shop/' ? `/contact/?product=${routeManifestProduct.id}` : null
-  const directAppLinks = [...body.matchAll(/href="(https:\/\/[^\"]+)"/g)].map(match => match[1]).filter(target => target.startsWith(`${appOrigin}/`) && target !== `${appOrigin}/login?product=shop`)
+  const directAppLinks = [...body.matchAll(/href="(https:\/\/[^\"]+)"/g)].map(match => match[1]).filter(target => target.startsWith(`${appOrigin}/`))
   check(directAppLinks.length === 0, `app_actions_match_release_state:${route}`)
   if (expectedContactTarget) check(body.includes(`href="${expectedContactTarget}">Contact SuperMega</a>`), `product_contact_action_matches_release_state:${route}`)
 }
@@ -515,7 +515,7 @@ for (const productId of ['website', 'ecommerce']) {
   const html = readStatic(`${productId}/index.html`)
   check(publicFirstJobDoors(html).length === 0, `${productId}_sample_doors_removed`)
   check(!html.includes('https://app.supermega.dev/settings/?'), `${productId}_no_local_setup_detour`)
-  check(html.includes(`${appOrigin}/login`), `${productId}_connected_login`)
+  check(!html.includes(`href="${appOrigin}/login`), `${productId}_public_login_absent`)
 }
 
 const productOnboardingSource = readFileSync(resolve(root, 'showroom', 'src', 'core', 'ProductOnboardingPage.tsx'), 'utf8')

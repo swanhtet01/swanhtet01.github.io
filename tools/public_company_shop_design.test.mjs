@@ -159,9 +159,9 @@ assert.match(companyShopHeaderHtml('/'), /href="\/shop\/"[^>]*>Shop/)
 assert.doesNotMatch(companyShopHeaderHtml('/'), />Company<\/a>/, 'the product homepage replaces a separate Company page')
 assert.match(companyShopHeaderHtml('/shop/'), /href="\/shop\/" aria-current="page">Shop/)
 assert.match(companyShopHeaderHtml('/contact/'), /href="\/contact\/" aria-current="page">Contact/)
-assert.match(companyShopHeaderHtml('/shop/'), /href="https:\/\/app\.supermega\.dev\/login\?product=shop">Login/)
-assert.match(companyShopHeaderHtml('/'), /href="https:\/\/app\.supermega\.dev\/login\?product=shop">Login/)
-assert.match(companyShopHeaderHtml('/contact/'), /href="https:\/\/app\.supermega\.dev\/login\?product=shop">Login/)
+for (const route of ['/', '/shop/', '/contact/', '/privacy/', '/website/', '/ecommerce/', '/plant/']) {
+  assert.doesNotMatch(companyShopHeaderHtml(route), /href="https:\/\/app\.supermega\.dev\/|>Login<\/a>/)
+}
 const brandMark = /<svg viewBox="0 0 72 44" width="30" height="18" focusable="false"><path d="M10 9 26 22 10 35M35 35h27" fill="none" stroke="#2563eb" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"\/><\/svg>/
 assert.equal(brandMarkHtml, '<svg viewBox="0 0 72 44" width="30" height="18" focusable="false"><path d="M10 9 26 22 10 35M35 35h27" fill="none" stroke="#2563eb" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/></svg>')
 assert.equal(
@@ -201,7 +201,7 @@ assert.match(companyShopFooterHtml('/contact/', 2026), /aria-label="SuperMega Sh
 const anchorCount = (source) => (source.match(/<a\b/g) || []).length
 assert.match(companyShopHeaderHtml('/'), /href="\/shop\/" aria-label="SuperMega Shop"/)
 assert.match(companyShopFooterHtml('/', 2026), /href="\/shop\/"/)
-assert.equal(anchorCount(companyShopHeaderHtml('/shop/') + shopMarkup + companyShopFooterHtml('/shop/', 2026)) + 2, 11)
+assert.equal(anchorCount(companyShopHeaderHtml('/shop/') + shopMarkup + companyShopFooterHtml('/shop/', 2026)) + 2, 10)
 assert.match(shopMarkup, /Interactive example · sample data/)
 assert.match(shopMarkup, /Complete sample sale/)
 assert.match(shopMarkup, /Sample receipt/)

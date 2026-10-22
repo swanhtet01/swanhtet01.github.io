@@ -187,9 +187,8 @@ test('public root redirects to Shop while Contact introduces the company', async
   for (const product of activeProductContracts(manifest)) {
     const page = main(await html(product.id+'/index.html'))
     const fullPage = await html(product.id+'/index.html')
-    const expectedLogin = `href="${appOrigin}/login?product=shop"`
     const loginLinks = [...fullPage.matchAll(/href="https:\/\/[^\"]+\/login[^\"]*"/g)].map(([link]) => link).filter(link => link.startsWith(`href="${appOrigin}/`))
-    assert.deepEqual(loginLinks, [expectedLogin])
+    assert.deepEqual(loginLinks, [])
     if (product.id === 'shop') assert.match(page, /class="shop-hero-app"/)
     else assert.match(page, /class="platform-image"/)
     assert.doesNotMatch(page, /Request assisted setup/)

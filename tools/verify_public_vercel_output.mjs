@@ -270,8 +270,8 @@ for (const [route, page] of pages) {
   const footerLabel = 'SuperMega Shop'
   const footerBrand = `<a class="brand" href="${footerHref}" aria-label="${footerLabel}"><span class="brand-mark" aria-hidden="true">`
   if (!page.html.includes(footerBrand)) fail('shared_footer_brand_missing', { route, footerHref })
-  const expectedLogin = `<a href="${appOrigin}/login?product=shop">Login</a>`
-  if (countOccurrences(page.html, expectedLogin) !== 1) fail('shared_login_destination_missing', { route, expectedLogin })
+  const publicLogin = `<a href="${appOrigin}/login?product=shop">Login</a>`
+  if (page.html.includes(publicLogin)) fail('shared_public_login_present', { route })
   const expectedActive = route === '/shop/' ? 'Shop' : route === '/contact/' ? 'Contact' : null
   const activeLinks = [...page.html.matchAll(/<a\b[^>]*aria-current="page"[^>]*>([^<]+)<\/a>/g)].map(match => match[1])
   if (activeLinks.join(',') !== (expectedActive || '')) fail('shared_navigation_active_state_drift', { route, expectedActive, activeLinks })
@@ -388,10 +388,10 @@ for (const [route, html] of [['/shop/', pages.get('/shop/').html], ...publicProd
     ? `/contact/?product=${routeProduct.id}`
     : null
   const galleryViews = { shop: 3, website: 2, ecommerce: 2 }
-  const expectedLinks = route === '/shop/' ? 11 : 5 + Number(Boolean(contactActionTarget))
+  const expectedLinks = route === '/shop/' ? 10 : 4 + Number(Boolean(contactActionTarget))
   if ((body.match(/<a\b/g) || []).length !== expectedLinks) fail('marketing_link_surface_drift', { route, expectedLinks })
-  const expectedLogin = `href="${appOrigin}/login?product=shop"`
-  if (countOccurrences(body, expectedLogin) !== 1) fail('login_action_count_invalid', { route, expectedLogin })
+  const publicLogin = `href="${appOrigin}/login?product=shop"`
+  if (countOccurrences(body, publicLogin) !== 0) fail('public_login_action_present', { route })
   if (route === '/shop/' && (!body.includes('class="button button-primary" href="/contact/?product=shop">Request a Shop walkthrough') || body.includes('Ask about Shop') || body.includes('Talk about Shop') || body.includes('See Shop screens') || body.includes('Need help with Shop?'))) fail('shop_primary_product_action_missing')
   if (route === '/shop/' && (!body.includes('MAMA photo:') || !body.includes('twindel / Open Food Facts') || !body.includes('https://creativecommons.org/licenses/by-sa/3.0/'))) fail('shop_photo_attribution_missing')
   if (body.includes('>Company</a>')) fail('company_page_navigation_not_consolidated')
@@ -420,10 +420,9 @@ for (const [route, html] of [['/shop/', pages.get('/shop/').html], ...publicProd
       ? !body.includes('class="shop-hero-app"') || !body.includes('class="shop-actual-showcase"') || !body.includes('aria-label="Orders and stock"') || body.includes('Orders and stock. Clear next steps.') || !body.includes('class="shop-responsive-showcase"') || !body.includes('class="shop-lead-capture"') || !body.includes('id="shop-sample-disclosure"') || countOccurrences(body, 'Shop browser workspace · synthetic local records') !== 1 || !body.includes('src="/images/actual-shop-orders.png"') || !body.includes('src="/images/actual-shop-inventory.png"') || countOccurrences(body, '<article class="shop-workflow-card">') !== 2 || countOccurrences(body, 'src="/images/actual-shop-sell.png"') !== 1 || body.includes('Makro PRO') || body.includes('17 October 2026') || body.includes('class="pos-window"') || body.includes('class="sample-label"') || body.includes('Complete sample sale') || body.includes('shop-sample-demo.js') || body.includes('class="platform-gallery shop-gallery-all"') || body.includes('data-platform-carousel') || body.includes('data-device-choice') || body.includes('data-device-frame') || /<a\b[^>]*>\s*<img\b[^>]*src="\/images\/actual-shop-/i.test(body)
       : !body.includes('class="platform-image"') || !body.includes('class="feature-line"')
   if (productVisualMissing) fail('product_visual_missing', { route })
-  const expectedLoginTarget = `${appOrigin}/login?product=shop`
   const directAppTargets = [...body.matchAll(/href="(https:\/\/[^\"]+)"/g)]
     .map(match => match[1])
-    .filter(target => target.startsWith(`${appOrigin}/`) && target !== expectedLoginTarget)
+    .filter(target => target.startsWith(`${appOrigin}/`))
   if (directAppTargets.length !== 0) fail('product_action_release_state_drift', { route, expected: 0, actual: directAppTargets.length })
   if (contactActionTarget && !body.includes(`href="${contactActionTarget}">Contact SuperMega</a>`)) fail('product_action_destination_drift', { route, expected: contactActionTarget })
   for (const token of ['Request assisted setup', 'Open Ecommerce', 'Open Website', 'Choose shop type', 'theme-toggle', 'Start guided trial']) {
