@@ -147,6 +147,11 @@ class _WalletEditorState extends State<_WalletEditor> {
       _payload.text,
       confirmedAsProviderIssued: _issuerConfirmed,
     );
+    final qrLabel = shopCopy(
+      myanmar,
+      '${widget.provider} merchant QR',
+      '${widget.provider} ဆိုင်ငွေလက်ခံ QR',
+    );
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -232,11 +237,11 @@ class _WalletEditorState extends State<_WalletEditor> {
                   container: true,
                   excludeSemantics: true,
                   image: true,
-                  label: '${widget.provider} merchant QR',
+                  label: qrLabel,
                   child: QrImageView(
                     data: qrPayload,
                     size: 210,
-                    semanticsLabel: '${widget.provider} merchant QR',
+                    semanticsLabel: qrLabel,
                   ),
                 ),
               ),

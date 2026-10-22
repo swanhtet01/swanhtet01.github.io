@@ -418,6 +418,7 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
 
   String _when(BuildContext context, int millis) {
     final date = DateTime.fromMillisecondsSinceEpoch(millis).toLocal();
+    if (widget.myanmar) return _myanmarDateTime(date);
     final localizations = MaterialLocalizations.of(context);
     return '${localizations.formatMediumDate(date)} '
         '${localizations.formatTimeOfDay(TimeOfDay.fromDateTime(date))}';
@@ -425,9 +426,22 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
 
   String _whenCompact(BuildContext context, int millis) {
     final date = DateTime.fromMillisecondsSinceEpoch(millis).toLocal();
+    if (widget.myanmar) return _myanmarDateTime(date);
     final localizations = MaterialLocalizations.of(context);
     return '${localizations.formatShortDate(date)} '
         '${localizations.formatTimeOfDay(TimeOfDay.fromDateTime(date))}';
+  }
+
+  String _myanmarDateTime(DateTime date) {
+    String digits(int value) => value
+        .toString()
+        .split('')
+        .map((digit) => shopNumber(int.parse(digit), myanmar: true))
+        .join();
+    String two(int value) => digits(value).padLeft(2, '၀');
+    return '${two(date.day)}/${two(date.month)}/'
+        '${digits(date.year)} '
+        '${two(date.hour)}:${two(date.minute)}';
   }
 
   String _paymentName(String method) => switch (method) {
