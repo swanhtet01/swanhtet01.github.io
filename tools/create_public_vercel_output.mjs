@@ -896,7 +896,7 @@ function shopLandingHtml(product, page, locale = 'en') {
  if (isMyanmar) {
   heroWithPreview = replaceOnce(heroWithPreview, '<p class="eyebrow">SuperMega Shop</p>', '<p class="eyebrow">SuperMega ဆိုင်</p>', 'my_shop_eyebrow')
   heroWithPreview = replaceOnce(heroWithPreview, 'Sell. See what’s in stock.', 'ရောင်းပါ။ ကုန်လက်ကျန်ကို ကြည့်ပါ။', 'my_shop_headline')
-   heroWithPreview = replaceOnce(heroWithPreview, 'Add products. Scan or tap to sell. Find a receipt and check stock.', 'ကုန်ပစ္စည်း ထည့်ပါ။ ဘားကုဒ်ဖတ် သို့မဟုတ် ရွေး၍ ရောင်းပါ။ ပြေစာရှာပြီး ကုန်လက်ကျန်ကို စစ်ပါ။', 'my_shop_description')
+  heroWithPreview = replaceOnce(heroWithPreview, 'Add products. Scan or tap to sell. Find a receipt and check stock.', 'ကုန်ပစ္စည်း ထည့်ပါ။ ဘားကုဒ်ဖတ် သို့မဟုတ် ရွေး၍ ရောင်းပါ။ ပြေစာရှာပြီး ကုန်လက်ကျန်ကို စစ်ပါ။', 'my_shop_description')
   heroWithPreview = replaceOnce(heroWithPreview, 'href="/contact/?product=shop">Request a Shop walkthrough', 'href="/my/contact/?product=shop">ဆိုင်အက်ပ် အသုံးပြုပုံကို မေးမြန်းရန်', 'my_shop_cta')
  }
  return documentHtml({route:page.route,title:page.title,description,shareImage:`/og-card-${product.id}.png`,locale,
