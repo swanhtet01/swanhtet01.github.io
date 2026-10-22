@@ -494,18 +494,16 @@ class _StockScreenState extends State<StockScreen> {
                                                 : const Color(0xff88530e),
                                           ),
                                 );
-                                final reorderNote = threshold == null
+                                final reorderNote = lowAlertLevel == null
                                     ? null
                                     : Text(
                                         shopCopy(
                                           widget.myanmar,
-                                          'Reorder at ${shopNumber(threshold, myanmar: false)}',
-                                          'ပြန်မှာရန်: ${shopNumber(threshold, myanmar: true)} ခု',
+                                          'Reorder at ${shopNumber(lowAlertLevel, myanmar: false)}',
+                                          'ပြန်မှာရန်: ${shopNumber(lowAlertLevel, myanmar: true)} ခု',
                                         ),
                                         style: textTheme.bodySmall?.copyWith(
-                                          color: lowAlertLevel == null
-                                              ? colors.onSurfaceVariant
-                                              : const Color(0xff88530e),
+                                          color: const Color(0xff88530e),
                                         ),
                                       );
                                 Future<void> openStockChange() => _changeStock(
@@ -540,7 +538,9 @@ class _StockScreenState extends State<StockScreen> {
                                   ),
                                   icon: const Icon(Icons.more_vert),
                                   onSelected: (value) {
-                                    if (value == 'edit') _editProduct(item);
+                                    if (value == 'edit') {
+                                      unawaited(_editProduct(item));
+                                    }
                                   },
                                   itemBuilder: (_) => [
                                     PopupMenuItem(
@@ -568,11 +568,11 @@ class _StockScreenState extends State<StockScreen> {
                                       item,
                                       widget.myanmar,
                                     ),
-                                  if (threshold != null)
+                                  if (lowAlertLevel != null)
                                     shopCopy(
                                       widget.myanmar,
-                                      'Reorder at $threshold',
-                                      '${shopNumber(threshold, myanmar: true)} ခုတွင် ပြန်မှာရန်',
+                                      'Low at $lowAlertLevel',
+                                      '${shopNumber(lowAlertLevel, myanmar: true)} ခုနှင့်အောက် သတိပေး',
                                     ),
                                 ].join('. ');
                                 if (wide) {
@@ -637,13 +637,15 @@ class _StockScreenState extends State<StockScreen> {
                                         Row(
                                           children: [
                                             Expanded(
-                                              child: Column(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.start,
-                                                children: [
-                                                  onHand,
-                                                  ?reorderNote,
-                                                ],
+                                              child: ExcludeSemantics(
+                                                child: Column(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
+                                                  children: [
+                                                    onHand,
+                                                    ?reorderNote,
+                                                  ],
+                                                ),
                                               ),
                                             ),
                                             const SizedBox(width: 8),
