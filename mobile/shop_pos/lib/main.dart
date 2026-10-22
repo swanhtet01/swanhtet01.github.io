@@ -1427,7 +1427,7 @@ class _ShopHomeState extends State<ShopHome> {
     const rowHeight = 96.0;
     // Compact tablet headers wrap product actions into a second line. Give
     // that header its own height before allocating the scrollable product row.
-    final headerHeight = catalogWidth < 450 ? 228.0 : 148.0;
+    final headerHeight = catalogWidth < 500 ? 228.0 : 148.0;
     final desiredHeight = matchingCount == 0
         ? 360.0
         : headerHeight + matchingCount * rowHeight * textScale;
