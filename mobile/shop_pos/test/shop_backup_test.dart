@@ -657,7 +657,9 @@ void main() {
   });
 
   testWidgets('fresh install restores before Shop opens', (tester) async {
+    debugPrint('restore-test stage 0: setup');
     final documents = Directory.systemTemp.createTempSync('shop-first-run-');
+    debugPrint('restore-test stage 1: temp ready');
     ShopDatabase? opened;
     try {
       await tester.pumpWidget(
@@ -672,29 +674,38 @@ void main() {
           },
         ),
       );
+      debugPrint('restore-test stage 2: widget pumped');
       await _pumpUntil(tester, find.text('Start new Shop'));
+      debugPrint('restore-test stage 3: first choice visible');
       expect(find.text('Start new Shop'), findsOneWidget);
       expect(ShopDatabase.privateDatabaseFile(documents).existsSync(), isFalse);
       await tester.tap(find.text('Restore backup'));
+      debugPrint('restore-test stage 4: picker tapped');
       await _pumpUntil(tester, find.text('Restore and open Shop'));
+      debugPrint('restore-test stage 5: restore form visible');
       expect(ShopDatabase.privateDatabaseFile(documents).existsSync(), isFalse);
       await tester.enterText(find.byType(TextField), _password);
       await tester.tap(find.text('Restore and open Shop'));
+      debugPrint('restore-test stage 6: restore tapped');
       await _pumpUntil(tester, find.text('Opened Shop'));
+      debugPrint('restore-test stage 7: Shop opened');
       expect(find.text('Opened Shop'), findsOneWidget);
       final products = await tester.runAsync(
         () => opened!.readActiveProducts(),
       );
       final sales = await tester.runAsync(() => opened!.countSales());
+      debugPrint('restore-test stage 8: Drift read complete');
       expect(products!.single.onHand, 3);
       expect(sales, 1);
       expect(ShopDatabase.privateDatabaseFile(documents).existsSync(), isTrue);
     } finally {
+      debugPrint('restore-test stage 9: cleanup start');
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.runAsync(() async {
         await opened?.close();
       });
       documents.deleteSync(recursive: true);
+      debugPrint('restore-test stage 10: cleanup complete');
     }
   });
 
