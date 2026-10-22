@@ -11,6 +11,32 @@ No local demo, passing test, healthy provider, or generated artifact is proof of
 
 Add provider-backed AI, payment, shipping, tax, publishing, and broader marketing only after their product gate has measured pilot evidence.
 
+## Retained browser compatibility invariants
+
+These statements protect data, routes, and safety boundaries in the parked
+browser platform. They do not add those products to the active native Shop
+launch scope or make the older portfolio a current release plan.
+
+Portfolio metadata snapshot — Last confirmed: 2026-08-21
+
+The customer portfolio is exactly **Shop**, **Plant**, **Website**, and **Ecommerce** in the retained browser registry. **AI assistance** is a shared capability inside those products, not a fifth product. SuperMega HQ, R&D, agent coordination, Ops, Console, and machine coordination are internal company systems.
+
+The retained compatibility routes are `/shop/`, `/plant/`, `/website/`, and
+`/ecommerce/`. `/agents/` — compatibility-only path to HQ; it is not a product route or separate workspace.
+
+`commerce` and `production` remain stable internal runtime identifiers while
+the retained browser records exist. Ecommerce is not a second Shop back office.
+
+The default app remains an isolated browser-local trial. Managed mode remains locked behind authenticated tenant identity and the existing security/readiness gates.
+
+External sends, payments, publishing, access changes, deployment, and production writes remain owner-approved.
+
+## Internal company system and R&D
+
+`hq/portfolio.json` remains the machine-readable compatibility registry for the
+parked browser platform. Resource intelligence stays inside HQ until an active,
+owner-approved product outcome and gate require it.
+
 ## Candidate
 
 | Item | Current fact |
