@@ -47,7 +47,7 @@ if(gallery){
  // counts are synthetic, not a market feed or a merchant's inventory.
  const catalog=${JSON.stringify(productSources?.products.map(product => ({
    sku: product.sku, name: product.name, nameMy: product.name_my,
-   variant: '', category: product.category,
+   category: product.category,
    onHand: product.sample_opening_stock, reorderAt: product.sample_reorder_at,
    price: product.sample_catalog_price_mmk,
  })) ?? [])};
