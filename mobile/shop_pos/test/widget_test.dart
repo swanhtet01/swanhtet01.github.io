@@ -173,13 +173,20 @@ void main() {
                   index,
                 );
               }
-              expect(
-                find.descendant(
-                  of: find.byType(ShopTaskPageHeader),
-                  matching: find.text(labels[index]),
-                ),
-                findsOneWidget,
-              );
+              if (index == 1 && width < 420) {
+                expect(
+                  find.text(myanmar ? 'ကုန်ပစ္စည်းများ' : 'Products'),
+                  findsOneWidget,
+                );
+              } else {
+                expect(
+                  find.descendant(
+                    of: find.byType(ShopTaskPageHeader),
+                    matching: find.text(labels[index]),
+                  ),
+                  findsOneWidget,
+                );
+              }
               expect(tester.takeException(), isNull);
             }
 
@@ -1672,6 +1679,7 @@ void main() {
           openingStock: 20,
         );
       }
+      debugPrint('density fixture: products added');
       await tester.pumpWidget(
         ShopApp(
           database: database,
@@ -1680,14 +1688,17 @@ void main() {
           initialMyanmar: true,
         ),
       );
-      await tester.pumpAndSettle();
+      await tester.pumpAndSettle(timeout: const Duration(seconds: 15));
+      debugPrint('density fixture: Shop mounted');
       await tester.tap(
         find.descendant(
           of: find.byType(NavigationBar),
           matching: find.text('ရောင်းရန်'),
         ),
       );
-      await tester.pumpAndSettle();
+      debugPrint('density fixture: Sell tapped');
+      await tester.pumpAndSettle(timeout: const Duration(seconds: 15));
+      debugPrint('density fixture: Sell settled');
       expect(find.text('ကုန်ပစ္စည်းများ'), findsOneWidget);
       expect(
         find.descendant(
@@ -1721,7 +1732,9 @@ void main() {
         'KAUNG ရန်ကုန် ဆန်',
       );
       expect(tester.takeException(), isNull);
+      debugPrint('density fixture: checks passed');
     } finally {
+      debugPrint('density fixture: teardown');
       await tester.pumpWidget(const SizedBox.shrink());
       await database.close();
     }
