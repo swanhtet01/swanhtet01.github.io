@@ -2137,40 +2137,44 @@ class _ShopHomeState extends State<ShopHome> {
     final content = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
+        Wrap(
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          runSpacing: 4,
           children: [
-            Expanded(
-              child: Text(
-                shopCopy(widget.myanmar, 'Current sale', 'လက်ရှိအရောင်း'),
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
+            Text(
+              shopCopy(widget.myanmar, 'Current sale', 'လက်ရှိအရောင်း'),
+              style: Theme.of(context).textTheme.titleLarge,
             ),
-            if (!compactCart &&
-                _cart.isNotEmpty &&
-                _pendingWalletCheckout == null)
-              TextButton.icon(
-                key: const ValueKey('shop-hold-sale'),
-                onPressed:
-                    !_checkoutReady ||
-                        _walletStarting ||
-                        _cashConfirming ||
-                        _saving
-                    ? null
-                    : () => _holdCurrentSale(refresh: refresh),
-                icon: const Icon(Icons.bookmark_add_outlined),
-                label: Text(shopCopy(widget.myanmar, 'Hold', 'ခဏသိမ်း')),
-              ),
             if (_cart.isNotEmpty)
-              TextButton(
-                onPressed:
-                    !_checkoutReady ||
-                        _walletStarting ||
-                        _cashConfirming ||
-                        _saving ||
-                        _pendingWalletCheckout != null
-                    ? null
-                    : () => _discardCounterDraft(refresh: refresh),
-                child: Text(shopCopy(widget.myanmar, 'Clear', 'ဖျက်ရန်')),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (!compactCart && _pendingWalletCheckout == null)
+                    TextButton.icon(
+                      key: const ValueKey('shop-hold-sale'),
+                      onPressed:
+                          !_checkoutReady ||
+                              _walletStarting ||
+                              _cashConfirming ||
+                              _saving
+                          ? null
+                          : () => _holdCurrentSale(refresh: refresh),
+                      icon: const Icon(Icons.bookmark_add_outlined),
+                      label: Text(shopCopy(widget.myanmar, 'Hold', 'ခဏသိမ်း')),
+                    ),
+                  TextButton(
+                    onPressed:
+                        !_checkoutReady ||
+                            _walletStarting ||
+                            _cashConfirming ||
+                            _saving ||
+                            _pendingWalletCheckout != null
+                        ? null
+                        : () => _discardCounterDraft(refresh: refresh),
+                    child: Text(shopCopy(widget.myanmar, 'Clear', 'ဖျက်ရန်')),
+                  ),
+                ],
               ),
           ],
         ),

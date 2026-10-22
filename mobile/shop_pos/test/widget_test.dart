@@ -2573,6 +2573,18 @@ void main() {
           expect(catalogRect.width, greaterThanOrEqualTo(320));
           expect(basketRect.width, greaterThanOrEqualTo(300));
           expect(catalogRect.right, lessThan(basketRect.left));
+          if (myanmar) {
+            final title = find.text('လက်ရှိအရောင်း');
+            final hold = find.byKey(const ValueKey('shop-hold-sale'));
+            expect(title, findsOneWidget);
+            expect(hold, findsOneWidget);
+            expect(tester.getSize(title).height, lessThan(42));
+            expect(tester.widget<TextButton>(hold).onPressed, isNotNull);
+            expect(
+              tester.getRect(title).overlaps(tester.getRect(hold)),
+              isFalse,
+            );
+          }
         }
         if (width == 800) {
           await tester.tap(
