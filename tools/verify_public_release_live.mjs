@@ -95,7 +95,7 @@ async function readPage(route) {
   for (const token of [
     `meta name="supermega-brand-version" content="${manifest.brand.version}"`,
     `meta name="supermega-context-version" content="${manifest.contextVersion}"`,
-    isMyanmarPage ? 'aria-label="SuperMega ဆိုင်"' : 'aria-label="SuperMega Shop"',
+    'aria-label="SuperMega"',
     `class="brand-mark" aria-hidden="true">${brandMarkHtml}</span>`,
     isMyanmarPage
       ? 'href="/my/privacy/">ကိုယ်ရေးအချက်အလက် မူဝါဒ</a>'
@@ -194,7 +194,7 @@ async function verifyOnce() {
       'landing_public_app_action_drift', { product: product.id, appLinks })
     if (product.id === 'shop') {
       assert(landing.includes(shopAction), 'shop_manifest_action_missing')
-      assert(landing.includes('href="/contact/?product=shop">Request a Shop walkthrough'), 'shop_contact_action_missing')
+      assert(landing.includes('href="/contact/?product=shop">Start with Shop'), 'shop_contact_action_missing')
     }
     assert(landing.includes('href="/contact/">Contact</a>'), 'landing_contact_route_missing', { product: product.id })
   }
@@ -280,8 +280,8 @@ async function verifyOnce() {
   // their actual response bytes; a 200 HTML fallback must never pass as an image.
   assert(publicProducts.map(product => product.id).join(',') === 'shop', 'public_product_scope_not_shop_only')
   for (const [route, files] of Object.entries({
-    '/shop/': ['shop_checkout_1200_en.png', 'shop_sell_390_en.png', 'shop_stock_820_en.png', 'shop_stock_390_en.png', 'shop_today_390_en.png'],
-    '/my/shop/': ['shop_checkout_1200_my.png', 'shop_sell_390_my.png', 'shop_stock_820_my.png', 'shop_stock_390_my.png', 'shop_today_390_my.png'],
+    '/shop/': ['shop_checkout_1200_en.png', 'shop_checkout_820_en.png', 'shop_stock_820_en.png', 'shop_today_820_en.png'],
+    '/my/shop/': ['shop_checkout_1200_my.png', 'shop_checkout_820_my.png', 'shop_stock_820_my.png', 'shop_today_820_my.png'],
   })) {
     const html = pages.get(route)
     if (html == null) continue
@@ -290,7 +290,7 @@ async function verifyOnce() {
       assert(html.includes(path), 'interface_image_reference_missing', { route, path })
     }
   }
-  for (const asset of nativeShopGallery.assets) {
+  for (const asset of nativeShopGallery.assets.filter(asset => /^(?:shop_checkout_1200|shop_checkout_820|shop_stock_820|shop_today_820)_(?:en|my)\.png$/.test(asset.file))) {
     const path = `/images/native-shop/${asset.file}`
     const response = await request(path, { accept: 'image/png' })
     assert(response.status === 200, 'interface_image_http_error', { path, status: response.status })

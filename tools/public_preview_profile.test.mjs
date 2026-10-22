@@ -17,7 +17,7 @@ const app = { origin: 'https://megaos-123456789-swanhtet01s-projects.vercel.app'
   projectId: 'prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG', deploymentId: 'dpl_12345678', commit }
 const policy = previewProfile({ profile: 'isolated-pair', expectedCommit: commit, appBinding: JSON.stringify(app) })
 const products = ['shop', 'website', 'ecommerce', 'plant'].map(id => ({ id }))
-const html = `<a class="button button-primary" href="/contact/?product=shop">Request a Shop walkthrough</a><a class="nav-sign-in" href="${app.origin}/login">Sign in</a>`
+const html = `<a class="button button-primary" href="/contact/?product=shop">Start with Shop</a><a class="nav-sign-in" href="${app.origin}/login">Sign in</a>`
 test('requires explicit profile, exact SHA and app binding', () => {
   for (const input of [{}, { profile: 'isolated-pair', expectedCommit: commit },
     { profile: 'isolated-pair', expectedCommit: 'main' }, { profile: 'unknown', expectedCommit: commit }]) assert.throws(() => previewProfile(input))
@@ -43,6 +43,9 @@ test('public chrome leads to Shop and keeps SuperMega as the company identity', 
     assert.doesNotMatch(header, /href="\/"/)
     assert.match(footer, new RegExp(statement.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
   }
+  assert.doesNotMatch(companyShopHeaderHtml('/website/', 'en'), /data-language-switch/)
+  assert.doesNotMatch(companyShopHeaderHtml('/ecommerce/', 'en'), /data-language-switch/)
+  assert.doesNotMatch(companyShopHeaderHtml('/plant/', 'en'), /data-language-switch/)
 })
 test('isolated contact cannot accept while production contract still requires acceptance', () => {
   const contact = { service: 'supermega-contact', status: 'attention', accepting: false,

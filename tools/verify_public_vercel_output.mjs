@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { createHash } from 'node:crypto'
+import { execFileSync } from 'node:child_process'
 import { join, relative, resolve } from 'node:path'
 import { activeProductContracts } from '../showroom/src/core/product-visibility.ts'
 import { parsePreviewAppBinding } from './public_preview_navigation.mjs'
@@ -119,8 +120,9 @@ const expectedStaticFiles = new Set([
   'fonts/noto-sans-myanmar.woff2',
   'fonts/noto-sans-myanmar-OFL.txt',
   'vercel-insights.js',
-  'platform-carousel.js',
-  ...nativeShopGallery.assets.map(asset => `images/native-shop/${asset.file}`),
+  ...nativeShopGallery.assets
+    .filter(asset => /^(?:shop_checkout_1200|shop_checkout_820|shop_stock_820|shop_today_820)_(?:en|my)\.png$/.test(asset.file))
+    .map(asset => `images/native-shop/${asset.file}`),
   'og-card.png',
   ...publicProducts.map((product) => `og-card-${product.id}.png`),
   'robots.txt',
@@ -162,7 +164,7 @@ const sharedRequired = [
   '.header-inner { min-height: 76px; display: flex; align-items: center; justify-content: space-between; gap: 24px; }',
   '.nav-links { display: flex; min-width: 0; align-items: center; justify-content: flex-end; gap: 10px; }',
   '.nav-links a { min-height: 48px; display: inline-flex; align-items: center; border: 1px solid transparent; border-radius: 8px; padding: 0 15px; color: var(--brand-muted); font-size: .9rem; font-weight: 600; text-decoration: none; transition: color 160ms ease, background-color 160ms ease, border-color 160ms ease; }',
-  'aria-label="SuperMega Shop"',
+  'aria-label="SuperMega"',
   '<nav class="nav-links" aria-label="Main navigation">',
   '<span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 72 44" width="30" height="18" focusable="false"><path d="M10 9 26 22 10 35M35 35h27" fill="none" stroke="#2563eb" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>',
   '<span class="brand-word">SuperMega</span>',
@@ -230,7 +232,7 @@ const pages = new Map(manifest.pages.filter(page => !page.redirectTo).map((page)
   } : {}), html: readStatic(page.file) }]
 }))
 const homePage = manifest.pages.find((page) => page.route === '/')
-const englishOnlyShared = new Set(['<a class="skip-link" href="#content">Skip to content</a>', 'aria-label="SuperMega Shop"', '<nav class="nav-links" aria-label="Main navigation">', 'href="/privacy/">Privacy</a>'])
+const englishOnlyShared = new Set(['<a class="skip-link" href="#content">Skip to content</a>', 'aria-label="SuperMega"', '<nav class="nav-links" aria-label="Main navigation">', 'href="/privacy/">Privacy</a>'])
 for (const [route, page] of pages) {
   if (!page.html.includes(`<title>${page.title}</title>`)) fail('page_title_drift', { route, expected: page.title })
   for (const token of sharedRequired) {
@@ -238,19 +240,19 @@ for (const [route, page] of pages) {
     if (!page.html.includes(token)) fail('shared_brand_contract_missing', { route, token })
   }
   if (page.language === 'my') {
-    for (const token of ['<html lang="my">', '<a class="skip-link" href="#content">အကြောင်းအရာသို့ သွားရန်</a>', 'aria-label="SuperMega ဆိုင်"', '<nav class="nav-links" aria-label="အဓိက လမ်းညွှန်">', 'href="/my/privacy/">ကိုယ်ရေးအချက်အလက် မူဝါဒ</a>', '/fonts/noto-sans-myanmar.woff2']) {
+    for (const token of ['<html lang="my">', '<a class="skip-link" href="#content">အကြောင်းအရာသို့ သွားရန်</a>', 'aria-label="SuperMega"', '<nav class="nav-links" aria-label="အဓိက လမ်းညွှန်">', 'href="/my/privacy/">ကိုယ်ရေးအချက်အလက် မူဝါဒ</a>', '/fonts/noto-sans-myanmar.woff2']) {
       if (!page.html.includes(token)) fail('myanmar_shared_contract_missing', { route, token })
     }
   }
   const footerHref = page.language === 'my' ? '/my/shop/' : '/shop/'
-  const footerLabel = page.language === 'my' ? 'SuperMega ဆိုင်' : 'SuperMega Shop'
+  const footerLabel = 'SuperMega'
   const footerBrand = `<a class="brand" href="${footerHref}" aria-label="${footerLabel}"><span class="brand-mark" aria-hidden="true">`
   if (!page.html.includes(footerBrand)) fail('shared_footer_brand_missing', { route, footerHref })
   const header = page.html.match(/<header\b[\s\S]*?<\/header>/)?.[0] || ''
   const signIn = `<a class="nav-sign-in" href="${appOrigin}/login">${page.language === 'my' ? 'ဝင်ရန်' : 'Sign in'}</a>`
   if (countOccurrences(header, signIn) !== 1
     || [...header.matchAll(/<a\b[^>]*href="[^"]*\/login[^"]*"[^>]*>/gi)].length !== 1) fail('shared_public_login_drift', { route })
-  const expectedActive = route === '/shop/' ? 'Shop' : route === '/contact/' ? 'Contact' : route === '/my/shop/' ? 'ဆိုင်' : route === '/my/contact/' ? 'ဆက်သွယ်ရန်' : null
+  const expectedActive = route === '/shop/' || route === '/my/shop/' ? 'Shop' : route === '/contact/' ? 'Contact' : route === '/my/contact/' ? 'ဆက်သွယ်ရန်' : null
   const activeLinks = [...page.html.matchAll(/<a\b[^>]*aria-current="page"[^>]*>([^<]+)<\/a>/g)].map(match => match[1])
   if (activeLinks.join(',') !== (expectedActive || '')) fail('shared_navigation_active_state_drift', { route, expectedActive, activeLinks })
   const copyWithoutExternalDestinations = page.html.replace(/\bhref="https?:\/\/[^\"]+"/gi, '')
@@ -359,11 +361,11 @@ const shopPageHtml = pages.get('/shop/').html
 for (const [route, html] of [['/shop/', shopPageHtml]]) {
   if (!html.includes('width: max-content;') || !html.includes('min-height: 48px;') || !html.includes('background: #202432;') || !html.includes('.button:focus-visible')) fail('marketing_primary_action_layout_missing', { route })
 }
-// Shop is the only customer product. App imagery stays static; the one
-// merchant action requests a walkthrough rather than promising live access.
+// Shop is the only customer product. App imagery stays static and one
+// merchant action leads to the truthful Shop contact path.
 const shopPage = pages.get('/shop/')?.html || ''
 const shopBody = shopPage.slice(shopPage.indexOf('<body'))
-if (!shopBody.includes('class="button button-primary" href="/contact/?product=shop">Request a Shop walkthrough')) fail('shop_primary_action_missing')
+if (!shopBody.includes('class="button button-primary" href="/contact/?product=shop">Start with Shop')) fail('shop_primary_action_missing')
 if (shopBody.includes('data-platform-carousel') || shopBody.includes('data-device-choice')
   || shopBody.includes('class="pos-window"') || shopBody.includes('shop-sample-demo.js')
   || /<a\b[^>]*>\s*<img\b[^>]*src="\/images\/native-shop\//i.test(shopBody)) fail('shop_gallery_interaction_or_mock_present')
@@ -373,14 +375,13 @@ if (shopBody.includes('>Company</a>') || shopBody.includes('href="' + appOrigin 
 for (const token of [
   'class="native-shop-gallery"',
   'src="/images/native-shop/shop_checkout_1200_en.png"',
-  '<source media="(max-width:650px)" srcset="/images/native-shop/shop_sell_390_en.png" width="390" height="844" />',
-  'src="/images/native-shop/shop_today_390_en.png"',
+  '<source media="(max-width:650px)" srcset="/images/native-shop/shop_checkout_820_en.png" width="820" height="1000" />',
+  'src="/images/native-shop/shop_today_820_en.png"',
   'src="/images/native-shop/shop_stock_820_en.png"',
-  '<source media="(max-width:650px)" srcset="/images/native-shop/shop_stock_390_en.png" width="390" height="844" />',
-  '<figcaption>Counter sale</figcaption>',
+  '<figcaption>Counter</figcaption>',
   '<figcaption>Stock</figcaption>',
   '<figcaption>Today</figcaption>',
-  'Shop app preview with sample data and prices.',
+  'App preview with sample data.',
 ]) if (!shopPage.includes(token)) fail('shop_native_gallery_missing', { token })
 if (shopPage.includes('class="native-shop-stock"') || shopPage.includes('<figcaption>Desktop')
   || shopPage.includes('<figcaption>Tablet') || shopPage.includes('<figcaption>Phone')) fail('shop_redundant_gallery_or_device_caption')
@@ -444,14 +445,13 @@ const myContact = pages.get('/my/contact/')?.html || ''
 const myShop = pages.get('/my/shop/')?.html || ''
 for (const token of [
   'src="/images/native-shop/shop_checkout_1200_my.png"',
-  '<source media="(max-width:650px)" srcset="/images/native-shop/shop_sell_390_my.png" width="390" height="844" />',
-  'src="/images/native-shop/shop_today_390_my.png"',
+  '<source media="(max-width:650px)" srcset="/images/native-shop/shop_checkout_820_my.png" width="820" height="1000" />',
+  'src="/images/native-shop/shop_today_820_my.png"',
   'src="/images/native-shop/shop_stock_820_my.png"',
-  '<source media="(max-width:650px)" srcset="/images/native-shop/shop_stock_390_my.png" width="390" height="844" />',
   '<figcaption>ကောင်တာအရောင်း</figcaption>',
   '<figcaption>ကုန်လက်ကျန်</figcaption>',
   '<figcaption>ယနေ့</figcaption>',
-  'နမူနာအချက်အလက်နှင့် ဈေးနှုန်းများဖြင့် ပြထားသော ဆိုင်အက်ပ်မျက်နှာပြင်များ။',
+  'နမူနာအချက်အလက်ဖြင့် ပြထားသော အက်ပ်နမူနာ။',
 ]) if (!myShop.includes(token)) fail('myanmar_shop_native_gallery_missing', { token })
 if (/\/images\/native-shop\/[^"]+_en\.png/.test(myShop)
   || myShop.includes('/images/actual-shop-')
@@ -486,10 +486,14 @@ for (const [key, value] of Object.entries({
   if (release[key] !== value) fail('release_metadata_drift', { key, expected: value, actual: release[key] })
 }
 if (!/^(?:[0-9a-f]{40}|preview-[a-z0-9-]{8,64}|unknown)$/.test(release.commit)) fail('release_commit_invalid', { commit: release.commit })
+if (/^[0-9a-f]{40}$/.test(release.commit)) {
+  const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim().toLowerCase()
+  if (release.commit !== head) fail('release_commit_not_head', { expected: head, actual: release.commit })
+}
 if (!/^\d{4}-\d{2}-\d{2}T/.test(release.generatedAt)) fail('release_timestamp_invalid')
 const publicGalleryEvidence = release.nativeShopGalleryEvidence
 if (JSON.stringify(publicGalleryEvidence) !== JSON.stringify(nativeShopGallery)) fail('native_shop_gallery_provenance_drift')
-for (const asset of nativeShopGallery.assets) {
+for (const asset of nativeShopGallery.assets.filter(asset => /^(?:shop_checkout_1200|shop_checkout_820|shop_stock_820|shop_today_820)_(?:en|my)\.png$/.test(asset.file))) {
   const path = resolve(staticDir, 'images', 'native-shop', asset.file)
   requireFile(path, 'images/native-shop/' + asset.file)
   const bytes = readFileSync(path)

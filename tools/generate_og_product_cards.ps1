@@ -31,7 +31,8 @@ $accent = ColorFromHex $manifest.brand.colors.accent           # #0b745e
 $muted = ColorFromHex '#526078'                                # --muted in the shared page style
 $borderOuter = ColorFromHex '#e1e6f0'                          # measured from the committed og-card.png
 $borderCore = ColorFromHex '#cbd3e3'
-$tagline = (@('shop', 'website', 'ecommerce') | ForEach-Object {
+$activeProductIds = @($manifest.productVisibility.activeProductIds)
+$tagline = ($activeProductIds | ForEach-Object {
   $productId = $_
   ($manifest.customerProducts | Where-Object { $_.id -eq $productId }).name
 }) -join ' / '
@@ -93,8 +94,8 @@ function New-OgCard {
   Write-Output ("wrote {0} ({1} bytes)" -f $OutPath, $bytes)
 }
 
-foreach ($product in $manifest.customerProducts) {
+foreach ($product in ($manifest.customerProducts | Where-Object { $activeProductIds -contains $_.id })) {
   New-OgCard -Name $product.name -Headline $product.headline -OutPath (Join-Path $assetDir ('og-card-' + $product.id + '.png'))
 }
 
-New-OgCard -Name 'Less busywork.' -Headline 'More business.' -OutPath (Join-Path $assetDir 'og-card.png')
+New-OgCard -Name 'SuperMega' -Headline 'Software for Myanmar businesses.' -OutPath (Join-Path $assetDir 'og-card.png')

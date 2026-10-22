@@ -26,18 +26,18 @@ export function companyShopHeaderHtml(route, locale = 'en') {
   const contactActive = baseRoute === '/contact/';
   const shopHref = isMyanmar ? '/my/shop/' : '/shop/';
   const contactHref = isMyanmar ? '/my/contact/' : '/contact/';
-  const switchHref = ['/shop/', '/contact/', '/privacy/'].includes(baseRoute)
-    ? (isMyanmar ? baseRoute : `/my${baseRoute}`) : '/my/shop/';
+  const hasLocalizedRoute = ['/shop/', '/contact/', '/privacy/'].includes(baseRoute);
+  const switchHref = hasLocalizedRoute ? (isMyanmar ? baseRoute : `/my${baseRoute}`) : null;
   return `<header class="site-header"><div class="wrap header-inner">
-    <a class="brand" href="${shopHref}" aria-label="${superMegaBrandIdentity.name} ${isMyanmar ? 'ဆိုင်' : 'Shop'}">
+    <a class="brand" href="${shopHref}" aria-label="${superMegaBrandIdentity.name}">
       <span class="brand-mark" aria-hidden="true">${brandMarkHtml}</span>
       <span class="brand-word">${superMegaBrandIdentity.name}</span>
     </a>
     <nav class="nav-links" aria-label="${isMyanmar ? 'အဓိက လမ်းညွှန်' : 'Main navigation'}">
-      <a href="${shopHref}" ${shopActive ? 'aria-current="page"' : ''}>${isMyanmar ? 'ဆိုင်' : 'Shop'}</a>
+      <a href="${shopHref}" ${shopActive ? 'aria-current="page"' : ''}>Shop</a>
       <a href="${contactHref}" ${contactActive ? 'aria-current="page"' : ''}>${isMyanmar ? 'ဆက်သွယ်ရန်' : 'Contact'}</a>
       <a class="nav-sign-in" href="https://app.supermega.dev/login">${isMyanmar ? 'ဝင်ရန်' : 'Sign in'}</a>
-      <a href="${switchHref}" data-language-switch hreflang="${isMyanmar ? 'en' : 'my'}">${isMyanmar ? 'အင်္ဂလိပ်' : 'မြန်မာ'}</a>
+      ${switchHref ? `<a href="${switchHref}" data-language-switch hreflang="${isMyanmar ? 'en' : 'my'}">${isMyanmar ? 'English' : 'မြန်မာ'}</a>` : ''}
     </nav>
   </div></header>`;
 }
@@ -49,7 +49,7 @@ export function companyShopFooterHtml(_route, year, locale = 'en') {
     ? 'SuperMega သည် မြန်မာနိုင်ငံမှ ဆော့ဖ်ဝဲကုမ္ပဏီဖြစ်ပြီး Shop အက်ပ်ကို ဖန်တီးပါသည်။'
     : 'SuperMega is a Myanmar software company and the maker of Shop.';
   return `<footer class="footer"><div class="wrap footer-row">
-    <div class="footer-company"><a class="brand" href="${home}" aria-label="${superMegaBrandIdentity.name} ${isMyanmar ? 'ဆိုင်' : 'Shop'}"><span class="brand-mark" aria-hidden="true">${brandMarkHtml}</span><span class="brand-word">${superMegaBrandIdentity.name}</span></a><p class="footer-company-statement">${companyStatement}</p></div>
+    <div class="footer-company"><a class="brand" href="${home}" aria-label="${superMegaBrandIdentity.name}"><span class="brand-mark" aria-hidden="true">${brandMarkHtml}</span><span class="brand-word">${superMegaBrandIdentity.name}</span></a><p class="footer-company-statement">${companyStatement}</p></div>
     <nav class="footer-links" aria-label="${isMyanmar ? 'အောက်ခြေ လမ်းညွှန်' : 'Footer'}"><a href="${isMyanmar ? '/my/contact/' : '/contact/'}">${isMyanmar ? 'ဆက်သွယ်ရန်' : 'Contact'}</a><a href="${isMyanmar ? '/my/privacy/' : '/privacy/'}">${isMyanmar ? 'ကိုယ်ရေးအချက်အလက် မူဝါဒ' : 'Privacy'}</a><span>&copy; ${year} ${superMegaBrandIdentity.name}</span></nav>
   </div></footer>`;
 }

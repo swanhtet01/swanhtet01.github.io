@@ -56,15 +56,15 @@ jobs:
           flutter_bin="$(readlink -f "$(command -v flutter)")"
           export SHOP_MATERIAL_ICONS_FONT="$(dirname "$flutter_bin")/cache/artifacts/material_fonts/MaterialIcons-Regular.otf"
           test -f "$SHOP_MATERIAL_ICONS_FONT"
+          rm -f test/goldens/shop_*.png
           timeout --signal=TERM --kill-after=10s 180s flutter test test/visual_capture_test.dart --update-goldens --reporter expanded --timeout 60s
 
       - name: Retain Flutter-rendered screens for design review
-        if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: supermega-shop-flutter-renders-${{ github.sha }}
           path: mobile/shop_pos/test/goldens/shop_*.png
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 7
 
       - name: Build Android debug APK
@@ -101,6 +101,14 @@ jobs:
 
       - name: Build iOS app without signing
         run: flutter build ios --debug --no-codesign --no-pub
+
+      - name: Retain unsigned iOS app for simulator and signing QA
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: supermega-shop-ios-unsigned-${{ github.sha }}
+          path: mobile/shop_pos/build/ios/iphoneos/Runner.app
+          if-no-files-found: error
+          retention-days: 7
 
   windows:
     name: Build Windows PC app

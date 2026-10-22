@@ -51,7 +51,7 @@ function harness(responses, search = '', hash = '', locale = 'en') {
   let timerId = 0
   const form = {
     querySelector(selector) {
-      if (!fields.has(selector)) fields.set(selector, { open: true, value: selector === '[name="product"]' ? 'guide' : '', placeholder: selector === '[name="goal"]' ? 'Tell us what your business needs.' : '', selectedOptions: [], validity: { typeMismatch: false }, setCustomValidity(message) { this.validationMessage = message }, addEventListener(name, callback) { events.set(selector + ':' + name, callback) } })
+      if (!fields.has(selector)) fields.set(selector, { open: true, hidden: selector === '[data-contact-selection]', textContent: '', value: selector === '[name="product"]' ? 'guide' : '', placeholder: selector === '[name="goal"]' ? 'Tell us what your business needs.' : '', selectedOptions: [], validity: { typeMismatch: false }, setCustomValidity(message) { this.validationMessage = message }, addEventListener(name, callback) { events.set(selector + ':' + name, callback) } })
       return fields.get(selector)
     },
     addEventListener(name, callback) { if (name === 'submit') handler = callback; else events.set('form:' + name, callback) },
@@ -63,6 +63,7 @@ function harness(responses, search = '', hash = '', locale = 'en') {
     document: { documentElement: { lang: locale }, querySelector: selector => {
       if (selector === '[data-contact-form]') return form
       if (selector === '[data-language-switch]') return languageSwitch
+      if (['[data-contact-selection]', '[data-contact-selection-label]', '[data-contact-selection-value]', '[data-contact-selection-clear]'].includes(selector)) return form.querySelector(selector)
       if (['[data-contact-heading]', '[data-contact-lede]'].includes(selector)) {
         if (!headings.has(selector)) headings.set(selector, { textContent: selector === '[data-contact-heading]' ? (locale === 'my' ? 'ဆက်သွယ်ရန်' : 'Contact') : 'Tell us about your business and the workflow you want to improve. We will reply by email.' })
         return headings.get(selector)
@@ -94,15 +95,15 @@ function harness(responses, search = '', hash = '', locale = 'en') {
     },
   })
   if (!hash) form.querySelector('[name="goal"]').value = 'Please build my business website'
-  return { invalid: field => events.get('form:invalid')?.({ target: form.querySelector('[name="' + field + '"]') }), input: field => events.get('form:input')?.({ target: form.querySelector('[name="' + field + '"]') }), reset: () => form.reset(), fields, headings, calls, timers, windowEvents, historyCalls, location, languageSwitch, changeProduct: value => { form.querySelector('[name="product"]').value = value; events.get('[name="product"]:change')() }, expire: () => { for (const callback of [...timers.values()]) callback() }, submit: () => handler({ preventDefault() {} }), resets: () => resets }
+  return { invalid: field => events.get('form:invalid')?.({ target: form.querySelector('[name="' + field + '"]') }), input: field => events.get('form:input')?.({ target: form.querySelector('[name="' + field + '"]') }), reset: () => form.reset(), fields, headings, calls, timers, windowEvents, historyCalls, location, languageSwitch, clearSetup: () => events.get('[data-contact-selection-clear]:click')?.({ preventDefault() {} }), changeProduct: value => { form.querySelector('[name="product"]').value = value; events.get('[name="product"]:change')() }, expire: () => { for (const callback of [...timers.values()]) callback() }, submit: () => handler({ preventDefault() {} }), resets: () => resets }
 }
 
 test('only active public product links set product context; internal routes fall back to the general brief', () => {
   assert.doesNotMatch(html, /<select name="product"/)
   const shop = harness([], '?product=shop&source=shop-brief', '#company=Example&goal=Prepare%20our%20shop')
   assert.equal(shop.fields.get('[name="product"]').value, 'shop')
-  assert.equal(shop.headings.get('[data-contact-heading]').textContent, 'Request a Shop walkthrough')
-  assert.equal(shop.headings.get('[data-contact-lede]').textContent, 'Tell us what you sell and which devices you use. We will reply by email to discuss a Shop walkthrough.')
+  assert.equal(shop.headings.get('[data-contact-heading]').textContent, 'Start with Shop')
+  assert.equal(shop.headings.get('[data-contact-lede]').textContent, 'Tell us what you sell and how you work today. We will reply by email.')
   assert.equal(shop.fields.get('[name="goal"]').value, 'Prepare our shop')
   assert.equal(shop.calls.length, 0)
   for (const product of ['website', 'ecommerce']) {
@@ -118,16 +119,23 @@ test('only active public product links set product context; internal routes fall
 
 test('prefilled message stays editable and does not claim setup is complete', () => {
   const state = harness([], '?product=shop', '#company=Example&goal=Prepare%20our%20shop')
-  assert.equal(state.headings.get('[data-contact-heading]').textContent, 'Request a Shop walkthrough')
+  assert.equal(state.headings.get('[data-contact-heading]').textContent, 'Start with Shop')
   assert.equal(state.fields.get('[name="company"]').value, 'Example')
   assert.equal(state.calls.length, 0)
   assert.doesNotMatch(script, /Your setup is ready\./)
 })
 
-test('Shop handoffs preserve valid context and unsupported internal routes cannot set product or template', () => {
-  const state = harness([], '?product=shop&template=example-template')
+test('Shop handoffs show an allowlisted setup and unsupported routes cannot set one', () => {
+  const state = harness([], '?product=shop&template=mini-mart-grocery')
   assert.equal(state.fields.get('[name="product"]').value, 'shop')
-  assert.equal(state.fields.get('[name="template"]').value, 'example-template')
+  assert.equal(state.fields.get('[name="template"]').value, 'mini-mart-grocery')
+  assert.equal(state.fields.get('[data-contact-selection]').hidden, false)
+  assert.equal(state.fields.get('[data-contact-selection-label]').textContent, 'Selected setup:')
+  assert.equal(state.fields.get('[data-contact-selection-value]').textContent, 'Mini-mart & grocery')
+  state.clearSetup()
+  assert.equal(state.fields.get('[name="template"]').value, '')
+  assert.equal(state.fields.get('[data-contact-selection]').hidden, true)
+  assert.equal(state.location.search, '?product=shop')
   state.fields.get('[name="company"]').value = 'Example business'
   state.changeProduct('guide')
   assert.equal(state.fields.get('[name="template"]').value, '')
@@ -135,12 +143,12 @@ test('Shop handoffs preserve valid context and unsupported internal routes canno
   assert.equal(state.fields.get('[name="goal"]').value, 'Please build my business website')
   assert.equal(state.calls.length, 0)
   for (const product of ['website', 'ecommerce']) {
-    const internal = harness([], `?product=${product}&template=example-template`)
+    const internal = harness([], `?product=${product}&template=mini-mart-grocery`)
     assert.equal(internal.fields.get('[name="product"]').value, 'guide')
     assert.equal(internal.fields.get('[name="template"]').value, '')
     assert.equal(internal.headings.get('[data-contact-heading]').textContent, 'Contact')
   }
-  for (const search of ['?product=unknown&template=example', '?product=guide&template=example', '?product=website&template=' + 'a'.repeat(121), '?product=website&template=%3Cbad%3E']) {
+  for (const search of ['?product=unknown&template=mini-mart-grocery', '?product=guide&template=mini-mart-grocery', '?product=shop&template=made-up', '?product=website&template=' + 'a'.repeat(121), '?product=website&template=%3Cbad%3E']) {
     assert.equal(harness([], search).fields.get('[name="template"]').value, '')
   }
 })
@@ -150,8 +158,8 @@ test('Burmese contact route keeps the same safe receipt contract with Burmese co
   for (const token of ['<label>အမည်<input', '<label>အီးမေးလ်<input', '<label class="wide">စာ<textarea', '>စာပို့ရန်</button>']) assert.match(myanmarPage, new RegExp(token))
   assert.doesNotMatch(myanmarPage, />Send message<\/button>|>Company \(optional\)<input/)
   const state = harness([new Error('connection lost'), { body: receipt }], '?product=shop&utm_source=example&private=discard', '', 'my')
-  assert.equal(state.headings.get('[data-contact-heading]').textContent, 'ဆိုင်အက်ပ် အသုံးပြုပုံကို မေးမြန်းရန်')
-  assert.equal(state.headings.get('[data-contact-lede]').textContent, 'သင်ရောင်းချသော ပစ္စည်းများနှင့် အသုံးပြုမည့်စက်များကို ပြောပြပါ။ ဆိုင်အက်ပ် အသုံးပြုပုံကို ဆွေးနွေးရန် အီးမေးလ်ဖြင့် ပြန်လည်ဆက်သွယ်ပါမည်။')
+  assert.equal(state.headings.get('[data-contact-heading]').textContent, 'Shop စတင်သုံးရန်')
+  assert.equal(state.headings.get('[data-contact-lede]').textContent, 'သင်ရောင်းချသော ပစ္စည်းများနှင့် လက်ရှိအလုပ်လုပ်ပုံကို ပြောပြပါ။ အီးမေးလ်ဖြင့် ပြန်လည်ဆက်သွယ်ပါမည်။')
   assert.equal(state.languageSwitch.href, '/contact/?product=shop&utm_source=example')
   state.invalid('name')
   assert.equal(state.fields.get('[name="name"]').validationMessage, 'ဤအချက်အလက်ကို ဖြည့်ပါ။')
