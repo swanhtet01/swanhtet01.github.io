@@ -1197,10 +1197,15 @@ class _ShopHomeState extends State<ShopHome> {
                                             !_recoveredDraft &&
                                             _pendingWalletCheckout == null
                                         ? _emptyCartPanel()
-                                        : _cartPanel(
-                                            products,
-                                            narrowPane: cartWidth < 320,
-                                          ),
+                                        : cartWidth < 320
+                                        ? Align(
+                                            alignment: Alignment.topCenter,
+                                            child: _cartPanel(
+                                              products,
+                                              narrowPane: true,
+                                            ),
+                                          )
+                                        : _cartPanel(products),
                                   ),
                                 ],
                               ],
