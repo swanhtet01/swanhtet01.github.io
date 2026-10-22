@@ -534,8 +534,14 @@ async function main() {
     await clickText(cdp, sessionId, 'Show Inventory')
     await waitFor(cdp, sessionId, 'ကုန်ပစ္စည်းလက်ကျန်')
     const myInventoryText = await evaluate(cdp, sessionId, `document.querySelector('.shop-stock-workspace')?.innerText || ''`)
-    if (/Inventory|Stock alerts|Count stock|Other products|Red apple \(each\)/.test(myInventoryText))
+    if (/Inventory|Stock alerts|Count stock|Other products|Red apple \(each\)|Purchasing & locations/.test(myInventoryText))
       throw new Error('myanmar_inventory_default_view_contains_english')
+    const myStockLabels = await evaluate(cdp, sessionId, `(() => {
+      const row=document.querySelector('.stock-attention-table .data-row:not(.table-head)');
+      return row ? [2,3,4].map(index=>getComputedStyle(row.children[index-1],'::before').content).join(' ') : '';
+    })()`)
+    if (!myStockLabels || /Available|Reorder|Price/.test(myStockLabels))
+      throw new Error(`myanmar_inventory_mobile_labels_untranslated:${myStockLabels}`)
     captures.push(await captureTablet(cdp, sessionId, output, 'actual-shop-inventory-my-tablet', ['ကုန်ပစ္စည်းလက်ကျန်', 'ပန်းသီးနီ (တစ်လုံး)'],
       { fixturePath: '/shop-my/', tab: 'inventory', uiLocale: 'my', selector: '.shop-stock-workspace', imageSelector: '.stock-product-photo', images: 1 }))
     captures.push(await captureMobile(cdp, sessionId, output, 'actual-shop-inventory-my-mobile', ['ကုန်ပစ္စည်းလက်ကျန်', 'ပန်းသီးနီ (တစ်လုံး)'],

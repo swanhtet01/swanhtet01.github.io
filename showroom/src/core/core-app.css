@@ -701,6 +701,12 @@ label.checkbox-row input { width: 1.25rem; min-width: 1.25rem; min-height: 1.25r
 .stock-attention-table .data-row:not(.table-head) > span:nth-child(2)::before { content: "Available"; }
 .stock-attention-table .data-row:not(.table-head) > span:nth-child(3)::before { content: "Reorder"; }
 .stock-attention-table .data-row:not(.table-head) > span:nth-child(4)::before { content: "Price"; }
+html:lang(my) .stock-attention-table .data-row:not(.table-head) > span:nth-child(2)::before { content: "လက်ကျန်"; }
+html:lang(my) .stock-attention-table .data-row:not(.table-head) > span:nth-child(3)::before { content: "ပြန်မှာရန်"; }
+html:lang(my) .stock-attention-table .data-row:not(.table-head) > span:nth-child(4)::before { content: "ဈေးနှုန်း"; }
+html:lang(my) .stock-attention-table .data-row:not(.table-head) > span:nth-child(2)::before,
+html:lang(my) .stock-attention-table .data-row:not(.table-head) > span:nth-child(3)::before,
+html:lang(my) .stock-attention-table .data-row:not(.table-head) > span:nth-child(4)::before { font-family: "Noto Sans Myanmar", "Myanmar Text", sans-serif; font-size: .5625rem; text-transform: none; }
 .data-row { min-height: 50px; display: grid; grid-template-columns: minmax(180px,1.5fr) repeat(3,minmax(85px,.7fr)) minmax(90px,.7fr); gap: 10px; align-items: center; border-bottom: 1px solid var(--core-line); color: var(--core-muted); font-size: 0.625rem; }
 .shop-stock-workspace .data-row { font-size: .75rem; }
 .shop-stock-workspace .data-row small { font-size: .625rem; }

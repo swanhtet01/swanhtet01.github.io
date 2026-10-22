@@ -245,4 +245,7 @@ export const UI_TRANSLATIONS: Readonly<Record<string, string>> = {
   'Create purchase order': 'ဝယ်ယူမှုအော်ဒါ ဖန်တီးရန်',
   'Purchase orders': 'ဝယ်ယူမှုအော်ဒါများ', 'active': 'ခု ဆောင်ရွက်နေ',
   'Add your first product': 'ပထမဆုံးကုန်ပစ္စည်း ထည့်ရန်',
+  'Purchasing & locations': 'ဝယ်ယူမှုနှင့် နေရာခွဲများ',
+  'Supplier planning, location stock, and available-to-promise': 'ပေးသွင်းသူ၊ နေရာအလိုက် လက်ကျန်နှင့် ရောင်းနိုင်သည့် လက်ကျန်',
+  'Open when needed': 'လိုအပ်မှ ဖွင့်ရန်',
 }

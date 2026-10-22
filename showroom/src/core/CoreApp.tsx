@@ -8132,7 +8132,7 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
         <div className="form-actions"><button className="core-button" disabled={Boolean(pendingAction)} onClick={cancelCatalogItemEditor} type="button">Cancel</button><button className="core-button primary" disabled={catalogEditStale ? Boolean(pendingAction) || !commerceCanWrite : commerceControlsDisabled || !catalogEditChanged} onClick={catalogEditStale ? () => openCatalogItemEditor(catalogEditItem.sku) : undefined} type={catalogEditStale ? 'button' : 'submit'}>{catalogEditStale ? 'Reload values' : 'Review changes'}</button></div>
       </form> : null}
       <details className="inventory-tools-disclosure">
-        <summary><span><strong>Purchasing &amp; locations</strong><small>Supplier planning, location stock, and available-to-promise</small></span><b>Open when needed</b></summary>
+        <summary><span><strong>{uiText('Purchasing & locations')}</strong><small>{uiText('Supplier planning, location stock, and available-to-promise')}</small></span><b>{uiText('Open when needed')}</b></summary>
         <div className="inventory-tools-content">
           {supplierControl}
           <section aria-label="AI demand advice" className="core-panel company-backup-panel"><div className="company-backup-head"><div><span className="core-eyebrow">AI demand advice</span><h2>{lockedCapabilityNotice('ai-demand-advice').label}</h2><p>{lockedCapabilityNotice('ai-demand-advice').outcome}</p></div><span className="status-pill">premium</span></div><p className="form-notice">{lockedCapabilityNotice('ai-demand-advice').reason} <a className="text-link" href="/contact/?product=guide&source=managed-intelligence">Talk to us about this.</a></p></section>
