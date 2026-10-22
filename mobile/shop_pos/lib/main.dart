@@ -1524,11 +1524,7 @@ class _ShopHomeState extends State<ShopHome> {
           MediaQuery.sizeOf(context).width >= _minSplitContentWidth &&
           constraints.maxWidth < 420;
       final compactAddButton = Tooltip(
-        message: shopCopy(
-          widget.myanmar,
-          'New product',
-          'ကုန်ပစ္စည်းအသစ်',
-        ),
+        message: shopCopy(widget.myanmar, 'New product', 'ကုန်ပစ္စည်းအသစ်'),
         child: TextButton.icon(
           key: const ValueKey('shop-new-product-compact'),
           onPressed: _showAddProduct,
