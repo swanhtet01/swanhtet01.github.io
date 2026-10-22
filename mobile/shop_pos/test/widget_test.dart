@@ -1934,7 +1934,6 @@ void main() {
     tester,
   ) async {
     final semantics = tester.ensureSemantics();
-    addTearDown(semantics.dispose);
     tester.view.physicalSize = const Size(320, 800);
     tester.view.devicePixelRatio = 1;
     tester.platformDispatcher.textScaleFactorTestValue = 1.3;
@@ -1988,6 +1987,7 @@ void main() {
       2,
     );
     expect(tester.takeException(), isNull);
+    semantics.dispose();
     await database.close();
   });
 
