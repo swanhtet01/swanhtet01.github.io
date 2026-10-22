@@ -4167,80 +4167,76 @@ void main() {
     (320.0, true),
     (390.0, true),
   ]) {
-    testWidgets(
-      'settings stays readable and tappable at ${width.toInt()}px '
-      '${myanmar ? 'MY' : 'EN'}',
-      (tester) async {
-        tester.view.physicalSize = Size(width, 800);
-        tester.view.devicePixelRatio = 1;
-        if (width == 320) {
-          tester.platformDispatcher.textScaleFactorTestValue = 1.5;
-        }
-        addTearDown(tester.view.resetPhysicalSize);
-        addTearDown(tester.view.resetDevicePixelRatio);
-        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
-        final database = ShopDatabase(NativeDatabase.memory());
-        await tester.pumpWidget(
-          ShopApp(
-            database: database,
-            authClient: null,
-            apiBaseUrl: 'https://example.invalid',
-            initialMyanmar: myanmar,
-          ),
+    testWidgets('settings stays readable and tappable at ${width.toInt()}px '
+        '${myanmar ? 'MY' : 'EN'}', (tester) async {
+      tester.view.physicalSize = Size(width, 800);
+      tester.view.devicePixelRatio = 1;
+      if (width == 320) {
+        tester.platformDispatcher.textScaleFactorTestValue = 1.5;
+      }
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      final database = ShopDatabase(NativeDatabase.memory());
+      await tester.pumpWidget(
+        ShopApp(
+          database: database,
+          authClient: null,
+          apiBaseUrl: 'https://example.invalid',
+          initialMyanmar: myanmar,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find
+            .descendant(
+              of: find.byType(AppBar),
+              matching: find.byIcon(Icons.settings_outlined),
+            )
+            .first,
+      );
+      await tester.pumpAndSettle();
+      final titles = myanmar
+          ? [
+              'ပြေစာပရင်တာ',
+              'မိုဘိုင်းငွေပေးချေမှု',
+              'ငွေသားတာဝန်ချိန်',
+              width == 320
+                  ? 'အရန်ကူးဖိုင်\nထုတ်ယူရန်'
+                  : 'အရန်ကူးဖိုင် ထုတ်ယူရန်',
+            ]
+          : [
+              'Receipt printer',
+              'Mobile money',
+              'Cash shift',
+              'Export backup file',
+            ];
+      for (final title in titles) {
+        final tile = find.ancestor(
+          of: find.text(title),
+          matching: find.byType(ListTile),
         );
-        await tester.pumpAndSettle();
-        await tester.tap(
-          find
-              .descendant(
-                of: find.byType(AppBar),
-                matching: find.byIcon(Icons.settings_outlined),
-              )
-              .first,
-        );
-        await tester.pumpAndSettle();
-
-        final titles = myanmar
-            ? [
-                'ပြေစာပရင်တာ',
-                'မိုဘိုင်းငွေပေးချေမှု',
-                'ငွေသားတာဝန်ချိန်',
-                width == 320
-                    ? 'အရန်ကူးဖိုင်\nထုတ်ယူရန်'
-                    : 'အရန်ကူးဖိုင် ထုတ်ယူရန်',
-              ]
-            : [
-                'Receipt printer',
-                'Mobile money',
-                'Cash shift',
-                'Export backup file',
-              ];
-        for (final title in titles) {
-          final tile = find.ancestor(
-            of: find.text(title),
-            matching: find.byType(ListTile),
-          );
-          expect(tile, findsOneWidget);
-          final bounds = tester.getRect(tile);
-          expect(bounds.height, greaterThanOrEqualTo(48));
-          expect(bounds.left, greaterThanOrEqualTo(0));
-          expect(bounds.right, lessThanOrEqualTo(width));
-        }
-        expect(
-          tester.getSize(find.byType(SegmentedButton<bool>)).height,
-          greaterThanOrEqualTo(48),
-        );
-        expect(
-          find.text(
-            myanmar
-                ? 'ဤစက်တွင်သာ သိမ်းထားသည်။ အွန်လိုင်းအရန်ကူး မရှိသေးပါ။'
-                : 'Saved on this device. Online backup is not active.',
-          ),
-          findsOneWidget,
-        );
-        expect(tester.takeException(), isNull);
-        await database.close();
-      },
-    );
+        expect(tile, findsOneWidget);
+        final bounds = tester.getRect(tile);
+        expect(bounds.height, greaterThanOrEqualTo(48));
+        expect(bounds.left, greaterThanOrEqualTo(0));
+        expect(bounds.right, lessThanOrEqualTo(width));
+      }
+      expect(
+        tester.getSize(find.byType(SegmentedButton<bool>)).height,
+        greaterThanOrEqualTo(48),
+      );
+      expect(
+        find.text(
+          myanmar
+              ? 'ဤစက်တွင်သာ သိမ်းထားသည်။ အွန်လိုင်းအရန်ကူး မရှိသေးပါ။'
+              : 'Saved on this device. Online backup is not active.',
+        ),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+      await database.close();
+    });
   }
 
   testWidgets(
