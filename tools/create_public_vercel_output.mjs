@@ -1048,7 +1048,7 @@ const contactScript = `<script>(function(){
 const inlineDigest = (value) => createHash('sha256').update(value).digest('base64')
 const contactScriptBody = contactScript.slice('<script>'.length, -'</script>'.length)
 const publicSecurityHeaders = {
-  'content-security-policy': `default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' 'sha256-${inlineDigest(contactScriptBody)}'; script-src-attr 'none'; style-src 'self' 'sha256-${inlineDigest(sharedStyle)}' 'sha256-${inlineDigest(publicMarketingStyle)}'; style-src-attr 'none'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; media-src 'none'; worker-src 'none'; manifest-src 'self'`,
+  'content-security-policy': `default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' 'sha256-${inlineDigest(contactScriptBody)}'; script-src-attr 'none'; style-src 'self' 'sha256-${inlineDigest(sharedStyle)}' 'sha256-${inlineDigest(publicMarketingStyle)}' 'sha256-${inlineDigest(myanmarPublicStyle)}'; style-src-attr 'none'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; media-src 'none'; worker-src 'none'; manifest-src 'self'`,
   'cross-origin-opener-policy': 'same-origin',
   'cross-origin-resource-policy': 'same-origin',
   'permissions-policy': 'camera=(), microphone=(), geolocation=(), payment=(), usb=()',
