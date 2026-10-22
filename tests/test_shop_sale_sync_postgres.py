@@ -51,6 +51,7 @@ class ShopSyncPostgresLauncher(unittest.TestCase):
         environment["SUPERMEGA_TRIAL_SCHEMA_VERSION"] = "14"
         environment["SUPERMEGA_BILLING_SCHEMA_VERSION"] = "13"
         environment["SUPERMEGA_OTEL_DISABLED"] = "1"
+        environment["SUPERMEGA_TEST_POSTGRES_BIN"] = environment["SUPERMEGA_POSTGRES17_BIN"]
         completed = subprocess.run(
             [sys.executable, "-m", "unittest",
              "tests.test_shop_sale_sync_postgres.LocalShopSyncPostgresTests", "-v"],
