@@ -10,7 +10,7 @@ import { bindPreviewNavigation, parsePreviewAppBinding } from './public_preview_
 import { assertPublicGalleryReleaseReady } from './public_gallery_rights.mjs'
 
 import { activeProductContracts } from '../showroom/src/core/product-visibility.ts'
-import { brandFaviconSvg, companyMarkup, companyShopFooterHtml, companyShopHeaderHtml, companyShopStyle, shopMarkup } from './public_company_shop_design.mjs'
+import { brandFaviconSvg, companyShopFooterHtml, companyShopHeaderHtml, companyShopStyle, shopMarkup } from './public_company_shop_design.mjs'
 
 
 const run = promisify(execFile)
@@ -191,7 +191,7 @@ for (const product of manifest.customerProducts) {
 
 const publicProducts = activeProductContracts(manifest)
 const publicProductNames = publicProducts.map(product => product.name).join(', ')
-const discoverablePages = manifest.pages.filter(page => !page.productId || publicProducts.some(product => product.id === page.productId))
+const discoverablePages = manifest.pages.filter(page => !page.redirectTo && (!page.productId || publicProducts.some(product => product.id === page.productId)))
 
 const brand = manifest.brand
 
@@ -410,6 +410,7 @@ const sharedStyle = `
   .contact-page .page-hero::after { display:none; }
   .contact-page .page-hero h1 { max-width:480px; font-size:clamp(40px,4.3vw,58px); line-height:1.04; letter-spacing:-.045em; }
   .contact-page .page-hero .lede { max-width:430px; font-size:18px; line-height:1.62; }
+  .contact-company-intro { max-width:430px; color:var(--ink); font-size:15px; line-height:1.6; }
   .contact-page .contact-layout { display:block; padding:0; }
   .contact-page .contact-form { width:100%; padding:clamp(24px,3vw,40px); gap:18px; border-color:#dbe3ee; border-radius:8px; background:#fff; box-shadow:0 16px 42px rgba(11,15,23,.06); }
   .contact-page .field-grid { gap:20px 16px; }
@@ -741,7 +742,7 @@ function structuredDataHtml(schema) {
 
 const publicObservabilityHosts = Object.freeze(['supermega.dev', 'www.supermega.dev'])
 const publicObservabilityPaths = Object.freeze(discoverablePages.map((page) => page.route))
-assert(publicObservabilityPaths.join(',') === '/,/shop/,/contact/,/privacy/', 'public_observability_path_surface_changed')
+assert(publicObservabilityPaths.join(',') === '/shop/,/contact/,/privacy/', 'public_observability_path_surface_changed')
 
 // Source presence is only delivery readiness. Provider-visible pageviews and
 // vitals remain unobserved until a separate read-only provider receipt proves
@@ -854,7 +855,7 @@ function documentHtml({ route, title, description, content, schema = null, robot
 }
 
 const homePage = manifest.pages.find((page) => page.route === '/')
-assert(homePage?.file === 'index.html', 'home_page_manifest_entry_invalid')
+assert(homePage?.file === 'index.html' && homePage.redirectTo === '/shop/', 'home_redirect_manifest_entry_invalid')
 assert(typeof homePage.title === 'string' && homePage.title.includes('SuperMega'), 'home_page_title_invalid')
 assert(typeof homePage.description === 'string' && homePage.description.length >= 40, 'home_page_description_invalid')
 
@@ -955,15 +956,6 @@ function removeSectionByClass(source, className, code) {
  }
  assert.fail(code + "_section_not_closed")
 }
-function shopOnlyCompanyMarkup(source) {
-  assert(!source.includes('class="company-portfolio"') && !source.includes('class="company-contact"'), 'home_redundant_section_remains')
-  assert(!source.includes('class="shop-showcase"'), 'home_duplicate_gallery_remains')
-  assert(!/href="\/(?:plant|website|ecommerce)\//.test(source), 'shop_only_inactive_product_link_remains')
-  assert((source.match(/class="button button-primary"/g) || []).length === 1, 'home_primary_action_count_drift')
-  assert((source.match(/Illustrative Shop interface · synthetic local records/g) || []).length === 1, 'home_capture_disclosure_count_drift')
-  return source
-}
-const publicHomeMarkup = shopOnlyCompanyMarkup(companyMarkup)
 const publicShopMarkup = shopMarkup
 
 function productCard(id) {
@@ -972,10 +964,9 @@ function productCard(id) {
  assert(typeof route === 'string' && /^\/[a-z]+\/$/.test(route), `public_product_route_missing:${id}`)
  return `<article class="product-card-compact" id="${id}" data-product-panel data-product-name="${escapeHtml(label)}"><div class="product-card-media">${productGallery(id,label,id==='shop')}</div><div class="product-card-copy"><span class="eyebrow">${label}</span><h2>${item.title}</h2><p>${item.body}</p><ul class="product-card-flow" aria-label="${label} includes">${productOutcomes[id].map(([title])=>`<li>${escapeHtml(title)}</li>`).join('')}</ul><a class="story-link" href="${escapeHtml(route)}">Explore ${label}<span aria-hidden="true">&rarr;</span></a></div></article>`
 }
-const homeHtml = documentHtml({route:'/',title:homePage.title,description:homePage.description,
- schema:{'@type':'Organization',name:'SuperMega',url:canonical('/'),description:homePage.description},
- content:`<main id="content">${publicHomeMarkup}</main>`,
-})
+// Static hosts and saved copies still give a no-JavaScript route to Shop.
+// Vercel's exact root and /index.html routes return the 308 below.
+const homeHtml = `<!doctype html><html lang="en"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><title>${escapeHtml(homePage.title)}</title><meta name="robots" content="noindex,follow" /><link rel="canonical" href="${escapeHtml(canonical(homePage.redirectTo))}" /><meta http-equiv="refresh" content="0; url=${homePage.redirectTo}" /></head><body><main><h1>SuperMega Shop</h1><p>This page has moved. <a href="${homePage.redirectTo}">Continue to Shop</a>.</p></main></body></html>`
 
 function productAction(product) {
  if (product.status !== 'available-in-app' || product.id === 'shop') return ''
@@ -1089,22 +1080,26 @@ let contactHtml = documentHtml({
   content: `<main class="frame contact-page" id="content"><section class="page-hero"><span class="eyebrow">SuperMega · Myanmar</span><h1 data-contact-heading>Contact SuperMega.</h1><p class="lede" data-contact-lede>SuperMega builds business software for Myanmar. Shop brings counter sales, stock and order follow-up together for retailers.</p></section><section class="contact-layout"><form class="contact-form" action="/api/contact-submissions" method="post" data-contact-form><div class="field-grid"><label>Name<input name="name" autocomplete="name" required maxlength="120" /></label><label>Email<input name="email" type="email" autocomplete="email" required maxlength="180" /></label><label class="wide">Company (optional)<input name="company" autocomplete="organization" maxlength="180" /></label><input type="hidden" name="product" value="guide" /><input type="hidden" name="template" maxlength="120" /><label class="wide">Message<textarea name="goal" required maxlength="4000" placeholder="Share a few details about your request."></textarea></label></div><input type="hidden" name="source_url" /><input type="hidden" name="referrer" /><input type="hidden" name="idempotency_key" /><input type="hidden" name="trial_claim_code" /><input type="hidden" name="proof_contract" /><input type="hidden" name="proof_version" /><input type="hidden" name="proof_digest" /><input type="hidden" name="proof_product" /><input type="hidden" name="proof_template" /><input type="hidden" name="proof_readiness" /><input type="hidden" name="proof_sources" /><input type="hidden" name="proof_behavior" /><input type="hidden" name="proof_decisions" /><input type="hidden" name="proof_raw_records" /><input type="hidden" name="proof_context_contract" /><input type="hidden" name="proof_context_digest" /><input type="hidden" name="proof_context_outcome_digest" /><input type="hidden" name="proof_context_approved" /><input type="hidden" name="proof_context_raw_records" /><input class="contact-honeypot" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" inert /><button class="button primary" type="submit">Send message</button><p class="form-status" data-form-status aria-live="polite"></p></form></section></main>${contactScript}`,
 })
 contactHtml = replaceOnce(contactHtml, 'Contact SuperMega.', 'Contact', 'contact_heading_copy')
+contactHtml = replaceOnce(contactHtml, '<h1 data-contact-heading>Contact</h1>', `<h1 data-contact-heading>Contact</h1><p class="contact-company-intro">${escapeHtml(manifest.company.statement)}</p>`, 'contact_company_intro')
 contactHtml = replaceOnce(contactHtml, 'SuperMega builds business software for Myanmar. Shop brings counter sales, stock and order follow-up together for retailers.', 'Tell us about your business and the workflow you want to improve. We will reply by email.', 'contact_company_intro_copy')
 contactHtml = replaceOnce(contactHtml, 'Share a few details about your request.', 'Tell us what your business needs.', 'contact_message_placeholder_copy')
 
-const privacyHtml = documentHtml({
+let privacyHtml = documentHtml({
   route: '/privacy/',
   title: 'Privacy | SuperMega',
   description: 'How SuperMega handles public contact requests and product implementation data.',
   content: `<main class="frame" id="content"><section class="page-hero"><span class="eyebrow">Privacy</span><h1>Collect what the work requires. Protect the rest.</h1><p class="lede">The public site uses the details you choose to send so SuperMega can respond to your request.</p></section><div class="prose"><section><h3>Site measurement</h3><p>On the production SuperMega public site, first-party Vercel Web Analytics records aggregate page views and Speed Insights measures Core Web Vitals. Before either tool starts, SuperMega allows only the four public page paths and removes query strings and fragments from the URL. SuperMega supplies no custom or conversion event, contact-form value, identity, free text, customer record, payment, or commercial proof in its measurement event fields. Vercel may add a timestamp, referrer, approximate location, browser, operating system, and device information to its aggregate reporting. Source code or a reachable script does not prove that provider telemetry was observed.</p></section><section><h3>Contact requests</h3><p>We receive your name, work email, company, selected product or template, request, source page, referrer, and an optional attached request summary, outcome status, and digest, plus an approved AI context digest and no-raw-record boundary when you attach them. We use them to reply, qualify the workflow, and prepare the next agreed step.</p></section><section><h3>Product data</h3><p>An attached request summary includes bounded readiness, source, behavior, reviewed-decision counts, and a digest-bound aggregate outcome. It excludes raw product records, questions, approval contents, and account details. Sending a request does not create an account or connect a source.</p></section><section><h3>AI processing</h3><p>Governed assistance is configured only against approved sources and roles. Consequential external actions remain behind explicit approval.</p></section><section><h3>Sharing</h3><p>We do not sell contact details. Service providers are used only where needed to host, secure, communicate, or deliver the agreed system.</p></section><section><h3>Deletion</h3><p>Email <a href="mailto:swanhtet@supermega.dev">swanhtet@supermega.dev</a> to request correction or deletion of a public contact record.</p></section></div></main>`,
 })
 
+privacyHtml = replaceOnce(privacyHtml, 'four public page paths', 'three public page paths', 'privacy_public_path_count')
+privacyHtml = replaceOnce(privacyHtml, 'your name, work email, company, selected product or template, request, source page, referrer', 'your name, email, optional company, message, product context from a Shop link, source page and referrer', 'privacy_contact_fields')
+
 const notFoundHtml = documentHtml({
   route: '/404',
   title: 'Page not found | SuperMega',
   description: 'The requested SuperMega route does not exist.',
   robots: 'noindex,nofollow',
-  content: `<main class="frame" id="content"><section class="page-hero"><span class="eyebrow">Page not found</span><h1>We couldn’t find that page.</h1><p class="lede">Find Shop on the home page.</p><div class="actions"><a class="button primary" href="/">Return home</a></div></section></main>`,
+  content: `<main class="frame" id="content"><section class="page-hero"><span class="eyebrow">Page not found</span><h1>We couldn’t find that page.</h1><p class="lede">Continue to Shop.</p><div class="actions"><a class="button primary" href="/shop/">Open Shop</a></div></section></main>`,
 })
 
 const healthFunction = `'use strict'
@@ -1685,6 +1680,7 @@ const vercelConfig = {
     { src: '^/api/contact-submissions/?$', dest: '/api/contact-submissions.js' },
     { src: '^/api/health/?$', dest: '/api/health.js' },
     { src: '^/api/(.*)$', dest: '/api/not-found.js' },
+    { src: '^/(?:index\\.html)?$', status: 308, headers: { Location: homePage.redirectTo } },
     { src: `^/(?:${manifest.productVisibility.retainedOnlyProductIds.join('|')})(?:/.*)?$`, status: 404, dest: '/404.html' },
     ...manifest.redirects.map((redirect) => ({ src: redirect.source, status: 308, headers: { Location: manifest.customerProducts.some(product => product.publicAnchor === redirect.destination && !publicProducts.includes(product)) ? `/${manifest.customerProducts.find(product => product.publicAnchor === redirect.destination).id}/` : redirect.destination } })),
     { src: '^/__release\\.json$', headers: { 'cache-control': 'no-store, max-age=0' }, continue: true },

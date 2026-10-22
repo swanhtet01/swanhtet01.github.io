@@ -26,7 +26,7 @@ export function companyShopHeaderHtml(route) {
   const contactActive = route === '/contact/';
   const loginHref = 'https://app.supermega.dev/login?product=shop';
   return `<header class="site-header"><div class="wrap header-inner">
-    <a class="brand" href="/" aria-label="${superMegaBrandIdentity.name} home">
+    <a class="brand" href="/shop/" aria-label="${superMegaBrandIdentity.name} Shop">
       <span class="brand-mark" aria-hidden="true">${brandMarkHtml}</span>
       <span class="brand-word">${superMegaBrandIdentity.name}</span>
     </a>
@@ -40,7 +40,7 @@ export function companyShopHeaderHtml(route) {
 
 export function companyShopFooterHtml(route, year) {
   const label = route === '/shop/' ? `${superMegaBrandIdentity.name} Shop` : superMegaBrandIdentity.name;
-  const home = route === '/shop/' ? '/shop/' : '/';
+  const home = '/shop/';
   return `<footer class="footer"><div class="wrap footer-row">
     <a class="brand" href="${home}" aria-label="${label}, back to top"><span class="brand-mark" aria-hidden="true">${brandMarkHtml}</span><span class="brand-word">${superMegaBrandIdentity.name}</span></a>
     <nav class="footer-links" aria-label="Footer"><a href="/contact/">Contact</a><a href="/privacy/">Privacy</a><span>&copy; ${year} ${superMegaBrandIdentity.name}</span></nav>

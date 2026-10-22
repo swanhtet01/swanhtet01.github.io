@@ -57,12 +57,12 @@ const packageManifest = JSON.parse(read('package.json'))
 const derived = new Set()
 
 check(manifest.release?.productionDomain === 'https://supermega.dev', 'manifest_production_domain')
-// The public surface presents products through screenshots and one Login.
+// Every public page with navigation presents the Shop-scoped Login.
 // Historical contact links below remain valid app/support routes, not public CTAs.
 const loginUrl = 'https://app.supermega.dev/login'
-for (const route of ['/', '/shop/', '/contact/']) {
+for (const route of ['/shop/', '/contact/', '/privacy/']) {
   const links = [...companyShopHeaderHtml(route).matchAll(/href="([^"]+)">Login<\/a>/g)].map(([, href]) => href)
-  check(links.length === 1 && (links[0] === loginUrl || (route === '/shop/' && links[0] === `${loginUrl}?product=shop`)), `public_single_login_route:${route}`)
+  check(links.length === 1 && links[0] === `${loginUrl}?product=shop`, `public_single_login_route:${route}`)
   derived.add(links[0])
 }
 check(generator.includes('class="platform-gallery"')

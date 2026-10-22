@@ -51,12 +51,6 @@ function assert(condition, code, detail = {}) {
   if (!condition) throw new Error(`${code}:${JSON.stringify(detail)}`)
 }
 
-function verifyCompanyHeadline(html, code) {
-  const heading = html.match(/<h1 id="hero-title">([\s\S]*?)<\/h1>/)?.[1] ?? ''
-  const text = heading.replace(/<br\s*\/?>/gi, ' ').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
-  assert(text === manifest.company.headline, code)
-}
-
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
@@ -98,11 +92,9 @@ async function readPage(route) {
   for (const token of [
     `meta name="supermega-brand-version" content="${manifest.brand.version}"`,
     `meta name="supermega-context-version" content="${manifest.contextVersion}"`,
-    'aria-label="SuperMega home"',
+    'aria-label="SuperMega Shop"',
     `class="brand-mark" aria-hidden="true">${brandMarkHtml}</span>`,
-    route === '/shop/'
-      ? `href="${appOrigin}/login?product=shop">Login</a>`
-      : `href="${appOrigin}/login">Login</a>`,
+    `href="${appOrigin}/login?product=shop">Login</a>`,
     'href="/privacy/">Privacy</a>',
   ]) assert(html.includes(token), 'page_shared_contract_missing', { route, token })
   const contactRouteToken = 'href="/contact/">Contact</a>'
@@ -151,8 +143,17 @@ async function verifyOnce() {
     : null
   appOrigin = previewAppBinding?.origin || 'https://app.supermega.dev'
   const pendingRoutes = new Set()
-  const pageResults = await Promise.all(manifest.pages.filter(page => !retiredCustomerRoutes.has(page.route)).map(async (page) => readPageOrPending(page, pendingRoutes)))
+  const pageResults = await Promise.all(manifest.pages.filter(page => !page.redirectTo && !retiredCustomerRoutes.has(page.route)).map(async (page) => readPageOrPending(page, pendingRoutes)))
   const pages = new Map([...pageResults, ...retiredCustomerPages.map(page => [page.route, null])])
+  const rootResponse = await request('/', { redirect: 'manual' })
+  if (rootResponse.status === 308) {
+    assert(new URL(rootResponse.headers.get('location') || '', `${baseUrl}/`).href === url('/shop/'), 'root_redirect_destination_wrong')
+    if (expectedCommit) await verifyRedirect('/index.html', '/shop/')
+  } else if (!expectedCommit && rootResponse.status === 200) {
+    pendingRoutes.add('/')
+  } else {
+    assert(false, 'root_redirect_status_wrong', { status: rootResponse.status })
+  }
   await Promise.all(retiredCustomerPaths.map(async page => {
     const response = await request(page.route, { redirect: 'manual' })
     if (response.status !== 404) {
@@ -164,16 +165,8 @@ async function verifyOnce() {
     const product = manifest.customerProducts.find(item => item.id === page.productId)
     assert(!product || !body.toLowerCase().includes(product.name.toLowerCase()), 'retired_product_content_served', { route: page.route, product: page.productId })
   }))
-  verifyCompanyHeadline(pages.get('/') || '', 'homepage_headline_wrong')
-  assert(pages.get('/')?.includes(`href="${appOrigin}/login">Login</a>`), 'homepage_product_cta_missing')
-  const homepage = pages.get('/') || ''
-  for (const token of ['class="company-operating-overview"', 'class="company-product-visual"', 'src="/images/actual-shop-today.png"']) {
-    assert(homepage.includes(token), 'homepage_offer_contract_missing', { token })
-  }
-  assert(!/\bSites\b|\bCommerce\b/.test(homepage), 'internal_products_exposed_on_homepage')
   const shop = publicProducts.find(product => product.id === 'shop')
   const shopAction = `href="${shop.primaryCta.url}">${shop.primaryCta.label}</a>`
-  assert(homepage.includes('href="/shop/">Explore Shop'), 'homepage_shop_action_missing')
   for (const product of publicProducts) {
     const landingRoute = `/${product.id}/`
     const landing = pages.get(landingRoute)
@@ -190,14 +183,9 @@ async function verifyOnce() {
     if (product.id === 'shop') assert(landing.includes('href="/contact/?product=shop">Request a Shop walkthrough'), 'shop_contact_action_missing')
     assert(!landing.includes(shopAction), 'retired_shop_action_present')
     assert(landing.includes('href="/contact/">Contact</a>'), 'landing_contact_route_missing', { product: product.id })
-    assert(homepage.includes('href="/shop/">Explore Shop'), 'landing_route_link_missing_on_home', { product: product.id })
   }
-  for (const product of manifest.customerProducts.filter(product => !publicProducts.includes(product))) {
-    assert(!homepage.includes(`href="/${product.id}/"`) && !homepage.includes(`product=${product.id}`), 'retired_product_marketed', { product: product.id })
-  }
-  for (const internalLabel of ['SuperMega HQ', 'One next action for the company', 'Gated R&amp;D']) assert(!pages.get('/')?.includes(internalLabel), 'internal_system_exposed', { internalLabel })
-  assert(pages.get('/')?.includes('href="/privacy/"'), 'privacy_navigation_missing')
   const contactPage = pages.get('/contact/') || ''
+  if (expectedCommit) assert(contactPage.includes(manifest.company.statement), 'contact_company_intro_missing')
   for (const token of ['supermega.managed_trial_proof.v2', 'data-trial-proof', 'name="product" value="guide"', 'name="proof_digest"', 'name="proof_readiness"', 'name="proof_behavior"', 'name="proof_sources"', 'name="proof_decisions"', 'proof_outcome', 'proof_outcome_digest', 'proof_outcome_accepted', 'digest-bound aggregate summary', 'trial_proof_invalid', 'Attached context removed because the product changed.', 'Message received:', 'source.value=location.href', '>Send message</button>']) {
     assert(contactPage.includes(token), 'contact_trial_proof_contract_missing', { token })
   }
@@ -216,7 +204,7 @@ async function verifyOnce() {
   // EXPECTED_RELEASE_COMMIT set, which asserts the full surface.
   const pendingFeatures = new Set()
   const shareImage = new URL('/og-card.png', `${manifest.release.productionDomain}/`).href
-  const shareSchemaLive = (pages.get('/') || '').includes('/og-card.png')
+  const shareSchemaLive = (pages.get('/shop/') || '').includes('/og-card-shop.png')
   if (!shareSchemaLive && !expectedCommit) {
     pendingFeatures.add('share-and-schema')
   } else {
@@ -249,12 +237,6 @@ async function verifyOnce() {
         && html.includes(`<meta name="twitter:image" content="${expectedShareImage}" />`), 'page_twitter_card_wrong', { route })
       assert(html.includes('<a class="skip-link" href="#content">Skip to content</a>') && html.includes('id="content"'), 'page_skip_link_missing', { route })
     }
-    const [homeSchema, ...extraHomeSchemas] = jsonLdSchemas(pages.get('/') || '', '/')
-    assert(extraHomeSchemas.length === 0
-      && homeSchema?.['@type'] === 'Organization'
-      && homeSchema?.name === 'SuperMega'
-      && homeSchema?.url === new URL('/', `${manifest.release.productionDomain}/`).href
-      && homeSchema?.description === manifest.pages.find(page => page.route === '/').description, 'organization_schema_wrong_live', { homeSchema })
     for (const page of activeLandingPages) {
       const landing = pages.get(page.route)
       if (landing == null) continue
@@ -279,7 +261,7 @@ async function verifyOnce() {
   assert(publicProducts.map(product => product.id).join(',') === 'shop', 'public_product_scope_not_shop_only')
   const interfaceImages = {
     shop: [
-      { file: 'actual-shop-today.png', routes: ['/'] },
+      { file: 'actual-shop-today.png', routes: [] },
       { file: 'actual-shop-sell.png', routes: ['/shop/'] },
       { file: 'actual-shop-orders.png', routes: ['/shop/'] },
       { file: 'actual-shop-inventory.png', routes: ['/shop/'] },
@@ -334,20 +316,20 @@ async function verifyOnce() {
   }))
 
   await Promise.all([
-    verifyRedirect('/products/shop/', '/#shop'),
+    verifyRedirect('/products/shop/', '/shop/'),
     verifyRedirect('/products/factory/', '/plant/'),
     verifyRedirect('/products/ecommerce/', publicProducts.some(product => product.id === 'ecommerce') ? '/#ecommerce' : '/ecommerce/'),
-    verifyRedirect('/ai-agent-solutions/', '/#products'),
-    verifyRedirect('/offers/', '/#products'),
-    verifyRedirect('/solutions/', '/#products'),
-    verifyRedirect('/trust/', '/#trust'),
+    verifyRedirect('/ai-agent-solutions/', '/shop/'),
+    verifyRedirect('/offers/', '/shop/'),
+    verifyRedirect('/solutions/', '/shop/'),
+    verifyRedirect('/trust/', '/contact/'),
     verifyRedirect('/demo/', 'https://app.supermega.dev/'),
   ])
 
   const www = await fetch('https://www.supermega.dev/', { redirect: 'follow', cache: 'no-store', headers: { 'user-agent': 'SuperMegaVerifiedRelease/2.0' }, signal: AbortSignal.timeout(timeoutMs) })
   assert(www.status === 200, 'www_http_error', { status: www.status })
   const wwwHtml = await www.text()
-  verifyCompanyHeadline(wwwHtml, 'www_release_drift')
+  if (expectedCommit) assert(wwwHtml.includes('class="shop-hero-app"'), 'www_shop_redirect_drift')
 
   return {
     pages: manifest.pages.map((page) => page.route).filter((route) => !retiredCustomerRoutes.has(route) && !pendingRoutes.has(route)),

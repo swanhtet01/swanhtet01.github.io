@@ -986,6 +986,7 @@
     {
       "route": "/",
       "file": "index.html",
+      "redirectTo": "/shop/",
       "title": "SuperMega | Operating software for Myanmar businesses",
       "description": "SuperMega is a Myanmar software company. Shop is our first customer product for counter sales, stock and order follow-up."
     },
@@ -1034,11 +1035,11 @@
   "redirects": [
     {
       "source": "^/solutions/?$",
-      "destination": "/#products"
+      "destination": "/shop/"
     },
     {
       "source": "^/trust/?$",
-      "destination": "/#trust"
+      "destination": "/contact/"
     },
     {
       "source": "^/shop(?:/.+)?$",
@@ -1058,19 +1059,19 @@
     },
     {
       "source": "^/templates(?:/.*)?$",
-      "destination": "/#products"
+      "destination": "/shop/"
     },
     {
       "source": "^/work(?:/.*)?$",
-      "destination": "/#products"
+      "destination": "/shop/"
     },
     {
       "source": "^/(?:products?|offers|pricing|plans|packages)/?$",
-      "destination": "/#products"
+      "destination": "/shop/"
     },
     {
       "source": "^/products/(?:commerce|retail|restaurant|store|shop)/?.*$",
-      "destination": "/#shop"
+      "destination": "/shop/"
     },
     {
       "source": "^/products/(?:production|factory|operations|erp|plant)/?.*$",
@@ -1086,11 +1087,11 @@
     },
     {
       "source": "^/(?:vision|ai-agent-solutions|ai-agents|agents|agent-templates|workcell|machine|agentops)/?.*$",
-      "destination": "/#products"
+      "destination": "/shop/"
     },
     {
       "source": "^/(?:find-clients|company-list|receiving-control|receiving-log|founder-brief|reconcile)/?.*$",
-      "destination": "/#products"
+      "destination": "/shop/"
     },
     {
       "source": "^/(?:start|book|setup|get-started|intake)/?.*$",

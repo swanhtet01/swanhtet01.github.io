@@ -90,7 +90,7 @@ const operatingProducts = manifest.customerProducts?.filter((product) => product
 const makerProducts = manifest.customerProducts?.filter((product) => product.kind === 'maker-product') || []
 const publicProducts = activeProductContracts(manifest)
 const publicProductNames = publicProducts.map(product => product.name).join(', ')
-const discoverablePages = manifest.pages.filter(page => !page.productId || publicProducts.some(product => product.id === page.productId))
+const discoverablePages = manifest.pages.filter(page => !page.redirectTo && (!page.productId || publicProducts.some(product => product.id === page.productId)))
 const shop = publicProducts.find((product) => product.id === 'shop')
 if (operatingProducts.map((product) => product.id).join(',') !== 'shop,plant') fail('operating_product_portfolio_drift')
 if (makerProducts.map((product) => `${product.id}:${product.status}`).join(',') !== 'website:release-candidate-local,ecommerce:release-candidate-local') fail('maker_product_portfolio_drift')
@@ -189,7 +189,7 @@ const sharedRequired = [
   '.header-inner { min-height: 76px; display: flex; align-items: center; justify-content: space-between; gap: 24px; }',
   '.nav-links { display: flex; min-width: 0; align-items: center; justify-content: flex-end; gap: 10px; }',
   '.nav-links a { min-height: 48px; display: inline-flex; align-items: center; border: 1px solid transparent; border-radius: 8px; padding: 0 15px; color: var(--brand-muted); font-size: .9rem; font-weight: 600; text-decoration: none; transition: color 160ms ease, background-color 160ms ease, border-color 160ms ease; }',
-  'aria-label="SuperMega home"',
+  'aria-label="SuperMega Shop"',
   '<nav class="nav-links" aria-label="Main navigation">',
   '<span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 72 44" width="30" height="18" focusable="false"><path d="M10 9 26 22 10 35M35 35h27" fill="none" stroke="#2563eb" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>',
   '<span class="brand-word">SuperMega</span>',
@@ -247,7 +247,7 @@ const forbiddenCopy = [
 ]
 const encodingCorruption = ['\uFFFD', '\u00e2\u20ac\u201d', '\u00e2\u20ac\u201c', '\u00c2', '\u00f0\u0178']
 
-const pages = new Map(manifest.pages.map((page) => {
+const pages = new Map(manifest.pages.filter(page => !page.redirectTo).map((page) => {
   const retained = manifest.customerProducts.find(product => product.id === page.productId && !publicProducts.includes(product))
   return [page.route, { ...page, ...(retained ? {
     title: `${retained.name} | Retained workspace access`,
@@ -260,13 +260,11 @@ for (const [route, page] of pages) {
   for (const token of sharedRequired) {
     if (!page.html.includes(token)) fail('shared_brand_contract_missing', { route, token })
   }
-  const footerHref = route === '/shop/' ? '/shop/' : '/'
+  const footerHref = '/shop/'
   const footerLabel = route === '/shop/' ? 'SuperMega Shop, back to top' : 'SuperMega, back to top'
   const footerBrand = `<a class="brand" href="${footerHref}" aria-label="${footerLabel}"><span class="brand-mark" aria-hidden="true">`
   if (!page.html.includes(footerBrand)) fail('shared_footer_brand_missing', { route, footerHref })
-  const expectedLogin = route === '/shop/'
-    ? `<a href="${appOrigin}/login?product=shop">Login</a>`
-    : `<a href="${appOrigin}/login">Login</a>`
+  const expectedLogin = `<a href="${appOrigin}/login?product=shop">Login</a>`
   if (countOccurrences(page.html, expectedLogin) !== 1) fail('shared_login_destination_missing', { route, expectedLogin })
   const expectedActive = route === '/shop/' ? 'Shop' : route === '/contact/' ? 'Contact' : null
   const activeLinks = [...page.html.matchAll(/<a\b[^>]*aria-current="page"[^>]*>([^<]+)<\/a>/g)].map(match => match[1])
@@ -312,8 +310,7 @@ for (const [route, page] of pages) {
 const pageTitles = manifest.pages.map((page) => page.title)
 if (new Set(pageTitles).size !== pageTitles.length) fail('page_titles_not_unique')
 
-// JSON-LD structured data: the homepage carries one Organization schema and each
-// product landing page one Product schema, sourced verbatim from the manifest.
+// Each public product landing page carries one Product schema.
 // Every JSON-LD element must keep type="application/ld+json" so it remains an
 // HTML data block that browsers never execute.
 const jsonLdBlocks = (html) => [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map((match) => match[1])
@@ -323,30 +320,23 @@ for (const [route, page] of pages) {
   if (executableScriptCount(page.html) !== expectedExecutable) fail('unexpected_executable_script_element', { route, expected: expectedExecutable })
   const blocks = jsonLdBlocks(page.html)
   const landingProduct = publicProducts.find((product) => `/${product.id}/` === route)
-  const expectedBlocks = route === '/' || landingProduct ? 1 : 0
+  const expectedBlocks = landingProduct ? 1 : 0
   if (blocks.length !== expectedBlocks) fail('structured_data_block_count_wrong', { route, expected: expectedBlocks, actual: blocks.length })
   if (!expectedBlocks) continue
   let schema
   try { schema = JSON.parse(blocks[0]) } catch { fail('structured_data_not_json', { route }) }
   if (schema['@context'] !== 'https://schema.org') fail('structured_data_context_wrong', { route, schema })
   if (Object.keys(schema).sort().join(',') !== '@context,@type,description,name,url') fail('structured_data_field_surface_drift', { route, keys: Object.keys(schema) })
-  if (route === '/') {
-    if (schema['@type'] !== 'Organization'
-      || schema.name !== 'SuperMega'
-      || schema.url !== new URL('/', `${manifest.release.productionDomain}/`).href
-      || schema.description !== homePage.description) fail('organization_schema_drift', { route, schema })
-  } else {
-    const pageEntry = manifest.pages.find((entry) => entry.route === route)
-    if (schema['@type'] !== 'Product'
-      || schema.name !== landingProduct.name
-      || schema.url !== new URL(route, `${manifest.release.productionDomain}/`).href
-      || schema.description !== (pageEntry.description || landingProduct.description)) fail('product_schema_drift', { route, schema })
-  }
+  const pageEntry = manifest.pages.find((entry) => entry.route === route)
+  if (schema['@type'] !== 'Product'
+    || schema.name !== landingProduct.name
+    || schema.url !== new URL(route, `${manifest.release.productionDomain}/`).href
+    || schema.description !== (pageEntry.description || landingProduct.description)) fail('product_schema_drift', { route, schema })
 }
 const publicObservability = readStatic('vercel-insights.js')
 for (const token of [
   '["supermega.dev","www.supermega.dev"]',
-  '["/","/shop/","/contact/","/privacy/"]',
+  '["/shop/","/contact/","/privacy/"]',
   "window.va('beforeSend'",
   "window.si('beforeSend'",
   "event.type !== expectedType",
@@ -364,75 +354,37 @@ if (publicObservability.indexOf("window.va('beforeSend'") > publicObservability.
 if (publicObservability.indexOf("window.si('beforeSend'") > publicObservability.indexOf("'/_vercel/speed-insights/script.js'")) fail('public_speed_before_send_order_invalid')
 if (/(?:conversion|contact-form|customer|email|payment|proof_|window\.va\('event')/i.test(publicObservability)) fail('public_observability_private_or_custom_event_surface')
 
-const home = pages.get('/')?.html || ''
+const home = readStatic('index.html')
 const expectedHomeDescription = manifest.company.supporting
-if (homePage?.file !== 'index.html') fail('home_manifest_entry_invalid')
+if (homePage?.file !== 'index.html' || homePage.redirectTo !== '/shop/') fail('home_manifest_entry_invalid')
 const expectedHomeTitle = `SuperMega | ${manifest.company.positioning.replace(/[.]$/, '')}`
 if (homePage.title !== expectedHomeTitle) fail('home_manifest_title_drift')
 if (homePage.description !== expectedHomeDescription) fail('home_manifest_description_source_drift')
-for (const staleToken of [
-  '<title>SuperMega | Four products</title>',
-  '<meta property="og:title" content="SuperMega | Four products" />',
-]) {
-  if (home.includes(staleToken)) fail('stale_home_metadata_present', { token: staleToken })
-}
-if (!hasClassToken(home, 'company-hero')) fail('homepage_contract_missing', { token: 'class token company-hero' })
-for (const token of ['href="/shop/">Explore Shop', 'href="' + appOrigin + '/login"']) {
-  if (!home.includes(token)) fail('homepage_contract_missing', { token })
-}
-if (!/<a href="\/contact\/"\s*>Contact<\/a>/.test(home)) fail('homepage_contact_destination_missing')
-if (home.includes('>View every screen size') || home.includes('>See Shop on desktop and mobile')) fail('home_action_must_not_be_a_device_tour')
-for (const token of ['body[data-view="company"] .company-hero::before{opacity:0;background-image:none}', 'body[data-view="company"] .company-hero .hero-grid{grid-template-columns:minmax(0,.76fr) minmax(520px,1.24fr)', 'body[data-view="company"] .company-product-visual']) {
-  if (!home.includes(token)) fail('home_visual_contract_missing', { token })
-}
-if (home.includes('body[data-view="company"] .site-header .brand-word { color: var(--text); }')) fail('company_wordmark_light_on_light_override')
+const rootRedirect = JSON.parse(readFileSync(configPath, 'utf8')).routes.find(route => route.src === '^/(?:index\\.html)?$')
+if (rootRedirect?.status !== 308 || rootRedirect.headers?.Location !== '/shop/') fail('root_redirect_missing')
+for (const token of [
+  `<title>${homePage.title}</title>`,
+  '<meta name="robots" content="noindex,follow" />',
+  '<link rel="canonical" href="https://supermega.dev/shop/" />',
+  '<meta http-equiv="refresh" content="0; url=/shop/" />',
+  'href="/shop/">Continue to Shop</a>',
+]) if (!home.includes(token)) fail('root_no_javascript_fallback_missing', { token })
+if (home.includes('company-hero') || home.includes('actual-shop-') || /href="\/(?:plant|website|ecommerce)\//.test(home)) fail('root_duplicates_product_or_internal_page')
 const shopPageHtml = pages.get('/shop/').html
-for (const [route, html] of [['/', home], ['/shop/', shopPageHtml]]) {
+for (const [route, html] of [['/shop/', shopPageHtml]]) {
   if (!html.includes('width: max-content;') || !html.includes('min-height: 48px;') || !html.includes('background: #202432;') || !html.includes('.button:focus-visible')) fail('marketing_primary_action_layout_missing', { route })
 }
-if (!home.includes('<p class="hero-kicker">SuperMega Shop · Myanmar</p>')
-  || !home.includes('Keep your shop day<br><span>in view.</span>')
-  || !home.includes('Record counter sales, check stock and follow open orders in one Shop workspace.')
-  || countOccurrences(home, 'class="company-product-visual"') !== 1
-  || countOccurrences(home, 'Illustrative Shop interface · synthetic local records') !== 1
-  || home.includes('class="company-operating-overview"')
-  || home.includes('class="company-contact"')
-  || /href="\/(?:website|ecommerce)\//.test(home)
-  || /\bSites\b|\bCommerce\b/.test(home)) fail('home_customer_access_scope_missing')
-for (const retiredToken of [
-  'Four focused products',
-  'Pick one product and try the working sample.',
-  'Choose one product to try.',
-  'Name the business, choose its type, and start with one guided job.',
-  'Create a Shop-connected ordering page.',
-  'Storefront from real stock',
-]) {
-  if (home.includes(retiredToken)) fail('superseded_home_offer_copy_present', { token: retiredToken })
-}
-for (const product of publicProducts) {
-  if (home.includes(`href="${product.appRoute}"`)) fail('direct_product_route_remains_primary', { product: product.id })
-}
-for (const internalLabel of ['SuperMega HQ', 'One next action for the company', 'Owners, evidence, review, and release', 'Gated R&amp;D']) {
-  if (home.includes(internalLabel)) fail('internal_system_exposed_on_public_home', { internalLabel })
-}
-for (const retiredLabel of ['>Open Commerce<', '>Open Production<']) {
-  if (home.includes(retiredLabel)) fail('ambiguous_demo_cta_present', { retiredLabel })
-}
-if (home.includes('Commerce and Production carry real records and actions.')) fail('unsupported_live_record_claim_present')
-// The Shop-first home and Shop landings show the full workflow gallery without
-// navigation controls; other internal product landings retain their gallery UI.
-for (const [route, html] of [['/', home], ['/shop/', pages.get('/shop/').html], ...publicProducts.filter(product => product.id !== 'shop').map(product => [`/${product.id}/`, pages.get(`/${product.id}/`).html])]) {
+// Shop shows its workflows without navigation controls.
+for (const [route, html] of [['/shop/', pages.get('/shop/').html], ...publicProducts.filter(product => product.id !== 'shop').map(product => [`/${product.id}/`, pages.get(`/${product.id}/`).html])]) {
   const body = html.slice(html.indexOf('<body'))
   const routeProduct = publicProducts.find(product => route === `/${product.id}/`) || null
   const contactActionTarget = routeProduct?.status === 'available-in-app' && route !== '/shop/'
     ? `/contact/?product=${routeProduct.id}`
     : null
   const galleryViews = { shop: 3, website: 2, ecommerce: 2 }
-  const expectedLinks = route === '/' ? 9 : route === '/shop/' ? 9 : 5 + Number(Boolean(contactActionTarget))
+  const expectedLinks = route === '/shop/' ? 9 : 5 + Number(Boolean(contactActionTarget))
   if ((body.match(/<a\b/g) || []).length !== expectedLinks) fail('marketing_link_surface_drift', { route, expectedLinks })
-  const expectedLogin = route === '/shop/'
-    ? `href="${appOrigin}/login?product=shop"`
-    : `href="${appOrigin}/login"`
+  const expectedLogin = `href="${appOrigin}/login?product=shop"`
   if (countOccurrences(body, expectedLogin) !== 1) fail('login_action_count_invalid', { route, expectedLogin })
   if (route === '/shop/' && (!body.includes('class="button button-primary" href="/contact/?product=shop">Request a Shop walkthrough') || body.includes('Ask about Shop') || body.includes('Talk about Shop') || body.includes('See Shop screens') || body.includes('Need help with Shop?'))) fail('shop_primary_product_action_missing')
   if (body.includes('>Company</a>')) fail('company_page_navigation_not_consolidated')
@@ -457,20 +409,11 @@ for (const [route, html] of [['/', home], ['/shop/', pages.get('/shop/').html], 
       fail('gallery_status_or_keyboard_accessibility_drift', { route })
     }
   }
-  const productVisualMissing = route === '/'
-    ? !hasClassToken(body, 'company-hero') || hasClassToken(body, 'product-family') || !body.includes('Keep your shop day<br><span>in view.</span>') || countOccurrences(body, 'class="company-product-visual"') !== 1 || countOccurrences(body, 'Illustrative Shop interface · synthetic local records') !== 1 || body.includes('class="company-operating-overview"') || body.includes('class="company-contact"') || body.includes('class="company-portfolio"') || body.includes('data-platform-carousel') || body.includes('Choose a Shop screen') || !body.includes('src="/images/actual-shop-today.png"') || body.includes('data-device-choice')
-    : route === '/shop/'
+  const productVisualMissing = route === '/shop/'
       ? !body.includes('class="shop-hero-app"') || !body.includes('class="shop-actual-showcase"') || !body.includes('Orders and stock. Clear next steps.') || !body.includes('class="shop-responsive-showcase"') || !body.includes('class="shop-lead-capture"') || !body.includes('id="shop-sample-disclosure"') || countOccurrences(body, 'Illustrative Shop interface · synthetic local records') !== 1 || !body.includes('src="/images/actual-shop-orders.png"') || !body.includes('src="/images/actual-shop-inventory.png"') || countOccurrences(body, '<article class="shop-workflow-card">') !== 2 || countOccurrences(body, 'src="/images/actual-shop-sell.png"') !== 1 || body.includes('Makro PRO') || body.includes('17 October 2026') || body.includes('class="pos-window"') || body.includes('class="sample-label"') || body.includes('Complete sample sale') || body.includes('shop-sample-demo.js') || body.includes('class="platform-gallery shop-gallery-all"') || body.includes('data-platform-carousel') || body.includes('data-device-choice') || body.includes('data-device-frame') || /<a\b[^>]*>\s*<img\b[^>]*src="\/images\/actual-shop-/i.test(body)
       : !body.includes('class="platform-image"') || !body.includes('class="feature-line"')
   if (productVisualMissing) fail('product_visual_missing', { route })
-  if (route === '/') {
-    const heroIndex = body.indexOf('class="hero company-hero"')
-    const visualIndex = body.indexOf('class="company-product-visual"')
-    if (heroIndex < 0 || visualIndex < heroIndex || body.includes('class="company-contact"')) {
-      fail('brand_home_story_order_drift')
-    }
-  }
-  const expectedLoginTarget = `${appOrigin}/login${route === '/shop/' ? '?product=shop' : ''}`
+  const expectedLoginTarget = `${appOrigin}/login?product=shop`
   const directAppTargets = [...body.matchAll(/href="(https:\/\/[^\"]+)"/g)]
     .map(match => match[1])
     .filter(target => target.startsWith(`${appOrigin}/`) && target !== expectedLoginTarget)
@@ -485,7 +428,7 @@ for (const [route, html] of [['/', home], ['/shop/', pages.get('/shop/').html], 
     if (legacyActionLabels.has(label)) fail('retired_acquisition_action', { route, label })
   }
 }
-if (countOccurrences(home, 'href="/shop/">Explore Shop') !== 1 || home.includes('class="family-link"')) fail('brand_home_primary_shop_link_invalid')
+if (countOccurrences(home, 'href="/shop/">Continue to Shop') !== 1 || home.includes('class="family-link"')) fail('root_fallback_shop_link_invalid')
 
 const shopPage = pages.get('/shop/')?.html || ''
 for (const token of [
@@ -518,6 +461,7 @@ if (publicProducts.map(product => product.id).join(',') !== 'shop') fail('shop_c
 
 const contact = pages.get('/contact/')?.html || ''
 const contactMain = contact.match(/<main\b[\s\S]*?<\/main>/)?.[0] || ''
+if (!contactMain.includes(`<p class="contact-company-intro">${manifest.company.statement}</p>`)) fail('contact_company_intro_missing')
 for (const token of [
   'data-contact-form', 'action="/api/contact-submissions"', 'name="name"', 'name="email"',
   'name="company"', 'name="product"', 'value="guide"', 'name="template"', 'name="goal"',
@@ -550,6 +494,7 @@ const privacy = pages.get('/privacy/')?.html || ''
 for (const token of ['Contact requests', 'Product data', 'AI processing', 'Deletion', 'optional attached request summary, outcome status, and digest', 'digest-bound aggregate outcome', 'excludes raw product records, questions, approval contents, and account details']) {
   if (!privacy.includes(token)) fail('privacy_contract_missing', { token })
 }
+if (!privacy.includes('three public page paths') || privacy.includes('four public page paths')) fail('privacy_analytics_route_count_drift')
 
 const favicon = readStatic('favicon.svg')
 const faviconAccent = manifest.brand.colors.accent
@@ -621,6 +566,10 @@ for (const asset of publicGalleryEvidence.assets) {
 const sitemap = readStatic('sitemap.xml')
 for (const page of manifest.pages) {
   const canonical = new URL(page.route, `${manifest.release.productionDomain}/`).href
+  if (page.redirectTo) {
+    if (sitemap.includes(`<loc>${canonical}</loc>`)) fail('redirect_in_sitemap', { route: page.route })
+    continue
+  }
   if (!discoverablePages.includes(page)) {
     if (sitemap.includes(`<loc>${canonical}</loc>`)) fail('retained_product_in_sitemap', { route: page.route })
     const retained = readStatic(page.file)
