@@ -429,9 +429,9 @@ void main() {
       (
         name: 'reconciliation-legacy-unbound-request',
         mutate: (connection) {
-          final row = connection.select(
-            'SELECT * FROM shop_wallet_reversal_reconciliations',
-          ).single;
+          final row = connection
+              .select('SELECT * FROM shop_wallet_reversal_reconciliations')
+              .single;
           final legacyFingerprint = jsonEncode(<String, Object>{
             'operationId': row['operation_id'] as String,
             'reversalId': row['reversal_id'] as String,

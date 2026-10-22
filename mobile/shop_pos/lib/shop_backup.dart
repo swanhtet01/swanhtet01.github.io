@@ -1102,8 +1102,7 @@ abstract final class ShopBackup {
             reversal['authorization_receipt_digest'];
         final authorizationCommandDigest =
             reversal['authorization_command_digest'];
-        final authorizationWorkspaceId =
-            reversal['authorization_workspace_id'];
+        final authorizationWorkspaceId = reversal['authorization_workspace_id'];
         final authorizedActorId = reversal['authorized_actor_id'];
         final authorizedActorLabel = reversal['authorized_actor_label'];
         final authorizedActorRole = reversal['authorized_actor_role'];
