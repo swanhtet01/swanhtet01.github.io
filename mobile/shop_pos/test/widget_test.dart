@@ -240,6 +240,12 @@ void main() {
         findsOneWidget,
       );
       expect(
+        find.text(
+          'Sale restored. Review changed stock or price before checkout.',
+        ),
+        findsNothing,
+      );
+      expect(
         tester
             .widget<FilledButton>(
               find.ancestor(

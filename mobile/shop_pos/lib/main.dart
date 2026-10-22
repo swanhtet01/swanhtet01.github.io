@@ -2166,7 +2166,8 @@ class _ShopHomeState extends State<ShopHome> {
           ],
         ),
         const Divider(height: 24),
-        if (_recoveredDraft) ...[
+        if (_recoveredDraft &&
+            !(hasUnavailableProducts && entries.isNotEmpty)) ...[
           Text(
             shopCopy(
               widget.myanmar,
