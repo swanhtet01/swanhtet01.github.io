@@ -486,7 +486,7 @@ void main() {
           await wal.writeAsString('its WAL');
         },
       ),
-      throwsFileSystemException,
+      throwsA(isA<FileSystemException>()),
     );
     expect(await target.readAsString(), 'another Shop instance');
     expect(await wal.readAsString(), 'its WAL');
