@@ -243,6 +243,11 @@ class _StockScreenState extends State<StockScreen> {
                                   : const SizedBox(height: 8),
                               itemBuilder: (context, index) {
                                 final item = products[index];
+                                final threshold = item.reorderLevel;
+                                final lowAlertLevel =
+                                    threshold != null && item.onHand <= threshold
+                                    ? threshold
+                                    : null;
                                 final hasCode =
                                     (item.sku?.trim().isNotEmpty ?? false) ||
                                     (item.barcode?.trim().isNotEmpty ?? false);
@@ -286,6 +291,18 @@ class _StockScreenState extends State<StockScreen> {
                                                   .onSurfaceVariant,
                                             ),
                                       ),
+                                    if (lowAlertLevel != null)
+                                      Text(
+                                        shopCopy(
+                                          widget.myanmar,
+                                          'Low at ${shopNumber(lowAlertLevel, myanmar: false)}',
+                                          '${shopNumber(lowAlertLevel, myanmar: true)} ခုနှင့်အောက် သတိပေး',
+                                        ),
+                                        style: textTheme.bodySmall?.copyWith(
+                                          color: colors.error,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
                                   ],
                                 );
                                 final onHand = Text(
@@ -328,6 +345,12 @@ class _StockScreenState extends State<StockScreen> {
                                     _stockProductReference(
                                       item,
                                       widget.myanmar,
+                                    ),
+                                  if (lowAlertLevel != null)
+                                    shopCopy(
+                                      widget.myanmar,
+                                      'Low at $lowAlertLevel',
+                                      '${shopNumber(lowAlertLevel, myanmar: true)} ခုနှင့်အောက် သတိပေး',
                                     ),
                                 ].join('. ');
                                 if (wide) {
@@ -449,26 +472,43 @@ class _StockChangeDialog extends StatefulWidget {
 class _StockChangeDialogState extends State<_StockChangeDialog> {
   final _formKey = GlobalKey<FormState>();
   final _quantity = TextEditingController();
+  late final TextEditingController _level;
   final _operationId = const Uuid().v4();
   String _kind = 'receive';
   late int? _reorderLevel;
   bool _saving = false;
+  bool _savingAlert = false;
+  bool _showAlertEditor = false;
   String? _error;
+  String? _alertError;
 
   @override
   void initState() {
     super.initState();
     _reorderLevel = widget.product.reorderLevel;
+    _level = TextEditingController(text: _reorderLevel?.toString() ?? '');
   }
 
   @override
   void dispose() {
     _quantity.dispose();
+    _level.dispose();
     super.dispose();
   }
 
   Future<void> _save() async {
-    if (_saving || !(_formKey.currentState?.validate() ?? false)) return;
+    if (_saving || _savingAlert) return;
+    if (_showAlertEditor && parseStockQuantity(_level.text) != _reorderLevel) {
+      setState(() {
+        _alertError = shopCopy(
+          widget.myanmar,
+          'Save the alert change first.',
+          'သတိပေးချက်ပြောင်းလဲမှုကို အရင်သိမ်းပါ။',
+        );
+      });
+      return;
+    }
+    if (!(_formKey.currentState?.validate() ?? false)) return;
     setState(() {
       _saving = true;
       _error = null;
@@ -503,18 +543,62 @@ class _StockChangeDialogState extends State<_StockChangeDialog> {
     }
   }
 
-  Future<void> _editReorderLevel() async {
-    final saved = await showDialog<_SavedReorderLevel>(
-      context: context,
-      builder: (_) => _ReorderLevelDialog(
-        database: widget.database,
-        product: widget.product,
+  Future<void> _saveAlert() async {
+    if (_saving || _savingAlert) return;
+    final value = parseStockQuantity(_level.text);
+    if (_level.text.trim().isNotEmpty &&
+        (value == null || value < 0 || value > 2000000000)) {
+      setState(() {
+        _alertError = shopCopy(
+          widget.myanmar,
+          'Enter a valid whole quantity.',
+          'မှန်ကန်သောအရေအတွက်ကို ထည့်ပါ။',
+        );
+      });
+      return;
+    }
+    if (value == _reorderLevel) {
+      setState(() {
+        _showAlertEditor = false;
+        _alertError = null;
+      });
+      return;
+    }
+    setState(() {
+      _savingAlert = true;
+      _alertError = null;
+    });
+    try {
+      await widget.database.setReorderLevel(
+        productId: widget.product.id,
         expectedReorderLevel: _reorderLevel,
-        myanmar: widget.myanmar,
-      ),
-    );
-    if (mounted && saved != null) {
-      setState(() => _reorderLevel = saved.value);
+        reorderLevel: value,
+      );
+      if (!mounted) return;
+      setState(() {
+        _reorderLevel = value;
+        _showAlertEditor = false;
+        _savingAlert = false;
+        _error = null;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _savingAlert = false;
+        _alertError =
+            error is StateError &&
+                error.message.toString().startsWith('Low-stock alert changed.')
+            ? shopCopy(
+                widget.myanmar,
+                'Alert changed. Reopen this item.',
+                'သတိပေးချက် ပြောင်းလဲသွားပါပြီ။ ပစ္စည်းကို ပြန်ဖွင့်ပါ။',
+              )
+            : shopCopy(
+                widget.myanmar,
+                'Could not save alert. Try again.',
+                'သတိပေးချက် မသိမ်းနိုင်ပါ။ ထပ်ကြိုးစားပါ။',
+              );
+      });
     }
   }
 
@@ -630,9 +714,54 @@ class _StockChangeDialogState extends State<_StockChangeDialog> {
                         '${shopNumber(_reorderLevel!, myanmar: true)} ခုနှင့်အောက်',
                       ),
               ),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: _saving ? null : _editReorderLevel,
+              trailing: Icon(
+                _showAlertEditor ? Icons.expand_less : Icons.expand_more,
+              ),
+              onTap: _saving || _savingAlert
+                  ? null
+                  : () => setState(() {
+                      _showAlertEditor = !_showAlertEditor;
+                      _level.text = _reorderLevel?.toString() ?? '';
+                      _alertError = null;
+                    }),
             ),
+            if (_showAlertEditor) ...[
+              TextField(
+                key: const ValueKey('reorder-level-input'),
+                controller: _level,
+                enabled: !_saving && !_savingAlert,
+                keyboardType: TextInputType.number,
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp('[0-9\u1040-\u1049]')),
+                ],
+                decoration: InputDecoration(
+                  labelText: shopCopy(
+                    widget.myanmar,
+                    'Alert at or below',
+                    'ဤလက်ကျန်နှင့်အောက်တွင် သတိပေးရန်',
+                  ),
+                  helperText: shopCopy(
+                    widget.myanmar,
+                    'Leave empty to turn off.',
+                    'ပိတ်ရန် ဗလာထားပါ။',
+                  ),
+                  errorText: _alertError,
+                ),
+              ),
+              Align(
+                alignment: AlignmentDirectional.centerEnd,
+                child: TextButton(
+                  onPressed: _saving || _savingAlert ? null : _saveAlert,
+                  child: Text(
+                    shopCopy(
+                      widget.myanmar,
+                      'Save alert',
+                      'သတိပေးချက်သိမ်းရန်',
+                    ),
+                  ),
+                ),
+              ),
+            ],
             if (_error != null) ...[
               const SizedBox(height: 12),
               Text(
@@ -646,161 +775,14 @@ class _StockChangeDialogState extends State<_StockChangeDialog> {
     ),
     actions: [
       TextButton(
-        onPressed: _saving ? null : () => Navigator.of(context).pop(),
+        onPressed: _saving || _savingAlert
+            ? null
+            : () => Navigator.of(context).pop(),
         child: Text(shopCopy(widget.myanmar, 'Cancel', 'မလုပ်တော့ပါ')),
       ),
       FilledButton(
-        onPressed: _saving ? null : _save,
+        onPressed: _saving || _savingAlert ? null : _save,
         child: Text(shopCopy(widget.myanmar, 'Save stock', 'လက်ကျန်သိမ်းရန်')),
-      ),
-    ],
-  );
-}
-
-class _SavedReorderLevel {
-  const _SavedReorderLevel(this.value);
-
-  final int? value;
-}
-
-class _ReorderLevelDialog extends StatefulWidget {
-  const _ReorderLevelDialog({
-    required this.database,
-    required this.product,
-    required this.expectedReorderLevel,
-    required this.myanmar,
-  });
-
-  final ShopDatabase database;
-  final ShopProduct product;
-  final int? expectedReorderLevel;
-  final bool myanmar;
-
-  @override
-  State<_ReorderLevelDialog> createState() => _ReorderLevelDialogState();
-}
-
-class _ReorderLevelDialogState extends State<_ReorderLevelDialog> {
-  final _formKey = GlobalKey<FormState>();
-  late final TextEditingController _level;
-  bool _saving = false;
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    _level = TextEditingController(
-      text: widget.expectedReorderLevel?.toString() ?? '',
-    );
-  }
-
-  @override
-  void dispose() {
-    _level.dispose();
-    super.dispose();
-  }
-
-  Future<void> _save() async {
-    if (_saving || !(_formKey.currentState?.validate() ?? false)) return;
-    setState(() {
-      _saving = true;
-      _error = null;
-    });
-    final value = parseStockQuantity(_level.text);
-    try {
-      await widget.database.setReorderLevel(
-        productId: widget.product.id,
-        expectedReorderLevel: widget.expectedReorderLevel,
-        reorderLevel: value,
-      );
-      if (mounted) Navigator.of(context).pop(_SavedReorderLevel(value));
-    } catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _saving = false;
-        _error =
-            error is StateError &&
-                error.message.toString().startsWith('Low-stock alert changed.')
-            ? shopCopy(
-                widget.myanmar,
-                'Alert changed. Reopen this item.',
-                'သတိပေးချက် ပြောင်းလဲသွားပါပြီ။ ပစ္စည်းကို ပြန်ဖွင့်ပါ။',
-              )
-            : shopCopy(
-                widget.myanmar,
-                'Could not save alert. Try again.',
-                'သတိပေးချက် မသိမ်းနိုင်ပါ။ ထပ်ကြိုးစားပါ။',
-              );
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) => AlertDialog(
-    title: Text(
-      shopCopy(widget.myanmar, 'Low-stock alert', 'လက်ကျန်နည်း သတိပေးချက်'),
-    ),
-    content: Form(
-      key: _formKey,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(widget.product.name),
-          const SizedBox(height: 16),
-          TextFormField(
-            key: const ValueKey('reorder-level-input'),
-            controller: _level,
-            autofocus: true,
-            keyboardType: TextInputType.number,
-            inputFormatters: [
-              FilteringTextInputFormatter.allow(RegExp('[0-9\u1040-\u1049]')),
-            ],
-            decoration: InputDecoration(
-              labelText: shopCopy(
-                widget.myanmar,
-                'Alert at or below',
-                'ဤလက်ကျန်နှင့်အောက်တွင် သတိပေးရန်',
-              ),
-              helperText: shopCopy(
-                widget.myanmar,
-                'Leave empty to turn off.',
-                'ပိတ်ရန် ဗလာထားပါ။',
-              ),
-            ),
-            validator: (text) {
-              if ((text?.trim() ?? '').isEmpty) return null;
-              final value = parseStockQuantity(text);
-              if (value == null || value < 0 || value > 2000000000) {
-                return shopCopy(
-                  widget.myanmar,
-                  'Enter a valid whole quantity.',
-                  'မှန်ကန်သောအရေအတွက်ကို ထည့်ပါ။',
-                );
-              }
-              return null;
-            },
-          ),
-          if (_error != null) ...[
-            const SizedBox(height: 12),
-            Text(
-              _error!,
-              style: TextStyle(color: Theme.of(context).colorScheme.error),
-            ),
-          ],
-        ],
-      ),
-    ),
-    actions: [
-      TextButton(
-        onPressed: _saving ? null : () => Navigator.of(context).pop(),
-        child: Text(shopCopy(widget.myanmar, 'Cancel', 'မလုပ်တော့ပါ')),
-      ),
-      FilledButton(
-        onPressed: _saving ? null : _save,
-        child: Text(
-          shopCopy(widget.myanmar, 'Save alert', 'သတိပေးချက်သိမ်းရန်'),
-        ),
       ),
     ],
   );

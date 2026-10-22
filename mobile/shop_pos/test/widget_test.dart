@@ -525,6 +525,7 @@ void main() {
         );
         await tester.tap(find.byKey(const ValueKey('stock-alert-edit')));
         await tester.pumpAndSettle();
+        expect(find.byType(AlertDialog), findsOneWidget);
         expect(
           find.text(myanmar ? 'ပိတ်ရန် ဗလာထားပါ။' : 'Leave empty to turn off.'),
           findsOneWidget,
@@ -533,6 +534,17 @@ void main() {
           find.byKey(const ValueKey('reorder-level-input')),
           myanmar ? '၁၀' : '10',
         );
+        await tester.tap(find.text(myanmar ? 'လက်ကျန်သိမ်းရန်' : 'Save stock'));
+        await tester.pumpAndSettle();
+        expect(
+          find.text(
+            myanmar
+                ? 'သတိပေးချက်ပြောင်းလဲမှုကို အရင်သိမ်းပါ။'
+                : 'Save the alert change first.',
+          ),
+          findsOneWidget,
+        );
+        expect((await database.readActiveProducts()).single.reorderLevel, 5);
         await tester.tap(
           find.text(myanmar ? 'သတိပေးချက်သိမ်းရန်' : 'Save alert'),
         );
@@ -553,6 +565,47 @@ void main() {
         expect(
           (await database.readActiveProducts()).single.reorderLevel,
           isNull,
+        );
+        expect(tester.takeException(), isNull);
+      } finally {
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump(const Duration(milliseconds: 1));
+        await database.close();
+      }
+    }
+  });
+
+  testWidgets('Stock shows only active low-stock thresholds on phone and tablet', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    for (final (width, myanmar) in [(320.0, true), (820.0, false)]) {
+      tester.view.physicalSize = Size(width, 900);
+      final database = ShopDatabase(NativeDatabase.memory());
+      try {
+        await database.addProduct(
+          id: 'low',
+          name: 'Low item',
+          priceMmk: 3000,
+          openingStock: 3,
+        );
+        await database.addProduct(
+          id: 'healthy',
+          name: 'Healthy item',
+          priceMmk: 4000,
+          openingStock: 8,
+        );
+        await tester.pumpWidget(
+          MaterialApp(
+            home: StockScreen(database: database, myanmar: myanmar),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          find.text(myanmar ? '၅ ခုနှင့်အောက် သတိပေး' : 'Low at 5'),
+          findsOneWidget,
         );
         expect(tester.takeException(), isNull);
       } finally {
