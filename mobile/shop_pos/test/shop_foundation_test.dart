@@ -365,6 +365,7 @@ void main() {
         expect(history.single.lines.single.lineTotalMmk, 5000);
 
         final printLines = shopReceiptTextLines(receipt, myanmar: true);
+        expect(printLines.first, 'SHOP');
         expect(printLines, contains('လက်ဖက်ရည် x2'));
         expect(printLines, contains('စုစုပေါင်း: 5,000 MMK'));
         expect(printLines, contains('ငွေပေးချေမှု: CASH'));

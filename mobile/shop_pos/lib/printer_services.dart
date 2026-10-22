@@ -232,7 +232,7 @@ List<String> shopReceiptTextLines(
   ShopSaleReceipt receipt, {
   required bool myanmar,
 }) => [
-  'SUPERMEGA SHOP',
+  'SHOP',
   myanmar ? 'အရောင်းပြေစာ' : 'SALE RECEIPT',
   'Sale ${receipt.id}',
   DateTime.fromMillisecondsSinceEpoch(receipt.createdAtMillis)
