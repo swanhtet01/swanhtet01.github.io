@@ -17,9 +17,9 @@ final _capture = Platform.environment['SHOP_VISUAL_CAPTURE'] == '1';
 const _captureKey = ValueKey('native-shop-visual-capture');
 const _photoFixtureDir = 'test/assets/grocery_photos';
 
-Future<List<Map<String, dynamic>>> _groceryFixture() async {
+List<Map<String, dynamic>> _groceryFixture() {
   final ledger = jsonDecode(
-    await File('$_photoFixtureDir/ledger.json').readAsString(),
+    File('$_photoFixtureDir/ledger.json').readAsStringSync(),
   ) as Map<String, dynamic>;
   return (ledger['items'] as List<dynamic>).cast<Map<String, dynamic>>();
 }
@@ -28,7 +28,7 @@ Future<ShopDatabase> _sampleShop({required bool myanmar}) async {
   final database = ShopDatabase(NativeDatabase.memory());
   // Fixture-only names, prices, stock, and rights-checked photos. The ledger
   // explicitly marks price and stock as illustrative, not live market data.
-  for (final item in await _groceryFixture()) {
+  for (final item in _groceryFixture()) {
     final id = item['id'] as String;
     await database.addProduct(
       id: id,
@@ -43,7 +43,7 @@ Future<ShopDatabase> _sampleShop({required bool myanmar}) async {
     await database.customStatement(
       'INSERT INTO shop_product_images '
       '(product_id, image_png, updated_at_millis) VALUES (?, ?, ?)',
-      [id, await File(photoPath).readAsBytes(), 0],
+      [id, File(photoPath).readAsBytesSync(), 0],
     );
   }
   await database.recordCashSale(
@@ -66,7 +66,7 @@ void main() {
   test(
     'grocery photo fixture is pinned and safe for the local catalog',
     () async {
-      final items = await _groceryFixture();
+      final items = _groceryFixture();
       final database = ShopDatabase(NativeDatabase.memory());
       addTearDown(database.close);
       expect(items.length, 5);
