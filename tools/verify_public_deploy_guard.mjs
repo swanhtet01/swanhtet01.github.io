@@ -65,7 +65,7 @@ for (const token of ['public_preview_action_missing', 'public_preview_app_route_
   requireToken(previewProfile, token, 'preview_navigation_policy_missing')
 }
 for (const token of ['page_public_login_present', 'landing_public_app_action_present', 'shop_contact_action_missing',
-  'root_redirect_destination_wrong', 'contact_company_intro_missing', 'retired_shop_action_present', 'landing_contact_route_missing',
+  'root_redirect_destination_wrong', 'contact_company_intro_missing', 'shop_manifest_action_missing', 'landing_contact_route_missing',
   'retired_product_route_not_found',
   'interface_image_reference_missing', 'interface_image_http_error',
   'interface_image_content_type_wrong', 'interface_image_invalid', 'interface_image_release_mismatch']) {
