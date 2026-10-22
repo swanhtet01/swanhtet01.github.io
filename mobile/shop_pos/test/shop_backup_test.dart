@@ -19,6 +19,17 @@ final _thumbnail = base64Decode(
   'AAAADUlEQVR4nGPQyNjxHwAETAJIB09U9wAAAABJRU5ErkJggg==',
 );
 
+Future<void> _pumpUntil(WidgetTester tester, Finder finder) async {
+  for (var attempt = 0; attempt < 200; attempt++) {
+    await tester.pump();
+    if (finder.evaluate().isNotEmpty) return;
+    await tester.runAsync(() async {
+      await Future<void>.delayed(const Duration(milliseconds: 25));
+    });
+  }
+  throw TestFailure('The expected Shop state did not appear: $finder');
+}
+
 void main() {
   late Directory directory;
   late ShopDatabase database;
@@ -654,21 +665,21 @@ void main() {
           },
         ),
       );
-      await tester.pumpAndSettle();
+      await _pumpUntil(tester, find.text('Start new Shop'));
       expect(find.text('Start new Shop'), findsOneWidget);
       expect(
         await ShopDatabase.privateDatabaseFile(documents).exists(),
         isFalse,
       );
       await tester.tap(find.text('Restore backup'));
-      await tester.pumpAndSettle();
+      await _pumpUntil(tester, find.text('Restore and open Shop'));
       expect(
         await ShopDatabase.privateDatabaseFile(documents).exists(),
         isFalse,
       );
       await tester.enterText(find.byType(TextField), _password);
       await tester.tap(find.text('Restore and open Shop'));
-      await tester.pumpAndSettle();
+      await _pumpUntil(tester, find.text('Opened Shop'));
       expect(find.text('Opened Shop'), findsOneWidget);
       expect((await opened!.readActiveProducts()).single.onHand, 3);
       expect(await opened!.countSales(), 1);
@@ -700,9 +711,9 @@ void main() {
           },
         ),
       );
-      await tester.pumpAndSettle();
+      await _pumpUntil(tester, find.text('Start new Shop'));
       await tester.tap(find.text('Start new Shop'));
-      await tester.pumpAndSettle();
+      await _pumpUntil(tester, find.text('Opened Shop'));
       expect(find.text('Opened Shop'), findsOneWidget);
       expect(
         await ShopDatabase.privateDatabaseFile(documents).exists(),
@@ -734,12 +745,12 @@ void main() {
           },
         ),
       );
-      await tester.pumpAndSettle();
+      await _pumpUntil(tester, find.text('Start new Shop'));
       await tester.tap(find.text('Restore backup'));
-      await tester.pumpAndSettle();
+      await _pumpUntil(tester, find.text('Restore and open Shop'));
       await tester.enterText(find.byType(TextField), 'a wrong long password');
       await tester.tap(find.text('Restore and open Shop'));
-      await tester.pumpAndSettle();
+      await _pumpUntil(tester, find.textContaining('Could not restore'));
       expect(find.textContaining('Could not restore'), findsOneWidget);
       expect(find.text('Restore and open Shop'), findsOneWidget);
       expect(
@@ -748,7 +759,7 @@ void main() {
       );
       await tester.enterText(find.byType(TextField), _password);
       await tester.tap(find.text('Restore and open Shop'));
-      await tester.pumpAndSettle();
+      await _pumpUntil(tester, find.text('Opened Shop'));
       expect(find.text('Opened Shop'), findsOneWidget);
     } finally {
       await tester.pumpWidget(const SizedBox.shrink());
@@ -771,9 +782,9 @@ void main() {
           buildShop: (_, _) => const SizedBox.shrink(),
         ),
       );
-      await tester.pumpAndSettle();
+      await _pumpUntil(tester, find.text('Shop အသစ် စတင်ရန်'));
       await tester.tap(find.text('အရန်ကူးဖိုင် ပြန်ယူရန်'));
-      await tester.pumpAndSettle();
+      await tester.pump();
       expect(find.text('Shop အသစ် စတင်ရန်'), findsOneWidget);
       expect(
         await ShopDatabase.privateDatabaseFile(documents).exists(),
@@ -806,7 +817,7 @@ void main() {
           },
         ),
       );
-      await tester.pumpAndSettle();
+      await _pumpUntil(tester, find.text('Opened Shop'));
       expect(find.text('Opened Shop'), findsOneWidget);
       expect(find.text('Restore backup'), findsNothing);
       expect((await opened!.readActiveProducts()).single.onHand, 3);
@@ -833,7 +844,7 @@ void main() {
           buildShop: (_, _) => const SizedBox.shrink(),
         ),
       );
-      await tester.pumpAndSettle();
+      await _pumpUntil(tester, find.textContaining('cannot safely open'));
       expect(find.textContaining('cannot safely open'), findsOneWidget);
       expect(find.text('Start new Shop'), findsNothing);
       expect(find.text('Restore backup'), findsNothing);
@@ -869,7 +880,7 @@ void main() {
           },
         ),
       );
-      await tester.pumpAndSettle();
+      await _pumpUntil(tester, find.textContaining('restore was interrupted'));
       expect(opened, isFalse);
       expect(find.textContaining('restore was interrupted'), findsOneWidget);
       expect(find.text('Start new Shop'), findsNothing);
