@@ -4223,23 +4223,18 @@ class _SetupTile extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.onTap,
-    this.narrowTitle,
   });
 
   final IconData icon;
   final String title;
   final String subtitle;
   final VoidCallback onTap;
-  final String? narrowTitle;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final compact =
         MediaQuery.sizeOf(context).width < 480 ||
-        MediaQuery.textScalerOf(context).scale(1) > 1.2;
-    final narrowWithLargeText =
-        MediaQuery.sizeOf(context).width < 360 &&
         MediaQuery.textScalerOf(context).scale(1) > 1.2;
     return ListTile(
       contentPadding: EdgeInsets.symmetric(
@@ -4252,7 +4247,7 @@ class _SetupTile extends StatelessWidget {
           ? null
           : Icon(icon, size: 23, color: theme.colorScheme.primary),
       title: Text(
-        narrowWithLargeText ? narrowTitle ?? title : title,
+        title,
         style: compact
             ? theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600)
             : theme.textTheme.titleMedium,
@@ -4387,9 +4382,8 @@ class _ShopSettingsScreenState extends State<ShopSettingsScreen> {
                     title: shopCopy(
                       _myanmar,
                       'Export backup file',
-                      'အရန်ကူးဖိုင် ထုတ်ယူရန်',
+                      'အရန်ကူးဖိုင် ထုတ်ရန်',
                     ),
-                    narrowTitle: _myanmar ? 'အရန်ကူးဖိုင်\nထုတ်ယူရန်' : null,
                     subtitle: shopCopy(
                       _myanmar,
                       'Save an encrypted file.',
@@ -4409,24 +4403,15 @@ class _ShopSettingsScreenState extends State<ShopSettingsScreen> {
             ),
             const SizedBox(height: 16),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surfaceContainerLow,
-                  borderRadius: BorderRadius.circular(12),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              child: Text(
+                shopCopy(
+                  _myanmar,
+                  'On this device only. No online backup.',
+                  'ဤစက်တွင်သာ သိမ်းသည်။ အွန်လိုင်းအရန်ကူး မရှိပါ။',
                 ),
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Text(
-                    shopCopy(
-                      _myanmar,
-                      'Saved on this device. Online backup is not active.',
-                      'ဤစက်တွင်သာ သိမ်းထားသည်။ အွန်လိုင်းအရန်ကူး မရှိသေးပါ။',
-                    ),
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                  ),
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
               ),
             ),

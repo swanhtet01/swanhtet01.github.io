@@ -4201,9 +4201,7 @@ void main() {
               'ပြေစာပရင်တာ',
               'မိုဘိုင်းငွေပေးချေမှု',
               'ငွေသားတာဝန်ချိန်',
-              width == 320
-                  ? 'အရန်ကူးဖိုင်\nထုတ်ယူရန်'
-                  : 'အရန်ကူးဖိုင် ထုတ်ယူရန်',
+              'အရန်ကူးဖိုင် ထုတ်ရန်',
             ]
           : [
               'Receipt printer',
@@ -4229,8 +4227,8 @@ void main() {
       expect(
         find.text(
           myanmar
-              ? 'ဤစက်တွင်သာ သိမ်းထားသည်။ အွန်လိုင်းအရန်ကူး မရှိသေးပါ။'
-              : 'Saved on this device. Online backup is not active.',
+              ? 'ဤစက်တွင်သာ သိမ်းသည်။ အွန်လိုင်းအရန်ကူး မရှိပါ။'
+              : 'On this device only. No online backup.',
         ),
         findsOneWidget,
       );
