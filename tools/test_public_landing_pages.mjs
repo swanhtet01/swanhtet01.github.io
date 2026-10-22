@@ -351,7 +351,12 @@ for (const [englishRoute, myanmarRoute] of [['/shop/', '/my/shop/'], ['/contact/
 }
 const myShop = readStatic('my/shop/index.html')
 check(myShop.includes('href="/my/contact/?product=shop"') && myShop.includes('Shop ဘရောက်ဇာလုပ်ငန်းခွင်'), 'myanmar_shop_contact_and_browser_claim')
-check(myShop.includes('မျက်နှာပြင်အတွင်း စာသားများသည် အင်္ဂလိပ်ဘာသာဖြစ်သည်'), 'myanmar_shop_capture_language_disclosed')
+check(myShop.includes('မြန်မာဘာသာ နမူနာမျက်နှာပြင်')
+  && myShop.includes('src="/images/actual-shop-sell-my.png"')
+  && myShop.includes('srcset="/images/actual-shop-sell-my-tablet.png"')
+  && myShop.includes('srcset="/images/actual-shop-sell-my-mobile.png"')
+  && !myShop.includes('src="/images/actual-shop-sell.png"'), 'myanmar_shop_uses_source_bound_localized_counter_capture')
+check(myShop.includes('အင်္ဂလိပ်ဘာသာ UI ကို ပြထားသည်'), 'myanmar_shop_support_capture_language_disclosed')
 check(countOccurrences(myShop, 'class="shop-photo-credit"') === 1
   && myShop.includes('MAMA photo:') && myShop.includes('twindel / Open Food Facts')
   && myShop.includes('https://creativecommons.org/licenses/by-sa/3.0/'), 'myanmar_shop_product_photo_credit_visible')

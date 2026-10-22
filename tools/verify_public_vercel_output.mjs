@@ -146,6 +146,9 @@ const expectedStaticFiles = new Set([
   'images/actual-shop-sell.png',
   'images/actual-shop-sell-tablet.png',
   'images/actual-shop-sell-mobile.png',
+  'images/actual-shop-sell-my.png',
+  'images/actual-shop-sell-my-tablet.png',
+  'images/actual-shop-sell-my-mobile.png',
   'images/actual-shop-orders.png',
   'images/actual-shop-orders-tablet.png',
   'images/actual-shop-orders-mobile.png',
@@ -521,6 +524,13 @@ for (const [route, englishRoute, switchHref] of [['/my/shop/', '/shop/', '/shop/
 }
 const myContact = pages.get('/my/contact/')?.html || ''
 const myShop = pages.get('/my/shop/')?.html || ''
+for (const token of ['src="/images/actual-shop-sell-my.png"', 'srcset="/images/actual-shop-sell-my-tablet.png"',
+  'srcset="/images/actual-shop-sell-my-mobile.png"', 'မြန်မာဘာသာ နမူနာမျက်နှာပြင်',
+  'အင်္ဂလိပ်ဘာသာ UI ကို ပြထားသည်']) {
+  if (!myShop.includes(token)) fail('myanmar_shop_capture_or_language_scope_missing', { token })
+}
+if (myShop.includes('src="/images/actual-shop-sell.png"') || shopPage.includes('src="/images/actual-shop-sell-my.png"'))
+  fail('shop_hero_capture_locale_mismatch')
 if (countOccurrences(myShop, 'class="shop-photo-credit"') !== 1
   || !myShop.includes('MAMA photo:') || !myShop.includes('twindel / Open Food Facts')
   || !myShop.includes('https://creativecommons.org/licenses/by-sa/3.0/')) fail('myanmar_shop_photo_attribution_missing')
@@ -558,6 +568,7 @@ const publicGalleryEvidence = release.publicGalleryEvidence
 const publicGalleryFiles = [
   'actual-shop-today.png',
   'actual-shop-sell.png', 'actual-shop-sell-tablet.png', 'actual-shop-sell-mobile.png',
+  'actual-shop-sell-my.png', 'actual-shop-sell-my-tablet.png', 'actual-shop-sell-my-mobile.png',
   'actual-shop-orders.png', 'actual-shop-orders-tablet.png', 'actual-shop-orders-mobile.png',
   'actual-shop-inventory.png', 'actual-shop-inventory-tablet.png', 'actual-shop-inventory-mobile.png',
 ]

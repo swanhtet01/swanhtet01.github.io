@@ -92,6 +92,7 @@ const sourceGalleryAssetNames = [
   'actual-shop-today-tablet.png', 'actual-shop-today-mobile.png',
   'actual-shop-orders.png', 'actual-shop-orders-tablet.png', 'actual-shop-orders-mobile.png',
   'actual-shop-inventory.png', 'actual-shop-inventory-tablet.png', 'actual-shop-inventory-mobile.png',
+  'actual-shop-sell-my.png', 'actual-shop-sell-my-tablet.png', 'actual-shop-sell-my-mobile.png',
   'actual-sites-editor.png', 'actual-sites-editor-tablet.png', 'actual-sites-editor-mobile.png',
   'actual-sites-inquiries.png', 'actual-sites-inquiries-tablet.png', 'actual-sites-inquiries-mobile.png',
   'actual-commerce-catalog.png', 'actual-commerce-catalog-tablet.png', 'actual-commerce-catalog-mobile.png',
@@ -102,6 +103,7 @@ const sourceGalleryAssetNames = [
 const publicGalleryAssetNames = [
   'actual-shop-today.png',
   'actual-shop-sell.png', 'actual-shop-sell-tablet.png', 'actual-shop-sell-mobile.png',
+  'actual-shop-sell-my.png', 'actual-shop-sell-my-tablet.png', 'actual-shop-sell-my-mobile.png',
   'actual-shop-orders.png', 'actual-shop-orders-tablet.png', 'actual-shop-orders-mobile.png',
   'actual-shop-inventory.png', 'actual-shop-inventory-tablet.png', 'actual-shop-inventory-mobile.png',
 ]
@@ -159,6 +161,8 @@ const sourceGalleryAssetEvidence = await Promise.all(publicGalleryProvenance.ass
     && capture.captureTool === 'tools/capture_public_gallery.mjs'
     && capture.fixturePath === reportCapture.fixturePath
     && capture.routeState === reportCapture.routeState
+    && capture.uiLocale === reportCapture.uiLocale
+    && capture.uiLocale === (file.startsWith('actual-shop-sell-my') ? 'my' : 'en')
     && capture.visibleSelector === reportCapture.visibleSelector
     && capture.loadedImages === reportCapture.loadedImages
     && capture.captureMode === 'clean-commit-review'
@@ -617,6 +621,7 @@ const sharedStyle = `
   .shop-gallery-all .platform-device-stage {padding:clamp(12px,2vw,22px);border-color:#e4e7ec;border-radius:12px;background:#f6f7f9;box-shadow:none}
   .shop-gallery-all .platform-device-capture img {border-radius:8px;box-shadow:0 5px 16px rgba(16,24,40,.08)}
   .shop-responsive-showcase {display:grid;gap:18px;min-width:0}
+  .shop-support-language-note {margin:0;color:#596579;font-size:14px;line-height:1.8}
   .shop-hero-app {min-width:0;align-self:center}
   .shop-lead-capture {max-width:1100px;margin:0 auto;padding:clamp(10px,1.5vw,18px);border:1px solid #e4e7ec;border-radius:12px;background:#fff;box-shadow:0 12px 34px rgba(16,24,40,.05)}
   .shop-lead-capture picture,.shop-lead-capture img {display:block;width:100%}
@@ -978,21 +983,22 @@ function shopSupportCard({image,alt,title,description,locale = 'en'}) {
  return `<article class="shop-workflow-card"><picture><source media="(max-width: 760px)" srcset="/images/${mobileImage}" width="390" height="844" /><img src="/images/${image}" alt="${escapeHtml(alt)} · ${locale === 'my' ? 'စမ်းသပ်မှတ်တမ်းများ' : 'synthetic sample records'}" width="1440" height="900" loading="lazy" /></picture><div class="shop-workflow-card-copy"><h3>${escapeHtml(title)}</h3><p>${escapeHtml(description)}</p></div></article>`
 }
 function shopCounterSalePreview(locale = 'en') {
- const [image,alt] = stories.shop.screens[0]
+ const [englishImage,alt] = stories.shop.screens[0]
+ const image = locale === 'my' ? 'actual-shop-sell-my.png' : englishImage
  const mobileImage = image.replace(/\.png$/, '-mobile.png')
  const tabletImage = image.replace(/\.png$/, '-tablet.png')
  interfaceDisclosure(image)
  interfaceDisclosure(mobileImage)
  interfaceDisclosure(tabletImage)
  const imageAlt = locale === 'my' ? 'ကောင်တာအရောင်း၊ ကုန်ပစ္စည်းရှာဖွေမှုနှင့် လက်ရှိခြင်းတောင်းကို ပြထားသော Shop ဘရောက်ဇာမျက်နှာပြင်' : alt
- const disclosure = locale === 'my' ? 'Shop ဘရောက်ဇာလုပ်ငန်းခွင် · စမ်းသပ်မှတ်တမ်းများ · မျက်နှာပြင်အတွင်း စာသားများသည် အင်္ဂလိပ်ဘာသာဖြစ်သည်' : 'Shop browser workspace · synthetic local records'
+ const disclosure = locale === 'my' ? 'Shop ဘရောက်ဇာ ကောင်တာ · မြန်မာဘာသာ နမူနာမျက်နှာပြင် · စမ်းသပ်မှတ်တမ်းများ' : 'Shop browser workspace · synthetic local records'
  return `<figure class="shop-lead-capture"><picture><source media="(max-width: 760px)" srcset="/images/${mobileImage}" width="390" height="844" /><source media="(max-width: 1024px)" srcset="/images/${tabletImage}" width="768" height="1024" /><img src="/images/${image}" alt="${escapeHtml(imageAlt)}" width="1440" height="900" loading="eager" fetchpriority="high" /></picture><figcaption id="shop-sample-disclosure">${disclosure}<span class="shop-photo-credit">MAMA photo: <a href="https://world.openfoodfacts.org/cgi/product_image.pl?code=8850987101526&amp;id=front_en">twindel / Open Food Facts</a> · <a href="https://creativecommons.org/licenses/by-sa/3.0/">CC BY-SA 3.0</a></span></figcaption></figure>`
 }
 function shopResponsiveShowcase(locale = 'en') {
  const isMyanmar = locale === 'my'
  const orders = shopSupportCard({image:'actual-shop-orders.png',alt:isMyanmar ? 'ဖြည့်ဆည်းမှုနှင့် ငွေပေးချေမှု နောက်ဆက်တွဲများပါသော Shop ဘရောက်ဇာ အော်ဒါစာရင်း' : 'Shop browser order queue with fulfilment and payment follow-up',title:isMyanmar ? 'အော်ဒါများ' : 'Orders',description:isMyanmar ? 'အဆင်သင့်ဖြစ်နေသည့်အော်ဒါ၊ ငွေမရှင်းရသေးသည့်အော်ဒါနှင့် နောက်တစ်ဆင့်လုပ်ရန် လိုအပ်သည့်အရာကို ကြည့်ပါ။' : 'See what is ready, what is unpaid, and what needs the next step.',locale})
  const stock = shopSupportCard({image:'actual-shop-inventory.png',alt:isMyanmar ? 'လက်ကျန်အရေအတွက်နှင့် ထပ်မံဖြည့်တင်းရန် သတိပေးချက်များပါသော Shop ဘရောက်ဇာ ကုန်ပစ္စည်းစာရင်း' : 'Shop browser inventory list with on-hand quantities and reorder signals',title:isMyanmar ? 'ကုန်လက်ကျန်' : 'Stock',description:isMyanmar ? 'ရေတွက်ရန် သို့မဟုတ် ထပ်မံဖြည့်တင်းရန် လိုအပ်သော ကုန်ပစ္စည်းများကို ရှာပါ။' : 'Find products that need a count or replenishment.',locale})
- return `<div class="shop-responsive-showcase"><div class="shop-workflow-support">${orders}${stock}</div></div>`
+ return `<div class="shop-responsive-showcase">${isMyanmar ? '<p class="shop-support-language-note">အောက်ပါ အော်ဒါနှင့် ကုန်လက်ကျန် နမူနာမျက်နှာပြင်များတွင် အင်္ဂလိပ်ဘာသာ UI ကို ပြထားသည်။</p>' : ''}<div class="shop-workflow-support">${orders}${stock}</div></div>`
 }
 function productStory(id, standalone = false) {
  const item=stories[id], label=publicProducts.find(product=>product.id===id).name
