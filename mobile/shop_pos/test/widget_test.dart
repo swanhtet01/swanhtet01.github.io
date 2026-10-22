@@ -4787,6 +4787,67 @@ void main() {
     await database.close();
   });
 
+  testWidgets(
+    'failed verified wallet save stays pending without another charge',
+    (tester) async {
+      final database = ShopDatabase(NativeDatabase.memory());
+      await database.addProduct(
+        id: 'tea',
+        name: 'Tea',
+        priceMmk: 2500,
+        openingStock: 1,
+      );
+      await database.createWalletCheckoutIntent(
+        operationId: 'wallet-stock-recovery',
+        merchant: MerchantWalletSetup(
+          provider: 'KBZPay',
+          merchantPhone: null,
+          officialQrPayload: _testStaticMmqr(),
+          issuerConfirmed: true,
+        ),
+        lines: const [ShopSaleLineInput(productId: 'tea', quantity: 1)],
+      );
+      // Corrupt the quantity outside the normal count path. That path guards
+      // pending wallet stock, but restore or damaged data still needs a safe UI.
+      await database.customUpdate(
+        'UPDATE shop_products SET on_hand = 0 WHERE id = ?',
+        variables: [const Variable<String>('tea')],
+      );
+      await tester.pumpWidget(
+        ShopApp(
+          initialCounter: true,
+          database: database,
+          authClient: null,
+          apiBaseUrl: 'https://app.supermega.dev',
+          initialMyanmar: false,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Resume payment'));
+      await tester.pumpAndSettle();
+      final verified = find.text('I verified this payment in the wallet app.');
+      await tester.ensureVisible(verified);
+      await tester.tap(verified);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Confirm received'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Check payment before retrying'), findsOneWidget);
+      expect(
+        find.textContaining('Do not ask the customer to pay again.'),
+        findsOneWidget,
+      );
+      expect(await database.countSales(), 0);
+      expect(await database.readPendingWalletCheckout(), isNotNull);
+      await tester.tap(find.text('Keep pending'));
+      await tester.pumpAndSettle();
+      expect(await database.readPendingWalletCheckout(), isNotNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+      await database.close();
+    },
+  );
+
   group('offline catalog and sale transactions', () {
     late ShopDatabase database;
 
