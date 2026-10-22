@@ -197,6 +197,15 @@ void main() {
           await tester.tap(saleDestination.first);
           await tester.pumpAndSettle();
           expect(tester.takeException(), isNull);
+          if (width == 320 || width == 820) {
+            final camera = find.byKey(const ValueKey('shop-camera-scan'));
+            expect(camera, findsOneWidget);
+            final bounds = tester.getRect(camera);
+            expect(bounds.left, greaterThanOrEqualTo(0));
+            expect(bounds.right, lessThanOrEqualTo(width));
+            expect(bounds.height, greaterThanOrEqualTo(48));
+            expect(tester.widget<IconButton>(camera).onPressed, isNotNull);
+          }
           await expectLater(
             find.byKey(_captureKey),
             matchesGoldenFile(
