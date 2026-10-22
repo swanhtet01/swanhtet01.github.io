@@ -2386,7 +2386,8 @@ ShopCorrectionAuthorization _backupAuthorization(
 }) {
   final now = DateTime.now().millisecondsSinceEpoch;
   final issuedAtMillis = now - 1000;
-  final expiresAtMillis = now + const Duration(minutes: 5).inMilliseconds;
+  final expiresAtMillis =
+      issuedAtMillis + const Duration(minutes: 5).inMilliseconds;
   const workspaceId = 'workspace-backup-test';
   const actorId = 'owner-backup-test';
   const actorLabel = 'Backup test owner';

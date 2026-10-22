@@ -3063,7 +3063,8 @@ ShopCorrectionAuthorization _correctionAuthorization(
 }) {
   final now = DateTime.now().millisecondsSinceEpoch;
   final issuedAtMillis = now - 1000;
-  final expiresAtMillis = now + const Duration(minutes: 5).inMilliseconds;
+  final expiresAtMillis =
+      issuedAtMillis + const Duration(minutes: 5).inMilliseconds;
   const actorId = 'owner-test';
   const actorLabel = 'Test owner';
   const actorRole = 'owner';
