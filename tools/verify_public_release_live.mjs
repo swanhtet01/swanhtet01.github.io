@@ -280,8 +280,8 @@ async function verifyOnce() {
   // their actual response bytes; a 200 HTML fallback must never pass as an image.
   assert(publicProducts.map(product => product.id).join(',') === 'shop', 'public_product_scope_not_shop_only')
   for (const [route, files] of Object.entries({
-    '/shop/': ['shop_checkout_1200_en.png', 'shop_checkout_390_en.png', 'shop_stock_820_en.png', 'shop_stock_390_en.png', 'shop_today_390_en.png'],
-    '/my/shop/': ['shop_checkout_820_my.png', 'shop_checkout_390_my.png', 'shop_stock_820_my.png', 'shop_stock_390_my.png', 'shop_today_390_my.png'],
+    '/shop/': ['shop_checkout_1200_en.png', 'shop_sell_390_en.png', 'shop_stock_820_en.png', 'shop_stock_390_en.png', 'shop_today_390_en.png'],
+    '/my/shop/': ['shop_checkout_1200_my.png', 'shop_sell_390_my.png', 'shop_stock_820_my.png', 'shop_stock_390_my.png', 'shop_today_390_my.png'],
   })) {
     const html = pages.get(route)
     if (html == null) continue

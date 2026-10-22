@@ -35,6 +35,20 @@ def main() -> None:
         raise SystemExit("checkout HEAD differs from the capture source commit")
     native_tree = git("rev-parse", "HEAD:mobile/shop_pos")
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
+    for name, width, height in (
+        ("shop_checkout_1200_my.png", 1200, 900),
+        ("shop_sell_390_en.png", 390, 844),
+        ("shop_sell_390_my.png", 390, 844),
+    ):
+        if not any(asset["file"] == name for asset in manifest["assets"]):
+            manifest["assets"].append({
+                "file": name,
+                "width": width,
+                "height": height,
+                "sha256": "",
+                "sourceFile": f"mobile/shop_pos/test/goldens/{name}",
+            })
+    manifest["assets"].sort(key=lambda asset: asset["file"])
     archive = args.archive.read_bytes()
     members = {}
     with zipfile.ZipFile(args.archive) as zipped:

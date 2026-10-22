@@ -121,9 +121,13 @@ test('generated public entry and contact expose only Shop', async () => {
     const fullPage = await html(product.id+'/index.html')
     assert.equal((fullPage.match(/href="https:\/\/app\.supermega\.dev\/login"/g) ?? []).length, 1)
     assert.match(page, /src="\/images\/native-shop\/shop_checkout_1200_en\.png"/)
+    assert.match(page, /srcset="\/images\/native-shop\/shop_sell_390_en\.png"/)
     assert.doesNotMatch(page, /data-platform-carousel|Open Ecommerce|Open Website/)
     assert.doesNotMatch(page, /product=plant|href="\/plant\//)
   }
+  const myShop = main(await html('my/shop/index.html'))
+  assert.match(myShop, /src="\/images\/native-shop\/shop_checkout_1200_my\.png"/)
+  assert.match(myShop, /srcset="\/images\/native-shop\/shop_sell_390_my\.png"/)
 })
 
 test('Plant public route becomes compatibility-only, not sales or new setup', async () => {

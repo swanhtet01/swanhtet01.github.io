@@ -43,9 +43,9 @@ check(shop.includes('Shop app preview with sample data and prices.'), 'synthetic
 check(myShop.includes('နမူနာအချက်အလက်နှင့် ဈေးနှုန်းများ'), 'my_synthetic_data_disclosed')
 check(shop.includes('class="native-shop-gallery"') && myShop.includes('class="native-shop-gallery"'), 'native_gallery_visible')
 check(shop.includes('shop_checkout_1200_en.png') && shop.includes('shop_stock_820_en.png') && shop.includes('shop_today_390_en.png'), 'en_three_workflows')
-check(myShop.includes('shop_checkout_820_my.png') && myShop.includes('shop_stock_820_my.png') && myShop.includes('shop_today_390_my.png'), 'my_three_workflows')
+check(myShop.includes('shop_checkout_1200_my.png') && myShop.includes('shop_stock_820_my.png') && myShop.includes('shop_today_390_my.png'), 'my_three_workflows')
 for (const [html, suffix] of [[shop, 'en'], [myShop, 'my']]) {
-  check(html.includes('srcset="/images/native-shop/shop_checkout_390_' + suffix + '.png"'), 'responsive_checkout_capture:' + suffix)
+  check(html.includes('srcset="/images/native-shop/shop_sell_390_' + suffix + '.png"'), 'responsive_sell_capture:' + suffix)
   check(html.includes('srcset="/images/native-shop/shop_stock_390_' + suffix + '.png"'), 'responsive_stock_capture:' + suffix)
   check(!html.includes('native-shop-stock') && !/<figcaption>(?:Desktop|Tablet|Phone)/.test(html), 'no_redundant_device_gallery:' + suffix)
   check(!html.includes('actual-shop-') && !html.includes('capture scaled to fit'), 'retired_browser_capture_absent:' + suffix)

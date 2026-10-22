@@ -55,8 +55,9 @@ export function verifyNativeShopGallery(root, { sourceTree = true } = {}) {
       && item.thumbnail_sha256 === sha256(readFileSync(resolve(root, 'mobile/shop_pos/test/assets/grocery_photos', item.thumbnail)))),
   'photo_rights_invalid')
   const expected = [
-    'shop_checkout_1200_en.png', 'shop_checkout_820_en.png', 'shop_checkout_820_my.png',
+    'shop_checkout_1200_en.png', 'shop_checkout_1200_my.png', 'shop_checkout_820_en.png', 'shop_checkout_820_my.png',
     'shop_checkout_390_en.png', 'shop_checkout_390_my.png',
+    'shop_sell_390_en.png', 'shop_sell_390_my.png',
     'shop_stock_1200_en.png', 'shop_stock_820_en.png', 'shop_stock_820_my.png',
     'shop_stock_390_en.png', 'shop_stock_390_my.png',
     'shop_today_1200_en.png', 'shop_today_820_en.png', 'shop_today_820_my.png',

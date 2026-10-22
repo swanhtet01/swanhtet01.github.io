@@ -373,10 +373,10 @@ if (shopBody.includes('>Company</a>') || shopBody.includes('href="' + appOrigin 
 for (const token of [
   'class="native-shop-gallery"',
   'src="/images/native-shop/shop_checkout_1200_en.png"',
-  '<source media="(max-width:650px)" srcset="/images/native-shop/shop_checkout_390_en.png" />',
+  '<source media="(max-width:650px)" srcset="/images/native-shop/shop_sell_390_en.png" width="390" height="844" />',
   'src="/images/native-shop/shop_today_390_en.png"',
   'src="/images/native-shop/shop_stock_820_en.png"',
-  '<source media="(max-width:650px)" srcset="/images/native-shop/shop_stock_390_en.png" />',
+  '<source media="(max-width:650px)" srcset="/images/native-shop/shop_stock_390_en.png" width="390" height="844" />',
   '<figcaption>Counter sale</figcaption>',
   '<figcaption>Stock</figcaption>',
   '<figcaption>Today</figcaption>',
@@ -443,11 +443,11 @@ for (const [route, englishRoute, switchHref] of [['/my/shop/', '/shop/', '/shop/
 const myContact = pages.get('/my/contact/')?.html || ''
 const myShop = pages.get('/my/shop/')?.html || ''
 for (const token of [
-  'src="/images/native-shop/shop_checkout_820_my.png"',
-  '<source media="(max-width:650px)" srcset="/images/native-shop/shop_checkout_390_my.png" />',
+  'src="/images/native-shop/shop_checkout_1200_my.png"',
+  '<source media="(max-width:650px)" srcset="/images/native-shop/shop_sell_390_my.png" width="390" height="844" />',
   'src="/images/native-shop/shop_today_390_my.png"',
   'src="/images/native-shop/shop_stock_820_my.png"',
-  '<source media="(max-width:650px)" srcset="/images/native-shop/shop_stock_390_my.png" />',
+  '<source media="(max-width:650px)" srcset="/images/native-shop/shop_stock_390_my.png" width="390" height="844" />',
   '<figcaption>ကောင်တာအရောင်း</figcaption>',
   '<figcaption>ကုန်လက်ကျန်</figcaption>',
   '<figcaption>ယနေ့</figcaption>',
