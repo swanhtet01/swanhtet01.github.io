@@ -7,7 +7,7 @@ Who this is for: counter-first businesses that sell and track stock — the mani
 Current public page:
 
 - `Shop | Sales and stock | SuperMega`
-- `Preview SuperMega Shop for counter sales, stock and daily insight using sample app screens.`
+- `Preview Shop for counter sales, stock and daily insight using sample app screens.`
 
 The public website shows three distinct native Shop app captures with synthetic sample data and prices. Request a walkthrough through Contact; existing merchants have a secondary Sign in route. These captures do not prove a preloaded catalog or physical-device acceptance.
 
