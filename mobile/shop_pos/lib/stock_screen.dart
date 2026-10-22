@@ -390,10 +390,7 @@ class _StockScreenState extends State<StockScreen> {
                                             child: Column(
                                               crossAxisAlignment:
                                                   CrossAxisAlignment.start,
-                                              children: [
-                                                onHand,
-                                                ?reorderNote,
-                                              ],
+                                              children: [onHand, ?reorderNote],
                                             ),
                                           ),
                                           SizedBox(width: 168, child: update),
