@@ -179,6 +179,15 @@ void main() {
       'capture Today and Sell at ${width.toInt()}px $language',
       skip: !_capture,
       (tester) async {
+        final elapsed = Stopwatch()..start();
+        void checkpoint(String stage) {
+          debugPrint(
+            '[visual ${width.toInt()} $language] '
+            '${elapsed.elapsedMilliseconds}ms $stage',
+          );
+        }
+
+        checkpoint('start');
         tester.view.physicalSize = Size(width, height);
         tester.view.devicePixelRatio = 1;
         if (width == 320) {
@@ -187,7 +196,9 @@ void main() {
         addTearDown(tester.view.resetPhysicalSize);
         addTearDown(tester.view.resetDevicePixelRatio);
         addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+        checkpoint('fixture start');
         final database = await _sampleShop(myanmar: language == 'my');
+        checkpoint('fixture ready');
         try {
           await tester.pumpWidget(
             RepaintBoundary(
@@ -200,14 +211,18 @@ void main() {
               ),
             ),
           );
+          checkpoint('widget pumped');
           await tester.pumpAndSettle();
+          checkpoint('today settled');
           expect(tester.takeException(), isNull);
+          checkpoint('today golden start');
           await expectLater(
             find.byKey(_captureKey),
             matchesGoldenFile(
               'goldens/shop_today_${width.toInt()}_$language.png',
             ),
           );
+          checkpoint('today golden complete');
 
           for (final (icon, screen) in [
             (Icons.receipt_long_outlined, 'sales'),
@@ -228,6 +243,7 @@ void main() {
             );
             await tester.tap(destination.first);
             await tester.pumpAndSettle();
+            checkpoint('$screen settled');
             expect(tester.takeException(), isNull);
             if (screen == 'stock') {
               expect(
@@ -243,6 +259,7 @@ void main() {
                 'goldens/shop_${screen}_${width.toInt()}_$language.png',
               ),
             );
+            checkpoint('$screen golden complete');
             // pageBack() looks for the English "Back" tooltip and misses the
             // localized Material back control in a Burmese route.
             expect(await tester.binding.handlePopRoute(), isTrue);
@@ -261,6 +278,7 @@ void main() {
           );
           await tester.tap(saleDestination.first);
           await tester.pumpAndSettle();
+          checkpoint('sell settled');
           expect(tester.takeException(), isNull);
           expect(
             find.byKey(const ValueKey('shop-product-photo:apple')),
@@ -281,6 +299,7 @@ void main() {
               'goldens/shop_sell_${width.toInt()}_$language.png',
             ),
           );
+          checkpoint('sell golden complete');
 
           final product = find
               .byTooltip(language == 'my' ? 'အရောင်းထဲထည့်ရန်' : 'Add to sale')
@@ -322,6 +341,7 @@ void main() {
               'goldens/shop_checkout_${width.toInt()}_$language.png',
             ),
           );
+          checkpoint('checkout golden complete');
 
           await tester.ensureVisible(cashButton);
           await tester.tap(cashButton);
@@ -338,10 +358,13 @@ void main() {
               'goldens/shop_cash_${width.toInt()}_$language.png',
             ),
           );
+          checkpoint('cash golden complete');
         } finally {
+          checkpoint('cleanup start');
           await tester.pumpWidget(const SizedBox.shrink());
           await tester.pump(const Duration(milliseconds: 1));
           await database.close();
+          checkpoint('cleanup complete');
         }
       },
     );
