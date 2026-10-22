@@ -465,6 +465,45 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('tablet Today keeps sales metrics in one row', (tester) async {
+    tester.view.physicalSize = const Size(820, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final database = ShopDatabase(NativeDatabase.memory());
+    try {
+      await database.addProduct(
+        id: 'water',
+        name: 'Water',
+        priceMmk: 1200,
+        openingStock: 20,
+      );
+      await database.recordCashSale(
+        operationId: 'tablet-today-sale',
+        lines: const [ShopSaleLineInput(productId: 'water', quantity: 1)],
+      );
+      await tester.pumpWidget(
+        ShopApp(
+          database: database,
+          authClient: null,
+          apiBaseUrl: 'https://app.supermega.dev',
+          initialMyanmar: false,
+        ),
+      );
+      await tester.pumpAndSettle();
+      final salesY = tester.getTopLeft(find.text('Sales today')).dy;
+      final completedY = tester.getTopLeft(find.text('Completed sales')).dy;
+      expect((salesY - completedY).abs(), lessThan(4));
+      expect(tester.getTopLeft(find.text('New sale')).dx, greaterThan(500));
+      expect(find.text('Check stock'), findsNothing);
+      expect(tester.takeException(), isNull);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+      await database.close();
+    }
+  });
+
   testWidgets('Burmese Today and Counter show the same kyat amount', (
     tester,
   ) async {

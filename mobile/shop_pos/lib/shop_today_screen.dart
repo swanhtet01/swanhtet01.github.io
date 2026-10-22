@@ -348,6 +348,7 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
   }) {
     final inset = compact ? 16.0 : 24.0;
     final contentWidth = (width - inset * 2).clamp(0.0, 1180.0).toDouble();
+    final phoneLayout = compact && contentWidth < 600;
     final threeAcross = contentWidth >= 900;
     final hasStockAlert = snapshot.stockToCheck.isNotEmpty;
     final smallCardWidth = threeAcross && hasStockAlert
@@ -355,7 +356,7 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
         : contentWidth >= 600
         ? (contentWidth - 12) / 2
         : contentWidth;
-    final salesWidth = compact ? contentWidth : smallCardWidth;
+    final salesWidth = phoneLayout ? contentWidth : smallCardWidth;
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
       padding: EdgeInsets.fromLTRB(inset, compact ? 18 : 30, inset, 32),
@@ -366,7 +367,7 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                if (compact) ...[
+                if (phoneLayout) ...[
                   _heading(showNewSale: false),
                   if (snapshot.products > 0) ...[
                     const SizedBox(height: 16),
@@ -393,7 +394,7 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
                         icon: Icons.payments_outlined,
                         emphasized: true,
                       ),
-                      if (compact)
+                      if (phoneLayout)
                         _compactStats(snapshot, width: contentWidth)
                       else ...[
                         _metric(
