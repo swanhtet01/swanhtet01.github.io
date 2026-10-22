@@ -479,6 +479,20 @@ try {
   assert.doesNotMatch(customerAck.body.text.split('\n').slice(1).join('\n'), /demo|preview|trial|account created|payment received/i)
   assert.doesNotMatch(customerAck.body.text, /one business day|founder|trial keeps working/)
 
+  const beforeMyanmarMail = resendMail.length
+  const myanmarAccepted = await invoke({
+    body: { ...validSubmission, product: 'shop', template: '', source_url: 'https://supermega.dev/my/contact/?product=shop', goal: 'ကုန်ပစ္စည်းစာရင်းနှင့် အရောင်းအတွက် အကူအညီလိုပါသည်။' },
+    headers: withKey(405, { 'x-forwarded-for': '203.0.113.45' }), activeHandler: resendHandler,
+  })
+  assert.equal(myanmarAccepted.status, 202)
+  assert.equal(resendMail.length, beforeMyanmarMail + 2)
+  const myanmarAck = resendMail.at(-1)
+  assert.equal(myanmarAck.body.subject, 'သင့်တောင်းဆိုချက်ကို လက်ခံရရှိပါပြီ - SuperMega')
+  assert.match(myanmarAck.body.text, /ကိုးကားနံပါတ်: LEAD-/)
+  assert.match(myanmarAck.body.text, /စကားဝှက်များ သို့မဟုတ် ဖောက်သည်မှတ်တမ်းများ မထည့်သွင်းပါနှင့်/)
+  assert.ok(myanmarAck.body.text.includes(myanmarAccepted.body.request_id))
+  assert.doesNotMatch(myanmarAck.body.text, /We received your request|Please do not include passwords/)
+
   const beforeOptionalMail = resendMail.length
   const optionalMail = await invoke({
     body: { ...validSubmission, name: 'Independent retailer', company: '', product: 'shop', template: '', goal: 'Need counter sales and stock.' },
