@@ -174,14 +174,8 @@ void main() {
           // checkout hierarchy better than a single-item fixture.
           if (width >= 820) {
             final extraProducts = language == 'my'
-                ? [
-                    'BAYDAR အဝတ်လျှော်ဆပ်ပြာ',
-                    'MAMA ကြက်သား အမြန်ခေါက်ဆွဲ',
-                  ]
-                : [
-                    'BAYDAR Laundry Detergent',
-                    'MAMA Chicken Instant Noodles',
-                  ];
+                ? ['BAYDAR အဝတ်လျှော်ဆပ်ပြာ', 'MAMA ကြက်သား အမြန်ခေါက်ဆွဲ']
+                : ['BAYDAR Laundry Detergent', 'MAMA Chicken Instant Noodles'];
             for (final name in extraProducts) {
               final nextProduct = find.text(name).first;
               await tester.ensureVisible(nextProduct);
