@@ -242,6 +242,19 @@ async function captureMobile(cdp, sessionId, output, name, expectedTexts, view) 
   }
 }
 
+async function captureMyanmarDesktop(cdp, sessionId, output, name, expectedTexts, view) {
+  // The 1000px two-pane counter remains readable when fitted into the public
+  // hero. The narrower 820px counter scrolls category chips horizontally.
+  await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1000, height: 900, deviceScaleFactor: 1, mobile: false }, sessionId)
+  try {
+    const pageWidth = await evaluate(cdp, sessionId, 'document.documentElement.scrollWidth')
+    if (pageWidth > 1000) throw new Error(`myanmar_counter_desktop_horizontal_overflow:${pageWidth}`)
+    return await capture(cdp, sessionId, output, name, expectedTexts, { ...view, width: 1000, height: 900 })
+  } finally {
+    await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false }, sessionId)
+  }
+}
+
 async function captureTablet(cdp, sessionId, output, name, expectedTexts, view) {
   // iPad-sized portrait viewport: the Shop keeps the sale beside the catalog
   // while retaining touch targets; phone capture exercises the modal sheet.
@@ -478,7 +491,7 @@ async function main() {
     })()`)
     if (mySaleBasket.added.length !== 3 || mySaleBasket.lines !== 3)
       throw new Error(`myanmar_counter_multi_item_basket_missing:${JSON.stringify(mySaleBasket)}`)
-    captures.push(await capture(cdp, sessionId, output, 'actual-shop-sell-my', ['ကုန်ပစ္စည်းများ', 'လက်ရှိ အရောင်း', 'ငွေသား', 'သောက်စရာ', 'အိမ်သုံးပစ္စည်း', 'အစားအသောက်'],
+    captures.push(await captureMyanmarDesktop(cdp, sessionId, output, 'actual-shop-sell-my', ['ကုန်ပစ္စည်းများ', 'လက်ရှိ အရောင်း', 'ငွေသား', 'သောက်စရာ', 'အိမ်သုံးပစ္စည်း', 'အစားအသောက်'],
       { fixturePath: '/shop-my/', tab: 'counter', uiLocale: 'my', selector: '.shop-current-sale', imageSelector: '.shop-product-art.shop-product-photo', images: 1,
         forbiddenText: ['Drinks', 'Home care', 'Pantry', 'Cash'] }))
     captures.push(await captureTablet(cdp, sessionId, output, 'actual-shop-sell-my-tablet', ['ကုန်ပစ္စည်းများ', 'လက်ရှိ အရောင်း'],
