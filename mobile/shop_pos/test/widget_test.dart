@@ -2836,9 +2836,11 @@ void main() {
             expect(tester.getTopLeft(price).dx, tester.getTopLeft(name).dx);
             expect(tester.getTopLeft(stock).dx, tester.getTopLeft(name).dx);
             expect(
-              tester.getTopLeft(
-                find.byKey(const ValueKey('shop-add-affordance:rice')),
-              ).dx,
+              tester
+                  .getTopLeft(
+                    find.byKey(const ValueKey('shop-add-affordance:rice')),
+                  )
+                  .dx,
               greaterThan(tester.getTopRight(name).dx),
             );
           }
