@@ -4212,8 +4212,8 @@ class _NewShopProductDialogState extends State<_NewShopProductDialog> {
                     label: Text(
                       shopCopy(
                         widget.myanmar,
-                        'Add barcode (optional)',
-                        'ဘားကုဒ်ထည့်ရန် (ရွေးချယ်နိုင်)',
+                        'Add barcode',
+                        'ဘားကုဒ်ထည့်ရန်',
                       ),
                     ),
                   ),
