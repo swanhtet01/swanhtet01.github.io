@@ -521,15 +521,63 @@ class _StockScreenState extends State<StockScreen> {
                                     ),
                                   ),
                                 );
-                                final edit = IconButton(
-                                  key: ValueKey('stock-edit-${item.id}'),
-                                  tooltip: shopCopy(
+                                final edit = Tooltip(
+                                  message: shopCopy(
                                     widget.myanmar,
                                     'Edit product',
                                     'ကုန်ပစ္စည်း ပြင်ရန်',
                                   ),
-                                  onPressed: () => _editProduct(item),
-                                  icon: const Icon(Icons.edit_outlined),
+                                  child: TextButton.icon(
+                                    key: ValueKey('stock-edit-${item.id}'),
+                                    onPressed: () => _editProduct(item),
+                                    icon: const Icon(Icons.edit_outlined),
+                                    label: Text(
+                                      shopCopy(
+                                        widget.myanmar,
+                                        'Edit',
+                                        'ပြင်ရန်',
+                                      ),
+                                    ),
+                                  ),
+                                );
+                                final compactEdit = Tooltip(
+                                  message: shopCopy(
+                                    widget.myanmar,
+                                    'Edit product',
+                                    'ကုန်ပစ္စည်း ပြင်ရန်',
+                                  ),
+                                  child: TextButton(
+                                    key: ValueKey('stock-edit-${item.id}'),
+                                    onPressed: () => _editProduct(item),
+                                    style: TextButton.styleFrom(
+                                      minimumSize: const Size(70, 56),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 4,
+                                        vertical: 4,
+                                      ),
+                                    ),
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Icon(
+                                          Icons.edit_outlined,
+                                          size: 19,
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          shopCopy(
+                                            widget.myanmar,
+                                            'Edit',
+                                            'ပြင်ရန်',
+                                          ),
+                                          style: textTheme.labelSmall?.copyWith(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
                                 );
                                 final stockActionLabel = [
                                   shopCopy(
@@ -628,7 +676,7 @@ class _StockScreenState extends State<StockScreen> {
                                                 ),
                                               ),
                                               const SizedBox(width: 8),
-                                              edit,
+                                              compactEdit,
                                             ],
                                           ),
                                         )

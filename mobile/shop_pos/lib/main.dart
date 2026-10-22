@@ -293,19 +293,19 @@ class _ShopAppState extends State<ShopApp> {
             TextTheme(
               headlineMedium: TextStyle(
                 fontSize: _myanmar ? 26 : 34,
-                fontWeight: FontWeight.w700,
+                fontWeight: _myanmar ? FontWeight.w600 : FontWeight.w700,
                 height: _myanmar ? 1.4 : 1.15,
                 letterSpacing: tracking,
               ),
               headlineSmall: TextStyle(
                 fontSize: _myanmar ? 22 : 28,
-                fontWeight: FontWeight.w700,
+                fontWeight: _myanmar ? FontWeight.w600 : FontWeight.w700,
                 height: _myanmar ? 1.4 : 1.2,
                 letterSpacing: tracking,
               ),
               titleLarge: TextStyle(
                 fontSize: _myanmar ? 18 : 21,
-                fontWeight: FontWeight.w700,
+                fontWeight: _myanmar ? FontWeight.w600 : FontWeight.w700,
                 height: _myanmar ? 1.45 : 1.25,
                 letterSpacing: tracking,
               ),
@@ -342,7 +342,7 @@ class _ShopAppState extends State<ShopApp> {
             fontFamily: fontFamily,
             fontFamilyFallback: fontFallback,
             fontSize: _myanmar ? 18 : 20,
-            fontWeight: FontWeight.w700,
+            fontWeight: _myanmar ? FontWeight.w600 : FontWeight.w700,
             letterSpacing: tracking,
             height: _myanmar ? 1.45 : 1.2,
             color: ink,
@@ -2063,28 +2063,34 @@ class _ShopHomeState extends State<ShopHome> {
     );
   }
 
-  Widget _emptyCartPanel() => Align(
-    alignment: Alignment.topCenter,
+  Widget _emptyCartPanel() => SizedBox.expand(
     child: Card(
       child: Padding(
         padding: const EdgeInsets.all(18),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
-          mainAxisSize: MainAxisSize.min,
           children: [
             Text(
               shopCopy(widget.myanmar, 'Current sale', 'လက်ရှိအရောင်း'),
               style: Theme.of(context).textTheme.titleLarge,
             ),
-            const SizedBox(height: 8),
-            Text(
-              shopCopy(
-                widget.myanmar,
-                'Scan a barcode or select a product to begin.',
-                'စတင်ရန် ဘားကုဒ်ဖတ်ပါ သို့မဟုတ် ပစ္စည်းရွေးပါ။',
-              ),
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
+            const Divider(height: 24),
+            Expanded(
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 260),
+                  child: Text(
+                    shopCopy(
+                      widget.myanmar,
+                      'Scan a barcode or select a product to begin.',
+                      'စတင်ရန် ဘားကုဒ်ဖတ်ပါ သို့မဟုတ် ပစ္စည်းရွေးပါ။',
+                    ),
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
               ),
             ),
           ],

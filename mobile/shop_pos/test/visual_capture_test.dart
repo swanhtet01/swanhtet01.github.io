@@ -271,6 +271,11 @@ void main() {
                 ),
                 findsOneWidget,
               );
+              expect(
+                find.byKey(const ValueKey('stock-photo-apple')),
+                findsOneWidget,
+              );
+              await _resolveVisibleProductPhotos(tester);
             }
             await expectLater(
               find.byKey(_captureKey),

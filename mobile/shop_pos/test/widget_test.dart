@@ -3773,7 +3773,6 @@ void main() {
       _usePhoneViewport(tester);
       final database = ShopDatabase(NativeDatabase.memory());
       try {
-        debugPrintSynchronously('STOCK_STAGE:before_add');
         await database.addProduct(
           id: 'apple',
           name: 'Red apple',
@@ -3781,34 +3780,26 @@ void main() {
           openingStock: 7,
           barcode: '111111',
         );
-        debugPrintSynchronously('STOCK_STAGE:after_add');
         await database.saveProductThumbnail(
           'apple',
           File('test/assets/grocery_photos/apple.png').readAsBytesSync(),
         );
-        debugPrintSynchronously('STOCK_STAGE:after_photo');
         await tester.pumpWidget(
           MaterialApp(
             home: StockScreen(database: database, myanmar: myanmar),
           ),
         );
-        debugPrintSynchronously('STOCK_STAGE:after_pump');
         await _settleStock(tester);
-        debugPrintSynchronously('STOCK_STAGE:after_settle');
         expect(find.byKey(const ValueKey('stock-photo-apple')), findsOneWidget);
-        debugPrintSynchronously('STOCK_STAGE:before_edit_tap');
+        expect(find.text(myanmar ? 'ပြင်ရန်' : 'Edit'), findsOneWidget);
         await tester.tap(find.byKey(const ValueKey('stock-edit-apple')));
-        debugPrintSynchronously('STOCK_STAGE:after_edit_tap');
         await _settleStock(tester);
-        debugPrintSynchronously('STOCK_STAGE:dialog_open');
         expect(find.byKey(const ValueKey('stock-edit-name')), findsOneWidget);
         await tester.tap(find.text(myanmar ? 'မလုပ်တော့ပါ' : 'Cancel'));
         await _settleStock(tester);
-        debugPrintSynchronously('STOCK_STAGE:dialog_cancelled');
         expect((await database.readActiveProducts()).single.priceMmk, 2800);
         await tester.tap(find.byKey(const ValueKey('stock-edit-apple')));
         await _settleStock(tester);
-        debugPrintSynchronously('STOCK_STAGE:dialog_reopened');
         await tester.enterText(
           find.byKey(const ValueKey('stock-edit-name')),
           'Apple 1 pc',
@@ -3823,22 +3814,16 @@ void main() {
         );
         await tester.tap(find.byKey(const ValueKey('stock-edit-save')));
         await _settleStock(tester);
-        debugPrintSynchronously('STOCK_STAGE:edit_saved');
         final apple = (await database.readActiveProducts()).single;
         expect(apple.name, 'Apple 1 pc');
         expect(apple.priceMmk, 3200);
         expect(apple.barcode, '333333');
         expect(apple.onHand, 7);
         expect(tester.takeException(), isNull);
-        debugPrintSynchronously('STOCK_STAGE:assertions_done');
       } finally {
-        debugPrintSynchronously('STOCK_STAGE:before_unmount');
         await tester.pumpWidget(const SizedBox.shrink());
-        debugPrintSynchronously('STOCK_STAGE:after_unmount');
         await tester.pump(const Duration(milliseconds: 1));
-        debugPrintSynchronously('STOCK_STAGE:after_cleanup_pump');
         await database.close();
-        debugPrintSynchronously('STOCK_STAGE:after_close');
       }
     });
   }
@@ -3998,7 +3983,13 @@ void main() {
     await _settleStock(tester);
     await tester.tap(find.text('လက်ကျန်'));
     await _settleStock(tester);
-    expect(find.text('ပြင်ရန်'), findsNothing);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('stock-edit-rice-phone')),
+        matching: find.text('ပြင်ရန်'),
+      ),
+      findsOneWidget,
+    );
     expect(find.byKey(const ValueKey('stock-row-rice-phone')), findsOneWidget);
     expect(
       find.byKey(const ValueKey('stock-photo-rice-phone')),
