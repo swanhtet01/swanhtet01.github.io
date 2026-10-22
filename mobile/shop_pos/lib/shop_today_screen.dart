@@ -479,9 +479,8 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
                   ],
                 ] else
                   _heading(showNewSale: snapshot.products > 0),
-                // On a phone, completed transactions are the first useful
-                // evidence of today's work. Keep the latest sale above the
-                // summary cards so it remains visible with large text.
+                // Put the next operator decision before history on phones.
+                if (phoneLayout) ..._attentionItems(snapshot),
                 if (phoneLayout && snapshot.recentSales.isNotEmpty) ...[
                   const SizedBox(height: 16),
                   _salesPreview(snapshot),
@@ -506,56 +505,7 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
                   else
                     Wrap(spacing: 12, runSpacing: 12, children: metricCards),
                 ],
-                if (snapshot.pendingWallet != null ||
-                    snapshot.stockToCheck.isNotEmpty ||
-                    snapshot.products == 0) ...[
-                  const SizedBox(height: 26),
-                  Text(
-                    snapshot.products == 0
-                        ? _copy('Get started', 'စတင်ရန်')
-                        : _copy('Needs attention', 'စစ်ဆေးရန်'),
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                  const SizedBox(height: 12),
-                  if (snapshot.pendingWallet != null)
-                    _actionCard(
-                      icon: Icons.qr_code_2_outlined,
-                      title: _copy(
-                        'Mobile payment to review',
-                        'မိုဘိုင်းငွေပေးချေမှု စစ်ဆေးရန်',
-                      ),
-                      detail: _money(snapshot.pendingWallet!.totalMmk),
-                      action: _copy('Review payment', 'ငွေပေးချေမှု စစ်ရန်'),
-                      onTap: () => _openSale(),
-                    ),
-                  if (snapshot.stockToCheck.isNotEmpty)
-                    _actionCard(
-                      icon: Icons.inventory_2_outlined,
-                      title: _copy('Check stock', 'လက်ကျန်စစ်ရန်'),
-                      detail: snapshot.stockToCheck
-                          .take(3)
-                          .map(
-                            (item) => '${item.name} · ${_number(item.onHand)}',
-                          )
-                          .join('   '),
-                      action: _copy('Open stock', 'လက်ကျန်ဖွင့်ရန်'),
-                      onTap: () => _open(widget.onStock),
-                    ),
-                  if (snapshot.products == 0)
-                    _actionCard(
-                      icon: Icons.add_box_outlined,
-                      title: _copy(
-                        'Add your first product',
-                        'ပထမကုန်ပစ္စည်းကို ထည့်ပါ',
-                      ),
-                      detail: _copy(
-                        'Enter its name, price and starting stock.',
-                        'အမည်၊ ဈေးနှုန်းနှင့် စတင်လက်ကျန်ကို ထည့်ပါ။',
-                      ),
-                      action: _copy('Add product', 'ကုန်ပစ္စည်းထည့်ရန်'),
-                      onTap: () => _openFirstProduct(),
-                    ),
-                ],
+                if (!phoneLayout) ..._attentionItems(snapshot),
                 if (!phoneLayout && snapshot.recentSales.isNotEmpty) ...[
                   const SizedBox(height: 24),
                   _salesPreview(snapshot),
@@ -566,6 +516,57 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
         ),
       ],
     );
+  }
+
+  List<Widget> _attentionItems(_TodaySnapshot snapshot) {
+    if (snapshot.pendingWallet == null &&
+        snapshot.stockToCheck.isEmpty &&
+        snapshot.products > 0) {
+      return const [];
+    }
+    return [
+      const SizedBox(height: 26),
+      Text(
+        snapshot.products == 0
+            ? _copy('Get started', 'စတင်ရန်')
+            : _copy('Needs attention', 'စစ်ဆေးရန်'),
+        style: Theme.of(context).textTheme.titleLarge,
+      ),
+      const SizedBox(height: 12),
+      if (snapshot.pendingWallet != null)
+        _actionCard(
+          icon: Icons.qr_code_2_outlined,
+          title: _copy(
+            'Mobile payment to review',
+            'မိုဘိုင်းငွေပေးချေမှု စစ်ဆေးရန်',
+          ),
+          detail: _money(snapshot.pendingWallet!.totalMmk),
+          action: _copy('Review payment', 'ငွေပေးချေမှု စစ်ရန်'),
+          onTap: () => _openSale(),
+        ),
+      if (snapshot.stockToCheck.isNotEmpty)
+        _actionCard(
+          icon: Icons.inventory_2_outlined,
+          title: _copy('Check stock', 'လက်ကျန်စစ်ရန်'),
+          detail: snapshot.stockToCheck
+              .take(3)
+              .map((item) => '${item.name} · ${_number(item.onHand)}')
+              .join('   '),
+          action: _copy('Open stock', 'လက်ကျန်ဖွင့်ရန်'),
+          onTap: () => _open(widget.onStock),
+        ),
+      if (snapshot.products == 0)
+        _actionCard(
+          icon: Icons.add_box_outlined,
+          title: _copy('Add your first product', 'ပထမကုန်ပစ္စည်းကို ထည့်ပါ'),
+          detail: _copy(
+            'Enter its name, price and starting stock.',
+            'အမည်၊ ဈေးနှုန်းနှင့် စတင်လက်ကျန်ကို ထည့်ပါ။',
+          ),
+          action: _copy('Add product', 'ကုန်ပစ္စည်းထည့်ရန်'),
+          onTap: () => _openFirstProduct(),
+        ),
+    ];
   }
 
   Widget _heading({required bool showNewSale}) => ShopTaskPageHeader(
