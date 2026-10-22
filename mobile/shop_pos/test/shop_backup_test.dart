@@ -674,16 +674,10 @@ void main() {
       );
       await _pumpUntil(tester, find.text('Start new Shop'));
       expect(find.text('Start new Shop'), findsOneWidget);
-      expect(
-        ShopDatabase.privateDatabaseFile(documents).existsSync(),
-        isFalse,
-      );
+      expect(ShopDatabase.privateDatabaseFile(documents).existsSync(), isFalse);
       await tester.tap(find.text('Restore backup'));
       await _pumpUntil(tester, find.text('Restore and open Shop'));
-      expect(
-        ShopDatabase.privateDatabaseFile(documents).existsSync(),
-        isFalse,
-      );
+      expect(ShopDatabase.privateDatabaseFile(documents).existsSync(), isFalse);
       await tester.enterText(find.byType(TextField), _password);
       await tester.tap(find.text('Restore and open Shop'));
       await _pumpUntil(tester, find.text('Opened Shop'));
@@ -694,10 +688,7 @@ void main() {
       final sales = await tester.runAsync(() => opened!.countSales());
       expect(products!.single.onHand, 3);
       expect(sales, 1);
-      expect(
-        ShopDatabase.privateDatabaseFile(documents).existsSync(),
-        isTrue,
-      );
+      expect(ShopDatabase.privateDatabaseFile(documents).existsSync(), isTrue);
     } finally {
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.runAsync(() async {
@@ -728,10 +719,7 @@ void main() {
       await tester.tap(find.text('Start new Shop'));
       await _pumpUntil(tester, find.text('Opened Shop'));
       expect(find.text('Opened Shop'), findsOneWidget);
-      expect(
-        ShopDatabase.privateDatabaseFile(documents).existsSync(),
-        isTrue,
-      );
+      expect(ShopDatabase.privateDatabaseFile(documents).existsSync(), isTrue);
       final products = await tester.runAsync(
         () => opened!.readActiveProducts(),
       );
@@ -748,9 +736,7 @@ void main() {
   testWidgets('wrong password keeps restore choice and local data empty', (
     tester,
   ) async {
-    final documents = Directory.systemTemp.createTempSync(
-      'shop-wrong-pass-',
-    );
+    final documents = Directory.systemTemp.createTempSync('shop-wrong-pass-');
     ShopDatabase? opened;
     try {
       await tester.pumpWidget(
@@ -773,10 +759,7 @@ void main() {
       await _pumpUntil(tester, find.textContaining('Could not restore'));
       expect(find.textContaining('Could not restore'), findsOneWidget);
       expect(find.text('Restore and open Shop'), findsOneWidget);
-      expect(
-        ShopDatabase.privateDatabaseFile(documents).existsSync(),
-        isFalse,
-      );
+      expect(ShopDatabase.privateDatabaseFile(documents).existsSync(), isFalse);
       await tester.enterText(find.byType(TextField), _password);
       await tester.tap(find.text('Restore and open Shop'));
       await _pumpUntil(tester, find.text('Opened Shop'));
@@ -808,10 +791,7 @@ void main() {
       await tester.tap(find.text('အရန်ကူးဖိုင် ပြန်ယူရန်'));
       await tester.pump();
       expect(find.text('Shop အသစ် စတင်ရန်'), findsOneWidget);
-      expect(
-        ShopDatabase.privateDatabaseFile(documents).existsSync(),
-        isFalse,
-      );
+      expect(ShopDatabase.privateDatabaseFile(documents).existsSync(), isFalse);
       expect(tester.takeException(), isNull);
     } finally {
       await tester.pumpWidget(const SizedBox.shrink());
@@ -860,9 +840,7 @@ void main() {
   testWidgets('orphaned WAL blocks first-run actions without deletion', (
     tester,
   ) async {
-    final documents = Directory.systemTemp.createTempSync(
-      'shop-orphan-wal-',
-    );
+    final documents = Directory.systemTemp.createTempSync('shop-orphan-wal-');
     try {
       final target = ShopDatabase.privateDatabaseFile(documents);
       final sidecar = File('${target.path}-wal');
