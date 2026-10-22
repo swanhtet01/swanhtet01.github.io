@@ -1425,7 +1425,7 @@ class _ShopHomeState extends State<ShopHome> {
         return Row(
           children: [
             Expanded(child: title),
-            if (cameraButton != null) cameraButton,
+            ?cameraButton,
           ],
         );
       }
@@ -1485,7 +1485,7 @@ class _ShopHomeState extends State<ShopHome> {
         return Row(
           children: [
             Expanded(child: title),
-            if (cameraButton != null) cameraButton,
+            ?cameraButton,
             productActions,
           ],
         );
@@ -1493,7 +1493,7 @@ class _ShopHomeState extends State<ShopHome> {
       return Row(
         children: [
           Expanded(child: title),
-          if (cameraButton != null) cameraButton,
+          ?cameraButton,
           addButton,
           productActions,
         ],
@@ -1606,7 +1606,9 @@ class _ShopHomeState extends State<ShopHome> {
           'ဤဘားကုဒ် သို့မဟုတ် ကုန်ပစ္စည်းကုဒ်ကို ကုန်ပစ္စည်းတစ်မျိုးထက်ပို၍ သုံးထားသည်။ မရောင်းမီ ကုန်ပစ္စည်းကုဒ်များကို ပြင်ပါ။',
         ),
       );
-    } else if (RegExp(r'^[0-9]{6,64}$').hasMatch(code)) {
+    } else if (RegExp(r'^[0-9]{6,64}$').hasMatch(code) ||
+        (fromCamera &&
+            RegExp(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$').hasMatch(code))) {
       if (fromCamera) {
         _search.text = code;
         setState(() {});
