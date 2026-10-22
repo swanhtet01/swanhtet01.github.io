@@ -1971,23 +1971,30 @@ class _ShopHomeState extends State<ShopHome> {
                                   style: Theme.of(context).textTheme.bodyMedium
                                       ?.copyWith(fontWeight: FontWeight.w600),
                                 ),
-                                Wrap(
-                                  spacing: 8,
-                                  runSpacing: 0,
-                                  crossAxisAlignment: WrapCrossAlignment.center,
-                                  children: [
-                                    Text(
-                                      _mmk(item.priceMmk),
-                                      style: _shopMoneyStyle(context),
-                                    ),
-                                    Text(compactStock, style: stockStyle),
-                                  ],
+                                Text(
+                                  _mmk(item.priceMmk),
+                                  style: _shopMoneyStyle(context),
                                 ),
                               ],
                             ),
                           ),
                           const SizedBox(width: 8),
-                          addAffordance,
+                          SizedBox(
+                            width: 80,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Text(
+                                  compactStock,
+                                  maxLines: item.onHand == 0 ? null : 1,
+                                  textAlign: TextAlign.center,
+                                  style: stockStyle,
+                                ),
+                                const SizedBox(height: 2),
+                                addAffordance,
+                              ],
+                            ),
+                          ),
                         ],
                       ),
                     ),

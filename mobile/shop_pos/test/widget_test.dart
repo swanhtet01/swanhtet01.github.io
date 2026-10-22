@@ -2647,11 +2647,9 @@ void main() {
           }
 
           final addLabel = myanmar ? 'အရောင်းထဲထည့်ရန်' : 'Add to sale';
-          final row = find.descendant(
-            of: find.byTooltip(addLabel),
-            matching: find.byType(ListTile),
-          );
+          final row = find.byKey(const ValueKey('shop-catalog-row:rice'));
           expect(row, findsOneWidget);
+          expect(find.byTooltip(addLabel), findsOneWidget);
           expect(tester.getSize(row).height, greaterThanOrEqualTo(56));
           if (width == 820) {
             expect(
