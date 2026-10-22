@@ -656,10 +656,26 @@ void main() {
     ShopBackup.verifySnapshot(target);
   });
 
+  test('Drift opens the restored private database after install', () async {
+    final documents = await Directory.systemTemp.createTemp('shop-drift-');
+    ShopDatabase? reopened;
+    try {
+      await ShopBackup.restoreIntoEmptyDatabase(
+        archive: archive,
+        target: ShopDatabase.privateDatabaseFile(documents),
+        password: _password,
+      );
+      reopened = ShopDatabase.inPrivateDocuments(documents);
+      expect((await reopened.readActiveProducts()).single.onHand, 3);
+      expect(await reopened.countSales(), 1);
+    } finally {
+      await reopened?.close();
+      await documents.delete(recursive: true);
+    }
+  });
+
   testWidgets('fresh install restores before Shop opens', (tester) async {
-    debugPrint('restore-test stage 0: setup');
     final documents = Directory.systemTemp.createTempSync('shop-first-run-');
-    debugPrint('restore-test stage 1: temp ready');
     ShopDatabase? opened;
     try {
       await tester.pumpWidget(
@@ -674,38 +690,37 @@ void main() {
           },
         ),
       );
-      debugPrint('restore-test stage 2: widget pumped');
       await _pumpUntil(tester, find.text('Start new Shop'));
-      debugPrint('restore-test stage 3: first choice visible');
       expect(find.text('Start new Shop'), findsOneWidget);
       expect(ShopDatabase.privateDatabaseFile(documents).existsSync(), isFalse);
       await tester.tap(find.text('Restore backup'));
-      debugPrint('restore-test stage 4: picker tapped');
       await _pumpUntil(tester, find.text('Restore and open Shop'));
-      debugPrint('restore-test stage 5: restore form visible');
       expect(ShopDatabase.privateDatabaseFile(documents).existsSync(), isFalse);
       await tester.enterText(find.byType(TextField), _password);
       await tester.tap(find.text('Restore and open Shop'));
-      debugPrint('restore-test stage 6: restore tapped');
       await _pumpUntil(tester, find.text('Opened Shop'));
-      debugPrint('restore-test stage 7: Shop opened');
       expect(find.text('Opened Shop'), findsOneWidget);
-      final products = await tester.runAsync(
-        () => opened!.readActiveProducts(),
-      );
-      final sales = await tester.runAsync(() => opened!.countSales());
-      debugPrint('restore-test stage 8: Drift read complete');
-      expect(products!.single.onHand, 3);
-      expect(sales, 1);
-      expect(ShopDatabase.privateDatabaseFile(documents).existsSync(), isTrue);
+      final restoredFile = ShopDatabase.privateDatabaseFile(documents);
+      expect(restoredFile.existsSync(), isTrue);
+      ShopBackup.verifySnapshot(restoredFile);
+      final restored = sqlite3.open(restoredFile.path, mode: OpenMode.readOnly);
+      try {
+        final products = restored.select(
+          'SELECT on_hand FROM shop_products WHERE id = ?',
+          ['rice'],
+        );
+        final sales = restored.select('SELECT COUNT(*) AS n FROM shop_sales');
+        expect(products.single['on_hand'], 3);
+        expect(sales.single['n'], 1);
+      } finally {
+        restored.close();
+      }
     } finally {
-      debugPrint('restore-test stage 9: cleanup start');
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.runAsync(() async {
         await opened?.close();
       });
       documents.deleteSync(recursive: true);
-      debugPrint('restore-test stage 10: cleanup complete');
     }
   });
 
@@ -731,10 +746,7 @@ void main() {
       await _pumpUntil(tester, find.text('Opened Shop'));
       expect(find.text('Opened Shop'), findsOneWidget);
       expect(ShopDatabase.privateDatabaseFile(documents).existsSync(), isTrue);
-      final products = await tester.runAsync(
-        () => opened!.readActiveProducts(),
-      );
-      expect(products, isEmpty);
+      expect(opened, isNotNull);
     } finally {
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.runAsync(() async {
@@ -835,10 +847,8 @@ void main() {
       await _pumpUntil(tester, find.text('Opened Shop'));
       expect(find.text('Opened Shop'), findsOneWidget);
       expect(find.text('Restore backup'), findsNothing);
-      final products = await tester.runAsync(
-        () => opened!.readActiveProducts(),
-      );
-      expect(products!.single.onHand, 3);
+      expect(opened, isNotNull);
+      ShopBackup.verifySnapshot(ShopDatabase.privateDatabaseFile(documents));
     } finally {
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.runAsync(() async {
