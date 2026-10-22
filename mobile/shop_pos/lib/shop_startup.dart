@@ -357,7 +357,7 @@ class _ShopStartupState extends State<ShopStartup> {
         scaffoldBackgroundColor: const Color(0xfff5f7fb),
         textTheme: TextTheme(
           headlineMedium: TextStyle(
-            fontSize: _myanmar ? 24 : 30,
+            fontSize: 30,
             fontWeight: _myanmar ? FontWeight.w600 : FontWeight.w700,
             height: _myanmar ? 1.4 : 1.15,
             letterSpacing: _myanmar ? 0 : -0.4,

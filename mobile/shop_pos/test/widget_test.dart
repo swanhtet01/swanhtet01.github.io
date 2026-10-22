@@ -3282,45 +3282,71 @@ void main() {
     await database.close();
   });
 
-  testWidgets('compact Burmese checkout keeps both payment actions visible', (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(360, 760);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    final database = ShopDatabase(NativeDatabase.memory());
-    await database.addProduct(
-      id: 'tea',
-      name: 'လက်ဖက်ရည်',
-      priceMmk: 2500,
-      openingStock: 2,
+  for (final myanmar in [false, true]) {
+    testWidgets(
+      'compact ${myanmar ? 'Burmese' : 'English'} checkout keeps both payment actions visible',
+      (tester) async {
+        tester.view.physicalSize = const Size(360, 760);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        final database = ShopDatabase(NativeDatabase.memory());
+        try {
+          await database.addProduct(
+            id: 'tea',
+            name: myanmar ? 'လက်ဖက်ရည်' : 'Tea',
+            priceMmk: 2500,
+            openingStock: 2,
+          );
+          await tester.pumpWidget(
+            ShopApp(
+              initialCounter: true,
+              database: database,
+              authClient: null,
+              apiBaseUrl: 'https://app.supermega.dev',
+              initialMyanmar: myanmar,
+            ),
+          );
+          await tester.pumpAndSettle();
+          expect(
+            tester.takeException(),
+            isNull,
+            reason: 'initial compact catalog',
+          );
+          await tester.tap(
+            find.byTooltip(myanmar ? 'အရောင်းထဲထည့်ရန်' : 'Add to sale'),
+          );
+          await tester.pumpAndSettle();
+          expect(
+            tester.takeException(),
+            isNull,
+            reason: 'compact catalog with basket',
+          );
+          await tester.tap(
+            find.textContaining(myanmar ? 'အရောင်းစစ်ရန်' : 'Review sale'),
+          );
+          await tester.pumpAndSettle();
+          final sheet = find.byKey(const ValueKey('shop-cart-sheet'));
+          final cash = find.byKey(const ValueKey('shop-cash-sale'));
+          final wallet = find.byKey(const ValueKey('shop-wallet-sale'));
+          expect(sheet, findsOneWidget);
+          expect(cash, findsOneWidget);
+          expect(wallet, findsOneWidget);
+          expect(tester.getSize(cash).height, greaterThanOrEqualTo(48));
+          expect(tester.getSize(wallet).height, greaterThanOrEqualTo(48));
+          expect(
+            tester.getBottomLeft(wallet).dy,
+            lessThanOrEqualTo(tester.getBottomLeft(sheet).dy + 0.5),
+          );
+          expect(tester.takeException(), isNull);
+        } finally {
+          await tester.pumpWidget(const SizedBox.shrink());
+          await tester.pump(const Duration(milliseconds: 1));
+          await database.close();
+        }
+      },
     );
-    await tester.pumpWidget(
-      ShopApp(
-        initialCounter: true,
-        database: database,
-        authClient: null,
-        apiBaseUrl: 'https://app.supermega.dev',
-        initialMyanmar: true,
-      ),
-    );
-    await tester.pumpAndSettle();
-    expect(tester.takeException(), isNull, reason: 'initial compact catalog');
-    await tester.tap(find.byTooltip('အရောင်းထဲထည့်ရန်'));
-    await tester.pumpAndSettle();
-    expect(
-      tester.takeException(),
-      isNull,
-      reason: 'compact catalog with basket',
-    );
-    await tester.tap(find.textContaining('အရောင်းစစ်ရန်'));
-    await tester.pumpAndSettle();
-    expect(find.text('ငွေသား'), findsOneWidget);
-    expect(find.text('မိုဘိုင်းငွေပေးချေမှု'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-    await database.close();
-  });
+  }
 
   testWidgets('cart sheet refreshes a changed product price before cash', (
     tester,

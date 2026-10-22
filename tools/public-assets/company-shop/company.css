@@ -651,8 +651,8 @@
 @media (max-width: 850px) { .native-shop-shots-pair, .native-shop-shots-my .native-shop-shots-pair { grid-template-columns: minmax(0, 1fr) minmax(230px, .65fr); gap: 14px; } }
 @media (max-width: 650px) {
   .site-header .nav-links a:first-child { display: none; }
-  .site-header .nav-links a { padding-inline: 5px; font-size: 12px; }
-  .site-header .brand-word { font-size: 13px; }
+  .site-header .nav-links a { padding-inline: 5px; font-size: 14px; }
+  .site-header .brand-word { font-size: 14px; }
   .native-shop-gallery { padding: 30px 0 42px; }
   .native-shop-shots, .native-shop-shots-pair, .native-shop-shots-my .native-shop-shots-pair { display: grid; grid-template-columns: 1fr; gap: 28px; }
   .native-shop-shot { width: min(100%, 390px); margin-inline: auto; }

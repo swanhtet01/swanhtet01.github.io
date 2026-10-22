@@ -17,7 +17,7 @@ const app = { origin: 'https://megaos-123456789-swanhtet01s-projects.vercel.app'
   projectId: 'prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG', deploymentId: 'dpl_12345678', commit }
 const policy = previewProfile({ profile: 'isolated-pair', expectedCommit: commit, appBinding: JSON.stringify(app) })
 const products = ['shop', 'website', 'ecommerce', 'plant'].map(id => ({ id }))
-const html = `<a class="button button-primary" href="/contact/?product=shop">Start with Shop</a><a class="nav-sign-in" href="${app.origin}/login">Sign in</a>`
+const html = `<a class="button button-primary" href="/contact/?product=shop&plan=shop-pilot">Request a Shop pilot</a><a class="nav-sign-in" href="${app.origin}/login">Sign in</a>`
 test('requires explicit profile, exact SHA and app binding', () => {
   for (const input of [{}, { profile: 'isolated-pair', expectedCommit: commit },
     { profile: 'isolated-pair', expectedCommit: 'main' }, { profile: 'unknown', expectedCommit: commit }]) assert.throws(() => previewProfile(input))
@@ -91,7 +91,7 @@ test('all-page mode permits informational tombstone but not a retired tool actio
 test('native gallery is read-only and no image is a preview navigation action', () => {
   const options = { publicOrigin: 'https://public-preview.example' }
   for (const path of ['/images/native-shop/shop_checkout_1200_en.png',
-    '/images/native-shop/shop_stock_390_my.png', '/images/unreviewed.png']) {
+    '/images/native-shop/shop_stock_820_my.png', '/images/unreviewed.png']) {
     assert.throws(() => validatePreviewLinks(html + `<a href="${path}">View full size</a>`, policy, products, options), undefined, path)
   }
 })

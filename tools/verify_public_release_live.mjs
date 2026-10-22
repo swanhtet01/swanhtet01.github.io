@@ -194,7 +194,7 @@ async function verifyOnce() {
       'landing_public_app_action_drift', { product: product.id, appLinks })
     if (product.id === 'shop') {
       assert(landing.includes(shopAction), 'shop_manifest_action_missing')
-      assert(landing.includes('href="/contact/?product=shop">Start with Shop'), 'shop_contact_action_missing')
+      assert(landing.includes('href="/contact/?product=shop&plan=shop-pilot">Request a Shop pilot'), 'shop_contact_action_missing')
     }
     assert(landing.includes('href="/contact/">Contact</a>'), 'landing_contact_route_missing', { product: product.id })
   }
@@ -207,7 +207,7 @@ async function verifyOnce() {
     assert(!contactPage.includes(token), 'retired_managed_pilot_pitch_present', { token })
   }
   const privacyPage = pages.get('/privacy/') || ''
-  assert(privacyPage.includes('optional attached request summary, outcome status, and digest') && privacyPage.includes('digest-bound aggregate outcome') && privacyPage.includes('excludes raw product records, questions, approval contents, and account details'), 'trial_proof_privacy_copy_missing')
+  assert(privacyPage.includes('We do not sell contact information.') && privacyPage.includes('raw business records and account details stay out') && privacyPage.includes('Sending a message does not create an account or connect your business data.'), 'trial_proof_privacy_copy_missing')
 
   // The share-and-schema surface (og-card asset, og:image/twitter metadata,
   // JSON-LD structured data, skip-to-content link) ships with a release, exactly
@@ -238,7 +238,8 @@ async function verifyOnce() {
     // EXPECTED_RELEASE_COMMIT set, which asserts the per-product surface.
     const landingShareImages = new Map(activeLandingPages.flatMap((entry) => {
       const image = new URL(`/og-card-${entry.productId}.png`, `${manifest.release.productionDomain}/`).href
-      return [[entry.route, image], [`/my${entry.route}`, image]]
+      const localizedImage = new URL(`/og-card-${entry.productId}-my.png`, `${manifest.release.productionDomain}/`).href
+      return [[entry.route, image], [`/my${entry.route}`, localizedImage]]
     }))
     const loadedLandingRoutes = [...landingShareImages.keys()].filter((route) => pages.get(route) != null)
     const perProductCardsLive = loadedLandingRoutes.length > 0 && loadedLandingRoutes.every((route) => pages.get(route).includes(landingShareImages.get(route)))
@@ -268,7 +269,7 @@ async function verifyOnce() {
         && schema?.url === new URL(page.route, `${manifest.release.productionDomain}/`).href
         && schema?.description === (page.description || product.description), 'product_schema_wrong_live', { route: page.route, schema })
     }
-    const cardPaths = ['/og-card.png', ...(perProductCardsActive ? activeLandingPages.map((entry) => `/og-card-${entry.productId}.png`) : [])]
+    const cardPaths = ['/og-card.png', ...(perProductCardsActive ? activeLandingPages.flatMap((entry) => [`/og-card-${entry.productId}.png`, `/og-card-${entry.productId}-my.png`]) : [])]
     await Promise.all(cardPaths.map(async (path) => {
       const card = await request(path, { accept: 'image/png' })
       assert(card.status === 200, 'share_image_http_error', { path, status: card.status })
@@ -280,8 +281,8 @@ async function verifyOnce() {
   // their actual response bytes; a 200 HTML fallback must never pass as an image.
   assert(publicProducts.map(product => product.id).join(',') === 'shop', 'public_product_scope_not_shop_only')
   for (const [route, files] of Object.entries({
-    '/shop/': ['shop_checkout_1200_en.png', 'shop_checkout_820_en.png', 'shop_stock_820_en.png', 'shop_today_820_en.png'],
-    '/my/shop/': ['shop_checkout_1200_my.png', 'shop_checkout_820_my.png', 'shop_stock_820_my.png', 'shop_today_820_my.png'],
+    '/shop/': ['shop_checkout_1200_en.png', 'shop_checkout_820_en.png', 'shop_sell_390_en.png', 'shop_stock_820_en.png', 'shop_today_820_en.png'],
+    '/my/shop/': ['shop_checkout_1200_my.png', 'shop_checkout_820_my.png', 'shop_sell_390_my.png', 'shop_stock_820_my.png', 'shop_today_820_my.png'],
   })) {
     const html = pages.get(route)
     if (html == null) continue
@@ -290,7 +291,7 @@ async function verifyOnce() {
       assert(html.includes(path), 'interface_image_reference_missing', { route, path })
     }
   }
-  for (const asset of nativeShopGallery.assets.filter(asset => /^(?:shop_checkout_1200|shop_checkout_820|shop_stock_820|shop_today_820)_(?:en|my)\.png$/.test(asset.file))) {
+  for (const asset of nativeShopGallery.assets.filter(asset => /^shop_(?:checkout_(?:1200|820)|sell_390|stock_820|today_820)_(?:en|my)\.png$/.test(asset.file))) {
     const path = `/images/native-shop/${asset.file}`
     const response = await request(path, { accept: 'image/png' })
     assert(response.status === 200, 'interface_image_http_error', { path, status: response.status })

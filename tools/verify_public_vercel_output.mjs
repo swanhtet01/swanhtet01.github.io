@@ -121,10 +121,11 @@ const expectedStaticFiles = new Set([
   'fonts/noto-sans-myanmar-OFL.txt',
   'vercel-insights.js',
   ...nativeShopGallery.assets
-    .filter(asset => /^(?:shop_checkout_1200|shop_checkout_820|shop_stock_820|shop_today_820)_(?:en|my)\.png$/.test(asset.file))
+    .filter(asset => /^shop_(?:checkout_(?:1200|820)|sell_390|stock_820|today_820)_(?:en|my)\.png$/.test(asset.file))
     .map(asset => `images/native-shop/${asset.file}`),
   'og-card.png',
   ...publicProducts.map((product) => `og-card-${product.id}.png`),
+  'og-card-shop-my.png',
   'robots.txt',
   'site.webmanifest',
   'sitemap.xml',
@@ -277,7 +278,7 @@ for (const [route, page] of pages) {
   }
   // Landing pages carry their per-product share card; every other page keeps the generic card.
   const activeLanding = route === '/my/shop/' || publicProducts.some(product => product.id === page.productId)
-  const pageShareImage = new URL(activeLanding ? `/og-card-${page.productId || 'shop'}.png` : '/og-card.png', `${manifest.release.productionDomain}/`).href
+  const pageShareImage = new URL(activeLanding ? (route === '/my/shop/' ? '/og-card-shop-my.png' : `/og-card-${page.productId || 'shop'}.png`) : '/og-card.png', `${manifest.release.productionDomain}/`).href
   for (const token of [
     '<meta property="og:type" content="website" />',
     '<meta property="og:site_name" content="SuperMega" />',
@@ -365,7 +366,7 @@ for (const [route, html] of [['/shop/', shopPageHtml]]) {
 // merchant action leads to the truthful Shop contact path.
 const shopPage = pages.get('/shop/')?.html || ''
 const shopBody = shopPage.slice(shopPage.indexOf('<body'))
-if (!shopBody.includes('class="button button-primary" href="/contact/?product=shop">Start with Shop')) fail('shop_primary_action_missing')
+if (!shopBody.includes('class="button button-primary" href="/contact/?product=shop&plan=shop-pilot">Request a Shop pilot')) fail('shop_primary_action_missing')
 if (shopBody.includes('data-platform-carousel') || shopBody.includes('data-device-choice')
   || shopBody.includes('class="pos-window"') || shopBody.includes('shop-sample-demo.js')
   || /<a\b[^>]*>\s*<img\b[^>]*src="\/images\/native-shop\//i.test(shopBody)) fail('shop_gallery_interaction_or_mock_present')
@@ -375,7 +376,8 @@ if (shopBody.includes('>Company</a>') || shopBody.includes('href="' + appOrigin 
 for (const token of [
   'class="native-shop-gallery"',
   'src="/images/native-shop/shop_checkout_1200_en.png"',
-  '<source media="(max-width:650px)" srcset="/images/native-shop/shop_checkout_820_en.png" width="820" height="1000" />',
+  '<source media="(max-width:650px)" srcset="/images/native-shop/shop_sell_390_en.png" width="390" height="844" />',
+  '<source media="(max-width:1100px)" srcset="/images/native-shop/shop_checkout_820_en.png" width="820" height="1000" />',
   'src="/images/native-shop/shop_today_820_en.png"',
   'src="/images/native-shop/shop_stock_820_en.png"',
   '<figcaption>Counter</figcaption>',
@@ -383,6 +385,12 @@ for (const token of [
   '<figcaption>Today</figcaption>',
   'App preview with sample data.',
 ]) if (!shopPage.includes(token)) fail('shop_native_gallery_missing', { token })
+if (shopPage.includes('shop_today_390_en.png') || shopPage.includes('shop_stock_390_en.png')) fail('shop_hidden_mobile_capture_shipped')
+const currentShopTemplateIds = ['mini-mart', 'tea-coffee', 'fashion', 'beauty-spa']
+if (countOccurrences(shopBody, 'class="shop-plan shop-plan-current"') !== 1
+  || countOccurrences(shopBody, 'class="shop-roadmap-item"') !== 2
+  || shopBody.includes('Choose a business setup and a plan separately')
+  || currentShopTemplateIds.some(id => !shopBody.includes(`href="/contact/?product=shop&template=${id}&plan=shop-pilot"`))) fail('shop_offer_contract_drift')
 if (shopPage.includes('class="native-shop-stock"') || shopPage.includes('<figcaption>Desktop')
   || shopPage.includes('<figcaption>Tablet') || shopPage.includes('<figcaption>Phone')) fail('shop_redundant_gallery_or_device_caption')
 if (shopPage.includes('/images/actual-shop-') || shopPage.includes('Shop browser workspace')
@@ -429,10 +437,10 @@ if (contact.includes('value="agents"') || contact.includes('>AI Agent Solutions<
 if (/<[^>]+\sstyle=/.test(contact)) fail('contact_inline_style_returned')
 
 const privacy = pages.get('/privacy/')?.html || ''
-for (const token of ['Contact requests', 'Product data', 'AI processing', 'Deletion', 'optional attached request summary, outcome status, and digest', 'digest-bound aggregate outcome', 'excludes raw product records, questions, approval contents, and account details']) {
+for (const token of ['What we collect', 'How we use it', 'Website measurement', 'AI and service providers', 'Your choice', 'We do not sell contact information.', 'raw business records and account details stay out']) {
   if (!privacy.includes(token)) fail('privacy_contract_missing', { token })
 }
-if (!privacy.includes('six public page paths') || privacy.includes('four public page paths')) fail('privacy_analytics_route_count_drift')
+if (/public page paths|Source code or a reachable script/.test(privacy)) fail('privacy_internal_copy_exposed')
 
 for (const [route, englishRoute, switchHref] of [['/my/shop/', '/shop/', '/shop/'], ['/my/contact/', '/contact/', '/contact/'], ['/my/privacy/', '/privacy/', '/privacy/']]) {
   const page = pages.get(route)?.html || ''
@@ -445,7 +453,8 @@ const myContact = pages.get('/my/contact/')?.html || ''
 const myShop = pages.get('/my/shop/')?.html || ''
 for (const token of [
   'src="/images/native-shop/shop_checkout_1200_my.png"',
-  '<source media="(max-width:650px)" srcset="/images/native-shop/shop_checkout_820_my.png" width="820" height="1000" />',
+  '<source media="(max-width:650px)" srcset="/images/native-shop/shop_sell_390_my.png" width="390" height="844" />',
+  '<source media="(max-width:1100px)" srcset="/images/native-shop/shop_checkout_820_my.png" width="820" height="1000" />',
   'src="/images/native-shop/shop_today_820_my.png"',
   'src="/images/native-shop/shop_stock_820_my.png"',
   '<figcaption>ကောင်တာအရောင်း</figcaption>',
@@ -453,6 +462,10 @@ for (const token of [
   '<figcaption>ယနေ့</figcaption>',
   'နမူနာအချက်အလက်ဖြင့် ပြထားသော အက်ပ်နမူနာ။',
 ]) if (!myShop.includes(token)) fail('myanmar_shop_native_gallery_missing', { token })
+if (myShop.includes('shop_today_390_my.png') || myShop.includes('shop_stock_390_my.png')) fail('myanmar_shop_hidden_mobile_capture_shipped')
+if (countOccurrences(myShop, 'class="shop-plan shop-plan-current"') !== 1
+  || countOccurrences(myShop, 'class="shop-roadmap-item"') !== 2
+  || currentShopTemplateIds.some(id => !myShop.includes(`href="/my/contact/?product=shop&template=${id}&plan=shop-pilot"`))) fail('myanmar_shop_offer_contract_drift')
 if (/\/images\/native-shop\/[^"]+_en\.png/.test(myShop)
   || myShop.includes('/images/actual-shop-')
   || myShop.includes('Shop browser workspace')) fail('myanmar_shop_capture_locale_mismatch')
@@ -469,7 +482,7 @@ for (const token of ['SuperMega terminal mark', 'd="M10 9 26 22 10 35M35 35h27"'
 }
 if (/<rect\b/i.test(favicon)) fail('brand_mark_background_present')
 
-for (const cardFile of ['og-card.png', ...publicProducts.map((product) => `og-card-${product.id}.png`)]) {
+for (const cardFile of ['og-card.png', ...publicProducts.map((product) => `og-card-${product.id}.png`), 'og-card-shop-my.png']) {
   const ogCardPath = resolve(staticDir, cardFile)
   requireFile(ogCardPath, cardFile)
   const ogCard = readFileSync(ogCardPath)
@@ -493,7 +506,7 @@ if (/^[0-9a-f]{40}$/.test(release.commit)) {
 if (!/^\d{4}-\d{2}-\d{2}T/.test(release.generatedAt)) fail('release_timestamp_invalid')
 const publicGalleryEvidence = release.nativeShopGalleryEvidence
 if (JSON.stringify(publicGalleryEvidence) !== JSON.stringify(nativeShopGallery)) fail('native_shop_gallery_provenance_drift')
-for (const asset of nativeShopGallery.assets.filter(asset => /^(?:shop_checkout_1200|shop_checkout_820|shop_stock_820|shop_today_820)_(?:en|my)\.png$/.test(asset.file))) {
+for (const asset of nativeShopGallery.assets.filter(asset => /^shop_(?:checkout_(?:1200|820)|sell_390|stock_820|today_820)_(?:en|my)\.png$/.test(asset.file))) {
   const path = resolve(staticDir, 'images', 'native-shop', asset.file)
   requireFile(path, 'images/native-shop/' + asset.file)
   const bytes = readFileSync(path)
@@ -574,7 +587,7 @@ for (const route of [
   if (!config.routes.some((entry) => entry.src === route[0] && entry.dest === route[1])) fail('public_api_route_missing', { route })
 }
 if (!config.routes.some((entry) => entry.src === '^/vercel-insights\\.js$' && entry.continue === true && entry.headers?.['cache-control'] === 'no-store, max-age=0')) fail('public_observability_no_store_route_missing')
-if (!config.routes.some((entry) => entry.src === '^/(?:favicon\\.svg|site\\.webmanifest|og-card(?:-shop)?\\.png)$' && entry.continue === true && entry.headers?.['cache-control'])) fail('static_asset_cache_route_missing')
+if (!config.routes.some((entry) => entry.src === '^/(?:favicon\\.svg|site\\.webmanifest|og-card(?:-shop(?:-my)?)?\\.png)$' && entry.continue === true && entry.headers?.['cache-control'])) fail('static_asset_cache_route_missing')
 const filesystemRouteIndex = config.routes.findIndex((entry) => entry.handle === 'filesystem')
 if (filesystemRouteIndex < 0) fail('filesystem_route_missing')
 const firstPublicRouteMatch = (path) => {

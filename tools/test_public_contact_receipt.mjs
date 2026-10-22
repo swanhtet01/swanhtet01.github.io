@@ -31,6 +31,7 @@ test('contact form stays concise and does not make customers classify the reques
   assert.match(formHtml, /<input type="hidden" name="product" value="guide"/)
   assert.doesNotMatch(page, /<select\b|trial-proof-summary|Attached request details|What to include|Readiness|Behavior|Decisions|Reply email|What would you like us to prepare\?|Do not paste|Brief tips|Your brief|request summary/)
   assert.match(formHtml, /<input type="hidden" name="template" maxlength="120"/)
+  assert.match(formHtml, /<input type="hidden" name="plan" maxlength="120"/)
   assert.doesNotMatch(page, /Template, if known|>Send workflow<|>Send the workflow</)
   assert.match(formHtml, />Send message<\/button>/)
   assert.match(formHtml, /name="goal" required maxlength="4000"/)
@@ -102,7 +103,7 @@ test('only active public product links set product context; internal routes fall
   assert.doesNotMatch(html, /<select name="product"/)
   const shop = harness([], '?product=shop&source=shop-brief', '#company=Example&goal=Prepare%20our%20shop')
   assert.equal(shop.fields.get('[name="product"]').value, 'shop')
-  assert.equal(shop.headings.get('[data-contact-heading]').textContent, 'Start with Shop')
+  assert.equal(shop.headings.get('[data-contact-heading]').textContent, 'Request a Shop pilot')
   assert.equal(shop.headings.get('[data-contact-lede]').textContent, 'Tell us what you sell and how you work today. We will reply by email.')
   assert.equal(shop.fields.get('[name="goal"]').value, 'Prepare our shop')
   assert.equal(shop.calls.length, 0)
@@ -119,48 +120,91 @@ test('only active public product links set product context; internal routes fall
 
 test('prefilled message stays editable and does not claim setup is complete', () => {
   const state = harness([], '?product=shop', '#company=Example&goal=Prepare%20our%20shop')
-  assert.equal(state.headings.get('[data-contact-heading]').textContent, 'Start with Shop')
+  assert.equal(state.headings.get('[data-contact-heading]').textContent, 'Request a Shop pilot')
   assert.equal(state.fields.get('[name="company"]').value, 'Example')
   assert.equal(state.calls.length, 0)
   assert.doesNotMatch(script, /Your setup is ready\./)
 })
 
 test('Shop handoffs show an allowlisted setup and unsupported routes cannot set one', () => {
-  const state = harness([], '?product=shop&template=mini-mart-grocery')
+  const state = harness([], '?product=shop&template=mini-mart&plan=shop-pilot&utm_source=shop-page&private=discard')
   assert.equal(state.fields.get('[name="product"]').value, 'shop')
-  assert.equal(state.fields.get('[name="template"]').value, 'mini-mart-grocery')
+  assert.equal(state.fields.get('[name="template"]').value, 'mini-mart')
+  assert.equal(state.fields.get('[name="plan"]').value, 'shop-pilot')
   assert.equal(state.fields.get('[data-contact-selection]').hidden, false)
   assert.equal(state.fields.get('[data-contact-selection-label]').textContent, 'Selected setup:')
-  assert.equal(state.fields.get('[data-contact-selection-value]').textContent, 'Mini-mart & grocery')
+  assert.equal(state.fields.get('[data-contact-selection-value]').textContent, 'Mini-mart & grocery · Local pilot')
+  assert.equal(state.languageSwitch.href, '/my/contact/?product=shop&template=mini-mart&plan=shop-pilot&utm_source=shop-page')
   state.clearSetup()
   assert.equal(state.fields.get('[name="template"]').value, '')
+  assert.equal(state.fields.get('[name="plan"]').value, '')
   assert.equal(state.fields.get('[data-contact-selection]').hidden, true)
-  assert.equal(state.location.search, '?product=shop')
+  assert.equal(state.location.search, '?product=shop&utm_source=shop-page&private=discard')
   state.fields.get('[name="company"]').value = 'Example business'
   state.changeProduct('guide')
   assert.equal(state.fields.get('[name="template"]').value, '')
+  assert.equal(state.fields.get('[name="plan"]').value, '')
   assert.equal(state.fields.get('[name="company"]').value, 'Example business')
   assert.equal(state.fields.get('[name="goal"]').value, 'Please build my business website')
   assert.equal(state.calls.length, 0)
   for (const product of ['website', 'ecommerce']) {
-    const internal = harness([], `?product=${product}&template=mini-mart-grocery`)
+    const internal = harness([], `?product=${product}&template=mini-mart&plan=shop-pilot`)
     assert.equal(internal.fields.get('[name="product"]').value, 'guide')
     assert.equal(internal.fields.get('[name="template"]').value, '')
+    assert.equal(internal.fields.get('[name="plan"]').value, '')
     assert.equal(internal.headings.get('[data-contact-heading]').textContent, 'Contact')
   }
-  for (const search of ['?product=unknown&template=mini-mart-grocery', '?product=guide&template=mini-mart-grocery', '?product=shop&template=made-up', '?product=website&template=' + 'a'.repeat(121), '?product=website&template=%3Cbad%3E']) {
-    assert.equal(harness([], search).fields.get('[name="template"]').value, '')
+  for (const search of ['?product=unknown&template=mini-mart&plan=shop-pilot', '?product=guide&template=mini-mart&plan=shop-pilot', '?product=shop&template=made-up&plan=made-up', '?product=shop&plan=shop-managed', '?product=shop&plan=assisted-launch', '?product=shop&plan=shop-core', '?product=website&template=' + 'a'.repeat(121), '?product=website&plan=%3Cbad%3E']) {
+    const invalid = harness([], search)
+    assert.equal(invalid.fields.get('[name="template"]').value, '')
+    assert.equal(invalid.fields.get('[name="plan"]').value, '')
   }
+  const legacyTemplate = harness([], '?product=shop&template=mini-mart-grocery')
+  assert.equal(legacyTemplate.fields.get('[name="template"]').value, 'mini-mart')
+  const legacyPlan = harness([], '?product=shop&template=shop-basic')
+  assert.equal(legacyPlan.fields.get('[name="template"]').value, '')
+  assert.equal(legacyPlan.fields.get('[name="plan"]').value, 'shop-pilot')
+})
+
+test('legacy setup aliases cannot silently rewrite attached managed proof', () => {
+  const proofHash = template => '#' + new URLSearchParams({
+    proof_contract: 'supermega.managed_trial_proof.v2',
+    proof_version: '2',
+    proof_digest: 'sha256:' + 'a'.repeat(64),
+    proof_product: 'shop',
+    proof_template: template,
+    proof_readiness: '67',
+    proof_sources: '12',
+    proof_behavior: '4',
+    proof_decisions: '2',
+    proof_outcome: 'improved',
+    proof_outcome_digest: 'sha256:' + 'b'.repeat(64),
+    proof_outcome_accepted: 'true',
+    proof_raw_records: 'false',
+  }).toString()
+
+  const canonical = harness([], '?product=shop&template=mini-mart', proofHash('mini-mart'))
+  assert.equal(canonical.fields.get('[name="proof_template"]').value, 'mini-mart')
+  assert.equal(canonical.fields.get('[data-form-status]').textContent, 'Helpful context attached. Nothing has been sent.')
+
+  const legacy = harness([], '?product=shop&template=mini-mart-grocery', proofHash('mini-mart-grocery'))
+  assert.equal(legacy.fields.get('[name="template"]').value, 'mini-mart')
+  assert.equal(legacy.fields.has('[name="proof_template"]'), false)
+  assert.equal(legacy.fields.has('[name="proof_digest"]'), false)
+  assert.equal(legacy.fields.get('[data-form-status]').textContent, 'Attached context could not be verified and was left out.')
+  assert.equal(legacy.location.hash, '')
+  assert.equal(legacy.calls.length, 0)
 })
 
 const receipt = { status: 'ready', request_id: 'LEAD-0123456789ABCDEF', proof_bound: false }
 test('Burmese contact route keeps the same safe receipt contract with Burmese controls and states', async () => {
   for (const token of ['<label>အမည်<input', '<label>အီးမေးလ်<input', '<label class="wide">စာ<textarea', '>စာပို့ရန်</button>']) assert.match(myanmarPage, new RegExp(token))
   assert.doesNotMatch(myanmarPage, />Send message<\/button>|>Company \(optional\)<input/)
-  const state = harness([new Error('connection lost'), { body: receipt }], '?product=shop&utm_source=example&private=discard', '', 'my')
-  assert.equal(state.headings.get('[data-contact-heading]').textContent, 'Shop စတင်သုံးရန်')
+  const state = harness([new Error('connection lost'), { body: receipt }], '?product=shop&template=mini-mart&plan=shop-pilot&utm_source=example&private=discard', '', 'my')
+  assert.equal(state.headings.get('[data-contact-heading]').textContent, 'Shop စမ်းသုံးရန် တောင်းဆိုပါ')
   assert.equal(state.headings.get('[data-contact-lede]').textContent, 'သင်ရောင်းချသော ပစ္စည်းများနှင့် လက်ရှိအလုပ်လုပ်ပုံကို ပြောပြပါ။ အီးမေးလ်ဖြင့် ပြန်လည်ဆက်သွယ်ပါမည်။')
-  assert.equal(state.languageSwitch.href, '/contact/?product=shop&utm_source=example')
+  assert.equal(state.fields.get('[data-contact-selection-value]').textContent, 'မီနီမတ်နှင့် ကုန်စုံဆိုင် · ဒေသတွင်း စမ်းသပ်သုံးစွဲမှု')
+  assert.equal(state.languageSwitch.href, '/contact/?product=shop&template=mini-mart&plan=shop-pilot&utm_source=example')
   state.invalid('name')
   assert.equal(state.fields.get('[name="name"]').validationMessage, 'ဤအချက်အလက်ကို ဖြည့်ပါ။')
   state.input('name')
@@ -174,7 +218,7 @@ test('Burmese contact route keeps the same safe receipt contract with Burmese co
   assert.match(state.fields.get('[data-form-status]').textContent, /သင့်စာကို လက်ခံရရှိခဲ့ကြောင်း အတည်မပြုနိုင်သေးပါ/)
   await state.submit()
   assert.equal(state.calls[0].body, state.calls[1].body)
-  assert.equal(JSON.parse(state.calls[0].body).source_url, 'https://supermega.dev/my/contact/?product=shop&utm_source=example&private=discard')
+  assert.equal(JSON.parse(state.calls[0].body).source_url, 'https://supermega.dev/my/contact/?product=shop&template=mini-mart&plan=shop-pilot&utm_source=example&private=discard')
   assert.match(state.fields.get('[data-form-status]').textContent, /စာလက်ခံရရှိပါပြီ: LEAD-0123456789ABCDEF/)
   assert.equal(state.headings.get('[data-contact-heading]').textContent, 'စာပို့ပြီးပါပြီ။')
   assert.equal(state.fields.get('button[type="submit"]').textContent, 'နောက်ထပ်စာပို့ရန်')

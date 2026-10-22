@@ -300,19 +300,19 @@ class _ShopAppState extends State<ShopApp> {
         textTheme:
             TextTheme(
               headlineMedium: TextStyle(
-                fontSize: _myanmar ? 24 : 30,
+                fontSize: 30,
                 fontWeight: _myanmar ? FontWeight.w600 : FontWeight.w700,
                 height: _myanmar ? 1.4 : 1.15,
                 letterSpacing: tracking,
               ),
               headlineSmall: TextStyle(
-                fontSize: _myanmar ? 21 : 25,
+                fontSize: 25,
                 fontWeight: _myanmar ? FontWeight.w600 : FontWeight.w700,
                 height: _myanmar ? 1.4 : 1.2,
                 letterSpacing: tracking,
               ),
               titleLarge: TextStyle(
-                fontSize: _myanmar ? 18 : 20,
+                fontSize: 20,
                 fontWeight: _myanmar ? FontWeight.w600 : FontWeight.w700,
                 height: _myanmar ? 1.45 : 1.25,
                 letterSpacing: tracking,
@@ -324,7 +324,7 @@ class _ShopAppState extends State<ShopApp> {
                 letterSpacing: _myanmar ? 0 : -0.1,
               ),
               titleSmall: TextStyle(
-                fontSize: _myanmar ? 15 : 16,
+                fontSize: 16,
                 fontWeight: FontWeight.w600,
                 height: _myanmar ? 1.5 : 1.3,
                 letterSpacing: _myanmar ? 0 : -0.1,
@@ -3755,9 +3755,9 @@ class _ShopHomeState extends State<ShopHome> {
                 .clamp(1.0, 1.6);
             // Keep a short sale near its content. Long baskets retain the
             // available height and scroll inside the existing list.
-            // Burmese action labels wrap on narrow phones. Reserve that extra
-            // line while the sheet itself remains capped below.
-            final compactBaseHeight = widget.myanmar && phone ? 356.0 : 300.0;
+            // Both locales need enough room for two 48 px payment actions on
+            // narrow phones while the sheet itself remains capped below.
+            final compactBaseHeight = phone ? 356.0 : 300.0;
             final contentHeight =
                 (compactBaseHeight +
                     76 * _cart.length.clamp(0, 4) +

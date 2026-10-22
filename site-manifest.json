@@ -70,8 +70,8 @@
         "See the sale in Today and the updated stock quantity."
       ],
       "primaryCta": {
-        "label": "Start with Shop",
-        "url": "/contact/?product=shop"
+        "label": "Request a Shop pilot",
+        "url": "/contact/?product=shop&plan=shop-pilot"
       },
       "secondaryCta": {
         "label": "Contact SuperMega",
@@ -994,7 +994,7 @@
       "route": "/shop/",
       "file": "shop/index.html",
       "title": "Shop | Sales and stock | SuperMega",
-      "description": "Preview Shop for counter sales, stock and daily insight using sample app screens.",
+      "description": "Sell, record payments, print receipts and keep stock clear with Shop, built for everyday retail work in Myanmar.",
       "productId": "shop",
       "liveGate": "post-release"
     },

@@ -1,14 +1,14 @@
 # SuperMega Supergoal
 
-Version: 1.2.34
+Version: 1.2.36
 Owner: Swan Htet, Founder  
 Maintainer: the active SuperMega operating agent, within the authority below  
-Updated: 2026-09-30
-Status: ACTIVE — the current release and first shared-shell redesign are live; authenticated founder, customer and commercial acceptance remain incomplete
+Updated: 2026-10-23
+Status: ACTIVE — the Shop-only, app-first launch candidate is in review; production release, managed hosted acceptance, physical hardware, signed distribution, native-language and customer/commercial acceptance remain incomplete
 
 ## 1. Controlling objective
 
-Build and operate SuperMega as a dependable, commercially viable, AI-operated software company for small businesses. Deliver a coherent public website, useful Shop/POS, Sites and Commerce products, and the internal systems needed to acquire, onboard, serve and retain customers. Implement, verify, release through the authorized path, observe and improve real systems. Plans and generated reports support execution; they do not replace customer outcomes.
+Build and operate SuperMega as a dependable, commercially viable, AI-operated software company for small businesses. Deliver a coherent public website and a useful Shop/POS as the current customer product, while Sites and Commerce remain internal capabilities. Maintain the systems needed to acquire, onboard, serve and retain customers. Implement, verify, release through the authorized path, observe and improve real systems. Plans and generated reports support execution; they do not replace customer outcomes.
 
 The founder sets direction and retains control of consequential commitments. AI and deterministic automation should perform increasingly useful portions of engineering, operations, research, marketing preparation, sales administration and support. Success means customers receive dependable value and the business delivers it repeatedly at sustainable cost. Agent counts, document counts and token consumption are not success measures.
 
@@ -16,9 +16,9 @@ This is the maintained project brief. It does not override higher-priority instr
 
 ### Replacement objective for the active Codex goal
 
-> Execute the SuperMega company and platform goal defined in `C:/Users/thesw/Projects/supermega-platform-worktrees/paired-preview-navigation-20260919/supergoal.md`. Read its current version at meaningful planning and release transitions. Build, verify and maintain Shop, Sites, Commerce, the public site, and the internal commercial and AI operating systems through real customer outcomes. Prioritize incidents and release blockers, then complete the customer lifecycle and revenue operations. Continue useful authorized work autonomously, preserving founder approval for final production releases, live database writes, IAM/access changes, spending and customer contact. Keep evidence, next actions and this brief current. Do not mistake local tests, plans, running services or generated drafts for hosted/customer acceptance. Complete defined milestones only when their acceptance evidence exists; maintain the ongoing company mission through successive measurable milestones.
+> Finalize and operate Shop as SuperMega's only current customer-facing product: a simple, premium, offline-first POS application for Myanmar retailers across supported tablet, phone and PC targets, with the web app as a compatible access path. Keep Sites and Commerce internal until their own acceptance gates pass. Deliver a concise English and Burmese public site, truthful pilot intake, distinct business templates and plan entitlements, fast product import, barcode selling, receipt printing, mobile-money handoff, recovery, insights and safe optional cloud continuity. Use REA and incumbent benchmarking as evidence inputs, then implement and verify the better workflow rather than copying branding, protected assets or unsupported claims. Continue useful authorized work autonomously while preserving founder control over production releases, live database writes, IAM/access changes, spending and customer contact. Keep exact-source, CI, hosted, physical-device, customer and commercial evidence distinct.
 
-The absolute path identifies this checkout. If the repository moves, verify the new checkout and update the thread reference and this paragraph together. Maintain one canonical file; link to it rather than distributing conflicting copies. The current goal tool can change status but cannot edit an active objective's text; the replacement paragraph is ready for the owner's goal editor. Do not falsely complete the old goal to work around that limitation.
+The canonical working copy for this objective is `C:/Users/thesw/Projects/supermega-platform-worktrees/shop-unboxed-launcher-20261022/supergoal.md`. If the repository moves, verify the new checkout and update the thread reference and this paragraph together. Maintain one canonical file; link to it rather than distributing conflicting copies. The current goal tool can change status but cannot edit an active objective's text, so this paragraph is the maintained replacement objective. Do not falsely complete the active goal to work around that limitation.
 
 ## 2. How to apply this document
 
@@ -26,15 +26,14 @@ Use `docs/product-operating-principles.md` for durable design, architecture, cos
 
 ### Immediate delivery sequence
 
-Current owner direction (29 September): public marketing is English-only, concise and focused on actual product tasks and interface screenshots. Public app hosts require Login; they must not fall back to local demos, samples, setup launchers or device-reset controls. Preserve existing records and recovery access. The owner designates app.supermega.dev for private founder showcase and R&D, entered through Login with swanhtet@supermega.dev. Keep Shop, Sites and Commerce workspaces separate; isolate experimental work from customer data. The single founder identity and three private workspaces now exist, and the current app/public release has hosted acceptance. Founder confirmation, first sign-in and authenticated save/reload remain incomplete. Do not invent another public portal or move existing customer routes without a compatibility plan. Retain one fixed light technical identity and remove public theme controls. These instructions supersede older sample-led acquisition guidance.
+Current owner direction (23 October): make Shop the only customer-facing product for this launch. Present SuperMega as the company and Shop as the product. Use separate full English and full Burmese routes. Keep the public site concise, show real source-bound Shop captures at phone, tablet and desktop breakpoints, remove the Company page, avoid device-selector theatre and unsupported enterprise or pricing claims, and require Login on private app hosts. Preserve existing records and recovery access. Run SuperMega agents on the approved paid VPS/cloud runtime; do not use local Ollama or local RAM as a release gate. Sites and Commerce stay internal until separately accepted.
 
-1. The latest approved paired production release completed on 30 September at `f9cfd10fbc7ec5d53072ff0e7aab9caaa01fb615` (workflow `36631267067`, PR622). Both Vercel projects are READY on that exact commit. Live readback reports managed mode, schema, audit and RLS ready, writes enabled and Supabase token authentication ready; the browser renders the real English-only Login form with no console errors. Production schema13 is verified; never replay the migration.
-2. Complete the private swanhtet@supermega.dev founder journey across the already assigned Shop, Sites and Commerce workspaces: use a current recovery email, set the password, sign in, save/reload each product and verify isolation/recovery. The account remains unconfirmed and has never signed in; do not call the founder showcase accepted yet.
-3. Qualify existing Contabo Windows capacity and workloads, or prepare an exact Linux alternative quote. Keep customer hosting separate; no purchase, reimage or worker installation is implied by a shortlist.
-4. Accept one useful internal worker job and one R&D catalog-mapping experiment, then expand roles based on measured usefulness and cost. The current local catalog-validator build has 589 passing tests and three skips; useful model output and VPS acceptance remain unproven.
-5. Align screenshots, product copy, business card and sales materials to the accepted release. Complete delivery/support and pricing evidence before outreach.
-
-Infrastructure shortlist: existing Contabo if inspection proves fit; Hetzner Linux cloud or DigitalOcean Droplets as alternatives. Compare the same RAM/CPU/storage, region, backups, tax and total monthly ceiling before recommending a purchase. The current Compose baseline reserves8GiB total; this is a resource budget, not a model-performance guarantee. Avoid new frameworks until a concrete missing capability is identified.
+1. Finish draft PR #751 as one exact-source Shop candidate: public Shop/Contact/Privacy routes, responsive real app captures, localized share assets, truthful pilot packaging and verified contact-state handling. Run exact-head public checks, code review and hosted Preview QA without promoting to production.
+2. Finish the native Flutter candidate for Android tablets/phones, iPad and Windows PC. Preserve the offline Drift transaction boundary, barcode camera and keyboard-wedge paths, ESC/POS discovery, mobile-money pending/confirmed states, encrypted export/recovery and full English/Burmese UI. Run exact-head native CI, then REA on the produced APK. CI and static analysis do not replace physical-device, scanner, printer, wallet or Burmese receipt acceptance.
+3. Complete managed Preview authentication and two-tenant isolation with branch-only credentials and verified cleanup. Do not reuse production credentials, expose privileged secrets to the browser, or call the isolated demo a managed pilot.
+4. Use business templates only as onboarding presets. Keep plan/entitlement state separate: Local pilot is the only current intake; Managed and Multi-site remain planned. Public numeric pricing stays disabled until infrastructure cost and buyer evidence support one authoritative pricing configuration.
+5. Test the first-sale journey on a representative Android tablet, iPad or Windows device with a common scanner and ESC/POS printer; produce signed distribution artifacts and restore evidence. Only then conduct a real merchant pilot, collect consented support/usage evidence and promote through the authorized production path.
+6. Operate internal AI/R&D, marketing preparation and company automation on the approved cloud workcell with bounded jobs, evidence and cost. Expand automation only after one useful accepted result; do not use agent count or generated plans as delivery evidence.
 
 1. Read current state, authority and priorities first. Read the relevant product/system section before implementing work. Avoid reloading the entire archive each turn.
 2. Verify branch, worktree and the precise source/provider state involved. Preserve unrelated changes, active servers and owner-visible applications.
@@ -115,7 +114,7 @@ Do not copy credentials, customer records, raw logs or the whole conversation in
 
 ## 4. Scope and settled product direction
 
-Customer-facing product names are Shop, Sites and Commerce. Sites replaces Website and Commerce replaces Ecommerce in presentation; retain website/ecommerce route IDs, API values and storage keys for compatibility. Shop covers the counter and stock; Sites covers business pages; Commerce covers online catalogs and orders. The public `supermega.dev` site explains these clearly. `app.supermega.dev` is the connected customer workspace. Additional subdomains require a clear audience and purpose; do not multiply portals to imitate organizational scale.
+Shop is the only customer-facing product in this launch. SuperMega is the company brand. Sites and Commerce remain internal capabilities and may retain website/ecommerce route IDs, API values and storage keys for compatibility, but they are not marketed or assigned as customer products. `supermega.dev` explains Shop and accepts a concise pilot request; `app.supermega.dev` is the authenticated Shop workspace. Additional subdomains require a clear audience and purpose.
 
 Plant is excluded from new customer acquisition and setup. Preserve retained records and recovery paths. SOL is a separate build: its public experience may inform requested research, but its code, infrastructure and customer data are outside this implementation scope.
 
@@ -147,8 +146,8 @@ Small copy fixes, urgent defect repairs and nonvisual changes do not require thr
 #### Rollout order and acceptance
 
 - **Shop first:** searchable catalog, clear current sale, reliable quantity controls, accurate total and one obvious payment action. Product details, notes and advanced operations appear progressively. Preserve inventory, receipts and recovery behavior.
-- **Connected workspace next:** a clear route into the customer's products and unfinished work, consistent Login/account navigation, no Plant acquisition or trial detours.
-- **Sites and Commerce:** collect essential business information, use coherent product/content/order management patterns, and carry the customer through actual publishing or fulfillment. Do not expose implementation choices as onboarding homework.
+- **Connected Shop workspace next:** a clear route into Shop and unfinished work, consistent Login/account navigation, no Plant acquisition or demo detours.
+- **Sites and Commerce internals:** preserve and improve their reusable publishing, catalog and order services behind internal access. Do not market or assign them as customer products in this launch.
 - **Public site and commercial assets:** use the same brand and language, concise product explanations and a direct path to real setup. Retain white theme without a website theme toggle.
 - **Internal tools:** apply the same clarity to work queues, ownership, evidence, failures and next actions. Operational truth takes priority over decorative dashboards.
 
@@ -172,7 +171,7 @@ Latest owner direction: improve the whole product with Apple-like restraint and 
 
 Design priorities: stronger typography and hierarchy, deliberate spacing, fewer borders and redundant labels, natural interaction feedback, and one clear next action. Retain essential status, accessibility and recovery information. Use the supplied SOL references as a quality benchmark; no wholesale brand cloning or new settings panels.
 
-PR622 implemented and released the selected Editorial Precision plus Operator Console hierarchy across the shared shell and Shop home: calmer fixed-light structure, clearer Priority/Continue flow, compact operating context and progressive disclosure. Its exact-head desktop and 390px journeys passed, including the corrected full borders on separated mobile metric cards. Next design action: remove remaining local-only Sample data/storage-risk presentation from the customer path, then carry the same interaction grammar into Sites and Commerce while preserving complete task behavior.
+PR622 is historical evidence for the Editorial Precision plus Operator Console direction. The active Shop candidate now applies the same restraint to the native app and public Shop page: one clear sale path, real product imagery, English/Burmese hierarchy and progressive disclosure. The next design action is to finish Shop onboarding, device recovery and physical hardware acceptance; Sites and Commerce remain internal.
 
 ## 5. Authority, credentials and resource boundaries
 
@@ -192,23 +191,23 @@ The connected platform is not air-gapped. The realistic requirement is local-onl
 
 ### ROG Ally operating limits
 
-Readiness check on 28 September confirms Ollama/OpenCode and `llama3.2:1b` installed, with no loaded models. The deeper launcher check blocks inference: 1,885,237,248 bytes available versus 2,684,354,560 required. Keep inference off until the memory gate passes naturally; do not terminate owner applications or bypass the gate. Installation is not accepted coding quality. Use existing local-agent-company launchers and protected-test receipts for bounded tasks, not another agent framework.
+Local Ollama/inference is out of scope and must remain stopped. Run approved SuperMega agent workloads on the existing paid VPS/cloud runtime after workload-isolation and capacity checks. Local RAM is not a hosted-readiness gate. A configured runtime is not accepted product quality; each job still needs bounded inputs, permissions, acceptance checks and a durable receipt.
 
-One active primary task, zero local Codex subagents by default, serial heavy jobs, one dev server and one local worker. Preserve active servers and owner-visible applications. Do not terminate Claude or other applications for memory without the specific owner request. Models remain scale-to-zero with short keep-alive; no hidden paid/cloud fallback.
+One active primary task, bounded delegated reviews when explicitly requested, serial heavy jobs and one dev server. Preserve active servers and owner-visible applications. Do not terminate Claude or other applications for memory without the specific owner request. Do not start local model runtimes.
 
-Do not reinstate hourly scheduled tasks. Corporate automation remains paused unless explicitly changed. Current local model policy supports its admitted Llama configurations. DeepSeek or other models are evaluation candidates, not assumed installed capabilities. Do not bypass memory/model gates to simulate a larger team.
+Do not reinstate hourly scheduled tasks. Corporate automation remains paused unless explicitly changed. Approved cloud models and agents are task-scoped tools, not proof of a staffed organization; do not create idle workers or unbounded spend to simulate a larger team.
 
 ## 6. Priorities and immediate queue
 
 Order: active security/data/money incident; release-blocking correctness; complete customer task; reliability/recovery; commercial delivery; measured UX/performance; agent productivity; speculative research. Corporate preparation can progress serially alongside technical work, but must not bury an unresolved product failure under new plans.
 
 1. Complete fresh real-business setup acceptance: no invented data, real item entry/import, reload, preserved existing records and understandable storage boundaries. The founder Login route is hosted and clean; authenticated founder save/reload/recovery remains NOT RUN.
-2. Reconcile the public site, Shop, Sites, Commerce and current brand assets around the released white/graphite/indigo token direction; treat the current cobalt/indigo split as unfinished.
+2. Reconcile the public Shop site, native Shop app and current brand assets around the released white/graphite/indigo token direction.
 3. Remove remaining local-only Sample data and storage-risk controls from the ordinary customer path without hiding genuine recovery or status evidence.
-4. Redesign Sites as a guided outcome flow: collect the minimum business facts, generate a coherent first site, make exact edits easy and keep publishing state/recovery explicit. Verify desktop and 390px behavior.
-5. Redesign Commerce around catalog readiness, orders, fulfillment and one clear next action. Preserve the corrected empty-catalog route into Shop Stock and verify real save/reload and order state.
+4. Finish native Shop onboarding around one Add products path, reviewed AI menu import, barcode discovery/input and optional advanced details.
+5. Verify Shop recovery and device workflows: offline restart, protected export/restore, printer discovery/failure recovery, wallet pending recovery and English/Burmese receipts.
 6. Deliver one consented real-business installation with an agreed task and acceptance criteria. Collect actual facts instead of inventing a cafe or shop.
-7. Convert accepted capability into a simple Basic/Pro or scoped-service offer with capability-backed pricing, delivery/support terms and current marketing assets before outreach.
+7. Offer one Local pilot (`shop-pilot`) with no public numeric price. Keep Assisted Launch as an optional one-time service; Managed and Multi-site remain noninteractive roadmap items until accepted capability exists.
 8. Automate the first repeated internal job with measured value, bounded authority, reliable failure handling and explicit operating cost.
 
 Update this queue in place. Completed tasks move to compact evidence records, not an indefinitely growing backlog here.
@@ -317,9 +316,9 @@ The corporate task last reported a Sheets write-scope rejection; this is histori
 
 ### Founder product access and cloud capacity
 
-Provide one private founder login with assigned Shop, Sites and Commerce workspaces. Reconcile existing identity and memberships before provisioning; do not create duplicate accounts or expose shared passwords. Custom products appear only after deployment and access are verified. Owner confirmed swanhtet@supermega.dev for the founder account and company email. The approved founder invitation was sent on29September; last verified state was invited but unconfirmed. Reconcile the existing identity before any further provisioning; do not resend or create a duplicate based on the obsolete28September lookup. Keep personal email separate. devteam@supermega.dev is unverified. Complete hosted sign-in, product entry, save/reload and recovery before handing over an account as ready. Use owner-supplied content or honestly labelled illustrative content, never invented customer activity.
+Provide one private founder login with an assigned Shop workspace. Sites and Commerce stay internal. Reconcile existing identity and memberships before provisioning; do not create duplicate accounts or expose shared passwords. Owner confirmed swanhtet@supermega.dev for the founder account and company email. The approved founder invitation was sent on 29 September; the last verified state was invited but unconfirmed. Reconcile that identity before any further provisioning. Keep personal email separate; devteam@supermega.dev is unverified. Complete hosted sign-in, product entry, save/reload and recovery before handing over an account as ready. Use owner-supplied content or honestly labelled illustrative content, never invented customer activity.
 
-The owner accepts paid cloud capacity when local RAM limits useful work. Prefer existing Vercel, Supabase, Google Workspace and coding subscriptions; verify actual plans and remaining capacity before claiming they are paid for. Connected access alone does not establish billing entitlement. New spend requires a specific service, workload, monthly ceiling and owner confirmation. Automated local routing stays local-only until an exact cloud job is authorized; no silent paid fallback. Move a measured workload to cloud before adding another framework or fleet. Track cost per accepted result and a stop limit. Owner reports an existing Resend account; contact notification and acknowledgement code already uses Resend, but sender-domain verification, SMTP configuration, plan and delivery still require provider evidence. Private custom-product and R&D access must remain separate from publicly available products.
+Use the existing approved paid VPS/cloud runtime for SuperMega agents. Prefer existing Vercel, Supabase, Google Workspace and coding subscriptions; verify actual plans and remaining capacity before claiming billing entitlement. New spend requires a specific service, workload, monthly ceiling and owner confirmation. Do not use local Ollama or local RAM as a hosted-readiness gate. Track cost per accepted result and a stop limit. Owner reports an existing Resend account; contact notification and acknowledgement code already uses Resend, but sender-domain verification, plan and delivery still require provider evidence. Private custom-product and R&D access must remain separate from Shop customer access.
 
 ## 14. AI-operated company
 
@@ -339,7 +338,7 @@ Agent employees are roles with useful inputs, outputs, permissions and acceptanc
 
 Generated work remains a draft until validation. A sealed report does not make quality-failed output authoritative. Deterministic arithmetic, parsing, routing and validation should not consume model inference. Measure accepted usefulness, correction burden, time saved, latency, memory and cost.
 
-Prove autonomy incrementally: read-only work, local reversible execution, then specifically authorized external operations with durable receipts. This maturity path does not grant future permissions. No hidden cloud fallback or unsupervised customer contact. Customer infrastructure must not depend on the local worker staying awake.
+Prove autonomy incrementally: read-only work, reversible execution, then specifically authorized external operations with durable receipts. Use the approved cloud runtime within a task and spend boundary. This maturity path does not grant future permissions; customer infrastructure must not depend on the local workstation staying awake, and agents must not contact customers without explicit authorization.
 
 ## 15. Corporate, sales and marketing
 
@@ -349,7 +348,7 @@ Establish contracting/invoice identity, support responsibility, scope/pricing, d
 
 Sales stages: discovery → qualified → scoped → quoted → accepted → setup → customer accepted → active → renewal/closed. Each transition needs evidence. Track source/contact basis, real need, owner and next action. A draft is not a sent message; quote acceptance is not collected revenue.
 
-Start with one clear Basic offer. Pro needs proven additional capability and measured economics. Freemium, template licensing and custom work remain hypotheses until supported. Do not advertise unavailable self-serve or publish unsupported prices.
+Start with one clear Local pilot. Assisted Launch is an optional one-time setup service. Managed, Multi-site, freemium, template licensing and recurring subscriptions remain hypotheses until capability, entitlement enforcement, support terms and economics are proven. Do not advertise unavailable self-serve or publish unsupported prices.
 
 Marketing assets: consistent founder profile, existing branded card, concise product description, one relevant CTA and real workflow evidence. Prepare social drafts and learning questions; publish only in authorized scope. Case studies need actual results and consent. Never invent users, testimonials, partnerships, ROI, ISO certification or institutional affiliation.
 
@@ -367,7 +366,7 @@ Bangkok12 October10:00–16:00 is founder-confirmed. Prepare introduction, card,
 
 Study incumbents for principles, workflows and documented capability. Do not copy proprietary code/private assets or create misleading brand identity. Use primary technical sources and refresh changing facts. With low traffic, observe actual task completion rather than claiming statistical A/B winners.
 
-Future options include better local models, multilingual assistance, industry packs, partner onboarding, richer inventory, verified payment integrations and reusable custom delivery. These are optional horizons, not concurrent launch promises. Promote an option only with a user problem, capacity, acceptance criteria and economic rationale.
+Future options include stronger approved cloud models, multilingual assistance, industry packs, partner onboarding, richer inventory, verified payment integrations and reusable custom delivery. These are optional horizons, not concurrent launch promises. Promote an option only with a user problem, capacity, acceptance criteria and economic rationale.
 
 ### Active R&D experiment: catalog mapping
 
@@ -405,7 +404,7 @@ an adopt/reject result and a product change, not another strategy document.
 |---|---|---|
 | M1 Coherent entry | No primary demo detours; consistent routes/copy; useful real-data setup | INCOMPLETE |
 | M2 Reliable hosted core | Verified login, tenant isolation, persistence, recovery and core task | UNPROVEN |
-| M3 Authorized live release | Exact approved candidate promoted; real-domain checks pass | PASS for `f9cfd10f...` in hosted production via workflow `36631267067` |
+| M3 Authorized live release | Exact approved candidate promoted; real-domain checks pass | HISTORICAL PASS for `f9cfd10f...`; current Shop candidate NOT RUN |
 | M4 Accepted installation | Consented business completes agreed task with reconciled records | UNPROVEN |
 | M5 Repeatable delivery | Offer, support, costs, payment evidence and reusable process | INCOMPLETE |
 | M6 Useful automation | Bounded jobs produce accepted results with recovery/measured value | PARTIAL local foundation |
@@ -429,7 +428,7 @@ Label future ambitions as future and proposals as proposals. Never present them 
 - No automatic synthetic customer records. Private fixtures remain explicitly labelled and isolated.
 - Preserve saved work, tenant boundaries, money/stock correctness and recovery throughout interface cleanup.
 - Full exact-candidate CI, rendered journeys and separate hosted/customer acceptance are required.
-- One primary writer; at most one explicitly requested bounded reviewer. Local models remain memory-gated and scale-to-zero.
+- One primary writer; bounded reviewers may be delegated when requested. Local inference remains off; approved agents run on the existing paid VPS/cloud within task and spend boundaries.
 - Keep product delivery, commercial operations and evaluated AI machinery in scope; do not substitute document or agent counts for outcomes.
 
 Chronological receipts belong in `C:/Users/thesw/OneDrive - BDA/outputs/supermega-launch-control-20260924.md`. Section 3 is the single current-state table. Prior database evidence includes 18 signup-budget tests, 74 rehearsal checks and 37 HQ checks; revalidate source binding when relevant code changes.

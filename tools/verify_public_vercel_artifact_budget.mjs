@@ -39,7 +39,7 @@ if (!existsSync(functionsApiDir)) fail('public_functions_missing', { path: funct
 // Social share cards exist only for public customer products. Sites and
 // Commerce remain internal and must not create orphan public assets.
 const ogCardBytes = {}
-for (const cardFile of ['og-card.png', ...activeProductContracts(manifest).map((product) => `og-card-${product.id}.png`)]) {
+for (const cardFile of ['og-card.png', ...activeProductContracts(manifest).map((product) => `og-card-${product.id}.png`), 'og-card-shop-my.png']) {
   const ogCardPath = resolve(outputDir, 'static', cardFile)
   if (!existsSync(ogCardPath)) fail('og_card_missing', { path: ogCardPath })
   const bytes = statSync(ogCardPath).size
