@@ -228,7 +228,11 @@ void main() {
         expect(name, findsOneWidget);
         expect(price, findsOneWidget);
         expect(stock, findsOneWidget);
-        expect(barcode, findsOneWidget);
+        expect(barcode, findsNothing);
+        expect(
+          find.byKey(const ValueKey('shop-product-add-barcode')),
+          findsOneWidget,
+        );
         expect(
           tester.getTopLeft(name).dy,
           lessThan(tester.getTopLeft(price).dy),
@@ -236,10 +240,6 @@ void main() {
         expect(
           tester.getTopLeft(price).dy,
           lessThan(tester.getTopLeft(stock).dy),
-        );
-        expect(
-          tester.getTopLeft(stock).dy,
-          lessThan(tester.getTopLeft(barcode).dy),
         );
         expect(tester.takeException(), isNull);
         if (_capture) {
