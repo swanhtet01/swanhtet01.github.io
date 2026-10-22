@@ -456,9 +456,7 @@ class _ShopAppState extends State<ShopApp> {
                   final desktop = width >= 1100;
                   return Scaffold(
                     appBar: AppBar(
-                      title: Text(
-                        shopCopy(_myanmar, 'Shop', 'ဆိုင်'),
-                      ),
+                      title: Text(shopCopy(_myanmar, 'Shop', 'ဆိုင်')),
                       actions: [
                         if (!desktop)
                           IconButton(

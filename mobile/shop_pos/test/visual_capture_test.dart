@@ -511,10 +511,7 @@ void main() {
           expect(holdBounds.top, greaterThanOrEqualTo(sheetBounds.top));
           expect(holdBounds.bottom, lessThanOrEqualTo(sheetBounds.bottom));
           expect(holdSale.hitTestable(), findsOneWidget);
-          expect(
-            tester.widget<TextButton>(holdSale).onPressed,
-            isNotNull,
-          );
+          expect(tester.widget<TextButton>(holdSale).onPressed, isNotNull);
           expect(tester.takeException(), isNull);
         } finally {
           await tester.pumpWidget(const SizedBox.shrink());
