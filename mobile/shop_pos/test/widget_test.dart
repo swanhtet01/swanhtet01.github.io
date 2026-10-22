@@ -2306,6 +2306,10 @@ void main() {
   testWidgets('cashier can receive and count stock outside the sale screen', (
     tester,
   ) async {
+    tester.view.physicalSize = const Size(820, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     final database = ShopDatabase(NativeDatabase.memory());
     await database.addProduct(
       id: 'rice',
@@ -2329,6 +2333,15 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('2 in stock'), findsOneWidget);
     expect(find.text('Reference rice'), findsNothing);
+    expect(find.text('Adjust stock'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('stock-update-rice')));
+    await tester.pumpAndSettle();
+    expect(find.text('Receive'), findsOneWidget);
+    expect(find.text('Count'), findsOneWidget);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect((await database.readActiveProducts()).single.onHand, 2);
 
     await tester.tap(find.byKey(const ValueKey('stock-update-rice')));
     await tester.pumpAndSettle();
@@ -2451,6 +2464,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('လက်ကျန်'));
       await tester.pumpAndSettle();
+      expect(find.text('လက်ကျန်ပြင်ရန်'), findsNWidgets(2));
       expect(
         find.text('ကုန်ပစ္စည်းကုဒ် RICE-1 · ဘားကုဒ် 111111'),
         findsOneWidget,
