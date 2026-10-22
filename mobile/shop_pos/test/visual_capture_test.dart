@@ -364,6 +364,10 @@ void main() {
           );
           await tester.pumpAndSettle();
           expect(basket, findsOneWidget);
+          expect(
+            tester.getRect(basket).top,
+            lessThanOrEqualTo(catalogBounds.top + 12),
+          );
           final cash = find.widgetWithText(
             FilledButton,
             language == 'my' ? 'ငွေသား' : 'Cash sale',
