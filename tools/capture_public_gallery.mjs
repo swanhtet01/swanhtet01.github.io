@@ -246,11 +246,13 @@ async function captureMyanmarDesktop(cdp, sessionId, output, name, expectedTexts
   // The 1000px two-pane counter remains readable when fitted into the public
   // hero. The narrower 820px counter scrolls category chips horizontally.
   await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1000, height: 900, deviceScaleFactor: 1, mobile: false }, sessionId)
+  await cdp.send('Emulation.setScrollbarsHidden', { hidden: true }, sessionId)
   try {
     const pageWidth = await evaluate(cdp, sessionId, 'document.documentElement.scrollWidth')
     if (pageWidth > 1000) throw new Error(`myanmar_counter_desktop_horizontal_overflow:${pageWidth}`)
     return await capture(cdp, sessionId, output, name, expectedTexts, { ...view, width: 1000, height: 900 })
   } finally {
+    await cdp.send('Emulation.setScrollbarsHidden', { hidden: false }, sessionId)
     await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false }, sessionId)
   }
 }
