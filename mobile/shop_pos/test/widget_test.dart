@@ -1374,6 +1374,20 @@ void main() {
                   ),
             findsOneWidget,
           );
+          if (width >= 820) {
+            await tester.tap(
+              find.byTooltip(myanmar ? 'တစ်ခုထပ်ထည့်ရန်' : 'Add one'),
+            );
+            await tester.pumpAndSettle();
+            expect(
+              tester
+                  .widget<Text>(
+                    find.byKey(const ValueKey('shop-cart-line-total:rice')),
+                  )
+                  .data,
+              myanmar ? '၄၉,၈၀၀ ကျပ်' : '49,800 MMK',
+            );
+          }
           expect(tester.takeException(), isNull);
 
           await tester.pumpWidget(const SizedBox.shrink());
