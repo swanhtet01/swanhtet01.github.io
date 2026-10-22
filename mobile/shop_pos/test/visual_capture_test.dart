@@ -228,7 +228,13 @@ void main() {
         expect(name, findsOneWidget);
         expect(price, findsOneWidget);
         expect(stock, findsOneWidget);
-        expect(barcode, findsOneWidget);
+        expect(tester.widget<TextFormField>(stock).controller!.text, isEmpty);
+        expect(barcode, findsNothing);
+        final addBarcode = find.byKey(
+          const ValueKey('shop-product-add-barcode'),
+        );
+        expect(addBarcode, findsOneWidget);
+        expect(tester.getSize(addBarcode).height, greaterThanOrEqualTo(48));
         expect(
           tester.getTopLeft(name).dy,
           lessThan(tester.getTopLeft(price).dy),
@@ -237,10 +243,21 @@ void main() {
           tester.getTopLeft(price).dy,
           lessThan(tester.getTopLeft(stock).dy),
         );
-        expect(
-          tester.getTopLeft(stock).dy,
-          lessThan(tester.getTopLeft(barcode).dy),
-        );
+        if (width == 320) {
+          final save = find.widgetWithText(
+            FilledButton,
+            language == 'my' ? 'သိမ်းရန်' : 'Save product',
+          );
+          final cancel = find.widgetWithText(
+            TextButton,
+            language == 'my' ? 'မလုပ်တော့ပါ' : 'Cancel',
+          );
+          expect(tester.getSize(save).width, greaterThanOrEqualTo(230));
+          expect(
+            tester.getTopLeft(save).dy,
+            lessThan(tester.getTopLeft(cancel).dy),
+          );
+        }
         expect(tester.takeException(), isNull);
         if (_capture) {
           await expectLater(

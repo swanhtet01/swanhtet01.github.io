@@ -680,6 +680,9 @@ void main() {
         find.byKey(const ValueKey('shop-product-name')),
         'Tea 500 g',
       );
+      expect(find.byKey(const ValueKey('shop-product-barcode')), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('shop-product-add-barcode')));
+      await tester.pumpAndSettle();
       await tester.enterText(
         find.byKey(const ValueKey('shop-product-barcode')),
         '1234567890123',
@@ -2434,6 +2437,9 @@ void main() {
       find.byKey(const ValueKey('shop-product-name')),
       'Tea',
     );
+    expect(find.byKey(const ValueKey('shop-product-barcode')), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('shop-product-add-barcode')));
+    await tester.pumpAndSettle();
     await tester.enterText(
       find.byKey(const ValueKey('shop-product-barcode')),
       '0012345678905',
@@ -2442,6 +2448,10 @@ void main() {
       find.byKey(const ValueKey('shop-product-price')),
       '2500',
     );
+    await tester.tap(find.text('Save product'));
+    await tester.pumpAndSettle();
+    expect(find.text('Enter a whole stock count.'), findsOneWidget);
+    expect(await database.readActiveProducts(), isEmpty);
     await tester.enterText(
       find.byKey(const ValueKey('shop-product-stock')),
       '2',
