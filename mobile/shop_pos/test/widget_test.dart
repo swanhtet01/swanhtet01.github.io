@@ -966,7 +966,9 @@ void main() {
             );
             await tester.pumpAndSettle();
 
-            final navigationTop = tester.getTopLeft(find.byType(NavigationBar)).dy;
+            final navigationTop = tester
+                .getTopLeft(find.byType(NavigationBar))
+                .dy;
             for (final label in [
               myanmar ? 'ယနေ့ရောင်းအား' : 'Sales today',
               myanmar ? 'ပြီးစီးသောအရောင်း' : 'Completed sales',
@@ -974,12 +976,18 @@ void main() {
               myanmar ? 'လက်ကျန်စစ်ရန်' : 'Check stock',
             ]) {
               expect(find.text(label), findsOneWidget);
-              expect(tester.getBottomRight(find.text(label)).dy, lessThan(navigationTop));
+              expect(
+                tester.getBottomRight(find.text(label)).dy,
+                lessThan(navigationTop),
+              );
             }
             final stockAction = find.byTooltip(
               myanmar ? 'လက်ကျန်ဖွင့်ရန်' : 'Open stock',
             );
-            expect(tester.getSize(stockAction).height, greaterThanOrEqualTo(44));
+            expect(
+              tester.getSize(stockAction).height,
+              greaterThanOrEqualTo(44),
+            );
             expect(
               find.text(myanmar ? 'အရောင်းအသစ်' : 'New sale'),
               findsOneWidget,
