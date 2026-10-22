@@ -45,8 +45,8 @@ owner-approved product outcome and gate require it.
 | State | Open draft; mergeable at the last check; not merged or deployed |
 | Integration branch | `codex/shop-public-main-port-20261022` |
 | Base / later promotion envelope | `codex/shop-main-integration-20261022` / PR #730 |
-| Last verified product-code anchor | `d33c349af94f2ea8f8c5dcfc34f378d93acf04ae` |
-| Native Shop tree | `4bff130d27dbaadeb64d5b42266efcd952579e5d` |
+| Last verified product-code anchor | `f5605ded96c28c85af040889d56ec534863c36ee` |
+| Native Shop tree | `b457c14b0053523833e610bc8a3cab54e1a47927` |
 | UI lane | #749 integrated and frozen for acceptance |
 | Paused lanes | #750 low-stock focus; Connected Orders server/sync work |
 
@@ -57,10 +57,10 @@ actual final PR head.
 
 ## Verified evidence at the product-code anchor
 
-- [Shop native POS checks](https://github.com/swanhtet01/swanhtet01.github.io/actions/runs/39839912132): success for Android analysis/tests/build, iPad/iOS unsigned build, and Windows build/package.
-- [SuperMega App CI push check](https://github.com/swanhtet01/swanhtet01.github.io/actions/runs/39839900259): success.
-- [Kernel verification](https://github.com/swanhtet01/swanhtet01.github.io/actions/runs/39839912145): success.
-- [Dependency security audit](https://github.com/swanhtet01/swanhtet01.github.io/actions/runs/39839912230): success.
+- [Shop native POS checks](https://github.com/swanhtet01/swanhtet01.github.io/actions/runs/39859320330): success for formatting, analysis, isolated and full Flutter tests, synthetic render capture, Android debug APK, unsigned iPad/iOS build, Windows backup/restore tests, and unsigned Windows build/package.
+- [SuperMega App CI push check](https://github.com/swanhtet01/swanhtet01.github.io/actions/runs/39859313672): success.
+- [Kernel verification](https://github.com/swanhtet01/swanhtet01.github.io/actions/runs/39859320156): success; its production release job remained owner-gated and skipped.
+- [Dependency security audit](https://github.com/swanhtet01/swanhtet01.github.io/actions/runs/39859320193): success.
 - Clean-tree public build and verification, gallery regression checks, public
   routing/contact/Vercel contracts, and the HQ verification set passed during
   candidate preparation.
@@ -77,6 +77,15 @@ installers or a public release.
 - Backup validation for required tables, columns, wallet intent semantics,
   basket arithmetic, pending uniqueness, and fail-closed malformed restores.
 - Restore safety for SQLite `-wal`, `-shm`, and rollback-journal sidecars.
+- Schema-v11 append-only full-sale reversal records preserve original sale and
+  price snapshots, require an explicit all-or-none restock choice, bind each
+  cash command to the reviewed open shift, and leave wallet reversals externally
+  pending until a separate evidenced reconciliation records `money_returned`
+  or `payment_not_received`.
+- Duplicate/retry protection and restore verification recompute reversal,
+  reconciliation, outbox, stock-movement, and cash-close evidence. Immutable
+  sales, sale lines, stock movements, and audit records fail closed on
+  update/delete or malformed legacy collisions.
 - Public gallery provenance with strict UTF-8 handling, CRLF-only ledger
   normalization, drift rejection, and pinned native render evidence.
 
@@ -87,8 +96,15 @@ installers or a public release.
 - Physical scanner and 58 mm / 80 mm Burmese printer behavior is not accepted.
 - Installed process-kill/restart/restore behavior is not accepted on the target
   device set.
-- Native refund/exchange is not implemented; the required correction/refund
-  journey remains an open product and operations gate.
+- The source-level full-sale reversal and wallet-reconciliation core is
+  implemented and regression-tested, but no trusted operator-facing action
+  exists. `ShopCorrectionAuthorization` is audit evidence, not authority;
+  correction must remain unavailable until a connected owner-only verifier and
+  action are implemented and proven, or the database/authentication pause
+  changes through the applicable decision.
+- Swan and Vivian have not accepted full-sale-only correction as sufficient for
+  launch. Partial returns and exchanges are not implemented and were not
+  silently removed from the release gate.
 - Vivian has not yet accepted the complete merchant journey.
 - Pricing, setup policy, printer promise, and support channel/hours remain open.
 - Connected Orders hosted synchronization and tenant isolation are not in the
@@ -98,26 +114,34 @@ installers or a public release.
 
 ## Cloud, local, and Dots coordination
 
-Remote-authoritative source, commits, PR evidence, and CI history are available
-in cloud Git. The unavailable local Codex session's uncommitted changes,
-terminal state, stashes, untracked files, OneDrive-only material, hardware
-state, and secrets have not been migrated or inferred.
+Remote Git is authoritative for integrated source, PR evidence, and CI. The
+owner-designated [Operations Hub](https://chatgpt.com/space/page_e3e4e94ac5d081918325eeb103e5da9d)
+contains Vivian's prepared operations material and independently verified Dots
+recovery evidence. That is coordination evidence, not proof that Dots is
+installed in this cloud task, that Vivian accepted the merchant journey, or
+that a native release gate passed. Do not recreate the prepared operations
+pack.
 
-When that machine returns, inventory its branch/HEAD, status, staged and
-unstaged diffs, stash, and untracked files. Bring forward only bounded,
-attributable work that does not duplicate the current candidate. Never copy
-credentials, caches, or broad private directories into the repository.
-
-No Dots workspace, thread, or attributable export is attached. Once supplied,
-compare it with the current candidate and classify every item as **Keep**,
-**Merge**, **Pause**, **Archive**, or **Client-specific** before implementation.
+The local handoff remains deliberately preserved, not archived and not fully
+migrated: five dirty Shop worktrees, three stashes, OneDrive changes, and
+unique historical catalog-import review, receivables aging,
+barcode/receiving, daily-sales projection, and older acceptance observations
+remain. The local transcript is unavailable, and this retained work may be
+older browser scope rather than a native blocker. Import only bounded,
+attributable, non-duplicative work after source and context preservation is
+demonstrated. Never copy credentials, caches, or broad private directories,
+and do not archive the local source yet.
 
 ## Next action
 
-Prepare and review the protected public preview, then collect installed-device,
-scanner, printer, restart, and restore evidence. In parallel, Vivian can run the
-merchant workflow and close the commercial/support decisions without creating
-another technical release lane.
+1. Swan and Vivian record whether full-sale-only correction is acceptable for
+   launch or partial returns and exchanges remain required.
+2. Implement and verify the connected owner-only correction authorization and
+   action when the database/authentication gate permits it; otherwise keep the
+   action unavailable.
+3. Then review protected preview, installed restart/restore, scanner/printer,
+   and Vivian merchant-journey evidence at one exact PR head, followed by
+   independent review and the joint go/no-go decision.
 
 The proposed 1 November date remains conditional on the release gates in
 [`docs/SHOP-RELEASE-RUNBOOK.md`](docs/SHOP-RELEASE-RUNBOOK.md).
