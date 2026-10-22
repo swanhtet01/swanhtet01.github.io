@@ -455,7 +455,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Sales today'), findsOneWidget);
-    expect(find.text('1,200 MMK'), findsOneWidget);
+    expect(find.text('1,200 MMK'), findsNWidgets(2));
     expect(find.text('Completed sales'), findsOneWidget);
     expect(find.text('Low-stock products'), findsNothing);
     expect(find.text('Stock to check'), findsNothing);
