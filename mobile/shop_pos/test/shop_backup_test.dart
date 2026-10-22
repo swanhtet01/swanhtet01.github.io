@@ -169,45 +169,59 @@ void main() {
     },
   );
 
-  test('encrypted backup restores a named held basket without stock or payment', () async {
-    final source = ShopDatabase(NativeDatabase.memory());
-    try {
-      await source.addProduct(
-        id: 'water', name: 'Water', priceMmk: 1200, openingStock: 5,
-      );
-      await source.saveCounterSaleDraft(
-        operationId: 'held-backup-op', quantities: const {'water': 2},
-      );
-      await source.holdCounterSaleDraft(
-        id: 'held-backup-id', name: 'Customer May',
-        operationId: 'held-backup-op',
-      );
-      final heldArchive = File('${directory.path}/held.smbak');
-      await ShopBackup.exportEncrypted(
-        database: source, archive: heldArchive,
-        password: _password, scratchRoot: directory,
-      );
-      final target = File('${directory.path}/held-restored.sqlite');
-      await ShopBackup.restoreIntoEmptyDatabase(
-        archive: heldArchive, target: target, password: _password,
-      );
-      final restored = ShopDatabase(NativeDatabase(target));
+  test(
+    'encrypted backup restores a named held basket without stock or payment',
+    () async {
+      final source = ShopDatabase(NativeDatabase.memory());
       try {
-        final ticket = (await restored.readHeldSaleTickets()).single;
-        expect(ticket.name, 'Customer May');
-        expect(ticket.draft.quantities, {'water': 2});
-        expect(await restored.readCounterSaleDraft(), isNull);
-        expect((await restored.readActiveProducts()).single.onHand, 5);
-        expect(await restored.countSales(), 0);
-        expect((await restored.reopenHeldSaleTicket(ticket.id)).operationId,
-            'held-backup-op');
+        await source.addProduct(
+          id: 'water',
+          name: 'Water',
+          priceMmk: 1200,
+          openingStock: 5,
+        );
+        await source.saveCounterSaleDraft(
+          operationId: 'held-backup-op',
+          quantities: const {'water': 2},
+        );
+        await source.holdCounterSaleDraft(
+          id: 'held-backup-id',
+          name: 'Customer May',
+          operationId: 'held-backup-op',
+        );
+        final heldArchive = File('${directory.path}/held.smbak');
+        await ShopBackup.exportEncrypted(
+          database: source,
+          archive: heldArchive,
+          password: _password,
+          scratchRoot: directory,
+        );
+        final target = File('${directory.path}/held-restored.sqlite');
+        await ShopBackup.restoreIntoEmptyDatabase(
+          archive: heldArchive,
+          target: target,
+          password: _password,
+        );
+        final restored = ShopDatabase(NativeDatabase(target));
+        try {
+          final ticket = (await restored.readHeldSaleTickets()).single;
+          expect(ticket.name, 'Customer May');
+          expect(ticket.draft.quantities, {'water': 2});
+          expect(await restored.readCounterSaleDraft(), isNull);
+          expect((await restored.readActiveProducts()).single.onHand, 5);
+          expect(await restored.countSales(), 0);
+          expect(
+            (await restored.reopenHeldSaleTicket(ticket.id)).operationId,
+            'held-backup-op',
+          );
+        } finally {
+          await restored.close();
+        }
       } finally {
-        await restored.close();
+        await source.close();
       }
-    } finally {
-      await source.close();
-    }
-  });
+    },
+  );
 
   test('merchant export hands only the encrypted archive to Save As', () async {
     File? handedArchive;
@@ -440,29 +454,35 @@ void main() {
     }
   });
 
-  test('v9 database gains an empty held-sale table without stock writes', () async {
-    final old = File('${directory.path}/legacy-v9.sqlite');
-    await database.exportVerifiedLocalSnapshot(old);
-    final connection = sqlite3.open(old.path);
-    try {
-      connection.execute('DROP TABLE shop_held_sales');
-      connection.execute('PRAGMA user_version = 9');
-    } finally {
-      connection.close();
-    }
-    ShopBackup.verifySnapshot(old, expectedSchemaVersion: 9);
-    final upgraded = ShopDatabase(NativeDatabase(old));
-    try {
-      expect(await upgraded.readHeldSaleTickets(), isEmpty);
-      expect((await upgraded.readActiveProducts()).single.onHand, 3);
-      expect(await upgraded.countSales(), 1);
-      expect((await upgraded.customSelect('PRAGMA user_version').getSingle())
-          .read<int>('user_version'), 10);
-    } finally {
-      await upgraded.close();
-    }
-    ShopBackup.verifySnapshot(old, expectedSchemaVersion: 10);
-  });
+  test(
+    'v9 database gains an empty held-sale table without stock writes',
+    () async {
+      final old = File('${directory.path}/legacy-v9.sqlite');
+      await database.exportVerifiedLocalSnapshot(old);
+      final connection = sqlite3.open(old.path);
+      try {
+        connection.execute('DROP TABLE shop_held_sales');
+        connection.execute('PRAGMA user_version = 9');
+      } finally {
+        connection.close();
+      }
+      ShopBackup.verifySnapshot(old, expectedSchemaVersion: 9);
+      final upgraded = ShopDatabase(NativeDatabase(old));
+      try {
+        expect(await upgraded.readHeldSaleTickets(), isEmpty);
+        expect((await upgraded.readActiveProducts()).single.onHand, 3);
+        expect(await upgraded.countSales(), 1);
+        expect(
+          (await upgraded.customSelect('PRAGMA user_version').getSingle())
+              .read<int>('user_version'),
+          10,
+        );
+      } finally {
+        await upgraded.close();
+      }
+      ShopBackup.verifySnapshot(old, expectedSchemaVersion: 10);
+    },
+  );
 
   test(
     'v8 catalog gains the documented alert default without stock writes',

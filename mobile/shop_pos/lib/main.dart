@@ -1445,11 +1445,13 @@ class _ShopHomeState extends State<ShopHome> {
         key: const ValueKey('shop-held-sales-open'),
         onPressed: _showHeldSaleTickets,
         icon: const Icon(Icons.bookmark_border),
-        label: Text(shopCopy(
-          widget.myanmar,
-          'Held sales (${_heldTickets.length})',
-          'ခဏသိမ်းထားသောအရောင်း (${shopNumber(_heldTickets.length, myanmar: true)})',
-        )),
+        label: Text(
+          shopCopy(
+            widget.myanmar,
+            'Held sales (${_heldTickets.length})',
+            'ခဏသိမ်းထားသောအရောင်း (${shopNumber(_heldTickets.length, myanmar: true)})',
+          ),
+        ),
       ),
     ),
   );
@@ -2084,8 +2086,11 @@ class _ShopHomeState extends State<ShopHome> {
                       'Hold this sale',
                       'ဤအရောင်းကို ခဏသိမ်းရန်',
                     ),
-                    onPressed: !_checkoutReady || _walletStarting ||
-                            _cashConfirming || _saving
+                    onPressed:
+                        !_checkoutReady ||
+                            _walletStarting ||
+                            _cashConfirming ||
+                            _saving
                         ? null
                         : () => _holdCurrentSale(refresh: refresh),
                     icon: const Icon(Icons.bookmark_add_outlined),
@@ -2403,17 +2408,22 @@ class _ShopHomeState extends State<ShopHome> {
   }
 
   Future<void> _holdCurrentSale({StateSetter? refresh}) async {
-    if (_cart.isEmpty || _operationId == null || !_checkoutReady ||
-        _saving || _walletStarting || _cashConfirming ||
-        _pendingWalletCheckout != null) return;
+    if (_cart.isEmpty ||
+        _operationId == null ||
+        !_checkoutReady ||
+        _saving ||
+        _walletStarting ||
+        _cashConfirming ||
+        _pendingWalletCheckout != null)
+      return;
     var ticketName = '';
     final name = await showDialog<String>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, update) => AlertDialog(
-          title: Text(shopCopy(
-            widget.myanmar, 'Hold sale', 'အရောင်းကို ခဏသိမ်းရန်',
-          )),
+          title: Text(
+            shopCopy(widget.myanmar, 'Hold sale', 'အရောင်းကို ခဏသိမ်းရန်'),
+          ),
           content: TextField(
             key: const ValueKey('shop-held-sale-name'),
             autofocus: true,
@@ -2421,12 +2431,15 @@ class _ShopHomeState extends State<ShopHome> {
             textCapitalization: TextCapitalization.words,
             decoration: InputDecoration(
               labelText: shopCopy(
-                widget.myanmar, 'Name or reference', 'အမည် သို့မဟုတ် အမှတ်အသား',
+                widget.myanmar,
+                'Name or reference',
+                'အမည် သို့မဟုတ် အမှတ်အသား',
               ),
             ),
             onChanged: (value) => update(() => ticketName = value.trim()),
             onSubmitted: (_) {
-              if (ticketName.isNotEmpty) Navigator.pop(dialogContext, ticketName);
+              if (ticketName.isNotEmpty)
+                Navigator.pop(dialogContext, ticketName);
             },
           ),
           actions: [
@@ -2459,16 +2472,22 @@ class _ShopHomeState extends State<ShopHome> {
       await _loadCheckoutState();
       if (!mounted) return;
       if (refresh != null && _checkoutReady) Navigator.of(context).pop();
-      _message(shopCopy(
-        widget.myanmar, 'Sale held on this device.',
-        'အရောင်းကို ဤစက်တွင် ခဏသိမ်းထားပါသည်။',
-      ));
+      _message(
+        shopCopy(
+          widget.myanmar,
+          'Sale held on this device.',
+          'အရောင်းကို ဤစက်တွင် ခဏသိမ်းထားပါသည်။',
+        ),
+      );
     } catch (_) {
-      if (mounted) _message(shopCopy(
-        widget.myanmar,
-        'Could not hold the sale. The current basket remains here.',
-        'အရောင်းကို ခဏမသိမ်းနိုင်ပါ။ လက်ရှိစာရင်း မပျောက်ပါ။',
-      ));
+      if (mounted)
+        _message(
+          shopCopy(
+            widget.myanmar,
+            'Could not hold the sale. The current basket remains here.',
+            'အရောင်းကို ခဏမသိမ်းနိုင်ပါ။ လက်ရှိစာရင်း မပျောက်ပါ။',
+          ),
+        );
     } finally {
       if (mounted) setState(() => _saving = false);
       _focusScannerIfReady();
@@ -2491,18 +2510,24 @@ class _ShopHomeState extends State<ShopHome> {
                 Padding(
                   padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
                   child: Text(
-                    shopCopy(widget.myanmar, 'Held sales', 'ခဏသိမ်းထားသောအရောင်းများ'),
+                    shopCopy(
+                      widget.myanmar,
+                      'Held sales',
+                      'ခဏသိမ်းထားသောအရောင်းများ',
+                    ),
                     style: Theme.of(sheetContext).textTheme.titleLarge,
                   ),
                 ),
                 if (_cart.isNotEmpty || _pendingWalletCheckout != null)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-                    child: Text(shopCopy(
-                      widget.myanmar,
-                      'Hold or finish the current sale before reopening another.',
-                      'အခြားအရောင်းကို ပြန်မဖွင့်မီ လက်ရှိအရောင်းကို ခဏသိမ်းပါ သို့မဟုတ် ပြီးဆုံးအောင်လုပ်ပါ။',
-                    )),
+                    child: Text(
+                      shopCopy(
+                        widget.myanmar,
+                        'Hold or finish the current sale before reopening another.',
+                        'အခြားအရောင်းကို ပြန်မဖွင့်မီ လက်ရှိအရောင်းကို ခဏသိမ်းပါ သို့မဟုတ် ပြီးဆုံးအောင်လုပ်ပါ။',
+                      ),
+                    ),
                   ),
                 Expanded(
                   child: ListView.separated(
@@ -2510,18 +2535,25 @@ class _ShopHomeState extends State<ShopHome> {
                     separatorBuilder: (_, _) => const Divider(height: 1),
                     itemBuilder: (context, index) {
                       final ticket = _heldTickets[index];
-                      final count = ticket.draft.quantities.values
-                          .fold<int>(0, (total, quantity) => total + quantity);
+                      final count = ticket.draft.quantities.values.fold<int>(
+                        0,
+                        (total, quantity) => total + quantity,
+                      );
                       return ListTile(
                         key: ValueKey('shop-held-ticket:${ticket.id}'),
                         title: Text(ticket.name),
-                        subtitle: Text(shopCopy(
-                          widget.myanmar,
-                          '$count items · saved on this device',
-                          '${shopNumber(count, myanmar: true)} ခု · ဤစက်တွင် သိမ်းထားသည်',
-                        )),
-                        onTap: _cart.isEmpty && _pendingWalletCheckout == null &&
-                                !_saving && _checkoutReady
+                        subtitle: Text(
+                          shopCopy(
+                            widget.myanmar,
+                            '$count items · saved on this device',
+                            '${shopNumber(count, myanmar: true)} ခု · ဤစက်တွင် သိမ်းထားသည်',
+                          ),
+                        ),
+                        onTap:
+                            _cart.isEmpty &&
+                                _pendingWalletCheckout == null &&
+                                !_saving &&
+                                _checkoutReady
                             ? () => _reopenHeldSale(ticket.id)
                             : null,
                         trailing: Row(
@@ -2529,24 +2561,44 @@ class _ShopHomeState extends State<ShopHome> {
                           children: [
                             TextButton(
                               key: ValueKey('shop-held-reopen:${ticket.id}'),
-                              onPressed: _cart.isEmpty &&
+                              onPressed:
+                                  _cart.isEmpty &&
                                       _pendingWalletCheckout == null &&
-                                      !_saving && _checkoutReady
+                                      !_saving &&
+                                      _checkoutReady
                                   ? () => _reopenHeldSale(ticket.id)
                                   : null,
-                              child: Text(shopCopy(widget.myanmar, 'Reopen', 'ပြန်ဖွင့်ရန်')),
+                              child: Text(
+                                shopCopy(
+                                  widget.myanmar,
+                                  'Reopen',
+                                  'ပြန်ဖွင့်ရန်',
+                                ),
+                              ),
                             ),
                             PopupMenuButton<String>(
-                              tooltip: shopCopy(widget.myanmar, 'Ticket options', 'အရောင်းရွေးချယ်မှုများ'),
+                              tooltip: shopCopy(
+                                widget.myanmar,
+                                'Ticket options',
+                                'အရောင်းရွေးချယ်မှုများ',
+                              ),
                               onSelected: (action) {
                                 if (action == 'discard') {
-                                  unawaited(_discardHeldSale(ticket, refresh: refresh));
+                                  unawaited(
+                                    _discardHeldSale(ticket, refresh: refresh),
+                                  );
                                 }
                               },
                               itemBuilder: (_) => [
                                 PopupMenuItem(
                                   value: 'discard',
-                                  child: Text(shopCopy(widget.myanmar, 'Discard ticket', 'သိမ်းထားသောအရောင်းကို ဖျက်ရန်')),
+                                  child: Text(
+                                    shopCopy(
+                                      widget.myanmar,
+                                      'Discard ticket',
+                                      'သိမ်းထားသောအရောင်းကို ဖျက်ရန်',
+                                    ),
+                                  ),
                                 ),
                               ],
                             ),
@@ -2566,8 +2618,11 @@ class _ShopHomeState extends State<ShopHome> {
   }
 
   Future<void> _reopenHeldSale(String id) async {
-    if (_cart.isNotEmpty || _pendingWalletCheckout != null || _saving ||
-        !_checkoutReady) return;
+    if (_cart.isNotEmpty ||
+        _pendingWalletCheckout != null ||
+        _saving ||
+        !_checkoutReady)
+      return;
     await _draftWrites;
     if (!mounted || _cart.isNotEmpty || _pendingWalletCheckout != null) return;
     setState(() => _saving = true);
@@ -2576,22 +2631,34 @@ class _ShopHomeState extends State<ShopHome> {
       await _loadCheckoutState();
       if (mounted && _checkoutReady) Navigator.of(context).pop();
     } catch (_) {
-      if (mounted) _message(shopCopy(
-        widget.myanmar,
-        'Could not reopen this sale. Nothing was replaced.',
-        'ဤအရောင်းကို ပြန်မဖွင့်နိုင်ပါ။ လက်ရှိစာရင်း မပြောင်းပါ။',
-      ));
+      if (mounted)
+        _message(
+          shopCopy(
+            widget.myanmar,
+            'Could not reopen this sale. Nothing was replaced.',
+            'ဤအရောင်းကို ပြန်မဖွင့်နိုင်ပါ။ လက်ရှိစာရင်း မပြောင်းပါ။',
+          ),
+        );
     } finally {
       if (mounted) setState(() => _saving = false);
       _focusScannerIfReady();
     }
   }
 
-  Future<void> _discardHeldSale(HeldSaleTicket ticket, {StateSetter? refresh}) async {
+  Future<void> _discardHeldSale(
+    HeldSaleTicket ticket, {
+    StateSetter? refresh,
+  }) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: Text(shopCopy(widget.myanmar, 'Discard held sale?', 'သိမ်းထားသောအရောင်းကို ဖျက်မလား။')),
+        title: Text(
+          shopCopy(
+            widget.myanmar,
+            'Discard held sale?',
+            'သိမ်းထားသောအရောင်းကို ဖျက်မလား။',
+          ),
+        ),
         content: Text(ticket.name),
         actions: [
           TextButton(
@@ -2617,10 +2684,14 @@ class _ShopHomeState extends State<ShopHome> {
         refresh?.call(() {});
       }
     } catch (_) {
-      if (mounted) _message(shopCopy(
-        widget.myanmar, 'Could not discard this held sale.',
-        'သိမ်းထားသောအရောင်းကို မဖျက်နိုင်ပါ။',
-      ));
+      if (mounted)
+        _message(
+          shopCopy(
+            widget.myanmar,
+            'Could not discard this held sale.',
+            'သိမ်းထားသောအရောင်းကို မဖျက်နိုင်ပါ။',
+          ),
+        );
     }
   }
 

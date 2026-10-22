@@ -519,16 +519,21 @@ abstract final class ShopBackup {
               'created_at_millis, updated_at_millis FROM shop_held_sales',
             )
           : const <Row>[];
-      final heldInvalid = heldSales.length > 30 ||
+      final heldInvalid =
+          heldSales.length > 30 ||
           heldSales.any((row) {
             final id = row['id'];
             final name = row['name'];
             final operationId = row['operation_id'];
-            if (id is! String || id.isEmpty || id.length > 120 ||
-                name is! String || name.trim().isEmpty ||
+            if (id is! String ||
+                id.isEmpty ||
+                id.length > 120 ||
+                name is! String ||
+                name.trim().isEmpty ||
                 name.runes.length > 80 ||
                 RegExp(r'[\x00-\x1f\x7f]').hasMatch(name) ||
-                operationId is! String || operationId.isEmpty ||
+                operationId is! String ||
+                operationId.isEmpty ||
                 operationId.length > 120 ||
                 row['created_at_millis'] is! int ||
                 row['updated_at_millis'] is! int ||
@@ -536,9 +541,9 @@ abstract final class ShopBackup {
               return true;
             }
             return connection.select(
-              'SELECT 1 FROM shop_sales WHERE operation_id = ? LIMIT 1',
-              [operationId],
-            ).isNotEmpty ||
+                  'SELECT 1 FROM shop_sales WHERE operation_id = ? LIMIT 1',
+                  [operationId],
+                ).isNotEmpty ||
                 drafts.any((draft) => draft['operation_id'] == operationId);
           });
       final hasReorderLevel =
