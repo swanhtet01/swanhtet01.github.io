@@ -252,7 +252,7 @@ class _MenuImportScreenState extends State<MenuImportScreen> {
         _message = shopCopy(
           widget.myanmar,
           'Added $count reviewed products to this device.',
-          'စစ်ဆေးပြီးသော ကုန်ပစ္စည်း $count ခုကို ဤစက်တွင် ထည့်ပြီးပါပြီ။',
+          'စစ်ဆေးပြီးသော ကုန်ပစ္စည်း ${shopNumber(count, myanmar: true)} ခုကို ဤစက်တွင် ထည့်ပြီးပါပြီ။',
         );
         _batchId = null;
         for (final editor in _editors) {
@@ -268,16 +268,14 @@ class _MenuImportScreenState extends State<MenuImportScreen> {
           'စာရင်းမထည့်မီ ပစ္စည်းအမည်၊ ဈေးနှုန်းနှင့် စတင်လက်ကျန်အားလုံးကို အတည်ပြုပါ။',
         ),
       );
-    } on ArgumentError catch (error) {
+    } on ArgumentError {
       if (mounted) {
         setState(
-          () => _message =
-              error.message?.toString() ??
-              shopCopy(
-                widget.myanmar,
-                'Review the product fields and try again.',
-                'ကုန်ပစ္စည်းအချက်အလက်များကို စစ်ပြီး ထပ်ကြိုးစားပါ။',
-              ),
+          () => _message = shopCopy(
+            widget.myanmar,
+            'Review the product fields and try again.',
+            'ကုန်ပစ္စည်းအချက်အလက်များကို စစ်ပြီး ထပ်ကြိုးစားပါ။',
+          ),
         );
       }
     } catch (_) {
