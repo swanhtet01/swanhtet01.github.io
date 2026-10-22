@@ -3093,6 +3093,99 @@ void main() {
     await database.close();
   });
 
+  testWidgets('wallet setup shows saved status and opens one editor at a time', (
+    tester,
+  ) async {
+    final database = ShopDatabase(NativeDatabase.memory());
+    await database.saveWalletSetup(
+      MerchantWalletSetup(
+        provider: 'KBZPay',
+        merchantPhone: '09123456789',
+        officialQrPayload: _testStaticMmqr(),
+        issuerConfirmed: true,
+      ),
+    );
+    await tester.pumpWidget(
+      MaterialApp(home: WalletSetupScreen(database: database, myanmar: false)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Ready to show QR'), findsOneWidget);
+    expect(find.text('No merchant QR saved'), findsOneWidget);
+    expect(find.byType(TextField), findsNothing);
+    expect(find.byType(QrImageView), findsNothing);
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is Semantics &&
+            widget.properties.label == 'KBZPay, Ready to show QR' &&
+            widget.properties.button == true &&
+            widget.properties.onTap != null,
+      ),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(const ValueKey('wallet-provider-KBZPay')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('wallet-payload-KBZPay')), findsOneWidget);
+    expect(find.byKey(const ValueKey('wallet-payload-WavePay')), findsNothing);
+    expect(_merchantQrSemantics('KBZPay'), findsOneWidget);
+
+    final waveRow = find.byKey(const ValueKey('wallet-provider-WavePay'));
+    await tester.ensureVisible(waveRow);
+    await tester.tap(waveRow);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('wallet-payload-KBZPay')), findsNothing);
+    expect(find.byKey(const ValueKey('wallet-payload-WavePay')), findsOneWidget);
+    expect(find.byType(QrImageView), findsNothing);
+    expect(_merchantQrSemantics('KBZPay'), findsNothing);
+    await database.close();
+  });
+
+  for (final (width, myanmar) in [
+    (320.0, false),
+    (320.0, true),
+    (820.0, false),
+    (820.0, true),
+  ]) {
+    testWidgets('wallet setup fits ${width.toInt()}px ${myanmar ? 'my' : 'en'}', (
+      tester,
+    ) async {
+      tester.view.physicalSize = Size(width, 800);
+      tester.view.devicePixelRatio = 1;
+      if (width == 320) {
+        tester.platformDispatcher.textScaleFactorTestValue = 1.5;
+      }
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      final database = ShopDatabase(NativeDatabase.memory());
+      await tester.pumpWidget(
+        MaterialApp(
+          home: WalletSetupScreen(database: database, myanmar: myanmar),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(find.byType(TextField), findsNothing);
+
+      await tester.tap(find.byKey(const ValueKey('wallet-provider-KBZPay')));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('wallet-payload-KBZPay')),
+      );
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      await tester.ensureVisible(
+        find.text(myanmar ? 'ငွေပေးချေမှုကို သိမ်းရန်' : 'Save payment setup'),
+      );
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      await database.close();
+    });
+  }
+
   testWidgets('editing a merchant QR clears its prior issuer confirmation', (
     tester,
   ) async {
@@ -3111,6 +3204,10 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    expect(find.text('Ready to show QR'), findsOneWidget);
+    expect(find.byType(QrImageView), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('wallet-provider-KBZPay')));
+    await tester.pumpAndSettle();
     final qrWidget = find.byType(QrImageView).first;
     await tester.ensureVisible(qrWidget);
     await tester.pumpAndSettle();
@@ -3131,6 +3228,7 @@ void main() {
     final saved = (await database.readWalletSetups()).single;
     expect(saved.officialQrPayload, revisedPayload);
     expect(saved.issuerConfirmed, isFalse);
+    expect(find.text('Saved · confirm merchant QR'), findsOneWidget);
 
     await tester.tap(find.byType(CheckboxListTile).first);
     await tester.pumpAndSettle();
@@ -3173,7 +3271,11 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('ငွေကိုင်က အတည်ပြုရမည်'), findsOneWidget);
     expect(find.textContaining('payment QR'), findsNothing);
+    expect(find.text('QR ပြသရန် အသင့်ဖြစ်ပြီ'), findsOneWidget);
+    expect(find.byType(QrImageView), findsNothing);
 
+    await tester.tap(find.byKey(const ValueKey('wallet-provider-KBZPay')));
+    await tester.pumpAndSettle();
     await tester.ensureVisible(find.byType(QrImageView).first);
     await tester.pumpAndSettle();
     expect(
