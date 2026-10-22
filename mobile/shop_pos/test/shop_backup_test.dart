@@ -221,44 +221,47 @@ void main() {
     }
   });
 
-  test('encrypted backup restores a cash reversal and closed-shift audit', () async {
-    final source = await _closedCashReversalDatabase();
-    try {
-      final cashArchive = File('${directory.path}/cash-reversal-close.smbak');
-      await ShopBackup.exportEncrypted(
-        database: source,
-        archive: cashArchive,
-        password: _password,
-        scratchRoot: directory,
-      );
-      final target = File('${directory.path}/cash-reversal-close.sqlite');
-      await ShopBackup.restoreIntoEmptyDatabase(
-        archive: cashArchive,
-        target: target,
-        password: _password,
-      );
-      final restored = ShopDatabase(NativeDatabase(target));
+  test(
+    'encrypted backup restores a cash reversal and closed-shift audit',
+    () async {
+      final source = await _closedCashReversalDatabase();
       try {
-        final shift = await restored.readLatestCashShift();
-        expect(shift?.state, 'closed');
-        expect(shift?.cashSalesTotalMmk, 3000);
-        expect(shift?.cashReversalCount, 1);
-        expect(shift?.cashReversalTotalMmk, 3000);
-        expect(shift?.cashDrawerOutflowMmk, 3000);
-        expect(shift?.expectedCashMmk, 5000);
-        expect(shift?.differenceMmk, 0);
-        final receipt = (await restored.readRecentSales()).single;
-        expect(receipt.reversal?.cashDrawerDeltaMmk, -3000);
-        expect(receipt.reversal?.restockItems, isTrue);
-        expect((await restored.readActiveProducts()).single.onHand, 3);
-        expect(await restored.countOutboxOperations(), 5);
+        final cashArchive = File('${directory.path}/cash-reversal-close.smbak');
+        await ShopBackup.exportEncrypted(
+          database: source,
+          archive: cashArchive,
+          password: _password,
+          scratchRoot: directory,
+        );
+        final target = File('${directory.path}/cash-reversal-close.sqlite');
+        await ShopBackup.restoreIntoEmptyDatabase(
+          archive: cashArchive,
+          target: target,
+          password: _password,
+        );
+        final restored = ShopDatabase(NativeDatabase(target));
+        try {
+          final shift = await restored.readLatestCashShift();
+          expect(shift?.state, 'closed');
+          expect(shift?.cashSalesTotalMmk, 3000);
+          expect(shift?.cashReversalCount, 1);
+          expect(shift?.cashReversalTotalMmk, 3000);
+          expect(shift?.cashDrawerOutflowMmk, 3000);
+          expect(shift?.expectedCashMmk, 5000);
+          expect(shift?.differenceMmk, 0);
+          final receipt = (await restored.readRecentSales()).single;
+          expect(receipt.reversal?.cashDrawerDeltaMmk, -3000);
+          expect(receipt.reversal?.restockItems, isTrue);
+          expect((await restored.readActiveProducts()).single.onHand, 3);
+          expect(await restored.countOutboxOperations(), 5);
+        } finally {
+          await restored.close();
+        }
       } finally {
-        await restored.close();
+        await source.close();
       }
-    } finally {
-      await source.close();
-    }
-  });
+    },
+  );
 
   test(
     'authenticated v11 restore rejects reversal digest and event corruption',
@@ -381,144 +384,138 @@ void main() {
     },
   );
 
-  test(
-    'authenticated v11 restore rejects reconciliation command and event corruption',
-    () async {
-      final base = File('${directory.path}/verifier-reconciled-base.sqlite');
-      await _writeWalletReversalSnapshot(base, reconciled: true);
-      ShopBackup.verifySnapshot(base, expectedSchemaVersion: 11);
-      final cases = <({String name, void Function(Database) mutate})>[
-        (
-          name: 'reconciliation-request',
-          mutate: (connection) => _mutateImmutableAuditRow(
-            connection,
-            table: 'shop_wallet_reversal_reconciliations',
-            mutate: () => connection.execute(
-              'UPDATE shop_wallet_reversal_reconciliations '
-              'SET request_fingerprint = ?',
-              ['{}'],
-            ),
+  test('authenticated v11 restore rejects reconciliation command and event corruption', () async {
+    final base = File('${directory.path}/verifier-reconciled-base.sqlite');
+    await _writeWalletReversalSnapshot(base, reconciled: true);
+    ShopBackup.verifySnapshot(base, expectedSchemaVersion: 11);
+    final cases = <({String name, void Function(Database) mutate})>[
+      (
+        name: 'reconciliation-request',
+        mutate: (connection) => _mutateImmutableAuditRow(
+          connection,
+          table: 'shop_wallet_reversal_reconciliations',
+          mutate: () => connection.execute(
+            'UPDATE shop_wallet_reversal_reconciliations '
+            'SET request_fingerprint = ?',
+            ['{}'],
           ),
         ),
-        (
-          name: 'reconciliation-command-digest',
-          mutate: (connection) => _mutateImmutableAuditRow(
-            connection,
-            table: 'shop_wallet_reversal_reconciliations',
-            mutate: () => connection.execute(
-              'UPDATE shop_wallet_reversal_reconciliations '
-              'SET authorization_command_digest = ?',
-              [List<String>.filled(64, 'd').join()],
-            ),
+      ),
+      (
+        name: 'reconciliation-command-digest',
+        mutate: (connection) => _mutateImmutableAuditRow(
+          connection,
+          table: 'shop_wallet_reversal_reconciliations',
+          mutate: () => connection.execute(
+            'UPDATE shop_wallet_reversal_reconciliations '
+            'SET authorization_command_digest = ?',
+            [List<String>.filled(64, 'd').join()],
           ),
         ),
-        (
-          name: 'reconciliation-money-returned',
-          mutate: (connection) {
-            final row = connection.select(
-              'SELECT payload_json FROM shop_sync_outbox '
-              'WHERE operation_id = ?',
-              ['verifier-wallet-reconciliation'],
-            ).single;
-            final payload = Map<String, dynamic>.from(
-              jsonDecode(row['payload_json'] as String) as Map,
-            );
-            payload['moneyReturned'] = false;
-            connection.execute(
-              'UPDATE shop_sync_outbox SET payload_json = ? '
-              'WHERE operation_id = ?',
-              [jsonEncode(payload), 'verifier-wallet-reconciliation'],
-            );
-          },
-        ),
-      ];
-      for (final testCase in cases) {
-        final corrupt = File(
-          '${directory.path}/verifier-${testCase.name}.sqlite',
-        );
-        await corrupt.writeAsBytes(await base.readAsBytes());
-        final connection = sqlite3.open(corrupt.path);
-        try {
-          testCase.mutate(connection);
-        } finally {
-          connection.close();
-        }
-        await _expectAuthenticatedRestoreRejected(
-          directory: directory,
-          snapshot: corrupt,
-          stem: 'verifier-${testCase.name}',
-          schemaVersion: 11,
-        );
-      }
-    },
-  );
-
-  test(
-    'authenticated v11 restore rejects cash-close snapshot and event corruption',
-    () async {
-      final source = await _closedCashReversalDatabase();
-      final base = File('${directory.path}/verifier-cash-base.sqlite');
+      ),
+      (
+        name: 'reconciliation-money-returned',
+        mutate: (connection) {
+          final row = connection.select(
+            'SELECT payload_json FROM shop_sync_outbox '
+            'WHERE operation_id = ?',
+            ['verifier-wallet-reconciliation'],
+          ).single;
+          final payload = Map<String, dynamic>.from(
+            jsonDecode(row['payload_json'] as String) as Map,
+          );
+          payload['moneyReturned'] = false;
+          connection.execute(
+            'UPDATE shop_sync_outbox SET payload_json = ? '
+            'WHERE operation_id = ?',
+            [jsonEncode(payload), 'verifier-wallet-reconciliation'],
+          );
+        },
+      ),
+    ];
+    for (final testCase in cases) {
+      final corrupt = File(
+        '${directory.path}/verifier-${testCase.name}.sqlite',
+      );
+      await corrupt.writeAsBytes(await base.readAsBytes());
+      final connection = sqlite3.open(corrupt.path);
       try {
-        await source.exportVerifiedLocalSnapshot(base);
+        testCase.mutate(connection);
       } finally {
-        await source.close();
+        connection.close();
       }
-      ShopBackup.verifySnapshot(base, expectedSchemaVersion: 11);
-      final cases = <({String name, void Function(Database) mutate})>[
-        (
-          name: 'cash-close-reversal-total',
-          mutate: (connection) => connection.execute(
-            'UPDATE shop_cash_shifts '
-            'SET cash_reversal_total_mmk = cash_reversal_total_mmk + 1',
-          ),
+      await _expectAuthenticatedRestoreRejected(
+        directory: directory,
+        snapshot: corrupt,
+        stem: 'verifier-${testCase.name}',
+        schemaVersion: 11,
+      );
+    }
+  });
+
+  test('authenticated v11 restore rejects cash-close snapshot and event corruption', () async {
+    final source = await _closedCashReversalDatabase();
+    final base = File('${directory.path}/verifier-cash-base.sqlite');
+    try {
+      await source.exportVerifiedLocalSnapshot(base);
+    } finally {
+      await source.close();
+    }
+    ShopBackup.verifySnapshot(base, expectedSchemaVersion: 11);
+    final cases = <({String name, void Function(Database) mutate})>[
+      (
+        name: 'cash-close-reversal-total',
+        mutate: (connection) => connection.execute(
+          'UPDATE shop_cash_shifts '
+          'SET cash_reversal_total_mmk = cash_reversal_total_mmk + 1',
         ),
-        (
-          name: 'cash-close-expected',
-          mutate: (connection) => connection.execute(
-            'UPDATE shop_cash_shifts '
-            'SET expected_cash_mmk = expected_cash_mmk + 1',
-          ),
+      ),
+      (
+        name: 'cash-close-expected',
+        mutate: (connection) => connection.execute(
+          'UPDATE shop_cash_shifts '
+          'SET expected_cash_mmk = expected_cash_mmk + 1',
         ),
-        (
-          name: 'cash-close-event',
-          mutate: (connection) {
-            final row = connection.select(
-              'SELECT payload_json FROM shop_sync_outbox '
-              'WHERE operation_id = ?',
-              ['verifier-cash-close'],
-            ).single;
-            final payload = Map<String, dynamic>.from(
-              jsonDecode(row['payload_json'] as String) as Map,
-            );
-            payload['cashDrawerOutflowMmk'] = 0;
-            connection.execute(
-              'UPDATE shop_sync_outbox SET payload_json = ? '
-              'WHERE operation_id = ?',
-              [jsonEncode(payload), 'verifier-cash-close'],
-            );
-          },
-        ),
-      ];
-      for (final testCase in cases) {
-        final corrupt = File(
-          '${directory.path}/verifier-${testCase.name}.sqlite',
-        );
-        await corrupt.writeAsBytes(await base.readAsBytes());
-        final connection = sqlite3.open(corrupt.path);
-        try {
-          testCase.mutate(connection);
-        } finally {
-          connection.close();
-        }
-        await _expectAuthenticatedRestoreRejected(
-          directory: directory,
-          snapshot: corrupt,
-          stem: 'verifier-${testCase.name}',
-          schemaVersion: 11,
-        );
+      ),
+      (
+        name: 'cash-close-event',
+        mutate: (connection) {
+          final row = connection.select(
+            'SELECT payload_json FROM shop_sync_outbox '
+            'WHERE operation_id = ?',
+            ['verifier-cash-close'],
+          ).single;
+          final payload = Map<String, dynamic>.from(
+            jsonDecode(row['payload_json'] as String) as Map,
+          );
+          payload['cashDrawerOutflowMmk'] = 0;
+          connection.execute(
+            'UPDATE shop_sync_outbox SET payload_json = ? '
+            'WHERE operation_id = ?',
+            [jsonEncode(payload), 'verifier-cash-close'],
+          );
+        },
+      ),
+    ];
+    for (final testCase in cases) {
+      final corrupt = File(
+        '${directory.path}/verifier-${testCase.name}.sqlite',
+      );
+      await corrupt.writeAsBytes(await base.readAsBytes());
+      final connection = sqlite3.open(corrupt.path);
+      try {
+        testCase.mutate(connection);
+      } finally {
+        connection.close();
       }
-    },
-  );
+      await _expectAuthenticatedRestoreRejected(
+        directory: directory,
+        snapshot: corrupt,
+        stem: 'verifier-${testCase.name}',
+        schemaVersion: 11,
+      );
+    }
+  });
 
   test(
     'encrypted export keeps an unfinished sale without recording it',
@@ -1003,27 +1000,27 @@ void main() {
     },
   );
 
-  test('direct v10 migration rejects a mixed-case reserved v11 table', () async {
-    final legacy = File('${directory.path}/legacy-direct-mixed-case.sqlite');
-    await database.exportVerifiedLocalSnapshot(legacy);
-    final connection = sqlite3.open(legacy.path);
-    try {
-      _removeV11ObjectsForLegacyFixture(connection);
-      connection.execute('PRAGMA user_version = 10');
-      connection.execute('CREATE TABLE SHOP_SALE_REVERSALS (fake TEXT)');
-    } finally {
-      connection.close();
-    }
-    final upgrading = ShopDatabase(NativeDatabase(legacy));
-    try {
-      await expectLater(
-        upgrading.countSales(),
-        throwsA(isA<StateError>()),
-      );
-    } finally {
-      await upgrading.close();
-    }
-  });
+  test(
+    'direct v10 migration rejects a mixed-case reserved v11 table',
+    () async {
+      final legacy = File('${directory.path}/legacy-direct-mixed-case.sqlite');
+      await database.exportVerifiedLocalSnapshot(legacy);
+      final connection = sqlite3.open(legacy.path);
+      try {
+        _removeV11ObjectsForLegacyFixture(connection);
+        connection.execute('PRAGMA user_version = 10');
+        connection.execute('CREATE TABLE SHOP_SALE_REVERSALS (fake TEXT)');
+      } finally {
+        connection.close();
+      }
+      final upgrading = ShopDatabase(NativeDatabase(legacy));
+      try {
+        await expectLater(upgrading.countSales(), throwsA(isA<StateError>()));
+      } finally {
+        await upgrading.close();
+      }
+    },
+  );
 
   test(
     'v9 database gains an empty held-sale table without stock writes',
@@ -1165,25 +1162,28 @@ void main() {
     );
   });
 
-  test('authenticated v11 restore rejects an extra executable trigger', () async {
-    final corrupt = File('${directory.path}/extra-audit-trigger.sqlite');
-    await database.exportVerifiedLocalSnapshot(corrupt);
-    final connection = sqlite3.open(corrupt.path);
-    try {
-      connection.execute('''
+  test(
+    'authenticated v11 restore rejects an extra executable trigger',
+    () async {
+      final corrupt = File('${directory.path}/extra-audit-trigger.sqlite');
+      await database.exportVerifiedLocalSnapshot(corrupt);
+      final connection = sqlite3.open(corrupt.path);
+      try {
+        connection.execute('''
         CREATE TRIGGER unexpected_product_insert
         AFTER INSERT ON shop_products BEGIN SELECT 1; END
       ''');
-    } finally {
-      connection.close();
-    }
-    await _expectAuthenticatedRestoreRejected(
-      directory: directory,
-      snapshot: corrupt,
-      stem: 'extra-audit-trigger',
-      schemaVersion: 11,
-    );
-  });
+      } finally {
+        connection.close();
+      }
+      await _expectAuthenticatedRestoreRejected(
+        directory: directory,
+        snapshot: corrupt,
+        stem: 'extra-audit-trigger',
+        schemaVersion: 11,
+      );
+    },
+  );
 
   test(
     'authenticated v11 restore preserves quoted CHECK literal case',
@@ -1220,31 +1220,31 @@ void main() {
     },
   );
 
-  test('authenticated v11 restore rejects changed audit column types', () async {
-    final corrupt = File('${directory.path}/changed-audit-column.sqlite');
-    await database.exportVerifiedLocalSnapshot(corrupt);
-    final connection = sqlite3.open(corrupt.path);
-    try {
-      connection.execute('PRAGMA writable_schema = ON');
-      connection.execute(
-        "UPDATE sqlite_master SET sql = replace(sql, ?, ?) "
-        "WHERE type = 'table' AND name = 'shop_cash_shifts'",
-        [
-          'cash_reversal_count INTEGER',
-          'cash_reversal_count TEXT',
-        ],
+  test(
+    'authenticated v11 restore rejects changed audit column types',
+    () async {
+      final corrupt = File('${directory.path}/changed-audit-column.sqlite');
+      await database.exportVerifiedLocalSnapshot(corrupt);
+      final connection = sqlite3.open(corrupt.path);
+      try {
+        connection.execute('PRAGMA writable_schema = ON');
+        connection.execute(
+          "UPDATE sqlite_master SET sql = replace(sql, ?, ?) "
+          "WHERE type = 'table' AND name = 'shop_cash_shifts'",
+          ['cash_reversal_count INTEGER', 'cash_reversal_count TEXT'],
+        );
+        connection.execute('PRAGMA writable_schema = OFF');
+      } finally {
+        connection.close();
+      }
+      await _expectAuthenticatedRestoreRejected(
+        directory: directory,
+        snapshot: corrupt,
+        stem: 'changed-audit-column',
+        schemaVersion: 11,
       );
-      connection.execute('PRAGMA writable_schema = OFF');
-    } finally {
-      connection.close();
-    }
-    await _expectAuthenticatedRestoreRejected(
-      directory: directory,
-      snapshot: corrupt,
-      stem: 'changed-audit-column',
-      schemaVersion: 11,
-    );
-  });
+    },
+  );
 
   test('v11 snapshots reject missing or invalid alert settings', () async {
     final missing = File('${directory.path}/missing-reorder.sqlite');

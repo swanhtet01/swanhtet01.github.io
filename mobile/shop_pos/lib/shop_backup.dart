@@ -871,7 +871,9 @@ abstract final class ShopBackup {
 
   static bool _v11CashShiftColumnDefinitionsValid(Database connection) {
     final columns = <String, Row>{
-      for (final row in connection.select('PRAGMA table_info(shop_cash_shifts)'))
+      for (final row in connection.select(
+        'PRAGMA table_info(shop_cash_shifts)',
+      ))
         if (row['name'] is String) (row['name'] as String).toLowerCase(): row,
     };
     return _v11CashShiftColumns.every((name) {
@@ -990,10 +992,7 @@ abstract final class ShopBackup {
 
   static String _canonicalSchemaSql(String value) {
     final output = StringBuffer();
-    final ifNotExists = RegExp(
-      r'if\s+not\s+exists\b',
-      caseSensitive: false,
-    );
+    final ifNotExists = RegExp(r'if\s+not\s+exists\b', caseSensitive: false);
     var index = 0;
     var pendingSpace = false;
     while (index < value.length) {
@@ -1025,8 +1024,8 @@ abstract final class ShopBackup {
       }
 
       final optionalClause = ifNotExists.matchAsPrefix(value, index);
-      final hasWordBefore = index > 0 &&
-          RegExp(r'[A-Za-z0-9_]').hasMatch(value[index - 1]);
+      final hasWordBefore =
+          index > 0 && RegExp(r'[A-Za-z0-9_]').hasMatch(value[index - 1]);
       if (!hasWordBefore && optionalClause != null) {
         index = optionalClause.end;
         pendingSpace = true;
@@ -1048,7 +1047,10 @@ abstract final class ShopBackup {
   static String _sha256Hex(String value) =>
       crypto.sha256.convert(utf8.encode(value)).toString();
 
-  static bool _jsonObjectMatches(Object? encoded, Map<String, Object?> expected) {
+  static bool _jsonObjectMatches(
+    Object? encoded,
+    Map<String, Object?> expected,
+  ) {
     if (encoded is! String) return false;
     try {
       return _jsonDeepEquals(jsonDecode(encoded), expected);
@@ -1183,8 +1185,7 @@ abstract final class ShopBackup {
           [operationId],
         );
         if (events.length != 1 ||
-            events.single['event_type'] !=
-                'shop.sale.reversal_recorded.v1' ||
+            events.single['event_type'] != 'shop.sale.reversal_recorded.v1' ||
             events.single['created_at_millis'] != createdAtMillis) {
           return false;
         }
@@ -1199,9 +1200,7 @@ abstract final class ShopBackup {
           'cashReturnConfirmed': isCash,
           'cashDrawerDeltaMmk': drawerDelta,
           if (isCash) 'shiftId': shiftId,
-          'externalReconciliationState': isCash
-              ? 'not_applicable'
-              : 'pending',
+          'externalReconciliationState': isCash ? 'not_applicable' : 'pending',
           'moneyReturned': isCash,
           'authorizationReceiptId': authorizationReceiptId,
           'authorizedActorId': authorizedActorId,
@@ -1317,7 +1316,9 @@ abstract final class ShopBackup {
             (state != 'open' && state != 'closed')) {
           return false;
         }
-        final sales = connection.select('''
+        final sales = connection
+            .select(
+              '''
           SELECT
             COALESCE(SUM(CASE WHEN s.payment_method = 'cash' THEN 1 ELSE 0 END), 0) AS cash_count,
             COALESCE(SUM(CASE WHEN s.payment_method = 'cash' THEN s.total_mmk ELSE 0 END), 0) AS cash_total,
@@ -1327,7 +1328,10 @@ abstract final class ShopBackup {
           FROM shop_cash_shift_sales link
           JOIN shop_sales s ON s.id = link.sale_id
           WHERE link.shift_id = ?
-        ''', [shiftId]).single;
+        ''',
+              [shiftId],
+            )
+            .single;
         final cashCount = sales['cash_count'];
         final cashTotal = sales['cash_total'];
         final walletCount = sales['wallet_count'];
@@ -1339,14 +1343,19 @@ abstract final class ShopBackup {
             sales['unknown_count'] != 0) {
           return false;
         }
-        final reversals = connection.select('''
+        final reversals = connection
+            .select(
+              '''
           SELECT COUNT(*) AS reversal_count,
             COALESCE(SUM(original_total_mmk), 0) AS reversal_total,
             COALESCE(SUM(-cash_drawer_delta_mmk), 0) AS drawer_outflow,
             COALESCE(MAX(created_at_millis), 0) AS latest_reversal_at
           FROM shop_sale_reversals
           WHERE shift_id = ? AND original_payment_method = 'cash'
-        ''', [shiftId]).single;
+        ''',
+              [shiftId],
+            )
+            .single;
         final reversalCount = reversals['reversal_count'];
         final reversalTotal = reversals['reversal_total'];
         final drawerOutflow = reversals['drawer_outflow'];
@@ -1430,7 +1439,8 @@ abstract final class ShopBackup {
                     shift['cash_reversal_total_mmk'] != reversalTotal ||
                     shift['cash_drawer_outflow_mmk'] != drawerOutflow ||
                     shift['review_cash_reversal_count'] != reversalCount ||
-                    shift['review_cash_drawer_outflow_mmk'] != drawerOutflow))) {
+                    shift['review_cash_drawer_outflow_mmk'] !=
+                        drawerOutflow))) {
           return false;
         }
 

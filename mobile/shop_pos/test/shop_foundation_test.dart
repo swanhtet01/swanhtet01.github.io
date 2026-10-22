@@ -569,132 +569,138 @@ void main() {
       expect(await database.countOutboxOperations(), outboxCount);
     });
 
-    test('cash reversal cannot reopen exhausted gross shift capacity', () async {
-      const maximumShiftCashMmk = 200000000000000;
-      await database.addProduct(
-        id: 'gross-cap-product',
-        name: 'Gross cap item',
-        priceMmk: 1000,
-        openingStock: 3,
-      );
-      final shift = await database.openCashShift(
-        operationId: 'gross-cap-shift',
-        operatorLabel: 'May',
-        openingFloatMmk: maximumShiftCashMmk - 1000,
-      );
-      final sale = await database.recordCashSale(
-        operationId: 'gross-cap-sale-1',
-        lines: const [
-          ShopSaleLineInput(productId: 'gross-cap-product', quantity: 1),
-        ],
-      );
-      final command = await database.previewFullSaleReversal(
-        operationId: 'gross-cap-reversal',
-        saleId: sale.id,
-        restockItems: true,
-        reason: 'Full sale returned at the gross cash boundary',
-        confirmCashReturned: true,
-      );
-      await database.recordAuthorizedFullSaleReversal(
-        command: command,
-        authorization: _correctionAuthorization(
-          command.commandDigest,
-          capability: 'shop.sale.reverse',
-          receiptId: 'gross-cap-reversal-receipt',
-        ),
-      );
-
-      final reviewed = await database.readCashShiftReview(shift.id);
-      expect(reviewed.cashSalesTotalMmk, 1000);
-      expect(reviewed.cashDrawerOutflowMmk, 1000);
-      expect(reviewed.expectedCashMmk, maximumShiftCashMmk - 1000);
-      await expectLater(
-        database.recordCashSale(
-          operationId: 'gross-cap-sale-2',
+    test(
+      'cash reversal cannot reopen exhausted gross shift capacity',
+      () async {
+        const maximumShiftCashMmk = 200000000000000;
+        await database.addProduct(
+          id: 'gross-cap-product',
+          name: 'Gross cap item',
+          priceMmk: 1000,
+          openingStock: 3,
+        );
+        final shift = await database.openCashShift(
+          operationId: 'gross-cap-shift',
+          operatorLabel: 'May',
+          openingFloatMmk: maximumShiftCashMmk - 1000,
+        );
+        final sale = await database.recordCashSale(
+          operationId: 'gross-cap-sale-1',
           lines: const [
             ShopSaleLineInput(productId: 'gross-cap-product', quantity: 1),
           ],
-        ),
-        throwsA(isA<StateError>()),
-      );
-      expect(await database.countSales(), 1);
-      expect((await database.readActiveProducts()).single.onHand, 3);
-
-      final unchanged = await database.readCashShiftReview(shift.id);
-      final closed = await database.closeCashShift(
-        shiftId: shift.id,
-        operationId: 'gross-cap-close',
-        seenSaleCount: unchanged.saleCount,
-        seenCashTotalMmk: unchanged.cashSalesTotalMmk,
-        seenCashReversalCount: unchanged.cashReversalCount,
-        seenCashDrawerOutflowMmk: unchanged.cashDrawerOutflowMmk,
-        countedCashMmk: unchanged.expectedCashMmk,
-      );
-      expect(closed.differenceMmk, 0);
-    });
-
-    test('cash reversal authorization stays bound to the reviewed shift', () async {
-      await database.addProduct(
-        id: 'shift-bound-return-product',
-        name: 'Shift-bound item',
-        priceMmk: 1000,
-        openingStock: 2,
-      );
-      final firstShift = await database.openCashShift(
-        operationId: 'shift-bound-first-open',
-        operatorLabel: 'May',
-        openingFloatMmk: 5000,
-      );
-      final sale = await database.recordCashSale(
-        operationId: 'shift-bound-sale',
-        lines: const [
-          ShopSaleLineInput(
-            productId: 'shift-bound-return-product',
-            quantity: 1,
-          ),
-        ],
-      );
-      final command = await database.previewFullSaleReversal(
-        operationId: 'shift-bound-reversal',
-        saleId: sale.id,
-        restockItems: true,
-        reason: 'Cash return was reviewed for the first shift',
-        confirmCashReturned: true,
-      );
-      expect(command.expectedCashShiftId, firstShift.id);
-      final firstReview = await database.readCashShiftReview(firstShift.id);
-      await database.closeCashShift(
-        shiftId: firstShift.id,
-        operationId: 'shift-bound-first-close',
-        seenSaleCount: firstReview.saleCount,
-        seenCashTotalMmk: firstReview.cashSalesTotalMmk,
-        countedCashMmk: firstReview.expectedCashMmk,
-      );
-      final secondShift = await database.openCashShift(
-        operationId: 'shift-bound-second-open',
-        operatorLabel: 'May',
-        openingFloatMmk: 5000,
-      );
-
-      await expectLater(
-        database.recordAuthorizedFullSaleReversal(
+        );
+        final command = await database.previewFullSaleReversal(
+          operationId: 'gross-cap-reversal',
+          saleId: sale.id,
+          restockItems: true,
+          reason: 'Full sale returned at the gross cash boundary',
+          confirmCashReturned: true,
+        );
+        await database.recordAuthorizedFullSaleReversal(
           command: command,
           authorization: _correctionAuthorization(
             command.commandDigest,
             capability: 'shop.sale.reverse',
-            receiptId: 'shift-bound-reversal-receipt',
+            receiptId: 'gross-cap-reversal-receipt',
           ),
-        ),
-        throwsA(isA<StateError>()),
-      );
-      expect(await database.readSaleReversalForSale(sale.id), isNull);
-      expect((await database.readActiveProducts()).single.onHand, 1);
-      expect(
-        (await database.readCashShiftReview(secondShift.id))
-            .cashDrawerOutflowMmk,
-        0,
-      );
-    });
+        );
+
+        final reviewed = await database.readCashShiftReview(shift.id);
+        expect(reviewed.cashSalesTotalMmk, 1000);
+        expect(reviewed.cashDrawerOutflowMmk, 1000);
+        expect(reviewed.expectedCashMmk, maximumShiftCashMmk - 1000);
+        await expectLater(
+          database.recordCashSale(
+            operationId: 'gross-cap-sale-2',
+            lines: const [
+              ShopSaleLineInput(productId: 'gross-cap-product', quantity: 1),
+            ],
+          ),
+          throwsA(isA<StateError>()),
+        );
+        expect(await database.countSales(), 1);
+        expect((await database.readActiveProducts()).single.onHand, 3);
+
+        final unchanged = await database.readCashShiftReview(shift.id);
+        final closed = await database.closeCashShift(
+          shiftId: shift.id,
+          operationId: 'gross-cap-close',
+          seenSaleCount: unchanged.saleCount,
+          seenCashTotalMmk: unchanged.cashSalesTotalMmk,
+          seenCashReversalCount: unchanged.cashReversalCount,
+          seenCashDrawerOutflowMmk: unchanged.cashDrawerOutflowMmk,
+          countedCashMmk: unchanged.expectedCashMmk,
+        );
+        expect(closed.differenceMmk, 0);
+      },
+    );
+
+    test(
+      'cash reversal authorization stays bound to the reviewed shift',
+      () async {
+        await database.addProduct(
+          id: 'shift-bound-return-product',
+          name: 'Shift-bound item',
+          priceMmk: 1000,
+          openingStock: 2,
+        );
+        final firstShift = await database.openCashShift(
+          operationId: 'shift-bound-first-open',
+          operatorLabel: 'May',
+          openingFloatMmk: 5000,
+        );
+        final sale = await database.recordCashSale(
+          operationId: 'shift-bound-sale',
+          lines: const [
+            ShopSaleLineInput(
+              productId: 'shift-bound-return-product',
+              quantity: 1,
+            ),
+          ],
+        );
+        final command = await database.previewFullSaleReversal(
+          operationId: 'shift-bound-reversal',
+          saleId: sale.id,
+          restockItems: true,
+          reason: 'Cash return was reviewed for the first shift',
+          confirmCashReturned: true,
+        );
+        expect(command.expectedCashShiftId, firstShift.id);
+        final firstReview = await database.readCashShiftReview(firstShift.id);
+        await database.closeCashShift(
+          shiftId: firstShift.id,
+          operationId: 'shift-bound-first-close',
+          seenSaleCount: firstReview.saleCount,
+          seenCashTotalMmk: firstReview.cashSalesTotalMmk,
+          countedCashMmk: firstReview.expectedCashMmk,
+        );
+        final secondShift = await database.openCashShift(
+          operationId: 'shift-bound-second-open',
+          operatorLabel: 'May',
+          openingFloatMmk: 5000,
+        );
+
+        await expectLater(
+          database.recordAuthorizedFullSaleReversal(
+            command: command,
+            authorization: _correctionAuthorization(
+              command.commandDigest,
+              capability: 'shop.sale.reverse',
+              receiptId: 'shift-bound-reversal-receipt',
+            ),
+          ),
+          throwsA(isA<StateError>()),
+        );
+        expect(await database.readSaleReversalForSale(sale.id), isNull);
+        expect((await database.readActiveProducts()).single.onHand, 1);
+        expect(
+          (await database.readCashShiftReview(secondShift.id))
+              .cashDrawerOutflowMmk,
+          0,
+        );
+      },
+    );
 
     test('wallet reversal stays externally pending until separate reconciliation', () async {
       await database.addProduct(

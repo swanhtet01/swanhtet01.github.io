@@ -1326,9 +1326,8 @@ class ShopDatabase extends _$ShopDatabase {
       'review_cash_drawer_outflow_mmk',
     };
     final hasReservedShiftColumn = shiftColumns.any(
-      (row) => reservedShiftColumns.contains(
-        row.read<String>('name').toLowerCase(),
-      ),
+      (row) =>
+          reservedShiftColumns.contains(row.read<String>('name').toLowerCase()),
     );
     if (hasReservedObject || hasReservedShiftColumn) {
       throw StateError(
@@ -2593,9 +2592,7 @@ class ShopDatabase extends _$ShopDatabase {
     if (isCash && activeShift == null) {
       throw StateError('Start a cash shift before returning cash.');
     }
-    final paymentResolution = isCash
-        ? 'cash_returned_now'
-        : 'external_pending';
+    final paymentResolution = isCash ? 'cash_returned_now' : 'external_pending';
     final requestFingerprint = jsonEncode({
       'operationId': cleanOperationId,
       'saleId': sale.id,
@@ -2656,8 +2653,7 @@ class ShopDatabase extends _$ShopDatabase {
     QueryRow row,
     ShopCorrectionAuthorization authorization,
   ) =>
-      row.read<String>('authorization_receipt_id') ==
-          authorization.receiptId &&
+      row.read<String>('authorization_receipt_id') == authorization.receiptId &&
       row.read<String>('authorization_receipt_digest') ==
           authorization.receiptDigest &&
       row.read<String>('authorization_workspace_id') ==
@@ -2803,8 +2799,7 @@ class ShopDatabase extends _$ShopDatabase {
           verifiedCommand.originalTotalMmk != command.originalTotalMmk ||
           verifiedCommand.originalPaymentMethod !=
               command.originalPaymentMethod ||
-          verifiedCommand.cashReturnConfirmed !=
-              command.cashReturnConfirmed ||
+          verifiedCommand.cashReturnConfirmed != command.cashReturnConfirmed ||
           verifiedCommand.expectedCashShiftId != command.expectedCashShiftId ||
           verifiedCommand.paymentResolution != command.paymentResolution) {
         throw StateError('The original sale changed. Review it again.');
@@ -2829,7 +2824,8 @@ class ShopDatabase extends _$ShopDatabase {
       ShopCashShift? activeShift;
       if (command.originalPaymentMethod == 'cash') {
         activeShift = await readOpenCashShift();
-        if (activeShift == null || activeShift.id != command.expectedCashShiftId) {
+        if (activeShift == null ||
+            activeShift.id != command.expectedCashShiftId) {
           throw StateError(
             'The cash shift changed. Review and authorize this return again.',
           );
@@ -2977,7 +2973,8 @@ class ShopDatabase extends _$ShopDatabase {
                 command.originalPaymentMethod == 'cash'
                 ? 'not_applicable'
                 : 'pending',
-            'moneyReturned': command.originalPaymentMethod == 'cash' &&
+            'moneyReturned':
+                command.originalPaymentMethod == 'cash' &&
                 command.cashReturnConfirmed,
             'authorizationReceiptId': authorization.receiptId,
             'authorizedActorId': authorization.actorId,
