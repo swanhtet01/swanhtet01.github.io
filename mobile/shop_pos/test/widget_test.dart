@@ -901,6 +901,10 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Recent sales'), findsOneWidget);
       expect(find.text('Check stock'), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.text('Check stock')).dy,
+        lessThan(tester.getTopLeft(find.text('Recent sales')).dy),
+      );
       expect(find.text('Stock to check'), findsNothing);
       await tester.ensureVisible(find.text('Check stock'));
       await tester.tap(find.text('Check stock'));
@@ -2774,10 +2778,7 @@ void main() {
         greaterThanOrEqualTo(44),
       );
       expect(
-        find.descendant(
-          of: fourthRow,
-          matching: find.text('ထည့်'),
-        ),
+        find.descendant(of: fourthRow, matching: find.text('ထည့်')),
         findsOneWidget,
       );
       expect(
