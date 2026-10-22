@@ -1670,6 +1670,7 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
   tab: CommerceTab
 }) {
   const navigate = useNavigate()
+  const inventoryLocale = useUiLocale()
   const commerceLocation = useLocation()
   const requestedEcommerceIntent = useMemo(
     () => allowEcommerceShopHandoff ? ecommerceShopIntentReference(new URLSearchParams(commerceLocation.search)) : null,
@@ -7467,6 +7468,12 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
           : stockNextActionKind === 'restore'
             ? 'Access'
             : 'Review'
+  const stockNextReasonVisible = inventoryLocale !== 'my' ? stockNextReason
+    : stockNextActionKind === 'receive' && stockNextPurchaseRow
+      ? `${stockNextPurchaseRow.purchaseOrder.supplier} ထံမှ ${stockNextPurchaseRow.progress.remaining.toLocaleString()} ခု လက်ခံရန် ကျန်သည်။`
+      : stockNextItem && stockNextItem.onHand <= stockNextItem.reorderAt
+        ? `${stockNextItem.nameMy?.trim() || stockNextItem.name} ပြန်မှာရန် သတ်မှတ်ချက်သို့ ရောက်နေသည်။`
+        : uiText(stockNextReason)
 
   function renderStockRow({ item }: (typeof stockRows)[number]) {
     const active = activePurchaseOrderBySku.get(item.sku)
@@ -7478,16 +7485,17 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
         : false
     const stockNeedsAttention = item.onHand <= item.reorderAt
     const stockAttentionLabel = stockNeedsAttention
-      ? item.onHand === item.reorderAt ? 'At reorder level' : `${item.reorderAt - item.onHand} below reorder`
+      ? item.onHand === item.reorderAt ? uiText('At reorder level') : inventoryLocale === 'my' ? `ပြန်မှာရန် သတ်မှတ်ချက်ထက် ${item.reorderAt - item.onHand} ခု နည်းနေသည်` : `${item.reorderAt - item.onHand} below reorder`
       : null
+    const visibleName = inventoryLocale === 'my' && item.nameMy?.trim() ? item.nameMy : item.name
     return <div className="data-row" data-receiving={editing || catalogEditing} data-stock-attention={stockNeedsAttention ? 'true' : 'false'} role="row" key={item.sku}>
-      <span role="rowheader"><ProductPhoto className="stock-product-photo" fallback={null} scope={productImageScope} sku={item.sku} /><span className="stock-row-copy"><strong>{item.name}</strong>{stockAttentionLabel ? <small className="stock-attention-label">{stockAttentionLabel}</small> : null}<small>{item.sku}</small></span></span>
+      <span role="rowheader"><ProductPhoto className="stock-product-photo" fallback={null} scope={productImageScope} sku={item.sku} /><span className="stock-row-copy"><strong lang={inventoryLocale === 'my' && item.nameMy ? 'my' : undefined}>{visibleName}</strong>{stockAttentionLabel ? <small className="stock-attention-label">{stockAttentionLabel}</small> : null}<small>{item.sku}</small></span></span>
       <span className={stockNeedsAttention ? 'warning-text' : ''} role="cell">{item.onHand}</span>
       <span role="cell">{item.reorderAt}</span>
       <span role="cell">{formatMoney(item.price)}</span>
       <span className="catalog-row-actions" role="cell">
-        <button aria-controls="catalog-item-editor" aria-expanded={catalogEditing} aria-label={`Edit price and reorder level for ${item.name}`} className="text-link" disabled={commerceControlsDisabled} ref={(node) => { if (node) catalogEditTriggerRefs.current.set(item.sku, node); else catalogEditTriggerRefs.current.delete(item.sku) }} type="button" onClick={() => openCatalogItemEditor(item.sku)}>{catalogEditing ? 'Editing' : 'Edit'}</button>
-        <button aria-expanded={editing} aria-label={active ? `Receive stock for ${item.name}` : `Order stock for ${item.name}`} className="text-link" disabled={commerceControlsDisabled} ref={(node) => { if (node) purchaseOrderTriggerRefs.current.set(item.sku, node); else purchaseOrderTriggerRefs.current.delete(item.sku) }} type="button" onClick={() => openPurchaseOrder(item.sku)}>{editing ? 'Continue' : active ? 'Receive' : stockNeedsAttention ? 'Reorder' : 'Order'}</button>
+        <button aria-controls="catalog-item-editor" aria-expanded={catalogEditing} aria-label={`${uiText('Edit price and reorder level for')} ${visibleName}`} className="text-link" disabled={commerceControlsDisabled} ref={(node) => { if (node) catalogEditTriggerRefs.current.set(item.sku, node); else catalogEditTriggerRefs.current.delete(item.sku) }} type="button" onClick={() => openCatalogItemEditor(item.sku)}>{catalogEditing ? uiText('Editing') : uiText('Edit')}</button>
+        <button aria-expanded={editing} aria-label={`${uiText(active ? 'Receive stock for' : 'Order stock for')} ${visibleName}`} className="text-link" disabled={commerceControlsDisabled} ref={(node) => { if (node) purchaseOrderTriggerRefs.current.set(item.sku, node); else purchaseOrderTriggerRefs.current.delete(item.sku) }} type="button" onClick={() => openPurchaseOrder(item.sku)}>{uiText(editing ? 'Continue' : active ? 'Receive' : stockNeedsAttention ? 'Reorder' : 'Order')}</button>
       </span>
     </div>
   }
@@ -8020,14 +8028,14 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
   if (tab === 'inventory') return <div className="operation-module shop-stock-module">
     {commerceBoundary}
     {!commerce.items.length ? shopCatalogOnboarding : null}
-    <section aria-label="Shop stock workspace" className="core-panel inventory-panel shop-stock-workspace">
+    <section aria-label={uiText('Shop stock workspace')} className="core-panel inventory-panel shop-stock-workspace">
       <Suspense fallback={null}><ShopStocktakeDraftRecovery active={Boolean(stockCountDraft)} current={stockCountDraft} key={scheduleScopeKey} lines={stockCountBatchDrafts} onReady={setStocktakeRecoveryReadyScope} scopeKey={scheduleScopeKey} setCurrent={setStockCountDraft} setLines={setStockCountBatchDrafts} /></Suspense>
-      <header className="shop-stock-heading"><div><h2>Inventory</h2></div><button aria-expanded={Boolean(stockCountDraft && stocktakeScopeReady)} className="core-button" disabled={commerceControlsDisabled || !commerce.items.length} onClick={openStockCount} ref={stockCountTriggerRef} type="button">{stockCountDraft ? 'Continue count' : commerce.items.length ? 'Count stock' : 'Add products first'}</button></header>
-      <dl aria-label="Stock status" className="shop-stock-metrics">
-        <div data-tone={lowStock.length ? 'attention' : 'ready'}><dt>Stock alerts</dt><dd>{lowStock.length.toLocaleString()}</dd><small>{lowStock.length ? 'At or below reorder' : 'Reorder levels clear'}</small></div>
-        <div><dt>Units available</dt><dd>{stockUnitsAvailable.toLocaleString()}</dd><small>Across {commerce.items.length.toLocaleString()} {commerce.items.length === 1 ? 'product' : 'products'}</small></div>
-        <div data-tone={overduePurchaseOrders.length ? 'attention' : 'ready'}><dt>Active purchase orders</dt><dd>{activePurchaseOrders.length.toLocaleString()}</dd><small>{overduePurchaseOrders.length ? `${overduePurchaseOrders.length} late` : activePurchaseOrders.length ? 'Receiving tracked' : 'No open orders'}</small></div>
-        <div><dt>Stock tracking</dt><dd>{managedInventoryProjection ? `${managedInventoryProjection.locations.length.toLocaleString()} locations` : 'Simple count'}</dd><small>{managedInventoryProjection ? 'Lots and available-to-promise' : 'Enable locations when needed'}</small></div>
+      <header className="shop-stock-heading"><div><h2>{uiText('Inventory')}</h2></div><button aria-expanded={Boolean(stockCountDraft && stocktakeScopeReady)} className="core-button" disabled={commerceControlsDisabled || !commerce.items.length} onClick={openStockCount} ref={stockCountTriggerRef} type="button">{uiText(stockCountDraft ? 'Continue count' : commerce.items.length ? 'Count stock' : 'Add products first')}</button></header>
+      <dl aria-label={uiText('Stock status')} className="shop-stock-metrics">
+        <div data-tone={lowStock.length ? 'attention' : 'ready'}><dt>{uiText('Stock alerts')}</dt><dd>{lowStock.length.toLocaleString()}</dd><small>{uiText(lowStock.length ? 'At or below reorder' : 'Reorder levels clear')}</small></div>
+        <div><dt>{uiText('Units available')}</dt><dd>{stockUnitsAvailable.toLocaleString()}</dd><small>{inventoryLocale === 'my' ? `ကုန်ပစ္စည်း ${commerce.items.length.toLocaleString()} မျိုး၏ စုစုပေါင်း` : `Across ${commerce.items.length.toLocaleString()} ${commerce.items.length === 1 ? 'product' : 'products'}`}</small></div>
+        <div data-tone={overduePurchaseOrders.length ? 'attention' : 'ready'}><dt>{uiText('Active purchase orders')}</dt><dd>{activePurchaseOrders.length.toLocaleString()}</dd><small>{overduePurchaseOrders.length ? inventoryLocale === 'my' ? `${overduePurchaseOrders.length} ခု နောက်ကျနေ` : `${overduePurchaseOrders.length} late` : uiText(activePurchaseOrders.length ? 'Receiving tracked' : 'No open orders')}</small></div>
+        <div><dt>{uiText('Stock tracking')}</dt><dd>{managedInventoryProjection ? inventoryLocale === 'my' ? `နေရာ ${managedInventoryProjection.locations.length.toLocaleString()} ခု` : `${managedInventoryProjection.locations.length.toLocaleString()} locations` : uiText('Simple count')}</dd><small>{uiText(managedInventoryProjection ? 'Lots and available-to-promise' : 'Enable locations when needed')}</small></div>
       </dl>
       {stockCountDraft && stocktakeScopeReady && <form aria-labelledby="stock-count-title" className="stock-receipt-editor stock-count-editor" id="stock-count-editor" onSubmit={reviewStockCount} ref={stockCountEditorRef}>
         <div className="stock-receipt-copy">
@@ -8080,32 +8088,32 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
       </form>}
       <div className="shop-stock-grid">
         <section aria-labelledby="shop-stock-attention-title" className="shop-stock-attention-card">
-          <header><span><span className="core-eyebrow">Inventory</span><h3 id="shop-stock-attention-title">Stock attention</h3><p>Low stock and active receiving work appear first.</p></span><b>{stockAttentionRows.length} {stockAttentionRows.length === 1 ? 'item' : 'items'}</b></header>
+          <header><span><span className="core-eyebrow">{uiText('Inventory')}</span><h3 id="shop-stock-attention-title">{uiText('Stock attention')}</h3><p>{uiText('Low stock and active receiving work appear first.')}</p></span><b>{stockAttentionRows.length} {uiText(stockAttentionRows.length === 1 ? 'item' : 'items')}</b></header>
           <div className="shop-stock-attention-scroll">
-            <div className="data-table stock-attention-table" data-stock-list="attention" role="table" aria-label="Shop stock">
-              <div className="data-row table-head" role="row"><span role="columnheader">Item</span><span role="columnheader">Available</span><span role="columnheader">Reorder</span><span role="columnheader">Price</span><span role="columnheader">Next step</span></div>
-              {stockAttentionRows.length ? stockAttentionRows.map(renderStockRow) : <div className="data-row stock-empty-row" role="row"><span role="cell"><strong>No stock needs action.</strong><small>Count stock or open other products only when needed.</small></span></div>}
+            <div className="data-table stock-attention-table" data-stock-list="attention" role="table" aria-label={uiText('Shop stock')}>
+              <div className="data-row table-head" role="row"><span role="columnheader">{uiText('Item')}</span><span role="columnheader">{uiText('Available')}</span><span role="columnheader">{uiText('Reorder')}</span><span role="columnheader">{uiText('Price')}</span><span role="columnheader">{uiText('Next step')}</span></div>
+              {stockAttentionRows.length ? stockAttentionRows.map(renderStockRow) : <div className="data-row stock-empty-row" role="row"><span role="cell"><strong>{uiText('No stock needs action.')}</strong><small>{uiText('Count stock or open other products only when needed.')}</small></span></div>}
             </div>
           </div>
           <details className="inventory-tools-disclosure stock-catalog-disclosure">
-            <summary><span><strong>Other products</strong><small>Healthy stock, pricing, and reorder levels</small></span><b>{stockCatalogRows.length} {stockCatalogRows.length === 1 ? 'item' : 'items'}</b></summary>
+            <summary><span><strong>{uiText('Other products')}</strong><small>{uiText('Healthy stock, pricing, and reorder levels')}</small></span><b>{stockCatalogRows.length} {uiText(stockCatalogRows.length === 1 ? 'item' : 'items')}</b></summary>
             <div className="stock-catalog-content">
-              <div className="data-table" data-stock-list="catalog" role="table" aria-label="Other Shop products">
-                <div className="data-row table-head" role="row"><span role="columnheader">Item</span><span role="columnheader">Available</span><span role="columnheader">Reorder</span><span role="columnheader">Price</span><span role="columnheader">Next step</span></div>
-                {stockCatalogRows.length ? stockCatalogRows.map(renderStockRow) : <div className="data-row stock-empty-row" role="row"><span role="cell"><strong>No other products.</strong><small>Every current product appears in the action list above.</small></span></div>}
+                <div className="data-table" data-stock-list="catalog" role="table" aria-label={uiText('Other Shop products')}>
+                  <div className="data-row table-head" role="row"><span role="columnheader">{uiText('Item')}</span><span role="columnheader">{uiText('Available')}</span><span role="columnheader">{uiText('Reorder')}</span><span role="columnheader">{uiText('Price')}</span><span role="columnheader">{uiText('Next step')}</span></div>
+                  {stockCatalogRows.length ? stockCatalogRows.map(renderStockRow) : <div className="data-row stock-empty-row" role="row"><span role="cell"><strong>{uiText('No other products.')}</strong><small>{uiText('Every current product appears in the action list above.')}</small></span></div>}
               </div>
             </div>
           </details>
         </section>
         <aside aria-labelledby="shop-stock-next-title" className="shop-stock-next-action" data-action={stockNextActionKind}>
-          <header><span><span className="core-eyebrow">Next stock action</span><h3 id="shop-stock-next-title">{stockNextActionTitle}</h3></span><b>{stockNextTrack}</b></header>
-          {stockNextItem ? <div className="shop-stock-next-item"><ProductPhoto className="stock-product-photo" fallback={null} scope={productImageScope} sku={stockNextItem.sku} /><span><strong>{stockNextItem.name}</strong><small>{stockNextItem.sku}</small></span><span><strong>{stockNextItem.onHand.toLocaleString()}</strong><small>available</small></span></div> : null}
-          <div className="shop-stock-next-guidance"><div><span>Why now</span><p>{stockNextReason}</p></div><div><span>Owner check</span><p>{stockNextOwnerCheck}</p></div></div>
-          <footer><small>Record → recommendation → owner check → action → closure</small>{stockNextActionKind === 'catalog'
-            ? <Link className="core-button primary" to="/shop/?tab=inventory#shop-catalog-import">Add products</Link>
+          <header><span><span className="core-eyebrow">{uiText('Next stock action')}</span><h3 id="shop-stock-next-title">{uiText(stockNextActionTitle)}</h3></span><b>{uiText(stockNextTrack)}</b></header>
+          {stockNextItem ? <div className="shop-stock-next-item"><ProductPhoto className="stock-product-photo" fallback={null} scope={productImageScope} sku={stockNextItem.sku} /><span><strong>{inventoryLocale === 'my' && stockNextItem.nameMy?.trim() ? stockNextItem.nameMy : stockNextItem.name}</strong><small>{stockNextItem.sku}</small></span><span><strong>{stockNextItem.onHand.toLocaleString()}</strong><small>{uiText('available')}</small></span></div> : null}
+          <div className="shop-stock-next-guidance"><div><span>{uiText('Why now')}</span><p>{stockNextReasonVisible}</p></div><div><span>{uiText('Owner check')}</span><p>{uiText(stockNextOwnerCheck)}</p></div></div>
+          <footer><small>{uiText('Record → recommendation → owner check → action → closure')}</small>{stockNextActionKind === 'catalog'
+            ? <Link className="core-button primary" to="/shop/?tab=inventory#shop-catalog-import">{uiText('Add products')}</Link>
             : stockNextActionKind === 'restore'
-              ? <Link className="core-button primary" to="/settings/#controls">Open workspace controls</Link>
-              : <button className="core-button primary" disabled={commerceControlsDisabled || !stockNextItem} onClick={() => stockNextActionKind === 'count' ? openStockCount() : stockNextItem ? openPurchaseOrder(stockNextItem.sku) : undefined} type="button">{stockNextActionKind === 'pending' ? 'Pending review' : stockNextActionKind === 'receive' ? purchaseOrderDraft?.mode === 'receive' ? 'Continue receipt' : 'Receive stock' : stockNextActionKind === 'create' ? purchaseOrderDraft?.mode === 'create' ? 'Continue purchase order' : 'Create purchase order' : stockCountDraft ? 'Continue count' : 'Count stock'}</button>}</footer>
+              ? <Link className="core-button primary" to="/settings/#controls">{uiText('Open workspace controls')}</Link>
+              : <button className="core-button primary" disabled={commerceControlsDisabled || !stockNextItem} onClick={() => stockNextActionKind === 'count' ? openStockCount() : stockNextItem ? openPurchaseOrder(stockNextItem.sku) : undefined} type="button">{uiText(stockNextActionKind === 'pending' ? 'Pending review' : stockNextActionKind === 'receive' ? purchaseOrderDraft?.mode === 'receive' ? 'Continue receipt' : 'Receive stock' : stockNextActionKind === 'create' ? purchaseOrderDraft?.mode === 'create' ? 'Continue purchase order' : 'Create purchase order' : stockCountDraft ? 'Continue count' : 'Count stock')}</button>}</footer>
         </aside>
       </div>
       {catalogEditDraft && catalogEditItem ? <form aria-labelledby="catalog-item-editor-title" className="stock-receipt-editor" id="catalog-item-editor" onSubmit={reviewCatalogItemUpdate} ref={catalogEditEditorRef}>
@@ -8190,7 +8198,7 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
         <div className="form-actions"><button className="core-button" disabled={Boolean(pendingAction)} onClick={() => setSupplierInvoiceDraft(null)} type="button">Cancel</button><button className="core-button primary" disabled={commerceControlsDisabled || !supplierInvoiceDraftReady} type="submit">Review invoice</button></div>
       </form> : null}
       <details className="compact-disclosure purchase-order-history" id="purchase-orders" ref={purchaseOrderHistoryRef}>
-        <summary><span>Purchase orders</span><strong>{purchaseOrderRows.filter(({ progress }) => progress.status === 'open' || progress.status === 'partially_received').length} active · {purchaseOrderRows.length} total</strong></summary>
+        <summary><span>{uiText('Purchase orders')}</span><strong>{purchaseOrderRows.filter(({ progress }) => progress.status === 'open' || progress.status === 'partially_received').length} {uiText('active')} · {purchaseOrderRows.length} {uiText('total')}</strong></summary>
         {supplierPerformance.length ? <section aria-label="Supplier performance" className="supplier-performance">
           <div className="supplier-performance-heading"><span className="core-eyebrow">Supplier performance</span><small>Measured from Shop orders and receipts</small></div>
           <div className="supplier-performance-grid">{supplierPerformance.map((supplier) => <article data-supplier-status={supplier.status} key={supplier.supplier}>
@@ -8242,7 +8250,7 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
       {commerce.items.length ? shopCatalogOnboarding : null}
       <datalist id="shop-product-category-options">{shopCategoryOptions.map((category) => <option key={category} value={category} />)}</datalist>
       <details className="compact-disclosure catalog-disclosure" id="shop-catalog-create" onToggle={(event) => setCatalogCreateOpen(event.currentTarget.open)} open={catalogCreateOpen}>
-        <summary>{commerce.items.length ? 'Add product' : 'Add your first product'}</summary>
+        <summary>{uiText(commerce.items.length ? 'Add product' : 'Add your first product')}</summary>
         <form className="core-form compact-form catalog-create-form" onSubmit={queueCatalogItem} ref={catalogCreateFormRef}>
           <div className="form-row"><label>Product name<input disabled={commerceControlsDisabled} maxLength={180} name="product-name" onChange={(event) => setItemDraft((current) => ({ ...current, name: event.target.value }))} placeholder="e.g. Drinking water" required value={itemDraft.name} /></label><label>Price (MMK)<input disabled={commerceControlsDisabled} min="1" onChange={(event) => setItemDraft((current) => ({ ...current, price: event.target.value }))} required step="1" type="number" value={itemDraft.price} /></label></div>
           <label>Burmese name (optional)<input disabled={commerceControlsDisabled} lang="my" maxLength={180} onChange={(event) => setItemDraft((current) => ({ ...current, nameMy: event.target.value }))} placeholder="Use the name your customers know" value={itemDraft.nameMy} /></label>
