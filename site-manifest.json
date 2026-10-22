@@ -70,8 +70,8 @@
         "Follow order status and stock attention in the same workspace."
       ],
       "primaryCta": {
-        "label": "See Shop screens",
-        "url": "/shop/#shop-demo"
+        "label": "Request a Shop walkthrough",
+        "url": "/contact/?product=shop"
       },
       "secondaryCta": {
         "label": "Contact SuperMega",
