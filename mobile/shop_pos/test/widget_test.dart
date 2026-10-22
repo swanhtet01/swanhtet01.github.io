@@ -10,6 +10,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supermega_shop/main.dart';
+import 'package:supermega_shop/menu_import_screen.dart';
 import 'package:supermega_shop/printer_services.dart';
 import 'package:supermega_shop/recent_sales_screen.dart';
 import 'package:supermega_shop/shop_copy.dart';
@@ -942,6 +943,57 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Menu photo ready to review'), findsNothing);
     await database.close();
+  });
+
+  testWidgets('menu-photo consent reads in one language on a small phone', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 800);
+    tester.view.devicePixelRatio = 1;
+    tester.platformDispatcher.textScaleFactorTestValue = 1.3;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    for (final myanmar in [false, true]) {
+      final database = ShopDatabase(NativeDatabase.memory());
+      try {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: MenuImportScreen(
+              database: database,
+              authClient: null,
+              apiBaseUrl: 'https://example.invalid',
+              myanmar: myanmar,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          find.textContaining(
+            myanmar
+                ? 'အက်ပ်ဒေတာဘေ့စ်တွင် မသိမ်းပါ'
+                : 'not kept in the app database',
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.textContaining(
+            myanmar
+                ? 'အွန်လိုင်း ဉာဏ်ရည်တုစနစ်သို့ ပေးပို့ရန်'
+                : 'send this photo to cloud AI',
+          ),
+          findsOneWidget,
+        );
+        if (myanmar) {
+          expect(find.textContaining('Cloud'), findsNothing);
+          expect(find.textContaining('App database'), findsNothing);
+        }
+        expect(tester.takeException(), isNull);
+      } finally {
+        await tester.pumpWidget(const SizedBox.shrink());
+        await database.close();
+      }
+    }
   });
 
   testWidgets('catalog aligns saved photos and products without photos', (
@@ -2222,12 +2274,22 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('လက်ကျန်'));
       await tester.pumpAndSettle();
-      expect(find.text('SKU RICE-1 · ဘားကုဒ် 111111'), findsOneWidget);
-      expect(find.text('SKU RICE-2 · ဘားကုဒ် 222222'), findsOneWidget);
+      expect(
+        find.text('ကုန်ပစ္စည်းကုဒ် RICE-1 · ဘားကုဒ် 111111'),
+        findsOneWidget,
+      );
+      expect(
+        find.text('ကုန်ပစ္စည်းကုဒ် RICE-2 · ဘားကုဒ် 222222'),
+        findsOneWidget,
+      );
 
       await tester.tap(find.byKey(const ValueKey('stock-update-rice-large')));
       await tester.pumpAndSettle();
-      expect(find.text('SKU RICE-2 · ဘားကုဒ် 222222'), findsNWidgets(2));
+      expect(
+        find.text('ကုန်ပစ္စည်းကုဒ် RICE-2 · ဘားကုဒ် 222222'),
+        findsNWidgets(2),
+      );
+      expect(find.text('လက်ရှိ ၂ ခု လက်ကျန်'), findsOneWidget);
       await tester.enterText(
         find.byKey(const ValueKey('stock-change-quantity')),
         '၄',

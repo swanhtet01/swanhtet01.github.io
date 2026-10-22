@@ -1580,7 +1580,7 @@ class _ShopHomeState extends State<ShopHome> {
           shopCopy(
             widget.myanmar,
             'More than one product uses this barcode or SKU. Fix the product codes before selling.',
-            'ဤဘားကုဒ် သို့မဟုတ် SKU ကို ကုန်ပစ္စည်းတစ်မျိုးထက်ပို၍ သုံးထားသည်။ မရောင်းမီ ကုန်ပစ္စည်းကုဒ်များကို ပြင်ပါ။',
+            'ဤဘားကုဒ် သို့မဟုတ် ကုန်ပစ္စည်းကုဒ်ကို ကုန်ပစ္စည်းတစ်မျိုးထက်ပို၍ သုံးထားသည်။ မရောင်းမီ ကုန်ပစ္စည်းကုဒ်များကို ပြင်ပါ။',
           ),
         );
       } else if (RegExp(r'^[0-9]{6,64}$').hasMatch(code)) {
@@ -1590,7 +1590,7 @@ class _ShopHomeState extends State<ShopHome> {
           shopCopy(
             widget.myanmar,
             'No exact barcode or SKU match. Check the code or add the product.',
-            'ဘားကုဒ် သို့မဟုတ် SKU အတိအကျ မတွေ့ပါ။ ကုဒ်ကို စစ်ပါ သို့မဟုတ် ကုန်ပစ္စည်းထည့်ပါ။',
+            'ဘားကုဒ် သို့မဟုတ် ကုန်ပစ္စည်းကုဒ် အတိအကျ မတွေ့ပါ။ ကုဒ်ကို စစ်ပါ သို့မဟုတ် ကုန်ပစ္စည်းထည့်ပါ။',
           ),
         );
       }
@@ -1600,7 +1600,7 @@ class _ShopHomeState extends State<ShopHome> {
       hintText: shopCopy(
         widget.myanmar,
         'Search name, barcode or SKU',
-        'အမည်၊ ဘားကုဒ် သို့မဟုတ် SKU ရှာရန်',
+        'အမည်၊ ဘားကုဒ် သို့မဟုတ် ကုန်ပစ္စည်းကုဒ် ရှာရန်',
       ),
       suffixIcon: _search.text.isEmpty
           ? null
@@ -2867,7 +2867,7 @@ class _ShopHomeState extends State<ShopHome> {
           shopCopy(
             widget.myanmar,
             'Could not cancel this checkout. It remains pending.',
-            'Checkout ကို ပယ်ဖျက်မရပါ။ ဆိုင်းငံ့ထားဆဲဖြစ်သည်။',
+            'ငွေပေးချေမှုကို ပယ်ဖျက်မရပါ။ ဆိုင်းငံ့ထားဆဲဖြစ်သည်။',
           ),
         );
       }
@@ -3246,7 +3246,7 @@ String _productSaveError(Object error, bool myanmar) {
       return shopCopy(
         myanmar,
         'This SKU already belongs to another product.',
-        'ဤ SKU ကို အခြားကုန်ပစ္စည်းတစ်ခုတွင် သုံးထားပြီးဖြစ်ပါသည်။',
+        'ဤကုန်ပစ္စည်းကုဒ်ကို အခြားကုန်ပစ္စည်းတစ်ခုတွင် သုံးထားပြီးဖြစ်ပါသည်။',
       );
     }
   }

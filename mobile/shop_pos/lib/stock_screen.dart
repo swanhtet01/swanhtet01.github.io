@@ -23,7 +23,7 @@ int? parseStockQuantity(String? value) {
 String _stockProductReference(ShopProduct product, bool myanmar) {
   final parts = <String>[];
   if (product.sku case final String sku when sku.trim().isNotEmpty) {
-    parts.add('SKU ${sku.trim()}');
+    parts.add('${shopCopy(myanmar, 'SKU', 'ကုန်ပစ္စည်းကုဒ်')} ${sku.trim()}');
   }
   if (product.barcode case final String barcode
       when barcode.trim().isNotEmpty) {
@@ -514,7 +514,7 @@ class _StockChangeDialogState extends State<_StockChangeDialog> {
               shopCopy(
                 widget.myanmar,
                 '${widget.product.onHand} currently in stock',
-                'လက်ရှိ ${widget.product.onHand} ခု လက်ကျန်',
+                'လက်ရှိ ${shopNumber(widget.product.onHand, myanmar: true)} ခု လက်ကျန်',
               ),
             ),
             const SizedBox(height: 16),
