@@ -4238,9 +4238,10 @@ class _SetupTile extends StatelessWidget {
         MediaQuery.textScalerOf(context).scale(1) > 1.2;
     return ListTile(
       contentPadding: EdgeInsets.symmetric(
-        horizontal: 16,
+        horizontal: compact ? 12 : 16,
         vertical: compact ? 4 : 8,
       ),
+      horizontalTitleGap: compact ? 8 : 16,
       minLeadingWidth: 28,
       leading: compact
           ? null
@@ -4262,7 +4263,7 @@ class _SetupTile extends StatelessWidget {
                 ),
               ),
             ),
-      trailing: const Icon(Icons.chevron_right, size: 20),
+      trailing: Icon(Icons.chevron_right, size: compact ? 18 : 20),
       onTap: onTap,
     );
   }
@@ -4303,6 +4304,9 @@ class _ShopSettingsScreenState extends State<ShopSettingsScreen> {
             const SizedBox(height: 12),
             SegmentedButton<bool>(
               showSelectedIcon: false,
+              style: const ButtonStyle(
+                minimumSize: WidgetStatePropertyAll(Size(0, 48)),
+              ),
               segments: const [
                 ButtonSegment(value: false, label: Text('English')),
                 ButtonSegment(value: true, label: Text('မြန်မာ')),
@@ -4378,7 +4382,7 @@ class _ShopSettingsScreenState extends State<ShopSettingsScreen> {
                     title: shopCopy(
                       _myanmar,
                       'Export backup file',
-                      'အရန်ကူးဖိုင် ထုတ်ယူရန်',
+                      'အရန်ကူးဖိုင် ထုတ်ရန်',
                     ),
                     subtitle: shopCopy(
                       _myanmar,
@@ -4403,8 +4407,8 @@ class _ShopSettingsScreenState extends State<ShopSettingsScreen> {
               child: Text(
                 shopCopy(
                   _myanmar,
-                  'Saved on this device. Online backup is not active.',
-                  'ဤစက်တွင်သာ သိမ်းထားသည်။ အွန်လိုင်းအရန်ကူး မရှိသေးပါ။',
+                  'On this device only. No online backup.',
+                  'ဤစက်တွင်သာ သိမ်းသည်။ အွန်လိုင်းအရန်ကူး မရှိပါ။',
                 ),
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,

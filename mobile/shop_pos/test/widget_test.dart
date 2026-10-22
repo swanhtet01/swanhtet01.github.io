@@ -4161,6 +4161,82 @@ void main() {
     await database.close();
   });
 
+  for (final (width, myanmar) in [
+    (320.0, false),
+    (390.0, false),
+    (320.0, true),
+    (390.0, true),
+  ]) {
+    testWidgets('settings stays readable and tappable at ${width.toInt()}px '
+        '${myanmar ? 'MY' : 'EN'}', (tester) async {
+      tester.view.physicalSize = Size(width, 800);
+      tester.view.devicePixelRatio = 1;
+      if (width == 320) {
+        tester.platformDispatcher.textScaleFactorTestValue = 1.5;
+      }
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      final database = ShopDatabase(NativeDatabase.memory());
+      await tester.pumpWidget(
+        ShopApp(
+          database: database,
+          authClient: null,
+          apiBaseUrl: 'https://example.invalid',
+          initialMyanmar: myanmar,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find
+            .descendant(
+              of: find.byType(AppBar),
+              matching: find.byIcon(Icons.settings_outlined),
+            )
+            .first,
+      );
+      await tester.pumpAndSettle();
+      final titles = myanmar
+          ? [
+              'ပြေစာပရင်တာ',
+              'မိုဘိုင်းငွေပေးချေမှု',
+              'ငွေသားတာဝန်ချိန်',
+              'အရန်ကူးဖိုင် ထုတ်ရန်',
+            ]
+          : [
+              'Receipt printer',
+              'Mobile money',
+              'Cash shift',
+              'Export backup file',
+            ];
+      for (final title in titles) {
+        final tile = find.ancestor(
+          of: find.text(title),
+          matching: find.byType(ListTile),
+        );
+        expect(tile, findsOneWidget);
+        final bounds = tester.getRect(tile);
+        expect(bounds.height, greaterThanOrEqualTo(48));
+        expect(bounds.left, greaterThanOrEqualTo(0));
+        expect(bounds.right, lessThanOrEqualTo(width));
+      }
+      expect(
+        tester.getSize(find.byType(SegmentedButton<bool>)).height,
+        greaterThanOrEqualTo(48),
+      );
+      expect(
+        find.text(
+          myanmar
+              ? 'ဤစက်တွင်သာ သိမ်းသည်။ အွန်လိုင်းအရန်ကူး မရှိပါ။'
+              : 'On this device only. No online backup.',
+        ),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+      await database.close();
+    });
+  }
+
   testWidgets(
     'wallet setup shows saved status and opens one editor at a time',
     (tester) async {
