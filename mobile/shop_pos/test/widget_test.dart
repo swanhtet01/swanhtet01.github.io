@@ -1087,6 +1087,35 @@ void main() {
     }
   });
 
+  testWidgets('stock counts use Burmese digits on tablet', (tester) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(820, 800);
+    final database = ShopDatabase(NativeDatabase.memory());
+    addTearDown(database.close);
+    await database.addProduct(
+      id: 'rice',
+      name: 'Rice',
+      priceMmk: 12000,
+      openingStock: 8,
+    );
+    await database.addProduct(
+      id: 'tea',
+      name: 'Tea',
+      priceMmk: 2500,
+      openingStock: 4,
+    );
+    await tester.pumpWidget(
+      MaterialApp(home: StockScreen(database: database, myanmar: true)),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('ကုန်ပစ္စည်း ၂ မျိုး'), findsOneWidget);
+    await tester.enterText(find.byKey(const ValueKey('stock-search')), 'Rice');
+    await tester.pumpAndSettle();
+    expect(find.text('ကိုက်ညီမှု ၁ ခု'), findsOneWidget);
+  });
+
   testWidgets(
     'Stock shows only active low-stock thresholds on phone and tablet',
     (tester) async {
@@ -1724,9 +1753,18 @@ void main() {
       priceMmk: 2500,
       openingStock: 1,
     );
+    await database.addProduct(
+      id: 'coffee',
+      name: 'Coffee',
+      priceMmk: 3000,
+      openingStock: 1,
+    );
     await database.recordCashSale(
       operationId: 'burmese-date',
-      lines: const [ShopSaleLineInput(productId: 'tea', quantity: 1)],
+      lines: const [
+        ShopSaleLineInput(productId: 'tea', quantity: 1),
+        ShopSaleLineInput(productId: 'coffee', quantity: 1),
+      ],
     );
     await tester.pumpWidget(
       MaterialApp(
@@ -1735,6 +1773,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    expect(find.textContaining(' +၁'), findsOneWidget);
     expect(
       find.textContaining(
         RegExp(r'[၀-၉]{2}/[၀-၉]{2}/[၀-၉]{4} [၀-၉]{2}:[၀-၉]{2}'),
@@ -2073,6 +2112,13 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField && widget.decoration?.hintText == 'ရှာ / စကင်ဖတ်',
+      ),
+      findsOneWidget,
+    );
     expect(find.byKey(const ValueKey('shop-product-media:rice')), findsNothing);
     expect(
       find.byKey(const ValueKey('shop-product-media:water')),

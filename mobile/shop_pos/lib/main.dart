@@ -1221,7 +1221,9 @@ class _ShopHomeState extends State<ShopHome> {
                               child: _catalogHeader(products),
                             ),
                             Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 16),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                              ),
                               child: _searchField(products),
                             ),
                             SizedBox(height: width < 380 ? 4 : 8),
@@ -1669,7 +1671,7 @@ class _ShopHomeState extends State<ShopHome> {
       return shopCopy(widget.myanmar, 'Scan a barcode', 'ဘားကုဒ် ဖတ်ပါ');
     }
     if (MediaQuery.sizeOf(context).width < 420) {
-      return shopCopy(widget.myanmar, 'Search or scan', 'ပစ္စည်းရှာရန်');
+      return shopCopy(widget.myanmar, 'Search or scan', 'ရှာ / စကင်ဖတ်');
     }
     return shopCopy(
       widget.myanmar,
