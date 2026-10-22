@@ -20,7 +20,7 @@ enum ShopStorePresence { empty, existing, interrupted, unsafe }
 /// the database so an interrupted export or restore cannot retain plaintext.
 abstract final class ShopBackup {
   static const formatVersion = 1;
-  static const supportedSchemaVersion = 10;
+  static const supportedSchemaVersion = 11;
   static const oldestSupportedSchemaVersion = 6;
   static const maxSnapshotBytes = 64 * 1024 * 1024;
 
@@ -137,6 +137,77 @@ abstract final class ShopBackup {
       'review_cash_total_mmk',
     },
     'shop_cash_shift_sales': {'sale_id', 'shift_id'},
+  };
+  static const _v11RequiredColumns = <String, Set<String>>{
+    'shop_sale_reversals': {
+      'id',
+      'operation_id',
+      'request_fingerprint',
+      'sale_snapshot_digest',
+      'sale_id',
+      'original_total_mmk',
+      'original_payment_method',
+      'original_created_at_millis',
+      'original_line_count',
+      'restock_items',
+      'reason',
+      'payment_resolution',
+      'cash_drawer_delta_mmk',
+      'shift_id',
+      'authorization_receipt_id',
+      'authorization_receipt_digest',
+      'authorization_command_digest',
+      'authorization_workspace_id',
+      'authorized_actor_id',
+      'authorized_actor_label',
+      'authorized_actor_role',
+      'authorization_capability',
+      'authorization_source',
+      'authorization_issued_at_millis',
+      'authorization_verified_at_millis',
+      'authorization_expires_at_millis',
+      'created_at_millis',
+    },
+    'shop_sale_reversal_lines': {
+      'id',
+      'reversal_id',
+      'sale_line_id',
+      'product_id',
+      'product_name',
+      'unit_price_mmk',
+      'quantity',
+      'line_total_mmk',
+      'restock_quantity',
+      'stock_movement_id',
+    },
+    'shop_wallet_reversal_reconciliations': {
+      'id',
+      'operation_id',
+      'request_fingerprint',
+      'reversal_id',
+      'outcome',
+      'evidence_reference',
+      'authorization_receipt_id',
+      'authorization_receipt_digest',
+      'authorization_command_digest',
+      'authorization_workspace_id',
+      'authorized_actor_id',
+      'authorized_actor_label',
+      'authorized_actor_role',
+      'authorization_capability',
+      'authorization_source',
+      'authorization_issued_at_millis',
+      'authorization_verified_at_millis',
+      'authorization_expires_at_millis',
+      'created_at_millis',
+    },
+  };
+  static const _v11CashShiftColumns = {
+    'cash_reversal_count',
+    'cash_reversal_total_mmk',
+    'cash_drawer_outflow_mmk',
+    'review_cash_reversal_count',
+    'review_cash_drawer_outflow_mmk',
   };
 
   static final _cipher = AesGcm.with256bits();
@@ -593,6 +664,10 @@ abstract final class ShopBackup {
       final schemaVersion = version.length == 1
           ? version.single['user_version'] as int
           : -1;
+      final legacyHasReservedV11Objects =
+          schemaVersion >= oldestSupportedSchemaVersion &&
+          schemaVersion < 11 &&
+          !_legacyV11ObjectsAbsent(connection, tables);
       final baseSchemaValid = _requiredColumns.entries.every(
         (entry) =>
             tables.contains(entry.key) &&
@@ -624,7 +699,18 @@ abstract final class ShopBackup {
                     'basket_json',
                     'created_at_millis',
                     'updated_at_millis',
-                  })));
+                  }))) &&
+          (schemaVersion < 11 ||
+              (_v11RequiredColumns.entries.every(
+                    (entry) =>
+                        tables.contains(entry.key) &&
+                        _tableHasColumns(connection, entry.key, entry.value),
+                  ) &&
+                  _tableHasColumns(
+                    connection,
+                    'shop_cash_shifts',
+                    _v11CashShiftColumns,
+                  )));
       final walletIntents = schemaValid
           ? connection.select(
               'SELECT operation_id, payment_method, request_fingerprint, '
@@ -716,6 +802,11 @@ abstract final class ShopBackup {
             'OR reorder_level > 2000000000) LIMIT 1',
             ['integer'],
           ).isNotEmpty;
+      final reversalAuditInvalid =
+          schemaVersion >= 11 &&
+          (!schemaValid ||
+              !_v11ReversalAuditValid(connection) ||
+              !_v11SchemaDefinitionsValid(connection));
       if (version.length != 1 ||
           schemaVersion < oldestSupportedSchemaVersion ||
           schemaVersion > supportedSchemaVersion ||
@@ -726,11 +817,13 @@ abstract final class ShopBackup {
           brokenReferences.isNotEmpty ||
           !tables.containsAll(_requiredTables) ||
           !schemaValid ||
+          legacyHasReservedV11Objects ||
           walletInvalid ||
           (schemaVersion >= 7 && !tables.contains('shop_product_images')) ||
           (schemaVersion >= 8 && !tables.contains('shop_counter_drafts')) ||
           (schemaVersion >= 9 && !hasReorderLevel) ||
           (schemaVersion >= 10 && !tables.contains('shop_held_sales')) ||
+          (schemaVersion >= 11 && reversalAuditInvalid) ||
           invalidReorderLevel ||
           draftInvalid ||
           heldInvalid ||
@@ -772,6 +865,218 @@ abstract final class ShopBackup {
         .whereType<String>()
         .toSet();
     return columns.containsAll(required);
+  }
+
+  static Map<String, String> get _v11SchemaDefinitions {
+    final definitions = <String, String>{
+      'shop_sale_reversals': shopSaleReversalsV11Sql,
+      'shop_sale_reversal_lines': shopSaleReversalLinesV11Sql,
+      'shop_wallet_reversal_reconciliations':
+          shopWalletReversalReconciliationsV11Sql,
+    };
+    for (final table in const [
+      'shop_sale_reversals',
+      'shop_sale_reversal_lines',
+      'shop_wallet_reversal_reconciliations',
+      'shop_sales',
+      'shop_sale_lines',
+    ]) {
+      final message = table == 'shop_sales' || table == 'shop_sale_lines'
+          ? 'Completed Shop sales are immutable'
+          : 'Shop reversal audit records are immutable';
+      for (final operation in const ['update', 'delete']) {
+        definitions['${table}_no_$operation'] = shopImmutableTriggerV11Sql(
+          table: table,
+          operation: operation,
+          message: message,
+        );
+      }
+    }
+    return definitions;
+  }
+
+  static bool _legacyV11ObjectsAbsent(
+    Database connection,
+    Set<String> tables,
+  ) {
+    final reservedNames = _v11SchemaDefinitions.keys.toSet();
+    final existingNames = connection
+        .select(
+          "SELECT name FROM sqlite_master WHERE type IN ('table', 'trigger')",
+        )
+        .map((row) => row['name'])
+        .whereType<String>()
+        .toSet();
+    if (existingNames.intersection(reservedNames).isNotEmpty) return false;
+    if (!tables.contains('shop_cash_shifts')) return true;
+    final columns = connection
+        .select('PRAGMA table_info(shop_cash_shifts)')
+        .map((row) => row['name'])
+        .whereType<String>()
+        .toSet();
+    return columns.intersection(_v11CashShiftColumns).isEmpty;
+  }
+
+  static bool _v11SchemaDefinitionsValid(Database connection) {
+    final actual = <String, String>{
+      for (final row in connection.select(
+        "SELECT name, sql FROM sqlite_master WHERE type IN ('table', 'trigger')",
+      ))
+        if (row['name'] is String && row['sql'] is String)
+          row['name'] as String: row['sql'] as String,
+    };
+    return _v11SchemaDefinitions.entries.every(
+      (entry) =>
+          actual.containsKey(entry.key) &&
+          _canonicalSchemaSql(actual[entry.key]!) ==
+              _canonicalSchemaSql(entry.value),
+    );
+  }
+
+  static String _canonicalSchemaSql(String value) => value
+      .replaceAll(RegExp(r'\bIF\s+NOT\s+EXISTS\b', caseSensitive: false), '')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim()
+      .toLowerCase();
+
+  static bool _v11ReversalAuditValid(Database connection) {
+    final invalidReversal = connection.select('''
+      SELECT 1
+      FROM shop_sale_reversals r
+      JOIN shop_sales s ON s.id = r.sale_id
+      WHERE r.original_total_mmk != s.total_mmk
+         OR r.original_payment_method != s.payment_method
+         OR r.original_created_at_millis != s.created_at_millis
+         OR r.original_line_count != (
+              SELECT COUNT(*) FROM shop_sale_lines sl WHERE sl.sale_id = s.id
+            )
+         OR r.original_line_count != (
+              SELECT COUNT(*) FROM shop_sale_reversal_lines rl
+              WHERE rl.reversal_id = r.id
+            )
+         OR r.original_total_mmk != COALESCE((
+              SELECT SUM(rl.line_total_mmk)
+              FROM shop_sale_reversal_lines rl WHERE rl.reversal_id = r.id
+            ), -1)
+         OR length(r.sale_snapshot_digest) != 64
+         OR r.sale_snapshot_digest GLOB '*[^0-9a-f]*'
+         OR length(r.authorization_receipt_digest) != 64
+         OR r.authorization_receipt_digest GLOB '*[^0-9a-f]*'
+         OR length(r.authorization_command_digest) != 64
+         OR r.authorization_command_digest GLOB '*[^0-9a-f]*'
+         OR r.authorized_actor_role != 'owner'
+         OR r.authorization_capability != 'shop.sale.reverse'
+         OR r.authorization_source != 'managed_membership_receipt_v1'
+         OR r.authorization_issued_at_millis <= 0
+         OR r.authorization_verified_at_millis < r.authorization_issued_at_millis
+         OR r.authorization_expires_at_millis < r.authorization_verified_at_millis
+         OR r.authorization_expires_at_millis - r.authorization_issued_at_millis > 600000
+         OR (r.original_payment_method = 'cash' AND (
+              r.payment_resolution != 'cash_returned_now'
+              OR r.shift_id IS NULL
+              OR r.cash_drawer_delta_mmk != -r.original_total_mmk
+            ))
+         OR (r.original_payment_method IN ('kbzpay', 'wavepay') AND (
+              r.payment_resolution != 'external_pending'
+              OR r.shift_id IS NOT NULL
+              OR r.cash_drawer_delta_mmk != 0
+            ))
+         OR NOT EXISTS (
+              SELECT 1 FROM shop_sync_outbox o
+              WHERE o.operation_id = r.operation_id
+                AND o.event_type = 'shop.sale.reversal_recorded.v1'
+            )
+      LIMIT 1
+    ''').isNotEmpty;
+    final invalidLine = connection.select('''
+      SELECT 1
+      FROM shop_sale_reversal_lines rl
+      JOIN shop_sale_reversals r ON r.id = rl.reversal_id
+      JOIN shop_sale_lines sl ON sl.id = rl.sale_line_id
+      LEFT JOIN shop_stock_movements m ON m.id = rl.stock_movement_id
+      WHERE sl.sale_id != r.sale_id
+         OR rl.product_id != sl.product_id
+         OR rl.product_name != sl.product_name
+         OR rl.unit_price_mmk != sl.unit_price_mmk
+         OR rl.quantity != sl.quantity
+         OR rl.line_total_mmk != sl.line_total_mmk
+         OR rl.line_total_mmk != rl.unit_price_mmk * rl.quantity
+         OR (r.restock_items = 0 AND (
+              rl.restock_quantity != 0 OR rl.stock_movement_id IS NOT NULL
+            ))
+         OR (r.restock_items = 1 AND (
+              rl.restock_quantity != rl.quantity
+              OR rl.stock_movement_id IS NULL
+              OR m.id IS NULL
+              OR m.sale_id != r.sale_id
+              OR m.product_id != rl.product_id
+              OR m.quantity_delta != rl.quantity
+              OR m.reason != 'sale_reversal_restock'
+            ))
+      LIMIT 1
+    ''').isNotEmpty;
+    final missingLine = connection.select('''
+      SELECT 1
+      FROM shop_sale_reversals r
+      JOIN shop_sale_lines sl ON sl.sale_id = r.sale_id
+      LEFT JOIN shop_sale_reversal_lines rl
+        ON rl.reversal_id = r.id AND rl.sale_line_id = sl.id
+      WHERE rl.id IS NULL
+      LIMIT 1
+    ''').isNotEmpty;
+    final duplicateAuditIdentity = connection.select('''
+      SELECT 1 FROM (
+        SELECT sale_id AS value FROM shop_sale_reversals
+        GROUP BY sale_id HAVING COUNT(*) != 1
+        UNION ALL
+        SELECT authorization_receipt_id AS value FROM shop_sale_reversals
+        GROUP BY authorization_receipt_id HAVING COUNT(*) != 1
+        UNION ALL
+        SELECT reversal_id AS value FROM shop_wallet_reversal_reconciliations
+        GROUP BY reversal_id HAVING COUNT(*) != 1
+        UNION ALL
+        SELECT authorization_receipt_id AS value
+        FROM shop_wallet_reversal_reconciliations
+        GROUP BY authorization_receipt_id HAVING COUNT(*) != 1
+      ) LIMIT 1
+    ''').isNotEmpty;
+    final reusedAuthorizationReceipt = connection.select('''
+      SELECT 1
+      FROM shop_sale_reversals r
+      JOIN shop_wallet_reversal_reconciliations w
+        ON w.authorization_receipt_id = r.authorization_receipt_id
+      LIMIT 1
+    ''').isNotEmpty;
+    final invalidReconciliation = connection.select('''
+      SELECT 1
+      FROM shop_wallet_reversal_reconciliations w
+      JOIN shop_sale_reversals r ON r.id = w.reversal_id
+      WHERE r.original_payment_method = 'cash'
+         OR length(w.evidence_reference) NOT BETWEEN 1 AND 160
+         OR length(w.authorization_receipt_digest) != 64
+         OR w.authorization_receipt_digest GLOB '*[^0-9a-f]*'
+         OR length(w.authorization_command_digest) != 64
+         OR w.authorization_command_digest GLOB '*[^0-9a-f]*'
+         OR w.authorized_actor_role != 'owner'
+         OR w.authorization_capability != 'shop.sale.reconcile_wallet'
+         OR w.authorization_source != 'managed_membership_receipt_v1'
+         OR w.authorization_issued_at_millis <= 0
+         OR w.authorization_verified_at_millis < w.authorization_issued_at_millis
+         OR w.authorization_expires_at_millis < w.authorization_verified_at_millis
+         OR w.authorization_expires_at_millis - w.authorization_issued_at_millis > 600000
+         OR NOT EXISTS (
+              SELECT 1 FROM shop_sync_outbox o
+              WHERE o.operation_id = w.operation_id
+                AND o.event_type = 'shop.mobile_money.reversal_reconciled.v1'
+            )
+      LIMIT 1
+    ''').isNotEmpty;
+    return !invalidReversal &&
+        !invalidLine &&
+        !missingLine &&
+        !duplicateAuditIdentity &&
+        !reusedAuthorizationReceipt &&
+        !invalidReconciliation;
   }
 
   static bool _validWalletIntent(Row row) {

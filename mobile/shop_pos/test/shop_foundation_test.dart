@@ -371,6 +371,312 @@ void main() {
       },
     );
 
+    test(
+      'authorized cash reversal preserves snapshots, restocks once, and closes honestly',
+      () async {
+        await database.addProduct(
+          id: 'tea-reversal',
+          name: 'Original Tea',
+          priceMmk: 2500,
+          openingStock: 5,
+        );
+        final shift = await database.openCashShift(
+          operationId: 'cash-reversal-shift',
+          operatorLabel: 'May',
+          openingFloatMmk: 10000,
+        );
+        final sale = await database.recordCashSale(
+          operationId: 'cash-reversal-sale',
+          lines: const [
+            ShopSaleLineInput(productId: 'tea-reversal', quantity: 2),
+          ],
+        );
+        final reviewedBeforeReversal = await database.readCashShiftReview(
+          shift.id,
+        );
+        await database.customStatement(
+          'UPDATE shop_products SET name = ?, price_mmk = ?, archived = 1 '
+          'WHERE id = ?',
+          ['Renamed Tea', 9000, 'tea-reversal'],
+        );
+
+        final command = await database.previewFullSaleReversal(
+          operationId: 'cash-reversal-1',
+          saleId: sale.id,
+          restockItems: true,
+          reason: 'Customer returned the complete sale',
+        );
+        final authorization = _correctionAuthorization(
+          command.commandDigest,
+          capability: 'shop.sale.reverse',
+          receiptId: 'cash-reversal-receipt',
+        );
+        final alteredAmount = ShopFullSaleReversalCommand(
+          operationId: command.operationId,
+          saleId: command.saleId,
+          saleSnapshotDigest: command.saleSnapshotDigest,
+          requestFingerprint: command.requestFingerprint,
+          commandDigest: command.commandDigest,
+          originalTotalMmk: command.originalTotalMmk + 1,
+          originalPaymentMethod: command.originalPaymentMethod,
+          restockItems: command.restockItems,
+          reason: command.reason,
+          paymentResolution: command.paymentResolution,
+        );
+        await expectLater(
+          database.recordAuthorizedFullSaleReversal(
+            command: alteredAmount,
+            authorization: authorization,
+          ),
+          throwsA(isA<StateError>()),
+        );
+        final reversal = await database.recordAuthorizedFullSaleReversal(
+          command: command,
+          authorization: authorization,
+        );
+        final replay = await database.recordAuthorizedFullSaleReversal(
+          command: command,
+          authorization: authorization,
+        );
+
+        expect(reversal.id, replay.id);
+        expect(reversal.originalTotalMmk, 5000);
+        expect(reversal.originalPaymentMethod, 'cash');
+        expect(reversal.cashDrawerDeltaMmk, -5000);
+        expect(reversal.lines.single.productName, 'Original Tea');
+        expect(reversal.lines.single.unitPriceMmk, 2500);
+        expect(reversal.lines.single.restockQuantity, 2);
+        final product = await database.customSelect(
+          'SELECT on_hand, name, price_mmk FROM shop_products WHERE id = ?',
+          variables: [const Variable<String>('tea-reversal')],
+        ).getSingle();
+        expect(
+          (await database.customSelect(
+            'SELECT on_hand FROM shop_products WHERE id = ?',
+            variables: [const Variable<String>('tea-reversal')],
+          ).getSingle()).read<int>('on_hand'),
+          5,
+        );
+        expect(product.read<String>('name'), 'Renamed Tea');
+        expect(product.read<int>('price_mmk'), 9000);
+        expect(await database.countStockMovements(), 3);
+        final recent = (await database.readRecentSales()).single;
+        expect(recent.reversal?.id, reversal.id);
+        expect(recent.lines.single.productName, 'Original Tea');
+
+        final review = await database.readCashShiftReview(shift.id);
+        expect(review.cashSalesTotalMmk, 5000);
+        expect(review.cashReversalCount, 1);
+        expect(review.cashReversalTotalMmk, 5000);
+        expect(review.cashDrawerOutflowMmk, 5000);
+        expect(review.expectedCashMmk, 10000);
+        await expectLater(
+          database.closeCashShift(
+            shiftId: shift.id,
+            operationId: 'cash-reversal-stale-close',
+            seenSaleCount: reviewedBeforeReversal.saleCount,
+            seenCashTotalMmk: reviewedBeforeReversal.cashSalesTotalMmk,
+            countedCashMmk: 10000,
+          ),
+          throwsA(isA<StateError>()),
+        );
+        final closed = await database.closeCashShift(
+          shiftId: shift.id,
+          operationId: 'cash-reversal-close',
+          seenSaleCount: review.saleCount,
+          seenCashTotalMmk: review.cashSalesTotalMmk,
+          seenCashReversalCount: review.cashReversalCount,
+          seenCashDrawerOutflowMmk: review.cashDrawerOutflowMmk,
+          countedCashMmk: 10000,
+        );
+        expect(closed.cashReversalCount, 1);
+        expect(closed.cashDrawerOutflowMmk, 5000);
+        expect(closed.differenceMmk, 0);
+
+        final movementCount = await database.countStockMovements();
+        final outboxCount = await database.countOutboxOperations();
+        final changedCommand = await database.previewFullSaleReversal(
+          operationId: command.operationId,
+          saleId: sale.id,
+          restockItems: false,
+          reason: 'Changed retry',
+        );
+        await expectLater(
+          database.recordAuthorizedFullSaleReversal(
+            command: changedCommand,
+            authorization: _correctionAuthorization(
+              changedCommand.commandDigest,
+              capability: 'shop.sale.reverse',
+              receiptId: 'changed-retry-receipt',
+            ),
+          ),
+          throwsA(isA<StateError>()),
+        );
+        expect(
+          (await database.customSelect(
+            'SELECT on_hand FROM shop_products WHERE id = ?',
+            variables: [const Variable<String>('tea-reversal')],
+          ).getSingle()).read<int>('on_hand'),
+          5,
+        );
+        expect(await database.countStockMovements(), movementCount);
+        expect(await database.countOutboxOperations(), outboxCount);
+      },
+    );
+
+    test(
+      'wallet reversal stays externally pending until separate reconciliation',
+      () async {
+        await database.addProduct(
+          id: 'wallet-reversal-product',
+          name: 'Water',
+          priceMmk: 1000,
+          openingStock: 4,
+        );
+        const lines = [
+          ShopSaleLineInput(productId: 'wallet-reversal-product', quantity: 1),
+        ];
+        await database.createWalletCheckoutIntent(
+          operationId: 'wallet-reversal-sale',
+          merchant: MerchantWalletSetup(
+            provider: 'KBZPay',
+            merchantPhone: null,
+            officialQrPayload: _syntheticStaticMmqr(),
+            issuerConfirmed: true,
+          ),
+          lines: lines,
+        );
+        final sale = await database.recordSale(
+          operationId: 'wallet-reversal-sale',
+          lines: lines,
+          paymentMethod: 'kbzpay',
+          walletCheckoutOperationId: 'wallet-reversal-sale',
+        );
+        final command = await database.previewFullSaleReversal(
+          operationId: 'wallet-local-reversal',
+          saleId: sale.id,
+          restockItems: false,
+          reason: 'Duplicate wallet charge recorded locally',
+        );
+        var reversal = await database.recordAuthorizedFullSaleReversal(
+          command: command,
+          authorization: _correctionAuthorization(
+            command.commandDigest,
+            capability: 'shop.sale.reverse',
+            receiptId: 'wallet-reversal-receipt',
+          ),
+        );
+        expect(reversal.paymentResolution, 'external_pending');
+        expect(reversal.walletReconciliationPending, isTrue);
+        expect(reversal.cashDrawerDeltaMmk, 0);
+        expect((await database.readActiveProducts()).single.onHand, 3);
+        final intent = await database.customSelect(
+          'SELECT state FROM shop_wallet_checkout_intents '
+          'WHERE operation_id = ?',
+          variables: [const Variable<String>('wallet-reversal-sale')],
+        ).getSingle();
+        expect(intent.read<String>('state'), 'completed');
+        final reversalEvent = await database.customSelect(
+          'SELECT payload_json FROM shop_sync_outbox WHERE operation_id = ?',
+          variables: [const Variable<String>('wallet-local-reversal')],
+        ).getSingle();
+        expect(
+          (jsonDecode(reversalEvent.read<String>('payload_json'))
+              as Map<String, dynamic>)['moneyReturned'],
+          isFalse,
+        );
+
+        await database.recordCashSale(
+          operationId: 'sale-after-pending-wallet-return',
+          lines: lines,
+        );
+        final shift = await database.openCashShift(
+          operationId: 'shift-after-pending-wallet-return',
+          operatorLabel: 'May',
+          openingFloatMmk: 0,
+        );
+        final review = await database.readCashShiftReview(shift.id);
+        expect(review.expectedCashMmk, 0);
+        await database.closeCashShift(
+          shiftId: shift.id,
+          operationId: 'close-after-pending-wallet-return',
+          seenSaleCount: review.saleCount,
+          seenCashTotalMmk: review.cashSalesTotalMmk,
+          countedCashMmk: 0,
+        );
+
+        final pendingSummary = await database.readSalesSummary(
+          startAtMillis: 0,
+          endAtMillis: DateTime.now()
+              .add(const Duration(days: 1))
+              .millisecondsSinceEpoch,
+        );
+        expect(pendingSummary.grossSaleCount, 2);
+        expect(pendingSummary.grossSalesMmk, 2000);
+        expect(pendingSummary.reversalCount, 1);
+        expect(pendingSummary.reversalMmk, 1000);
+        expect(pendingSummary.netSalesMmk, 1000);
+        expect(pendingSummary.pendingWalletReversalCount, 1);
+
+        final reconciliation = await database.previewWalletReconciliation(
+          operationId: 'wallet-return-confirmation',
+          reversalId: reversal.id,
+          outcome: 'money_returned',
+          evidenceReference: 'KBZPay merchant history reference 42',
+        );
+        final reconciliationAuthorization = _correctionAuthorization(
+          reconciliation.commandDigest,
+          capability: 'shop.sale.reconcile_wallet',
+          receiptId: 'wallet-confirmation-receipt',
+        );
+        await expectLater(
+          database.recordAuthorizedWalletReconciliation(
+            command: reconciliation,
+            authorization: _correctionAuthorization(
+              reconciliation.commandDigest,
+              capability: 'shop.sale.reconcile_wallet',
+              receiptId: 'wallet-reversal-receipt',
+            ),
+          ),
+          throwsA(isA<StateError>()),
+        );
+        expect(
+          (await database.readSaleReversalForSale(sale.id))
+              ?.walletReconciliationPending,
+          isTrue,
+        );
+        reversal = await database.recordAuthorizedWalletReconciliation(
+          command: reconciliation,
+          authorization: reconciliationAuthorization,
+        );
+        final reconciliationReplay =
+            await database.recordAuthorizedWalletReconciliation(
+              command: reconciliation,
+              authorization: reconciliationAuthorization,
+            );
+        expect(reversal.walletReconciliationOutcome, 'money_returned');
+        expect(reconciliationReplay.walletReconciliationOutcome, 'money_returned');
+        expect((await database.readActiveProducts()).single.onHand, 2);
+        final confirmedSummary = await database.readSalesSummary(
+          startAtMillis: 0,
+          endAtMillis: DateTime.now()
+              .add(const Duration(days: 1))
+              .millisecondsSinceEpoch,
+        );
+        expect(confirmedSummary.netSalesMmk, 1000);
+        expect(confirmedSummary.pendingWalletReversalCount, 0);
+        final confirmationEvent = await database.customSelect(
+          'SELECT payload_json FROM shop_sync_outbox WHERE operation_id = ?',
+          variables: [const Variable<String>('wallet-return-confirmation')],
+        ).getSingle();
+        expect(
+          (jsonDecode(confirmationEvent.read<String>('payload_json'))
+              as Map<String, dynamic>)['moneyReturned'],
+          isTrue,
+        );
+      },
+    );
+
     test('sale history searches saved items and pages beyond 30', () async {
       await database.addProduct(
         id: 'tea',
@@ -1621,14 +1927,20 @@ void main() {
         await tester.enterText(find.byType(TextField).last, '10000');
         await tester.tap(find.text('Start shift'));
         await tester.pumpAndSettle();
-        expect(find.text('Expected from recorded sales'), findsOneWidget);
+        expect(
+          find.text('Expected after recorded cash activity'),
+          findsOneWidget,
+        );
         await tester.enterText(find.byType(TextField).last, '10000');
         await tester.tap(find.text('Close shift'));
         await tester.pumpAndSettle();
         await tester.drag(find.byType(ListView), const Offset(0, -400));
         await tester.pumpAndSettle();
         expect(find.text('Last closed shift'), findsOneWidget);
-        expect(find.text('Expected from recorded sales'), findsOneWidget);
+        expect(
+          find.text('Expected after recorded cash activity'),
+          findsOneWidget,
+        );
         await tester.pumpWidget(const SizedBox());
         await tester.pumpWidget(
           MaterialApp(
@@ -2143,6 +2455,27 @@ void main() {
       );
     });
   });
+}
+
+ShopCorrectionAuthorization _correctionAuthorization(
+  String commandDigest, {
+  required String capability,
+  required String receiptId,
+}) {
+  final now = DateTime.now().millisecondsSinceEpoch;
+  return ShopCorrectionAuthorization(
+    receiptId: receiptId,
+    receiptDigest: List<String>.filled(64, 'a').join(),
+    workspaceId: 'workspace-shop-test',
+    actorId: 'owner-test',
+    actorLabel: 'Test owner',
+    actorRole: 'owner',
+    capability: capability,
+    source: 'managed_membership_receipt_v1',
+    commandDigest: commandDigest,
+    issuedAtMillis: now - 1000,
+    expiresAtMillis: now + const Duration(minutes: 5).inMilliseconds,
+  );
 }
 
 Uint8List _pngBytes() {

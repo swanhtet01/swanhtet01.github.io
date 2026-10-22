@@ -783,7 +783,9 @@ void main() {
           findsOneWidget,
         );
         expect(
-          find.text(myanmar ? 'ယနေ့ရောင်းအား' : 'Sales today'),
+          find.text(
+            myanmar ? 'ယနေ့အသားတင်ရောင်းအား' : 'Net sales today',
+          ),
           findsNothing,
         );
         expect(tester.takeException(), isNull);
@@ -865,7 +867,7 @@ void main() {
       await tester.tap(find.text('Today'));
       await tester.pumpAndSettle();
       expect(find.text('2,500 MMK'), findsWidgets);
-      expect(find.text('Completed sales'), findsOneWidget);
+      expect(find.text('Sales recorded'), findsOneWidget);
       await tester.tap(find.text('Sell'));
       await tester.pumpAndSettle();
       expect(
@@ -919,7 +921,7 @@ void main() {
         lessThan(tester.getTopLeft(find.text('Recent sales')).dy),
       );
       expect(
-        tester.getTopLeft(find.text('Sales today')).dy,
+        tester.getTopLeft(find.text('Net sales today')).dy,
         lessThan(tester.getTopLeft(find.text('Recent sales')).dy),
       );
       expect(find.text('Stock to check'), findsNothing);
@@ -973,8 +975,8 @@ void main() {
                 .getTopLeft(find.byType(NavigationBar))
                 .dy;
             for (final label in [
-              myanmar ? 'ယနေ့ရောင်းအား' : 'Sales today',
-              myanmar ? 'ပြီးစီးသောအရောင်း' : 'Completed sales',
+              myanmar ? 'ယနေ့အသားတင်ရောင်းအား' : 'Net sales today',
+              myanmar ? 'မှတ်တမ်းတင်ထားသောအရောင်း' : 'Sales recorded',
               myanmar ? 'လက်ကျန်နည်း' : 'Low stock',
               myanmar ? 'လက်ကျန်စစ်ရန်' : 'Check stock',
             ]) {
@@ -1590,9 +1592,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Sales today'), findsOneWidget);
+    expect(find.text('Net sales today'), findsOneWidget);
     expect(find.text('1,200 MMK'), findsNWidgets(2));
-    expect(find.text('Completed sales'), findsOneWidget);
+    expect(find.text('Sales recorded'), findsOneWidget);
     expect(find.text('Low-stock products'), findsNothing);
     expect(find.text('Stock to check'), findsNothing);
     expect(find.text('Mobile payment to review'), findsOneWidget);
@@ -1627,8 +1629,8 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      final salesY = tester.getTopLeft(find.text('Sales today')).dy;
-      final completedY = tester.getTopLeft(find.text('Completed sales')).dy;
+      final salesY = tester.getTopLeft(find.text('Net sales today')).dy;
+      final completedY = tester.getTopLeft(find.text('Sales recorded')).dy;
       expect((salesY - completedY).abs(), lessThan(4));
       expect(tester.getTopLeft(find.text('New sale')).dx, greaterThan(500));
       expect(find.text('Check stock'), findsNothing);
@@ -1673,8 +1675,8 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      final salesY = tester.getTopLeft(find.text('Sales today')).dy;
-      final completedY = tester.getTopLeft(find.text('Completed sales')).dy;
+      final salesY = tester.getTopLeft(find.text('Net sales today')).dy;
+      final completedY = tester.getTopLeft(find.text('Sales recorded')).dy;
       final stockY = tester.getTopLeft(find.text('Low-stock products')).dy;
       expect((salesY - completedY).abs(), lessThan(4));
       expect((salesY - stockY).abs(), lessThan(4));
@@ -1700,9 +1702,9 @@ void main() {
         return tester.getBottomLeft(metricCard).dy;
       }
 
-      final burmeseSalesBottom = cardBottom('ယနေ့ရောင်းအား');
+      final burmeseSalesBottom = cardBottom('ယနေ့အသားတင်ရောင်းအား');
       expect(
-        (burmeseSalesBottom - cardBottom('ပြီးစီးသောအရောင်း')).abs(),
+        (burmeseSalesBottom - cardBottom('မှတ်တမ်းတင်ထားသောအရောင်း')).abs(),
         lessThan(4),
       );
       expect(
@@ -1878,6 +1880,158 @@ void main() {
     expect(find.textContaining('PM'), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
     await database.close();
+  });
+
+  testWidgets(
+    'cash reversal reports net and audit detail without ordinary reprint',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final database = ShopDatabase(NativeDatabase.memory());
+      try {
+        await database.addProduct(
+          id: 'reversed-tea',
+          name: 'Tea',
+          priceMmk: 2500,
+          openingStock: 2,
+        );
+        await database.openCashShift(
+          operationId: 'reversed-shift',
+          operatorLabel: 'May',
+          openingFloatMmk: 5000,
+        );
+        final sale = await database.recordCashSale(
+          operationId: 'reversed-sale',
+          lines: const [
+            ShopSaleLineInput(productId: 'reversed-tea', quantity: 1),
+          ],
+        );
+        final command = await database.previewFullSaleReversal(
+          operationId: 'reversed-sale-correction',
+          saleId: sale.id,
+          restockItems: true,
+          reason: 'Customer returned the full sale',
+        );
+        await database.recordAuthorizedFullSaleReversal(
+          command: command,
+          authorization: _widgetCorrectionAuthorization(
+            command.commandDigest,
+            capability: 'shop.sale.reverse',
+            receiptId: 'widget-cash-reversal-receipt',
+          ),
+        );
+
+        await tester.pumpWidget(
+          ShopApp(
+            database: database,
+            authClient: null,
+            apiBaseUrl: 'https://app.supermega.dev',
+            initialMyanmar: false,
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('Net sales today'), findsOneWidget);
+        expect(find.text('Gross recorded: 2,500 MMK'), findsOneWidget);
+        expect(find.text('Reversals today'), findsOneWidget);
+        expect(find.text('1 · 2,500 MMK'), findsOneWidget);
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: RecentSalesScreen(database: database, myanmar: false),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('2,500 MMK'));
+        await tester.pumpAndSettle();
+        expect(
+          find.text('Reversed — original sale retained'),
+          findsOneWidget,
+        );
+        expect(
+          find.text('Reason: Customer returned the full sale'),
+          findsOneWidget,
+        );
+        expect(find.text('Recorded actor: Widget test owner'), findsOneWidget);
+        expect(
+          find.text('All original quantities were returned to stock.'),
+          findsOneWidget,
+        );
+        expect(find.text('Reprint receipt'), findsNothing);
+        expect(tester.takeException(), isNull);
+      } finally {
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump(const Duration(milliseconds: 1));
+        await database.close();
+      }
+    },
+  );
+
+  testWidgets('wallet reversal never presents local pending as money returned', (
+    tester,
+  ) async {
+    final database = ShopDatabase(NativeDatabase.memory());
+    try {
+      await database.addProduct(
+        id: 'wallet-reversed-water',
+        name: 'Water',
+        priceMmk: 1000,
+        openingStock: 2,
+      );
+      const lines = [
+        ShopSaleLineInput(productId: 'wallet-reversed-water', quantity: 1),
+      ];
+      await database.createWalletCheckoutIntent(
+        operationId: 'widget-wallet-sale',
+        merchant: MerchantWalletSetup(
+          provider: 'KBZPay',
+          merchantPhone: null,
+          officialQrPayload: _testStaticMmqr(),
+          issuerConfirmed: true,
+        ),
+        lines: lines,
+      );
+      final sale = await database.recordSale(
+        operationId: 'widget-wallet-sale',
+        lines: lines,
+        paymentMethod: 'kbzpay',
+        walletCheckoutOperationId: 'widget-wallet-sale',
+      );
+      final command = await database.previewFullSaleReversal(
+        operationId: 'widget-wallet-reversal',
+        saleId: sale.id,
+        restockItems: false,
+        reason: 'Duplicate local record',
+      );
+      await database.recordAuthorizedFullSaleReversal(
+        command: command,
+        authorization: _widgetCorrectionAuthorization(
+          command.commandDigest,
+          capability: 'shop.sale.reverse',
+          receiptId: 'widget-wallet-reversal-receipt',
+        ),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: RecentSalesScreen(database: database, myanmar: false),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('1,000 MMK'));
+      await tester.pumpAndSettle();
+      expect(
+        find.text(
+          'Wallet reconciliation pending. No outgoing money return has been verified.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Money returned was'), findsNothing);
+      expect(find.text('Reprint receipt'), findsNothing);
+      expect(tester.takeException(), isNull);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+      await database.close();
+    }
   });
 
   testWidgets('saved sale reprints without recording another sale', (
@@ -5486,6 +5640,27 @@ void main() {
       expect(await database.countOutboxOperations(), 0);
     });
   });
+}
+
+ShopCorrectionAuthorization _widgetCorrectionAuthorization(
+  String commandDigest, {
+  required String capability,
+  required String receiptId,
+}) {
+  final now = DateTime.now().millisecondsSinceEpoch;
+  return ShopCorrectionAuthorization(
+    receiptId: receiptId,
+    receiptDigest: List<String>.filled(64, 'c').join(),
+    workspaceId: 'workspace-widget-test',
+    actorId: 'owner-widget-test',
+    actorLabel: 'Widget test owner',
+    actorRole: 'owner',
+    capability: capability,
+    source: 'managed_membership_receipt_v1',
+    commandDigest: commandDigest,
+    issuedAtMillis: now - 1000,
+    expiresAtMillis: now + const Duration(minutes: 5).inMilliseconds,
+  );
 }
 
 String _testStaticMmqr({String merchantName = 'TEST STORE'}) {

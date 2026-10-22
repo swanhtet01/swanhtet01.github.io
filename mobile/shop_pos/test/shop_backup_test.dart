@@ -90,7 +90,7 @@ void main() {
     () async {
       final bytes = await archive.readAsBytes();
       expect(bytes.sublist(0, 4), ascii.encode('SMBK'));
-      expect(bytes[5], 10);
+      expect(bytes[5], 11);
       expect(
         bytes.sublist(0, 16),
         isNot(ascii.encode('SQLite format 3\u0000')),
@@ -125,6 +125,103 @@ void main() {
         expect(intents.single.read<String>('operation_id'), 'backup-wallet-1');
       } finally {
         await reopened.close();
+      }
+    },
+  );
+
+  test(
+    'encrypted backup preserves a pending wallet reversal and exact retry state',
+    () async {
+      final source = ShopDatabase(NativeDatabase.memory());
+      try {
+        await source.addProduct(
+          id: 'backup-reversal-product',
+          name: 'Tea',
+          priceMmk: 1500,
+          openingStock: 3,
+        );
+        const lines = [
+          ShopSaleLineInput(productId: 'backup-reversal-product', quantity: 2),
+        ];
+        await source.createWalletCheckoutIntent(
+          operationId: 'backup-reversal-sale',
+          merchant: MerchantWalletSetup(
+            provider: 'KBZPay',
+            merchantPhone: null,
+            officialQrPayload: _syntheticStaticMmqr(),
+            issuerConfirmed: true,
+          ),
+          lines: lines,
+        );
+        final sale = await source.recordSale(
+          operationId: 'backup-reversal-sale',
+          lines: lines,
+          paymentMethod: 'kbzpay',
+          walletCheckoutOperationId: 'backup-reversal-sale',
+        );
+        final command = await source.previewFullSaleReversal(
+          operationId: 'backup-pending-reversal',
+          saleId: sale.id,
+          restockItems: true,
+          reason: 'Full sale returned',
+        );
+        final authorization = _backupAuthorization(
+          command.commandDigest,
+          capability: 'shop.sale.reverse',
+          receiptId: 'backup-reversal-receipt',
+        );
+        await source.recordAuthorizedFullSaleReversal(
+          command: command,
+          authorization: authorization,
+        );
+        final reversalArchive = File(
+          '${directory.path}/wallet-reversal.smbak',
+        );
+        await ShopBackup.exportEncrypted(
+          database: source,
+          archive: reversalArchive,
+          password: _password,
+          scratchRoot: directory,
+        );
+        final target = File('${directory.path}/wallet-reversal.sqlite');
+        await ShopBackup.restoreIntoEmptyDatabase(
+          archive: reversalArchive,
+          target: target,
+          password: _password,
+        );
+        final restored = ShopDatabase(NativeDatabase(target));
+        try {
+          final recent = (await restored.readRecentSales()).single;
+          expect(recent.reversal?.walletReconciliationPending, isTrue);
+          expect(recent.reversal?.restockItems, isTrue);
+          expect((await restored.readActiveProducts()).single.onHand, 3);
+          await restored.recordAuthorizedFullSaleReversal(
+            command: command,
+            authorization: authorization,
+          );
+          expect((await restored.readActiveProducts()).single.onHand, 3);
+          final reconciliation = await restored.previewWalletReconciliation(
+            operationId: 'backup-wallet-confirmation',
+            reversalId: command.operationId,
+            outcome: 'money_returned',
+            evidenceReference: 'Provider history receipt 99',
+          );
+          final confirmed =
+              await restored.recordAuthorizedWalletReconciliation(
+                command: reconciliation,
+                authorization: _backupAuthorization(
+                  reconciliation.commandDigest,
+                  capability: 'shop.sale.reconcile_wallet',
+                  receiptId: 'backup-confirmation-receipt',
+                ),
+              );
+          expect(confirmed.walletReconciliationOutcome, 'money_returned');
+          expect((await restored.readActiveProducts()).single.onHand, 3);
+        } finally {
+          await restored.close();
+        }
+      } finally {
+        await source.close();
       }
     },
   );
@@ -422,11 +519,12 @@ void main() {
     },
   );
 
-  test('v6 archive restores, then migrates its catalog to v10', () async {
+  test('v6 archive restores, then migrates its catalog to v11', () async {
     final legacy = File('${directory.path}/legacy-v6.sqlite');
     await database.exportVerifiedLocalSnapshot(legacy);
     final connection = sqlite3.open(legacy.path);
     try {
+      _removeV11ObjectsForLegacyFixture(connection);
       connection.execute('ALTER TABLE shop_products DROP COLUMN reorder_level');
       connection.execute('DROP TABLE shop_product_images');
       connection.execute('DROP TABLE shop_counter_drafts');
@@ -475,7 +573,7 @@ void main() {
       expect(
         (await migrated.customSelect('PRAGMA user_version').getSingle())
             .read<int>('user_version'),
-        10,
+        11,
       );
     } finally {
       await migrated.close();
@@ -487,6 +585,7 @@ void main() {
     await database.exportVerifiedLocalSnapshot(old);
     final connection = sqlite3.open(old.path);
     try {
+      _removeV11ObjectsForLegacyFixture(connection);
       connection.execute('ALTER TABLE shop_products DROP COLUMN reorder_level');
       connection.execute('DROP TABLE shop_counter_drafts');
       connection.execute('DROP TABLE shop_held_sales');
@@ -501,11 +600,52 @@ void main() {
       expect(
         (await upgraded.customSelect('PRAGMA user_version').getSingle())
             .read<int>('user_version'),
-        10,
+        11,
       );
     } finally {
       await upgraded.close();
     }
+  });
+
+  test('v10 snapshot gains empty immutable reversal audit tables', () async {
+    final old = File('${directory.path}/legacy-v10.sqlite');
+    await database.exportVerifiedLocalSnapshot(old);
+    final connection = sqlite3.open(old.path);
+    try {
+      _removeV11ObjectsForLegacyFixture(connection);
+      connection.execute('PRAGMA user_version = 10');
+      connection.execute('CREATE TABLE shop_sale_reversals (fake TEXT)');
+      expect(
+        () => ShopBackup.verifySnapshot(old, expectedSchemaVersion: 10),
+        throwsFormatException,
+      );
+      connection.execute('DROP TABLE shop_sale_reversals');
+      connection.execute('''
+        CREATE TRIGGER shop_sales_no_update
+        BEFORE UPDATE ON shop_sales BEGIN SELECT 1; END
+      ''');
+      expect(
+        () => ShopBackup.verifySnapshot(old, expectedSchemaVersion: 10),
+        throwsFormatException,
+      );
+      connection.execute('DROP TRIGGER shop_sales_no_update');
+    } finally {
+      connection.close();
+    }
+    ShopBackup.verifySnapshot(old, expectedSchemaVersion: 10);
+    final upgraded = ShopDatabase(NativeDatabase(old));
+    try {
+      expect(await upgraded.readSaleReversalForSale('backup-sale-1'), isNull);
+      expect(await upgraded.countSales(), 1);
+      expect(
+        (await upgraded.customSelect('PRAGMA user_version').getSingle())
+            .read<int>('user_version'),
+        11,
+      );
+    } finally {
+      await upgraded.close();
+    }
+    ShopBackup.verifySnapshot(old, expectedSchemaVersion: 11);
   });
 
   test(
@@ -515,6 +655,7 @@ void main() {
       await database.exportVerifiedLocalSnapshot(old);
       final connection = sqlite3.open(old.path);
       try {
+        _removeV11ObjectsForLegacyFixture(connection);
         connection.execute('DROP TABLE shop_held_sales');
         connection.execute('PRAGMA user_version = 9');
       } finally {
@@ -529,12 +670,12 @@ void main() {
         expect(
           (await upgraded.customSelect('PRAGMA user_version').getSingle())
               .read<int>('user_version'),
-          10,
+          11,
         );
       } finally {
         await upgraded.close();
       }
-      ShopBackup.verifySnapshot(old, expectedSchemaVersion: 10);
+      ShopBackup.verifySnapshot(old, expectedSchemaVersion: 11);
     },
   );
 
@@ -545,6 +686,7 @@ void main() {
       await database.exportVerifiedLocalSnapshot(old);
       final connection = sqlite3.open(old.path);
       try {
+        _removeV11ObjectsForLegacyFixture(connection);
         connection.execute(
           'ALTER TABLE shop_products DROP COLUMN reorder_level',
         );
@@ -562,16 +704,16 @@ void main() {
         expect(
           (await migrated.customSelect('PRAGMA user_version').getSingle())
               .read<int>('user_version'),
-          10,
+          11,
         );
       } finally {
         await migrated.close();
       }
-      ShopBackup.verifySnapshot(old, expectedSchemaVersion: 10);
+      ShopBackup.verifySnapshot(old, expectedSchemaVersion: 11);
     },
   );
 
-  test('v10 backup preserves custom and disabled low-stock alerts', () async {
+  test('v11 backup preserves custom and disabled low-stock alerts', () async {
     final source = ShopDatabase(NativeDatabase.memory());
     try {
       await source.addProduct(
@@ -609,7 +751,7 @@ void main() {
         target: restored,
         password: _password,
       );
-      ShopBackup.verifySnapshot(restored, expectedSchemaVersion: 10);
+      ShopBackup.verifySnapshot(restored, expectedSchemaVersion: 11);
       final reopened = ShopDatabase(NativeDatabase(restored));
       try {
         final products = {
@@ -627,7 +769,26 @@ void main() {
     }
   });
 
-  test('v10 snapshots reject missing or invalid alert settings', () async {
+  test('v11 snapshot rejects a same-name no-op audit trigger', () async {
+    final corrupt = File('${directory.path}/noop-audit-trigger.sqlite');
+    await database.exportVerifiedLocalSnapshot(corrupt);
+    final connection = sqlite3.open(corrupt.path);
+    try {
+      connection.execute('DROP TRIGGER shop_sale_reversals_no_update');
+      connection.execute('''
+        CREATE TRIGGER shop_sale_reversals_no_update
+        BEFORE UPDATE ON shop_sale_reversals BEGIN SELECT 1; END
+      ''');
+    } finally {
+      connection.close();
+    }
+    expect(
+      () => ShopBackup.verifySnapshot(corrupt, expectedSchemaVersion: 11),
+      throwsFormatException,
+    );
+  });
+
+  test('v11 snapshots reject missing or invalid alert settings', () async {
     final missing = File('${directory.path}/missing-reorder.sqlite');
     await database.exportVerifiedLocalSnapshot(missing);
     final missingConnection = sqlite3.open(missing.path);
@@ -682,7 +843,7 @@ void main() {
     expect(() => ShopBackup.verifySnapshot(corrupt), throwsFormatException);
   });
 
-  test('v10 snapshot rejects a malformed pending wallet basket', () async {
+  test('v11 snapshot rejects a malformed pending wallet basket', () async {
     final corrupt = File('${directory.path}/malformed-wallet.sqlite');
     await database.exportVerifiedLocalSnapshot(corrupt);
     final connection = sqlite3.open(corrupt.path);
@@ -1409,6 +1570,46 @@ Future<void> _expectNoScratch(Directory parent) async {
           name.startsWith('supermega-shop-backup-');
     }),
     isEmpty,
+  );
+}
+
+void _removeV11ObjectsForLegacyFixture(Database connection) {
+  connection.execute('DROP TABLE shop_wallet_reversal_reconciliations');
+  connection.execute('DROP TABLE shop_sale_reversal_lines');
+  connection.execute('DROP TABLE shop_sale_reversals');
+  for (final table in const ['shop_sales', 'shop_sale_lines']) {
+    connection.execute('DROP TRIGGER ${table}_no_update');
+    connection.execute('DROP TRIGGER ${table}_no_delete');
+  }
+  for (final column in const [
+    'cash_reversal_count',
+    'cash_reversal_total_mmk',
+    'cash_drawer_outflow_mmk',
+    'review_cash_reversal_count',
+    'review_cash_drawer_outflow_mmk',
+  ]) {
+    connection.execute('ALTER TABLE shop_cash_shifts DROP COLUMN $column');
+  }
+}
+
+ShopCorrectionAuthorization _backupAuthorization(
+  String commandDigest, {
+  required String capability,
+  required String receiptId,
+}) {
+  final now = DateTime.now().millisecondsSinceEpoch;
+  return ShopCorrectionAuthorization(
+    receiptId: receiptId,
+    receiptDigest: List<String>.filled(64, 'b').join(),
+    workspaceId: 'workspace-backup-test',
+    actorId: 'owner-backup-test',
+    actorLabel: 'Backup test owner',
+    actorRole: 'owner',
+    capability: capability,
+    source: 'managed_membership_receipt_v1',
+    commandDigest: commandDigest,
+    issuedAtMillis: now - 1000,
+    expiresAtMillis: now + const Duration(minutes: 5).inMilliseconds,
   );
 }
 

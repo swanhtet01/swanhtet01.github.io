@@ -297,10 +297,12 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
                                             runSpacing: 2,
                                             children: [
                                               Text(
-                                                _whenCompact(
-                                                  context,
-                                                  sale.createdAtMillis,
-                                                ),
+                                                sale.reversal == null
+                                                    ? _whenCompact(
+                                                        context,
+                                                        sale.createdAtMillis,
+                                                      )
+                                                    : '${shopCopy(widget.myanmar, 'Reversed', 'ပြန်လှန်ချိန်')} ${_whenCompact(context, sale.reversal!.createdAtMillis)}',
                                                 style: Theme.of(context)
                                                     .textTheme
                                                     .bodySmall,
@@ -313,6 +315,24 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
                                                     .textTheme
                                                     .bodySmall,
                                               ),
+                                              if (sale.reversal != null)
+                                                Text(
+                                                  shopCopy(
+                                                    widget.myanmar,
+                                                    'Sold ${_whenCompact(context, sale.createdAtMillis)}',
+                                                    'မူလရောင်းချိန် ${_whenCompact(context, sale.createdAtMillis)}',
+                                                  ),
+                                                  style: Theme.of(context)
+                                                      .textTheme
+                                                      .bodySmall
+                                                      ?.copyWith(
+                                                        color: Theme.of(context)
+                                                            .colorScheme
+                                                            .error,
+                                                        fontWeight:
+                                                            FontWeight.w700,
+                                                      ),
+                                                ),
                                             ],
                                           ),
                                         ],
@@ -338,8 +358,11 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
                                         ?.copyWith(fontWeight: FontWeight.w600),
                                   ),
                                   subtitle: Text(
-                                    '${_when(context, sale.createdAtMillis)} · '
-                                    '${_paymentName(sale.paymentMethod)}',
+                                    sale.reversal == null
+                                        ? '${_when(context, sale.createdAtMillis)} · ${_paymentName(sale.paymentMethod)}'
+                                        : '${shopCopy(widget.myanmar, 'Reversed', 'ပြန်လှန်ချိန်')} ${_when(context, sale.reversal!.createdAtMillis)} · '
+                                              '${shopCopy(widget.myanmar, 'sold', 'မူလရောင်းချိန်')} ${_when(context, sale.createdAtMillis)} · '
+                                              '${_paymentName(sale.paymentMethod)}',
                                     style: Theme.of(context)
                                         .textTheme
                                         .bodyMedium
@@ -524,27 +547,110 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
                   '${shopCopy(widget.myanmar, 'Payment', 'ငွေပေးချေမှု')}: '
                   '${_paymentName(sale.paymentMethod)}',
                 ),
+                if (sale.reversal case final ShopSaleReversal reversal) ...[
+                  const SizedBox(height: 16),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Theme.of(dialogContext).colorScheme.errorContainer,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          shopCopy(
+                            widget.myanmar,
+                            'Reversed — original sale retained',
+                            'ပြန်လှန်ပြီး — မူလအရောင်းမှတ်တမ်းကို ထိန်းသိမ်းထားသည်',
+                          ),
+                          style: Theme.of(dialogContext)
+                              .textTheme
+                              .titleSmall
+                              ?.copyWith(fontWeight: FontWeight.w700),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          '${shopCopy(widget.myanmar, 'Reason', 'အကြောင်းရင်း')}: ${reversal.reason}',
+                        ),
+                        Text(
+                          '${shopCopy(widget.myanmar, 'Reversed', 'ပြန်လှန်ချိန်')}: ${_when(dialogContext, reversal.createdAtMillis)}',
+                        ),
+                        Text(
+                          '${shopCopy(widget.myanmar, 'Recorded actor', 'မှတ်တမ်းတင်သူ')}: ${reversal.authorizedActorLabel}',
+                        ),
+                        Text(
+                          reversal.restockItems
+                              ? shopCopy(
+                                  widget.myanmar,
+                                  'All original quantities were returned to stock.',
+                                  'မူလပစ္စည်းအရေအတွက်အားလုံးကို လက်ကျန်ထဲ ပြန်ထည့်ထားသည်။',
+                                )
+                              : shopCopy(
+                                  widget.myanmar,
+                                  'Stock was not changed.',
+                                  'လက်ကျန်ပမာဏကို မပြောင်းထားပါ။',
+                                ),
+                        ),
+                        if (reversal.originalPaymentMethod != 'cash')
+                          Text(
+                            reversal.walletReconciliationPending
+                                ? shopCopy(
+                                    widget.myanmar,
+                                    'Wallet reconciliation pending. No outgoing money return has been verified.',
+                                    'Wallet စာရင်းညှိခြင်း ဆိုင်းငံ့ထားသည်။ အပြင်သို့ ငွေပြန်ပို့ပြီးကြောင်း အတည်မပြုရသေးပါ။',
+                                  )
+                                : reversal.walletReconciliationOutcome ==
+                                      'money_returned'
+                                ? shopCopy(
+                                    widget.myanmar,
+                                    'Money returned was separately confirmed with provider evidence.',
+                                    'ငွေပြန်ပို့ပြီးကြောင်းကို ဝန်ဆောင်မှုပေးသူ အထောက်အထားဖြင့် သီးခြားအတည်ပြုထားသည်။',
+                                  )
+                                : shopCopy(
+                                    widget.myanmar,
+                                    'The original wallet payment was separately confirmed not received; no money return was recorded.',
+                                    'မူလ Wallet ငွေပေးချေမှု မရရှိခဲ့ကြောင်း သီးခြားအတည်ပြုထားပြီး ငွေပြန်ပို့မှုကို မှတ်တမ်းမတင်ထားပါ။',
+                                  ),
+                          ),
+                        if (reversal.walletEvidenceReference
+                            case final String evidence)
+                          Text(
+                            '${shopCopy(widget.myanmar, 'Evidence reference', 'အထောက်အထား ရည်ညွှန်းချက်')}: $evidence',
+                          ),
+                        if (reversal.walletReconciledAtMillis
+                            case final int reconciledAt)
+                          Text(
+                            '${shopCopy(widget.myanmar, 'Reconciled', 'စာရင်းညှိချိန်')}: ${_when(dialogContext, reconciledAt)}'
+                            '${reversal.walletReconciledActorLabel == null ? '' : ' · ${reversal.walletReconciledActorLabel}'}',
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
         ),
         actions: [
-          FilledButton.icon(
-            onPressed: _reprinting
-                ? null
-                : () {
-                    Navigator.of(dialogContext).pop();
-                    unawaited(_reprintSale(sale));
-                  },
-            icon: const Icon(Icons.print_outlined),
-            label: Text(
-              shopCopy(
-                widget.myanmar,
-                'Reprint receipt',
-                'ပြေစာပြန်ပုံနှိပ်ရန်',
+          if (sale.reversal == null)
+            FilledButton.icon(
+              onPressed: _reprinting
+                  ? null
+                  : () {
+                      Navigator.of(dialogContext).pop();
+                      unawaited(_reprintSale(sale));
+                    },
+              icon: const Icon(Icons.print_outlined),
+              label: Text(
+                shopCopy(
+                  widget.myanmar,
+                  'Reprint receipt',
+                  'ပြေစာပြန်ပုံနှိပ်ရန်',
+                ),
               ),
             ),
-          ),
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(),
             child: Text(shopCopy(widget.myanmar, 'Close', 'ပိတ်ရန်')),

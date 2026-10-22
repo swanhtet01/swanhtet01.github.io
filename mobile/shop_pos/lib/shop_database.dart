@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:cryptography/cryptography.dart';
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:drift_flutter/drift_flutter.dart';
@@ -159,6 +160,7 @@ class ShopSaleReceipt {
     required this.createdAtMillis,
     required this.paymentMethod,
     this.lines = const [],
+    this.reversal,
   });
 
   final String id;
@@ -167,6 +169,7 @@ class ShopSaleReceipt {
   final int createdAtMillis;
   final String paymentMethod;
   final List<ShopSaleReceiptLine> lines;
+  final ShopSaleReversal? reversal;
 }
 
 class ShopSaleReceiptLine {
@@ -175,12 +178,184 @@ class ShopSaleReceiptLine {
     required this.unitPriceMmk,
     required this.quantity,
     required this.lineTotalMmk,
+    this.id,
+    this.productId,
   });
 
   final String productName;
   final int unitPriceMmk;
   final int quantity;
   final int lineTotalMmk;
+  final String? id;
+  final String? productId;
+}
+
+/// A server-verified, command-bound authorization receipt.
+///
+/// This value is evidence returned by an external membership/capability
+/// verifier. Constructing one locally does not authorize an action; production
+/// callers must keep reversal entry points unavailable until that verifier is
+/// configured. The database persists only receipt metadata and a digest, never
+/// a bearer token.
+class ShopCorrectionAuthorization {
+  const ShopCorrectionAuthorization({
+    required this.receiptId,
+    required this.receiptDigest,
+    required this.workspaceId,
+    required this.actorId,
+    required this.actorLabel,
+    required this.actorRole,
+    required this.capability,
+    required this.source,
+    required this.commandDigest,
+    required this.issuedAtMillis,
+    required this.expiresAtMillis,
+  });
+
+  final String receiptId;
+  final String receiptDigest;
+  final String workspaceId;
+  final String actorId;
+  final String actorLabel;
+  final String actorRole;
+  final String capability;
+  final String source;
+  final String commandDigest;
+  final int issuedAtMillis;
+  final int expiresAtMillis;
+}
+
+class ShopFullSaleReversalCommand {
+  const ShopFullSaleReversalCommand({
+    required this.operationId,
+    required this.saleId,
+    required this.saleSnapshotDigest,
+    required this.requestFingerprint,
+    required this.commandDigest,
+    required this.originalTotalMmk,
+    required this.originalPaymentMethod,
+    required this.restockItems,
+    required this.reason,
+    required this.paymentResolution,
+  });
+
+  final String operationId;
+  final String saleId;
+  final String saleSnapshotDigest;
+  final String requestFingerprint;
+  final String commandDigest;
+  final int originalTotalMmk;
+  final String originalPaymentMethod;
+  final bool restockItems;
+  final String reason;
+  final String paymentResolution;
+}
+
+class ShopWalletReconciliationCommand {
+  const ShopWalletReconciliationCommand({
+    required this.operationId,
+    required this.reversalId,
+    required this.requestFingerprint,
+    required this.commandDigest,
+    required this.outcome,
+    required this.evidenceReference,
+  });
+
+  final String operationId;
+  final String reversalId;
+  final String requestFingerprint;
+  final String commandDigest;
+  final String outcome;
+  final String evidenceReference;
+}
+
+class ShopSaleReversalLine {
+  const ShopSaleReversalLine({
+    required this.saleLineId,
+    required this.productId,
+    required this.productName,
+    required this.unitPriceMmk,
+    required this.quantity,
+    required this.lineTotalMmk,
+    required this.restockQuantity,
+  });
+
+  final String saleLineId;
+  final String productId;
+  final String productName;
+  final int unitPriceMmk;
+  final int quantity;
+  final int lineTotalMmk;
+  final int restockQuantity;
+}
+
+class ShopSaleReversal {
+  const ShopSaleReversal({
+    required this.id,
+    required this.operationId,
+    required this.saleId,
+    required this.originalTotalMmk,
+    required this.originalPaymentMethod,
+    required this.originalCreatedAtMillis,
+    required this.restockItems,
+    required this.reason,
+    required this.paymentResolution,
+    required this.cashDrawerDeltaMmk,
+    required this.authorizedActorId,
+    required this.authorizedActorLabel,
+    required this.authorizationReceiptId,
+    required this.createdAtMillis,
+    required this.lines,
+    this.shiftId,
+    this.walletReconciliationOutcome,
+    this.walletEvidenceReference,
+    this.walletReconciledActorLabel,
+    this.walletReconciledAtMillis,
+  });
+
+  final String id;
+  final String operationId;
+  final String saleId;
+  final int originalTotalMmk;
+  final String originalPaymentMethod;
+  final int originalCreatedAtMillis;
+  final bool restockItems;
+  final String reason;
+  final String paymentResolution;
+  final int cashDrawerDeltaMmk;
+  final String authorizedActorId;
+  final String authorizedActorLabel;
+  final String authorizationReceiptId;
+  final int createdAtMillis;
+  final String? shiftId;
+  final String? walletReconciliationOutcome;
+  final String? walletEvidenceReference;
+  final String? walletReconciledActorLabel;
+  final int? walletReconciledAtMillis;
+  final List<ShopSaleReversalLine> lines;
+
+  bool get walletReconciliationPending =>
+      originalPaymentMethod != 'cash' && walletReconciliationOutcome == null;
+}
+
+class ShopSalesSummary {
+  const ShopSalesSummary({
+    required this.grossSaleCount,
+    required this.grossSalesMmk,
+    required this.reversalCount,
+    required this.reversalMmk,
+    required this.pendingWalletReversalCount,
+    required this.pendingWalletReversalMmk,
+  });
+
+  final int grossSaleCount;
+  final int grossSalesMmk;
+  final int reversalCount;
+  final int reversalMmk;
+  final int pendingWalletReversalCount;
+  final int pendingWalletReversalMmk;
+
+  int get netSalesMmk => grossSalesMmk - reversalMmk;
 }
 
 class ShopCashShift {
@@ -198,6 +373,9 @@ class ShopCashShift {
     this.expectedCashMmk,
     this.countedCashMmk,
     this.differenceMmk,
+    this.cashReversalCount,
+    this.cashReversalTotalMmk,
+    this.cashDrawerOutflowMmk,
   });
 
   final String id;
@@ -213,6 +391,9 @@ class ShopCashShift {
   final int? expectedCashMmk;
   final int? countedCashMmk;
   final int? differenceMmk;
+  final int? cashReversalCount;
+  final int? cashReversalTotalMmk;
+  final int? cashDrawerOutflowMmk;
 }
 
 class ShopCashShiftReview {
@@ -223,6 +404,9 @@ class ShopCashShiftReview {
     required this.walletSalesCount,
     required this.walletSalesTotalMmk,
     required this.expectedCashMmk,
+    required this.cashReversalCount,
+    required this.cashReversalTotalMmk,
+    required this.cashDrawerOutflowMmk,
   });
 
   final ShopCashShift shift;
@@ -231,8 +415,12 @@ class ShopCashShiftReview {
   final int walletSalesCount;
   final int walletSalesTotalMmk;
   final int expectedCashMmk;
+  final int cashReversalCount;
+  final int cashReversalTotalMmk;
+  final int cashDrawerOutflowMmk;
 
   int get saleCount => cashSalesCount + walletSalesCount;
+  int get activityCount => saleCount + cashReversalCount;
 }
 
 class WalletCheckoutLineSnapshot {
@@ -310,6 +498,94 @@ class PendingWalletCheckout {
   final int createdAtMillis;
 }
 
+const shopSaleReversalsV11Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_sale_reversals (
+    id TEXT PRIMARY KEY NOT NULL CHECK (length(id) BETWEEN 1 AND 120),
+    operation_id TEXT NOT NULL UNIQUE CHECK (length(operation_id) BETWEEN 1 AND 120),
+    request_fingerprint TEXT NOT NULL,
+    sale_snapshot_digest TEXT NOT NULL CHECK (length(sale_snapshot_digest) = 64),
+    sale_id TEXT NOT NULL UNIQUE REFERENCES shop_sales(id),
+    original_total_mmk INTEGER NOT NULL CHECK (original_total_mmk BETWEEN 0 AND 200000000000000),
+    original_payment_method TEXT NOT NULL CHECK (original_payment_method IN ('cash', 'kbzpay', 'wavepay')),
+    original_created_at_millis INTEGER NOT NULL,
+    original_line_count INTEGER NOT NULL CHECK (original_line_count BETWEEN 1 AND 100),
+    restock_items INTEGER NOT NULL CHECK (restock_items IN (0, 1)),
+    reason TEXT NOT NULL CHECK (length(reason) BETWEEN 1 AND 240),
+    payment_resolution TEXT NOT NULL CHECK (payment_resolution IN ('cash_returned_now', 'external_pending')),
+    cash_drawer_delta_mmk INTEGER NOT NULL CHECK (cash_drawer_delta_mmk <= 0),
+    shift_id TEXT REFERENCES shop_cash_shifts(id),
+    authorization_receipt_id TEXT NOT NULL UNIQUE CHECK (length(authorization_receipt_id) BETWEEN 1 AND 160),
+    authorization_receipt_digest TEXT NOT NULL CHECK (length(authorization_receipt_digest) = 64),
+    authorization_command_digest TEXT NOT NULL CHECK (length(authorization_command_digest) = 64),
+    authorization_workspace_id TEXT NOT NULL CHECK (length(authorization_workspace_id) BETWEEN 1 AND 128),
+    authorized_actor_id TEXT NOT NULL CHECK (length(authorized_actor_id) BETWEEN 1 AND 128),
+    authorized_actor_label TEXT NOT NULL CHECK (length(authorized_actor_label) BETWEEN 1 AND 120),
+    authorized_actor_role TEXT NOT NULL CHECK (authorized_actor_role = 'owner'),
+    authorization_capability TEXT NOT NULL CHECK (authorization_capability = 'shop.sale.reverse'),
+    authorization_source TEXT NOT NULL CHECK (authorization_source = 'managed_membership_receipt_v1'),
+    authorization_issued_at_millis INTEGER NOT NULL,
+    authorization_verified_at_millis INTEGER NOT NULL,
+    authorization_expires_at_millis INTEGER NOT NULL,
+    created_at_millis INTEGER NOT NULL,
+    CHECK ((original_payment_method = 'cash' AND payment_resolution = 'cash_returned_now' AND shift_id IS NOT NULL AND cash_drawer_delta_mmk = -original_total_mmk)
+      OR (original_payment_method IN ('kbzpay', 'wavepay') AND payment_resolution = 'external_pending' AND shift_id IS NULL AND cash_drawer_delta_mmk = 0))
+  )
+''';
+
+const shopSaleReversalLinesV11Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_sale_reversal_lines (
+    id TEXT PRIMARY KEY NOT NULL,
+    reversal_id TEXT NOT NULL REFERENCES shop_sale_reversals(id),
+    sale_line_id TEXT NOT NULL REFERENCES shop_sale_lines(id),
+    product_id TEXT NOT NULL REFERENCES shop_products(id),
+    product_name TEXT NOT NULL,
+    unit_price_mmk INTEGER NOT NULL CHECK (unit_price_mmk BETWEEN 0 AND 2000000000),
+    quantity INTEGER NOT NULL CHECK (quantity BETWEEN 1 AND 1000),
+    line_total_mmk INTEGER NOT NULL CHECK (line_total_mmk = unit_price_mmk * quantity),
+    restock_quantity INTEGER NOT NULL CHECK (restock_quantity IN (0, quantity)),
+    stock_movement_id TEXT REFERENCES shop_stock_movements(id),
+    UNIQUE(reversal_id, sale_line_id),
+    CHECK ((restock_quantity = 0 AND stock_movement_id IS NULL)
+      OR (restock_quantity = quantity AND stock_movement_id IS NOT NULL))
+  )
+''';
+
+const shopWalletReversalReconciliationsV11Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_wallet_reversal_reconciliations (
+    id TEXT PRIMARY KEY NOT NULL CHECK (length(id) BETWEEN 1 AND 120),
+    operation_id TEXT NOT NULL UNIQUE CHECK (length(operation_id) BETWEEN 1 AND 120),
+    request_fingerprint TEXT NOT NULL,
+    reversal_id TEXT NOT NULL UNIQUE REFERENCES shop_sale_reversals(id),
+    outcome TEXT NOT NULL CHECK (outcome IN ('money_returned', 'payment_not_received')),
+    evidence_reference TEXT NOT NULL CHECK (length(evidence_reference) BETWEEN 1 AND 160),
+    authorization_receipt_id TEXT NOT NULL UNIQUE CHECK (length(authorization_receipt_id) BETWEEN 1 AND 160),
+    authorization_receipt_digest TEXT NOT NULL CHECK (length(authorization_receipt_digest) = 64),
+    authorization_command_digest TEXT NOT NULL CHECK (length(authorization_command_digest) = 64),
+    authorization_workspace_id TEXT NOT NULL CHECK (length(authorization_workspace_id) BETWEEN 1 AND 128),
+    authorized_actor_id TEXT NOT NULL CHECK (length(authorized_actor_id) BETWEEN 1 AND 128),
+    authorized_actor_label TEXT NOT NULL CHECK (length(authorized_actor_label) BETWEEN 1 AND 120),
+    authorized_actor_role TEXT NOT NULL CHECK (authorized_actor_role = 'owner'),
+    authorization_capability TEXT NOT NULL CHECK (authorization_capability = 'shop.sale.reconcile_wallet'),
+    authorization_source TEXT NOT NULL CHECK (authorization_source = 'managed_membership_receipt_v1'),
+    authorization_issued_at_millis INTEGER NOT NULL,
+    authorization_verified_at_millis INTEGER NOT NULL,
+    authorization_expires_at_millis INTEGER NOT NULL,
+    created_at_millis INTEGER NOT NULL
+  )
+''';
+
+String shopImmutableTriggerV11Sql({
+  required String table,
+  required String operation,
+  required String message,
+}) =>
+    '''
+  CREATE TRIGGER IF NOT EXISTS ${table}_no_$operation
+  BEFORE ${operation.toUpperCase()} ON $table BEGIN
+    SELECT RAISE(ABORT, '$message');
+  END
+''';
+
 @DriftDatabase(
   tables: [
     MenuImportDrafts,
@@ -342,7 +618,7 @@ class ShopDatabase extends _$ShopDatabase {
     : super(executor ?? driftDatabase(name: 'supermega_shop'));
 
   @override
-  int get schemaVersion => 10;
+  int get schemaVersion => 11;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -353,8 +629,12 @@ class ShopDatabase extends _$ShopDatabase {
       await _createProductImageTable();
       await _createCounterDraftTable();
       await _createHeldSaleTable();
+      await _createSaleReversalTables();
     },
     onUpgrade: (migrator, from, to) async {
+      if (from < 11) {
+        await _requireNoReservedV11Objects();
+      }
       if (from < 2) {
         await migrator.createTable(shopProducts);
         await migrator.createTable(shopSales);
@@ -409,6 +689,34 @@ class ShopDatabase extends _$ShopDatabase {
       if (from < 10) {
         await _createHeldSaleTable();
       }
+      if (from < 11) {
+        await _ensureColumn(
+          'shop_cash_shifts',
+          'cash_reversal_count',
+          'INTEGER',
+        );
+        await _ensureColumn(
+          'shop_cash_shifts',
+          'cash_reversal_total_mmk',
+          'INTEGER',
+        );
+        await _ensureColumn(
+          'shop_cash_shifts',
+          'cash_drawer_outflow_mmk',
+          'INTEGER',
+        );
+        await _ensureColumn(
+          'shop_cash_shifts',
+          'review_cash_reversal_count',
+          'INTEGER',
+        );
+        await _ensureColumn(
+          'shop_cash_shifts',
+          'review_cash_drawer_outflow_mmk',
+          'INTEGER',
+        );
+        await _createSaleReversalTables();
+      }
     },
     beforeOpen: (_) => customStatement('PRAGMA foreign_keys = ON'),
   );
@@ -451,7 +759,12 @@ class ShopDatabase extends _$ShopDatabase {
         counted_cash_mmk INTEGER,
         difference_mmk INTEGER,
         review_sale_count INTEGER,
-        review_cash_total_mmk INTEGER
+        review_cash_total_mmk INTEGER,
+        cash_reversal_count INTEGER,
+        cash_reversal_total_mmk INTEGER,
+        cash_drawer_outflow_mmk INTEGER,
+        review_cash_reversal_count INTEGER,
+        review_cash_drawer_outflow_mmk INTEGER
       )
     ''');
     await customStatement('''
@@ -502,6 +815,38 @@ class ShopDatabase extends _$ShopDatabase {
       CREATE INDEX IF NOT EXISTS shop_held_sales_updated
       ON shop_held_sales(updated_at_millis DESC)
     ''');
+  }
+
+  Future<void> _createSaleReversalTables() async {
+    await customStatement(shopSaleReversalsV11Sql);
+    await customStatement(shopSaleReversalLinesV11Sql);
+    await customStatement(shopWalletReversalReconciliationsV11Sql);
+    for (final table in const [
+      'shop_sale_reversals',
+      'shop_sale_reversal_lines',
+      'shop_wallet_reversal_reconciliations',
+    ]) {
+      for (final operation in const ['update', 'delete']) {
+        await customStatement(
+          shopImmutableTriggerV11Sql(
+            table: table,
+            operation: operation,
+            message: 'Shop reversal audit records are immutable',
+          ),
+        );
+      }
+    }
+    for (final table in const ['shop_sales', 'shop_sale_lines']) {
+      for (final operation in const ['update', 'delete']) {
+        await customStatement(
+          shopImmutableTriggerV11Sql(
+            table: table,
+            operation: operation,
+            message: 'Completed Shop sales are immutable',
+          ),
+        );
+      }
+    }
   }
 
   /// Persist the next basket before showing it to the operator. No stock or
@@ -935,6 +1280,52 @@ class ShopDatabase extends _$ShopDatabase {
     final rows = await customSelect('PRAGMA table_info($table)').get();
     if (rows.any((row) => row.read<String>('name') == column)) return;
     await customStatement('ALTER TABLE $table ADD COLUMN $column $declaration');
+  }
+
+  Future<void> _requireNoReservedV11Objects() async {
+    const auditTables = {
+      'shop_sale_reversals',
+      'shop_sale_reversal_lines',
+      'shop_wallet_reversal_reconciliations',
+    };
+    const protectedTables = {
+      ...auditTables,
+      'shop_sales',
+      'shop_sale_lines',
+    };
+    final objects = await customSelect(
+      "SELECT type, name FROM sqlite_master WHERE type IN ('table', 'trigger')",
+    ).get();
+    final hasReservedTable = objects.any(
+      (row) =>
+          row.read<String>('type') == 'table' &&
+          auditTables.contains(row.read<String>('name')),
+    );
+    final hasReservedTrigger = objects.any((row) {
+      if (row.read<String>('type') != 'trigger') return false;
+      final name = row.read<String>('name');
+      return protectedTables.any(
+        (table) => name == '${table}_no_update' || name == '${table}_no_delete',
+      );
+    });
+    final shiftColumns = await customSelect(
+      'PRAGMA table_info(shop_cash_shifts)',
+    ).get();
+    const reservedShiftColumns = {
+      'cash_reversal_count',
+      'cash_reversal_total_mmk',
+      'cash_drawer_outflow_mmk',
+      'review_cash_reversal_count',
+      'review_cash_drawer_outflow_mmk',
+    };
+    final hasReservedShiftColumn = shiftColumns.any(
+      (row) => reservedShiftColumns.contains(row.read<String>('name')),
+    );
+    if (hasReservedTable || hasReservedTrigger || hasReservedShiftColumn) {
+      throw StateError(
+        'This legacy Shop database contains reserved future audit objects.',
+      );
+    }
   }
 
   /// Create and read back a consistent local SQLite snapshot. This plaintext
@@ -1819,6 +2210,9 @@ class ShopDatabase extends _$ShopDatabase {
     expectedCashMmk: row.readNullable<int>('expected_cash_mmk'),
     countedCashMmk: row.readNullable<int>('counted_cash_mmk'),
     differenceMmk: row.readNullable<int>('difference_mmk'),
+    cashReversalCount: row.readNullable<int>('cash_reversal_count'),
+    cashReversalTotalMmk: row.readNullable<int>('cash_reversal_total_mmk'),
+    cashDrawerOutflowMmk: row.readNullable<int>('cash_drawer_outflow_mmk'),
   );
 
   Future<ShopCashShift?> readOpenCashShift() async {
@@ -1917,7 +2311,7 @@ class ShopDatabase extends _$ShopDatabase {
     if (shift.state != 'open') {
       throw StateError('This cash shift is already closed.');
     }
-    final totals = await customSelect(
+    final salesTotals = await customSelect(
       '''
       SELECT
         COALESCE(SUM(CASE WHEN s.payment_method = 'cash' THEN 1 ELSE 0 END), 0) AS cash_count,
@@ -1931,20 +2325,39 @@ class ShopDatabase extends _$ShopDatabase {
     ''',
       variables: [Variable<String>(shiftId)],
     ).getSingle();
-    if (totals.read<int>('unknown_count') != 0) {
+    if (salesTotals.read<int>('unknown_count') != 0) {
       throw StateError('The shift contains an unsupported payment method.');
     }
-    final cashTotal = totals.read<int>('cash_total');
+    final reversalTotals = await customSelect(
+      '''
+      SELECT
+        COUNT(*) AS reversal_count,
+        COALESCE(SUM(original_total_mmk), 0) AS reversal_total,
+        COALESCE(SUM(-cash_drawer_delta_mmk), 0) AS drawer_outflow
+      FROM shop_sale_reversals
+      WHERE shift_id = ? AND original_payment_method = 'cash'
+    ''',
+      variables: [Variable<String>(shiftId)],
+    ).getSingle();
+    final cashTotal = salesTotals.read<int>('cash_total');
+    final drawerOutflow = reversalTotals.read<int>('drawer_outflow');
     if (cashTotal > 200000000000000 - shift.openingFloatMmk) {
       throw StateError('Cash shift total exceeds the supported limit.');
     }
+    final cashBeforeReturns = shift.openingFloatMmk + cashTotal;
+    if (drawerOutflow > cashBeforeReturns) {
+      throw StateError('Cash returns exceed this shift\'s recorded drawer cash.');
+    }
     return ShopCashShiftReview(
       shift: shift,
-      cashSalesCount: totals.read<int>('cash_count'),
+      cashSalesCount: salesTotals.read<int>('cash_count'),
       cashSalesTotalMmk: cashTotal,
-      walletSalesCount: totals.read<int>('wallet_count'),
-      walletSalesTotalMmk: totals.read<int>('wallet_total'),
-      expectedCashMmk: shift.openingFloatMmk + cashTotal,
+      walletSalesCount: salesTotals.read<int>('wallet_count'),
+      walletSalesTotalMmk: salesTotals.read<int>('wallet_total'),
+      cashReversalCount: reversalTotals.read<int>('reversal_count'),
+      cashReversalTotalMmk: reversalTotals.read<int>('reversal_total'),
+      cashDrawerOutflowMmk: drawerOutflow,
+      expectedCashMmk: cashBeforeReturns - drawerOutflow,
     );
   }
 
@@ -1954,6 +2367,8 @@ class ShopDatabase extends _$ShopDatabase {
     required int seenSaleCount,
     required int seenCashTotalMmk,
     required int countedCashMmk,
+    int seenCashReversalCount = 0,
+    int seenCashDrawerOutflowMmk = 0,
   }) async {
     final cleanOperationId = operationId.trim();
     if (shiftId.trim().isEmpty ||
@@ -1961,6 +2376,8 @@ class ShopDatabase extends _$ShopDatabase {
         cleanOperationId.length > 120 ||
         seenSaleCount < 0 ||
         seenCashTotalMmk < 0 ||
+        seenCashReversalCount < 0 ||
+        seenCashDrawerOutflowMmk < 0 ||
         countedCashMmk < 0 ||
         countedCashMmk > 200000000000000) {
       throw ArgumentError('Cash shift close details are invalid.');
@@ -1976,7 +2393,14 @@ class ShopDatabase extends _$ShopDatabase {
             priorShift.countedCashMmk != countedCashMmk ||
             previous.readNullable<int>('review_sale_count') != seenSaleCount ||
             previous.readNullable<int>('review_cash_total_mmk') !=
-                seenCashTotalMmk) {
+                seenCashTotalMmk ||
+            (previous.readNullable<int>('review_cash_reversal_count') ?? 0) !=
+                seenCashReversalCount ||
+            (previous.readNullable<int>(
+                  'review_cash_drawer_outflow_mmk',
+                ) ??
+                0) !=
+                seenCashDrawerOutflowMmk) {
           throw StateError('A shift operation ID was reused with new details.');
         }
         return priorShift;
@@ -1989,8 +2413,10 @@ class ShopDatabase extends _$ShopDatabase {
       }
       final review = await readCashShiftReview(shiftId);
       if (review.saleCount != seenSaleCount ||
-          review.cashSalesTotalMmk != seenCashTotalMmk) {
-        throw StateError('Sales changed. Review the cash shift again.');
+          review.cashSalesTotalMmk != seenCashTotalMmk ||
+          review.cashReversalCount != seenCashReversalCount ||
+          review.cashDrawerOutflowMmk != seenCashDrawerOutflowMmk) {
+        throw StateError('Shift activity changed. Review the cash shift again.');
       }
       final now = DateTime.now().millisecondsSinceEpoch;
       final difference = countedCashMmk - review.expectedCashMmk;
@@ -1999,7 +2425,10 @@ class ShopDatabase extends _$ShopDatabase {
         'closed_at_millis = ?, cash_sales_count = ?, cash_sales_total_mmk = ?, '
         'wallet_sales_count = ?, wallet_sales_total_mmk = ?, '
         'expected_cash_mmk = ?, counted_cash_mmk = ?, difference_mmk = ?, '
-        'review_sale_count = ?, review_cash_total_mmk = ? '
+        'review_sale_count = ?, review_cash_total_mmk = ?, '
+        'cash_reversal_count = ?, cash_reversal_total_mmk = ?, '
+        'cash_drawer_outflow_mmk = ?, review_cash_reversal_count = ?, '
+        'review_cash_drawer_outflow_mmk = ? '
         "WHERE id = ? AND state = 'open'",
         variables: [
           const Variable<String>('closed'),
@@ -2014,6 +2443,11 @@ class ShopDatabase extends _$ShopDatabase {
           Variable<int>(difference),
           Variable<int>(seenSaleCount),
           Variable<int>(seenCashTotalMmk),
+          Variable<int>(review.cashReversalCount),
+          Variable<int>(review.cashReversalTotalMmk),
+          Variable<int>(review.cashDrawerOutflowMmk),
+          Variable<int>(seenCashReversalCount),
+          Variable<int>(seenCashDrawerOutflowMmk),
           Variable<String>(shiftId),
         ],
       );
@@ -2028,6 +2462,9 @@ class ShopDatabase extends _$ShopDatabase {
             'cashSalesTotalMmk': review.cashSalesTotalMmk,
             'walletSalesCount': review.walletSalesCount,
             'walletSalesTotalMmk': review.walletSalesTotalMmk,
+            'cashReversalCount': review.cashReversalCount,
+            'cashReversalTotalMmk': review.cashReversalTotalMmk,
+            'cashDrawerOutflowMmk': review.cashDrawerOutflowMmk,
             'expectedCashMmk': review.expectedCashMmk,
             'countedCashMmk': countedCashMmk,
             'differenceMmk': difference,
@@ -2042,6 +2479,647 @@ class ShopDatabase extends _$ShopDatabase {
       ).getSingle();
       return _cashShiftFromRow(closed);
     });
+  }
+
+  Future<String> _sha256Hex(String value) async {
+    final digest = await Sha256().hash(utf8.encode(value));
+    return digest.bytes
+        .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
+        .join();
+  }
+
+  String _boundedCorrectionText(
+    String value, {
+    required String field,
+    required int maximum,
+  }) {
+    final clean = value.trim();
+    if (clean.isEmpty ||
+        clean.runes.length > maximum ||
+        RegExp(r'[\x00-\x1f\x7f]').hasMatch(clean)) {
+      throw ArgumentError('$field is invalid.');
+    }
+    return clean;
+  }
+
+  Future<ShopFullSaleReversalCommand> previewFullSaleReversal({
+    required String operationId,
+    required String saleId,
+    required bool restockItems,
+    required String reason,
+  }) async {
+    final cleanOperationId = operationId.trim();
+    final cleanSaleId = saleId.trim();
+    final cleanReason = _boundedCorrectionText(
+      reason,
+      field: 'Correction reason',
+      maximum: 240,
+    );
+    if (cleanOperationId.isEmpty ||
+        cleanOperationId.length > 120 ||
+        cleanSaleId.isEmpty ||
+        cleanSaleId.length > 120) {
+      throw ArgumentError('Correction identifiers are invalid.');
+    }
+    final sale = await (select(
+      shopSales,
+    )..where((row) => row.id.equals(cleanSaleId))).getSingleOrNull();
+    if (sale == null) throw StateError('The original sale was not found.');
+    if (!const {'cash', 'kbzpay', 'wavepay'}.contains(sale.paymentMethod)) {
+      throw StateError('The original payment method is unsupported.');
+    }
+    final lines =
+        await (select(shopSaleLines)
+              ..where((row) => row.saleId.equals(cleanSaleId))
+              ..orderBy([(row) => OrderingTerm.asc(row.id)]))
+            .get();
+    if (lines.isEmpty || lines.length > 100) {
+      throw StateError('The original sale lines are incomplete.');
+    }
+    var calculatedTotal = 0;
+    for (final line in lines) {
+      if (line.quantity < 1 ||
+          line.quantity > 1000 ||
+          line.unitPriceMmk < 0 ||
+          line.unitPriceMmk > 2000000000 ||
+          line.lineTotalMmk != line.unitPriceMmk * line.quantity ||
+          calculatedTotal > 200000000000000 - line.lineTotalMmk) {
+        throw StateError('The original sale snapshot is invalid.');
+      }
+      calculatedTotal += line.lineTotalMmk;
+    }
+    if (calculatedTotal != sale.totalMmk) {
+      throw StateError('The original sale total does not match its lines.');
+    }
+    final snapshot = jsonEncode({
+      'saleId': sale.id,
+      'totalMmk': sale.totalMmk,
+      'paymentMethod': sale.paymentMethod,
+      'createdAtMillis': sale.createdAtMillis,
+      'lines': [
+        for (final line in lines)
+          {
+            'id': line.id,
+            'productId': line.productId,
+            'productName': line.productName,
+            'unitPriceMmk': line.unitPriceMmk,
+            'quantity': line.quantity,
+            'lineTotalMmk': line.lineTotalMmk,
+          },
+      ],
+    });
+    final snapshotDigest = await _sha256Hex(snapshot);
+    final paymentResolution = sale.paymentMethod == 'cash'
+        ? 'cash_returned_now'
+        : 'external_pending';
+    final requestFingerprint = jsonEncode({
+      'operationId': cleanOperationId,
+      'saleId': sale.id,
+      'saleSnapshotDigest': snapshotDigest,
+      'restockItems': restockItems,
+      'reason': cleanReason,
+      'paymentResolution': paymentResolution,
+    });
+    return ShopFullSaleReversalCommand(
+      operationId: cleanOperationId,
+      saleId: sale.id,
+      saleSnapshotDigest: snapshotDigest,
+      requestFingerprint: requestFingerprint,
+      commandDigest: await _sha256Hex(requestFingerprint),
+      originalTotalMmk: sale.totalMmk,
+      originalPaymentMethod: sale.paymentMethod,
+      restockItems: restockItems,
+      reason: cleanReason,
+      paymentResolution: paymentResolution,
+    );
+  }
+
+  void _validateCorrectionAuthorization({
+    required ShopCorrectionAuthorization authorization,
+    required String commandDigest,
+    required String capability,
+    required int now,
+  }) {
+    final hex = RegExp(r'^[0-9a-f]{64}$');
+    if (authorization.receiptId.trim().isEmpty ||
+        authorization.receiptId.length > 160 ||
+        !hex.hasMatch(authorization.receiptDigest) ||
+        authorization.workspaceId.trim().isEmpty ||
+        authorization.workspaceId.length > 128 ||
+        authorization.actorId.trim().isEmpty ||
+        authorization.actorId.length > 128 ||
+        authorization.actorLabel.trim().isEmpty ||
+        authorization.actorLabel.runes.length > 120 ||
+        authorization.actorRole != 'owner' ||
+        authorization.capability != capability ||
+        authorization.source != 'managed_membership_receipt_v1' ||
+        authorization.commandDigest != commandDigest ||
+        authorization.issuedAtMillis <= 0 ||
+        authorization.expiresAtMillis <= authorization.issuedAtMillis ||
+        authorization.expiresAtMillis - authorization.issuedAtMillis >
+            const Duration(minutes: 10).inMilliseconds ||
+        authorization.issuedAtMillis > now ||
+        authorization.expiresAtMillis < now) {
+      throw StateError('Correction authorization is missing or invalid.');
+    }
+  }
+
+  Future<void> _requireUnusedCorrectionReceipt(String receiptId) async {
+    final usedForReversal = await customSelect(
+      'SELECT 1 FROM shop_sale_reversals '
+      'WHERE authorization_receipt_id = ? LIMIT 1',
+      variables: [Variable<String>(receiptId)],
+    ).getSingleOrNull();
+    final usedForReconciliation = await customSelect(
+      'SELECT 1 FROM shop_wallet_reversal_reconciliations '
+      'WHERE authorization_receipt_id = ? LIMIT 1',
+      variables: [Variable<String>(receiptId)],
+    ).getSingleOrNull();
+    if (usedForReversal != null || usedForReconciliation != null) {
+      throw StateError('This correction authorization receipt was already used.');
+    }
+  }
+
+  Future<ShopSaleReversal> _saleReversalFromRow(QueryRow row) async {
+    final reversalId = row.read<String>('id');
+    final lineRows = await customSelect(
+      'SELECT * FROM shop_sale_reversal_lines '
+      'WHERE reversal_id = ? ORDER BY sale_line_id',
+      variables: [Variable<String>(reversalId)],
+    ).get();
+    final reconciliation = await customSelect(
+      'SELECT * FROM shop_wallet_reversal_reconciliations '
+      'WHERE reversal_id = ? LIMIT 1',
+      variables: [Variable<String>(reversalId)],
+    ).getSingleOrNull();
+    return ShopSaleReversal(
+      id: reversalId,
+      operationId: row.read<String>('operation_id'),
+      saleId: row.read<String>('sale_id'),
+      originalTotalMmk: row.read<int>('original_total_mmk'),
+      originalPaymentMethod: row.read<String>('original_payment_method'),
+      originalCreatedAtMillis: row.read<int>('original_created_at_millis'),
+      restockItems: row.read<int>('restock_items') == 1,
+      reason: row.read<String>('reason'),
+      paymentResolution: row.read<String>('payment_resolution'),
+      cashDrawerDeltaMmk: row.read<int>('cash_drawer_delta_mmk'),
+      shiftId: row.readNullable<String>('shift_id'),
+      authorizedActorId: row.read<String>('authorized_actor_id'),
+      authorizedActorLabel: row.read<String>('authorized_actor_label'),
+      authorizationReceiptId: row.read<String>('authorization_receipt_id'),
+      createdAtMillis: row.read<int>('created_at_millis'),
+      walletReconciliationOutcome: reconciliation?.read<String>('outcome'),
+      walletEvidenceReference: reconciliation?.read<String>(
+        'evidence_reference',
+      ),
+      walletReconciledActorLabel: reconciliation?.read<String>(
+        'authorized_actor_label',
+      ),
+      walletReconciledAtMillis: reconciliation?.read<int>(
+        'created_at_millis',
+      ),
+      lines: [
+        for (final line in lineRows)
+          ShopSaleReversalLine(
+            saleLineId: line.read<String>('sale_line_id'),
+            productId: line.read<String>('product_id'),
+            productName: line.read<String>('product_name'),
+            unitPriceMmk: line.read<int>('unit_price_mmk'),
+            quantity: line.read<int>('quantity'),
+            lineTotalMmk: line.read<int>('line_total_mmk'),
+            restockQuantity: line.read<int>('restock_quantity'),
+          ),
+      ],
+    );
+  }
+
+  Future<ShopSaleReversal?> readSaleReversalForSale(String saleId) async {
+    final cleanSaleId = saleId.trim();
+    if (cleanSaleId.isEmpty) return null;
+    final row = await customSelect(
+      'SELECT * FROM shop_sale_reversals WHERE sale_id = ? LIMIT 1',
+      variables: [Variable<String>(cleanSaleId)],
+    ).getSingleOrNull();
+    return row == null ? null : _saleReversalFromRow(row);
+  }
+
+  Future<ShopSaleReversal> recordAuthorizedFullSaleReversal({
+    required ShopFullSaleReversalCommand command,
+    required ShopCorrectionAuthorization authorization,
+  }) {
+    return transaction(() async {
+      final prior = await customSelect(
+        'SELECT * FROM shop_sale_reversals WHERE operation_id = ? LIMIT 1',
+        variables: [Variable<String>(command.operationId)],
+      ).getSingleOrNull();
+      if (prior != null) {
+        if (prior.read<String>('request_fingerprint') !=
+                command.requestFingerprint ||
+            prior.read<String>('sale_snapshot_digest') !=
+                command.saleSnapshotDigest ||
+            prior.read<String>('sale_id') != command.saleId ||
+            prior.read<int>('original_total_mmk') != command.originalTotalMmk ||
+            prior.read<String>('original_payment_method') !=
+                command.originalPaymentMethod ||
+            (prior.read<int>('restock_items') == 1) != command.restockItems ||
+            prior.read<String>('reason') != command.reason ||
+            prior.read<String>('payment_resolution') !=
+                command.paymentResolution ||
+            await _sha256Hex(command.requestFingerprint) !=
+                command.commandDigest) {
+          throw StateError(
+            'A correction operation ID was reused with different details.',
+          );
+        }
+        return _saleReversalFromRow(prior);
+      }
+
+      final verifiedCommand = await previewFullSaleReversal(
+        operationId: command.operationId,
+        saleId: command.saleId,
+        restockItems: command.restockItems,
+        reason: command.reason,
+      );
+      if (verifiedCommand.requestFingerprint != command.requestFingerprint ||
+          verifiedCommand.commandDigest != command.commandDigest ||
+          verifiedCommand.saleSnapshotDigest != command.saleSnapshotDigest ||
+          verifiedCommand.originalTotalMmk != command.originalTotalMmk ||
+          verifiedCommand.originalPaymentMethod != command.originalPaymentMethod ||
+          verifiedCommand.paymentResolution != command.paymentResolution) {
+        throw StateError('The original sale changed. Review it again.');
+      }
+      final existing = await customSelect(
+        'SELECT operation_id FROM shop_sale_reversals '
+        'WHERE sale_id = ? LIMIT 1',
+        variables: [Variable<String>(command.saleId)],
+      ).getSingleOrNull();
+      if (existing != null) {
+        throw StateError('This sale was already reversed.');
+      }
+      final now = DateTime.now().millisecondsSinceEpoch;
+      _validateCorrectionAuthorization(
+        authorization: authorization,
+        commandDigest: command.commandDigest,
+        capability: 'shop.sale.reverse',
+        now: now,
+      );
+      await _requireUnusedCorrectionReceipt(authorization.receiptId);
+
+      ShopCashShift? activeShift;
+      if (command.originalPaymentMethod == 'cash') {
+        activeShift = await readOpenCashShift();
+        if (activeShift == null) {
+          throw StateError('Start a cash shift before returning cash.');
+        }
+        final review = await readCashShiftReview(activeShift.id);
+        if (review.expectedCashMmk < command.originalTotalMmk) {
+          throw StateError(
+            'The open shift does not contain enough recorded cash for this return.',
+          );
+        }
+      }
+      final originalLines =
+          await (select(shopSaleLines)
+                ..where((line) => line.saleId.equals(command.saleId))
+                ..orderBy([(line) => OrderingTerm.asc(line.id)]))
+              .get();
+      final drawerDelta = command.originalPaymentMethod == 'cash'
+          ? -command.originalTotalMmk
+          : 0;
+      await customInsert(
+        'INSERT INTO shop_sale_reversals '
+        '(id, operation_id, request_fingerprint, sale_snapshot_digest, sale_id, '
+        'original_total_mmk, original_payment_method, original_created_at_millis, '
+        'original_line_count, restock_items, reason, payment_resolution, '
+        'cash_drawer_delta_mmk, shift_id, authorization_receipt_id, '
+        'authorization_receipt_digest, authorization_command_digest, '
+        'authorization_workspace_id, '
+        'authorized_actor_id, authorized_actor_label, authorized_actor_role, '
+        'authorization_capability, authorization_source, '
+        'authorization_issued_at_millis, authorization_verified_at_millis, '
+        'authorization_expires_at_millis, created_at_millis) '
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        variables: [
+          Variable<String>(command.operationId),
+          Variable<String>(command.operationId),
+          Variable<String>(command.requestFingerprint),
+          Variable<String>(command.saleSnapshotDigest),
+          Variable<String>(command.saleId),
+          Variable<int>(command.originalTotalMmk),
+          Variable<String>(command.originalPaymentMethod),
+          Variable<int>(
+            (await (select(shopSales)..where(
+                  (sale) => sale.id.equals(command.saleId),
+                )).getSingle()).createdAtMillis,
+          ),
+          Variable<int>(originalLines.length),
+          Variable<int>(command.restockItems ? 1 : 0),
+          Variable<String>(command.reason),
+          Variable<String>(command.paymentResolution),
+          Variable<int>(drawerDelta),
+          Variable<String>(activeShift?.id),
+          Variable<String>(authorization.receiptId),
+          Variable<String>(authorization.receiptDigest),
+          Variable<String>(authorization.commandDigest),
+          Variable<String>(authorization.workspaceId),
+          Variable<String>(authorization.actorId),
+          Variable<String>(authorization.actorLabel),
+          Variable<String>(authorization.actorRole),
+          Variable<String>(authorization.capability),
+          Variable<String>(authorization.source),
+          Variable<int>(authorization.issuedAtMillis),
+          Variable<int>(now),
+          Variable<int>(authorization.expiresAtMillis),
+          Variable<int>(now),
+        ],
+      );
+
+      final eventLines = <Map<String, Object?>>[];
+      for (var index = 0; index < originalLines.length; index++) {
+        final line = originalLines[index];
+        String? movementId;
+        if (command.restockItems) {
+          final changed = await customUpdate(
+            'UPDATE shop_products SET on_hand = on_hand + ?, '
+            'updated_at_millis = ? WHERE id = ? AND on_hand <= ?',
+            variables: [
+              Variable<int>(line.quantity),
+              Variable<int>(now),
+              Variable<String>(line.productId),
+              Variable<int>(2000000000 - line.quantity),
+            ],
+          );
+          if (changed != 1) {
+            throw StateError('Restoring stock would exceed the supported limit.');
+          }
+          movementId = '${command.operationId}:reversal:$index';
+          await into(shopStockMovements).insert(
+            ShopStockMovementsCompanion.insert(
+              id: movementId,
+              saleId: Value(command.saleId),
+              productId: line.productId,
+              quantityDelta: line.quantity,
+              reason: 'sale_reversal_restock',
+              createdAtMillis: now,
+            ),
+          );
+        }
+        await customInsert(
+          'INSERT INTO shop_sale_reversal_lines '
+          '(id, reversal_id, sale_line_id, product_id, product_name, '
+          'unit_price_mmk, quantity, line_total_mmk, restock_quantity, '
+          'stock_movement_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          variables: [
+            Variable<String>('${command.operationId}:$index'),
+            Variable<String>(command.operationId),
+            Variable<String>(line.id),
+            Variable<String>(line.productId),
+            Variable<String>(line.productName),
+            Variable<int>(line.unitPriceMmk),
+            Variable<int>(line.quantity),
+            Variable<int>(line.lineTotalMmk),
+            Variable<int>(command.restockItems ? line.quantity : 0),
+            Variable<String>(movementId),
+          ],
+        );
+        eventLines.add({
+          'saleLineId': line.id,
+          'productId': line.productId,
+          'productName': line.productName,
+          'unitPriceMmk': line.unitPriceMmk,
+          'quantity': line.quantity,
+          'lineTotalMmk': line.lineTotalMmk,
+          'restockQuantity': command.restockItems ? line.quantity : 0,
+        });
+      }
+      await into(shopSyncOutbox).insert(
+        ShopSyncOutboxCompanion.insert(
+          operationId: command.operationId,
+          eventType: 'shop.sale.reversal_recorded.v1',
+          payloadJson: jsonEncode({
+            'reversalId': command.operationId,
+            'saleId': command.saleId,
+            'originalTotalMmk': command.originalTotalMmk,
+            'originalPaymentMethod': command.originalPaymentMethod,
+            'restockItems': command.restockItems,
+            'reason': command.reason,
+            'paymentResolution': command.paymentResolution,
+            'cashDrawerDeltaMmk': drawerDelta,
+            if (activeShift != null) 'shiftId': activeShift.id,
+            'externalReconciliationState':
+                command.originalPaymentMethod == 'cash'
+                ? 'not_applicable'
+                : 'pending',
+            'moneyReturned': command.originalPaymentMethod == 'cash',
+            'authorizationReceiptId': authorization.receiptId,
+            'authorizedActorId': authorization.actorId,
+            'createdAtMillis': now,
+            'lines': eventLines,
+          }),
+          createdAtMillis: now,
+        ),
+      );
+      final row = await customSelect(
+        'SELECT * FROM shop_sale_reversals WHERE id = ?',
+        variables: [Variable<String>(command.operationId)],
+      ).getSingle();
+      return _saleReversalFromRow(row);
+    });
+  }
+
+  Future<ShopWalletReconciliationCommand> previewWalletReconciliation({
+    required String operationId,
+    required String reversalId,
+    required String outcome,
+    required String evidenceReference,
+  }) async {
+    final cleanOperationId = operationId.trim();
+    final cleanReversalId = reversalId.trim();
+    final cleanEvidence = _boundedCorrectionText(
+      evidenceReference,
+      field: 'Wallet evidence reference',
+      maximum: 160,
+    );
+    if (cleanOperationId.isEmpty ||
+        cleanOperationId.length > 120 ||
+        cleanReversalId.isEmpty ||
+        cleanReversalId.length > 120 ||
+        !const {'money_returned', 'payment_not_received'}.contains(outcome)) {
+      throw ArgumentError('Wallet reconciliation details are invalid.');
+    }
+    final reversal = await customSelect(
+      'SELECT original_payment_method FROM shop_sale_reversals WHERE id = ?',
+      variables: [Variable<String>(cleanReversalId)],
+    ).getSingleOrNull();
+    if (reversal == null) throw StateError('The sale reversal was not found.');
+    if (reversal.read<String>('original_payment_method') == 'cash') {
+      throw StateError('Cash returns do not have wallet reconciliation.');
+    }
+    final fingerprint = jsonEncode({
+      'operationId': cleanOperationId,
+      'reversalId': cleanReversalId,
+      'outcome': outcome,
+      'evidenceReference': cleanEvidence,
+    });
+    return ShopWalletReconciliationCommand(
+      operationId: cleanOperationId,
+      reversalId: cleanReversalId,
+      requestFingerprint: fingerprint,
+      commandDigest: await _sha256Hex(fingerprint),
+      outcome: outcome,
+      evidenceReference: cleanEvidence,
+    );
+  }
+
+  Future<ShopSaleReversal> recordAuthorizedWalletReconciliation({
+    required ShopWalletReconciliationCommand command,
+    required ShopCorrectionAuthorization authorization,
+  }) {
+    return transaction(() async {
+      final prior = await customSelect(
+        'SELECT * FROM shop_wallet_reversal_reconciliations '
+        'WHERE operation_id = ? LIMIT 1',
+        variables: [Variable<String>(command.operationId)],
+      ).getSingleOrNull();
+      if (prior != null) {
+        if (prior.read<String>('request_fingerprint') !=
+                command.requestFingerprint ||
+            prior.read<String>('reversal_id') != command.reversalId ||
+            prior.read<String>('outcome') != command.outcome ||
+            prior.read<String>('evidence_reference') !=
+                command.evidenceReference ||
+            await _sha256Hex(command.requestFingerprint) !=
+                command.commandDigest) {
+          throw StateError(
+            'A wallet reconciliation ID was reused with different details.',
+          );
+        }
+        final reversal = await customSelect(
+          'SELECT * FROM shop_sale_reversals WHERE id = ?',
+          variables: [Variable<String>(prior.read<String>('reversal_id'))],
+        ).getSingle();
+        return _saleReversalFromRow(reversal);
+      }
+      final verifiedCommand = await previewWalletReconciliation(
+        operationId: command.operationId,
+        reversalId: command.reversalId,
+        outcome: command.outcome,
+        evidenceReference: command.evidenceReference,
+      );
+      if (verifiedCommand.requestFingerprint != command.requestFingerprint ||
+          verifiedCommand.commandDigest != command.commandDigest) {
+        throw StateError('Wallet reconciliation changed. Review it again.');
+      }
+      final existing = await customSelect(
+        'SELECT operation_id FROM shop_wallet_reversal_reconciliations '
+        'WHERE reversal_id = ? LIMIT 1',
+        variables: [Variable<String>(command.reversalId)],
+      ).getSingleOrNull();
+      if (existing != null) {
+        throw StateError('This wallet reversal was already reconciled.');
+      }
+      final now = DateTime.now().millisecondsSinceEpoch;
+      _validateCorrectionAuthorization(
+        authorization: authorization,
+        commandDigest: command.commandDigest,
+        capability: 'shop.sale.reconcile_wallet',
+        now: now,
+      );
+      await _requireUnusedCorrectionReceipt(authorization.receiptId);
+      await customInsert(
+        'INSERT INTO shop_wallet_reversal_reconciliations '
+        '(id, operation_id, request_fingerprint, reversal_id, outcome, '
+        'evidence_reference, authorization_receipt_id, '
+        'authorization_receipt_digest, authorization_command_digest, '
+        'authorization_workspace_id, '
+        'authorized_actor_id, authorized_actor_label, authorized_actor_role, '
+        'authorization_capability, authorization_source, '
+        'authorization_issued_at_millis, authorization_verified_at_millis, '
+        'authorization_expires_at_millis, created_at_millis) '
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        variables: [
+          Variable<String>(command.operationId),
+          Variable<String>(command.operationId),
+          Variable<String>(command.requestFingerprint),
+          Variable<String>(command.reversalId),
+          Variable<String>(command.outcome),
+          Variable<String>(command.evidenceReference),
+          Variable<String>(authorization.receiptId),
+          Variable<String>(authorization.receiptDigest),
+          Variable<String>(authorization.commandDigest),
+          Variable<String>(authorization.workspaceId),
+          Variable<String>(authorization.actorId),
+          Variable<String>(authorization.actorLabel),
+          Variable<String>(authorization.actorRole),
+          Variable<String>(authorization.capability),
+          Variable<String>(authorization.source),
+          Variable<int>(authorization.issuedAtMillis),
+          Variable<int>(now),
+          Variable<int>(authorization.expiresAtMillis),
+          Variable<int>(now),
+        ],
+      );
+      await into(shopSyncOutbox).insert(
+        ShopSyncOutboxCompanion.insert(
+          operationId: command.operationId,
+          eventType: 'shop.mobile_money.reversal_reconciled.v1',
+          payloadJson: jsonEncode({
+            'reversalId': command.reversalId,
+            'outcome': command.outcome,
+            'evidenceReference': command.evidenceReference,
+            'externalReconciliationState': 'confirmed',
+            'moneyReturned': command.outcome == 'money_returned',
+            'authorizationReceiptId': authorization.receiptId,
+            'authorizedActorId': authorization.actorId,
+            'createdAtMillis': now,
+          }),
+          createdAtMillis: now,
+        ),
+      );
+      final reversal = await customSelect(
+        'SELECT * FROM shop_sale_reversals WHERE id = ?',
+        variables: [Variable<String>(command.reversalId)],
+      ).getSingle();
+      return _saleReversalFromRow(reversal);
+    });
+  }
+
+  Future<ShopSalesSummary> readSalesSummary({
+    required int startAtMillis,
+    required int endAtMillis,
+  }) async {
+    if (startAtMillis < 0 || endAtMillis <= startAtMillis) {
+      throw ArgumentError('Sales summary range is invalid.');
+    }
+    final gross = await customSelect(
+      'SELECT COUNT(*) AS sale_count, COALESCE(SUM(total_mmk), 0) AS total_mmk '
+      'FROM shop_sales WHERE created_at_millis >= ? AND created_at_millis < ?',
+      variables: [Variable<int>(startAtMillis), Variable<int>(endAtMillis)],
+    ).getSingle();
+    final reversed = await customSelect(
+      'SELECT COUNT(*) AS reversal_count, '
+      'COALESCE(SUM(original_total_mmk), 0) AS total_mmk '
+      'FROM shop_sale_reversals '
+      'WHERE created_at_millis >= ? AND created_at_millis < ?',
+      variables: [Variable<int>(startAtMillis), Variable<int>(endAtMillis)],
+    ).getSingle();
+    final pendingWallet = await customSelect(
+      'SELECT COUNT(*) AS reversal_count, '
+      'COALESCE(SUM(r.original_total_mmk), 0) AS total_mmk '
+      'FROM shop_sale_reversals r '
+      'LEFT JOIN shop_wallet_reversal_reconciliations w '
+      'ON w.reversal_id = r.id '
+      "WHERE r.original_payment_method IN ('kbzpay', 'wavepay') "
+      'AND w.id IS NULL',
+    ).getSingle();
+    return ShopSalesSummary(
+      grossSaleCount: gross.read<int>('sale_count'),
+      grossSalesMmk: gross.read<int>('total_mmk'),
+      reversalCount: reversed.read<int>('reversal_count'),
+      reversalMmk: reversed.read<int>('total_mmk'),
+      pendingWalletReversalCount: pendingWallet.read<int>('reversal_count'),
+      pendingWalletReversalMmk: pendingWallet.read<int>('total_mmk'),
+    );
   }
 
   Future<ShopSaleReceipt> recordCashSale({
@@ -2165,6 +3243,8 @@ class ShopDatabase extends _$ShopDatabase {
           lines: [
             for (final line in priorLines)
               ShopSaleReceiptLine(
+                id: line.id,
+                productId: line.productId,
                 productName: line.productName,
                 unitPriceMmk: line.unitPriceMmk,
                 quantity: line.quantity,
@@ -2400,6 +3480,8 @@ class ShopDatabase extends _$ShopDatabase {
         lines: [
           for (final line in eventLines)
             ShopSaleReceiptLine(
+              id: '$saleId:${line['productId']! as String}',
+              productId: line['productId']! as String,
               productName: line['productName']! as String,
               unitPriceMmk: line['unitPriceMmk']! as int,
               quantity: line['quantity']! as int,
@@ -2410,8 +3492,9 @@ class ShopDatabase extends _$ShopDatabase {
     });
   }
 
-  /// A bounded page of device-local committed sales. Search uses saved item
-  /// names, so later catalog edits cannot make an old receipt disappear.
+  /// A bounded page of device-local committed sales, ordered by the latest
+  /// sale or reversal activity. Search uses saved item names, so later catalog
+  /// edits cannot make an old receipt disappear.
   Future<List<ShopSaleReceipt>> readRecentSales({
     int limit = 30,
     int offset = 0,
@@ -2424,41 +3507,30 @@ class ShopDatabase extends _$ShopDatabase {
       throw ArgumentError.value(offset, 'offset', 'Use a non-negative offset.');
     }
     final search = query.trim();
-    late final List<ShopSale> sales;
-    if (search.isEmpty) {
-      sales =
-          await (select(shopSales)
-                ..orderBy([
-                  (sale) => OrderingTerm.desc(sale.createdAtMillis),
-                  (sale) => OrderingTerm.desc(sale.id),
-                ])
-                ..limit(limit, offset: offset))
-              .get();
-    } else {
-      final matchingIds = await customSelect(
-        'SELECT sale.id FROM shop_sales AS sale '
-        'WHERE instr(lower(sale.id), lower(?)) > 0 '
-        'OR EXISTS (SELECT 1 FROM shop_sale_lines AS line '
-        'WHERE line.sale_id = sale.id '
-        'AND instr(lower(line.product_name), lower(?)) > 0) '
-        'ORDER BY sale.created_at_millis DESC, sale.id DESC '
-        'LIMIT ? OFFSET ?',
-        variables: [
+    final matchingIds = await customSelect(
+      'SELECT sale.id FROM shop_sales AS sale '
+      'LEFT JOIN shop_sale_reversals AS reversal '
+      'ON reversal.sale_id = sale.id '
+      '${search.isEmpty ? '' : 'WHERE instr(lower(sale.id), lower(?)) > 0 OR EXISTS (SELECT 1 FROM shop_sale_lines AS line WHERE line.sale_id = sale.id AND instr(lower(line.product_name), lower(?)) > 0) '} '
+      'ORDER BY COALESCE(reversal.created_at_millis, sale.created_at_millis) DESC, '
+      'sale.id DESC LIMIT ? OFFSET ?',
+      variables: [
+        if (search.isNotEmpty) ...[
           Variable.withString(search),
           Variable.withString(search),
-          Variable.withInt(limit),
-          Variable.withInt(offset),
         ],
-        readsFrom: {shopSales, shopSaleLines},
-      ).get();
-      if (matchingIds.isEmpty) return const [];
-      final ids = matchingIds.map((row) => row.read<String>('id')).toList();
-      final rows = await (select(
-        shopSales,
-      )..where((sale) => sale.id.isIn(ids))).get();
-      final byId = {for (final row in rows) row.id: row};
-      sales = [for (final id in ids) byId[id]!];
-    }
+        Variable.withInt(limit),
+        Variable.withInt(offset),
+      ],
+      readsFrom: {shopSales, shopSaleLines},
+    ).get();
+    if (matchingIds.isEmpty) return const [];
+    final ids = matchingIds.map((row) => row.read<String>('id')).toList();
+    final rows = await (select(
+      shopSales,
+    )..where((sale) => sale.id.isIn(ids))).get();
+    final byId = {for (final row in rows) row.id: row};
+    final sales = [for (final id in ids) byId[id]!];
     if (sales.isEmpty) return const [];
 
     final saleIds = sales.map((sale) => sale.id).toList(growable: false);
@@ -2471,12 +3543,19 @@ class ShopDatabase extends _$ShopDatabase {
     for (final line in savedLines) {
       (linesBySale[line.saleId] ??= []).add(
         ShopSaleReceiptLine(
+          id: line.id,
+          productId: line.productId,
           productName: line.productName,
           unitPriceMmk: line.unitPriceMmk,
           quantity: line.quantity,
           lineTotalMmk: line.lineTotalMmk,
         ),
       );
+    }
+    final reversalsBySale = <String, ShopSaleReversal>{};
+    for (final saleId in saleIds) {
+      final reversal = await readSaleReversalForSale(saleId);
+      if (reversal != null) reversalsBySale[saleId] = reversal;
     }
     return [
       for (final sale in sales)
@@ -2487,6 +3566,7 @@ class ShopDatabase extends _$ShopDatabase {
           createdAtMillis: sale.createdAtMillis,
           paymentMethod: sale.paymentMethod,
           lines: linesBySale[sale.id] ?? const [],
+          reversal: reversalsBySale[sale.id],
         ),
     ];
   }

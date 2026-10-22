@@ -68,7 +68,13 @@ For Shop:
 
 - keep cash sales, stock movements, wallet intents, outbox entries, backup, and
   restore transactionally correct and retry-safe;
+- preserve every completed sale and line snapshot; corrections are append-only
+  linked records with explicit stock and drawer effects, never edits or deletes;
 - never infer wallet settlement from a QR, phone number, screenshot, or button;
+- never expose a money/stock correction from a typed name, shift label, shared
+  PIN, locally constructed receipt object, raw session, or broad role. Require
+  the configured verifier to bind named membership, workspace, exact command,
+  narrow capability, expiry, and revocation state;
 - never call a local outbox entry synchronized or a backup recoverable without
   acknowledgement and restore evidence;
 - keep Connected Orders default-off until its hosted identity, sync, conflict,

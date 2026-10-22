@@ -1,6 +1,6 @@
 # SuperMega Supergoal
 
-- Version: 2.0.0
+- Version: 2.0.1
 - Owners: Swan Htet (technical) and Vivian (operations and business)
 - Updated: 2026-10-22
 - Status: ACTIVE — Shop has a verified internal candidate; it is not yet a
@@ -32,6 +32,9 @@ Included now:
 - fast catalog entry, barcode/scanner use, offline cash sales, stock movement,
   daily operating records, export, backup, and restore;
 - manual wallet confirmation that never implies automatic settlement;
+- an audit-preserving correction/refund outcome that never rewrites an original
+  sale, never restocks without an explicit choice, and never treats a local
+  wallet record as proof that money moved;
 - ESC/POS receipt work that remains gated by real printer evidence;
 - English and Burmese operator quality;
 - honest public Shop evidence and a bounded path to installation and support.
@@ -70,7 +73,9 @@ gates have evidence:
 3. Representative Android, iPad, and Windows devices complete the core flow.
 4. A physical scanner and both intended 58 mm / 80 mm receipt paths are
    exercised, including Burmese output.
-5. Vivian accepts the complete merchant journey using agreed business data.
+5. Vivian accepts the complete merchant journey using agreed business data,
+   including an explicit decision on full-sale reversal versus any required
+   partial-return or exchange behavior.
 6. Pricing, free/paid boundary, setup policy, printer promise, support channel,
    and support hours are decided honestly.
 7. An independent last-push review has no unresolved release-blocking finding.
@@ -130,6 +135,8 @@ Keep these levels separate:
 
 A PASS at one level never implies a higher one. Screenshots and gallery
 provenance are useful source evidence; they are not device or merchant proof.
+Likewise, a locally well-formed authorization receipt is not operator authority;
+the configured identity and capability verifier must establish that boundary.
 
 ## Authority and safety
 
