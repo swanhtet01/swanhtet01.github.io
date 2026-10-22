@@ -12,7 +12,6 @@ const _productBarcodeFormats = <BarcodeFormat>{
   BarcodeFormat.code128,
   BarcodeFormat.code39,
   BarcodeFormat.code93,
-  BarcodeFormat.itf,
   BarcodeFormat.itf14,
   BarcodeFormat.itf2of5,
   BarcodeFormat.itf2of5WithChecksum,
