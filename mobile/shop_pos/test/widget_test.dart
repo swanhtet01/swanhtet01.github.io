@@ -3014,7 +3014,7 @@ void main() {
     await database.close();
   });
 
-  testWidgets('reopened held sale reviews a renamed item before cash', (
+  testWidgets('reopened held sale reviews a renamed and repriced item', (
     tester,
   ) async {
     _usePhoneViewport(tester);
@@ -3035,9 +3035,10 @@ void main() {
         name: 'Customer May',
         operationId: 'held-rename',
       );
-      expect((await database.readHeldSaleTickets()).single.draft.productNames, {
-        'tea': 'Tea',
-      });
+      final stockMovementsBefore = await database.countStockMovements();
+      final heldBefore = (await database.readHeldSaleTickets()).single.draft;
+      expect(heldBefore.productNames, {'tea': 'Tea'});
+      expect(heldBefore.unitPricesMmk, {'tea': 2500});
       await database.updateProductDetails(
         operationId: 'rename-held-tea',
         productId: 'tea',
@@ -3045,9 +3046,14 @@ void main() {
         expectedPriceMmk: 2500,
         expectedBarcode: null,
         name: 'Tea large',
-        priceMmk: 2500,
+        priceMmk: 3000,
         barcode: null,
       );
+      final heldAfterEdit = (await database.readHeldSaleTickets()).single.draft;
+      expect(heldAfterEdit.productNames, {'tea': 'Tea'});
+      expect(heldAfterEdit.unitPricesMmk, {'tea': 2500});
+      expect((await database.readActiveProducts()).single.onHand, 2);
+      expect(await database.countStockMovements(), stockMovementsBefore);
       await tester.pumpWidget(
         MaterialApp(
           home: ShopHome(
@@ -3069,9 +3075,13 @@ void main() {
       expect((await database.readCounterSaleDraft())?.productNames, {
         'tea': 'Tea',
       });
+      expect((await database.readCounterSaleDraft())?.unitPricesMmk, {
+        'tea': 2500,
+      });
       await tester.tap(find.textContaining('Review sale'));
       await tester.pumpAndSettle();
       expect(find.text('Tea large'), findsWidgets);
+      expect(find.text('3,000 MMK'), findsWidgets);
       expect(
         find.text('Sale restored. Review changed items before checkout.'),
         findsOneWidget,
@@ -3086,6 +3096,11 @@ void main() {
       expect((await database.readCounterSaleDraft())?.productNames, {
         'tea': 'Tea large',
       });
+      expect((await database.readCounterSaleDraft())?.unitPricesMmk, {
+        'tea': 3000,
+      });
+      expect((await database.readActiveProducts()).single.onHand, 2);
+      expect(await database.countStockMovements(), stockMovementsBefore);
       await tester.ensureVisible(find.text('Cash sale'));
       await tester.pumpAndSettle();
       expect(find.text('Cash sale').hitTestable(), findsOneWidget);
@@ -3096,7 +3111,9 @@ void main() {
       await tester.pumpAndSettle();
       final sale = await database.select(database.shopSaleLines).getSingle();
       expect(sale.productName, 'Tea large');
+      expect(sale.unitPriceMmk, 3000);
       expect(await database.countSales(), 1);
+      expect((await database.readActiveProducts()).single.onHand, 1);
       expect(tester.takeException(), isNull);
     } finally {
       await tester.pumpWidget(const SizedBox.shrink());
