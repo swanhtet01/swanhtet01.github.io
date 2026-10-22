@@ -4160,11 +4160,7 @@ class _NewShopProductDialogState extends State<_NewShopProductDialog> {
     controller: _barcode,
     decoration: InputDecoration(
       labelText: shopCopy(widget.myanmar, 'Barcode', 'ဘားကုဒ်'),
-      helperText: shopCopy(
-        widget.myanmar,
-        'Optional',
-        'မဖြစ်မနေမဟုတ်ပါ',
-      ),
+      helperText: shopCopy(widget.myanmar, 'Optional', 'မဖြစ်မနေမဟုတ်ပါ'),
     ),
   );
 
