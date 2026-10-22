@@ -665,8 +665,8 @@ body[data-view="company"] .company-hero .hero-copy > p:not(.hero-kicker) { max-w
 body[data-view="company"] .company-product-visual { gap: 10px; padding: 12px; border-color: #dfded8; border-radius: 14px; background: #fff; box-shadow: 0 14px 32px rgba(25,28,38,.06); }
 body[data-view="company"] .company-product-visual img { border-color: #e4e4e1; border-radius: 8px; }
 body[data-view="shop"] #shop.shop-view { min-height: 0; }
-body[data-view="shop"] .shop-hero { padding-block: clamp(24px,3vw,38px); background: #f6f8fc; }
-body[data-view="shop"] .native-shop-gallery { padding-top: 22px; }
+body[data-view="shop"] .shop-hero { padding-block: 24px 20px; border-bottom: 0; background: #f6f8fc; }
+body[data-view="shop"] .native-shop-gallery { padding-top: 0; background: #f6f8fc; }
 body[data-view="shop"] .shop-hero h1 { max-width: 12ch; font-size: clamp(42px,4.1vw,58px); line-height: 1.1; letter-spacing: -.018em; font-weight: 650; }
 body[data-view="shop"] .shop-hero-copy { display: grid; gap: 20px; align-content: center; min-width: 0; }
 body[data-view="shop"] .shop-hero-copy .eyebrow, body[data-view="shop"] .shop-hero-copy h1, body[data-view="shop"] .shop-hero-copy > p { margin: 0; }
@@ -674,7 +674,7 @@ body[data-view="shop"] .shop-hero-copy > p { max-width: 41ch; font-size: 16px; l
 body[data-view="shop"] .shop-hero .button-primary { align-self: start; min-height: 50px; margin-top: 6px; padding-inline: 22px; border-color: #2563eb; border-radius: 8px; background: #2563eb; box-shadow: none; }
 body[data-view="shop"] .shop-hero .button-primary:hover { border-color: #1d4ed8; background: #1d4ed8; }
 body[data-view="shop"] .shop-hero .wrap { display: grid; grid-template-columns: minmax(0,1fr); gap: clamp(24px,3vw,40px); align-items: start; }
-body[data-view="shop"] .shop-hero-copy { max-width: 900px; gap: 14px; }
+body[data-view="shop"] .shop-hero-copy { max-width: 900px; gap: 12px; }
 body[data-view="shop"] .shop-hero h1 { max-width: none; }
 body[data-view="shop"] .shop-hero-copy > p { max-width: 68ch; }
 body[data-view="shop"] .shop-hero-app { width: 100%; max-width: 1100px; justify-self: center; }
@@ -696,7 +696,7 @@ body[data-view="contact"] .contact-page .contact-form .button { width: max-conte
 @media (max-width: 760px) {
   body[data-view="company"] .company-hero .hero-grid { min-height: 0; padding-block: 32px; }
   body[data-view="company"] .company-hero h1 { max-width: 100%; font-size: clamp(38px,10vw,52px); }
-  body[data-view="shop"] .shop-hero { padding-block: 34px; }
+  body[data-view="shop"] .shop-hero { padding-block: 24px 20px; }
   body[data-view="shop"] .shop-hero h1 { max-width: 16ch; font-size: clamp(38px,10vw,48px); }
   body[data-view="shop"] .shop-hero .button-primary { width: 100%; justify-content: center; }
   body[data-view="shop"] .shop-inventory-proof .wrap { grid-template-columns: 1fr; }
@@ -733,7 +733,7 @@ const myanmarPublicStyle = `
   html:lang(my) body:not([data-view]) .prose h2, html:lang(my) body:not([data-view]) .prose h3 { font-size: 18px; line-height: 1.6; letter-spacing: 0; }
   html:lang(my) body:not([data-view]) .prose p { font-size: 16px; line-height: 1.9; }
   @media (max-width: 760px) {
-    html:lang(my) body[data-view="shop"] .shop-hero h1 { font-size: 30px; line-height: 1.55; }
+    html:lang(my) body[data-view="shop"] .shop-hero h1 { font-size: 30px; line-height: 1.45; }
     html:lang(my) body[data-view="contact"] .contact-page .page-hero h1 { font-size: 32px; line-height: 1.6; }
     html:lang(my) body:not([data-view]) .page-hero { padding-block: 52px 48px; }
     html:lang(my) body:not([data-view]) .page-hero h1 { font-size: 28px; line-height: 1.6; }
@@ -894,7 +894,7 @@ function shopLandingHtml(product, page, locale = 'en') {
  let heroWithPreview = publicShopMarkup
  if (isMyanmar) {
   heroWithPreview = replaceOnce(heroWithPreview, '<p class="eyebrow">SuperMega Shop</p>', '<p class="eyebrow">SuperMega ဆိုင်</p>', 'my_shop_eyebrow')
-  heroWithPreview = replaceOnce(heroWithPreview, 'Sell at the counter.<br>Know what is in stock.', 'ကောင်တာမှာ ရောင်းပါ။<br>ကုန်လက်ကျန်ကို ကြည့်ပါ။', 'my_shop_headline')
+  heroWithPreview = replaceOnce(heroWithPreview, 'Sell. See what’s in stock.', 'ရောင်းပါ။ ကုန်လက်ကျန်ကို ကြည့်ပါ။', 'my_shop_headline')
   heroWithPreview = replaceOnce(heroWithPreview, 'Find an item, check the basket and record the sale. See today’s sales and stock at a glance.', 'ကုန်ပစ္စည်းကို ရှာပါ၊ ခြင်းတောင်းကို စစ်ဆေးပါ၊ အရောင်းကို မှတ်တမ်းတင်ပါ။ ယနေ့အရောင်းနှင့် ကုန်လက်ကျန်ကို တစ်နေရာတည်းမှာ ကြည့်နိုင်ပါသည်။', 'my_shop_description')
   heroWithPreview = replaceOnce(heroWithPreview, 'href="/contact/?product=shop">Request a Shop walkthrough', 'href="/my/contact/?product=shop">ဆိုင်အက်ပ် အသုံးပြုပုံကို မေးမြန်းရန်', 'my_shop_cta')
  }
