@@ -652,6 +652,10 @@ body[data-view="shop"] .shop-showcase-nav a { border-radius: 8px; }
 .button-secondary { border-color: #d5d8df; color: #252a36; background: transparent; box-shadow: none; }
 .button-secondary:hover { border-color: #aeb4c1; color: #151922; background: #f6f7f9; }
 .button:focus-visible, .button-primary:focus-visible, .nav-links a:focus-visible { outline: 3px solid #2563eb; outline-offset: 3px; }
+@media (max-width: 650px) {
+  .site-header .nav-links a:first-child { display: inline-flex; }
+  .site-header .nav-sign-in { display: none; }
+}
 body[data-view="company"] .company-hero { background: #f6f5f1; }
 body[data-view="company"] .company-hero::before { display: none; }
 body[data-view="company"] .company-hero .hero-grid { min-height: 500px; align-items: start; padding-block: clamp(32px,4vw,54px); }
@@ -915,7 +919,7 @@ const contactUiCopy = {
     proofNote: 'Attached from this browser. The outcome is a client-provided, digest-bound aggregate summary; it does not verify a managed account.',
     detached: 'Attached context removed because the product changed.',
     headingShop: 'Request a Shop walkthrough', headingServiceStart: 'Contact our ', headingServiceEnd: ' team.', headingDefault: 'Contact',
-    ledeShop: 'Tell us what you sell and the devices you use. We will discuss a Shop pilot for your business.',
+    ledeShop: 'Tell us what you sell and which devices you use. We will reply by email to discuss a Shop walkthrough.',
     ledeDefault: 'Tell us about your business and the workflow you want to improve. We will reply by email.',
     contextAttached: 'Helpful context attached. Nothing has been sent.', contextInvalid: 'Attached context could not be verified and was left out.',
     messageSent: 'Message sent.', sendAnother: 'Send another message.', previous: 'Previous message — ', sendMessage: 'Send message', sending: 'Sending...',
@@ -932,7 +936,7 @@ const contactUiCopy = {
     proofNote: 'ဤဘရောက်ဇာမှ အကြောင်းအရာကို ပူးတွဲထားပါသည်။ ရလဒ်သည် သုံးစွဲသူပေးပို့သော စုစည်းအနှစ်ချုပ်သာ ဖြစ်ပြီး စီမံထားသော အကောင့်ရှိကြောင်း အတည်မပြုနိုင်ပါ။',
     detached: 'ကုန်ပစ္စည်းရွေးချယ်မှု ပြောင်းလဲသဖြင့် ပူးတွဲအကြောင်းအရာကို ဖယ်ရှားလိုက်ပါသည်။',
     headingShop: 'ဆိုင်အက်ပ် အသုံးပြုပုံကို မေးမြန်းရန်', headingServiceStart: '', headingServiceEnd: ' အဖွဲ့ထံ ဆက်သွယ်ရန်', headingDefault: 'ဆက်သွယ်ရန်',
-    ledeShop: 'သင်ရောင်းချသော ပစ္စည်းများနှင့် အသုံးပြုမည့်စက်များကို ပြောပြပါ။ သင့်လုပ်ငန်းအတွက် ဆိုင်အက်ပ် စမ်းသပ်အသုံးပြုမှုကို ဆွေးနွေးကြမည်။',
+    ledeShop: 'သင်ရောင်းချသော ပစ္စည်းများနှင့် အသုံးပြုမည့်စက်များကို ပြောပြပါ။ ဆိုင်အက်ပ် အသုံးပြုပုံကို ဆွေးနွေးရန် အီးမေးလ်ဖြင့် ပြန်လည်ဆက်သွယ်ပါမည်။',
     ledeDefault: 'သင့်လုပ်ငန်းလိုအပ်ချက်ကို ပြောပြပါ၊ SuperMega က အီးမေးလ်ဖြင့် ပြန်လည်ဆက်သွယ်ပါမည်။',
     contextAttached: 'အထောက်အကူဖြစ်စေမည့် အကြောင်းအရာကို ပူးတွဲထားပါသည်။ မပို့ရသေးပါ။', contextInvalid: 'ပူးတွဲအကြောင်းအရာကို အတည်မပြုနိုင်သဖြင့် မထည့်သွင်းခဲ့ပါ။',
     messageSent: 'စာပို့ပြီးပါပြီ။', sendAnother: 'နောက်ထပ်စာပို့ရန်', previous: 'ယခင်စာ — ', sendMessage: 'စာပို့ရန်', sending: 'ပို့နေပါသည်...',
