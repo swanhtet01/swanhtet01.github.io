@@ -71,7 +71,8 @@ const assets = await Promise.all(captureFiles.map(async file => {
   } else assert.equal(capture.fixturePath, '/workspaces/')
   assert(capture.visibleSelector)
   const expected = file.endsWith('-mobile.png') ? [390, 844]
-    : file.endsWith('-tablet.png') ? [768, 1024] : [1440, 900]
+    : file.endsWith('-tablet.png') ? [768, 1024]
+      : file === 'actual-shop-sell-my.png' ? [1000, 900] : [1440, 900]
   assert.deepEqual([capture.width, capture.height], expected, `dimensions: ${file}`)
   const bytes = await readFile(resolve(sourceRoot, file))
   assert.equal(bytes.subarray(0, 8).toString('hex'), '89504e470d0a1a0a', `PNG: ${file}`)

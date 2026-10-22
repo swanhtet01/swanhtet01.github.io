@@ -531,6 +531,8 @@ for (const token of ['src="/images/actual-shop-sell-my.png"', 'srcset="/images/a
 }
 if (myShop.includes('src="/images/actual-shop-sell.png"') || shopPage.includes('src="/images/actual-shop-sell-my.png"'))
   fail('shop_hero_capture_locale_mismatch')
+if (!/<img src="\/images\/actual-shop-sell-my\.png"[^>]*width="1000" height="900"/.test(myShop))
+  fail('myanmar_shop_hero_dimensions_invalid')
 if (countOccurrences(myShop, 'class="shop-photo-credit"') !== 1
   || !myShop.includes('MAMA photo:') || !myShop.includes('twindel / Open Food Facts')
   || !myShop.includes('https://creativecommons.org/licenses/by-sa/3.0/')) fail('myanmar_shop_photo_attribution_missing')

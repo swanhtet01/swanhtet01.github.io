@@ -145,7 +145,8 @@ const sourceGalleryAssetEvidence = await Promise.all(publicGalleryProvenance.ass
   const bytes = await readFile(resolve(root, 'tools', 'public-assets', file))
   assert(bytes.subarray(0, 8).equals(OG_CARD_PNG_SIGNATURE), `public_gallery_asset_not_png:${file}`)
   const expectedDimensions = file.endsWith('-mobile.png') ? [390, 844]
-    : file.endsWith('-tablet.png') ? [768, 1024] : [1440, 900]
+    : file.endsWith('-tablet.png') ? [768, 1024]
+      : file === 'actual-shop-sell-my.png' ? [1000, 900] : [1440, 900]
   assert(Number.isInteger(width) && Number.isInteger(height)
     && width === expectedDimensions[0] && height === expectedDimensions[1],
     `public_gallery_asset_dimensions_invalid:${file}`)
@@ -992,7 +993,7 @@ function shopCounterSalePreview(locale = 'en') {
  interfaceDisclosure(tabletImage)
  const imageAlt = locale === 'my' ? 'ကောင်တာအရောင်း၊ ကုန်ပစ္စည်းရှာဖွေမှုနှင့် လက်ရှိခြင်းတောင်းကို ပြထားသော Shop ဘရောက်ဇာမျက်နှာပြင်' : alt
  const disclosure = locale === 'my' ? 'Shop ဘရောက်ဇာ ကောင်တာ · မြန်မာဘာသာ နမူနာမျက်နှာပြင် · စမ်းသပ်မှတ်တမ်းများ' : 'Shop browser workspace · synthetic local records'
- return `<figure class="shop-lead-capture"><picture><source media="(max-width: 760px)" srcset="/images/${mobileImage}" width="390" height="844" /><source media="(max-width: 1024px)" srcset="/images/${tabletImage}" width="768" height="1024" /><img src="/images/${image}" alt="${escapeHtml(imageAlt)}" width="1440" height="900" loading="eager" fetchpriority="high" /></picture><figcaption id="shop-sample-disclosure">${disclosure}<span class="shop-photo-credit">MAMA photo: <a href="https://world.openfoodfacts.org/cgi/product_image.pl?code=8850987101526&amp;id=front_en">twindel / Open Food Facts</a> · <a href="https://creativecommons.org/licenses/by-sa/3.0/">CC BY-SA 3.0</a></span></figcaption></figure>`
+ return `<figure class="shop-lead-capture"><picture><source media="(max-width: 760px)" srcset="/images/${mobileImage}" width="390" height="844" /><source media="(max-width: 1024px)" srcset="/images/${tabletImage}" width="768" height="1024" /><img src="/images/${image}" alt="${escapeHtml(imageAlt)}" width="${locale === 'my' ? 1000 : 1440}" height="900" loading="eager" fetchpriority="high" /></picture><figcaption id="shop-sample-disclosure">${disclosure}<span class="shop-photo-credit">MAMA photo: <a href="https://world.openfoodfacts.org/cgi/product_image.pl?code=8850987101526&amp;id=front_en">twindel / Open Food Facts</a> · <a href="https://creativecommons.org/licenses/by-sa/3.0/">CC BY-SA 3.0</a></span></figcaption></figure>`
 }
 function shopResponsiveShowcase(locale = 'en') {
  const isMyanmar = locale === 'my'

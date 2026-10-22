@@ -356,6 +356,9 @@ check(myShop.includes('မြန်မာဘာသာ နမူနာမျက�
   && myShop.includes('srcset="/images/actual-shop-sell-my-tablet.png"')
   && myShop.includes('srcset="/images/actual-shop-sell-my-mobile.png"')
   && !myShop.includes('src="/images/actual-shop-sell.png"'), 'myanmar_shop_uses_source_bound_localized_counter_capture')
+check(/<img src="\/images\/actual-shop-sell-my\.png"[^>]*width="1000" height="900"/.test(myShop)
+  && readFileSync(resolve(staticDir, 'images/actual-shop-sell-my.png')).readUInt32BE(16) === 1000,
+  'myanmar_shop_hero_uses_readable_real_two_pane_viewport')
 check(myShop.includes('အင်္ဂလိပ်ဘာသာ UI ကို ပြထားသည်'), 'myanmar_shop_support_capture_language_disclosed')
 check(countOccurrences(myShop, 'class="shop-photo-credit"') === 1
   && myShop.includes('MAMA photo:') && myShop.includes('twindel / Open Food Facts')
