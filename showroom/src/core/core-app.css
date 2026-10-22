@@ -3290,6 +3290,7 @@ input, select, textarea,
    columns have room. Narrow devices retain the existing touch-sized sheet. */
 @media (min-width: 700px) and (max-width: 840px) {
   .shop-product-shell .core-main { padding-bottom: 1.5rem; }
+  .shop-counter-category-filter { flex-wrap: wrap; overflow-x: visible; scrollbar-width: none; }
   .shop-counter-surface, .shop-counter-grid { height: auto; }
   .shop-counter-grid { display: grid; grid-template-columns: minmax(0, 1.08fr) minmax(0, .92fr); gap: .75rem; align-items: start; }
   .shop-counter-surface { padding-bottom: 0; }
@@ -3306,11 +3307,16 @@ input, select, textarea,
 }
 @media (max-width: 480px) {
   .shop-item-grid { grid-template-columns: minmax(0, 1fr); }
-  .shop-product-tile { min-height: 4.25rem; grid-template-columns: 2.75rem minmax(0, 1fr) 2.75rem; grid-template-rows: auto; align-items: center; }
+  .shop-product-tile { min-height: 4.25rem; grid-template-columns: 2.75rem minmax(0, 1fr) 2.75rem; grid-template-rows: auto; align-items: center; padding-block: .25rem; }
   .shop-product-art { width: 2.75rem; height: 2.75rem; }
   .shop-product-name { min-height: 0; }
   .shop-product-copy { padding-right: 0; }
   .shop-product-quantity, .shop-product-add-hint { width: 2.75rem; min-width: 2.75rem; min-height: 2.75rem; }
+}
+@media (max-width: 699px) {
+  .shop-product-shell .core-main { padding-bottom: calc(180px + env(safe-area-inset-bottom)); }
+  .shop-item-grid { padding-bottom: calc(4.5rem + env(safe-area-inset-bottom)); }
+  .shop-product-tile:last-child { scroll-margin-bottom: calc(9rem + env(safe-area-inset-bottom)); }
 }
 @media (hover: none) {
   .shop-product-add-hint { opacity: 1; }

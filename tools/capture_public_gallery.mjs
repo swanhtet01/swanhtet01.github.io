@@ -234,7 +234,18 @@ async function captureMobile(cdp, sessionId, output, name, expectedTexts, view) 
       return { viewport: innerWidth, page: document.documentElement.scrollWidth };
     })()`)
     if (mobileLayout.page > mobileLayout.viewport + 1) throw new Error(`mobile_capture_horizontal_overflow:${name}:${JSON.stringify(mobileLayout)}`)
-    return await capture(cdp, sessionId, output, name, expectedTexts, { ...view, width: 390, height: 844 })
+    const receipt = await capture(cdp, sessionId, output, name, expectedTexts, { ...view, width: 390, height: 844 })
+    if (name === 'actual-shop-sell-my-mobile') {
+      const safeArea = await evaluate(cdp, sessionId, `(() => {
+        const row=document.querySelector('.shop-item-grid .shop-product-tile:last-child');
+        row?.scrollIntoView({block:'end',behavior:'instant'});
+        const bar=document.querySelector('.shop-mobile-cart')?.getBoundingClientRect();
+        return {rowBottom:row?.getBoundingClientRect().bottom,barTop:bar?.top};
+      })()`)
+      if (!safeArea.barTop || safeArea.rowBottom > safeArea.barTop - 8)
+        throw new Error(`myanmar_mobile_catalog_safe_area_missing:${JSON.stringify(safeArea)}`)
+    }
+    return receipt
   } finally {
     await cdp.send('Emulation.setScrollbarsHidden', { hidden: false }, sessionId)
     await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false }, sessionId)
@@ -271,6 +282,14 @@ async function captureTablet(cdp, sessionId, output, name, expectedTexts, view) 
       return { viewport: innerWidth, page: document.documentElement.scrollWidth };
     })()`)
     if (layout.page > layout.viewport + 1) throw new Error(`tablet_capture_horizontal_overflow:${name}:${JSON.stringify(layout)}`)
+    if (name === 'actual-shop-sell-my-tablet') {
+      const categories = await evaluate(cdp, sessionId, `(() => {
+        const node=document.querySelector('.shop-counter-category-filter');
+        return {clientWidth:node?.clientWidth,scrollWidth:node?.scrollWidth,flexWrap:node && getComputedStyle(node).flexWrap};
+      })()`)
+      if (!categories || categories.flexWrap !== 'wrap' || categories.scrollWidth > categories.clientWidth + 1)
+        throw new Error(`myanmar_tablet_category_scrollbar_visible:${JSON.stringify(categories)}`)
+    }
     return await capture(cdp, sessionId, output, name, expectedTexts, { ...view, width: 768, height: 1024 })
   } finally {
     if (view.openSale) await clickSelector(cdp, sessionId, '.shop-cart-close')
