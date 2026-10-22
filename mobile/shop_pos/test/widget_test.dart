@@ -2348,7 +2348,10 @@ void main() {
           find.byKey(const ValueKey('shop-pending-wallet-line:item-002')),
           findsNothing,
         );
-        expect(find.text('+${count - 2} more items in payment review'), findsOneWidget);
+        expect(
+          find.text('+${count - 2} more items in payment review'),
+          findsOneWidget,
+        );
         final resume = find.text('Resume payment');
         expect(resume, findsOneWidget);
         expect(tester.getRect(resume).bottom, lessThan(800));

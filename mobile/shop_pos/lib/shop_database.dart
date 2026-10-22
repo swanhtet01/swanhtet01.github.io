@@ -1766,7 +1766,9 @@ class ShopDatabase extends _$ShopDatabase {
             intent.lines.any(
               (line) => productQuantities[line.productId] != line.quantity,
             )) {
-          throw StateError('The pending checkout basket does not match this sale.');
+          throw StateError(
+            'The pending checkout basket does not match this sale.',
+          );
         }
         walletIntentTotalMmk = intent.totalMmk;
         walletSnapshots = {

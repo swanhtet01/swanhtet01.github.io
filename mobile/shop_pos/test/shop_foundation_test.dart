@@ -790,11 +790,16 @@ void main() {
       );
       expect(await database.countSales(), 0);
       expect(await database.countOutboxOperations(), beforeOutbox);
-      expect((await database.readActiveProducts()).every((p) => p.onHand == 3), isTrue);
-      final state = await database.customSelect(
-        'SELECT state FROM shop_wallet_checkout_intents WHERE operation_id = ?',
-        variables: [const Variable<String>('wallet-basket-tamper')],
-      ).getSingle();
+      expect(
+        (await database.readActiveProducts()).every((p) => p.onHand == 3),
+        isTrue,
+      );
+      final state = await database
+          .customSelect(
+            'SELECT state FROM shop_wallet_checkout_intents WHERE operation_id = ?',
+            variables: [const Variable<String>('wallet-basket-tamper')],
+          )
+          .getSingle();
       expect(state.read<String>('state'), 'pending');
     });
 
