@@ -2491,9 +2491,7 @@ html:lang(my) .shop-stock-workspace .stock-attention-table .data-row:not(.table-
 .shop-stock-workspace > .catalog-onboarding-bridge p { display: none; }
 .shop-stock-workspace > .purchase-order-history > summary { width: 100%; min-height: 3.25rem; display: flex; justify-content: space-between; border: 0; border-radius: 0; padding: .625rem 1rem; font-size: .8125rem; }
 .shop-stock-workspace > .catalog-onboarding-bridge { min-height: 3.75rem; margin-top: 0; padding: .625rem 1rem; }
-@media (min-width: 841px) {
-  .shop-stock-workspace > .catalog-disclosure:not([open]) { display: none; }
-}
+.shop-stock-workspace > .catalog-disclosure:not([open]) { display: none; }
 
 @media (max-width: 840px) {
   .shop-operating-strip { grid-template-columns: repeat(2,minmax(0,1fr))!important; }
@@ -2517,8 +2515,8 @@ html:lang(my) .shop-stock-workspace .stock-attention-table .data-row:not(.table-
 @media (max-width: 560px) {
   .shop-stock-workspace { padding: .875rem; }
   .shop-stock-heading { align-items: stretch; flex-direction: column; }
-  .shop-stock-heading-actions > .core-button { width: 100%; }
-  .shop-stock-add-product { display: none; }
+  .shop-stock-heading-actions { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .shop-stock-heading-actions > .core-button { width: 100%; min-height: 44px; padding-inline: .5rem; font-size: .8125rem; text-align: center; white-space: normal; }
   /* Phone operators need the actionable stock row first; the detailed metrics
      remain available in the larger workspaces. */
   .shop-stock-metrics { display: none; }
@@ -2530,9 +2528,6 @@ html:lang(my) .shop-stock-workspace .stock-attention-table .data-row:not(.table-
   .shop-stock-workspace .data-row:not(.table-head):not(.stock-empty-row) > span:nth-child(3) { grid-column: 2; grid-row: 2; justify-items: start; }
   .shop-stock-workspace .data-row:not(.table-head):not(.stock-empty-row) > span:nth-child(4) { grid-column: 3; grid-row: 2; justify-items: start; }
   .shop-stock-workspace .data-row:not(.table-head):not(.stock-empty-row) > span:nth-child(5) { grid-column: 1 / -1; grid-row: 3; justify-self: start; }
-  /* The receiving row already has a one-tap Receive action. Keep the phone
-     view focused on that list instead of repeating the same order in a card. */
-  .shop-stock-next-action[data-action="receive"] { display: none; }
   .commerce-screen .product-task-tabs { grid-template-columns: repeat(4,minmax(0,1fr)); }
   .shop-today-overview { padding: 1rem; }
   .shop-today-heading { align-items: stretch; }
