@@ -511,6 +511,33 @@ void main() {
     }
   }
 
+  test('valid SQLite changed after publication stays blocked', () async {
+    final target = File('${directory.path}/changed-after-link.sqlite');
+    await expectLater(
+      ShopBackup.restoreIntoEmptyDatabase(
+        archive: archive,
+        target: target,
+        password: _password,
+        afterPublishForTest: () async {
+          final connection = sqlite3.open(target.path);
+          try {
+            connection.execute(
+              'UPDATE shop_products SET price_mmk = price_mmk + 1 '
+              'WHERE id = ?',
+              ['rice'],
+            );
+          } finally {
+            connection.close();
+          }
+        },
+      ),
+      throwsStateError,
+    );
+    expect(await target.exists(), isTrue);
+    expect(await ShopBackup.restoreMarkerFor(target).exists(), isTrue);
+    await _expectNoScratch(directory);
+  });
+
   test('startup clears only an unpublished restore marker', () async {
     final target = File('${directory.path}/unpublished.sqlite');
     final marker = ShopBackup.restoreMarkerFor(target);

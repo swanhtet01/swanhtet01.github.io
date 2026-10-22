@@ -187,6 +187,9 @@ abstract final class ShopBackup {
         await _requireNoSidecars(target);
         verifySnapshot(target, expectedSchemaVersion: archiveBytes[5]);
         await _requireNoSidecars(target);
+        if (!await _sameFileBytes(target, cleartext)) {
+          throw StateError('The Shop database changed during restore.');
+        }
         verifiedPublication = true;
       } finally {
         try {
@@ -627,6 +630,18 @@ abstract final class ShopBackup {
       if (left[index] != right[index]) return false;
     }
     return true;
+  }
+
+  static Future<bool> _sameFileBytes(File file, List<int> expected) async {
+    var offset = 0;
+    await for (final chunk in file.openRead()) {
+      if (offset + chunk.length > expected.length) return false;
+      for (var index = 0; index < chunk.length; index++) {
+        if (chunk[index] != expected[offset + index]) return false;
+      }
+      offset += chunk.length;
+    }
+    return offset == expected.length;
   }
 
   static bool _hasSqliteHeader(List<int> bytes) {
