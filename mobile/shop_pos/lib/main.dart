@@ -1945,13 +1945,13 @@ class _ShopHomeState extends State<ShopHome> {
               child: Padding(
                 padding: EdgeInsets.symmetric(
                   horizontal: narrowProductRow ? 8 : 14,
-                  vertical: compactProductRow ? 9 : 10,
+                  vertical: enlargedNarrowRow ? 8 : compactProductRow ? 9 : 10,
                 ),
                 child: Row(
                   children: [
                     if (photoSnapshot.data != null) ...[
                       productPhoto(photoSnapshot.data)!,
-                      const SizedBox(width: 10),
+                      SizedBox(width: enlargedNarrowRow ? 8 : 10),
                     ],
                     Expanded(
                       child: Column(
@@ -1978,8 +1978,10 @@ class _ShopHomeState extends State<ShopHome> {
                             const SizedBox(height: 2),
                             Text(_mmk(item.priceMmk), style: catalogPriceStyle),
                           ],
-                          const SizedBox(height: 2),
-                          Text(stock, style: stockStyle),
+                          if (!enlargedNarrowRow) ...[
+                            const SizedBox(height: 2),
+                            Text(stock, style: stockStyle),
+                          ],
                         ],
                       ),
                     ),
@@ -1987,8 +1989,27 @@ class _ShopHomeState extends State<ShopHome> {
                       const SizedBox(width: 12),
                       Text(_mmk(item.priceMmk), style: catalogPriceStyle),
                     ],
-                    const SizedBox(width: 10),
-                    addAffordance,
+                    SizedBox(width: enlargedNarrowRow ? 8 : 10),
+                    if (enlargedNarrowRow)
+                      SizedBox(
+                        width: 72,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              stock,
+                              maxLines: item.onHand == 0 ? 2 : 1,
+                              textAlign: TextAlign.center,
+                              style: stockStyle,
+                            ),
+                            const SizedBox(height: 2),
+                            addAffordance,
+                          ],
+                        ),
+                      )
+                    else
+                      addAffordance,
                   ],
                 ),
               ),
