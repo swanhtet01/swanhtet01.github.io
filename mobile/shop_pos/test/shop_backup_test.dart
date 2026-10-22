@@ -86,7 +86,7 @@ void main() {
     () async {
       final bytes = await archive.readAsBytes();
       expect(bytes.sublist(0, 4), ascii.encode('SMBK'));
-      expect(bytes[5], 9);
+      expect(bytes[5], 10);
       expect(
         bytes.sublist(0, 16),
         isNot(ascii.encode('SQLite format 3\u0000')),
@@ -168,6 +168,46 @@ void main() {
       }
     },
   );
+
+  test('encrypted backup restores a named held basket without stock or payment', () async {
+    final source = ShopDatabase(NativeDatabase.memory());
+    try {
+      await source.addProduct(
+        id: 'water', name: 'Water', priceMmk: 1200, openingStock: 5,
+      );
+      await source.saveCounterSaleDraft(
+        operationId: 'held-backup-op', quantities: const {'water': 2},
+      );
+      await source.holdCounterSaleDraft(
+        id: 'held-backup-id', name: 'Customer May',
+        operationId: 'held-backup-op',
+      );
+      final heldArchive = File('${directory.path}/held.smbak');
+      await ShopBackup.exportEncrypted(
+        database: source, archive: heldArchive,
+        password: _password, scratchRoot: directory,
+      );
+      final target = File('${directory.path}/held-restored.sqlite');
+      await ShopBackup.restoreIntoEmptyDatabase(
+        archive: heldArchive, target: target, password: _password,
+      );
+      final restored = ShopDatabase(NativeDatabase(target));
+      try {
+        final ticket = (await restored.readHeldSaleTickets()).single;
+        expect(ticket.name, 'Customer May');
+        expect(ticket.draft.quantities, {'water': 2});
+        expect(await restored.readCounterSaleDraft(), isNull);
+        expect((await restored.readActiveProducts()).single.onHand, 5);
+        expect(await restored.countSales(), 0);
+        expect((await restored.reopenHeldSaleTicket(ticket.id)).operationId,
+            'held-backup-op');
+      } finally {
+        await restored.close();
+      }
+    } finally {
+      await source.close();
+    }
+  });
 
   test('merchant export hands only the encrypted archive to Save As', () async {
     File? handedArchive;
@@ -314,7 +354,7 @@ void main() {
     },
   );
 
-  test('v6 archive restores, then migrates its catalog to v9', () async {
+  test('v6 archive restores, then migrates its catalog to v10', () async {
     final legacy = File('${directory.path}/legacy-v6.sqlite');
     await database.exportVerifiedLocalSnapshot(legacy);
     final connection = sqlite3.open(legacy.path);
@@ -322,6 +362,7 @@ void main() {
       connection.execute('ALTER TABLE shop_products DROP COLUMN reorder_level');
       connection.execute('DROP TABLE shop_product_images');
       connection.execute('DROP TABLE shop_counter_drafts');
+      connection.execute('DROP TABLE shop_held_sales');
       connection.execute('PRAGMA user_version = 6');
     } finally {
       connection.close();
@@ -366,7 +407,7 @@ void main() {
       expect(
         (await migrated.customSelect('PRAGMA user_version').getSingle())
             .read<int>('user_version'),
-        9,
+        10,
       );
     } finally {
       await migrated.close();
@@ -380,6 +421,7 @@ void main() {
     try {
       connection.execute('ALTER TABLE shop_products DROP COLUMN reorder_level');
       connection.execute('DROP TABLE shop_counter_drafts');
+      connection.execute('DROP TABLE shop_held_sales');
       connection.execute('PRAGMA user_version = 7');
     } finally {
       connection.close();
@@ -391,11 +433,35 @@ void main() {
       expect(
         (await upgraded.customSelect('PRAGMA user_version').getSingle())
             .read<int>('user_version'),
-        9,
+        10,
       );
     } finally {
       await upgraded.close();
     }
+  });
+
+  test('v9 database gains an empty held-sale table without stock writes', () async {
+    final old = File('${directory.path}/legacy-v9.sqlite');
+    await database.exportVerifiedLocalSnapshot(old);
+    final connection = sqlite3.open(old.path);
+    try {
+      connection.execute('DROP TABLE shop_held_sales');
+      connection.execute('PRAGMA user_version = 9');
+    } finally {
+      connection.close();
+    }
+    ShopBackup.verifySnapshot(old, expectedSchemaVersion: 9);
+    final upgraded = ShopDatabase(NativeDatabase(old));
+    try {
+      expect(await upgraded.readHeldSaleTickets(), isEmpty);
+      expect((await upgraded.readActiveProducts()).single.onHand, 3);
+      expect(await upgraded.countSales(), 1);
+      expect((await upgraded.customSelect('PRAGMA user_version').getSingle())
+          .read<int>('user_version'), 10);
+    } finally {
+      await upgraded.close();
+    }
+    ShopBackup.verifySnapshot(old, expectedSchemaVersion: 10);
   });
 
   test(
@@ -409,6 +475,7 @@ void main() {
           'ALTER TABLE shop_products DROP COLUMN reorder_level',
         );
         connection.execute('PRAGMA user_version = 8');
+        connection.execute('DROP TABLE shop_held_sales');
       } finally {
         connection.close();
       }
@@ -421,16 +488,16 @@ void main() {
         expect(
           (await migrated.customSelect('PRAGMA user_version').getSingle())
               .read<int>('user_version'),
-          9,
+          10,
         );
       } finally {
         await migrated.close();
       }
-      ShopBackup.verifySnapshot(old, expectedSchemaVersion: 9);
+      ShopBackup.verifySnapshot(old, expectedSchemaVersion: 10);
     },
   );
 
-  test('v9 backup preserves custom and disabled low-stock alerts', () async {
+  test('v10 backup preserves custom and disabled low-stock alerts', () async {
     final source = ShopDatabase(NativeDatabase.memory());
     try {
       await source.addProduct(
@@ -468,7 +535,7 @@ void main() {
         target: restored,
         password: _password,
       );
-      ShopBackup.verifySnapshot(restored, expectedSchemaVersion: 9);
+      ShopBackup.verifySnapshot(restored, expectedSchemaVersion: 10);
       final reopened = ShopDatabase(NativeDatabase(restored));
       try {
         final products = {
@@ -486,7 +553,7 @@ void main() {
     }
   });
 
-  test('v9 snapshots reject missing or invalid alert settings', () async {
+  test('v10 snapshots reject missing or invalid alert settings', () async {
     final missing = File('${directory.path}/missing-reorder.sqlite');
     await database.exportVerifiedLocalSnapshot(missing);
     final missingConnection = sqlite3.open(missing.path);

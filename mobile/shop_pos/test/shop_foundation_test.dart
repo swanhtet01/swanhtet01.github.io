@@ -589,6 +589,101 @@ void main() {
       }
     });
 
+    test('held baskets let the cashier serve another customer without stock holds', () async {
+      final database = ShopDatabase(NativeDatabase.memory());
+      try {
+        await database.addProduct(
+          id: 'tea', name: 'Tea', priceMmk: 2500, openingStock: 4,
+        );
+        await database.addProduct(
+          id: 'water', name: 'Water', priceMmk: 1200, openingStock: 3,
+        );
+        await database.saveCounterSaleDraft(
+          operationId: 'customer-a', quantities: const {'tea': 2},
+        );
+        final outboxBeforeHold = await database.countOutboxOperations();
+        await expectLater(
+          database.holdCounterSaleDraft(
+            id: 'bad', name: 'Wrong basket', operationId: 'changed',
+          ),
+          throwsStateError,
+        );
+        expect((await database.readCounterSaleDraft())?.operationId, 'customer-a');
+
+        await database.holdCounterSaleDraft(
+          id: 'ticket-a', name: 'Customer A', operationId: 'customer-a',
+        );
+        expect(await database.readCounterSaleDraft(), isNull);
+        expect((await database.readHeldSaleTickets()).single.draft.quantities,
+            {'tea': 2});
+        expect(await database.countSales(), 0);
+        expect(await database.countOutboxOperations(), outboxBeforeHold);
+        expect((await database.readActiveProducts()).firstWhere(
+            (product) => product.id == 'tea').onHand, 4);
+        await expectLater(
+          database.saveCounterSaleDraft(
+            operationId: 'customer-a', quantities: const {'tea': 1},
+          ),
+          throwsStateError,
+        );
+
+        await database.saveCounterSaleDraft(
+          operationId: 'customer-b', quantities: const {'water': 1},
+        );
+        await expectLater(
+          database.reopenHeldSaleTicket('ticket-a'), throwsStateError,
+        );
+        expect((await database.readCounterSaleDraft())?.operationId, 'customer-b');
+        expect((await database.readHeldSaleTickets()).length, 1);
+        await database.recordCashSale(
+          operationId: 'customer-b',
+          lines: const [ShopSaleLineInput(productId: 'water', quantity: 1)],
+        );
+        expect(await database.readCounterSaleDraft(), isNull);
+        final reopened = await database.reopenHeldSaleTicket('ticket-a');
+        expect(reopened.operationId, 'customer-a');
+        expect(reopened.quantities, {'tea': 2});
+        expect(await database.readHeldSaleTickets(), isEmpty);
+        await database.recordCashSale(
+          operationId: 'customer-a',
+          lines: const [ShopSaleLineInput(productId: 'tea', quantity: 2)],
+        );
+        expect(await database.countSales(), 2);
+        expect((await database.readActiveProducts()).firstWhere(
+            (product) => product.id == 'tea').onHand, 2);
+      } finally {
+        await database.close();
+      }
+    });
+
+    test('holding a basket survives SQLite reopen and discarding touches no stock', () async {
+      final directory = await Directory.systemTemp.createTemp('shop-held-');
+      final file = File('${directory.path}${Platform.pathSeparator}shop.sqlite');
+      var database = ShopDatabase(NativeDatabase(file));
+      try {
+        await database.addProduct(
+          id: 'tea', name: 'Tea', priceMmk: 2500, openingStock: 3,
+        );
+        await database.saveCounterSaleDraft(
+          operationId: 'held-op', quantities: const {'tea': 1},
+        );
+        await database.holdCounterSaleDraft(
+          id: 'ticket-1', name: 'Table 1', operationId: 'held-op',
+        );
+        await database.close();
+        database = ShopDatabase(NativeDatabase(file));
+        expect((await database.readHeldSaleTickets()).single.name, 'Table 1');
+        expect(await database.readCounterSaleDraft(), isNull);
+        await database.discardHeldSaleTicket('ticket-1');
+        expect(await database.readHeldSaleTickets(), isEmpty);
+        expect((await database.readActiveProducts()).single.onHand, 3);
+        expect(await database.countSales(), 0);
+      } finally {
+        await database.close();
+        await directory.delete(recursive: true);
+      }
+    });
+
     test('verified saved wallet sale survives a later product archive', () async {
       await database.addProduct(
         id: 'tea',

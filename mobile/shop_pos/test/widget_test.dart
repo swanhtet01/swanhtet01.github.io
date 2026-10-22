@@ -37,6 +37,61 @@ void _usePhoneViewport(WidgetTester tester) {
 }
 
 void main() {
+  for (final myanmar in [false, true]) {
+    testWidgets('cashier holds and reopens a local sale in ${myanmar ? 'MY' : 'EN'}',
+        (tester) async {
+      _usePhoneViewport(tester);
+      final database = ShopDatabase(NativeDatabase.memory());
+      try {
+        await database.addProduct(
+          id: 'tea', name: 'Tea', priceMmk: 2500, openingStock: 3,
+        );
+        await tester.pumpWidget(MaterialApp(
+          home: ShopHome(
+            database: database, authClient: null,
+            apiBaseUrl: 'https://example.invalid',
+            myanmar: myanmar, onLanguageChanged: (_) {},
+          ),
+        ));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey('shop-catalog-row:tea')));
+        await tester.pumpAndSettle();
+        final original = await database.readCounterSaleDraft();
+        expect(original?.quantities, {'tea': 1});
+        await tester.tap(find.textContaining(myanmar ? 'အရောင်းစစ်ရန်' : 'Review sale'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey('shop-hold-sale')));
+        await tester.pumpAndSettle();
+        await tester.enterText(
+          find.byKey(const ValueKey('shop-held-sale-name')), 'Customer A',
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey('shop-held-sale-confirm')));
+        await tester.pumpAndSettle();
+        expect(await database.readCounterSaleDraft(), isNull);
+        expect((await database.readHeldSaleTickets()).single.draft.operationId,
+            original!.operationId);
+        expect((await database.readActiveProducts()).single.onHand, 3);
+        expect(await database.countSales(), 0);
+
+        await tester.tap(find.byKey(const ValueKey('shop-held-sales-open')));
+        await tester.pumpAndSettle();
+        expect(find.text('Customer A'), findsOneWidget);
+        final ticket = (await database.readHeldSaleTickets()).single;
+        await tester.tap(find.byKey(ValueKey('shop-held-ticket:${ticket.id}')));
+        await tester.pumpAndSettle();
+        expect((await database.readCounterSaleDraft())?.operationId,
+            original.operationId);
+        expect(await database.readHeldSaleTickets(), isEmpty);
+        expect(tester.takeException(), isNull);
+      } finally {
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump(const Duration(milliseconds: 1));
+        await database.close();
+      }
+    });
+  }
+
   testWidgets('Windows scanner focus returns after switching tasks', (
     tester,
   ) async {
