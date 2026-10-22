@@ -7400,11 +7400,13 @@ if (shopPackIds.join(',') !== 'retail,cafe,restaurant,spa,gym,school'
   || shopProductContract?.internalTemplatePacks?.some((pack) => pack.status !== 'core-compatible' || !pack.availableNow?.some((capability) => /schedule|reservation|appointment/i.test(capability)))
   || shopProductContract?.internalTemplatePacks?.some((pack) => !shopProductContract.templates?.some((template) => template.id === pack.workflowTemplateId && template.entryPoints?.includes(pack.entryPoint)))
   || shopProductContract?.internalTemplatePacks?.some((pack) => pack.plannedNext?.includes('Appointments') || pack.plannedNext?.includes('Classes'))) fail('shop_industry_pack_manifest_not_operationally_aligned')
-if (websiteProductContract?.status !== 'available-in-app'
+if (websiteProductContract?.status !== 'release-candidate-local'
+  || manifest.productVisibility?.activeProductIds?.includes('website')
+  || !manifest.productVisibility?.retainedOnlyProductIds?.includes('website')
   || websiteProductContract?.views?.join(',') !== 'Start,Edit,Preview,Download'
   || websiteProductContract?.templates?.some((template) => template.workflow?.at(-1) !== 'Download website')
   || manifestText.includes('Approve site file')
-  || manifestText.includes('content approval time')) fail('website_trial_catalog_not_aligned_with_download_outcome')
+  || manifestText.includes('content approval time')) fail('internal_website_catalog_not_aligned_with_download_outcome')
 for (const product of solutionProducts) {
   if (product.templates?.length !== 3) fail(`wrong_template_count:${product.id}`)
   for (const template of product.templates || []) {
