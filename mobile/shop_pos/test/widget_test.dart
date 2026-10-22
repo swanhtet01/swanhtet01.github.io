@@ -4813,7 +4813,6 @@ void main() {
         'UPDATE shop_products SET on_hand = 0 WHERE id = ?',
         variables: [const Variable<String>('tea')],
       );
-      debugPrint('wallet recovery test: setup complete');
       await tester.pumpWidget(
         ShopApp(
           initialCounter: true,
@@ -4824,19 +4823,14 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      debugPrint('wallet recovery test: app settled');
       await tester.tap(find.text('Resume payment'));
       await tester.pumpAndSettle();
-      debugPrint('wallet recovery test: QR settled');
       final verified = find.text('I verified this payment in the wallet app.');
       await tester.ensureVisible(verified);
       await tester.tap(verified);
       await tester.pumpAndSettle();
-      debugPrint('wallet recovery test: verified');
       await tester.tap(find.text('Confirm received'));
-      debugPrint('wallet recovery test: tapped confirmation');
       await tester.pumpAndSettle();
-      debugPrint('wallet recovery test: recovery dialog settled');
 
       expect(find.text('Check payment before retrying'), findsOneWidget);
       expect(
@@ -4847,9 +4841,9 @@ void main() {
       expect(await database.readPendingWalletCheckout(), isNotNull);
       await tester.tap(find.text('Keep pending'));
       await tester.pumpAndSettle();
-      debugPrint('wallet recovery test: acknowledged');
       expect(await database.readPendingWalletCheckout(), isNotNull);
       await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
       await database.close();
     },
   );
