@@ -392,8 +392,7 @@ class _StockScreenState extends State<StockScreen> {
                                                   CrossAxisAlignment.start,
                                               children: [
                                                 onHand,
-                                                if (reorderNote != null)
-                                                  reorderNote,
+                                                ?reorderNote,
                                               ],
                                             ),
                                           ),
@@ -471,8 +470,7 @@ class _StockScreenState extends State<StockScreen> {
                                                   children: [
                                                     details,
                                                     onHand,
-                                                    if (reorderNote != null)
-                                                      reorderNote,
+                                                    ?reorderNote,
                                                   ],
                                                 ),
                                               ),
