@@ -6,6 +6,7 @@ import 'package:cryptography/cryptography.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
 import 'package:supermega_shop/shop_backup.dart';
@@ -14,6 +15,7 @@ import 'package:supermega_shop/shop_database.dart';
 import 'package:supermega_shop/shop_startup.dart';
 
 const _password = 'correct horse battery staple';
+const _pathProviderChannel = MethodChannel('plugins.flutter.io/path_provider');
 final _thumbnail = base64Decode(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ'
   'AAAADUlEQVR4nGPQyNjxHwAETAJIB09U9wAAAABJRU5ErkJggg==',
@@ -37,6 +39,14 @@ void main() {
 
   setUpAll(() async {
     directory = await Directory.systemTemp.createTemp('shop-backup-test-');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(_pathProviderChannel, (call) async {
+          if (call.method == 'getTemporaryDirectory' ||
+              call.method == 'getApplicationDocumentsDirectory') {
+            return directory.path;
+          }
+          throw MissingPluginException();
+        });
     database = ShopDatabase(NativeDatabase.memory());
     await database.addProduct(
       id: 'rice',
@@ -67,6 +77,8 @@ void main() {
 
   tearDownAll(() async {
     await database.close();
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(_pathProviderChannel, null);
     await directory.delete(recursive: true);
   });
 
