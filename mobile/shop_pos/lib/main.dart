@@ -4231,13 +4231,13 @@ class _NewShopProductDialogState extends State<_NewShopProductDialog> {
                       onPressed: () =>
                           setState(() => _showManualBarcode = true),
                       icon: const Icon(Icons.qr_code_2_outlined),
-                    label: Text(
-                      shopCopy(
-                        widget.myanmar,
-                        'Add barcode',
-                        'ဘားကုဒ်ထည့်ရန်',
+                      label: Text(
+                        shopCopy(
+                          widget.myanmar,
+                          'Add barcode',
+                          'ဘားကုဒ်ထည့်ရန်',
+                        ),
                       ),
-                    ),
                     ),
                   ),
                 ] else if (widget.initialBarcode.trim().isEmpty) ...[
