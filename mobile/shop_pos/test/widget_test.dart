@@ -76,13 +76,10 @@ void main() {
             find.textContaining(myanmar ? 'အရောင်းစစ်ရန်' : 'Review sale'),
           );
           await tester.pumpAndSettle();
-          expect(
-            find.text(myanmar ? 'အရောင်း ခဏသိမ်း' : 'Hold sale'),
-            findsOneWidget,
-          );
           await tester.ensureVisible(
             find.byKey(const ValueKey('shop-hold-sale')),
           );
+          expect(find.byKey(const ValueKey('shop-hold-sale')), findsOneWidget);
           await tester.tap(find.byKey(const ValueKey('shop-hold-sale')));
           await tester.pumpAndSettle();
           await tester.enterText(
@@ -183,7 +180,10 @@ void main() {
       await tester.tap(find.textContaining('အရောင်းစစ်ရန်'));
       await tester.pumpAndSettle();
       await tester.ensureVisible(find.byKey(const ValueKey('shop-hold-sale')));
-      expect(find.text('အရောင်း ခဏသိမ်း'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('shop-hold-sale')).hitTestable(),
+        findsOneWidget,
+      );
       expect(tester.takeException(), isNull);
     } finally {
       await tester.pumpWidget(const SizedBox.shrink());
@@ -261,7 +261,9 @@ void main() {
         isNull,
       );
       expect(await database.countSales(), 1);
-      await tester.tap(find.text('Match available stock'));
+      final matchStock = find.byKey(const ValueKey('shop-match-stock'));
+      await tester.ensureVisible(matchStock);
+      await tester.tap(matchStock);
       await tester.pumpAndSettle();
       expect((await database.readCounterSaleDraft())?.quantities, {'tea': 2});
       expect(

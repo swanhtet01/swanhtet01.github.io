@@ -2284,8 +2284,9 @@ class _ShopHomeState extends State<ShopHome> {
               style: Theme.of(context).textTheme.titleLarge,
             ),
             if (_cart.isNotEmpty)
-              Row(
-                mainAxisSize: MainAxisSize.min,
+              Wrap(
+                alignment: WrapAlignment.end,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   if (_pendingWalletCheckout == null)
                     TextButton.icon(
@@ -2348,6 +2349,7 @@ class _ShopHomeState extends State<ShopHome> {
           Align(
             alignment: Alignment.centerLeft,
             child: TextButton(
+              key: const ValueKey('shop-match-stock'),
               onPressed:
                   _checkoutReady &&
                       !_saving &&
