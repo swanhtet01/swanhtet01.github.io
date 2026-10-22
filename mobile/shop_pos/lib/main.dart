@@ -1220,15 +1220,11 @@ class _ShopHomeState extends State<ShopHome> {
                                   : const EdgeInsets.fromLTRB(16, 14, 12, 10),
                               child: _catalogHeader(products),
                             ),
-                            if (products.isNotEmpty) ...[
-                              Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                ),
-                                child: _searchField(products),
-                              ),
-                              SizedBox(height: width < 380 ? 4 : 8),
-                            ],
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 16),
+                              child: _searchField(products),
+                            ),
+                            SizedBox(height: width < 380 ? 4 : 8),
                             if (_heldTickets.isNotEmpty) _heldSalesAction(),
                             Expanded(
                               child: LayoutBuilder(
