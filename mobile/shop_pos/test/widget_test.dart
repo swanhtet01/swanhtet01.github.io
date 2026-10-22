@@ -3830,9 +3830,15 @@ void main() {
         expect(apple.barcode, '333333');
         expect(apple.onHand, 7);
         expect(tester.takeException(), isNull);
+        debugPrintSynchronously('STOCK_STAGE:assertions_done');
       } finally {
+        debugPrintSynchronously('STOCK_STAGE:before_unmount');
         await tester.pumpWidget(const SizedBox.shrink());
+        debugPrintSynchronously('STOCK_STAGE:after_unmount');
+        await tester.pump(const Duration(milliseconds: 1));
+        debugPrintSynchronously('STOCK_STAGE:after_cleanup_pump');
         await database.close();
+        debugPrintSynchronously('STOCK_STAGE:after_close');
       }
     });
   }
@@ -3873,7 +3879,46 @@ void main() {
       expect(tester.takeException(), isNull);
     } finally {
       await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
       await database.close();
+    }
+  });
+
+  testWidgets('Stock switches mounted catalogs with its database', (
+    tester,
+  ) async {
+    _usePhoneViewport(tester);
+    final first = ShopDatabase(NativeDatabase.memory());
+    final second = ShopDatabase(NativeDatabase.memory());
+    try {
+      await first.addProduct(
+        id: 'apple',
+        name: 'Apple',
+        priceMmk: 2800,
+        openingStock: 7,
+      );
+      await second.addProduct(
+        id: 'orange',
+        name: 'Orange',
+        priceMmk: 3200,
+        openingStock: 4,
+      );
+      Widget screen(ShopDatabase database) => MaterialApp(
+        home: StockScreen(database: database, myanmar: false),
+      );
+      await tester.pumpWidget(screen(first));
+      await _settleStock(tester);
+      expect(find.text('Apple'), findsOneWidget);
+      await tester.pumpWidget(screen(second));
+      await _settleStock(tester);
+      expect(find.text('Orange'), findsOneWidget);
+      expect(find.text('Apple'), findsNothing);
+      expect(tester.takeException(), isNull);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+      await first.close();
+      await second.close();
     }
   });
 

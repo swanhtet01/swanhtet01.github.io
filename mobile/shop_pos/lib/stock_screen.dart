@@ -56,7 +56,7 @@ class StockScreen extends StatefulWidget {
 class _StockScreenState extends State<StockScreen> {
   final _search = TextEditingController();
   final _thumbnailFutures = <String, Future<Uint8List?>>{};
-  late final Stream<List<ShopProduct>> _products;
+  late Stream<List<ShopProduct>> _products;
 
   Future<Uint8List?> _thumbnailFor(String productId) {
     if (_thumbnailFutures.length >= 64 &&
