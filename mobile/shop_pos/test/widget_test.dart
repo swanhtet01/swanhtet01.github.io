@@ -783,9 +783,7 @@ void main() {
           findsOneWidget,
         );
         expect(
-          find.text(
-            myanmar ? 'ယနေ့အသားတင်ရောင်းအား' : 'Net sales today',
-          ),
+          find.text(myanmar ? 'ယနေ့အသားတင်ရောင်းအား' : 'Net sales today'),
           findsNothing,
         );
         expect(tester.takeException(), isNull);
@@ -1883,6 +1881,107 @@ void main() {
   });
 
   testWidgets(
+    'reversal activity and original sale keep distinct audit timestamps',
+    (tester) async {
+      _usePhoneViewport(tester);
+      final soldAt = DateTime(2026, 10, 20, 9, 15).millisecondsSinceEpoch;
+      final reversedAt = DateTime(2026, 10, 22, 17, 40).millisecondsSinceEpoch;
+      final database = _RecentSalesFixtureDatabase([
+        ShopSaleReceipt(
+          id: 'timestamp-sale',
+          operationId: 'timestamp-sale-operation',
+          totalMmk: 2500,
+          createdAtMillis: soldAt,
+          paymentMethod: 'cash',
+          lines: const [
+            ShopSaleReceiptLine(
+              id: 'timestamp-sale-line',
+              productId: 'timestamp-tea',
+              productName: 'Tea',
+              unitPriceMmk: 2500,
+              quantity: 1,
+              lineTotalMmk: 2500,
+            ),
+          ],
+          reversal: ShopSaleReversal(
+            id: 'timestamp-reversal',
+            operationId: 'timestamp-reversal-operation',
+            saleId: 'timestamp-sale',
+            originalTotalMmk: 2500,
+            originalPaymentMethod: 'cash',
+            originalCreatedAtMillis: soldAt,
+            restockItems: false,
+            reason: 'Audit timestamp fixture',
+            paymentResolution: 'cash_returned_now',
+            cashDrawerDeltaMmk: -2500,
+            authorizedActorId: 'owner-timestamp-fixture',
+            authorizedActorLabel: 'Timestamp fixture owner',
+            authorizationReceiptId: 'timestamp-fixture-receipt',
+            createdAtMillis: reversedAt,
+            lines: const [],
+          ),
+        ),
+      ]);
+      try {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: RecentSalesScreen(database: database, myanmar: false),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final screenContext = tester.element(find.byType(RecentSalesScreen));
+        final localizations = MaterialLocalizations.of(screenContext);
+        String compactTimestamp(int millis) {
+          final date = DateTime.fromMillisecondsSinceEpoch(millis).toLocal();
+          return '${localizations.formatShortDate(date)} '
+              '${localizations.formatTimeOfDay(TimeOfDay.fromDateTime(date))}';
+        }
+
+        String fullTimestamp(int millis) {
+          final date = DateTime.fromMillisecondsSinceEpoch(millis).toLocal();
+          return '${localizations.formatMediumDate(date)} '
+              '${localizations.formatTimeOfDay(TimeOfDay.fromDateTime(date))}';
+        }
+
+        final reversedLabel = 'Reversed ${compactTimestamp(reversedAt)}';
+        final soldLabel = 'Sold ${compactTimestamp(soldAt)}';
+        expect(find.text(reversedLabel), findsOneWidget);
+        expect(find.text(soldLabel), findsOneWidget);
+        final colors = Theme.of(screenContext).colorScheme;
+        expect(
+          tester.widget<Text>(find.text(reversedLabel)).style?.color,
+          colors.error,
+        );
+        expect(
+          tester.widget<Text>(find.text(reversedLabel)).style?.fontWeight,
+          FontWeight.w700,
+        );
+        expect(
+          tester.widget<Text>(find.text(soldLabel)).style?.color,
+          colors.onSurfaceVariant,
+        );
+
+        await tester.tap(find.text('2,500 MMK'));
+        await tester.pumpAndSettle();
+        expect(
+          find.text('Original sale: ${fullTimestamp(soldAt)}'),
+          findsOneWidget,
+        );
+        expect(
+          find.text('Reversed: ${fullTimestamp(reversedAt)}'),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+      } finally {
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump(const Duration(milliseconds: 1));
+        await database.close();
+      }
+    },
+  );
+
+  testWidgets(
     'cash reversal reports net and audit detail without ordinary reprint',
     (tester) async {
       SharedPreferences.setMockInitialValues({});
@@ -1910,6 +2009,7 @@ void main() {
           saleId: sale.id,
           restockItems: true,
           reason: 'Customer returned the full sale',
+          confirmCashReturned: true,
         );
         await database.recordAuthorizedFullSaleReversal(
           command: command,
@@ -1942,10 +2042,7 @@ void main() {
         await tester.pumpAndSettle();
         await tester.tap(find.text('2,500 MMK'));
         await tester.pumpAndSettle();
-        expect(
-          find.text('Reversed — original sale retained'),
-          findsOneWidget,
-        );
+        expect(find.text('Reversed — original sale retained'), findsOneWidget);
         expect(
           find.text('Reason: Customer returned the full sale'),
           findsOneWidget,
@@ -1965,74 +2062,198 @@ void main() {
     },
   );
 
-  testWidgets('wallet reversal never presents local pending as money returned', (
-    tester,
-  ) async {
-    final database = ShopDatabase(NativeDatabase.memory());
-    try {
-      await database.addProduct(
-        id: 'wallet-reversed-water',
-        name: 'Water',
-        priceMmk: 1000,
-        openingStock: 2,
-      );
-      const lines = [
-        ShopSaleLineInput(productId: 'wallet-reversed-water', quantity: 1),
-      ];
-      await database.createWalletCheckoutIntent(
-        operationId: 'widget-wallet-sale',
-        merchant: MerchantWalletSetup(
-          provider: 'KBZPay',
-          merchantPhone: null,
-          officialQrPayload: _testStaticMmqr(),
-          issuerConfirmed: true,
-        ),
-        lines: lines,
-      );
-      final sale = await database.recordSale(
-        operationId: 'widget-wallet-sale',
-        lines: lines,
-        paymentMethod: 'kbzpay',
-        walletCheckoutOperationId: 'widget-wallet-sale',
-      );
-      final command = await database.previewFullSaleReversal(
-        operationId: 'widget-wallet-reversal',
-        saleId: sale.id,
-        restockItems: false,
-        reason: 'Duplicate local record',
-      );
-      await database.recordAuthorizedFullSaleReversal(
-        command: command,
-        authorization: _widgetCorrectionAuthorization(
-          command.commandDigest,
-          capability: 'shop.sale.reverse',
-          receiptId: 'widget-wallet-reversal-receipt',
-        ),
-      );
+  testWidgets(
+    'wallet reversal never presents local pending as money returned',
+    (tester) async {
+      final database = ShopDatabase(NativeDatabase.memory());
+      try {
+        await database.addProduct(
+          id: 'wallet-reversed-water',
+          name: 'Water',
+          priceMmk: 1000,
+          openingStock: 2,
+        );
+        const lines = [
+          ShopSaleLineInput(productId: 'wallet-reversed-water', quantity: 1),
+        ];
+        await database.createWalletCheckoutIntent(
+          operationId: 'widget-wallet-sale',
+          merchant: MerchantWalletSetup(
+            provider: 'KBZPay',
+            merchantPhone: null,
+            officialQrPayload: _testStaticMmqr(),
+            issuerConfirmed: true,
+          ),
+          lines: lines,
+        );
+        final sale = await database.recordSale(
+          operationId: 'widget-wallet-sale',
+          lines: lines,
+          paymentMethod: 'kbzpay',
+          walletCheckoutOperationId: 'widget-wallet-sale',
+        );
+        final command = await database.previewFullSaleReversal(
+          operationId: 'widget-wallet-reversal',
+          saleId: sale.id,
+          restockItems: false,
+          reason: 'Duplicate local record',
+          confirmCashReturned: false,
+        );
+        await database.recordAuthorizedFullSaleReversal(
+          command: command,
+          authorization: _widgetCorrectionAuthorization(
+            command.commandDigest,
+            capability: 'shop.sale.reverse',
+            receiptId: 'widget-wallet-reversal-receipt',
+          ),
+        );
 
-      await tester.pumpWidget(
-        MaterialApp(
-          home: RecentSalesScreen(database: database, myanmar: false),
-        ),
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('1,000 MMK'));
-      await tester.pumpAndSettle();
-      expect(
-        find.text(
-          'Wallet reconciliation pending. No outgoing money return has been verified.',
-        ),
-        findsOneWidget,
-      );
-      expect(find.textContaining('Money returned was'), findsNothing);
-      expect(find.text('Reprint receipt'), findsNothing);
-      expect(tester.takeException(), isNull);
-    } finally {
-      await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pump(const Duration(milliseconds: 1));
-      await database.close();
-    }
-  });
+        await tester.pumpWidget(
+          MaterialApp(
+            home: RecentSalesScreen(database: database, myanmar: false),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('1,000 MMK'));
+        await tester.pumpAndSettle();
+        expect(
+          find.text(
+            'Wallet reconciliation pending. No outgoing money return has been verified.',
+          ),
+          findsOneWidget,
+        );
+        expect(find.textContaining('Money returned was'), findsNothing);
+        expect(find.text('Reprint receipt'), findsNothing);
+        expect(tester.takeException(), isNull);
+      } finally {
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump(const Duration(milliseconds: 1));
+        await database.close();
+      }
+    },
+  );
+
+  for (final outcome in const ['money_returned', 'payment_not_received']) {
+    testWidgets(
+      'confirmed wallet $outcome shows its evidence-backed outcome',
+      (tester) async {
+        final database = ShopDatabase(NativeDatabase.memory());
+        try {
+          final operationPrefix = 'widget-wallet-$outcome';
+          final productId = '$operationPrefix-water';
+          await database.addProduct(
+            id: productId,
+            name: 'Water',
+            priceMmk: 1000,
+            openingStock: 2,
+          );
+          final lines = [
+            ShopSaleLineInput(productId: productId, quantity: 1),
+          ];
+          await database.createWalletCheckoutIntent(
+            operationId: '$operationPrefix-sale',
+            merchant: MerchantWalletSetup(
+              provider: 'KBZPay',
+              merchantPhone: null,
+              officialQrPayload: _testStaticMmqr(),
+              issuerConfirmed: true,
+            ),
+            lines: lines,
+          );
+          final sale = await database.recordSale(
+            operationId: '$operationPrefix-sale',
+            lines: lines,
+            paymentMethod: 'kbzpay',
+            walletCheckoutOperationId: '$operationPrefix-sale',
+          );
+          final reversalCommand = await database.previewFullSaleReversal(
+            operationId: '$operationPrefix-reversal',
+            saleId: sale.id,
+            restockItems: false,
+            reason: 'Correct the full wallet sale',
+            confirmCashReturned: false,
+          );
+          final reversal = await database.recordAuthorizedFullSaleReversal(
+            command: reversalCommand,
+            authorization: _widgetCorrectionAuthorization(
+              reversalCommand.commandDigest,
+              capability: 'shop.sale.reverse',
+              receiptId: '$operationPrefix-reversal-receipt',
+            ),
+          );
+          final evidenceReference = 'Provider case $outcome';
+          final reconciliationCommand = await database
+              .previewWalletReconciliation(
+                operationId: '$operationPrefix-reconciliation',
+                reversalId: reversal.id,
+                outcome: outcome,
+                evidenceReference: evidenceReference,
+              );
+          final reconciled = await database
+              .recordAuthorizedWalletReconciliation(
+                command: reconciliationCommand,
+                authorization: _widgetCorrectionAuthorization(
+                  reconciliationCommand.commandDigest,
+                  capability: 'shop.sale.reconcile_wallet',
+                  receiptId: '$operationPrefix-reconciliation-receipt',
+                ),
+              );
+
+          await tester.pumpWidget(
+            MaterialApp(
+              home: RecentSalesScreen(database: database, myanmar: false),
+            ),
+          );
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('1,000 MMK'));
+          await tester.pumpAndSettle();
+
+          final moneyReturnedCopy =
+              'Money returned was separately confirmed with provider evidence.';
+          final paymentNotReceivedCopy =
+              'The original wallet payment was separately confirmed not received; no money return was recorded.';
+          final expectedCopy = outcome == 'money_returned'
+              ? moneyReturnedCopy
+              : paymentNotReceivedCopy;
+          final unexpectedCopy = outcome == 'money_returned'
+              ? paymentNotReceivedCopy
+              : moneyReturnedCopy;
+          expect(find.text(expectedCopy), findsOneWidget);
+          expect(find.text(unexpectedCopy), findsNothing);
+          expect(
+            find.text('Evidence reference: $evidenceReference'),
+            findsOneWidget,
+          );
+          expect(find.text('Recorded actor: Widget test owner'), findsOneWidget);
+
+          final screenContext = tester.element(find.byType(RecentSalesScreen));
+          final localizations = MaterialLocalizations.of(screenContext);
+          final reconciledAt = DateTime.fromMillisecondsSinceEpoch(
+            reconciled.walletReconciledAtMillis!,
+          ).toLocal();
+          final reconciledTimestamp =
+              '${localizations.formatMediumDate(reconciledAt)} '
+              '${localizations.formatTimeOfDay(TimeOfDay.fromDateTime(reconciledAt))}';
+          expect(
+            find.text(
+              'Reconciled: $reconciledTimestamp · Widget test owner',
+            ),
+            findsOneWidget,
+          );
+          expect(
+            find.textContaining('Wallet reconciliation pending.'),
+            findsNothing,
+          );
+          expect(find.text('Reprint receipt'), findsNothing);
+          expect(tester.takeException(), isNull);
+        } finally {
+          await tester.pumpWidget(const SizedBox.shrink());
+          await tester.pump(const Duration(milliseconds: 1));
+          await database.close();
+        }
+      },
+    );
+  }
 
   testWidgets('saved sale reprints without recording another sale', (
     tester,
@@ -5640,6 +5861,19 @@ void main() {
       expect(await database.countOutboxOperations(), 0);
     });
   });
+}
+
+class _RecentSalesFixtureDatabase extends ShopDatabase {
+  _RecentSalesFixtureDatabase(this.sales) : super(NativeDatabase.memory());
+
+  final List<ShopSaleReceipt> sales;
+
+  @override
+  Future<List<ShopSaleReceipt>> readRecentSales({
+    int limit = 30,
+    int offset = 0,
+    String query = '',
+  }) async => sales.skip(offset).take(limit).toList(growable: false);
 }
 
 ShopCorrectionAuthorization _widgetCorrectionAuthorization(

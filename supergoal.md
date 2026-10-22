@@ -1,6 +1,6 @@
 # SuperMega Supergoal
 
-- Version: 2.0.1
+- Version: 2.0.2
 - Owners: Swan Htet (technical) and Vivian (operations and business)
 - Updated: 2026-10-22
 - Status: ACTIVE — Shop has a verified internal candidate; it is not yet a
@@ -32,9 +32,11 @@ Included now:
 - fast catalog entry, barcode/scanner use, offline cash sales, stock movement,
   daily operating records, export, backup, and restore;
 - manual wallet confirmation that never implies automatic settlement;
-- an audit-preserving correction/refund outcome that never rewrites an original
-  sale, never restocks without an explicit choice, and never treats a local
-  wallet record as proof that money moved;
+- a source-level, audit-preserving full-sale reversal core that never rewrites an
+  original sale, never restocks without an explicit choice, and never treats a
+  local wallet record as proof that money moved; trustworthy operator
+  authorization/action and any partial-return or exchange scope remain release
+  gates;
 - ESC/POS receipt work that remains gated by real printer evidence;
 - English and Burmese operator quality;
 - honest public Shop evidence and a bounded path to installation and support.
@@ -161,13 +163,17 @@ widen the task.
 
 ## Immediate sequence
 
-1. Review the protected public preview for the current Shop candidate.
-2. Produce installed restart/restore and physical scanner/printer evidence.
-3. Run Vivian's complete merchant-journey acceptance.
-4. Resolve the commercial and support decisions needed for the offer.
-5. Complete an independent review at the last candidate push.
-6. Hold the joint Swan/Vivian go/no-go decision.
-7. Only then use the authorized release and rollback procedure.
+1. Swan and Vivian decide whether full-sale reversal is sufficient for launch
+   or partial returns/exchanges remain required.
+2. Add and verify the connected owner-only correction authorization/action, or
+   keep correction unavailable while the database/authentication gate is paused.
+3. Review the protected public preview for the current Shop candidate.
+4. Produce installed restart/restore and physical scanner/printer evidence.
+5. Run Vivian's complete merchant-journey acceptance.
+6. Resolve the commercial and support decisions needed for the offer.
+7. Complete an independent review at the last candidate push.
+8. Hold the joint Swan/Vivian go/no-go decision.
+9. Only then use the authorized release and rollback procedure.
 
 Use [`docs/SHOP-RELEASE-RUNBOOK.md`](docs/SHOP-RELEASE-RUNBOOK.md) for the gate
 details. Work that does not reduce one of these open gates should normally stay

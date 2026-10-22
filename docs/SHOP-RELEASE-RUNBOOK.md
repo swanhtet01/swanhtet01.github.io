@@ -121,9 +121,11 @@ delegated to the implementation agent.
 
 Schema v11 now has a source-level full-sale reversal engine: it preserves the
 original receipt and prices, records an immutable linked audit, makes restock an
-explicit all-or-none choice, protects retries, accounts for current-shift cash
-outflow, keeps wallet money-return status external-pending until separately
-reconciled, and validates the records through encrypted backup/restore.
+explicit all-or-none choice, protects retries, and accounts for cash outflow
+only after an explicit full-cash-return attestation bound to the exact reviewed
+open shift. A later shift cannot consume that authorization. Wallet money-return
+status stays external-pending until separately reconciled, and the records are
+validated through encrypted backup/restore.
 
 Gate 5 remains open for two exact reasons:
 
@@ -132,10 +134,18 @@ Gate 5 remains open for two exact reasons:
    Supabase session, or broad write role is not authority. The smallest current
    proposal is connected owner-only authorization from a managed, short-lived
    receipt bound to the exact workspace, sale snapshot, operation, reason,
-   restock choice, and capability. If cashier/supervisor or offline corrections
-   remain launch requirements, named staff identity, narrow approval,
-   device/session binding, revocation, and offline isolation must be designed
-   and accepted first.
+   restock choice, cash-return attestation and reviewed shift when applicable,
+   and capability. If cashier/supervisor or offline corrections remain launch
+   requirements, named staff identity, narrow approval, device/session binding,
+   revocation, and offline isolation must be designed and accepted first.
+   The repository already has server-side Supabase user, live-session,
+   workspace-membership, owner, and Shop-entitlement checks that can be reused,
+   but it has no one-use Shop-correction authorization endpoint or durable
+   receipt relation. Adding those is a separate schema/server/native-client
+   increment and requires non-production tenant-isolation proof. Under the
+   current database pause, keep the operator action unavailable; offline
+   corrections must be deferred rather than authorized by a local PIN or
+   locally constructed receipt.
 2. The engine reverses a complete sale only. Partial returns and exchanges are
    not implemented. Swan and Vivian must explicitly accept full-sale reversal
    as the November correction/refund scope or retain partial/exchange as a

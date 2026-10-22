@@ -236,6 +236,8 @@ class ShopFullSaleReversalCommand {
     required this.originalPaymentMethod,
     required this.restockItems,
     required this.reason,
+    required this.cashReturnConfirmed,
+    required this.expectedCashShiftId,
     required this.paymentResolution,
   });
 
@@ -248,6 +250,8 @@ class ShopFullSaleReversalCommand {
   final String originalPaymentMethod;
   final bool restockItems;
   final String reason;
+  final bool cashReturnConfirmed;
+  final String? expectedCashShiftId;
   final String paymentResolution;
 }
 
@@ -543,7 +547,7 @@ const shopSaleReversalLinesV11Sql = '''
     quantity INTEGER NOT NULL CHECK (quantity BETWEEN 1 AND 1000),
     line_total_mmk INTEGER NOT NULL CHECK (line_total_mmk = unit_price_mmk * quantity),
     restock_quantity INTEGER NOT NULL CHECK (restock_quantity IN (0, quantity)),
-    stock_movement_id TEXT REFERENCES shop_stock_movements(id),
+    stock_movement_id TEXT UNIQUE REFERENCES shop_stock_movements(id),
     UNIQUE(reversal_id, sale_line_id),
     CHECK ((restock_quantity = 0 AND stock_movement_id IS NULL)
       OR (restock_quantity = quantity AND stock_movement_id IS NOT NULL))
@@ -836,13 +840,19 @@ class ShopDatabase extends _$ShopDatabase {
         );
       }
     }
-    for (final table in const ['shop_sales', 'shop_sale_lines']) {
+    for (final table in const [
+      'shop_sales',
+      'shop_sale_lines',
+      'shop_stock_movements',
+    ]) {
       for (final operation in const ['update', 'delete']) {
         await customStatement(
           shopImmutableTriggerV11Sql(
             table: table,
             operation: operation,
-            message: 'Completed Shop sales are immutable',
+            message: table == 'shop_stock_movements'
+                ? 'Completed Shop stock movements are immutable'
+                : 'Completed Shop sales are immutable',
           ),
         );
       }
@@ -1292,22 +1302,19 @@ class ShopDatabase extends _$ShopDatabase {
       ...auditTables,
       'shop_sales',
       'shop_sale_lines',
+      'shop_stock_movements',
+    };
+    final reservedNames = <String>{
+      ...auditTables,
+      for (final table in protectedTables) '${table}_no_update',
+      for (final table in protectedTables) '${table}_no_delete',
     };
     final objects = await customSelect(
-      "SELECT type, name FROM sqlite_master WHERE type IN ('table', 'trigger')",
+      "SELECT name FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'",
     ).get();
-    final hasReservedTable = objects.any(
-      (row) =>
-          row.read<String>('type') == 'table' &&
-          auditTables.contains(row.read<String>('name')),
+    final hasReservedObject = objects.any(
+      (row) => reservedNames.contains(row.read<String>('name').toLowerCase()),
     );
-    final hasReservedTrigger = objects.any((row) {
-      if (row.read<String>('type') != 'trigger') return false;
-      final name = row.read<String>('name');
-      return protectedTables.any(
-        (table) => name == '${table}_no_update' || name == '${table}_no_delete',
-      );
-    });
     final shiftColumns = await customSelect(
       'PRAGMA table_info(shop_cash_shifts)',
     ).get();
@@ -1319,9 +1326,11 @@ class ShopDatabase extends _$ShopDatabase {
       'review_cash_drawer_outflow_mmk',
     };
     final hasReservedShiftColumn = shiftColumns.any(
-      (row) => reservedShiftColumns.contains(row.read<String>('name')),
+      (row) => reservedShiftColumns.contains(
+        row.read<String>('name').toLowerCase(),
+      ),
     );
-    if (hasReservedTable || hasReservedTrigger || hasReservedShiftColumn) {
+    if (hasReservedObject || hasReservedShiftColumn) {
       throw StateError(
         'This legacy Shop database contains reserved future audit objects.',
       );
@@ -2346,7 +2355,9 @@ class ShopDatabase extends _$ShopDatabase {
     }
     final cashBeforeReturns = shift.openingFloatMmk + cashTotal;
     if (drawerOutflow > cashBeforeReturns) {
-      throw StateError('Cash returns exceed this shift\'s recorded drawer cash.');
+      throw StateError(
+        'Cash returns exceed this shift\'s recorded drawer cash.',
+      );
     }
     return ShopCashShiftReview(
       shift: shift,
@@ -2396,10 +2407,8 @@ class ShopDatabase extends _$ShopDatabase {
                 seenCashTotalMmk ||
             (previous.readNullable<int>('review_cash_reversal_count') ?? 0) !=
                 seenCashReversalCount ||
-            (previous.readNullable<int>(
-                  'review_cash_drawer_outflow_mmk',
-                ) ??
-                0) !=
+            (previous.readNullable<int>('review_cash_drawer_outflow_mmk') ??
+                    0) !=
                 seenCashDrawerOutflowMmk) {
           throw StateError('A shift operation ID was reused with new details.');
         }
@@ -2416,7 +2425,9 @@ class ShopDatabase extends _$ShopDatabase {
           review.cashSalesTotalMmk != seenCashTotalMmk ||
           review.cashReversalCount != seenCashReversalCount ||
           review.cashDrawerOutflowMmk != seenCashDrawerOutflowMmk) {
-        throw StateError('Shift activity changed. Review the cash shift again.');
+        throw StateError(
+          'Shift activity changed. Review the cash shift again.',
+        );
       }
       final now = DateTime.now().millisecondsSinceEpoch;
       final difference = countedCashMmk - review.expectedCashMmk;
@@ -2507,6 +2518,7 @@ class ShopDatabase extends _$ShopDatabase {
     required String saleId,
     required bool restockItems,
     required String reason,
+    required bool confirmCashReturned,
   }) async {
     final cleanOperationId = operationId.trim();
     final cleanSaleId = saleId.trim();
@@ -2569,7 +2581,19 @@ class ShopDatabase extends _$ShopDatabase {
       ],
     });
     final snapshotDigest = await _sha256Hex(snapshot);
-    final paymentResolution = sale.paymentMethod == 'cash'
+    final isCash = sale.paymentMethod == 'cash';
+    if (isCash != confirmCashReturned) {
+      throw ArgumentError(
+        isCash
+            ? 'Confirm that the full cash amount was returned.'
+            : 'Wallet reversals require separate provider reconciliation.',
+      );
+    }
+    final activeShift = isCash ? await readOpenCashShift() : null;
+    if (isCash && activeShift == null) {
+      throw StateError('Start a cash shift before returning cash.');
+    }
+    final paymentResolution = isCash
         ? 'cash_returned_now'
         : 'external_pending';
     final requestFingerprint = jsonEncode({
@@ -2578,6 +2602,8 @@ class ShopDatabase extends _$ShopDatabase {
       'saleSnapshotDigest': snapshotDigest,
       'restockItems': restockItems,
       'reason': cleanReason,
+      'cashReturnConfirmed': confirmCashReturned,
+      'expectedCashShiftId': activeShift?.id,
       'paymentResolution': paymentResolution,
     });
     return ShopFullSaleReversalCommand(
@@ -2590,6 +2616,8 @@ class ShopDatabase extends _$ShopDatabase {
       originalPaymentMethod: sale.paymentMethod,
       restockItems: restockItems,
       reason: cleanReason,
+      cashReturnConfirmed: confirmCashReturned,
+      expectedCashShiftId: activeShift?.id,
       paymentResolution: paymentResolution,
     );
   }
@@ -2624,6 +2652,29 @@ class ShopDatabase extends _$ShopDatabase {
     }
   }
 
+  bool _matchesRecordedCorrectionAuthorization(
+    QueryRow row,
+    ShopCorrectionAuthorization authorization,
+  ) =>
+      row.read<String>('authorization_receipt_id') ==
+          authorization.receiptId &&
+      row.read<String>('authorization_receipt_digest') ==
+          authorization.receiptDigest &&
+      row.read<String>('authorization_workspace_id') ==
+          authorization.workspaceId &&
+      row.read<String>('authorized_actor_id') == authorization.actorId &&
+      row.read<String>('authorized_actor_label') == authorization.actorLabel &&
+      row.read<String>('authorized_actor_role') == authorization.actorRole &&
+      row.read<String>('authorization_capability') ==
+          authorization.capability &&
+      row.read<String>('authorization_source') == authorization.source &&
+      row.read<String>('authorization_command_digest') ==
+          authorization.commandDigest &&
+      row.read<int>('authorization_issued_at_millis') ==
+          authorization.issuedAtMillis &&
+      row.read<int>('authorization_expires_at_millis') ==
+          authorization.expiresAtMillis;
+
   Future<void> _requireUnusedCorrectionReceipt(String receiptId) async {
     final usedForReversal = await customSelect(
       'SELECT 1 FROM shop_sale_reversals '
@@ -2636,7 +2687,9 @@ class ShopDatabase extends _$ShopDatabase {
       variables: [Variable<String>(receiptId)],
     ).getSingleOrNull();
     if (usedForReversal != null || usedForReconciliation != null) {
-      throw StateError('This correction authorization receipt was already used.');
+      throw StateError(
+        'This correction authorization receipt was already used.',
+      );
     }
   }
 
@@ -2675,9 +2728,7 @@ class ShopDatabase extends _$ShopDatabase {
       walletReconciledActorLabel: reconciliation?.read<String>(
         'authorized_actor_label',
       ),
-      walletReconciledAtMillis: reconciliation?.read<int>(
-        'created_at_millis',
-      ),
+      walletReconciledAtMillis: reconciliation?.read<int>('created_at_millis'),
       lines: [
         for (final line in lineRows)
           ShopSaleReversalLine(
@@ -2723,10 +2774,15 @@ class ShopDatabase extends _$ShopDatabase {
                 command.originalPaymentMethod ||
             (prior.read<int>('restock_items') == 1) != command.restockItems ||
             prior.read<String>('reason') != command.reason ||
+            (command.originalPaymentMethod == 'cash') !=
+                command.cashReturnConfirmed ||
+            prior.readNullable<String>('shift_id') !=
+                command.expectedCashShiftId ||
             prior.read<String>('payment_resolution') !=
                 command.paymentResolution ||
             await _sha256Hex(command.requestFingerprint) !=
-                command.commandDigest) {
+                command.commandDigest ||
+            !_matchesRecordedCorrectionAuthorization(prior, authorization)) {
           throw StateError(
             'A correction operation ID was reused with different details.',
           );
@@ -2739,12 +2795,17 @@ class ShopDatabase extends _$ShopDatabase {
         saleId: command.saleId,
         restockItems: command.restockItems,
         reason: command.reason,
+        confirmCashReturned: command.cashReturnConfirmed,
       );
       if (verifiedCommand.requestFingerprint != command.requestFingerprint ||
           verifiedCommand.commandDigest != command.commandDigest ||
           verifiedCommand.saleSnapshotDigest != command.saleSnapshotDigest ||
           verifiedCommand.originalTotalMmk != command.originalTotalMmk ||
-          verifiedCommand.originalPaymentMethod != command.originalPaymentMethod ||
+          verifiedCommand.originalPaymentMethod !=
+              command.originalPaymentMethod ||
+          verifiedCommand.cashReturnConfirmed !=
+              command.cashReturnConfirmed ||
+          verifiedCommand.expectedCashShiftId != command.expectedCashShiftId ||
           verifiedCommand.paymentResolution != command.paymentResolution) {
         throw StateError('The original sale changed. Review it again.');
       }
@@ -2768,8 +2829,10 @@ class ShopDatabase extends _$ShopDatabase {
       ShopCashShift? activeShift;
       if (command.originalPaymentMethod == 'cash') {
         activeShift = await readOpenCashShift();
-        if (activeShift == null) {
-          throw StateError('Start a cash shift before returning cash.');
+        if (activeShift == null || activeShift.id != command.expectedCashShiftId) {
+          throw StateError(
+            'The cash shift changed. Review and authorize this return again.',
+          );
         }
         final review = await readCashShiftReview(activeShift.id);
         if (review.expectedCashMmk < command.originalTotalMmk) {
@@ -2808,9 +2871,10 @@ class ShopDatabase extends _$ShopDatabase {
           Variable<int>(command.originalTotalMmk),
           Variable<String>(command.originalPaymentMethod),
           Variable<int>(
-            (await (select(shopSales)..where(
-                  (sale) => sale.id.equals(command.saleId),
-                )).getSingle()).createdAtMillis,
+            (await (select(
+                  shopSales,
+                )..where((sale) => sale.id.equals(command.saleId))).getSingle())
+                .createdAtMillis,
           ),
           Variable<int>(originalLines.length),
           Variable<int>(command.restockItems ? 1 : 0),
@@ -2850,7 +2914,9 @@ class ShopDatabase extends _$ShopDatabase {
             ],
           );
           if (changed != 1) {
-            throw StateError('Restoring stock would exceed the supported limit.');
+            throw StateError(
+              'Restoring stock would exceed the supported limit.',
+            );
           }
           movementId = '${command.operationId}:reversal:$index';
           await into(shopStockMovements).insert(
@@ -2904,13 +2970,15 @@ class ShopDatabase extends _$ShopDatabase {
             'restockItems': command.restockItems,
             'reason': command.reason,
             'paymentResolution': command.paymentResolution,
+            'cashReturnConfirmed': command.cashReturnConfirmed,
             'cashDrawerDeltaMmk': drawerDelta,
             if (activeShift != null) 'shiftId': activeShift.id,
             'externalReconciliationState':
                 command.originalPaymentMethod == 'cash'
                 ? 'not_applicable'
                 : 'pending',
-            'moneyReturned': command.originalPaymentMethod == 'cash',
+            'moneyReturned': command.originalPaymentMethod == 'cash' &&
+                command.cashReturnConfirmed,
             'authorizationReceiptId': authorization.receiptId,
             'authorizedActorId': authorization.actorId,
             'createdAtMillis': now,
@@ -2989,7 +3057,8 @@ class ShopDatabase extends _$ShopDatabase {
             prior.read<String>('evidence_reference') !=
                 command.evidenceReference ||
             await _sha256Hex(command.requestFingerprint) !=
-                command.commandDigest) {
+                command.commandDigest ||
+            !_matchesRecordedCorrectionAuthorization(prior, authorization)) {
           throw StateError(
             'A wallet reconciliation ID was reused with different details.',
           );
@@ -3356,7 +3425,9 @@ class ShopDatabase extends _$ShopDatabase {
       final activeShift = await readOpenCashShift();
       if (activeShift != null && paymentMethod == 'cash') {
         final review = await readCashShiftReview(activeShift.id);
-        if (totalMmk > 200000000000000 - review.expectedCashMmk) {
+        final grossCashBeforeSale =
+            activeShift.openingFloatMmk + review.cashSalesTotalMmk;
+        if (totalMmk > 200000000000000 - grossCashBeforeSale) {
           throw StateError(
             'This cash shift reached its supported limit. Close the shift '
             'before recording another cash sale.',

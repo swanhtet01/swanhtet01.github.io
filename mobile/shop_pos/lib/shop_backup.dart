@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 
+import 'package:crypto/crypto.dart' as crypto;
 import 'package:cryptography/cryptography.dart';
 import 'package:ffi/ffi.dart';
 import 'package:sqlite3/sqlite3.dart';
@@ -710,7 +711,8 @@ abstract final class ShopBackup {
                     connection,
                     'shop_cash_shifts',
                     _v11CashShiftColumns,
-                  )));
+                  ) &&
+                  _v11CashShiftColumnDefinitionsValid(connection)));
       final walletIntents = schemaValid
           ? connection.select(
               'SELECT operation_id, payment_method, request_fingerprint, '
@@ -867,6 +869,21 @@ abstract final class ShopBackup {
     return columns.containsAll(required);
   }
 
+  static bool _v11CashShiftColumnDefinitionsValid(Database connection) {
+    final columns = <String, Row>{
+      for (final row in connection.select('PRAGMA table_info(shop_cash_shifts)'))
+        if (row['name'] is String) (row['name'] as String).toLowerCase(): row,
+    };
+    return _v11CashShiftColumns.every((name) {
+      final column = columns[name];
+      return column != null &&
+          (column['type'] as String?)?.toUpperCase() == 'INTEGER' &&
+          column['notnull'] == 0 &&
+          column['dflt_value'] == null &&
+          column['pk'] == 0;
+    });
+  }
+
   static Map<String, String> get _v11SchemaDefinitions {
     final definitions = <String, String>{
       'shop_sale_reversals': shopSaleReversalsV11Sql,
@@ -880,8 +897,11 @@ abstract final class ShopBackup {
       'shop_wallet_reversal_reconciliations',
       'shop_sales',
       'shop_sale_lines',
+      'shop_stock_movements',
     ]) {
-      final message = table == 'shop_sales' || table == 'shop_sale_lines'
+      final message = table == 'shop_stock_movements'
+          ? 'Completed Shop stock movements are immutable'
+          : table == 'shop_sales' || table == 'shop_sale_lines'
           ? 'Completed Shop sales are immutable'
           : 'Shop reversal audit records are immutable';
       for (final operation in const ['update', 'delete']) {
@@ -895,49 +915,561 @@ abstract final class ShopBackup {
     return definitions;
   }
 
-  static bool _legacyV11ObjectsAbsent(
-    Database connection,
-    Set<String> tables,
-  ) {
-    final reservedNames = _v11SchemaDefinitions.keys.toSet();
+  static const _v11AuditTableNames = {
+    'shop_sale_reversals',
+    'shop_sale_reversal_lines',
+    'shop_wallet_reversal_reconciliations',
+  };
+
+  static bool _legacyV11ObjectsAbsent(Database connection, Set<String> tables) {
+    final reservedNames = _v11SchemaDefinitions.keys
+        .map((name) => name.toLowerCase())
+        .toSet();
     final existingNames = connection
-        .select(
-          "SELECT name FROM sqlite_master WHERE type IN ('table', 'trigger')",
-        )
+        .select('SELECT name FROM sqlite_master')
         .map((row) => row['name'])
         .whereType<String>()
+        .map((name) => name.toLowerCase())
         .toSet();
     if (existingNames.intersection(reservedNames).isNotEmpty) return false;
-    if (!tables.contains('shop_cash_shifts')) return true;
+    final lowerTables = tables.map((name) => name.toLowerCase()).toSet();
+    if (!lowerTables.contains('shop_cash_shifts')) return true;
     final columns = connection
         .select('PRAGMA table_info(shop_cash_shifts)')
         .map((row) => row['name'])
         .whereType<String>()
+        .map((name) => name.toLowerCase())
         .toSet();
     return columns.intersection(_v11CashShiftColumns).isEmpty;
   }
 
   static bool _v11SchemaDefinitionsValid(Database connection) {
-    final actual = <String, String>{
-      for (final row in connection.select(
-        "SELECT name, sql FROM sqlite_master WHERE type IN ('table', 'trigger')",
-      ))
-        if (row['name'] is String && row['sql'] is String)
-          row['name'] as String: row['sql'] as String,
-    };
-    return _v11SchemaDefinitions.entries.every(
-      (entry) =>
-          actual.containsKey(entry.key) &&
-          _canonicalSchemaSql(actual[entry.key]!) ==
-              _canonicalSchemaSql(entry.value),
-    );
+    final actualSql = <String, String>{};
+    final actualTypes = <String, String>{};
+    final triggerTables = <String, String>{};
+    for (final row in connection.select(
+      "SELECT type, name, tbl_name, sql FROM sqlite_master "
+      "WHERE type IN ('table', 'trigger')",
+    )) {
+      final type = row['type'];
+      final name = row['name'];
+      final sql = row['sql'];
+      if (type is! String || name is! String || sql is! String) continue;
+      final lowerName = name.toLowerCase();
+      if (actualSql.containsKey(lowerName)) return false;
+      actualSql[lowerName] = sql;
+      actualTypes[lowerName] = type.toLowerCase();
+      final table = row['tbl_name'];
+      if (type.toLowerCase() == 'trigger' && table is String) {
+        triggerTables[lowerName] = table.toLowerCase();
+      }
+    }
+
+    final definitions = _v11SchemaDefinitions;
+    for (final entry in definitions.entries) {
+      final name = entry.key.toLowerCase();
+      final expectedType = _v11AuditTableNames.contains(name)
+          ? 'table'
+          : 'trigger';
+      if (actualTypes[name] != expectedType ||
+          actualSql[name] == null ||
+          _canonicalSchemaSql(actualSql[name]!) !=
+              _canonicalSchemaSql(entry.value)) {
+        return false;
+      }
+    }
+
+    final expectedTriggerNames = definitions.keys
+        .map((name) => name.toLowerCase())
+        .where((name) => !_v11AuditTableNames.contains(name))
+        .toSet();
+    final actualTriggerNames = triggerTables.keys.toSet();
+    return actualTriggerNames.length == expectedTriggerNames.length &&
+        actualTriggerNames.containsAll(expectedTriggerNames);
   }
 
-  static String _canonicalSchemaSql(String value) => value
-      .replaceAll(RegExp(r'\bIF\s+NOT\s+EXISTS\b', caseSensitive: false), '')
-      .replaceAll(RegExp(r'\s+'), ' ')
-      .trim()
-      .toLowerCase();
+  static String _canonicalSchemaSql(String value) {
+    final output = StringBuffer();
+    final ifNotExists = RegExp(
+      r'if\s+not\s+exists\b',
+      caseSensitive: false,
+    );
+    var index = 0;
+    var pendingSpace = false;
+    while (index < value.length) {
+      final character = value[index];
+      if (character == "'" ||
+          character == '"' ||
+          character == '`' ||
+          character == '[') {
+        if (pendingSpace && output.length > 0) output.write(' ');
+        pendingSpace = false;
+        final closing = character == '[' ? ']' : character;
+        output.write(character);
+        index++;
+        while (index < value.length) {
+          final quoted = value[index];
+          output.write(quoted);
+          index++;
+          if (quoted != closing) continue;
+          if (closing != ']' &&
+              index < value.length &&
+              value[index] == closing) {
+            output.write(value[index]);
+            index++;
+            continue;
+          }
+          break;
+        }
+        continue;
+      }
+
+      final optionalClause = ifNotExists.matchAsPrefix(value, index);
+      final hasWordBefore = index > 0 &&
+          RegExp(r'[A-Za-z0-9_]').hasMatch(value[index - 1]);
+      if (!hasWordBefore && optionalClause != null) {
+        index = optionalClause.end;
+        pendingSpace = true;
+        continue;
+      }
+      if (RegExp(r'\s').hasMatch(character)) {
+        pendingSpace = true;
+        index++;
+        continue;
+      }
+      if (pendingSpace && output.length > 0) output.write(' ');
+      pendingSpace = false;
+      output.write(character.toLowerCase());
+      index++;
+    }
+    return output.toString().trim();
+  }
+
+  static String _sha256Hex(String value) =>
+      crypto.sha256.convert(utf8.encode(value)).toString();
+
+  static bool _jsonObjectMatches(Object? encoded, Map<String, Object?> expected) {
+    if (encoded is! String) return false;
+    try {
+      return _jsonDeepEquals(jsonDecode(encoded), expected);
+    } on FormatException {
+      return false;
+    }
+  }
+
+  static bool _jsonDeepEquals(Object? actual, Object? expected) {
+    if (actual is Map && expected is Map) {
+      if (actual.length != expected.length) return false;
+      for (final entry in expected.entries) {
+        if (!actual.containsKey(entry.key) ||
+            !_jsonDeepEquals(actual[entry.key], entry.value)) {
+          return false;
+        }
+      }
+      return true;
+    }
+    if (actual is List && expected is List) {
+      if (actual.length != expected.length) return false;
+      for (var index = 0; index < actual.length; index++) {
+        if (!_jsonDeepEquals(actual[index], expected[index])) return false;
+      }
+      return true;
+    }
+    if (actual == null || expected == null) return actual == expected;
+    return actual.runtimeType == expected.runtimeType && actual == expected;
+  }
+
+  static bool _v11DigestsAndEventsValid(Database connection) {
+    try {
+      final reversals = connection.select(
+        'SELECT * FROM shop_sale_reversals ORDER BY id',
+      );
+      for (final reversal in reversals) {
+        final reversalId = reversal['id'];
+        final operationId = reversal['operation_id'];
+        final saleId = reversal['sale_id'];
+        final originalTotalMmk = reversal['original_total_mmk'];
+        final originalPaymentMethod = reversal['original_payment_method'];
+        final restockValue = reversal['restock_items'];
+        final reason = reversal['reason'];
+        final paymentResolution = reversal['payment_resolution'];
+        final drawerDelta = reversal['cash_drawer_delta_mmk'];
+        final shiftId = reversal['shift_id'];
+        final authorizationReceiptId = reversal['authorization_receipt_id'];
+        final authorizedActorId = reversal['authorized_actor_id'];
+        final createdAtMillis = reversal['created_at_millis'];
+        if (reversalId is! String ||
+            operationId is! String ||
+            reversalId != operationId ||
+            saleId is! String ||
+            originalTotalMmk is! int ||
+            originalPaymentMethod is! String ||
+            restockValue is! int ||
+            reason is! String ||
+            paymentResolution is! String ||
+            drawerDelta is! int ||
+            authorizationReceiptId is! String ||
+            authorizedActorId is! String ||
+            createdAtMillis is! int) {
+          return false;
+        }
+        final isCash = originalPaymentMethod == 'cash';
+        if ((isCash && shiftId is! String) || (!isCash && shiftId != null)) {
+          return false;
+        }
+
+        final sales = connection.select(
+          'SELECT * FROM shop_sales WHERE id = ?',
+          [saleId],
+        );
+        if (sales.length != 1) return false;
+        final sale = sales.single;
+        final totalMmk = sale['total_mmk'];
+        final paymentMethod = sale['payment_method'];
+        final saleCreatedAtMillis = sale['created_at_millis'];
+        if (totalMmk is! int ||
+            paymentMethod is! String ||
+            saleCreatedAtMillis is! int) {
+          return false;
+        }
+        final saleLines = connection.select(
+          'SELECT * FROM shop_sale_lines WHERE sale_id = ? ORDER BY id',
+          [saleId],
+        );
+        final saleSnapshot = jsonEncode(<String, Object?>{
+          'saleId': saleId,
+          'totalMmk': totalMmk,
+          'paymentMethod': paymentMethod,
+          'createdAtMillis': saleCreatedAtMillis,
+          'lines': <Map<String, Object?>>[
+            for (final line in saleLines)
+              <String, Object?>{
+                'id': line['id'],
+                'productId': line['product_id'],
+                'productName': line['product_name'],
+                'unitPriceMmk': line['unit_price_mmk'],
+                'quantity': line['quantity'],
+                'lineTotalMmk': line['line_total_mmk'],
+              },
+          ],
+        });
+        final snapshotDigest = _sha256Hex(saleSnapshot);
+        if (reversal['sale_snapshot_digest'] != snapshotDigest) return false;
+
+        final requestFingerprint = jsonEncode(<String, Object?>{
+          'operationId': operationId,
+          'saleId': saleId,
+          'saleSnapshotDigest': snapshotDigest,
+          'restockItems': restockValue == 1,
+          'reason': reason,
+          'cashReturnConfirmed': isCash,
+          'expectedCashShiftId': shiftId,
+          'paymentResolution': paymentResolution,
+        });
+        if (reversal['request_fingerprint'] != requestFingerprint ||
+            reversal['authorization_command_digest'] !=
+                _sha256Hex(requestFingerprint)) {
+          return false;
+        }
+
+        final reversalLines = connection.select(
+          'SELECT * FROM shop_sale_reversal_lines '
+          'WHERE reversal_id = ? ORDER BY sale_line_id',
+          [reversalId],
+        );
+        final events = connection.select(
+          'SELECT event_type, payload_json, created_at_millis '
+          'FROM shop_sync_outbox WHERE operation_id = ?',
+          [operationId],
+        );
+        if (events.length != 1 ||
+            events.single['event_type'] !=
+                'shop.sale.reversal_recorded.v1' ||
+            events.single['created_at_millis'] != createdAtMillis) {
+          return false;
+        }
+        final expectedPayload = <String, Object?>{
+          'reversalId': reversalId,
+          'saleId': saleId,
+          'originalTotalMmk': originalTotalMmk,
+          'originalPaymentMethod': originalPaymentMethod,
+          'restockItems': restockValue == 1,
+          'reason': reason,
+          'paymentResolution': paymentResolution,
+          'cashReturnConfirmed': isCash,
+          'cashDrawerDeltaMmk': drawerDelta,
+          if (isCash) 'shiftId': shiftId,
+          'externalReconciliationState': isCash
+              ? 'not_applicable'
+              : 'pending',
+          'moneyReturned': isCash,
+          'authorizationReceiptId': authorizationReceiptId,
+          'authorizedActorId': authorizedActorId,
+          'createdAtMillis': createdAtMillis,
+          'lines': <Map<String, Object?>>[
+            for (final line in reversalLines)
+              <String, Object?>{
+                'saleLineId': line['sale_line_id'],
+                'productId': line['product_id'],
+                'productName': line['product_name'],
+                'unitPriceMmk': line['unit_price_mmk'],
+                'quantity': line['quantity'],
+                'lineTotalMmk': line['line_total_mmk'],
+                'restockQuantity': line['restock_quantity'],
+              },
+          ],
+        };
+        if (!_jsonObjectMatches(
+          events.single['payload_json'],
+          expectedPayload,
+        )) {
+          return false;
+        }
+      }
+
+      final reconciliations = connection.select(
+        'SELECT * FROM shop_wallet_reversal_reconciliations ORDER BY id',
+      );
+      for (final reconciliation in reconciliations) {
+        final id = reconciliation['id'];
+        final operationId = reconciliation['operation_id'];
+        final reversalId = reconciliation['reversal_id'];
+        final outcome = reconciliation['outcome'];
+        final evidenceReference = reconciliation['evidence_reference'];
+        final authorizationReceiptId =
+            reconciliation['authorization_receipt_id'];
+        final authorizedActorId = reconciliation['authorized_actor_id'];
+        final createdAtMillis = reconciliation['created_at_millis'];
+        if (id is! String ||
+            operationId is! String ||
+            id != operationId ||
+            reversalId is! String ||
+            outcome is! String ||
+            evidenceReference is! String ||
+            authorizationReceiptId is! String ||
+            authorizedActorId is! String ||
+            createdAtMillis is! int) {
+          return false;
+        }
+        final requestFingerprint = jsonEncode(<String, Object?>{
+          'operationId': operationId,
+          'reversalId': reversalId,
+          'outcome': outcome,
+          'evidenceReference': evidenceReference,
+        });
+        if (reconciliation['request_fingerprint'] != requestFingerprint ||
+            reconciliation['authorization_command_digest'] !=
+                _sha256Hex(requestFingerprint)) {
+          return false;
+        }
+        final reversal = connection.select(
+          'SELECT created_at_millis FROM shop_sale_reversals WHERE id = ?',
+          [reversalId],
+        );
+        if (reversal.length != 1 ||
+            reversal.single['created_at_millis'] is! int ||
+            createdAtMillis < (reversal.single['created_at_millis'] as int)) {
+          return false;
+        }
+        final events = connection.select(
+          'SELECT event_type, payload_json, created_at_millis '
+          'FROM shop_sync_outbox WHERE operation_id = ?',
+          [operationId],
+        );
+        if (events.length != 1 ||
+            events.single['event_type'] !=
+                'shop.mobile_money.reversal_reconciled.v1' ||
+            events.single['created_at_millis'] != createdAtMillis ||
+            !_jsonObjectMatches(
+              events.single['payload_json'],
+              <String, Object?>{
+                'reversalId': reversalId,
+                'outcome': outcome,
+                'evidenceReference': evidenceReference,
+                'externalReconciliationState': 'confirmed',
+                'moneyReturned': outcome == 'money_returned',
+                'authorizationReceiptId': authorizationReceiptId,
+                'authorizedActorId': authorizedActorId,
+                'createdAtMillis': createdAtMillis,
+              },
+            )) {
+          return false;
+        }
+      }
+      return true;
+    } on Object {
+      return false;
+    }
+  }
+
+  static bool _v11CashShiftsValid(Database connection) {
+    try {
+      for (final shift in connection.select('SELECT * FROM shop_cash_shifts')) {
+        final shiftId = shift['id'];
+        final openingFloatMmk = shift['opening_float_mmk'];
+        final openedAtMillis = shift['opened_at_millis'];
+        final state = shift['state'];
+        if (shiftId is! String ||
+            openingFloatMmk is! int ||
+            openingFloatMmk < 0 ||
+            openingFloatMmk > 200000000000000 ||
+            openedAtMillis is! int ||
+            (state != 'open' && state != 'closed')) {
+          return false;
+        }
+        final sales = connection.select('''
+          SELECT
+            COALESCE(SUM(CASE WHEN s.payment_method = 'cash' THEN 1 ELSE 0 END), 0) AS cash_count,
+            COALESCE(SUM(CASE WHEN s.payment_method = 'cash' THEN s.total_mmk ELSE 0 END), 0) AS cash_total,
+            COALESCE(SUM(CASE WHEN s.payment_method IN ('kbzpay', 'wavepay') THEN 1 ELSE 0 END), 0) AS wallet_count,
+            COALESCE(SUM(CASE WHEN s.payment_method IN ('kbzpay', 'wavepay') THEN s.total_mmk ELSE 0 END), 0) AS wallet_total,
+            COALESCE(SUM(CASE WHEN s.payment_method NOT IN ('cash', 'kbzpay', 'wavepay') THEN 1 ELSE 0 END), 0) AS unknown_count
+          FROM shop_cash_shift_sales link
+          JOIN shop_sales s ON s.id = link.sale_id
+          WHERE link.shift_id = ?
+        ''', [shiftId]).single;
+        final cashCount = sales['cash_count'];
+        final cashTotal = sales['cash_total'];
+        final walletCount = sales['wallet_count'];
+        final walletTotal = sales['wallet_total'];
+        if (cashCount is! int ||
+            cashTotal is! int ||
+            walletCount is! int ||
+            walletTotal is! int ||
+            sales['unknown_count'] != 0) {
+          return false;
+        }
+        final reversals = connection.select('''
+          SELECT COUNT(*) AS reversal_count,
+            COALESCE(SUM(original_total_mmk), 0) AS reversal_total,
+            COALESCE(SUM(-cash_drawer_delta_mmk), 0) AS drawer_outflow,
+            COALESCE(MAX(created_at_millis), 0) AS latest_reversal_at
+          FROM shop_sale_reversals
+          WHERE shift_id = ? AND original_payment_method = 'cash'
+        ''', [shiftId]).single;
+        final reversalCount = reversals['reversal_count'];
+        final reversalTotal = reversals['reversal_total'];
+        final drawerOutflow = reversals['drawer_outflow'];
+        final latestReversalAt = reversals['latest_reversal_at'];
+        if (reversalCount is! int ||
+            reversalTotal is! int ||
+            drawerOutflow is! int ||
+            latestReversalAt is! int ||
+            cashTotal > 200000000000000 - openingFloatMmk ||
+            drawerOutflow > openingFloatMmk + cashTotal) {
+          return false;
+        }
+        final expectedCashMmk = openingFloatMmk + cashTotal - drawerOutflow;
+
+        const closeFields = <String>[
+          'close_operation_id',
+          'closed_at_millis',
+          'cash_sales_count',
+          'cash_sales_total_mmk',
+          'wallet_sales_count',
+          'wallet_sales_total_mmk',
+          'expected_cash_mmk',
+          'counted_cash_mmk',
+          'difference_mmk',
+          'review_sale_count',
+          'review_cash_total_mmk',
+          'cash_reversal_count',
+          'cash_reversal_total_mmk',
+          'cash_drawer_outflow_mmk',
+          'review_cash_reversal_count',
+          'review_cash_drawer_outflow_mmk',
+        ];
+        if (state == 'open') {
+          if (closeFields.any((field) => shift[field] != null)) return false;
+          continue;
+        }
+
+        final closeOperationId = shift['close_operation_id'];
+        final closedAtMillis = shift['closed_at_millis'];
+        final countedCashMmk = shift['counted_cash_mmk'];
+        if (closeOperationId is! String ||
+            closeOperationId.isEmpty ||
+            closeOperationId.length > 120 ||
+            closedAtMillis is! int ||
+            closedAtMillis < openedAtMillis ||
+            countedCashMmk is! int ||
+            countedCashMmk < 0 ||
+            countedCashMmk > 200000000000000 ||
+            latestReversalAt > closedAtMillis ||
+            shift['cash_sales_count'] != cashCount ||
+            shift['cash_sales_total_mmk'] != cashTotal ||
+            shift['wallet_sales_count'] != walletCount ||
+            shift['wallet_sales_total_mmk'] != walletTotal ||
+            shift['expected_cash_mmk'] != expectedCashMmk ||
+            shift['difference_mmk'] != countedCashMmk - expectedCashMmk ||
+            shift['review_sale_count'] != cashCount + walletCount ||
+            shift['review_cash_total_mmk'] != cashTotal) {
+          return false;
+        }
+
+        const reversalFields = <String>[
+          'cash_reversal_count',
+          'cash_reversal_total_mmk',
+          'cash_drawer_outflow_mmk',
+          'review_cash_reversal_count',
+          'review_cash_drawer_outflow_mmk',
+        ];
+        final legacyClose = reversalFields.every(
+          (field) => shift[field] == null,
+        );
+        if (!legacyClose &&
+            reversalFields.any((field) => shift[field] is! int)) {
+          return false;
+        }
+        if ((legacyClose &&
+                (reversalCount != 0 ||
+                    reversalTotal != 0 ||
+                    drawerOutflow != 0)) ||
+            (!legacyClose &&
+                (shift['cash_reversal_count'] != reversalCount ||
+                    shift['cash_reversal_total_mmk'] != reversalTotal ||
+                    shift['cash_drawer_outflow_mmk'] != drawerOutflow ||
+                    shift['review_cash_reversal_count'] != reversalCount ||
+                    shift['review_cash_drawer_outflow_mmk'] != drawerOutflow))) {
+          return false;
+        }
+
+        final expectedPayload = <String, Object?>{
+          'shiftId': shiftId,
+          'cashSalesCount': cashCount,
+          'cashSalesTotalMmk': cashTotal,
+          'walletSalesCount': walletCount,
+          'walletSalesTotalMmk': walletTotal,
+          if (!legacyClose) ...<String, Object?>{
+            'cashReversalCount': reversalCount,
+            'cashReversalTotalMmk': reversalTotal,
+            'cashDrawerOutflowMmk': drawerOutflow,
+          },
+          'expectedCashMmk': expectedCashMmk,
+          'countedCashMmk': countedCashMmk,
+          'differenceMmk': countedCashMmk - expectedCashMmk,
+          'closedAtMillis': closedAtMillis,
+        };
+        final events = connection.select(
+          'SELECT event_type, payload_json, created_at_millis '
+          'FROM shop_sync_outbox WHERE operation_id = ?',
+          [closeOperationId],
+        );
+        if (events.length != 1 ||
+            events.single['event_type'] != 'shop.cash_shift.closed.v1' ||
+            events.single['created_at_millis'] != closedAtMillis ||
+            !_jsonObjectMatches(
+              events.single['payload_json'],
+              expectedPayload,
+            )) {
+          return false;
+        }
+      }
+      return true;
+    } on Object {
+      return false;
+    }
+  }
 
   static bool _v11ReversalAuditValid(Database connection) {
     final invalidReversal = connection.select('''
@@ -1012,7 +1544,18 @@ abstract final class ShopBackup {
               OR m.product_id != rl.product_id
               OR m.quantity_delta != rl.quantity
               OR m.reason != 'sale_reversal_restock'
+              OR m.created_at_millis != r.created_at_millis
             ))
+      LIMIT 1
+    ''').isNotEmpty;
+    final invalidRestockMovement = connection.select('''
+      SELECT 1
+      FROM shop_stock_movements m
+      WHERE m.reason = 'sale_reversal_restock'
+        AND (
+          SELECT COUNT(*) FROM shop_sale_reversal_lines rl
+          WHERE rl.stock_movement_id = m.id
+        ) != 1
       LIMIT 1
     ''').isNotEmpty;
     final missingLine = connection.select('''
@@ -1074,9 +1617,12 @@ abstract final class ShopBackup {
     return !invalidReversal &&
         !invalidLine &&
         !missingLine &&
+        !invalidRestockMovement &&
         !duplicateAuditIdentity &&
         !reusedAuthorizationReceipt &&
-        !invalidReconciliation;
+        !invalidReconciliation &&
+        _v11DigestsAndEventsValid(connection) &&
+        _v11CashShiftsValid(connection);
   }
 
   static bool _validWalletIntent(Row row) {

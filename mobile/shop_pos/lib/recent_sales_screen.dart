@@ -303,9 +303,20 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
                                                         sale.createdAtMillis,
                                                       )
                                                     : '${shopCopy(widget.myanmar, 'Reversed', 'ပြန်လှန်ချိန်')} ${_whenCompact(context, sale.reversal!.createdAtMillis)}',
-                                                style: Theme.of(context)
-                                                    .textTheme
-                                                    .bodySmall,
+                                                style: sale.reversal == null
+                                                    ? Theme.of(context)
+                                                          .textTheme
+                                                          .bodySmall
+                                                    : Theme.of(context)
+                                                          .textTheme
+                                                          .bodySmall
+                                                          ?.copyWith(
+                                                            color: Theme.of(
+                                                              context,
+                                                            ).colorScheme.error,
+                                                            fontWeight:
+                                                                FontWeight.w700,
+                                                          ),
                                               ),
                                               Text(
                                                 _paymentName(
@@ -328,9 +339,7 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
                                                       ?.copyWith(
                                                         color: Theme.of(context)
                                                             .colorScheme
-                                                            .error,
-                                                        fontWeight:
-                                                            FontWeight.w700,
+                                                            .onSurfaceVariant,
                                                       ),
                                                 ),
                                             ],
@@ -491,6 +500,11 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
   };
 
   Future<void> _showSale(ShopSaleReceipt sale) async {
+    final soldTimeLabel = shopCopy(
+      widget.myanmar,
+      sale.reversal == null ? 'Sold' : 'Original sale',
+      'မူလရောင်းချိန်',
+    );
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -504,7 +518,9 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(_when(dialogContext, sale.createdAtMillis)),
+                Text(
+                  '$soldTimeLabel: ${_when(dialogContext, sale.createdAtMillis)}',
+                ),
                 const SizedBox(height: 4),
                 SelectableText(sale.id),
                 const Divider(height: 24),
@@ -565,9 +581,7 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
                             'Reversed — original sale retained',
                             'ပြန်လှန်ပြီး — မူလအရောင်းမှတ်တမ်းကို ထိန်းသိမ်းထားသည်',
                           ),
-                          style: Theme.of(dialogContext)
-                              .textTheme
-                              .titleSmall
+                          style: Theme.of(dialogContext).textTheme.titleSmall
                               ?.copyWith(fontWeight: FontWeight.w700),
                         ),
                         const SizedBox(height: 6),
