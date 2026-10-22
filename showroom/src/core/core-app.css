@@ -713,6 +713,9 @@ html:lang(my) .stock-attention-table .data-row:not(.table-head) > span:nth-child
 .shop-stock-workspace .stock-attention-table .data-row:not(.table-head) > span:nth-child(2)::before,
 .shop-stock-workspace .stock-attention-table .data-row:not(.table-head) > span:nth-child(3)::before,
 .shop-stock-workspace .stock-attention-table .data-row:not(.table-head) > span:nth-child(4)::before { font-size: .8125rem; }
+html:lang(my) .shop-stock-workspace .stock-attention-table .data-row:not(.table-head) > span:nth-child(2)::before,
+html:lang(my) .shop-stock-workspace .stock-attention-table .data-row:not(.table-head) > span:nth-child(3)::before,
+html:lang(my) .shop-stock-workspace .stock-attention-table .data-row:not(.table-head) > span:nth-child(4)::before { font-size: .8125rem; }
 .shop-stock-workspace .data-row.table-head { font-size: .8125rem; }
 .shop-stock-workspace .data-row .stock-attention-label { font-size: .8125rem; }
 .data-row > span:first-child { display: grid; gap: 2px; }
