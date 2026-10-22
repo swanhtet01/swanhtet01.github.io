@@ -344,6 +344,33 @@ void main() {
           expect(basketBounds.width, 300);
           expect(catalogBounds.right, lessThan(basketBounds.left));
           expect(basketBounds.right, lessThanOrEqualTo(width));
+          final newProduct = find.byKey(
+            const ValueKey('shop-new-product-compact'),
+          );
+          final camera = find.byKey(const ValueKey('shop-camera-scan'));
+          final productActions = find.byKey(
+            const ValueKey('shop-product-actions'),
+          );
+          expect(newProduct, findsOneWidget);
+          expect(find.text(language == 'my' ? 'အသစ်' : 'New'), findsOneWidget);
+          expect(camera, findsOneWidget);
+          expect(productActions, findsOneWidget);
+          expect(tester.getSize(newProduct).height, greaterThanOrEqualTo(48));
+          expect(tester.getSize(camera).height, greaterThanOrEqualTo(48));
+          expect(
+            tester.getRect(newProduct).left,
+            greaterThanOrEqualTo(tester.getRect(camera).right),
+          );
+          expect(
+            tester.getRect(newProduct).right,
+            lessThanOrEqualTo(tester.getRect(productActions).left),
+          );
+          expect(
+            (tester.getRect(newProduct).center.dy -
+                    tester.getRect(camera).center.dy)
+                .abs(),
+            lessThan(2),
+          );
           expect(tester.takeException(), isNull);
           if (_capture) {
             await _resolveVisibleProductPhotos(tester);
