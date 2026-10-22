@@ -37,7 +37,10 @@ Future<void> main() async {
   late final Directory documents;
   try {
     documents = await getApplicationDocumentsDirectory();
-    await ShopBackup.cleanupInterruptedStaging(documents);
+    await ShopBackup.cleanupInterruptedStaging(
+      documents,
+      restoreTarget: ShopDatabase.privateDatabaseFile(documents),
+    );
   } catch (_) {
     final myanmar = preferences.getBool('shop_locale_myanmar') ?? false;
     runApp(

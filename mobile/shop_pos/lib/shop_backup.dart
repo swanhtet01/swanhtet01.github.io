@@ -10,6 +10,8 @@ import 'package:sqlite3/sqlite3.dart';
 
 import 'shop_database.dart';
 
+enum ShopStorePresence { empty, existing, interrupted, unsafe }
+
 /// An offline, password-encrypted export format for a single Shop device.
 ///
 /// This is a storage primitive, not a cloud sync or backup UI. The SQLite
@@ -41,6 +43,8 @@ abstract final class ShopBackup {
   static const _lockName = '.supermega-shop-backup.lock';
   static const _exportPrefix = 'supermega-shop-backup-';
   static const _restorePrefix = '.supermega-shop-restore-';
+  static const _preparingMarker = 'preparing-v1\n';
+  static const _committingMarker = 'committing-v1\n';
   static final _kdf = Argon2id(
     memory: 19 * 1024,
     parallelism: 1,
@@ -131,12 +135,14 @@ abstract final class ShopBackup {
   /// or WAL files. An OS file lock serializes cooperating callers. A same-
   /// volume hard link publishes the verified file without replacing a target
   /// created by another process after the empty-path check. Startup must call
-  /// [cleanupInterruptedStaging] before opening the database.
+  /// [cleanupInterruptedStaging] and honor [restoreMarkerFor] before opening
+  /// the database. A marker left after publication blocks a mixed DB/sidecar.
   static Future<void> restoreIntoEmptyDatabase({
     required File archive,
     required File target,
     required String password,
     Future<void> Function()? beforePublishForTest,
+    Future<void> Function()? afterPublishForTest,
   }) async {
     _checkPassword(password);
     await _requireEmptyRestoreDestination(target);
@@ -152,8 +158,19 @@ abstract final class ShopBackup {
     await _withRootLock(target.parent, () async {
       await _removeInterruptedStaging(target.parent);
       await _requireEmptyRestoreDestination(target);
-      final staging = await target.parent.createTemp(_restorePrefix);
+      final marker = restoreMarkerFor(target);
+      if (await FileSystemEntity.type(marker.path, followLinks: false) !=
+          FileSystemEntityType.notFound) {
+        throw StateError('An interrupted Shop restore needs recovery.');
+      }
+      await marker.create(exclusive: true);
+      Directory? staging;
+      var published = false;
+      var verifiedPublication = false;
+      var cleaned = false;
       try {
+        await marker.writeAsString(_preparingMarker, flush: true);
+        staging = await target.parent.createTemp(_restorePrefix);
         final stagedFile = File(
           '${staging.path}${Platform.pathSeparator}shop.sqlite',
         );
@@ -162,18 +179,110 @@ abstract final class ShopBackup {
         // Recheck sidecars immediately before the atomic no-replace link. The
         // link itself closes the target-creation race that rename leaves open.
         await _requireEmptyRestoreDestination(target);
+        await marker.writeAsString(_committingMarker, flush: true);
         if (beforePublishForTest != null) await beforePublishForTest();
         _publishVerifiedFileNoReplace(stagedFile, target);
+        published = true;
+        if (afterPublishForTest != null) await afterPublishForTest();
+        await _requireNoSidecars(target);
+        verifySnapshot(target, expectedSchemaVersion: archiveBytes[5]);
+        await _requireNoSidecars(target);
+        verifiedPublication = true;
       } finally {
-        await _deleteScratchDirectory(target.parent, staging);
+        try {
+          if (staging != null) {
+            await _deleteScratchDirectory(target.parent, staging);
+          }
+          cleaned = true;
+        } finally {
+          final targetPresent =
+              await FileSystemEntity.type(target.path, followLinks: false) !=
+              FileSystemEntityType.notFound;
+          final sidecarPresent = await _hasSidecars(target);
+          if (cleaned &&
+              ((verifiedPublication && !sidecarPresent) ||
+                  (!published && !targetPresent && !sidecarPresent))) {
+            await marker.delete();
+          }
+        }
       }
     });
   }
 
+  /// A published DB with this marker may have raced a WAL/SHM writer. Startup
+  /// must not open it until a separate recovery has checked the bytes.
+  static File restoreMarkerFor(File target) =>
+      File('${target.path}.restore-in-progress');
+
+  /// Inspect under the same lock as restore. An existing DB is never offered
+  /// for overwrite; sidecars without a DB and interrupted commits stay closed.
+  static Future<ShopStorePresence> inspectStore(File target) =>
+      _withRootLock(target.parent, () async {
+        if (await FileSystemEntity.type(
+              restoreMarkerFor(target).path,
+              followLinks: false,
+            ) !=
+            FileSystemEntityType.notFound) {
+          return ShopStorePresence.interrupted;
+        }
+        final type = await FileSystemEntity.type(
+          target.path,
+          followLinks: false,
+        );
+        if (type == FileSystemEntityType.file) {
+          return ShopStorePresence.existing;
+        }
+        if (type != FileSystemEntityType.notFound || await _hasSidecars(target)) {
+          return ShopStorePresence.unsafe;
+        }
+        return ShopStorePresence.empty;
+      });
+
+  /// Reserve a new DB pathname under the restore lock. Drift initializes the
+  /// empty SQLite file when Shop opens it; a concurrent restore must then fail.
+  static Future<void> reserveNewStore(File target) =>
+      _withRootLock(target.parent, () async {
+        if (await FileSystemEntity.type(
+              restoreMarkerFor(target).path,
+              followLinks: false,
+            ) !=
+            FileSystemEntityType.notFound) {
+          throw StateError('An interrupted Shop restore needs recovery.');
+        }
+        await _requireEmptyRestoreDestination(target);
+        await target.create(exclusive: true);
+      });
+
   /// Removes only Shop's recognized plaintext staging directories in an
   /// app-private parent. Safe to call before opening the database on startup.
-  static Future<void> cleanupInterruptedStaging(Directory privateRoot) =>
-      _withRootLock(privateRoot, () => _removeInterruptedStaging(privateRoot));
+  static Future<void> cleanupInterruptedStaging(
+    Directory privateRoot, {
+    File? restoreTarget,
+  }) => _withRootLock(privateRoot, () async {
+    await _removeInterruptedStaging(privateRoot);
+    if (restoreTarget == null) return;
+    if (_pathKey(restoreTarget.parent.absolute.path) !=
+        _pathKey(privateRoot.absolute.path)) {
+      throw StateError('Shop restore target escaped its private directory.');
+    }
+    final marker = restoreMarkerFor(restoreTarget);
+    final markerType = await FileSystemEntity.type(
+      marker.path,
+      followLinks: false,
+    );
+    if (markerType == FileSystemEntityType.notFound) return;
+    if (markerType != FileSystemEntityType.file) {
+      throw StateError('Shop restore marker is not a regular file.');
+    }
+    // Only a complete preparing marker with no DB or sidecars is safe to
+    // retry. A committing marker might have crashed just after publication.
+    if (await FileSystemEntity.type(restoreTarget.path, followLinks: false) ==
+            FileSystemEntityType.notFound &&
+        !await _hasSidecars(restoreTarget) &&
+        await marker.readAsString() == _preparingMarker) {
+      await marker.delete();
+    }
+  });
 
   static Future<T> _withRootLock<T>(
     Directory root,
@@ -294,10 +403,11 @@ abstract final class ShopBackup {
   /// verified SQLite file; startup may safely remove only the staging link.
   static void _publishVerifiedFileNoReplace(File staged, File target) {
     if (Platform.isWindows) {
-      final createHardLink = DynamicLibrary.open('kernel32.dll').lookupFunction<
-        Int32 Function(Pointer<Utf16>, Pointer<Utf16>, Pointer<Void>),
-        int Function(Pointer<Utf16>, Pointer<Utf16>, Pointer<Void>)
-      >('CreateHardLinkW');
+      final createHardLink = DynamicLibrary.open('kernel32.dll')
+          .lookupFunction<
+            Int32 Function(Pointer<Utf16>, Pointer<Utf16>, Pointer<Void>),
+            int Function(Pointer<Utf16>, Pointer<Utf16>, Pointer<Void>)
+          >('CreateHardLinkW');
       final destination = target.path.toNativeUtf16();
       final source = staged.path.toNativeUtf16();
       try {
@@ -314,10 +424,14 @@ abstract final class ShopBackup {
       return;
     }
     if (Platform.isAndroid || Platform.isIOS || Platform.isLinux) {
-      final link = DynamicLibrary.process().lookupFunction<
-        Int32 Function(Pointer<Utf8>, Pointer<Utf8>),
-        int Function(Pointer<Utf8>, Pointer<Utf8>)
-      >('link');
+      final libc = Platform.isAndroid
+          ? DynamicLibrary.open('libc.so')
+          : DynamicLibrary.process();
+      final link = libc
+          .lookupFunction<
+            Int32 Function(Pointer<Utf8>, Pointer<Utf8>),
+            int Function(Pointer<Utf8>, Pointer<Utf8>)
+          >('link');
       final source = staged.path.toNativeUtf8();
       final destination = target.path.toNativeUtf8();
       try {
@@ -339,11 +453,20 @@ abstract final class ShopBackup {
   static Future<void> _requireEmptyRestoreDestination(File target) async {
     if (await FileSystemEntity.type(target.path, followLinks: false) !=
             FileSystemEntityType.notFound ||
-        await FileSystemEntity.type('${target.path}-wal', followLinks: false) !=
-            FileSystemEntityType.notFound ||
-        await FileSystemEntity.type('${target.path}-shm', followLinks: false) !=
-            FileSystemEntityType.notFound) {
+        await _hasSidecars(target)) {
       throw StateError('The restore destination is not empty.');
+    }
+  }
+
+  static Future<bool> _hasSidecars(File target) async =>
+      await FileSystemEntity.type('${target.path}-wal', followLinks: false) !=
+          FileSystemEntityType.notFound ||
+      await FileSystemEntity.type('${target.path}-shm', followLinks: false) !=
+          FileSystemEntityType.notFound;
+
+  static Future<void> _requireNoSidecars(File target) async {
+    if (await _hasSidecars(target)) {
+      throw StateError('Shop restore found a database sidecar during commit.');
     }
   }
 

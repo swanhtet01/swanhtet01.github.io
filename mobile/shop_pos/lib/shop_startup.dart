@@ -50,6 +50,13 @@ class _ShopStartupState extends State<ShopStartup> {
 
   File get _databaseFile => ShopDatabase.privateDatabaseFile(widget.documents);
 
+  Future<bool> _hasRestoreMarker() async =>
+      await FileSystemEntity.type(
+        ShopBackup.restoreMarkerFor(_databaseFile).path,
+        followLinks: false,
+      ) !=
+      FileSystemEntityType.notFound;
+
   @override
   void initState() {
     super.initState();
@@ -71,19 +78,21 @@ class _ShopStartupState extends State<ShopStartup> {
 
   Future<void> _inspectExistingStore() async {
     try {
-      final type = await FileSystemEntity.type(
-        _databaseFile.path,
-        followLinks: false,
-      );
+      final presence = await ShopBackup.inspectStore(_databaseFile);
       if (!mounted) return;
-      if (type == FileSystemEntityType.file) {
+      if (presence == ShopStorePresence.existing) {
         _openShop();
       } else {
-        final sidecar = await _hasSidecar();
-        if (!mounted) return;
         setState(() {
-          _blocked = type != FileSystemEntityType.notFound || sidecar;
+          _blocked = presence != ShopStorePresence.empty;
           _checking = false;
+          if (presence == ShopStorePresence.interrupted) {
+            _message = shopCopy(
+              _myanmar,
+              'A restore was interrupted. Your files were not replaced. Close Shop and contact support before opening these records.',
+              'ပြန်ယူမှု ရပ်တန့်ခဲ့ပါသည်။ ဖိုင်များကို အစားမထိုးခဲ့ပါ။ ဤမှတ်တမ်းများ မဖွင့်မီ Shop ကို ပိတ်ပြီး အကူအညီတောင်းပါ။',
+            );
+          }
         });
       }
     } catch (_) {
@@ -109,19 +118,7 @@ class _ShopStartupState extends State<ShopStartup> {
     if (_busy) return;
     setState(() => _busy = true);
     try {
-      final type = await FileSystemEntity.type(
-        _databaseFile.path,
-        followLinks: false,
-      );
-      if (type != FileSystemEntityType.notFound || await _hasSidecar()) {
-        if (mounted) {
-          setState(() {
-            _blocked = true;
-            _busy = false;
-          });
-        }
-        return;
-      }
+      await ShopBackup.reserveNewStore(_databaseFile);
       if (mounted) _openShop();
     } catch (_) {
       if (mounted) {
@@ -273,14 +270,16 @@ class _ShopStartupState extends State<ShopStartup> {
       final sidecar = await _hasSidecar();
       if (!mounted) return;
       removeArchive =
-          targetType != FileSystemEntityType.notFound || sidecar;
+          targetType != FileSystemEntityType.notFound ||
+          sidecar ||
+          await _hasRestoreMarker();
       setState(() {
         _blocked = removeArchive;
         _message = _blocked
             ? shopCopy(
                 _myanmar,
-                'Shop data appeared during restore. Close and reopen Shop; no records were replaced.',
-                'ပြန်ယူနေစဉ် Shop ဒေတာ ပေါ်လာပါသည်။ Shop ကို ပိတ်ပြီး ပြန်ဖွင့်ပါ။ မှတ်တမ်းကို အစားမထိုးခဲ့ပါ။',
+                'Shop data or a recovery marker appeared during restore. Close Shop and contact support; no existing records were replaced.',
+                'ပြန်ယူနေစဉ် Shop ဒေတာ သို့မဟုတ် ပြန်လည်စစ်ဆေးရန် အမှတ်အသား ပေါ်လာပါသည်။ Shop ကို ပိတ်ပြီး အကူအညီတောင်းပါ။ ရှိပြီးသောမှတ်တမ်းများကို အစားမထိုးခဲ့ပါ။',
               )
             : shopCopy(
                 _myanmar,
@@ -384,12 +383,24 @@ class _ShopStartupState extends State<ShopStartup> {
                   ] else if (_selectedArchive == null) ...[
                     FilledButton(
                       onPressed: _busy ? null : _startNew,
-                      child: Text(shopCopy(_myanmar, 'Start new Shop', 'Shop အသစ် စတင်ရန်')),
+                      child: Text(
+                        shopCopy(
+                          _myanmar,
+                          'Start new Shop',
+                          'Shop အသစ် စတင်ရန်',
+                        ),
+                      ),
                     ),
                     const SizedBox(height: 12),
                     OutlinedButton(
                       onPressed: _busy ? null : _chooseBackup,
-                      child: Text(shopCopy(_myanmar, 'Restore backup', 'အရန်ကူးဖိုင် ပြန်ယူရန်')),
+                      child: Text(
+                        shopCopy(
+                          _myanmar,
+                          'Restore backup',
+                          'အရန်ကူးဖိုင် ပြန်ယူရန်',
+                        ),
+                      ),
                     ),
                   ] else ...[
                     Text(
@@ -405,7 +416,11 @@ class _ShopStartupState extends State<ShopStartup> {
                       autocorrect: false,
                       enableSuggestions: false,
                       decoration: InputDecoration(
-                        labelText: shopCopy(_myanmar, 'Backup password', 'အရန်ကူးစကားဝှက်'),
+                        labelText: shopCopy(
+                          _myanmar,
+                          'Backup password',
+                          'အရန်ကူးစကားဝှက်',
+                        ),
                         border: const OutlineInputBorder(),
                       ),
                     ),
@@ -413,7 +428,11 @@ class _ShopStartupState extends State<ShopStartup> {
                     FilledButton(
                       onPressed: _busy ? null : _restore,
                       child: Text(
-                        shopCopy(_myanmar, 'Restore and open Shop', 'ပြန်ယူပြီး Shop ဖွင့်ရန်'),
+                        shopCopy(
+                          _myanmar,
+                          'Restore and open Shop',
+                          'ပြန်ယူပြီး Shop ဖွင့်ရန်',
+                        ),
                       ),
                     ),
                     TextButton(

@@ -479,7 +479,101 @@ void main() {
     );
     expect(await target.readAsString(), 'another Shop instance');
     expect(await wal.readAsString(), 'its WAL');
+    expect(await ShopBackup.restoreMarkerFor(target).exists(), isTrue);
     await _expectNoScratch(directory);
+  });
+
+  for (final suffix in const ['-wal', '-shm']) {
+    for (final timing in const ['before', 'after']) {
+      test('late $suffix creator $timing publication leaves recovery marker', () async {
+        final target = File(
+          '${directory.path}/late-sidecar-$timing-${suffix.substring(1)}.sqlite',
+        );
+        final sidecar = File('${target.path}$suffix');
+        Future<void> createSidecar() async {
+          await sidecar.writeAsString('other writer');
+        }
+        await expectLater(
+          ShopBackup.restoreIntoEmptyDatabase(
+            archive: archive,
+            target: target,
+            password: _password,
+            beforePublishForTest: timing == 'before' ? createSidecar : null,
+            afterPublishForTest: timing == 'after' ? createSidecar : null,
+          ),
+          throwsStateError,
+        );
+        expect(await sidecar.readAsString(), 'other writer');
+        expect(await target.exists(), isTrue);
+        expect(await ShopBackup.restoreMarkerFor(target).exists(), isTrue);
+        await _expectNoScratch(directory);
+      });
+    }
+  }
+
+  test('startup clears only an unpublished restore marker', () async {
+    final target = File('${directory.path}/unpublished.sqlite');
+    final marker = ShopBackup.restoreMarkerFor(target);
+    final staging = await directory.createTemp('.supermega-shop-restore-');
+    await File('${staging.path}/shop.sqlite').writeAsString('plaintext');
+    await marker.writeAsString('preparing-v1\n');
+    await ShopBackup.cleanupInterruptedStaging(directory, restoreTarget: target);
+    expect(await staging.exists(), isFalse);
+    expect(await marker.exists(), isFalse);
+    expect(await target.exists(), isFalse);
+  });
+
+  test('startup keeps an uncertain committing marker even without DB', () async {
+    final target = File('${directory.path}/uncertain.sqlite');
+    final marker = ShopBackup.restoreMarkerFor(target);
+    await marker.writeAsString('committing-v1\n');
+    await ShopBackup.cleanupInterruptedStaging(directory, restoreTarget: target);
+    expect(await marker.exists(), isTrue);
+    expect(await ShopBackup.inspectStore(target), ShopStorePresence.interrupted);
+  });
+
+  test('startup retains a published restore marker', () async {
+    final target = File('${directory.path}/marked.sqlite');
+    await ShopBackup.restoreIntoEmptyDatabase(
+      archive: archive,
+      target: target,
+      password: _password,
+    );
+    final original = await target.readAsBytes();
+    final marker = ShopBackup.restoreMarkerFor(target);
+    await marker.writeAsString('interrupted after commit');
+    await ShopBackup.cleanupInterruptedStaging(directory, restoreTarget: target);
+    expect(await marker.exists(), isTrue);
+    expect(await target.readAsBytes(), original);
+  });
+
+  test('new Shop reservation prevents a later restore from replacing it', () async {
+    final target = File('${directory.path}/new-shop.sqlite');
+    expect(await ShopBackup.inspectStore(target), ShopStorePresence.empty);
+    await ShopBackup.reserveNewStore(target);
+    expect(await ShopBackup.inspectStore(target), ShopStorePresence.existing);
+    await expectLater(
+      ShopBackup.restoreIntoEmptyDatabase(
+        archive: archive,
+        target: target,
+        password: _password,
+      ),
+      throwsStateError,
+    );
+    expect(await target.length(), 0);
+  });
+
+  test('restore after empty inspection prevents a stale new-Shop choice', () async {
+    final target = File('${directory.path}/restore-wins.sqlite');
+    expect(await ShopBackup.inspectStore(target), ShopStorePresence.empty);
+    await ShopBackup.restoreIntoEmptyDatabase(
+      archive: archive,
+      target: target,
+      password: _password,
+    );
+    final bytes = await target.readAsBytes();
+    await expectLater(ShopBackup.reserveNewStore(target), throwsStateError);
+    expect(await target.readAsBytes(), bytes);
   });
 
   test('startup cleanup leaves a fully published database intact', () async {
@@ -516,17 +610,56 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.text('Start new Shop'), findsOneWidget);
-      expect(await ShopDatabase.privateDatabaseFile(documents).exists(), isFalse);
+      expect(
+        await ShopDatabase.privateDatabaseFile(documents).exists(),
+        isFalse,
+      );
       await tester.tap(find.text('Restore backup'));
       await tester.pumpAndSettle();
-      expect(await ShopDatabase.privateDatabaseFile(documents).exists(), isFalse);
+      expect(
+        await ShopDatabase.privateDatabaseFile(documents).exists(),
+        isFalse,
+      );
       await tester.enterText(find.byType(TextField), _password);
       await tester.tap(find.text('Restore and open Shop'));
       await tester.pumpAndSettle();
       expect(find.text('Opened Shop'), findsOneWidget);
       expect((await opened!.readActiveProducts()).single.onHand, 3);
       expect(await opened!.countSales(), 1);
+      expect(
+        await ShopDatabase.privateDatabaseFile(documents).exists(),
+        isTrue,
+      );
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await opened?.close();
+      await documents.delete(recursive: true);
+    }
+  });
+
+  testWidgets('Start new reserves the exact Drift database path', (
+    tester,
+  ) async {
+    final documents = await Directory.systemTemp.createTemp('shop-new-');
+    ShopDatabase? opened;
+    try {
+      await tester.pumpWidget(
+        ShopStartup(
+          documents: documents,
+          importScratchRoot: documents,
+          initialMyanmar: false,
+          buildShop: (database, _) {
+            opened = database;
+            return const MaterialApp(home: Scaffold(body: Text('Opened Shop')));
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Start new Shop'));
+      await tester.pumpAndSettle();
+      expect(find.text('Opened Shop'), findsOneWidget);
       expect(await ShopDatabase.privateDatabaseFile(documents).exists(), isTrue);
+      expect(await opened!.readActiveProducts(), isEmpty);
     } finally {
       await tester.pumpWidget(const SizedBox.shrink());
       await opened?.close();
@@ -560,7 +693,10 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.textContaining('Could not restore'), findsOneWidget);
       expect(find.text('Restore and open Shop'), findsOneWidget);
-      expect(await ShopDatabase.privateDatabaseFile(documents).exists(), isFalse);
+      expect(
+        await ShopDatabase.privateDatabaseFile(documents).exists(),
+        isFalse,
+      );
       await tester.enterText(find.byType(TextField), _password);
       await tester.tap(find.text('Restore and open Shop'));
       await tester.pumpAndSettle();
@@ -572,7 +708,9 @@ void main() {
     }
   });
 
-  testWidgets('cancelled restore cannot create a Shop database', (tester) async {
+  testWidgets('cancelled restore cannot create a Shop database', (
+    tester,
+  ) async {
     final documents = await Directory.systemTemp.createTemp('shop-cancel-');
     try {
       await tester.pumpWidget(
@@ -588,7 +726,10 @@ void main() {
       await tester.tap(find.text('အရန်ကူးဖိုင် ပြန်ယူရန်'));
       await tester.pumpAndSettle();
       expect(find.text('Shop အသစ် စတင်ရန်'), findsOneWidget);
-      expect(await ShopDatabase.privateDatabaseFile(documents).exists(), isFalse);
+      expect(
+        await ShopDatabase.privateDatabaseFile(documents).exists(),
+        isFalse,
+      );
       expect(tester.takeException(), isNull);
     } finally {
       await tester.pumpWidget(const SizedBox.shrink());
@@ -649,6 +790,42 @@ void main() {
       expect(find.text('Restore backup'), findsNothing);
       expect(await sidecar.readAsString(), 'preserve this file');
       expect(await target.exists(), isFalse);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await documents.delete(recursive: true);
+    }
+  });
+
+  testWidgets('published recovery marker blocks opening an existing Shop', (
+    tester,
+  ) async {
+    final documents = await Directory.systemTemp.createTemp('shop-marked-');
+    var opened = false;
+    try {
+      final target = ShopDatabase.privateDatabaseFile(documents);
+      await ShopBackup.restoreIntoEmptyDatabase(
+        archive: archive,
+        target: target,
+        password: _password,
+      );
+      await ShopBackup.restoreMarkerFor(target).writeAsString('interrupted');
+      await tester.pumpWidget(
+        ShopStartup(
+          documents: documents,
+          importScratchRoot: documents,
+          initialMyanmar: false,
+          buildShop: (_, _) {
+            opened = true;
+            return const SizedBox.shrink();
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(opened, isFalse);
+      expect(find.textContaining('restore was interrupted'), findsOneWidget);
+      expect(find.text('Start new Shop'), findsNothing);
+      expect(find.text('Restore backup'), findsNothing);
+      expect(await target.exists(), isTrue);
     } finally {
       await tester.pumpWidget(const SizedBox.shrink());
       await documents.delete(recursive: true);

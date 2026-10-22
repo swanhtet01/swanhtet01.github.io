@@ -301,9 +301,8 @@ class ShopDatabase extends _$ShopDatabase {
   static const maxProductThumbnailsTotalBytes = 32 * 1024 * 1024;
 
   /// Keep the first-launch restore target and Drift's opened database identical.
-  static File privateDatabaseFile(Directory documents) => File(
-    '${documents.path}${Platform.pathSeparator}supermega_shop.sqlite',
-  );
+  static File privateDatabaseFile(Directory documents) =>
+      File('${documents.path}${Platform.pathSeparator}supermega_shop.sqlite');
 
   factory ShopDatabase.inPrivateDocuments(Directory documents) => ShopDatabase(
     driftDatabase(
