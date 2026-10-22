@@ -1373,6 +1373,7 @@ class _ShopHomeState extends State<ShopHome> {
     // desktop basket can leave less room than a portrait tablet catalog.
     final compactProductRow = catalogWidth < 780;
     final narrowProductRow = catalogWidth < 380;
+    final touchCompactRow = MediaQuery.sizeOf(context).width >= 820;
     final text = _search.text.trim().toLowerCase();
     final visible = products
         .where(
@@ -1520,9 +1521,9 @@ class _ShopHomeState extends State<ShopHome> {
                 : shopCopy(widget.myanmar, 'Add to sale', 'အရောင်းထဲထည့်ရန်'),
             child: ListTile(
               isThreeLine: compactProductRow,
-              contentPadding: const EdgeInsets.symmetric(
+              contentPadding: EdgeInsets.symmetric(
                 horizontal: 14,
-                vertical: 10,
+                vertical: touchCompactRow ? 2 : 10,
               ),
               leading:
                   !_hasProductPhotos &&
@@ -1838,6 +1839,8 @@ class _ShopHomeState extends State<ShopHome> {
         break;
       }
     }
+    final unitPriceMmk = snapshot?.unitPriceMmk ?? item.priceMmk;
+    final lineTotalMmk = snapshot?.lineTotalMmk ?? unitPriceMmk * quantity;
     final details = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1846,9 +1849,19 @@ class _ShopHomeState extends State<ShopHome> {
           style: Theme.of(context).textTheme.bodyMedium
               ?.copyWith(fontWeight: FontWeight.w600),
         ),
+        if (quantity > 1)
+          Text(
+            _mmk(lineTotalMmk),
+            key: ValueKey('shop-cart-line-total:${item.id}'),
+            style: _shopMoneyStyle(context, total: true),
+          ),
         Text(
-          '${_mmk(snapshot?.unitPriceMmk ?? item.priceMmk)} × ${shopNumber(quantity, myanmar: widget.myanmar)}',
-          style: _shopMoneyStyle(context),
+          '${_mmk(unitPriceMmk)} × ${shopNumber(quantity, myanmar: widget.myanmar)}',
+          style: quantity > 1
+              ? Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                )
+              : _shopMoneyStyle(context),
         ),
       ],
     );

@@ -1237,6 +1237,14 @@ void main() {
           );
         }
         expect(find.text(myanmar ? 'ငွေသား' : 'Cash sale'), findsOneWidget);
+        await tester.tap(
+          find.byTooltip(myanmar ? 'တစ်ခုထပ်ထည့်ရန်' : 'Add one'),
+        );
+        await tester.pumpAndSettle();
+        final lineTotal = tester.widget<Text>(
+          find.byKey(const ValueKey('shop-cart-line-total:tea')),
+        );
+        expect(lineTotal.data, myanmar ? '၅,၀၀၀ ကျပ်' : '5,000 MMK');
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox.shrink());
         await tester.pump(const Duration(milliseconds: 1));
