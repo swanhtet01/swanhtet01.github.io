@@ -982,6 +982,10 @@ void main() {
         name: 'Water',
         priceMmk: 1200,
         openingStock: 7,
+      );
+      await database.setReorderLevel(
+        productId: 'water',
+        expectedReorderLevel: 5,
         reorderLevel: 10,
       );
       await database.recordCashSale(
