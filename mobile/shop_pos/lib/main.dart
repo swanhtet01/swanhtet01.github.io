@@ -1759,11 +1759,7 @@ class _ShopHomeState extends State<ShopHome> {
     final enlargedNarrowRow =
         narrowProductRow && MediaQuery.textScalerOf(context).scale(1) > 1.2;
     final touchCompactRow = MediaQuery.sizeOf(context).width >= 820;
-    final photoExtent = enlargedNarrowRow
-        ? 40.0
-        : narrowProductRow
-        ? 48.0
-        : 58.0;
+    final photoExtent = narrowProductRow ? 48.0 : 58.0;
     final text = _search.text.trim().toLowerCase();
     final visible = _visibleProducts(products).toList();
     if (visible.isEmpty) {
@@ -1887,7 +1883,7 @@ class _ShopHomeState extends State<ShopHome> {
         final addAffordance = ExcludeSemantics(
           child: Container(
             key: ValueKey('shop-add-affordance:${item.id}'),
-            width: enlargedNarrowRow ? 80 : 52,
+            width: enlargedNarrowRow ? 72 : 52,
             height: 44,
             decoration: BoxDecoration(
               color: canAdd ? const Color(0xffeef3ff) : const Color(0xfff1f2f5),
@@ -1982,7 +1978,7 @@ class _ShopHomeState extends State<ShopHome> {
                           ),
                           const SizedBox(width: 8),
                           SizedBox(
-                            width: 80,
+                            width: 72,
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
