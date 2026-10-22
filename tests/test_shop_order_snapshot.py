@@ -87,26 +87,33 @@ def test_endpoint_is_tenant_scoped_and_requires_shop_user_session():
         "alice": "00000000-0000-4000-8000-000000000001",
         "bob": "00000000-0000-4000-8000-000000000002",
         "carol": "00000000-0000-4000-8000-000000000003",
+        "new_shop": "00000000-0000-4000-8000-000000000004",
+        "no_read": "00000000-0000-4000-8000-000000000005",
     }
     session = "00000000-0000-4000-8000-000000000010"
     for workspace, actor, product in (
         ("shop-a", "alice", "commerce"),
         ("shop-b", "bob", "commerce"),
         ("ecommerce-c", "carol", "ecommerce"),
+        ("shop-new", "new_shop", "commerce"),
+        ("shop-no-read", "no_read", "commerce"),
     ):
         store.provision_membership(
             workspace_id=workspace, actor_id=actors[actor], actor_kind="human",
-            capabilities=["commerce.read"],
+            capabilities=["company.read"] if actor == "no_read" else ["commerce.read"],
         )
         store.provision_product_entitlements(workspace_id=workspace, products=[product])
-        store._states[(workspace, "commerce")] = TrialState(
-            workspace, "commerce", 3, empty_state, updated_at="2026-10-22T00:00:00Z",
-        )
+        if actor not in {"new_shop", "no_read"}:
+            store._states[(workspace, "commerce")] = TrialState(
+                workspace, "commerce", 3, empty_state, updated_at="2026-10-22T00:00:00Z",
+            )
 
     principals = {
         "alice": TrialPrincipal("shop-a", actors["alice"], "human", session_id=session, identity_provider="supabase"),
         "bob": TrialPrincipal("shop-b", actors["bob"], "human", session_id=session, identity_provider="supabase"),
         "carol": TrialPrincipal("ecommerce-c", actors["carol"], "human", session_id=session, identity_provider="supabase"),
+        "new_shop": TrialPrincipal("shop-new", actors["new_shop"], "human", session_id=session, identity_provider="supabase"),
+        "no_read": TrialPrincipal("shop-no-read", actors["no_read"], "human", session_id=session, identity_provider="supabase"),
         "gateway": TrialPrincipal("shop-a", actors["alice"], "human", identity_provider="gateway"),
         "agent": TrialPrincipal("shop-a", actors["alice"], "agent", session_id=session, identity_provider="supabase"),
     }
@@ -123,6 +130,10 @@ def test_endpoint_is_tenant_scoped_and_requires_shop_user_session():
     assert client.get(path, headers={"x-test-user": "agent"}).status_code == 401
     ecommerce_response = client.get(path, headers={"x-test-user": "carol"})
     assert ecommerce_response.status_code == 403, ecommerce_response.json()
+    assert ecommerce_response.json()["detail"]["code"] == "shop_orders_shop_entitlement_required"
+    no_read_response = client.get(path, headers={"x-test-user": "no_read"})
+    assert no_read_response.status_code == 403, no_read_response.json()
+    assert no_read_response.json()["detail"]["required_capability"] == "commerce.read"
     assert client.get(path + "?workspace_id=shop-b", headers={"x-test-user": "alice"}).status_code == 422
     for actor, workspace in (("alice", "shop-a"), ("bob", "shop-b")):
         response = client.get(path, headers={"x-test-user": actor})
@@ -130,6 +141,16 @@ def test_endpoint_is_tenant_scoped_and_requires_shop_user_session():
         assert response.headers["cache-control"] == "private, no-store"
         assert response.json()["workspaceId"] == workspace
         assert response.json()["orders"] == []
+
+    # An authorized first-run Shop tenant has no Commerce state row. Its own
+    # empty v0 snapshot is readable without borrowing another tenant's data.
+    new_shop_response = client.get(path, headers={"x-test-user": "new_shop"})
+    assert new_shop_response.status_code == 200, new_shop_response.json()
+    assert new_shop_response.headers["cache-control"] == "private, no-store"
+    assert new_shop_response.json()["workspaceId"] == "shop-new"
+    assert new_shop_response.json()["workspaceVersion"] == 0
+    assert new_shop_response.json()["workspaceUpdatedAt"] == ""
+    assert new_shop_response.json()["orders"] == []
 
     # Isolate the route's tenant selection from the existing Commerce validator;
     # the projection's exact field allowlist is tested above.
@@ -147,3 +168,9 @@ def test_endpoint_is_tenant_scoped_and_requires_shop_user_session():
     assert bob.status_code == 200
     assert bob.json()["orders"] == []
     assert "Alice customer" not in alice.text
+
+    # A persisted but empty Commerce row is inconsistent, not a first-run
+    # workspace. It must not be silently reported as a valid empty snapshot.
+    store._states[("shop-new", "commerce")] = TrialState("shop-new", "commerce", 4, {})
+    corrupt_response = client.get(path, headers={"x-test-user": "new_shop"})
+    assert corrupt_response.status_code == 409

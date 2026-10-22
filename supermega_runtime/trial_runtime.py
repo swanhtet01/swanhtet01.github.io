@@ -67,6 +67,7 @@ from supermega_runtime.shop_sale_sync import (
 )
 from supermega_runtime.shop_order_snapshot import project_shop_order_snapshot
 from supermega_runtime.trial_store import (
+    ACTIVATION_PRODUCT_ENTITLEMENTS,
     APPROVAL_DECIDE_CAPABILITY,
     APPROVAL_REQUEST_CAPABILITY,
     PRODUCT_ACCEPTANCE_SURFACES,
@@ -1415,7 +1416,7 @@ def create_trial_router(
 
     @router.get("/shop/orders")
     async def read_shop_orders(request: Request) -> JSONResponse:
-        """Read confirmed orders from the signed-in tenant's Commerce state."""
+        """Read confirmed orders for a signed-in Shop member only."""
 
         headers = {"Cache-Control": "private, no-store", "Pragma": "no-cache"}
         try:
@@ -1428,14 +1429,26 @@ def create_trial_router(
             _require_read_ready(readiness)
             if not readiness.role_ready:
                 raise _error(503, "trial_not_ready", blockers=["role_ready"])
-            if readiness.product_entitlements is None or "commerce" not in readiness.product_entitlements:
+            # Shop's canonical activation entitlement is named ``commerce``;
+            # Ecommerce has a distinct entitlement even though both products
+            # can read the shared Commerce state. Do not accept Ecommerce-only
+            # membership for this Shop-specific projection.
+            if (
+                readiness.product_entitlements is None
+                or ACTIVATION_PRODUCT_ENTITLEMENTS["shop"] not in readiness.product_entitlements
+            ):
                 raise _error(403, "shop_orders_shop_entitlement_required")
             if not has_surface_read_capability(readiness.capabilities, "commerce"):
                 raise _error(403, "trial_capability_required", required_capability="commerce.read")
             commerce = await run_in_threadpool(_invoke, lambda: store.get_state(principal, "commerce"))
-            if not commerce.state:
+            if commerce.version == 0 and not commerce.state:
+                # A first-run Shop workspace has no Commerce row yet. An
+                # authorized read is an empty snapshot, not a setup failure.
+                state = {"orders": []}
+            elif not commerce.state:
                 raise _error(409, "commerce_workspace_required")
-            state = await run_in_threadpool(_invoke, lambda: validate_commerce_state(commerce.state))
+            else:
+                state = await run_in_threadpool(_invoke, lambda: validate_commerce_state(commerce.state))
             snapshot = project_shop_order_snapshot(
                 state,
                 workspace_id=principal.workspace_id,
