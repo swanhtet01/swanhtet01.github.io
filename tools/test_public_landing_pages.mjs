@@ -23,6 +23,7 @@ const outputDir = isolatedOutputId
 const staticDir = resolve(outputDir, 'static')
 const manifest = JSON.parse(readFileSync(resolve(root, 'site-manifest.json'), 'utf8'))
 const publicGalleryProvenance = JSON.parse(readFileSync(resolve(root, 'tools', 'public-assets', 'public-gallery-provenance.json'), 'utf8'))
+const shopPhotoSources = JSON.parse(readFileSync(resolve(root, 'tools', 'qa-assets', 'shop-products', 'sources.json'), 'utf8'))
 const activeIds = activeProductContracts(manifest).map(product => product.id)
 const discoverablePages = manifest.pages.filter(page => !page.redirectTo && (!page.productId || activeIds.includes(page.productId)))
 const config = JSON.parse(readFileSync(resolve(outputDir, 'config.json'), 'utf8'))
@@ -368,7 +369,8 @@ check(/<img src="\/images\/actual-shop-sell-my\.png"[^>]*width="1000" height="90
 check(!myShop.includes('class="shop-support-proof"')
   && !/\/images\/actual-shop-(?:orders|inventory)[^" ]*/.test(myShop), 'myanmar_shop_has_one_localized_capture')
 check(countOccurrences(myShop, 'class="shop-photo-credit"') === 1
-  && myShop.includes('id="shop-image-credits"') && myShop.includes('ပန်းသီးနီ ဓာတ်ပုံ:') && myShop.includes('Fructibus / Wikimedia Commons')
+  && myShop.includes('id="shop-image-credits"') && myShop.includes('ဓာတ်ပုံရင်းမြစ်:')
+  && ['Fructibus', 'ZooFari', 'Nat1620', 'Eoin Kilfeather', 'Saidismailanik'].every(author => myShop.includes(author))
   && myShop.includes('https://creativecommons.org/publicdomain/zero/1.0/'), 'myanmar_shop_product_photo_credit_visible')
 check(!myShop.includes('Complete sample sale') && !myShop.includes('class="pos-window"'), 'myanmar_shop_does_not_claim_public_simulator')
 const myContact = readStatic('my/contact/index.html')
@@ -448,7 +450,9 @@ for (const [route, html] of [['/shop/', shopLanding], ...activeIds.filter(id => 
   const expectedLoginHref = `href="${appOrigin}/login?product=shop"`
   check(countOccurrences(body, expectedLoginHref) === 0, `public_login_action_absent:${route}`)
   const carouselCount = 0
-  const expectedLinks = route === '/shop/' ? 11 : 5 + Number(routeManifestProduct?.status === 'available-in-app')
+  const photoCreditLinks = shopPhotoSources.products.length
+    + shopPhotoSources.products.filter(product => product.publication_rights.basis === 'cc0-1.0').length
+  const expectedLinks = route === '/shop/' ? 9 + photoCreditLinks : 5 + Number(routeManifestProduct?.status === 'available-in-app')
   check((body.match(/<a\b/g) || []).length === expectedLinks, `marketing_link_surface:${route}`)
   const viewportGalleryCount = countOccurrences(body, 'data-viewport-gallery')
   const expectedButtons = viewportGalleryCount * 3 + carouselCount * 2

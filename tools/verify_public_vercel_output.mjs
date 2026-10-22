@@ -405,12 +405,16 @@ for (const [route, html] of [['/shop/', pages.get('/shop/').html], ...publicProd
     ? `/contact/?product=${routeProduct.id}`
     : null
   const galleryViews = { shop: 3, website: 2, ecommerce: 2 }
-  const expectedLinks = route === '/shop/' ? 11 : 5 + Number(Boolean(contactActionTarget))
+  const photoCreditLinks = publicGalleryImageSources.products.length
+    + publicGalleryImageSources.products.filter(product => product.publication_rights.basis === 'cc0-1.0').length
+  const expectedLinks = route === '/shop/' ? 9 + photoCreditLinks : 5 + Number(Boolean(contactActionTarget))
   if ((body.match(/<a\b/g) || []).length !== expectedLinks) fail('marketing_link_surface_drift', { route, expectedLinks })
   const publicLogin = `href="${appOrigin}/login?product=shop"`
   if (countOccurrences(body, publicLogin) !== 0) fail('public_login_action_present', { route })
   if (route === '/shop/' && (!body.includes('class="button button-primary" href="/contact/?product=shop">Request a Shop walkthrough') || body.includes('Ask about Shop') || body.includes('Talk about Shop') || body.includes('See Shop screens') || body.includes('Need help with Shop?'))) fail('shop_primary_product_action_missing')
-  if (route === '/shop/' && (!body.includes('Red apple photo:') || !body.includes('Fructibus / Wikimedia Commons') || !body.includes('https://creativecommons.org/publicdomain/zero/1.0/'))) fail('shop_photo_attribution_missing')
+  if (route === '/shop/' && (!body.includes('Photo sources:')
+    || publicGalleryImageSources.products.some(product => !body.includes(product.source_author))
+    || !body.includes('https://creativecommons.org/publicdomain/zero/1.0/'))) fail('shop_photo_attribution_missing')
   if (body.includes('>Company</a>')) fail('company_page_navigation_not_consolidated')
   const hasGalleryNavigation = route !== '/shop/' && (galleryViews[routeProduct?.id] || 0) > 1
   const expectedButtons = Number(hasGalleryNavigation) * 2
@@ -539,7 +543,8 @@ if (!/<img src="\/images\/actual-shop-sell-my\.png"[^>]*width="1000" height="900
   fail('myanmar_shop_hero_dimensions_invalid')
 if (/\/images\/actual-shop-(?:orders|inventory)[^" ]*/.test(myShop)) fail('myanmar_shop_displays_english_support_capture')
 if (countOccurrences(myShop, 'class="shop-photo-credit"') !== 1
-  || !myShop.includes('id="shop-image-credits"') || !myShop.includes('ပန်းသီးနီ ဓာတ်ပုံ:') || !myShop.includes('Fructibus / Wikimedia Commons')
+  || !myShop.includes('id="shop-image-credits"') || !myShop.includes('ဓာတ်ပုံရင်းမြစ်:')
+  || publicGalleryImageSources.products.some(product => !myShop.includes(product.source_author))
   || !myShop.includes('https://creativecommons.org/publicdomain/zero/1.0/')) fail('myanmar_shop_photo_attribution_missing')
 for (const token of ['action="/api/contact-submissions"', 'name="idempotency_key"', 'name="source_url"', '>အမည်<input', '>အီးမေးလ်<input', '>စာပို့ရန်</button>', 'စာလက်ခံရရှိပါပြီ']) {
   if (!myContact.includes(token)) fail('myanmar_contact_contract_missing', { token })

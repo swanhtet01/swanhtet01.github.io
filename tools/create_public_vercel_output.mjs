@@ -980,9 +980,14 @@ function shopCounterSalePreview(locale = 'en') {
  interfaceDisclosure(tabletImage)
  const imageAlt = locale === 'my' ? 'ကောင်တာအရောင်း၊ ကုန်ပစ္စည်းရှာဖွေမှုနှင့် လက်ရှိခြင်းတောင်းကို ပြထားသော Shop ဘရောက်ဇာမျက်နှာပြင်' : alt
  const disclosure = locale === 'my' ? 'နမူနာမှတ်တမ်းများနှင့် ဈေးနှုန်းများ' : 'Sample records and prices'
- const photographers = publicGalleryImageSources.products.map(product =>
-  `<a href="${escapeHtml(product.source_page)}">${escapeHtml(product.source_author)}</a>`).join(' · ')
- const credit = `${locale === 'my' ? 'ဓာတ်ပုံရင်းမြစ်' : 'Photo sources'}: ${photographers} / Wikimedia Commons · CC0 / public domain`
+ const photographers = publicGalleryImageSources.products.map(product => {
+  const rights = product.publication_rights
+  const license = rights.basis === 'cc0-1.0'
+   ? `<a href="${escapeHtml(rights.license_url)}">CC0</a>`
+   : (locale === 'my' ? 'အများပိုင်အဖြစ် လွှဲပြောင်းထားသည်' : 'public-domain dedication')
+  return `<a href="${escapeHtml(product.source_page)}">${escapeHtml(product.source_author)}</a> (${license})`
+ }).join(' · ')
+ const credit = `${locale === 'my' ? 'ဓာတ်ပုံရင်းမြစ်' : 'Photo sources'}: ${photographers} / Wikimedia Commons`
  return `<figure class="shop-lead-capture"><picture><source media="(max-width: 760px)" srcset="/images/${mobileImage}" width="390" height="844" /><source media="(max-width: 1024px)" srcset="/images/${tabletImage}" width="768" height="1024" /><img src="/images/${image}" alt="${escapeHtml(imageAlt)}" width="${locale === 'my' ? 1000 : 1440}" height="900" loading="eager" fetchpriority="high" /></picture><figcaption id="shop-sample-disclosure"><span>${disclosure}</span><span class="shop-photo-credit" id="shop-image-credits">${credit}</span></figcaption></figure>`
 }
 function productStory(id, standalone = false) {
