@@ -270,7 +270,7 @@ void main() {
               ?.textTheme
               .bodyMedium
               ?.fontFamily,
-          'Inter',
+          myanmar ? 'NotoSansMyanmarUI' : 'Inter',
         );
         final theme = tester
             .widget<MaterialApp>(find.byType(MaterialApp))

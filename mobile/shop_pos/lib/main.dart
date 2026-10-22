@@ -214,11 +214,13 @@ class _ShopAppState extends State<ShopApp> {
 
   @override
   Widget build(BuildContext context) {
-    // Keep Latin product names consistent in both locales. The UI-cut Myanmar
-    // font has tighter vertical metrics for controls; the full font remains a
-    // fallback for glyphs outside that cut.
-    const fontFamily = 'Inter';
-    const fontFallback = ['NotoSansMyanmarUI', 'NotoSansMyanmar'];
+    // Give each locale its own UI metrics. Latin product names still use Inter
+    // through fallback on Myanmar screens, while Myanmar labels shape together
+    // in one font instead of being split across a Latin-first fallback chain.
+    final fontFamily = _myanmar ? 'NotoSansMyanmarUI' : 'Inter';
+    final fontFallback = _myanmar
+        ? const ['NotoSansMyanmar', 'Inter']
+        : const ['NotoSansMyanmarUI', 'NotoSansMyanmar'];
     final tracking = _myanmar ? 0.0 : -0.35;
     const ink = Color(0xff171b2c);
     const border = Color(0xffdce2ed);
