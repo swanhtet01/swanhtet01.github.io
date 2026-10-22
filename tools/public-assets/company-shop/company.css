@@ -18,9 +18,9 @@
       --radius-xl: 30px;
       --radius-lg: 22px;
       --radius-md: 16px;
-      --sans: "Inter", "Noto Sans Myanmar", "Segoe UI", system-ui, sans-serif;
-      --display: "Geist", Inter, "Noto Sans Myanmar", "Segoe UI", system-ui, sans-serif;
-      --myanmar: "Noto Sans Myanmar", "Myanmar Text", "Segoe UI", system-ui, sans-serif;
+      --sans: "Inter", "SuperMega Noto Myanmar", "Segoe UI", system-ui, sans-serif;
+      --display: "Inter", "SuperMega Noto Myanmar", "Segoe UI", system-ui, sans-serif;
+      --myanmar: "SuperMega Noto Myanmar", "Myanmar Text", "Segoe UI", system-ui, sans-serif;
     }
 
     * { box-sizing: border-box; }

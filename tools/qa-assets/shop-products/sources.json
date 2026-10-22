@@ -1,19 +1,15 @@
 {
-  "purpose": "Synthetic Shop screenshot fixture only. Four retailer photos have no verified public reuse grant; the public site remains blocked.",
+  "purpose": "Synthetic Shop screenshot fixture only. Retailer images are excluded because public reuse permission is absent; the public site remains blocked pending exact-capture review and all image rights.",
   "observed_at": "2026-10-20",
   "photo_rights_reviewed_at": "2026-10-21",
-  "license_status": "one CC BY-SA 3.0 contributor photo; four retailer photos without verified public reuse permission",
+  "license_status": "one CC BY-SA 3.0 contributor photo retained; four retailer photos removed from the current source tree and capture fixture",
   "products": [
     {
       "sku": "SM-1001",
       "name": "KAUNG 90 Days Rice",
       "variant": "6 kg",
-      "file": "kaung-90-days-rice.webp",
-      "image_sha256": "e0b65ee270b98f1d475c6930cd2caa734c7f4fd612d19a1b2a36f951939b2e22",
-      "package_visual_check": "Brand and 6 kg are legible on the saved package photo.",
+      "photo_status": "not_included_no_public_reuse_grant",
       "source_page": "https://www.makropro.com.mm/en/p/UGzIQDaq-655742229162369",
-      "source_image": "https://images.mango-prod.siammakro.cloud/product-images/655742229162369-b1d0e5f0-2cf9-4d19-8fa4-3fd61f45e1f2.png?eo-img.format=webp&eo-img.resize=w%2F1080",
-      "observed_listing_price_mmk": 16100,
       "sample_catalog_price_mmk": 12450
     },
     {
@@ -21,6 +17,7 @@
       "name": "MAMA Chicken Instant Noodles",
       "variant": "55 g × 5",
       "file": "mama-chicken-noodles.jpg",
+      "photo_status": "contributor_photo_license_review_needed_for_public_use",
       "image_sha256": "5f2e2d57abe0a28199dbdaa8fb8295bc85332bc39a15dd8b087a869a63627f6c",
       "package_visual_check": "The MAMA Chicken multipack front shows five packets and 55 g per packet; the physical pack shape is cropped.",
       "source_page": "https://world.openfoodfacts.org/product/8850987101526",
@@ -33,44 +30,30 @@
         "attribution": "Photo by twindel for Open Food Facts, CC BY-SA 3.0; original image, no edits.",
         "note": "The contributor photo license does not clear separate package-artwork or trademark rights."
       },
-      "price_source_page": "https://www.makropro.com.mm/en/p/5naG253i-959581956494723",
-      "observed_listing_price_mmk": 3700,
       "sample_catalog_price_mmk": 2950
     },
     {
       "sku": "SM-1003",
       "name": "ALPINE Drinking Water",
       "variant": "1 L × 6",
-      "file": "alpine-water-six-pack.webp",
-      "image_sha256": "65e4227f93acb9fcdf215addfa6ae4c0d5a818bbf910e61c7bcd9c5797ba0035",
-      "package_visual_check": "A shrink-wrapped ALPINE bottle pack is visible; the 1 L size and six-bottle count are not legible in this photo.",
+      "photo_status": "not_included_no_public_reuse_grant",
       "source_page": "https://www.makropro.com.mm/en/p/8ZJsp9nm-350193912914762",
-      "source_image": "https://images.mango-prod.siammakro.cloud/product-images/350193912914762-9ce07323-e83a-49ee-8df8-af4e19c697f4.jpeg?eo-img.format=webp&eo-img.resize=w%2F1080",
-      "observed_listing_price_mmk": 5000,
       "sample_catalog_price_mmk": 5700
     },
     {
       "sku": "SM-1004",
       "name": "BAYDAR Laundry Detergent",
       "variant": "700 g",
-      "file": "baydar-detergent.webp",
-      "image_sha256": "3ca92a8d0224bd71024dcc704fedea2020280b3d9bc64c3b59f125b41a2a5d7b",
-      "package_visual_check": "BAYDAR branding and 700 g are legible on the saved package photo.",
+      "photo_status": "not_included_no_public_reuse_grant",
       "source_page": "https://www.makropro.com.mm/en/p/S7kSD2ZS-553565729514833",
-      "source_image": "https://images.mango-prod.siammakro.cloud/product-images/553565729514833-bb05ddfa-34ff-4b8b-af21-6a7ccacaee35.jpeg?eo-img.format=webp&eo-img.resize=w%2F1080",
-      "observed_listing_price_mmk": 7600,
       "sample_catalog_price_mmk": 5900
     },
     {
       "sku": "SM-1005",
       "name": "ZESS Sugar Crackers",
       "variant": "192 g",
-      "file": "zess-sugar-crackers.webp",
-      "image_sha256": "dec71c394470b0e5dfd43d23d7611319e64201f6689649a5ccd041266e0680d5",
-      "package_visual_check": "ZESS Sugar and eight inner packs are visible; the 192 g weight is not legible in this photo.",
+      "photo_status": "not_included_no_public_reuse_grant",
       "source_page": "https://www.makropro.com.mm/en/p/ETuOUnrc-858707669623079",
-      "source_image": "https://images.mango-prod.siammakro.cloud/product-images/858707669623079-90aafabe-d261-4d30-b753-b98ef3cc4eb6.png?eo-img.format=webp&eo-img.resize=w%2F1080",
-      "observed_listing_price_mmk": 8000,
       "sample_catalog_price_mmk": 8000
     }
   ]

@@ -66,7 +66,7 @@ async function serveFixture(fixtures) {
         response.writeHead(200, { 'Content-Type': mime['.woff2'], 'Cache-Control': 'no-store' }).end(bytes)
         return
       }
-      const match = /^\/(shop|workspaces)\/(index\.html|fixture\.js|fixture\.css|qa\.css)?$/.exec(url.pathname)
+      const match = /^\/(shop|shop-my|workspaces)\/(index\.html|fixture\.js|fixture\.css|qa\.css)?$/.exec(url.pathname)
       if (!match) { response.writeHead(404).end(); return }
       const file = match[2] || 'index.html'
       const bytes = await readFile(join(fixtures[match[1]], file))
@@ -153,7 +153,7 @@ async function capture(cdp, sessionId, output, name, expectedTexts, view) {
       const node = document.querySelector(${JSON.stringify(view.selector)});
       const bounds = node?.getBoundingClientRect();
       const images = [...document.querySelectorAll(${JSON.stringify(view.imageSelector || 'img')})];
-      return { path: location.pathname, route: window.__qaGalleryRoute ?? null,
+      return { path: location.pathname, locale: document.documentElement.lang, route: window.__qaGalleryRoute ?? null,
         tab: window.__qaGalleryTab ?? null, visible: Boolean(bounds && bounds.bottom > 0 && bounds.top < innerHeight && bounds.right > 0 && bounds.left < innerWidth),
         imageCount: images.length, loadedImages: images.filter(image => image.complete && image.naturalWidth > 0).length };
     })()`)
@@ -164,7 +164,8 @@ async function capture(cdp, sessionId, output, name, expectedTexts, view) {
     const routeMatches = expectedRoute ? actualRoute?.pathname === expectedRoute.pathname
       && [...expectedRoute.searchParams].every(([key, value]) => actualRoute.searchParams.get(key) === value)
       : actualRoute === null
-    if (state.path === view.fixturePath && routeMatches && state.tab === (view.tab || null)
+    if (state.path === view.fixturePath && (!view.uiLocale || state.locale === view.uiLocale)
+      && routeMatches && state.tab === (view.tab || null)
       && state.visible && state.imageCount >= (view.images || 0) && state.loadedImages >= (view.images || 0)) {
       viewVerified = true
       break
@@ -209,7 +210,8 @@ async function capture(cdp, sessionId, output, name, expectedTexts, view) {
   if (width !== (view.width || 1440) || height !== (view.height || 900)) throw new Error(`capture_dimensions_invalid:${name}:${width}x${height}`)
   await writeFile(resolve(output, `${name}.png`), bytes, { flag: 'wx' })
   return { file: `${name}.png`, width, height, sha256: createHash('sha256').update(bytes).digest('hex'),
-    fixturePath: view.fixturePath, routeState: lastState.route || lastState.tab, visibleSelector: view.selector, loadedImages }
+    fixturePath: view.fixturePath, routeState: lastState.route || lastState.tab, uiLocale: lastState.locale,
+    visibleSelector: view.selector, loadedImages }
 }
 
 async function captureMobile(cdp, sessionId, output, name, expectedTexts, view) {
@@ -237,6 +239,21 @@ async function captureMobile(cdp, sessionId, output, name, expectedTexts, view) 
     await cdp.send('Emulation.setScrollbarsHidden', { hidden: false }, sessionId)
     await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false }, sessionId)
     await evaluate(cdp, sessionId, 'window.scrollTo(0,0)')
+  }
+}
+
+async function captureMyanmarDesktop(cdp, sessionId, output, name, expectedTexts, view) {
+  // The 1000px two-pane counter remains readable when fitted into the public
+  // hero. The narrower 820px counter scrolls category chips horizontally.
+  await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1000, height: 900, deviceScaleFactor: 1, mobile: false }, sessionId)
+  await cdp.send('Emulation.setScrollbarsHidden', { hidden: true }, sessionId)
+  try {
+    const pageWidth = await evaluate(cdp, sessionId, 'document.documentElement.scrollWidth')
+    if (pageWidth > 1000) throw new Error(`myanmar_counter_desktop_horizontal_overflow:${pageWidth}`)
+    return await capture(cdp, sessionId, output, name, expectedTexts, { ...view, width: 1000, height: 900 })
+  } finally {
+    await cdp.send('Emulation.setScrollbarsHidden', { hidden: false }, sessionId)
+    await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false }, sessionId)
   }
 }
 
@@ -292,8 +309,9 @@ async function main() {
   await mkdir(outputRoot, { recursive: true })
   const output = await mkdtemp(join(outputRoot, 'gallery-candidate-'))
   const fixtureRoot = await mkdtemp(join(outputRoot, 'gallery-fixtures-'))
-  const fixtures = { shop: join(fixtureRoot, 'shop'), workspaces: join(fixtureRoot, 'workspaces') }
+  const fixtures = { shop: join(fixtureRoot, 'shop'), 'shop-my': join(fixtureRoot, 'shop-my'), workspaces: join(fixtureRoot, 'workspaces') }
   buildFixture('build_shop_browser_fixture.mjs', fixtures.shop, ['--today', '--gallery'])
+  buildFixture('build_shop_browser_fixture.mjs', fixtures['shop-my'], ['--today', '--gallery', '--gallery-myanmar'])
   buildFixture('build_product_clarity_fixture.mjs', fixtures.workspaces, ['--gallery'])
   const sampleMedia = new Map(await Promise.all(samplePhotoFiles.map(async file =>
     [`https://gallery-fixture.example/media/${file}`, await readFile(resolve(root, 'tools', 'qa-assets', file))])))
@@ -378,11 +396,11 @@ async function main() {
       throw new Error(`counter_multi_item_basket_missing:${JSON.stringify(saleBasket)}`)
     }
     captures.push(await capture(cdp, sessionId, output, 'actual-shop-sell', ['Products', 'Current sale', 'KAUNG 90 Days Rice'],
-      { fixturePath: '/shop/', tab: 'counter', selector: '.shop-current-sale', imageSelector: '.shop-product-art.shop-product-photo', images: 5 }))
+      { fixturePath: '/shop/', tab: 'counter', selector: '.shop-current-sale', imageSelector: '.shop-product-art.shop-product-photo', images: 1 }))
     captures.push(await captureTablet(cdp, sessionId, output, 'actual-shop-sell-tablet', ['Products', 'Current sale', 'KAUNG 90 Days Rice'],
-      { fixturePath: '/shop/', tab: 'counter', selector: '.shop-counter-grid', scrollToTop: true, imageSelector: '.shop-product-art.shop-product-photo', images: 5 }))
+      { fixturePath: '/shop/', tab: 'counter', selector: '.shop-counter-grid', scrollToTop: true, imageSelector: '.shop-product-art.shop-product-photo', images: 1 }))
     captures.push(await captureMobile(cdp, sessionId, output, 'actual-shop-sell-mobile', ['Products', 'KAUNG 90 Days Rice'],
-      { fixturePath: '/shop/', tab: 'counter', selector: '.shop-counter-grid', imageSelector: '.shop-product-art.shop-product-photo', images: 5 }))
+      { fixturePath: '/shop/', tab: 'counter', selector: '.shop-counter-grid', imageSelector: '.shop-product-art.shop-product-photo', images: 1 }))
     await clickSelector(cdp, sessionId, '.shop-review-sale')
     await waitFor(cdp, sessionId, 'Review counter sale')
     await typeInto(cdp, sessionId, '.accountable-action-gate input', 'Synthetic cashier')
@@ -454,6 +472,35 @@ async function main() {
     captures.push(await captureMobile(cdp, sessionId, output, 'actual-shop-inventory-mobile', ['Inventory', 'Stock'],
       { fixturePath: '/shop/', tab: 'inventory', selector: '.shop-stock-module', forbiddenText: ['Payment and handoff recorded'] }))
     await assertShopMobileFits(cdp, sessionId, '.shop-stock-module')
+    await clickText(cdp, sessionId, 'Clean synthetic databases')
+
+    await cdp.send('Page.navigate', { url: `${origin}/shop-my/` }, sessionId)
+    await waitFor(cdp, sessionId, 'ကုန်ပစ္စည်းများ')
+    const myLocale = await evaluate(cdp, sessionId, `({ selected: window.__qaReadLocale(), lang: document.documentElement.lang })`)
+    if (myLocale.selected !== 'my' || myLocale.lang !== 'my') throw new Error(`myanmar_shop_locale_not_ready:${JSON.stringify(myLocale)}`)
+    await clickText(cdp, sessionId, 'Show Counter')
+    const mySaleBasket = await evaluate(cdp, sessionId, `(async () => {
+      const added=[];
+      for (let index=0; index<3; index+=1) {
+        const tile=[...document.querySelectorAll('button.shop-product-tile')]
+          .find(candidate=>!candidate.querySelector('.shop-product-quantity'));
+        if (!tile) return {added,lines:document.querySelectorAll('.shop-cart-lines article').length};
+        added.push(tile.querySelector('.shop-product-name strong')?.textContent?.trim()||'unnamed product');
+        tile.click();
+        await new Promise(resolve=>setTimeout(resolve,100));
+      }
+      return {added,lines:document.querySelectorAll('.shop-cart-lines article').length};
+    })()`)
+    if (mySaleBasket.added.length !== 3 || mySaleBasket.lines !== 3)
+      throw new Error(`myanmar_counter_multi_item_basket_missing:${JSON.stringify(mySaleBasket)}`)
+    captures.push(await captureMyanmarDesktop(cdp, sessionId, output, 'actual-shop-sell-my', ['ကုန်ပစ္စည်းများ', 'လက်ရှိ အရောင်း', 'ငွေသား', 'သောက်စရာ', 'အိမ်သုံးပစ္စည်း', 'အစားအသောက်'],
+      { fixturePath: '/shop-my/', tab: 'counter', uiLocale: 'my', selector: '.shop-current-sale', imageSelector: '.shop-product-art.shop-product-photo', images: 1,
+        forbiddenText: ['Drinks', 'Home care', 'Pantry', 'Cash'] }))
+    captures.push(await captureTablet(cdp, sessionId, output, 'actual-shop-sell-my-tablet', ['ကုန်ပစ္စည်းများ', 'လက်ရှိ အရောင်း'],
+      { fixturePath: '/shop-my/', tab: 'counter', uiLocale: 'my', selector: '.shop-counter-grid', scrollToTop: true, imageSelector: '.shop-product-art.shop-product-photo', images: 1 }))
+    captures.push(await captureMobile(cdp, sessionId, output, 'actual-shop-sell-my-mobile', ['ကုန်ပစ္စည်းများ', 'လက်ရှိ အရောင်း'],
+      { fixturePath: '/shop-my/', tab: 'counter', uiLocale: 'my', selector: '.shop-counter-grid', imageSelector: '.shop-product-art.shop-product-photo', images: 1 }))
+    await assertShopMobileFits(cdp, sessionId, '.shop-counter-grid')
     await clickText(cdp, sessionId, 'Clean synthetic databases')
 
     await cdp.send('Page.navigate', { url: `${origin}/workspaces/` }, sessionId)

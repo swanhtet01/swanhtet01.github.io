@@ -92,6 +92,7 @@ const sourceGalleryAssetNames = [
   'actual-shop-today-tablet.png', 'actual-shop-today-mobile.png',
   'actual-shop-orders.png', 'actual-shop-orders-tablet.png', 'actual-shop-orders-mobile.png',
   'actual-shop-inventory.png', 'actual-shop-inventory-tablet.png', 'actual-shop-inventory-mobile.png',
+  'actual-shop-sell-my.png', 'actual-shop-sell-my-tablet.png', 'actual-shop-sell-my-mobile.png',
   'actual-sites-editor.png', 'actual-sites-editor-tablet.png', 'actual-sites-editor-mobile.png',
   'actual-sites-inquiries.png', 'actual-sites-inquiries-tablet.png', 'actual-sites-inquiries-mobile.png',
   'actual-commerce-catalog.png', 'actual-commerce-catalog-tablet.png', 'actual-commerce-catalog-mobile.png',
@@ -102,6 +103,7 @@ const sourceGalleryAssetNames = [
 const publicGalleryAssetNames = [
   'actual-shop-today.png',
   'actual-shop-sell.png', 'actual-shop-sell-tablet.png', 'actual-shop-sell-mobile.png',
+  'actual-shop-sell-my.png', 'actual-shop-sell-my-tablet.png', 'actual-shop-sell-my-mobile.png',
   'actual-shop-orders.png', 'actual-shop-orders-tablet.png', 'actual-shop-orders-mobile.png',
   'actual-shop-inventory.png', 'actual-shop-inventory-tablet.png', 'actual-shop-inventory-mobile.png',
 ]
@@ -143,7 +145,8 @@ const sourceGalleryAssetEvidence = await Promise.all(publicGalleryProvenance.ass
   const bytes = await readFile(resolve(root, 'tools', 'public-assets', file))
   assert(bytes.subarray(0, 8).equals(OG_CARD_PNG_SIGNATURE), `public_gallery_asset_not_png:${file}`)
   const expectedDimensions = file.endsWith('-mobile.png') ? [390, 844]
-    : file.endsWith('-tablet.png') ? [768, 1024] : [1440, 900]
+    : file.endsWith('-tablet.png') ? [768, 1024]
+      : file === 'actual-shop-sell-my.png' ? [1000, 900] : [1440, 900]
   assert(Number.isInteger(width) && Number.isInteger(height)
     && width === expectedDimensions[0] && height === expectedDimensions[1],
     `public_gallery_asset_dimensions_invalid:${file}`)
@@ -159,6 +162,8 @@ const sourceGalleryAssetEvidence = await Promise.all(publicGalleryProvenance.ass
     && capture.captureTool === 'tools/capture_public_gallery.mjs'
     && capture.fixturePath === reportCapture.fixturePath
     && capture.routeState === reportCapture.routeState
+    && capture.uiLocale === reportCapture.uiLocale
+    && capture.uiLocale === (file.startsWith('actual-shop-sell-my') ? 'my' : 'en')
     && capture.visibleSelector === reportCapture.visibleSelector
     && capture.loadedImages === reportCapture.loadedImages
     && capture.captureMode === 'clean-commit-review'
@@ -268,6 +273,8 @@ if (previewAppBinding) release.previewNavigation = previewAppBinding
 const faviconSvg = brandFaviconSvg(manifest.brand.colors.accent)
 
 const sharedStyle = `
+  @font-face { font-family: "Inter"; src: url("/fonts/inter-latin.woff2") format("woff2"); font-style: normal; font-weight: 100 900; font-display: swap; }
+  @font-face { font-family: "SuperMega Noto Myanmar"; src: url("/fonts/noto-sans-myanmar.woff2") format("woff2"); font-style: normal; font-weight: 100 900; font-display: swap; }
   @font-face { font-family: "SuperMega Noto Sans"; src: url("/fonts/noto-sans-latin.woff2") format("woff2"); font-style: normal; font-weight: 100 900; font-display: swap; }
   @font-face { font-family: "SuperMega Noto Sans Myanmar"; src: url("/fonts/noto-sans-myanmar.woff2") format("woff2"); font-style: normal; font-weight: 100 900; font-display: swap; }
   :root {
@@ -295,7 +302,7 @@ const sharedStyle = `
     --blue-soft: rgba(37,99,235, .1);
     --shadow: 0 18px 48px rgba(15,23,42, .08);
     --radius: 8px;
-    --font-latin: "SuperMega Noto Sans", "Noto Sans", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI";
+    --font-latin: "Inter", "SuperMega Noto Myanmar", "SuperMega Noto Sans", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI";
   }
   * { box-sizing: border-box; }
   html { min-width: 320px; scroll-behavior: smooth; background: var(--bg); }
@@ -316,7 +323,7 @@ const sharedStyle = `
   .wrap { width: min(1260px, calc(100% - 64px)); margin-inline: auto; }
   .site-header { position: sticky; top: 0; z-index: 40; min-height: 76px; border-bottom: 1px solid var(--brand-line); background: rgba(255,255,255,.96); backdrop-filter: blur(18px); }
   .header-inner { min-height: 76px; display: flex; align-items: center; justify-content: space-between; gap: 24px; }
-  .brand { display: inline-flex; min-height: 48px; align-items: center; gap: .625rem; text-decoration: none; font-family: Geist, Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Myanmar Text", "Noto Sans Myanmar", sans-serif; font-size: 1rem; font-weight: 650; letter-spacing: -.02em; }
+  .brand { display: inline-flex; min-height: 48px; align-items: center; gap: .625rem; text-decoration: none; font-family: var(--font-latin), sans-serif; font-size: 1rem; font-weight: 650; letter-spacing: -.02em; }
   .brand-mark { width: 30px; height: 18px; display: inline-flex; flex: none; align-items: center; justify-content: center; border: 0; border-radius: 0; padding: 0; background: transparent; box-shadow: none; color: var(--brand-accent); }
   .brand-mark svg { display: block; width: 100%; height: 100%; }
   .brand-word { color: var(--brand-ink); font-size: 1rem; font-weight: 650; letter-spacing: -.02em; line-height: 1; }
@@ -336,8 +343,8 @@ const sharedStyle = `
   .eyebrow { display: inline-flex; align-items: center; gap: 9px; color: var(--green); font-family: "SFMono-Regular", Consolas, monospace; font-size: 12px; font-weight: 760; letter-spacing: .04em; text-transform: uppercase; }
   .eyebrow::before { width: 7px; height: 7px; border-radius: 50%; background: currentColor; content: ""; }
   h1, h2, h3, p { margin-top: 0; }
-  h1 { margin-bottom: 18px; font-size: clamp(42px, 5vw, 68px); line-height: .98; letter-spacing: -.058em; }
-  h2 { margin-bottom: 12px; font-size: clamp(28px, 3.4vw, 44px); line-height: 1.04; letter-spacing: -.04em; }
+  h1 { margin-bottom: 18px; font-size: clamp(42px, 5vw, 68px); line-height: 1.08; letter-spacing: -.025em; }
+  h2 { margin-bottom: 12px; font-size: clamp(28px, 3.4vw, 44px); line-height: 1.1; letter-spacing: -.02em; }
   h3 { margin-bottom: 9px; font-size: 20px; line-height: 1.2; letter-spacing: -.02em; }
   .lede { max-width: 720px; color: var(--muted); font-size: clamp(18px, 2vw, 23px); line-height: 1.55; }
   .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 30px; }
@@ -422,11 +429,14 @@ const sharedStyle = `
   .contact-page { display:grid; grid-template-columns:minmax(0,.82fr) minmax(0,1fr); align-items:start; gap:clamp(32px,5vw,84px); max-width:1160px; padding:clamp(44px,7vw,88px) 0 86px; }
   .contact-page .page-hero { max-width:none; padding:18px 0 0; position:static; }
   .contact-page .page-hero::after { display:none; }
-  .contact-page .page-hero h1 { max-width:480px; font-size:clamp(40px,4.3vw,58px); line-height:1.04; letter-spacing:-.045em; }
+  .contact-page .page-hero h1 { max-width:480px; font-size:clamp(40px,4.3vw,58px); line-height:1.1; letter-spacing:-.02em; }
   .contact-page .page-hero .lede { max-width:430px; font-size:18px; line-height:1.62; }
   .contact-company-intro { max-width:430px; color:var(--ink); font-size:15px; line-height:1.6; }
+  .contact-direct { max-width:430px; margin-top:28px; color:var(--muted); font-size:14px; line-height:1.6; }
+  .contact-direct a { color:var(--brand-accent-strong); text-decoration:underline; text-underline-offset:3px; }
   .contact-page .contact-layout { display:block; padding:0; }
   .contact-page .contact-form { width:100%; padding:clamp(24px,3vw,40px); gap:18px; border-color:#dbe3ee; border-radius:8px; background:#fff; box-shadow:0 16px 42px rgba(11,15,23,.06); }
+  .contact-page .contact-form[hidden] { display:none; }
   .contact-page .field-grid { gap:20px 16px; }
   .contact-page .field-grid label { display: block; color: var(--ink); font-size: 13px; font-weight: 650; }
   .contact-page .field-grid input, .contact-page .field-grid select, .contact-page .field-grid textarea { display: block; margin-top: 9px; min-height: 52px; border-color: #dbe3ee; border-radius: 6px; background: #fff; font-size: 15px; }
@@ -591,7 +601,8 @@ const sharedStyle = `
   @media (max-width: 760px) { .contact-form input, .contact-form select, .contact-form textarea { font-size: 16px; } }
   @media (max-width: 1050px) { .wrap { width: min(calc(100% - 48px), 900px); } }
   @media (max-width: 760px) { .frame { width: min(calc(100% - 30px), 1200px); } .header-inner { min-height: 62px; gap: 10px; } .nav-link { padding-inline: 8px; } .nav-optional { display: none; } .header-cta { min-height: 42px; padding-inline: 13px; } .hero, .page-hero { padding-top: 46px; } .hero { padding-bottom: 52px; } .workspace-body { grid-template-columns: 1fr; min-height: 0; } .workspace-nav { display: none; } .workspace-main { padding: 16px; } .metric-grid { grid-template-columns: 1fr; } .metric { min-height: 76px; } .surface-grid, .product-grid, .template-grid, .module-grid, .principle-grid, .trust-compact, .case-grid, .compact-solutions, .product-roadmap, .shared-capability { grid-template-columns: 1fr; } .surface-card, .surface-card:last-child { grid-column: auto; min-height: 220px; } .solution-block { padding: 24px; } .system-preview-body { padding: 18px; } .system-row { grid-template-columns: 28px 92px minmax(0, 1fr); } .system-row i { display: none; } .section { padding: 50px 0; } .control-line, .closing-strip { display: grid; grid-template-columns: 1fr; } .callout { grid-template-columns: 1fr; } .callout { padding: 26px; } .contact-form { padding: 20px; } .field-grid { grid-template-columns: 1fr; } label.wide { grid-column: auto; } .prose section { grid-template-columns: 1fr; gap: 6px; } .footer-row { display: grid; } .footer-links { justify-content: flex-start; } }
-  @media (max-width: 680px) { .wrap { width: min(calc(100% - 36px), 560px); } .site-header .header-inner { flex-wrap: wrap; gap: 6px 12px; padding-block: 8px; } .site-header .brand { min-height: 48px; gap: .625rem; font-size: 1rem; } .site-header .nav-links { flex: 1 0 100%; justify-content: flex-end; flex-wrap: wrap; } .site-header .nav-links a { min-height: 48px; padding-inline: 9px; } }
+  @media (max-width: 680px) { .wrap { width: min(calc(100% - 36px), 560px); } .site-header { min-height: 64px; } .site-header .header-inner { min-height: 64px; flex-wrap: nowrap; gap: 6px; padding-block: 0; } .site-header .brand { min-height: 48px; flex: none; gap: 6px; font-size: 1rem; } .site-header .brand-word { font-size: 14px; } .site-header .nav-links { flex: 0 1 auto; justify-content: flex-end; flex-wrap: nowrap; gap: 0; } .site-header .nav-links a { min-width: 44px; min-height: 44px; padding-inline: 7px; font-size: 13px; white-space: nowrap; } }
+  @media (max-width: 340px) { .site-header .brand-word { font-size: 13px; } .site-header .nav-links a { padding-inline: 5px; } }
   @media (max-width: 420px) { .nav-link { display: none; } h1 { font-size: 38px; } .product-card { padding: 24px; } .compact-solution { padding: 22px; } }
   @media (min-width: 761px) { .detail-disclosure > summary { display: none; } details.detail-disclosure:not([open]) > .disclosure-body { display: block; } .detail-disclosure { margin-top: 0; border-top: 0; } .product-disclosure .disclosure-body { padding-top: 16px; } }
   @media (max-width: 760px) { .hero { gap: 28px; padding-top: 28px; padding-bottom: 32px; } .hero-note { display: none; } .section { padding: 32px 0; } .section-head { margin-bottom: 18px; } .section-head p { font-size: 16px; } .workspace-bar { min-height: 44px; } .system-preview-body { padding: 14px 16px; } .system-row { min-height: 44px; } .system-boundary { margin-top: 14px; } .compact-solution > p { min-height: 0; } .closing-strip { padding: 22px; } }
@@ -599,7 +610,7 @@ const sharedStyle = `
   @media (max-width: 520px) { .compact-solutions { grid-template-columns: 1fr; gap: 14px; } .compact-solution { min-height: 0; padding: 22px; } .compact-solution h3 { margin-top: 16px; font-size: 28px; } .compact-solution > p { font-size: 16px; line-height: 1.65; } .compact-solution .myanmar-label { line-height: 1.9; } .compact-solution .card-index { font-size: 11px; } .compact-solution .module-tags { display: none; } .compact-solution .card-link { margin-top: 16px; font-size: 14px; } }
   @media (max-width: 760px) { .offer-model-grid { grid-template-columns: 1fr; } .offer-model-lane { padding: 24px 0; } .offer-model-lane + .offer-model-lane { border-top: 1px solid var(--line-strong); border-left: 0; padding-left: 0; } .offer-model-action { align-items: stretch; flex-direction: column; } .offer-model-action .button { width: 100%; } }
   .editorial-hero {padding:36px 0 26px;max-width:1060px}
-  .editorial-hero h1 {font-size:clamp(40px,4.7vw,64px);line-height:1.04;letter-spacing:-.055em;margin:12px 0 14px;font-weight:650}
+  .editorial-hero h1 {font-size:clamp(40px,4.7vw,64px);line-height:1.1;letter-spacing:-.025em;margin:12px 0 14px;font-weight:650}
   .editorial-hero .lede {max-width:610px;font-size:17px;line-height:1.55;color:var(--muted)}
   .platform-gallery {display:grid;gap:12px;min-width:0}
   .company-hero .shop-showcase-nav a[aria-current="true"] {border-color:#93c5fd;background:#eff6ff;color:#1d4ed8}
@@ -613,19 +624,13 @@ const sharedStyle = `
   .shop-gallery-all .platform-image {padding:clamp(14px,2vw,24px);border-color:#e4e7ec;border-radius:14px;background:#fff;box-shadow:0 12px 34px rgba(16,24,40,.05)}
   .shop-gallery-all .platform-device-stage {padding:clamp(12px,2vw,22px);border-color:#e4e7ec;border-radius:12px;background:#f6f7f9;box-shadow:none}
   .shop-gallery-all .platform-device-capture img {border-radius:8px;box-shadow:0 5px 16px rgba(16,24,40,.08)}
-  .shop-responsive-showcase {display:grid;gap:18px;min-width:0}
   .shop-hero-app {min-width:0;align-self:center}
   .shop-lead-capture {max-width:1100px;margin:0 auto;padding:clamp(10px,1.5vw,18px);border:1px solid #e4e7ec;border-radius:12px;background:#fff;box-shadow:0 12px 34px rgba(16,24,40,.05)}
   .shop-lead-capture picture,.shop-lead-capture img {display:block;width:100%}
   .shop-lead-capture img {height:auto;border:1px solid #e5e8ef;border-radius:8px;background:#f7f8fb}
-  .shop-lead-capture figcaption {padding:12px 2px 2px;color:#596579;font-size:12px;line-height:1.45}
-  .shop-workflow-card p {margin:0;color:#596579;font-size:14px;line-height:1.55}
-  .shop-workflow-support {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
-  .shop-workflow-card {display:grid;grid-template-columns:minmax(0,1fr);gap:16px;min-width:0;margin:0;padding:14px;border:1px solid #e4e7ec;border-radius:12px;background:#fff}
-  .shop-workflow-card picture,.shop-workflow-card img {display:block;width:100%}
-  .shop-workflow-card img {height:auto;border:1px solid #e5e8ef;border-radius:8px;background:#f7f8fb;pointer-events:none;user-select:none}
-  .shop-workflow-card-copy {min-width:0}
-  .shop-workflow-card h3 {margin:0 0 8px;font-size:18px;letter-spacing:-.025em}
+  .shop-lead-capture figcaption {display:flex;flex-wrap:wrap;justify-content:space-between;gap:4px 16px;padding:12px 2px 2px;color:#596579;font-size:12px;line-height:1.55}
+  .shop-photo-credit {color:#596579}
+  .shop-photo-credit a {color:inherit;text-decoration:underline;text-underline-offset:2px}
   .platform-gallery-controls {display:flex;align-items:center;justify-content:flex-end;gap:12px;min-height:40px}
   .platform-gallery-controls button {display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border:1px solid var(--line-strong);border-radius:50%;color:var(--ink);background:#fff;font-size:20px;cursor:pointer}
   .platform-gallery-controls button:hover:not(:disabled) {border-color:var(--blue);color:var(--blue);background:#eff6ff}
@@ -696,7 +701,6 @@ const sharedStyle = `
   .button.primary:hover{background:#1d4ed8}
   .company-hero{background:radial-gradient(ellipse at 84% 18%,rgba(37,99,235,.10),transparent 32%),linear-gradient(180deg,#f5f8ff,#fff 68%)}
   body[data-view="company"] .company-hero{background:linear-gradient(180deg,#f8fbff,#fff 72%)}
-  .shop-actual-showcase{padding-block:clamp(24px,4vw,48px);border-bottom:1px solid #e4e7ec;background:#fff}
   body[data-view="company"] .company-hero::before{opacity:0;background-image:none}
   @media(min-width:1051px){body[data-view="company"] .company-hero .hero-grid{grid-template-columns:minmax(0,.76fr) minmax(520px,1.24fr);gap:clamp(28px,3.5vw,56px)}}
   body[data-view="company"] .company-hero .hero-art{min-height:0}
@@ -726,8 +730,6 @@ const sharedStyle = `
   @media(max-width:980px){.contact-page{grid-template-columns:1fr;gap:24px;max-width:760px;padding:42px 0 70px}.contact-page .page-hero{position:static;padding:0}.contact-page .page-hero::after{display:none}.contact-page .page-hero h1{font-size:clamp(36px,7vw,52px)}}
   @media(max-width:760px){.contact-page{padding:28px 0 52px}.contact-page .page-hero h1{font-size:clamp(36px,9vw,48px)}.contact-page .contact-form{padding:20px;border-radius:8px}.brand-domain{display:none}}
   @media(max-width:1050px){body[data-view="shop"] .shop-hero .wrap{grid-template-columns:minmax(0,1fr);gap:28px}.shop-hero-app{max-width:920px}}
-  @media(max-width:760px){.shop-workflow-support{grid-template-columns:1fr}.shop-workflow-card{gap:12px;padding:12px}}
-  @media(max-width:480px){.shop-workflow-card{grid-template-columns:minmax(0,1fr)}.shop-workflow-card h3{margin-top:6px}}
 `
 
 function headerHtml(route, locale = 'en') {
@@ -801,15 +803,19 @@ body[data-view="company"] .company-hero h1 { max-width: 100%; font-size: clamp(4
 body[data-view="company"] .company-hero .hero-copy > p:not(.hero-kicker) { max-width: 44ch; font-size: 17px; line-height: 1.55; }
 body[data-view="company"] .company-product-visual { gap: 10px; padding: 12px; border-color: #dfded8; border-radius: 14px; background: #fff; box-shadow: 0 14px 32px rgba(25,28,38,.06); }
 body[data-view="company"] .company-product-visual img { border-color: #e4e4e1; border-radius: 8px; }
-body[data-view="shop"] .shop-hero { padding-block: clamp(34px,4vw,52px); background: #f3f5f9; }
-body[data-view="shop"] .shop-hero h1 { max-width: 24ch; font-size: clamp(40px,4.1vw,54px); line-height: 1.02; }
-body[data-view="shop"] .shop-hero-copy { display: grid; gap: 18px; align-content: center; min-width: 0; }
+body[data-view="shop"] .shop-hero { padding-block: clamp(40px,4.5vw,64px); background: #f6f8fc; }
+body[data-view="shop"] .shop-hero h1 { max-width: 12ch; font-size: clamp(42px,4.1vw,58px); line-height: 1.1; letter-spacing: -.018em; font-weight: 650; }
+body[data-view="shop"] .shop-hero-copy { display: grid; gap: 20px; align-content: center; min-width: 0; }
 body[data-view="shop"] .shop-hero-copy .eyebrow, body[data-view="shop"] .shop-hero-copy h1, body[data-view="shop"] .shop-hero-copy > p { margin: 0; }
-body[data-view="shop"] .shop-hero .button-primary { align-self: start; }
-body[data-view="shop"] .shop-hero .wrap { display: grid; grid-template-columns: minmax(0,1fr); gap: clamp(28px,4vw,48px); align-items: start; }
-body[data-view="shop"] .shop-hero-copy { max-width: 830px; }
-body[data-view="shop"] .shop-hero-app { width: 100%; max-width: none; justify-self: stretch; }
-body[data-view="shop"] .shop-actual-showcase { background: #fff; }
+body[data-view="shop"] .shop-hero-copy > p { max-width: 41ch; font-size: 16px; line-height: 1.55; }
+body[data-view="shop"] .shop-hero .button-primary { align-self: start; min-height: 50px; margin-top: 6px; padding-inline: 22px; border-color: #2563eb; border-radius: 8px; background: #2563eb; box-shadow: none; }
+body[data-view="shop"] .shop-hero .button-primary:hover { border-color: #1d4ed8; background: #1d4ed8; }
+body[data-view="shop"] .shop-hero .wrap { display: grid; grid-template-columns: minmax(0,1fr); gap: clamp(24px,3vw,40px); align-items: start; }
+body[data-view="shop"] .shop-hero-copy { max-width: 900px; gap: 14px; }
+body[data-view="shop"] .shop-hero h1 { max-width: none; }
+body[data-view="shop"] .shop-hero-copy > p { max-width: 68ch; }
+body[data-view="shop"] .shop-hero-app { width: 100%; max-width: 1100px; justify-self: center; }
+body[data-view="shop"] .shop-lead-capture { max-width: none; margin: 0; padding: 10px; border-color: #dfe5ee; border-radius: 13px; box-shadow: 0 20px 44px rgba(20,35,65,.10); }
 body[data-view="contact"] .contact-page { padding-block: clamp(48px,6vw,78px); }
 body[data-view="contact"] .contact-page .contact-form { gap: 16px; padding: 26px; border-color: #e1e3e8; border-radius: 12px; background: #fafbfc; box-shadow: none; }
 body[data-view="contact"] .contact-page .field-grid input, body[data-view="contact"] .contact-page .field-grid textarea { border-radius: 7px; }
@@ -818,10 +824,45 @@ body[data-view="contact"] .contact-page .contact-form .button { width: max-conte
   body[data-view="company"] .company-hero .hero-grid { min-height: 0; padding-block: 32px; }
   body[data-view="company"] .company-hero h1 { max-width: 100%; font-size: clamp(38px,10vw,52px); }
   body[data-view="shop"] .shop-hero { padding-block: 34px; }
+  body[data-view="shop"] .shop-hero h1 { max-width: 16ch; font-size: clamp(38px,10vw,48px); }
+  body[data-view="shop"] .shop-hero .button-primary { width: 100%; justify-content: center; }
   body[data-view="contact"] .contact-page { padding-block: 32px 52px; }
   body[data-view="contact"] .contact-page .contact-form { padding: 20px; }
   body[data-view="contact"] .contact-page .contact-form .button { width: 100%; }
 }
+@media (max-width: 1100px) {
+  body[data-view="shop"] .shop-hero .wrap { grid-template-columns: minmax(0,1fr); gap: 28px; }
+  body[data-view="shop"] .shop-hero-copy { max-width: 720px; }
+}
+@media (min-width: 761px) and (max-width: 1100px) { body[data-view="shop"] .shop-hero-copy { margin-inline: auto; text-align: center; justify-items: center; } body[data-view="shop"] .shop-hero h1 { max-width: 22ch; } }
+`
+
+const myanmarPublicStyle = `
+  html:lang(my) .nav-links a, html:lang(my) .button, html:lang(my) .footer-links a { line-height: 1.7; }
+  html:lang(my) body[data-view="shop"] .shop-hero h1 { max-width: 100%; font-size: clamp(30px, 2.65vw, 36px); line-height: 1.55; letter-spacing: 0; }
+  html:lang(my) body[data-view="shop"] .shop-hero-copy > p:not(.eyebrow) { max-width: 100%; font-size: 17px; line-height: 1.85; }
+  html:lang(my) body[data-view="shop"] .shop-hero-app { max-width: 1000px; }
+  html:lang(my) body[data-view="shop"] .shop-lead-capture figcaption { line-height: 1.8; }
+  html:lang(my) body[data-view="contact"] .contact-page .page-hero h1 { max-width: 100%; margin-bottom: 22px; font-size: clamp(32px, 3vw, 38px); line-height: 1.6; letter-spacing: 0; }
+  html:lang(my) body[data-view="contact"] .contact-company-intro { max-width: 480px; font-size: 16px; line-height: 1.85; }
+  html:lang(my) body[data-view="contact"] .contact-direct { line-height: 1.85; }
+  html:lang(my) body[data-view="contact"] .contact-page .page-hero .lede { max-width: 480px; font-size: 18px; line-height: 1.85; }
+  html:lang(my) body[data-view="contact"] .contact-page .field-grid label { font-size: 15px; line-height: 1.75; }
+  html:lang(my) body[data-view="contact"] .contact-page .field-grid input, html:lang(my) body[data-view="contact"] .contact-page .field-grid textarea { min-height: 56px; font-size: 16px; line-height: 1.7; }
+  html:lang(my) body[data-view="contact"] .contact-page .field-grid textarea { min-height: 136px; }
+  html:lang(my) body[data-view="contact"] .contact-page .form-note { font-size: 14px; line-height: 1.75; }
+  html:lang(my) body:not([data-view]) .page-hero { max-width: 900px; padding-block: 72px 58px; }
+  html:lang(my) body:not([data-view]) .page-hero h1 { max-width: 880px; margin-bottom: 24px; font-size: clamp(32px, 3vw, 40px); line-height: 1.6; letter-spacing: 0; }
+  html:lang(my) body:not([data-view]) .page-hero .lede { max-width: 780px; font-size: 18px; line-height: 1.85; }
+  html:lang(my) body:not([data-view]) .prose { max-width: 900px; }
+  html:lang(my) body:not([data-view]) .prose h2, html:lang(my) body:not([data-view]) .prose h3 { font-size: 18px; line-height: 1.6; letter-spacing: 0; }
+  html:lang(my) body:not([data-view]) .prose p { font-size: 16px; line-height: 1.9; }
+  @media (max-width: 760px) {
+    html:lang(my) body[data-view="shop"] .shop-hero h1 { font-size: 30px; line-height: 1.55; }
+    html:lang(my) body[data-view="contact"] .contact-page .page-hero h1 { font-size: 32px; line-height: 1.6; }
+    html:lang(my) body:not([data-view]) .page-hero { padding-block: 52px 48px; }
+    html:lang(my) body:not([data-view]) .page-hero h1 { font-size: 28px; line-height: 1.6; }
+  }
 `
 
 function documentHtml({ route, title, description, content, schema = null, robots = 'index,follow', shareImage = '/og-card.png', locale = 'en' }) {
@@ -833,6 +874,7 @@ function documentHtml({ route, title, description, content, schema = null, robot
   const alternateLinks = myanmarRoute ? `\n    <link rel="alternate" hreflang="en" href="${escapeHtml(canonical(baseRoute))}" />\n    <link rel="alternate" hreflang="my" href="${escapeHtml(canonical(myanmarRoute))}" />\n    <link rel="alternate" hreflang="x-default" href="${escapeHtml(canonical(baseRoute))}" />` : ''
   const themeColor = view === 'shop' ? '#f7f9fc' : '#ffffff'
   const pageStyle = view ? `<style>${publicMarketingStyle}</style>` : ''
+  const localeStyle = locale === 'my' ? `<style>${myanmarPublicStyle}</style>` : ''
   const viewAttribute = view ? ` data-view="${view}"` : ''
   return `<!doctype html>
 <html lang="${locale}">
@@ -858,7 +900,7 @@ function documentHtml({ route, title, description, content, schema = null, robot
     <meta property="og:image:height" content="${OG_CARD_HEIGHT}" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:image" content="${escapeHtml(shareImageUrl)}" />${structuredDataHtml(schema)}
-    <style>${sharedStyle}</style>${pageStyle}
+    <style>${sharedStyle}</style>${pageStyle}${localeStyle}
   </head>
   <body data-brand-version="${escapeHtml(brand.version)}" data-context-version="${escapeHtml(manifest.contextVersion)}"${viewAttribute}>
     <a class="skip-link" href="#content">${locale === 'my' ? 'အကြောင်းအရာသို့ သွားရန်' : 'Skip to content'}</a>
@@ -925,28 +967,18 @@ function productGallery(id,label,eagerFirst=false,showAll=false) {
  if (item.screens.length === 1) return `<div class="platform-gallery" data-product-gallery="${id}" data-single role="region" aria-label="${label} interface view"><div class="platform-slides">${slides}</div></div>`
  return `<div class="platform-gallery" data-product-gallery="${id}" data-platform-carousel role="region" aria-roledescription="carousel" aria-label="${label} interface views"><div class="platform-slides" tabindex="0">${slides}</div><div class="platform-gallery-controls"><button type="button" data-gallery-previous aria-label="Previous ${label} screen" disabled>&lsaquo;</button><span class="platform-gallery-status" data-gallery-status aria-live="polite">1 of ${item.screens.length}</span><button type="button" data-gallery-next aria-label="Next ${label} screen">&rsaquo;</button></div></div>`
 }
-function shopSupportCard({image,alt,title,description,locale = 'en'}) {
- interfaceDisclosure(image)
- const mobileImage = image.replace(/\.png$/, '-mobile.png')
- interfaceDisclosure(mobileImage)
- return `<article class="shop-workflow-card"><picture><source media="(max-width: 760px)" srcset="/images/${mobileImage}" width="390" height="844" /><img src="/images/${image}" alt="${escapeHtml(alt)} · ${locale === 'my' ? 'စမ်းသပ်မှတ်တမ်းများ' : 'synthetic sample records'}" width="1440" height="900" loading="lazy" /></picture><div class="shop-workflow-card-copy"><h3>${escapeHtml(title)}</h3><p>${escapeHtml(description)}</p></div></article>`
-}
 function shopCounterSalePreview(locale = 'en') {
- const [image,alt] = stories.shop.screens[0]
+ const [englishImage,alt] = stories.shop.screens[0]
+ const image = locale === 'my' ? 'actual-shop-sell-my.png' : englishImage
  const mobileImage = image.replace(/\.png$/, '-mobile.png')
  const tabletImage = image.replace(/\.png$/, '-tablet.png')
  interfaceDisclosure(image)
  interfaceDisclosure(mobileImage)
  interfaceDisclosure(tabletImage)
  const imageAlt = locale === 'my' ? 'ကောင်တာအရောင်း၊ ကုန်ပစ္စည်းရှာဖွေမှုနှင့် လက်ရှိခြင်းတောင်းကို ပြထားသော Shop ဘရောက်ဇာမျက်နှာပြင်' : alt
- const disclosure = locale === 'my' ? 'Shop ဘရောက်ဇာလုပ်ငန်းခွင် · စမ်းသပ်မှတ်တမ်းများ · မျက်နှာပြင်အတွင်း စာသားများသည် အင်္ဂလိပ်ဘာသာဖြစ်သည်' : 'Shop browser workspace · synthetic local records'
- return `<figure class="shop-lead-capture"><picture><source media="(max-width: 760px)" srcset="/images/${mobileImage}" width="390" height="844" /><source media="(max-width: 1024px)" srcset="/images/${tabletImage}" width="768" height="1024" /><img src="/images/${image}" alt="${escapeHtml(imageAlt)}" width="1440" height="900" loading="eager" fetchpriority="high" /></picture><figcaption id="shop-sample-disclosure">${disclosure}</figcaption></figure>`
-}
-function shopResponsiveShowcase(locale = 'en') {
- const isMyanmar = locale === 'my'
- const orders = shopSupportCard({image:'actual-shop-orders.png',alt:isMyanmar ? 'ဖြည့်ဆည်းမှုနှင့် ငွေပေးချေမှု နောက်ဆက်တွဲများပါသော Shop ဘရောက်ဇာ အော်ဒါစာရင်း' : 'Shop browser order queue with fulfilment and payment follow-up',title:isMyanmar ? 'အော်ဒါများ' : 'Orders',description:isMyanmar ? 'အဆင်သင့်ဖြစ်နေသည့်အော်ဒါ၊ ငွေမရှင်းရသေးသည့်အော်ဒါနှင့် နောက်တစ်ဆင့်လုပ်ရန် လိုအပ်သည့်အရာကို ကြည့်ပါ။' : 'See what is ready, what is unpaid, and what needs the next step.',locale})
- const stock = shopSupportCard({image:'actual-shop-inventory.png',alt:isMyanmar ? 'လက်ကျန်အရေအတွက်နှင့် ထပ်မံဖြည့်တင်းရန် သတိပေးချက်များပါသော Shop ဘရောက်ဇာ ကုန်ပစ္စည်းစာရင်း' : 'Shop browser inventory list with on-hand quantities and reorder signals',title:isMyanmar ? 'ကုန်လက်ကျန်' : 'Stock',description:isMyanmar ? 'ရေတွက်ရန် သို့မဟုတ် ထပ်မံဖြည့်တင်းရန် လိုအပ်သော ကုန်ပစ္စည်းများကို ရှာပါ။' : 'Find products that need a count or replenishment.',locale})
- return `<div class="shop-responsive-showcase"><div class="shop-workflow-support">${orders}${stock}</div></div>`
+ const disclosure = locale === 'my' ? 'Shop ဘရောက်ဇာမျက်နှာပြင် · နမူနာမှတ်တမ်းများ' : 'Shop browser view · sample records'
+ const credit = `MAMA ${locale === 'my' ? 'ဓာတ်ပုံ' : 'photo'}: <a href="https://world.openfoodfacts.org/cgi/product_image.pl?code=8850987101526&amp;id=front_en">twindel / Open Food Facts</a> · <a href="https://creativecommons.org/licenses/by-sa/3.0/">CC BY-SA 3.0</a>`
+ return `<figure class="shop-lead-capture"><picture><source media="(max-width: 760px)" srcset="/images/${mobileImage}" width="390" height="844" /><source media="(max-width: 1024px)" srcset="/images/${tabletImage}" width="768" height="1024" /><img src="/images/${image}" alt="${escapeHtml(imageAlt)}" width="${locale === 'my' ? 1000 : 1440}" height="900" loading="eager" fetchpriority="high" /></picture><figcaption id="shop-sample-disclosure"><span>${disclosure}</span><span class="shop-photo-credit" id="shop-image-credits">${credit}</span></figcaption></figure>`
 }
 function productStory(id, standalone = false) {
  const item=stories[id], label=publicProducts.find(product=>product.id===id).name
@@ -994,19 +1026,14 @@ function productAction(product) {
 function shopLandingHtml(product, page, locale = 'en') {
  const description = page.description || product.description
  const isMyanmar = locale === 'my'
- let heroWithPreview = replaceOnce(publicShopMarkup, '<div class="shop-hero-app" aria-label="Shop browser counter sale preview"></div>', `<div class="shop-hero-app" aria-label="${isMyanmar ? 'Shop ဘရောက်ဇာ ကောင်တာအရောင်း နမူနာမျက်နှာပြင်' : 'Shop browser counter sale preview'}">${shopCounterSalePreview(locale)}</div>`, 'shop_hero_app_capture')
+ let heroWithPreview = replaceOnce(publicShopMarkup, '<div class="shop-hero-app" aria-label="Shop browser counter sale preview"></div>', `<div class="shop-hero-app" id="shop-demo" aria-label="${isMyanmar ? 'Shop ဘရောက်ဇာ ကောင်တာအရောင်း နမူနာမျက်နှာပြင်' : 'Shop browser counter sale preview'}" aria-describedby="shop-sample-disclosure">${shopCounterSalePreview(locale)}</div>`, 'shop_hero_app_capture')
  if (isMyanmar) {
   heroWithPreview = replaceOnce(heroWithPreview, '<p class="eyebrow">SuperMega Shop</p>', '<p class="eyebrow">SuperMega ဆိုင်</p>', 'my_shop_eyebrow')
   heroWithPreview = replaceOnce(heroWithPreview, 'Sell at the counter.<br>Stay ahead of stock.', 'ကောင်တာမှာ ရောင်းပါ။<br>ကုန်လက်ကျန်ကို အမြဲသိပါ။', 'my_shop_headline')
-  heroWithPreview = replaceOnce(heroWithPreview, 'See counter sales, recorded orders and stock in the Shop browser workspace.', 'Shop ဘရောက်ဇာလုပ်ငန်းခွင်တွင် ကောင်တာအရောင်း၊ မှတ်တမ်းတင်ထားသော အော်ဒါများနှင့် ကုန်လက်ကျန်ကို တစ်နေရာတည်းက ကြည့်ပါ။', 'my_shop_description')
+  heroWithPreview = replaceOnce(heroWithPreview, 'Find or scan an item, review the basket and record the sale. Review recorded orders and stock when you need them.', 'ကုန်ပစ္စည်းကို ရှာဖွေ သို့မဟုတ် စကန်ဖတ်ပြီး ခြင်းတောင်းကို စစ်ဆေးကာ အရောင်းကို မှတ်တမ်းတင်ပါ။ လိုအပ်သည့်အခါ မှတ်တမ်းတင်ထားသော အော်ဒါများနှင့် ကုန်လက်ကျန်ကို စစ်ဆေးပါ။', 'my_shop_description')
   heroWithPreview = replaceOnce(heroWithPreview, 'href="/contact/?product=shop">Request a Shop walkthrough', 'href="/my/contact/?product=shop">Shop အသုံးပြုပုံကို မေးမြန်းရန်', 'my_shop_cta')
  }
- const shopShowcase = `<section class="shop-actual-showcase" id="shop-demo" aria-label="${isMyanmar ? 'အော်ဒါများနှင့် ကုန်လက်ကျန်' : 'Orders and stock'}" aria-describedby="shop-sample-disclosure"><div class="wrap">${shopResponsiveShowcase(locale)}</div></section>`
- let shopContent = heroWithPreview
- const showcaseAnchor = /<\/section>(\r?\n)([ \t]*)<section class="demo-section"/g
- assert((shopContent.match(showcaseAnchor) || []).length === 1, 'shop_showcase_insertion_point_missing')
- const shopWithActualShowcase = shopContent.replace(showcaseAnchor, (_, newline, indent) => `</section>${newline}${indent}${shopShowcase}${newline}${indent}<section class="demo-section"`)
- const shopWithRemovedMocks = removeSectionByClass(removeSectionByClass(shopWithActualShowcase, 'demo-section', 'shop_interactive_mock'), 'benefits-section', 'shop_mock_benefits')
+ const shopWithRemovedMocks = removeSectionByClass(removeSectionByClass(heroWithPreview, 'demo-section', 'shop_interactive_mock'), 'benefits-section', 'shop_mock_benefits')
  return documentHtml({route:page.route,title:page.title,description,shareImage:`/og-card-${product.id}.png`,locale,
   schema:{'@type':'Product',name:product.name,description,url:canonical(page.route)},
   content:`<main id="content">${shopWithRemovedMocks}</main>${productAction(product)}`})
@@ -1045,8 +1072,8 @@ const contactUiCopy = {
     proofNote: 'ဤဘရောက်ဇာမှ အကြောင်းအရာကို ပူးတွဲထားပါသည်။ ရလဒ်သည် သုံးစွဲသူပေးပို့သော စုစည်းအနှစ်ချုပ်သာ ဖြစ်ပြီး စီမံထားသော အကောင့်ရှိကြောင်း အတည်မပြုနိုင်ပါ။',
     detached: 'ကုန်ပစ္စည်းရွေးချယ်မှု ပြောင်းလဲသဖြင့် ပူးတွဲအကြောင်းအရာကို ဖယ်ရှားလိုက်ပါသည်။',
     headingShop: 'Shop အသုံးပြုပုံကို မေးမြန်းရန်', headingServiceStart: '', headingServiceEnd: ' အဖွဲ့ထံ ဆက်သွယ်ရန်', headingDefault: 'ဆက်သွယ်ရန်',
-    ledeShop: 'သင်ရောင်းချသည့် ကုန်ပစ္စည်းများနှင့် လက်ရှိလုပ်ငန်းပုံစံကို ပြောပြပါ။ Shop အသုံးပြုပုံနှင့် စတင်အသုံးပြုနိုင်မည့် နည်းလမ်းများကို အီးမေးလ်ဖြင့် ပြန်လည်ရှင်းပြပါမည်။',
-    ledeDefault: 'သင့်လုပ်ငန်းနှင့် ပိုမိုကောင်းမွန်စေလိုသော လုပ်ငန်းစဉ်ကို ပြောပြပါ။ အီးမေးလ်ဖြင့် ပြန်လည်ဆက်သွယ်ပါမည်။',
+    ledeShop: 'သင်ရောင်းချသည့် ကုန်ပစ္စည်းများကို ပြောပြပါ၊ Shop အကြောင်း အီးမေးလ်ဖြင့် ပြန်လည်ရှင်းပြပါမည်။',
+    ledeDefault: 'သင့်လုပ်ငန်းလိုအပ်ချက်ကို ပြောပြပါ၊ SuperMega က အီးမေးလ်ဖြင့် ပြန်လည်ဆက်သွယ်ပါမည်။',
     contextAttached: 'အထောက်အကူဖြစ်စေမည့် အကြောင်းအရာကို ပူးတွဲထားပါသည်။ မပို့ရသေးပါ။', contextInvalid: 'ပူးတွဲအကြောင်းအရာကို အတည်မပြုနိုင်သဖြင့် မထည့်သွင်းခဲ့ပါ။',
     messageSent: 'စာပို့ပြီးပါပြီ။', sendAnother: 'နောက်ထပ်စာပို့ရန်', previous: 'ယခင်စာ — ', sendMessage: 'စာပို့ရန်', sending: 'ပို့နေပါသည်...',
     invalidProof: 'ပူးတွဲအကြောင်းအရာကို အတည်မပြုနိုင်ပါ။ SuperMega မှ တောင်းဆိုချက်ကို ပြန်ဖွင့်ပါ။', checkForm: 'ဖြည့်ထားသော အချက်အလက်များကို စစ်ဆေးပြီး ပြန်ကြိုးစားပါ။',
@@ -1149,6 +1176,7 @@ const contactScript = `<script>(function(){
       status.textContent=copy.messageReceived+body.request_id+copy.messageFollowUp+(edited?copy.laterEdits:'');
     }catch(error){status.textContent=error&&error.message==='rate_limited'?copy.rateLimited:error&&error.message==='trial_proof_invalid'?copy.invalidProof:copy.unconfirmed;if(unconfirmedPayload)status.textContent+=copy.retryOriginal;}finally{clearTimeout(deadline);if(!unconfirmedPayload)window.removeEventListener('beforeunload',warnUnconfirmedNavigation);submit.disabled=false;}
   });
+  form.hidden=false;
 })();</script>`
 
 const inlineDigest = (value) => createHash('sha256').update(value).digest('base64')
@@ -1173,6 +1201,8 @@ contactHtml = replaceOnce(contactHtml, '<span class="eyebrow">SuperMega · Myanm
 contactHtml = replaceOnce(contactHtml, '<h1 data-contact-heading>Contact</h1>', `<h1 data-contact-heading>Contact</h1><p class="contact-company-intro">${escapeHtml(manifest.company.statement)}</p>`, 'contact_company_intro')
 contactHtml = replaceOnce(contactHtml, 'SuperMega builds business software for Myanmar. Shop brings counter sales, stock and order follow-up together for retailers.', 'Tell us about your business and the workflow you want to improve. We will reply by email.', 'contact_company_intro_copy')
 contactHtml = replaceOnce(contactHtml, 'Share a few details about your request.', 'Tell us what your business needs.', 'contact_message_placeholder_copy')
+contactHtml = replaceOnce(contactHtml, '</section><section class="contact-layout">', '<p class="contact-direct">Prefer email? <a href="mailto:swanhtet@supermega.dev">swanhtet@supermega.dev</a></p></section><section class="contact-layout">', 'contact_direct_email')
+contactHtml = replaceOnce(contactHtml, '<form class="contact-form" action="/api/contact-submissions"', '<form class="contact-form" hidden action="/api/contact-submissions"', 'contact_form_requires_script')
 
 // Reuse the reviewed English form fields and receipt script so both languages
 // submit the identical idempotent payload. Only the rendered copy changes.
@@ -1181,13 +1211,14 @@ const contactContentEnd = contactHtml.indexOf('</main>', contactContentStart) + 
 assert(contactContentStart >= 0 && contactContentEnd > contactContentStart, 'contact_content_boundary_missing')
 let myContactContent = contactHtml.slice(contactContentStart, contactContentEnd)
 myContactContent = replaceOnce(myContactContent, '<h1 data-contact-heading>Contact</h1>', '<h1 data-contact-heading>ဆက်သွယ်ရန်</h1>', 'my_contact_heading')
-myContactContent = replaceOnce(myContactContent, `<p class="contact-company-intro">${escapeHtml(manifest.company.statement)}</p>`, '<p class="contact-company-intro">SuperMega သည် မြန်မာနိုင်ငံရှိ လုပ်ငန်းများအတွက် ဆော့ဖ်ဝဲတည်ဆောက်သော ကုမ္ပဏီဖြစ်ပါသည်။ Shop သည် ကောင်တာအရောင်း၊ ကုန်လက်ကျန်နှင့် အော်ဒါနောက်ဆက်တွဲများအတွက် ပထမဆုံး ဖောက်သည်သုံး ကုန်ပစ္စည်းဖြစ်ပါသည်။</p>', 'my_contact_company')
+myContactContent = replaceOnce(myContactContent, `<p class="contact-company-intro">${escapeHtml(manifest.company.statement)}</p>`, '<p class="contact-company-intro">SuperMega သည် မြန်မာနိုင်ငံမှ ဆော့ဖ်ဝဲကုမ္ပဏီဖြစ်ပါသည်။ Shop တွင် ကောင်တာအရောင်း၊ ကုန်လက်ကျန်နှင့် အော်ဒါနောက်ဆက်တွဲလုပ်ငန်းများကို စီမံနိုင်ပါသည်။</p>', 'my_contact_company_intro')
 myContactContent = replaceOnce(myContactContent, 'Tell us about your business and the workflow you want to improve. We will reply by email.', contactUiCopy.my.ledeDefault, 'my_contact_lede')
+myContactContent = replaceOnce(myContactContent, 'Prefer email?', 'အီးမေးလ်ဖြင့် ဆက်သွယ်လိုပါက', 'my_contact_direct_email')
 myContactContent = replaceOnce(myContactContent, '<label>Name<input', '<label>အမည်<input', 'my_contact_name')
 myContactContent = replaceOnce(myContactContent, '<label>Email<input', '<label>အီးမေးလ်<input', 'my_contact_email')
-myContactContent = replaceOnce(myContactContent, '<label class="wide">Company (optional)<input', '<label class="wide">ကုမ္ပဏီအမည် (မဖြည့်လည်းရသည်)<input', 'my_contact_company_field')
+myContactContent = replaceOnce(myContactContent, '<label class="wide">Company (optional)<input', '<label class="wide">ကုမ္ပဏီ (မဖြည့်လည်းရ)<input', 'my_contact_company_field')
 myContactContent = replaceOnce(myContactContent, '<label class="wide">Message<textarea', '<label class="wide">စာ<textarea', 'my_contact_message')
-myContactContent = replaceOnce(myContactContent, 'placeholder="Tell us what your business needs."', 'placeholder="သင့်လုပ်ငန်းအတွက် လိုအပ်သောအရာကို ပြောပြပါ။"', 'my_contact_placeholder')
+myContactContent = replaceOnce(myContactContent, 'placeholder="Tell us what your business needs."', 'placeholder="သင့်လိုအပ်ချက်ကို ရေးပါ။"', 'my_contact_placeholder')
 myContactContent = replaceOnce(myContactContent, '>Send message</button>', '>စာပို့ရန်</button>', 'my_contact_submit')
 const myContactPage = manifest.pages.find((page) => page.route === '/my/contact/')
 const myContactHtml = documentHtml({ route: myContactPage.route, title: myContactPage.title, description: myContactPage.description, content: myContactContent + contactScript, locale: 'my' })
@@ -1849,6 +1880,8 @@ for (const [relativePath, content] of pageFiles) await writeStatic(relativePath,
 for (const image of publicGalleryAssetNames) await writeStatic(`images/${image}`, await readFile(resolve(root,'tools/public-assets',image)))
 await writeStatic('fonts/noto-sans-latin.woff2', await readFile(resolve(root,'tools/public-assets/noto-sans-latin.woff2')))
 await writeStatic('fonts/noto-sans-latin-OFL.txt', await readFile(resolve(root,'tools/public-assets/noto-sans-latin-OFL.txt')))
+await writeStatic('fonts/inter-latin.woff2', await readFile(resolve(root,'tools/public-assets/inter-latin.woff2')))
+await writeStatic('fonts/inter-OFL.txt', await readFile(resolve(root,'mobile/shop_pos/assets/fonts/Inter/OFL.txt')))
 await writeStatic('fonts/noto-sans-myanmar.woff2', await readFile(resolve(root,'tools/public-assets/noto-sans-myanmar.woff2')))
 await writeStatic('fonts/noto-sans-myanmar-OFL.txt', await readFile(resolve(root,'tools/public-assets/noto-sans-myanmar-OFL.txt')))
 await writeStatic('favicon.svg', faviconSvg)

@@ -77,7 +77,7 @@ globalThis.fetch=async (input,options={})=>{
  if(mode==='pilot-pitch'&&u.pathname==='/contact/') html+='<p>Request managed company intelligence.</p>';
  if(mode==='missing-source'&&u.pathname==='/contact/') html=html.replaceAll('source.value=location.href','REMOVED');
  if(mode==='missing-company-intro'&&u.pathname==='/contact/') html=html.replace(manifest.company.statement,'REMOVED');
- if(mode==='missing-guided') html=html.replaceAll('>Login</a>','>REMOVED</a>');
+  if(mode==='extra-public-login'&&u.pathname==='/shop/') html+='<a href="https://app.supermega.dev/login?product=shop">Login</a>';
  if(mode==='missing-assisted') html=html.replaceAll('>Contact</a>','>REMOVED</a>');
  return new Response(html,{headers});
 };
@@ -108,7 +108,7 @@ test('current generated Shop-only pages pass exact-release checks through offlin
 for (const [mutation, failure] of [
   ['privacy-header', 'page_security_header_wrong'], ['usb-policy', 'page_security_header_wrong'],
   ['wrong-root-redirect', 'root_redirect_destination_wrong'], ['missing-company-intro', 'contact_company_intro_missing'],
-  ['missing-guided', 'page_shared_contract_missing'], ['missing-assisted', 'page_contact_route_missing'],
+  ['extra-public-login', 'page_public_login_present'], ['missing-assisted', 'page_contact_route_missing'],
   ['wrong-commit', 'release_commit_wrong'], ['contact-down', 'contact_not_accepting'],
   ['old-redirect', 'redirect_destination_wrong'],
   ['pilot-pitch', 'retired_managed_pilot_pitch_present'], ['missing-source', 'contact_trial_proof_contract_missing'],

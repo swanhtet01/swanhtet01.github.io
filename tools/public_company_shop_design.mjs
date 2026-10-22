@@ -29,7 +29,6 @@ export function companyShopHeaderHtml(route, locale = 'en') {
   const contactHref = isMyanmar ? '/my/contact/' : '/contact/';
   const switchHref = ['/shop/', '/contact/', '/privacy/'].includes(baseRoute)
     ? (isMyanmar ? baseRoute : `/my${baseRoute}`) : '/my/shop/';
-  const loginHref = 'https://app.supermega.dev/login?product=shop';
   return `<header class="site-header"><div class="wrap header-inner">
     <a class="brand" href="${shopHref}" aria-label="${superMegaBrandIdentity.name} ${isMyanmar ? 'ဆိုင်' : 'Shop'}">
       <span class="brand-mark" aria-hidden="true">${brandMarkHtml}</span>
@@ -38,7 +37,6 @@ export function companyShopHeaderHtml(route, locale = 'en') {
     <nav class="nav-links" aria-label="${isMyanmar ? 'အဓိက လမ်းညွှန်' : 'Main navigation'}">
       <a href="${shopHref}" ${shopActive ? 'aria-current="page"' : ''}>${isMyanmar ? 'ဆိုင်' : 'Shop'}</a>
       <a href="${contactHref}" ${contactActive ? 'aria-current="page"' : ''}>${isMyanmar ? 'ဆက်သွယ်ရန်' : 'Contact'}</a>
-      <a href="${loginHref}">${isMyanmar ? 'အကောင့်ဝင်ရန်' : 'Login'}</a>
       <a href="${switchHref}" data-language-switch hreflang="${isMyanmar ? 'en' : 'my'}">${isMyanmar ? 'အင်္ဂလိပ်' : 'မြန်မာ'}</a>
     </nav>
   </div></header>`;

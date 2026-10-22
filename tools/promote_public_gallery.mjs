@@ -18,6 +18,7 @@ const captureFiles = [
   'actual-shop-today-tablet.png', 'actual-shop-today-mobile.png',
   'actual-shop-orders.png', 'actual-shop-orders-tablet.png', 'actual-shop-orders-mobile.png',
   'actual-shop-inventory.png', 'actual-shop-inventory-tablet.png', 'actual-shop-inventory-mobile.png',
+  'actual-shop-sell-my.png', 'actual-shop-sell-my-tablet.png', 'actual-shop-sell-my-mobile.png',
   'actual-sites-editor.png', 'actual-sites-editor-tablet.png', 'actual-sites-editor-mobile.png',
   'actual-sites-inquiries.png', 'actual-sites-inquiries-tablet.png', 'actual-sites-inquiries-mobile.png',
   'actual-commerce-catalog.png', 'actual-commerce-catalog-tablet.png', 'actual-commerce-catalog-mobile.png',
@@ -25,6 +26,7 @@ const captureFiles = [
 ]
 const publicFiles = [
   'actual-shop-sell.png', 'actual-shop-sell-tablet.png', 'actual-shop-sell-mobile.png',
+  'actual-shop-sell-my.png', 'actual-shop-sell-my-tablet.png', 'actual-shop-sell-my-mobile.png',
   'actual-shop-orders.png', 'actual-shop-orders-tablet.png', 'actual-shop-orders-mobile.png',
   'actual-shop-inventory.png', 'actual-shop-inventory-tablet.png', 'actual-shop-inventory-mobile.png',
 ]
@@ -51,7 +53,7 @@ assert.equal(report.deniedExternal, 0)
 assert.equal(report.fulfilledSyntheticMedia, 3)
 assert.equal(report.completedSale, true)
 assert.equal(report.customerReceiptVisible, false)
-assert.equal(report.captures?.length, 26, 'review the capture inventory before promotion')
+assert.equal(report.captures?.length, 29, 'review the capture inventory before promotion')
 assert.deepEqual(report.captures.map(capture => capture.file), captureFiles, 'capture inventory changed')
 assert(/^[0-9a-f]{64}$/.test(report.captureInputsSha256))
 const byFile = new Map(report.captures.map(capture => [capture.file, capture]))
@@ -59,7 +61,9 @@ const assets = await Promise.all(captureFiles.map(async file => {
   const capture = byFile.get(file)
   assert(capture, `missing capture: ${file}`)
   if (file.startsWith('actual-shop-')) {
-    assert.equal(capture.fixturePath, '/shop/')
+    const myanmar = file.startsWith('actual-shop-sell-my')
+    assert.equal(capture.fixturePath, myanmar ? '/shop-my/' : '/shop/')
+    assert.equal(capture.uiLocale, myanmar ? 'my' : 'en')
     assert.equal(capture.routeState, file.includes('-today') || file.includes('first-run') ? 'today'
       : file.includes('-sell') || file.includes('order-record') ? 'counter'
       : file.includes('-orders') ? 'orders'
@@ -67,7 +71,8 @@ const assets = await Promise.all(captureFiles.map(async file => {
   } else assert.equal(capture.fixturePath, '/workspaces/')
   assert(capture.visibleSelector)
   const expected = file.endsWith('-mobile.png') ? [390, 844]
-    : file.endsWith('-tablet.png') ? [768, 1024] : [1440, 900]
+    : file.endsWith('-tablet.png') ? [768, 1024]
+      : file === 'actual-shop-sell-my.png' ? [1000, 900] : [1440, 900]
   assert.deepEqual([capture.width, capture.height], expected, `dimensions: ${file}`)
   const bytes = await readFile(resolve(sourceRoot, file))
   assert.equal(bytes.subarray(0, 8).toString('hex'), '89504e470d0a1a0a', `PNG: ${file}`)
@@ -95,6 +100,7 @@ const provenance = {
       captureTool: 'tools/capture_public_gallery.mjs',
       fixturePath: capture.fixturePath,
       routeState: capture.routeState,
+      uiLocale: capture.uiLocale,
       visibleSelector: capture.visibleSelector,
       loadedImages: capture.loadedImages,
       deniedExternal: report.deniedExternal,

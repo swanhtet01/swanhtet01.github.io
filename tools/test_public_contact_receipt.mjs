@@ -156,6 +156,7 @@ test('Burmese contact route keeps the same safe receipt contract with Burmese co
   assert.equal(state.fields.get('[name="name"]').validationMessage, 'ဤအချက်အလက်ကို ဖြည့်ပါ။')
   state.input('name')
   assert.equal(state.fields.get('[name="name"]').validationMessage, '')
+  state.input('email')
   state.fields.get('[name="email"]').validity.typeMismatch = true
   state.invalid('email')
   assert.equal(state.fields.get('[name="email"]').validationMessage, 'မှန်ကန်သော အီးမေးလ်လိပ်စာကို ဖြည့်ပါ။')
@@ -434,7 +435,7 @@ test('confirmed handoff resets entry guidance only when no later edits remain', 
     assert.equal(state.headings.get('[data-contact-heading]').textContent, edited ? originalHeading : 'Message sent.')
     if (edited) assert.equal(state.fields.get('[name="goal"]').value, 'Later unsent brief')
     else {
-      assert.equal(state.fields.get('button[type="submit"]').textContent, 'Send another message')
+      assert.equal(state.fields.get('button[type="submit"]').textContent, 'Send another message.')
       assert.equal(state.headings.get('[data-contact-lede]').textContent, 'Reference: '+receipt.request_id+'. Keep it for follow-up.')
     }
     assert.match(state.fields.get('[data-form-status]').textContent, /Message received: LEAD-/)

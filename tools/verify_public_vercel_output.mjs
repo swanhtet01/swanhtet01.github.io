@@ -136,6 +136,8 @@ const expectedStaticFiles = new Set([
   'favicon.svg',
   'fonts/noto-sans-latin.woff2',
   'fonts/noto-sans-latin-OFL.txt',
+  'fonts/inter-latin.woff2',
+  'fonts/inter-OFL.txt',
   'fonts/noto-sans-myanmar.woff2',
   'fonts/noto-sans-myanmar-OFL.txt',
   'vercel-insights.js',
@@ -144,6 +146,9 @@ const expectedStaticFiles = new Set([
   'images/actual-shop-sell.png',
   'images/actual-shop-sell-tablet.png',
   'images/actual-shop-sell-mobile.png',
+  'images/actual-shop-sell-my.png',
+  'images/actual-shop-sell-my-tablet.png',
+  'images/actual-shop-sell-my-mobile.png',
   'images/actual-shop-orders.png',
   'images/actual-shop-orders-tablet.png',
   'images/actual-shop-orders-mobile.png',
@@ -200,8 +205,10 @@ const sharedRequired = [
   '--bg-raised: #f3f6fc;',
   '--ink: #151521;',
   '--blue: #2563eb;',
+  'font-family: "Inter"',
+  'font-family: "SuperMega Noto Myanmar"',
   'font-family: "SuperMega Noto Sans"',
-  '--font-latin: "SuperMega Noto Sans"',
+  '--font-latin: "Inter"',
   '.platform-image figcaption {margin-top:auto;padding:12px 2px 0;color:#596579;font-size:12px;line-height:1.45}',
   '.platform-device-set {display:grid;grid-template-columns:minmax(0,1.75fr) minmax(0,1.25fr) minmax(0,.95fr);',
   '.platform-device-capture figcaption',
@@ -273,8 +280,8 @@ for (const [route, page] of pages) {
   const footerLabel = page.language === 'my' ? 'SuperMega ဆိုင်' : 'SuperMega Shop'
   const footerBrand = `<a class="brand" href="${footerHref}" aria-label="${footerLabel}"><span class="brand-mark" aria-hidden="true">`
   if (!page.html.includes(footerBrand)) fail('shared_footer_brand_missing', { route, footerHref })
-  const expectedLogin = `<a href="${appOrigin}/login?product=shop">${page.language === 'my' ? 'အကောင့်ဝင်ရန်' : 'Login'}</a>`
-  if (countOccurrences(page.html, expectedLogin) !== 1) fail('shared_login_destination_missing', { route, expectedLogin })
+  const header = page.html.match(/<header\b[\s\S]*?<\/header>/)?.[0] || ''
+  if (/<a\b[^>]*href="[^"]*\/login(?:\?[^\"]*)?"/i.test(header) || />\s*(?:Login|အကောင့်ဝင်ရန်)\s*<\/a>/.test(header)) fail('shared_public_login_present', { route })
   const expectedActive = route === '/shop/' ? 'Shop' : route === '/contact/' ? 'Contact' : route === '/my/shop/' ? 'ဆိုင်' : route === '/my/contact/' ? 'ဆက်သွယ်ရန်' : null
   const activeLinks = [...page.html.matchAll(/<a\b[^>]*aria-current="page"[^>]*>([^<]+)<\/a>/g)].map(match => match[1])
   if (activeLinks.join(',') !== (expectedActive || '')) fail('shared_navigation_active_state_drift', { route, expectedActive, activeLinks })
@@ -392,11 +399,12 @@ for (const [route, html] of [['/shop/', pages.get('/shop/').html], ...publicProd
     ? `/contact/?product=${routeProduct.id}`
     : null
   const galleryViews = { shop: 3, website: 2, ecommerce: 2 }
-  const expectedLinks = route === '/shop/' ? 10 : 6 + Number(Boolean(contactActionTarget))
+  const expectedLinks = route === '/shop/' ? 11 : 5 + Number(Boolean(contactActionTarget))
   if ((body.match(/<a\b/g) || []).length !== expectedLinks) fail('marketing_link_surface_drift', { route, expectedLinks })
-  const expectedLogin = `href="${appOrigin}/login?product=shop"`
-  if (countOccurrences(body, expectedLogin) !== 1) fail('login_action_count_invalid', { route, expectedLogin })
+  const publicLogin = `href="${appOrigin}/login?product=shop"`
+  if (countOccurrences(body, publicLogin) !== 0) fail('public_login_action_present', { route })
   if (route === '/shop/' && (!body.includes('class="button button-primary" href="/contact/?product=shop">Request a Shop walkthrough') || body.includes('Ask about Shop') || body.includes('Talk about Shop') || body.includes('See Shop screens') || body.includes('Need help with Shop?'))) fail('shop_primary_product_action_missing')
+  if (route === '/shop/' && (!body.includes('MAMA photo:') || !body.includes('twindel / Open Food Facts') || !body.includes('https://creativecommons.org/licenses/by-sa/3.0/'))) fail('shop_photo_attribution_missing')
   if (body.includes('>Company</a>')) fail('company_page_navigation_not_consolidated')
   const hasGalleryNavigation = route !== '/shop/' && (galleryViews[routeProduct?.id] || 0) > 1
   const expectedButtons = Number(hasGalleryNavigation) * 2
@@ -420,13 +428,12 @@ for (const [route, html] of [['/shop/', pages.get('/shop/').html], ...publicProd
     }
   }
   const productVisualMissing = route === '/shop/'
-      ? !body.includes('class="shop-hero-app"') || !body.includes('class="shop-actual-showcase"') || !body.includes('aria-label="Orders and stock"') || body.includes('Orders and stock. Clear next steps.') || !body.includes('class="shop-responsive-showcase"') || !body.includes('class="shop-lead-capture"') || !body.includes('id="shop-sample-disclosure"') || countOccurrences(body, 'Shop browser workspace · synthetic local records') !== 1 || !body.includes('src="/images/actual-shop-orders.png"') || !body.includes('src="/images/actual-shop-inventory.png"') || countOccurrences(body, '<article class="shop-workflow-card">') !== 2 || countOccurrences(body, 'src="/images/actual-shop-sell.png"') !== 1 || body.includes('Makro PRO') || body.includes('17 October 2026') || body.includes('class="pos-window"') || body.includes('class="sample-label"') || body.includes('Complete sample sale') || body.includes('shop-sample-demo.js') || body.includes('class="platform-gallery shop-gallery-all"') || body.includes('data-platform-carousel') || body.includes('data-device-choice') || body.includes('data-device-frame') || /<a\b[^>]*>\s*<img\b[^>]*src="\/images\/actual-shop-/i.test(body)
+      ? !body.includes('class="shop-hero-app" id="shop-demo"') || body.includes('class="shop-actual-showcase"') || body.includes('class="shop-support-proof"') || !body.includes('class="shop-lead-capture"') || !body.includes('id="shop-sample-disclosure"') || countOccurrences(body, 'Shop browser view · sample records') !== 1 || /\/images\/actual-shop-(?:orders|inventory)[^" ]*/.test(body) || body.includes('<article class="shop-workflow-card">') || countOccurrences(body, 'src="/images/actual-shop-sell.png"') !== 1 || body.includes('Makro PRO') || body.includes('17 October 2026') || body.includes('class="pos-window"') || body.includes('class="sample-label"') || body.includes('Complete sample sale') || body.includes('shop-sample-demo.js') || body.includes('class="platform-gallery shop-gallery-all"') || body.includes('data-platform-carousel') || body.includes('data-device-choice') || body.includes('data-device-frame') || /<a\b[^>]*>\s*<img\b[^>]*src="\/images\/actual-shop-/i.test(body)
       : !body.includes('class="platform-image"') || !body.includes('class="feature-line"')
   if (productVisualMissing) fail('product_visual_missing', { route })
-  const expectedLoginTarget = `${appOrigin}/login?product=shop`
   const directAppTargets = [...body.matchAll(/href="(https:\/\/[^\"]+)"/g)]
     .map(match => match[1])
-    .filter(target => target.startsWith(`${appOrigin}/`) && target !== expectedLoginTarget)
+    .filter(target => target.startsWith(`${appOrigin}/`))
   if (directAppTargets.length !== 0) fail('product_action_release_state_drift', { route, expected: 0, actual: directAppTargets.length })
   if (contactActionTarget && !body.includes(`href="${contactActionTarget}">Contact SuperMega</a>`)) fail('product_action_destination_drift', { route, expected: contactActionTarget })
   for (const token of ['Request assisted setup', 'Open Ecommerce', 'Open Website', 'Choose shop type', 'theme-toggle', 'Start guided trial']) {
@@ -446,11 +453,8 @@ for (const token of [
   'src="/images/actual-shop-sell.png"',
   'srcset="/images/actual-shop-sell-mobile.png"',
   'srcset="/images/actual-shop-sell-tablet.png"',
-  'src="/images/actual-shop-orders.png"',
-  'srcset="/images/actual-shop-orders-mobile.png"',
-  'src="/images/actual-shop-inventory.png"',
-  'srcset="/images/actual-shop-inventory-mobile.png"',
-  'class="shop-workflow-support"',
+  'class="shop-hero-app" id="shop-demo"',
+  'id="shop-image-credits"',
   'aria-describedby="shop-sample-disclosure"',
 ]) {
   if (!shopPage.includes(token)) fail('shop_responsive_capture_missing', { token })
@@ -463,7 +467,7 @@ for (const [route, html] of [['/', home], ['/shop/', shopPage]]) {
   const withoutLanguageSwitch = html.replace(/<a href="\/my\/(?:shop|contact|privacy)\/" data-language-switch hreflang="my">မြန်မာ<\/a>/g, '')
   if (html.includes('data-i18n=') || /[\u1000-\u109f]/u.test(withoutLanguageSwitch)) fail('marketing_myanmar_copy_outside_switch', { route })
 }
-for (const token of ['Sell at the counter.', 'Stay ahead of stock.', 'aria-label="Orders and stock"', 'Shop browser workspace · synthetic local records', 'See counter sales, recorded orders and stock in the Shop browser workspace.']) {
+for (const token of ['Sell at the counter.', 'Stay ahead of stock.', 'Shop browser view · sample records', 'Review recorded orders and stock when you need them.']) {
   if (!shopPage.includes(token)) fail('shop_page_scope_missing', { token })
 }
 if (/<section\b[^>]*class="[^"]*\bsubscription-section\b/.test(shopPage)
@@ -494,7 +498,9 @@ for (const token of [
 for (const token of ['Request managed company intelligence.', "submit.textContent='Request managed pilot'", 'managedIntelligenceRequest']) {
   if (contact.includes(token)) fail('retired_managed_pilot_pitch_present', { token })
 }
-if (contact.includes('mailto:') || contact.includes('tel:') || contact.includes('Email swanhtet@supermega.dev')) fail('contact_bypass_links_returned')
+if (countOccurrences(contactMain, 'href="mailto:swanhtet@supermega.dev"') !== 1
+  || !contactMain.includes('<form class="contact-form" hidden action="/api/contact-submissions"')
+  || !contact.includes('form.hidden=false;') || contactMain.includes('tel:')) fail('contact_fallback_or_form_readiness_missing')
 if (!contact.includes('source.value=location.href')) fail('contact_source_attribution_missing')
 
 if (/<(?:input|textarea)\b(?=[^>]*\bname="(?:name|email|company|template|goal)")(?=[^>]*\bvalue=)[^>]*>/i.test(contact)
@@ -516,6 +522,19 @@ for (const [route, englishRoute, switchHref] of [['/my/shop/', '/shop/', '/shop/
     || !page.includes(`<link rel="alternate" hreflang="my" href="https://supermega.dev${route}" />`)) fail('myanmar_seo_alternates_missing', { route })
 }
 const myContact = pages.get('/my/contact/')?.html || ''
+const myShop = pages.get('/my/shop/')?.html || ''
+for (const token of ['src="/images/actual-shop-sell-my.png"', 'srcset="/images/actual-shop-sell-my-tablet.png"',
+  'srcset="/images/actual-shop-sell-my-mobile.png"', 'Shop ဘရောက်ဇာမျက်နှာပြင် · နမူနာမှတ်တမ်းများ']) {
+  if (!myShop.includes(token)) fail('myanmar_shop_capture_or_language_scope_missing', { token })
+}
+if (myShop.includes('src="/images/actual-shop-sell.png"') || shopPage.includes('src="/images/actual-shop-sell-my.png"'))
+  fail('shop_hero_capture_locale_mismatch')
+if (!/<img src="\/images\/actual-shop-sell-my\.png"[^>]*width="1000" height="900"/.test(myShop))
+  fail('myanmar_shop_hero_dimensions_invalid')
+if (/\/images\/actual-shop-(?:orders|inventory)[^" ]*/.test(myShop)) fail('myanmar_shop_displays_english_support_capture')
+if (countOccurrences(myShop, 'class="shop-photo-credit"') !== 1
+  || !myShop.includes('id="shop-image-credits"') || !myShop.includes('MAMA ဓာတ်ပုံ:') || !myShop.includes('twindel / Open Food Facts')
+  || !myShop.includes('https://creativecommons.org/licenses/by-sa/3.0/')) fail('myanmar_shop_photo_attribution_missing')
 for (const token of ['action="/api/contact-submissions"', 'name="idempotency_key"', 'name="source_url"', '>အမည်<input', '>အီးမေးလ်<input', '>စာပို့ရန်</button>', 'စာလက်ခံရရှိပါပြီ']) {
   if (!myContact.includes(token)) fail('myanmar_contact_contract_missing', { token })
 }
@@ -550,6 +569,7 @@ const publicGalleryEvidence = release.publicGalleryEvidence
 const publicGalleryFiles = [
   'actual-shop-today.png',
   'actual-shop-sell.png', 'actual-shop-sell-tablet.png', 'actual-shop-sell-mobile.png',
+  'actual-shop-sell-my.png', 'actual-shop-sell-my-tablet.png', 'actual-shop-sell-my-mobile.png',
   'actual-shop-orders.png', 'actual-shop-orders-tablet.png', 'actual-shop-orders-mobile.png',
   'actual-shop-inventory.png', 'actual-shop-inventory-tablet.png', 'actual-shop-inventory-mobile.png',
 ]

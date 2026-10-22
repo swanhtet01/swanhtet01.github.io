@@ -3,11 +3,7 @@ import { isAbsolute, relative, resolve, sep } from 'node:path'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 const { build } = createRequire(resolve('showroom/package.json'))('esbuild')
 const productPhotoFiles = {
-  'SM-1001': 'kaung-90-days-rice.webp',
   'SM-1002': 'mama-chicken-noodles.jpg',
-  'SM-1003': 'alpine-water-six-pack.webp',
-  'SM-1004': 'baydar-detergent.webp',
-  'SM-1005': 'zess-sugar-crackers.webp',
 }
 const productPhotoBytes = Object.fromEntries(Object.entries(productPhotoFiles).map(([sku, file]) => [
   sku,
@@ -20,6 +16,7 @@ const productPhotoMimes = Object.fromEntries(Object.entries(productPhotoFiles).m
 const managed = process.argv.includes('--managed')
 const today = process.argv.includes('--today')
 const gallery = process.argv.includes('--gallery')
+const galleryMyanmar = process.argv.includes('--gallery-myanmar')
 const requestedOutput = process.env.SUPERMEGA_QA_FIXTURE_OUTPUT_DIR
 const out = resolve(requestedOutput || (managed ? '.tmp/qa-managed-shop' : '.tmp/qa-shop'))
 if (requestedOutput) {
@@ -31,16 +28,23 @@ mkdirSync(out,{recursive:true})
 await build({stdin:{resolveDir:resolve('showroom'),loader:'tsx',contents:`
 import React,{useState} from 'react';import {createRoot} from 'react-dom/client';import {MemoryRouter} from 'react-router';
 import {CommercePage} from './src/core/CoreApp';import {createSeedCommerce,COMMERCE_KEY} from './src/core/commerce-workspace';import {putProductImage,productImageScopeForWorkspace} from './src/core/product-image-store';
+import {setUiLocale,readUiLocale,useUiLocale} from './src/core/ui-locale';
 import './src/core/core-app.css';
 let fail=false;let rejectedWrites=0;let ledgerWrites=0;window.__qaFailAck=false;const values=new Map();
 const memory=(map)=>({getItem:k=>map.get(k)??null,setItem:(k,v)=>{if(fail&&k===COMMERCE_KEY){rejectedWrites++;throw new DOMException('Synthetic quota','QuotaExceededError')};if(k===COMMERCE_KEY)ledgerWrites++;map.set(k,String(v))},removeItem:k=>map.delete(k),key:i=>[...map.keys()][i]??null,get length(){return map.size}});
 Object.defineProperty(window,'localStorage',{value:memory(values)});Object.defineProperty(window,'sessionStorage',{value:memory(new Map())});
 const gallery=${gallery};
+const galleryMyanmar=${galleryMyanmar};
 const seed=createSeedCommerce(Date.now());
 if(gallery){
  const completedSeedIds=new Set(seed.orders.filter(order=>order.status==='completed').map(order=>order.id));
  seed.orders=seed.orders.filter(order=>!completedSeedIds.has(order.id));
  seed.movements=seed.movements.filter(movement=>!completedSeedIds.has(movement.orderId));
+}
+if(galleryMyanmar){
+ const categories={Pantry:'အစားအသောက်',Drinks:'သောက်စရာ','Home care':'အိမ်သုံးပစ္စည်း'};
+ seed.items=seed.items.map(item=>({...item,category:categories[item.category]??item.category}));
+ await setUiLocale('my');
 }
 localStorage.setItem(COMMERCE_KEY,JSON.stringify(seed));
 const productPhotoBytes=${JSON.stringify(productPhotoBytes)};
@@ -54,10 +58,11 @@ Object.defineProperty(window,'indexedDB',{value:{open(name,version){const isolat
 Object.defineProperty(navigator,'storage',{value:{persist:async()=>gallery,persisted:async()=>gallery,estimate:async()=>({usage:0,quota:100000000})}});
 window.fetch=async()=>{throw Error('Fixture network denied')};
 const root=createRoot(document.getElementById('root'));
+window.__qaSetLocale=setUiLocale;window.__qaReadLocale=readUiLocale;
 async function cleanup(){root.unmount();for(const db of connections)db.close();await Promise.all([...names].map(name=>new Promise((resolve,reject)=>{const r=nativeIDB.deleteDatabase(name);r.onsuccess=resolve;r.onerror=reject;r.onblocked=()=>reject(Error('Synthetic cleanup blocked'))})));document.body.textContent='Synthetic databases removed';}
 function inspect(){const state=${managed ? 'window.__qaManaged.state' : 'JSON.parse(localStorage.getItem(COMMERCE_KEY))'};document.getElementById('evidence').textContent=JSON.stringify({managedWrites:window.__qaManaged.writes,managedReads:window.__qaManaged.reads,orders:state.orders.map(o=>({id:o.id,customer:o.customer})),rejectedWrites,ledgerWrites,unchanged:localStorage.getItem(COMMERCE_KEY)===baseline,completed:state.orders.filter(o=>o.status==='completed').map(o=>({id:o.id,paymentStatus:o.paymentStatus})),stock:state.items[0].onHand});}
 document.addEventListener('keydown',event=>{if(event.key==='F8'){event.preventDefault();fail=false;inspect()}if(event.key==='F9'){event.preventDefault();inspect()}});
-function Shop(){const [tab,setTab]=useState('${today ? 'today' : 'counter'}');window.__qaGalleryTab=tab;return <><button onClick={()=>setTab('today')}>Show Today</button><button onClick={()=>setTab('counter')}>Show Counter</button><button onClick={()=>setTab('orders')}>Show Orders</button><button onClick={()=>setTab('inventory')}>Show Inventory</button><CommercePage confirmedLocalShop={${!managed}} managedIdentity={${managed ? 'syntheticIdentity' : 'null'}} tab={tab} shopCounterClientId="" shopCounterCustomer="" shopCounterSearch="" requestedRequestId={null} requestedShopTemplate={null} requestedSource={null} ecommerceCancellationNavigationIntent={null} ecommerceCorrectionNavigationIntent={null} ecommerceNavigationDraft={null} ecommerceOrderAmendmentNavigationIntent={null} ecommerceOrderRescheduleNavigationIntent={null} ecommerceReturnNavigationIntent={null} ecommerceSupportNavigationIntent={null}/></>}
+function Shop(){const [tab,setTab]=useState('${today ? 'today' : 'counter'}');const uiLocale=useUiLocale();window.__qaGalleryTab=tab;window.__qaGalleryLocale=uiLocale;return <><button onClick={()=>setTab('today')}>Show Today</button><button onClick={()=>setTab('counter')}>Show Counter</button><button onClick={()=>setTab('orders')}>Show Orders</button><button onClick={()=>setTab('inventory')}>Show Inventory</button><CommercePage confirmedLocalShop={${!managed}} managedIdentity={${managed ? 'syntheticIdentity' : 'null'}} tab={tab} shopCounterClientId="" shopCounterCustomer="" shopCounterSearch="" requestedRequestId={null} requestedShopTemplate={null} requestedSource={null} ecommerceCancellationNavigationIntent={null} ecommerceCorrectionNavigationIntent={null} ecommerceNavigationDraft={null} ecommerceOrderAmendmentNavigationIntent={null} ecommerceOrderRescheduleNavigationIntent={null} ecommerceReturnNavigationIntent={null} ecommerceSupportNavigationIntent={null}/></>}
 let mountId=0;function renderFixture(){root.render(<><p>Isolated real Shop page. Synthetic records only; network blocked. F8 enables synthetic writes; F9 inspects records, including while a dialog is open.</p><button onClick={()=>{fail=true;document.getElementById('evidence').textContent='Synthetic Commerce writes blocked'}}>Block synthetic writes</button><button onClick={()=>{fail=false;document.getElementById('evidence').textContent='Synthetic Commerce writes enabled'}}>Enable synthetic writes</button><button onClick={()=>{window.__qaFailAck=true}}>Fail next acknowledgement</button><button onClick={renderFixture}>Reopen synthetic Shop</button><button onClick={inspect}>Inspect synthetic records</button><button onClick={()=>void cleanup()}>Clean synthetic databases</button><output id="evidence"/><MemoryRouter key={++mountId} initialEntries={['/shop/?tab=${today ? 'today' : 'counter'}']}><Shop/></MemoryRouter></>);}
 for(const [sku,encoded] of Object.entries(productPhotoBytes)){const bytes=Uint8Array.from(atob(encoded),character=>character.charCodeAt(0));await putProductImage(productImageScopeForWorkspace(null),sku,new Blob([bytes],{type:productPhotoMimes[sku]}));}
 renderFixture();

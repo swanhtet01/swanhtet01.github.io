@@ -37,7 +37,7 @@ test('preserve escaped path/query/hash and leave SEO and unrelated targets uncha
   assert.equal(bindPreviewNavigation(html, parse(binding)), html.replace('<a href="https://app.supermega.dev/', `<a href="${binding.origin}/`))
 })
 
-test('actual generator maps every production app anchor, preserves default contract and SEO', () => {
+test('actual generator keeps public pages free of app entry, preserves preview metadata and SEO', () => {
   const env = { ...process.env, SUPERMEGA_RELEASE_COMMIT: commit }
   delete env.SUPERMEGA_PUBLIC_PREVIEW_APP_BINDING
   const build = extra => execFileSync(process.execPath, ['tools/create_public_vercel_output.mjs'], {
@@ -57,7 +57,7 @@ test('actual generator maps every production app anchor, preserves default contr
       assert.equal(/<a\b[^>]*href="https:\/\/app\.supermega\.dev(?:\/|")/.test(actual), false, name)
       mapped += (original.match(/<a\b[^>]*href="https:\/\/app\.supermega\.dev\//g) || []).length
     }
-    assert.equal(mapped, manifest.pages.length, `expected one Login per public page, got ${mapped}`)
+    assert.equal(mapped, 0, `public pages must have no generic app entry, got ${mapped}`)
     assert.deepEqual(JSON.parse(read('__release.json')).previewNavigation, binding)
     assert.equal(read('robots.txt'), 'User-agent: *\nDisallow: /\n')
     const config = JSON.parse(readFileSync(resolve(root, '.vercel/output/config.json'), 'utf8'))

@@ -1,5 +1,6 @@
 import { lazy, Suspense, useMemo, useState } from 'react'
 import { Link } from 'react-router'
+import { Cookie, Droplets, Package, Soup, WashingMachine, Wheat } from 'lucide-react'
 import type { CommerceState } from './commerce-workspace'
 import type { ShopProfitControlBoard } from './shop-profit-control'
 import type { ShopBatchProfitControlView } from './ShopTodayAdvanced'
@@ -105,6 +106,16 @@ function ShopSummaryIcon({ label }: { label: string }) {
   return <svg aria-hidden="true" fill="none" viewBox="0 0 24 24"><path d="m12 3 9 17H3zM12 9v5m0 3h.01" /></svg>
 }
 
+function ShopProductFallback({ name }: { name: string }) {
+  const label = name.toLocaleLowerCase()
+  const Icon = /rice|grain|ဆန်/u.test(label) ? Wheat
+    : /noodle|pasta|ခေါက်ဆွဲ/u.test(label) ? Soup
+      : /water|drink|သောက်ရေ/u.test(label) ? Droplets
+        : /detergent|laundry|ဆပ်ပြာ/u.test(label) ? WashingMachine
+          : /cracker|biscuit|snack|ဘီစကစ်/u.test(label) ? Cookie : Package
+  return <span aria-hidden="true" className="shop-today-product-fallback"><Icon size={22} strokeWidth={1.8} /></span>
+}
+
 function formatSalesComparison(deltaBasisPoints: number | null, previousGrossMmk: number) {
   if (!previousGrossMmk || deltaBasisPoints === null) return uiText('No sales yesterday')
   if (deltaBasisPoints === 0) return uiText('Level with yesterday')
@@ -197,7 +208,7 @@ export function ShopToday({ accountingExport = null, batchProfitControl, catalog
         {visibleProducts.length ? <div aria-hidden="true" className="shop-product-columns"><span>{uiText('Product')}</span><span>{uiText('Stock')}</span><span>{uiText('Price')}</span></div> : null}
         <div className="shop-operating-list shop-product-list">
           {visibleProducts.length ? visibleProducts.map((item) => <Link aria-label={`${readUiLocale() === 'my' && item.nameMy ? item.nameMy : item.name}: ${item.onHand} ${uiText('in stock')}, ${formatMmk(item.price)}`} data-low-stock={item.onHand <= item.reorderAt} key={item.sku} to="/shop/?tab=inventory">
-            <span className="shop-product-identity"><ProductPhoto className="shop-today-product-photo" fallback={<span aria-hidden="true" className="shop-today-product-fallback">{item.name.trim().slice(0, 1).toUpperCase()}</span>} scope={productImageScope} sku={item.sku} /><span><strong>{readUiLocale() === 'my' && item.nameMy ? item.nameMy : item.name}</strong><small>{item.onHand} {uiText('in stock')}{item.onHand <= item.reorderAt ? ` · ${uiText('Reorder')}` : ''}</small></span></span>
+            <span className="shop-product-identity"><ProductPhoto className="shop-today-product-photo" fallback={<ShopProductFallback name={item.name} />} scope={productImageScope} sku={item.sku} /><span><strong>{readUiLocale() === 'my' && item.nameMy ? item.nameMy : item.name}</strong><small>{item.onHand} {uiText('in stock')}{item.onHand <= item.reorderAt ? ` · ${uiText('Reorder')}` : ''}</small></span></span>
             <span className="shop-product-stock">{item.onHand}{item.onHand <= item.reorderAt ? <small>{uiText('Reorder')}</small> : null}</span>
             <span className="shop-product-price"><b>{formatMmk(item.price)}</b></span>
           </Link>) : <div className="shop-operating-empty"><strong>{bi('No products to sell yet')}</strong><span>{bi('Add one item to start, or import a catalog.')}</span><Link className="core-button primary" to="/shop/?tab=inventory#shop-catalog-create">{bi('Add first product')}</Link><Link className="text-link" to="/shop/?tab=inventory#shop-catalog-import">{bi('Import a CSV')} <span aria-hidden="true">→</span></Link></div>}
@@ -210,7 +221,7 @@ export function ShopToday({ accountingExport = null, batchProfitControl, catalog
         <div className="shop-operating-list">
           {activeOrders.length ? activeOrders.map((order) => <Link key={order.id} to={shopOrderLink(order.id)}>
             <span><strong>{order.item}</strong><small>{privacySafeQueueCustomer(order.customer)} · {order.quantity} {uiText(order.quantity === 1 ? 'item' : 'items')}</small></span>
-            <span className="shop-order-queue-meta"><b>{formatMmk(order.total)}</b><small>{uiText(order.status)} <em data-payment-due={order.paymentStatus === 'pending'}>{uiText(order.paymentStatus === 'pending' ? 'Payment due' : 'Paid')}</em></small></span>
+            <span className="shop-order-queue-meta"><b>{formatMmk(order.total)}</b><small>{uiText(order.status)} <em data-payment-pending={order.paymentStatus === 'pending'}>{uiText(order.paymentStatus === 'pending' ? 'Unpaid' : 'Paid')}</em></small></span>
           </Link>) : <p className="shop-operating-empty"><strong>{uiText('Queue clear')}</strong><span>{uiText('No open orders need fulfilment.')}</span></p>}
         </div>
         <footer><Link to="/shop/?tab=orders#shop-order-queue">{uiText('Open all orders')} <span aria-hidden="true">→</span></Link></footer>

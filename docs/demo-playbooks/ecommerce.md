@@ -7,13 +7,13 @@ Current public page:
 - `Commerce | Your product catalog | SuperMega`
 - `The SuperMega team manages the Shop-backed catalog and reviews customer requests before any order or payment is confirmed.`
 
-The public website shows interface screenshots and one Login. Contact is in the footer. It has no sample, trial, setup or product-launch buttons.
+The public website shows interface screenshots and no generic public Login. Contact is in the footer. It has no sample, trial, setup or product-launch buttons.
 
 Use this as a service walkthrough. The product route is not proof of a provisioned business, published deliverable or completed customer acceptance.
 
 ## 2. Pre-demo setup
 
-Use an isolated browser profile and synthetic business details. The public product page is `/ecommerce/`; `Login` is the customer entry for Shop. Our team manages Commerce, while the public storefront and customer review remain available through their own routes. Internal legacy setup routes are retained for rehearsals only. Never reset existing customer work for a presentation.
+Use an isolated browser profile and synthetic business details. The public product page is `/ecommerce/`; authorized Shop customers use their private app sign-in. Our team manages Commerce, while the public storefront and customer review remain available through their own routes. Internal legacy setup routes are retained for rehearsals only. Never reset existing customer work for a presentation.
 
 ## 3. Demo script
 

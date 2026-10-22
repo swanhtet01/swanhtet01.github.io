@@ -57,13 +57,12 @@ const packageManifest = JSON.parse(read('package.json'))
 const derived = new Set()
 
 check(manifest.release?.productionDomain === 'https://supermega.dev', 'manifest_production_domain')
-// Every public page with navigation presents the Shop-scoped Login.
+// The public Shop, Contact and Privacy headers do not advertise app sign-in.
 // Historical contact links below remain valid app/support routes, not public CTAs.
-const loginUrl = 'https://app.supermega.dev/login'
-for (const route of ['/shop/', '/contact/', '/privacy/']) {
-  const links = [...companyShopHeaderHtml(route).matchAll(/href="([^"]+)">Login<\/a>/g)].map(([, href]) => href)
-  check(links.length === 1 && links[0] === `${loginUrl}?product=shop`, `public_single_login_route:${route}`)
-  derived.add(links[0])
+for (const route of ['/shop/', '/contact/', '/privacy/', '/my/shop/', '/my/contact/', '/my/privacy/']) {
+  const header = companyShopHeaderHtml(route, route.startsWith('/my/') ? 'my' : 'en')
+  check(!/<a\b[^>]*>\s*Login\s*<\/a>/i.test(header)
+    && !header.includes('https://app.supermega.dev/login'), `public_header_without_login:${route}`)
 }
 check(generator.includes('class="platform-gallery"')
   && generator.includes('class="platform-slides"')
@@ -144,7 +143,7 @@ for (const file of files) {
     check(text.includes(`eyebrow \`${product.eyebrow}\``), `${file}:eyebrow_drift`)
   } else {
     check(text.includes(`\`${page.title}\``), `${file}:public_title_drift`)
-    check(text.includes('one Login'), `${file}:single_login_navigation_missing`)
+    check(text.includes('no generic public Login'), `${file}:public_login_disclosure_missing`)
   }
   check(text.includes(`- \`${renderedDescription}\``), `${file}:description_drift`)
   check(text.includes(`\`${product.secondaryCta.label}\``), `${file}:assisted_setup_label_missing`)

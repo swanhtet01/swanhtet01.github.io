@@ -60,12 +60,11 @@ for (const token of ['validatePreviewLinks(shopPage, policy, manifest.customerPr
 }
 for (const token of ['public_preview_action_missing', 'public_preview_app_route_invalid',
   'public_preview_production_escape', 'public_preview_retired_entry',
-  "const appPaths = new Set(['/login', '/login?product=shop'])",
-  'loginLinks.length !== expectedLoginCount',
-  'hasShopSignIn && !loginLinks.every(href => href === `${origin}/login?product=shop`)']) {
+  "if (url.origin === origin) throw new Error('public_preview_app_route_invalid')",
+  'Request a Shop walkthrough</a>']) {
   requireToken(previewProfile, token, 'preview_navigation_policy_missing')
 }
-for (const token of ['landing_login_route_missing', 'shop_contact_action_missing',
+for (const token of ['page_public_login_present', 'landing_public_app_action_present', 'shop_contact_action_missing',
   'root_redirect_destination_wrong', 'contact_company_intro_missing', 'retired_shop_action_present', 'landing_contact_route_missing',
   'retired_product_route_not_found',
   'interface_image_reference_missing', 'interface_image_http_error',

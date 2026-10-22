@@ -9,7 +9,7 @@ Current public page:
 - `Shop | Sales and stock | SuperMega`
 - `Keep sales, orders and stock together. See product availability, track orders and manage replenishment with SuperMega Shop.`
 
-The public website shows interface screenshots and one Login. Contact is in the footer. It has no sample, trial, setup or product-launch buttons.
+The public website shows interface screenshots and no generic public Login. Contact is in the footer. It has no sample, trial, setup or product-launch buttons.
 
 Historical internal positioning: POS-independent Shop Profit Control was the acquisition and diagnostic wedge; it is no longer the public website pitch. Its first job selects and prioritizes one accountable money leak or operating risk, with the accountable role, due point, next action, and objective closure made explicit. It does not replace a POS and it does not turn a local projection into customer, pilot, or commercial proof.
 
@@ -19,7 +19,7 @@ Both paths remain owner-gated. Synthetic, sample, browser-local, and local-rende
 
 ## 2. Pre-demo setup
 
-1. Open `https://app.supermega.dev/settings/?product=shop` for an internal, synthetic rehearsal. Current customers enter through Login or request setup; this legacy route is not the public acquisition path.
+1. Open `https://app.supermega.dev/settings/?product=shop` for an internal, synthetic rehearsal. Authorized customers use their private app sign-in or request setup; this legacy route is not the public acquisition path.
 2. Under `Name your workspace`, enter the client's name in `Business name` (the field shows `Example: Golden Valley Trading`).
 3. Press `Create Shop and start selling`. The app provisions the industry sample and opens the first task at `/shop/?tab=counter`. The stated first result is `Complete a sample sale`.
 4. Confirm the sidebar badge reads `Local workspace` and the counter heading shows the working-sample pack context.

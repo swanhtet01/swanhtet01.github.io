@@ -177,7 +177,7 @@ jobs:
           assert evidence['customerReceiptVisible'] is False
           assert evidence['fulfilledSyntheticMedia'] == 3
           captures = evidence['captures']
-          assert len(captures) == 26
+          assert len(captures) == 29
           expected = {
               'actual-shop-first-run.png', 'actual-shop-today.png', 'actual-shop-sell.png', 'actual-shop-order-record.png', 'actual-shop-orders.png',
               'actual-shop-inventory.png',
@@ -185,6 +185,7 @@ jobs:
               'actual-commerce-catalog.png', 'actual-commerce-order-request.png',
               'actual-shop-today-tablet.png', 'actual-shop-today-mobile.png',
               'actual-shop-sell-tablet.png', 'actual-shop-sell-mobile.png',
+              'actual-shop-sell-my.png', 'actual-shop-sell-my-tablet.png', 'actual-shop-sell-my-mobile.png',
               'actual-shop-orders-tablet.png', 'actual-shop-orders-mobile.png',
               'actual-shop-inventory-tablet.png', 'actual-shop-inventory-mobile.png',
               'actual-sites-editor-mobile.png', 'actual-sites-inquiries-mobile.png',
@@ -204,6 +205,9 @@ jobs:
               'actual-shop-today-mobile.png': ('/shop/', 'today'),
               'actual-shop-sell-tablet.png': ('/shop/', 'counter'),
               'actual-shop-sell-mobile.png': ('/shop/', 'counter'),
+              'actual-shop-sell-my.png': ('/shop-my/', 'counter'),
+              'actual-shop-sell-my-tablet.png': ('/shop-my/', 'counter'),
+              'actual-shop-sell-my-mobile.png': ('/shop-my/', 'counter'),
               'actual-shop-orders-tablet.png': ('/shop/', 'orders'),
               'actual-shop-orders-mobile.png': ('/shop/', 'orders'),
               'actual-shop-inventory-tablet.png': ('/shop/', 'inventory'),
@@ -223,9 +227,11 @@ jobs:
           }
           for item in captures:
               expected_path, expected_route = expected_states[item['file']]
-              expected_size = (390, 844) if item['file'].endswith('-mobile.png') else (768, 1024) if item['file'].endswith('-tablet.png') else (1440, 900)
+              expected_size = (390, 844) if item['file'].endswith('-mobile.png') else (768, 1024) if item['file'].endswith('-tablet.png') else (1000, 900) if item['file'] == 'actual-shop-sell-my.png' else (1440, 900)
               assert (item['width'], item['height']) == expected_size
               assert item['fixturePath'] == expected_path
+              if item['file'].startswith('actual-shop-sell-my'):
+                  assert item['uiLocale'] == 'my'
               if item['file'].startswith('actual-commerce-'):
                   actual_route = urlsplit(item['routeState'])
                   assert actual_route.path == '/ecommerce/'

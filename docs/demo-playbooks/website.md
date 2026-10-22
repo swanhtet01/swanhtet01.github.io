@@ -7,13 +7,13 @@ Current public page:
 - `Sites | Your business online | SuperMega`
 - `The SuperMega team manages business pages, readiness checks and customer inquiries in Sites.`
 
-The public website shows interface screenshots and one Login. Contact is in the footer. It has no sample, trial, setup or product-launch buttons.
+The public website shows interface screenshots and no generic public Login. Contact is in the footer. It has no sample, trial, setup or product-launch buttons.
 
 Use this as a service walkthrough. The product route is not proof of a provisioned business, published deliverable or completed customer acceptance.
 
 ## 2. Pre-demo setup
 
-Use an isolated browser profile and synthetic business details. The public product page is `/website/`; `Login` is the customer entry for Shop. An authorized SuperMega operator runs the Sites workspace internally. Internal legacy setup routes are retained for rehearsals only. Never reset existing customer work for a presentation.
+Use an isolated browser profile and synthetic business details. The public product page is `/website/`; authorized Shop customers use their private app sign-in. An authorized SuperMega operator runs the Sites workspace internally. Internal legacy setup routes are retained for rehearsals only. Never reset existing customer work for a presentation.
 
 ## 3. Demo script
 
