@@ -1868,11 +1868,6 @@ class _ShopHomeState extends State<ShopHome> {
               ? Theme.of(context).colorScheme.error
               : Theme.of(context).colorScheme.onSurfaceVariant,
         );
-        final compactStock = shopCopy(
-          widget.myanmar,
-          '${item.onHand} left',
-          '${shopNumber(item.onHand, myanmar: true)} ကျန်',
-        );
         final canAdd =
             _checkoutReady &&
             !_saving &&
@@ -1903,6 +1898,34 @@ class _ShopHomeState extends State<ShopHome> {
             ),
           ),
         );
+        Widget? productPhoto(Uint8List? bytes) => bytes == null
+            ? null
+            : SizedBox(
+                key: ValueKey('shop-product-media:${item.id}'),
+                width: photoExtent,
+                height: photoExtent,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    border: Border.all(color: const Color(0xffe7ebf2)),
+                    borderRadius: BorderRadius.circular(11),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: SizedBox(
+                      key: ValueKey('shop-product-photo:${item.id}'),
+                      child: Image.memory(
+                        bytes,
+                        width: photoExtent,
+                        height: photoExtent,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, error, stackTrace) => const Icon(
+                          Icons.image_not_supported_outlined,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              );
         return FutureBuilder<Uint8List?>(
           future: _thumbnailFor(item.id),
           builder: (context, photoSnapshot) => Tooltip(
@@ -1915,64 +1938,68 @@ class _ShopHomeState extends State<ShopHome> {
                     'ဆိုင်းငံ့ငွေပေးချေမှုကို အရင်ပြီးစီးပါ',
                   )
                 : shopCopy(widget.myanmar, 'Add to sale', 'အရောင်းထဲထည့်ရန်'),
-            child: ListTile(
-              key: ValueKey('shop-catalog-row:${item.id}'),
-              isThreeLine: compactProductRow && !enlargedNarrowRow,
-              dense: enlargedNarrowRow,
-              horizontalTitleGap: enlargedNarrowRow ? 8 : null,
-              contentPadding: EdgeInsets.symmetric(
-                horizontal: enlargedNarrowRow ? 8 : 14,
-                vertical: enlargedNarrowRow
-                    ? 0
-                    : touchCompactRow
-                    ? 2
-                    : narrowProductRow
-                    ? 0
-                    : 10,
-              ),
-              minVerticalPadding: narrowProductRow ? 0 : null,
-              leading: photoSnapshot.data == null
-                  ? null
-                  : SizedBox(
-                      key: ValueKey('shop-product-media:${item.id}'),
-                      width: photoExtent,
-                      height: photoExtent,
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          border: Border.all(color: const Color(0xffe7ebf2)),
-                          borderRadius: BorderRadius.circular(11),
-                        ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(10),
-                          child: SizedBox(
-                            key: ValueKey('shop-product-photo:${item.id}'),
-                            child: Image.memory(
-                              photoSnapshot.data!,
-                              width: photoExtent,
-                              height: photoExtent,
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, error, stackTrace) =>
-                                  const Icon(
-                                    Icons.image_not_supported_outlined,
-                                  ),
+            child: enlargedNarrowRow
+                ? InkWell(
+                    key: ValueKey('shop-catalog-row:${item.id}'),
+                    onTap: canAdd ? () => _add(item) : null,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 8,
+                      ),
+                      child: Row(
+                        children: [
+                          if (photoSnapshot.data != null) ...[
+                            productPhoto(photoSnapshot.data)!,
+                            const SizedBox(width: 8),
+                          ],
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  item.name,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  semanticsLabel: item.name,
+                                  style: Theme.of(context).textTheme.bodyMedium
+                                      ?.copyWith(fontWeight: FontWeight.w600),
+                                ),
+                                Text(
+                                  _mmk(item.priceMmk),
+                                  style: _shopMoneyStyle(context),
+                                ),
+                                Text(stock, style: stockStyle),
+                              ],
                             ),
                           ),
-                        ),
+                          const SizedBox(width: 8),
+                          addAffordance,
+                        ],
                       ),
                     ),
-              title: Text(
-                item.name,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                semanticsLabel: item.name,
-                style: enlargedNarrowRow
-                    ? Theme.of(context).textTheme.bodyMedium
-                          ?.copyWith(fontWeight: FontWeight.w600)
-                    : Theme.of(context).textTheme.titleMedium,
-              ),
-              subtitle: enlargedNarrowRow
-                  ? Text(_mmk(item.priceMmk), style: _shopMoneyStyle(context))
-                  : Column(
+                  )
+                : ListTile(
+                    key: ValueKey('shop-catalog-row:${item.id}'),
+                    isThreeLine: compactProductRow,
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: touchCompactRow
+                          ? 2
+                          : narrowProductRow
+                          ? 0
+                          : 10,
+                    ),
+                    minVerticalPadding: narrowProductRow ? 0 : null,
+                    leading: productPhoto(photoSnapshot.data),
+                    title: Text(
+                      item.name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      semanticsLabel: item.name,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    subtitle: Column(
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -1993,39 +2020,21 @@ class _ShopHomeState extends State<ShopHome> {
                           Text(stock, style: stockStyle),
                       ],
                     ),
-              trailing: enlargedNarrowRow
-                  ? SizedBox(
-                      width: 80,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Text(
-                            compactStock,
-                            maxLines: 1,
-                            textAlign: TextAlign.center,
-                            style: stockStyle,
+                    trailing: compactProductRow
+                        ? addAffordance
+                        : Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                _mmk(item.priceMmk),
+                                style: _shopMoneyStyle(context),
+                              ),
+                              const SizedBox(width: 12),
+                              addAffordance,
+                            ],
                           ),
-                          const SizedBox(height: 2),
-                          addAffordance,
-                        ],
-                      ),
-                    )
-                  : compactProductRow
-                  ? addAffordance
-                  : Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          _mmk(item.priceMmk),
-                          style: _shopMoneyStyle(context),
-                        ),
-                        const SizedBox(width: 12),
-                        addAffordance,
-                      ],
-                    ),
-              onTap: canAdd ? () => _add(item) : null,
-            ),
+                    onTap: canAdd ? () => _add(item) : null,
+                  ),
           ),
         );
       },
