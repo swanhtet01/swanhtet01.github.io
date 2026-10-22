@@ -293,7 +293,7 @@ void main() {
                 database: database,
                 authClient: null,
                 apiBaseUrl: 'https://example.invalid',
-                initialMyanmar: false,
+                initialMyanmar: language == 'my',
               ),
             ),
           );
@@ -307,10 +307,6 @@ void main() {
                 .first,
           );
           await tester.pumpAndSettle();
-          if (language == 'my') {
-            await tester.tap(find.text('မြန်မာ'));
-            await tester.pumpAndSettle();
-          }
           final walletEntry = find.text(
             language == 'my' ? 'မိုဘိုင်းငွေပေးချေမှု' : 'Mobile money',
           );
