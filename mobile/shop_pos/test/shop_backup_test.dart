@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
+import 'package:file_selector/file_selector.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -10,6 +11,7 @@ import 'package:sqlite3/sqlite3.dart';
 import 'package:supermega_shop/shop_backup.dart';
 import 'package:supermega_shop/shop_backup_export_screen.dart';
 import 'package:supermega_shop/shop_database.dart';
+import 'package:supermega_shop/shop_startup.dart';
 
 const _password = 'correct horse battery staple';
 final _thumbnail = base64Decode(
@@ -458,6 +460,199 @@ void main() {
     );
     expect(await target.exists(), isFalse);
     expect(await sidecar.readAsString(), 'another database owns this');
+  });
+
+  test('late database and WAL creator wins without being replaced', () async {
+    final target = File('${directory.path}/late.sqlite');
+    final wal = File('${target.path}-wal');
+    await expectLater(
+      ShopBackup.restoreIntoEmptyDatabase(
+        archive: archive,
+        target: target,
+        password: _password,
+        beforePublishForTest: () async {
+          await target.writeAsString('another Shop instance');
+          await wal.writeAsString('its WAL');
+        },
+      ),
+      throwsFileSystemException,
+    );
+    expect(await target.readAsString(), 'another Shop instance');
+    expect(await wal.readAsString(), 'its WAL');
+    await _expectNoScratch(directory);
+  });
+
+  test('startup cleanup leaves a fully published database intact', () async {
+    final target = File('${directory.path}/published.sqlite');
+    await ShopBackup.restoreIntoEmptyDatabase(
+      archive: archive,
+      target: target,
+      password: _password,
+    );
+    final before = await target.readAsBytes();
+    final interrupted = await directory.createTemp('.supermega-shop-restore-');
+    await target.copy('${interrupted.path}/shop.sqlite');
+    await ShopBackup.cleanupInterruptedStaging(directory);
+    expect(await interrupted.exists(), isFalse);
+    expect(await target.readAsBytes(), before);
+    ShopBackup.verifySnapshot(target);
+  });
+
+  testWidgets('fresh install restores before Shop opens', (tester) async {
+    final documents = await Directory.systemTemp.createTemp('shop-first-run-');
+    ShopDatabase? opened;
+    try {
+      await tester.pumpWidget(
+        ShopStartup(
+          documents: documents,
+          importScratchRoot: documents,
+          initialMyanmar: false,
+          pickBackup: () async => XFile(archive.path),
+          buildShop: (database, _) {
+            opened = database;
+            return const MaterialApp(home: Scaffold(body: Text('Opened Shop')));
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Start new Shop'), findsOneWidget);
+      expect(await ShopDatabase.privateDatabaseFile(documents).exists(), isFalse);
+      await tester.tap(find.text('Restore backup'));
+      await tester.pumpAndSettle();
+      expect(await ShopDatabase.privateDatabaseFile(documents).exists(), isFalse);
+      await tester.enterText(find.byType(TextField), _password);
+      await tester.tap(find.text('Restore and open Shop'));
+      await tester.pumpAndSettle();
+      expect(find.text('Opened Shop'), findsOneWidget);
+      expect((await opened!.readActiveProducts()).single.onHand, 3);
+      expect(await opened!.countSales(), 1);
+      expect(await ShopDatabase.privateDatabaseFile(documents).exists(), isTrue);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await opened?.close();
+      await documents.delete(recursive: true);
+    }
+  });
+
+  testWidgets('wrong password keeps restore choice and local data empty', (
+    tester,
+  ) async {
+    final documents = await Directory.systemTemp.createTemp('shop-wrong-pass-');
+    ShopDatabase? opened;
+    try {
+      await tester.pumpWidget(
+        ShopStartup(
+          documents: documents,
+          importScratchRoot: documents,
+          initialMyanmar: false,
+          pickBackup: () async => XFile(archive.path),
+          buildShop: (database, _) {
+            opened = database;
+            return const MaterialApp(home: Scaffold(body: Text('Opened Shop')));
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Restore backup'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'a wrong long password');
+      await tester.tap(find.text('Restore and open Shop'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Could not restore'), findsOneWidget);
+      expect(find.text('Restore and open Shop'), findsOneWidget);
+      expect(await ShopDatabase.privateDatabaseFile(documents).exists(), isFalse);
+      await tester.enterText(find.byType(TextField), _password);
+      await tester.tap(find.text('Restore and open Shop'));
+      await tester.pumpAndSettle();
+      expect(find.text('Opened Shop'), findsOneWidget);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await opened?.close();
+      await documents.delete(recursive: true);
+    }
+  });
+
+  testWidgets('cancelled restore cannot create a Shop database', (tester) async {
+    final documents = await Directory.systemTemp.createTemp('shop-cancel-');
+    try {
+      await tester.pumpWidget(
+        ShopStartup(
+          documents: documents,
+          importScratchRoot: documents,
+          initialMyanmar: true,
+          pickBackup: () async => null,
+          buildShop: (_, _) => const SizedBox.shrink(),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('အရန်ကူးဖိုင် ပြန်ယူရန်'));
+      await tester.pumpAndSettle();
+      expect(find.text('Shop အသစ် စတင်ရန်'), findsOneWidget);
+      expect(await ShopDatabase.privateDatabaseFile(documents).exists(), isFalse);
+      expect(tester.takeException(), isNull);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await documents.delete(recursive: true);
+    }
+  });
+
+  testWidgets('existing Shop opens without offering restore', (tester) async {
+    final documents = await Directory.systemTemp.createTemp('shop-existing-');
+    ShopDatabase? opened;
+    try {
+      await ShopBackup.restoreIntoEmptyDatabase(
+        archive: archive,
+        target: ShopDatabase.privateDatabaseFile(documents),
+        password: _password,
+      );
+      await tester.pumpWidget(
+        ShopStartup(
+          documents: documents,
+          importScratchRoot: documents,
+          initialMyanmar: false,
+          buildShop: (database, _) {
+            opened = database;
+            return const MaterialApp(home: Scaffold(body: Text('Opened Shop')));
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Opened Shop'), findsOneWidget);
+      expect(find.text('Restore backup'), findsNothing);
+      expect((await opened!.readActiveProducts()).single.onHand, 3);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await opened?.close();
+      await documents.delete(recursive: true);
+    }
+  });
+
+  testWidgets('orphaned WAL blocks first-run actions without deletion', (
+    tester,
+  ) async {
+    final documents = await Directory.systemTemp.createTemp('shop-orphan-wal-');
+    try {
+      final target = ShopDatabase.privateDatabaseFile(documents);
+      final sidecar = File('${target.path}-wal');
+      await sidecar.writeAsString('preserve this file');
+      await tester.pumpWidget(
+        ShopStartup(
+          documents: documents,
+          importScratchRoot: documents,
+          initialMyanmar: false,
+          buildShop: (_, _) => const SizedBox.shrink(),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.textContaining('cannot safely open'), findsOneWidget);
+      expect(find.text('Start new Shop'), findsNothing);
+      expect(find.text('Restore backup'), findsNothing);
+      expect(await sidecar.readAsString(), 'preserve this file');
+      expect(await target.exists(), isFalse);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await documents.delete(recursive: true);
+    }
   });
 
   test('concurrent cleanup fails fast and releases its lock', () async {

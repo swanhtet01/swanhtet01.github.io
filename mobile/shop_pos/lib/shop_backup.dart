@@ -1,9 +1,11 @@
 import 'dart:convert';
+import 'dart:ffi';
 import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
+import 'package:ffi/ffi.dart';
 import 'package:sqlite3/sqlite3.dart';
 
 import 'shop_database.dart';
@@ -126,15 +128,15 @@ abstract final class ShopBackup {
 
   /// Restores only into a nonexistent database path, before ShopDatabase opens.
   /// It never merges records or intentionally overwrites an existing database
-  /// or WAL files. An OS file lock serializes this method's callers. Promotion
-  /// uses a same-directory rename after verification, but a process that does
-  /// not honor the lock could still create the target between the final check
-  /// and rename; Dart's rename may replace that file on some platforms.
-  /// Merchant-facing restore must remain disabled until startup owns the path.
+  /// or WAL files. An OS file lock serializes cooperating callers. A same-
+  /// volume hard link publishes the verified file without replacing a target
+  /// created by another process after the empty-path check. Startup must call
+  /// [cleanupInterruptedStaging] before opening the database.
   static Future<void> restoreIntoEmptyDatabase({
     required File archive,
     required File target,
     required String password,
+    Future<void> Function()? beforePublishForTest,
   }) async {
     _checkPassword(password);
     await _requireEmptyRestoreDestination(target);
@@ -157,8 +159,11 @@ abstract final class ShopBackup {
         );
         await stagedFile.writeAsBytes(cleartext, flush: true);
         verifySnapshot(stagedFile, expectedSchemaVersion: archiveBytes[5]);
+        // Recheck sidecars immediately before the atomic no-replace link. The
+        // link itself closes the target-creation race that rename leaves open.
         await _requireEmptyRestoreDestination(target);
-        await stagedFile.rename(target.path);
+        if (beforePublishForTest != null) await beforePublishForTest();
+        _publishVerifiedFileNoReplace(stagedFile, target);
       } finally {
         await _deleteScratchDirectory(target.parent, staging);
       }
@@ -283,6 +288,53 @@ abstract final class ShopBackup {
 
   static String _pathKey(String path) =>
       Platform.isWindows ? path.toLowerCase() : path;
+
+  /// Hard links fail when the destination already exists. Staging and target
+  /// share a private directory, so a crash after linking leaves the complete
+  /// verified SQLite file; startup may safely remove only the staging link.
+  static void _publishVerifiedFileNoReplace(File staged, File target) {
+    if (Platform.isWindows) {
+      final createHardLink = DynamicLibrary.open('kernel32.dll').lookupFunction<
+        Int32 Function(Pointer<Utf16>, Pointer<Utf16>, Pointer<Void>),
+        int Function(Pointer<Utf16>, Pointer<Utf16>, Pointer<Void>)
+      >('CreateHardLinkW');
+      final destination = target.path.toNativeUtf16();
+      final source = staged.path.toNativeUtf16();
+      try {
+        if (createHardLink(destination, source, nullptr) == 0) {
+          throw FileSystemException(
+            'Could not publish the verified Shop backup without replacement.',
+            target.path,
+          );
+        }
+      } finally {
+        calloc.free(destination);
+        calloc.free(source);
+      }
+      return;
+    }
+    if (Platform.isAndroid || Platform.isIOS || Platform.isLinux) {
+      final link = DynamicLibrary.process().lookupFunction<
+        Int32 Function(Pointer<Utf8>, Pointer<Utf8>),
+        int Function(Pointer<Utf8>, Pointer<Utf8>)
+      >('link');
+      final source = staged.path.toNativeUtf8();
+      final destination = target.path.toNativeUtf8();
+      try {
+        if (link(source, destination) != 0) {
+          throw FileSystemException(
+            'Could not publish the verified Shop backup without replacement.',
+            target.path,
+          );
+        }
+      } finally {
+        calloc.free(source);
+        calloc.free(destination);
+      }
+      return;
+    }
+    throw UnsupportedError('Shop restore is unsupported on this device.');
+  }
 
   static Future<void> _requireEmptyRestoreDestination(File target) async {
     if (await FileSystemEntity.type(target.path, followLinks: false) !=

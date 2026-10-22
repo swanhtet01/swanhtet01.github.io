@@ -37,8 +37,8 @@ jobs:
 
       - name: Check changed Dart formatting
         run: |
-          dart format lib/main.dart lib/menu_import_screen.dart lib/menu_import_service.dart lib/printer_services.dart lib/recent_sales_screen.dart lib/shop_backup.dart lib/shop_cash_shift_screen.dart lib/shop_copy.dart lib/shop_database.dart lib/shop_today_screen.dart lib/stock_screen.dart test/shop_backup_test.dart test/shop_foundation_test.dart test/visual_capture_test.dart test/widget_test.dart
-          git diff --exit-code -- lib/main.dart lib/menu_import_screen.dart lib/menu_import_service.dart lib/printer_services.dart lib/recent_sales_screen.dart lib/shop_backup.dart lib/shop_cash_shift_screen.dart lib/shop_copy.dart lib/shop_database.dart lib/shop_today_screen.dart lib/stock_screen.dart test/shop_backup_test.dart test/shop_foundation_test.dart test/visual_capture_test.dart test/widget_test.dart
+          dart format lib/main.dart lib/menu_import_screen.dart lib/menu_import_service.dart lib/printer_services.dart lib/recent_sales_screen.dart lib/shop_backup.dart lib/shop_cash_shift_screen.dart lib/shop_copy.dart lib/shop_database.dart lib/shop_startup.dart lib/shop_today_screen.dart lib/stock_screen.dart test/shop_backup_test.dart test/shop_foundation_test.dart test/visual_capture_test.dart test/widget_test.dart
+          git diff --exit-code -- lib/main.dart lib/menu_import_screen.dart lib/menu_import_service.dart lib/printer_services.dart lib/recent_sales_screen.dart lib/shop_backup.dart lib/shop_cash_shift_screen.dart lib/shop_copy.dart lib/shop_database.dart lib/shop_startup.dart lib/shop_today_screen.dart lib/stock_screen.dart test/shop_backup_test.dart test/shop_foundation_test.dart test/visual_capture_test.dart test/widget_test.dart
 
       - name: Analyze Flutter source
         run: flutter analyze
@@ -133,6 +133,9 @@ jobs:
 
       - name: Resolve locked dependencies
         run: flutter pub get --enforce-lockfile
+
+      - name: Prove backup restore and no-replace behavior on Windows
+        run: flutter test test/shop_backup_test.dart --reporter expanded --timeout 2m
 
       - name: Build unsigned Windows app
         run: flutter build windows --release --no-pub
