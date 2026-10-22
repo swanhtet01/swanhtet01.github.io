@@ -102,7 +102,7 @@ test('only active public product links set product context; internal routes fall
   const shop = harness([], '?product=shop&source=shop-brief', '#company=Example&goal=Prepare%20our%20shop')
   assert.equal(shop.fields.get('[name="product"]').value, 'shop')
   assert.equal(shop.headings.get('[data-contact-heading]').textContent, 'Request a Shop walkthrough')
-  assert.equal(shop.headings.get('[data-contact-lede]').textContent, 'The Shop browser sample shows counter sales, orders and inventory. Tell us about your catalog, devices and receipt needs to plan a guided pilot.')
+  assert.equal(shop.headings.get('[data-contact-lede]').textContent, 'Tell us what you sell and the devices you use. We will discuss a Shop pilot for your business.')
   assert.equal(shop.fields.get('[name="goal"]').value, 'Prepare our shop')
   assert.equal(shop.calls.length, 0)
   for (const product of ['website', 'ecommerce']) {
@@ -151,7 +151,7 @@ test('Burmese contact route keeps the same safe receipt contract with Burmese co
   assert.doesNotMatch(myanmarPage, />Send message<\/button>|>Company \(optional\)<input/)
   const state = harness([new Error('connection lost'), { body: receipt }], '?product=shop&utm_source=example&private=discard', '', 'my')
   assert.equal(state.headings.get('[data-contact-heading]').textContent, 'Shop အသုံးပြုပုံကို မေးမြန်းရန်')
-  assert.equal(state.headings.get('[data-contact-lede]').textContent, 'Shop ဘရောက်ဇာနမူနာတွင် ကောင်တာအရောင်း၊ အော်ဒါနှင့် ကုန်လက်ကျန်ကို ကြည့်နိုင်ပါသည်။ စမ်းသပ်အသုံးပြုမည့်အစီအစဉ်ကို ဆွေးနွေးရန် သင့်ကုန်ပစ္စည်းစာရင်း၊ အသုံးပြုမည့်စက်များနှင့် ပြေစာလိုအပ်ချက်ကို ပြောပြပါ။')
+  assert.equal(state.headings.get('[data-contact-lede]').textContent, 'သင်ရောင်းချသော ပစ္စည်းများနှင့် အသုံးပြုမည့်စက်များကို ပြောပြပါ။ သင့်လုပ်ငန်းအတွက် Shop စမ်းသပ်အသုံးပြုမှုကို ဆွေးနွေးကြမည်။')
   assert.equal(state.languageSwitch.href, '/contact/?product=shop&utm_source=example')
   state.invalid('name')
   assert.equal(state.fields.get('[name="name"]').validationMessage, 'ဤအချက်အလက်ကို ဖြည့်ပါ။')
