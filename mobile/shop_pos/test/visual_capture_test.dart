@@ -59,47 +59,51 @@ Future<ShopDatabase> _sampleShop({required bool myanmar}) async {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('grocery photo fixture is pinned and safe for the local catalog', () async {
-    final items = await _groceryFixture();
-    expect(items.length, 5);
-    expect(items.map((item) => item['id']).toSet().length, 5);
-    for (final item in items) {
-      final photo = await File(
-        '$_photoFixtureDir/' + (item['thumbnail'] as String),
-      ).readAsBytes();
-      expect(ShopDatabase.isValidProductThumbnail(photo), isTrue);
-      final digest = await Sha256().hash(photo);
-      final actualSha256 = digest.bytes
-          .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
-          .join();
-      expect(
-        actualSha256,
-        item['thumbnail_sha256'],
-        reason: item['id'] as String,
-      );
-      expect(
-        item['source_page'],
-        startsWith('https://commons.wikimedia.org/wiki/File:'),
-      );
-      expect(item['reuse_basis'], isNotEmpty);
-      expect(item['name_en'], isNotEmpty);
-      expect(item['name_my'], isNotEmpty);
-      // No ancillary EXIF, location, color, or software metadata in derivatives.
-      var offset = 8;
-      final chunks = <String>[];
-      while (offset + 12 <= photo.length) {
-        final length = (photo[offset] << 24) |
-            (photo[offset + 1] << 16) |
-            (photo[offset + 2] << 8) |
-            photo[offset + 3];
-        chunks.add(ascii.decode(photo.sublist(offset + 4, offset + 8)));
-        offset += length + 12;
+  test(
+    'grocery photo fixture is pinned and safe for the local catalog',
+    () async {
+      final items = await _groceryFixture();
+      expect(items.length, 5);
+      expect(items.map((item) => item['id']).toSet().length, 5);
+      for (final item in items) {
+        final photo = await File(
+          '$_photoFixtureDir/' + (item['thumbnail'] as String),
+        ).readAsBytes();
+        expect(ShopDatabase.isValidProductThumbnail(photo), isTrue);
+        final digest = await Sha256().hash(photo);
+        final actualSha256 = digest.bytes
+            .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
+            .join();
+        expect(
+          actualSha256,
+          item['thumbnail_sha256'],
+          reason: item['id'] as String,
+        );
+        expect(
+          item['source_page'],
+          startsWith('https://commons.wikimedia.org/wiki/File:'),
+        );
+        expect(item['reuse_basis'], isNotEmpty);
+        expect(item['name_en'], isNotEmpty);
+        expect(item['name_my'], isNotEmpty);
+        // No ancillary EXIF, location, color, or software metadata in derivatives.
+        var offset = 8;
+        final chunks = <String>[];
+        while (offset + 12 <= photo.length) {
+          final length =
+              (photo[offset] << 24) |
+              (photo[offset + 1] << 16) |
+              (photo[offset + 2] << 8) |
+              photo[offset + 3];
+          chunks.add(ascii.decode(photo.sublist(offset + 4, offset + 8)));
+          offset += length + 12;
+        }
+        expect(chunks.first, 'IHDR');
+        expect(chunks.last, 'IEND');
+        expect(chunks.every({'IHDR', 'IDAT', 'IEND'}.contains), isTrue);
       }
-      expect(chunks.first, 'IHDR');
-      expect(chunks.last, 'IEND');
-      expect(chunks.every({'IHDR', 'IDAT', 'IEND'}.contains), isTrue);
-    }
-  });
+    },
+  );
 
   setUpAll(() async {
     if (!_capture) return;
