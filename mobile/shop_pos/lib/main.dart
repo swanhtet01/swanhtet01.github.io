@@ -1407,10 +1407,8 @@ class _ShopHomeState extends State<ShopHome> {
       child: Column(
         children: [
           _catalogHeader(products),
-          if (products.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            _searchField(products),
-          ],
+          const SizedBox(height: 12),
+          _searchField(products),
           if (_heldTickets.isNotEmpty) _heldSalesAction(),
           const SizedBox(height: 8),
           Expanded(
@@ -1670,6 +1668,20 @@ class _ShopHomeState extends State<ShopHome> {
     }
   }
 
+  String _searchHint(List<ShopProduct> products) {
+    if (products.isEmpty) {
+      return shopCopy(widget.myanmar, 'Scan a barcode', 'ဘားကုဒ် ဖတ်ပါ');
+    }
+    if (MediaQuery.sizeOf(context).width < 420) {
+      return shopCopy(widget.myanmar, 'Search or scan', 'ပစ္စည်းရှာရန်');
+    }
+    return shopCopy(
+      widget.myanmar,
+      'Search name, barcode or SKU',
+      'အမည်၊ ဘားကုဒ် သို့မဟုတ် ကုန်ပစ္စည်းကုဒ် ရှာရန်',
+    );
+  }
+
   Widget _searchField(List<ShopProduct> products) => TextField(
     controller: _search,
     focusNode: _searchFocus,
@@ -1685,13 +1697,7 @@ class _ShopHomeState extends State<ShopHome> {
           ? const EdgeInsets.symmetric(horizontal: 12, vertical: 8)
           : null,
       prefixIcon: const Icon(Icons.search),
-      hintText: MediaQuery.sizeOf(context).width < 420
-          ? shopCopy(widget.myanmar, 'Search or scan', 'ပစ္စည်းရှာရန်')
-          : shopCopy(
-              widget.myanmar,
-              'Search name, barcode or SKU',
-              'အမည်၊ ဘားကုဒ် သို့မဟုတ် ကုန်ပစ္စည်းကုဒ် ရှာရန်',
-            ),
+      hintText: _searchHint(products),
       suffixIcon: _search.text.isEmpty
           ? null
           : IconButton(

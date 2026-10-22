@@ -2174,6 +2174,84 @@ void main() {
     await tester.pump(const Duration(milliseconds: 1));
   });
 
+  for (final myanmar in [false, true]) {
+    testWidgets(
+      'empty ${myanmar ? 'MY' : 'EN'} catalog scans a first product without a sale',
+      (tester) async {
+        _usePhoneViewport(tester);
+        final database = ShopDatabase(NativeDatabase.memory());
+        addTearDown(database.close);
+        await tester.pumpWidget(
+          ShopApp(
+            initialCounter: true,
+            database: database,
+            authClient: null,
+            apiBaseUrl: 'https://app.supermega.dev',
+            initialMyanmar: myanmar,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(
+          find.text(myanmar ? 'ဘားကုဒ် ဖတ်ပါ' : 'Scan a barcode'),
+          findsOneWidget,
+        );
+        final search = find.byType(TextField);
+        await tester.enterText(search, '0012345678905');
+        await tester.testTextInput.receiveAction(TextInputAction.done);
+        await tester.pumpAndSettle();
+        expect(find.byType(AlertDialog), findsOneWidget);
+        expect(
+          tester
+              .widget<TextFormField>(
+                find.byKey(const ValueKey('shop-product-barcode')),
+              )
+              .controller!
+              .text,
+          '0012345678905',
+        );
+        await tester.tap(find.text(myanmar ? 'မလုပ်တော့ပါ' : 'Cancel'));
+        await tester.pumpAndSettle();
+        expect(await database.readActiveProducts(), isEmpty);
+        expect(await database.readCounterSaleDraft(), isNull);
+
+        await tester.testTextInput.receiveAction(TextInputAction.done);
+        await tester.pumpAndSettle();
+        expect(find.byType(AlertDialog), findsOneWidget);
+        await tester.enterText(
+          find.byKey(const ValueKey('shop-product-name')),
+          'Rice',
+        );
+        await tester.enterText(
+          find.byKey(const ValueKey('shop-product-price')),
+          '12000',
+        );
+        await tester.enterText(
+          find.byKey(const ValueKey('shop-product-stock')),
+          '3',
+        );
+        await tester.tap(find.text(myanmar ? 'သိမ်းရန်' : 'Save product'));
+        await tester.pumpAndSettle();
+        final products = await database.readActiveProducts();
+        expect(products, hasLength(1));
+        expect(products.single.barcode, '0012345678905');
+        expect(await database.readCounterSaleDraft(), isNull);
+
+        await tester.enterText(search, '0012345678905');
+        await tester.testTextInput.receiveAction(TextInputAction.done);
+        await tester.pumpAndSettle();
+        expect((await database.readCounterSaleDraft())?.quantities, {
+          products.single.id: 1,
+        });
+        expect(await database.countSales(), 0);
+        expect((await database.readActiveProducts()).single.onHand, 3);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump(const Duration(milliseconds: 1));
+      },
+    );
+  }
+
   testWidgets('empty catalog can make a durable cash sale', (tester) async {
     _usePhoneViewport(tester);
     final database = ShopDatabase(NativeDatabase.memory());
@@ -2191,7 +2269,7 @@ void main() {
 
     expect(find.text('Products'), findsOneWidget);
     expect(find.text('Your catalog is empty'), findsOneWidget);
-    expect(find.text('Search name, barcode or SKU'), findsNothing);
+    expect(find.text('Scan a barcode'), findsOneWidget);
     expect(find.text('MAMA Chicken Instant Noodles'), findsNothing);
 
     await tester.ensureVisible(find.text('Add first product'));
@@ -2279,7 +2357,7 @@ void main() {
       expect(find.text('Your catalog is empty'), findsOneWidget);
       expect(find.text('Add first product'), findsOneWidget);
       expect(find.text('Import menu photo'), findsOneWidget);
-      expect(find.text('Search name, barcode or SKU'), findsNothing);
+      expect(find.text('Scan a barcode'), findsOneWidget);
       expect(find.text('Current sale'), findsNothing);
       expect(tester.takeException(), isNull);
     } finally {
