@@ -1,13 +1,13 @@
 {
   "schemaVersion": "supermega.hq.database-rehearsal.v3",
-  "recordedAt": "2026-10-22T06:10:06.443Z",
+  "recordedAt": "2026-10-22T14:57:25.357Z",
   "runner": "tools/rehearse_supermega_postgres17.py",
-  "implementationCommit": "48015013b841b90dcc64e2996b87b0b4411bc102",
-  "implementationTree": "30c52db437d29835f258a0b93e677dee0693b869",
+  "implementationCommit": "3c796da20e80b2892ff7b4bf03bf2f18fe88ce06",
+  "implementationTree": "eb5c198a24431ddca115f55827e4d14bf6783af1",
   "sourceCleanBeforeAndAfter": true,
-  "rawReportDigest": "sha256:34025eba7ba22fecc142348db405c69c80415379def8db26cd50d093936ef1eb",
+  "rawReportDigest": "sha256:7a58075b82764bab95a961367ffcf6dbbe167f9306426d96a261d44e16db1274",
   "implementation": {
-    "digest": "sha256:1c68061356b631c83481b15b1ac1100051dc05dd4f0f593a1ff6a771737afbb2",
+    "digest": "sha256:f20cf2d7c075a1ddd59bce3e6d009d9e6e85d585f99f55399ec0e0ff2030a2a5",
     "paths": [
       "kernel/database-rehearsal-evidence.mjs",
       "supabase/migrations/20260722004500_private_trial_backend_role_preflight.sql",
@@ -99,7 +99,7 @@
       "tools/verify_public_browser_quarantine.mjs"
     ]
   },
-  "implementationDigest": "sha256:1c68061356b631c83481b15b1ac1100051dc05dd4f0f593a1ff6a771737afbb2",
+  "implementationDigest": "sha256:f20cf2d7c075a1ddd59bce3e6d009d9e6e85d585f99f55399ec0e0ff2030a2a5",
   "implementationFileCount": 88,
   "localVerification": {
     "command": "npm run database:postgres17:record",
@@ -327,8 +327,8 @@
     "backupNonempty": true,
     "format": "pg_dump_custom",
     "restoredSchemaVersion": 13,
-    "privateSnapshotBefore": "sha256:633cd2a32158d38e9f9930f9a96cf36d41397518facc6a14c79d79613707d3b1",
-    "privateSnapshotAfter": "sha256:633cd2a32158d38e9f9930f9a96cf36d41397518facc6a14c79d79613707d3b1"
+    "privateSnapshotBefore": "sha256:9c916608ee9bebead84a4556ef8539e4dea26ebfd993f950364ccc173b7584bf",
+    "privateSnapshotAfter": "sha256:9c916608ee9bebead84a4556ef8539e4dea26ebfd993f950364ccc173b7584bf"
   },
   "storage": {
     "catalogMode": "local_private_fixture",
@@ -352,5 +352,5 @@
     "Prove real Auth signup, verified email, account recovery, admin MFA and revocation on the hosted target.",
     "Keep production writes disabled until founder approval."
   ],
-  "receiptDigest": "sha256:2ffa43be530be4867cb68c1e4b52c24f55cc705de55cc029b3979dfc7fecf209"
+  "receiptDigest": "sha256:418488ee49000d6dfbe37cfdb0897b4d54d76a265df7dd72b4a8a88f50d14124"
 }
