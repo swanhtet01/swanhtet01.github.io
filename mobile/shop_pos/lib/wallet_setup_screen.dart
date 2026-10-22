@@ -257,21 +257,30 @@ class _WalletEditorState extends State<_WalletEditor> {
                   Text(
                     shopCopy(
                       myanmar,
-                      'Add the QR supplied for this merchant wallet. A phone number alone cannot make a payment QR.',
-                      'ဤဆိုင်ငွေလက်ခံအကောင့်အတွက် ဝန်ဆောင်မှုပေးသူ ထုတ်ပေးသော QR ကို ထည့်ပါ။ ဖုန်းနံပါတ်တစ်ခုတည်းဖြင့် ငွေပေးချေမှု QR မဖန်တီးနိုင်ပါ။',
+                      'Use this wallet provider’s merchant QR. A phone number cannot create a payment QR.',
+                      'ဝန်ဆောင်မှုပေးသူ၏ ဆိုင် QR ကို ထည့်ပါ။ ဖုန်းနံပါတ်ဖြင့် ငွေပေးချေမှု QR မဖန်တီးနိုင်ပါ။',
                     ),
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                   const SizedBox(height: 12),
+                  Text(
+                    shopCopy(
+                      myanmar,
+                      'Merchant number (optional)',
+                      'ဆိုင်ရှင်ဖုန်းနံပါတ် (မထည့်လည်းရ)',
+                    ),
+                    style: Theme.of(context).textTheme.labelLarge,
+                  ),
+                  const SizedBox(height: 6),
                   TextField(
                     key: ValueKey('wallet-phone-${widget.provider}'),
                     controller: _phone,
                     keyboardType: TextInputType.phone,
                     decoration: InputDecoration(
-                      labelText: shopCopy(
+                      hintText: shopCopy(
                         myanmar,
-                      'Merchant number (optional)',
-                      'ဆိုင်ရှင်ဖုန်းနံပါတ် (မထည့်လည်းရ)',
+                        'Phone number',
+                        'ဖုန်းနံပါတ်',
                       ),
                     ),
                     onChanged: (_) => setState(() {
@@ -281,22 +290,26 @@ class _WalletEditorState extends State<_WalletEditor> {
                       _message = null;
                     }),
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 14),
+                  Text(
+                    shopCopy(
+                      myanmar,
+                      'Provider-issued static MMQR data',
+                      'ဝန်ဆောင်မှုပေးသူ ထုတ်ပေးသော ပုံသေ MMQR အချက်အလက်',
+                    ),
+                    style: Theme.of(context).textTheme.labelLarge,
+                  ),
+                  const SizedBox(height: 6),
                   TextField(
                     key: ValueKey('wallet-payload-${widget.provider}'),
                     controller: _payload,
                     maxLines: 3,
                     maxLength: 512,
                     decoration: InputDecoration(
-                      labelText: shopCopy(
+                      hintText: shopCopy(
                         myanmar,
-                        'Provider-issued QR payload',
-                        'ဝန်ဆောင်မှုပေးသူ ထုတ်ပေးသော QR အချက်အလက်',
-                      ),
-                      helperText: shopCopy(
-                        myanmar,
-                        'Paste the exact payload from the merchant QR. Do not enter a phone number or invented wallet link.',
-                        'ဆိုင်အတွက် ထုတ်ပေးထားသော QR မှ အချက်အလက်အတိအကျကို ကူးထည့်ပါ။ ဖုန်းနံပါတ် သို့မဟုတ် ကိုယ်တိုင်ဖန်တီးထားသောလင့်ခ် မထည့်ပါနှင့်။',
+                        'Paste QR data',
+                        'QR အချက်အလက် ထည့်ရန်',
                       ),
                     ),
                     onChanged: (_) => setState(() {
@@ -306,6 +319,14 @@ class _WalletEditorState extends State<_WalletEditor> {
                       _dirty = true;
                       _message = null;
                     }),
+                  ),
+                  Text(
+                    shopCopy(
+                      myanmar,
+                      'Paste the exact data from the merchant QR. Do not enter a phone number or invented wallet link.',
+                      'ဆိုင်အတွက် ထုတ်ပေးထားသော QR မှ အချက်အလက်အတိအကျကို ကူးထည့်ပါ။ ဖုန်းနံပါတ် သို့မဟုတ် ကိုယ်တိုင်ဖန်တီးထားသောလင့်ခ် မထည့်ပါနှင့်။',
+                    ),
+                    style: Theme.of(context).textTheme.bodySmall,
                   ),
                   CheckboxListTile(
                     contentPadding: EdgeInsets.zero,
