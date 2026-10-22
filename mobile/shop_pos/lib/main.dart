@@ -1136,7 +1136,8 @@ class _ShopHomeState extends State<ShopHome> {
                                     ],
                                   ),
                                 ),
-                                if (_cart.isNotEmpty || products.isNotEmpty) ...[
+                                if (_cart.isNotEmpty ||
+                                    products.isNotEmpty) ...[
                                   SizedBox(width: tablet ? 12 : 18),
                                   SizedBox(
                                     key: const ValueKey('shop-split-basket'),

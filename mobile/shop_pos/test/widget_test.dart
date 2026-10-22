@@ -1767,9 +1767,7 @@ void main() {
     }
   });
 
-  testWidgets('portrait tablet keeps basket beside catalog', (
-    tester,
-  ) async {
+  testWidgets('portrait tablet keeps basket beside catalog', (tester) async {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     tester.view.devicePixelRatio = 1;
