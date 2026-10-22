@@ -12,6 +12,9 @@ CORE_SECURITY_DIGESTS = {
     11: "9e37eeb42c580724e93c0155e033a3814ebcba53404746ec2844fac60bd197ef",
     12: "0cf1bd35def7c0cfdf3843435c9b7e331dca2ef516fb96286e2c9506d1f8539a",
     13: "1ae6d34fb1a066d45fb9d60858390710b6c2ce1afa3fe38f9da7cfc895bff54e",
+    # v14 adds only new Shop tables/functions/triggers outside the pinned core
+    # catalog targets; the existing core relations and privileges are unchanged.
+    14: "1ae6d34fb1a066d45fb9d60858390710b6c2ce1afa3fe38f9da7cfc895bff54e",
 }
 
 

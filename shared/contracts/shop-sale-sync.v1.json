@@ -1,0 +1,48 @@
+{
+  "contract": "supermega.shop.sale_operation.v1",
+  "schemaVersion": 1,
+  "scope": "One authenticated Shop selling device per workspace; native completed sales only",
+  "bindingRoute": "POST /api/trial/v1/shop/sync-devices/bind",
+  "saleRoute": "POST /api/trial/v1/shop/sale-operations",
+  "authorization": "Verified named Supabase Auth session, active workspace membership, Shop activation entitlement and commerce.write capability; Ecommerce-only activation is denied",
+  "bindingRequest": {
+    "schemaVersion": 1,
+    "workspaceId": "trusted workspace ID repeated for mismatch rejection",
+    "deviceId": "canonical lowercase UUID persisted by the client",
+    "confirmWorkspace": true
+  },
+  "saleRequest": {
+    "schemaVersion": 1,
+    "workspaceId": "trusted workspace ID repeated for mismatch rejection",
+    "deviceId": "same bound device UUID",
+    "operationId": "native shop_sync_outbox.operation_id",
+    "eventType": "shop.cash_sale.completed.v1 or shop.mobile_money_sale.completed.v1",
+    "payload": {
+      "saleId": "native sale ID; equals operationId",
+      "totalMmk": "nonnegative integer MMK total",
+      "paymentMethod": "cash, kbzpay or wavepay",
+      "createdAtMillis": "native sale timestamp in Unix milliseconds",
+      "shiftId": "optional native cash shift ID",
+      "lines": [
+        {
+          "productId": "native product ID",
+          "productName": "receipt snapshot name",
+          "unitPriceMmk": "nonnegative integer MMK price",
+          "quantity": "integer 1 to 1000",
+          "lineTotalMmk": "unitPriceMmk multiplied by quantity"
+        }
+      ]
+    }
+  },
+  "acknowledgement": {
+    "contract": "supermega.shop.sale_operation.v1",
+    "workspaceId": "authorized workspace",
+    "deviceId": "bound device",
+    "operationId": "accepted operation",
+    "saleId": "accepted native sale",
+    "serverRevision": "durable server assigned monotonic revision",
+    "acceptedAt": "server UTC timestamp"
+  },
+  "retryRule": "Same workspace, device, operation and canonical sale returns the original acknowledgement; changed sale details conflict",
+  "stockRule": "Exactly one negative stock movement per distinct product line in the sale transaction; no stock balance merge in v1"
+}

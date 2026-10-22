@@ -56,6 +56,15 @@ from supermega_runtime.production_material_handoff import (
     require_shop_issue_before_plant_progress,
     require_shop_issue_matches_plant,
 )
+from supermega_runtime.shop_sale_sync import (
+    ShopSyncDeviceConflict,
+    ShopSyncDeviceNotBound,
+    ShopSyncOperationConflict,
+    ShopSyncValidationError,
+    ShopSyncWrongWorkspace,
+    parse_device_binding,
+    parse_sale_operation,
+)
 from supermega_runtime.trial_store import (
     APPROVAL_DECIDE_CAPABILITY,
     APPROVAL_REQUEST_CAPABILITY,
@@ -536,6 +545,12 @@ async def _bounded_json_body(
 def _invoke(operation: Callable[[], ResultT]) -> ResultT:
     try:
         return operation()
+    except ShopSyncDeviceNotBound as exc:
+        raise _error(403, "shop_sync_device_not_bound") from exc
+    except ShopSyncDeviceConflict as exc:
+        raise _error(409, "shop_sync_device_conflict") from exc
+    except ShopSyncOperationConflict as exc:
+        raise _error(409, "shop_sync_operation_conflict") from exc
     except TrialNotReadyError as exc:
         reasons = list(exc.reasons)
         if "auth_ready" in exc.reasons:
@@ -1363,6 +1378,39 @@ def create_trial_router(
     def trial_readiness(request: Request) -> dict[str, Any]:
         principal = _resolve_principal(request, resolve_principal)
         return _readiness(store, principal).to_dict()
+
+    async def shop_sync_request(request: Request, *, binding: bool) -> JSONResponse:
+        if request.query_params:
+            raise _error(422, "shop_sync_request_invalid")
+        principal = _resolve_principal(request, resolve_principal)
+        if principal.actor_kind != "human" or principal.identity_provider != "supabase":
+            raise _error(401, "shop_sync_user_session_required")
+        readiness = _readiness(store, principal)
+        _require_write_ready(readiness, "commerce.write")
+        if readiness.product_entitlements is None or "commerce" not in readiness.product_entitlements:
+            raise _error(403, "shop_sync_shop_entitlement_required")
+        body = await _bounded_json_body(request, maximum_bytes=32768)
+        try:
+            if binding:
+                device_id = parse_device_binding(body, workspace_id=principal.workspace_id)
+                operation = lambda: store.bind_shop_sync_device(principal, device_id=device_id)
+            else:
+                sale = parse_sale_operation(body, workspace_id=principal.workspace_id)
+                operation = lambda: store.ingest_shop_sale_operation(principal, sale)
+        except ShopSyncWrongWorkspace as exc:
+            raise _error(403, "shop_sync_wrong_workspace") from exc
+        except ShopSyncValidationError as exc:
+            raise _error(422, "shop_sync_request_invalid") from exc
+        result = await run_in_threadpool(_invoke, operation)
+        return JSONResponse(result, headers={"Cache-Control": "private, no-store"})
+
+    @router.post("/shop/sync-devices/bind")
+    async def bind_shop_sync_device(request: Request) -> JSONResponse:
+        return await shop_sync_request(request, binding=True)
+
+    @router.post("/shop/sale-operations")
+    async def ingest_shop_sale_operation(request: Request) -> JSONResponse:
+        return await shop_sync_request(request, binding=False)
 
     @router.get("/bootstrap")
     def trial_bootstrap(request: Request) -> dict[str, Any]:
