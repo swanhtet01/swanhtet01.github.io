@@ -4226,12 +4226,14 @@ class _NewShopProductDialogState extends State<_NewShopProductDialog> {
                   const SizedBox(height: 10),
                   Align(
                     alignment: Alignment.centerLeft,
-                    child: TextButton.icon(
+                    child: TextButton(
                       key: const ValueKey('shop-product-add-barcode'),
+                      style: TextButton.styleFrom(
+                        minimumSize: const Size(0, 48),
+                      ),
                       onPressed: () =>
                           setState(() => _showManualBarcode = true),
-                      icon: const Icon(Icons.qr_code_2_outlined),
-                      label: Text(
+                      child: Text(
                         shopCopy(
                           widget.myanmar,
                           'Add barcode',
