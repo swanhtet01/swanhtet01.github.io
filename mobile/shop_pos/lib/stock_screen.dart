@@ -38,12 +38,14 @@ class StockScreen extends StatefulWidget {
     required this.database,
     required this.myanmar,
     this.embeddedTaskShell = false,
+    this.onAddProduct,
     super.key,
   });
 
   final ShopDatabase database;
   final bool myanmar;
   final bool embeddedTaskShell;
+  final VoidCallback? onAddProduct;
 
   @override
   State<StockScreen> createState() => _StockScreenState();
@@ -98,7 +100,22 @@ class _StockScreenState extends State<StockScreen> {
   Widget build(BuildContext context) => Scaffold(
     appBar: widget.embeddedTaskShell
         ? null
-        : AppBar(title: Text(shopCopy(widget.myanmar, 'Stock', 'လက်ကျန်'))),
+        : AppBar(
+            title: Text(shopCopy(widget.myanmar, 'Stock', 'လက်ကျန်')),
+            actions: [
+              if (widget.onAddProduct != null)
+                IconButton(
+                  key: const ValueKey('stock-add-product'),
+                  tooltip: shopCopy(
+                    widget.myanmar,
+                    'Add product',
+                    'ကုန်ပစ္စည်းထည့်ရန်',
+                  ),
+                  onPressed: widget.onAddProduct,
+                  icon: const Icon(Icons.add),
+                ),
+            ],
+          ),
     body: SafeArea(
       child: StreamBuilder<List<ShopProduct>>(
         stream: _products,
@@ -164,6 +181,34 @@ class _StockScreenState extends State<StockScreen> {
                       ShopTaskPageHeader(
                         title: shopCopy(widget.myanmar, 'Stock', 'လက်ကျန်'),
                         myanmar: widget.myanmar,
+                        trailing: widget.onAddProduct == null ||
+                                products.isEmpty
+                            ? null
+                            : MediaQuery.sizeOf(context).width < 360 &&
+                                  MediaQuery.textScalerOf(context).scale(1) >
+                                      1.2
+                            ? IconButton.filledTonal(
+                                key: const ValueKey('stock-add-product'),
+                                tooltip: shopCopy(
+                                  widget.myanmar,
+                                  'Add product',
+                                  'ကုန်ပစ္စည်းထည့်ရန်',
+                                ),
+                                onPressed: widget.onAddProduct,
+                                icon: const Icon(Icons.add),
+                              )
+                            : OutlinedButton.icon(
+                                key: const ValueKey('stock-add-product'),
+                                onPressed: widget.onAddProduct,
+                                icon: const Icon(Icons.add),
+                                label: Text(
+                                  shopCopy(
+                                    widget.myanmar,
+                                    'Add product',
+                                    'ကုန်ပစ္စည်းထည့်ရန်',
+                                  ),
+                                ),
+                              ),
                       ),
                       const SizedBox(height: 12),
                     ],
@@ -235,16 +280,38 @@ class _StockScreenState extends State<StockScreen> {
                     Expanded(
                       child: products.isEmpty
                           ? Center(
-                              child: Text(
-                                shopCopy(
-                                  widget.myanmar,
-                                  query.isEmpty
-                                      ? 'No products yet'
-                                      : 'No matching products',
-                                  query.isEmpty
-                                      ? 'ကုန်ပစ္စည်း မရှိသေးပါ'
-                                      : 'ကိုက်ညီသောပစ္စည်း မတွေ့ပါ',
-                                ),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    shopCopy(
+                                      widget.myanmar,
+                                      query.isEmpty
+                                          ? 'No products yet'
+                                          : 'No matching products',
+                                      query.isEmpty
+                                          ? 'ကုန်ပစ္စည်း မရှိသေးပါ'
+                                          : 'ကိုက်ညီသောပစ္စည်း မတွေ့ပါ',
+                                    ),
+                                  ),
+                                  if (widget.embeddedTaskShell &&
+                                      widget.onAddProduct != null &&
+                                      query.isEmpty) ...[
+                                    const SizedBox(height: 12),
+                                    FilledButton.icon(
+                                      key: const ValueKey('stock-add-product'),
+                                      onPressed: widget.onAddProduct,
+                                      icon: const Icon(Icons.add),
+                                      label: Text(
+                                        shopCopy(
+                                          widget.myanmar,
+                                          'Add first product',
+                                          'ပထမကုန်ပစ္စည်းထည့်ရန်',
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
                               ),
                             )
                           : ListView.separated(
