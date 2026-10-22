@@ -976,8 +976,8 @@ function shopCounterSalePreview(locale = 'en') {
  interfaceDisclosure(mobileImage)
  interfaceDisclosure(tabletImage)
  const imageAlt = locale === 'my' ? 'ကောင်တာအရောင်း၊ ကုန်ပစ္စည်းရှာဖွေမှုနှင့် လက်ရှိခြင်းတောင်းကို ပြထားသော Shop ဘရောက်ဇာမျက်နှာပြင်' : alt
- const disclosure = locale === 'my' ? 'Shop ဘရောက်ဇာမျက်နှာပြင် · နမူနာမှတ်တမ်းများ' : 'Shop browser view · sample records'
- const credit = `MAMA ${locale === 'my' ? 'ဓာတ်ပုံ' : 'photo'}: <a href="https://world.openfoodfacts.org/cgi/product_image.pl?code=8850987101526&amp;id=front_en">twindel / Open Food Facts</a> · <a href="https://creativecommons.org/licenses/by-sa/3.0/">CC BY-SA 3.0</a>`
+ const disclosure = locale === 'my' ? 'နမူနာမှတ်တမ်းများနှင့် ဈေးနှုန်းများ' : 'Sample records and prices'
+ const credit = `${locale === 'my' ? 'ပန်းသီးနီ ဓာတ်ပုံ' : 'Red apple photo'}: <a href="https://commons.wikimedia.org/wiki/File:Red_apple_on_a_plate_2017_A.jpg">Fructibus / Wikimedia Commons</a> · <a href="https://creativecommons.org/publicdomain/zero/1.0/">CC0 1.0</a>`
  return `<figure class="shop-lead-capture"><picture><source media="(max-width: 760px)" srcset="/images/${mobileImage}" width="390" height="844" /><source media="(max-width: 1024px)" srcset="/images/${tabletImage}" width="768" height="1024" /><img src="/images/${image}" alt="${escapeHtml(imageAlt)}" width="${locale === 'my' ? 1000 : 1440}" height="900" loading="eager" fetchpriority="high" /></picture><figcaption id="shop-sample-disclosure"><span>${disclosure}</span><span class="shop-photo-credit" id="shop-image-credits">${credit}</span></figcaption></figure>`
 }
 function productStory(id, standalone = false) {

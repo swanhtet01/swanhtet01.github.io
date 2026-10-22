@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { runInNewContext } from 'node:vm'
 import { inflateSync } from 'node:zlib'
@@ -248,15 +249,15 @@ assert.match(generator, /class="shop-hero-app"/)
 assert.doesNotMatch(generator, /class="shop-support-proof"/)
 assert.match(generator, /\.shop-lead-capture picture,\.shop-lead-capture img \{display:block;width:100%\}/)
 assert.match(generator, /<figure class="shop-lead-capture"><picture>/)
-assert.match(generator, /const disclosure = locale === 'my' \? 'Shop ဘရောက်ဇာမျက်နှာပြင် · နမူနာမှတ်တမ်းများ'/)
+assert.match(generator, /const disclosure = locale === 'my' \? 'နမူနာမှတ်တမ်းများနှင့် ဈေးနှုန်းများ' : 'Sample records and prices'/)
 assert.match(generator, /const image = locale === 'my' \? 'actual-shop-sell-my\.png' : englishImage/)
 assert.match(captureTool, /'shop-my'.*?--gallery-myanmar/s)
 assert.match(captureTool, /function captureMyanmarDesktop\(/)
 assert.match(captureTool, /width: 1000, height: 900, deviceScaleFactor: 1, mobile: false/)
 assert.match(generator, /figcaption id="shop-sample-disclosure"><span>\$\{disclosure\}<\/span><span class="shop-photo-credit" id="shop-image-credits">\$\{credit\}<\/span>/)
 assert.match(generator, /aria-describedby="shop-sample-disclosure"/)
-assert.match(generator, /const credit = `MAMA \$\{locale === 'my' \? 'ဓာတ်ပုံ' : 'photo'\}: <a href="https:\/\/world\.openfoodfacts\.org\/cgi\/product_image\.pl\?code=8850987101526&amp;id=front_en">twindel \/ Open Food Facts<\/a>/)
-assert.match(generator, /https:\/\/creativecommons\.org\/licenses\/by-sa\/3\.0\//)
+assert.match(generator, /const credit = `\$\{locale === 'my' \? 'ပန်းသီးနီ ဓာတ်ပုံ' : 'Red apple photo'\}: <a href="https:\/\/commons\.wikimedia\.org\/wiki\/File:Red_apple_on_a_plate_2017_A\.jpg">Fructibus \/ Wikimedia Commons<\/a>/)
+assert.match(generator, /https:\/\/creativecommons\.org\/publicdomain\/zero\/1\.0\//)
 const shopStaticSource = generator.slice(generator.indexOf('function shopCounterSalePreview('), generator.indexOf('function productStory('))
 assert.match(shopStaticSource, /<source media="\(max-width: 760px\)" srcset="\/images\/\$\{mobileImage\}"/)
 assert.match(shopStaticSource, /<source media="\(max-width: 1024px\)" srcset="\/images\/\$\{tabletImage\}"/)
@@ -278,17 +279,19 @@ assert.match(generator, /const homeHtml = `<!doctype html>/)
 assert.match(generator, /const publicShopMarkup = shopMarkup/)
 assert.doesNotMatch(generator, /function addShopHeroPreview|shop-hero-preview/)
 assert.match(shopCaptureFixture, /putProductImage\(productImageScopeForWorkspace\(null\),sku,new Blob\(\[bytes\],\{type:productPhotoMimes\[sku\]\}\)\)/)
-assert.match(shopCaptureFixture, /SM-1002': 'mama-chicken-noodles\.jpg/)
+assert.match(shopCaptureFixture, /SM-1006': 'red-apple-each\.jpg/)
+assert.match(shopCaptureFixture, /name:'Red apple \(each\)',nameMy:'ပန်းသီးနီ \(တစ်လုံး\)'/)
 assert.doesNotMatch(shopCaptureFixture, /SM-1001': 'kaung-90-days-rice\.webp/)
 assert.match(shopCaptureFixture, /persisted:async\(\)=>gallery/)
-assert.equal(shopProductSources.products.length, 5, 'capture fixture uses five real locally sourced shop products')
-assert.match(shopProductSources.license_status, /four retailer photos removed/)
+assert.equal(shopProductSources.products.length, 6, 'capture fixture includes one unbranded apple with five text-only products')
+assert.match(shopProductSources.license_status, /MAMA package photo and four retailer photos removed/)
 for (const product of shopProductSources.products) {
   if (!product.file) {
-    assert.equal(product.photo_status, 'not_included_no_public_reuse_grant')
+    assert.match(product.photo_status, /^not_included_(?:no_public_reuse_grant|package_artwork_unreviewed)$/)
     continue
   }
   const image = readFileSync(new URL(`./qa-assets/shop-products/${product.file}`, import.meta.url))
+  assert.equal(createHash('sha256').update(image).digest('hex'), product.image_sha256, `${product.file} matches the recorded original`)
   if (product.file.endsWith('.webp')) {
     assert.equal(image.subarray(0, 4).toString(), 'RIFF', `${product.file} is a WebP image`)
     assert.equal(image.subarray(8, 12).toString(), 'WEBP', `${product.file} is a WebP image`)

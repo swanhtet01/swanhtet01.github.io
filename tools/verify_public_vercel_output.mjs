@@ -404,7 +404,7 @@ for (const [route, html] of [['/shop/', pages.get('/shop/').html], ...publicProd
   const publicLogin = `href="${appOrigin}/login?product=shop"`
   if (countOccurrences(body, publicLogin) !== 0) fail('public_login_action_present', { route })
   if (route === '/shop/' && (!body.includes('class="button button-primary" href="/contact/?product=shop">Request a Shop walkthrough') || body.includes('Ask about Shop') || body.includes('Talk about Shop') || body.includes('See Shop screens') || body.includes('Need help with Shop?'))) fail('shop_primary_product_action_missing')
-  if (route === '/shop/' && (!body.includes('MAMA photo:') || !body.includes('twindel / Open Food Facts') || !body.includes('https://creativecommons.org/licenses/by-sa/3.0/'))) fail('shop_photo_attribution_missing')
+  if (route === '/shop/' && (!body.includes('Red apple photo:') || !body.includes('Fructibus / Wikimedia Commons') || !body.includes('https://creativecommons.org/publicdomain/zero/1.0/'))) fail('shop_photo_attribution_missing')
   if (body.includes('>Company</a>')) fail('company_page_navigation_not_consolidated')
   const hasGalleryNavigation = route !== '/shop/' && (galleryViews[routeProduct?.id] || 0) > 1
   const expectedButtons = Number(hasGalleryNavigation) * 2
@@ -428,7 +428,7 @@ for (const [route, html] of [['/shop/', pages.get('/shop/').html], ...publicProd
     }
   }
   const productVisualMissing = route === '/shop/'
-      ? !body.includes('class="shop-hero-app" id="shop-demo"') || body.includes('class="shop-actual-showcase"') || body.includes('class="shop-support-proof"') || !body.includes('class="shop-lead-capture"') || !body.includes('id="shop-sample-disclosure"') || countOccurrences(body, 'Shop browser view · sample records') !== 1 || /\/images\/actual-shop-(?:orders|inventory)[^" ]*/.test(body) || body.includes('<article class="shop-workflow-card">') || countOccurrences(body, 'src="/images/actual-shop-sell.png"') !== 1 || body.includes('Makro PRO') || body.includes('17 October 2026') || body.includes('class="pos-window"') || body.includes('class="sample-label"') || body.includes('Complete sample sale') || body.includes('shop-sample-demo.js') || body.includes('class="platform-gallery shop-gallery-all"') || body.includes('data-platform-carousel') || body.includes('data-device-choice') || body.includes('data-device-frame') || /<a\b[^>]*>\s*<img\b[^>]*src="\/images\/actual-shop-/i.test(body)
+      ? !body.includes('class="shop-hero-app" id="shop-demo"') || body.includes('class="shop-actual-showcase"') || body.includes('class="shop-support-proof"') || !body.includes('class="shop-lead-capture"') || !body.includes('id="shop-sample-disclosure"') || countOccurrences(body, 'Sample records and prices') !== 1 || /\/images\/actual-shop-(?:orders|inventory)[^" ]*/.test(body) || body.includes('<article class="shop-workflow-card">') || countOccurrences(body, 'src="/images/actual-shop-sell.png"') !== 1 || body.includes('Makro PRO') || body.includes('17 October 2026') || body.includes('class="pos-window"') || body.includes('class="sample-label"') || body.includes('Complete sample sale') || body.includes('shop-sample-demo.js') || body.includes('class="platform-gallery shop-gallery-all"') || body.includes('data-platform-carousel') || body.includes('data-device-choice') || body.includes('data-device-frame') || /<a\b[^>]*>\s*<img\b[^>]*src="\/images\/actual-shop-/i.test(body)
       : !body.includes('class="platform-image"') || !body.includes('class="feature-line"')
   if (productVisualMissing) fail('product_visual_missing', { route })
   const directAppTargets = [...body.matchAll(/href="(https:\/\/[^\"]+)"/g)]
@@ -467,7 +467,7 @@ for (const [route, html] of [['/', home], ['/shop/', shopPage]]) {
   const withoutLanguageSwitch = html.replace(/<a href="\/my\/(?:shop|contact|privacy)\/" data-language-switch hreflang="my">မြန်မာ<\/a>/g, '')
   if (html.includes('data-i18n=') || /[\u1000-\u109f]/u.test(withoutLanguageSwitch)) fail('marketing_myanmar_copy_outside_switch', { route })
 }
-for (const token of ['Sell at the counter.', 'Stay ahead of stock.', 'Shop browser view · sample records', 'Review recorded orders and stock when you need them.']) {
+for (const token of ['Sell at the counter.', 'Stay ahead of stock.', 'Sample records and prices', 'Review recorded orders and stock when you need them.']) {
   if (!shopPage.includes(token)) fail('shop_page_scope_missing', { token })
 }
 if (/<section\b[^>]*class="[^"]*\bsubscription-section\b/.test(shopPage)
@@ -524,7 +524,7 @@ for (const [route, englishRoute, switchHref] of [['/my/shop/', '/shop/', '/shop/
 const myContact = pages.get('/my/contact/')?.html || ''
 const myShop = pages.get('/my/shop/')?.html || ''
 for (const token of ['src="/images/actual-shop-sell-my.png"', 'srcset="/images/actual-shop-sell-my-tablet.png"',
-  'srcset="/images/actual-shop-sell-my-mobile.png"', 'Shop ဘရောက်ဇာမျက်နှာပြင် · နမူနာမှတ်တမ်းများ']) {
+  'srcset="/images/actual-shop-sell-my-mobile.png"', 'နမူနာမှတ်တမ်းများနှင့် ဈေးနှုန်းများ']) {
   if (!myShop.includes(token)) fail('myanmar_shop_capture_or_language_scope_missing', { token })
 }
 if (myShop.includes('src="/images/actual-shop-sell.png"') || shopPage.includes('src="/images/actual-shop-sell-my.png"'))
@@ -533,8 +533,8 @@ if (!/<img src="\/images\/actual-shop-sell-my\.png"[^>]*width="1000" height="900
   fail('myanmar_shop_hero_dimensions_invalid')
 if (/\/images\/actual-shop-(?:orders|inventory)[^" ]*/.test(myShop)) fail('myanmar_shop_displays_english_support_capture')
 if (countOccurrences(myShop, 'class="shop-photo-credit"') !== 1
-  || !myShop.includes('id="shop-image-credits"') || !myShop.includes('MAMA ဓာတ်ပုံ:') || !myShop.includes('twindel / Open Food Facts')
-  || !myShop.includes('https://creativecommons.org/licenses/by-sa/3.0/')) fail('myanmar_shop_photo_attribution_missing')
+  || !myShop.includes('id="shop-image-credits"') || !myShop.includes('ပန်းသီးနီ ဓာတ်ပုံ:') || !myShop.includes('Fructibus / Wikimedia Commons')
+  || !myShop.includes('https://creativecommons.org/publicdomain/zero/1.0/')) fail('myanmar_shop_photo_attribution_missing')
 for (const token of ['action="/api/contact-submissions"', 'name="idempotency_key"', 'name="source_url"', '>အမည်<input', '>အီးမေးလ်<input', '>စာပို့ရန်</button>', 'စာလက်ခံရရှိပါပြီ']) {
   if (!myContact.includes(token)) fail('myanmar_contact_contract_missing', { token })
 }
