@@ -3831,13 +3831,17 @@ void main() {
         );
         await _settleStock(tester);
         expect(find.byKey(const ValueKey('stock-photo-apple')), findsOneWidget);
-        expect(find.text(myanmar ? 'ပြင်ရန်' : 'Edit'), findsOneWidget);
+        expect(find.byKey(const ValueKey('stock-more-apple')), findsOneWidget);
+        await tester.tap(find.byKey(const ValueKey('stock-more-apple')));
+        await _settleStock(tester);
         await tester.tap(find.byKey(const ValueKey('stock-edit-apple')));
         await _settleStock(tester);
         expect(find.byKey(const ValueKey('stock-edit-name')), findsOneWidget);
         await tester.tap(find.text(myanmar ? 'မလုပ်တော့ပါ' : 'Cancel'));
         await _settleStock(tester);
         expect((await database.readActiveProducts()).single.priceMmk, 2800);
+        await tester.tap(find.byKey(const ValueKey('stock-more-apple')));
+        await _settleStock(tester);
         await tester.tap(find.byKey(const ValueKey('stock-edit-apple')));
         await _settleStock(tester);
         await tester.enterText(
@@ -3971,7 +3975,7 @@ void main() {
       await _settleStock(tester);
       expect(find.byKey(const ValueKey('stock-photo-apple')), findsOneWidget);
       expect(find.textContaining('၂,၈၀၀'), findsWidgets);
-      expect(find.byKey(const ValueKey('stock-edit-apple')), findsOneWidget);
+      expect(find.byKey(const ValueKey('stock-more-apple')), findsOneWidget);
       expect(tester.takeException(), isNull);
     } finally {
       await tester.pumpWidget(const SizedBox.shrink());
@@ -4022,13 +4026,26 @@ void main() {
     await tester.tap(find.text('လက်ကျန်'));
     await _settleStock(tester);
     expect(
+      find.byKey(const ValueKey('stock-more-rice-phone')),
+      findsOneWidget,
+    );
+    await tester.tap(find.byKey(const ValueKey('stock-more-rice-phone')));
+    await _settleStock(tester);
+    expect(
       find.descendant(
         of: find.byKey(const ValueKey('stock-edit-rice-phone')),
-        matching: find.text('ပြင်ရန်'),
+        matching: find.text('ကုန်ပစ္စည်း ပြင်ရန်'),
       ),
       findsOneWidget,
     );
+    await tester.tapAt(const Offset(4, 400));
+    await _settleStock(tester);
     expect(find.byKey(const ValueKey('stock-row-rice-phone')), findsOneWidget);
+    final firstRow = find.byKey(const ValueKey('stock-row-rice-phone'));
+    final secondRow = find.byKey(const ValueKey('stock-row-rice-phone-small'));
+    final rowSpacing =
+        tester.getTopLeft(secondRow).dy - tester.getTopLeft(firstRow).dy;
+    expect(rowSpacing, lessThan(220));
     final adjust = find.byKey(const ValueKey('stock-update-rice-phone'));
     expect(adjust, findsOneWidget);
     expect(

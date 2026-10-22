@@ -367,9 +367,8 @@ class _StockScreenState extends State<StockScreen> {
                             )
                           : ListView.separated(
                               itemCount: products.length,
-                              separatorBuilder: (_, _) => wide
-                                  ? const Divider(height: 1)
-                                  : const SizedBox(height: 8),
+                              separatorBuilder: (_, _) =>
+                                  const Divider(height: 1),
                               itemBuilder: (context, index) {
                                 final item = products[index];
                                 final threshold = item.reorderLevel;
@@ -386,8 +385,7 @@ class _StockScreenState extends State<StockScreen> {
                                     duplicateNames.contains(
                                       item.name.trim().toLowerCase(),
                                     );
-                                final compact =
-                                    MediaQuery.sizeOf(context).width < 480;
+                                final compact = !wide;
                                 final textTheme = Theme.of(context).textTheme;
                                 final productTextStyle = wide
                                     ? textTheme.titleMedium
@@ -398,7 +396,7 @@ class _StockScreenState extends State<StockScreen> {
                                   children: [
                                     Text(
                                       item.name,
-                                      maxLines: compact ? 3 : 2,
+                                      maxLines: 2,
                                       overflow: TextOverflow.ellipsis,
                                       style: productTextStyle?.copyWith(
                                         fontWeight: FontWeight.w600,
@@ -425,7 +423,7 @@ class _StockScreenState extends State<StockScreen> {
                                           item,
                                           widget.myanmar,
                                         ),
-                                        maxLines: 2,
+                                        maxLines: compact ? 1 : 2,
                                         overflow: TextOverflow.ellipsis,
                                         style: Theme.of(context)
                                             .textTheme
@@ -496,16 +494,18 @@ class _StockScreenState extends State<StockScreen> {
                                                 : const Color(0xff88530e),
                                           ),
                                 );
-                                final reorderNote = lowAlertLevel == null
+                                final reorderNote = threshold == null
                                     ? null
                                     : Text(
                                         shopCopy(
                                           widget.myanmar,
-                                          'Reorder at ${shopNumber(lowAlertLevel, myanmar: false)}',
-                                          'ပြန်မှာရန်: ${shopNumber(lowAlertLevel, myanmar: true)} ခု',
+                                          'Reorder at ${shopNumber(threshold, myanmar: false)}',
+                                          'ပြန်မှာရန်: ${shopNumber(threshold, myanmar: true)} ခု',
                                         ),
                                         style: textTheme.bodySmall?.copyWith(
-                                          color: colors.onSurfaceVariant,
+                                          color: lowAlertLevel == null
+                                              ? colors.onSurfaceVariant
+                                              : const Color(0xff88530e),
                                         ),
                                       );
                                 Future<void> openStockChange() => _changeStock(
@@ -515,71 +515,46 @@ class _StockScreenState extends State<StockScreen> {
                                 final update = OutlinedButton(
                                   key: ValueKey('stock-update-${item.id}'),
                                   onPressed: openStockChange,
+                                  style: OutlinedButton.styleFrom(
+                                    minimumSize: const Size(0, 48),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                    ),
+                                  ),
                                   child: Text(
                                     shopCopy(
                                       widget.myanmar,
                                       'Adjust stock',
                                       'လက်ကျန်ပြင်ရန်',
                                     ),
+                                    maxLines: 2,
+                                    textAlign: TextAlign.center,
                                   ),
                                 );
-                                final edit = Tooltip(
-                                  message: shopCopy(
+                                final more = PopupMenuButton<String>(
+                                  key: ValueKey('stock-more-${item.id}'),
+                                  tooltip: shopCopy(
                                     widget.myanmar,
-                                    'Edit product',
-                                    'ကုန်ပစ္စည်း ပြင်ရန်',
+                                    'More for ${item.name}',
+                                    '${item.name} အတွက် နောက်ထပ်',
                                   ),
-                                  child: TextButton.icon(
-                                    key: ValueKey('stock-edit-${item.id}'),
-                                    onPressed: () => _editProduct(item),
-                                    icon: const Icon(Icons.edit_outlined),
-                                    label: Text(
-                                      shopCopy(
-                                        widget.myanmar,
-                                        'Edit',
-                                        'ပြင်ရန်',
+                                  icon: const Icon(Icons.more_vert),
+                                  onSelected: (value) {
+                                    if (value == 'edit') _editProduct(item);
+                                  },
+                                  itemBuilder: (_) => [
+                                    PopupMenuItem(
+                                      key: ValueKey('stock-edit-${item.id}'),
+                                      value: 'edit',
+                                      child: Text(
+                                        shopCopy(
+                                          widget.myanmar,
+                                          'Edit product',
+                                          'ကုန်ပစ္စည်း ပြင်ရန်',
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                );
-                                final compactEdit = Tooltip(
-                                  message: shopCopy(
-                                    widget.myanmar,
-                                    'Edit product',
-                                    'ကုန်ပစ္စည်း ပြင်ရန်',
-                                  ),
-                                  child: TextButton(
-                                    key: ValueKey('stock-edit-${item.id}'),
-                                    onPressed: () => _editProduct(item),
-                                    style: TextButton.styleFrom(
-                                      minimumSize: const Size(70, 56),
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 4,
-                                        vertical: 4,
-                                      ),
-                                    ),
-                                    child: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        const Icon(
-                                          Icons.edit_outlined,
-                                          size: 19,
-                                        ),
-                                        const SizedBox(height: 2),
-                                        Text(
-                                          shopCopy(
-                                            widget.myanmar,
-                                            'Edit',
-                                            'ပြင်ရန်',
-                                          ),
-                                          style: textTheme.labelSmall?.copyWith(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
+                                  ],
                                 );
                                 final stockSummaryLabel = [
                                   item.name,
@@ -593,11 +568,11 @@ class _StockScreenState extends State<StockScreen> {
                                       item,
                                       widget.myanmar,
                                     ),
-                                  if (lowAlertLevel != null)
+                                  if (threshold != null)
                                     shopCopy(
                                       widget.myanmar,
-                                      'Low at $lowAlertLevel',
-                                      '${shopNumber(lowAlertLevel, myanmar: true)} ခုနှင့်အောက် သတိပေး',
+                                      'Reorder at $threshold',
+                                      '${shopNumber(threshold, myanmar: true)} ခုတွင် ပြန်မှာရန်',
                                     ),
                                 ].join('. ');
                                 if (wide) {
@@ -623,91 +598,61 @@ class _StockScreenState extends State<StockScreen> {
                                             ),
                                           ),
                                           SizedBox(width: 168, child: update),
-                                          edit,
+                                          more,
                                         ],
                                       ),
                                     ),
                                   );
                                 }
-                                return Card(
-                                  clipBehavior: Clip.antiAlias,
-                                  child: compact
-                                      ? Padding(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 12,
-                                            vertical: 12,
-                                          ),
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.stretch,
-                                            children: [
-                                              Row(
-                                                children: [
-                                                  Expanded(
-                                                    child: Semantics(
-                                                      label: stockSummaryLabel,
-                                                      child: ExcludeSemantics(
-                                                        child: Column(
-                                                          key: ValueKey(
-                                                            'stock-row-${item.id}',
-                                                          ),
-                                                          crossAxisAlignment:
-                                                              CrossAxisAlignment
-                                                                  .start,
-                                                          children: [
-                                                            detailsWithPhoto,
-                                                            const SizedBox(
-                                                              height: 8,
-                                                            ),
-                                                            onHand,
-                                                            if (reorderNote !=
-                                                                null) ...[
-                                                              const SizedBox(
-                                                                height: 2,
-                                                              ),
-                                                              reorderNote,
-                                                            ],
-                                                          ],
-                                                        ),
-                                                      ),
+                                return ColoredBox(
+                                  color: colors.surface,
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 4,
+                                      vertical: 8,
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.stretch,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                              child: Semantics(
+                                                label: stockSummaryLabel,
+                                                child: ExcludeSemantics(
+                                                  child: Container(
+                                                    key: ValueKey(
+                                                      'stock-row-${item.id}',
                                                     ),
+                                                    child: detailsWithPhoto,
                                                   ),
-                                                  const SizedBox(width: 8),
-                                                  compactEdit,
-                                                ],
-                                              ),
-                                              const SizedBox(height: 8),
-                                              SizedBox(
-                                                height: 48,
-                                                child: update,
-                                              ),
-                                            ],
-                                          ),
-                                        )
-                                      : Padding(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 12,
-                                            vertical: 8,
-                                          ),
-                                          child: Row(
-                                            children: [
-                                              Expanded(
-                                                child: Column(
-                                                  crossAxisAlignment:
-                                                      CrossAxisAlignment.start,
-                                                  children: [
-                                                    detailsWithPhoto,
-                                                    onHand,
-                                                    ?reorderNote,
-                                                  ],
                                                 ),
                                               ),
-                                              const SizedBox(width: 8),
-                                              update,
-                                              edit,
-                                            ],
-                                          ),
+                                            ),
+                                            more,
+                                          ],
                                         ),
+                                        const SizedBox(height: 4),
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                              child: Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                children: [
+                                                  onHand,
+                                                  ?reorderNote,
+                                                ],
+                                              ),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            SizedBox(width: 120, child: update),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
                                 );
                               },
                             ),
