@@ -710,10 +710,13 @@ void main() {
       await tester.enterText(find.byType(TextField), _password);
       await tester.tap(find.text('Restore and open Shop'));
       await _pumpUntil(tester, find.text('Opened Shop'));
+      debugPrint('restore-widget stage 1: opened');
       expect(find.text('Opened Shop'), findsOneWidget);
       final restoredFile = ShopDatabase.privateDatabaseFile(documents);
       expect(restoredFile.existsSync(), isTrue);
+      debugPrint('restore-widget stage 2: before snapshot verification');
       ShopBackup.verifySnapshot(restoredFile);
+      debugPrint('restore-widget stage 3: snapshot verified');
       final restored = sqlite3.open(restoredFile.path, mode: OpenMode.readOnly);
       try {
         final products = restored.select(
@@ -726,12 +729,17 @@ void main() {
       } finally {
         restored.close();
       }
+      debugPrint('restore-widget stage 4: row assertions complete');
     } finally {
+      debugPrint('restore-widget stage 5: teardown starts');
       await tester.pumpWidget(const SizedBox.shrink());
+      debugPrint('restore-widget stage 6: widget removed');
       await tester.runAsync(() async {
         await opened?.close();
       });
+      debugPrint('restore-widget stage 7: Drift closed');
       documents.deleteSync(recursive: true);
+      debugPrint('restore-widget stage 8: temp removed');
     }
   });
 
