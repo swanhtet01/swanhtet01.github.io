@@ -682,10 +682,7 @@ const sharedStyle = `
   .button.primary:hover{background:#1d4ed8}
   .company-hero{background:radial-gradient(ellipse at 84% 18%,rgba(37,99,235,.10),transparent 32%),linear-gradient(180deg,#f5f8ff,#fff 68%)}
   body[data-view="company"] .company-hero{background:linear-gradient(180deg,#f8fbff,#fff 72%)}
-  .shop-actual-showcase{padding-block:clamp(46px,6vw,78px);border-bottom:1px solid #e4e7ec;background:#fff}
-  .shop-actual-showcase .story-heading{margin-bottom:26px}
-  .shop-actual-showcase .story-heading h2{font-size:clamp(30px,4vw,48px);letter-spacing:-.045em;line-height:1.08}
-  .shop-actual-showcase .story-heading p{max-width:36ch;font-size:15px;line-height:1.55}
+  .shop-actual-showcase{padding-block:clamp(24px,4vw,48px);border-bottom:1px solid #e4e7ec;background:#fff}
   body[data-view="company"] .company-hero::before{opacity:0;background-image:none}
   @media(min-width:1051px){body[data-view="company"] .company-hero .hero-grid{grid-template-columns:minmax(0,.76fr) minmax(520px,1.24fr);gap:clamp(28px,3.5vw,56px)}}
   body[data-view="company"] .company-hero .hero-art{min-height:0}
@@ -929,7 +926,7 @@ function shopCounterSalePreview() {
 function shopResponsiveShowcase() {
  const orders = shopSupportCard({image:'actual-shop-orders.png',alt:'Shop order queue with fulfilment and payment follow-up',title:'Orders',description:'See what is ready, what is unpaid, and what needs the next step.'})
  const stock = shopSupportCard({image:'actual-shop-inventory.png',alt:'Shop inventory list with on-hand quantities and reorder signals',title:'Stock',description:'Find products that need a count or replenishment.'})
- return `<div class="shop-responsive-showcase" role="region" aria-label="Order and stock workflows" aria-describedby="shop-sample-disclosure"><div class="shop-workflow-support" aria-label="More Shop workflows">${orders}${stock}</div></div>`
+ return `<div class="shop-responsive-showcase"><div class="shop-workflow-support">${orders}${stock}</div></div>`
 }
 function productStory(id, standalone = false) {
  const item=stories[id], label=publicProducts.find(product=>product.id===id).name
@@ -977,7 +974,7 @@ function productAction(product) {
 function shopLandingHtml(product, page) {
  const description = page.description || product.description
  const heroWithPreview = replaceOnce(publicShopMarkup, '<div class="shop-hero-app" aria-label="Counter sale interface preview"></div>', '<div class="shop-hero-app" aria-label="Counter sale interface preview">' + shopCounterSalePreview() + '</div>', 'shop_hero_app_capture')
- const shopShowcase = `<section class="shop-actual-showcase" id="shop-demo" aria-labelledby="shop-actual-showcase-title"><div class="wrap"><div class="story-heading"><div><span class="eyebrow">SHOP WORKSPACE</span><h2 id="shop-actual-showcase-title">Orders and stock. Clear next steps.</h2></div><p>Follow orders that need fulfilment or payment. See which products need a count or reorder.</p></div>${shopResponsiveShowcase()}</div></section>`
+ const shopShowcase = `<section class="shop-actual-showcase" id="shop-demo" aria-label="Orders and stock" aria-describedby="shop-sample-disclosure"><div class="wrap">${shopResponsiveShowcase()}</div></section>`
  let shopContent = heroWithPreview
  const showcaseAnchor = /<\/section>(\r?\n)([ \t]*)<section class="demo-section"/g
  assert((shopContent.match(showcaseAnchor) || []).length === 1, 'shop_showcase_insertion_point_missing')
@@ -1080,6 +1077,7 @@ let contactHtml = documentHtml({
   content: `<main class="frame contact-page" id="content"><section class="page-hero"><span class="eyebrow">SuperMega · Myanmar</span><h1 data-contact-heading>Contact SuperMega.</h1><p class="lede" data-contact-lede>SuperMega builds business software for Myanmar. Shop brings counter sales, stock and order follow-up together for retailers.</p></section><section class="contact-layout"><form class="contact-form" action="/api/contact-submissions" method="post" data-contact-form><div class="field-grid"><label>Name<input name="name" autocomplete="name" required maxlength="120" /></label><label>Email<input name="email" type="email" autocomplete="email" required maxlength="180" /></label><label class="wide">Company (optional)<input name="company" autocomplete="organization" maxlength="180" /></label><input type="hidden" name="product" value="guide" /><input type="hidden" name="template" maxlength="120" /><label class="wide">Message<textarea name="goal" required maxlength="4000" placeholder="Share a few details about your request."></textarea></label></div><input type="hidden" name="source_url" /><input type="hidden" name="referrer" /><input type="hidden" name="idempotency_key" /><input type="hidden" name="trial_claim_code" /><input type="hidden" name="proof_contract" /><input type="hidden" name="proof_version" /><input type="hidden" name="proof_digest" /><input type="hidden" name="proof_product" /><input type="hidden" name="proof_template" /><input type="hidden" name="proof_readiness" /><input type="hidden" name="proof_sources" /><input type="hidden" name="proof_behavior" /><input type="hidden" name="proof_decisions" /><input type="hidden" name="proof_raw_records" /><input type="hidden" name="proof_context_contract" /><input type="hidden" name="proof_context_digest" /><input type="hidden" name="proof_context_outcome_digest" /><input type="hidden" name="proof_context_approved" /><input type="hidden" name="proof_context_raw_records" /><input class="contact-honeypot" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" inert /><button class="button primary" type="submit">Send message</button><p class="form-status" data-form-status aria-live="polite"></p></form></section></main>${contactScript}`,
 })
 contactHtml = replaceOnce(contactHtml, 'Contact SuperMega.', 'Contact', 'contact_heading_copy')
+contactHtml = replaceOnce(contactHtml, '<span class="eyebrow">SuperMega · Myanmar</span>', '', 'contact_redundant_eyebrow')
 contactHtml = replaceOnce(contactHtml, '<h1 data-contact-heading>Contact</h1>', `<h1 data-contact-heading>Contact</h1><p class="contact-company-intro">${escapeHtml(manifest.company.statement)}</p>`, 'contact_company_intro')
 contactHtml = replaceOnce(contactHtml, 'SuperMega builds business software for Myanmar. Shop brings counter sales, stock and order follow-up together for retailers.', 'Tell us about your business and the workflow you want to improve. We will reply by email.', 'contact_company_intro_copy')
 contactHtml = replaceOnce(contactHtml, 'Share a few details about your request.', 'Tell us what your business needs.', 'contact_message_placeholder_copy')

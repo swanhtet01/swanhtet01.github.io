@@ -201,7 +201,8 @@ for (const page of landingPages) {
     check(!html.includes('class="pos-window"') && !html.includes('class="sample-label"') && !html.includes('Complete sample sale') && !html.includes('shop-sample-demo.js'), 'landing_shop_no_simulated_pos')
     check(html.includes('class="shop-hero-app"') && html.includes('class="shop-responsive-showcase"') && html.includes('class="shop-workflow-support"'), 'landing_shop_three_workflows_visible')
     check(countOccurrences(html, '<figure class="platform-device-capture ') === 3 && countOccurrences(html, '<article class="shop-workflow-card">') === 2, 'landing_shop_primary_device_set_and_two_supporting_workflows')
-    check(html.includes('Follow orders that need fulfilment or payment. See which products need a count or reorder.') && html.includes(captureDisclosure), 'landing_shop_capture_disclosure')
+    check(html.includes('aria-label="Orders and stock"') && html.includes(captureDisclosure), 'landing_shop_capture_disclosure')
+    check(!html.includes('Orders and stock. Clear next steps.') && !html.includes('Follow orders that need fulfilment or payment. See which products need a count or reorder.'), 'landing_shop_no_repeated_workflow_pitch')
     check(!html.includes('actual-shop-today') && !html.includes('DEVICE-ONLY DATA') && !html.includes('Export backup'), 'landing_shop_gallery_omits_storage_warning')
     check(html.includes('platform-device-capture-desktop') && html.includes('platform-device-capture-tablet') && html.includes('platform-device-capture-phone') && !html.includes('data-device-choice'), 'landing_shop_device_captures_present_without_switcher')
     check(!html.includes('data-gallery-previous') && !html.includes('data-gallery-next') && !html.includes('data-platform-carousel'), 'landing_shop_all_views_without_carousel')
@@ -324,6 +325,7 @@ for (const token of ['Site measurement', 'three public page paths', 'removes que
 
 const contact = readStatic('contact/index.html')
 check(contact.includes(`<p class="contact-company-intro">${manifest.company.statement}</p>`), 'contact_factual_company_introduction')
+check(!contact.includes('SuperMega · Myanmar'), 'contact_no_redundant_brand_eyebrow')
 for (const token of ['Message received:', 'Keep this reference if you need to follow up.', 'Tell us about your business and the workflow you want to improve. We will reply by email.']) {
   check(contact.includes(token), `contact_confirmed_receipt_guidance:${token}`)
 }
@@ -357,7 +359,7 @@ const shopProduct = manifest.customerProducts.find(product => product.id === 'sh
 check(!shopLanding.includes('class="shop-hero-preview"') && !shopLanding.includes('src="/images/actual-shop-today.png"')
   && shopLanding.includes('class="shop-actual-showcase"'), 'shop_hero_does_not_repeat_home_dashboard_or_gallery')
 for (const token of [
-  'Follow orders that need fulfilment or payment. See which products need a count or reorder.',
+  'aria-label="Orders and stock"',
   'Sample catalog and example prices.',
   'Shop counter sale with product search and a live basket',
   'Shop order queue with fulfilment and payment follow-up',
