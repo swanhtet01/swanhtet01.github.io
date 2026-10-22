@@ -373,6 +373,7 @@ for (const token of [
   'src="/images/native-shop/shop_checkout_820_en.png"',
   'src="/images/native-shop/shop_today_390_en.png"',
   'src="/images/native-shop/shop_stock_1200_en.png"',
+  '<source media="(max-width:650px)" srcset="/images/native-shop/shop_stock_390_en.png" />',
   'Shop app preview with sample data and prices.',
 ]) if (!shopPage.includes(token)) fail('shop_native_gallery_missing', { token })
 if (shopPage.includes('/images/actual-shop-') || shopPage.includes('Shop browser workspace')
@@ -437,6 +438,7 @@ for (const token of [
   'src="/images/native-shop/shop_checkout_820_my.png"',
   'src="/images/native-shop/shop_today_390_my.png"',
   'src="/images/native-shop/shop_stock_820_my.png"',
+  '<source media="(max-width:650px)" srcset="/images/native-shop/shop_stock_390_my.png" />',
   'နမူနာအချက်အလက်နှင့် ဈေးနှုန်းများဖြင့် ပြထားသော ဆိုင်အက်ပ်မျက်နှာပြင်များ။',
 ]) if (!myShop.includes(token)) fail('myanmar_shop_native_gallery_missing', { token })
 if (/\/images\/native-shop\/[^"]+_en\.png/.test(myShop)

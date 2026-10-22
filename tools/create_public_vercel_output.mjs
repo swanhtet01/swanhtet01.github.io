@@ -838,10 +838,15 @@ function productGallery(id,label,eagerFirst=false,showAll=false) {
  if (item.screens.length === 1) return `<div class="platform-gallery" data-product-gallery="${id}" data-single role="region" aria-label="${label} interface view"><div class="platform-slides">${slides}</div></div>`
  return `<div class="platform-gallery" data-product-gallery="${id}" data-platform-carousel role="region" aria-roledescription="carousel" aria-label="${label} interface views"><div class="platform-slides" tabindex="0">${slides}</div><div class="platform-gallery-controls"><button type="button" data-gallery-previous aria-label="Previous ${label} screen" disabled>&lsaquo;</button><span class="platform-gallery-status" data-gallery-status aria-live="polite">1 of ${item.screens.length}</span><button type="button" data-gallery-next aria-label="Next ${label} screen">&rsaquo;</button></div></div>`
 }
-function nativeShopShot(file, alt, label, loading = 'lazy') {
+function nativeShopShot(file, alt, label, loading = 'lazy', mobileFile = null) {
  const asset = nativeShopGallery.assets.find(item => item.file === file)
  assert(asset, `native_shop_gallery_asset_missing:${file}`)
- return `<figure class="native-shop-shot"><div class="native-shop-shot-window"><img src="/images/native-shop/${file}" alt="${escapeHtml(alt)}" width="${asset.width}" height="${asset.height}" loading="${loading}"${loading === 'eager' ? ' fetchpriority="high"' : ''} /></div><figcaption>${escapeHtml(label)}</figcaption></figure>`
+ if (mobileFile) assert(nativeShopGallery.assets.some(item => item.file === mobileFile), `native_shop_gallery_asset_missing:${mobileFile}`)
+ const image = `<img src="/images/native-shop/${file}" alt="${escapeHtml(alt)}" width="${asset.width}" height="${asset.height}" loading="${loading}"${loading === 'eager' ? ' fetchpriority="high"' : ''} />`
+ const responsiveImage = mobileFile
+   ? `<picture><source media="(max-width:650px)" srcset="/images/native-shop/${mobileFile}" />${image}</picture>`
+   : image
+ return `<figure class="native-shop-shot"><div class="native-shop-shot-window">${responsiveImage}</div><figcaption>${escapeHtml(label)}</figcaption></figure>`
 }
 function nativeShopHero(locale = 'en') {
  const my = locale === 'my'
@@ -853,7 +858,7 @@ function nativeShopHero(locale = 'en') {
 function nativeShopStock(locale = 'en') {
  const my = locale === 'my'
  const image = my ? 'shop_stock_820_my.png' : 'shop_stock_1200_en.png'
- return `<section class="native-shop-stock"><div class="wrap"><div class="native-shop-stock-heading"><div><p class="eyebrow">${my ? 'ကုန်လက်ကျန်' : 'Stock'}</p><h2>${my ? 'ကုန်မပြတ်မီ သိပါ။' : 'See what needs restocking.'}</h2></div><p>${my ? 'လက်ကျန်အရေအတွက်၊ ပြန်မှာယူရမည့် အဆင့်နှင့် ကုန်လက်ကျန် ပြင်ဆင်မှုကို တစ်နေရာတည်းတွင် ကြည့်ပါ။' : 'Review on-hand quantities and reorder levels; adjust stock from the product row.'}</p></div>${nativeShopShot(image, my ? 'မြန်မာဘာသာဖြင့် ကုန်လက်ကျန်နှင့် ပြန်မှာယူရန် အဆင့်ကို ပြထားသော ဆိုင်အက်ပ်မျက်နှာပြင်' : 'Shop stock list with product photos, on-hand quantities and reorder levels', my ? 'ကုန်လက်ကျန်စာရင်း' : 'Stock list')}</div></section>`
+ return `<section class="native-shop-stock"><div class="wrap"><div class="native-shop-stock-heading"><div><p class="eyebrow">${my ? 'ကုန်လက်ကျန်' : 'Stock'}</p><h2>${my ? 'ကုန်မပြတ်မီ သိပါ။' : 'See what needs restocking.'}</h2></div><p>${my ? 'လက်ကျန်အရေအတွက်၊ ပြန်မှာယူရမည့် အဆင့်နှင့် ကုန်လက်ကျန် ပြင်ဆင်မှုကို တစ်နေရာတည်းတွင် ကြည့်ပါ။' : 'Review on-hand quantities and reorder levels; adjust stock from the product row.'}</p></div>${nativeShopShot(image, my ? 'မြန်မာဘာသာဖြင့် ကုန်လက်ကျန်နှင့် ပြန်မှာယူရန် အဆင့်ကို ပြထားသော ဆိုင်အက်ပ်မျက်နှာပြင်' : 'Shop stock list with product photos, on-hand quantities and reorder levels', my ? 'ကုန်လက်ကျန်စာရင်း' : 'Stock list', 'lazy', `shop_stock_390_${my ? 'my' : 'en'}.png`)}</div></section>`
 }
 function productStory(id, standalone = false) {
  const item=stories[id], label=publicProducts.find(product=>product.id===id).name

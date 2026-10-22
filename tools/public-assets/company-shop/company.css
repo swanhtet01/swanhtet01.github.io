@@ -662,7 +662,7 @@
   .native-shop-shots-pair, .native-shop-shots-my .native-shop-shots-pair { display: block; }
   .native-shop-shots-pair > .native-shop-shot:last-child { max-width: 390px; margin-inline: auto; }
   .native-shop-stock-heading { grid-template-columns: 1fr; }
-  .native-shop-stock .native-shop-shot-window { max-height: 590px; }
+  .native-shop-stock .native-shop-shot-window { max-height: none; }
 }
 .shop-actual-showcase { padding-block: clamp(46px, 6vw, 78px); border-bottom: 1px solid #e4e7ec; background: #fff; }
 .shop-actual-showcase .story-heading { margin-bottom: 26px; }
