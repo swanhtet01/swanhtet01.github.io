@@ -54,7 +54,7 @@ for (const token of ["policy.profile === 'production-contract'", 'contact.accept
 }
 if (!previewVerifier.includes('deployment_function_surface_wrong')) failures.push('preview_function_inventory_not_verified')
 if (!previewVerifier.includes('const maxAttempts = 6') || !previewVerifier.includes('protected_preview_retry:')) failures.push('preview_propagation_retry_missing')
-for (const token of ['validatePreviewLinks(homepage, policy, manifest.customerProducts, linkOptions)',
+for (const token of ['validatePreviewLinks(shopPage, policy, manifest.customerProducts, linkOptions)',
   'validatePreviewLinks(html, policy, manifest.customerProducts,']) {
   requireToken(previewVerifier, token, 'preview_navigation_consumer_missing')
 }
@@ -66,8 +66,8 @@ for (const token of ['public_preview_action_missing', 'public_preview_app_route_
   requireToken(previewProfile, token, 'preview_navigation_policy_missing')
 }
 for (const token of ['landing_login_route_missing', 'shop_contact_action_missing',
-  'homepage_shop_action_missing', 'retired_shop_action_present', 'landing_contact_route_missing',
-  'retired_product_marketed', 'retired_product_route_not_found',
+  'root_redirect_destination_wrong', 'contact_company_intro_missing', 'retired_shop_action_present', 'landing_contact_route_missing',
+  'retired_product_route_not_found',
   'interface_image_reference_missing', 'interface_image_http_error',
   'interface_image_content_type_wrong', 'interface_image_invalid', 'interface_image_release_mismatch']) {
   requireToken(liveVerifier, token, 'live_navigation_contract_missing')

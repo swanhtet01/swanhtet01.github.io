@@ -35,7 +35,7 @@ const firstPageRoute=path=>{
  const index=config.routes.findIndex((r,i)=>i<boundary&&typeof r.src==='string'&&r.continue!==true&&new RegExp(r.src).test(path));
  return index<0?undefined:config.routes[index];
 };
-globalThis.fetch=async input=>{
+globalThis.fetch=async (input,options={})=>{
  const u=new URL(input);
  if(!['supermega.dev','www.supermega.dev'].includes(u.hostname)) throw Error('offline_fixture_unexpected_host');
  const headers={...config.routes.find(r=>r.headers?.['content-security-policy']).headers};
@@ -58,7 +58,11 @@ globalThis.fetch=async input=>{
   return new Response(fs.readFileSync(outputDir+'/static/'+page.file,'utf8'),{status:200,headers});
  }
  const redirect=config.routes.find(r=>r.status===308 && new RegExp(r.src).test(u.pathname));
- if(redirect) return new Response(null,{status:308,headers:{location:mode==='old-redirect'&&u.pathname==='/products/factory/'?'/#plant':redirect.headers.Location}});
+ if(redirect) {
+  const location=mode==='old-redirect'&&u.pathname==='/products/factory/'?'/#plant':mode==='wrong-root-redirect'&&u.pathname==='/'?'/contact/':redirect.headers.Location;
+  if(options.redirect==='follow') return fetch(new URL(location,u),options);
+  return new Response(null,{status:308,headers:{location}});
+ }
  if(u.pathname.startsWith('/images/')) {
   if(mode==='image-missing') return new Response('missing',{status:404});
   if(mode==='image-html') return new Response('<html>fallback</html>',{headers:{'content-type':'text/html'}});
@@ -72,11 +76,9 @@ globalThis.fetch=async input=>{
  let html=fs.readFileSync(outputDir+'/static/'+page.file,'utf8');
  if(mode==='pilot-pitch'&&u.pathname==='/contact/') html+='<p>Request managed company intelligence.</p>';
  if(mode==='missing-source'&&u.pathname==='/contact/') html=html.replaceAll('source.value=location.href','REMOVED');
- if(mode==='missing-offer') html=html.replaceAll('class="company-operating-overview"','REMOVED');
- if(mode==='missing-action') html=html.replace('href="/shop/">Explore Shop','REMOVED');
+ if(mode==='missing-company-intro'&&u.pathname==='/contact/') html=html.replace(manifest.company.statement,'REMOVED');
  if(mode==='missing-guided') html=html.replaceAll('>Login</a>','>REMOVED</a>');
  if(mode==='missing-assisted') html=html.replaceAll('>Contact</a>','>REMOVED</a>');
- if(mode==='plant-marketing'&&u.pathname==='/') html+='<a href="/plant/">Plant</a>';
  return new Response(html,{headers});
 };
 `
@@ -105,9 +107,8 @@ test('current generated Shop-only pages pass exact-release checks through offlin
 
 for (const [mutation, failure] of [
   ['privacy-header', 'page_security_header_wrong'], ['usb-policy', 'page_security_header_wrong'],
-  ['missing-offer', 'homepage_offer_contract_missing'], ['missing-action', 'homepage_shop_action_missing'],
+  ['wrong-root-redirect', 'root_redirect_destination_wrong'], ['missing-company-intro', 'contact_company_intro_missing'],
   ['missing-guided', 'page_shared_contract_missing'], ['missing-assisted', 'page_contact_route_missing'],
-  ['plant-marketing', 'retired_product_marketed'],
   ['wrong-commit', 'release_commit_wrong'], ['contact-down', 'contact_not_accepting'],
   ['old-redirect', 'redirect_destination_wrong'],
   ['pilot-pitch', 'retired_managed_pilot_pitch_present'], ['missing-source', 'contact_trial_proof_contract_missing'],

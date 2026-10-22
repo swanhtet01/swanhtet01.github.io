@@ -21,7 +21,7 @@ test('app fetch rejects redirects without following another release endpoint', a
 })
 
 test('protected app and public page CLI reads have deadlines and preserve deployment arguments', async () => {
-  for (const [code, invocation] of [[appGet, "get('/__release.json', 1)"], [extract(preview, 'function get(', 'for (const page of manifest.pages)'), "get('/__release.json')"]]) {
+  for (const [code, invocation] of [[appGet, "get('/__release.json', 1)"], [extract(preview, 'function get(', 'for (const page of manifest.pages'), "get('/__release.json')"]]) {
     let call
     const value = await vm.runInNewContext(`${code}; ${invocation}`, {
       protectedPreview: true, baseUrl: 'https://candidate.vercel.app', expectedCommit: '', process: {platform:'linux'}, cliEnv:{}, maxAttempts:1,

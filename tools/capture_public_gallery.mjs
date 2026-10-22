@@ -343,6 +343,9 @@ async function main() {
     await evaluate(cdp, sessionId, `(() => { const s=document.createElement('style');s.textContent='#root > p,#root > button,#root > output,.qa-notice,.qa-nav{display:none!important}body{margin:0!important}';document.head.append(s) })()`)
     const stockedShop = await evaluate(cdp, sessionId, "localStorage.getItem('supermega.commerce.workspace.v2')")
     if (!stockedShop) throw new Error('synthetic_shop_seed_missing')
+    const seedOrders = JSON.parse(stockedShop).orders
+    if (seedOrders.some(order => order.status === 'completed')) throw new Error('gallery_seed_contains_completed_sale')
+    const seedOrderIds = seedOrders.map(order => order.id)
     await evaluate(cdp, sessionId, `(() => {
       const key='supermega.commerce.workspace.v2';
       const empty={schema:JSON.parse(${JSON.stringify(stockedShop)}).schema,items:[],orders:[],movements:[],closes:[],catalogBaselines:[],catalogChanges:[],promotionPolicies:[],shippingPolicies:[],paymentPolicies:[],websiteIntakes:[],storefrontRequests:[],purchaseBudgetEnvelopes:[],supplierSourcingDecisions:[],purchaseOrders:[]};
@@ -390,10 +393,14 @@ async function main() {
     await typeInto(cdp, sessionId, '.receipt-profile-form input[autocomplete="organization"]', 'Example Corner Shop')
     await clickText(cdp, sessionId, 'Save details')
     await waitForPaidOrderRecord(cdp, sessionId)
-    const completedSale = await evaluate(cdp, sessionId, `(() => {
+    const newPaidSales = await evaluate(cdp, sessionId, `(() => {
       const state = JSON.parse(localStorage.getItem('supermega.commerce.workspace.v2') || '{}');
-      return state.orders?.some(order => order.status === 'completed' && order.paymentStatus === 'reconciled') === true;
+      const seedOrderIds = new Set(${JSON.stringify(seedOrderIds)});
+      return (state.orders || []).filter(order => !seedOrderIds.has(order.id)
+        && order.status === 'completed' && order.paymentStatus === 'reconciled')
+        .map(order => ({ id: order.id, total: order.total }));
     })()`)
+    const completedSale = newPaidSales.length === 1
     if (!completedSale) throw new Error('synthetic_counter_sale_not_completed')
     captures.push({
       ...await capture(cdp, sessionId, output, 'actual-shop-order-record', ['Order record', 'PAID'],
@@ -401,17 +408,25 @@ async function main() {
       recordKind: 'paid_order_record_not_customer_receipt',
     })
     await clickSelector(cdp, sessionId, '.receipt-dialog-actions button:last-child')
-    // Reset transient success feedback before capturing the next views; the synthetic sale
-    // remains in browser storage and is still visible in the Today and Orders totals.
-    await cdp.send('Page.navigate', { url: `${origin}/shop/` }, sessionId)
+    // Remount the isolated app to reset transient feedback without discarding its
+    // in-memory storage shim. A full page navigation creates a new shim and seed.
+    await clickText(cdp, sessionId, 'Reopen synthetic Shop')
     await waitFor(cdp, sessionId, 'Today')
     await waitFor(cdp, sessionId, 'Order queue')
-    const completedSaleSurvivedReload = await evaluate(cdp, sessionId, `(() => {
+    const completedSaleSurvivedRemount = await evaluate(cdp, sessionId, `(() => {
       const state = JSON.parse(localStorage.getItem('supermega.commerce.workspace.v2') || '{}');
-      return state.orders?.some(order => order.status === 'completed' && order.paymentStatus === 'reconciled') === true;
+      return (state.orders || []).some(order => order.id === ${JSON.stringify(newPaidSales[0].id)}
+        && order.total === ${JSON.stringify(newPaidSales[0].total)}
+        && order.status === 'completed' && order.paymentStatus === 'reconciled');
     })()`)
-    if (!completedSaleSurvivedReload) throw new Error('synthetic_counter_sale_missing_after_reload')
+    if (!completedSaleSurvivedRemount) throw new Error('synthetic_counter_sale_missing_after_remount')
     await clickText(cdp, sessionId, 'Show Today')
+    await waitFor(cdp, sessionId, `${newPaidSales[0].total.toLocaleString('en-US')} MMK`)
+    const todayText = await evaluate(cdp, sessionId, `document.querySelector('.shop-today-module')?.innerText || ''`)
+    if (!todayText.includes(`${newPaidSales[0].total.toLocaleString('en-US')} MMK`)
+      || !todayText.includes('1 completed')) throw new Error('synthetic_sale_missing_from_today_metrics')
+    if (!todayText.includes(`Cash ${newPaidSales[0].total.toLocaleString('en-US')} MMK`))
+      throw new Error('synthetic_sale_missing_from_close_queue')
     captures.unshift(await capture(cdp, sessionId, output, 'actual-shop-today', ['Today', 'Quick tasks', 'Order queue'],
       { fixturePath: '/shop/', tab: 'today', selector: '.shop-today-module' }))
     captures.push(await captureTablet(cdp, sessionId, output, 'actual-shop-today-tablet', ['Today', 'Quick tasks', 'Order queue'],

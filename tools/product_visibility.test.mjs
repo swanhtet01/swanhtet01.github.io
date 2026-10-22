@@ -170,29 +170,24 @@ test('saved Plant setup survives visibility projection byte-for-byte', () => {
   assert.ok(productContracts.production.templates.length > 0)
 })
 
-test('generated public home and contact offer only active products', async () => {
+test('public root redirects to Shop while Contact introduces the company', async () => {
   const homeDocument = await html('index.html')
   const home = main(homeDocument), contact = main(await html('contact/index.html'))
-  assert.equal((home.match(/class="family-card/g)??[]).length, 0)
-  assert.equal((home.match(/class="family-link"/g)??[]).length, 0)
-  const headline = home.match(/<h1 id="hero-title">([\s\S]*?)<\/h1>/)?.[1]
-  assert.ok(headline, 'Company page has its primary headline')
-  const headlineText = headline.replace(/<br\s*\/?>/gi, ' ').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
-  assert.equal(headlineText, manifest.company.headline)
-  assert.match(homeDocument, /href="\/contact\/">Contact<\/a>/)
-  assert.doesNotMatch(home, /\bSites\b|\bCommerce\b/)
-  assert.doesNotMatch(home, /Explore Sites|Explore Commerce|href="\/(?:website|ecommerce)\//)
-  assert.doesNotMatch(home, /Plant|all four|href="[^\"]*(?:\/plant\/|product=plant)/)
+  assert.equal(manifest.pages.find((page) => page.route === '/')?.redirectTo, '/shop/')
+  assert.match(homeDocument, /name="robots" content="noindex,follow"/)
+  assert.match(homeDocument, /rel="canonical" href="https:\/\/supermega\.dev\/shop\/"/)
+  assert.match(homeDocument, /http-equiv="refresh" content="0; url=\/shop\/"/)
+  assert.match(home, /href="\/shop\/">Continue to Shop<\/a>/)
+  assert.doesNotMatch(home, /company-hero|actual-shop-|\/plant\/|\/website\/|\/ecommerce\//)
+  assert.match(contact, /SuperMega is a Myanmar software company\. Shop is our first customer product for counter sales, stock and order follow-up\./)
   assert.match(contact, /<input type="hidden" name="product" value="guide" \/>/)
   assert.doesNotMatch(contact, /<select[^>]*name="product"/)
-  assert.match(contact, /SuperMega builds practical business software for Myanmar\. Shop helps retailers manage counter sales, stock and open orders\./)
+  assert.match(contact, /Tell us about your business and the workflow you want to improve\. We will reply by email\./)
   assert.doesNotMatch(contact, /English and Burmese are both welcome/)
   for (const product of activeProductContracts(manifest)) {
     const page = main(await html(product.id+'/index.html'))
     const fullPage = await html(product.id+'/index.html')
-    const expectedLogin = product.id === 'shop'
-      ? `href="${appOrigin}/login?product=shop"`
-      : `href="${appOrigin}/login"`
+    const expectedLogin = `href="${appOrigin}/login?product=shop"`
     const loginLinks = [...fullPage.matchAll(/href="https:\/\/[^\"]+\/login[^\"]*"/g)].map(([link]) => link).filter(link => link.startsWith(`href="${appOrigin}/`))
     assert.deepEqual(loginLinks, [expectedLogin])
     if (product.id === 'shop') assert.match(page, /class="shop-hero-app"/)
@@ -223,7 +218,7 @@ test('Plant public route becomes compatibility-only, not sales or new setup', as
   assert.match(page, /name="robots" content="noindex,follow"/)
   assert.match(content, /not offered for new setup/)
   assert.match(content, /Existing workspace records are preserved/)
-  assert.match(content, /href="\/#products">View current products/)
+  assert.match(content, /href="\/shop\/">View current products/)
   assert.doesNotMatch(content, /Open retained workspace|href="[^\"]*\/plant\//)
   assert.doesNotMatch(content, /first-job-templates|Start free sample|Request assisted setup|product=plant|\?template=|\?pack=/)
   assert.doesNotMatch(await html('sitemap.xml'), /<loc>https:\/\/supermega.dev\/plant\/<\/loc>/)

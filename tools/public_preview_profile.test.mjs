@@ -64,7 +64,7 @@ test('rejects all external retail-price links from the public preview', () => {
 })
 test('all-page mode permits informational tombstone but not a retired tool action', () => {
   const options = { requireActions: false, publicOrigin: 'https://public-preview.example' }
-  validatePreviewLinks('<h1>Plant retained records</h1><a href="/#products">View current products</a>', policy, products, options)
+  validatePreviewLinks('<h1>Plant retained records</h1><a href="/shop/">View current products</a>', policy, products, options)
   assert.throws(() => validatePreviewLinks(`<a href="${app.origin}/plant/">Open retained workspace</a>`, policy, products, options))
   validatePreviewLinks('<a href="mailto:swanhtet@supermega.dev">Contact</a>', policy, products, options)
 })

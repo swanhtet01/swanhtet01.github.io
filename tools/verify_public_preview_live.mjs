@@ -54,13 +54,13 @@ function get(path) {
   throw new Error(`protected_preview_request_failed:${path}:attempts=${maxAttempts}:${lastFailure}`)
 }
 
-for (const page of manifest.pages) {
+for (const page of manifest.pages.filter(page => !page.redirectTo)) {
   const html = get(page.route)
   validatePreviewLinks(html, policy, manifest.customerProducts, { ...linkOptions, requireActions: false })
   for (const token of [
     `meta name="supermega-brand-version" content="${manifest.brand.version}"`,
     `meta name="supermega-context-version" content="${manifest.contextVersion}"`,
-    'aria-label="SuperMega home"',
+    'aria-label="SuperMega Shop"',
   ]) {
     if (!html.includes(token)) throw new Error(`preview_shared_contract_missing:${page.route}:${token}`)
   }
@@ -69,8 +69,8 @@ for (const page of manifest.pages) {
   }
 }
 
-const homepage = get('/')
-const navigation = validatePreviewLinks(homepage, policy, manifest.customerProducts, linkOptions)
+const shopPage = get('/shop/')
+const navigation = validatePreviewLinks(shopPage, policy, manifest.customerProducts, linkOptions)
 
 const release = JSON.parse(get(manifest.release.releaseEndpoint))
 if (release.brandVersion !== manifest.brand.version) throw new Error('preview_brand_version_wrong')
@@ -119,5 +119,5 @@ const expectedFunctions = ['api/contact-submissions.js', 'api/health.js', 'api/n
 if (JSON.stringify(deploymentFunctions) !== JSON.stringify(expectedFunctions)) throw new Error(`deployment_function_surface_wrong:${deploymentFunctions.join(',')}`)
 
 console.log(JSON.stringify({ ok: true, contract: 'supermega_public_preview.v2', profile: policy.profile, baseUrl,
-  pages: manifest.pages.map((page) => page.route), release, contact: contact.status, navigation, deploymentFunctions,
+  pages: manifest.pages.filter(page => !page.redirectTo).map((page) => page.route), release, contact: contact.status, navigation, deploymentFunctions,
   browserTransitionProven: false, environmentIsolationProven: false, hostedCustomerAcceptanceProven: false }, null, 2))

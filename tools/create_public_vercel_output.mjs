@@ -10,7 +10,7 @@ import { bindPreviewNavigation, parsePreviewAppBinding } from './public_preview_
 import { assertPublicGalleryReleaseReady } from './public_gallery_rights.mjs'
 
 import { activeProductContracts } from '../showroom/src/core/product-visibility.ts'
-import { brandFaviconSvg, companyMarkup, companyShopFooterHtml, companyShopHeaderHtml, companyShopStyle, shopMarkup } from './public_company_shop_design.mjs'
+import { brandFaviconSvg, companyShopFooterHtml, companyShopHeaderHtml, companyShopStyle, shopMarkup } from './public_company_shop_design.mjs'
 
 
 const run = promisify(execFile)
@@ -191,7 +191,7 @@ for (const product of manifest.customerProducts) {
 
 const publicProducts = activeProductContracts(manifest)
 const publicProductNames = publicProducts.map(product => product.name).join(', ')
-const discoverablePages = manifest.pages.filter(page => !page.productId || publicProducts.some(product => product.id === page.productId))
+const discoverablePages = manifest.pages.filter(page => !page.redirectTo && (!page.productId || publicProducts.some(product => product.id === page.productId)))
 
 const brand = manifest.brand
 
@@ -410,6 +410,7 @@ const sharedStyle = `
   .contact-page .page-hero::after { display:none; }
   .contact-page .page-hero h1 { max-width:480px; font-size:clamp(40px,4.3vw,58px); line-height:1.04; letter-spacing:-.045em; }
   .contact-page .page-hero .lede { max-width:430px; font-size:18px; line-height:1.62; }
+  .contact-company-intro { max-width:430px; color:var(--ink); font-size:15px; line-height:1.6; }
   .contact-page .contact-layout { display:block; padding:0; }
   .contact-page .contact-form { width:100%; padding:clamp(24px,3vw,40px); gap:18px; border-color:#dbe3ee; border-radius:8px; background:#fff; box-shadow:0 16px 42px rgba(11,15,23,.06); }
   .contact-page .field-grid { gap:20px 16px; }
@@ -681,10 +682,7 @@ const sharedStyle = `
   .button.primary:hover{background:#1d4ed8}
   .company-hero{background:radial-gradient(ellipse at 84% 18%,rgba(37,99,235,.10),transparent 32%),linear-gradient(180deg,#f5f8ff,#fff 68%)}
   body[data-view="company"] .company-hero{background:linear-gradient(180deg,#f8fbff,#fff 72%)}
-  .shop-actual-showcase{padding-block:clamp(46px,6vw,78px);border-bottom:1px solid #e4e7ec;background:#fff}
-  .shop-actual-showcase .story-heading{margin-bottom:26px}
-  .shop-actual-showcase .story-heading h2{font-size:clamp(30px,4vw,48px);letter-spacing:-.045em;line-height:1.08}
-  .shop-actual-showcase .story-heading p{max-width:36ch;font-size:15px;line-height:1.55}
+  .shop-actual-showcase{padding-block:clamp(24px,4vw,48px);border-bottom:1px solid #e4e7ec;background:#fff}
   body[data-view="company"] .company-hero::before{opacity:0;background-image:none}
   @media(min-width:1051px){body[data-view="company"] .company-hero .hero-grid{grid-template-columns:minmax(0,.76fr) minmax(520px,1.24fr);gap:clamp(28px,3.5vw,56px)}}
   body[data-view="company"] .company-hero .hero-art{min-height:0}
@@ -741,7 +739,7 @@ function structuredDataHtml(schema) {
 
 const publicObservabilityHosts = Object.freeze(['supermega.dev', 'www.supermega.dev'])
 const publicObservabilityPaths = Object.freeze(discoverablePages.map((page) => page.route))
-assert(publicObservabilityPaths.join(',') === '/,/shop/,/contact/,/privacy/', 'public_observability_path_surface_changed')
+assert(publicObservabilityPaths.join(',') === '/shop/,/contact/,/privacy/', 'public_observability_path_surface_changed')
 
 // Source presence is only delivery readiness. Provider-visible pageviews and
 // vitals remain unobserved until a separate read-only provider receipt proves
@@ -854,12 +852,12 @@ function documentHtml({ route, title, description, content, schema = null, robot
 }
 
 const homePage = manifest.pages.find((page) => page.route === '/')
-assert(homePage?.file === 'index.html', 'home_page_manifest_entry_invalid')
+assert(homePage?.file === 'index.html' && homePage.redirectTo === '/shop/', 'home_redirect_manifest_entry_invalid')
 assert(typeof homePage.title === 'string' && homePage.title.includes('SuperMega'), 'home_page_title_invalid')
 assert(typeof homePage.description === 'string' && homePage.description.length >= 40, 'home_page_description_invalid')
 
 const stories = {
- shop: {title:'Sell at the counter. Keep stock and orders in view.', body:'Search or scan a product, build a sale, and see order and stock follow-up in the same Shop workspace.', screens:[['actual-shop-sell.png','Shop counter sale with product search and a live basket','Counter sale'],['actual-shop-orders.png','Shop order queue showing order status and the next follow-up','Orders and fulfilment'],['actual-shop-inventory.png','Shop inventory workspace showing stock levels and the count, receive, and reorder workflow','Inventory and replenishment']], proof:[['Find','Search or scan the right product'],['Sell','Review each item and the MMK total'],['Follow up','See order status and stock needs']]},
+ shop: {title:'Sell at the counter. Keep stock and orders in view.', body:'The Shop browser workspace shows counter sales, recorded orders and stock.', screens:[['actual-shop-sell.png','Shop browser counter sale with product search and a live basket','Counter sale'],['actual-shop-orders.png','Shop browser order queue showing order status and the next follow-up','Orders and fulfilment'],['actual-shop-inventory.png','Shop browser inventory workspace showing stock levels and the count, receive, and reorder workflow','Inventory and replenishment']], proof:[['Find','Search or scan the right product'],['Sell','Review each item and the MMK total'],['Follow up','See order status and stock needs']]},
  website: {title:'Build clear pages. Review inquiries in one place.', body:'Our team manages pages, readiness checks and customer inquiries in one workspace.', screens:[['actual-sites-editor.png','Sites editor showing page navigation, focused content editing and readiness checks','Page workspace and readiness'],['actual-sites-inquiries.png','Sites inquiry workspace showing a synthetic customer request, ownership and decision controls','Inquiry review and ownership']], proof:[['Record','Pages, services and metadata'],['Action','Edit, check and prepare to publish'],['Result','Qualified inquiries in one inbox']]},
  ecommerce: {title:'Show your catalog. Review each request.', body:'Our team reviews each catalog request before Shop records an order or payment.', screens:[['actual-commerce-catalog.png','Commerce catalog showing available products, local pricing and customer ordering','Store catalog and availability'],['actual-commerce-order-request.png','Commerce Store showing a locally saved customer request awaiting Shop confirmation','Request saved locally']], proof:[['Record','Catalog, customer and request'],['Action','Review before an order is confirmed'],['Result','A clear next step for fulfilment']]},
 }
@@ -923,12 +921,12 @@ function shopCounterSalePreview() {
  interfaceDisclosure(image)
  interfaceDisclosure(mobileImage)
  interfaceDisclosure(tabletImage)
- return `<figure class="shop-lead-capture"><picture><source media="(max-width: 760px)" srcset="/images/${mobileImage}" width="390" height="844" /><source media="(max-width: 1024px)" srcset="/images/${tabletImage}" width="768" height="1024" /><img src="/images/${image}" alt="${escapeHtml(alt)}" width="1440" height="900" loading="eager" fetchpriority="high" /></picture><figcaption id="shop-sample-disclosure">Illustrative Shop interface · synthetic local records</figcaption></figure>`
+ return `<figure class="shop-lead-capture"><picture><source media="(max-width: 760px)" srcset="/images/${mobileImage}" width="390" height="844" /><source media="(max-width: 1024px)" srcset="/images/${tabletImage}" width="768" height="1024" /><img src="/images/${image}" alt="${escapeHtml(alt)}" width="1440" height="900" loading="eager" fetchpriority="high" /></picture><figcaption id="shop-sample-disclosure">Shop browser workspace · synthetic local records</figcaption></figure>`
 }
 function shopResponsiveShowcase() {
- const orders = shopSupportCard({image:'actual-shop-orders.png',alt:'Shop order queue with fulfilment and payment follow-up',title:'Orders',description:'See what is ready, what is unpaid, and what needs the next step.'})
- const stock = shopSupportCard({image:'actual-shop-inventory.png',alt:'Shop inventory list with on-hand quantities and reorder signals',title:'Stock',description:'Find products that need a count or replenishment.'})
- return `<div class="shop-responsive-showcase" role="region" aria-label="Order and stock workflows" aria-describedby="shop-sample-disclosure"><div class="shop-workflow-support" aria-label="More Shop workflows">${orders}${stock}</div></div>`
+ const orders = shopSupportCard({image:'actual-shop-orders.png',alt:'Shop browser order queue with fulfilment and payment follow-up',title:'Orders',description:'See what is ready, what is unpaid, and what needs the next step.'})
+ const stock = shopSupportCard({image:'actual-shop-inventory.png',alt:'Shop browser inventory list with on-hand quantities and reorder signals',title:'Stock',description:'Find products that need a count or replenishment.'})
+ return `<div class="shop-responsive-showcase"><div class="shop-workflow-support">${orders}${stock}</div></div>`
 }
 function productStory(id, standalone = false) {
  const item=stories[id], label=publicProducts.find(product=>product.id===id).name
@@ -955,15 +953,6 @@ function removeSectionByClass(source, className, code) {
  }
  assert.fail(code + "_section_not_closed")
 }
-function shopOnlyCompanyMarkup(source) {
-  assert(!source.includes('class="company-portfolio"') && !source.includes('class="company-contact"'), 'home_redundant_section_remains')
-  assert(!source.includes('class="shop-showcase"'), 'home_duplicate_gallery_remains')
-  assert(!/href="\/(?:plant|website|ecommerce)\//.test(source), 'shop_only_inactive_product_link_remains')
-  assert((source.match(/class="button button-primary"/g) || []).length === 1, 'home_primary_action_count_drift')
-  assert((source.match(/Illustrative Shop interface · synthetic local records/g) || []).length === 1, 'home_capture_disclosure_count_drift')
-  return source
-}
-const publicHomeMarkup = shopOnlyCompanyMarkup(companyMarkup)
 const publicShopMarkup = shopMarkup
 
 function productCard(id) {
@@ -972,10 +961,9 @@ function productCard(id) {
  assert(typeof route === 'string' && /^\/[a-z]+\/$/.test(route), `public_product_route_missing:${id}`)
  return `<article class="product-card-compact" id="${id}" data-product-panel data-product-name="${escapeHtml(label)}"><div class="product-card-media">${productGallery(id,label,id==='shop')}</div><div class="product-card-copy"><span class="eyebrow">${label}</span><h2>${item.title}</h2><p>${item.body}</p><ul class="product-card-flow" aria-label="${label} includes">${productOutcomes[id].map(([title])=>`<li>${escapeHtml(title)}</li>`).join('')}</ul><a class="story-link" href="${escapeHtml(route)}">Explore ${label}<span aria-hidden="true">&rarr;</span></a></div></article>`
 }
-const homeHtml = documentHtml({route:'/',title:homePage.title,description:homePage.description,
- schema:{'@type':'Organization',name:'SuperMega',url:canonical('/'),description:homePage.description},
- content:`<main id="content">${publicHomeMarkup}</main>`,
-})
+// Static hosts and saved copies still give a no-JavaScript route to Shop.
+// Vercel's exact root and /index.html routes return the 308 below.
+const homeHtml = `<!doctype html><html lang="en"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><title>${escapeHtml(homePage.title)}</title><meta name="robots" content="noindex,follow" /><link rel="canonical" href="${escapeHtml(canonical(homePage.redirectTo))}" /><meta http-equiv="refresh" content="0; url=${homePage.redirectTo}" /></head><body><main><h1>SuperMega Shop</h1><p>This page has moved. <a href="${homePage.redirectTo}">Continue to Shop</a>.</p></main></body></html>`
 
 function productAction(product) {
  if (product.status !== 'available-in-app' || product.id === 'shop') return ''
@@ -985,8 +973,8 @@ function productAction(product) {
 
 function shopLandingHtml(product, page) {
  const description = page.description || product.description
- const heroWithPreview = replaceOnce(publicShopMarkup, '<div class="shop-hero-app" aria-label="Counter sale interface preview"></div>', '<div class="shop-hero-app" aria-label="Counter sale interface preview">' + shopCounterSalePreview() + '</div>', 'shop_hero_app_capture')
- const shopShowcase = `<section class="shop-actual-showcase" id="shop-demo" aria-labelledby="shop-actual-showcase-title"><div class="wrap"><div class="story-heading"><div><span class="eyebrow">SHOP WORKSPACE</span><h2 id="shop-actual-showcase-title">Orders and stock. Clear next steps.</h2></div><p>Follow orders that need fulfilment or payment. See which products need a count or reorder.</p></div>${shopResponsiveShowcase()}</div></section>`
+ const heroWithPreview = replaceOnce(publicShopMarkup, '<div class="shop-hero-app" aria-label="Shop browser counter sale preview"></div>', '<div class="shop-hero-app" aria-label="Shop browser counter sale preview">' + shopCounterSalePreview() + '</div>', 'shop_hero_app_capture')
+ const shopShowcase = `<section class="shop-actual-showcase" id="shop-demo" aria-label="Orders and stock" aria-describedby="shop-sample-disclosure"><div class="wrap">${shopResponsiveShowcase()}</div></section>`
  let shopContent = heroWithPreview
  const showcaseAnchor = /<\/section>(\r?\n)([ \t]*)<section class="demo-section"/g
  assert((shopContent.match(showcaseAnchor) || []).length === 1, 'shop_showcase_insertion_point_missing')
@@ -1043,12 +1031,12 @@ const contactScript = `<script>(function(){
     if(!heading)return;
     var serviceName=product&&({website:'Sites',ecommerce:'Commerce',shop:'Shop'})[product.value];
     heading.textContent=serviceName?(serviceName==='Shop'?'Request a Shop walkthrough':'Contact our '+serviceName+' team.'):'Contact';
+    if(lede)lede.textContent=serviceName==='Shop'?'Tell us what you sell and how you work today. We will reply with Shop walkthrough and setup options.':'Tell us about your business and the workflow you want to improve. We will reply by email.';
   }
   updateServiceSummary();
   if(product)product.addEventListener('change',function(){if(template)template.value='';detachProofIfChanged();updateServiceSummary()});
   if(template)template.addEventListener('input',detachProofIfChanged);
   if(handoff.toString()){
-    if(lede)lede.textContent='SuperMega builds practical business software for Myanmar. Shop helps retailers manage counter sales, stock and open orders.';
     if(proof)status.textContent='Helpful context attached. Nothing has been sent.';
     else if(proofResult.attempted)status.textContent='Attached context could not be verified and was left out.';
     history.replaceState(null,'',location.pathname+location.search);
@@ -1089,22 +1077,27 @@ let contactHtml = documentHtml({
   content: `<main class="frame contact-page" id="content"><section class="page-hero"><span class="eyebrow">SuperMega · Myanmar</span><h1 data-contact-heading>Contact SuperMega.</h1><p class="lede" data-contact-lede>SuperMega builds business software for Myanmar. Shop brings counter sales, stock and order follow-up together for retailers.</p></section><section class="contact-layout"><form class="contact-form" action="/api/contact-submissions" method="post" data-contact-form><div class="field-grid"><label>Name<input name="name" autocomplete="name" required maxlength="120" /></label><label>Email<input name="email" type="email" autocomplete="email" required maxlength="180" /></label><label class="wide">Company (optional)<input name="company" autocomplete="organization" maxlength="180" /></label><input type="hidden" name="product" value="guide" /><input type="hidden" name="template" maxlength="120" /><label class="wide">Message<textarea name="goal" required maxlength="4000" placeholder="Share a few details about your request."></textarea></label></div><input type="hidden" name="source_url" /><input type="hidden" name="referrer" /><input type="hidden" name="idempotency_key" /><input type="hidden" name="trial_claim_code" /><input type="hidden" name="proof_contract" /><input type="hidden" name="proof_version" /><input type="hidden" name="proof_digest" /><input type="hidden" name="proof_product" /><input type="hidden" name="proof_template" /><input type="hidden" name="proof_readiness" /><input type="hidden" name="proof_sources" /><input type="hidden" name="proof_behavior" /><input type="hidden" name="proof_decisions" /><input type="hidden" name="proof_raw_records" /><input type="hidden" name="proof_context_contract" /><input type="hidden" name="proof_context_digest" /><input type="hidden" name="proof_context_outcome_digest" /><input type="hidden" name="proof_context_approved" /><input type="hidden" name="proof_context_raw_records" /><input class="contact-honeypot" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" inert /><button class="button primary" type="submit">Send message</button><p class="form-status" data-form-status aria-live="polite"></p></form></section></main>${contactScript}`,
 })
 contactHtml = replaceOnce(contactHtml, 'Contact SuperMega.', 'Contact', 'contact_heading_copy')
-contactHtml = replaceOnce(contactHtml, 'SuperMega builds business software for Myanmar. Shop brings counter sales, stock and order follow-up together for retailers.', 'SuperMega builds practical business software for Myanmar. Shop helps retailers manage counter sales, stock and open orders.', 'contact_company_intro_copy')
+contactHtml = replaceOnce(contactHtml, '<span class="eyebrow">SuperMega · Myanmar</span>', '', 'contact_redundant_eyebrow')
+contactHtml = replaceOnce(contactHtml, '<h1 data-contact-heading>Contact</h1>', `<h1 data-contact-heading>Contact</h1><p class="contact-company-intro">${escapeHtml(manifest.company.statement)}</p>`, 'contact_company_intro')
+contactHtml = replaceOnce(contactHtml, 'SuperMega builds business software for Myanmar. Shop brings counter sales, stock and order follow-up together for retailers.', 'Tell us about your business and the workflow you want to improve. We will reply by email.', 'contact_company_intro_copy')
 contactHtml = replaceOnce(contactHtml, 'Share a few details about your request.', 'Tell us what your business needs.', 'contact_message_placeholder_copy')
 
-const privacyHtml = documentHtml({
+let privacyHtml = documentHtml({
   route: '/privacy/',
   title: 'Privacy | SuperMega',
   description: 'How SuperMega handles public contact requests and product implementation data.',
   content: `<main class="frame" id="content"><section class="page-hero"><span class="eyebrow">Privacy</span><h1>Collect what the work requires. Protect the rest.</h1><p class="lede">The public site uses the details you choose to send so SuperMega can respond to your request.</p></section><div class="prose"><section><h3>Site measurement</h3><p>On the production SuperMega public site, first-party Vercel Web Analytics records aggregate page views and Speed Insights measures Core Web Vitals. Before either tool starts, SuperMega allows only the four public page paths and removes query strings and fragments from the URL. SuperMega supplies no custom or conversion event, contact-form value, identity, free text, customer record, payment, or commercial proof in its measurement event fields. Vercel may add a timestamp, referrer, approximate location, browser, operating system, and device information to its aggregate reporting. Source code or a reachable script does not prove that provider telemetry was observed.</p></section><section><h3>Contact requests</h3><p>We receive your name, work email, company, selected product or template, request, source page, referrer, and an optional attached request summary, outcome status, and digest, plus an approved AI context digest and no-raw-record boundary when you attach them. We use them to reply, qualify the workflow, and prepare the next agreed step.</p></section><section><h3>Product data</h3><p>An attached request summary includes bounded readiness, source, behavior, reviewed-decision counts, and a digest-bound aggregate outcome. It excludes raw product records, questions, approval contents, and account details. Sending a request does not create an account or connect a source.</p></section><section><h3>AI processing</h3><p>Governed assistance is configured only against approved sources and roles. Consequential external actions remain behind explicit approval.</p></section><section><h3>Sharing</h3><p>We do not sell contact details. Service providers are used only where needed to host, secure, communicate, or deliver the agreed system.</p></section><section><h3>Deletion</h3><p>Email <a href="mailto:swanhtet@supermega.dev">swanhtet@supermega.dev</a> to request correction or deletion of a public contact record.</p></section></div></main>`,
 })
 
+privacyHtml = replaceOnce(privacyHtml, 'four public page paths', 'three public page paths', 'privacy_public_path_count')
+privacyHtml = replaceOnce(privacyHtml, 'your name, work email, company, selected product or template, request, source page, referrer', 'your name, email, optional company, message, product context from a Shop link, source page and referrer', 'privacy_contact_fields')
+
 const notFoundHtml = documentHtml({
   route: '/404',
   title: 'Page not found | SuperMega',
   description: 'The requested SuperMega route does not exist.',
   robots: 'noindex,nofollow',
-  content: `<main class="frame" id="content"><section class="page-hero"><span class="eyebrow">Page not found</span><h1>We couldn’t find that page.</h1><p class="lede">Find Shop on the home page.</p><div class="actions"><a class="button primary" href="/">Return home</a></div></section></main>`,
+  content: `<main class="frame" id="content"><section class="page-hero"><span class="eyebrow">Page not found</span><h1>We couldn’t find that page.</h1><p class="lede">Continue to Shop.</p><div class="actions"><a class="button primary" href="/shop/">Open Shop</a></div></section></main>`,
 })
 
 const healthFunction = `'use strict'
@@ -1537,8 +1530,8 @@ async function sendResend(record) {
   if (!key) return { status: 'skipped' }
   const to = env('SUPERMEGA_CONTACT_NOTIFY_EMAIL') || 'swanhtet@supermega.dev'
   const from = env('SUPERMEGA_CONTACT_FROM_EMAIL') || 'SuperMega <leads@supermega.dev>'
-  const body = ['New SuperMega request', '', 'Product: ' + record.workflow, 'Template: ' + (record.requested_package || 'not selected'), 'Company: ' + record.company, 'Name: ' + record.name, 'Email: ' + record.email].concat(record.raw.trial_claim_code ? ['Trial claim code: ' + record.raw.trial_claim_code] : []).concat(['', 'Operator next step: ' + record.next_step, '', 'Customer brief:', record.goal, '', 'Source: ' + record.source_url, 'Lead: ' + record.lead_id]).join('\\n')
-  const response = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { authorization: 'Bearer ' + key, 'content-type': 'application/json', 'idempotency-key': 'supermega-contact-email/' + record.lead_id }, body: JSON.stringify({ from, to: [to], reply_to: record.email, subject: 'SuperMega request — ' + record.company, text: body }), redirect: 'error', signal: AbortSignal.timeout(9000) })
+  const body = ['New SuperMega request', '', 'Product: ' + record.workflow, 'Template: ' + (record.requested_package || 'not selected'), 'Company: ' + (record.company || 'Not provided'), 'Name: ' + record.name, 'Email: ' + record.email].concat(record.raw.trial_claim_code ? ['Trial claim code: ' + record.raw.trial_claim_code] : []).concat(['', 'Operator next step: ' + record.next_step, '', 'Customer brief:', record.goal, '', 'Source: ' + record.source_url, 'Lead: ' + record.lead_id]).join('\\n')
+  const response = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { authorization: 'Bearer ' + key, 'content-type': 'application/json', 'idempotency-key': 'supermega-contact-email/' + record.lead_id }, body: JSON.stringify({ from, to: [to], reply_to: record.email, subject: 'SuperMega request — ' + (record.company || record.name), text: body }), redirect: 'error', signal: AbortSignal.timeout(9000) })
   if (!response.ok) throw new Error('email_' + response.status)
   return { status: 'ready', channel: 'email' }
 }
@@ -1547,7 +1540,7 @@ async function sendTelegram(record) {
   const token = env('TELEGRAM_BOT_TOKEN')
   const chatId = env('TELEGRAM_CHAT_ID')
   if (!token || !chatId) return { status: 'skipped' }
-  const message = ['New SuperMega request', record.company + ' · ' + record.name, record.email, 'Product: ' + record.workflow, 'Template: ' + (record.requested_package || 'not selected')].concat(record.raw.trial_claim_code ? ['Claim: ' + record.raw.trial_claim_code] : []).concat(['', 'Next: ' + record.next_step, '', 'Customer brief:', record.goal, '', record.lead_id]).join('\\n').slice(0, 3900)
+  const message = ['New SuperMega request', (record.company ? record.company + ' · ' : '') + record.name, record.email, 'Product: ' + record.workflow, 'Template: ' + (record.requested_package || 'not selected')].concat(record.raw.trial_claim_code ? ['Claim: ' + record.raw.trial_claim_code] : []).concat(['', 'Next: ' + record.next_step, '', 'Customer brief:', record.goal, '', record.lead_id]).join('\\n').slice(0, 3900)
   const response = await fetch('https://api.telegram.org/bot' + token + '/sendMessage', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ chat_id: chatId, text: message, disable_web_page_preview: true }), redirect: 'error', signal: AbortSignal.timeout(9000) })
   if (!response.ok) throw new Error('telegram_' + response.status)
   return { status: 'ready', channel: 'telegram' }
@@ -1583,7 +1576,7 @@ async function sendCustomerAcknowledgement(record) {
   if (!emailOk(record.email)) return { status: 'skipped' }
   const from = env('SUPERMEGA_CONTACT_FROM_EMAIL') || 'SuperMega <leads@supermega.dev>'
   const replyTo = env('SUPERMEGA_CONTACT_NOTIFY_EMAIL') || 'swanhtet@supermega.dev'
-  const body = ['Hi ' + record.name + ',', '', 'We received your request for ' + record.company + '.', '', acknowledgementPlan(record.workflow), '', 'Next: we review your requirements and confirm scope, price and timing.', '', 'Reference: ' + record.lead_id].concat(record.raw.trial_claim_code ? ['Workspace reference: ' + record.raw.trial_claim_code] : []).concat(['', 'Reply to this email with questions or corrections. Please do not include passwords or customer records.', '', 'SuperMega - https://supermega.dev']).join('\\n')
+  const body = ['Hi ' + record.name + ',', '', 'We received your request' + (record.company ? ' for ' + record.company : '') + '.', '', acknowledgementPlan(record.workflow), '', 'Next: we review your requirements and confirm scope, price and timing.', '', 'Reference: ' + record.lead_id].concat(record.raw.trial_claim_code ? ['Workspace reference: ' + record.raw.trial_claim_code] : []).concat(['', 'Reply to this email with questions or corrections. Please do not include passwords or customer records.', '', 'SuperMega - https://supermega.dev']).join('\\n')
   const response = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { authorization: 'Bearer ' + key, 'content-type': 'application/json', 'idempotency-key': 'supermega-contact-ack/' + record.lead_id }, body: JSON.stringify({ from, to: [record.email], reply_to: replyTo, subject: 'We received your request - SuperMega', text: body }), redirect: 'error', signal: AbortSignal.timeout(9000) })
   if (!response.ok) throw new Error('ack_email_' + response.status)
   return { status: 'ready', channel: 'ack_email' }
@@ -1606,7 +1599,7 @@ module.exports = async function handler(req, res) {
     send(res, 400, { status: 'error', reason: error?.message === 'trial_proof_invalid' ? 'trial_proof_invalid' : 'invalid_request' })
     return
   }
-  if (!safe.name || !safe.company || !safe.goal || !emailOk(safe.email)) { send(res, 400, { status: 'error', reason: 'required_fields_missing' }); return }
+  if (!safe.name || !safe.goal || !emailOk(safe.email)) { send(res, 400, { status: 'error', reason: 'required_fields_missing' }); return }
   if (!safe.product) { send(res, 400, { status: 'error', reason: 'product_not_supported' }); return }
   if (!idempotencySecret()) { send(res, 503, { status: 'error', reason: 'contact_controls_unavailable', fallback_email: 'swanhtet@supermega.dev' }); return }
   const idempotencyKey = idempotencyKeyFrom(payload, req)
@@ -1673,7 +1666,7 @@ for (const page of manifest.pages.filter((entry) => entry.productId)) {
     route: page.route, title: product.name + ' | Retained workspace access',
     description: 'Compatibility access for retained workspaces. Not offered for new-product setup.',
     robots: 'noindex,follow',
-    content: `<main class="frame" id="content"><section class="page-hero"><h1>${escapeHtml(product.name)} retained records</h1><p>This product is not offered for new setup. Existing workspace records are preserved; nothing is deleted or migrated by this page.</p><a class="button" href="/#products">View current products</a></section></main>`,
+    content: `<main class="frame" id="content"><section class="page-hero"><h1>${escapeHtml(product.name)} retained records</h1><p>This product is not offered for new setup. Existing workspace records are preserved; nothing is deleted or migrated by this page.</p><a class="button" href="/shop/">View Shop</a></section></main>`,
   }))
 }
 
@@ -1685,6 +1678,7 @@ const vercelConfig = {
     { src: '^/api/contact-submissions/?$', dest: '/api/contact-submissions.js' },
     { src: '^/api/health/?$', dest: '/api/health.js' },
     { src: '^/api/(.*)$', dest: '/api/not-found.js' },
+    { src: '^/(?:index\\.html)?$', status: 308, headers: { Location: homePage.redirectTo } },
     { src: `^/(?:${manifest.productVisibility.retainedOnlyProductIds.join('|')})(?:/.*)?$`, status: 404, dest: '/404.html' },
     ...manifest.redirects.map((redirect) => ({ src: redirect.source, status: 308, headers: { Location: manifest.customerProducts.some(product => product.publicAnchor === redirect.destination && !publicProducts.includes(product)) ? `/${manifest.customerProducts.find(product => product.publicAnchor === redirect.destination).id}/` : redirect.destination } })),
     { src: '^/__release\\.json$', headers: { 'cache-control': 'no-store, max-age=0' }, continue: true },
