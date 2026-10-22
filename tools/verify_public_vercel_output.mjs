@@ -247,7 +247,9 @@ for (const [route, page] of pages) {
   const footerBrand = `<a class="brand" href="${footerHref}" aria-label="${footerLabel}"><span class="brand-mark" aria-hidden="true">`
   if (!page.html.includes(footerBrand)) fail('shared_footer_brand_missing', { route, footerHref })
   const header = page.html.match(/<header\b[\s\S]*?<\/header>/)?.[0] || ''
-  if (/<a\b[^>]*href="[^"]*\/login(?:\?[^\"]*)?"/i.test(header) || />\s*(?:Login|အကောင့်ဝင်ရန်)\s*<\/a>/.test(header)) fail('shared_public_login_present', { route })
+  const signIn = `<a class="nav-sign-in" href="${appOrigin}/login">${page.language === 'my' ? 'ဝင်ရန်' : 'Sign in'}</a>`
+  if (countOccurrences(header, signIn) !== 1
+    || [...header.matchAll(/<a\b[^>]*href="[^"]*\/login[^"]*"[^>]*>/gi)].length !== 1) fail('shared_public_login_drift', { route })
   const expectedActive = route === '/shop/' ? 'Shop' : route === '/contact/' ? 'Contact' : route === '/my/shop/' ? 'ဆိုင်' : route === '/my/contact/' ? 'ဆက်သွယ်ရန်' : null
   const activeLinks = [...page.html.matchAll(/<a\b[^>]*aria-current="page"[^>]*>([^<]+)<\/a>/g)].map(match => match[1])
   if (activeLinks.join(',') !== (expectedActive || '')) fail('shared_navigation_active_state_drift', { route, expectedActive, activeLinks })
@@ -366,16 +368,22 @@ if (shopBody.includes('data-platform-carousel') || shopBody.includes('data-devic
   || shopBody.includes('class="pos-window"') || shopBody.includes('shop-sample-demo.js')
   || /<a\b[^>]*>\s*<img\b[^>]*src="\/images\/native-shop\//i.test(shopBody)) fail('shop_gallery_interaction_or_mock_present')
 if (shopBody.includes('>Company</a>') || shopBody.includes('href="' + appOrigin + '/login?product=shop"')
-  || /href="https:\/\/app\.supermega\.dev\//.test(shopBody)) fail('shop_public_access_scope_drift')
+  || [...shopBody.matchAll(/href="https:\/\/app\.supermega\.dev\/[^"]*"/g)].some(match => match[0] !== 'href="https://app.supermega.dev/login"')
+  || countOccurrences(shopBody, `href="${appOrigin}/login"`) !== 1) fail('shop_public_access_scope_drift')
 for (const token of [
   'class="native-shop-gallery"',
   'src="/images/native-shop/shop_checkout_1200_en.png"',
-  'src="/images/native-shop/shop_checkout_820_en.png"',
+  '<source media="(max-width:650px)" srcset="/images/native-shop/shop_checkout_390_en.png" />',
   'src="/images/native-shop/shop_today_390_en.png"',
-  'src="/images/native-shop/shop_stock_1200_en.png"',
+  'src="/images/native-shop/shop_stock_820_en.png"',
   '<source media="(max-width:650px)" srcset="/images/native-shop/shop_stock_390_en.png" />',
+  '<figcaption>Counter sale</figcaption>',
+  '<figcaption>Stock</figcaption>',
+  '<figcaption>Today</figcaption>',
   'Shop app preview with sample data and prices.',
 ]) if (!shopPage.includes(token)) fail('shop_native_gallery_missing', { token })
+if (shopPage.includes('class="native-shop-stock"') || shopPage.includes('<figcaption>Desktop')
+  || shopPage.includes('<figcaption>Tablet') || shopPage.includes('<figcaption>Phone')) fail('shop_redundant_gallery_or_device_caption')
 if (shopPage.includes('/images/actual-shop-') || shopPage.includes('Shop browser workspace')
   || shopPage.includes('Shop browser counter sale preview')
   || /no setup fee|printer-sourcing markup|Shop is subscription-only/i.test(shopPage)) fail('shop_unsupported_claim_or_old_capture')
@@ -436,9 +444,13 @@ const myContact = pages.get('/my/contact/')?.html || ''
 const myShop = pages.get('/my/shop/')?.html || ''
 for (const token of [
   'src="/images/native-shop/shop_checkout_820_my.png"',
+  '<source media="(max-width:650px)" srcset="/images/native-shop/shop_checkout_390_my.png" />',
   'src="/images/native-shop/shop_today_390_my.png"',
   'src="/images/native-shop/shop_stock_820_my.png"',
   '<source media="(max-width:650px)" srcset="/images/native-shop/shop_stock_390_my.png" />',
+  '<figcaption>ကောင်တာအရောင်း</figcaption>',
+  '<figcaption>ကုန်လက်ကျန်</figcaption>',
+  '<figcaption>ယနေ့</figcaption>',
   'နမူနာအချက်အလက်နှင့် ဈေးနှုန်းများဖြင့် ပြထားသော ဆိုင်အက်ပ်မျက်နှာပြင်များ။',
 ]) if (!myShop.includes(token)) fail('myanmar_shop_native_gallery_missing', { token })
 if (/\/images\/native-shop\/[^"]+_en\.png/.test(myShop)

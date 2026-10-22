@@ -16,13 +16,13 @@ const app = { origin: 'https://megaos-123456789-swanhtet01s-projects.vercel.app'
   projectId: 'prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG', deploymentId: 'dpl_12345678', commit }
 const policy = previewProfile({ profile: 'isolated-pair', expectedCommit: commit, appBinding: JSON.stringify(app) })
 const products = ['shop', 'website', 'ecommerce', 'plant'].map(id => ({ id }))
-const html = '<a class="button button-primary" href="/contact/?product=shop">Request a Shop walkthrough</a>'
+const html = `<a class="button button-primary" href="/contact/?product=shop">Request a Shop walkthrough</a><a class="nav-sign-in" href="${app.origin}/login">Sign in</a>`
 test('requires explicit profile, exact SHA and app binding', () => {
   for (const input of [{}, { profile: 'isolated-pair', expectedCommit: commit },
     { profile: 'isolated-pair', expectedCommit: 'main' }, { profile: 'unknown', expectedCommit: commit }]) assert.throws(() => previewProfile(input))
   assert.throws(() => previewProfile({ profile: 'isolated-pair', expectedCommit: commit, appBinding: JSON.stringify({ ...app, commit: 'b'.repeat(40) }) }))
 })
-test('paired Shop action excludes app entry, internal products and production escapes', () => {
+test('paired Shop action permits only scoped merchant sign-in and excludes internal products', () => {
   assert.deepEqual(validatePreviewLinks(html, policy, products).activeProducts, ['shop'])
   for (const wrong of [html + `<a href="${app.origin}/shop/?tab=counter">Open app</a>`, html + '<a href="https://app.supermega.dev/login?product=shop">Login</a>',
     html + '<a href="/plant/">Plant</a>', html + '<a href="/settings/?product=production">Setup</a>',
@@ -78,16 +78,16 @@ test('native gallery is read-only and no image is a preview navigation action', 
 })
 
 
-test('public site keeps the Shop walkthrough and rejects managed app links', () => {
+test('public site keeps Shop walkthrough and a single safe sign-in link', () => {
   validatePreviewLinks(html, policy, products)
-  for (const suffix of ['/login', '/login?product=shop', '/?choose=1', '/shop/?tab=today', '/settings/?product=website', '/login?product=website', '/login?product=shop&next=/shop/']) {
+  for (const suffix of ['/login?product=shop', '/?choose=1', '/shop/?tab=today', '/settings/?product=website', '/login?product=website', '/login?product=shop&next=/shop/']) {
     assert.throws(() => validatePreviewLinks(html + `<a href="${app.origin}${suffix}">Open</a>`, policy, products))
   }
-  assert.throws(() => validatePreviewLinks(html + `<a href="${app.origin}/login">Login</a>`, policy, products), /app_route_invalid/)
+  assert.throws(() => validatePreviewLinks(html + `<a href="${app.origin}/login">Login</a>`, policy, products), /action_missing:single_login/)
   assert.throws(() => validatePreviewLinks('<h1>Products</h1>', policy, products), /action_missing/)
 })
 
-test('public preview rejects sign-in actions even with a valid walkthrough', () => {
+test('public preview rejects extra or unbound sign-in actions', () => {
   for (const href of [`${app.origin}/login`, `${app.origin}/login?product=shop`, 'https://app.supermega.dev/login?product=shop']) {
     assert.throws(() => validatePreviewLinks(html + `<a href="${href}">Login</a>`, policy, products))
   }
@@ -104,7 +104,7 @@ test('Burmese routes stay within the preview boundary', () => {
   }
 })
 
-test('current generated Shop, Contact and Privacy pages have no app login or production escapes', () => {
+test('current generated Shop, Contact and Privacy pages bind one sign-in without production escapes', () => {
   for (const path of ['shop/index.html', 'contact/index.html', 'privacy/index.html', 'my/shop/index.html', 'my/contact/index.html', 'my/privacy/index.html']) {
     const source = readFileSync(resolve(staticDir, path), 'utf8')
     const canonicalSource = currentRelease.previewNavigation
@@ -113,6 +113,6 @@ test('current generated Shop, Contact and Privacy pages have no app login or pro
     const bound = bindPreviewNavigation(canonicalSource, app)
     assert.equal(validatePreviewLinks(bound, policy, products, { publicOrigin: 'https://public-preview.example', requireActions: path === 'shop/index.html' }).pairedOrigin, app.origin)
     assert.ok(!bound.includes('href="https://app.supermega.dev/'))
-    assert.ok(!bound.includes(`href="${app.origin}/`))
+    assert.equal((bound.match(new RegExp(`href="${app.origin}/login"`, 'g')) ?? []).length, 1)
   }
 })

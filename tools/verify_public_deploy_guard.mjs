@@ -63,9 +63,9 @@ for (const token of ['public_preview_action_missing', 'public_preview_app_route_
   "const appPaths = new Set(['/login'])"]) {
   requireToken(previewProfile, token, 'preview_navigation_policy_missing')
 }
-for (const token of ['guided_product_route_missing', 'guided_product_label_wrong',
-  'homepage_shop_action_missing', 'retired_shop_action_present', 'landing_contact_route_missing',
-  'retired_product_marketed', 'retired_product_boundary_missing',
+for (const token of ['root_redirect_destination_wrong', 'shop_manifest_action_missing',
+  'shop_contact_action_missing', 'landing_contact_route_missing',
+  'page_shop_sign_in_drift', 'retired_product_route_not_found', 'retired_product_content_served',
   'interface_image_reference_missing', 'interface_image_http_error',
   'interface_image_content_type_wrong', 'interface_image_invalid', 'interface_image_release_mismatch']) {
   requireToken(liveVerifier, token, 'live_navigation_contract_missing')

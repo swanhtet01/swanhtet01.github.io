@@ -36,6 +36,7 @@ export function companyShopHeaderHtml(route, locale = 'en') {
     <nav class="nav-links" aria-label="${isMyanmar ? 'အဓိက လမ်းညွှန်' : 'Main navigation'}">
       <a href="${shopHref}" ${shopActive ? 'aria-current="page"' : ''}>${isMyanmar ? 'ဆိုင်' : 'Shop'}</a>
       <a href="${contactHref}" ${contactActive ? 'aria-current="page"' : ''}>${isMyanmar ? 'ဆက်သွယ်ရန်' : 'Contact'}</a>
+      <a class="nav-sign-in" href="https://app.supermega.dev/login">${isMyanmar ? 'ဝင်ရန်' : 'Sign in'}</a>
       <a href="${switchHref}" data-language-switch hreflang="${isMyanmar ? 'en' : 'my'}">${isMyanmar ? 'အင်္ဂလိပ်' : 'မြန်မာ'}</a>
     </nav>
   </div></header>`;

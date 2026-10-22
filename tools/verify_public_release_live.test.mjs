@@ -108,7 +108,7 @@ test('current generated Shop-only pages pass exact-release checks through offlin
 for (const [mutation, failure] of [
   ['privacy-header', 'page_security_header_wrong'], ['usb-policy', 'page_security_header_wrong'],
   ['wrong-root-redirect', 'root_redirect_destination_wrong'], ['missing-company-intro', 'contact_company_intro_missing'],
-  ['extra-public-login', 'page_public_login_present'], ['missing-assisted', 'page_contact_route_missing'],
+  ['extra-public-login', 'page_shop_sign_in_drift'], ['missing-assisted', 'page_contact_route_missing'],
   ['wrong-commit', 'release_commit_wrong'], ['contact-down', 'contact_not_accepting'],
   ['old-redirect', 'redirect_destination_wrong'],
   ['pilot-pitch', 'retired_managed_pilot_pitch_present'], ['missing-source', 'contact_trial_proof_contract_missing'],

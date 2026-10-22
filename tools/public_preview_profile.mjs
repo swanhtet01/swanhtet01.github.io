@@ -37,6 +37,7 @@ export function validatePreviewLinks(html, policy, products, options = {}) {
       return String.fromCodePoint(parseInt(entity.slice(entity[2].toLowerCase() === 'x' ? 3 : 2, -1), entity[2].toLowerCase() === 'x' ? 16 : 10))
     })
   })
+  const appPaths = new Set(['/login'])
   const publicOrigin = options.publicOrigin || 'https://supermega.dev'
   for (const href of hrefs) {
     if (!href || /[\s\\]|%|&(?:#|[a-z]+;)/i.test(href) || href.startsWith('//')) throw new Error('public_preview_href_unsafe')
@@ -44,13 +45,19 @@ export function validatePreviewLinks(html, policy, products, options = {}) {
     if (href === 'mailto:swanhtet@supermega.dev') continue
     const url = new URL(href, publicOrigin)
     if (url.username || url.password || url.protocol !== 'https:') throw new Error('public_preview_href_unsafe')
-    if (url.origin === origin) throw new Error('public_preview_app_route_invalid')
+    if (url.origin === origin) {
+      if (!appPaths.has(url.pathname + url.search + url.hash)) throw new Error('public_preview_app_route_invalid')
+    }
     else if (url.origin !== publicOrigin) throw new Error('public_preview_production_escape')
     else if (!['/', '/shop/', '/contact/', '/privacy/', '/my/shop/', '/my/contact/', '/my/privacy/'].includes(url.pathname)) throw new Error('public_preview_public_route_invalid')
   }
   if (options.requireActions !== false
     && !html.includes('<a class="button button-primary" href="/contact/?product=shop">Request a Shop walkthrough</a>')) {
     throw new Error('public_preview_action_missing:shop_walkthrough')
+  }
+  const signInCount = hrefs.filter(href => href === origin + '/login').length
+  if (signInCount > 1 || (options.requireActions !== false && signInCount !== 1)) {
+    throw new Error('public_preview_action_missing:single_login')
   }
   return { activeProducts: active.map(product => product.id), pairedOrigin: origin }
 }

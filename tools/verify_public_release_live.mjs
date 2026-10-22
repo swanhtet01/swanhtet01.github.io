@@ -101,7 +101,11 @@ async function readPage(route) {
       ? 'href="/my/privacy/">ကိုယ်ရေးအချက်အလက် မူဝါဒ</a>'
       : 'href="/privacy/">Privacy</a>',
   ]) assert(html.includes(token), 'page_shared_contract_missing', { route, token })
-  assert(!/<a\b[^>]*\bhref="https:\/\/[^\"]+\/login\b[^\"]*"[^>]*>/i.test(html), 'page_public_login_present', { route })
+  const expectedSignInOpening = `<a class="nav-sign-in" href="${appOrigin}/login">`
+  const expectedSignIn = `${expectedSignInOpening}${isMyanmarPage ? 'ဝင်ရန်' : 'Sign in'}</a>`
+  const signInLinks = [...html.matchAll(/<a\b[^>]*\bhref="https:\/\/[^"]+\/login[^"]*"[^>]*>/gi)]
+  assert(html.includes(expectedSignIn) && signInLinks.length === 1 && signInLinks[0][0] === expectedSignInOpening,
+    'page_shop_sign_in_drift', { route })
   const contactRouteToken = isMyanmarPage
     ? 'href="/my/contact/">ဆက်သွယ်ရန်</a>'
     : 'href="/contact/">Contact</a>'
@@ -184,7 +188,10 @@ async function verifyOnce() {
     } else {
       assert(landing.includes('class="platform-image"'), 'landing_headline_missing', { product: product.id })
     }
-    assert(!landing.includes(`href="${appOrigin}/`), 'landing_public_app_action_present', { product: product.id })
+    const appLinks = [...landing.matchAll(/href="https:\/\/[^"]+"/g)].map(match => match[0])
+      .filter(href => href.startsWith(`href="${appOrigin}/`) || href.startsWith('href="https://app.supermega.dev/'))
+    assert(appLinks.length === 1 && appLinks[0] === `href="${appOrigin}/login"`,
+      'landing_public_app_action_drift', { product: product.id, appLinks })
     if (product.id === 'shop') {
       assert(landing.includes(shopAction), 'shop_manifest_action_missing')
       assert(landing.includes('href="/contact/?product=shop">Request a Shop walkthrough'), 'shop_contact_action_missing')
@@ -273,8 +280,8 @@ async function verifyOnce() {
   // their actual response bytes; a 200 HTML fallback must never pass as an image.
   assert(publicProducts.map(product => product.id).join(',') === 'shop', 'public_product_scope_not_shop_only')
   for (const [route, files] of Object.entries({
-    '/shop/': ['shop_checkout_1200_en.png', 'shop_checkout_820_en.png', 'shop_today_390_en.png', 'shop_stock_1200_en.png', 'shop_stock_390_en.png'],
-    '/my/shop/': ['shop_checkout_820_my.png', 'shop_today_390_my.png', 'shop_stock_820_my.png', 'shop_stock_390_my.png'],
+    '/shop/': ['shop_checkout_1200_en.png', 'shop_checkout_390_en.png', 'shop_stock_820_en.png', 'shop_stock_390_en.png', 'shop_today_390_en.png'],
+    '/my/shop/': ['shop_checkout_820_my.png', 'shop_checkout_390_my.png', 'shop_stock_820_my.png', 'shop_stock_390_my.png', 'shop_today_390_my.png'],
   })) {
     const html = pages.get(route)
     if (html == null) continue

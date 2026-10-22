@@ -119,7 +119,7 @@ test('generated public entry and contact expose only Shop', async () => {
   for (const product of activeProductContracts(manifest)) {
     const page = main(await html(product.id+'/index.html'))
     const fullPage = await html(product.id+'/index.html')
-    assert.equal((fullPage.match(/href="https:\/\/app\.supermega\.dev\/login"/g) ?? []).length, 0)
+    assert.equal((fullPage.match(/href="https:\/\/app\.supermega\.dev\/login"/g) ?? []).length, 1)
     assert.match(page, /src="\/images\/native-shop\/shop_checkout_1200_en\.png"/)
     assert.doesNotMatch(page, /data-platform-carousel|Open Ecommerce|Open Website/)
     assert.doesNotMatch(page, /product=plant|href="\/plant\//)

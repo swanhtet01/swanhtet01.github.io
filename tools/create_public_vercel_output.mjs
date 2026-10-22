@@ -850,15 +850,10 @@ function nativeShopShot(file, alt, label, loading = 'lazy', mobileFile = null) {
 }
 function nativeShopHero(locale = 'en') {
  const my = locale === 'my'
- const desktop = my ? '' : nativeShopShot('shop_checkout_1200_en.png', 'Shop counter with photographed products and a cash sale ready to record', 'Desktop · counter sale', 'eager')
- const tablet = nativeShopShot(`shop_checkout_820_${my ? 'my' : 'en'}.png`, my ? 'မြန်မာဘာသာဖြင့် ကုန်ပစ္စည်း၊ ခြင်းတောင်းနှင့် အရောင်းစုစုပေါင်းကို ပြထားသော ဆိုင်အက်ပ်၏ တက်ဘလက်မျက်နှာပြင်' : 'Shop tablet checkout with photographed products and basket', my ? 'တက်ဘလက် · ကောင်တာအရောင်း' : 'Tablet · counter sale', my ? 'eager' : 'lazy')
- const phone = nativeShopShot(`shop_today_390_${my ? 'my' : 'en'}.png`, my ? 'မြန်မာဘာသာဖြင့် ယနေ့အရောင်းနှင့် ကုန်လက်ကျန် သတိပေးချက်ကို ပြထားသော ဆိုင်အက်ပ်၏ ဖုန်းမျက်နှာပြင်' : 'Shop phone Today screen with sales and stock attention', my ? 'ဖုန်း · ယနေ့' : 'Phone · Today')
+ const desktop = nativeShopShot(my ? 'shop_checkout_820_my.png' : 'shop_checkout_1200_en.png', my ? 'မြန်မာဘာသာဖြင့် ကုန်ပစ္စည်းများနှင့် အရောင်းစုစုပေါင်းကို ပြထားသော ဆိုင်အက်ပ်' : 'Shop counter with photographed products and a cash sale ready to record', my ? 'ကောင်တာအရောင်း' : 'Counter sale', 'eager', `shop_checkout_390_${my ? 'my' : 'en'}.png`)
+ const tablet = nativeShopShot(`shop_stock_820_${my ? 'my' : 'en'}.png`, my ? 'မြန်မာဘာသာဖြင့် ကုန်လက်ကျန်နှင့် ပြန်မှာယူရန် အဆင့်ကို ပြထားသော ဆိုင်အက်ပ်၏ တက်ဘလက်မျက်နှာပြင်' : 'Shop tablet Stock screen with product photos, on-hand quantities and reorder levels', my ? 'ကုန်လက်ကျန်' : 'Stock', 'lazy', `shop_stock_390_${my ? 'my' : 'en'}.png`)
+ const phone = nativeShopShot(`shop_today_390_${my ? 'my' : 'en'}.png`, my ? 'မြန်မာဘာသာဖြင့် ယနေ့အရောင်းနှင့် ကုန်လက်ကျန် သတိပေးချက်ကို ပြထားသော ဆိုင်အက်ပ်၏ ဖုန်းမျက်နှာပြင်' : 'Shop phone Today screen with sales and stock attention', my ? 'ယနေ့' : 'Today')
  return `<section class="native-shop-gallery" aria-label="${my ? 'ဆိုင်အက်ပ် နမူနာမျက်နှာပြင်များ' : 'Shop app previews'}"><div class="wrap"><div class="native-shop-shots${my ? ' native-shop-shots-my' : ''}">${desktop}<div class="native-shop-shots-pair">${tablet}${phone}</div></div><p class="native-shop-caption" id="shop-sample-disclosure">${my ? 'နမူနာအချက်အလက်နှင့် ဈေးနှုန်းများဖြင့် ပြထားသော ဆိုင်အက်ပ်မျက်နှာပြင်များ။' : 'Shop app preview with sample data and prices.'}</p></div></section>`
-}
-function nativeShopStock(locale = 'en') {
- const my = locale === 'my'
- const image = my ? 'shop_stock_820_my.png' : 'shop_stock_1200_en.png'
- return `<section class="native-shop-stock"><div class="wrap"><div class="native-shop-stock-heading"><div><p class="eyebrow">${my ? 'ကုန်လက်ကျန်' : 'Stock'}</p><h2>${my ? 'ကုန်မပြတ်မီ သိပါ။' : 'See what needs restocking.'}</h2></div><p>${my ? 'လက်ကျန်အရေအတွက်၊ ပြန်မှာယူရမည့် အဆင့်နှင့် ကုန်လက်ကျန် ပြင်ဆင်မှုကို တစ်နေရာတည်းတွင် ကြည့်ပါ။' : 'Review on-hand quantities and reorder levels; adjust stock from the product row.'}</p></div>${nativeShopShot(image, my ? 'မြန်မာဘာသာဖြင့် ကုန်လက်ကျန်နှင့် ပြန်မှာယူရန် အဆင့်ကို ပြထားသော ဆိုင်အက်ပ်မျက်နှာပြင်' : 'Shop stock list with product photos, on-hand quantities and reorder levels', my ? 'ကုန်လက်ကျန်စာရင်း' : 'Stock list', 'lazy', `shop_stock_390_${my ? 'my' : 'en'}.png`)}</div></section>`
 }
 function productStory(id, standalone = false) {
  const item=stories[id], label=publicProducts.find(product=>product.id===id).name
@@ -901,7 +896,7 @@ function shopLandingHtml(product, page, locale = 'en') {
  }
  return documentHtml({route:page.route,title:page.title,description,shareImage:`/og-card-${product.id}.png`,locale,
   schema:{'@type':'Product',name:product.name,description,url:canonical(page.route)},
-  content:`<main id="content">${heroWithPreview}${nativeShopHero(locale)}${nativeShopStock(locale)}</main>${productAction(product)}`})
+  content:`<main id="content">${heroWithPreview}${nativeShopHero(locale)}</main>${productAction(product)}`})
 }
 
 function productLandingHtml(product,page) {

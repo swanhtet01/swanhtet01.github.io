@@ -33,7 +33,8 @@ for (const [route, html, locale] of [
   check(html.includes('<html lang="' + locale + '">'), 'locale:' + route)
   check(html.includes('<link rel="canonical" href="https://supermega.dev' + route + '" />'), 'canonical:' + route)
   check(html.includes('href="/privacy/"') || html.includes('href="/my/privacy/"'), 'privacy_link:' + route)
-  check(!/href="https:\/\/app\.supermega\.dev\/login/i.test(html), 'public_login_absent:' + route)
+  check((html.match(/<a class="nav-sign-in" href="https:\/\/app\.supermega\.dev\/login">/g) ?? []).length === 1
+    && (html.match(/href="https:\/\/app\.supermega\.dev\/login/g) ?? []).length === 1, 'single_shop_sign_in:' + route)
   check(!/href="\/(?:website|ecommerce|plant)\//.test(html), 'internal_nav_absent:' + route)
 }
 check(shop.includes('<a class="button button-primary" href="/contact/?product=shop">Request a Shop walkthrough</a>'), 'shop_single_action')
@@ -41,10 +42,12 @@ check(myShop.includes('href="/my/contact/?product=shop"'), 'my_shop_action')
 check(shop.includes('Shop app preview with sample data and prices.'), 'synthetic_data_disclosed')
 check(myShop.includes('နမူနာအချက်အလက်နှင့် ဈေးနှုန်းများ'), 'my_synthetic_data_disclosed')
 check(shop.includes('class="native-shop-gallery"') && myShop.includes('class="native-shop-gallery"'), 'native_gallery_visible')
-check(shop.includes('shop_checkout_1200_en.png') && shop.includes('shop_checkout_820_en.png') && shop.includes('shop_today_390_en.png'), 'en_three_viewports')
-check(myShop.includes('shop_checkout_820_my.png') && myShop.includes('shop_today_390_my.png'), 'my_native_captures')
+check(shop.includes('shop_checkout_1200_en.png') && shop.includes('shop_stock_820_en.png') && shop.includes('shop_today_390_en.png'), 'en_three_workflows')
+check(myShop.includes('shop_checkout_820_my.png') && myShop.includes('shop_stock_820_my.png') && myShop.includes('shop_today_390_my.png'), 'my_three_workflows')
 for (const [html, suffix] of [[shop, 'en'], [myShop, 'my']]) {
+  check(html.includes('srcset="/images/native-shop/shop_checkout_390_' + suffix + '.png"'), 'responsive_checkout_capture:' + suffix)
   check(html.includes('srcset="/images/native-shop/shop_stock_390_' + suffix + '.png"'), 'responsive_stock_capture:' + suffix)
+  check(!html.includes('native-shop-stock') && !/<figcaption>(?:Desktop|Tablet|Phone)/.test(html), 'no_redundant_device_gallery:' + suffix)
   check(!html.includes('actual-shop-') && !html.includes('capture scaled to fit'), 'retired_browser_capture_absent:' + suffix)
   check(!/<a\b[^>]*>\s*<(?:picture|img)\b/i.test(html), 'gallery_not_navigation:' + suffix)
 }
