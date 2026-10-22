@@ -2,11 +2,28 @@ import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { TextDecoder } from 'node:util'
 
 export const NATIVE_SHOP_GALLERY_DIR = 'tools/public-assets/native-shop'
 export const NATIVE_SHOP_GALLERY_URL = '/images/native-shop/'
 const pngSignature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex')
+
+// Git stores this JSON ledger with LF line endings, while a Windows checkout
+// may materialize the same tracked text with CRLF. Seal the canonical text
+// rather than checkout-specific newline bytes so the provenance receipt is
+// identical on Windows CI, Linux CI, and Vercel. No other whitespace or JSON
+// normalization is allowed: any substantive byte change still changes the
+// receipt.
+export function photoLedgerSha256(bytes) {
+  let text
+  try {
+    text = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+  } catch {
+    throw new Error('native_shop_gallery_photo_ledger_utf8_invalid')
+  }
+  return sha256(Buffer.from(text.replaceAll('\r\n', '\n'), 'utf8'))
+}
 
 function check(condition, reason) {
   if (!condition) throw new Error(`native_shop_gallery_${reason}`)
@@ -46,7 +63,7 @@ export function verifyNativeShopGallery(root, { sourceTree = true } = {}) {
     check(currentTree === manifest.nativeTree && captureTree === manifest.nativeTree, 'source_tree_drift')
   }
   const ledgerBytes = readFileSync(resolve(root, manifest.photoLedgerPath))
-  check(sha256(ledgerBytes) === manifest.photoLedgerSha256, 'photo_ledger_drift')
+  check(photoLedgerSha256(ledgerBytes) === manifest.photoLedgerSha256, 'photo_ledger_drift')
   const ledger = JSON.parse(ledgerBytes.toString('utf8'))
   check(ledger.schema === 'supermega.native_shop.synthetic_photo_ledger.v1'
     && ledger.items?.length === 5
