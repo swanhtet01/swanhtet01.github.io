@@ -2450,10 +2450,11 @@ html:lang(my) .shop-stock-workspace .stock-attention-table .data-row:not(.table-
 .shop-stock-next-item > span:last-child { justify-items: end; }
 .shop-stock-next-item strong { overflow: hidden; color: var(--core-ink); font-size: .875rem; text-overflow: ellipsis; white-space: nowrap; }
 .shop-stock-next-item small { color: var(--core-muted); font-size: .8125rem; line-height: 1.45; }
-.shop-stock-next-guidance { display: grid; gap: .625rem; padding: 1rem; }
-.shop-stock-next-guidance > div { border: 1px solid color-mix(in srgb,var(--core-accent) 12%,var(--core-line)); border-radius: .875rem; padding: .75rem; background: color-mix(in srgb,var(--core-panel) 96%,var(--core-accent) 4%); }
-.shop-stock-next-guidance span { display: block; margin-bottom: .3125rem; color: var(--core-accent); font-family: inherit; font-size: .75rem; font-weight: var(--font-weight-bold); }
-.shop-stock-next-guidance p { margin: 0; color: var(--core-muted); font-size: .8125rem; line-height: 1.5; }
+.shop-stock-next-guidance { padding: .875rem 1rem; }
+.shop-stock-next-guidance p { margin: 0; color: var(--core-muted); font-size: .875rem; line-height: 1.5; }
+.shop-stock-next-guidance details { margin-top: .625rem; border-top: 1px solid var(--core-line); padding-top: .625rem; }
+.shop-stock-next-guidance summary { color: var(--core-accent); font-size: .8125rem; font-weight: var(--font-weight-bold); cursor: pointer; }
+.shop-stock-next-guidance details p { margin-top: .5rem; }
 .shop-stock-next-action > footer { display: grid; gap: .75rem; margin-top: auto; border-top: 1px solid var(--core-line); padding: 1rem; }
 .shop-stock-next-action > footer small { color: var(--core-muted); font-size: .75rem; line-height: 1.45; }
 .shop-stock-next-action > footer .core-button { width: 100%; }
@@ -2477,8 +2478,7 @@ html:lang(my) .shop-stock-workspace .stock-attention-table .data-row:not(.table-
   .shop-stock-grid { grid-template-columns: 1fr; }
   .shop-stock-attention-card header p { display: none; }
   .shop-stock-next-action { background: var(--core-panel); box-shadow: none; }
-  .shop-stock-next-guidance { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 1rem; padding: .25rem 1rem .75rem; }
-  .shop-stock-next-guidance > div { border: 0; border-radius: 0; padding: .625rem 0; background: transparent; }
+  .shop-stock-next-guidance { padding: .875rem 1rem; }
   .shop-stock-workspace .inventory-tools-disclosure > summary strong, .shop-stock-workspace .inventory-tools-disclosure > summary small,
   .shop-stock-workspace .inventory-tools-disclosure > summary b { font-size: .8125rem; line-height: 1.35; }
   .shop-stock-module .purchase-order-list article small { font-size: .8125rem; }

@@ -8108,8 +8108,8 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
         <aside aria-labelledby="shop-stock-next-title" className="shop-stock-next-action" data-action={stockNextActionKind}>
           <header><span><span className="core-eyebrow">{uiText('Next stock action')}</span><h3 id="shop-stock-next-title">{uiText(stockNextActionTitle)}</h3></span><b>{uiText(stockNextTrack)}</b></header>
           {stockNextItem ? <div className="shop-stock-next-item"><ProductPhoto className="stock-product-photo" fallback={null} scope={productImageScope} sku={stockNextItem.sku} /><span><strong>{inventoryLocale === 'my' && stockNextItem.nameMy?.trim() ? stockNextItem.nameMy : stockNextItem.name}</strong><small>{stockNextItem.sku}</small></span><span><strong>{stockNextItem.onHand.toLocaleString()}</strong><small>{uiText('available')}</small></span></div> : null}
-          <div className="shop-stock-next-guidance"><div><span>{uiText('Why now')}</span><p>{stockNextReasonVisible}</p></div><div><span>{uiText('Owner check')}</span><p>{uiText(stockNextOwnerCheck)}</p></div></div>
-          <footer><small>{uiText('Record → recommendation → owner check → action → closure')}</small>{stockNextActionKind === 'catalog'
+          <div className="shop-stock-next-guidance"><p>{stockNextReasonVisible}</p><details><summary>{uiText('Before you continue')}</summary><p>{uiText(stockNextOwnerCheck)}</p></details></div>
+          <footer>{stockNextActionKind === 'catalog'
             ? <Link className="core-button primary" to="/shop/?tab=inventory#shop-catalog-import">{uiText('Add products')}</Link>
             : stockNextActionKind === 'restore'
               ? <Link className="core-button primary" to="/settings/#controls">{uiText('Open workspace controls')}</Link>

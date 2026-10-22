@@ -3,6 +3,7 @@
 // Keep a whole phrase as the translation unit. These labels are a source draft;
 // native review and full route coverage remain launch checks.
 export const UI_TRANSLATIONS: Readonly<Record<string, string>> = {
+  'Before you continue': 'ဆက်မလုပ်မီ စစ်ဆေးရန်',
   'Stock check': 'ကုန်လက်ကျန် စစ်ဆေးခြင်း',
   'Review a stocktake': 'လက်ကျန်ရေတွက်မှုကို စစ်ဆေးရန်',
   'Scan each item and lot, then enter its physical count including reserved units. Nothing changes until you review the full stocktake.': 'ပစ္စည်းနှင့် အသုတ်ကို စကန်ဖတ်ပြီး သီးသန့်ထားသော အရေအတွက်ပါဝင်သည့် ရေတွက်ချက်ကို ထည့်ပါ။ ရေတွက်မှုတစ်ခုလုံးကို စစ်ဆေးပြီးမှသာ မှတ်တမ်းပြောင်းမည်။',
