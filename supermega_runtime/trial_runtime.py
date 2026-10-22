@@ -65,6 +65,7 @@ from supermega_runtime.shop_sale_sync import (
     parse_device_binding,
     parse_sale_operation,
 )
+from supermega_runtime.shop_order_snapshot import project_shop_order_snapshot
 from supermega_runtime.trial_store import (
     APPROVAL_DECIDE_CAPABILITY,
     APPROVAL_REQUEST_CAPABILITY,
@@ -1411,6 +1412,40 @@ def create_trial_router(
     @router.post("/shop/sale-operations")
     async def ingest_shop_sale_operation(request: Request) -> JSONResponse:
         return await shop_sync_request(request, binding=False)
+
+    @router.get("/shop/orders")
+    async def read_shop_orders(request: Request) -> JSONResponse:
+        """Read confirmed orders from the signed-in tenant's Commerce state."""
+
+        headers = {"Cache-Control": "private, no-store", "Pragma": "no-cache"}
+        try:
+            if request.query_params:
+                raise _error(422, "shop_orders_request_invalid")
+            principal = _resolve_principal(request, resolve_principal)
+            if principal.actor_kind != "human" or principal.identity_provider != "supabase":
+                raise _error(401, "shop_orders_user_session_required")
+            readiness = _readiness(store, principal)
+            _require_read_ready(readiness)
+            if not readiness.role_ready:
+                raise _error(503, "trial_not_ready", blockers=["role_ready"])
+            if readiness.product_entitlements is None or "commerce" not in readiness.product_entitlements:
+                raise _error(403, "shop_orders_shop_entitlement_required")
+            if not has_surface_read_capability(readiness.capabilities, "commerce"):
+                raise _error(403, "trial_capability_required", required_capability="commerce.read")
+            commerce = await run_in_threadpool(_invoke, lambda: store.get_state(principal, "commerce"))
+            if not commerce.state:
+                raise _error(409, "commerce_workspace_required")
+            state = await run_in_threadpool(_invoke, lambda: validate_commerce_state(commerce.state))
+            snapshot = project_shop_order_snapshot(
+                state,
+                workspace_id=principal.workspace_id,
+                workspace_version=commerce.version,
+                workspace_updated_at=commerce.updated_at,
+            )
+            return JSONResponse(snapshot, headers=headers)
+        except HTTPException as exc:
+            exc.headers = {**(exc.headers or {}), **headers}
+            raise
 
     @router.get("/bootstrap")
     def trial_bootstrap(request: Request) -> dict[str, Any]:
