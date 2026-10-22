@@ -715,6 +715,7 @@ body[data-view="contact"] .contact-page .contact-form .button { width: max-conte
 const myanmarPublicStyle = `
   html:lang(my) .nav-links a, html:lang(my) .button, html:lang(my) .footer-links a { line-height: 1.7; }
   html:lang(my) body[data-view="shop"] .shop-hero h1 { max-width: 100%; font-size: clamp(30px, 2.65vw, 36px); line-height: 1.55; letter-spacing: 0; }
+  @media (min-width: 761px) { html:lang(my) body[data-view="shop"] .shop-hero h1 { max-width: min(100%, 740px); font-size: clamp(29px, 2.3vw, 32px); line-height: 1.38; font-weight: 600; } }
   html:lang(my) body[data-view="shop"] .shop-hero-copy > p:not(.eyebrow) { max-width: 100%; font-size: 17px; line-height: 1.85; }
   html:lang(my) body[data-view="shop"] .shop-hero-app { max-width: 1000px; }
   html:lang(my) body[data-view="shop"] .shop-lead-capture figcaption { line-height: 1.8; }
