@@ -3903,9 +3903,8 @@ void main() {
         priceMmk: 3200,
         openingStock: 4,
       );
-      Widget screen(ShopDatabase database) => MaterialApp(
-        home: StockScreen(database: database, myanmar: false),
-      );
+      Widget screen(ShopDatabase database) =>
+          MaterialApp(home: StockScreen(database: database, myanmar: false));
       await tester.pumpWidget(screen(first));
       await _settleStock(tester);
       expect(find.text('Apple'), findsOneWidget);
