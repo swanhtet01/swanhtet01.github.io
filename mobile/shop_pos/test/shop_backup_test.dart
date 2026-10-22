@@ -687,7 +687,6 @@ void main() {
 
   testWidgets('fresh install restores before Shop opens', (tester) async {
     final documents = Directory.systemTemp.createTempSync('shop-first-run-');
-    ShopDatabase? opened;
     try {
       await tester.pumpWidget(
         ShopStartup(
@@ -695,10 +694,8 @@ void main() {
           importScratchRoot: documents,
           initialMyanmar: false,
           pickBackup: () async => XFile(archive.path),
-          buildShop: (database, _) {
-            opened = database;
-            return const MaterialApp(home: Scaffold(body: Text('Opened Shop')));
-          },
+          buildShop: (_, _) =>
+              const MaterialApp(home: Scaffold(body: Text('Opened Shop'))),
         ),
       );
       await _pumpUntil(tester, find.text('Start new Shop'));
@@ -710,13 +707,10 @@ void main() {
       await tester.enterText(find.byType(TextField), _password);
       await tester.tap(find.text('Restore and open Shop'));
       await _pumpUntil(tester, find.text('Opened Shop'));
-      debugPrint('restore-widget stage 1: opened');
       expect(find.text('Opened Shop'), findsOneWidget);
       final restoredFile = ShopDatabase.privateDatabaseFile(documents);
       expect(restoredFile.existsSync(), isTrue);
-      debugPrint('restore-widget stage 2: before snapshot verification');
       ShopBackup.verifySnapshot(restoredFile);
-      debugPrint('restore-widget stage 3: snapshot verified');
       final restored = sqlite3.open(restoredFile.path, mode: OpenMode.readOnly);
       try {
         final products = restored.select(
@@ -729,17 +723,11 @@ void main() {
       } finally {
         restored.close();
       }
-      debugPrint('restore-widget stage 4: row assertions complete');
     } finally {
-      debugPrint('restore-widget stage 5: teardown starts');
       await tester.pumpWidget(const SizedBox.shrink());
-      debugPrint('restore-widget stage 6: widget removed');
-      await tester.runAsync(() async {
-        await opened?.close();
-      });
-      debugPrint('restore-widget stage 7: Drift closed');
+      // The static builder never queries the lazy executor; the normal-async
+      // Drift reopen test above verifies opening, querying, and closing it.
       documents.deleteSync(recursive: true);
-      debugPrint('restore-widget stage 8: temp removed');
     }
   });
 
@@ -768,9 +756,7 @@ void main() {
       expect(opened, isNotNull);
     } finally {
       await tester.pumpWidget(const SizedBox.shrink());
-      await tester.runAsync(() async {
-        await opened?.close();
-      });
+      // The static builder does not open Drift's lazy executor.
       documents.deleteSync(recursive: true);
     }
   });
@@ -779,7 +765,6 @@ void main() {
     tester,
   ) async {
     final documents = Directory.systemTemp.createTempSync('shop-wrong-pass-');
-    ShopDatabase? opened;
     try {
       await tester.pumpWidget(
         ShopStartup(
@@ -787,10 +772,8 @@ void main() {
           importScratchRoot: documents,
           initialMyanmar: false,
           pickBackup: () async => XFile(archive.path),
-          buildShop: (database, _) {
-            opened = database;
-            return const MaterialApp(home: Scaffold(body: Text('Opened Shop')));
-          },
+          buildShop: (_, _) =>
+              const MaterialApp(home: Scaffold(body: Text('Opened Shop'))),
         ),
       );
       await _pumpUntil(tester, find.text('Start new Shop'));
@@ -808,9 +791,6 @@ void main() {
       expect(find.text('Opened Shop'), findsOneWidget);
     } finally {
       await tester.pumpWidget(const SizedBox.shrink());
-      await tester.runAsync(() async {
-        await opened?.close();
-      });
       documents.deleteSync(recursive: true);
     }
   });
@@ -870,9 +850,7 @@ void main() {
       ShopBackup.verifySnapshot(ShopDatabase.privateDatabaseFile(documents));
     } finally {
       await tester.pumpWidget(const SizedBox.shrink());
-      await tester.runAsync(() async {
-        await opened?.close();
-      });
+      // The static builder does not open Drift's lazy executor.
       documents.deleteSync(recursive: true);
     }
   });
