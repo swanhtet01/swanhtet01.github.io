@@ -3596,33 +3596,37 @@ class _ShopHomeState extends State<ShopHome> {
         // The operator has already confirmed the incoming wallet payment.
         // A failed local commit must never look like permission to charge
         // the customer again or discard the persisted pending intent.
-        await showDialog<void>(
-          context: context,
-          barrierDismissible: false,
-          builder: (dialogContext) => AlertDialog(
-            scrollable: true,
-            title: Text(
-              shopCopy(
-                widget.myanmar,
-                'Check payment before retrying',
-                'ထပ်မကြိုးစားမီ ငွေပေးချေမှုကို စစ်ပါ',
-              ),
-            ),
-            content: Text(
-              shopCopy(
-                widget.myanmar,
-                'You marked this payment as received, but the sale could not be confirmed. Keep it pending. Check Recent sales and your wallet record before retrying. Do not ask the customer to pay again.',
-                'ငွေလက်ခံပြီးကြောင်း သင်မှတ်သားခဲ့သော်လည်း အရောင်းကို အတည်မပြုနိုင်သေးပါ။ ဆိုင်းငံ့ထားပါ။ ထပ်မကြိုးစားမီ မကြာသေးသောအရောင်းများနှင့် မိုဘိုင်းငွေလက်ခံမှုမှတ်တမ်းကို စစ်ပါ။ ဝယ်သူကို ထပ်မံငွေပေးခိုင်းခြင်း မပြုပါနှင့်။',
-              ),
-            ),
-            actions: [
-              FilledButton(
-                onPressed: () => Navigator.of(dialogContext).pop(),
-                child: Text(
-                  shopCopy(widget.myanmar, 'Keep pending', 'ဆိုင်းငံ့ထားပါ'),
+        // Keep the cashier's action future free to finish while this
+        // persistent recovery prompt remains open for acknowledgement.
+        unawaited(
+          showDialog<void>(
+            context: context,
+            barrierDismissible: false,
+            builder: (dialogContext) => AlertDialog(
+              scrollable: true,
+              title: Text(
+                shopCopy(
+                  widget.myanmar,
+                  'Check payment before retrying',
+                  'ထပ်မကြိုးစားမီ ငွေပေးချေမှုကို စစ်ပါ',
                 ),
               ),
-            ],
+              content: Text(
+                shopCopy(
+                  widget.myanmar,
+                  'You marked this payment as received, but the sale could not be confirmed. Keep it pending. Check Recent sales and your wallet record before retrying. Do not ask the customer to pay again.',
+                  'ငွေလက်ခံပြီးကြောင်း သင်မှတ်သားခဲ့သော်လည်း အရောင်းကို အတည်မပြုနိုင်သေးပါ။ ဆိုင်းငံ့ထားပါ။ ထပ်မကြိုးစားမီ မကြာသေးသောအရောင်းများနှင့် မိုဘိုင်းငွေလက်ခံမှုမှတ်တမ်းကို စစ်ပါ။ ဝယ်သူကို ထပ်မံငွေပေးခိုင်းခြင်း မပြုပါနှင့်။',
+                ),
+              ),
+              actions: [
+                FilledButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: Text(
+                    shopCopy(widget.myanmar, 'Keep pending', 'ဆိုင်းငံ့ထားပါ'),
+                  ),
+                ),
+              ],
+            ),
           ),
         );
       }
