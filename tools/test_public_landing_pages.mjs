@@ -308,6 +308,7 @@ for (const hostname of ['supermega.dev', 'www.supermega.dev']) {
   check(JSON.stringify(analyticsBeforeSend({ type: 'pageview', url: `https://${hostname}/shop/?campaign=private#fragment` })) === JSON.stringify({ type: 'pageview', url: `https://${hostname}/shop/` }), `public_analytics_strips_query_and_hash:${hostname}`)
   check(analyticsBeforeSend({ type: 'event', url: `https://${hostname}/shop/` }) === null, `public_analytics_custom_event_rejected:${hostname}`)
   check(analyticsBeforeSend({ type: 'pageview', url: `https://${hostname}/private/` }) === null, `public_analytics_unknown_path_rejected:${hostname}`)
+  check(analyticsBeforeSend({ type: 'pageview', url: `https://${hostname}/` }) === null, `public_analytics_redirect_root_rejected:${hostname}`)
   check(analyticsBeforeSend({ type: 'pageview', url: 'https://example.test/shop/' }) === null, `public_analytics_cross_origin_rejected:${hostname}`)
   check(JSON.stringify(speedBeforeSend({ type: 'vital', url: `https://${hostname}/contact/?email=private#fragment`, route: '/unsafe' })) === JSON.stringify({ type: 'vital', url: `https://${hostname}/contact/`, route: '/contact/' }), `public_speed_strips_query_hash_and_route:${hostname}`)
   check(speedBeforeSend({ type: 'custom', url: `https://${hostname}/` }) === null, `public_speed_non_vital_rejected:${hostname}`)
@@ -317,7 +318,7 @@ for (const [hostname, protocol] of [['preview.vercel.app', 'https:'], ['supermeg
   check(execution.appended.length === 0 && execution.window.vaq === undefined && execution.window.siq === undefined, `public_observability_non_production_inert:${protocol}//${hostname}`)
 }
 const privacy = readStatic('privacy/index.html')
-for (const token of ['Site measurement', 'four public page paths', 'removes query strings and fragments', 'SuperMega supplies no custom or conversion event', 'Vercel may add a timestamp, referrer', 'Source code or a reachable script does not prove that provider telemetry was observed.']) {
+for (const token of ['Site measurement', 'three public page paths', 'removes query strings and fragments', 'SuperMega supplies no custom or conversion event', 'Vercel may add a timestamp, referrer', 'Source code or a reachable script does not prove that provider telemetry was observed.']) {
   check(privacy.includes(token), `public_observability_privacy_disclosure:${token}`)
 }
 
