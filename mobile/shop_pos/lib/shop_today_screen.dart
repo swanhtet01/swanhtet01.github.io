@@ -38,9 +38,8 @@ class ShopTaskPageHeader extends StatelessWidget {
             children: [
               Text(
                 title,
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontSize: headingSize,
-                ),
+                style: Theme.of(context).textTheme.headlineSmall
+                    ?.copyWith(fontSize: headingSize),
               ),
               if (subtitle != null) ...[
                 const SizedBox(height: 4),
@@ -178,6 +177,7 @@ class ShopTodayScreen extends StatefulWidget {
   const ShopTodayScreen({
     required this.database,
     required this.myanmar,
+    required this.hasCounterDraft,
     required this.onNewSale,
     required this.onAddFirstProduct,
     required this.onSales,
@@ -190,6 +190,7 @@ class ShopTodayScreen extends StatefulWidget {
 
   final ShopDatabase database;
   final bool myanmar;
+  final bool hasCounterDraft;
   final ShopTodayDestination onNewSale;
   final ShopTodayDestination onAddFirstProduct;
   final ShopTodayDestination onSales;
@@ -431,8 +432,12 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
                     const SizedBox(height: 12),
                     FilledButton.icon(
                       onPressed: _openSale,
-                      icon: const Icon(Icons.point_of_sale_outlined),
-                      label: Text(_copy('New sale', 'အရောင်းအသစ်')),
+                      icon: Icon(
+                        widget.hasCounterDraft
+                            ? Icons.play_arrow_rounded
+                            : Icons.point_of_sale_outlined,
+                      ),
+                      label: Text(_saleActionLabel),
                     ),
                   ],
                 ] else
@@ -545,20 +550,23 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
     trailing: showNewSale
         ? FilledButton.icon(
             onPressed: () => _openSale(),
-            icon: const Icon(Icons.add),
-            label: Text(_copy('New sale', 'အရောင်းအသစ်')),
+            icon: Icon(
+              widget.hasCounterDraft ? Icons.play_arrow_rounded : Icons.add,
+            ),
+            label: Text(_saleActionLabel),
           )
         : null,
   );
+
+  String get _saleActionLabel => widget.hasCounterDraft
+      ? _copy('Continue sale', 'အရောင်းဆက်ရန်')
+      : _copy('New sale', 'အရောင်းအသစ်');
 
   Widget _salesPreview(_TodaySnapshot snapshot) => _previewPanel(
     title: _copy('Recent sales', 'မကြာသေးမီက အရောင်းများ'),
     action: _copy('View sales', 'အရောင်းကြည့်ရန်'),
     onOpen: () => _open(widget.onSales),
-    rows: [
-      for (final sale in snapshot.recentSales)
-        _recentSaleRow(sale),
-    ],
+    rows: [for (final sale in snapshot.recentSales) _recentSaleRow(sale)],
   );
 
   Widget _recentSaleRow(ShopSaleReceipt sale) => LayoutBuilder(
@@ -583,9 +591,8 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
             DateTime.fromMillisecondsSinceEpoch(sale.createdAtMillis),
           ),
         ),
-        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-          color: Theme.of(context).colorScheme.onSurfaceVariant,
-        ),
+        style: Theme.of(context).textTheme.bodyMedium
+            ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
       );
       final amount = Text(
         _money(sale.totalMmk),

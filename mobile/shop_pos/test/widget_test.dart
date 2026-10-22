@@ -534,6 +534,8 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.text('Continue sale'), findsOneWidget);
+      expect(find.text('New sale'), findsNothing);
+      expect(find.text('Unfinished sale'), findsNothing);
       await tester.tap(find.text('Continue sale'));
       await tester.pumpAndSettle();
       expect(
@@ -553,6 +555,48 @@ void main() {
       Navigator.of(tester.element(restoredNotice)).pop();
       await tester.pumpAndSettle();
       expect(restoredNotice, findsNothing);
+      expect(tester.takeException(), isNull);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+      await database.close();
+    }
+  });
+
+  testWidgets('Burmese tablet Today continues one saved sale', (tester) async {
+    tester.view.physicalSize = const Size(820, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final database = ShopDatabase(NativeDatabase.memory());
+    try {
+      await database.addProduct(
+        id: 'water',
+        name: 'ရေသန့်',
+        priceMmk: 1500,
+        openingStock: 5,
+      );
+      await database.saveCounterSaleDraft(
+        operationId: 'burmese-saved-sale',
+        quantities: const {'water': 2},
+      );
+      await tester.pumpWidget(
+        ShopApp(
+          database: database,
+          authClient: null,
+          apiBaseUrl: 'https://example.invalid',
+          initialMyanmar: true,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('အရောင်းဆက်ရန်'), findsOneWidget);
+      expect(find.text('အရောင်းအသစ်'), findsNothing);
+      expect(find.text('မပြီးသေးသော အရောင်း'), findsNothing);
+      await tester.tap(find.text('အရောင်းဆက်ရန်'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('အရောင်းစစ်ရန်'), findsOneWidget);
+      expect((await database.readCounterSaleDraft())?.quantities, {'water': 2});
+      expect(await database.countSales(), 0);
       expect(tester.takeException(), isNull);
     } finally {
       await tester.pumpWidget(const SizedBox.shrink());

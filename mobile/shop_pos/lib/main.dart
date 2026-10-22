@@ -437,83 +437,17 @@ class _ShopAppState extends State<ShopApp> {
                               builder: (context, constraints) => IndexedStack(
                                 index: _workspaceTab,
                                 children: [
-                                  Column(
-                                    children: [
-                                      if (_hasCounterDraft)
-                                        Padding(
-                                          padding: const EdgeInsets.fromLTRB(
-                                            16,
-                                            12,
-                                            16,
-                                            0,
-                                          ),
-                                          child: Card(
-                                            child: Padding(
-                                              padding: const EdgeInsets.all(12),
-                                              child: LayoutBuilder(
-                                                builder: (context, size) {
-                                                  final title = Text(
-                                                    shopCopy(
-                                                      _myanmar,
-                                                      'Unfinished sale',
-                                                      'မပြီးသေးသော အရောင်း',
-                                                    ),
-                                                    style: Theme.of(context)
-                                                        .textTheme
-                                                        .titleSmall,
-                                                  );
-                                                  final action = TextButton(
-                                                    onPressed: () => unawaited(
-                                                      _openCounter(context),
-                                                    ),
-                                                    child: Text(
-                                                      shopCopy(
-                                                        _myanmar,
-                                                        'Continue sale',
-                                                        'အရောင်းဆက်ရန်',
-                                                      ),
-                                                    ),
-                                                  );
-                                                  if (size.maxWidth < 420) {
-                                                    return Column(
-                                                      crossAxisAlignment:
-                                                          CrossAxisAlignment
-                                                              .start,
-                                                      children: [
-                                                        title,
-                                                        Align(
-                                                          alignment: Alignment
-                                                              .centerRight,
-                                                          child: action,
-                                                        ),
-                                                      ],
-                                                    );
-                                                  }
-                                                  return Row(
-                                                    children: [
-                                                      Expanded(child: title),
-                                                      action,
-                                                    ],
-                                                  );
-                                                },
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      Expanded(
-                                        child: ShopTodayScreen(
-                                          database: widget.database,
-                                          myanmar: _myanmar,
-                                          embeddedTaskShell: true,
-                                          refreshToken: _todayRefreshToken,
-                                          onNewSale: _openCounter,
-                                          onAddFirstProduct: _openFirstProduct,
-                                          onSales: _openSales,
-                                          onStock: _openStock,
-                                          onSettings: _openSettings,
-                                        ),
-                                      ),
-                                    ],
+                                  ShopTodayScreen(
+                                    database: widget.database,
+                                    myanmar: _myanmar,
+                                    hasCounterDraft: _hasCounterDraft,
+                                    embeddedTaskShell: true,
+                                    refreshToken: _todayRefreshToken,
+                                    onNewSale: _openCounter,
+                                    onAddFirstProduct: _openFirstProduct,
+                                    onSales: _openSales,
+                                    onStock: _openStock,
+                                    onSettings: _openSettings,
                                   ),
                                   if (_counterOpened)
                                     ShopHome(
@@ -1209,7 +1143,8 @@ class _ShopHomeState extends State<ShopHome> {
                                   SizedBox(
                                     key: const ValueKey('shop-split-basket'),
                                     width: cartWidth,
-                                    child: _cart.isEmpty &&
+                                    child:
+                                        _cart.isEmpty &&
                                             !_recoveredDraft &&
                                             _pendingWalletCheckout == null
                                         ? _emptyCartPanel()
@@ -1898,17 +1833,11 @@ class _ShopHomeState extends State<ShopHome> {
                           _mmk(item.priceMmk),
                           style: _shopMoneyStyle(context),
                         ),
-                        Text(
-                          stock,
-                          style: stockStyle,
-                        ),
+                        Text(stock, style: stockStyle),
                       ],
                     )
                   else
-                    Text(
-                      stock,
-                      style: stockStyle,
-                    ),
+                    Text(stock, style: stockStyle),
                 ],
               ),
               trailing: compactProductRow
