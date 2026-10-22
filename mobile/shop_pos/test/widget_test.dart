@@ -2890,11 +2890,18 @@ void main() {
         findsOneWidget,
       );
       expect(thirdRow, findsOneWidget);
-      expect(fourthRow, findsOneWidget);
       final navigationTop = tester.getTopLeft(find.byType(NavigationBar)).dy;
       expect(tester.getBottomLeft(thirdRow).dy, lessThan(navigationTop));
-      await tester.ensureVisible(fourthRow);
+      await tester.scrollUntilVisible(
+        fourthRow,
+        120,
+        scrollable: find.ancestor(
+          of: thirdRow,
+          matching: find.byType(Scrollable),
+        ).first,
+      );
       await tester.pumpAndSettle();
+      expect(fourthRow, findsOneWidget);
       expect(tester.getBottomLeft(fourthRow).dy, lessThan(navigationTop + 1));
       expect(tester.getSize(thirdRow).height, greaterThanOrEqualTo(44));
       expect(
@@ -4598,11 +4605,9 @@ void main() {
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
       expect(find.text('Resume payment'), findsOneWidget);
-      final addToSaleRow = find.descendant(
-        of: find.byTooltip('Finish the pending payment first'),
-        matching: find.byType(ListTile),
-      );
-      expect(tester.widget<ListTile>(addToSaleRow.first).onTap, isNull);
+      final addToSaleRow = find.byKey(const ValueKey('shop-catalog-row:tea'));
+      expect(find.byTooltip('Finish the pending payment first'), findsOneWidget);
+      expect(tester.widget<InkWell>(addToSaleRow).onTap, isNull);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpWidget(
         ShopApp(
