@@ -1,6 +1,6 @@
 # SuperMega Supergoal
 
-- Version: 2.0.2
+- Version: 2.0.3
 - Owners: Swan Htet (technical) and Vivian (operations and business)
 - Updated: 2026-10-22
 - Status: ACTIVE — Shop has a verified internal candidate; it is not yet a
@@ -32,11 +32,13 @@ Included now:
 - fast catalog entry, barcode/scanner use, offline cash sales, stock movement,
   daily operating records, export, backup, and restore;
 - manual wallet confirmation that never implies automatic settlement;
-- a source-level, audit-preserving full-sale reversal core that never rewrites an
-  original sale, never restocks without an explicit choice, and never treats a
-  local wallet record as proof that money moved; trustworthy operator
-  authorization/action and any partial-return or exchange scope remain release
-  gates;
+- a source-level, audit-preserving full-sale reversal core, a default-dark
+  managed owner receipt issuer, a strict native client, and an immutable local
+  workspace anchor; together they never rewrite an original sale, never restock
+  without an explicit choice, and never treat a local wallet record as proof
+  that money moved;
+  authenticated discovery, a trustworthy operator action, hosted authorization
+  proof, and any partial-return or exchange scope remain release gates;
 - ESC/POS receipt work that remains gated by real printer evidence;
 - English and Burmese operator quality;
 - honest public Shop evidence and a bounded path to installation and support.
@@ -165,8 +167,9 @@ widen the task.
 
 1. Swan and Vivian decide whether full-sale reversal is sufficient for launch
    or partial returns/exchanges remain required.
-2. Add and verify the connected owner-only correction authorization/action, or
-   keep correction unavailable while the database/authentication gate is paused.
+2. Keep the issuer default-dark while hosted authorization proof is absent;
+   wire authenticated managed-workspace discovery and the guarded native
+   correction action only after the complete authority boundary is proven.
 3. Review the protected public preview for the current Shop candidate.
 4. Produce installed restart/restore and physical scanner/printer evidence.
 5. Run Vivian's complete merchant-journey acceptance.

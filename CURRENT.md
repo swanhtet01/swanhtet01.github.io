@@ -42,18 +42,19 @@ owner-approved product outcome and gate require it.
 | Item | Current fact |
 | --- | --- |
 | Integration PR | [#734 — Unify Shop app first-use and public launch candidate](https://github.com/swanhtet01/swanhtet01.github.io/pull/734) |
-| State | Open draft; mergeable at the last check; not merged or deployed |
+| State | Open draft; not merged or deployed |
 | Integration branch | `codex/shop-public-main-port-20261022` |
 | Base / later promotion envelope | `codex/shop-main-integration-20261022` / PR #730 |
-| Last verified product-code anchor | `f5605ded96c28c85af040889d56ec534863c36ee` |
-| Native Shop tree | `b457c14b0053523833e610bc8a3cab54e1a47927` |
+| Last fully green product-code anchor | `f5605ded96c28c85af040889d56ec534863c36ee` |
+| Native Shop tree at the fully green anchor | `b457c14b0053523833e610bc8a3cab54e1a47927` |
+| Latest source increment | `1f99c20e1f8c78500114f82a56442fe96385798d` |
+| Native Shop tree at the latest source | `7d5a26ecd4b593c69024e87a26b34a202a71076d` |
 | UI lane | #749 integrated and frozen for acceptance |
 | Paused lanes | #750 low-stock focus; Connected Orders server/sync work |
 
-Documentation commits after the product-code anchor do not by themselves
-invalidate its product tree evidence, but they also do not create a new signed
-or accepted release. Before go/no-go, bind all required checks and review to the
-actual final PR head.
+The latest source increment does not inherit the fully green anchor's evidence.
+It has not created a signed or accepted release. Before go/no-go, bind all
+required checks and review to the actual final PR head.
 
 ## Verified evidence at the product-code anchor
 
@@ -69,6 +70,20 @@ The same-repository pull-request App CI entry is expected to skip because the
 push check is canonical. Unsigned CI packages are QA artifacts, not supported
 installers or a public release.
 
+## Latest source verification status
+
+- Source review and focused tests cover the default-dark owner authorization
+  issuer, strict native receipt client, immutable schema-v12 workspace anchor,
+  cross-workspace and retry rejection, migration, and encrypted-backup
+  validation.
+- The exact-head App CI is not green. Its digest-bound PostgreSQL-17 rehearsal
+  evidence still names the earlier implementation digest; refreshing that
+  receipt requires the real isolated PostgreSQL-17 rehearsal, not a hand edit
+  or verifier bypass.
+- The fully green anchor above remains the last all-passing CI set. Individual
+  exact-head checks for the latest source do not promote it to an accepted
+  candidate while App CI or any other required gate remains unsuccessful.
+
 ## Included candidate work
 
 - English and Burmese typography and operator-facing layout improvements.
@@ -77,11 +92,20 @@ installers or a public release.
 - Backup validation for required tables, columns, wallet intent semantics,
   basket arithmetic, pending uniqueness, and fail-closed malformed restores.
 - Restore safety for SQLite `-wal`, `-shm`, and rollback-journal sidecars.
-- Schema-v11 append-only full-sale reversal records preserve original sale and
+- Schema-v12 append-only full-sale reversal records preserve original sale and
   price snapshots, require an explicit all-or-none restock choice, bind each
   cash command to the reviewed open shift, and leave wallet reversals externally
   pending until a separate evidenced reconciliation records `money_returned`
   or `payment_not_received`.
+- A default-dark managed endpoint can issue a five-minute, exact-command owner
+  receipt only after a live Supabase human session, active membership,
+  `commerce.write`, exact workspace ownership, and Shop entitlement checks. A
+  strict native client is pinned to `app.supermega.dev`, rejects redirects and
+  malformed or cross-identity receipts, and has one bounded request deadline.
+- Each schema-v12 database can be attached once to an explicitly selected
+  managed workspace. Immutable storage and SQLite triggers reject unbound or
+  cross-workspace reversal and reconciliation writes, including replay paths;
+  correction receipts cannot create or switch that binding.
 - Duplicate/retry protection and restore verification recompute reversal,
   reconciliation, outbox, stock-movement, and cash-close evidence. Immutable
   sales, sale lines, stock movements, and audit records fail closed on
@@ -96,12 +120,19 @@ installers or a public release.
 - Physical scanner and 58 mm / 80 mm Burmese printer behavior is not accepted.
 - Installed process-kill/restart/restore behavior is not accepted on the target
   device set.
-- The source-level full-sale reversal and wallet-reconciliation core is
-  implemented and regression-tested, but no trusted operator-facing action
-  exists. `ShopCorrectionAuthorization` is audit evidence, not authority;
-  correction must remain unavailable until a connected owner-only verifier and
-  action are implemented and proven, or the database/authentication pause
-  changes through the applicable decision.
+- The source contains a default-dark owner-only receipt issuer, strict native
+  client, and immutable local workspace anchor, but no authenticated discovery
+  wiring or trusted operator-facing correction action. The locally constructible
+  workspace selection is an anchor, not authentication evidence. The unkeyed
+  receipt digest proves field consistency rather than server authenticity,
+  receipt consumption is not globally enforced across cloned databases, and
+  native expiry still depends on device time. Keep correction unavailable until
+  those boundaries and real PostgreSQL/RLS tenant isolation, revoked-session,
+  replay, and owner-transfer behavior are proven.
+- Pre-hardening schema-v11 wallet-reconciliation rows that used the earlier
+  four-key fingerprint intentionally fail current replay and restore. Before
+  launch, prove no retained candidate data needs compatibility or add an
+  explicit versioned migration.
 - Swan and Vivian have not accepted full-sale-only correction as sufficient for
   launch. Partial returns and exchanges are not implemented and were not
   silently removed from the release gate.
@@ -136,9 +167,11 @@ and do not archive the local source yet.
 
 1. Swan and Vivian record whether full-sale-only correction is acceptable for
    launch or partial returns and exchanges remain required.
-2. Implement and verify the connected owner-only correction authorization and
-   action when the database/authentication gate permits it; otherwise keep the
-   action unavailable.
+2. Keep the issuer default-dark while hosted authorization proof is absent.
+   Wire authenticated managed-workspace discovery and the guarded native
+   correction action only after disposable real PostgreSQL/RLS tenant,
+   revocation, replay, owner-transfer, and expiry evidence passes; otherwise
+   keep the action unavailable.
 3. Then review protected preview, installed restart/restore, scanner/printer,
    and Vivian merchant-journey evidence at one exact PR head, followed by
    independent review and the joint go/no-go decision.
