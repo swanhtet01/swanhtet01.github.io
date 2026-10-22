@@ -19,6 +19,13 @@ from supermega_runtime.shop_inventory_runtime import (
     ShopInventoryValidationError,
     restamp_latest_shop_inventory_command,
 )
+from supermega_runtime.shop_sale_sync import (
+    ShopSaleOperation,
+    ShopSyncDeviceConflict,
+    ShopSyncDeviceNotBound,
+    ShopSyncOperationConflict,
+    sale_acknowledgement,
+)
 
 
 TRIAL_SCHEMA_COMPONENT = "private_trial_backend"
@@ -710,6 +717,21 @@ if TRIAL_SCHEMA_VERSION >= 12:
         }
     )
 
+if TRIAL_SCHEMA_VERSION >= 14:
+    _SHOP_SYNC_IMMUTABLE_TRIGGER = {
+        "event_mask": 27,
+        "function_name": "reject_shop_sale_sync_mutation",
+        "function_source": """
+            begin
+              raise exception using errcode = '55000', message = 'Shop sale sync records are immutable';
+            end
+        """,
+    }
+    _PRIVATE_HARDENING_TRIGGER_CONTRACT.update({
+        (table, f"{table}_immutable"): _SHOP_SYNC_IMMUTABLE_TRIGGER
+        for table in ("shop_sales", "shop_stock_movements", "shop_sale_operations")
+    })
+
 
 class TrialStoreError(RuntimeError):
     """Base class for safe, expected trial-store failures."""
@@ -1015,6 +1037,12 @@ class ApprovalRecord:
 
 class TrialStore(Protocol):
     def readiness(self, principal: TrialPrincipal | None) -> TrialReadiness: ...
+
+    def bind_shop_sync_device(self, principal: TrialPrincipal, *, device_id: str) -> JsonObject: ...
+
+    def ingest_shop_sale_operation(
+        self, principal: TrialPrincipal, operation: ShopSaleOperation,
+    ) -> JsonObject: ...
 
     def list_actor_workspaces(
         self,
@@ -3833,6 +3861,80 @@ class PostgresTrialStore:
         )
 
     @staticmethod
+    def _assert_shop_sync_schema(cursor: Any) -> None:
+        """Reject a v14 target missing private RLS or the narrow Shop grants."""
+        cursor.execute(
+            """
+            with shop_tables as (
+              select class.oid, class.relname, class.relrowsecurity, class.relforcerowsecurity
+              from pg_class class
+              join pg_namespace schema on schema.oid = class.relnamespace
+              where schema.nspname = 'app_private'
+                and class.relname in (
+                  'shop_sync_devices', 'shop_sales', 'shop_stock_movements',
+                  'shop_sale_operations'
+                )
+            ), shop_policies as (
+              select policy.polcmd, policy.polroles, policy.polqual, policy.polwithcheck,
+                     policy.polrelid
+              from pg_policy policy join shop_tables table_record on table_record.oid = policy.polrelid
+            )
+            select
+              (select count(*) = 4 and bool_and(relrowsecurity and relforcerowsecurity)
+               from shop_tables) as tables_force_rls,
+              (select count(*) = 9 and
+                 count(distinct (polrelid, polcmd)) = 9 and
+                 bool_and(
+                   (polcmd = 'r' and polqual is not null and
+                    pg_get_expr(polqual, polrelid) like '%shop_sync_can_write%')
+                   or (polcmd = 'a' and polwithcheck is not null and
+                    pg_get_expr(polwithcheck, polrelid) like '%shop_sync_can_write%')
+                   or (polcmd = 'w' and polqual is not null and polwithcheck is not null
+                    and pg_get_expr(polqual, polrelid) like '%shop_sync_can_write%'
+                    and pg_get_expr(polwithcheck, polrelid) like '%shop_sync_can_write%')
+                 ) and
+                 bool_and(polroles = array[(select oid from pg_roles
+                    where rolname = 'supermega_trial_backend')]::oid[])
+               from shop_policies) as policies_scoped,
+              (select count(*) = 1 and bool_and(
+                 not function_record.prosecdef
+                 and function_record.provolatile = 's'
+                 and function_record.proconfig = array['search_path=pg_catalog, app_private']::text[]
+                 and md5(replace(function_record.prosrc, E'\\r\\n', E'\\n')) =
+                   '08bd03394dacc60070d1c200f022fee0'
+                 and has_function_privilege('supermega_trial_backend', function_record.oid, 'EXECUTE')
+                 and not has_function_privilege('anon', function_record.oid, 'EXECUTE')
+                 and not has_function_privilege('authenticated', function_record.oid, 'EXECUTE')
+                 and not has_function_privilege('service_role', function_record.oid, 'EXECUTE')
+               )
+               from pg_proc function_record
+               join pg_namespace schema on schema.oid = function_record.pronamespace
+               where schema.nspname = 'app_private'
+                 and function_record.proname = 'shop_sync_can_write') as invoker_function,
+              (select bool_and(
+                 has_table_privilege('supermega_trial_backend', oid, 'SELECT')
+                 and has_table_privilege('supermega_trial_backend', oid, 'INSERT')
+                 and (case when relname = 'shop_sync_devices'
+                   then has_column_privilege(
+                     'supermega_trial_backend', oid, 'last_seen_at', 'UPDATE')
+                     and not has_column_privilege(
+                       'supermega_trial_backend', oid, 'status', 'UPDATE')
+                   else not has_table_privilege('supermega_trial_backend', oid, 'UPDATE')
+                 end)
+                 and not has_table_privilege('supermega_trial_backend', oid, 'DELETE')
+                 and not has_table_privilege('anon', oid, 'SELECT')
+                 and not has_table_privilege('authenticated', oid, 'SELECT')
+                 and not has_table_privilege('service_role', oid, 'SELECT')
+               ) from shop_tables) as grants_scoped
+            """
+        )
+        row = cursor.fetchone() or {}
+        if not all(bool(row.get(check)) for check in (
+            "tables_force_rls", "policies_scoped", "invoker_function", "grants_scoped",
+        )):
+            raise TrialNotReadyError(("shop_sync_schema_ready",))
+
+    @staticmethod
     def _assert_active_identity_session(cursor: Any, principal: TrialPrincipal) -> None:
         if principal.identity_provider != "supabase":
             return
@@ -4024,6 +4126,8 @@ class PostgresTrialStore:
         from .core_security_catalog import core_security_catalog_verified
         if not core_security_catalog_verified(cursor, TRIAL_SCHEMA_VERSION):
             raise TrialNotReadyError(("schema_ready",))
+        if TRIAL_SCHEMA_VERSION >= 14:
+            PostgresTrialStore._assert_shop_sync_schema(cursor)
 
     @staticmethod
     def _assert_runtime_role(cursor: Any) -> None:
@@ -5059,6 +5163,139 @@ class PostgresTrialStore:
         result = row.get("result_json") or {}
         return json.loads(result) if isinstance(result, str) else result
 
+    def bind_shop_sync_device(self, principal: TrialPrincipal, *, device_id: str) -> JsonObject:
+        if TRIAL_SCHEMA_VERSION < 14:
+            raise TrialNotReadyError(("shop_sync_schema_ready",))
+        normalized = principal.normalized()
+        if normalized.actor_kind != "human" or normalized.identity_provider != "supabase":
+            raise TrialNotReadyError(("auth_ready",))
+        with self._guarded_cursor(normalized, write=True, capability="commerce.write") as (cursor, _):
+            self._lock(cursor, f"{normalized.workspace_id}:shop-sale-sync")
+            if "commerce" not in self._product_entitlements(cursor, normalized.workspace_id):
+                raise TrialPermissionDenied("product.commerce")
+            cursor.execute(
+                """select device_id, bound_by, bound_at from app_private.shop_sync_devices
+                   where workspace_id = %s and status = 'active'""",
+                (normalized.workspace_id,),
+            )
+            active = cursor.fetchone()
+            if active:
+                if active["device_id"] != device_id:
+                    raise ShopSyncDeviceConflict("Another selling device is already bound.")
+                if active["bound_by"] != normalized.actor_id:
+                    raise ShopSyncDeviceNotBound("This device is bound to a different operator.")
+                bound_at = active["bound_at"]
+                replay = True
+            else:
+                cursor.execute(
+                    """select status from app_private.shop_sync_devices
+                       where workspace_id = %s and device_id = %s""",
+                    (normalized.workspace_id, device_id),
+                )
+                if cursor.fetchone():
+                    raise ShopSyncDeviceConflict("A revoked device cannot be rebound.")
+                cursor.execute(
+                    """insert into app_private.shop_sync_devices
+                       (workspace_id, device_id, bound_by) values (%s, %s, %s)
+                       returning bound_at""",
+                    (normalized.workspace_id, device_id, normalized.actor_id),
+                )
+                bound_at = cursor.fetchone()["bound_at"]
+                replay = False
+        return {
+            "contract": "supermega.shop.device_binding.v1",
+            "workspaceId": normalized.workspace_id,
+            "deviceId": device_id,
+            "boundAt": _iso_timestamp(bound_at),
+            "idempotentReplay": replay,
+        }
+
+    def ingest_shop_sale_operation(
+        self, principal: TrialPrincipal, operation: ShopSaleOperation,
+    ) -> JsonObject:
+        if TRIAL_SCHEMA_VERSION < 14:
+            raise TrialNotReadyError(("shop_sync_schema_ready",))
+        normalized = principal.normalized()
+        if normalized.actor_kind != "human" or normalized.identity_provider != "supabase":
+            raise TrialNotReadyError(("auth_ready",))
+        if normalized.workspace_id != operation.workspace_id:
+            raise ShopSyncOperationConflict("Sale workspace changed after validation.")
+        with self._guarded_cursor(normalized, write=True, capability="commerce.write") as (cursor, _):
+            self._lock(cursor, f"{normalized.workspace_id}:shop-sale-sync")
+            if "commerce" not in self._product_entitlements(cursor, normalized.workspace_id):
+                raise TrialPermissionDenied("product.commerce")
+            cursor.execute(
+                """update app_private.shop_sync_devices
+                   set last_seen_at = transaction_timestamp()
+                   where workspace_id = %s and device_id = %s and status = 'active'
+                     and bound_by = %s
+                   returning bound_by""",
+                (normalized.workspace_id, operation.device_id, normalized.actor_id),
+            )
+            device = cursor.fetchone()
+            if not device or device["bound_by"] != normalized.actor_id:
+                raise ShopSyncDeviceNotBound("Selling device is not bound to this operator and workspace.")
+            cursor.execute(
+                """select fingerprint, sale_id, server_revision, accepted_at
+                   from app_private.shop_sale_operations
+                   where workspace_id = %s and device_id = %s and operation_id = %s""",
+                (normalized.workspace_id, operation.device_id, operation.operation_id),
+            )
+            prior = cursor.fetchone()
+            if prior:
+                if prior["fingerprint"] != operation.fingerprint or prior["sale_id"] != operation.sale_id:
+                    raise ShopSyncOperationConflict("Operation ID was already used with different sale details.")
+                return sale_acknowledgement(
+                    operation, server_revision=int(prior["server_revision"]),
+                    accepted_at=prior["accepted_at"], replay=True,
+                )
+            cursor.execute(
+                """select 1 from app_private.shop_sales
+                   where workspace_id = %s and sale_id = %s""",
+                (normalized.workspace_id, operation.sale_id),
+            )
+            if cursor.fetchone():
+                raise ShopSyncOperationConflict("Sale ID was already used by another operation.")
+            cursor.execute(
+                """insert into app_private.shop_sales
+                   (workspace_id, sale_id, device_id, operation_id, payment_method,
+                    total_mmk, created_at_millis, shift_id, lines_json)
+                   values (%s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb)""",
+                (
+                    normalized.workspace_id, operation.sale_id, operation.device_id,
+                    operation.operation_id, operation.payment_method, operation.total_mmk,
+                    operation.created_at_millis, operation.shift_id,
+                    json.dumps(operation.lines, ensure_ascii=False),
+                ),
+            )
+            for line in operation.lines:
+                cursor.execute(
+                    """insert into app_private.shop_stock_movements
+                       (workspace_id, sale_id, product_id, quantity_delta, reason)
+                       values (%s, %s, %s, %s, %s)""",
+                    (
+                        normalized.workspace_id, operation.sale_id, line["productId"],
+                        -line["quantity"], f"{operation.payment_method}_sale",
+                    ),
+                )
+            cursor.execute(
+                """insert into app_private.shop_sale_operations
+                   (workspace_id, device_id, operation_id, sale_id, event_type,
+                    fingerprint, accepted_by)
+                   values (%s, %s, %s, %s, %s, %s, %s)
+                   returning server_revision, accepted_at""",
+                (
+                    normalized.workspace_id, operation.device_id, operation.operation_id,
+                    operation.sale_id, operation.event_type, operation.fingerprint,
+                    normalized.actor_id,
+                ),
+            )
+            accepted = cursor.fetchone()
+        return sale_acknowledgement(
+            operation, server_revision=int(accepted["server_revision"]),
+            accepted_at=accepted["accepted_at"], replay=False,
+        )
+
     def apply_command(
         self,
         principal: TrialPrincipal,
@@ -5774,6 +6011,11 @@ class InMemoryTrialStore:
         self._self_serve_attempts: dict[str, int] = {}
         self._workspace_labels: dict[str, str] = {}
         self._workspace_product_entitlements: dict[str, tuple[str, ...]] = {}
+        self._shop_sync_devices: dict[tuple[str, str], dict[str, str]] = {}
+        self._shop_sale_operations: dict[tuple[str, str, str], tuple[str, int, str]] = {}
+        self._shop_sales: dict[tuple[str, str], tuple[str, str, str]] = {}
+        self._shop_stock_movements: list[tuple[str, str, str, int]] = []
+        self._shop_server_revision = 0
         self._lock = RLock()
 
     def provision_membership(
@@ -5995,6 +6237,87 @@ class InMemoryTrialStore:
         if capability and capability not in readiness.capabilities:
             raise TrialPermissionDenied(capability)
         return normalized, readiness
+
+    def bind_shop_sync_device(self, principal: TrialPrincipal, *, device_id: str) -> JsonObject:
+        with self._lock:
+            normalized, readiness = self._guard(principal, write=True, capability="commerce.write")
+            if readiness.product_entitlements is None or "commerce" not in readiness.product_entitlements:
+                raise TrialPermissionDenied("product.commerce")
+            if normalized.actor_kind != "human" or normalized.identity_provider != "supabase":
+                raise TrialNotReadyError(("auth_ready",))
+            active = next(
+                (row for (workspace, _), row in self._shop_sync_devices.items()
+                 if workspace == normalized.workspace_id and row["status"] == "active"),
+                None,
+            )
+            if active:
+                if active["device_id"] != device_id:
+                    raise ShopSyncDeviceConflict("Another selling device is already bound.")
+                if active["bound_by"] != normalized.actor_id:
+                    raise ShopSyncDeviceNotBound("This device is bound to a different operator.")
+                row = active
+                replay = True
+            else:
+                if (normalized.workspace_id, device_id) in self._shop_sync_devices:
+                    raise ShopSyncDeviceConflict("A revoked device cannot be rebound.")
+                row = {
+                    "device_id": device_id,
+                    "bound_by": normalized.actor_id,
+                    "bound_at": _utc_now(),
+                    "status": "active",
+                }
+                self._shop_sync_devices[(normalized.workspace_id, device_id)] = row
+                replay = False
+            return {
+                "contract": "supermega.shop.device_binding.v1",
+                "workspaceId": normalized.workspace_id,
+                "deviceId": device_id,
+                "boundAt": row["bound_at"],
+                "idempotentReplay": replay,
+            }
+
+    def ingest_shop_sale_operation(
+        self, principal: TrialPrincipal, operation: ShopSaleOperation,
+    ) -> JsonObject:
+        with self._lock:
+            normalized, readiness = self._guard(principal, write=True, capability="commerce.write")
+            if readiness.product_entitlements is None or "commerce" not in readiness.product_entitlements:
+                raise TrialPermissionDenied("product.commerce")
+            if normalized.actor_kind != "human" or normalized.identity_provider != "supabase":
+                raise TrialNotReadyError(("auth_ready",))
+            if normalized.workspace_id != operation.workspace_id:
+                raise ShopSyncOperationConflict("Sale workspace changed after validation.")
+            device = self._shop_sync_devices.get((normalized.workspace_id, operation.device_id))
+            if not device or device["status"] != "active" or device["bound_by"] != normalized.actor_id:
+                raise ShopSyncDeviceNotBound("Selling device is not bound to this operator and workspace.")
+            key = (normalized.workspace_id, operation.device_id, operation.operation_id)
+            prior = self._shop_sale_operations.get(key)
+            if prior:
+                fingerprint, revision, accepted_at = prior
+                if fingerprint != operation.fingerprint:
+                    raise ShopSyncOperationConflict("Operation ID was already used with different sale details.")
+                return sale_acknowledgement(
+                    operation, server_revision=revision, accepted_at=accepted_at, replay=True,
+                )
+            sale_key = (normalized.workspace_id, operation.sale_id)
+            if sale_key in self._shop_sales:
+                raise ShopSyncOperationConflict("Sale ID was already used by another operation.")
+            self._shop_server_revision += 1
+            accepted_at = _utc_now()
+            self._shop_sales[sale_key] = (
+                operation.device_id, operation.operation_id, operation.fingerprint,
+            )
+            self._shop_stock_movements.extend(
+                (normalized.workspace_id, operation.sale_id, line["productId"], -line["quantity"])
+                for line in operation.lines
+            )
+            self._shop_sale_operations[key] = (
+                operation.fingerprint, self._shop_server_revision, accepted_at,
+            )
+            return sale_acknowledgement(
+                operation, server_revision=self._shop_server_revision,
+                accepted_at=accepted_at, replay=False,
+            )
 
     def get_state(self, principal: TrialPrincipal, surface: str) -> TrialState:
         normalized, readiness = self._guard(principal, write=False)

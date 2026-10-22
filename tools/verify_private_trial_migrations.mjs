@@ -33,6 +33,9 @@ const outOfScopeMigrations = [
   // Uses a privileged, transaction-scoped role to exercise FORCE RLS and is
   // covered by the disposable PostgreSQL 17 rehearsal instead of PGlite.
   '20261020175519_access_control_member_read_hardening.sql',
+  // v14 Shop sale sync is reviewed by a separate disposable PostgreSQL 17
+  // rehearsal; this verifier's PGlite catalog remains the canonical v13 chain.
+  '20261022052731_shop_sale_operation_sync.sql',
 ]
 const expectedMigrations = [
   '20260722004500_private_trial_backend_role_preflight.sql',

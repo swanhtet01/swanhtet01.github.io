@@ -85,6 +85,7 @@ DOMAIN_CANDIDATE_MIGRATIONS = (DOMAIN_CANDIDATE_MIGRATION, DOMAIN_CORRECTIVE_MIG
 DORMANT_CANDIDATE_MIGRATIONS = (
     "20261016143945_optimize_sites_inquiry_rls_initplans.sql",
 )
+SHOP_SYNC_CANDIDATE_MIGRATION = "20261022052731_shop_sale_operation_sync.sql"
 RUNTIME_ROLE = "supermega_trial_login"
 DATABASE_NAME = "supermega_rehearsal"
 RESTORE_DATABASE_NAME = "supermega_rehearsal_restore"
@@ -242,7 +243,8 @@ def _source_identity(expected_head: str | None) -> dict[str, str]:
         raise RehearsalFailure("source_head_mismatch")
     observed = tuple(sorted(path.name for path in MIGRATION_DIRECTORY.glob("*.sql")
         if path.name not in ("20260711081300_public_legacy_baseline.sql",
-                             *DOMAIN_CANDIDATE_MIGRATIONS, *DORMANT_CANDIDATE_MIGRATIONS)))
+                             *DOMAIN_CANDIDATE_MIGRATIONS, *DORMANT_CANDIDATE_MIGRATIONS,
+                             SHOP_SYNC_CANDIDATE_MIGRATION)))
     if observed != CURRENT_MIGRATIONS:
         raise RehearsalFailure("private_migration_inventory_mismatch")
     return {"head": expected_head, "tree": git("rev-parse", "HEAD^{tree}"),
