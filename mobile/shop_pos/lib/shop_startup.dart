@@ -223,6 +223,7 @@ class _ShopStartupState extends State<ShopStartup> {
     } catch (_) {
       if (mounted) {
         setState(() {
+          _selectedArchive = archive;
           _message = shopCopy(
             _myanmar,
             'Could not clear the temporary backup copy. Close and reopen Shop.',
