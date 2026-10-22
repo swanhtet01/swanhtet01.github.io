@@ -8096,15 +8096,6 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
             </div>
           </div>
           {stockCatalogRows.length ? <div aria-label={uiText('Other products')} className="shop-stock-catalog-preview" role="list"><div className="shop-stock-catalog-preview-heading"><strong>{uiText('Other products')}</strong><span>{stockCatalogRows.length} {uiText(stockCatalogRows.length === 1 ? 'item' : 'items')}</span></div>{stockCatalogRows.slice(0, 4).map(({ item }) => <div className="shop-stock-catalog-preview-row" key={item.sku} role="listitem"><ProductPhoto className="stock-product-photo" fallback={null} scope={productImageScope} sku={item.sku} /><span className="shop-stock-catalog-preview-name"><strong lang={inventoryLocale === 'my' && item.nameMy ? 'my' : undefined}>{inventoryLocale === 'my' && item.nameMy?.trim() ? item.nameMy : item.name}</strong><small>{item.sku}</small></span><span className="shop-stock-catalog-preview-quantity"><strong>{item.onHand.toLocaleString()}</strong><small>{uiText('Available')}</small></span><strong className="shop-stock-catalog-preview-price">{formatMoney(item.price)}</strong></div>)}</div> : null}
-          <details className="inventory-tools-disclosure stock-catalog-disclosure">
-            <summary><span><strong>{uiText('View all products')}</strong><small>{uiText('Healthy stock, pricing, and reorder levels')}</small></span><b>{stockCatalogRows.length} {uiText(stockCatalogRows.length === 1 ? 'item' : 'items')}</b></summary>
-            <div className="stock-catalog-content">
-                <div className="data-table" data-stock-list="catalog" role="table" aria-label={uiText('Other Shop products')}>
-                  <div className="data-row table-head" role="row"><span role="columnheader">{uiText('Item')}</span><span role="columnheader">{uiText('Available')}</span><span role="columnheader">{uiText('Reorder')}</span><span role="columnheader">{uiText('Price')}</span><span role="columnheader">{uiText('Next step')}</span></div>
-                  {stockCatalogRows.length ? stockCatalogRows.map(renderStockRow) : <div className="data-row stock-empty-row" role="row"><span role="cell"><strong>{uiText('No other products.')}</strong><small>{uiText('Every current product appears in the action list above.')}</small></span></div>}
-              </div>
-            </div>
-          </details>
         </section>
         <aside aria-labelledby="shop-stock-next-title" className="shop-stock-next-action" data-action={stockNextActionKind}>
           <header><span><span className="core-eyebrow">{uiText('Next stock action')}</span><h3 id="shop-stock-next-title">{uiText(stockNextActionTitle)}</h3></span><b>{uiText(stockNextTrack)}</b></header>
@@ -8117,6 +8108,15 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
               : <button className="core-button primary" disabled={commerceControlsDisabled || !stockNextItem} onClick={() => stockNextActionKind === 'count' ? openStockCount() : stockNextItem ? openPurchaseOrder(stockNextItem.sku) : undefined} type="button">{uiText(stockNextActionKind === 'pending' ? 'Pending review' : stockNextActionKind === 'receive' ? purchaseOrderDraft?.mode === 'receive' ? 'Continue receipt' : 'Receive stock' : stockNextActionKind === 'create' ? purchaseOrderDraft?.mode === 'create' ? 'Continue purchase order' : 'Create purchase order' : stockCountDraft ? 'Continue count' : 'Count stock')}</button>}</footer>
         </aside>
       </div>
+      <details className="inventory-tools-disclosure stock-catalog-disclosure">
+        <summary><span><strong>{uiText('Manage products')}</strong></span></summary>
+        <div className="stock-catalog-content">
+          <div className="data-table" data-stock-list="catalog" role="table" aria-label={uiText('Other Shop products')}>
+            <div className="data-row table-head" role="row"><span role="columnheader">{uiText('Item')}</span><span role="columnheader">{uiText('Available')}</span><span role="columnheader">{uiText('Reorder')}</span><span role="columnheader">{uiText('Price')}</span><span role="columnheader">{uiText('Next step')}</span></div>
+            {stockCatalogRows.length ? stockCatalogRows.map(renderStockRow) : <div className="data-row stock-empty-row" role="row"><span role="cell"><strong>{uiText('No other products.')}</strong><small>{uiText('Every current product appears in the action list above.')}</small></span></div>}
+          </div>
+        </div>
+      </details>
       {catalogEditDraft && catalogEditItem ? <form aria-labelledby="catalog-item-editor-title" className="stock-receipt-editor" id="catalog-item-editor" onSubmit={reviewCatalogItemUpdate} ref={catalogEditEditorRef}>
         <div className="stock-receipt-copy">
           <span className="core-eyebrow">Edit item</span>

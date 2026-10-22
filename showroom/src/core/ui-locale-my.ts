@@ -226,7 +226,7 @@ export const UI_TRANSLATIONS: Readonly<Record<string, string>> = {
   'No stock needs action.': 'စစ်ဆေးရန် လက်ကျန် မရှိပါ။',
   'Count stock or open other products only when needed.': 'လိုအပ်မှ လက်ကျန်ကို ရေတွက်ပါ သို့မဟုတ် အခြားပစ္စည်းများကို ဖွင့်ကြည့်ပါ။',
   'Other products': 'အခြားကုန်ပစ္စည်းများ',
-  'View all products': 'ကုန်ပစ္စည်းအားလုံး ကြည့်ရန်',
+  'Manage products': 'ကုန်ပစ္စည်းများ စီမံရန်',
   'Add product': 'ကုန်ပစ္စည်းထည့်ရန်',
   'Help': 'အကူအညီ',
   'Catalog values, counts, stock orders, receipts, and cancellations require attributable confirmation. Supplier contact, payment, and accounting remain outside this workflow.': 'ကုန်ပစ္စည်းအချက်အလက်၊ လက်ကျန်ရေတွက်မှု၊ ဝယ်ယူမှုအော်ဒါ၊ ပစ္စည်းလက်ခံမှုနှင့် ပယ်ဖျက်မှုများကို တာဝန်ရှိသူက အတည်ပြုမှ မှတ်တမ်းတင်ပါသည်။ ပေးသွင်းသူထံ ဆက်သွယ်ခြင်း၊ ငွေပေးချေခြင်းနှင့် စာရင်းကိုင်စာရင်းသွင်းခြင်း မပါဝင်ပါ။',

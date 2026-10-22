@@ -499,9 +499,9 @@ async function main() {
       { fixturePath: '/shop/', tab: 'orders', selector: '.orders-module', forbiddenText: ['Payment and handoff recorded'] }))
     await clickText(cdp, sessionId, 'Show Inventory')
     await waitFor(cdp, sessionId, 'Inventory')
-    captures.push(await capture(cdp, sessionId, output, 'actual-shop-inventory', ['Inventory', 'Stock', 'View all products', 'Red apple (each)'],
+    captures.push(await capture(cdp, sessionId, output, 'actual-shop-inventory', ['Inventory', 'Stock', 'Manage products', 'Red apple (each)'],
       { fixturePath: '/shop/', tab: 'inventory', selector: '.shop-stock-module', imageSelector: '.shop-stock-catalog-preview .stock-product-photo', images: 4, forbiddenText: ['Payment and handoff recorded'] }))
-    captures.push(await captureTablet(cdp, sessionId, output, 'actual-shop-inventory-tablet', ['Inventory', 'Stock', 'View all products', 'Red apple (each)'],
+    captures.push(await captureTablet(cdp, sessionId, output, 'actual-shop-inventory-tablet', ['Inventory', 'Stock', 'Manage products', 'Red apple (each)'],
       { fixturePath: '/shop/', tab: 'inventory', selector: '.shop-stock-module', forbiddenText: ['Payment and handoff recorded'] }))
     captures.push(await captureMobile(cdp, sessionId, output, 'actual-shop-inventory-mobile', ['Inventory', 'Stock'],
       { fixturePath: '/shop/', tab: 'inventory', selector: '.shop-stock-module', forbiddenText: ['Payment and handoff recorded'] }))
@@ -544,7 +544,7 @@ async function main() {
     await clickText(cdp, sessionId, 'Show Inventory')
     await waitFor(cdp, sessionId, 'ကုန်ပစ္စည်းလက်ကျန်')
     const myInventoryText = await evaluate(cdp, sessionId, `document.querySelector('.shop-stock-workspace')?.innerText || ''`)
-    if (/Inventory|Stock alerts|Count stock|Other products|View all products|Add product|Help|Red apple \(each\)|Purchasing & locations|Supplier to confirm/.test(myInventoryText))
+    if (/Inventory|Stock alerts|Count stock|Other products|Manage products|Add product|Help|Red apple \(each\)|Purchasing & locations|Supplier to confirm/.test(myInventoryText))
       throw new Error('myanmar_inventory_default_view_contains_english')
     const myStockLabels = await evaluate(cdp, sessionId, `(() => {
       const row=document.querySelector('.stock-attention-table .data-row:not(.table-head)');
