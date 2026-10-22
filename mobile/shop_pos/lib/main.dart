@@ -1675,11 +1675,7 @@ class _ShopHomeState extends State<ShopHome> {
           : null,
       prefixIcon: const Icon(Icons.search),
       hintText: MediaQuery.sizeOf(context).width < 420
-          ? shopCopy(
-              widget.myanmar,
-              'Search or scan',
-              'ပစ္စည်းရှာရန်',
-            )
+          ? shopCopy(widget.myanmar, 'Search or scan', 'ပစ္စည်းရှာရန်')
           : shopCopy(
               widget.myanmar,
               'Search name, barcode or SKU',
