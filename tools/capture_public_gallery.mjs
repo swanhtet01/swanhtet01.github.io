@@ -153,7 +153,7 @@ async function capture(cdp, sessionId, output, name, expectedTexts, view) {
       const node = document.querySelector(${JSON.stringify(view.selector)});
       const bounds = node?.getBoundingClientRect();
       const images = [...document.querySelectorAll(${JSON.stringify(view.imageSelector || 'img')})];
-      return { path: location.pathname, route: window.__qaGalleryRoute ?? null,
+      return { path: location.pathname, locale: document.documentElement.lang, route: window.__qaGalleryRoute ?? null,
         tab: window.__qaGalleryTab ?? null, visible: Boolean(bounds && bounds.bottom > 0 && bounds.top < innerHeight && bounds.right > 0 && bounds.left < innerWidth),
         imageCount: images.length, loadedImages: images.filter(image => image.complete && image.naturalWidth > 0).length };
     })()`)
@@ -164,7 +164,8 @@ async function capture(cdp, sessionId, output, name, expectedTexts, view) {
     const routeMatches = expectedRoute ? actualRoute?.pathname === expectedRoute.pathname
       && [...expectedRoute.searchParams].every(([key, value]) => actualRoute.searchParams.get(key) === value)
       : actualRoute === null
-    if (state.path === view.fixturePath && routeMatches && state.tab === (view.tab || null)
+    if (state.path === view.fixturePath && (!view.uiLocale || state.locale === view.uiLocale)
+      && routeMatches && state.tab === (view.tab || null)
       && state.visible && state.imageCount >= (view.images || 0) && state.loadedImages >= (view.images || 0)) {
       viewVerified = true
       break
@@ -209,7 +210,8 @@ async function capture(cdp, sessionId, output, name, expectedTexts, view) {
   if (width !== (view.width || 1440) || height !== (view.height || 900)) throw new Error(`capture_dimensions_invalid:${name}:${width}x${height}`)
   await writeFile(resolve(output, `${name}.png`), bytes, { flag: 'wx' })
   return { file: `${name}.png`, width, height, sha256: createHash('sha256').update(bytes).digest('hex'),
-    fixturePath: view.fixturePath, routeState: lastState.route || lastState.tab, visibleSelector: view.selector, loadedImages }
+    fixturePath: view.fixturePath, routeState: lastState.route || lastState.tab, uiLocale: lastState.locale,
+    visibleSelector: view.selector, loadedImages }
 }
 
 async function captureMobile(cdp, sessionId, output, name, expectedTexts, view) {
@@ -383,6 +385,17 @@ async function main() {
       { fixturePath: '/shop/', tab: 'counter', selector: '.shop-counter-grid', scrollToTop: true, imageSelector: '.shop-product-art.shop-product-photo', images: 1 }))
     captures.push(await captureMobile(cdp, sessionId, output, 'actual-shop-sell-mobile', ['Products', 'KAUNG 90 Days Rice'],
       { fixturePath: '/shop/', tab: 'counter', selector: '.shop-counter-grid', imageSelector: '.shop-product-art.shop-product-photo', images: 1 }))
+    const myLocale = await evaluate(cdp, sessionId, `window.__qaSetLocale('my').then(() => ({ selected: window.__qaReadLocale(), lang: document.documentElement.lang }))`)
+    if (myLocale.selected !== 'my' || myLocale.lang !== 'my') throw new Error(`myanmar_shop_locale_not_ready:${JSON.stringify(myLocale)}`)
+    captures.push(await capture(cdp, sessionId, output, 'actual-shop-sell-my', ['ကုန်ပစ္စည်းများ', 'လက်ရှိ အရောင်း', 'ငွေသား', 'လာယူရန် ပစ္စည်းသီးသန့်ထားရန်'],
+      { fixturePath: '/shop/', tab: 'counter', uiLocale: 'my', selector: '.shop-current-sale', imageSelector: '.shop-product-art.shop-product-photo', images: 1 }))
+    captures.push(await captureTablet(cdp, sessionId, output, 'actual-shop-sell-my-tablet', ['ကုန်ပစ္စည်းများ', 'လက်ရှိ အရောင်း'],
+      { fixturePath: '/shop/', tab: 'counter', uiLocale: 'my', selector: '.shop-counter-grid', scrollToTop: true, imageSelector: '.shop-product-art.shop-product-photo', images: 1 }))
+    captures.push(await captureMobile(cdp, sessionId, output, 'actual-shop-sell-my-mobile', ['ကုန်ပစ္စည်းများ', 'လက်ရှိ အရောင်း'],
+      { fixturePath: '/shop/', tab: 'counter', uiLocale: 'my', selector: '.shop-counter-grid', imageSelector: '.shop-product-art.shop-product-photo', images: 1 }))
+    const restoredLocale = await evaluate(cdp, sessionId, `window.__qaSetLocale('en').then(() => ({ selected: window.__qaReadLocale(), lang: document.documentElement.lang }))`)
+    if (restoredLocale.selected !== 'en' || restoredLocale.lang !== 'en') throw new Error(`english_shop_locale_not_restored:${JSON.stringify(restoredLocale)}`)
+    await waitFor(cdp, sessionId, 'Current sale')
     await clickSelector(cdp, sessionId, '.shop-review-sale')
     await waitFor(cdp, sessionId, 'Review counter sale')
     await typeInto(cdp, sessionId, '.accountable-action-gate input', 'Synthetic cashier')
