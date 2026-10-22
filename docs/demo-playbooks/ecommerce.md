@@ -2,22 +2,22 @@
 
 ## 1. Client and the 30-second pitch
 
-Current public page:
+Retained internal manifest record:
 
 - `Commerce | Your product catalog | SuperMega`
-- `Help customers browse your products and prepare a request. Your team confirms availability, orders and payment.`
+- `The SuperMega team manages the Shop-backed catalog and reviews customer requests before any order or payment is confirmed.`
 
-The public website shows interface screenshots and one Login. Contact is in the footer. It has no sample, trial, setup or product-launch buttons.
+The public website presents Shop only, with Contact and a secondary Sign in link. The public Commerce route returns 404; this record is for internal operators, not a customer acquisition page.
 
 Use this as a service walkthrough. The product route is not proof of a provisioned business, published deliverable or completed customer acceptance.
 
 ## 2. Pre-demo setup
 
-Use an isolated browser profile and synthetic business details. Customer entry starts at `/ecommerce/` or `Login`; it does not require customers to configure a sample workspace. Internal legacy setup routes are retained for rehearsals only. Never reset existing customer work for a presentation.
+Use an isolated browser profile and synthetic business details. Enter through an authorized internal account at `https://app.supermega.dev/ecommerce/`; do not direct customers to `/ecommerce/`. Internal legacy setup routes are retained for rehearsals only. Never reset existing customer work for a presentation.
 
 ## 3. Demo script
 
-1. Open `/ecommerce/` without a saved workspace override. Verify the business brief is shown for an unsigned visitor.
+1. Open `https://app.supermega.dev/ecommerce/` in the authorized internal account. Check the actual entry state before continuing; an unsigned visitor is not a customer-access proof.
 2. Enter a fictional business name and concise requirements. Use only facts supplied for the exercise; leave unknown details unresolved.
 3. Use the optional reference field when there is a relevant source. Check that entered facts remain intact before continuing.
 4. Choose `Continue` and verify that the handoff preserves the product and brief. Stop before sending customer details unless that submission is authorized.
