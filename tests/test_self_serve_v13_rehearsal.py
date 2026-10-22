@@ -40,7 +40,8 @@ class FullChainProofContractTests(unittest.TestCase):
         actual = sorted(p.name for p in (proof.ROOT / "supabase/migrations").glob("*.sql")
                         if p.name not in ("20260711081300_public_legacy_baseline.sql",
                                           *proof.pg.DOMAIN_CANDIDATE_MIGRATIONS,
-                                          *proof.pg.DORMANT_CANDIDATE_MIGRATIONS))
+                                          *proof.pg.DORMANT_CANDIDATE_MIGRATIONS,
+                                          proof.pg.SHOP_SYNC_CANDIDATE_MIGRATION))
         self.assertEqual(list(proof.MIGRATIONS), actual)
         for candidate in proof.pg.DOMAIN_CANDIDATE_MIGRATIONS:
             self.assertTrue((proof.ROOT / "supabase/migrations" / candidate).is_file())

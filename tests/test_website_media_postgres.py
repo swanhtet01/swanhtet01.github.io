@@ -35,7 +35,7 @@ from tools import rehearse_supermega_postgres17 as pg
 
 
 @contextmanager
-def _local_database():
+def _local_database(*, extra_migrations=()):
     default = (Path.home() / ".cache/supermega-postgresql/17.10-2/pgsql/bin"
                if os.name == "nt" else Path(shutil.which("postgres") or "/usr/bin/postgres").parent)
     binary = Path(os.environ.get("SUPERMEGA_TEST_POSTGRES_BIN", default)).resolve()
@@ -71,7 +71,7 @@ def _local_database():
                                                 environment=environment)
             pg._apply_migrations(postgres_bin=binary, admin_password=admin_password,
                                  admin_database_url=admin, port=port, environment=environment,
-                                 migrations=pg.CURRENT_MIGRATIONS)
+                                 migrations=(*pg.CURRENT_MIGRATIONS, *extra_migrations))
             pg._provision_runtime(admin, runtime_password)
             # Only an ephemeral local login is changed; no provider credentials.
             from psycopg import sql

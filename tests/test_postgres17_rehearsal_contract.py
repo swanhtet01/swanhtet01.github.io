@@ -96,7 +96,8 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
         observed = tuple(sorted(path.name for path in (ROOT / "supabase/migrations").glob("*.sql")
                                 if path.name not in ("20260711081300_public_legacy_baseline.sql",
                                                      *module.DOMAIN_CANDIDATE_MIGRATIONS,
-                                                     *module.DORMANT_CANDIDATE_MIGRATIONS)))
+                                                     *module.DORMANT_CANDIDATE_MIGRATIONS,
+                                                     module.SHOP_SYNC_CANDIDATE_MIGRATION)))
         self.assertEqual(module.CURRENT_MIGRATIONS, observed)
         self.assertTrue((ROOT / "supabase/migrations" / dormant_sites_rls_candidate).is_file())
         self.assertNotIn(dormant_sites_rls_candidate, module.CURRENT_MIGRATIONS)
