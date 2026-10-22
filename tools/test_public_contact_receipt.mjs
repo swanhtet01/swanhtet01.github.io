@@ -151,6 +151,7 @@ test('Burmese contact route keeps the same safe receipt contract with Burmese co
   assert.doesNotMatch(myanmarPage, />Send message<\/button>|>Company \(optional\)<input/)
   const state = harness([new Error('connection lost'), { body: receipt }], '?product=shop&utm_source=example&private=discard', '', 'my')
   assert.equal(state.headings.get('[data-contact-heading]').textContent, 'Shop အသုံးပြုပုံကို မေးမြန်းရန်')
+  assert.equal(state.headings.get('[data-contact-lede]').textContent, 'Shop ဘရောက်ဇာနမူနာတွင် ကောင်တာအရောင်း၊ အော်ဒါနှင့် ကုန်လက်ကျန်ကို ကြည့်နိုင်ပါသည်။ စမ်းသပ်အသုံးပြုမည့်အစီအစဉ်ကို ဆွေးနွေးရန် သင့်ကုန်ပစ္စည်းစာရင်း၊ အသုံးပြုမည့်စက်များနှင့် ပြေစာလိုအပ်ချက်ကို ပြောပြပါ။')
   assert.equal(state.languageSwitch.href, '/contact/?product=shop&utm_source=example')
   state.invalid('name')
   assert.equal(state.fields.get('[name="name"]').validationMessage, 'ဤအချက်အလက်ကို ဖြည့်ပါ။')
