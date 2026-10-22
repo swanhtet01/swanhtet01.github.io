@@ -18,6 +18,39 @@ import 'package:supermega_shop/shop_database.dart';
 import 'package:supermega_shop/shop_models.dart';
 
 void main() {
+  test('correction authorization receipt v1 digest is stable', () {
+    expect(
+      shopCorrectionAuthorizationReceiptDigest(
+        source: 'managed_membership_receipt_v1',
+        receiptId: 'receipt-1',
+        workspaceId: 'workspace-1',
+        actorId: 'actor-1',
+        actorLabel: 'Owner',
+        actorRole: 'owner',
+        capability: 'shop.sale.reverse',
+        commandDigest: List<String>.filled(64, '0').join(),
+        issuedAtMillis: 1000,
+        expiresAtMillis: 301000,
+      ),
+      '42832341daffab7ac3967f57d91665a01b6303addc0ecfada3dce9c76a584902',
+    );
+    expect(
+      shopCorrectionAuthorizationReceiptDigest(
+        source: 'managed_membership_receipt_v1',
+        receiptId: 'receipt-2',
+        workspaceId: 'workspace-1',
+        actorId: 'actor-1',
+        actorLabel: 'Owner',
+        actorRole: 'owner',
+        capability: 'shop.sale.reconcile_wallet',
+        commandDigest: List<String>.filled(64, 'f').join(),
+        issuedAtMillis: 2000,
+        expiresAtMillis: 302000,
+      ),
+      '941c1a39aea89a13cdefdf48f7d6d4f02a125ccb2eab8e555142de7ba48053f4',
+    );
+  });
+
   group('menu candidate contract', () {
     test('accepts a nullable price and preserves Burmese text', () {
       final item = MenuCandidate.fromJson({
@@ -421,6 +454,53 @@ void main() {
         capability: 'shop.sale.reverse',
         receiptId: 'cash-reversal-receipt',
       );
+      for (final tamperedAuthorization in [
+        ShopCorrectionAuthorization(
+          receiptId: authorization.receiptId,
+          receiptDigest: List<String>.filled(64, '0').join(),
+          workspaceId: authorization.workspaceId,
+          actorId: authorization.actorId,
+          actorLabel: authorization.actorLabel,
+          actorRole: authorization.actorRole,
+          capability: authorization.capability,
+          source: authorization.source,
+          commandDigest: authorization.commandDigest,
+          issuedAtMillis: authorization.issuedAtMillis,
+          expiresAtMillis: authorization.expiresAtMillis,
+        ),
+        ShopCorrectionAuthorization(
+          receiptId: authorization.receiptId,
+          receiptDigest: authorization.receiptDigest,
+          workspaceId: authorization.workspaceId,
+          actorId: authorization.actorId,
+          actorLabel: 'Different owner',
+          actorRole: authorization.actorRole,
+          capability: authorization.capability,
+          source: authorization.source,
+          commandDigest: authorization.commandDigest,
+          issuedAtMillis: authorization.issuedAtMillis,
+          expiresAtMillis: authorization.expiresAtMillis,
+        ),
+      ]) {
+        await expectLater(
+          database.recordAuthorizedFullSaleReversal(
+            command: command,
+            authorization: tamperedAuthorization,
+          ),
+          throwsA(isA<StateError>()),
+        );
+      }
+      expect(await database.readSaleReversalForSale(sale.id), isNull);
+      expect(
+        (await database
+                .customSelect(
+                  'SELECT on_hand FROM shop_products WHERE id = ?',
+                  variables: [const Variable<String>('tea-reversal')],
+                )
+                .getSingle())
+            .read<int>('on_hand'),
+        3,
+      );
       final alteredAmount = ShopFullSaleReversalCommand(
         operationId: command.operationId,
         saleId: command.saleId,
@@ -805,10 +885,44 @@ void main() {
         outcome: 'money_returned',
         evidenceReference: 'KBZPay merchant history reference 42',
       );
+      expect(reconciliation.originalPaymentMethod, 'kbzpay');
+      expect(reconciliation.originalTotalMmk, 1000);
+      expect(
+        reconciliation.requestFingerprint,
+        jsonEncode(<String, Object>{
+          'operationId': 'wallet-return-confirmation',
+          'reversalId': reversal.id,
+          'originalPaymentMethod': 'kbzpay',
+          'originalTotalMmk': 1000,
+          'outcome': 'money_returned',
+          'evidenceReference': 'KBZPay merchant history reference 42',
+        }),
+      );
       final reconciliationAuthorization = _correctionAuthorization(
         reconciliation.commandDigest,
         capability: 'shop.sale.reconcile_wallet',
         receiptId: 'wallet-confirmation-receipt',
+      );
+      await expectLater(
+        database.recordAuthorizedWalletReconciliation(
+          command: ShopWalletReconciliationCommand(
+            operationId: reconciliation.operationId,
+            reversalId: reconciliation.reversalId,
+            originalPaymentMethod: reconciliation.originalPaymentMethod,
+            originalTotalMmk: reconciliation.originalTotalMmk + 1,
+            requestFingerprint: reconciliation.requestFingerprint,
+            commandDigest: reconciliation.commandDigest,
+            outcome: reconciliation.outcome,
+            evidenceReference: reconciliation.evidenceReference,
+          ),
+          authorization: reconciliationAuthorization,
+        ),
+        throwsA(isA<StateError>()),
+      );
+      expect(
+        (await database.readSaleReversalForSale(sale.id))
+            ?.walletReconciliationPending,
+        isTrue,
       );
       await expectLater(
         database.recordAuthorizedWalletReconciliation(
@@ -835,6 +949,32 @@ void main() {
             command: reconciliation,
             authorization: reconciliationAuthorization,
           );
+      await expectLater(
+        database.recordAuthorizedWalletReconciliation(
+          command: ShopWalletReconciliationCommand(
+            operationId: reconciliation.operationId,
+            reversalId: reconciliation.reversalId,
+            originalPaymentMethod: 'wavepay',
+            originalTotalMmk: reconciliation.originalTotalMmk,
+            requestFingerprint: reconciliation.requestFingerprint,
+            commandDigest: reconciliation.commandDigest,
+            outcome: reconciliation.outcome,
+            evidenceReference: reconciliation.evidenceReference,
+          ),
+          authorization: reconciliationAuthorization,
+        ),
+        throwsA(isA<StateError>()),
+      );
+      expect(
+        (await database
+                .customSelect(
+                  'SELECT COUNT(*) AS count '
+                  'FROM shop_wallet_reversal_reconciliations',
+                )
+                .getSingle())
+            .read<int>('count'),
+        1,
+      );
       expect(reversal.walletReconciliationOutcome, 'money_returned');
       expect(
         reconciliationReplay.walletReconciliationOutcome,
@@ -2668,18 +2808,36 @@ ShopCorrectionAuthorization _correctionAuthorization(
   required String receiptId,
 }) {
   final now = DateTime.now().millisecondsSinceEpoch;
+  final issuedAtMillis = now - 1000;
+  final expiresAtMillis = now + const Duration(minutes: 5).inMilliseconds;
+  const workspaceId = 'workspace-shop-test';
+  const actorId = 'owner-test';
+  const actorLabel = 'Test owner';
+  const actorRole = 'owner';
+  const source = 'managed_membership_receipt_v1';
   return ShopCorrectionAuthorization(
     receiptId: receiptId,
-    receiptDigest: List<String>.filled(64, 'a').join(),
-    workspaceId: 'workspace-shop-test',
-    actorId: 'owner-test',
-    actorLabel: 'Test owner',
-    actorRole: 'owner',
+    receiptDigest: shopCorrectionAuthorizationReceiptDigest(
+      source: source,
+      receiptId: receiptId,
+      workspaceId: workspaceId,
+      actorId: actorId,
+      actorLabel: actorLabel,
+      actorRole: actorRole,
+      capability: capability,
+      commandDigest: commandDigest,
+      issuedAtMillis: issuedAtMillis,
+      expiresAtMillis: expiresAtMillis,
+    ),
+    workspaceId: workspaceId,
+    actorId: actorId,
+    actorLabel: actorLabel,
+    actorRole: actorRole,
     capability: capability,
-    source: 'managed_membership_receipt_v1',
+    source: source,
     commandDigest: commandDigest,
-    issuedAtMillis: now - 1000,
-    expiresAtMillis: now + const Duration(minutes: 5).inMilliseconds,
+    issuedAtMillis: issuedAtMillis,
+    expiresAtMillis: expiresAtMillis,
   );
 }
 

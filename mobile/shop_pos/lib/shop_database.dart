@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:crypto/crypto.dart' as crypto;
 import 'package:cryptography/cryptography.dart';
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
@@ -190,6 +191,80 @@ class ShopSaleReceiptLine {
   final String? productId;
 }
 
+const shopCorrectionAuthorizationReceiptContract =
+    'supermega.shop.correction-authorization-receipt.v1';
+
+/// Digest the exact receipt fields persisted in the local correction audit.
+///
+/// The field order and domain separator are part of the v1 cross-runtime
+/// contract. Do not replace this with a sorted-key or pretty-printed encoder.
+String shopCorrectionAuthorizationReceiptDigest({
+  required String source,
+  required String receiptId,
+  required String workspaceId,
+  required String actorId,
+  required String actorLabel,
+  required String actorRole,
+  required String capability,
+  required String commandDigest,
+  required int issuedAtMillis,
+  required int expiresAtMillis,
+}) {
+  final projection = jsonEncode(<String, Object>{
+    'source': source,
+    'receiptId': receiptId,
+    'workspaceId': workspaceId,
+    'actorId': actorId,
+    'actorLabel': actorLabel,
+    'actorRole': actorRole,
+    'capability': capability,
+    'commandDigest': commandDigest,
+    'issuedAtMillis': issuedAtMillis,
+    'expiresAtMillis': expiresAtMillis,
+  });
+  final receiptBytes = utf8.encode(
+    '$shopCorrectionAuthorizationReceiptContract\n$projection',
+  );
+  return crypto.sha256.convert(receiptBytes).toString();
+}
+
+/// Compares a persisted receipt digest with the canonical v1 projection.
+///
+/// Once the lengths match, every code unit is examined before returning so a
+/// mismatch position is not exposed through an early return.
+bool shopCorrectionAuthorizationReceiptDigestMatches({
+  required String receiptDigest,
+  required String source,
+  required String receiptId,
+  required String workspaceId,
+  required String actorId,
+  required String actorLabel,
+  required String actorRole,
+  required String capability,
+  required String commandDigest,
+  required int issuedAtMillis,
+  required int expiresAtMillis,
+}) {
+  final expected = shopCorrectionAuthorizationReceiptDigest(
+    source: source,
+    receiptId: receiptId,
+    workspaceId: workspaceId,
+    actorId: actorId,
+    actorLabel: actorLabel,
+    actorRole: actorRole,
+    capability: capability,
+    commandDigest: commandDigest,
+    issuedAtMillis: issuedAtMillis,
+    expiresAtMillis: expiresAtMillis,
+  );
+  if (receiptDigest.length != expected.length) return false;
+  var difference = 0;
+  for (var index = 0; index < expected.length; index++) {
+    difference |= expected.codeUnitAt(index) ^ receiptDigest.codeUnitAt(index);
+  }
+  return difference == 0;
+}
+
 /// A server-verified, command-bound authorization receipt.
 ///
 /// This value is evidence returned by an external membership/capability
@@ -259,6 +334,8 @@ class ShopWalletReconciliationCommand {
   const ShopWalletReconciliationCommand({
     required this.operationId,
     required this.reversalId,
+    required this.originalPaymentMethod,
+    required this.originalTotalMmk,
     required this.requestFingerprint,
     required this.commandDigest,
     required this.outcome,
@@ -267,10 +344,31 @@ class ShopWalletReconciliationCommand {
 
   final String operationId;
   final String reversalId;
+  final String originalPaymentMethod;
+  final int originalTotalMmk;
   final String requestFingerprint;
   final String commandDigest;
   final String outcome;
   final String evidenceReference;
+}
+
+// Key order is part of the cross-runtime authorization command contract.
+String _walletReconciliationRequestFingerprint({
+  required String operationId,
+  required String reversalId,
+  required String originalPaymentMethod,
+  required int originalTotalMmk,
+  required String outcome,
+  required String evidenceReference,
+}) {
+  return jsonEncode(<String, Object>{
+    'operationId': operationId,
+    'reversalId': reversalId,
+    'originalPaymentMethod': originalPaymentMethod,
+    'originalTotalMmk': originalTotalMmk,
+    'outcome': outcome,
+    'evidenceReference': evidenceReference,
+  });
 }
 
 class ShopSaleReversalLine {
@@ -2639,6 +2737,19 @@ class ShopDatabase extends _$ShopDatabase {
         authorization.capability != capability ||
         authorization.source != 'managed_membership_receipt_v1' ||
         authorization.commandDigest != commandDigest ||
+        !shopCorrectionAuthorizationReceiptDigestMatches(
+          receiptDigest: authorization.receiptDigest,
+          source: authorization.source,
+          receiptId: authorization.receiptId,
+          workspaceId: authorization.workspaceId,
+          actorId: authorization.actorId,
+          actorLabel: authorization.actorLabel,
+          actorRole: authorization.actorRole,
+          capability: authorization.capability,
+          commandDigest: authorization.commandDigest,
+          issuedAtMillis: authorization.issuedAtMillis,
+          expiresAtMillis: authorization.expiresAtMillis,
+        ) ||
         authorization.issuedAtMillis <= 0 ||
         authorization.expiresAtMillis <= authorization.issuedAtMillis ||
         authorization.expiresAtMillis - authorization.issuedAtMillis >
@@ -3013,22 +3124,31 @@ class ShopDatabase extends _$ShopDatabase {
       throw ArgumentError('Wallet reconciliation details are invalid.');
     }
     final reversal = await customSelect(
-      'SELECT original_payment_method FROM shop_sale_reversals WHERE id = ?',
+      'SELECT original_payment_method, original_total_mmk '
+      'FROM shop_sale_reversals WHERE id = ?',
       variables: [Variable<String>(cleanReversalId)],
     ).getSingleOrNull();
     if (reversal == null) throw StateError('The sale reversal was not found.');
-    if (reversal.read<String>('original_payment_method') == 'cash') {
+    final originalPaymentMethod = reversal.read<String>(
+      'original_payment_method',
+    );
+    final originalTotalMmk = reversal.read<int>('original_total_mmk');
+    if (originalPaymentMethod == 'cash') {
       throw StateError('Cash returns do not have wallet reconciliation.');
     }
-    final fingerprint = jsonEncode({
-      'operationId': cleanOperationId,
-      'reversalId': cleanReversalId,
-      'outcome': outcome,
-      'evidenceReference': cleanEvidence,
-    });
+    final fingerprint = _walletReconciliationRequestFingerprint(
+      operationId: cleanOperationId,
+      reversalId: cleanReversalId,
+      originalPaymentMethod: originalPaymentMethod,
+      originalTotalMmk: originalTotalMmk,
+      outcome: outcome,
+      evidenceReference: cleanEvidence,
+    );
     return ShopWalletReconciliationCommand(
       operationId: cleanOperationId,
       reversalId: cleanReversalId,
+      originalPaymentMethod: originalPaymentMethod,
+      originalTotalMmk: originalTotalMmk,
       requestFingerprint: fingerprint,
       commandDigest: await _sha256Hex(fingerprint),
       outcome: outcome,
@@ -3047,23 +3167,39 @@ class ShopDatabase extends _$ShopDatabase {
         variables: [Variable<String>(command.operationId)],
       ).getSingleOrNull();
       if (prior != null) {
-        if (prior.read<String>('request_fingerprint') !=
-                command.requestFingerprint ||
-            prior.read<String>('reversal_id') != command.reversalId ||
-            prior.read<String>('outcome') != command.outcome ||
-            prior.read<String>('evidence_reference') !=
-                command.evidenceReference ||
-            await _sha256Hex(command.requestFingerprint) !=
-                command.commandDigest ||
+        final recordedReversalId = prior.read<String>('reversal_id');
+        final recordedOutcome = prior.read<String>('outcome');
+        final recordedEvidence = prior.read<String>('evidence_reference');
+        final reversal = await customSelect(
+          'SELECT * FROM shop_sale_reversals WHERE id = ?',
+          variables: [Variable<String>(recordedReversalId)],
+        ).getSingle();
+        final originalPaymentMethod = reversal.read<String>(
+          'original_payment_method',
+        );
+        final originalTotalMmk = reversal.read<int>('original_total_mmk');
+        final expectedFingerprint = _walletReconciliationRequestFingerprint(
+          operationId: prior.read<String>('operation_id'),
+          reversalId: recordedReversalId,
+          originalPaymentMethod: originalPaymentMethod,
+          originalTotalMmk: originalTotalMmk,
+          outcome: recordedOutcome,
+          evidenceReference: recordedEvidence,
+        );
+        if (prior.read<String>('request_fingerprint') != expectedFingerprint ||
+            command.requestFingerprint != expectedFingerprint ||
+            command.reversalId != recordedReversalId ||
+            command.originalPaymentMethod != originalPaymentMethod ||
+            command.originalTotalMmk != originalTotalMmk ||
+            command.outcome != recordedOutcome ||
+            command.evidenceReference != recordedEvidence ||
+            await _sha256Hex(expectedFingerprint) != command.commandDigest ||
+            authorization.commandDigest != command.commandDigest ||
             !_matchesRecordedCorrectionAuthorization(prior, authorization)) {
           throw StateError(
             'A wallet reconciliation ID was reused with different details.',
           );
         }
-        final reversal = await customSelect(
-          'SELECT * FROM shop_sale_reversals WHERE id = ?',
-          variables: [Variable<String>(prior.read<String>('reversal_id'))],
-        ).getSingle();
         return _saleReversalFromRow(reversal);
       }
       final verifiedCommand = await previewWalletReconciliation(
@@ -3073,7 +3209,10 @@ class ShopDatabase extends _$ShopDatabase {
         evidenceReference: command.evidenceReference,
       );
       if (verifiedCommand.requestFingerprint != command.requestFingerprint ||
-          verifiedCommand.commandDigest != command.commandDigest) {
+          verifiedCommand.commandDigest != command.commandDigest ||
+          verifiedCommand.originalPaymentMethod !=
+              command.originalPaymentMethod ||
+          verifiedCommand.originalTotalMmk != command.originalTotalMmk) {
         throw StateError('Wallet reconciliation changed. Review it again.');
       }
       final existing = await customSelect(

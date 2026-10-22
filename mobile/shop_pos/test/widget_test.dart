@@ -5876,18 +5876,36 @@ ShopCorrectionAuthorization _widgetCorrectionAuthorization(
   required String receiptId,
 }) {
   final now = DateTime.now().millisecondsSinceEpoch;
+  final issuedAtMillis = now - 1000;
+  final expiresAtMillis = now + const Duration(minutes: 5).inMilliseconds;
+  const workspaceId = 'workspace-widget-test';
+  const actorId = 'owner-widget-test';
+  const actorLabel = 'Widget test owner';
+  const actorRole = 'owner';
+  const source = 'managed_membership_receipt_v1';
   return ShopCorrectionAuthorization(
     receiptId: receiptId,
-    receiptDigest: List<String>.filled(64, 'c').join(),
-    workspaceId: 'workspace-widget-test',
-    actorId: 'owner-widget-test',
-    actorLabel: 'Widget test owner',
-    actorRole: 'owner',
+    receiptDigest: shopCorrectionAuthorizationReceiptDigest(
+      source: source,
+      receiptId: receiptId,
+      workspaceId: workspaceId,
+      actorId: actorId,
+      actorLabel: actorLabel,
+      actorRole: actorRole,
+      capability: capability,
+      commandDigest: commandDigest,
+      issuedAtMillis: issuedAtMillis,
+      expiresAtMillis: expiresAtMillis,
+    ),
+    workspaceId: workspaceId,
+    actorId: actorId,
+    actorLabel: actorLabel,
+    actorRole: actorRole,
     capability: capability,
-    source: 'managed_membership_receipt_v1',
+    source: source,
     commandDigest: commandDigest,
-    issuedAtMillis: now - 1000,
-    expiresAtMillis: now + const Duration(minutes: 5).inMilliseconds,
+    issuedAtMillis: issuedAtMillis,
+    expiresAtMillis: expiresAtMillis,
   );
 }
 

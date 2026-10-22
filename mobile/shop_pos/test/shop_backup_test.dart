@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart' as crypto;
 import 'package:cryptography/cryptography.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:drift/native.dart';
@@ -305,6 +306,18 @@ void main() {
           ),
         ),
         (
+          name: 'reversal-receipt-digest',
+          mutate: (connection) => _mutateImmutableAuditRow(
+            connection,
+            table: 'shop_sale_reversals',
+            mutate: () => connection.execute(
+              'UPDATE shop_sale_reversals '
+              'SET authorization_receipt_digest = ?',
+              [List<String>.filled(64, '0').join()],
+            ),
+          ),
+        ),
+        (
           name: 'wallet-money-returned',
           mutate: (connection) {
             final row = connection.select(
@@ -410,6 +423,58 @@ void main() {
             'UPDATE shop_wallet_reversal_reconciliations '
             'SET authorization_command_digest = ?',
             [List<String>.filled(64, 'd').join()],
+          ),
+        ),
+      ),
+      (
+        name: 'reconciliation-legacy-unbound-request',
+        mutate: (connection) {
+          final row = connection.select(
+            'SELECT * FROM shop_wallet_reversal_reconciliations',
+          ).single;
+          final legacyFingerprint = jsonEncode(<String, Object>{
+            'operationId': row['operation_id'] as String,
+            'reversalId': row['reversal_id'] as String,
+            'outcome': row['outcome'] as String,
+            'evidenceReference': row['evidence_reference'] as String,
+          });
+          final commandDigest = crypto.sha256
+              .convert(utf8.encode(legacyFingerprint))
+              .toString();
+          final receiptDigest = shopCorrectionAuthorizationReceiptDigest(
+            source: row['authorization_source'] as String,
+            receiptId: row['authorization_receipt_id'] as String,
+            workspaceId: row['authorization_workspace_id'] as String,
+            actorId: row['authorized_actor_id'] as String,
+            actorLabel: row['authorized_actor_label'] as String,
+            actorRole: row['authorized_actor_role'] as String,
+            capability: row['authorization_capability'] as String,
+            commandDigest: commandDigest,
+            issuedAtMillis: row['authorization_issued_at_millis'] as int,
+            expiresAtMillis: row['authorization_expires_at_millis'] as int,
+          );
+          _mutateImmutableAuditRow(
+            connection,
+            table: 'shop_wallet_reversal_reconciliations',
+            mutate: () => connection.execute(
+              'UPDATE shop_wallet_reversal_reconciliations '
+              'SET request_fingerprint = ?, '
+              'authorization_command_digest = ?, '
+              'authorization_receipt_digest = ?',
+              [legacyFingerprint, commandDigest, receiptDigest],
+            ),
+          );
+        },
+      ),
+      (
+        name: 'reconciliation-receipt-metadata',
+        mutate: (connection) => _mutateImmutableAuditRow(
+          connection,
+          table: 'shop_wallet_reversal_reconciliations',
+          mutate: () => connection.execute(
+            'UPDATE shop_wallet_reversal_reconciliations '
+            'SET authorized_actor_label = ?',
+            ['Tampered owner'],
           ),
         ),
       ),
@@ -2060,18 +2125,36 @@ ShopCorrectionAuthorization _backupAuthorization(
   required String receiptId,
 }) {
   final now = DateTime.now().millisecondsSinceEpoch;
+  final issuedAtMillis = now - 1000;
+  final expiresAtMillis = now + const Duration(minutes: 5).inMilliseconds;
+  const workspaceId = 'workspace-backup-test';
+  const actorId = 'owner-backup-test';
+  const actorLabel = 'Backup test owner';
+  const actorRole = 'owner';
+  const source = 'managed_membership_receipt_v1';
   return ShopCorrectionAuthorization(
     receiptId: receiptId,
-    receiptDigest: List<String>.filled(64, 'b').join(),
-    workspaceId: 'workspace-backup-test',
-    actorId: 'owner-backup-test',
-    actorLabel: 'Backup test owner',
-    actorRole: 'owner',
+    receiptDigest: shopCorrectionAuthorizationReceiptDigest(
+      source: source,
+      receiptId: receiptId,
+      workspaceId: workspaceId,
+      actorId: actorId,
+      actorLabel: actorLabel,
+      actorRole: actorRole,
+      capability: capability,
+      commandDigest: commandDigest,
+      issuedAtMillis: issuedAtMillis,
+      expiresAtMillis: expiresAtMillis,
+    ),
+    workspaceId: workspaceId,
+    actorId: actorId,
+    actorLabel: actorLabel,
+    actorRole: actorRole,
     capability: capability,
-    source: 'managed_membership_receipt_v1',
+    source: source,
     commandDigest: commandDigest,
-    issuedAtMillis: now - 1000,
-    expiresAtMillis: now + const Duration(minutes: 5).inMilliseconds,
+    issuedAtMillis: issuedAtMillis,
+    expiresAtMillis: expiresAtMillis,
   );
 }
 

@@ -1098,7 +1098,21 @@ abstract final class ShopBackup {
         final drawerDelta = reversal['cash_drawer_delta_mmk'];
         final shiftId = reversal['shift_id'];
         final authorizationReceiptId = reversal['authorization_receipt_id'];
+        final authorizationReceiptDigest =
+            reversal['authorization_receipt_digest'];
+        final authorizationCommandDigest =
+            reversal['authorization_command_digest'];
+        final authorizationWorkspaceId =
+            reversal['authorization_workspace_id'];
         final authorizedActorId = reversal['authorized_actor_id'];
+        final authorizedActorLabel = reversal['authorized_actor_label'];
+        final authorizedActorRole = reversal['authorized_actor_role'];
+        final authorizationCapability = reversal['authorization_capability'];
+        final authorizationSource = reversal['authorization_source'];
+        final authorizationIssuedAtMillis =
+            reversal['authorization_issued_at_millis'];
+        final authorizationExpiresAtMillis =
+            reversal['authorization_expires_at_millis'];
         final createdAtMillis = reversal['created_at_millis'];
         if (reversalId is! String ||
             operationId is! String ||
@@ -1111,7 +1125,16 @@ abstract final class ShopBackup {
             paymentResolution is! String ||
             drawerDelta is! int ||
             authorizationReceiptId is! String ||
+            authorizationReceiptDigest is! String ||
+            authorizationCommandDigest is! String ||
+            authorizationWorkspaceId is! String ||
             authorizedActorId is! String ||
+            authorizedActorLabel is! String ||
+            authorizedActorRole is! String ||
+            authorizationCapability is! String ||
+            authorizationSource is! String ||
+            authorizationIssuedAtMillis is! int ||
+            authorizationExpiresAtMillis is! int ||
             createdAtMillis is! int) {
           return false;
         }
@@ -1169,8 +1192,20 @@ abstract final class ShopBackup {
           'paymentResolution': paymentResolution,
         });
         if (reversal['request_fingerprint'] != requestFingerprint ||
-            reversal['authorization_command_digest'] !=
-                _sha256Hex(requestFingerprint)) {
+            authorizationCommandDigest != _sha256Hex(requestFingerprint) ||
+            !shopCorrectionAuthorizationReceiptDigestMatches(
+              receiptDigest: authorizationReceiptDigest,
+              source: authorizationSource,
+              receiptId: authorizationReceiptId,
+              workspaceId: authorizationWorkspaceId,
+              actorId: authorizedActorId,
+              actorLabel: authorizedActorLabel,
+              actorRole: authorizedActorRole,
+              capability: authorizationCapability,
+              commandDigest: authorizationCommandDigest,
+              issuedAtMillis: authorizationIssuedAtMillis,
+              expiresAtMillis: authorizationExpiresAtMillis,
+            )) {
           return false;
         }
 
@@ -1237,7 +1272,22 @@ abstract final class ShopBackup {
         final evidenceReference = reconciliation['evidence_reference'];
         final authorizationReceiptId =
             reconciliation['authorization_receipt_id'];
+        final authorizationReceiptDigest =
+            reconciliation['authorization_receipt_digest'];
+        final authorizationCommandDigest =
+            reconciliation['authorization_command_digest'];
+        final authorizationWorkspaceId =
+            reconciliation['authorization_workspace_id'];
         final authorizedActorId = reconciliation['authorized_actor_id'];
+        final authorizedActorLabel = reconciliation['authorized_actor_label'];
+        final authorizedActorRole = reconciliation['authorized_actor_role'];
+        final authorizationCapability =
+            reconciliation['authorization_capability'];
+        final authorizationSource = reconciliation['authorization_source'];
+        final authorizationIssuedAtMillis =
+            reconciliation['authorization_issued_at_millis'];
+        final authorizationExpiresAtMillis =
+            reconciliation['authorization_expires_at_millis'];
         final createdAtMillis = reconciliation['created_at_millis'];
         if (id is! String ||
             operationId is! String ||
@@ -1246,28 +1296,59 @@ abstract final class ShopBackup {
             outcome is! String ||
             evidenceReference is! String ||
             authorizationReceiptId is! String ||
+            authorizationReceiptDigest is! String ||
+            authorizationCommandDigest is! String ||
+            authorizationWorkspaceId is! String ||
             authorizedActorId is! String ||
+            authorizedActorLabel is! String ||
+            authorizedActorRole is! String ||
+            authorizationCapability is! String ||
+            authorizationSource is! String ||
+            authorizationIssuedAtMillis is! int ||
+            authorizationExpiresAtMillis is! int ||
             createdAtMillis is! int) {
           return false;
         }
-        final requestFingerprint = jsonEncode(<String, Object?>{
+        final linkedReversals = connection.select(
+          'SELECT original_payment_method, original_total_mmk, '
+          'created_at_millis FROM shop_sale_reversals WHERE id = ?',
+          [reversalId],
+        );
+        if (linkedReversals.length != 1) return false;
+        final reversal = linkedReversals.single;
+        final originalPaymentMethod = reversal['original_payment_method'];
+        final originalTotalMmk = reversal['original_total_mmk'];
+        final reversalCreatedAtMillis = reversal['created_at_millis'];
+        if (originalPaymentMethod is! String ||
+            originalTotalMmk is! int ||
+            reversalCreatedAtMillis is! int ||
+            createdAtMillis < reversalCreatedAtMillis) {
+          return false;
+        }
+        // Rebuild the cross-runtime command contract from immutable evidence.
+        final requestFingerprint = jsonEncode(<String, Object>{
           'operationId': operationId,
           'reversalId': reversalId,
+          'originalPaymentMethod': originalPaymentMethod,
+          'originalTotalMmk': originalTotalMmk,
           'outcome': outcome,
           'evidenceReference': evidenceReference,
         });
         if (reconciliation['request_fingerprint'] != requestFingerprint ||
-            reconciliation['authorization_command_digest'] !=
-                _sha256Hex(requestFingerprint)) {
-          return false;
-        }
-        final reversal = connection.select(
-          'SELECT created_at_millis FROM shop_sale_reversals WHERE id = ?',
-          [reversalId],
-        );
-        if (reversal.length != 1 ||
-            reversal.single['created_at_millis'] is! int ||
-            createdAtMillis < (reversal.single['created_at_millis'] as int)) {
+            authorizationCommandDigest != _sha256Hex(requestFingerprint) ||
+            !shopCorrectionAuthorizationReceiptDigestMatches(
+              receiptDigest: authorizationReceiptDigest,
+              source: authorizationSource,
+              receiptId: authorizationReceiptId,
+              workspaceId: authorizationWorkspaceId,
+              actorId: authorizedActorId,
+              actorLabel: authorizedActorLabel,
+              actorRole: authorizedActorRole,
+              capability: authorizationCapability,
+              commandDigest: authorizationCommandDigest,
+              issuedAtMillis: authorizationIssuedAtMillis,
+              expiresAtMillis: authorizationExpiresAtMillis,
+            )) {
           return false;
         }
         final events = connection.select(
