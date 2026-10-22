@@ -36,6 +36,12 @@ void _usePhoneViewport(WidgetTester tester) {
   addTearDown(tester.view.resetDevicePixelRatio);
 }
 
+Future<int> _settleStock(WidgetTester tester) => tester.pumpAndSettle(
+  const Duration(milliseconds: 100),
+  EnginePhase.sendSemanticsUpdate,
+  const Duration(seconds: 5),
+);
+
 void main() {
   for (final myanmar in [false, true]) {
     testWidgets(
@@ -3783,16 +3789,16 @@ void main() {
             home: StockScreen(database: database, myanmar: myanmar),
           ),
         );
-        await tester.pumpAndSettle();
+        await _settleStock(tester);
         expect(find.byKey(const ValueKey('stock-photo-apple')), findsOneWidget);
         await tester.tap(find.byKey(const ValueKey('stock-edit-apple')));
-        await tester.pumpAndSettle();
+        await _settleStock(tester);
         expect(find.byKey(const ValueKey('stock-edit-name')), findsOneWidget);
         await tester.tap(find.text(myanmar ? 'မလုပ်တော့ပါ' : 'Cancel'));
-        await tester.pumpAndSettle();
+        await _settleStock(tester);
         expect((await database.readActiveProducts()).single.priceMmk, 2800);
         await tester.tap(find.byKey(const ValueKey('stock-edit-apple')));
-        await tester.pumpAndSettle();
+        await _settleStock(tester);
         await tester.enterText(
           find.byKey(const ValueKey('stock-edit-name')),
           'Apple 1 pc',
@@ -3806,7 +3812,7 @@ void main() {
           '333333',
         );
         await tester.tap(find.byKey(const ValueKey('stock-edit-save')));
-        await tester.pumpAndSettle();
+        await _settleStock(tester);
         final apple = (await database.readActiveProducts()).single;
         expect(apple.name, 'Apple 1 pc');
         expect(apple.priceMmk, 3200);
@@ -3829,8 +3835,8 @@ void main() {
       'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ'
       'AAAADUlEQVR4nGPQyNjxHwAETAJIB09U9wAAAABJRU5ErkJggg==',
     );
-    final nextPhoto =
-        File('test/assets/grocery_photos/apple.png').readAsBytesSync();
+    final nextPhoto = File('test/assets/grocery_photos/apple.png')
+        .readAsBytesSync();
     try {
       await database.addProduct(
         id: 'apple',
@@ -3840,23 +3846,18 @@ void main() {
       );
       await database.saveProductThumbnail('apple', firstPhoto);
       Widget screen({required bool active}) => MaterialApp(
-        home: StockScreen(
-          database: database,
-          myanmar: false,
-          active: active,
-        ),
+        home: StockScreen(database: database, myanmar: false, active: active),
       );
       await tester.pumpWidget(screen(active: true));
-      await tester.pumpAndSettle();
-      Image photo() => tester.widget<Image>(
-        find.byKey(const ValueKey('stock-photo-apple')),
-      );
+      await _settleStock(tester);
+      Image photo() =>
+          tester.widget<Image>(find.byKey(const ValueKey('stock-photo-apple')));
       expect((photo().image as MemoryImage).bytes, orderedEquals(firstPhoto));
 
       await tester.pumpWidget(screen(active: false));
       await database.saveProductThumbnail('apple', nextPhoto);
       await tester.pumpWidget(screen(active: true));
-      await tester.pumpAndSettle();
+      await _settleStock(tester);
       expect((photo().image as MemoryImage).bytes, orderedEquals(nextPhoto));
       expect(tester.takeException(), isNull);
     } finally {
@@ -3887,7 +3888,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(home: StockScreen(database: database, myanmar: true)),
       );
-      await tester.pumpAndSettle();
+      await _settleStock(tester);
       expect(find.byKey(const ValueKey('stock-photo-apple')), findsOneWidget);
       expect(find.textContaining('၂,၈၀၀'), findsWidgets);
       expect(find.byKey(const ValueKey('stock-edit-apple')), findsOneWidget);
@@ -3937,11 +3938,11 @@ void main() {
         initialMyanmar: true,
       ),
     );
-    await tester.pumpAndSettle();
+    await _settleStock(tester);
     await tester.tap(find.byTooltip('နောက်ထပ်'));
-    await tester.pumpAndSettle();
+    await _settleStock(tester);
     await tester.tap(find.text('လက်ကျန်'));
-    await tester.pumpAndSettle();
+    await _settleStock(tester);
     expect(find.text('ပြင်ရန်'), findsNothing);
     expect(find.byKey(const ValueKey('stock-row-rice-phone')), findsOneWidget);
     expect(
@@ -3953,10 +3954,10 @@ void main() {
     expect(tester.takeException(), isNull);
 
     await tester.tap(find.byKey(const ValueKey('stock-row-rice-phone')));
-    await tester.pumpAndSettle();
+    await _settleStock(tester);
     expect(find.text('လက်ခံရန်'), findsOneWidget);
     await tester.tap(find.text('မလုပ်တော့ပါ'));
-    await tester.pumpAndSettle();
+    await _settleStock(tester);
     expect(
       (await database.readActiveProducts())
           .singleWhere((item) => item.id == 'rice-phone')
