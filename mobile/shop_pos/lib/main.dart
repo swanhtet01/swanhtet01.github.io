@@ -4101,7 +4101,8 @@ class _NewShopProductDialogState extends State<_NewShopProductDialog> {
   late final _name = TextEditingController(text: widget.initialName);
   late final _barcode = TextEditingController(text: widget.initialBarcode);
   final _price = TextEditingController();
-  final _stock = TextEditingController(text: '0');
+  final _stock = TextEditingController();
+  bool _showManualBarcode = false;
 
   @override
   void dispose() {
@@ -4117,7 +4118,6 @@ class _NewShopProductDialogState extends State<_NewShopProductDialog> {
     controller: _barcode,
     decoration: InputDecoration(
       labelText: shopCopy(widget.myanmar, 'Barcode', 'ဘားကုဒ်'),
-      helperText: shopCopy(widget.myanmar, 'Optional', 'မဖြစ်မနေမဟုတ်ပါ'),
     ),
   );
 
@@ -4187,11 +4187,7 @@ class _NewShopProductDialogState extends State<_NewShopProductDialog> {
                 controller: _stock,
                 keyboardType: TextInputType.number,
                 decoration: InputDecoration(
-                  labelText: shopCopy(
-                    widget.myanmar,
-                    'Opening stock',
-                    'စတင်လက်ကျန်',
-                  ),
+                  labelText: shopCopy(widget.myanmar, 'In stock', 'လက်ကျန်'),
                 ),
                 validator: (value) {
                   final count = int.tryParse(value?.trim() ?? '');
@@ -4204,7 +4200,25 @@ class _NewShopProductDialogState extends State<_NewShopProductDialog> {
                       : null;
                 },
               ),
-              if (widget.initialBarcode.trim().isEmpty) ...[
+              if (widget.initialBarcode.trim().isEmpty &&
+                  !_showManualBarcode) ...[
+                const SizedBox(height: 10),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    key: const ValueKey('shop-product-add-barcode'),
+                    onPressed: () => setState(() => _showManualBarcode = true),
+                    icon: const Icon(Icons.qr_code_2_outlined),
+                    label: Text(
+                      shopCopy(
+                        widget.myanmar,
+                        'Add barcode (optional)',
+                        'ဘားကုဒ်ထည့်ရန် (ရွေးချယ်နိုင်)',
+                      ),
+                    ),
+                  ),
+                ),
+              ] else if (widget.initialBarcode.trim().isEmpty) ...[
                 const SizedBox(height: 10),
                 _barcodeField(),
               ],
