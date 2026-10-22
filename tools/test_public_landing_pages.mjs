@@ -200,8 +200,8 @@ for (const page of landingPages) {
     const captureDisclosure = 'Sample records and prices'
     check(html.includes('class="shop-hero-app" id="shop-demo"') && html.includes(captureDisclosure), 'landing_shop_actual_capture_disclosed')
     check(!html.includes('class="pos-window"') && !html.includes('class="sample-label"') && !html.includes('Complete sample sale') && !html.includes('shop-sample-demo.js'), 'landing_shop_no_simulated_pos')
-    check(html.includes('class="shop-hero-app"') && !html.includes('class="shop-actual-showcase"') && !html.includes('class="shop-support-proof"'), 'landing_shop_has_one_product_section')
-    check(countOccurrences(html, '<figure class="shop-lead-capture">') === 1 && !html.includes('<article class="shop-workflow-card">'), 'landing_shop_one_enlarged_capture_without_duplicate_support_screens')
+    check(html.includes('class="shop-hero-app"') && !html.includes('class="shop-actual-showcase"') && !html.includes('class="shop-support-proof"'), 'landing_shop_has_no_old_showcase')
+    check(countOccurrences(html, '<figure class="shop-lead-capture">') === 1 && !html.includes('<article class="shop-workflow-card">'), 'landing_shop_one_counter_capture_without_duplicate_cards')
     check(html.includes('aria-describedby="shop-sample-disclosure"') && html.includes(captureDisclosure), 'landing_shop_capture_disclosure')
     check(!html.includes('Orders and stock. Clear next steps.') && !html.includes('Follow orders that need fulfilment or payment. See which products need a count or reorder.'), 'landing_shop_no_repeated_workflow_pitch')
     check(!html.includes('actual-shop-today') && !html.includes('DEVICE-ONLY DATA') && !html.includes('Export backup'), 'landing_shop_gallery_omits_storage_warning')
@@ -218,7 +218,10 @@ for (const page of landingPages) {
     check(!/<a\b[^>]*>\s*<img\b[^>]*src="\/images\/actual-shop-/i.test(html), 'landing_shop_screens_are_not_raw_image_links')
     check(!html.includes('Makro PRO') && !html.includes('17 October 2026'), 'landing_shop_no_dated_retail_price_claim')
     for (const screen of ['actual-shop-sell.png', 'actual-shop-sell-tablet.png', 'actual-shop-sell-mobile.png']) check(html.includes(`/images/${screen}`), `landing_shop_counter_capture:${screen}`)
-    check(!/\/images\/actual-shop-(?:orders|inventory)[^" ]*/.test(html), 'landing_shop_omits_tiny_support_captures')
+    check(html.includes('class="shop-inventory-proof"')
+      && html.includes('src="/images/actual-shop-inventory-tablet.png"')
+      && html.includes('srcset="/images/actual-shop-inventory-mobile.png"')
+      && !/\/images\/actual-shop-orders[^" ]*/.test(html), 'landing_shop_shows_inventory_without_cluttered_orders')
   } else {
     check(html.includes('class="platform-gallery"') && html.includes('class="platform-image"') && html.includes('class="product-proof"') && html.includes('class="feature-line"'), `landing_interface_and_features:${page.route}`)
     check(countOccurrences(html, '<figure class="platform-image') === productScreens[page.productId]?.length, `landing_product_views:${page.route}`)
@@ -431,6 +434,10 @@ check(!shopLanding.includes('class="pos-window"') && !shopLanding.includes('clas
   && !shopLanding.includes('shop-sample-demo.js'), 'shop_public_page_has_no_simulated_pos')
 check(countOccurrences(shopLanding, '<figure class="shop-lead-capture">') === 1
   && !shopLanding.includes('class="shop-support-proof"'), 'shop_one_real_capture_without_second_pitch')
+check(shopLanding.includes('class="shop-inventory-proof"')
+  && shopLanding.includes('src="/images/actual-shop-inventory-tablet.png"')
+  && shopLanding.includes('srcset="/images/actual-shop-inventory-mobile.png"')
+  && !shopLanding.includes('/images/actual-shop-orders'), 'shop_secondary_screen_is_inventory_without_order_clutter')
 check(shopManifest?.status === 'release-candidate-local', 'shop_public_status_matches_unhosted_candidate')
 check(shopManifest?.primaryCta?.url === '/shop/#shop-demo', 'shop_primary_action_opens_real_screen_gallery')
 check(shopLanding.includes('Sell at the counter.') && shopLanding.includes('Stay ahead of stock.'), 'shop_hero_matches_the_operating_job')

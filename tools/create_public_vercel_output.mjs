@@ -819,6 +819,16 @@ body[data-view="shop"] .shop-hero h1 { max-width: none; }
 body[data-view="shop"] .shop-hero-copy > p { max-width: 68ch; }
 body[data-view="shop"] .shop-hero-app { width: 100%; max-width: 1100px; justify-self: center; }
 body[data-view="shop"] .shop-lead-capture { max-width: none; margin: 0; padding: 10px; border-color: #dfe5ee; border-radius: 13px; box-shadow: 0 20px 44px rgba(20,35,65,.10); }
+body[data-view="shop"] .shop-inventory-proof { padding-block: clamp(44px,6vw,78px); background: #fff; }
+body[data-view="shop"] .shop-inventory-proof .wrap { display: grid; grid-template-columns: minmax(220px,.7fr) minmax(0,1fr); align-items: center; gap: clamp(28px,5vw,76px); }
+body[data-view="shop"] .shop-inventory-proof-copy { max-width: 360px; }
+body[data-view="shop"] .shop-inventory-proof-copy .eyebrow { margin: 0 0 12px; }
+body[data-view="shop"] .shop-inventory-proof h2 { margin: 0; color: #121826; font-size: clamp(30px,3.2vw,46px); line-height: 1.08; letter-spacing: -.04em; }
+body[data-view="shop"] .shop-inventory-proof-copy > p:last-child { margin: 16px 0 0; color: #4f5b6e; font-size: 16px; line-height: 1.55; }
+body[data-view="shop"] .shop-inventory-proof figure { min-width: 0; margin: 0; }
+body[data-view="shop"] .shop-inventory-proof picture,body[data-view="shop"] .shop-inventory-proof img { display: block; width: 100%; }
+body[data-view="shop"] .shop-inventory-proof img { height: auto; border: 1px solid #dfe5ee; border-radius: 11px; background: #f7f8fb; box-shadow: 0 16px 36px rgba(20,35,65,.07); }
+body[data-view="shop"] .shop-inventory-proof figcaption { padding-top: 10px; color: #667085; font-size: 12px; line-height: 1.5; }
 body[data-view="contact"] .contact-page { padding-block: clamp(48px,6vw,78px); }
 body[data-view="contact"] .contact-page .contact-form { gap: 16px; padding: 26px; border-color: #e1e3e8; border-radius: 12px; background: #fafbfc; box-shadow: none; }
 body[data-view="contact"] .contact-page .field-grid input, body[data-view="contact"] .contact-page .field-grid textarea { border-radius: 7px; }
@@ -829,6 +839,8 @@ body[data-view="contact"] .contact-page .contact-form .button { width: max-conte
   body[data-view="shop"] .shop-hero { padding-block: 34px; }
   body[data-view="shop"] .shop-hero h1 { max-width: 16ch; font-size: clamp(38px,10vw,48px); }
   body[data-view="shop"] .shop-hero .button-primary { width: 100%; justify-content: center; }
+  body[data-view="shop"] .shop-inventory-proof .wrap { grid-template-columns: 1fr; }
+  body[data-view="shop"] .shop-inventory-proof-copy { max-width: 540px; }
   body[data-view="contact"] .contact-page { padding-block: 32px 52px; }
   body[data-view="contact"] .contact-page .contact-form { padding: 20px; }
   body[data-view="contact"] .contact-page .contact-form .button { width: 100%; }
@@ -990,6 +1002,13 @@ function shopCounterSalePreview(locale = 'en') {
  const credit = `${locale === 'my' ? 'ဓာတ်ပုံရင်းမြစ်' : 'Photo sources'}: ${photographers} / Wikimedia Commons`
  return `<figure class="shop-lead-capture"><picture><source media="(max-width: 760px)" srcset="/images/${mobileImage}" width="390" height="844" /><source media="(max-width: 1024px)" srcset="/images/${tabletImage}" width="768" height="1024" /><img src="/images/${image}" alt="${escapeHtml(imageAlt)}" width="${locale === 'my' ? 1000 : 1440}" height="900" loading="eager" fetchpriority="high" /></picture><figcaption id="shop-sample-disclosure"><span>${disclosure}</span><span class="shop-photo-credit" id="shop-image-credits">${credit}</span></figcaption></figure>`
 }
+function shopInventoryProof() {
+ const tabletImage = 'actual-shop-inventory-tablet.png'
+ const mobileImage = 'actual-shop-inventory-mobile.png'
+ interfaceDisclosure(tabletImage)
+ interfaceDisclosure(mobileImage)
+ return `<section class="shop-inventory-proof" aria-labelledby="shop-inventory-proof-title"><div class="wrap"><div class="shop-inventory-proof-copy"><p class="eyebrow">Inventory</p><h2 id="shop-inventory-proof-title">Know what needs restocking.</h2><p>See on-hand quantities, reorder levels and incoming stock.</p></div><figure aria-describedby="shop-sample-disclosure"><picture><source media="(max-width: 600px)" srcset="/images/${mobileImage}" width="390" height="844" /><img src="/images/${tabletImage}" alt="Shop inventory showing low stock, product photos and stock to receive" width="768" height="1024" loading="lazy" /></picture><figcaption>Shop inventory</figcaption></figure></div></section>`
+}
 function productStory(id, standalone = false) {
  const item=stories[id], label=publicProducts.find(product=>product.id===id).name
  const route=manifest.pages.find(page=>page.productId===id)?.route
@@ -1046,7 +1065,7 @@ function shopLandingHtml(product, page, locale = 'en') {
  const shopWithRemovedMocks = removeSectionByClass(removeSectionByClass(heroWithPreview, 'demo-section', 'shop_interactive_mock'), 'benefits-section', 'shop_mock_benefits')
  return documentHtml({route:page.route,title:page.title,description,shareImage:`/og-card-${product.id}.png`,locale,
   schema:{'@type':'Product',name:product.name,description,url:canonical(page.route)},
-  content:`<main id="content">${shopWithRemovedMocks}</main>${productAction(product)}`})
+  content:`<main id="content">${shopWithRemovedMocks}${isMyanmar ? '' : shopInventoryProof()}</main>${productAction(product)}`})
 }
 
 function productLandingHtml(product,page) {
