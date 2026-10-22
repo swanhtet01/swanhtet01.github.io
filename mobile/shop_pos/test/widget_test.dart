@@ -2771,9 +2771,11 @@ void main() {
             } else {
               expect(
                 tester.getTopLeft(stock).dx,
-                tester.getTopLeft(
-                  find.byKey(const ValueKey('shop-add-affordance:rice')),
-                ).dx,
+                tester
+                    .getTopLeft(
+                      find.byKey(const ValueKey('shop-add-affordance:rice')),
+                    )
+                    .dx,
               );
             }
             expect(

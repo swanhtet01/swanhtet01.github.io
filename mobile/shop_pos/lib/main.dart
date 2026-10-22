@@ -1945,7 +1945,11 @@ class _ShopHomeState extends State<ShopHome> {
               child: Padding(
                 padding: EdgeInsets.symmetric(
                   horizontal: narrowProductRow ? 8 : 14,
-                  vertical: enlargedNarrowRow ? 8 : compactProductRow ? 9 : 10,
+                  vertical: enlargedNarrowRow
+                      ? 8
+                      : compactProductRow
+                      ? 9
+                      : 10,
                 ),
                 child: Row(
                   children: [
