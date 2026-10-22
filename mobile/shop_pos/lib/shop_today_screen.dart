@@ -424,6 +424,35 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
         ? (contentWidth - 12) / 2
         : contentWidth;
     final salesWidth = phoneLayout ? contentWidth : smallCardWidth;
+    final metricCards = <Widget>[
+      _metric(
+        width: salesWidth,
+        label: _copy('Sales today', 'ယနေ့ရောင်းအား'),
+        value: _money(snapshot.salesMmk),
+        icon: Icons.payments_outlined,
+        emphasized: true,
+      ),
+      if (phoneLayout)
+        _compactStats(snapshot, width: contentWidth)
+      else ...[
+        _metric(
+          width: smallCardWidth,
+          label: _copy('Completed sales', 'ပြီးစီးသောအရောင်း'),
+          value: _number(snapshot.saleCount),
+          icon: Icons.receipt_long_outlined,
+        ),
+        if (hasStockAlert)
+          _metric(
+            width: smallCardWidth,
+            label: _copy(
+              'Low-stock products',
+              'လက်ကျန်နည်းသော ကုန်ပစ္စည်းများ',
+            ),
+            value: _number(snapshot.stockToCheck.length),
+            icon: Icons.inventory_2_outlined,
+          ),
+      ],
+    ];
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
       padding: EdgeInsets.fromLTRB(inset, phoneLayout ? 12 : 16, inset, 32),
@@ -461,39 +490,21 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
                     snapshot.saleCount > 0 ||
                     snapshot.pendingWallet != null) ...[
                   SizedBox(height: phoneLayout ? 16 : 22),
-                  Wrap(
-                    spacing: 12,
-                    runSpacing: 12,
-                    children: [
-                      _metric(
-                        width: salesWidth,
-                        label: _copy('Sales today', 'ယနေ့ရောင်းအား'),
-                        value: _money(snapshot.salesMmk),
-                        icon: Icons.payments_outlined,
-                        emphasized: true,
+                  if (threeAcross && hasStockAlert && !phoneLayout)
+                    IntrinsicHeight(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          metricCards[0],
+                          const SizedBox(width: 12),
+                          metricCards[1],
+                          const SizedBox(width: 12),
+                          metricCards[2],
+                        ],
                       ),
-                      if (phoneLayout)
-                        _compactStats(snapshot, width: contentWidth)
-                      else ...[
-                        _metric(
-                          width: smallCardWidth,
-                          label: _copy('Completed sales', 'ပြီးစီးသောအရောင်း'),
-                          value: _number(snapshot.saleCount),
-                          icon: Icons.receipt_long_outlined,
-                        ),
-                        if (hasStockAlert)
-                          _metric(
-                            width: smallCardWidth,
-                            label: _copy(
-                              'Low-stock products',
-                              'လက်ကျန်နည်းသော ကုန်ပစ္စည်းများ',
-                            ),
-                            value: _number(snapshot.stockToCheck.length),
-                            icon: Icons.inventory_2_outlined,
-                          ),
-                      ],
-                    ],
-                  ),
+                    )
+                  else
+                    Wrap(spacing: 12, runSpacing: 12, children: metricCards),
                 ],
                 if (snapshot.pendingWallet != null ||
                     snapshot.stockToCheck.isNotEmpty ||

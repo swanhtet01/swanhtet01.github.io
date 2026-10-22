@@ -1008,6 +1008,37 @@ void main() {
       expect((salesY - stockY).abs(), lessThan(4));
       expect(find.text('Check stock'), findsOneWidget);
       expect(tester.takeException(), isNull);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+      await tester.pumpWidget(
+        ShopApp(
+          database: database,
+          authClient: null,
+          apiBaseUrl: 'https://app.supermega.dev',
+          initialMyanmar: true,
+        ),
+      );
+      await tester.pumpAndSettle();
+      double cardBottom(String label) {
+        final metricCard = find.ancestor(
+          of: find.text(label),
+          matching: find.byType(Card),
+        );
+        return tester.getBottomLeft(metricCard).dy;
+      }
+      final burmeseSalesBottom = cardBottom('ယနေ့ရောင်းအား');
+      expect(
+        (burmeseSalesBottom - cardBottom('ပြီးစီးသောအရောင်း')).abs(),
+        lessThan(4),
+      );
+      expect(
+        (burmeseSalesBottom -
+                cardBottom('လက်ကျန်နည်းသော ကုန်ပစ္စည်းများ'))
+            .abs(),
+        lessThan(4),
+      );
+      expect(tester.takeException(), isNull);
     } finally {
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump(const Duration(milliseconds: 1));
@@ -1801,6 +1832,7 @@ void main() {
           final basket = find.byKey(const ValueKey('shop-split-basket'));
           expect(catalog, findsOneWidget);
           expect(basket, findsOneWidget);
+          expect(tester.getSize(catalog).height, lessThan(400));
         }
         await tester.tap(
           find.byTooltip(myanmar ? 'အရောင်းထဲထည့်ရန်' : 'Add to sale'),

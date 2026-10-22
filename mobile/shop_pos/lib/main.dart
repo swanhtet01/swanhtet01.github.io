@@ -1126,11 +1126,21 @@ class _ShopHomeState extends State<ShopHome> {
                                       ],
                                       const SizedBox(height: 14),
                                       Expanded(
-                                        child: SizedBox(
-                                          key: const ValueKey(
-                                            'shop-split-catalog',
+                                        child: LayoutBuilder(
+                                          builder: (context, constraints) => Align(
+                                            alignment: Alignment.topCenter,
+                                            child: SizedBox(
+                                              key: const ValueKey(
+                                                'shop-split-catalog',
+                                              ),
+                                              width: double.infinity,
+                                              height: _catalogHeight(
+                                                products,
+                                                constraints.maxHeight,
+                                              ),
+                                              child: _catalog(products),
+                                            ),
                                           ),
-                                          child: _catalog(products),
                                         ),
                                       ),
                                     ],
@@ -1348,6 +1358,19 @@ class _ShopHomeState extends State<ShopHome> {
       ),
     ),
   );
+
+  double _catalogHeight(List<ShopProduct> products, double maxHeight) {
+    if (products.isEmpty) return maxHeight;
+    final matchingCount = _visibleProducts(products).length;
+    final textScale = MediaQuery.textScalerOf(context).scale(1.0);
+    // A short catalog should end near its final row. Larger catalogs retain
+    // the available scroll area, and text scaling may grow the rows freely.
+    final rowHeight = widget.myanmar ? 82.0 : 96.0;
+    final desiredHeight = matchingCount == 0
+        ? 360.0
+        : 148.0 + matchingCount * rowHeight * textScale;
+    return desiredHeight.clamp(0.0, maxHeight).toDouble();
+  }
 
   Widget _catalog(List<ShopProduct> products) => Card(
     child: Padding(
@@ -1597,6 +1620,17 @@ class _ShopHomeState extends State<ShopHome> {
     });
   }
 
+  Iterable<ShopProduct> _visibleProducts(List<ShopProduct> products) {
+    final text = _search.text.trim().toLowerCase();
+    return products.where(
+      (item) =>
+          text.isEmpty ||
+          item.name.toLowerCase().contains(text) ||
+          (item.barcode?.toLowerCase().contains(text) ?? false) ||
+          (item.sku?.toLowerCase().contains(text) ?? false),
+    );
+  }
+
   Widget _productList(
     List<ShopProduct> products, {
     required double catalogWidth,
@@ -1607,15 +1641,7 @@ class _ShopHomeState extends State<ShopHome> {
     final narrowProductRow = catalogWidth < 380;
     final touchCompactRow = MediaQuery.sizeOf(context).width >= 820;
     final text = _search.text.trim().toLowerCase();
-    final visible = products
-        .where(
-          (item) =>
-              text.isEmpty ||
-              item.name.toLowerCase().contains(text) ||
-              (item.barcode?.toLowerCase().contains(text) ?? false) ||
-              (item.sku?.toLowerCase().contains(text) ?? false),
-        )
-        .toList();
+    final visible = _visibleProducts(products).toList();
     if (visible.isEmpty) {
       return ListView(
         padding: const EdgeInsets.all(24),
