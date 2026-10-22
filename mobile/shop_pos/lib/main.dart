@@ -1760,6 +1760,11 @@ class _ShopHomeState extends State<ShopHome> {
         narrowProductRow && MediaQuery.textScalerOf(context).scale(1) > 1.2;
     final touchCompactRow = MediaQuery.sizeOf(context).width >= 820;
     final photoExtent = narrowProductRow ? 48.0 : 58.0;
+    final catalogPriceStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
+      color: Theme.of(context).colorScheme.onSurfaceVariant,
+      fontWeight: FontWeight.w500,
+      fontFeatures: const [FontFeature.tabularFigures()],
+    );
     final text = _search.text.trim().toLowerCase();
     final visible = _visibleProducts(products).toList();
     if (visible.isEmpty) {
@@ -1862,6 +1867,7 @@ class _ShopHomeState extends State<ShopHome> {
                 '${shopNumber(item.onHand, myanmar: true)} ခုလက်ကျန်',
               );
         final stockStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
+          fontWeight: item.onHand == 0 ? FontWeight.w600 : FontWeight.w500,
           color: item.onHand == 0
               ? Theme.of(context).colorScheme.error
               : Theme.of(context).colorScheme.onSurfaceVariant,
@@ -1884,7 +1890,7 @@ class _ShopHomeState extends State<ShopHome> {
           child: Container(
             key: ValueKey('shop-add-affordance:${item.id}'),
             width: enlargedNarrowRow ? 72 : 52,
-            height: 44,
+            height: 48,
             decoration: BoxDecoration(
               color: canAdd ? const Color(0xffeef3ff) : const Color(0xfff1f2f5),
               borderRadius: BorderRadius.circular(10),
@@ -1967,11 +1973,14 @@ class _ShopHomeState extends State<ShopHome> {
                                   overflow: TextOverflow.ellipsis,
                                   semanticsLabel: item.name,
                                   style: Theme.of(context).textTheme.bodyMedium
-                                      ?.copyWith(fontWeight: FontWeight.w600),
+                                      ?.copyWith(
+                                        fontWeight: FontWeight.w600,
+                                        height: 1.3,
+                                      ),
                                 ),
                                 Text(
                                   _mmk(item.priceMmk),
-                                  style: _shopMoneyStyle(context),
+                                  style: catalogPriceStyle,
                                 ),
                               ],
                             ),
@@ -2015,7 +2024,10 @@ class _ShopHomeState extends State<ShopHome> {
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       semanticsLabel: item.name,
-                      style: Theme.of(context).textTheme.titleMedium,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        height: 1.3,
+                      ),
                     ),
                     subtitle: Column(
                       mainAxisSize: MainAxisSize.min,
@@ -2029,7 +2041,7 @@ class _ShopHomeState extends State<ShopHome> {
                             children: [
                               Text(
                                 _mmk(item.priceMmk),
-                                style: _shopMoneyStyle(context),
+                                style: catalogPriceStyle,
                               ),
                               Text(stock, style: stockStyle),
                             ],
@@ -2045,7 +2057,7 @@ class _ShopHomeState extends State<ShopHome> {
                             children: [
                               Text(
                                 _mmk(item.priceMmk),
-                                style: _shopMoneyStyle(context),
+                                style: catalogPriceStyle,
                               ),
                               const SizedBox(width: 12),
                               addAffordance,
