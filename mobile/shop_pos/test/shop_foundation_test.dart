@@ -1427,6 +1427,60 @@ void main() {
   });
 
   group('offline stock updates', () {
+    test('per-product alert starts at 5 and never changes stock or outbox', () async {
+      final database = ShopDatabase(NativeDatabase.memory());
+      try {
+        await database.addProduct(
+          id: 'rice',
+          name: 'Rice',
+          priceMmk: 12000,
+          openingStock: 8,
+        );
+        final stockMovements = await database.countStockMovements();
+        final outboxOperations = await database.countOutboxOperations();
+        expect((await database.readActiveProducts()).single.reorderLevel, 5);
+        await database.setReorderLevel(
+          productId: 'rice',
+          expectedReorderLevel: 5,
+          reorderLevel: 12,
+        );
+        expect((await database.readActiveProducts()).single.reorderLevel, 12);
+        await expectLater(
+          database.setReorderLevel(
+            productId: 'rice',
+            expectedReorderLevel: 5,
+            reorderLevel: 3,
+          ),
+          throwsA(isA<StateError>()),
+        );
+        await database.setReorderLevel(
+          productId: 'rice',
+          expectedReorderLevel: 12,
+          reorderLevel: null,
+        );
+        expect((await database.readActiveProducts()).single.reorderLevel, isNull);
+        await database.setReorderLevel(
+          productId: 'rice',
+          expectedReorderLevel: null,
+          reorderLevel: 0,
+        );
+        expect((await database.readActiveProducts()).single.reorderLevel, 0);
+        await expectLater(
+          database.setReorderLevel(
+            productId: 'rice',
+            expectedReorderLevel: 0,
+            reorderLevel: -1,
+          ),
+          throwsArgumentError,
+        );
+        expect((await database.readActiveProducts()).single.onHand, 8);
+        expect(await database.countStockMovements(), stockMovements);
+        expect(await database.countOutboxOperations(), outboxOperations);
+      } finally {
+        await database.close();
+      }
+    });
+
     test('a count preserves stock promised in a pending wallet sale', () async {
       final database = ShopDatabase(NativeDatabase.memory());
       try {
