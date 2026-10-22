@@ -506,6 +506,13 @@ async function main() {
     captures.push(await captureMobile(cdp, sessionId, output, 'actual-shop-inventory-mobile', ['Inventory', 'Stock'],
       { fixturePath: '/shop/', tab: 'inventory', selector: '.shop-stock-module', forbiddenText: ['Payment and handoff recorded'] }))
     await assertShopMobileFits(cdp, sessionId, '.shop-stock-module')
+    // Both locale previews must show the same synthetic business state. The
+    // English flow completed a real counter sale above; preserve that state for
+    // the Myanmar inventory view after its pre-sale counter captures.
+    const completedShopSnapshot = await evaluate(cdp, sessionId,
+      "localStorage.getItem('supermega.commerce.workspace.v2')")
+    if (!completedShopSnapshot) throw new Error('completed_shop_snapshot_missing')
+    const completedShopItems = JSON.parse(completedShopSnapshot).items
     await clickText(cdp, sessionId, 'Clean synthetic databases')
 
     await cdp.send('Page.navigate', { url: `${origin}/shop-my/` }, sessionId)
@@ -541,6 +548,12 @@ async function main() {
     captures.push(await captureMobile(cdp, sessionId, output, 'actual-shop-sell-my-mobile', ['ကုန်ပစ္စည်းများ', 'လက်ရှိ အရောင်း', 'ပန်းသီးနီ (တစ်လုံး)'],
       { fixturePath: '/shop-my/', tab: 'counter', uiLocale: 'my', selector: '.shop-counter-grid', imageSelector: '.shop-product-art.shop-product-photo', images: 5 }))
     await assertShopMobileFits(cdp, sessionId, '.shop-counter-grid')
+    await evaluate(cdp, sessionId, `localStorage.setItem('supermega.commerce.workspace.v2',${JSON.stringify(completedShopSnapshot)})`)
+    await clickText(cdp, sessionId, 'Reopen synthetic Shop')
+    await waitFor(cdp, sessionId, 'ကုန်ပစ္စည်းများ')
+    const myInventoryItems = await evaluate(cdp, sessionId, `JSON.parse(localStorage.getItem('supermega.commerce.workspace.v2') || '{}').items`)
+    if (JSON.stringify(myInventoryItems) !== JSON.stringify(completedShopItems))
+      throw new Error('myanmar_inventory_stock_differs_from_english_capture')
     await clickText(cdp, sessionId, 'Show Inventory')
     await waitFor(cdp, sessionId, 'ကုန်ပစ္စည်းလက်ကျန်')
     const myInventoryText = await evaluate(cdp, sessionId, `document.querySelector('.shop-stock-workspace')?.innerText || ''`)
