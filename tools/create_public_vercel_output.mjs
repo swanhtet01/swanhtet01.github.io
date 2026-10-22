@@ -1030,7 +1030,7 @@ function shopLandingHtml(product, page, locale = 'en') {
  if (isMyanmar) {
   heroWithPreview = replaceOnce(heroWithPreview, '<p class="eyebrow">SuperMega Shop</p>', '<p class="eyebrow">SuperMega ဆိုင်</p>', 'my_shop_eyebrow')
   heroWithPreview = replaceOnce(heroWithPreview, 'Sell at the counter.<br>Stay ahead of stock.', 'ကောင်တာမှာ ရောင်းပါ။<br>ကုန်လက်ကျန်ကို အမြဲသိပါ။', 'my_shop_headline')
-  heroWithPreview = replaceOnce(heroWithPreview, 'Find or scan an item, review the basket and record the sale. See recorded orders and stock in the Shop browser workspace.', 'ကုန်ပစ္စည်းကို ရှာဖွေ သို့မဟုတ် စကန်ဖတ်ပြီး ခြင်းတောင်းကို စစ်ဆေးကာ အရောင်းကို မှတ်တမ်းတင်ပါ။ Shop ဘရောက်ဇာလုပ်ငန်းခွင်တွင် မှတ်တမ်းတင်ထားသော အော်ဒါများနှင့် ကုန်လက်ကျန်ကို ကြည့်ပါ။', 'my_shop_description')
+  heroWithPreview = replaceOnce(heroWithPreview, 'Find or scan an item, review the basket and record the sale. Review recorded orders and stock when you need them.', 'ကုန်ပစ္စည်းကို ရှာဖွေ သို့မဟုတ် စကန်ဖတ်ပြီး ခြင်းတောင်းကို စစ်ဆေးကာ အရောင်းကို မှတ်တမ်းတင်ပါ။ လိုအပ်သည့်အခါ မှတ်တမ်းတင်ထားသော အော်ဒါများနှင့် ကုန်လက်ကျန်ကို စစ်ဆေးပါ။', 'my_shop_description')
   heroWithPreview = replaceOnce(heroWithPreview, 'href="/contact/?product=shop">Request a Shop walkthrough', 'href="/my/contact/?product=shop">Shop အသုံးပြုပုံကို မေးမြန်းရန်', 'my_shop_cta')
  }
  const shopWithRemovedMocks = removeSectionByClass(removeSectionByClass(heroWithPreview, 'demo-section', 'shop_interactive_mock'), 'benefits-section', 'shop_mock_benefits')

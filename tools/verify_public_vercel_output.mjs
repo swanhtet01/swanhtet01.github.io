@@ -467,7 +467,7 @@ for (const [route, html] of [['/', home], ['/shop/', shopPage]]) {
   const withoutLanguageSwitch = html.replace(/<a href="\/my\/(?:shop|contact|privacy)\/" data-language-switch hreflang="my">မြန်မာ<\/a>/g, '')
   if (html.includes('data-i18n=') || /[\u1000-\u109f]/u.test(withoutLanguageSwitch)) fail('marketing_myanmar_copy_outside_switch', { route })
 }
-for (const token of ['Sell at the counter.', 'Stay ahead of stock.', 'Shop browser view · sample records', 'See recorded orders and stock in the Shop browser workspace.']) {
+for (const token of ['Sell at the counter.', 'Stay ahead of stock.', 'Shop browser view · sample records', 'Review recorded orders and stock when you need them.']) {
   if (!shopPage.includes(token)) fail('shop_page_scope_missing', { token })
 }
 if (/<section\b[^>]*class="[^"]*\bsubscription-section\b/.test(shopPage)

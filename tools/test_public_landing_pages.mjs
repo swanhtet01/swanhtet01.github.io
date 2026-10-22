@@ -355,7 +355,7 @@ for (const [englishRoute, myanmarRoute] of [['/shop/', '/my/shop/'], ['/contact/
   check(myanmar.includes('href="/my/contact/">ဆက်သွယ်ရန်</a>') && myanmar.includes('href="/my/privacy/">ကိုယ်ရေးအချက်အလက် မူဝါဒ</a>'), `myanmar_navigation_persists_locale:${myanmarRoute}`)
 }
 const myShop = readStatic('my/shop/index.html')
-check(myShop.includes('href="/my/contact/?product=shop"') && myShop.includes('Shop ဘရောက်ဇာလုပ်ငန်းခွင်'), 'myanmar_shop_contact_and_browser_claim')
+check(myShop.includes('href="/my/contact/?product=shop"') && myShop.includes('လိုအပ်သည့်အခါ မှတ်တမ်းတင်ထားသော အော်ဒါများနှင့် ကုန်လက်ကျန်ကို စစ်ဆေးပါ။'), 'myanmar_shop_contact_and_stock_claim')
 check(myShop.includes('Shop ဘရောက်ဇာမျက်နှာပြင် · နမူနာမှတ်တမ်းများ')
   && myShop.includes('src="/images/actual-shop-sell-my.png"')
   && myShop.includes('srcset="/images/actual-shop-sell-my-tablet.png"')
@@ -432,7 +432,7 @@ check(shopManifest?.status === 'release-candidate-local', 'shop_public_status_ma
 check(shopManifest?.primaryCta?.url === '/shop/#shop-demo', 'shop_primary_action_opens_real_screen_gallery')
 check(shopLanding.includes('Sell at the counter.') && shopLanding.includes('Stay ahead of stock.'), 'shop_hero_matches_the_operating_job')
 check(shopLanding.includes('.shop-hero .button-primary') && shopLanding.includes('white-space:nowrap'), 'shop_primary_action_stays_compact')
-check(shopLanding.includes('See recorded orders and stock in the Shop browser workspace.')
+check(shopLanding.includes('Review recorded orders and stock when you need them.')
   && !shopLanding.includes('follow open orders and stock in one workspace.'), 'shop_hero_does_not_imply_native_orders_parity')
 check(!/<section\b[^>]*class="[^"]*\bsubscription-section\b/.test(shopLanding)
   && !shopLanding.includes('no setup fee') && !shopLanding.includes('printer-sourcing markup'), 'shop_page_omits_unverified_pricing_and_hardware_promises')
