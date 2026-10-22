@@ -31,7 +31,7 @@ class WalletSetupScreen extends StatelessWidget {
                 shopCopy(
                   myanmar,
                   'Use a QR issued by your payment provider. A phone number alone is not a payment QR. The cashier still confirms each payment.',
-                  'ငွေပေးချေမှုဝန်ဆောင်မှုပေးသူမှ ထုတ်ပေးသော QR ကို အသုံးပြုပါ။ ဖုန်းနံပါတ်တစ်ခုတည်းသည် payment QR မဟုတ်ပါ။ ငွေလက်ခံရရှိမှုကို ဆိုင်ရှင်က အတည်ပြုရမည်။',
+                  'ငွေပေးချေမှုဝန်ဆောင်မှုပေးသူမှ ထုတ်ပေးသော QR ကို အသုံးပြုပါ။ ဖုန်းနံပါတ်တစ်ခုတည်းသည် ငွေပေးချေမှု QR မဟုတ်ပါ။ ငွေလက်ခံရရှိမှုကို ငွေကိုင်က အတည်ပြုရမည်။',
                 ),
               ),
             ),
@@ -131,7 +131,7 @@ class _WalletEditorState extends State<_WalletEditor> {
           () => _message = shopCopy(
             widget.myanmar,
             'Could not save. Use a valid static Myanmar MMQR payload and confirm it matches this wallet.',
-            'မသိမ်းနိုင်ပါ။ Myanmar MMQR static payload အမှန်ကိုထည့်ပြီး ဤ wallet နှင့်ကိုက်ညီကြောင်း အတည်ပြုပါ။',
+            'မသိမ်းနိုင်ပါ။ အသုံးပြုနိုင်သော ပုံသေ မြန်မာ MMQR အချက်အလက်ကို ထည့်ပြီး ဤငွေလက်ခံအကောင့်နှင့် ကိုက်ညီကြောင်း အတည်ပြုပါ။',
           ),
         );
       }
@@ -146,6 +146,11 @@ class _WalletEditorState extends State<_WalletEditor> {
     final qrPayload = qrPayloadForDisplay(
       _payload.text,
       confirmedAsProviderIssued: _issuerConfirmed,
+    );
+    final qrLabel = shopCopy(
+      myanmar,
+      '${widget.provider} merchant QR',
+      '${widget.provider} ဆိုင်ငွေလက်ခံ QR',
     );
     return Card(
       child: Padding(
@@ -184,12 +189,12 @@ class _WalletEditorState extends State<_WalletEditor> {
                 labelText: shopCopy(
                   myanmar,
                   'Provider-issued QR payload',
-                  'ဝန်ဆောင်မှုပေးသူထုတ်ပေးသော QR payload',
+                  'ဝန်ဆောင်မှုပေးသူ ထုတ်ပေးသော QR အချက်အလက်',
                 ),
                 helperText: shopCopy(
                   myanmar,
                   'Paste the exact payload from the merchant QR. Do not enter a phone number or invented wallet link.',
-                  'Merchant QR မှ payload အတိအကျကို ကူးထည့်ပါ။ ဖုန်းနံပါတ် သို့မဟုတ် ကိုယ်တိုင်ဖန်တီးထားသော wallet link မထည့်ပါနှင့်။',
+                  'ဆိုင်အတွက် ထုတ်ပေးထားသော QR မှ အချက်အလက်အတိအကျကို ကူးထည့်ပါ။ ဖုန်းနံပါတ် သို့မဟုတ် ကိုယ်တိုင်ဖန်တီးထားသောလင့်ခ် မထည့်ပါနှင့်။',
                 ),
               ),
               onChanged: (_) => setState(() {
@@ -207,7 +212,7 @@ class _WalletEditorState extends State<_WalletEditor> {
                 shopCopy(
                   myanmar,
                   'I checked this static MMQR against the merchant QR issued for this wallet.',
-                  'ဤ static MMQR ကို ဤ wallet အတွက် ထုတ်ပေးထားသော ဆိုင် QR နှင့် တိုက်စစ်ပြီးပါပြီ။',
+                  'ဤပုံသေ MMQR ကို ဤငွေလက်ခံအကောင့်အတွက် ထုတ်ပေးထားသော ဆိုင် QR နှင့် တိုက်စစ်ပြီးပါပြီ။',
                 ),
               ),
               controlAffinity: ListTileControlAffinity.leading,
@@ -221,7 +226,7 @@ class _WalletEditorState extends State<_WalletEditor> {
                   shopCopy(
                     myanmar,
                     'This is not a valid static Myanmar MMQR payload. Copy the exact merchant QR data from your wallet provider.',
-                    'ဤအချက်အလက်သည် static Myanmar MMQR အမှန်မဟုတ်ပါ။ Wallet provider မှ ဆိုင် QR အချက်အလက်အတိအကျကို ကူးယူပါ။',
+                    'ဤအချက်အလက်သည် အသုံးပြုနိုင်သော ပုံသေ မြန်မာ MMQR မဟုတ်ပါ။ ငွေပေးချေမှုဝန်ဆောင်မှုပေးသူမှ ထုတ်ပေးထားသော ဆိုင် QR အချက်အလက်အတိအကျကို ကူးယူပါ။',
                   ),
                   style: TextStyle(color: Theme.of(context).colorScheme.error),
                 ),
@@ -232,11 +237,11 @@ class _WalletEditorState extends State<_WalletEditor> {
                   container: true,
                   excludeSemantics: true,
                   image: true,
-                  label: '${widget.provider} merchant QR',
+                  label: qrLabel,
                   child: QrImageView(
                     data: qrPayload,
                     size: 210,
-                    semanticsLabel: '${widget.provider} merchant QR',
+                    semanticsLabel: qrLabel,
                   ),
                 ),
               ),
@@ -260,7 +265,7 @@ class _WalletEditorState extends State<_WalletEditor> {
               shopCopy(
                 myanmar,
                 'The app checks MMQR structure and checksum, not who issued it. Verify the merchant name in the wallet app. A scan never marks an order paid.',
-                'App သည် MMQR ပုံစံနှင့် checksum ကိုသာ စစ်ဆေးပြီး ထုတ်ပေးသူကို မစစ်ဆေးပါ။ Wallet app တွင် ဆိုင်အမည်ကို စစ်ပါ။ Scan လုပ်ရုံဖြင့် order paid မဖြစ်ပါ။',
+                'အက်ပ်သည် MMQR ၏ ဖွဲ့စည်းပုံနှင့် စစ်ဆေးဂဏန်းကိုသာ စစ်ဆေးပြီး ထုတ်ပေးသူကို မစစ်ဆေးပါ။ ငွေပေးချေမှုအက်ပ်တွင် ဆိုင်အမည်ကို အတည်ပြုပါ။ QR ဖတ်ရုံဖြင့် အရောင်းကို ငွေချေပြီးဟု မမှတ်ပါ။',
               ),
               style: Theme.of(context).textTheme.bodySmall,
             ),
