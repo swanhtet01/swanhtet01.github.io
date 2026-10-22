@@ -1743,6 +1743,8 @@ class _ShopHomeState extends State<ShopHome> {
     // the pane is too narrow for name, price and the add target.
     final compactProductRow = catalogWidth < 520;
     final narrowProductRow = catalogWidth < 380;
+    final enlargedNarrowRow =
+        narrowProductRow && MediaQuery.textScalerOf(context).scale(1) > 1.2;
     final touchCompactRow = MediaQuery.sizeOf(context).width >= 820;
     final text = _search.text.trim().toLowerCase();
     final visible = _visibleProducts(products).toList();
@@ -1860,23 +1862,31 @@ class _ShopHomeState extends State<ShopHome> {
         final addAffordance = ExcludeSemantics(
           child: Container(
             key: ValueKey('shop-add-affordance:${item.id}'),
-            width: 52,
+            width: enlargedNarrowRow ? 44 : 52,
             height: 44,
             decoration: BoxDecoration(
               color: canAdd ? const Color(0xffeef3ff) : const Color(0xfff1f2f5),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Center(
-              child: Text(
-                shopCopy(widget.myanmar, 'Add', 'ထည့်'),
-                maxLines: 1,
-                style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  color: canAdd
-                      ? Theme.of(context).colorScheme.primary
-                      : Theme.of(context).disabledColor,
-                ),
-              ),
+              child: enlargedNarrowRow
+                  ? Icon(
+                      Icons.add_rounded,
+                      size: 22,
+                      color: canAdd
+                          ? Theme.of(context).colorScheme.primary
+                          : Theme.of(context).disabledColor,
+                    )
+                  : Text(
+                      shopCopy(widget.myanmar, 'Add', 'ထည့်'),
+                      maxLines: 1,
+                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: canAdd
+                            ? Theme.of(context).colorScheme.primary
+                            : Theme.of(context).disabledColor,
+                      ),
+                    ),
             ),
           ),
         );
@@ -1951,7 +1961,11 @@ class _ShopHomeState extends State<ShopHome> {
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 semanticsLabel: item.name,
-                style: Theme.of(context).textTheme.titleMedium,
+                style: enlargedNarrowRow
+                    ? Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      )
+                    : Theme.of(context).textTheme.titleMedium,
               ),
               subtitle: Column(
                 mainAxisSize: MainAxisSize.min,
