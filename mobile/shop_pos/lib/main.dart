@@ -1206,7 +1206,10 @@ class _ShopHomeState extends State<ShopHome> {
                                             !_recoveredDraft &&
                                             _pendingWalletCheckout == null
                                         ? _emptyCartPanel()
-                                        : _cartPanel(products),
+                                        : _cartPanel(
+                                            products,
+                                            narrowPane: cartWidth < 320,
+                                          ),
                                   ),
                                 ],
                               ],
@@ -2086,8 +2089,12 @@ class _ShopHomeState extends State<ShopHome> {
     ),
   );
 
-  Widget _cartPanel(List<ShopProduct> products, {StateSetter? refresh}) {
-    final compactCart = MediaQuery.sizeOf(context).width < 520;
+  Widget _cartPanel(
+    List<ShopProduct> products, {
+    StateSetter? refresh,
+    bool narrowPane = false,
+  }) {
+    final compactCart = narrowPane || MediaQuery.sizeOf(context).width < 520;
     final byId = {for (final item in products) item.id: item};
     final hasUnavailableProducts = _cartHasUnavailableProducts(products);
     final entries = _pendingWalletCheckout != null
