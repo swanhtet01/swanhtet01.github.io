@@ -153,6 +153,24 @@ test('a correctly bound review cannot override missing product image rights', ()
   assert.equal(result(input), 'public_gallery_image_rights_unverified')
 })
 
+test('author-dedicated public-domain photos require the exact source page and named author', () => {
+  const input = fixture()
+  const product = input.imageSources.products[0]
+  product.publication_rights.basis = 'author-public-domain-dedication'
+  product.publication_rights.license_url = product.source_page
+  product.publication_rights.original_author = 'Example photographer'
+  rebindRights(input)
+  assert.equal(result(input), null)
+
+  product.publication_rights.license_url = 'https://example.com/unrelated-license'
+  rebindRights(input)
+  assert.equal(result(input), 'public_gallery_image_rights_unverified')
+  product.publication_rights.license_url = product.source_page
+  delete product.publication_rights.original_author
+  rebindRights(input)
+  assert.equal(result(input), 'public_gallery_image_rights_unverified')
+})
+
 test('an uncleared photo, disguised text-only photo, or changed image bytes fail closed', () => {
   for (const change of [
     input => { input.imageSources.products[0].publication_rights.status = 'candidate' },

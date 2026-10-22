@@ -8,7 +8,20 @@ const readDesignSource = (filename) => readFileSync(resolve(designDirectory, fil
 
 export const companyShopStyle = readDesignSource('company.css');
 export const shopMarkup = readDesignSource('shop-page.html');
-export const shopDemoScript = readDesignSource('shop-sample-demo.js');
+// The optional interactive example uses the same rights-cleared, illustrative
+// catalog as the browser capture. Embed these small derivatives so the source
+// demo cannot silently drift back to fabricated products or remote hotlinks.
+const sourceCatalog = JSON.parse(readFileSync(resolve(designDirectory, '..', '..', 'qa-assets', 'shop-products', 'sources.json'), 'utf8'));
+const demoCatalog = sourceCatalog.products.map(product => ({
+  id: product.sku,
+  name: product.name,
+  myanmar: product.name_my,
+  category: product.category,
+  price: product.sample_catalog_price_mmk,
+  initialStock: product.sample_opening_stock,
+  photo: `data:image/png;base64,${readFileSync(resolve(designDirectory, '..', '..', 'qa-assets', 'shop-products', product.file)).toString('base64')}`,
+}));
+export const shopDemoScript = readDesignSource('shop-sample-demo.js').replace('__SHOP_SAMPLE_PRODUCTS__', JSON.stringify(demoCatalog));
 
 export const brandMarkHtml = `<svg viewBox="${superMegaBrandMark.viewBox}" width="${superMegaBrandMark.width}" height="${superMegaBrandMark.height}" focusable="false"><path d="${superMegaBrandMark.path}" fill="none" stroke="${superMegaBrandIdentity.accent}" stroke-width="${superMegaBrandMark.strokeWidth}" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 

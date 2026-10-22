@@ -164,6 +164,17 @@ export function publicGalleryReleaseReadinessError(capture, imageSources, proven
       continue
     }
 
+    // Commons also hosts author-dedicated public-domain photos that are not
+    // CC0. Bind that basis to the exact source page instead of relabelling it
+    // as a Creative Commons license or accepting an arbitrary URL.
+    if (rights.basis === 'author-public-domain-dedication') {
+      if (rights.license_url !== product.source_page
+        || typeof rights.original_author !== 'string' || !rights.original_author.trim()) {
+        return 'public_gallery_image_rights_unverified'
+      }
+      continue
+    }
+
     if (!PERMISSION_BASES.has(rights.basis)
       || typeof rights.permission_ref !== 'string'
       || !rights.permission_ref.trim()) return 'public_gallery_image_rights_unverified'
