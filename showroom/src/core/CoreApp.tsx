@@ -1552,7 +1552,7 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
               non-cash method chosen, amount due on screen. No payment API, no status
               write; the cashier still confirms money received in the reviewed sale. */}
           {payment !== 'Cash' ? <PaymentQrButton amountDue={formatMoney(total)} method={payment} scope={paymentQrScope} settingsHint /> : null}
-          {canCompleteInOneReview ? <label className="shop-open-order-choice"><input checked={outcome === 'open_order'} onChange={(event) => setOutcome(event.target.checked ? 'open_order' : 'paid_handoff')} type="checkbox" /><span><strong>{uiText('Leave unpaid')}</strong><small>{uiText('Track it in Orders and finish later.')}</small></span></label> : null}
+          {canCompleteInOneReview ? <label className="shop-open-order-choice"><input checked={outcome === 'open_order'} onChange={(event) => setOutcome(event.target.checked ? 'open_order' : 'paid_handoff')} type="checkbox" /><span><strong>{uiText('Reserve for pickup')}</strong><small>{uiText('Collect payment before handoff.')}</small></span></label> : null}
           {effectiveOutcome === 'open_order' ? <label className="shop-counter-pickup-time">{uiText('Pickup by')}<input aria-invalid={pickupIssue ? 'true' : undefined} onChange={(event) => { setPickupBy(event.target.value); setPickupIssue('') }} type="datetime-local" value={pickupBy} />{pickupIssue ? <small role="alert">{pickupIssue}</small> : null}</label> : null}
         </div>
         {cartLowStockLines.length ? <p className="shop-cart-stock-risk" role="status">{readUiLocale() === 'my' ? `ဤအရောင်းပြီးနောက် ပစ္စည်း ${cartLowStockLines.length} မျိုး ပြန်မှာရန် သတ်မှတ်ချက်သို့ ရောက်ပါမည်။` : `After this sale, ${cartLowStockLines.length} ${cartLowStockLines.length === 1 ? 'item reaches its' : 'items reach their'} reorder level.`} <Link to="/shop/?tab=inventory">{uiText('Review stock')}</Link></p> : null}
@@ -8383,7 +8383,7 @@ function OrderList({
           : `${order.item} × ${order.quantity}`}</strong>
         <div className="order-statuses">
           <span className={`status-pill ${order.status === 'completed' ? 'approved' : order.status === 'cancelled' ? 'cancelled' : 'bounded'}`}>{uiText(order.status)}</span>
-          {attentionLabels.map((attention) => <span className={`status-pill ${attention.tone}`} data-order-attention={attention.kind} key={attention.kind}>{uiText(attention.text)}</span>)}
+          {attentionLabels.map((attention) => <span className={`status-pill ${attention.tone}`} data-order-attention={attention.kind} key={attention.kind}>{uiText(attention.kind === 'promise' && attention.text === 'Order late' && order.fulfilment === 'pickup' ? 'Pickup late' : attention.text)}</span>)}
         </div>
         <details className="order-record-details">
           <summary><span>{commerceOrderDisplayReference(order.id)} · {order.promisedAt ? `${uiText('promised')} ${formatTime(order.promisedAt)}` : uiText('promise not recorded')}</span><small>{uiText('Details')}</small></summary>
