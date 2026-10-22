@@ -707,6 +707,7 @@ void main() {
       await tester.enterText(find.byType(TextField), _password);
       await tester.tap(find.text('Restore and open Shop'));
       await _pumpUntil(tester, find.text('Opened Shop'));
+      await tester.pump(const Duration(milliseconds: 1));
       expect(find.text('Opened Shop'), findsOneWidget);
       final restoredFile = ShopDatabase.privateDatabaseFile(documents);
       expect(restoredFile.existsSync(), isTrue);
@@ -751,6 +752,7 @@ void main() {
       await _pumpUntil(tester, find.text('Start new Shop'));
       await tester.tap(find.text('Start new Shop'));
       await _pumpUntil(tester, find.text('Opened Shop'));
+      await tester.pump(const Duration(milliseconds: 1));
       expect(find.text('Opened Shop'), findsOneWidget);
       expect(ShopDatabase.privateDatabaseFile(documents).existsSync(), isTrue);
       expect(opened, isNotNull);
@@ -788,6 +790,7 @@ void main() {
       await tester.enterText(find.byType(TextField), _password);
       await tester.tap(find.text('Restore and open Shop'));
       await _pumpUntil(tester, find.text('Opened Shop'));
+      await tester.pump(const Duration(milliseconds: 1));
       expect(find.text('Opened Shop'), findsOneWidget);
     } finally {
       await tester.pumpWidget(const SizedBox.shrink());
@@ -844,6 +847,7 @@ void main() {
         ),
       );
       await _pumpUntil(tester, find.text('Opened Shop'));
+      await tester.pump(const Duration(milliseconds: 1));
       expect(find.text('Opened Shop'), findsOneWidget);
       expect(find.text('Restore backup'), findsNothing);
       expect(opened, isNotNull);
