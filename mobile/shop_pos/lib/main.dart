@@ -2190,7 +2190,7 @@ class _ShopHomeState extends State<ShopHome> {
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  if (!compactCart && _pendingWalletCheckout == null)
+                  if (_pendingWalletCheckout == null)
                     TextButton.icon(
                       key: const ValueKey('shop-hold-sale'),
                       onPressed:
@@ -2357,30 +2357,6 @@ class _ShopHomeState extends State<ShopHome> {
                       cash,
                       const SizedBox(height: 8),
                       wallet,
-                      if (compactCart && _cart.isNotEmpty) ...[
-                        const SizedBox(height: 4),
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: TextButton.icon(
-                            key: const ValueKey('shop-hold-sale'),
-                            onPressed:
-                                !_checkoutReady ||
-                                    _walletStarting ||
-                                    _cashConfirming ||
-                                    _saving
-                                ? null
-                                : () => _holdCurrentSale(refresh: refresh),
-                            icon: const Icon(Icons.bookmark_add_outlined),
-                            label: Text(
-                              shopCopy(
-                                widget.myanmar,
-                                'Hold sale',
-                                'အရောင်း ခဏသိမ်း',
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
                     ],
                   );
                 }

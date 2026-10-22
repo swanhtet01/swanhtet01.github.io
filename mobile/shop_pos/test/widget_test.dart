@@ -2668,12 +2668,11 @@ void main() {
         );
 
         final choice = find.byKey(
-          const ValueKey('shop-business-template:mini-mart'),
+          const ValueKey('shop-business-template:custom'),
         );
-        await tester.scrollUntilVisible(choice, -160);
         await tester.tap(choice);
         await tester.pumpAndSettle();
-        expect((await database.readBusinessProfile())?.templateId, 'mini-mart');
+        expect((await database.readBusinessProfile())?.templateId, 'custom');
         expect(await database.readActiveProducts(), isEmpty);
         expect(await database.countSales(), 0);
         expect(await database.countStockMovements(), 0);
@@ -3151,7 +3150,7 @@ void main() {
       await tester.tap(
         find.descendant(
           of: find.byType(NavigationBar),
-          matching: find.text('ရောင်းရန်'),
+          matching: find.byIcon(Icons.point_of_sale_outlined),
         ),
       );
       await tester.pumpAndSettle();
@@ -4582,14 +4581,13 @@ void main() {
         tester.getSize(find.byType(SegmentedButton<bool>)).height,
         greaterThanOrEqualTo(48),
       );
-      expect(
-        find.text(
-          myanmar
-              ? 'ဤစက်တွင်သာ သိမ်းသည်။ အွန်လိုင်းအရန်ကူး မရှိပါ။'
-              : 'On this device only. No online backup.',
-        ),
-        findsOneWidget,
+      final storageStatus = find.text(
+        myanmar
+            ? 'ဤစက်တွင်သာ သိမ်းသည်။ အွန်လိုင်းအရန်ကူး မရှိပါ။'
+            : 'On this device only. No online backup.',
       );
+      await tester.scrollUntilVisible(storageStatus, 120);
+      expect(storageStatus, findsOneWidget);
       expect(tester.takeException(), isNull);
       await database.close();
     });
