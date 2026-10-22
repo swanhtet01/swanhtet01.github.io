@@ -527,6 +527,7 @@ abstract final class ShopBackup {
             if (id is! String || id.isEmpty || id.length > 120 ||
                 name is! String || name.trim().isEmpty ||
                 name.runes.length > 80 ||
+                RegExp(r'[\x00-\x1f\x7f]').hasMatch(name) ||
                 operationId is! String || operationId.isEmpty ||
                 operationId.length > 120 ||
                 row['created_at_millis'] is! int ||

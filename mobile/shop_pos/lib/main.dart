@@ -2524,17 +2524,31 @@ class _ShopHomeState extends State<ShopHome> {
                                 !_saving && _checkoutReady
                             ? () => _reopenHeldSale(ticket.id)
                             : null,
-                        trailing: PopupMenuButton<String>(
-                          tooltip: shopCopy(widget.myanmar, 'Ticket options', 'အရောင်းရွေးချယ်မှုများ'),
-                          onSelected: (action) {
-                            if (action == 'discard') {
-                              _discardHeldSale(ticket, refresh: refresh);
-                            }
-                          },
-                          itemBuilder: (_) => [
-                            PopupMenuItem(
-                              value: 'discard',
-                              child: Text(shopCopy(widget.myanmar, 'Discard ticket', 'သိမ်းထားသောအရောင်းကို ဖျက်ရန်')),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            TextButton(
+                              key: ValueKey('shop-held-reopen:${ticket.id}'),
+                              onPressed: _cart.isEmpty &&
+                                      _pendingWalletCheckout == null &&
+                                      !_saving && _checkoutReady
+                                  ? () => _reopenHeldSale(ticket.id)
+                                  : null,
+                              child: Text(shopCopy(widget.myanmar, 'Reopen', 'ပြန်ဖွင့်ရန်')),
+                            ),
+                            PopupMenuButton<String>(
+                              tooltip: shopCopy(widget.myanmar, 'Ticket options', 'အရောင်းရွေးချယ်မှုများ'),
+                              onSelected: (action) {
+                                if (action == 'discard') {
+                                  unawaited(_discardHeldSale(ticket, refresh: refresh));
+                                }
+                              },
+                              itemBuilder: (_) => [
+                                PopupMenuItem(
+                                  value: 'discard',
+                                  child: Text(shopCopy(widget.myanmar, 'Discard ticket', 'သိမ်းထားသောအရောင်းကို ဖျက်ရန်')),
+                                ),
+                              ],
                             ),
                           ],
                         ),

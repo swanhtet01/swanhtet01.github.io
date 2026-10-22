@@ -78,7 +78,7 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.text('Customer A'), findsOneWidget);
         final ticket = (await database.readHeldSaleTickets()).single;
-        await tester.tap(find.byKey(ValueKey('shop-held-ticket:${ticket.id}')));
+        await tester.tap(find.byKey(ValueKey('shop-held-reopen:${ticket.id}')));
         await tester.pumpAndSettle();
         expect((await database.readCounterSaleDraft())?.operationId,
             original.operationId);
@@ -91,6 +91,45 @@ void main() {
       }
     });
   }
+
+  testWidgets('held-sale picker fits a 320px phone at enlarged text', (tester) async {
+    tester.view.physicalSize = const Size(320, 800);
+    tester.view.devicePixelRatio = 1;
+    tester.platformDispatcher.textScaleFactorTestValue = 1.5;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    final database = ShopDatabase(NativeDatabase.memory());
+    try {
+      await database.addProduct(
+        id: 'tea', name: 'Tea', priceMmk: 2500, openingStock: 3,
+      );
+      await database.saveCounterSaleDraft(
+        operationId: 'held-compact', quantities: const {'tea': 1},
+      );
+      await database.holdCounterSaleDraft(
+        id: 'compact-ticket', name: 'Customer May',
+        operationId: 'held-compact',
+      );
+      await tester.pumpWidget(MaterialApp(
+        home: ShopHome(
+          database: database, authClient: null,
+          apiBaseUrl: 'https://example.invalid',
+          myanmar: true, onLanguageChanged: (_) {},
+        ),
+      ));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('shop-held-sales-open')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('shop-held-reopen:compact-ticket')),
+          findsOneWidget);
+      expect(tester.takeException(), isNull);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+      await database.close();
+    }
+  });
 
   testWidgets('Windows scanner focus returns after switching tasks', (
     tester,

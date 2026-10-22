@@ -667,6 +667,13 @@ class ShopDatabase extends _$ShopDatabase {
       if (completed != null) {
         throw StateError('A completed sale still has a held ticket.');
       }
+      final active = await customSelect(
+        'SELECT 1 FROM shop_counter_drafts WHERE operation_id = ? LIMIT 1',
+        variables: [Variable.withString(operationId)],
+      ).getSingleOrNull();
+      if (active != null) {
+        throw StateError('A sale cannot be active and held at the same time.');
+      }
       tickets.add(HeldSaleTicket(
         id: id,
         name: name,
