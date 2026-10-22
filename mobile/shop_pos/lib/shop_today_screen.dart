@@ -481,10 +481,6 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
                   _heading(showNewSale: snapshot.products > 0),
                 // Put the next operator decision before history on phones.
                 if (phoneLayout) ..._attentionItems(snapshot),
-                if (phoneLayout && snapshot.recentSales.isNotEmpty) ...[
-                  const SizedBox(height: 16),
-                  _salesPreview(snapshot),
-                ],
                 if (snapshot.products > 0 ||
                     snapshot.saleCount > 0 ||
                     snapshot.pendingWallet != null) ...[
@@ -504,6 +500,10 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
                     )
                   else
                     Wrap(spacing: 12, runSpacing: 12, children: metricCards),
+                ],
+                if (phoneLayout && snapshot.recentSales.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  _salesPreview(snapshot),
                 ],
                 if (!phoneLayout) ..._attentionItems(snapshot),
                 if (!phoneLayout && snapshot.recentSales.isNotEmpty) ...[

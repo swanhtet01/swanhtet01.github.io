@@ -915,6 +915,10 @@ void main() {
         tester.getTopLeft(find.text('Check stock')).dy,
         lessThan(tester.getTopLeft(find.text('Recent sales')).dy),
       );
+      expect(
+        tester.getTopLeft(find.text('Sales today')).dy,
+        lessThan(tester.getTopLeft(find.text('Recent sales')).dy),
+      );
       expect(find.text('Stock to check'), findsNothing);
       await tester.ensureVisible(find.text('Check stock'));
       await tester.tap(find.text('Check stock'));
@@ -962,12 +966,19 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    final salesTotal = find.textContaining('၁၂,၄၅၀,၀၀၀').first;
+    expect(
+      tester.getBottomRight(salesTotal).dy,
+      lessThan(tester.getTopLeft(find.byType(NavigationBar)).dy),
+    );
     final latestItem = find.textContaining('MAMA ကြက်သား');
     expect(latestItem, findsOneWidget);
     expect(
-      tester.getBottomRight(latestItem).dy,
-      lessThan(tester.getTopLeft(find.byType(NavigationBar)).dy),
+      tester.getTopLeft(salesTotal).dy,
+      lessThan(tester.getTopLeft(latestItem).dy),
     );
+    await tester.ensureVisible(latestItem);
+    await tester.pumpAndSettle();
     expect(find.byTooltip('အရောင်းကြည့်ရန်'), findsOneWidget);
     expect(find.textContaining('၁၂,၄၅၀,၀၀၀'), findsWidgets);
     expect(tester.takeException(), isNull);
