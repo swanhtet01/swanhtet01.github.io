@@ -207,7 +207,9 @@ for (const page of landingPages) {
     check(html.includes('src="/images/actual-shop-sell.png"')
       && html.includes('srcset="/images/actual-shop-sell-tablet.png"')
       && html.includes('srcset="/images/actual-shop-sell-mobile.png"')
-      && !html.includes('platform-device-capture') && !html.includes('data-device-choice'), 'landing_shop_responsive_capture_without_switcher')
+      && !/<figure class="platform-device-capture/.test(html) && !html.includes('data-device-choice'), 'landing_shop_responsive_capture_without_switcher')
+    check(html.includes('MAMA photo:') && html.includes('twindel / Open Food Facts')
+      && html.includes('https://creativecommons.org/licenses/by-sa/3.0/'), 'landing_shop_product_photo_credit_visible')
     check(!html.includes('data-gallery-previous') && !html.includes('data-gallery-next') && !html.includes('data-platform-carousel'), 'landing_shop_all_views_without_carousel')
     check(!html.includes('<script src="/platform-carousel.js" defer></script>'), 'landing_shop_needs_no_gallery_script')
     check(!/<a\b[^>]*>\s*<img\b[^>]*src="\/images\/actual-shop-/i.test(html), 'landing_shop_screens_are_not_raw_image_links')
@@ -401,7 +403,7 @@ for (const [route, html] of [['/shop/', shopLanding], ...activeIds.filter(id => 
   const expectedLoginHref = `href="${appOrigin}/login?product=shop"`
   check(countOccurrences(body, expectedLoginHref) === 1, `login_action_count:${route}`)
   const carouselCount = 0
-  const expectedLinks = route === '/shop/' ? 9 : 5 + Number(routeManifestProduct?.status === 'available-in-app')
+  const expectedLinks = route === '/shop/' ? 11 : 5 + Number(routeManifestProduct?.status === 'available-in-app')
   check((body.match(/<a\b/g) || []).length === expectedLinks, `marketing_link_surface:${route}`)
   const viewportGalleryCount = countOccurrences(body, 'data-viewport-gallery')
   const expectedButtons = viewportGalleryCount * 3 + carouselCount * 2

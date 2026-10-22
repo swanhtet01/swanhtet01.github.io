@@ -605,6 +605,8 @@ const sharedStyle = `
   .shop-lead-capture picture,.shop-lead-capture img {display:block;width:100%}
   .shop-lead-capture img {height:auto;border:1px solid #e5e8ef;border-radius:8px;background:#f7f8fb}
   .shop-lead-capture figcaption {padding:12px 2px 2px;color:#596579;font-size:12px;line-height:1.45}
+  .shop-photo-credit {display:block;margin-top:3px}
+  .shop-photo-credit a {color:inherit;text-decoration:underline;text-underline-offset:2px}
   .shop-workflow-card p {margin:0;color:#596579;font-size:14px;line-height:1.55}
   .shop-workflow-support {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
   .shop-workflow-card {display:grid;grid-template-columns:minmax(0,1fr);gap:16px;min-width:0;margin:0;padding:14px;border:1px solid #e4e7ec;border-radius:12px;background:#fff}
@@ -921,7 +923,7 @@ function shopCounterSalePreview() {
  interfaceDisclosure(image)
  interfaceDisclosure(mobileImage)
  interfaceDisclosure(tabletImage)
- return `<figure class="shop-lead-capture"><picture><source media="(max-width: 760px)" srcset="/images/${mobileImage}" width="390" height="844" /><source media="(max-width: 1024px)" srcset="/images/${tabletImage}" width="768" height="1024" /><img src="/images/${image}" alt="${escapeHtml(alt)}" width="1440" height="900" loading="eager" fetchpriority="high" /></picture><figcaption id="shop-sample-disclosure">Shop browser workspace · synthetic local records</figcaption></figure>`
+ return `<figure class="shop-lead-capture"><picture><source media="(max-width: 760px)" srcset="/images/${mobileImage}" width="390" height="844" /><source media="(max-width: 1024px)" srcset="/images/${tabletImage}" width="768" height="1024" /><img src="/images/${image}" alt="${escapeHtml(alt)}" width="1440" height="900" loading="eager" fetchpriority="high" /></picture><figcaption id="shop-sample-disclosure">Shop browser workspace · synthetic local records<span class="shop-photo-credit">MAMA photo: <a href="https://world.openfoodfacts.org/cgi/product_image.pl?code=8850987101526&amp;id=front_en">twindel / Open Food Facts</a> · <a href="https://creativecommons.org/licenses/by-sa/3.0/">CC BY-SA 3.0</a></span></figcaption></figure>`
 }
 function shopResponsiveShowcase() {
  const orders = shopSupportCard({image:'actual-shop-orders.png',alt:'Shop browser order queue with fulfilment and payment follow-up',title:'Orders',description:'See what is ready, what is unpaid, and what needs the next step.'})

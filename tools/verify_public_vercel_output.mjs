@@ -382,11 +382,12 @@ for (const [route, html] of [['/shop/', pages.get('/shop/').html], ...publicProd
     ? `/contact/?product=${routeProduct.id}`
     : null
   const galleryViews = { shop: 3, website: 2, ecommerce: 2 }
-  const expectedLinks = route === '/shop/' ? 9 : 5 + Number(Boolean(contactActionTarget))
+  const expectedLinks = route === '/shop/' ? 11 : 5 + Number(Boolean(contactActionTarget))
   if ((body.match(/<a\b/g) || []).length !== expectedLinks) fail('marketing_link_surface_drift', { route, expectedLinks })
   const expectedLogin = `href="${appOrigin}/login?product=shop"`
   if (countOccurrences(body, expectedLogin) !== 1) fail('login_action_count_invalid', { route, expectedLogin })
   if (route === '/shop/' && (!body.includes('class="button button-primary" href="/contact/?product=shop">Request a Shop walkthrough') || body.includes('Ask about Shop') || body.includes('Talk about Shop') || body.includes('See Shop screens') || body.includes('Need help with Shop?'))) fail('shop_primary_product_action_missing')
+  if (route === '/shop/' && (!body.includes('MAMA photo:') || !body.includes('twindel / Open Food Facts') || !body.includes('https://creativecommons.org/licenses/by-sa/3.0/'))) fail('shop_photo_attribution_missing')
   if (body.includes('>Company</a>')) fail('company_page_navigation_not_consolidated')
   const hasGalleryNavigation = route !== '/shop/' && (galleryViews[routeProduct?.id] || 0) > 1
   const expectedButtons = Number(hasGalleryNavigation) * 2

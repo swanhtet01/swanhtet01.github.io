@@ -244,6 +244,8 @@ assert.match(generator, /@media\(max-width:760px\)\{\.shop-workflow-support\{gri
 assert.match(generator, /<figure class="shop-lead-capture"><picture>/)
 assert.match(generator, /figcaption id="shop-sample-disclosure">Shop browser workspace · synthetic local records/)
 assert.match(generator, /aria-describedby="shop-sample-disclosure"/)
+assert.match(generator, /MAMA photo: <a href="https:\/\/world\.openfoodfacts\.org\/cgi\/product_image\.pl\?code=8850987101526&amp;id=front_en">twindel \/ Open Food Facts<\/a>/)
+assert.match(generator, /https:\/\/creativecommons\.org\/licenses\/by-sa\/3\.0\//)
 const shopStaticSource = generator.slice(generator.indexOf('function shopSupportCard('), generator.indexOf('function productStory('))
 assert.match(shopStaticSource, /<source media="\(max-width: 760px\)" srcset="\/images\/\$\{mobileImage\}"/)
 assert.match(shopStaticSource, /<source media="\(max-width: 1024px\)" srcset="\/images\/\$\{tabletImage\}"/)
