@@ -402,6 +402,7 @@ class _StockScreenState extends State<StockScreen> {
                                       overflow: TextOverflow.ellipsis,
                                       style: productTextStyle?.copyWith(
                                         fontWeight: FontWeight.w600,
+                                        height: 1.3,
                                       ),
                                     ),
                                     Text(
@@ -412,6 +413,7 @@ class _StockScreenState extends State<StockScreen> {
                                       ),
                                       style: textTheme.bodySmall?.copyWith(
                                         color: colors.onSurfaceVariant,
+                                        fontWeight: FontWeight.w500,
                                         fontFeatures: const [
                                           FontFeature.tabularFigures(),
                                         ],
@@ -486,7 +488,7 @@ class _StockScreenState extends State<StockScreen> {
                                               ? textTheme.titleMedium
                                               : textTheme.bodyMedium)
                                           ?.copyWith(
-                                            fontWeight: FontWeight.w700,
+                                            fontWeight: FontWeight.w600,
                                             color: item.onHand == 0
                                                 ? colors.error
                                                 : lowAlertLevel == null
