@@ -66,7 +66,7 @@ async function serveFixture(fixtures) {
         response.writeHead(200, { 'Content-Type': mime['.woff2'], 'Cache-Control': 'no-store' }).end(bytes)
         return
       }
-      const match = /^\/(shop|workspaces)\/(index\.html|fixture\.js|fixture\.css|qa\.css)?$/.exec(url.pathname)
+      const match = /^\/(shop|shop-my|workspaces)\/(index\.html|fixture\.js|fixture\.css|qa\.css)?$/.exec(url.pathname)
       if (!match) { response.writeHead(404).end(); return }
       const file = match[2] || 'index.html'
       const bytes = await readFile(join(fixtures[match[1]], file))
@@ -294,8 +294,9 @@ async function main() {
   await mkdir(outputRoot, { recursive: true })
   const output = await mkdtemp(join(outputRoot, 'gallery-candidate-'))
   const fixtureRoot = await mkdtemp(join(outputRoot, 'gallery-fixtures-'))
-  const fixtures = { shop: join(fixtureRoot, 'shop'), workspaces: join(fixtureRoot, 'workspaces') }
+  const fixtures = { shop: join(fixtureRoot, 'shop'), 'shop-my': join(fixtureRoot, 'shop-my'), workspaces: join(fixtureRoot, 'workspaces') }
   buildFixture('build_shop_browser_fixture.mjs', fixtures.shop, ['--today', '--gallery'])
+  buildFixture('build_shop_browser_fixture.mjs', fixtures['shop-my'], ['--today', '--gallery', '--gallery-myanmar'])
   buildFixture('build_product_clarity_fixture.mjs', fixtures.workspaces, ['--gallery'])
   const sampleMedia = new Map(await Promise.all(samplePhotoFiles.map(async file =>
     [`https://gallery-fixture.example/media/${file}`, await readFile(resolve(root, 'tools', 'qa-assets', file))])))
@@ -385,17 +386,6 @@ async function main() {
       { fixturePath: '/shop/', tab: 'counter', selector: '.shop-counter-grid', scrollToTop: true, imageSelector: '.shop-product-art.shop-product-photo', images: 1 }))
     captures.push(await captureMobile(cdp, sessionId, output, 'actual-shop-sell-mobile', ['Products', 'KAUNG 90 Days Rice'],
       { fixturePath: '/shop/', tab: 'counter', selector: '.shop-counter-grid', imageSelector: '.shop-product-art.shop-product-photo', images: 1 }))
-    const myLocale = await evaluate(cdp, sessionId, `window.__qaSetLocale('my').then(() => ({ selected: window.__qaReadLocale(), lang: document.documentElement.lang }))`)
-    if (myLocale.selected !== 'my' || myLocale.lang !== 'my') throw new Error(`myanmar_shop_locale_not_ready:${JSON.stringify(myLocale)}`)
-    captures.push(await capture(cdp, sessionId, output, 'actual-shop-sell-my', ['ကုန်ပစ္စည်းများ', 'လက်ရှိ အရောင်း', 'ငွေသား', 'လာယူရန် ပစ္စည်းသီးသန့်ထားရန်'],
-      { fixturePath: '/shop/', tab: 'counter', uiLocale: 'my', selector: '.shop-current-sale', imageSelector: '.shop-product-art.shop-product-photo', images: 1 }))
-    captures.push(await captureTablet(cdp, sessionId, output, 'actual-shop-sell-my-tablet', ['ကုန်ပစ္စည်းများ', 'လက်ရှိ အရောင်း'],
-      { fixturePath: '/shop/', tab: 'counter', uiLocale: 'my', selector: '.shop-counter-grid', scrollToTop: true, imageSelector: '.shop-product-art.shop-product-photo', images: 1 }))
-    captures.push(await captureMobile(cdp, sessionId, output, 'actual-shop-sell-my-mobile', ['ကုန်ပစ္စည်းများ', 'လက်ရှိ အရောင်း'],
-      { fixturePath: '/shop/', tab: 'counter', uiLocale: 'my', selector: '.shop-counter-grid', imageSelector: '.shop-product-art.shop-product-photo', images: 1 }))
-    const restoredLocale = await evaluate(cdp, sessionId, `window.__qaSetLocale('en').then(() => ({ selected: window.__qaReadLocale(), lang: document.documentElement.lang }))`)
-    if (restoredLocale.selected !== 'en' || restoredLocale.lang !== 'en') throw new Error(`english_shop_locale_not_restored:${JSON.stringify(restoredLocale)}`)
-    await waitFor(cdp, sessionId, 'Current sale')
     await clickSelector(cdp, sessionId, '.shop-review-sale')
     await waitFor(cdp, sessionId, 'Review counter sale')
     await typeInto(cdp, sessionId, '.accountable-action-gate input', 'Synthetic cashier')
@@ -467,6 +457,35 @@ async function main() {
     captures.push(await captureMobile(cdp, sessionId, output, 'actual-shop-inventory-mobile', ['Inventory', 'Stock'],
       { fixturePath: '/shop/', tab: 'inventory', selector: '.shop-stock-module', forbiddenText: ['Payment and handoff recorded'] }))
     await assertShopMobileFits(cdp, sessionId, '.shop-stock-module')
+    await clickText(cdp, sessionId, 'Clean synthetic databases')
+
+    await cdp.send('Page.navigate', { url: `${origin}/shop-my/` }, sessionId)
+    await waitFor(cdp, sessionId, 'ကုန်ပစ္စည်းများ')
+    const myLocale = await evaluate(cdp, sessionId, `({ selected: window.__qaReadLocale(), lang: document.documentElement.lang })`)
+    if (myLocale.selected !== 'my' || myLocale.lang !== 'my') throw new Error(`myanmar_shop_locale_not_ready:${JSON.stringify(myLocale)}`)
+    await clickText(cdp, sessionId, 'Show Counter')
+    const mySaleBasket = await evaluate(cdp, sessionId, `(async () => {
+      const added=[];
+      for (let index=0; index<3; index+=1) {
+        const tile=[...document.querySelectorAll('button.shop-product-tile')]
+          .find(candidate=>!candidate.querySelector('.shop-product-quantity'));
+        if (!tile) return {added,lines:document.querySelectorAll('.shop-cart-lines article').length};
+        added.push(tile.querySelector('.shop-product-name strong')?.textContent?.trim()||'unnamed product');
+        tile.click();
+        await new Promise(resolve=>setTimeout(resolve,100));
+      }
+      return {added,lines:document.querySelectorAll('.shop-cart-lines article').length};
+    })()`)
+    if (mySaleBasket.added.length !== 3 || mySaleBasket.lines !== 3)
+      throw new Error(`myanmar_counter_multi_item_basket_missing:${JSON.stringify(mySaleBasket)}`)
+    captures.push(await capture(cdp, sessionId, output, 'actual-shop-sell-my', ['ကုန်ပစ္စည်းများ', 'လက်ရှိ အရောင်း', 'ငွေသား', 'သောက်စရာ', 'အိမ်သုံးပစ္စည်း', 'အစားအသောက်'],
+      { fixturePath: '/shop-my/', tab: 'counter', uiLocale: 'my', selector: '.shop-current-sale', imageSelector: '.shop-product-art.shop-product-photo', images: 1,
+        forbiddenText: ['Drinks', 'Home care', 'Pantry', 'Cash'] }))
+    captures.push(await captureTablet(cdp, sessionId, output, 'actual-shop-sell-my-tablet', ['ကုန်ပစ္စည်းများ', 'လက်ရှိ အရောင်း'],
+      { fixturePath: '/shop-my/', tab: 'counter', uiLocale: 'my', selector: '.shop-counter-grid', scrollToTop: true, imageSelector: '.shop-product-art.shop-product-photo', images: 1 }))
+    captures.push(await captureMobile(cdp, sessionId, output, 'actual-shop-sell-my-mobile', ['ကုန်ပစ္စည်းများ', 'လက်ရှိ အရောင်း'],
+      { fixturePath: '/shop-my/', tab: 'counter', uiLocale: 'my', selector: '.shop-counter-grid', imageSelector: '.shop-product-art.shop-product-photo', images: 1 }))
+    await assertShopMobileFits(cdp, sessionId, '.shop-counter-grid')
     await clickText(cdp, sessionId, 'Clean synthetic databases')
 
     await cdp.send('Page.navigate', { url: `${origin}/workspaces/` }, sessionId)

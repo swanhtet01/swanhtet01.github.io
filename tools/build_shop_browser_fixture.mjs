@@ -16,6 +16,7 @@ const productPhotoMimes = Object.fromEntries(Object.entries(productPhotoFiles).m
 const managed = process.argv.includes('--managed')
 const today = process.argv.includes('--today')
 const gallery = process.argv.includes('--gallery')
+const galleryMyanmar = process.argv.includes('--gallery-myanmar')
 const requestedOutput = process.env.SUPERMEGA_QA_FIXTURE_OUTPUT_DIR
 const out = resolve(requestedOutput || (managed ? '.tmp/qa-managed-shop' : '.tmp/qa-shop'))
 if (requestedOutput) {
@@ -33,11 +34,17 @@ let fail=false;let rejectedWrites=0;let ledgerWrites=0;window.__qaFailAck=false;
 const memory=(map)=>({getItem:k=>map.get(k)??null,setItem:(k,v)=>{if(fail&&k===COMMERCE_KEY){rejectedWrites++;throw new DOMException('Synthetic quota','QuotaExceededError')};if(k===COMMERCE_KEY)ledgerWrites++;map.set(k,String(v))},removeItem:k=>map.delete(k),key:i=>[...map.keys()][i]??null,get length(){return map.size}});
 Object.defineProperty(window,'localStorage',{value:memory(values)});Object.defineProperty(window,'sessionStorage',{value:memory(new Map())});
 const gallery=${gallery};
+const galleryMyanmar=${galleryMyanmar};
 const seed=createSeedCommerce(Date.now());
 if(gallery){
  const completedSeedIds=new Set(seed.orders.filter(order=>order.status==='completed').map(order=>order.id));
  seed.orders=seed.orders.filter(order=>!completedSeedIds.has(order.id));
  seed.movements=seed.movements.filter(movement=>!completedSeedIds.has(movement.orderId));
+}
+if(galleryMyanmar){
+ const categories={Pantry:'အစားအသောက်',Drinks:'သောက်စရာ','Home care':'အိမ်သုံးပစ္စည်း'};
+ seed.items=seed.items.map(item=>({...item,category:categories[item.category]??item.category}));
+ await setUiLocale('my');
 }
 localStorage.setItem(COMMERCE_KEY,JSON.stringify(seed));
 const productPhotoBytes=${JSON.stringify(productPhotoBytes)};
