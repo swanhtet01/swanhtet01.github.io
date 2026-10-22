@@ -594,7 +594,12 @@ void main() {
       expect(find.text('မပြီးသေးသော အရောင်း'), findsNothing);
       await tester.tap(find.text('အရောင်းဆက်ရန်'));
       await tester.pumpAndSettle();
-      expect(find.textContaining('အရောင်းစစ်ရန်'), findsOneWidget);
+      // A tablet resumes into the visible two-pane basket, while phones use
+      // the bottom Review sale action to open the same sale.
+      expect(find.byKey(const ValueKey('shop-split-basket')), findsOneWidget);
+      expect(find.text('လက်ရှိအရောင်း'), findsOneWidget);
+      expect(find.textContaining('၃,၀၀၀'), findsWidgets);
+      expect(find.text('ငွေသား'), findsOneWidget);
       expect((await database.readCounterSaleDraft())?.quantities, {'water': 2});
       expect(await database.countSales(), 0);
       expect(tester.takeException(), isNull);

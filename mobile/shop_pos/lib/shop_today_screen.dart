@@ -442,6 +442,13 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
                   ],
                 ] else
                   _heading(showNewSale: snapshot.products > 0),
+                // On a phone, completed transactions are the first useful
+                // evidence of today's work. Keep the latest sale above the
+                // summary cards so it remains visible with large text.
+                if (phoneLayout && snapshot.recentSales.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  _salesPreview(snapshot),
+                ],
                 if (snapshot.products > 0 ||
                     snapshot.saleCount > 0 ||
                     snapshot.pendingWallet != null) ...[
@@ -530,8 +537,8 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
                       onTap: () => _openFirstProduct(),
                     ),
                 ],
-                if (snapshot.recentSales.isNotEmpty) ...[
-                  SizedBox(height: phoneLayout ? 16 : 24),
+                if (!phoneLayout && snapshot.recentSales.isNotEmpty) ...[
+                  const SizedBox(height: 24),
                   _salesPreview(snapshot),
                 ],
               ],
