@@ -790,6 +790,39 @@ void main() {
     await database.close();
   });
 
+  testWidgets('recent sales dates stay in Burmese when the host uses English', (
+    tester,
+  ) async {
+    final database = ShopDatabase(NativeDatabase.memory());
+    await database.addProduct(
+      id: 'tea',
+      name: 'Tea',
+      priceMmk: 2500,
+      openingStock: 1,
+    );
+    await database.recordCashSale(
+      operationId: 'burmese-date',
+      lines: const [ShopSaleLineInput(productId: 'tea', quantity: 1)],
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('en'),
+        home: RecentSalesScreen(database: database, myanmar: true),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.textContaining(
+        RegExp(r'[၀-၉]{2}/[၀-၉]{2}/[၀-၉]{4} [၀-၉]{2}:[၀-၉]{2}'),
+      ),
+      findsOneWidget,
+    );
+    expect(find.textContaining('AM'), findsNothing);
+    expect(find.textContaining('PM'), findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await database.close();
+  });
+
   testWidgets('saved sale reprints without recording another sale', (
     tester,
   ) async {
@@ -2490,6 +2523,40 @@ void main() {
     final savedAfterPhoneEdit = (await database.readWalletSetups()).single;
     expect(savedAfterPhoneEdit.merchantPhone, '09987654321');
     expect(savedAfterPhoneEdit.issuerConfirmed, isFalse);
+    await database.close();
+  });
+
+  testWidgets('merchant QR is described in Burmese when Myanmar is selected', (
+    tester,
+  ) async {
+    final database = ShopDatabase(NativeDatabase.memory());
+    await database.saveWalletSetup(
+      MerchantWalletSetup(
+        provider: 'KBZPay',
+        merchantPhone: '09123456789',
+        officialQrPayload: _testStaticMmqr(),
+        issuerConfirmed: true,
+      ),
+    );
+    await tester.pumpWidget(
+      MaterialApp(home: WalletSetupScreen(database: database, myanmar: true)),
+    );
+    await tester.pumpAndSettle();
+    expect(find.textContaining('ငွေကိုင်က အတည်ပြုရမည်'), findsOneWidget);
+    expect(find.textContaining('payment QR'), findsNothing);
+
+    await tester.ensureVisible(find.byType(QrImageView).first);
+    await tester.pumpAndSettle();
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is Semantics &&
+            widget.properties.label == 'KBZPay ဆိုင်ငွေလက်ခံ QR' &&
+            widget.properties.image == true,
+      ),
+      findsOneWidget,
+    );
+    expect(_merchantQrSemantics('KBZPay'), findsNothing);
     await database.close();
   });
 

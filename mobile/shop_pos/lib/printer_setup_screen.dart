@@ -86,7 +86,7 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
             : shopCopy(
                 widget.myanmar,
                 'Found ${result.printers.length}. Send a test receipt and check that paper comes out.',
-                '${result.printers.length} ခု တွေ့ပါသည်။ စမ်းသပ်ပြေစာပို့ပြီး စက္ကူထွက်လာကြောင်း စစ်ပါ။',
+                '${shopNumber(result.printers.length, myanmar: true)} ခု တွေ့ပါသည်။ စမ်းသပ်ပြေစာပို့ပြီး စက္ကူထွက်လာကြောင်း စစ်ပါ။',
               );
       });
     } on PrinterNetworkChanged {
