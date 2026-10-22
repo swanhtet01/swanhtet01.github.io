@@ -644,7 +644,7 @@ const publicObservabilityScript = `(function () {
 `
 
 const publicMarketingStyle = (companyShopStyle + `
-/* One quiet, consistent public identity. The company page is editorial; Shop is product-led. */
+/* One quiet, product-led public identity. SuperMega remains the company; Shop is the destination. */
 .nav-links a { min-height: 44px; border-radius: 6px; padding-inline: 13px; transition: color 160ms ease, border-color 160ms ease; }
 .nav-links a[aria-current="page"] { border-bottom: 2px solid var(--brand-accent); border-radius: 0; color: var(--ink); background: transparent; }
 .nav-links a:hover:not([aria-current="page"]) { border-color: transparent; color: var(--brand-accent-strong); background: transparent; }
@@ -656,14 +656,8 @@ body[data-view="shop"] .shop-showcase-nav a { border-radius: 8px; }
   .site-header .nav-links a:first-child { display: inline-flex; }
   .site-header .nav-sign-in { display: none; }
 }
-body[data-view="company"] .company-hero { background: #f6f5f1; }
-body[data-view="company"] .company-hero::before { display: none; }
-body[data-view="company"] .company-hero .hero-grid { min-height: 500px; align-items: start; padding-block: clamp(32px,4vw,54px); }
-body[data-view="company"] .company-hero .hero-copy { max-width: 590px; }
-body[data-view="company"] .company-hero h1 { max-width: 100%; font-size: clamp(42px,4.8vw,62px); line-height: 1.02; letter-spacing: -.052em; }
-body[data-view="company"] .company-hero .hero-copy > p:not(.hero-kicker) { max-width: 44ch; font-size: 17px; line-height: 1.55; }
-body[data-view="company"] .company-product-visual { gap: 10px; padding: 12px; border-color: #dfded8; border-radius: 14px; background: #fff; box-shadow: 0 14px 32px rgba(25,28,38,.06); }
-body[data-view="company"] .company-product-visual img { border-color: #e4e4e1; border-radius: 8px; }
+.footer-company { display: grid; max-width: 560px; gap: 6px; }
+.footer-company-statement { margin: 0; color: var(--brand-muted); font-size: .8rem; line-height: 1.55; }
 body[data-view="shop"] #shop.shop-view { min-height: 0; }
 body[data-view="shop"] .shop-hero { padding-block: 24px 20px; border-bottom: 0; background: #f6f8fc; }
 body[data-view="shop"] .native-shop-gallery { padding-top: 0; background: #f6f8fc; }
@@ -711,8 +705,6 @@ body[data-view="contact"] .contact-page .contact-form { gap: 16px; padding: 26px
 body[data-view="contact"] .contact-page .field-grid input, body[data-view="contact"] .contact-page .field-grid textarea { border-radius: 7px; }
 body[data-view="contact"] .contact-page .contact-form .button { width: max-content; min-width: 176px; min-height: 48px; justify-self: start; }
 @media (max-width: 760px) {
-  body[data-view="company"] .company-hero .hero-grid { min-height: 0; padding-block: 32px; }
-  body[data-view="company"] .company-hero h1 { max-width: 100%; font-size: clamp(38px,10vw,52px); }
   body[data-view="shop"] .shop-hero { padding-block: 24px 20px; }
   body[data-view="shop"] .shop-hero h1 { max-width: 16ch; font-size: clamp(34px,9vw,42px); line-height: 1.12; }
   body[data-view="shop"] .shop-hero-copy > p { font-size: 17px; line-height: 1.62; }
@@ -777,7 +769,7 @@ function documentHtml({ route, title, description, content, schema = null, robot
   const url = canonical(route)
   const shareImageUrl = canonical(shareImage)
   const baseRoute = locale === 'my' && route.startsWith('/my/') ? route.slice(3) : route
-  const view = baseRoute === '/' ? 'company' : baseRoute === '/shop/' ? 'shop' : baseRoute === '/contact/' ? 'contact' : null
+  const view = baseRoute === '/shop/' ? 'shop' : baseRoute === '/contact/' ? 'contact' : null
   const myanmarRoute = localizedPublicRoutes[baseRoute]
   const alternateLinks = myanmarRoute ? `\n    <link rel="alternate" hreflang="en" href="${escapeHtml(canonical(baseRoute))}" />\n    <link rel="alternate" hreflang="my" href="${escapeHtml(canonical(myanmarRoute))}" />\n    <link rel="alternate" hreflang="x-default" href="${escapeHtml(canonical(baseRoute))}" />` : ''
   const themeColor = view === 'shop' ? '#f7f9fc' : '#ffffff'

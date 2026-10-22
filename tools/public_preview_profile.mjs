@@ -41,6 +41,7 @@ export function validatePreviewLinks(html, policy, products, options = {}) {
   const publicOrigin = options.publicOrigin || 'https://supermega.dev'
   for (const href of hrefs) {
     if (!href || /[\s\\]|%|&(?:#|[a-z]+;)/i.test(href) || href.startsWith('//')) throw new Error('public_preview_href_unsafe')
+    if (href === '/') throw new Error('public_preview_company_destination_removed')
     if (/\/plant(?:\/|\?|#|$)|\/operations\/production|[?&](?:product|demo)=(?:plant|production|factory)(?:&|$)/i.test(href)) throw new Error('public_preview_retired_entry')
     if (href === 'mailto:swanhtet@supermega.dev') continue
     const url = new URL(href, publicOrigin)

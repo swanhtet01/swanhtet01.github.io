@@ -45,8 +45,11 @@ export function companyShopHeaderHtml(route, locale = 'en') {
 export function companyShopFooterHtml(_route, year, locale = 'en') {
   const isMyanmar = locale === 'my';
   const home = isMyanmar ? '/my/shop/' : '/shop/';
+  const companyStatement = isMyanmar
+    ? 'SuperMega သည် မြန်မာနိုင်ငံမှ ဆော့ဖ်ဝဲကုမ္ပဏီဖြစ်ပြီး Shop အက်ပ်ကို ဖန်တီးပါသည်။'
+    : 'SuperMega is a Myanmar software company and the maker of Shop.';
   return `<footer class="footer"><div class="wrap footer-row">
-    <a class="brand" href="${home}" aria-label="${superMegaBrandIdentity.name} ${isMyanmar ? 'ဆိုင်' : 'Shop'}"><span class="brand-mark" aria-hidden="true">${brandMarkHtml}</span><span class="brand-word">${superMegaBrandIdentity.name}</span></a>
+    <div class="footer-company"><a class="brand" href="${home}" aria-label="${superMegaBrandIdentity.name} ${isMyanmar ? 'ဆိုင်' : 'Shop'}"><span class="brand-mark" aria-hidden="true">${brandMarkHtml}</span><span class="brand-word">${superMegaBrandIdentity.name}</span></a><p class="footer-company-statement">${companyStatement}</p></div>
     <nav class="footer-links" aria-label="${isMyanmar ? 'အောက်ခြေ လမ်းညွှန်' : 'Footer'}"><a href="${isMyanmar ? '/my/contact/' : '/contact/'}">${isMyanmar ? 'ဆက်သွယ်ရန်' : 'Contact'}</a><a href="${isMyanmar ? '/my/privacy/' : '/privacy/'}">${isMyanmar ? 'ကိုယ်ရေးအချက်အလက် မူဝါဒ' : 'Privacy'}</a><span>&copy; ${year} ${superMegaBrandIdentity.name}</span></nav>
   </div></footer>`;
 }

@@ -111,11 +111,14 @@ test('saved Plant setup survives visibility projection byte-for-byte', () => {
 })
 
 test('generated public entry and contact expose only Shop', async () => {
-  const home = await html('index.html'), contact = main(await html('contact/index.html'))
+  const home = await html('index.html'), contactSource = await html('contact/index.html'), contact = main(contactSource)
   assert.match(home, /url=\/shop\//)
+  assert.match(home, /rel="canonical" href="https:\/\/supermega\.dev\/shop\/"/)
+  assert.match(home, /name="robots" content="noindex,follow"/)
   assert.doesNotMatch(home, /class="product-story"|Plant|all four/)
   assert.doesNotMatch(contact, /<select|<option|product=ecommerce|product=website|product=plant/)
   assert.match(contact, /name="product" value="guide"/)
+  assert.match(contact, new RegExp(manifest.company.statement.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
   for (const product of activeProductContracts(manifest)) {
     const page = main(await html(product.id+'/index.html'))
     const fullPage = await html(product.id+'/index.html')
@@ -135,6 +138,27 @@ test('generated public entry and contact expose only Shop', async () => {
   assert.match(myShop, /srcset="\/images\/native-shop\/shop_checkout_820_my\.png"/)
   assert.match(myShop, />ဆိုင်<\/p>/)
   assert.doesNotMatch(myShop, /shop_[a-z]+_390_my\.png|ဖုန်းမျက်နှာပြင်/)
+
+  const publicPages = [
+    ['shop/index.html', '>Company<', 'SuperMega is a Myanmar software company and the maker of Shop.'],
+    ['contact/index.html', '>Company<', 'SuperMega is a Myanmar software company and the maker of Shop.'],
+    ['privacy/index.html', '>Company<', 'SuperMega is a Myanmar software company and the maker of Shop.'],
+    ['my/shop/index.html', '>ကုမ္ပဏီ<', 'SuperMega သည် မြန်မာနိုင်ငံမှ ဆော့ဖ်ဝဲကုမ္ပဏီဖြစ်ပြီး Shop အက်ပ်ကို ဖန်တီးပါသည်။'],
+    ['my/contact/index.html', '>ကုမ္ပဏီ<', 'SuperMega သည် မြန်မာနိုင်ငံမှ ဆော့ဖ်ဝဲကုမ္ပဏီဖြစ်ပြီး Shop အက်ပ်ကို ဖန်တီးပါသည်။'],
+    ['my/privacy/index.html', '>ကုမ္ပဏီ<', 'SuperMega သည် မြန်မာနိုင်ငံမှ ဆော့ဖ်ဝဲကုမ္ပဏီဖြစ်ပြီး Shop အက်ပ်ကို ဖန်တီးပါသည်။'],
+  ]
+  for (const [path, forbiddenLabel, companyStatement] of publicPages) {
+    const source = await html(path)
+    const header = source.match(/<header\b[\s\S]*?<\/header>/)?.[0] ?? ''
+    const footer = source.match(/<footer\b[\s\S]*?<\/footer>/)?.[0] ?? ''
+    assert.ok(header && footer, `public chrome missing: ${path}`)
+    assert.doesNotMatch(header, new RegExp(forbiddenLabel))
+    assert.doesNotMatch(header, /href="\/"/)
+    assert.match(footer, new RegExp(companyStatement.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+  }
+
+  const config = JSON.parse(await readFile(resolve(root,'.vercel/output/config.json'),'utf8'))
+  assert.ok(config.routes.some(route => route.src === '^/(?:index\\.html)?$' && route.status === 308 && route.headers?.Location === '/shop/'))
 })
 
 test('Plant public route becomes compatibility-only, not sales or new setup', async () => {

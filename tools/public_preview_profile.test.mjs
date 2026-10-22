@@ -3,6 +3,7 @@ import { test } from 'node:test'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { bindPreviewNavigation } from './public_preview_navigation.mjs'
+import { companyShopFooterHtml, companyShopHeaderHtml } from './public_company_shop_design.mjs'
 import { previewProfile, validatePreviewContact, validatePreviewLinks, validatePreviewDeployment } from './public_preview_profile.mjs'
 const root = resolve(import.meta.dirname, '..')
 const isolatedOutputId = process.env.SUPERMEGA_PUBLIC_OUTPUT_ID || ''
@@ -10,7 +11,7 @@ if (isolatedOutputId && !/^[a-z0-9][a-z0-9-]{0,63}$/.test(isolatedOutputId)) thr
 const staticDir = isolatedOutputId
   ? resolve(root, '.tmp', `supermega-public-output-${isolatedOutputId}`, 'static')
   : resolve(root, '.vercel/output/static')
-const currentRelease = JSON.parse(readFileSync(resolve(staticDir, '__release.json'), 'utf8'))
+const readCurrentRelease = () => JSON.parse(readFileSync(resolve(staticDir, '__release.json'), 'utf8'))
 const commit = 'a'.repeat(40)
 const app = { origin: 'https://megaos-123456789-swanhtet01s-projects.vercel.app',
   projectId: 'prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG', deploymentId: 'dpl_12345678', commit }
@@ -25,8 +26,23 @@ test('requires explicit profile, exact SHA and app binding', () => {
 test('paired Shop action permits only scoped merchant sign-in and excludes internal products', () => {
   assert.deepEqual(validatePreviewLinks(html, policy, products).activeProducts, ['shop'])
   for (const wrong of [html + `<a href="${app.origin}/shop/?tab=counter">Open app</a>`, html + '<a href="https://app.supermega.dev/login?product=shop">Login</a>',
-    html + '<a href="/plant/">Plant</a>', html + '<a href="/settings/?product=production">Setup</a>',
+    html + '<a href="/">Company</a>', html + '<a href="/plant/">Plant</a>', html + '<a href="/settings/?product=production">Setup</a>',
     html + '<a href="https://other.vercel.app">External</a>']) assert.throws(() => validatePreviewLinks(wrong, policy, products))
+})
+
+test('public chrome leads to Shop and keeps SuperMega as the company identity', () => {
+  for (const [locale, shopHref, contactHref, forbiddenLabel, statement] of [
+    ['en', '/shop/', '/contact/', '>Company<', 'SuperMega is a Myanmar software company and the maker of Shop.'],
+    ['my', '/my/shop/', '/my/contact/', '>ကုမ္ပဏီ<', 'SuperMega သည် မြန်မာနိုင်ငံမှ ဆော့ဖ်ဝဲကုမ္ပဏီဖြစ်ပြီး Shop အက်ပ်ကို ဖန်တီးပါသည်။'],
+  ]) {
+    const header = companyShopHeaderHtml(shopHref, locale)
+    const footer = companyShopFooterHtml(shopHref, 2026, locale)
+    assert.match(header, new RegExp(`href="${shopHref.replaceAll('/', '\\/')}"`))
+    assert.match(header, new RegExp(`href="${contactHref.replaceAll('/', '\\/')}"`))
+    assert.doesNotMatch(header, new RegExp(forbiddenLabel))
+    assert.doesNotMatch(header, /href="\/"/)
+    assert.match(footer, new RegExp(statement.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+  }
 })
 test('isolated contact cannot accept while production contract still requires acceptance', () => {
   const contact = { service: 'supermega-contact', status: 'attention', accepting: false,
@@ -105,6 +121,7 @@ test('Burmese routes stay within the preview boundary', () => {
 })
 
 test('current generated Shop, Contact and Privacy pages bind one sign-in without production escapes', () => {
+  const currentRelease = readCurrentRelease()
   for (const path of ['shop/index.html', 'contact/index.html', 'privacy/index.html', 'my/shop/index.html', 'my/contact/index.html', 'my/privacy/index.html']) {
     const source = readFileSync(resolve(staticDir, path), 'utf8')
     const canonicalSource = currentRelease.previewNavigation
