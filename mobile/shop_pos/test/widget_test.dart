@@ -2895,10 +2895,9 @@ void main() {
       await tester.scrollUntilVisible(
         fourthRow,
         120,
-        scrollable: find.ancestor(
-          of: thirdRow,
-          matching: find.byType(Scrollable),
-        ).first,
+        scrollable: find
+            .ancestor(of: thirdRow, matching: find.byType(Scrollable))
+            .first,
       );
       await tester.pumpAndSettle();
       expect(fourthRow, findsOneWidget);
@@ -4606,7 +4605,10 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Resume payment'), findsOneWidget);
       final addToSaleRow = find.byKey(const ValueKey('shop-catalog-row:tea'));
-      expect(find.byTooltip('Finish the pending payment first'), findsOneWidget);
+      expect(
+        find.byTooltip('Finish the pending payment first'),
+        findsOneWidget,
+      );
       expect(tester.widget<InkWell>(addToSaleRow).onTap, isNull);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpWidget(
