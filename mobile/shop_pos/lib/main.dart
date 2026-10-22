@@ -1733,18 +1733,23 @@ class _ShopHomeState extends State<ShopHome> {
         final addAffordance = ExcludeSemantics(
           child: Container(
             key: ValueKey('shop-add-affordance:${item.id}'),
-            width: 44,
+            width: 52,
             height: 44,
             decoration: BoxDecoration(
               color: canAdd ? const Color(0xffeef3ff) : const Color(0xfff1f2f5),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: Icon(
-              Icons.add,
-              size: 20,
-              color: canAdd
-                  ? Theme.of(context).colorScheme.primary
-                  : Theme.of(context).disabledColor,
+            child: Center(
+              child: Text(
+                shopCopy(widget.myanmar, 'Add', 'ထည့်'),
+                maxLines: 1,
+                style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: canAdd
+                      ? Theme.of(context).colorScheme.primary
+                      : Theme.of(context).disabledColor,
+                ),
+              ),
             ),
           ),
         );
