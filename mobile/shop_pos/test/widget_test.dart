@@ -2658,8 +2658,10 @@ void main() {
           'beauty-household',
           'custom',
         ]) {
+          final template = find.byKey(ValueKey('shop-business-template:$id'));
+          await tester.scrollUntilVisible(template, 160);
           expect(
-            find.byKey(ValueKey('shop-business-template:$id')),
+            template,
             findsOneWidget,
           );
         }
@@ -2671,7 +2673,7 @@ void main() {
         final choice = find.byKey(
           const ValueKey('shop-business-template:mini-mart'),
         );
-        await tester.ensureVisible(choice);
+        await tester.scrollUntilVisible(choice, -160);
         await tester.tap(choice);
         await tester.pumpAndSettle();
         expect((await database.readBusinessProfile())?.templateId, 'mini-mart');
@@ -2731,6 +2733,8 @@ void main() {
       expect(product.category, 'Grocery');
       expect(await database.countSales(), 0);
       expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(seconds: 5));
     },
   );
 
