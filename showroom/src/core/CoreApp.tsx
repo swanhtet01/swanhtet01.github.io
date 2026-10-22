@@ -7431,6 +7431,11 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
             : stockCountDraft
               ? 'Continue the stock count'
               : 'Count physical stock'
+  const stockNextDisplayTitle = inventoryLocale === 'my' && stockNextActionKind === 'receive'
+    ? 'ရောက်မည့်ကုန်'
+    : inventoryLocale === 'my' && stockNextActionKind === 'create'
+      ? 'ပစ္စည်းပြန်မှာရန်'
+      : uiText(stockNextActionTitle)
   const stockNextReason = stockNextActionKind === 'catalog'
     ? 'Stock decisions start with the real items, prices and opening quantities your business uses.'
     : stockNextActionKind === 'restore'
@@ -8098,7 +8103,7 @@ function CommercePage({ allowEcommerceShopHandoff, allowShopInboundRequests, con
           {stockCatalogRows.length ? <div aria-label={uiText('Other products')} className="shop-stock-catalog-preview" role="list"><div className="shop-stock-catalog-preview-heading"><strong>{uiText('Other products')}</strong><span>{stockCatalogRows.length} {uiText(stockCatalogRows.length === 1 ? 'item' : 'items')}</span></div>{stockCatalogRows.slice(0, 4).map(({ item }) => <div className="shop-stock-catalog-preview-row" key={item.sku} role="listitem"><ProductPhoto className="stock-product-photo" fallback={null} scope={productImageScope} sku={item.sku} /><span className="shop-stock-catalog-preview-name"><strong lang={inventoryLocale === 'my' && item.nameMy ? 'my' : undefined}>{inventoryLocale === 'my' && item.nameMy?.trim() ? item.nameMy : item.name}</strong><small>{item.sku}</small></span><span className="shop-stock-catalog-preview-quantity"><strong>{item.onHand.toLocaleString()}</strong><small>{uiText('Available')}</small></span><strong className="shop-stock-catalog-preview-price">{formatMoney(item.price)}</strong></div>)}</div> : null}
         </section>
         <aside aria-labelledby="shop-stock-next-title" className="shop-stock-next-action" data-action={stockNextActionKind}>
-          <header><span><span className="core-eyebrow">{inventoryLocale === 'my' ? 'နောက်တစ်ဆင့်' : uiText('Next stock action')}</span><h3 id="shop-stock-next-title">{inventoryLocale === 'my' && stockNextActionKind === 'create' ? 'ပစ္စည်းပြန်မှာရန်' : uiText(stockNextActionTitle)}</h3></span><b>{uiText(stockNextTrack)}</b></header>
+          <header><span><span className="core-eyebrow">{inventoryLocale === 'my' ? 'နောက်တစ်ဆင့်' : uiText('Next stock action')}</span><h3 id="shop-stock-next-title">{stockNextDisplayTitle}</h3></span><b>{uiText(stockNextTrack)}</b></header>
           {stockNextItem ? <div className="shop-stock-next-item"><ProductPhoto className="stock-product-photo" fallback={null} scope={productImageScope} sku={stockNextItem.sku} /><span><strong>{inventoryLocale === 'my' && stockNextItem.nameMy?.trim() ? stockNextItem.nameMy : stockNextItem.name}</strong><small>{stockNextItem.sku}</small></span><span><strong>{stockNextItem.onHand.toLocaleString()}</strong><small>{uiText('available')}</small></span></div> : null}
           <div className="shop-stock-next-guidance"><p>{stockNextReasonVisible}</p><details><summary>{uiText('Before you continue')}</summary><p>{uiText(stockNextOwnerCheck)}</p></details></div>
           <footer>{stockNextActionKind === 'catalog'
