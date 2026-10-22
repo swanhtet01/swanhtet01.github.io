@@ -89,15 +89,20 @@ async function readPage(route) {
     assert(response.headers.get(name) === value, 'page_security_header_wrong', { route, name, expected: value, actual: response.headers.get(name) })
   }
   const html = await response.text()
+  const isMyanmarPage = route.startsWith('/my/')
   for (const token of [
     `meta name="supermega-brand-version" content="${manifest.brand.version}"`,
     `meta name="supermega-context-version" content="${manifest.contextVersion}"`,
-    'aria-label="SuperMega Shop"',
+    isMyanmarPage ? 'aria-label="SuperMega ဆိုင်"' : 'aria-label="SuperMega Shop"',
     `class="brand-mark" aria-hidden="true">${brandMarkHtml}</span>`,
-    'href="/privacy/">Privacy</a>',
+    isMyanmarPage
+      ? 'href="/my/privacy/">ကိုယ်ရေးအချက်အလက် မူဝါဒ</a>'
+      : 'href="/privacy/">Privacy</a>',
   ]) assert(html.includes(token), 'page_shared_contract_missing', { route, token })
   assert(!/<a\b[^>]*\bhref="https:\/\/[^\"]+\/login\b[^\"]*"[^>]*>/i.test(html), 'page_public_login_present', { route })
-  const contactRouteToken = 'href="/contact/">Contact</a>'
+  const contactRouteToken = isMyanmarPage
+    ? 'href="/my/contact/">ဆက်သွယ်ရန်</a>'
+    : 'href="/contact/">Contact</a>'
   assert(html.includes(contactRouteToken), 'page_contact_route_missing', { route, token: contactRouteToken })
   const copyWithoutExternalDestinations = html.replace(/\bhref="https?:\/\/[^\"]+"/gi, '')
   for (const token of manifest.retiredPublicNames) assert(!copyWithoutExternalDestinations.toLowerCase().includes(token.toLowerCase()), 'retired_context_live', { route, token })
@@ -177,8 +182,10 @@ async function verifyOnce() {
       assert(landing.includes('class="platform-image"'), 'landing_headline_missing', { product: product.id })
     }
     assert(!landing.includes(`href="${appOrigin}/`), 'landing_public_app_action_present', { product: product.id })
-    if (product.id === 'shop') assert(landing.includes('href="/contact/?product=shop">Request a Shop walkthrough'), 'shop_contact_action_missing')
-    assert(!landing.includes(shopAction), 'retired_shop_action_present')
+    if (product.id === 'shop') {
+      assert(landing.includes(shopAction), 'shop_manifest_action_missing')
+      assert(landing.includes('href="/contact/?product=shop">Request a Shop walkthrough'), 'shop_contact_action_missing')
+    }
     assert(landing.includes('href="/contact/">Contact</a>'), 'landing_contact_route_missing', { product: product.id })
   }
   const contactPage = pages.get('/contact/') || ''
@@ -219,7 +226,10 @@ async function verifyOnce() {
     // generic-card surface stays valid while the per-product release is
     // pending; the post-deploy release verification always runs with
     // EXPECTED_RELEASE_COMMIT set, which asserts the per-product surface.
-    const landingShareImages = new Map(activeLandingPages.map((entry) => [entry.route, new URL(`/og-card-${entry.productId}.png`, `${manifest.release.productionDomain}/`).href]))
+    const landingShareImages = new Map(activeLandingPages.flatMap((entry) => {
+      const image = new URL(`/og-card-${entry.productId}.png`, `${manifest.release.productionDomain}/`).href
+      return [[entry.route, image], [`/my${entry.route}`, image]]
+    }))
     const loadedLandingRoutes = [...landingShareImages.keys()].filter((route) => pages.get(route) != null)
     const perProductCardsLive = loadedLandingRoutes.length > 0 && loadedLandingRoutes.every((route) => pages.get(route).includes(landingShareImages.get(route)))
     const perProductCardsActive = Boolean(expectedCommit) || perProductCardsLive
@@ -232,7 +242,10 @@ async function verifyOnce() {
         && html.includes('<meta property="og:image:height" content="630" />'), 'page_share_image_missing', { route })
       assert(html.includes('<meta name="twitter:card" content="summary_large_image" />')
         && html.includes(`<meta name="twitter:image" content="${expectedShareImage}" />`), 'page_twitter_card_wrong', { route })
-      assert(html.includes('<a class="skip-link" href="#content">Skip to content</a>') && html.includes('id="content"'), 'page_skip_link_missing', { route })
+      const skipLink = route.startsWith('/my/')
+        ? '<a class="skip-link" href="#content">အကြောင်းအရာသို့ သွားရန်</a>'
+        : '<a class="skip-link" href="#content">Skip to content</a>'
+      assert(html.includes(skipLink) && html.includes('id="content"'), 'page_skip_link_missing', { route })
     }
     for (const page of activeLandingPages) {
       const landing = pages.get(page.route)
@@ -260,8 +273,8 @@ async function verifyOnce() {
     shop: [
       { file: 'actual-shop-today.png', routes: [] },
       { file: 'actual-shop-sell.png', routes: ['/shop/'] },
-      { file: 'actual-shop-orders.png', routes: ['/shop/'] },
-      { file: 'actual-shop-inventory.png', routes: ['/shop/'] },
+      { file: 'actual-shop-orders.png', routes: [] },
+      { file: 'actual-shop-inventory.png', routes: [] },
     ],
   }
   for (const product of publicProducts) {

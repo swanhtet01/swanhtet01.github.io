@@ -52,8 +52,12 @@ export function validatePreviewLinks(html, policy, products, options = {}) {
   ])
   const publicOrigin = options.publicOrigin || 'https://supermega.dev'
   const shopPhotoCredits = new Set([
-    'https://world.openfoodfacts.org/cgi/product_image.pl?code=8850987101526&id=front_en',
-    'https://creativecommons.org/licenses/by-sa/3.0/',
+    'https://commons.wikimedia.org/wiki/File:Red_apple_on_a_plate_2017_A.jpg',
+    'https://commons.wikimedia.org/wiki/File:Banana_Fruit.JPG',
+    'https://commons.wikimedia.org/wiki/File:Red_tomato.jpg',
+    'https://commons.wikimedia.org/wiki/File:Red_onion.jpg',
+    'https://commons.wikimedia.org/wiki/File:A_ripe_yellow_mango_2025.jpg',
+    'https://creativecommons.org/publicdomain/zero/1.0/',
   ])
   for (const href of hrefs) {
     if (!href || /[\s\\]|%|&(?:#|[a-z]+;)/i.test(href) || href.startsWith('//')) throw new Error('public_preview_href_unsafe')

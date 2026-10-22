@@ -104,11 +104,15 @@ test('public preview rejects sign-in actions even with a valid walkthrough', () 
 test('Burmese routes and fixed Shop photo credits stay within the preview boundary', () => {
   const options = { publicOrigin: 'https://public-preview.example' }
   for (const href of ['/my/shop/', '/my/contact/?product=shop', '/my/privacy/',
-    'https://world.openfoodfacts.org/cgi/product_image.pl?code=8850987101526&amp;id=front_en',
-    'https://creativecommons.org/licenses/by-sa/3.0/']) {
+    'https://commons.wikimedia.org/wiki/File:Red_apple_on_a_plate_2017_A.jpg',
+    'https://commons.wikimedia.org/wiki/File:Banana_Fruit.JPG',
+    'https://commons.wikimedia.org/wiki/File:Red_tomato.jpg',
+    'https://commons.wikimedia.org/wiki/File:Red_onion.jpg',
+    'https://commons.wikimedia.org/wiki/File:A_ripe_yellow_mango_2025.jpg',
+    'https://creativecommons.org/publicdomain/zero/1.0/']) {
     validatePreviewLinks(html + `<a href="${href}">Continue</a>`, policy, products, options)
   }
-  for (const href of ['/my/plant/', 'https://world.openfoodfacts.org/cgi/product_image.pl?code=other&amp;id=front_en',
+  for (const href of ['/my/plant/', 'https://commons.wikimedia.org/wiki/File:Unreviewed_photo.jpg',
     'https://creativecommons.org/licenses/by-sa/4.0/']) {
     assert.throws(() => validatePreviewLinks(html + `<a href="${href}">Continue</a>`, policy, products, options))
   }
