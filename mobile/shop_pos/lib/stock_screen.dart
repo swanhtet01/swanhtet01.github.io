@@ -579,12 +579,8 @@ class _StockScreenState extends State<StockScreen> {
                                     ),
                                   ),
                                 );
-                                final stockActionLabel = [
-                                  shopCopy(
-                                    widget.myanmar,
-                                    'Adjust stock for ${item.name}',
-                                    '${item.name} ၏ လက်ကျန် ပြင်ရန်',
-                                  ),
+                                final stockSummaryLabel = [
+                                  item.name,
                                   shopCopy(
                                     widget.myanmar,
                                     '${item.onHand} in stock',
@@ -639,44 +635,50 @@ class _StockScreenState extends State<StockScreen> {
                                             horizontal: 12,
                                             vertical: 12,
                                           ),
-                                          child: Row(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.stretch,
                                             children: [
-                                              Expanded(
-                                                child: Semantics(
-                                                  button: true,
-                                                  label: stockActionLabel,
-                                                  onTap: openStockChange,
-                                                  child: ExcludeSemantics(
-                                                    child: InkWell(
-                                                      key: ValueKey(
-                                                        'stock-row-${item.id}',
-                                                      ),
-                                                      onTap: openStockChange,
-                                                      child: Column(
-                                                        crossAxisAlignment:
-                                                            CrossAxisAlignment
-                                                                .start,
-                                                        children: [
-                                                          detailsWithPhoto,
-                                                          const SizedBox(
-                                                            height: 8,
+                                              Row(
+                                                children: [
+                                                  Expanded(
+                                                    child: Semantics(
+                                                      label: stockSummaryLabel,
+                                                      child: ExcludeSemantics(
+                                                        child: Column(
+                                                          key: ValueKey(
+                                                            'stock-row-${item.id}',
                                                           ),
-                                                          onHand,
-                                                          if (reorderNote !=
-                                                              null) ...[
+                                                          crossAxisAlignment:
+                                                              CrossAxisAlignment
+                                                                  .start,
+                                                          children: [
+                                                            detailsWithPhoto,
                                                             const SizedBox(
-                                                              height: 2,
+                                                              height: 8,
                                                             ),
-                                                            reorderNote,
+                                                            onHand,
+                                                            if (reorderNote !=
+                                                                null) ...[
+                                                              const SizedBox(
+                                                                height: 2,
+                                                              ),
+                                                              reorderNote,
+                                                            ],
                                                           ],
-                                                        ],
+                                                        ),
                                                       ),
                                                     ),
                                                   ),
-                                                ),
+                                                  const SizedBox(width: 8),
+                                                  compactEdit,
+                                                ],
                                               ),
-                                              const SizedBox(width: 8),
-                                              compactEdit,
+                                              const SizedBox(height: 8),
+                                              SizedBox(
+                                                height: 48,
+                                                child: update,
+                                              ),
                                             ],
                                           ),
                                         )

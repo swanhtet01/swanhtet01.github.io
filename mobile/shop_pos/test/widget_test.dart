@@ -3963,9 +3963,7 @@ void main() {
     }
   });
 
-  testWidgets('phone stock row opens adjustment and cancel keeps the count', (
-    tester,
-  ) async {
+  testWidgets('phone stock action opens and cancels', (tester) async {
     final semantics = tester.ensureSemantics();
     tester.view.physicalSize = const Size(320, 800);
     tester.view.devicePixelRatio = 1;
@@ -4014,6 +4012,13 @@ void main() {
       findsOneWidget,
     );
     expect(find.byKey(const ValueKey('stock-row-rice-phone')), findsOneWidget);
+    final adjust = find.byKey(const ValueKey('stock-update-rice-phone'));
+    expect(adjust, findsOneWidget);
+    expect(
+      find.descendant(of: adjust, matching: find.text('လက်ကျန်ပြင်ရန်')),
+      findsOneWidget,
+    );
+    expect(tester.getSize(adjust).height, greaterThanOrEqualTo(48));
     expect(
       find.byKey(const ValueKey('stock-photo-rice-phone')),
       findsOneWidget,
@@ -4022,7 +4027,7 @@ void main() {
     expect(find.bySemanticsLabel(RegExp('၄.*RICE-S')), findsOneWidget);
     expect(tester.takeException(), isNull);
 
-    await tester.tap(find.byKey(const ValueKey('stock-row-rice-phone')));
+    await tester.tap(adjust);
     await _settleStock(tester);
     expect(find.text('လက်ခံရန်'), findsOneWidget);
     await tester.tap(find.text('မလုပ်တော့ပါ'));
