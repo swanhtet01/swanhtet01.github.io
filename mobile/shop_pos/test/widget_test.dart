@@ -4049,7 +4049,14 @@ void main() {
     final adjust = find.byKey(const ValueKey('stock-update-rice-phone'));
     expect(adjust, findsOneWidget);
     expect(
-      find.descendant(of: adjust, matching: find.text('လက်ကျန်ပြင်ရန်')),
+      find.descendant(of: adjust, matching: find.text('ပြင်ရန်')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: adjust,
+        matching: find.bySemanticsLabel('လက်ကျန်ပြင်ရန်'),
+      ),
       findsOneWidget,
     );
     expect(tester.getSize(adjust).height, greaterThanOrEqualTo(48));
