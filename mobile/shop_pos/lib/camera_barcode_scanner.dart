@@ -93,18 +93,16 @@ class _CameraBarcodeScannerState extends State<CameraBarcodeScanner> {
     final error = _cameraError;
     return Scaffold(
       appBar: AppBar(
-        title: Text(shopCopy(widget.myanmar, 'Scan barcode', 'ဘားကုဒ်ဖတ်ရန်')),
-        actions: [
-          IconButton(
-            tooltip: shopCopy(
-              widget.myanmar,
-              'Cancel scan',
-              'ဖတ်ခြင်းပယ်ဖျက်ရန်',
-            ),
-            onPressed: () => Navigator.of(context).pop(),
-            icon: const Icon(Icons.close),
+        leading: IconButton(
+          tooltip: shopCopy(
+            widget.myanmar,
+            'Cancel scan',
+            'ဖတ်ခြင်းပယ်ဖျက်ရန်',
           ),
-        ],
+          onPressed: () => Navigator.of(context).pop(),
+          icon: const Icon(Icons.arrow_back),
+        ),
+        title: Text(shopCopy(widget.myanmar, 'Scan barcode', 'ဘားကုဒ်ဖတ်ရန်')),
       ),
       body: SafeArea(
         child: !shopCameraScanningSupported || error != null
