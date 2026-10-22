@@ -47,16 +47,12 @@ def project_shop_order_snapshot(
                 })
         projected.append({
             "id": order_id,
-            "sourceRecordId": order.get("sourceRecordId"),
             "createdAt": order["createdAt"],
-            "channel": order["channel"],
             "status": order["status"],
             "paymentStatus": order["paymentStatus"],
             "refundStatus": order["refundStatus"],
             "paymentDueAt": order.get("paymentDueAt"),
-            "fulfilment": order.get("fulfilment"),
             "promisedAt": order.get("promisedAt"),
-            "itemSummary": order["item"],
             "quantity": order["quantity"],
             "totalMmk": order["total"],
             "lineSnapshotsAvailable": lines_available,

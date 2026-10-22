@@ -20,14 +20,14 @@ def test_snapshot_projects_lines_without_contact_or_payment_evidence():
         "createdAt": "2026-10-22T02:00:00Z",
         "customer": "Private customer name",
         "paymentEvidenceReference": "private receipt reference",
-        "channel": "Website",
+        "channel": "Private customer channel note",
         "status": "preparing",
         "paymentStatus": "pending",
         "refundStatus": "none",
         "paymentDueAt": "2026-10-29T02:00:00Z",
         "promisedAt": "2026-10-23T02:00:00Z",
-        "fulfilment": "delivery",
-        "item": "Rice x 2",
+        "fulfilment": "Private delivery address",
+        "item": "Private customer summary",
         "quantity": 2,
         "total": 24000,
         "lines": [{"sku": "RICE-01", "name": "Rice", "nameMy": "ဆန်", "quantity": 2, "unitPriceMmk": 12000}],
@@ -47,6 +47,7 @@ def test_snapshot_projects_lines_without_contact_or_payment_evidence():
     assert result["orders"][0]["totalMmk"] == 24000
     assert "Private" not in str(result)
     assert "storefrontRequests" not in str(result)
+    assert "sourceRecordId" not in result["orders"][0]
 
 
 def test_legacy_order_has_no_invented_lines_or_payment_deadline():
