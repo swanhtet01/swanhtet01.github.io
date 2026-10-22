@@ -79,7 +79,15 @@ void main() {
           await tester.ensureVisible(
             find.byKey(const ValueKey('shop-hold-sale')),
           );
-          expect(find.byKey(const ValueKey('shop-hold-sale')), findsOneWidget);
+          final holdSale = find.byKey(const ValueKey('shop-hold-sale'));
+          expect(holdSale, findsOneWidget);
+          expect(
+            find.descendant(
+              of: holdSale,
+              matching: find.text(myanmar ? 'ခဏသိမ်း' : 'Hold'),
+            ),
+            findsOneWidget,
+          );
           await tester.tap(find.byKey(const ValueKey('shop-hold-sale')));
           await tester.pumpAndSettle();
           await tester.enterText(
@@ -1607,7 +1615,9 @@ void main() {
         isNull,
       );
       expect(await database.countSales(), 0);
-      await tester.tap(find.text('Match available stock'));
+      final matchStock = find.byKey(const ValueKey('shop-match-stock'));
+      await tester.ensureVisible(matchStock);
+      await tester.tap(matchStock);
       await tester.pumpAndSettle();
       expect((await database.readCounterSaleDraft())?.quantities, {'tea': 1});
       expect(
