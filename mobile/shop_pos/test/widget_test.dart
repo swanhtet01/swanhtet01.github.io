@@ -2196,11 +2196,11 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        expect(
-          find.text(myanmar ? 'ဘားကုဒ် ဖတ်ပါ' : 'Scan a barcode'),
-          findsOneWidget,
-        );
         final search = find.byType(TextField);
+        expect(
+          tester.widget<TextField>(search).decoration?.hintText,
+          myanmar ? 'ဘားကုဒ် ဖတ်ပါ' : 'Scan a barcode',
+        );
         await tester.enterText(search, '0012345678905');
         await tester.testTextInput.receiveAction(TextInputAction.done);
         await tester.pumpAndSettle();
@@ -2273,7 +2273,10 @@ void main() {
 
     expect(find.text('Products'), findsOneWidget);
     expect(find.text('Your catalog is empty'), findsOneWidget);
-    expect(find.text('Scan a barcode'), findsOneWidget);
+    expect(
+      tester.widget<TextField>(find.byType(TextField)).decoration?.hintText,
+      'Scan a barcode',
+    );
     expect(find.text('MAMA Chicken Instant Noodles'), findsNothing);
 
     await tester.ensureVisible(find.text('Add first product'));
@@ -2361,7 +2364,10 @@ void main() {
       expect(find.text('Your catalog is empty'), findsOneWidget);
       expect(find.text('Add first product'), findsOneWidget);
       expect(find.text('Import menu photo'), findsOneWidget);
-      expect(find.text('Scan a barcode'), findsOneWidget);
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).decoration?.hintText,
+        'Scan a barcode',
+      );
       expect(find.text('Current sale'), findsNothing);
       expect(tester.takeException(), isNull);
     } finally {
