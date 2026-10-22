@@ -1678,7 +1678,7 @@ class _ShopHomeState extends State<ShopHome> {
           ? shopCopy(
               widget.myanmar,
               'Search or scan',
-              'ပစ္စည်း၊ ဘားကုဒ် ရှာရန်',
+              'ပစ္စည်းရှာရန်',
             )
           : shopCopy(
               widget.myanmar,
