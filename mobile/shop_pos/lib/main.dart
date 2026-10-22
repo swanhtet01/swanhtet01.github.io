@@ -2353,11 +2353,7 @@ class _ShopHomeState extends State<ShopHome> {
                 if (constraints.maxWidth < 520) {
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      cash,
-                      const SizedBox(height: 8),
-                      wallet,
-                    ],
+                    children: [cash, const SizedBox(height: 8), wallet],
                   );
                 }
                 return Row(
