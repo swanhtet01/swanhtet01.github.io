@@ -1735,10 +1735,17 @@ void main() {
       );
       expect(tester.takeException(), isNull);
       debugPrint('density fixture: checks passed');
+    } catch (error) {
+      debugPrint('density fixture: failed assertion: $error');
+      rethrow;
     } finally {
       debugPrint('density fixture: teardown');
       await tester.pumpWidget(const SizedBox.shrink());
+      debugPrint('density fixture: unmounted');
+      await tester.pump(const Duration(milliseconds: 1));
+      debugPrint('density fixture: disposed');
       await database.close();
+      debugPrint('density fixture: closed');
     }
   });
 
