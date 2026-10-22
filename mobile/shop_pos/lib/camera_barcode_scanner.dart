@@ -4,6 +4,24 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 
 import 'shop_copy.dart';
 
+const _productBarcodeFormats = <BarcodeFormat>{
+  BarcodeFormat.ean13,
+  BarcodeFormat.ean8,
+  BarcodeFormat.upcA,
+  BarcodeFormat.upcE,
+  BarcodeFormat.code128,
+  BarcodeFormat.code39,
+  BarcodeFormat.code93,
+  BarcodeFormat.itf,
+  BarcodeFormat.itf14,
+  BarcodeFormat.itf2of5,
+  BarcodeFormat.itf2of5WithChecksum,
+  BarcodeFormat.codabar,
+  BarcodeFormat.dataBar,
+  BarcodeFormat.dataBarExpanded,
+  BarcodeFormat.dataBarLimited,
+};
+
 typedef ShopCameraViewBuilder = Widget Function(
   BuildContext context,
   ValueChanged<String> onScanned,
@@ -51,6 +69,7 @@ class _CameraBarcodeScannerState extends State<CameraBarcodeScanner> {
       MobileScanner(
         onDetect: (capture) {
           for (final barcode in capture.barcodes) {
+            if (!_productBarcodeFormats.contains(barcode.format)) continue;
             final code = barcode.rawValue;
             if (code != null && code.trim().isNotEmpty) {
               _accept(code);

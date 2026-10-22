@@ -188,7 +188,7 @@ void main() {
             cameraViewBuilder: (context, onScanned, onError) => Center(
               child: FilledButton(
                 key: const ValueKey('fake-camera-detect'),
-                onPressed: () => onScanned('0012345678905'),
+                onPressed: () => onScanned('SKU-NEW-1'),
                 child: const Text('Detect'),
               ),
             ),
@@ -208,7 +208,7 @@ void main() {
             )
             .controller!
             .text,
-        '0012345678905',
+        'SKU-NEW-1',
       );
       expect(await database.readCounterSaleDraft(), isNull);
       expect(await database.countSales(), 0);
