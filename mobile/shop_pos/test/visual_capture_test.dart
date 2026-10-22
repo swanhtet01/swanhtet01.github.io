@@ -410,6 +410,17 @@ void main() {
           );
           await _resolveVisibleProductPhotos(tester);
           checkpoint('sell photos decoded');
+          if (width == 820 && language == 'my') {
+            final catalog = find.byKey(const ValueKey('shop-split-catalog'));
+            final lastProduct = find.byKey(
+              const ValueKey('shop-catalog-row:mango'),
+            );
+            expect(lastProduct, findsOneWidget);
+            expect(
+              tester.getBottomLeft(lastProduct).dy,
+              lessThan(tester.getBottomLeft(catalog).dy - 8),
+            );
+          }
           if (width == 320 || width == 820) {
             final camera = find.byKey(const ValueKey('shop-camera-scan'));
             expect(camera, findsOneWidget);

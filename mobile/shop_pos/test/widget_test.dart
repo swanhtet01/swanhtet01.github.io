@@ -2070,6 +2070,16 @@ void main() {
       ),
       findsOneWidget,
     );
+    final teaMedia = find.byKey(const ValueKey('shop-product-media:tea'));
+    expect(tester.getSize(teaMedia).width, tester.getSize(teaMedia).height);
+    expect(
+      tester
+          .widget<Image>(
+            find.descendant(of: teaMedia, matching: find.byType(Image)),
+          )
+          .fit,
+      BoxFit.contain,
+    );
     expect(
       find.byKey(const ValueKey('shop-product-photo:water')),
       findsNothing,
@@ -2738,6 +2748,45 @@ void main() {
             find.text(myanmar ? '၂၄,၉၀၀ ကျပ်' : '24,900 MMK'),
             findsOneWidget,
           );
+          if (width <= 390) {
+            final name = find.descendant(
+              of: row,
+              matching: find.text(
+                myanmar
+                    ? 'ဆန်အိတ် အရည်အသွေးကောင်း ၁၀ ကီလိုဂရမ်'
+                    : 'Premium rice 10 kg bag',
+              ),
+            );
+            final price = find.descendant(
+              of: row,
+              matching: find.text(myanmar ? '၂၄,၉၀၀ ကျပ်' : '24,900 MMK'),
+            );
+            final stock = find.descendant(
+              of: row,
+              matching: find.text(myanmar ? '၃ ကျန်' : '3 left'),
+            );
+            expect(tester.getTopLeft(price).dx, tester.getTopLeft(name).dx);
+            if (width == 390) {
+              expect(tester.getTopLeft(stock).dx, tester.getTopLeft(name).dx);
+            } else {
+              expect(
+                tester.getTopLeft(stock).dx,
+                tester
+                    .getTopLeft(
+                      find.byKey(const ValueKey('shop-add-affordance:rice')),
+                    )
+                    .dx,
+              );
+            }
+            expect(
+              tester
+                  .getTopLeft(
+                    find.byKey(const ValueKey('shop-add-affordance:rice')),
+                  )
+                  .dx,
+              greaterThan(tester.getTopRight(name).dx),
+            );
+          }
           expect(tester.takeException(), isNull);
 
           // The labeled target and the rest of the row both add the product.
@@ -2852,11 +2901,17 @@ void main() {
         findsOneWidget,
       );
       expect(thirdRow, findsOneWidget);
-      expect(fourthRow, findsOneWidget);
       final navigationTop = tester.getTopLeft(find.byType(NavigationBar)).dy;
       expect(tester.getBottomLeft(thirdRow).dy, lessThan(navigationTop));
-      await tester.ensureVisible(fourthRow);
+      await tester.scrollUntilVisible(
+        fourthRow,
+        120,
+        scrollable: find
+            .ancestor(of: thirdRow, matching: find.byType(Scrollable))
+            .first,
+      );
       await tester.pumpAndSettle();
+      expect(fourthRow, findsOneWidget);
       expect(tester.getBottomLeft(fourthRow).dy, lessThan(navigationTop + 1));
       expect(tester.getSize(thirdRow).height, greaterThanOrEqualTo(44));
       expect(
@@ -4560,11 +4615,12 @@ void main() {
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
       expect(find.text('Resume payment'), findsOneWidget);
-      final addToSaleRow = find.descendant(
-        of: find.byTooltip('Finish the pending payment first'),
-        matching: find.byType(ListTile),
+      final addToSaleRow = find.byKey(const ValueKey('shop-catalog-row:tea'));
+      expect(
+        find.byTooltip('Finish the pending payment first'),
+        findsOneWidget,
       );
-      expect(tester.widget<ListTile>(addToSaleRow.first).onTap, isNull);
+      expect(tester.widget<InkWell>(addToSaleRow).onTap, isNull);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpWidget(
         ShopApp(

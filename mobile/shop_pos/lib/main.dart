@@ -1394,7 +1394,9 @@ class _ShopHomeState extends State<ShopHome> {
     final textScale = MediaQuery.textScalerOf(context).scale(1.0);
     // A short catalog should end near its final row. Larger catalogs retain
     // the available scroll area, and text scaling may grow the rows freely.
-    final rowHeight = widget.myanmar ? 82.0 : 96.0;
+    // Burmese's three-line product rows need the same vertical budget as EN.
+    // A shorter estimate clips the last row while empty tablet space remains.
+    const rowHeight = 96.0;
     final desiredHeight = matchingCount == 0
         ? 360.0
         : 148.0 + matchingCount * rowHeight * textScale;
@@ -1749,20 +1751,16 @@ class _ShopHomeState extends State<ShopHome> {
     List<ShopProduct> products, {
     required double catalogWidth,
   }) {
-    // The product pane, not the full window, determines row density. A
-    // desktop basket can leave less room than a portrait tablet catalog.
-    // The split counter gives the catalog roughly 550 px inside its card on
-    // desktop. Use a price column there; place price under the name only when
-    // the pane is too narrow for name, price and the add target.
+    // The product pane, not the full window, determines row density. Keep
+    // product details in one column when the basket narrows that pane.
     final compactProductRow = catalogWidth < 520;
     final narrowProductRow = catalogWidth < 380;
     final enlargedNarrowRow =
         narrowProductRow && MediaQuery.textScalerOf(context).scale(1) > 1.2;
-    final touchCompactRow = MediaQuery.sizeOf(context).width >= 820;
     final photoExtent = narrowProductRow ? 48.0 : 58.0;
     final catalogPriceStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
-      color: Theme.of(context).colorScheme.onSurfaceVariant,
-      fontWeight: FontWeight.w500,
+      color: Theme.of(context).colorScheme.onSurface,
+      fontWeight: FontWeight.w600,
       fontFeatures: const [FontFeature.tabularFigures()],
     );
     final text = _search.text.trim().toLowerCase();
@@ -1859,20 +1857,13 @@ class _ShopHomeState extends State<ShopHome> {
           const Divider(height: 1, indent: 16, endIndent: 16),
       itemBuilder: (context, index) {
         final item = visible[index];
-        final stock = item.onHand == 0
-            ? shopCopy(widget.myanmar, 'Out of stock', 'လက်ကျန်ကုန်ပါပြီ')
-            : shopCopy(
-                widget.myanmar,
-                '${item.onHand} in stock',
-                '${shopNumber(item.onHand, myanmar: true)} ခုလက်ကျန်',
-              );
         final stockStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
           fontWeight: item.onHand == 0 ? FontWeight.w600 : FontWeight.w500,
           color: item.onHand == 0
               ? Theme.of(context).colorScheme.error
               : Theme.of(context).colorScheme.onSurfaceVariant,
         );
-        final compactStock = item.onHand == 0
+        final stock = item.onHand == 0
             ? shopCopy(widget.myanmar, 'Out of stock', 'လက်ကျန်ကုန်ပါပြီ')
             : shopCopy(
                 widget.myanmar,
@@ -1917,18 +1908,20 @@ class _ShopHomeState extends State<ShopHome> {
                 height: photoExtent,
                 child: DecoratedBox(
                   decoration: BoxDecoration(
+                    color: const Color(0xfff7f8fb),
                     border: Border.all(color: const Color(0xffe7ebf2)),
-                    borderRadius: BorderRadius.circular(11),
+                    borderRadius: BorderRadius.circular(10),
                   ),
                   child: ClipRRect(
-                    borderRadius: BorderRadius.circular(10),
-                    child: SizedBox(
+                    borderRadius: BorderRadius.circular(9),
+                    child: Padding(
+                      padding: const EdgeInsets.all(3),
                       key: ValueKey('shop-product-photo:${item.id}'),
                       child: Image.memory(
                         bytes,
-                        width: photoExtent,
-                        height: photoExtent,
-                        fit: BoxFit.cover,
+                        width: photoExtent - 6,
+                        height: photoExtent - 6,
+                        fit: BoxFit.contain,
                         errorBuilder: (_, error, stackTrace) =>
                             const Icon(Icons.image_not_supported_outlined),
                       ),
@@ -1948,121 +1941,85 @@ class _ShopHomeState extends State<ShopHome> {
                     'ဆိုင်းငံ့ငွေပေးချေမှုကို အရင်ပြီးစီးပါ',
                   )
                 : shopCopy(widget.myanmar, 'Add to sale', 'အရောင်းထဲထည့်ရန်'),
-            child: enlargedNarrowRow
-                ? InkWell(
-                    key: ValueKey('shop-catalog-row:${item.id}'),
-                    onTap: canAdd ? () => _add(item) : null,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 8,
-                      ),
-                      child: Row(
+            child: InkWell(
+              key: ValueKey('shop-catalog-row:${item.id}'),
+              onTap: canAdd ? () => _add(item) : null,
+              child: Padding(
+                padding: EdgeInsets.symmetric(
+                  horizontal: narrowProductRow ? 8 : 14,
+                  vertical: enlargedNarrowRow
+                      ? 8
+                      : compactProductRow
+                      ? 9
+                      : 10,
+                ),
+                child: Row(
+                  children: [
+                    if (photoSnapshot.data != null) ...[
+                      productPhoto(photoSnapshot.data)!,
+                      SizedBox(width: enlargedNarrowRow ? 8 : 10),
+                    ],
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          if (photoSnapshot.data != null) ...[
-                            productPhoto(photoSnapshot.data)!,
-                            const SizedBox(width: 8),
+                          Text(
+                            item.name,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            semanticsLabel: item.name,
+                            style:
+                                (compactProductRow
+                                        ? Theme.of(context).textTheme.bodyMedium
+                                        : Theme.of(context)
+                                              .textTheme
+                                              .titleMedium)
+                                    ?.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                      height: 1.3,
+                                    ),
+                          ),
+                          if (compactProductRow) ...[
+                            const SizedBox(height: 2),
+                            Text(_mmk(item.priceMmk), style: catalogPriceStyle),
                           ],
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  item.name,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  semanticsLabel: item.name,
-                                  style: Theme.of(context).textTheme.bodyMedium
-                                      ?.copyWith(
-                                        fontWeight: FontWeight.w600,
-                                        height: 1.3,
-                                      ),
-                                ),
-                                Text(
-                                  _mmk(item.priceMmk),
-                                  style: catalogPriceStyle,
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          SizedBox(
-                            width: 72,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                Text(
-                                  compactStock,
-                                  maxLines: item.onHand == 0 ? null : 1,
-                                  textAlign: TextAlign.center,
-                                  style: stockStyle,
-                                ),
-                                const SizedBox(height: 2),
-                                addAffordance,
-                              ],
-                            ),
-                          ),
+                          if (!enlargedNarrowRow) ...[
+                            const SizedBox(height: 2),
+                            Text(stock, style: stockStyle),
+                          ],
                         ],
                       ),
                     ),
-                  )
-                : ListTile(
-                    key: ValueKey('shop-catalog-row:${item.id}'),
-                    isThreeLine: compactProductRow,
-                    contentPadding: EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: touchCompactRow
-                          ? 2
-                          : narrowProductRow
-                          ? 0
-                          : 10,
-                    ),
-                    minVerticalPadding: narrowProductRow ? 0 : null,
-                    leading: productPhoto(photoSnapshot.data),
-                    title: Text(
-                      item.name,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      semanticsLabel: item.name,
-                      style: Theme.of(context).textTheme.titleMedium
-                          ?.copyWith(fontWeight: FontWeight.w600, height: 1.3),
-                    ),
-                    subtitle: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (compactProductRow)
-                          Wrap(
-                            spacing: 10,
-                            runSpacing: 2,
-                            crossAxisAlignment: WrapCrossAlignment.center,
-                            children: [
-                              Text(
-                                _mmk(item.priceMmk),
-                                style: catalogPriceStyle,
-                              ),
-                              Text(stock, style: stockStyle),
-                            ],
-                          )
-                        else
-                          Text(stock, style: stockStyle),
-                      ],
-                    ),
-                    trailing: compactProductRow
-                        ? addAffordance
-                        : Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                _mmk(item.priceMmk),
-                                style: catalogPriceStyle,
-                              ),
-                              const SizedBox(width: 12),
-                              addAffordance,
-                            ],
-                          ),
-                    onTap: canAdd ? () => _add(item) : null,
-                  ),
+                    if (!compactProductRow) ...[
+                      const SizedBox(width: 12),
+                      Text(_mmk(item.priceMmk), style: catalogPriceStyle),
+                    ],
+                    SizedBox(width: enlargedNarrowRow ? 8 : 10),
+                    if (enlargedNarrowRow)
+                      SizedBox(
+                        width: 72,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              stock,
+                              maxLines: item.onHand == 0 ? 2 : 1,
+                              textAlign: TextAlign.center,
+                              style: stockStyle,
+                            ),
+                            const SizedBox(height: 2),
+                            addAffordance,
+                          ],
+                        ),
+                      )
+                    else
+                      addAffordance,
+                  ],
+                ),
+              ),
+            ),
           ),
         );
       },
