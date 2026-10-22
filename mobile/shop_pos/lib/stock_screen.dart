@@ -670,24 +670,45 @@ class _StockScreenState extends State<StockScreen> {
                                           ],
                                         ),
                                         const SizedBox(height: 4),
-                                        Row(
-                                          children: [
-                                            Expanded(
-                                              child: ExcludeSemantics(
-                                                child: Column(
-                                                  crossAxisAlignment:
-                                                      CrossAxisAlignment.start,
-                                                  children: [
-                                                    onHand,
-                                                    ?reorderNote,
-                                                  ],
+                                        if (narrowPhone) ...[
+                                          ExcludeSemantics(
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [onHand, ?reorderNote],
+                                            ),
+                                          ),
+                                          const SizedBox(height: 8),
+                                          Align(
+                                            alignment: Alignment.centerRight,
+                                            child: SizedBox(
+                                              width: 120,
+                                              child: update,
+                                            ),
+                                          ),
+                                        ] else
+                                          Row(
+                                            children: [
+                                              Expanded(
+                                                child: ExcludeSemantics(
+                                                  child: Column(
+                                                    crossAxisAlignment:
+                                                        CrossAxisAlignment
+                                                            .start,
+                                                    children: [
+                                                      onHand,
+                                                      ?reorderNote,
+                                                    ],
+                                                  ),
                                                 ),
                                               ),
-                                            ),
-                                            const SizedBox(width: 8),
-                                            SizedBox(width: 120, child: update),
-                                          ],
-                                        ),
+                                              const SizedBox(width: 8),
+                                              SizedBox(
+                                                width: 120,
+                                                child: update,
+                                              ),
+                                            ],
+                                          ),
                                       ],
                                     ),
                                   ),
