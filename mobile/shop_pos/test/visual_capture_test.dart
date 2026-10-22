@@ -38,7 +38,7 @@ Future<ShopDatabase> _sampleShop({required bool myanmar}) async {
     );
     await database.saveProductThumbnail(
       id,
-      await File('$_photoFixtureDir/' + (item['thumbnail'] as String))
+      await File('$_photoFixtureDir/${item['thumbnail']}')
           .readAsBytes(),
     );
   }
@@ -67,7 +67,7 @@ void main() {
       expect(items.map((item) => item['id']).toSet().length, 5);
       for (final item in items) {
         final photo = await File(
-          '$_photoFixtureDir/' + (item['thumbnail'] as String),
+          '$_photoFixtureDir/${item['thumbnail']}',
         ).readAsBytes();
         expect(ShopDatabase.isValidProductThumbnail(photo), isTrue);
         final digest = await Sha256().hash(photo);
