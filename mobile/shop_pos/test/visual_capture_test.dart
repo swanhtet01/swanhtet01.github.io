@@ -520,6 +520,7 @@ void main() {
             RepaintBoundary(
               key: _captureKey,
               child: MaterialApp(
+                debugShowCheckedModeBanner: false,
                 theme: ThemeData(
                   fontFamily: language == 'my' ? 'NotoSansMyanmarUI' : 'Inter',
                   fontFamilyFallback: const ['Inter'],
