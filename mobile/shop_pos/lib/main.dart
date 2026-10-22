@@ -1942,9 +1942,10 @@ class _ShopHomeState extends State<ShopHome> {
                               width: photoExtent,
                               height: photoExtent,
                               fit: BoxFit.cover,
-                              errorBuilder: (_, error, stackTrace) => const Icon(
-                                Icons.image_not_supported_outlined,
-                              ),
+                              errorBuilder: (_, error, stackTrace) =>
+                                  const Icon(
+                                    Icons.image_not_supported_outlined,
+                                  ),
                             ),
                           ),
                         ),
@@ -2130,8 +2131,8 @@ class _ShopHomeState extends State<ShopHome> {
           Text(
             shopCopy(
               widget.myanmar,
-              'A saved product is unavailable. Remove it before checkout.',
-              'သိမ်းထားသော ပစ္စည်းတစ်ခု မရနိုင်တော့ပါ။ ငွေမရှင်းမီ ဖယ်ရှားပါ။',
+              'Stock changed. Match this sale to available quantities before payment.',
+              'လက်ကျန်ပြောင်းသွားပါသည်။ ငွေမရှင်းမီ ရနိုင်သည့်အရေအတွက်နှင့် အရောင်းကို ကိုက်ညီအောင်ပြင်ပါ။',
             ),
             style: Theme.of(context).textTheme.bodyMedium,
           ),
@@ -2144,14 +2145,13 @@ class _ShopHomeState extends State<ShopHome> {
                       !_walletStarting &&
                       !_cashConfirming &&
                       _pendingWalletCheckout == null
-                  ? () =>
-                        _removeUnavailableFromDraft(products, refresh: refresh)
+                  ? () => _matchCartToAvailableStock(products, refresh: refresh)
                   : null,
               child: Text(
                 shopCopy(
                   widget.myanmar,
-                  'Remove unavailable item',
-                  'မရနိုင်သော ပစ္စည်းကို ဖယ်ရန်',
+                  'Match available stock',
+                  'ရနိုင်သည့်လက်ကျန်နှင့်ကိုက်ညီစေရန်',
                 ),
               ),
             ),
@@ -2326,6 +2326,17 @@ class _ShopHomeState extends State<ShopHome> {
                 )
               : _shopMoneyStyle(context),
         ),
+        if (snapshot == null && quantity > item.onHand)
+          Text(
+            shopCopy(
+              widget.myanmar,
+              'Only ${item.onHand} available',
+              '${shopNumber(item.onHand, myanmar: true)} ခုသာ ရနိုင်သည်',
+            ),
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Theme.of(context).colorScheme.error,
+            ),
+          ),
       ],
     );
     final controls = Row(
@@ -2780,11 +2791,14 @@ class _ShopHomeState extends State<ShopHome> {
   }
 
   bool _cartHasUnavailableProducts(List<ShopProduct> products) {
-    final availableIds = {for (final item in products) item.id};
-    return _cart.keys.any((id) => !availableIds.contains(id));
+    final byId = {for (final item in products) item.id: item};
+    return _cart.entries.any(
+      (line) =>
+          byId[line.key] == null || line.value > byId[line.key]!.onHand,
+    );
   }
 
-  void _removeUnavailableFromDraft(
+  void _matchCartToAvailableStock(
     List<ShopProduct> products, {
     StateSetter? refresh,
   }) {
@@ -2798,9 +2812,14 @@ class _ShopHomeState extends State<ShopHome> {
     _queueDraftEdit(() async {
       final operationId = _operationId;
       if (operationId == null) return;
-      final availableIds = {for (final item in products) item.id};
-      final next = Map<String, int>.of(_cart)
-        ..removeWhere((id, _) => !availableIds.contains(id));
+      final byId = {for (final item in products) item.id: item};
+      final next = <String, int>{};
+      for (final line in _cart.entries) {
+        final available = byId[line.key]?.onHand ?? 0;
+        if (available > 0) {
+          next[line.key] = line.value < available ? line.value : available;
+        }
+      }
       if (next.isEmpty) {
         await widget.database.clearCounterSaleDraft(operationId);
         _applySavedCart(const {}, null, refresh: refresh);
@@ -2844,20 +2863,28 @@ class _ShopHomeState extends State<ShopHome> {
         return;
       }
       final selected = Map<String, int>.of(_cart);
-      final knownProducts = {
-        for (final product in products) product.id: product,
-      };
-      if (selected.keys.any((id) => !knownProducts.containsKey(id))) {
+      final currentProducts = await widget.database.readActiveProducts();
+      if (_cartHasUnavailableProducts(currentProducts)) {
         _message(
           shopCopy(
             widget.myanmar,
-            'A product changed. Review the sale again.',
-            'ကုန်ပစ္စည်းပြောင်းလဲသွားပါသည်။ အရောင်းကို ပြန်စစ်ပါ။',
+            'Stock changed. Review the sale before accepting cash.',
+            'လက်ကျန်ပြောင်းသွားပါသည်။ ငွေမယူမီ အရောင်းကို ပြန်စစ်ပါ။',
           ),
         );
         return;
       }
-      final totalMmk = _cartTotal(products);
+      final totalMmk = _cartTotal(currentProducts);
+      if (totalMmk != _cartTotal(products)) {
+        _message(
+          shopCopy(
+            widget.myanmar,
+            'A price changed. Review the total before accepting cash.',
+            'ဈေးနှုန်းပြောင်းသွားပါသည်။ ငွေမယူမီ စုစုပေါင်းကို ပြန်စစ်ပါ။',
+          ),
+        );
+        return;
+      }
       var cashGiven = '';
       final confirmed = await showDialog<bool>(
         context: context,
@@ -2978,6 +3005,8 @@ class _ShopHomeState extends State<ShopHome> {
         return;
       }
       await _completeSale(closeSheet: closeSheet, expectedTotalMmk: totalMmk);
+    } catch (error) {
+      if (mounted) _message(_saleSaveError(error, widget.myanmar));
     } finally {
       if (mounted) setState(() => _cashConfirming = false);
     }
@@ -3003,8 +3032,8 @@ class _ShopHomeState extends State<ShopHome> {
         _message(
           shopCopy(
             widget.myanmar,
-            'Remove unavailable items before checkout.',
-            'ငွေမရှင်းမီ မရနိုင်သော ပစ္စည်းများကို ဖယ်ရှားပါ။',
+            'Match the sale to available stock before checkout.',
+            'ငွေမရှင်းမီ ရနိုင်သည့်လက်ကျန်နှင့် အရောင်းကို ကိုက်ညီအောင်ပြင်ပါ။',
           ),
         );
         return;

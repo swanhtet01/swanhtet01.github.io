@@ -398,6 +398,110 @@ void main() {
     (820.0, 'my'),
   ]) {
     testWidgets(
+      'capture held and stock-changed sale at ${width.toInt()}px $language',
+      skip: !_capture,
+      (tester) async {
+        final height = width == 320 ? 800.0 : 1000.0;
+        tester.view.physicalSize = Size(width, height);
+        tester.view.devicePixelRatio = 1;
+        if (width == 320) {
+          tester.platformDispatcher.textScaleFactorTestValue = 1.5;
+        }
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+        final database = await _sampleShop(myanmar: language == 'my');
+        try {
+          await database.saveCounterSaleDraft(
+            operationId: 'synthetic-held-sale',
+            quantities: const {'apple': 6},
+          );
+          await database.holdCounterSaleDraft(
+            id: 'synthetic-held-ticket',
+            name: 'Customer A',
+            operationId: 'synthetic-held-sale',
+          );
+          await database.recordCashSale(
+            operationId: 'synthetic-other-sale',
+            lines: const [ShopSaleLineInput(productId: 'apple', quantity: 2)],
+          );
+          await tester.pumpWidget(
+            RepaintBoundary(
+              key: _captureKey,
+              child: ShopApp(
+                database: database,
+                authClient: null,
+                apiBaseUrl: 'https://example.invalid',
+                initialMyanmar: language == 'my',
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          await tester.tap(
+            find
+                .descendant(
+                  of: find.byType(NavigationBar),
+                  matching: find.byIcon(Icons.point_of_sale_outlined),
+                )
+                .first,
+          );
+          await tester.pumpAndSettle();
+          await _resolveVisibleProductPhotos(tester);
+          await tester.tap(find.byKey(const ValueKey('shop-held-sales-open')));
+          await tester.pumpAndSettle();
+          expect(find.text('Customer A'), findsOneWidget);
+          expect(tester.takeException(), isNull);
+          await expectLater(
+            find.byKey(_captureKey),
+            matchesGoldenFile(
+              'goldens/shop_held_${width.toInt()}_$language.png',
+            ),
+          );
+          await tester.tap(
+            find.byKey(
+              const ValueKey('shop-held-reopen:synthetic-held-ticket'),
+            ),
+          );
+          await tester.pumpAndSettle();
+          if (width < 820) {
+            await tester.tap(
+              find.textContaining(
+                language == 'my' ? 'အရောင်းစစ်ရန်' : 'Review sale',
+              ),
+            );
+            await tester.pumpAndSettle();
+          }
+          expect(
+            find.text(
+              language == 'my'
+                  ? 'လက်ကျန်ပြောင်းသွားပါသည်။ ငွေမရှင်းမီ ရနိုင်သည့်အရေအတွက်နှင့် အရောင်းကို ကိုက်ညီအောင်ပြင်ပါ။'
+                  : 'Stock changed. Match this sale to available quantities before payment.',
+            ),
+            findsOneWidget,
+          );
+          expect(tester.takeException(), isNull);
+          await expectLater(
+            find.byKey(_captureKey),
+            matchesGoldenFile(
+              'goldens/shop_held_review_${width.toInt()}_$language.png',
+            ),
+          );
+        } finally {
+          await tester.pumpWidget(const SizedBox.shrink());
+          await tester.pump(const Duration(milliseconds: 1));
+          await database.close();
+        }
+      },
+    );
+  }
+
+  for (final (width, language) in [
+    (320.0, 'en'),
+    (320.0, 'my'),
+    (820.0, 'en'),
+    (820.0, 'my'),
+  ]) {
+    testWidgets(
       'capture synthetic camera scanner at ${width.toInt()}px $language',
       skip: !_capture,
       (tester) async {

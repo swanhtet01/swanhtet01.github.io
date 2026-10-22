@@ -186,6 +186,94 @@ void main() {
     }
   });
 
+  testWidgets('reopened held sale waits when another sale used its stock', (
+    tester,
+  ) async {
+    _usePhoneViewport(tester);
+    final database = ShopDatabase(NativeDatabase.memory());
+    try {
+      await database.addProduct(
+        id: 'tea',
+        name: 'Tea',
+        priceMmk: 2500,
+        openingStock: 4,
+      );
+      await database.saveCounterSaleDraft(
+        operationId: 'held-stock-a',
+        quantities: const {'tea': 3},
+      );
+      await database.holdCounterSaleDraft(
+        id: 'held-stock-ticket',
+        name: 'Customer A',
+        operationId: 'held-stock-a',
+      );
+      await database.recordSale(
+        operationId: 'other-customer',
+        paymentMethod: 'cash',
+        lines: const [ShopSaleLineInput(productId: 'tea', quantity: 2)],
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ShopHome(
+            database: database,
+            authClient: null,
+            apiBaseUrl: 'https://example.invalid',
+            myanmar: false,
+            onLanguageChanged: (_) {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('shop-held-sales-open')));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('shop-held-reopen:held-stock-ticket')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('Review sale'));
+      await tester.pumpAndSettle();
+      expect(find.text('Only 2 available'), findsOneWidget);
+      expect(
+        find.text(
+          'Stock changed. Match this sale to available quantities before payment.',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        tester
+            .widget<FilledButton>(
+              find.ancestor(
+                of: find.text('Cash sale'),
+                matching: find.byType(FilledButton),
+              ),
+            )
+            .onPressed,
+        isNull,
+      );
+      expect(await database.countSales(), 1);
+      await tester.tap(find.text('Match available stock'));
+      await tester.pumpAndSettle();
+      expect((await database.readCounterSaleDraft())?.quantities, {'tea': 2});
+      expect(
+        tester
+            .widget<FilledButton>(
+              find.ancestor(
+                of: find.text('Cash sale'),
+                matching: find.byType(FilledButton),
+              ),
+            )
+            .onPressed,
+        isNotNull,
+      );
+      expect(await database.countSales(), 1);
+      expect(tester.takeException(), isNull);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+      await database.close();
+    }
+  });
+
   testWidgets('Windows scanner focus returns after switching tasks', (
     tester,
   ) async {
@@ -1275,7 +1363,9 @@ void main() {
       await tester.tap(find.textContaining('Review sale · 2 · Check items'));
       await tester.pumpAndSettle();
       expect(
-        find.text('A saved product is unavailable. Remove it before checkout.'),
+        find.text(
+          'Stock changed. Match this sale to available quantities before payment.',
+        ),
         findsOneWidget,
       );
       expect(find.text('Check items'), findsOneWidget);
@@ -1302,11 +1392,13 @@ void main() {
         isNull,
       );
       expect(await database.countSales(), 0);
-      await tester.tap(find.text('Remove unavailable item'));
+      await tester.tap(find.text('Match available stock'));
       await tester.pumpAndSettle();
       expect((await database.readCounterSaleDraft())?.quantities, {'tea': 1});
       expect(
-        find.text('A saved product is unavailable. Remove it before checkout.'),
+        find.text(
+          'Stock changed. Match this sale to available quantities before payment.',
+        ),
         findsNothing,
       );
       expect(
