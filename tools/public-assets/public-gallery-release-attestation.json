@@ -1,0 +1,110 @@
+{
+  "schemaVersion": "supermega.public-gallery-release-attestation.v1",
+  "publicationReady": true,
+  "reviewScope": "public_shop_gallery",
+  "reviewedSurface": "browser_component_synthetic",
+  "reviewedAt": "2026-10-22T11:31:40.583Z",
+  "reviewedBy": "Independent Codex gallery reviewer (scoped source and visual review)",
+  "reviewRef": "https://github.com/swanhtet01/swanhtet01.github.io/blob/ec044e88316355b50e69d620054299774fab81da/docs/reviews/public-shop-gallery-20261022.md",
+  "sourceBinding": {
+    "sourceCommit": "62f044d8faaf9c81454ec0f9610b31243f206032",
+    "showroomTree": "b98162d3b373604a37f4409b05c13c24b1578ff8",
+    "captureInputsSha256": "24154aa1a1d416c8393b87d37298756d252f081f4fc1d406bd7fc128f82bcc3e",
+    "capturedAt": "2026-10-22T11:13:50.527Z",
+    "captureReportSha256": "78352780408029ba8e115e9b4e39586ff34a544e2b3e7ac076003857c2404d64",
+    "provenanceSha256": "d9d867aa3725f3ced71af91fea3052ff9a026edec9a4c319151ec3fed04a7690",
+    "imageSourcesSha256": "90bf5d0e0c3afacb0e51f688d53a7ec784832327afc3118b2ec20e2b372e0aa8"
+  },
+  "assets": [
+    {
+      "file": "actual-shop-today.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "98a8426eb5856efc4c73c4f7c0a623def665ea66a9bf3bca82eb170b7655e457"
+    },
+    {
+      "file": "actual-shop-sell.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "e91246f2e0aa0e285ae89bc0959746c55ca954cee764eb7b310c90584039203c"
+    },
+    {
+      "file": "actual-shop-sell-tablet.png",
+      "width": 768,
+      "height": 1024,
+      "sha256": "d89dcf609a22fc177b10e56e97547032631a46389de99aacb4829fade48b9e5e"
+    },
+    {
+      "file": "actual-shop-sell-mobile.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "758e0f34352e0f2c6938d3fe4e53ab421537fe6599b77e7bcdd165ca29238cc6"
+    },
+    {
+      "file": "actual-shop-orders.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "8d21826cfcf3196c56e0d5cec69cebf63cce03157f6c383d2312046fa2b00f74"
+    },
+    {
+      "file": "actual-shop-orders-tablet.png",
+      "width": 768,
+      "height": 1024,
+      "sha256": "ee7be3c91449478c7f8aa98b32fe1cc9820391e326faea93def1a6c1d204ac89"
+    },
+    {
+      "file": "actual-shop-orders-mobile.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "c0520cbe053fb7c7d536ed236db0a594d0425dcca305b895e164dd16475639fe"
+    },
+    {
+      "file": "actual-shop-inventory.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "54934275f2443a85703096398a188ae84ff8ea33581db20c5dad26af81d3b207"
+    },
+    {
+      "file": "actual-shop-inventory-tablet.png",
+      "width": 768,
+      "height": 1024,
+      "sha256": "33a7ccf9ec302fe1633a7dd9a9372b46cea85ace69e56ee808d8881df8b385fe"
+    },
+    {
+      "file": "actual-shop-inventory-mobile.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "9d3784781cbdb56b0e652624cd8446b951eecd8fd5e3f1b32d9f280680e48f7f"
+    },
+    {
+      "file": "actual-shop-sell-my.png",
+      "width": 1000,
+      "height": 900,
+      "sha256": "596bb426f65d7513d213e47508ca75e8b516fdf09855515d0a88c2108c9b6caf"
+    },
+    {
+      "file": "actual-shop-sell-my-tablet.png",
+      "width": 768,
+      "height": 1024,
+      "sha256": "1b57f00f04c87068163c204fcdfbc6eb9d4e586b0586a44695c950e39970e92b"
+    },
+    {
+      "file": "actual-shop-sell-my-mobile.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "5dd3ca3075708c6ed6abda11bd01865b0450670dd39125e74420d1ab683f3f2c"
+    },
+    {
+      "file": "actual-shop-inventory-my-tablet.png",
+      "width": 768,
+      "height": 1024,
+      "sha256": "ed3922bd530a9df3cc82eabae243420d1a0d012cbb33c7b2d20ca96fd2f58abd"
+    },
+    {
+      "file": "actual-shop-inventory-my-mobile.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "f8d4527664731c545303d1c0dd14c49ed4dd38b14d9bc73012ad7b6c2fff3ba6"
+    }
+  ]
+}

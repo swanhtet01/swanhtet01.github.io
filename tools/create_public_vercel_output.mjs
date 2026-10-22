@@ -7,7 +7,7 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { bindPreviewNavigation, parsePreviewAppBinding } from './public_preview_navigation.mjs'
-import { assertPublicGalleryReleaseReady } from './public_gallery_rights.mjs'
+import { assertPublicGalleryReleaseReady, PUBLIC_SHOP_GALLERY_ASSETS } from './public_gallery_rights.mjs'
 
 import { activeProductContracts } from '../showroom/src/core/product-visibility.ts'
 import { brandFaviconSvg, companyShopFooterHtml, companyShopHeaderHtml, companyShopStyle, shopMarkup } from './public_company_shop_design.mjs'
@@ -47,12 +47,22 @@ const publicGalleryImageSources = JSON.parse(galleryImageSourcesBytes.toString('
 const galleryAttestationPath = resolve(root, 'tools', 'public-assets', 'public-gallery-release-attestation.json')
 const publicGalleryReleaseAttestation = existsSync(galleryAttestationPath)
   ? JSON.parse(await readFile(galleryAttestationPath, 'utf8')) : null
+const publicGalleryAssetNames = PUBLIC_SHOP_GALLERY_ASSETS
 if (process.env.SUPERMEGA_PUBLIC_RELEASE === '1' || process.env.VERCEL === '1') {
+  const imageFileSha256 = Object.fromEntries(await Promise.all(publicGalleryImageSources.products
+    .filter(product => product.file != null)
+    .map(async product => {
+      if (!/^[a-z0-9][a-z0-9._-]*\.(?:png|jpe?g|webp)$/i.test(product.file)) throw new Error('public_gallery_image_file_invalid')
+      const bytes = await readFile(resolve(root, 'tools', 'qa-assets', 'shop-products', product.file))
+      return [product.file, createHash('sha256').update(bytes).digest('hex')]
+    })))
   assertPublicGalleryReleaseReady(publicGalleryCapture, publicGalleryImageSources,
     publicGalleryProvenance, publicGalleryReleaseAttestation, {
       captureReportSha256: createHash('sha256').update(galleryCaptureBytes).digest('hex'),
       provenanceSha256: createHash('sha256').update(galleryProvenanceBytes).digest('hex'),
       imageSourcesSha256: createHash('sha256').update(galleryImageSourcesBytes).digest('hex'),
+      publicAssetNames: publicGalleryAssetNames,
+      imageFileSha256,
     })
 }
 // Hash the checked-out source as a Git tree so a source archive is checked as
@@ -93,6 +103,7 @@ const sourceGalleryAssetNames = [
   'actual-shop-orders.png', 'actual-shop-orders-tablet.png', 'actual-shop-orders-mobile.png',
   'actual-shop-inventory.png', 'actual-shop-inventory-tablet.png', 'actual-shop-inventory-mobile.png',
   'actual-shop-sell-my.png', 'actual-shop-sell-my-tablet.png', 'actual-shop-sell-my-mobile.png',
+  'actual-shop-inventory-my-tablet.png', 'actual-shop-inventory-my-mobile.png',
   'actual-sites-editor.png', 'actual-sites-editor-tablet.png', 'actual-sites-editor-mobile.png',
   'actual-sites-inquiries.png', 'actual-sites-inquiries-tablet.png', 'actual-sites-inquiries-mobile.png',
   'actual-commerce-catalog.png', 'actual-commerce-catalog-tablet.png', 'actual-commerce-catalog-mobile.png',
@@ -100,13 +111,6 @@ const sourceGalleryAssetNames = [
 ]
 // Keep the complete capture set and provenance available to internal review,
 // while exposing only the approved Shop customer surface in the public bundle.
-const publicGalleryAssetNames = [
-  'actual-shop-today.png',
-  'actual-shop-sell.png', 'actual-shop-sell-tablet.png', 'actual-shop-sell-mobile.png',
-  'actual-shop-sell-my.png', 'actual-shop-sell-my-tablet.png', 'actual-shop-sell-my-mobile.png',
-  'actual-shop-orders.png', 'actual-shop-orders-tablet.png', 'actual-shop-orders-mobile.png',
-  'actual-shop-inventory.png', 'actual-shop-inventory-tablet.png', 'actual-shop-inventory-mobile.png',
-]
 assert(publicGalleryProvenance.schemaVersion === 'supermega.public-gallery-provenance.v1', 'public_gallery_provenance_schema_unsupported')
 assert(publicGalleryProvenance.status === 'local_component_capture' && publicGalleryProvenance.records === 'synthetic'
   && typeof publicGalleryProvenance.capturedAt === 'string'
@@ -163,7 +167,7 @@ const sourceGalleryAssetEvidence = await Promise.all(publicGalleryProvenance.ass
     && capture.fixturePath === reportCapture.fixturePath
     && capture.routeState === reportCapture.routeState
     && capture.uiLocale === reportCapture.uiLocale
-    && capture.uiLocale === (file.startsWith('actual-shop-sell-my') ? 'my' : 'en')
+    && capture.uiLocale === (file.startsWith('actual-shop-sell-my') || file.startsWith('actual-shop-inventory-my') ? 'my' : 'en')
     && capture.visibleSelector === reportCapture.visibleSelector
     && capture.loadedImages === reportCapture.loadedImages
     && capture.captureMode === 'clean-commit-review'
@@ -816,6 +820,16 @@ body[data-view="shop"] .shop-hero h1 { max-width: none; }
 body[data-view="shop"] .shop-hero-copy > p { max-width: 68ch; }
 body[data-view="shop"] .shop-hero-app { width: 100%; max-width: 1100px; justify-self: center; }
 body[data-view="shop"] .shop-lead-capture { max-width: none; margin: 0; padding: 10px; border-color: #dfe5ee; border-radius: 13px; box-shadow: 0 20px 44px rgba(20,35,65,.10); }
+body[data-view="shop"] .shop-inventory-proof { padding-block: clamp(44px,6vw,78px); background: #fff; }
+body[data-view="shop"] .shop-inventory-proof .wrap { display: grid; grid-template-columns: minmax(220px,.7fr) minmax(0,1fr); align-items: center; gap: clamp(28px,5vw,76px); }
+body[data-view="shop"] .shop-inventory-proof-copy { max-width: 360px; }
+body[data-view="shop"] .shop-inventory-proof-copy .eyebrow { margin: 0 0 12px; }
+body[data-view="shop"] .shop-inventory-proof h2 { margin: 0; color: #121826; font-size: clamp(30px,3.2vw,46px); line-height: 1.08; letter-spacing: -.04em; }
+body[data-view="shop"] .shop-inventory-proof-copy > p:last-child { margin: 16px 0 0; color: #4f5b6e; font-size: 16px; line-height: 1.55; }
+body[data-view="shop"] .shop-inventory-proof figure { min-width: 0; margin: 0; }
+body[data-view="shop"] .shop-inventory-proof picture,body[data-view="shop"] .shop-inventory-proof img { display: block; width: 100%; }
+body[data-view="shop"] .shop-inventory-proof img { height: auto; border: 1px solid #dfe5ee; border-radius: 11px; background: #f7f8fb; box-shadow: 0 16px 36px rgba(20,35,65,.07); }
+body[data-view="shop"] .shop-inventory-proof figcaption { padding-top: 10px; color: #667085; font-size: 12px; line-height: 1.5; }
 body[data-view="contact"] .contact-page { padding-block: clamp(48px,6vw,78px); }
 body[data-view="contact"] .contact-page .contact-form { gap: 16px; padding: 26px; border-color: #e1e3e8; border-radius: 12px; background: #fafbfc; box-shadow: none; }
 body[data-view="contact"] .contact-page .field-grid input, body[data-view="contact"] .contact-page .field-grid textarea { border-radius: 7px; }
@@ -826,6 +840,8 @@ body[data-view="contact"] .contact-page .contact-form .button { width: max-conte
   body[data-view="shop"] .shop-hero { padding-block: 34px; }
   body[data-view="shop"] .shop-hero h1 { max-width: 16ch; font-size: clamp(38px,10vw,48px); }
   body[data-view="shop"] .shop-hero .button-primary { width: 100%; justify-content: center; }
+  body[data-view="shop"] .shop-inventory-proof .wrap { grid-template-columns: 1fr; }
+  body[data-view="shop"] .shop-inventory-proof-copy { max-width: 540px; }
   body[data-view="contact"] .contact-page { padding-block: 32px 52px; }
   body[data-view="contact"] .contact-page .contact-form { padding: 20px; }
   body[data-view="contact"] .contact-page .contact-form .button { width: 100%; }
@@ -939,7 +955,7 @@ const productOutcomes = {
 }
 function interfaceDisclosure(image) {
  assert(publicGalleryAssetNames.includes(image), `interface_gallery_asset_unverified:${image}`)
- return 'Actual app interface · sample data'
+ return image.startsWith('actual-shop-') ? 'Shop browser workspace · sample data' : 'Browser workspace · sample data'
 }
 function deviceCapture(device,image,alt,width,height,loading,fetchPriority='') {
  interfaceDisclosure(image)
@@ -976,9 +992,28 @@ function shopCounterSalePreview(locale = 'en') {
  interfaceDisclosure(mobileImage)
  interfaceDisclosure(tabletImage)
  const imageAlt = locale === 'my' ? 'ကောင်တာအရောင်း၊ ကုန်ပစ္စည်းရှာဖွေမှုနှင့် လက်ရှိခြင်းတောင်းကို ပြထားသော Shop ဘရောက်ဇာမျက်နှာပြင်' : alt
- const disclosure = locale === 'my' ? 'Shop ဘရောက်ဇာမျက်နှာပြင် · နမူနာမှတ်တမ်းများ' : 'Shop browser view · sample records'
- const credit = `MAMA ${locale === 'my' ? 'ဓာတ်ပုံ' : 'photo'}: <a href="https://world.openfoodfacts.org/cgi/product_image.pl?code=8850987101526&amp;id=front_en">twindel / Open Food Facts</a> · <a href="https://creativecommons.org/licenses/by-sa/3.0/">CC BY-SA 3.0</a>`
+ const disclosure = locale === 'my' ? 'Shop ဘရောက်ဇာ လုပ်ငန်းနေရာ · နမူနာမှတ်တမ်းများနှင့် ဈေးနှုန်းများ' : 'Shop browser workspace · Sample records and prices'
+ const photographers = publicGalleryImageSources.products.map(product => {
+  const rights = product.publication_rights
+  const license = rights.basis === 'cc0-1.0'
+   ? `<a href="${escapeHtml(rights.license_url)}">CC0</a>`
+   : (locale === 'my' ? 'အများပိုင်အဖြစ် လွှဲပြောင်းထားသည်' : 'public-domain dedication')
+  return `<a href="${escapeHtml(product.source_page)}">${escapeHtml(product.source_author)}</a> (${license})`
+ }).join(' · ')
+ const credit = `${locale === 'my' ? 'ဓာတ်ပုံရင်းမြစ်' : 'Photo sources'}: ${photographers} / Wikimedia Commons`
  return `<figure class="shop-lead-capture"><picture><source media="(max-width: 760px)" srcset="/images/${mobileImage}" width="390" height="844" /><source media="(max-width: 1024px)" srcset="/images/${tabletImage}" width="768" height="1024" /><img src="/images/${image}" alt="${escapeHtml(imageAlt)}" width="${locale === 'my' ? 1000 : 1440}" height="900" loading="eager" fetchpriority="high" /></picture><figcaption id="shop-sample-disclosure"><span>${disclosure}</span><span class="shop-photo-credit" id="shop-image-credits">${credit}</span></figcaption></figure>`
+}
+function shopInventoryProof(locale = 'en') {
+ const isMyanmar = locale === 'my'
+ const tabletImage = `actual-shop-inventory${isMyanmar ? '-my' : ''}-tablet.png`
+ const mobileImage = `actual-shop-inventory${isMyanmar ? '-my' : ''}-mobile.png`
+ interfaceDisclosure(tabletImage)
+ interfaceDisclosure(mobileImage)
+ const eyebrow = isMyanmar ? 'ကုန်လက်ကျန်' : 'Inventory'
+ const title = isMyanmar ? 'ပြန်ဖြည့်ရန် လိုသည့်ပစ္စည်းကို သိပါ။' : 'Know what needs restocking.'
+ const description = isMyanmar ? 'လက်ကျန်အရေအတွက်၊ ပြန်မှာယူရန် သတ်မှတ်ချက်နှင့် ဝင်လာမည့်ကုန်ကို တစ်နေရာတည်းတွင် စစ်ဆေးပါ။' : 'See on-hand quantities, reorder levels and incoming stock.'
+ const alt = isMyanmar ? 'ကုန်လက်ကျန်၊ ပစ္စည်းဓာတ်ပုံများနှင့် လက်ခံရန်ကုန်များကို မြန်မာဘာသာဖြင့် ပြထားသော Shop မျက်နှာပြင်' : 'Shop inventory showing low stock, product photos and stock to receive'
+ return `<section class="shop-inventory-proof" aria-labelledby="shop-inventory-proof-title"><div class="wrap"><div class="shop-inventory-proof-copy"><p class="eyebrow">${eyebrow}</p><h2 id="shop-inventory-proof-title">${title}</h2><p>${description}</p></div><figure aria-describedby="shop-sample-disclosure"><picture><source media="(max-width: 600px)" srcset="/images/${mobileImage}" width="390" height="844" /><img src="/images/${tabletImage}" alt="${alt}" width="768" height="1024" loading="lazy" /></picture><figcaption>${eyebrow}</figcaption></figure></div></section>`
 }
 function productStory(id, standalone = false) {
  const item=stories[id], label=publicProducts.find(product=>product.id===id).name
@@ -1036,7 +1071,7 @@ function shopLandingHtml(product, page, locale = 'en') {
  const shopWithRemovedMocks = removeSectionByClass(removeSectionByClass(heroWithPreview, 'demo-section', 'shop_interactive_mock'), 'benefits-section', 'shop_mock_benefits')
  return documentHtml({route:page.route,title:page.title,description,shareImage:`/og-card-${product.id}.png`,locale,
   schema:{'@type':'Product',name:product.name,description,url:canonical(page.route)},
-  content:`<main id="content">${shopWithRemovedMocks}</main>${productAction(product)}`})
+  content:`<main id="content">${shopWithRemovedMocks}${shopInventoryProof(locale)}</main>${productAction(product)}`})
 }
 
 function productLandingHtml(product,page) {
@@ -1055,7 +1090,7 @@ const contactUiCopy = {
     proofNote: 'Attached from this browser. The outcome is a client-provided, digest-bound aggregate summary; it does not verify a managed account.',
     detached: 'Attached context removed because the product changed.',
     headingShop: 'Request a Shop walkthrough', headingServiceStart: 'Contact our ', headingServiceEnd: ' team.', headingDefault: 'Contact',
-    ledeShop: 'Tell us what you sell and how you work today. We will reply with Shop walkthrough and setup options.',
+    ledeShop: 'Tell us what you sell and the devices you use. We will discuss a Shop pilot for your business.',
     ledeDefault: 'Tell us about your business and the workflow you want to improve. We will reply by email.',
     contextAttached: 'Helpful context attached. Nothing has been sent.', contextInvalid: 'Attached context could not be verified and was left out.',
     messageSent: 'Message sent.', sendAnother: 'Send another message.', previous: 'Previous message — ', sendMessage: 'Send message', sending: 'Sending...',
@@ -1072,7 +1107,7 @@ const contactUiCopy = {
     proofNote: 'ဤဘရောက်ဇာမှ အကြောင်းအရာကို ပူးတွဲထားပါသည်။ ရလဒ်သည် သုံးစွဲသူပေးပို့သော စုစည်းအနှစ်ချုပ်သာ ဖြစ်ပြီး စီမံထားသော အကောင့်ရှိကြောင်း အတည်မပြုနိုင်ပါ။',
     detached: 'ကုန်ပစ္စည်းရွေးချယ်မှု ပြောင်းလဲသဖြင့် ပူးတွဲအကြောင်းအရာကို ဖယ်ရှားလိုက်ပါသည်။',
     headingShop: 'Shop အသုံးပြုပုံကို မေးမြန်းရန်', headingServiceStart: '', headingServiceEnd: ' အဖွဲ့ထံ ဆက်သွယ်ရန်', headingDefault: 'ဆက်သွယ်ရန်',
-    ledeShop: 'သင်ရောင်းချသည့် ကုန်ပစ္စည်းများကို ပြောပြပါ၊ Shop အကြောင်း အီးမေးလ်ဖြင့် ပြန်လည်ရှင်းပြပါမည်။',
+    ledeShop: 'သင်ရောင်းချသော ပစ္စည်းများနှင့် အသုံးပြုမည့်စက်များကို ပြောပြပါ။ သင့်လုပ်ငန်းအတွက် Shop စမ်းသပ်အသုံးပြုမှုကို ဆွေးနွေးကြမည်။',
     ledeDefault: 'သင့်လုပ်ငန်းလိုအပ်ချက်ကို ပြောပြပါ၊ SuperMega က အီးမေးလ်ဖြင့် ပြန်လည်ဆက်သွယ်ပါမည်။',
     contextAttached: 'အထောက်အကူဖြစ်စေမည့် အကြောင်းအရာကို ပူးတွဲထားပါသည်။ မပို့ရသေးပါ။', contextInvalid: 'ပူးတွဲအကြောင်းအရာကို အတည်မပြုနိုင်သဖြင့် မထည့်သွင်းခဲ့ပါ။',
     messageSent: 'စာပို့ပြီးပါပြီ။', sendAnother: 'နောက်ထပ်စာပို့ရန်', previous: 'ယခင်စာ — ', sendMessage: 'စာပို့ရန်', sending: 'ပို့နေပါသည်...',

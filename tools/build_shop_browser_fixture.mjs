@@ -2,20 +2,25 @@ import { createRequire } from 'node:module'
 import { isAbsolute, relative, resolve, sep } from 'node:path'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 const { build } = createRequire(resolve('showroom/package.json'))('esbuild')
-const productPhotoFiles = {
-  'SM-1002': 'mama-chicken-noodles.jpg',
-}
+const gallery = process.argv.includes('--gallery')
+// The gallery loads exactly the photos declared in the rights ledger.
+const productSources = gallery ? JSON.parse(readFileSync(resolve('tools/qa-assets/shop-products/sources.json'), 'utf8')) : null
+const productPhotoFiles = gallery ? Object.fromEntries(productSources.products
+  .filter(product => product.file)
+  .map(product => {
+    if (!/^[a-z0-9][a-z0-9._-]*\.(?:png|jpe?g|webp)$/i.test(product.file)) throw new Error('gallery_photo_file_invalid')
+    return [product.sku, product.file]
+  })) : {}
 const productPhotoBytes = Object.fromEntries(Object.entries(productPhotoFiles).map(([sku, file]) => [
   sku,
   readFileSync(resolve('tools/qa-assets/shop-products', file)).toString('base64'),
 ]))
 const productPhotoMimes = Object.fromEntries(Object.entries(productPhotoFiles).map(([sku, file]) => [
   sku,
-  file.endsWith('.jpg') ? 'image/jpeg' : 'image/webp',
+  file.endsWith('.png') ? 'image/png' : file.endsWith('.jpg') ? 'image/jpeg' : 'image/webp',
 ]))
 const managed = process.argv.includes('--managed')
 const today = process.argv.includes('--today')
-const gallery = process.argv.includes('--gallery')
 const galleryMyanmar = process.argv.includes('--gallery-myanmar')
 const requestedOutput = process.env.SUPERMEGA_QA_FIXTURE_OUTPUT_DIR
 const out = resolve(requestedOutput || (managed ? '.tmp/qa-managed-shop' : '.tmp/qa-shop'))
@@ -27,8 +32,9 @@ if (requestedOutput) {
 mkdirSync(out,{recursive:true})
 await build({stdin:{resolveDir:resolve('showroom'),loader:'tsx',contents:`
 import React,{useState} from 'react';import {createRoot} from 'react-dom/client';import {MemoryRouter} from 'react-router';
-import {CommercePage} from './src/core/CoreApp';import {createSeedCommerce,COMMERCE_KEY} from './src/core/commerce-workspace';import {putProductImage,productImageScopeForWorkspace} from './src/core/product-image-store';
+import {CommercePage} from './src/core/CoreApp';import {createSeedCommerce,createCommerceCatalogBaseline,COMMERCE_KEY} from './src/core/commerce-workspace';import {putProductImage,productImageScopeForWorkspace} from './src/core/product-image-store';
 import {setUiLocale,readUiLocale,useUiLocale} from './src/core/ui-locale';
+import './src/index.css';
 import './src/core/core-app.css';
 let fail=false;let rejectedWrites=0;let ledgerWrites=0;window.__qaFailAck=false;const values=new Map();
 const memory=(map)=>({getItem:k=>map.get(k)??null,setItem:(k,v)=>{if(fail&&k===COMMERCE_KEY){rejectedWrites++;throw new DOMException('Synthetic quota','QuotaExceededError')};if(k===COMMERCE_KEY)ledgerWrites++;map.set(k,String(v))},removeItem:k=>map.delete(k),key:i=>[...map.keys()][i]??null,get length(){return map.size}});
@@ -37,13 +43,38 @@ const gallery=${gallery};
 const galleryMyanmar=${galleryMyanmar};
 const seed=createSeedCommerce(Date.now());
 if(gallery){
+ // Match the photographed native-app fixture. These five prices and stock
+ // counts are synthetic, not a market feed or a merchant's inventory.
+ const catalog=${JSON.stringify(productSources?.products.map(product => ({
+   sku: product.sku, name: product.name, nameMy: product.name_my,
+   category: product.category,
+   onHand: product.sample_opening_stock, reorderAt: product.sample_reorder_at,
+   price: product.sample_catalog_price_mmk,
+ })) ?? [])};
+ seed.items=catalog;
+ const baselineProof=seed.catalogBaselines[0].proof;
+ seed.catalogBaselines=catalog.map(item=>createCommerceCatalogBaseline(item,baselineProof));
  const completedSeedIds=new Set(seed.orders.filter(order=>order.status==='completed').map(order=>order.id));
- seed.orders=seed.orders.filter(order=>!completedSeedIds.has(order.id));
+ seed.orders=seed.orders.filter(order=>!completedSeedIds.has(order.id)).map(order=>{
+   const lines=order.lines.map(line=>{
+     const item=catalog.find(candidate=>candidate.sku===line.sku);
+     if(!item)throw Error('Synthetic gallery order has no catalog item: '+line.sku);
+     return {...line,name:item.name,unitPriceMmk:item.price};
+   });
+   const total=lines.reduce((sum,line)=>sum+line.quantity*line.unitPriceMmk,0);
+   return {...order,item:lines[0].name,lines,total,
+     calculation:{...order.calculation,subtotalMmk:total,totalMmk:total}};
+ });
  seed.movements=seed.movements.filter(movement=>!completedSeedIds.has(movement.orderId));
 }
 if(galleryMyanmar){
- const categories={Pantry:'အစားအသောက်',Drinks:'သောက်စရာ','Home care':'အိမ်သုံးပစ္စည်း'};
+ const categories={Fruit:'သစ်သီး',Vegetables:'ဟင်းသီးဟင်းရွက်'};
  seed.items=seed.items.map(item=>({...item,category:categories[item.category]??item.category}));
+ seed.orders=seed.orders.map(order=>{
+   const item=seed.items.find(candidate=>candidate.sku===order.itemSku);
+   return {...order,item:item?.nameMy??order.item,
+     lines:order.lines.map(line=>({...line,name:seed.items.find(candidate=>candidate.sku===line.sku)?.nameMy??line.name}))};
+ });
  await setUiLocale('my');
 }
 localStorage.setItem(COMMERCE_KEY,JSON.stringify(seed));
@@ -82,6 +113,6 @@ export async function saveManagedCommerceCommand(request) {
  return {command_id:request.commandId,event_type:request.eventType,surface:'commerce',version:qa.version,state:qa.state,idempotent_replay:false};
 }
 `}));
-b.onLoad({filter:/commerce-sync-outbox\.ts$/},a=>({loader:'ts',contents:readFileSync(a.path,'utf8').replace("return settleIntent(commandId, 'local_applied', recovered)","if ((window as any).__qaFailAck) { (window as any).__qaFailAck=false; return Promise.reject(new Error('Synthetic acknowledgement failure')) }; return settleIntent(commandId, 'local_applied', recovered)")}));b.onLoad({filter:/CoreApp\.tsx$/},a=>({loader:'tsx',contents:readFileSync(a.path,'utf8').replace('function CommercePage({','export function CommercePage({')}))}}],jsx:'automatic',bundle:true,format:'esm',external:['/fonts/noto-sans-myanmar.woff2'],define:{'import.meta.env':'{}'},outfile:resolve(out,'fixture.js')})
+b.onLoad({filter:/commerce-sync-outbox\.ts$/},a=>({loader:'ts',contents:readFileSync(a.path,'utf8').replace("return settleIntent(commandId, 'local_applied', recovered)","if ((window as any).__qaFailAck) { (window as any).__qaFailAck=false; return Promise.reject(new Error('Synthetic acknowledgement failure')) }; return settleIntent(commandId, 'local_applied', recovered)")}));b.onLoad({filter:/CoreApp\.tsx$/},a=>({loader:'tsx',contents:readFileSync(a.path,'utf8').replace('function CommercePage({','export function CommercePage({')}))}}],jsx:'automatic',bundle:true,format:'esm',external:['/fonts/noto-sans-myanmar.woff2','/fonts/inter-latin.woff2'],define:{'import.meta.env':'{}'},outfile:resolve(out,'fixture.js')})
 writeFileSync(resolve(out,'index.html'),'<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="connect-src \'none\'; form-action \'none\'"><title>Isolated Shop acceptance</title><link rel="stylesheet" href="fixture.css"><div id="root"></div><script type="module" src="fixture.js"></script>')
 console.log('Built '+out+'. Synthetic provider only; use Clean synthetic databases before leaving.')

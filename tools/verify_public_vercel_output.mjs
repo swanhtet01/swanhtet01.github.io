@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto'
 import { join, relative, resolve } from 'node:path'
 import { activeProductContracts } from '../showroom/src/core/product-visibility.ts'
 import { parsePreviewAppBinding } from './public_preview_navigation.mjs'
-import { publicGalleryReleaseReadinessError } from './public_gallery_rights.mjs'
+import { publicGalleryReleaseReadinessError, PUBLIC_SHOP_GALLERY_ASSETS } from './public_gallery_rights.mjs'
 
 const root = process.cwd()
 const isolatedOutputId = process.env.SUPERMEGA_PUBLIC_OUTPUT_ID || ''
@@ -42,6 +42,12 @@ const galleryEvidence = {
   captureReportSha256: createHash('sha256').update(galleryCaptureBytes).digest('hex'),
   provenanceSha256: createHash('sha256').update(galleryProvenanceBytes).digest('hex'),
   imageSourcesSha256: createHash('sha256').update(galleryImageSourcesBytes).digest('hex'),
+  publicAssetNames: PUBLIC_SHOP_GALLERY_ASSETS,
+  imageFileSha256: Object.fromEntries(publicGalleryImageSources.products.filter(product => product.file != null).map(product => {
+    if (!/^[a-z0-9][a-z0-9._-]*\.(?:png|jpe?g|webp)$/i.test(product.file)) fail('public_gallery_image_file_invalid')
+    const bytes = readFileSync(resolve(root, 'tools', 'qa-assets', 'shop-products', product.file))
+    return [product.file, createHash('sha256').update(bytes).digest('hex')]
+  })),
 }
 const galleryReleaseError = publicGalleryReleaseReadinessError(publicGalleryCapture, publicGalleryImageSources,
   publicGalleryProvenance, publicGalleryReleaseAttestation, galleryEvidence)
@@ -155,6 +161,8 @@ const expectedStaticFiles = new Set([
   'images/actual-shop-inventory.png',
   'images/actual-shop-inventory-tablet.png',
   'images/actual-shop-inventory-mobile.png',
+  'images/actual-shop-inventory-my-tablet.png',
+  'images/actual-shop-inventory-my-mobile.png',
   'og-card.png',
   ...publicProducts.map((product) => `og-card-${product.id}.png`),
   'robots.txt',
@@ -399,12 +407,16 @@ for (const [route, html] of [['/shop/', pages.get('/shop/').html], ...publicProd
     ? `/contact/?product=${routeProduct.id}`
     : null
   const galleryViews = { shop: 3, website: 2, ecommerce: 2 }
-  const expectedLinks = route === '/shop/' ? 11 : 5 + Number(Boolean(contactActionTarget))
+  const photoCreditLinks = publicGalleryImageSources.products.length
+    + publicGalleryImageSources.products.filter(product => product.publication_rights.basis === 'cc0-1.0').length
+  const expectedLinks = route === '/shop/' ? 9 + photoCreditLinks : 5 + Number(Boolean(contactActionTarget))
   if ((body.match(/<a\b/g) || []).length !== expectedLinks) fail('marketing_link_surface_drift', { route, expectedLinks })
   const publicLogin = `href="${appOrigin}/login?product=shop"`
   if (countOccurrences(body, publicLogin) !== 0) fail('public_login_action_present', { route })
   if (route === '/shop/' && (!body.includes('class="button button-primary" href="/contact/?product=shop">Request a Shop walkthrough') || body.includes('Ask about Shop') || body.includes('Talk about Shop') || body.includes('See Shop screens') || body.includes('Need help with Shop?'))) fail('shop_primary_product_action_missing')
-  if (route === '/shop/' && (!body.includes('MAMA photo:') || !body.includes('twindel / Open Food Facts') || !body.includes('https://creativecommons.org/licenses/by-sa/3.0/'))) fail('shop_photo_attribution_missing')
+  if (route === '/shop/' && (!body.includes('Photo sources:')
+    || publicGalleryImageSources.products.some(product => !body.includes(product.source_author))
+    || !body.includes('https://creativecommons.org/publicdomain/zero/1.0/'))) fail('shop_photo_attribution_missing')
   if (body.includes('>Company</a>')) fail('company_page_navigation_not_consolidated')
   const hasGalleryNavigation = route !== '/shop/' && (galleryViews[routeProduct?.id] || 0) > 1
   const expectedButtons = Number(hasGalleryNavigation) * 2
@@ -428,7 +440,7 @@ for (const [route, html] of [['/shop/', pages.get('/shop/').html], ...publicProd
     }
   }
   const productVisualMissing = route === '/shop/'
-      ? !body.includes('class="shop-hero-app" id="shop-demo"') || body.includes('class="shop-actual-showcase"') || body.includes('class="shop-support-proof"') || !body.includes('class="shop-lead-capture"') || !body.includes('id="shop-sample-disclosure"') || countOccurrences(body, 'Shop browser view · sample records') !== 1 || /\/images\/actual-shop-(?:orders|inventory)[^" ]*/.test(body) || body.includes('<article class="shop-workflow-card">') || countOccurrences(body, 'src="/images/actual-shop-sell.png"') !== 1 || body.includes('Makro PRO') || body.includes('17 October 2026') || body.includes('class="pos-window"') || body.includes('class="sample-label"') || body.includes('Complete sample sale') || body.includes('shop-sample-demo.js') || body.includes('class="platform-gallery shop-gallery-all"') || body.includes('data-platform-carousel') || body.includes('data-device-choice') || body.includes('data-device-frame') || /<a\b[^>]*>\s*<img\b[^>]*src="\/images\/actual-shop-/i.test(body)
+      ? !body.includes('class="shop-hero-app" id="shop-demo"') || body.includes('class="shop-actual-showcase"') || body.includes('class="shop-support-proof"') || !body.includes('class="shop-lead-capture"') || !body.includes('class="shop-inventory-proof"') || !body.includes('id="shop-sample-disclosure"') || countOccurrences(body, 'Sample records and prices') !== 1 || !body.includes('src="/images/actual-shop-inventory-tablet.png"') || !body.includes('srcset="/images/actual-shop-inventory-mobile.png"') || /\/images\/actual-shop-orders[^" ]*/.test(body) || body.includes('<article class="shop-workflow-card">') || countOccurrences(body, 'src="/images/actual-shop-sell.png"') !== 1 || body.includes('Makro PRO') || body.includes('17 October 2026') || body.includes('class="pos-window"') || body.includes('class="sample-label"') || body.includes('Complete sample sale') || body.includes('shop-sample-demo.js') || body.includes('class="platform-gallery shop-gallery-all"') || body.includes('data-platform-carousel') || body.includes('data-device-choice') || body.includes('data-device-frame') || /<a\b[^>]*>\s*<img\b[^>]*src="\/images\/actual-shop-/i.test(body)
       : !body.includes('class="platform-image"') || !body.includes('class="feature-line"')
   if (productVisualMissing) fail('product_visual_missing', { route })
   const directAppTargets = [...body.matchAll(/href="(https:\/\/[^\"]+)"/g)]
@@ -467,7 +479,7 @@ for (const [route, html] of [['/', home], ['/shop/', shopPage]]) {
   const withoutLanguageSwitch = html.replace(/<a href="\/my\/(?:shop|contact|privacy)\/" data-language-switch hreflang="my">မြန်မာ<\/a>/g, '')
   if (html.includes('data-i18n=') || /[\u1000-\u109f]/u.test(withoutLanguageSwitch)) fail('marketing_myanmar_copy_outside_switch', { route })
 }
-for (const token of ['Sell at the counter.', 'Stay ahead of stock.', 'Shop browser view · sample records', 'Review recorded orders and stock when you need them.']) {
+for (const token of ['Sell at the counter.', 'Stay ahead of stock.', 'Sample records and prices', 'Review recorded orders and stock when you need them.']) {
   if (!shopPage.includes(token)) fail('shop_page_scope_missing', { token })
 }
 if (/<section\b[^>]*class="[^"]*\bsubscription-section\b/.test(shopPage)
@@ -524,17 +536,21 @@ for (const [route, englishRoute, switchHref] of [['/my/shop/', '/shop/', '/shop/
 const myContact = pages.get('/my/contact/')?.html || ''
 const myShop = pages.get('/my/shop/')?.html || ''
 for (const token of ['src="/images/actual-shop-sell-my.png"', 'srcset="/images/actual-shop-sell-my-tablet.png"',
-  'srcset="/images/actual-shop-sell-my-mobile.png"', 'Shop ဘရောက်ဇာမျက်နှာပြင် · နမူနာမှတ်တမ်းများ']) {
+  'srcset="/images/actual-shop-sell-my-mobile.png"', 'နမူနာမှတ်တမ်းများနှင့် ဈေးနှုန်းများ']) {
   if (!myShop.includes(token)) fail('myanmar_shop_capture_or_language_scope_missing', { token })
 }
 if (myShop.includes('src="/images/actual-shop-sell.png"') || shopPage.includes('src="/images/actual-shop-sell-my.png"'))
   fail('shop_hero_capture_locale_mismatch')
 if (!/<img src="\/images\/actual-shop-sell-my\.png"[^>]*width="1000" height="900"/.test(myShop))
   fail('myanmar_shop_hero_dimensions_invalid')
-if (/\/images\/actual-shop-(?:orders|inventory)[^" ]*/.test(myShop)) fail('myanmar_shop_displays_english_support_capture')
+if (/\/images\/actual-shop-(?:orders|inventory)(?!-my)[^" ]*/.test(myShop)) fail('myanmar_shop_displays_english_support_capture')
+for (const token of ['src="/images/actual-shop-inventory-my-tablet.png"', 'srcset="/images/actual-shop-inventory-my-mobile.png"', 'ပြန်ဖြည့်ရန် လိုသည့်ပစ္စည်းကို သိပါ။']) {
+  if (!myShop.includes(token)) fail('myanmar_shop_inventory_capture_or_translation_missing', { token })
+}
 if (countOccurrences(myShop, 'class="shop-photo-credit"') !== 1
-  || !myShop.includes('id="shop-image-credits"') || !myShop.includes('MAMA ဓာတ်ပုံ:') || !myShop.includes('twindel / Open Food Facts')
-  || !myShop.includes('https://creativecommons.org/licenses/by-sa/3.0/')) fail('myanmar_shop_photo_attribution_missing')
+  || !myShop.includes('id="shop-image-credits"') || !myShop.includes('ဓာတ်ပုံရင်းမြစ်:')
+  || publicGalleryImageSources.products.some(product => !myShop.includes(product.source_author))
+  || !myShop.includes('https://creativecommons.org/publicdomain/zero/1.0/')) fail('myanmar_shop_photo_attribution_missing')
 for (const token of ['action="/api/contact-submissions"', 'name="idempotency_key"', 'name="source_url"', '>အမည်<input', '>အီးမေးလ်<input', '>စာပို့ရန်</button>', 'စာလက်ခံရရှိပါပြီ']) {
   if (!myContact.includes(token)) fail('myanmar_contact_contract_missing', { token })
 }
@@ -572,6 +588,7 @@ const publicGalleryFiles = [
   'actual-shop-sell-my.png', 'actual-shop-sell-my-tablet.png', 'actual-shop-sell-my-mobile.png',
   'actual-shop-orders.png', 'actual-shop-orders-tablet.png', 'actual-shop-orders-mobile.png',
   'actual-shop-inventory.png', 'actual-shop-inventory-tablet.png', 'actual-shop-inventory-mobile.png',
+  'actual-shop-inventory-my-tablet.png', 'actual-shop-inventory-my-mobile.png',
 ]
 const sourceGalleryByFile = new Map(publicGalleryProvenance.assets?.map(asset => [asset.file, asset]) ?? [])
 const expectedPublicGalleryEvidence = {

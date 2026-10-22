@@ -1,13 +1,6 @@
 
     (() => {
-      const products = [
-        { id: "milk-tea", name: "Milk tea", myanmar: "လက်ဖက်ရည်", category: "Drinks", price: 4500, initialStock: 12, icon: "icon-tea", color: "#f8eadf" },
-        { id: "coffee-tonic", name: "Coffee tonic", category: "Drinks", price: 6500, initialStock: 8, icon: "icon-coffee", color: "#eaf2ff" },
-        { id: "coconut-cloud", name: "Coconut cloud", category: "Drinks", price: 5500, initialStock: 10, icon: "icon-coconut", color: "#e4f6ed" },
-        { id: "butter-bun", name: "Butter bun", category: "Bakes", price: 2500, initialStock: 16, icon: "icon-bun", color: "#fff0d9" },
-        { id: "sesame-cookie", name: "Sesame cookie", category: "Bakes", price: 2000, initialStock: 20, icon: "icon-cookie", color: "#f5e7d8" },
-        { id: "palm-sugar-cake", name: "Palm sugar cake", category: "Bakes", price: 3000, initialStock: 9, icon: "icon-cake", color: "#f8ecd1" }
-      ];
+      const products = __SHOP_SAMPLE_PRODUCTS__;
       const state = {
         stock: Object.fromEntries(products.map(product => [product.id, product.initialStock])),
         basket: {},
@@ -39,8 +32,8 @@
           const stockLabel = stock === 0 ? "Out of sample stock" : limitReached ? `${inBasket} in basket · sample stock limit` : `${stock} in sample stock`;
           const disabled = stock === 0 || limitReached ? "disabled" : "";
           return `<button class="product-card" type="button" data-add="${product.id}" aria-label="Add ${product.name}, ${formatMMK(product.price)}, ${stockLabel}" ${disabled}>
-            <span class="product-icon" style="--icon-bg:${product.color}"><svg aria-hidden="true"><use href="#${product.icon}"/></svg></span>
-            <span class="product-copy"><span class="product-name">${product.name}${product.myanmar ? `<span class="myanmar" lang="my">${product.myanmar}</span>` : ""}</span>
+            <span class="product-icon"><img src="${product.photo}" width="192" height="192" alt="" /></span>
+            <span class="product-copy"><span class="product-name">${product.name}</span>
             <span class="product-meta"><span class="product-price">${formatMMK(product.price)}</span><span class="product-stock">${stockLabel}</span></span></span>
           </button>`;
         }).join("");

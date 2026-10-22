@@ -43,7 +43,7 @@ test('an unpaid delivery order due soon is not marked late', () => {
     shopOrderAttentionLabels({ paymentStatus: 'pending', refundStatus: 'none', fulfilment: 'delivery' }, 'due_soon'),
     [
       { kind: 'payment', text: 'Unpaid', tone: 'pending' },
-      { kind: 'promise', text: 'due soon', tone: 'pending' },
+      { kind: 'promise', text: 'Order due soon', tone: 'pending' },
     ],
   )
 })

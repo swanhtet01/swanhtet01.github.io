@@ -1,12 +1,32 @@
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
+import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import { assertPublicGalleryReleaseReady, publicGalleryReleaseReadinessError } from './public_gallery_rights.mjs'
 
 const sha = value => createHash('sha256').update(JSON.stringify(value)).digest('hex')
 
+test('hosted gallery gate accounts for every source-bound capture, including Burmese Inventory', () => {
+  const workflow = readFileSync(new URL('../.github/workflows/showroom-ci.yml', import.meta.url), 'utf8')
+  const capture = JSON.parse(readFileSync(new URL('./public-assets/public-gallery-capture.json', import.meta.url), 'utf8'))
+  const declaredCount = workflow.match(/assert len\(captures\) == (\d+)/)
+  assert.ok(declaredCount, 'hosted gallery count contract exists')
+  assert.equal(Number(declaredCount[1]), capture.captures.length)
+  assert.equal(new Set(capture.captures.map(item => item.file)).size, capture.captures.length)
+  for (const file of ['actual-shop-inventory-my-tablet.png', 'actual-shop-inventory-my-mobile.png']) {
+    const item = capture.captures.find(entry => entry.file === file)
+    assert.ok(item, `${file} is captured`)
+    assert.equal(item.fixturePath, '/shop-my/')
+    assert.equal(item.routeState, 'inventory')
+    assert.equal(item.uiLocale, 'my')
+    assert.ok(workflow.includes(`'${file}': ('/shop-my/', 'inventory')`), `${file} has a hosted state guard`)
+  }
+  assert.match(workflow, /startswith\(\('actual-shop-sell-my', 'actual-shop-inventory-my'\)\)/)
+})
+
 function fixture() {
   const asset = { file: 'actual-shop-today.png', width: 1440, height: 900, sha256: 'd'.repeat(64) }
+  const internalAsset = { file: 'actual-sites-editor.png', width: 1440, height: 900, sha256: 'a'.repeat(64) }
   const capture = {
     ok: true,
     classification: 'candidate_only_local_real_component_synthetic',
@@ -15,20 +35,23 @@ function fixture() {
     sourceCommit: 'a'.repeat(40),
     showroomTree: 'b'.repeat(40),
     captureInputsSha256: 'c'.repeat(64),
-    captures: [{ ...asset }],
+    captures: [{ ...asset }, { ...internalAsset }],
   }
   const provenance = {
     captureSourceCommit: capture.sourceCommit,
     captureSourceTree: capture.showroomTree,
     capturedAt: capture.capturedAt,
-    assets: [{ ...asset }],
+    assets: [{ ...asset }, { ...internalAsset }],
   }
   const imageSources = {
     schemaVersion: 'supermega.shop-image-rights.v1',
     status: 'cleared_for_publication',
     products: [{
+      sku: 'SM-1006',
       file: 'example.webp',
+      image_sha256: 'e'.repeat(64),
       source_page: 'https://example.com/photo',
+      source_image: 'https://example.com/example.webp',
       publication_rights: {
         status: 'cleared_for_publication',
         basis: 'cc-by-4.0',
@@ -38,12 +61,19 @@ function fixture() {
         reviewed_by: 'founder',
         evidence_sha256: 'e'.repeat(64),
       },
+    }, {
+      sku: 'SM-1002',
+      source_page: 'https://example.com/text-only-product',
+      photo_status: 'not_included_package_artwork_unreviewed',
+      image_use: 'text_only_no_image',
     }],
   }
   const evidence = {
     captureReportSha256: sha(capture),
     provenanceSha256: sha(provenance),
     imageSourcesSha256: sha(imageSources),
+    publicAssetNames: [asset.file],
+    imageFileSha256: { 'example.webp': 'e'.repeat(64) },
   }
   const attestation = {
     schemaVersion: 'supermega.public-gallery-release-attestation.v1',
@@ -67,6 +97,10 @@ function fixture() {
 
 const result = ({ capture, imageSources, provenance, attestation, evidence }) =>
   publicGalleryReleaseReadinessError(capture, imageSources, provenance, attestation, evidence)
+const rebindRights = input => {
+  input.evidence.imageSourcesSha256 = sha(input.imageSources)
+  input.attestation.sourceBinding.imageSourcesSha256 = input.evidence.imageSourcesSha256
+}
 
 test('candidate capture alone cannot become a public release', () => {
   const input = fixture()
@@ -78,7 +112,7 @@ test('candidate capture alone cannot become a public release', () => {
   assert.equal(result(input), 'public_gallery_capture_not_candidate')
 })
 
-test('separate reviewed state accepts an exact, fully cleared synthetic fixture', () => {
+test('separate review of only public Shop assets accepts a fully cleared synthetic fixture', () => {
   assert.equal(result(fixture()), null)
 })
 
@@ -120,6 +154,10 @@ test('missing, duplicated, or altered reviewed assets invalidate review', () => 
     input => { input.attestation.assets.push(input.attestation.assets[0]) },
     input => { input.attestation.assets[0].sha256 = 'f'.repeat(64) },
     input => { input.attestation.assets[0].width = 100 },
+    input => { input.attestation.assets[0].file = 'actual-sites-editor.png' },
+    input => { input.evidence.publicAssetNames = ['actual-shop-renamed.png'] },
+    input => { input.capture.captures[0].file = 'actual-shop-renamed.png' },
+    input => { input.provenance.assets[1].sha256 = 'f'.repeat(64) },
   ]) {
     const input = fixture()
     change(input)
@@ -130,7 +168,40 @@ test('missing, duplicated, or altered reviewed assets invalidate review', () => 
 test('a correctly bound review cannot override missing product image rights', () => {
   const input = fixture()
   delete input.imageSources.products[0].publication_rights.evidence_sha256
-  input.evidence.imageSourcesSha256 = sha(input.imageSources)
-  input.attestation.sourceBinding.imageSourcesSha256 = input.evidence.imageSourcesSha256
+  rebindRights(input)
   assert.equal(result(input), 'public_gallery_image_rights_unverified')
+})
+
+test('author-dedicated public-domain photos require the exact source page and named author', () => {
+  const input = fixture()
+  const product = input.imageSources.products[0]
+  product.publication_rights.basis = 'author-public-domain-dedication'
+  product.publication_rights.license_url = product.source_page
+  product.publication_rights.original_author = 'Example photographer'
+  rebindRights(input)
+  assert.equal(result(input), null)
+
+  product.publication_rights.license_url = 'https://example.com/unrelated-license'
+  rebindRights(input)
+  assert.equal(result(input), 'public_gallery_image_rights_unverified')
+  product.publication_rights.license_url = product.source_page
+  delete product.publication_rights.original_author
+  rebindRights(input)
+  assert.equal(result(input), 'public_gallery_image_rights_unverified')
+})
+
+test('an uncleared photo, disguised text-only photo, or changed image bytes fail closed', () => {
+  for (const change of [
+    input => { input.imageSources.products[0].publication_rights.status = 'candidate' },
+    input => { input.imageSources.products[1].file = 'mama.webp' },
+    input => { input.imageSources.products[1].image_sha256 = 'f'.repeat(64) },
+    input => { input.imageSources.products[0].file = 'renamed.webp' },
+    input => { input.evidence.imageFileSha256['example.webp'] = 'f'.repeat(64) },
+    input => { input.evidence.imageFileSha256['extra.webp'] = 'f'.repeat(64) },
+  ]) {
+    const input = fixture()
+    change(input)
+    rebindRights(input)
+    assert.equal(result(input), 'public_gallery_image_rights_unverified')
+  }
 })

@@ -1,29 +1,21 @@
-# Synthetic Shop product-photo sources
+# Synthetic Shop gallery photographs
 
-The MAMA Chicken 5 × 55 g front photo (`mama-chicken-noodles.jpg`) is by
-**twindel** for [Open Food Facts](https://world.openfoodfacts.org/product/8850987101526).
-The [photo credit page](https://world.openfoodfacts.org/cgi/product_image.pl?code=8850987101526&id=front_en)
-identifies [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/).
-This copy is the 400 px JPEG supplied by Open Food Facts, without edits.
-Reusers must retain attribution and comply with that license. The photo license
-does not grant rights in third-party package artwork or trademarks.
+The browser gallery uses the same five 192 × 192, metadata-free PNG
+derivatives as the [native Shop visual fixture](https://github.com/swanhtet01/swanhtet01.github.io/tree/f9d7b6763fb341904cb5396fc2cc69f5b5eb1568/mobile/shop_pos/test/assets/grocery_photos).
+The source JPEGs, authors, exact source and derivative hashes, and terms are
+recorded in `sources.json`. The original JPEGs are not bundled. These are
+illustrative grocery examples; names, stock and MMK prices do not represent a
+merchant catalog or a live retail feed.
 
-Open Food Facts documents that [product images are CC BY-SA while package
-graphics may have separate rights](https://openfoodfacts.github.io/documentation/docs/Product-Opener/api/tutorials/license-be-on-the-legal-side/).
-The MAMA asset remains a local synthetic-capture candidate, not a clearance
-decision for public marketing use.
+| Item | Photographer | Source and reuse basis |
+| --- | --- | --- |
+| Red apple | Fructibus | [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Red_apple_on_a_plate_2017_A.jpg), CC0 1.0 |
+| Bananas | ZooFari | [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Banana_Fruit.JPG), author-dedicated public domain |
+| Red tomato | Nat1620 | [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Red_tomato.jpg), CC0 1.0 |
+| Red onions | Eoin Kilfeather | [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Red_onion.jpg), author-dedicated public domain |
+| Mango | Saidismailanik | [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:A_ripe_yellow_mango_2025.jpg), CC0 1.0 |
 
-The other four retailer-sourced photos had **no verified commercial reuse
-grant** and are removed from this branch's source tree and current capture
-fixture. `sources.json` retains only product-page references and sample prices;
-it does not point to or embed the retailer images. Older Git commits and
-pre-recapture gallery PNGs may still contain those photos. Those images must
-not be promoted; a new source-bound capture and reviewed rights attestation
-are required before public use. Removing a file from a Git head does not erase
-historical commits.
-
-The retailer's [terms of use, section 3.1](https://www.makropro.com.mm/en/static/terms-conditions)
-reserve copying and public display absent prior written consent. A public
-product listing is evidence of the item, not an image-use license. The
-[ZESS manufacturer page](https://www.ofih.com.my/product/zess-sugar-crackers-192g/)
-confirms the 192 g product but does not grant photo reuse rights.
+The mango photo shows a green-yellow mango on a tree; the product label is
+simply “Mango (each).” This source-license review does not attest the rendered
+Shop gallery. The separately reviewed capture report, provenance and public
+asset digests must bind an explicit release attestation before publication.

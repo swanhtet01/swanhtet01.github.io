@@ -317,9 +317,9 @@
       place-items: center;
       overflow: hidden;
       border-radius: 12px;
-      background: var(--icon-bg);
+      background: #f5f7fa;
     }
-    .product-icon svg { width: 66px; height: 66px; }
+    .product-icon img { width: 100%; height: 100%; object-fit: contain; }
     .product-copy { display: flex; flex: 1; flex-direction: column; justify-content: space-between; padding: 10px 2px 1px; }
     .product-name { display: block; min-width: 0; font-size: .96rem; font-weight: 740; letter-spacing: -.025em; line-height: 1.3; overflow-wrap: anywhere; }
     .product-name .myanmar { display: block; margin-top: 4px; color: #555869; font-family: var(--myanmar); font-size: .88rem; font-weight: 450; letter-spacing: 0; line-height: 1.45; text-overflow: clip; white-space: normal; }

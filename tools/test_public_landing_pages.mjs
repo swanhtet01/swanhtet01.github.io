@@ -23,6 +23,7 @@ const outputDir = isolatedOutputId
 const staticDir = resolve(outputDir, 'static')
 const manifest = JSON.parse(readFileSync(resolve(root, 'site-manifest.json'), 'utf8'))
 const publicGalleryProvenance = JSON.parse(readFileSync(resolve(root, 'tools', 'public-assets', 'public-gallery-provenance.json'), 'utf8'))
+const shopPhotoSources = JSON.parse(readFileSync(resolve(root, 'tools', 'qa-assets', 'shop-products', 'sources.json'), 'utf8'))
 const activeIds = activeProductContracts(manifest).map(product => product.id)
 const discoverablePages = manifest.pages.filter(page => !page.redirectTo && (!page.productId || activeIds.includes(page.productId)))
 const config = JSON.parse(readFileSync(resolve(outputDir, 'config.json'), 'utf8'))
@@ -153,7 +154,7 @@ const productScreens = {
 }
 const interfaceDisclosure = (image) => {
   const asset = publicGalleryProvenance.assets.find(entry => entry.file === image)
-  return asset?.capture ? 'Actual app interface · sample data' : null
+  return asset?.capture ? image.startsWith('actual-shop-') ? 'Shop browser workspace · sample data' : 'Browser workspace · sample data' : null
 }
 check(!publicGeneratorSource.includes('compatibilityScreens') && !publicGeneratorSource.includes('data-legacy-interface-assets'), 'landing_legacy_interface_compatibility_removed')
 for (const page of landingPages) {
@@ -196,11 +197,11 @@ for (const page of landingPages) {
   check(html.includes('<meta name="robots" content="index,follow" />'), `landing_indexable:${page.route}`)
   check((html.match(/<h1\b/g) || []).length === 1, `landing_single_headline:${page.route}`)
   if (page.productId === 'shop') {
-    const captureDisclosure = 'Shop browser view · sample records'
+    const captureDisclosure = 'Sample records and prices'
     check(html.includes('class="shop-hero-app" id="shop-demo"') && html.includes(captureDisclosure), 'landing_shop_actual_capture_disclosed')
     check(!html.includes('class="pos-window"') && !html.includes('class="sample-label"') && !html.includes('Complete sample sale') && !html.includes('shop-sample-demo.js'), 'landing_shop_no_simulated_pos')
-    check(html.includes('class="shop-hero-app"') && !html.includes('class="shop-actual-showcase"') && !html.includes('class="shop-support-proof"'), 'landing_shop_has_one_product_section')
-    check(countOccurrences(html, '<figure class="shop-lead-capture">') === 1 && !html.includes('<article class="shop-workflow-card">'), 'landing_shop_one_enlarged_capture_without_duplicate_support_screens')
+    check(html.includes('class="shop-hero-app"') && !html.includes('class="shop-actual-showcase"') && !html.includes('class="shop-support-proof"'), 'landing_shop_has_no_old_showcase')
+    check(countOccurrences(html, '<figure class="shop-lead-capture">') === 1 && !html.includes('<article class="shop-workflow-card">'), 'landing_shop_one_counter_capture_without_duplicate_cards')
     check(html.includes('aria-describedby="shop-sample-disclosure"') && html.includes(captureDisclosure), 'landing_shop_capture_disclosure')
     check(!html.includes('Orders and stock. Clear next steps.') && !html.includes('Follow orders that need fulfilment or payment. See which products need a count or reorder.'), 'landing_shop_no_repeated_workflow_pitch')
     check(!html.includes('actual-shop-today') && !html.includes('DEVICE-ONLY DATA') && !html.includes('Export backup'), 'landing_shop_gallery_omits_storage_warning')
@@ -209,14 +210,18 @@ for (const page of landingPages) {
       && html.includes('srcset="/images/actual-shop-sell-mobile.png"')
       && !/<figure class="platform-device-capture/.test(html) && !html.includes('data-device-choice'), 'landing_shop_responsive_capture_without_switcher')
     check(html.includes('id="shop-image-credits"')
-      && html.includes('MAMA photo:') && html.includes('twindel / Open Food Facts')
-      && html.includes('https://creativecommons.org/licenses/by-sa/3.0/'), 'landing_shop_product_photo_credit_visible')
+      && html.includes('Photo sources:')
+      && ['Fructibus', 'ZooFari', 'Nat1620', 'Eoin Kilfeather', 'Saidismailanik'].every(author => html.includes(author))
+      && html.includes('https://creativecommons.org/publicdomain/zero/1.0/'), 'landing_shop_product_photo_credit_visible')
     check(!html.includes('data-gallery-previous') && !html.includes('data-gallery-next') && !html.includes('data-platform-carousel'), 'landing_shop_all_views_without_carousel')
     check(!html.includes('<script src="/platform-carousel.js" defer></script>'), 'landing_shop_needs_no_gallery_script')
     check(!/<a\b[^>]*>\s*<img\b[^>]*src="\/images\/actual-shop-/i.test(html), 'landing_shop_screens_are_not_raw_image_links')
     check(!html.includes('Makro PRO') && !html.includes('17 October 2026'), 'landing_shop_no_dated_retail_price_claim')
     for (const screen of ['actual-shop-sell.png', 'actual-shop-sell-tablet.png', 'actual-shop-sell-mobile.png']) check(html.includes(`/images/${screen}`), `landing_shop_counter_capture:${screen}`)
-    check(!/\/images\/actual-shop-(?:orders|inventory)[^" ]*/.test(html), 'landing_shop_omits_tiny_support_captures')
+    check(html.includes('class="shop-inventory-proof"')
+      && html.includes('src="/images/actual-shop-inventory-tablet.png"')
+      && html.includes('srcset="/images/actual-shop-inventory-mobile.png"')
+      && !/\/images\/actual-shop-orders[^" ]*/.test(html), 'landing_shop_shows_inventory_without_cluttered_orders')
   } else {
     check(html.includes('class="platform-gallery"') && html.includes('class="platform-image"') && html.includes('class="product-proof"') && html.includes('class="feature-line"'), `landing_interface_and_features:${page.route}`)
     check(countOccurrences(html, '<figure class="platform-image') === productScreens[page.productId]?.length, `landing_product_views:${page.route}`)
@@ -356,7 +361,7 @@ for (const [englishRoute, myanmarRoute] of [['/shop/', '/my/shop/'], ['/contact/
 }
 const myShop = readStatic('my/shop/index.html')
 check(myShop.includes('href="/my/contact/?product=shop"') && myShop.includes('လိုအပ်သည့်အခါ မှတ်တမ်းတင်ထားသော အော်ဒါများနှင့် ကုန်လက်ကျန်ကို စစ်ဆေးပါ။'), 'myanmar_shop_contact_and_stock_claim')
-check(myShop.includes('Shop ဘရောက်ဇာမျက်နှာပြင် · နမူနာမှတ်တမ်းများ')
+check(myShop.includes('နမူနာမှတ်တမ်းများနှင့် ဈေးနှုန်းများ')
   && myShop.includes('src="/images/actual-shop-sell-my.png"')
   && myShop.includes('srcset="/images/actual-shop-sell-my-tablet.png"')
   && myShop.includes('srcset="/images/actual-shop-sell-my-mobile.png"')
@@ -364,11 +369,14 @@ check(myShop.includes('Shop ဘရောက်ဇာမျက်နှာပြ�
 check(/<img src="\/images\/actual-shop-sell-my\.png"[^>]*width="1000" height="900"/.test(myShop)
   && readFileSync(resolve(staticDir, 'images/actual-shop-sell-my.png')).readUInt32BE(16) === 1000,
   'myanmar_shop_hero_uses_readable_real_two_pane_viewport')
-check(!myShop.includes('class="shop-support-proof"')
-  && !/\/images\/actual-shop-(?:orders|inventory)[^" ]*/.test(myShop), 'myanmar_shop_has_one_localized_capture')
+check(myShop.includes('src="/images/actual-shop-inventory-my-tablet.png"')
+  && myShop.includes('srcset="/images/actual-shop-inventory-my-mobile.png"')
+  && myShop.includes('ပြန်ဖြည့်ရန် လိုသည့်ပစ္စည်းကို သိပါ။')
+  && !/\/images\/actual-shop-(?:orders|inventory)(?!-my)[^" ]*/.test(myShop), 'myanmar_shop_has_localized_inventory_capture')
 check(countOccurrences(myShop, 'class="shop-photo-credit"') === 1
-  && myShop.includes('id="shop-image-credits"') && myShop.includes('MAMA ဓာတ်ပုံ:') && myShop.includes('twindel / Open Food Facts')
-  && myShop.includes('https://creativecommons.org/licenses/by-sa/3.0/'), 'myanmar_shop_product_photo_credit_visible')
+  && myShop.includes('id="shop-image-credits"') && myShop.includes('ဓာတ်ပုံရင်းမြစ်:')
+  && ['Fructibus', 'ZooFari', 'Nat1620', 'Eoin Kilfeather', 'Saidismailanik'].every(author => myShop.includes(author))
+  && myShop.includes('https://creativecommons.org/publicdomain/zero/1.0/'), 'myanmar_shop_product_photo_credit_visible')
 check(!myShop.includes('Complete sample sale') && !myShop.includes('class="pos-window"'), 'myanmar_shop_does_not_claim_public_simulator')
 const myContact = readStatic('my/contact/index.html')
 const myContactMain = myContact.match(/<main\b[\s\S]*?<\/main>/)?.[0] || ''
@@ -412,7 +420,7 @@ const shopProduct = manifest.customerProducts.find(product => product.id === 'sh
 check(!shopLanding.includes('class="shop-hero-preview"') && !shopLanding.includes('src="/images/actual-shop-today.png"')
   && !shopLanding.includes('class="shop-actual-showcase"'), 'shop_hero_does_not_repeat_home_dashboard_or_gallery')
 for (const token of [
-  'Shop browser view · sample records',
+  'Sample records and prices',
   'Shop browser counter sale with product search and a live basket',
 ]) check(shopLanding.includes(token), `shop_gallery_describes_verified_view:${token}`)
 check(!shopLanding.includes('Makro PRO') && !shopLanding.includes('17 October 2026')
@@ -428,8 +436,13 @@ check(!shopLanding.includes('class="pos-window"') && !shopLanding.includes('clas
   && !shopLanding.includes('shop-sample-demo.js'), 'shop_public_page_has_no_simulated_pos')
 check(countOccurrences(shopLanding, '<figure class="shop-lead-capture">') === 1
   && !shopLanding.includes('class="shop-support-proof"'), 'shop_one_real_capture_without_second_pitch')
+check(shopLanding.includes('class="shop-inventory-proof"')
+  && shopLanding.includes('src="/images/actual-shop-inventory-tablet.png"')
+  && shopLanding.includes('srcset="/images/actual-shop-inventory-mobile.png"')
+  && !shopLanding.includes('/images/actual-shop-orders'), 'shop_secondary_screen_is_inventory_without_order_clutter')
 check(shopManifest?.status === 'release-candidate-local', 'shop_public_status_matches_unhosted_candidate')
-check(shopManifest?.primaryCta?.url === '/shop/#shop-demo', 'shop_primary_action_opens_real_screen_gallery')
+check(shopManifest?.primaryCta?.label === 'Request a Shop walkthrough'
+  && shopManifest?.primaryCta?.url === '/contact/?product=shop', 'shop_primary_action_matches_contact_walkthrough')
 check(shopLanding.includes('Sell at the counter.') && shopLanding.includes('Stay ahead of stock.'), 'shop_hero_matches_the_operating_job')
 check(shopLanding.includes('.shop-hero .button-primary') && shopLanding.includes('white-space:nowrap'), 'shop_primary_action_stays_compact')
 check(shopLanding.includes('Review recorded orders and stock when you need them.')
@@ -447,7 +460,9 @@ for (const [route, html] of [['/shop/', shopLanding], ...activeIds.filter(id => 
   const expectedLoginHref = `href="${appOrigin}/login?product=shop"`
   check(countOccurrences(body, expectedLoginHref) === 0, `public_login_action_absent:${route}`)
   const carouselCount = 0
-  const expectedLinks = route === '/shop/' ? 11 : 5 + Number(routeManifestProduct?.status === 'available-in-app')
+  const photoCreditLinks = shopPhotoSources.products.length
+    + shopPhotoSources.products.filter(product => product.publication_rights.basis === 'cc0-1.0').length
+  const expectedLinks = route === '/shop/' ? 9 + photoCreditLinks : 5 + Number(routeManifestProduct?.status === 'available-in-app')
   check((body.match(/<a\b/g) || []).length === expectedLinks, `marketing_link_surface:${route}`)
   const viewportGalleryCount = countOccurrences(body, 'data-viewport-gallery')
   const expectedButtons = viewportGalleryCount * 3 + carouselCount * 2
@@ -456,8 +471,8 @@ for (const [route, html] of [['/shop/', shopLanding], ...activeIds.filter(id => 
   check(figures === (route === '/shop/' ? 0 : productScreens[routeProduct]?.length || 0), `marketing_interface_figures:${route}`)
   const expectedCaptureScreens = productScreens[routeProduct] || []
   if (route === '/shop/') {
-    check(body.includes('Shop browser view · sample records')
-      && countOccurrences(body, 'Shop browser view · sample records') === 1, 'shop_shared_capture_disclosure_once')
+    check(body.includes('Sample records and prices')
+      && countOccurrences(body, 'Sample records and prices') === 1, 'shop_shared_capture_disclosure_once')
   } else {
     for (const screen of expectedCaptureScreens) check(body.includes(interfaceDisclosure(screen)), `interface_disclosure_per_image:${route}:${screen}`)
   }

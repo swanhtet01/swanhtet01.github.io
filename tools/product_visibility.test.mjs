@@ -217,7 +217,7 @@ test('Plant public route becomes compatibility-only, not sales or new setup', as
   assert.match(page, /name="robots" content="noindex,follow"/)
   assert.match(content, /not offered for new setup/)
   assert.match(content, /Existing workspace records are preserved/)
-  assert.match(content, /href="\/shop\/">View current products/)
+  assert.match(content, /href="\/shop\/">View Shop/)
   assert.doesNotMatch(content, /Open retained workspace|href="[^\"]*\/plant\//)
   assert.doesNotMatch(content, /first-job-templates|Start free sample|Request assisted setup|product=plant|\?template=|\?pack=/)
   assert.doesNotMatch(await html('sitemap.xml'), /<loc>https:\/\/supermega.dev\/plant\/<\/loc>/)
