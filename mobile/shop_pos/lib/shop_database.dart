@@ -235,6 +235,35 @@ class ShopCashShiftReview {
   int get saleCount => cashSalesCount + walletSalesCount;
 }
 
+/// Optional, device-local setup guidance for a common business shape.
+///
+/// A profile changes labels and category suggestions only. It never creates
+/// catalog, sale, stock, payment, or sync records, and it is not a plan or
+/// entitlement.
+class ShopBusinessProfile {
+  const ShopBusinessProfile({
+    required this.schemaId,
+    required this.templateId,
+    required this.templateVersion,
+    required this.updatedAtMillis,
+  });
+
+  static const schemaIdValue = 'supermega.shop.business_profile.v1';
+  static const currentTemplateVersion = 1;
+  static const allowedTemplateIds = {
+    'mini-mart',
+    'cafe-takeaway',
+    'fashion-accessories',
+    'beauty-household',
+    'custom',
+  };
+
+  final String schemaId;
+  final String templateId;
+  final int templateVersion;
+  final int updatedAtMillis;
+}
+
 class WalletCheckoutLineSnapshot {
   const WalletCheckoutLineSnapshot({
     required this.productId,
@@ -342,7 +371,7 @@ class ShopDatabase extends _$ShopDatabase {
     : super(executor ?? driftDatabase(name: 'supermega_shop'));
 
   @override
-  int get schemaVersion => 10;
+  int get schemaVersion => 11;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -353,6 +382,7 @@ class ShopDatabase extends _$ShopDatabase {
       await _createProductImageTable();
       await _createCounterDraftTable();
       await _createHeldSaleTable();
+      await _createBusinessProfileTable();
     },
     onUpgrade: (migrator, from, to) async {
       if (from < 2) {
@@ -408,6 +438,9 @@ class ShopDatabase extends _$ShopDatabase {
       }
       if (from < 10) {
         await _createHeldSaleTable();
+      }
+      if (from < 11) {
+        await _createBusinessProfileTable();
       }
     },
     beforeOpen: (_) => customStatement('PRAGMA foreign_keys = ON'),
@@ -484,6 +517,21 @@ class ShopDatabase extends _$ShopDatabase {
       operation_id TEXT NOT NULL UNIQUE CHECK (length(operation_id) BETWEEN 1 AND 120),
       basket_json TEXT NOT NULL,
       updated_at_millis INTEGER NOT NULL
+    )
+  ''');
+
+  Future<void> _createBusinessProfileTable() => customStatement('''
+    CREATE TABLE IF NOT EXISTS shop_business_profile (
+      singleton_key INTEGER PRIMARY KEY NOT NULL CHECK (singleton_key = 1),
+      schema_id TEXT NOT NULL
+        CHECK (schema_id = 'supermega.shop.business_profile.v1'),
+      template_id TEXT NOT NULL
+        CHECK (template_id IN (
+          'mini-mart', 'cafe-takeaway', 'fashion-accessories',
+          'beauty-household', 'custom'
+        )),
+      template_version INTEGER NOT NULL CHECK (template_version = 1),
+      updated_at_millis INTEGER NOT NULL CHECK (updated_at_millis >= 0)
     )
   ''');
 
@@ -975,6 +1023,48 @@ class ShopDatabase extends _$ShopDatabase {
       if (await target.exists()) await target.delete();
       rethrow;
     }
+  }
+
+  Future<ShopBusinessProfile?> readBusinessProfile() async {
+    final row = await customSelect(
+      'SELECT schema_id, template_id, template_version, updated_at_millis '
+      'FROM shop_business_profile WHERE singleton_key = 1',
+    ).getSingleOrNull();
+    if (row == null) return null;
+    return ShopBusinessProfile(
+      schemaId: row.read<String>('schema_id'),
+      templateId: row.read<String>('template_id'),
+      templateVersion: row.read<int>('template_version'),
+      updatedAtMillis: row.read<int>('updated_at_millis'),
+    );
+  }
+
+  Future<void> saveBusinessProfile(
+    String templateId, {
+    int? updatedAtMillis,
+  }) async {
+    final cleanTemplateId = templateId.trim();
+    final updatedAt = updatedAtMillis ?? DateTime.now().millisecondsSinceEpoch;
+    if (!ShopBusinessProfile.allowedTemplateIds.contains(cleanTemplateId) ||
+        updatedAt < 0) {
+      throw ArgumentError('Business profile values are invalid.');
+    }
+    await customStatement(
+      'INSERT INTO shop_business_profile '
+      '(singleton_key, schema_id, template_id, template_version, '
+      'updated_at_millis) VALUES (1, ?, ?, ?, ?) '
+      'ON CONFLICT(singleton_key) DO UPDATE SET '
+      'schema_id = excluded.schema_id, '
+      'template_id = excluded.template_id, '
+      'template_version = excluded.template_version, '
+      'updated_at_millis = excluded.updated_at_millis',
+      [
+        ShopBusinessProfile.schemaIdValue,
+        cleanTemplateId,
+        ShopBusinessProfile.currentTemplateVersion,
+        updatedAt,
+      ],
+    );
   }
 
   Future<void> addProduct({

@@ -2613,6 +2613,127 @@ void main() {
     }
   });
 
+  for (final width in [320.0, 390.0, 768.0, 1200.0]) {
+    for (final myanmar in [false, true]) {
+      testWidgets('optional business setup fits ${width.toInt()}px '
+          '${myanmar ? 'MY' : 'EN'} without seeding records', (tester) async {
+        tester.view.physicalSize = Size(width, width < 700 ? 900 : 960);
+        tester.view.devicePixelRatio = 1;
+        if (width == 320) {
+          tester.platformDispatcher.textScaleFactorTestValue = 1.3;
+        }
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+        final database = ShopDatabase(NativeDatabase.memory());
+        addTearDown(database.close);
+        await tester.pumpWidget(
+          ShopApp(
+            initialCounter: true,
+            database: database,
+            authClient: null,
+            apiBaseUrl: 'https://example.invalid',
+            initialMyanmar: myanmar,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final setup = find.byKey(const ValueKey('shop-business-setup-empty'));
+        await tester.ensureVisible(setup);
+        await tester.tap(setup);
+        await tester.pumpAndSettle();
+        expect(find.byType(ShopBusinessProfileScreen), findsOneWidget);
+        for (final id in const [
+          'mini-mart',
+          'cafe-takeaway',
+          'fashion-accessories',
+          'beauty-household',
+          'custom',
+        ]) {
+          expect(
+            find.byKey(ValueKey('shop-business-template:$id')),
+            findsOneWidget,
+          );
+        }
+        expect(
+          find.byWidgetPredicate((widget) => widget is DropdownButton<Object?>),
+          findsNothing,
+        );
+
+        final choice = find.byKey(
+          const ValueKey('shop-business-template:mini-mart'),
+        );
+        await tester.ensureVisible(choice);
+        await tester.tap(choice);
+        await tester.pumpAndSettle();
+        expect((await database.readBusinessProfile())?.templateId, 'mini-mart');
+        expect(await database.readActiveProducts(), isEmpty);
+        expect(await database.countSales(), 0);
+        expect(await database.countStockMovements(), 0);
+        expect(await database.countOutboxOperations(), 0);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump();
+      });
+    }
+  }
+
+  testWidgets(
+    'business setup suggests and saves an ordinary product category',
+    (tester) async {
+      _usePhoneViewport(tester);
+      final database = ShopDatabase(NativeDatabase.memory());
+      addTearDown(database.close);
+      await database.saveBusinessProfile('mini-mart', updatedAtMillis: 1);
+      await tester.pumpWidget(
+        ShopApp(
+          initialCounter: true,
+          database: database,
+          authClient: null,
+          apiBaseUrl: 'https://example.invalid',
+          initialMyanmar: false,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(find.text('Add first product'));
+      await tester.tap(find.text('Add first product'));
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<TextFormField>(
+              find.byKey(const ValueKey('shop-product-name')),
+            )
+            .decoration
+            .hintText,
+        'e.g. Rice 5 kg',
+      );
+      await tester.tap(
+        find.byKey(const ValueKey('shop-product-category-suggestion:Grocery')),
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('shop-product-name')),
+        'Real test item',
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('shop-product-price')),
+        '2500',
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('shop-product-stock')),
+        '2',
+      );
+      await tester.tap(find.text('Save product'));
+      await tester.pumpAndSettle();
+
+      final product = (await database.readActiveProducts()).single;
+      expect(product.name, 'Real test item');
+      expect(product.category, 'Grocery');
+      expect(await database.countSales(), 0);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('one-item phone basket does not fill the screen', (tester) async {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
@@ -4380,6 +4501,12 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('English'), findsOneWidget);
     expect(find.text('မြန်မာ'), findsOneWidget);
+    await tester.ensureVisible(find.text('Business setup'));
+    await tester.tap(find.text('Business setup'));
+    await tester.pumpAndSettle();
+    expect(find.byType(ShopBusinessProfileScreen), findsOneWidget);
+    Navigator.of(tester.element(find.byType(ShopBusinessProfileScreen))).pop();
+    await tester.pumpAndSettle();
     expect(find.text('Mobile money'), findsOneWidget);
     await tester.tap(find.text('မြန်မာ'));
     await tester.pumpAndSettle();

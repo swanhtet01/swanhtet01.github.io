@@ -20,7 +20,7 @@ enum ShopStorePresence { empty, existing, interrupted, unsafe }
 /// the database so an interrupted export or restore cannot retain plaintext.
 abstract final class ShopBackup {
   static const formatVersion = 1;
-  static const supportedSchemaVersion = 10;
+  static const supportedSchemaVersion = 11;
   static const oldestSupportedSchemaVersion = 6;
   static const maxSnapshotBytes = 64 * 1024 * 1024;
 
@@ -546,6 +546,17 @@ abstract final class ShopBackup {
                 ).isNotEmpty ||
                 drafts.any((draft) => draft['operation_id'] == operationId);
           });
+      final businessProfiles =
+          schemaVersion >= 11 && tables.contains('shop_business_profile')
+          ? connection.select(
+              'SELECT singleton_key, schema_id, template_id, '
+              'template_version, updated_at_millis '
+              'FROM shop_business_profile',
+            )
+          : const <Row>[];
+      final businessProfileInvalid =
+          businessProfiles.length > 1 ||
+          businessProfiles.any((row) => !_validBusinessProfile(row));
       final hasReorderLevel =
           schemaVersion >= 9 &&
           tables.contains('shop_products') &&
@@ -573,9 +584,11 @@ abstract final class ShopBackup {
           (schemaVersion >= 8 && !tables.contains('shop_counter_drafts')) ||
           (schemaVersion >= 9 && !hasReorderLevel) ||
           (schemaVersion >= 10 && !tables.contains('shop_held_sales')) ||
+          (schemaVersion >= 11 && !tables.contains('shop_business_profile')) ||
           invalidReorderLevel ||
           draftInvalid ||
           heldInvalid ||
+          businessProfileInvalid ||
           images.any((row) {
             final image = row['image_png'];
             return image is! Uint8List ||
@@ -601,6 +614,18 @@ abstract final class ShopBackup {
       return false;
     }
     return _validBasketJson(row['basket_json']);
+  }
+
+  static bool _validBusinessProfile(Row row) {
+    final templateId = row['template_id'];
+    final updatedAtMillis = row['updated_at_millis'];
+    return row['singleton_key'] == 1 &&
+        row['schema_id'] == ShopBusinessProfile.schemaIdValue &&
+        templateId is String &&
+        ShopBusinessProfile.allowedTemplateIds.contains(templateId) &&
+        row['template_version'] == ShopBusinessProfile.currentTemplateVersion &&
+        updatedAtMillis is int &&
+        updatedAtMillis >= 0;
   }
 
   static bool _validBasketJson(Object? value) {

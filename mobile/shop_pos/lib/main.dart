@@ -1891,6 +1891,19 @@ class _ShopHomeState extends State<ShopHome> {
                 ),
                 const SizedBox(height: 8),
                 OutlinedButton.icon(
+                  key: const ValueKey('shop-business-setup-empty'),
+                  onPressed: _openBusinessSetup,
+                  icon: const Icon(Icons.storefront_outlined),
+                  label: Text(
+                    shopCopy(
+                      widget.myanmar,
+                      'Set up for your business',
+                      'သင့်လုပ်ငန်းအတွက် ပြင်ဆင်ရန်',
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                TextButton.icon(
                   onPressed: _openMenuImport,
                   icon: const Icon(Icons.document_scanner_outlined),
                   label: Text(
@@ -3836,6 +3849,15 @@ class _ShopHomeState extends State<ShopHome> {
     );
   }
 
+  void _openBusinessSetup() => Navigator.of(context).push<void>(
+    MaterialPageRoute<void>(
+      builder: (_) => ShopBusinessProfileScreen(
+        database: widget.database,
+        myanmar: widget.myanmar,
+      ),
+    ),
+  );
+
   void _openStock() {
     if (widget.onStock != null) {
       widget.onStock!();
@@ -3906,12 +3928,20 @@ Future<String?> _createShopProduct({
   String initialName = '',
   String initialBarcode = '',
 }) async {
+  final profile = await database.readBusinessProfile();
+  if (!context.mounted) return null;
+  final setup = _businessTemplateOptionForId(
+    profile?.templateId,
+    myanmar: myanmar,
+  );
   final values = await showDialog<_NewShopProduct>(
     context: context,
     builder: (_) => _NewShopProductDialog(
       myanmar: myanmar,
       initialName: initialName,
       initialBarcode: initialBarcode,
+      productNameHint: setup?.productNameHint,
+      categorySuggestions: setup?.categorySuggestions ?? const [],
     ),
   );
   if (values == null) return null;
@@ -3919,6 +3949,7 @@ Future<String?> _createShopProduct({
   await database.addProduct(
     id: productId,
     name: values.name,
+    category: values.category,
     barcode: values.barcode,
     priceMmk: values.priceMmk,
     openingStock: values.openingStock,
@@ -4135,12 +4166,14 @@ class _WalletCheckoutDialogState extends State<_WalletCheckoutDialog> {
 class _NewShopProduct {
   const _NewShopProduct({
     required this.name,
+    required this.category,
     required this.barcode,
     required this.priceMmk,
     required this.openingStock,
   });
 
   final String name;
+  final String category;
   final String? barcode;
   final int priceMmk;
   final int openingStock;
@@ -4151,11 +4184,15 @@ class _NewShopProductDialog extends StatefulWidget {
     required this.myanmar,
     this.initialName = '',
     this.initialBarcode = '',
+    this.productNameHint,
+    this.categorySuggestions = const [],
   });
 
   final bool myanmar;
   final String initialName;
   final String initialBarcode;
+  final String? productNameHint;
+  final List<String> categorySuggestions;
 
   @override
   State<_NewShopProductDialog> createState() => _NewShopProductDialogState();
@@ -4164,6 +4201,7 @@ class _NewShopProductDialog extends StatefulWidget {
 class _NewShopProductDialogState extends State<_NewShopProductDialog> {
   final _formKey = GlobalKey<FormState>();
   late final _name = TextEditingController(text: widget.initialName);
+  final _category = TextEditingController();
   late final _barcode = TextEditingController(text: widget.initialBarcode);
   final _price = TextEditingController();
   final _stock = TextEditingController();
@@ -4172,6 +4210,7 @@ class _NewShopProductDialogState extends State<_NewShopProductDialog> {
   @override
   void dispose() {
     _name.dispose();
+    _category.dispose();
     _barcode.dispose();
     _price.dispose();
     _stock.dispose();
@@ -4191,6 +4230,7 @@ class _NewShopProductDialogState extends State<_NewShopProductDialog> {
     Navigator.of(context).pop(
       _NewShopProduct(
         name: _name.text.trim(),
+        category: _category.text.trim(),
         barcode: _barcode.text.trim().isEmpty ? null : _barcode.text.trim(),
         priceMmk: int.parse(_price.text.trim()),
         openingStock: int.parse(_stock.text.trim()),
@@ -4232,11 +4272,45 @@ class _NewShopProductDialogState extends State<_NewShopProductDialog> {
                       'Product name',
                       'ကုန်ပစ္စည်းအမည်',
                     ),
+                    hintText: widget.productNameHint,
                   ),
                   validator: (value) => value == null || value.trim().isEmpty
                       ? shopCopy(widget.myanmar, 'Enter a name.', 'အမည်ထည့်ပါ။')
                       : null,
                 ),
+                const SizedBox(height: 10),
+                TextFormField(
+                  key: const ValueKey('shop-product-category'),
+                  controller: _category,
+                  decoration: InputDecoration(
+                    labelText: shopCopy(
+                      widget.myanmar,
+                      'Category · optional',
+                      'အမျိုးအစား · မထည့်လည်းရသည်',
+                    ),
+                  ),
+                ),
+                if (widget.categorySuggestions.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 6,
+                      children: [
+                        for (final category in widget.categorySuggestions)
+                          ActionChip(
+                            key: ValueKey(
+                              'shop-product-category-suggestion:$category',
+                            ),
+                            label: Text(category),
+                            onPressed: () =>
+                                setState(() => _category.text = category),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
                 // A scanned code stays visible near the name so the cashier can
                 // verify it. During manual entry, keep the three required fields
                 // together before asking for an optional barcode.
@@ -4438,6 +4512,30 @@ class ShopSettingsScreen extends StatefulWidget {
 
 class _ShopSettingsScreenState extends State<ShopSettingsScreen> {
   late bool _myanmar = widget.myanmar;
+  ShopBusinessProfile? _businessProfile;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_loadBusinessProfile());
+  }
+
+  Future<void> _loadBusinessProfile() async {
+    final profile = await widget.database.readBusinessProfile();
+    if (mounted) setState(() => _businessProfile = profile);
+  }
+
+  Future<void> _openBusinessProfile() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => ShopBusinessProfileScreen(
+          database: widget.database,
+          myanmar: _myanmar,
+        ),
+      ),
+    );
+    await _loadBusinessProfile();
+  }
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -4473,6 +4571,27 @@ class _ShopSettingsScreenState extends State<ShopSettingsScreen> {
             Card(
               child: Column(
                 children: [
+                  _SetupTile(
+                    icon: Icons.storefront_outlined,
+                    title: shopCopy(
+                      _myanmar,
+                      'Business setup',
+                      'လုပ်ငန်းအမျိုးအစား ပြင်ဆင်ရန်',
+                    ),
+                    subtitle: _businessProfile == null
+                        ? shopCopy(
+                            _myanmar,
+                            'Choose useful category suggestions.',
+                            'အသုံးဝင်သော အမျိုးအစားအကြံပြုချက်များ ရွေးပါ။',
+                          )
+                        : _businessTemplateOptionForId(
+                                _businessProfile!.templateId,
+                                myanmar: _myanmar,
+                              )?.title ??
+                              shopCopy(_myanmar, 'Custom', 'စိတ်ကြိုက်'),
+                    onTap: () => unawaited(_openBusinessProfile()),
+                  ),
+                  const Divider(height: 1),
                   if (_connectedOrdersEnabled) ...[
                     _SetupTile(
                       icon: Icons.inventory_2_outlined,
@@ -4596,4 +4715,308 @@ class _ShopSettingsScreenState extends State<ShopSettingsScreen> {
       ),
     ),
   );
+}
+
+class _BusinessTemplateOption {
+  const _BusinessTemplateOption({
+    required this.id,
+    required this.title,
+    required this.guidance,
+    required this.productNameHint,
+    required this.categorySuggestions,
+    required this.icon,
+  });
+
+  final String id;
+  final String title;
+  final String guidance;
+  final String productNameHint;
+  final List<String> categorySuggestions;
+  final IconData icon;
+}
+
+List<_BusinessTemplateOption> _businessTemplateOptions(bool myanmar) => [
+  _BusinessTemplateOption(
+    id: 'mini-mart',
+    title: shopCopy(myanmar, 'Mini-mart & grocery', 'ကုန်စုံနှင့် မီနီမတ်'),
+    guidance: shopCopy(
+      myanmar,
+      'Start with everyday categories. Add each real item with its own price and stock.',
+      'နေ့စဉ်သုံး အမျိုးအစားများဖြင့် စတင်ပါ။ အမှန်တကယ်ရောင်းသော ပစ္စည်းတစ်ခုချင်းစီ၏ ဈေးနှုန်းနှင့် လက်ကျန်ကို ထည့်ပါ။',
+    ),
+    productNameHint: shopCopy(myanmar, 'e.g. Rice 5 kg', 'ဥပမာ ဆန် ၅ ကီလို'),
+    categorySuggestions: myanmar
+        ? const ['ကုန်စုံ', 'အဖျော်ယမကာ', 'အိမ်သုံး']
+        : const ['Grocery', 'Drinks', 'Household'],
+    icon: Icons.local_convenience_store_outlined,
+  ),
+  _BusinessTemplateOption(
+    id: 'cafe-takeaway',
+    title: shopCopy(myanmar, 'Café & takeaway', 'ကဖေးနှင့် ပါဆယ်'),
+    guidance: shopCopy(
+      myanmar,
+      'Organize the menu by what customers order. Keep each sellable choice as a product.',
+      'ဖောက်သည်မှာယူသည့် အုပ်စုအလိုက် မီနူးကို စီပါ။ ရောင်းနိုင်သော ရွေးချယ်မှုတိုင်းကို ကုန်ပစ္စည်းတစ်ခုအဖြစ် ထည့်ပါ။',
+    ),
+    productNameHint: shopCopy(myanmar, 'e.g. Iced coffee', 'ဥပမာ ကော်ဖီအေး'),
+    categorySuggestions: myanmar
+        ? const ['အစားအစာ', 'အဖျော်ယမကာ', 'မုန့်နှင့် အဆာပြေ']
+        : const ['Food', 'Drinks', 'Snacks'],
+    icon: Icons.local_cafe_outlined,
+  ),
+  _BusinessTemplateOption(
+    id: 'fashion-accessories',
+    title: shopCopy(
+      myanmar,
+      'Fashion & accessories',
+      'အဝတ်အထည်နှင့် အသုံးအဆောင်',
+    ),
+    guidance: shopCopy(
+      myanmar,
+      'Track each size or colour you stock as its own product so counts stay clear.',
+      'လက်ကျန်ရှင်းလင်းစေရန် အရွယ်အစား သို့မဟုတ် အရောင်တစ်မျိုးစီကို ကုန်ပစ္စည်းတစ်ခုစီအဖြစ် မှတ်ပါ။',
+    ),
+    productNameHint: shopCopy(
+      myanmar,
+      'e.g. Cotton shirt · M · Black',
+      'ဥပမာ ချည်အင်္ကျီ · M · အနက်',
+    ),
+    categorySuggestions: myanmar
+        ? const ['အဝတ်အထည်', 'ဖိနပ်', 'အသုံးအဆောင်']
+        : const ['Clothing', 'Shoes', 'Accessories'],
+    icon: Icons.checkroom_outlined,
+  ),
+  _BusinessTemplateOption(
+    id: 'beauty-household',
+    title: shopCopy(myanmar, 'Beauty & household', 'အလှကုန်နှင့် အိမ်သုံး'),
+    guidance: shopCopy(
+      myanmar,
+      'Use the package size in each real product name so similar items stay distinct.',
+      'ဆင်တူသောပစ္စည်းများ မရောစေရန် အမှန်တကယ်ကုန်ပစ္စည်းအမည်တွင် ထုပ်ပိုးအရွယ်အစား ထည့်ပါ။',
+    ),
+    productNameHint: shopCopy(
+      myanmar,
+      'e.g. Shampoo 400 ml',
+      'ဥပမာ ခေါင်းလျှော်ရည် ၄၀၀ မီလီလီတာ',
+    ),
+    categorySuggestions: myanmar
+        ? const ['အလှကုန်', 'တစ်ကိုယ်ရေသုံး', 'အိမ်သုံး']
+        : const ['Beauty', 'Personal care', 'Household'],
+    icon: Icons.spa_outlined,
+  ),
+  _BusinessTemplateOption(
+    id: 'custom',
+    title: shopCopy(myanmar, 'Other business', 'အခြားလုပ်ငန်း'),
+    guidance: shopCopy(
+      myanmar,
+      'Create categories as you add the real products your business sells.',
+      'သင့်လုပ်ငန်းတွင် အမှန်တကယ်ရောင်းသော ကုန်ပစ္စည်းများ ထည့်စဉ် အမျိုးအစားများကို ဖန်တီးပါ။',
+    ),
+    productNameHint: shopCopy(myanmar, 'Product name', 'ကုန်ပစ္စည်းအမည်'),
+    categorySuggestions: const [],
+    icon: Icons.store_outlined,
+  ),
+];
+
+_BusinessTemplateOption? _businessTemplateOptionForId(
+  String? id, {
+  required bool myanmar,
+}) {
+  if (id == null) return null;
+  for (final option in _businessTemplateOptions(myanmar)) {
+    if (option.id == id) return option;
+  }
+  return null;
+}
+
+class ShopBusinessProfileScreen extends StatefulWidget {
+  const ShopBusinessProfileScreen({
+    required this.database,
+    required this.myanmar,
+    super.key,
+  });
+
+  final ShopDatabase database;
+  final bool myanmar;
+
+  @override
+  State<ShopBusinessProfileScreen> createState() =>
+      _ShopBusinessProfileScreenState();
+}
+
+class _ShopBusinessProfileScreenState extends State<ShopBusinessProfileScreen> {
+  String? _selectedId;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_load());
+  }
+
+  Future<void> _load() async {
+    final profile = await widget.database.readBusinessProfile();
+    if (mounted) setState(() => _selectedId = profile?.templateId);
+  }
+
+  Future<void> _select(String templateId) async {
+    if (_saving) return;
+    setState(() => _saving = true);
+    try {
+      await widget.database.saveBusinessProfile(templateId);
+      if (mounted) setState(() => _selectedId = templateId);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            SnackBar(
+              content: Text(
+                shopCopy(
+                  widget.myanmar,
+                  'Could not save this setup. Try again.',
+                  'ဤပြင်ဆင်မှုကို မသိမ်းနိုင်ပါ။ ထပ်ကြိုးစားပါ။',
+                ),
+              ),
+            ),
+          );
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final options = _businessTemplateOptions(widget.myanmar);
+    final selected = _businessTemplateOptionForId(
+      _selectedId,
+      myanmar: widget.myanmar,
+    );
+    final theme = Theme.of(context);
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(
+          shopCopy(
+            widget.myanmar,
+            'Set up for your business',
+            'သင့်လုပ်ငန်းအတွက် ပြင်ဆင်ရန်',
+          ),
+        ),
+      ),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 720),
+          child: ListView(
+            key: const ValueKey('shop-business-profile-list'),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
+            children: [
+              Text(
+                shopCopy(
+                  widget.myanmar,
+                  'Choose the closest fit. This only changes suggestions when you add products. It does not add records or change sales.',
+                  'အနီးစပ်ဆုံးလုပ်ငန်းအမျိုးအစားကို ရွေးပါ။ ကုန်ပစ္စည်းထည့်သည့်အခါ အကြံပြုချက်များသာ ပြောင်းမည်။ မှတ်တမ်းများ မဖန်တီးသလို အရောင်းလုပ်ငန်းစဉ်လည်း မပြောင်းပါ။',
+                ),
+                style: theme.textTheme.bodyLarge?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 16),
+              for (final option in options) ...[
+                OutlinedButton(
+                  key: ValueKey('shop-business-template:${option.id}'),
+                  style: OutlinedButton.styleFrom(
+                    alignment: Alignment.centerLeft,
+                    minimumSize: const Size.fromHeight(64),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                    backgroundColor: _selectedId == option.id
+                        ? theme.colorScheme.primaryContainer
+                        : theme.colorScheme.surface,
+                    side: BorderSide(
+                      color: _selectedId == option.id
+                          ? theme.colorScheme.primary
+                          : theme.colorScheme.outline,
+                    ),
+                  ),
+                  onPressed: _saving ? null : () => _select(option.id),
+                  child: Row(
+                    children: [
+                      Icon(option.icon, size: 24),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          option.title,
+                          style: theme.textTheme.titleMedium,
+                        ),
+                      ),
+                      if (_selectedId == option.id)
+                        const Icon(Icons.check_circle, size: 22),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 10),
+              ],
+              if (selected != null) ...[
+                const SizedBox(height: 4),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          shopCopy(
+                            widget.myanmar,
+                            'Product suggestions',
+                            'ကုန်ပစ္စည်းထည့်ရန် အကြံပြုချက်များ',
+                          ),
+                          style: theme.textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: 6),
+                        Text(selected.guidance),
+                        if (selected.categorySuggestions.isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              for (final category
+                                  in selected.categorySuggestions)
+                                Chip(label: Text(category)),
+                            ],
+                          ),
+                        ],
+                        const SizedBox(height: 8),
+                        Text(
+                          selected.productNameHint,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+              const SizedBox(height: 12),
+              FilledButton(
+                key: const ValueKey('shop-business-profile-done'),
+                onPressed: _saving ? null : () => Navigator.of(context).pop(),
+                child: Text(
+                  shopCopy(
+                    widget.myanmar,
+                    selected == null ? 'Not now' : 'Done',
+                    selected == null ? 'ယခုမလုပ်သေးပါ' : 'ပြီးပါပြီ',
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }

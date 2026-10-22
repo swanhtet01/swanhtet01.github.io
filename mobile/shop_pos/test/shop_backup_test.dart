@@ -53,6 +53,7 @@ void main() {
       priceMmk: 12000,
       openingStock: 5,
     );
+    await database.saveBusinessProfile('mini-mart', updatedAtMillis: 42);
     await database.saveProductThumbnail('rice', _thumbnail);
     await database.recordCashSale(
       operationId: 'backup-sale-1',
@@ -86,7 +87,7 @@ void main() {
     () async {
       final bytes = await archive.readAsBytes();
       expect(bytes.sublist(0, 4), ascii.encode('SMBK'));
-      expect(bytes[5], 10);
+      expect(bytes[5], 11);
       expect(
         bytes.sublist(0, 16),
         isNot(ascii.encode('SQLite format 3\u0000')),
@@ -113,6 +114,11 @@ void main() {
         expect(await reopened.countSales(), 1);
         expect(await reopened.countStockMovements(), 2);
         expect(await reopened.countOutboxOperations(), 2);
+        final profile = await reopened.readBusinessProfile();
+        expect(profile?.schemaId, ShopBusinessProfile.schemaIdValue);
+        expect(profile?.templateId, 'mini-mart');
+        expect(profile?.templateVersion, 1);
+        expect(profile?.updatedAtMillis, 42);
         final intents = await reopened
             .customSelect(
               'SELECT operation_id FROM shop_wallet_checkout_intents',
@@ -368,7 +374,7 @@ void main() {
     },
   );
 
-  test('v6 archive restores, then migrates its catalog to v10', () async {
+  test('v6 archive restores, then migrates its catalog to v11', () async {
     final legacy = File('${directory.path}/legacy-v6.sqlite');
     await database.exportVerifiedLocalSnapshot(legacy);
     final connection = sqlite3.open(legacy.path);
@@ -377,6 +383,7 @@ void main() {
       connection.execute('DROP TABLE shop_product_images');
       connection.execute('DROP TABLE shop_counter_drafts');
       connection.execute('DROP TABLE shop_held_sales');
+      connection.execute('DROP TABLE shop_business_profile');
       connection.execute('PRAGMA user_version = 6');
     } finally {
       connection.close();
@@ -421,7 +428,7 @@ void main() {
       expect(
         (await migrated.customSelect('PRAGMA user_version').getSingle())
             .read<int>('user_version'),
-        10,
+        11,
       );
     } finally {
       await migrated.close();
@@ -436,6 +443,7 @@ void main() {
       connection.execute('ALTER TABLE shop_products DROP COLUMN reorder_level');
       connection.execute('DROP TABLE shop_counter_drafts');
       connection.execute('DROP TABLE shop_held_sales');
+      connection.execute('DROP TABLE shop_business_profile');
       connection.execute('PRAGMA user_version = 7');
     } finally {
       connection.close();
@@ -447,7 +455,7 @@ void main() {
       expect(
         (await upgraded.customSelect('PRAGMA user_version').getSingle())
             .read<int>('user_version'),
-        10,
+        11,
       );
     } finally {
       await upgraded.close();
@@ -462,6 +470,7 @@ void main() {
       final connection = sqlite3.open(old.path);
       try {
         connection.execute('DROP TABLE shop_held_sales');
+        connection.execute('DROP TABLE shop_business_profile');
         connection.execute('PRAGMA user_version = 9');
       } finally {
         connection.close();
@@ -475,12 +484,56 @@ void main() {
         expect(
           (await upgraded.customSelect('PRAGMA user_version').getSingle())
               .read<int>('user_version'),
-          10,
+          11,
         );
       } finally {
         await upgraded.close();
       }
+      ShopBackup.verifySnapshot(old, expectedSchemaVersion: 11);
+    },
+  );
+
+  test(
+    'v10 database gains an unset business profile without record writes',
+    () async {
+      final old = File('${directory.path}/legacy-v10.sqlite');
+      await database.exportVerifiedLocalSnapshot(old);
+      final connection = sqlite3.open(old.path);
+      try {
+        connection.execute('DROP TABLE shop_business_profile');
+        connection.execute('PRAGMA user_version = 10');
+      } finally {
+        connection.close();
+      }
       ShopBackup.verifySnapshot(old, expectedSchemaVersion: 10);
+      final legacyArchive = File('${directory.path}/legacy-v10.smbak');
+      await _writeAuthenticatedArchive(
+        legacyArchive,
+        await old.readAsBytes(),
+        schemaVersion: 10,
+      );
+      final restored = File('${directory.path}/legacy-v10-restored.sqlite');
+      await ShopBackup.restoreIntoEmptyDatabase(
+        archive: legacyArchive,
+        target: restored,
+        password: _password,
+      );
+      final upgraded = ShopDatabase(NativeDatabase(restored));
+      try {
+        expect(await upgraded.readBusinessProfile(), isNull);
+        expect((await upgraded.readActiveProducts()).single.onHand, 3);
+        expect(await upgraded.countSales(), 1);
+        expect(await upgraded.countStockMovements(), 2);
+        expect(await upgraded.countOutboxOperations(), 2);
+        expect(
+          (await upgraded.customSelect('PRAGMA user_version').getSingle())
+              .read<int>('user_version'),
+          11,
+        );
+      } finally {
+        await upgraded.close();
+      }
+      ShopBackup.verifySnapshot(restored, expectedSchemaVersion: 11);
     },
   );
 
@@ -496,6 +549,7 @@ void main() {
         );
         connection.execute('PRAGMA user_version = 8');
         connection.execute('DROP TABLE shop_held_sales');
+        connection.execute('DROP TABLE shop_business_profile');
       } finally {
         connection.close();
       }
@@ -508,16 +562,16 @@ void main() {
         expect(
           (await migrated.customSelect('PRAGMA user_version').getSingle())
               .read<int>('user_version'),
-          10,
+          11,
         );
       } finally {
         await migrated.close();
       }
-      ShopBackup.verifySnapshot(old, expectedSchemaVersion: 10);
+      ShopBackup.verifySnapshot(old, expectedSchemaVersion: 11);
     },
   );
 
-  test('v10 backup preserves custom and disabled low-stock alerts', () async {
+  test('v11 backup preserves custom and disabled low-stock alerts', () async {
     final source = ShopDatabase(NativeDatabase.memory());
     try {
       await source.addProduct(
@@ -555,7 +609,7 @@ void main() {
         target: restored,
         password: _password,
       );
-      ShopBackup.verifySnapshot(restored, expectedSchemaVersion: 10);
+      ShopBackup.verifySnapshot(restored, expectedSchemaVersion: 11);
       final reopened = ShopDatabase(NativeDatabase(restored));
       try {
         final products = {
@@ -573,7 +627,7 @@ void main() {
     }
   });
 
-  test('v10 snapshots reject missing or invalid alert settings', () async {
+  test('v11 snapshots reject missing or invalid alert settings', () async {
     final missing = File('${directory.path}/missing-reorder.sqlite');
     await database.exportVerifiedLocalSnapshot(missing);
     final missingConnection = sqlite3.open(missing.path);
@@ -596,6 +650,35 @@ void main() {
     }
     expect(() => ShopBackup.verifySnapshot(invalid), throwsFormatException);
   });
+
+  test(
+    'business profile rejects unsupported IDs and corrupt snapshots',
+    () async {
+      final source = ShopDatabase(NativeDatabase.memory());
+      try {
+        await expectLater(
+          source.saveBusinessProfile('restaurant'),
+          throwsArgumentError,
+        );
+        expect(await source.readBusinessProfile(), isNull);
+      } finally {
+        await source.close();
+      }
+
+      final corrupt = File('${directory.path}/invalid-business-profile.sqlite');
+      await database.exportVerifiedLocalSnapshot(corrupt);
+      final connection = sqlite3.open(corrupt.path);
+      try {
+        connection.execute('PRAGMA ignore_check_constraints = ON');
+        connection.execute(
+          "UPDATE shop_business_profile SET template_id = 'restaurant'",
+        );
+      } finally {
+        connection.close();
+      }
+      expect(() => ShopBackup.verifySnapshot(corrupt), throwsFormatException);
+    },
+  );
 
   test('v8 snapshot rejects a malformed image blob', () async {
     final corrupt = File('${directory.path}/malformed-photo.sqlite');
