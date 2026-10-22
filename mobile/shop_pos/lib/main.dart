@@ -4155,6 +4155,18 @@ class _NewShopProductDialogState extends State<_NewShopProductDialog> {
     super.dispose();
   }
 
+  Widget _barcodeField() => TextFormField(
+    key: const ValueKey('shop-product-barcode'),
+    controller: _barcode,
+    decoration: InputDecoration(
+      labelText: shopCopy(
+        widget.myanmar,
+        'Barcode (optional)',
+        'ဘားကုဒ် (မဖြစ်မနေမဟုတ်ပါ)',
+      ),
+    ),
+  );
+
   @override
   Widget build(BuildContext context) => AlertDialog(
     title: Text(shopCopy(widget.myanmar, 'Add product', 'ကုန်ပစ္စည်းထည့်ရန်')),
@@ -4179,18 +4191,13 @@ class _NewShopProductDialogState extends State<_NewShopProductDialog> {
                   ? shopCopy(widget.myanmar, 'Enter a name.', 'အမည်ထည့်ပါ။')
                   : null,
             ),
-            const SizedBox(height: 10),
-            TextFormField(
-              key: const ValueKey('shop-product-barcode'),
-              controller: _barcode,
-              decoration: InputDecoration(
-                labelText: shopCopy(
-                  widget.myanmar,
-                  'Barcode (optional)',
-                  'ဘားကုဒ် (မဖြစ်မနေမဟုတ်ပါ)',
-                ),
-              ),
-            ),
+            // A scanned code stays visible near the name so the cashier can
+            // verify it. During manual entry, keep the three required fields
+            // together before asking for an optional barcode.
+            if (widget.initialBarcode.trim().isNotEmpty) ...[
+              const SizedBox(height: 10),
+              _barcodeField(),
+            ],
             const SizedBox(height: 10),
             TextFormField(
               key: const ValueKey('shop-product-price'),
@@ -4237,6 +4244,10 @@ class _NewShopProductDialogState extends State<_NewShopProductDialog> {
                     : null;
               },
             ),
+            if (widget.initialBarcode.trim().isEmpty) ...[
+              const SizedBox(height: 10),
+              _barcodeField(),
+            ],
           ],
         ),
       ),
