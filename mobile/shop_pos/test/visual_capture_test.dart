@@ -139,7 +139,19 @@ void main() {
             (Icons.inventory_2_outlined, 'stock'),
             (Icons.settings_outlined, 'settings'),
           ]) {
-            await tester.tap(find.byIcon(icon).first);
+            final Finder navigation;
+            if (width >= 1100) {
+              navigation = find.byType(NavigationRail);
+            } else if (icon == Icons.settings_outlined) {
+              navigation = find.byType(AppBar);
+            } else {
+              navigation = find.byType(NavigationBar);
+            }
+            final destination = find.descendant(
+              of: navigation,
+              matching: find.byIcon(icon),
+            );
+            await tester.tap(destination.first);
             await tester.pumpAndSettle();
             expect(tester.takeException(), isNull);
             await expectLater(
@@ -154,7 +166,17 @@ void main() {
             await tester.pumpAndSettle();
           }
 
-          await tester.tap(find.byIcon(Icons.point_of_sale_outlined).first);
+          final Finder saleNavigation;
+          if (width >= 1100) {
+            saleNavigation = find.byType(NavigationRail);
+          } else {
+            saleNavigation = find.byType(NavigationBar);
+          }
+          final saleDestination = find.descendant(
+            of: saleNavigation,
+            matching: find.byIcon(Icons.point_of_sale_outlined),
+          );
+          await tester.tap(saleDestination.first);
           await tester.pumpAndSettle();
           expect(tester.takeException(), isNull);
           await expectLater(
