@@ -1,7 +1,9 @@
 // Synthetic Flutter renders for visual review. These are not installed-device
 // screenshots and must not be published as hardware acceptance evidence.
+import 'dart:convert';
 import 'dart:io';
 
+import 'package:cryptography/cryptography.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -13,38 +15,41 @@ import 'package:supermega_shop/shop_database.dart';
 
 final _capture = Platform.environment['SHOP_VISUAL_CAPTURE'] == '1';
 const _captureKey = ValueKey('native-shop-visual-capture');
+const _photoFixtureDir = 'test/assets/grocery_photos';
+
+Future<List<Map<String, dynamic>>> _groceryFixture() async {
+  final ledger = jsonDecode(
+    await File('$_photoFixtureDir/ledger.json').readAsString(),
+  ) as Map<String, dynamic>;
+  return (ledger['items'] as List<dynamic>).cast<Map<String, dynamic>>();
+}
 
 Future<ShopDatabase> _sampleShop({required bool myanmar}) async {
   final database = ShopDatabase(NativeDatabase.memory());
-  // Display copy belongs to this synthetic fixture, not merchant catalog data.
-  for (final (id, englishName, myanmarName, price, stock) in [
-    (
-      'mama',
-      'MAMA Chicken Instant Noodles',
-      'MAMA ကြက်သား အမြန်ခေါက်ဆွဲ',
-      2950,
-      8,
-    ),
-    ('kaung', 'KAUNG 90 Days Rice', 'KAUNG ရက် ၉၀ ဆန်', 12450, 34),
-    ('alpine', 'ALPINE Drinking Water', 'ALPINE သောက်ရေသန့်', 5700, 21),
-    ('baydar', 'BAYDAR Laundry Detergent', 'BAYDAR အဝတ်လျှော်ဆပ်ပြာ', 5900, 13),
-    ('zess', 'ZESS Sugar Crackers', 'ZESS သကြား ကရက်ကာ', 8000, 14),
-  ]) {
+  // Fixture-only names, prices, stock, and rights-checked photos. The ledger
+  // explicitly marks price and stock as illustrative, not live market data.
+  for (final item in await _groceryFixture()) {
+    final id = item['id'] as String;
     await database.addProduct(
       id: id,
-      name: myanmar ? myanmarName : englishName,
-      priceMmk: price,
-      openingStock: stock,
+      name: item[myanmar ? 'name_my' : 'name_en'] as String,
+      priceMmk: item['price_mmk'] as int,
+      openingStock: item['opening_stock'] as int,
+    );
+    await database.saveProductThumbnail(
+      id,
+      await File('$_photoFixtureDir/' + (item['thumbnail'] as String))
+          .readAsBytes(),
     );
   }
   await database.recordCashSale(
     operationId: 'synthetic-visual-capture-sale',
-    lines: const [ShopSaleLineInput(productId: 'mama', quantity: 1)],
+    lines: const [ShopSaleLineInput(productId: 'apple', quantity: 1)],
   );
-  // The sample sale leaves seven packs. Make the merchant's alert visible in
+  // The sample sale leaves seven apples. Make the merchant's alert visible in
   // Today and Stock captures without changing checkout or fixture stock.
   await database.setReorderLevel(
-    productId: 'mama',
+    productId: 'apple',
     expectedReorderLevel: 5,
     reorderLevel: 10,
   );
@@ -53,6 +58,48 @@ Future<ShopDatabase> _sampleShop({required bool myanmar}) async {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('grocery photo fixture is pinned and safe for the local catalog', () async {
+    final items = await _groceryFixture();
+    expect(items.length, 5);
+    expect(items.map((item) => item['id']).toSet().length, 5);
+    for (final item in items) {
+      final photo = await File(
+        '$_photoFixtureDir/' + (item['thumbnail'] as String),
+      ).readAsBytes();
+      expect(ShopDatabase.isValidProductThumbnail(photo), isTrue);
+      final digest = await Sha256().hash(photo);
+      final actualSha256 = digest.bytes
+          .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
+          .join();
+      expect(
+        actualSha256,
+        item['thumbnail_sha256'],
+        reason: item['id'] as String,
+      );
+      expect(
+        item['source_page'],
+        startsWith('https://commons.wikimedia.org/wiki/File:'),
+      );
+      expect(item['reuse_basis'], isNotEmpty);
+      expect(item['name_en'], isNotEmpty);
+      expect(item['name_my'], isNotEmpty);
+      // No ancillary EXIF, location, color, or software metadata in derivatives.
+      var offset = 8;
+      final chunks = <String>[];
+      while (offset + 12 <= photo.length) {
+        final length = (photo[offset] << 24) |
+            (photo[offset + 1] << 16) |
+            (photo[offset + 2] << 8) |
+            photo[offset + 3];
+        chunks.add(ascii.decode(photo.sublist(offset + 4, offset + 8)));
+        offset += length + 12;
+      }
+      expect(chunks.first, 'IHDR');
+      expect(chunks.last, 'IEND');
+      expect(chunks.every({'IHDR', 'IDAT', 'IEND'}.contains), isTrue);
+    }
+  });
 
   setUpAll(() async {
     if (!_capture) return;
@@ -197,6 +244,10 @@ void main() {
           await tester.tap(saleDestination.first);
           await tester.pumpAndSettle();
           expect(tester.takeException(), isNull);
+          expect(
+            find.byKey(const ValueKey('shop-product-photo:apple')),
+            findsOneWidget,
+          );
           if (width == 320 || width == 820) {
             final camera = find.byKey(const ValueKey('shop-camera-scan'));
             expect(camera, findsOneWidget);
@@ -223,8 +274,8 @@ void main() {
           // checkout hierarchy better than a single-item fixture.
           if (width >= 820) {
             final extraProducts = language == 'my'
-                ? ['BAYDAR အဝတ်လျှော်ဆပ်ပြာ', 'MAMA ကြက်သား အမြန်ခေါက်ဆွဲ']
-                : ['BAYDAR Laundry Detergent', 'MAMA Chicken Instant Noodles'];
+                ? ['ငှက်ပျောသီး (တစ်ဖီး)', 'သရက်သီး (တစ်လုံး)']
+                : ['Bananas (bunch)', 'Mango (each)'];
             for (final name in extraProducts) {
               final nextProduct = find.text(name).first;
               await tester.ensureVisible(nextProduct);
