@@ -423,35 +423,27 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
         : contentWidth >= 600
         ? (contentWidth - 12) / 2
         : contentWidth;
-    final salesWidth = phoneLayout ? contentWidth : smallCardWidth;
     final metricCards = <Widget>[
       _metric(
-        width: salesWidth,
+        width: smallCardWidth,
         label: _copy('Sales today', 'ယနေ့ရောင်းအား'),
         value: _money(snapshot.salesMmk),
         icon: Icons.payments_outlined,
         emphasized: true,
       ),
-      if (phoneLayout)
-        _compactStats(snapshot, width: contentWidth)
-      else ...[
+      _metric(
+        width: smallCardWidth,
+        label: _copy('Completed sales', 'ပြီးစီးသောအရောင်း'),
+        value: _number(snapshot.saleCount),
+        icon: Icons.receipt_long_outlined,
+      ),
+      if (hasStockAlert)
         _metric(
           width: smallCardWidth,
-          label: _copy('Completed sales', 'ပြီးစီးသောအရောင်း'),
-          value: _number(snapshot.saleCount),
-          icon: Icons.receipt_long_outlined,
+          label: _copy('Low-stock products', 'လက်ကျန်နည်းသော ကုန်ပစ္စည်းများ'),
+          value: _number(snapshot.stockToCheck.length),
+          icon: Icons.inventory_2_outlined,
         ),
-        if (hasStockAlert)
-          _metric(
-            width: smallCardWidth,
-            label: _copy(
-              'Low-stock products',
-              'လက်ကျန်နည်းသော ကုန်ပစ္စည်းများ',
-            ),
-            value: _number(snapshot.stockToCheck.length),
-            icon: Icons.inventory_2_outlined,
-          ),
-      ],
     ];
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
@@ -479,13 +471,13 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
                   ],
                 ] else
                   _heading(showNewSale: snapshot.products > 0),
-                // Put the next operator decision before history on phones.
-                if (phoneLayout) ..._attentionItems(snapshot),
                 if (snapshot.products > 0 ||
                     snapshot.saleCount > 0 ||
                     snapshot.pendingWallet != null) ...[
                   SizedBox(height: phoneLayout ? 16 : 22),
-                  if (threeAcross && hasStockAlert && !phoneLayout)
+                  if (phoneLayout)
+                    _phoneSummary(snapshot)
+                  else if (threeAcross && hasStockAlert)
                     IntrinsicHeight(
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -501,6 +493,7 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
                   else
                     Wrap(spacing: 12, runSpacing: 12, children: metricCards),
                 ],
+                if (phoneLayout) ..._attentionItems(snapshot, compact: true),
                 if (phoneLayout && snapshot.recentSales.isNotEmpty) ...[
                   const SizedBox(height: 16),
                   _salesPreview(snapshot),
@@ -518,11 +511,41 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
     );
   }
 
-  List<Widget> _attentionItems(_TodaySnapshot snapshot) {
+  List<Widget> _attentionItems(
+    _TodaySnapshot snapshot, {
+    bool compact = false,
+  }) {
     if (snapshot.pendingWallet == null &&
         snapshot.stockToCheck.isEmpty &&
         snapshot.products > 0) {
       return const [];
+    }
+    if (compact && snapshot.products > 0) {
+      return [
+        const SizedBox(height: 12),
+        if (snapshot.pendingWallet != null)
+          _compactAction(
+            icon: Icons.qr_code_2_outlined,
+            title: _copy(
+              'Mobile payment to review',
+              'မိုဘိုင်းငွေပေးချေမှု စစ်ဆေးရန်',
+            ),
+            detail: _money(snapshot.pendingWallet!.totalMmk),
+            action: _copy('Review payment', 'ငွေပေးချေမှု စစ်ရန်'),
+            onTap: _openSale,
+          ),
+        if (snapshot.stockToCheck.isNotEmpty)
+          _compactAction(
+            icon: Icons.inventory_2_outlined,
+            title: _copy('Check stock', 'လက်ကျန်စစ်ရန်'),
+            detail: snapshot.stockToCheck
+                .take(3)
+                .map((item) => '${item.name} · ${_number(item.onHand)}')
+                .join('   '),
+            action: _copy('Open stock', 'လက်ကျန်ဖွင့်ရန်'),
+            onTap: () => _open(widget.onStock),
+          ),
+      ];
     }
     return [
       const SizedBox(height: 26),
@@ -745,75 +768,58 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
     ),
   );
 
-  Widget _compactStats(_TodaySnapshot snapshot, {required double width}) =>
-      SizedBox(
-        width: width,
-        child: Card(
-          child: Padding(
-            padding: const EdgeInsets.all(18),
-            child: snapshot.stockToCheck.isEmpty
-                ? _compactStatRow(
-                    _copy('Completed sales', 'ပြီးစီးသောအရောင်း'),
-                    _number(snapshot.saleCount),
-                  )
-                : width < 330
-                ? Column(
-                    children: [
-                      _compactStatRow(
-                        _copy('Completed sales', 'ပြီးစီးသောအရောင်း'),
-                        _number(snapshot.saleCount),
-                      ),
-                      const Divider(height: 20),
-                      _compactStatRow(
-                        _copy(
-                          'Low-stock products',
-                          'လက်ကျန်နည်းသော ကုန်ပစ္စည်းများ',
-                        ),
-                        _number(snapshot.stockToCheck.length),
-                      ),
-                    ],
-                  )
-                : Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: _compactStat(
-                          _copy('Completed sales', 'ပြီးစီးသောအရောင်း'),
-                          _number(snapshot.saleCount),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Container(
-                        width: 1,
-                        height: 64,
-                        color: const Color(0xffe2e5ed),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _compactStat(
-                          _copy(
-                            'Low-stock products',
-                            'လက်ကျန်နည်းသော ကုန်ပစ္စည်းများ',
-                          ),
-                          _number(snapshot.stockToCheck.length),
-                        ),
-                      ),
-                    ],
-                  ),
+  Widget _phoneSummary(_TodaySnapshot snapshot) => Card(
+    color: Theme.of(context).colorScheme.primaryContainer,
+    child: Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            _copy('Sales today', 'ယနေ့ရောင်းအား'),
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
           ),
-        ),
-      );
-
-  Widget _compactStatRow(String label, String value) => Row(
-    children: [
-      Expanded(
-        child: Text(
-          label,
-          style: Theme.of(context).textTheme.bodyMedium
-              ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
-        ),
+          const SizedBox(height: 4),
+          Text(
+            _money(snapshot.salesMmk),
+            style: Theme.of(context).textTheme.headlineSmall
+                ?.copyWith(fontFeatures: const [FontFeature.tabularFigures()]),
+          ),
+          const Divider(height: 22),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: _summaryStat(
+                  _copy('Completed sales', 'ပြီးစီးသောအရောင်း'),
+                  _number(snapshot.saleCount),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: _summaryStat(
+                  _copy('Low stock', 'လက်ကျန်နည်း'),
+                  _number(snapshot.stockToCheck.length),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
-      const SizedBox(width: 12),
+    ),
+  );
+
+  Widget _summaryStat(String label, String value) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        label,
+        style: Theme.of(context).textTheme.bodySmall
+            ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+      ),
+      const SizedBox(height: 4),
       Text(
         value,
         style: Theme.of(context).textTheme.titleLarge
@@ -822,21 +828,54 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
     ],
   );
 
-  Widget _compactStat(String label, String value) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Text(
-        label,
-        style: Theme.of(context).textTheme.bodyMedium
-            ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+  Widget _compactAction({
+    required IconData icon,
+    required String title,
+    required String detail,
+    required String action,
+    required VoidCallback onTap,
+  }) => Padding(
+    padding: const EdgeInsets.only(bottom: 8),
+    child: Tooltip(
+      message: action,
+      child: Card(
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 56),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Row(
+                children: [
+                  Icon(icon, color: Theme.of(context).colorScheme.primary),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          style: Theme.of(context).textTheme.titleSmall,
+                        ),
+                        Text(
+                          detail,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  const Icon(Icons.chevron_right),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
-      const SizedBox(height: 8),
-      Text(
-        value,
-        style: Theme.of(context).textTheme.titleLarge
-            ?.copyWith(fontFeatures: const [FontFeature.tabularFigures()]),
-      ),
-    ],
+    ),
   );
 
   Widget _actionCard({
