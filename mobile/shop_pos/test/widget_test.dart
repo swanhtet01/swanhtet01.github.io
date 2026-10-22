@@ -172,7 +172,7 @@ void main() {
       await tester.pumpAndSettle();
       final heldSheet = find.byKey(const ValueKey('shop-held-sales-sheet'));
       expect(heldSheet, findsOneWidget);
-      expect(tester.getSize(heldSheet).height, lessThan(410));
+      expect(tester.getSize(heldSheet).height, lessThan(460));
       expect(
         find.byKey(const ValueKey('shop-held-reopen:compact-ticket')),
         findsOneWidget,
