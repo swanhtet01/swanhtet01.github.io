@@ -961,9 +961,9 @@ class _ShopHomeState extends State<ShopHome> {
     final showRail = inWorkspace && !widget.embeddedTaskShell && width >= 1100;
     final contentWidth =
         widget.workspaceContentWidth ?? width - (showRail ? 191 : 0);
-    // A portrait tablet keeps touch navigation at the bottom while the full
-    // content width can still fit two usable panes after a product is added.
-    const minSplitContentWidth = 820.0;
+    // A portrait tablet keeps touch navigation at the bottom while a 300 px
+    // basket and a usable compact catalog fit beside each other at 768 px.
+    const minSplitContentWidth = 740.0;
     final cartAction = SafeArea(
       top: false,
       minimum: const EdgeInsets.fromLTRB(12, 8, 12, 10),
