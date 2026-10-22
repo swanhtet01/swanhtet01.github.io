@@ -404,6 +404,69 @@ void main() {
     },
   );
 
+  testWidgets('Stock adds a product without switching tasks or making a sale', (
+    tester,
+  ) async {
+    _usePhoneViewport(tester);
+    final database = ShopDatabase(NativeDatabase.memory());
+    try {
+      await tester.pumpWidget(
+        ShopApp(
+          database: database,
+          authClient: null,
+          apiBaseUrl: 'https://app.supermega.dev',
+          initialMyanmar: false,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.descendant(
+          of: find.byType(NavigationBar),
+          matching: find.text('Stock'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('No products yet'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('stock-add-product')));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('shop-product-name')),
+        'Tea 500 g',
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('shop-product-barcode')),
+        '1234567890123',
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('shop-product-price')),
+        '3500',
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('shop-product-stock')),
+        '8',
+      );
+      await tester.tap(find.text('Save product'));
+      await tester.pumpAndSettle();
+      expect(find.text('Tea 500 g'), findsOneWidget);
+      expect(find.byKey(const ValueKey('stock-add-product')), findsOneWidget);
+      expect((await database.readActiveProducts()).single.onHand, 8);
+      expect(await database.countSales(), 0);
+      await tester.tap(
+        find.descendant(
+          of: find.byType(NavigationBar),
+          matching: find.text('Sell'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Tea 500 g'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+      await database.close();
+    }
+  });
+
   testWidgets('Today stays readable and opens Counter in both languages', (
     tester,
   ) async {
