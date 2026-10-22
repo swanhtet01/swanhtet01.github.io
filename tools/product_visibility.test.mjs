@@ -185,7 +185,7 @@ test('generated public home and contact offer only active products', async () =>
   assert.doesNotMatch(home, /Plant|all four|href="[^\"]*(?:\/plant\/|product=plant)/)
   assert.match(contact, /<input type="hidden" name="product" value="guide" \/>/)
   assert.doesNotMatch(contact, /<select[^>]*name="product"/)
-  assert.match(contact, /SuperMega builds practical business software for Myanmar\. Shop helps retailers manage counter sales, stock and open orders\./)
+  assert.match(contact, /Tell us about your business and the workflow you want to improve\. We will reply by email\./)
   assert.doesNotMatch(contact, /English and Burmese are both welcome/)
   for (const product of activeProductContracts(manifest)) {
     const page = main(await html(product.id+'/index.html'))

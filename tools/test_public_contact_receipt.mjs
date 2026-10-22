@@ -18,7 +18,7 @@ assert.ok(script, 'actual generated contact script exists')
 
 test('contact form stays concise and does not make customers classify the request', () => {
   assert.match(page, /<h1 data-contact-heading>Contact<\/h1>/)
-  assert.match(page, /SuperMega builds practical business software for Myanmar\. Shop helps retailers manage counter sales, stock and open orders\./)
+  assert.match(page, /Tell us about your business and the workflow you want to improve\. We will reply by email\./)
   assert.doesNotMatch(page, /English and Burmese are both welcome|lang="my"|[\u1000-\u109f]/u)
   assert.doesNotMatch(formHtml, /Your reference number confirms receipt/)
   assert.match(formHtml, /<label>Email<input name="email"/)
@@ -58,7 +58,7 @@ function harness(responses, search = '', hash = '') {
     document: { querySelector: selector => {
       if (selector === '[data-contact-form]') return form
       if (['[data-contact-heading]', '[data-contact-lede]'].includes(selector)) {
-        if (!headings.has(selector)) headings.set(selector, { textContent: selector === '[data-contact-heading]' ? 'Contact' : 'SuperMega builds practical business software for Myanmar. Shop helps retailers manage counter sales, stock and open orders.' })
+        if (!headings.has(selector)) headings.set(selector, { textContent: selector === '[data-contact-heading]' ? 'Contact' : 'Tell us about your business and the workflow you want to improve. We will reply by email.' })
         return headings.get(selector)
       }
       return null
@@ -96,6 +96,7 @@ test('only active public product links set product context; internal routes fall
   const shop = harness([], '?product=shop&source=shop-brief', '#company=Example&goal=Prepare%20our%20shop')
   assert.equal(shop.fields.get('[name="product"]').value, 'shop')
   assert.equal(shop.headings.get('[data-contact-heading]').textContent, 'Request a Shop walkthrough')
+  assert.equal(shop.headings.get('[data-contact-lede]').textContent, 'Tell us what you sell and how you work today. We will reply with Shop walkthrough and setup options.')
   assert.equal(shop.fields.get('[name="goal"]').value, 'Prepare our shop')
   assert.equal(shop.calls.length, 0)
   for (const product of ['website', 'ecommerce']) {
