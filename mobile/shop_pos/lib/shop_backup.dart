@@ -563,7 +563,10 @@ abstract final class ShopBackup {
   }
 
   static Future<bool> _hasSidecars(File target) async =>
-      await FileSystemEntity.type('${target.path}-journal', followLinks: false) !=
+      await FileSystemEntity.type(
+            '${target.path}-journal',
+            followLinks: false,
+          ) !=
           FileSystemEntityType.notFound ||
       await FileSystemEntity.type('${target.path}-wal', followLinks: false) !=
           FileSystemEntityType.notFound ||
