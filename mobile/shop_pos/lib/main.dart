@@ -24,6 +24,7 @@ import 'shop_cash_shift_screen.dart';
 import 'shop_copy.dart';
 import 'shop_database.dart';
 import 'shop_models.dart';
+import 'shop_startup.dart';
 import 'shop_today_screen.dart';
 import 'stock_screen.dart';
 import 'wallet_setup_screen.dart';
@@ -33,9 +34,12 @@ const _pendingPickerIntentKey = 'shop_pending_picker_intent';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final preferences = await SharedPreferences.getInstance();
+  late final Directory documents;
   try {
+    documents = await getApplicationDocumentsDirectory();
     await ShopBackup.cleanupInterruptedStaging(
-      await getApplicationDocumentsDirectory(),
+      documents,
+      restoreTarget: ShopDatabase.privateDatabaseFile(documents),
     );
   } catch (_) {
     final myanmar = preferences.getBool('shop_locale_myanmar') ?? false;
@@ -70,14 +74,18 @@ Future<void> main() async {
     authClient = Supabase.instance.client;
   }
   runApp(
-    ShopApp(
-      database: ShopDatabase(),
-      authClient: authClient,
-      apiBaseUrl: const String.fromEnvironment(
-        'SHOP_API_BASE_URL',
-        defaultValue: 'https://app.supermega.dev',
-      ),
+    ShopStartup(
+      documents: documents,
       initialMyanmar: preferences.getBool('shop_locale_myanmar') ?? false,
+      buildShop: (database, myanmar) => ShopApp(
+        database: database,
+        authClient: authClient,
+        apiBaseUrl: const String.fromEnvironment(
+          'SHOP_API_BASE_URL',
+          defaultValue: 'https://app.supermega.dev',
+        ),
+        initialMyanmar: myanmar,
+      ),
     ),
   );
 }

@@ -1,21 +1,35 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
+import 'package:file_selector/file_selector.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
 import 'package:supermega_shop/shop_backup.dart';
 import 'package:supermega_shop/shop_backup_export_screen.dart';
 import 'package:supermega_shop/shop_database.dart';
+import 'package:supermega_shop/shop_startup.dart';
 
 const _password = 'correct horse battery staple';
+const _pathProviderChannel = MethodChannel('plugins.flutter.io/path_provider');
 final _thumbnail = base64Decode(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ'
   'AAAADUlEQVR4nGPQyNjxHwAETAJIB09U9wAAAABJRU5ErkJggg==',
 );
+
+Future<void> _pumpUntil(WidgetTester tester, Finder finder) async {
+  for (var attempt = 0; attempt < 200; attempt++) {
+    await tester.pump();
+    if (finder.evaluate().isNotEmpty) return;
+    await tester.runAsync(() async {
+      await Future<void>.delayed(const Duration(milliseconds: 25));
+    });
+  }
+  throw TestFailure('The expected Shop state did not appear: $finder');
+}
 
 void main() {
   late Directory directory;
@@ -24,6 +38,14 @@ void main() {
 
   setUpAll(() async {
     directory = await Directory.systemTemp.createTemp('shop-backup-test-');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(_pathProviderChannel, (call) async {
+          if (call.method == 'getTemporaryDirectory' ||
+              call.method == 'getApplicationDocumentsDirectory') {
+            return directory.path;
+          }
+          throw MissingPluginException();
+        });
     database = ShopDatabase(NativeDatabase.memory());
     await database.addProduct(
       id: 'rice',
@@ -54,6 +76,8 @@ void main() {
 
   tearDownAll(() async {
     await database.close();
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(_pathProviderChannel, null);
     await directory.delete(recursive: true);
   });
 
@@ -458,6 +482,447 @@ void main() {
     );
     expect(await target.exists(), isFalse);
     expect(await sidecar.readAsString(), 'another database owns this');
+  });
+
+  test('late database and WAL creator wins without being replaced', () async {
+    final target = File('${directory.path}/late.sqlite');
+    final wal = File('${target.path}-wal');
+    await expectLater(
+      ShopBackup.restoreIntoEmptyDatabase(
+        archive: archive,
+        target: target,
+        password: _password,
+        beforePublishForTest: () async {
+          await target.writeAsString('another Shop instance');
+          await wal.writeAsString('its WAL');
+        },
+      ),
+      throwsA(isA<FileSystemException>()),
+    );
+    expect(await target.readAsString(), 'another Shop instance');
+    expect(await wal.readAsString(), 'its WAL');
+    expect(await ShopBackup.restoreMarkerFor(target).exists(), isTrue);
+    await _expectNoScratch(directory);
+  });
+
+  for (final suffix in const ['-wal', '-shm']) {
+    for (final timing in const ['before', 'after']) {
+      test(
+        'late $suffix creator $timing publication leaves recovery marker',
+        () async {
+          final target = File(
+            '${directory.path}/late-sidecar-$timing-'
+            '${suffix.substring(1)}.sqlite',
+          );
+          final sidecar = File('${target.path}$suffix');
+          Future<void> createSidecar() async {
+            await sidecar.writeAsString('other writer');
+          }
+
+          await expectLater(
+            ShopBackup.restoreIntoEmptyDatabase(
+              archive: archive,
+              target: target,
+              password: _password,
+              beforePublishForTest: timing == 'before' ? createSidecar : null,
+              afterPublishForTest: timing == 'after' ? createSidecar : null,
+            ),
+            throwsStateError,
+          );
+          expect(await sidecar.readAsString(), 'other writer');
+          expect(await target.exists(), isTrue);
+          expect(await ShopBackup.restoreMarkerFor(target).exists(), isTrue);
+          await _expectNoScratch(directory);
+        },
+      );
+    }
+  }
+
+  test('valid SQLite changed after publication stays blocked', () async {
+    final target = File('${directory.path}/changed-after-link.sqlite');
+    await expectLater(
+      ShopBackup.restoreIntoEmptyDatabase(
+        archive: archive,
+        target: target,
+        password: _password,
+        afterPublishForTest: () async {
+          final connection = sqlite3.open(target.path);
+          try {
+            connection.execute(
+              'UPDATE shop_products SET price_mmk = price_mmk + 1 '
+              'WHERE id = ?',
+              ['rice'],
+            );
+          } finally {
+            connection.close();
+          }
+        },
+      ),
+      throwsStateError,
+    );
+    expect(await target.exists(), isTrue);
+    expect(await ShopBackup.restoreMarkerFor(target).exists(), isTrue);
+    await _expectNoScratch(directory);
+  });
+
+  test('startup clears only an unpublished restore marker', () async {
+    final target = File('${directory.path}/unpublished.sqlite');
+    final marker = ShopBackup.restoreMarkerFor(target);
+    final staging = await directory.createTemp('.supermega-shop-restore-');
+    await File('${staging.path}/shop.sqlite').writeAsString('plaintext');
+    await marker.writeAsString('preparing-v1\n');
+    await ShopBackup.cleanupInterruptedStaging(
+      directory,
+      restoreTarget: target,
+    );
+    expect(await staging.exists(), isFalse);
+    expect(await marker.exists(), isFalse);
+    expect(await target.exists(), isFalse);
+  });
+
+  test(
+    'startup keeps an uncertain committing marker even without DB',
+    () async {
+      final target = File('${directory.path}/uncertain.sqlite');
+      final marker = ShopBackup.restoreMarkerFor(target);
+      await marker.writeAsString('committing-v1\n');
+      await ShopBackup.cleanupInterruptedStaging(
+        directory,
+        restoreTarget: target,
+      );
+      expect(await marker.exists(), isTrue);
+      expect(
+        await ShopBackup.inspectStore(target),
+        ShopStorePresence.interrupted,
+      );
+    },
+  );
+
+  test('startup retains a published restore marker', () async {
+    final target = File('${directory.path}/marked.sqlite');
+    await ShopBackup.restoreIntoEmptyDatabase(
+      archive: archive,
+      target: target,
+      password: _password,
+    );
+    final original = await target.readAsBytes();
+    final marker = ShopBackup.restoreMarkerFor(target);
+    await marker.writeAsString('interrupted after commit');
+    await ShopBackup.cleanupInterruptedStaging(
+      directory,
+      restoreTarget: target,
+    );
+    expect(await marker.exists(), isTrue);
+    expect(await target.readAsBytes(), original);
+  });
+
+  test(
+    'new Shop reservation prevents a later restore from replacing it',
+    () async {
+      final target = File('${directory.path}/new-shop.sqlite');
+      expect(await ShopBackup.inspectStore(target), ShopStorePresence.empty);
+      await ShopBackup.reserveNewStore(target);
+      expect(await ShopBackup.inspectStore(target), ShopStorePresence.existing);
+      await expectLater(
+        ShopBackup.restoreIntoEmptyDatabase(
+          archive: archive,
+          target: target,
+          password: _password,
+        ),
+        throwsStateError,
+      );
+      expect(await target.length(), 0);
+    },
+  );
+
+  test(
+    'restore after empty inspection prevents a stale new-Shop choice',
+    () async {
+      final target = File('${directory.path}/restore-wins.sqlite');
+      expect(await ShopBackup.inspectStore(target), ShopStorePresence.empty);
+      await ShopBackup.restoreIntoEmptyDatabase(
+        archive: archive,
+        target: target,
+        password: _password,
+      );
+      final bytes = await target.readAsBytes();
+      await expectLater(ShopBackup.reserveNewStore(target), throwsStateError);
+      expect(await target.readAsBytes(), bytes);
+    },
+  );
+
+  test('startup cleanup leaves a fully published database intact', () async {
+    final target = File('${directory.path}/published.sqlite');
+    await ShopBackup.restoreIntoEmptyDatabase(
+      archive: archive,
+      target: target,
+      password: _password,
+    );
+    final before = await target.readAsBytes();
+    final interrupted = await directory.createTemp('.supermega-shop-restore-');
+    await target.copy('${interrupted.path}/shop.sqlite');
+    await ShopBackup.cleanupInterruptedStaging(directory);
+    expect(await interrupted.exists(), isFalse);
+    expect(await target.readAsBytes(), before);
+    ShopBackup.verifySnapshot(target);
+  });
+
+  test('Drift opens the restored private database after install', () async {
+    final documents = await Directory.systemTemp.createTemp('shop-drift-');
+    ShopDatabase? reopened;
+    try {
+      await ShopBackup.restoreIntoEmptyDatabase(
+        archive: archive,
+        target: ShopDatabase.privateDatabaseFile(documents),
+        password: _password,
+      );
+      reopened = ShopDatabase.inPrivateDocuments(documents);
+      expect((await reopened.readActiveProducts()).single.onHand, 3);
+      expect(await reopened.countSales(), 1);
+    } finally {
+      await reopened?.close();
+      await documents.delete(recursive: true);
+    }
+  });
+
+  testWidgets('fresh install restores before Shop opens', (tester) async {
+    final documents = Directory.systemTemp.createTempSync('shop-first-run-');
+    try {
+      await tester.pumpWidget(
+        ShopStartup(
+          documents: documents,
+          importScratchRoot: documents,
+          initialMyanmar: false,
+          pickBackup: () async => XFile(archive.path),
+          buildShop: (_, _) =>
+              const MaterialApp(home: Scaffold(body: Text('Opened Shop'))),
+        ),
+      );
+      await _pumpUntil(tester, find.text('Start new Shop'));
+      expect(find.text('Start new Shop'), findsOneWidget);
+      expect(ShopDatabase.privateDatabaseFile(documents).existsSync(), isFalse);
+      await tester.tap(find.text('Restore backup'));
+      await _pumpUntil(tester, find.text('Restore and open Shop'));
+      expect(ShopDatabase.privateDatabaseFile(documents).existsSync(), isFalse);
+      await tester.enterText(find.byType(TextField), _password);
+      await tester.tap(find.text('Restore and open Shop'));
+      await _pumpUntil(tester, find.text('Opened Shop'));
+      await tester.pump(const Duration(milliseconds: 1));
+      expect(find.text('Opened Shop'), findsOneWidget);
+      final restoredFile = ShopDatabase.privateDatabaseFile(documents);
+      expect(restoredFile.existsSync(), isTrue);
+      ShopBackup.verifySnapshot(restoredFile);
+      final restored = sqlite3.open(restoredFile.path, mode: OpenMode.readOnly);
+      try {
+        final products = restored.select(
+          'SELECT on_hand FROM shop_products WHERE id = ?',
+          ['rice'],
+        );
+        final sales = restored.select('SELECT COUNT(*) AS n FROM shop_sales');
+        expect(products.single['on_hand'], 3);
+        expect(sales.single['n'], 1);
+      } finally {
+        restored.close();
+      }
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      // The static builder never queries the lazy executor; the normal-async
+      // Drift reopen test above verifies opening, querying, and closing it.
+      documents.deleteSync(recursive: true);
+    }
+  });
+
+  testWidgets('Start new reserves the exact Drift database path', (
+    tester,
+  ) async {
+    final documents = Directory.systemTemp.createTempSync('shop-new-');
+    ShopDatabase? opened;
+    try {
+      await tester.pumpWidget(
+        ShopStartup(
+          documents: documents,
+          importScratchRoot: documents,
+          initialMyanmar: false,
+          buildShop: (database, _) {
+            opened = database;
+            return const MaterialApp(home: Scaffold(body: Text('Opened Shop')));
+          },
+        ),
+      );
+      await _pumpUntil(tester, find.text('Start new Shop'));
+      await tester.tap(find.text('Start new Shop'));
+      await _pumpUntil(tester, find.text('Opened Shop'));
+      await tester.pump(const Duration(milliseconds: 1));
+      expect(find.text('Opened Shop'), findsOneWidget);
+      expect(ShopDatabase.privateDatabaseFile(documents).existsSync(), isTrue);
+      expect(opened, isNotNull);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      // The static builder does not open Drift's lazy executor.
+      documents.deleteSync(recursive: true);
+    }
+  });
+
+  testWidgets('wrong password keeps restore choice and local data empty', (
+    tester,
+  ) async {
+    final documents = Directory.systemTemp.createTempSync('shop-wrong-pass-');
+    try {
+      await tester.pumpWidget(
+        ShopStartup(
+          documents: documents,
+          importScratchRoot: documents,
+          initialMyanmar: false,
+          pickBackup: () async => XFile(archive.path),
+          buildShop: (_, _) =>
+              const MaterialApp(home: Scaffold(body: Text('Opened Shop'))),
+        ),
+      );
+      await _pumpUntil(tester, find.text('Start new Shop'));
+      await tester.tap(find.text('Restore backup'));
+      await _pumpUntil(tester, find.text('Restore and open Shop'));
+      await tester.enterText(find.byType(TextField), 'a wrong long password');
+      await tester.tap(find.text('Restore and open Shop'));
+      await _pumpUntil(tester, find.textContaining('Could not restore'));
+      expect(find.textContaining('Could not restore'), findsOneWidget);
+      expect(find.text('Restore and open Shop'), findsOneWidget);
+      expect(ShopDatabase.privateDatabaseFile(documents).existsSync(), isFalse);
+      await tester.enterText(find.byType(TextField), _password);
+      await tester.tap(find.text('Restore and open Shop'));
+      await _pumpUntil(tester, find.text('Opened Shop'));
+      await tester.pump(const Duration(milliseconds: 1));
+      expect(find.text('Opened Shop'), findsOneWidget);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      documents.deleteSync(recursive: true);
+    }
+  });
+
+  testWidgets('cancelled restore cannot create a Shop database', (
+    tester,
+  ) async {
+    final documents = Directory.systemTemp.createTempSync('shop-cancel-');
+    try {
+      await tester.pumpWidget(
+        ShopStartup(
+          documents: documents,
+          importScratchRoot: documents,
+          initialMyanmar: true,
+          pickBackup: () async => null,
+          buildShop: (_, _) => const SizedBox.shrink(),
+        ),
+      );
+      await _pumpUntil(tester, find.text('Shop အသစ် စတင်ရန်'));
+      await tester.tap(find.text('အရန်ကူးဖိုင် ပြန်ယူရန်'));
+      await tester.pump();
+      expect(find.text('Shop အသစ် စတင်ရန်'), findsOneWidget);
+      expect(ShopDatabase.privateDatabaseFile(documents).existsSync(), isFalse);
+      expect(tester.takeException(), isNull);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      documents.deleteSync(recursive: true);
+    }
+  });
+
+  testWidgets('existing Shop opens without offering restore', (tester) async {
+    final documents = Directory.systemTemp.createTempSync('shop-existing-');
+    ShopDatabase? opened;
+    try {
+      await tester.runAsync(
+        () => ShopBackup.restoreIntoEmptyDatabase(
+          archive: archive,
+          target: ShopDatabase.privateDatabaseFile(documents),
+          password: _password,
+        ),
+      );
+      await tester.pumpWidget(
+        ShopStartup(
+          documents: documents,
+          importScratchRoot: documents,
+          initialMyanmar: false,
+          buildShop: (database, _) {
+            opened = database;
+            return const MaterialApp(home: Scaffold(body: Text('Opened Shop')));
+          },
+        ),
+      );
+      await _pumpUntil(tester, find.text('Opened Shop'));
+      await tester.pump(const Duration(milliseconds: 1));
+      expect(find.text('Opened Shop'), findsOneWidget);
+      expect(find.text('Restore backup'), findsNothing);
+      expect(opened, isNotNull);
+      ShopBackup.verifySnapshot(ShopDatabase.privateDatabaseFile(documents));
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      // The static builder does not open Drift's lazy executor.
+      documents.deleteSync(recursive: true);
+    }
+  });
+
+  testWidgets('orphaned WAL blocks first-run actions without deletion', (
+    tester,
+  ) async {
+    final documents = Directory.systemTemp.createTempSync('shop-orphan-wal-');
+    try {
+      final target = ShopDatabase.privateDatabaseFile(documents);
+      final sidecar = File('${target.path}-wal');
+      sidecar.writeAsStringSync('preserve this file');
+      await tester.pumpWidget(
+        ShopStartup(
+          documents: documents,
+          importScratchRoot: documents,
+          initialMyanmar: false,
+          buildShop: (_, _) => const SizedBox.shrink(),
+        ),
+      );
+      await _pumpUntil(tester, find.textContaining('cannot safely open'));
+      expect(find.textContaining('cannot safely open'), findsOneWidget);
+      expect(find.text('Start new Shop'), findsNothing);
+      expect(find.text('Restore backup'), findsNothing);
+      expect(sidecar.readAsStringSync(), 'preserve this file');
+      expect(target.existsSync(), isFalse);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      documents.deleteSync(recursive: true);
+    }
+  });
+
+  testWidgets('published recovery marker blocks opening an existing Shop', (
+    tester,
+  ) async {
+    final documents = Directory.systemTemp.createTempSync('shop-marked-');
+    var opened = false;
+    try {
+      final target = ShopDatabase.privateDatabaseFile(documents);
+      await tester.runAsync(
+        () => ShopBackup.restoreIntoEmptyDatabase(
+          archive: archive,
+          target: target,
+          password: _password,
+        ),
+      );
+      ShopBackup.restoreMarkerFor(target).writeAsStringSync('interrupted');
+      await tester.pumpWidget(
+        ShopStartup(
+          documents: documents,
+          importScratchRoot: documents,
+          initialMyanmar: false,
+          buildShop: (_, _) {
+            opened = true;
+            return const SizedBox.shrink();
+          },
+        ),
+      );
+      await _pumpUntil(tester, find.textContaining('restore was interrupted'));
+      expect(opened, isFalse);
+      expect(find.textContaining('restore was interrupted'), findsOneWidget);
+      expect(find.text('Start new Shop'), findsNothing);
+      expect(find.text('Restore backup'), findsNothing);
+      expect(target.existsSync(), isTrue);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      documents.deleteSync(recursive: true);
+    }
   });
 
   test('concurrent cleanup fails fast and releases its lock', () async {
