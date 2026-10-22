@@ -2766,7 +2766,16 @@ void main() {
               matching: find.text(myanmar ? '၃ ကျန်' : '3 left'),
             );
             expect(tester.getTopLeft(price).dx, tester.getTopLeft(name).dx);
-            expect(tester.getTopLeft(stock).dx, tester.getTopLeft(name).dx);
+            if (width == 390) {
+              expect(tester.getTopLeft(stock).dx, tester.getTopLeft(name).dx);
+            } else {
+              expect(
+                tester.getTopLeft(stock).dx,
+                tester.getTopLeft(
+                  find.byKey(const ValueKey('shop-add-affordance:rice')),
+                ).dx,
+              );
+            }
             expect(
               tester
                   .getTopLeft(
