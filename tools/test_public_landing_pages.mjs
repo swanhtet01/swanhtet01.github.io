@@ -154,7 +154,7 @@ const productScreens = {
 }
 const interfaceDisclosure = (image) => {
   const asset = publicGalleryProvenance.assets.find(entry => entry.file === image)
-  return asset?.capture ? 'Actual app interface · sample data' : null
+  return asset?.capture ? image.startsWith('actual-shop-') ? 'Shop browser workspace · sample data' : 'Browser workspace · sample data' : null
 }
 check(!publicGeneratorSource.includes('compatibilityScreens') && !publicGeneratorSource.includes('data-legacy-interface-assets'), 'landing_legacy_interface_compatibility_removed')
 for (const page of landingPages) {

@@ -955,7 +955,7 @@ const productOutcomes = {
 }
 function interfaceDisclosure(image) {
  assert(publicGalleryAssetNames.includes(image), `interface_gallery_asset_unverified:${image}`)
- return 'Actual app interface · sample data'
+ return image.startsWith('actual-shop-') ? 'Shop browser workspace · sample data' : 'Browser workspace · sample data'
 }
 function deviceCapture(device,image,alt,width,height,loading,fetchPriority='') {
  interfaceDisclosure(image)
@@ -992,7 +992,7 @@ function shopCounterSalePreview(locale = 'en') {
  interfaceDisclosure(mobileImage)
  interfaceDisclosure(tabletImage)
  const imageAlt = locale === 'my' ? 'ကောင်တာအရောင်း၊ ကုန်ပစ္စည်းရှာဖွေမှုနှင့် လက်ရှိခြင်းတောင်းကို ပြထားသော Shop ဘရောက်ဇာမျက်နှာပြင်' : alt
- const disclosure = locale === 'my' ? 'နမူနာမှတ်တမ်းများနှင့် ဈေးနှုန်းများ' : 'Sample records and prices'
+ const disclosure = locale === 'my' ? 'Shop ဘရောက်ဇာ လုပ်ငန်းနေရာ · နမူနာမှတ်တမ်းများနှင့် ဈေးနှုန်းများ' : 'Shop browser workspace · Sample records and prices'
  const photographers = publicGalleryImageSources.products.map(product => {
   const rights = product.publication_rights
   const license = rights.basis === 'cc0-1.0'
