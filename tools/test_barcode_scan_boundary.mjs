@@ -262,7 +262,7 @@ check(invalidStockScan.status === 'invalid-current' && invalidStockScan.draft?.q
 const overflowStockScan = applyStockCountScan({ sku: 'RICE-01', stockUnitId: '', locationId: '', quantity: String(Number.MAX_SAFE_INTEGER) }, { sku: 'RICE-01' })
 check(overflowStockScan.status === 'count-overflow', 'unsafe_count_overflow_must_fail_closed')
 check(!/fetch\(|XMLHttpRequest|mutateCommerce|countCommerceStock|queueAction\(/.test(stockCountScanSource), 'stock_count_scan_helper_must_not_write_or_call_network')
-check(coreApp.includes('label="Scan a product barcode for this stock count" onDetected={selectStockCountBarcode}'), 'stock_count_scanner_call_site_missing')
+check(coreApp.includes("label={uiText('Scan a product barcode for this stock count')} onDetected={selectStockCountBarcode}"), 'stock_count_scanner_call_site_missing')
 check(selectStockCountBarcode.includes('findCommerceItemByScanCode(commerce.items, code)')
   && selectStockCountBarcode.includes('balances.length === 1')
   && selectStockCountBarcode.includes('balances.find((candidate) => candidate.stockUnitId === stockCountDraft?.stockUnitId')
