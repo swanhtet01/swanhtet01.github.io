@@ -4093,10 +4093,7 @@ void main() {
     await _settleStock(tester);
     await tester.tap(find.text('လက်ကျန်'));
     await _settleStock(tester);
-    expect(
-      find.byKey(const ValueKey('stock-more-rice-phone')),
-      findsOneWidget,
-    );
+    expect(find.byKey(const ValueKey('stock-more-rice-phone')), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('stock-more-rice-phone')));
     await _settleStock(tester);
     expect(
