@@ -163,7 +163,7 @@
     "version": "17.10"
   },
   "implementation": {
-    "digest": "sha256:dadbc890118c1107028464040a60f61359db43e5817e8f3b9949cfd6968752db",
+    "digest": "sha256:f20cf2d7c075a1ddd59bce3e6d009d9e6e85d585f99f55399ec0e0ff2030a2a5",
     "paths": [
       "kernel/database-rehearsal-evidence.mjs",
       "supabase/migrations/20260722004500_private_trial_backend_role_preflight.sql",
@@ -302,15 +302,15 @@
   "recovery": {
     "backup_nonempty": true,
     "format": "pg_dump_custom",
-    "private_snapshot_after": "sha256:d01a8b3753bb5abf4d8cdf454c528f5792059f533719fe7ad177f1f4c290967a",
-    "private_snapshot_before": "sha256:d01a8b3753bb5abf4d8cdf454c528f5792059f533719fe7ad177f1f4c290967a",
+    "private_snapshot_after": "sha256:9c916608ee9bebead84a4556ef8539e4dea26ebfd993f950364ccc173b7584bf",
+    "private_snapshot_before": "sha256:9c916608ee9bebead84a4556ef8539e4dea26ebfd993f950364ccc173b7584bf",
     "restored_schema_version": 13
   },
   "secret_values_exposed": false,
   "source": {
-    "head": "ae985d0588171ae707a846b27e526078564290ab",
-    "implementation_digest": "sha256:dadbc890118c1107028464040a60f61359db43e5817e8f3b9949cfd6968752db",
-    "tree": "d6f53f3cc73eb2cfb579797808eaa9fa750113aa"
+    "head": "3c796da20e80b2892ff7b4bf03bf2f18fe88ce06",
+    "implementation_digest": "sha256:f20cf2d7c075a1ddd59bce3e6d009d9e6e85d585f99f55399ec0e0ff2030a2a5",
+    "tree": "eb5c198a24431ddca115f55827e4d14bf6783af1"
   },
   "status": "rehearsed",
   "storage": {
