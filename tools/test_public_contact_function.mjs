@@ -173,6 +173,11 @@ try {
   const invalid = await invoke({ body: { company: 'Missing identity' } })
   assert.equal(invalid.status, 400)
   assert.equal(invalid.body.reason, 'required_fields_missing')
+  for (const field of ['name', 'email', 'goal']) {
+    const missingRequired = await invoke({ body: { ...validSubmission, company: '', [field]: '' } })
+    assert.equal(missingRequired.status, 400, `${field} remains required when company is blank`)
+    assert.equal(missingRequired.body.reason, 'required_fields_missing')
+  }
 
   const wrongOrigin = await invoke({ body: validSubmission, headers: withKey(1, { origin: 'https://attacker.example' }) })
   assert.equal(wrongOrigin.status, 403)
@@ -232,6 +237,20 @@ try {
   const conflict = await invoke({ body: { ...validSubmission, product: 'guide', goal: 'Different request.' }, headers: withKey(3) })
   assert.equal(conflict.status, 409)
   assert.equal(conflict.body.reason, 'idempotency_conflict')
+
+  const noCompanySubmission = { ...validSubmission, company: '', product: 'shop', template: '', goal: 'Set up a small counter and receipt printer.' }
+  const noCompany = await invoke({ body: noCompanySubmission, headers: withKey(4000, { 'x-forwarded-for': '203.0.113.99' }) })
+  assert.equal(noCompany.status, 202, 'an optional Company field cannot block contact receipt')
+  const noCompanyEvent = JSON.parse(delivered.options.body)
+  assert.equal(noCompanyEvent.record.company, '')
+  assert.equal(noCompanyEvent.record.raw.company, '')
+  assert.equal(noCompanyEvent.record.workflow, 'commerce')
+  assert.equal(noCompanyEvent.record.goal, noCompanySubmission.goal)
+  assert.equal(notificationFixtureRows.get(noCompany.body.request_id).company, '')
+  const noCompanyReplay = await invoke({ body: noCompanySubmission, headers: withKey(4000, { 'x-forwarded-for': '203.0.113.99' }) })
+  assert.equal(noCompanyReplay.status, 202)
+  assert.equal(noCompanyReplay.body.request_id, noCompany.body.request_id)
+  assert.equal(noCompanyReplay.headers['x-idempotent-replay'], 'true')
 
   const websiteAccepted = await invoke({
     body: {
@@ -459,6 +478,18 @@ try {
   assert.match(customerAck.body.text, /Please do not include passwords or customer records/)
   assert.doesNotMatch(customerAck.body.text.split('\n').slice(1).join('\n'), /demo|preview|trial|account created|payment received/i)
   assert.doesNotMatch(customerAck.body.text, /one business day|founder|trial keeps working/)
+
+  const beforeOptionalMail = resendMail.length
+  const optionalMail = await invoke({
+    body: { ...validSubmission, name: 'Independent retailer', company: '', product: 'shop', template: '', goal: 'Need counter sales and stock.' },
+    headers: withKey(4001, { 'x-forwarded-for': '203.0.113.98' }), activeHandler: resendHandler,
+  })
+  assert.equal(optionalMail.status, 202)
+  assert.equal(resendMail.length, beforeOptionalMail + 2)
+  assert.equal(resendMail.at(-2).body.subject, 'SuperMega request — Independent retailer')
+  assert.match(resendMail.at(-2).body.text, /Company: Not provided/)
+  assert.match(resendMail.at(-1).body.text, /We received your request\./)
+  assert.doesNotMatch(resendMail.at(-1).body.text, /request for \./)
 
   const productAcknowledgements = {
     shop: /your catalog, stock and sales workflow/,

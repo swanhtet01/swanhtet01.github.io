@@ -118,7 +118,7 @@ for (const page of landingPages) {
 check(config.routes.at(-1)?.dest === '/404.html' && config.routes.at(-1)?.status === 404, 'not_found_fallback_last')
 
 // Every public route shares the same navigation and brand mark. Route-specific
-// active state and Shop login intent are the only header differences.
+// Active state is the only header difference; every public login opens Shop.
 const sharedShellRoutes = new Set(['/', '/shop/', '/contact/', '/privacy/'])
 const sharedShellPages = manifest.pages.filter((page) => sharedShellRoutes.has(page.route))
 let referenceBrandMarkup = null
@@ -134,7 +134,7 @@ for (const page of sharedShellPages) {
   const activeLabel = page.route === '/shop/' ? 'Shop' : page.route === '/contact/' ? 'Contact' : null
   const activeLinks = [...header.matchAll(/<a\b[^>]*aria-current="page"[^>]*>([^<]+)<\/a>/g)].map((match) => match[1])
   check(activeLinks.join(',') === (activeLabel || ''), `shared_navigation_active_state:${page.route}`)
-  if (page.route === '/shop/') check(header.includes(`${appOrigin}/login?product=shop`), 'shop_navigation_preserves_login_intent')
+  check(header.includes(`${appOrigin}/login?product=shop`), `navigation_preserves_shop_login_intent:${page.route}`)
   if (referenceBrandMarkup === null) referenceBrandMarkup = brandMarkup
   else check(brandMarkup === referenceBrandMarkup, `shared_brand_mark:${page.route}`)
 }
@@ -163,7 +163,7 @@ for (const page of landingPages) {
   if (!activeIds.includes(page.productId)) {
     check(html.includes('name="robots" content="noindex,follow"'), `retained_noindex:${page.route}`)
     check(!html.includes(`href="${product.appRoute}"`) && !html.includes('Open retained workspace'), `retired_tool_link_absent:${page.route}`)
-    check(html.includes('href="/#products"') && html.includes('Existing workspace records are preserved'), `retained_records_and_active_return:${page.route}`)
+    check(html.includes('href="/shop/">View Shop') && html.includes('Existing workspace records are preserved'), `retained_records_and_active_return:${page.route}`)
     check(html.includes('not offered for new setup'), `retained_boundary:${page.route}`)
     check(!html.includes('class="trade-card') && !html.includes('Request assisted setup'), `retained_no_acquisition:${page.route}`)
     continue
@@ -246,9 +246,7 @@ for (const page of landingPages) {
     check(html.includes(`Sites &middot; Page workspace and readiness &middot; ${interfaceDisclosure('actual-sites-editor.png')}`), 'landing_sites_editor_capture_scope_truthful')
     check(html.includes(`Sites &middot; Inquiry review and ownership &middot; ${interfaceDisclosure('actual-sites-inquiries.png')}`), 'landing_sites_inquiry_capture_scope_truthful')
   }
-  const expectedLoginHref = page.route === '/shop/'
-    ? `href="${appOrigin}/login?product=shop"`
-    : `href="${appOrigin}/login"`
+  const expectedLoginHref = `href="${appOrigin}/login?product=shop"`
   check(countOccurrences(html, expectedLoginHref) === 1, `landing_login_actions:${page.route}`)
   if (page.route === '/shop/') check(html.includes('class="button button-primary" href="/contact/?product=shop">Request a Shop walkthrough'), 'shop_primary_action_is_honest_contact')
   if (page.route === '/') check(html.includes('.company-hero .hero-actions .button-primary') && html.includes('white-space:nowrap'), 'company_primary_action_stays_compact')

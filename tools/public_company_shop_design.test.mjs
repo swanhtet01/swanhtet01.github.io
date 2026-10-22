@@ -164,6 +164,8 @@ assert.doesNotMatch(companyShopHeaderHtml('/'), />Company<\/a>/, 'the product ho
 assert.match(companyShopHeaderHtml('/shop/'), /href="\/shop\/" aria-current="page">Shop/)
 assert.match(companyShopHeaderHtml('/contact/'), /href="\/contact\/" aria-current="page">Contact/)
 assert.match(companyShopHeaderHtml('/shop/'), /href="https:\/\/app\.supermega\.dev\/login\?product=shop">Login/)
+assert.match(companyShopHeaderHtml('/'), /href="https:\/\/app\.supermega\.dev\/login\?product=shop">Login/)
+assert.match(companyShopHeaderHtml('/contact/'), /href="https:\/\/app\.supermega\.dev\/login\?product=shop">Login/)
 const brandMark = /<svg viewBox="0 0 72 44" width="30" height="18" focusable="false"><path d="M10 9 26 22 10 35M35 35h27" fill="none" stroke="#2563eb" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"\/><\/svg>/
 assert.equal(brandMarkHtml, '<svg viewBox="0 0 72 44" width="30" height="18" focusable="false"><path d="M10 9 26 22 10 35M35 35h27" fill="none" stroke="#2563eb" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/></svg>')
 assert.equal(

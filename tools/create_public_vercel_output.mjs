@@ -1537,8 +1537,8 @@ async function sendResend(record) {
   if (!key) return { status: 'skipped' }
   const to = env('SUPERMEGA_CONTACT_NOTIFY_EMAIL') || 'swanhtet@supermega.dev'
   const from = env('SUPERMEGA_CONTACT_FROM_EMAIL') || 'SuperMega <leads@supermega.dev>'
-  const body = ['New SuperMega request', '', 'Product: ' + record.workflow, 'Template: ' + (record.requested_package || 'not selected'), 'Company: ' + record.company, 'Name: ' + record.name, 'Email: ' + record.email].concat(record.raw.trial_claim_code ? ['Trial claim code: ' + record.raw.trial_claim_code] : []).concat(['', 'Operator next step: ' + record.next_step, '', 'Customer brief:', record.goal, '', 'Source: ' + record.source_url, 'Lead: ' + record.lead_id]).join('\\n')
-  const response = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { authorization: 'Bearer ' + key, 'content-type': 'application/json', 'idempotency-key': 'supermega-contact-email/' + record.lead_id }, body: JSON.stringify({ from, to: [to], reply_to: record.email, subject: 'SuperMega request — ' + record.company, text: body }), redirect: 'error', signal: AbortSignal.timeout(9000) })
+  const body = ['New SuperMega request', '', 'Product: ' + record.workflow, 'Template: ' + (record.requested_package || 'not selected'), 'Company: ' + (record.company || 'Not provided'), 'Name: ' + record.name, 'Email: ' + record.email].concat(record.raw.trial_claim_code ? ['Trial claim code: ' + record.raw.trial_claim_code] : []).concat(['', 'Operator next step: ' + record.next_step, '', 'Customer brief:', record.goal, '', 'Source: ' + record.source_url, 'Lead: ' + record.lead_id]).join('\\n')
+  const response = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { authorization: 'Bearer ' + key, 'content-type': 'application/json', 'idempotency-key': 'supermega-contact-email/' + record.lead_id }, body: JSON.stringify({ from, to: [to], reply_to: record.email, subject: 'SuperMega request — ' + (record.company || record.name), text: body }), redirect: 'error', signal: AbortSignal.timeout(9000) })
   if (!response.ok) throw new Error('email_' + response.status)
   return { status: 'ready', channel: 'email' }
 }
@@ -1547,7 +1547,7 @@ async function sendTelegram(record) {
   const token = env('TELEGRAM_BOT_TOKEN')
   const chatId = env('TELEGRAM_CHAT_ID')
   if (!token || !chatId) return { status: 'skipped' }
-  const message = ['New SuperMega request', record.company + ' · ' + record.name, record.email, 'Product: ' + record.workflow, 'Template: ' + (record.requested_package || 'not selected')].concat(record.raw.trial_claim_code ? ['Claim: ' + record.raw.trial_claim_code] : []).concat(['', 'Next: ' + record.next_step, '', 'Customer brief:', record.goal, '', record.lead_id]).join('\\n').slice(0, 3900)
+  const message = ['New SuperMega request', (record.company ? record.company + ' · ' : '') + record.name, record.email, 'Product: ' + record.workflow, 'Template: ' + (record.requested_package || 'not selected')].concat(record.raw.trial_claim_code ? ['Claim: ' + record.raw.trial_claim_code] : []).concat(['', 'Next: ' + record.next_step, '', 'Customer brief:', record.goal, '', record.lead_id]).join('\\n').slice(0, 3900)
   const response = await fetch('https://api.telegram.org/bot' + token + '/sendMessage', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ chat_id: chatId, text: message, disable_web_page_preview: true }), redirect: 'error', signal: AbortSignal.timeout(9000) })
   if (!response.ok) throw new Error('telegram_' + response.status)
   return { status: 'ready', channel: 'telegram' }
@@ -1583,7 +1583,7 @@ async function sendCustomerAcknowledgement(record) {
   if (!emailOk(record.email)) return { status: 'skipped' }
   const from = env('SUPERMEGA_CONTACT_FROM_EMAIL') || 'SuperMega <leads@supermega.dev>'
   const replyTo = env('SUPERMEGA_CONTACT_NOTIFY_EMAIL') || 'swanhtet@supermega.dev'
-  const body = ['Hi ' + record.name + ',', '', 'We received your request for ' + record.company + '.', '', acknowledgementPlan(record.workflow), '', 'Next: we review your requirements and confirm scope, price and timing.', '', 'Reference: ' + record.lead_id].concat(record.raw.trial_claim_code ? ['Workspace reference: ' + record.raw.trial_claim_code] : []).concat(['', 'Reply to this email with questions or corrections. Please do not include passwords or customer records.', '', 'SuperMega - https://supermega.dev']).join('\\n')
+  const body = ['Hi ' + record.name + ',', '', 'We received your request' + (record.company ? ' for ' + record.company : '') + '.', '', acknowledgementPlan(record.workflow), '', 'Next: we review your requirements and confirm scope, price and timing.', '', 'Reference: ' + record.lead_id].concat(record.raw.trial_claim_code ? ['Workspace reference: ' + record.raw.trial_claim_code] : []).concat(['', 'Reply to this email with questions or corrections. Please do not include passwords or customer records.', '', 'SuperMega - https://supermega.dev']).join('\\n')
   const response = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { authorization: 'Bearer ' + key, 'content-type': 'application/json', 'idempotency-key': 'supermega-contact-ack/' + record.lead_id }, body: JSON.stringify({ from, to: [record.email], reply_to: replyTo, subject: 'We received your request - SuperMega', text: body }), redirect: 'error', signal: AbortSignal.timeout(9000) })
   if (!response.ok) throw new Error('ack_email_' + response.status)
   return { status: 'ready', channel: 'ack_email' }
@@ -1606,7 +1606,7 @@ module.exports = async function handler(req, res) {
     send(res, 400, { status: 'error', reason: error?.message === 'trial_proof_invalid' ? 'trial_proof_invalid' : 'invalid_request' })
     return
   }
-  if (!safe.name || !safe.company || !safe.goal || !emailOk(safe.email)) { send(res, 400, { status: 'error', reason: 'required_fields_missing' }); return }
+  if (!safe.name || !safe.goal || !emailOk(safe.email)) { send(res, 400, { status: 'error', reason: 'required_fields_missing' }); return }
   if (!safe.product) { send(res, 400, { status: 'error', reason: 'product_not_supported' }); return }
   if (!idempotencySecret()) { send(res, 503, { status: 'error', reason: 'contact_controls_unavailable', fallback_email: 'swanhtet@supermega.dev' }); return }
   const idempotencyKey = idempotencyKeyFrom(payload, req)
@@ -1673,7 +1673,7 @@ for (const page of manifest.pages.filter((entry) => entry.productId)) {
     route: page.route, title: product.name + ' | Retained workspace access',
     description: 'Compatibility access for retained workspaces. Not offered for new-product setup.',
     robots: 'noindex,follow',
-    content: `<main class="frame" id="content"><section class="page-hero"><h1>${escapeHtml(product.name)} retained records</h1><p>This product is not offered for new setup. Existing workspace records are preserved; nothing is deleted or migrated by this page.</p><a class="button" href="/#products">View current products</a></section></main>`,
+    content: `<main class="frame" id="content"><section class="page-hero"><h1>${escapeHtml(product.name)} retained records</h1><p>This product is not offered for new setup. Existing workspace records are preserved; nothing is deleted or migrated by this page.</p><a class="button" href="/shop/">View Shop</a></section></main>`,
   }))
 }
 
