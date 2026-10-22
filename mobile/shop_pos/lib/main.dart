@@ -1963,13 +1963,16 @@ class _ShopHomeState extends State<ShopHome> {
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             semanticsLabel: item.name,
-                            style: (compactProductRow
-                                    ? Theme.of(context).textTheme.bodyMedium
-                                    : Theme.of(context).textTheme.titleMedium)
-                                ?.copyWith(
-                                  fontWeight: FontWeight.w600,
-                                  height: 1.3,
-                                ),
+                            style:
+                                (compactProductRow
+                                        ? Theme.of(context).textTheme.bodyMedium
+                                        : Theme.of(context)
+                                              .textTheme
+                                              .titleMedium)
+                                    ?.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                      height: 1.3,
+                                    ),
                           ),
                           if (compactProductRow) ...[
                             const SizedBox(height: 2),
