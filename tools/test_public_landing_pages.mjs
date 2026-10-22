@@ -39,6 +39,8 @@ for (const [route, html, locale] of [
 }
 check(shop.includes('<a class="button button-primary" href="/contact/?product=shop">Request a Shop walkthrough</a>'), 'shop_single_action')
 check(myShop.includes('href="/my/contact/?product=shop"'), 'my_shop_action')
+check(shop.includes('Add products. Scan or tap to sell. Find a receipt and check stock.'), 'shop_concrete_merchant_flow')
+check(myShop.includes('ကုန်ပစ္စည်း ထည့်ပါ။ ဘားကုဒ်ဖတ် သို့မဟုတ် ရွေး၍ ရောင်းပါ။ ပြေစာရှာပြီး ကုန်လက်ကျန်ကို စစ်ပါ။'), 'my_shop_concrete_merchant_flow')
 check(shop.includes('Shop app preview with sample data and prices.'), 'synthetic_data_disclosed')
 check(myShop.includes('နမူနာအချက်အလက်နှင့် ဈေးနှုန်းများ'), 'my_synthetic_data_disclosed')
 check(shop.includes('class="native-shop-gallery"') && myShop.includes('class="native-shop-gallery"'), 'native_gallery_visible')

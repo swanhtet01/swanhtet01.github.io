@@ -640,11 +640,11 @@
 
 /* Native Shop screenshots are displayed at readable size, without fake hardware frames. */
 .native-shop-gallery { background: #fff; padding: clamp(30px, 4.5vw, 70px) 0; border-bottom: 1px solid #e5eaf1; }
-.native-shop-shots { display: grid; gap: 24px; }
-.native-shop-shots-pair { display: grid; grid-template-columns: minmax(0, 1.28fr) minmax(250px, .72fr); gap: 24px; align-items: start; }
+.native-shop-shots { display: grid; gap: 18px; }
+.native-shop-shots-pair { display: grid; grid-template-columns: minmax(0, 1.28fr) minmax(250px, .72fr); gap: 18px; align-items: start; }
 .native-shop-shots-my .native-shop-shots-pair { grid-template-columns: minmax(0, 1fr) minmax(260px, .55fr); }
 .native-shop-shot { min-width: 0; margin: 0; }
-.native-shop-shot-window { overflow: hidden; border: 1px solid #dce4ee; border-radius: 13px; background: #f3f6fb; box-shadow: 0 14px 38px rgba(20, 35, 55, .06); }
+.native-shop-shot-window { overflow: hidden; border: 1px solid #dce4ee; border-radius: 8px; background: #f3f6fb; box-shadow: 0 8px 26px rgba(20, 35, 55, .05); }
 .native-shop-shot img { display: block; width: 100%; height: auto; }
 .native-shop-shot figcaption { padding: 9px 2px 0; color: #536175; font-size: .82rem; font-weight: 620; }
 .native-shop-caption { margin: 15px 0 0; color: #687586; font-size: .81rem; line-height: 1.5; }
