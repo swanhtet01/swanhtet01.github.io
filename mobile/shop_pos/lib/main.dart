@@ -656,6 +656,8 @@ class ShopHome extends StatefulWidget {
 }
 
 class _ShopHomeState extends State<ShopHome> {
+  static const _minSplitContentWidth = 740.0;
+
   String _mmk(int amount) => shopMmk(amount, myanmar: widget.myanmar);
 
   void _focusScannerIfReady() {
@@ -974,7 +976,6 @@ class _ShopHomeState extends State<ShopHome> {
         widget.workspaceContentWidth ?? width - (showRail ? 191 : 0);
     // A portrait tablet keeps touch navigation at the bottom while a 300 px
     // basket and a usable compact catalog fit beside each other at 768 px.
-    const minSplitContentWidth = 740.0;
     final cartAction = SafeArea(
       top: false,
       minimum: const EdgeInsets.fromLTRB(12, 8, 12, 10),
@@ -1148,7 +1149,7 @@ class _ShopHomeState extends State<ShopHome> {
                       stream: _productsStream,
                       builder: (context, snapshot) {
                         final products = snapshot.data ?? const <ShopProduct>[];
-                        if (contentWidth >= minSplitContentWidth) {
+                        if (contentWidth >= _minSplitContentWidth) {
                           // Keep the current sale visible beside the catalog
                           // on tablets and desktop, including before the first
                           // item is selected.
@@ -1280,14 +1281,14 @@ class _ShopHomeState extends State<ShopHome> {
       ),
       bottomNavigationBar: inWorkspace && width < 1100
           ? widget.embeddedTaskShell
-                ? (_cart.isNotEmpty && contentWidth < minSplitContentWidth
+                ? (_cart.isNotEmpty && contentWidth < _minSplitContentWidth
                       ? cartAction
                       : null)
                 : Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       if (_cart.isNotEmpty &&
-                          contentWidth < minSplitContentWidth)
+                          contentWidth < _minSplitContentWidth)
                         cartAction,
                       ShopTaskBottomBar(
                         myanmar: widget.myanmar,
@@ -1300,7 +1301,7 @@ class _ShopHomeState extends State<ShopHome> {
                       ),
                     ],
                   )
-          : contentWidth >= minSplitContentWidth || _cart.isEmpty
+          : contentWidth >= _minSplitContentWidth || _cart.isEmpty
           ? null
           : cartAction,
     );
@@ -1484,6 +1485,8 @@ class _ShopHomeState extends State<ShopHome> {
       final narrowPhone = MediaQuery.sizeOf(context).width < 380;
       final title = Text(
         shopCopy(widget.myanmar, 'Products', 'ကုန်ပစ္စည်းများ'),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
         style: narrowPhone
             ? Theme.of(context).textTheme.titleMedium
             : Theme.of(context).textTheme.titleLarge,
@@ -1515,6 +1518,28 @@ class _ShopHomeState extends State<ShopHome> {
         icon: const Icon(Icons.add),
         label: Text(shopCopy(widget.myanmar, 'New product', 'ကုန်ပစ္စည်းအသစ်')),
       );
+      // A portrait tablet has a split basket but only a narrow catalog header.
+      // Keep product creation visible without adding a second header row.
+      final compactTabletHeader =
+          MediaQuery.sizeOf(context).width >= _minSplitContentWidth &&
+          constraints.maxWidth < 420;
+      final compactAddButton = Tooltip(
+        message: shopCopy(
+          widget.myanmar,
+          'New product',
+          'ကုန်ပစ္စည်းအသစ်',
+        ),
+        child: TextButton.icon(
+          key: const ValueKey('shop-new-product-compact'),
+          onPressed: _showAddProduct,
+          style: TextButton.styleFrom(
+            minimumSize: const Size(0, 48),
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+          ),
+          icon: const Icon(Icons.add, size: 18),
+          label: Text(shopCopy(widget.myanmar, 'New', 'အသစ်')),
+        ),
+      );
       final productActions = PopupMenuButton<String>(
         key: const ValueKey('shop-product-actions'),
         tooltip: shopCopy(
@@ -1533,7 +1558,7 @@ class _ShopHomeState extends State<ShopHome> {
           }
         },
         itemBuilder: (_) => [
-          if (constraints.maxWidth < 420)
+          if (constraints.maxWidth < 420 && !compactTabletHeader)
             PopupMenuItem(
               value: 'new',
               child: Text(
@@ -1567,6 +1592,7 @@ class _ShopHomeState extends State<ShopHome> {
           children: [
             Expanded(child: title),
             ?cameraButton,
+            if (compactTabletHeader) compactAddButton,
             productActions,
           ],
         );
