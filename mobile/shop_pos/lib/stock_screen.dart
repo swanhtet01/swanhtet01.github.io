@@ -129,11 +129,13 @@ class _StockScreenState extends State<StockScreen> {
                   .toList()
                 ..sort((left, right) {
                   final leftNeedsAttention =
-                      left.reorderLevel != null &&
-                      left.onHand <= left.reorderLevel!;
+                      left.onHand == 0 ||
+                      (left.reorderLevel != null &&
+                          left.onHand <= left.reorderLevel!);
                   final rightNeedsAttention =
-                      right.reorderLevel != null &&
-                      right.onHand <= right.reorderLevel!;
+                      right.onHand == 0 ||
+                      (right.reorderLevel != null &&
+                          right.onHand <= right.reorderLevel!);
                   if (leftNeedsAttention != rightNeedsAttention) {
                     return leftNeedsAttention ? -1 : 1;
                   }
@@ -309,17 +311,18 @@ class _StockScreenState extends State<StockScreen> {
                                     '${item.onHand} in stock',
                                     '${shopNumber(item.onHand, myanmar: true)} ခု လက်ကျန်',
                                   ),
-                                  style: (wide
-                                          ? textTheme.titleMedium
-                                          : textTheme.bodyMedium)
-                                      ?.copyWith(
-                                        fontWeight: FontWeight.w700,
-                                        color: lowAlertLevel == null
-                                            ? colors.onSurface
-                                            : item.onHand == 0
-                                            ? colors.error
-                                            : const Color(0xff88530e),
-                                      ),
+                                  style:
+                                      (wide
+                                              ? textTheme.titleMedium
+                                              : textTheme.bodyMedium)
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.w700,
+                                            color: item.onHand == 0
+                                                ? colors.error
+                                                : lowAlertLevel == null
+                                                ? colors.onSurface
+                                                : const Color(0xff88530e),
+                                          ),
                                 );
                                 final reorderNote = lowAlertLevel == null
                                     ? null
@@ -432,7 +435,8 @@ class _StockScreenState extends State<StockScreen> {
                                                             height: 8,
                                                           ),
                                                           onHand,
-                                                          if (reorderNote != null) ...[
+                                                          if (reorderNote !=
+                                                              null) ...[
                                                             const SizedBox(
                                                               height: 2,
                                                             ),
@@ -464,12 +468,12 @@ class _StockScreenState extends State<StockScreen> {
                                                 child: Column(
                                                   crossAxisAlignment:
                                                       CrossAxisAlignment.start,
-                                                    children: [
-                                                      details,
-                                                      onHand,
-                                                      if (reorderNote != null)
-                                                        reorderNote,
-                                                    ],
+                                                  children: [
+                                                    details,
+                                                    onHand,
+                                                    if (reorderNote != null)
+                                                      reorderNote,
+                                                  ],
                                                 ),
                                               ),
                                               const SizedBox(width: 8),

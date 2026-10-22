@@ -682,6 +682,12 @@ void main() {
         priceMmk: 3000,
         openingStock: 20,
       );
+      await database.addProduct(
+        id: 'out',
+        name: 'Out of stock',
+        priceMmk: 3000,
+        openingStock: 0,
+      );
       await database.setReorderLevel(
         productId: 'healthy',
         expectedReorderLevel: 5,
@@ -692,17 +698,33 @@ void main() {
         expectedReorderLevel: 5,
         reorderLevel: 30,
       );
+      await database.setReorderLevel(
+        productId: 'out',
+        expectedReorderLevel: 5,
+        reorderLevel: null,
+      );
       await tester.pumpWidget(
         MaterialApp(home: StockScreen(database: database, myanmar: false)),
       );
       await tester.pumpAndSettle();
       expect(
-        tester.getTopLeft(find.byKey(const ValueKey('stock-row-needs-order'))).dy,
+        tester.getTopLeft(find.byKey(const ValueKey('stock-row-out'))).dy,
+        lessThan(
+          tester
+              .getTopLeft(find.byKey(const ValueKey('stock-row-needs-order')))
+              .dy,
+        ),
+      );
+      expect(
+        tester
+            .getTopLeft(find.byKey(const ValueKey('stock-row-needs-order')))
+            .dy,
         lessThan(
           tester.getTopLeft(find.byKey(const ValueKey('stock-row-healthy'))).dy,
         ),
       );
       expect(find.text('20 in stock'), findsOneWidget);
+      expect(find.text('0 in stock'), findsOneWidget);
       expect(find.text('Reorder at 30'), findsOneWidget);
       expect(tester.takeException(), isNull);
     } finally {

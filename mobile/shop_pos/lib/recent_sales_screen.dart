@@ -324,50 +324,54 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
                               return Card(
                                 clipBehavior: Clip.antiAlias,
                                 child: ListTile(
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 8,
-                                ),
-                                title: Text(
-                                  '$firstItem$more',
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: Theme.of(context).textTheme.titleMedium
-                                      ?.copyWith(fontWeight: FontWeight.w600),
-                                ),
-                                subtitle: Text(
-                                  '${_when(context, sale.createdAtMillis)} · '
-                                  '${_paymentName(sale.paymentMethod)}',
-                                  style: Theme.of(context).textTheme.bodyMedium
-                                      ?.copyWith(
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .onSurfaceVariant,
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 8,
+                                  ),
+                                  title: Text(
+                                    '$firstItem$more',
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleMedium
+                                        ?.copyWith(fontWeight: FontWeight.w600),
+                                  ),
+                                  subtitle: Text(
+                                    '${_when(context, sale.createdAtMillis)} · '
+                                    '${_paymentName(sale.paymentMethod)}',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodyMedium
+                                        ?.copyWith(
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onSurfaceVariant,
+                                        ),
+                                  ),
+                                  trailing: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        shopMmk(
+                                          sale.totalMmk,
+                                          myanmar: widget.myanmar,
+                                        ),
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .titleSmall
+                                            ?.copyWith(
+                                              fontWeight: FontWeight.w700,
+                                              fontFeatures: const [
+                                                FontFeature.tabularFigures(),
+                                              ],
+                                            ),
                                       ),
-                                ),
-                                trailing: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text(
-                                      shopMmk(
-                                        sale.totalMmk,
-                                        myanmar: widget.myanmar,
-                                      ),
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .titleSmall
-                                          ?.copyWith(
-                                            fontWeight: FontWeight.w700,
-                                            fontFeatures: const [
-                                              FontFeature.tabularFigures(),
-                                            ],
-                                          ),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    const Icon(Icons.chevron_right, size: 20),
-                                  ],
-                                ),
-                                onTap: () => _showSale(sale),
+                                      const SizedBox(width: 12),
+                                      const Icon(Icons.chevron_right, size: 20),
+                                    ],
+                                  ),
+                                  onTap: () => _showSale(sale),
                                 ),
                               );
                             },
