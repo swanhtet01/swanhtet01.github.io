@@ -2115,7 +2115,8 @@ void main() {
     expect(
       find.byWidgetPredicate(
         (widget) =>
-            widget is TextField && widget.decoration?.hintText == 'ရှာ / စကင်ဖတ်',
+            widget is TextField &&
+            widget.decoration?.hintText == 'ရှာ / စကင်ဖတ်',
       ),
       findsOneWidget,
     );
