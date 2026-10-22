@@ -199,8 +199,8 @@ for (const page of landingPages) {
     const captureDisclosure = 'Shop browser workspace · synthetic local records'
     check(html.includes('class="shop-actual-showcase"') && html.includes(captureDisclosure), 'landing_shop_actual_showcase_disclosed')
     check(!html.includes('class="pos-window"') && !html.includes('class="sample-label"') && !html.includes('Complete sample sale') && !html.includes('shop-sample-demo.js'), 'landing_shop_no_simulated_pos')
-    check(html.includes('class="shop-hero-app"') && html.includes('class="shop-responsive-showcase"') && html.includes('class="shop-workflow-support"'), 'landing_shop_three_workflows_visible')
-    check(countOccurrences(html, '<figure class="shop-lead-capture">') === 1 && countOccurrences(html, '<article class="shop-workflow-card">') === 2, 'landing_shop_one_responsive_lead_and_two_supporting_workflows')
+    check(html.includes('class="shop-hero-app"') && html.includes('class="shop-responsive-showcase"') && html.includes('class="shop-support-proof"'), 'landing_shop_counter_and_text_proof_visible')
+    check(countOccurrences(html, '<figure class="shop-lead-capture">') === 1 && !html.includes('<article class="shop-workflow-card">'), 'landing_shop_one_enlarged_capture_without_duplicate_support_screens')
     check(html.includes('aria-label="Orders and stock"') && html.includes(captureDisclosure), 'landing_shop_capture_disclosure')
     check(!html.includes('Orders and stock. Clear next steps.') && !html.includes('Follow orders that need fulfilment or payment. See which products need a count or reorder.'), 'landing_shop_no_repeated_workflow_pitch')
     check(!html.includes('actual-shop-today') && !html.includes('DEVICE-ONLY DATA') && !html.includes('Export backup'), 'landing_shop_gallery_omits_storage_warning')
@@ -208,13 +208,15 @@ for (const page of landingPages) {
       && html.includes('srcset="/images/actual-shop-sell-tablet.png"')
       && html.includes('srcset="/images/actual-shop-sell-mobile.png"')
       && !/<figure class="platform-device-capture/.test(html) && !html.includes('data-device-choice'), 'landing_shop_responsive_capture_without_switcher')
-    check(html.includes('MAMA photo:') && html.includes('twindel / Open Food Facts')
+    check(html.includes('href="#shop-image-credits"') && html.includes('id="shop-image-credits"')
+      && html.includes('MAMA photo:') && html.includes('twindel / Open Food Facts')
       && html.includes('https://creativecommons.org/licenses/by-sa/3.0/'), 'landing_shop_product_photo_credit_visible')
     check(!html.includes('data-gallery-previous') && !html.includes('data-gallery-next') && !html.includes('data-platform-carousel'), 'landing_shop_all_views_without_carousel')
     check(!html.includes('<script src="/platform-carousel.js" defer></script>'), 'landing_shop_needs_no_gallery_script')
     check(!/<a\b[^>]*>\s*<img\b[^>]*src="\/images\/actual-shop-/i.test(html), 'landing_shop_screens_are_not_raw_image_links')
     check(!html.includes('Makro PRO') && !html.includes('17 October 2026'), 'landing_shop_no_dated_retail_price_claim')
-    for (const screen of ['actual-shop-sell.png', 'actual-shop-sell-tablet.png', 'actual-shop-sell-mobile.png', 'actual-shop-orders.png', 'actual-shop-orders-mobile.png', 'actual-shop-inventory.png', 'actual-shop-inventory-mobile.png']) check(html.includes(`/images/${screen}`), `landing_shop_workflow_capture:${screen}`)
+    for (const screen of ['actual-shop-sell.png', 'actual-shop-sell-tablet.png', 'actual-shop-sell-mobile.png']) check(html.includes(`/images/${screen}`), `landing_shop_counter_capture:${screen}`)
+    check(!/\/images\/actual-shop-(?:orders|inventory)[^" ]*/.test(html), 'landing_shop_omits_tiny_support_captures')
   } else {
     check(html.includes('class="platform-gallery"') && html.includes('class="platform-image"') && html.includes('class="product-proof"') && html.includes('class="feature-line"'), `landing_interface_and_features:${page.route}`)
     check(countOccurrences(html, '<figure class="platform-image') === productScreens[page.productId]?.length, `landing_product_views:${page.route}`)
@@ -359,13 +361,17 @@ check(myShop.includes('မြန်မာဘာသာ နမူနာမျက�
 check(/<img src="\/images\/actual-shop-sell-my\.png"[^>]*width="1000" height="900"/.test(myShop)
   && readFileSync(resolve(staticDir, 'images/actual-shop-sell-my.png')).readUInt32BE(16) === 1000,
   'myanmar_shop_hero_uses_readable_real_two_pane_viewport')
-check(myShop.includes('အင်္ဂလိပ်ဘာသာ UI ကို ပြထားသည်'), 'myanmar_shop_support_capture_language_disclosed')
+check(myShop.includes('class="shop-support-proof"') && myShop.includes('အော်ဒါနှင့် ကုန်လက်ကျန်')
+  && !/\/images\/actual-shop-(?:orders|inventory)[^" ]*/.test(myShop), 'myanmar_shop_has_localized_text_proof_without_english_support_screens')
 check(countOccurrences(myShop, 'class="shop-photo-credit"') === 1
-  && myShop.includes('MAMA photo:') && myShop.includes('twindel / Open Food Facts')
+  && myShop.includes('href="#shop-image-credits"') && myShop.includes('MAMA ဓာတ်ပုံ:') && myShop.includes('twindel / Open Food Facts')
   && myShop.includes('https://creativecommons.org/licenses/by-sa/3.0/'), 'myanmar_shop_product_photo_credit_visible')
 check(!myShop.includes('Complete sample sale') && !myShop.includes('class="pos-window"'), 'myanmar_shop_does_not_claim_public_simulator')
 const myContact = readStatic('my/contact/index.html')
 const myContactMain = myContact.match(/<main\b[\s\S]*?<\/main>/)?.[0] || ''
+check(!myContactMain.includes('class="contact-company-intro"')
+  && myContactMain.includes('သင့်လုပ်ငန်းလိုအပ်ချက်ကို ပြောပြပါ၊ SuperMega က အီးမေးလ်ဖြင့် ပြန်လည်ဆက်သွယ်ပါမည်။'),
+  'myanmar_contact_intro_is_one_direct_sentence')
 for (const token of ['>အမည်<input', '>အီးမေးလ်<input', '>စာ<textarea', '>စာပို့ရန်</button>', 'action="/api/contact-submissions"', 'name="idempotency_key"']) {
   check(myContactMain.includes(token), `myanmar_contact_form:${token}`)
 }
@@ -402,8 +408,7 @@ for (const token of [
   'aria-label="Orders and stock"',
   'Shop browser workspace · synthetic local records',
   'Shop browser counter sale with product search and a live basket',
-  'Shop browser order queue with fulfilment and payment follow-up',
-  'Shop browser inventory list with on-hand quantities and reorder signals',
+  'After a sale, check recorded orders and stock in the Shop browser workspace.',
 ]) check(shopLanding.includes(token), `shop_gallery_describes_verified_view:${token}`)
 check(!shopLanding.includes('Makro PRO') && !shopLanding.includes('17 October 2026')
   && !/<a\b[^>]*>\s*<img\b[^>]*src="\/images\/actual-shop-/i.test(shopLanding), 'shop_prices_not_dated_and_screens_not_raw_links')
@@ -418,7 +423,7 @@ check(!shopLanding.includes('class="pos-window"') && !shopLanding.includes('clas
   && !shopLanding.includes('Complete sample sale') && !shopLanding.includes('Sample receipt')
   && !shopLanding.includes('shop-sample-demo.js'), 'shop_public_page_has_no_simulated_pos')
 check(countOccurrences(shopLanding, '<figure class="shop-lead-capture">') === 1
-  && countOccurrences(shopLanding, '<article class="shop-workflow-card">') === 2, 'shop_one_device_set_plus_two_distinct_workflows')
+  && countOccurrences(shopLanding, 'class="shop-support-proof"') === 1, 'shop_one_device_set_plus_concise_text_proof')
 check(shopManifest?.status === 'release-candidate-local', 'shop_public_status_matches_unhosted_candidate')
 check(shopManifest?.primaryCta?.url === '/shop/#shop-demo', 'shop_primary_action_opens_real_screen_gallery')
 check(shopLanding.includes('Sell at the counter.') && shopLanding.includes('Stay ahead of stock.'), 'shop_hero_matches_the_operating_job')
@@ -438,7 +443,7 @@ for (const [route, html] of [['/shop/', shopLanding], ...activeIds.filter(id => 
   const expectedLoginHref = `href="${appOrigin}/login?product=shop"`
   check(countOccurrences(body, expectedLoginHref) === 0, `public_login_action_absent:${route}`)
   const carouselCount = 0
-  const expectedLinks = route === '/shop/' ? 11 : 5 + Number(routeManifestProduct?.status === 'available-in-app')
+  const expectedLinks = route === '/shop/' ? 12 : 5 + Number(routeManifestProduct?.status === 'available-in-app')
   check((body.match(/<a\b/g) || []).length === expectedLinks, `marketing_link_surface:${route}`)
   const viewportGalleryCount = countOccurrences(body, 'data-viewport-gallery')
   const expectedButtons = viewportGalleryCount * 3 + carouselCount * 2

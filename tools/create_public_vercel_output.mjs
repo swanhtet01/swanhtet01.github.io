@@ -621,22 +621,18 @@ const sharedStyle = `
   .shop-gallery-all .platform-image {padding:clamp(14px,2vw,24px);border-color:#e4e7ec;border-radius:14px;background:#fff;box-shadow:0 12px 34px rgba(16,24,40,.05)}
   .shop-gallery-all .platform-device-stage {padding:clamp(12px,2vw,22px);border-color:#e4e7ec;border-radius:12px;background:#f6f7f9;box-shadow:none}
   .shop-gallery-all .platform-device-capture img {border-radius:8px;box-shadow:0 5px 16px rgba(16,24,40,.08)}
-  .shop-responsive-showcase {display:grid;gap:18px;min-width:0}
-  .shop-support-language-note {margin:0;color:#596579;font-size:14px;line-height:1.8}
+  .shop-responsive-showcase {min-width:0}
+  .shop-support-proof {display:grid;grid-template-columns:minmax(0,.45fr) minmax(0,1fr);gap:clamp(20px,4vw,56px);align-items:start;padding-block:12px 22px;border-bottom:1px solid #e3e7ee}
+  .shop-support-proof h2 {margin:0;font-size:clamp(25px,2.8vw,36px);line-height:1.15;letter-spacing:-.035em}
+  .shop-support-proof p {max-width:58ch;margin:0;color:#596579;font-size:16px;line-height:1.65}
   .shop-hero-app {min-width:0;align-self:center}
   .shop-lead-capture {max-width:1100px;margin:0 auto;padding:clamp(10px,1.5vw,18px);border:1px solid #e4e7ec;border-radius:12px;background:#fff;box-shadow:0 12px 34px rgba(16,24,40,.05)}
   .shop-lead-capture picture,.shop-lead-capture img {display:block;width:100%}
   .shop-lead-capture img {height:auto;border:1px solid #e5e8ef;border-radius:8px;background:#f7f8fb}
   .shop-lead-capture figcaption {padding:12px 2px 2px;color:#596579;font-size:12px;line-height:1.45}
-  .shop-photo-credit {display:block;margin-top:3px}
+  .shop-capture-credit-link {margin-left:12px;color:inherit;text-decoration:underline;text-underline-offset:2px}
+  .shop-photo-credit {margin:22px 0 0;color:#596579;font-size:12px;line-height:1.6}
   .shop-photo-credit a {color:inherit;text-decoration:underline;text-underline-offset:2px}
-  .shop-workflow-card p {margin:0;color:#596579;font-size:14px;line-height:1.55}
-  .shop-workflow-support {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
-  .shop-workflow-card {display:grid;grid-template-columns:minmax(0,1fr);gap:16px;min-width:0;margin:0;padding:14px;border:1px solid #e4e7ec;border-radius:12px;background:#fff}
-  .shop-workflow-card picture,.shop-workflow-card img {display:block;width:100%}
-  .shop-workflow-card img {height:auto;border:1px solid #e5e8ef;border-radius:8px;background:#f7f8fb;pointer-events:none;user-select:none}
-  .shop-workflow-card-copy {min-width:0}
-  .shop-workflow-card h3 {margin:0 0 8px;font-size:18px;letter-spacing:-.025em}
   .platform-gallery-controls {display:flex;align-items:center;justify-content:flex-end;gap:12px;min-height:40px}
   .platform-gallery-controls button {display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border:1px solid var(--line-strong);border-radius:50%;color:var(--ink);background:#fff;font-size:20px;cursor:pointer}
   .platform-gallery-controls button:hover:not(:disabled) {border-color:var(--blue);color:var(--blue);background:#eff6ff}
@@ -737,8 +733,7 @@ const sharedStyle = `
   @media(max-width:980px){.contact-page{grid-template-columns:1fr;gap:24px;max-width:760px;padding:42px 0 70px}.contact-page .page-hero{position:static;padding:0}.contact-page .page-hero::after{display:none}.contact-page .page-hero h1{font-size:clamp(36px,7vw,52px)}}
   @media(max-width:760px){.contact-page{padding:28px 0 52px}.contact-page .page-hero h1{font-size:clamp(36px,9vw,48px)}.contact-page .contact-form{padding:20px;border-radius:8px}.brand-domain{display:none}}
   @media(max-width:1050px){body[data-view="shop"] .shop-hero .wrap{grid-template-columns:minmax(0,1fr);gap:28px}.shop-hero-app{max-width:920px}}
-  @media(max-width:760px){.shop-workflow-support{grid-template-columns:1fr}.shop-workflow-card{gap:12px;padding:12px}}
-  @media(max-width:480px){.shop-workflow-card{grid-template-columns:minmax(0,1fr)}.shop-workflow-card h3{margin-top:6px}}
+  @media(max-width:760px){.shop-support-proof{grid-template-columns:1fr;gap:12px}.shop-support-proof h2{font-size:28px}}
 `
 
 function headerHtml(route, locale = 'en') {
@@ -819,14 +814,13 @@ body[data-view="shop"] .shop-hero-copy .eyebrow, body[data-view="shop"] .shop-he
 body[data-view="shop"] .shop-hero-copy > p { max-width: 41ch; font-size: 16px; line-height: 1.55; }
 body[data-view="shop"] .shop-hero .button-primary { align-self: start; min-height: 50px; margin-top: 6px; padding-inline: 22px; border-color: #2563eb; border-radius: 8px; background: #2563eb; box-shadow: none; }
 body[data-view="shop"] .shop-hero .button-primary:hover { border-color: #1d4ed8; background: #1d4ed8; }
-body[data-view="shop"] .shop-hero .wrap { display: grid; grid-template-columns: minmax(0,.68fr) minmax(0,1.32fr); gap: clamp(32px,4vw,60px); align-items: center; }
-body[data-view="shop"] .shop-hero-copy { max-width: 460px; }
-body[data-view="shop"] .shop-hero-app { width: 100%; max-width: none; justify-self: stretch; }
+body[data-view="shop"] .shop-hero .wrap { display: grid; grid-template-columns: minmax(0,1fr); gap: clamp(24px,3vw,40px); align-items: start; }
+body[data-view="shop"] .shop-hero-copy { max-width: 900px; gap: 14px; }
+body[data-view="shop"] .shop-hero h1 { max-width: none; }
+body[data-view="shop"] .shop-hero-copy > p { max-width: 68ch; }
+body[data-view="shop"] .shop-hero-app { width: 100%; max-width: 1100px; justify-self: center; }
 body[data-view="shop"] .shop-lead-capture { max-width: none; margin: 0; padding: 10px; border-color: #dfe5ee; border-radius: 13px; box-shadow: 0 20px 44px rgba(20,35,65,.10); }
 body[data-view="shop"] .shop-actual-showcase { padding-block: clamp(30px,3.5vw,48px); background: #fff; }
-body[data-view="shop"] .shop-workflow-card { gap: 10px; padding: 10px; border-color: #e3e7ee; box-shadow: 0 8px 22px rgba(16,24,40,.035); }
-body[data-view="shop"] .shop-workflow-card-copy { padding: 2px 4px 5px; }
-body[data-view="shop"] .shop-workflow-card h3 { margin: 0; font-size: 16px; }
 body[data-view="contact"] .contact-page { padding-block: clamp(48px,6vw,78px); }
 body[data-view="contact"] .contact-page .contact-form { gap: 16px; padding: 26px; border-color: #e1e3e8; border-radius: 12px; background: #fafbfc; box-shadow: none; }
 body[data-view="contact"] .contact-page .field-grid input, body[data-view="contact"] .contact-page .field-grid textarea { border-radius: 7px; }
@@ -852,8 +846,9 @@ const myanmarPublicStyle = `
   html:lang(my) .nav-links a, html:lang(my) .button, html:lang(my) .footer-links a { line-height: 1.7; }
   html:lang(my) body[data-view="shop"] .shop-hero h1 { max-width: 100%; font-size: clamp(30px, 2.65vw, 36px); line-height: 1.55; letter-spacing: 0; }
   html:lang(my) body[data-view="shop"] .shop-hero-copy > p:not(.eyebrow) { max-width: 100%; font-size: 17px; line-height: 1.85; }
-  html:lang(my) body[data-view="shop"] .shop-workflow-card h3 { line-height: 1.55; letter-spacing: 0; }
-  html:lang(my) body[data-view="shop"] .shop-workflow-card p, html:lang(my) body[data-view="shop"] .shop-lead-capture figcaption { line-height: 1.8; }
+  html:lang(my) body[data-view="shop"] .shop-hero-app { max-width: 1000px; }
+  html:lang(my) body[data-view="shop"] .shop-support-proof h2 { line-height: 1.55; letter-spacing: 0; }
+  html:lang(my) body[data-view="shop"] .shop-support-proof p, html:lang(my) body[data-view="shop"] .shop-lead-capture figcaption, html:lang(my) body[data-view="shop"] .shop-photo-credit { line-height: 1.8; }
   html:lang(my) body[data-view="contact"] .contact-page .page-hero h1 { max-width: 100%; margin-bottom: 22px; font-size: clamp(32px, 3vw, 38px); line-height: 1.6; letter-spacing: 0; }
   html:lang(my) body[data-view="contact"] .contact-company-intro { max-width: 480px; font-size: 16px; line-height: 1.85; }
   html:lang(my) body[data-view="contact"] .contact-page .page-hero .lede { max-width: 480px; font-size: 18px; line-height: 1.85; }
@@ -977,12 +972,6 @@ function productGallery(id,label,eagerFirst=false,showAll=false) {
  if (item.screens.length === 1) return `<div class="platform-gallery" data-product-gallery="${id}" data-single role="region" aria-label="${label} interface view"><div class="platform-slides">${slides}</div></div>`
  return `<div class="platform-gallery" data-product-gallery="${id}" data-platform-carousel role="region" aria-roledescription="carousel" aria-label="${label} interface views"><div class="platform-slides" tabindex="0">${slides}</div><div class="platform-gallery-controls"><button type="button" data-gallery-previous aria-label="Previous ${label} screen" disabled>&lsaquo;</button><span class="platform-gallery-status" data-gallery-status aria-live="polite">1 of ${item.screens.length}</span><button type="button" data-gallery-next aria-label="Next ${label} screen">&rsaquo;</button></div></div>`
 }
-function shopSupportCard({image,alt,title,description,locale = 'en'}) {
- interfaceDisclosure(image)
- const mobileImage = image.replace(/\.png$/, '-mobile.png')
- interfaceDisclosure(mobileImage)
- return `<article class="shop-workflow-card"><picture><source media="(max-width: 760px)" srcset="/images/${mobileImage}" width="390" height="844" /><img src="/images/${image}" alt="${escapeHtml(alt)} · ${locale === 'my' ? 'စမ်းသပ်မှတ်တမ်းများ' : 'synthetic sample records'}" width="1440" height="900" loading="lazy" /></picture><div class="shop-workflow-card-copy"><h3>${escapeHtml(title)}</h3><p>${escapeHtml(description)}</p></div></article>`
-}
 function shopCounterSalePreview(locale = 'en') {
  const [englishImage,alt] = stories.shop.screens[0]
  const image = locale === 'my' ? 'actual-shop-sell-my.png' : englishImage
@@ -993,13 +982,14 @@ function shopCounterSalePreview(locale = 'en') {
  interfaceDisclosure(tabletImage)
  const imageAlt = locale === 'my' ? 'ကောင်တာအရောင်း၊ ကုန်ပစ္စည်းရှာဖွေမှုနှင့် လက်ရှိခြင်းတောင်းကို ပြထားသော Shop ဘရောက်ဇာမျက်နှာပြင်' : alt
  const disclosure = locale === 'my' ? 'Shop ဘရောက်ဇာ ကောင်တာ · မြန်မာဘာသာ နမူနာမျက်နှာပြင် · စမ်းသပ်မှတ်တမ်းများ' : 'Shop browser workspace · synthetic local records'
- return `<figure class="shop-lead-capture"><picture><source media="(max-width: 760px)" srcset="/images/${mobileImage}" width="390" height="844" /><source media="(max-width: 1024px)" srcset="/images/${tabletImage}" width="768" height="1024" /><img src="/images/${image}" alt="${escapeHtml(imageAlt)}" width="${locale === 'my' ? 1000 : 1440}" height="900" loading="eager" fetchpriority="high" /></picture><figcaption id="shop-sample-disclosure">${disclosure}<span class="shop-photo-credit">MAMA photo: <a href="https://world.openfoodfacts.org/cgi/product_image.pl?code=8850987101526&amp;id=front_en">twindel / Open Food Facts</a> · <a href="https://creativecommons.org/licenses/by-sa/3.0/">CC BY-SA 3.0</a></span></figcaption></figure>`
+ return `<figure class="shop-lead-capture"><picture><source media="(max-width: 760px)" srcset="/images/${mobileImage}" width="390" height="844" /><source media="(max-width: 1024px)" srcset="/images/${tabletImage}" width="768" height="1024" /><img src="/images/${image}" alt="${escapeHtml(imageAlt)}" width="${locale === 'my' ? 1000 : 1440}" height="900" loading="eager" fetchpriority="high" /></picture><figcaption id="shop-sample-disclosure">${disclosure}<a class="shop-capture-credit-link" href="#shop-image-credits">${locale === 'my' ? 'ပုံရင်းမြစ်' : 'Image credits'}</a></figcaption></figure>`
 }
 function shopResponsiveShowcase(locale = 'en') {
  const isMyanmar = locale === 'my'
- const orders = shopSupportCard({image:'actual-shop-orders.png',alt:isMyanmar ? 'ဖြည့်ဆည်းမှုနှင့် ငွေပေးချေမှု နောက်ဆက်တွဲများပါသော Shop ဘရောက်ဇာ အော်ဒါစာရင်း' : 'Shop browser order queue with fulfilment and payment follow-up',title:isMyanmar ? 'အော်ဒါများ' : 'Orders',description:isMyanmar ? 'အဆင်သင့်ဖြစ်နေသည့်အော်ဒါ၊ ငွေမရှင်းရသေးသည့်အော်ဒါနှင့် နောက်တစ်ဆင့်လုပ်ရန် လိုအပ်သည့်အရာကို ကြည့်ပါ။' : 'See what is ready, what is unpaid, and what needs the next step.',locale})
- const stock = shopSupportCard({image:'actual-shop-inventory.png',alt:isMyanmar ? 'လက်ကျန်အရေအတွက်နှင့် ထပ်မံဖြည့်တင်းရန် သတိပေးချက်များပါသော Shop ဘရောက်ဇာ ကုန်ပစ္စည်းစာရင်း' : 'Shop browser inventory list with on-hand quantities and reorder signals',title:isMyanmar ? 'ကုန်လက်ကျန်' : 'Stock',description:isMyanmar ? 'ရေတွက်ရန် သို့မဟုတ် ထပ်မံဖြည့်တင်းရန် လိုအပ်သော ကုန်ပစ္စည်းများကို ရှာပါ။' : 'Find products that need a count or replenishment.',locale})
- return `<div class="shop-responsive-showcase">${isMyanmar ? '<p class="shop-support-language-note">အောက်ပါ အော်ဒါနှင့် ကုန်လက်ကျန် နမူနာမျက်နှာပြင်များတွင် အင်္ဂလိပ်ဘာသာ UI ကို ပြထားသည်။</p>' : ''}<div class="shop-workflow-support">${orders}${stock}</div></div>`
+ const title = isMyanmar ? 'အော်ဒါနှင့် ကုန်လက်ကျန်' : 'Orders and stock'
+ const description = isMyanmar ? 'အရောင်းပြီးနောက် မှတ်တမ်းတင်ထားသော အော်ဒါများနှင့် ကုန်လက်ကျန်ကို Shop ဘရောက်ဇာလုပ်ငန်းခွင်တွင် စစ်ဆေးနိုင်ပါသည်။' : 'After a sale, check recorded orders and stock in the Shop browser workspace.'
+ const credit = `MAMA ${isMyanmar ? 'ဓာတ်ပုံ' : 'photo'}: <a href="https://world.openfoodfacts.org/cgi/product_image.pl?code=8850987101526&amp;id=front_en">twindel / Open Food Facts</a> · <a href="https://creativecommons.org/licenses/by-sa/3.0/">CC BY-SA 3.0</a>`
+ return `<div class="shop-responsive-showcase"><div class="shop-support-proof"><h2>${title}</h2><p>${description}</p></div><p class="shop-photo-credit" id="shop-image-credits">${credit}</p></div>`
 }
 function productStory(id, standalone = false) {
  const item=stories[id], label=publicProducts.find(product=>product.id===id).name
@@ -1097,9 +1087,9 @@ const contactUiCopy = {
     proofNoteContext: 'ဤဘရောက်ဇာမှ အကြောင်းအရာကို ပူးတွဲထားပါသည်။ ပိုင်ရှင်အတည်ပြုထားသော အနှစ်ချုပ်၏ အမှတ်အသားသာ ပါဝင်ပြီး မူရင်းမှတ်တမ်းများ မပါဝင်ပါ။ စီမံထားသော အကောင့်ရှိကြောင်း အတည်မပြုနိုင်ပါ။',
     proofNote: 'ဤဘရောက်ဇာမှ အကြောင်းအရာကို ပူးတွဲထားပါသည်။ ရလဒ်သည် သုံးစွဲသူပေးပို့သော စုစည်းအနှစ်ချုပ်သာ ဖြစ်ပြီး စီမံထားသော အကောင့်ရှိကြောင်း အတည်မပြုနိုင်ပါ။',
     detached: 'ကုန်ပစ္စည်းရွေးချယ်မှု ပြောင်းလဲသဖြင့် ပူးတွဲအကြောင်းအရာကို ဖယ်ရှားလိုက်ပါသည်။',
-    headingShop: 'Shop အသုံးပြုပုံကို မေးမြန်းရန်', headingServiceStart: '', headingServiceEnd: ' အဖွဲ့ထံ ဆက်သွယ်ရန်', headingDefault: 'ဆက်သွယ်ရန်',
-    ledeShop: 'သင်ရောင်းချသည့် ကုန်ပစ္စည်းများနှင့် လက်ရှိလုပ်ငန်းပုံစံကို ပြောပြပါ။ Shop အသုံးပြုပုံနှင့် စတင်အသုံးပြုနိုင်မည့် နည်းလမ်းများကို အီးမေးလ်ဖြင့် ပြန်လည်ရှင်းပြပါမည်။',
-    ledeDefault: 'သင့်လုပ်ငန်းနှင့် ပိုမိုကောင်းမွန်စေလိုသော လုပ်ငန်းစဉ်ကို ပြောပြပါ။ အီးမေးလ်ဖြင့် ပြန်လည်ဆက်သွယ်ပါမည်။',
+    headingShop: 'Shop အကြောင်း မေးမြန်းရန်', headingServiceStart: '', headingServiceEnd: ' အဖွဲ့ထံ ဆက်သွယ်ရန်', headingDefault: 'ဆက်သွယ်ရန်',
+    ledeShop: 'သင်ရောင်းချသည့် ကုန်ပစ္စည်းများကို ပြောပြပါ၊ Shop အကြောင်း အီးမေးလ်ဖြင့် ပြန်လည်ရှင်းပြပါမည်။',
+    ledeDefault: 'သင့်လုပ်ငန်းလိုအပ်ချက်ကို ပြောပြပါ၊ SuperMega က အီးမေးလ်ဖြင့် ပြန်လည်ဆက်သွယ်ပါမည်။',
     contextAttached: 'အထောက်အကူဖြစ်စေမည့် အကြောင်းအရာကို ပူးတွဲထားပါသည်။ မပို့ရသေးပါ။', contextInvalid: 'ပူးတွဲအကြောင်းအရာကို အတည်မပြုနိုင်သဖြင့် မထည့်သွင်းခဲ့ပါ။',
     messageSent: 'စာပို့ပြီးပါပြီ။', sendAnother: 'နောက်ထပ်စာပို့ရန်', previous: 'ယခင်စာ — ', sendMessage: 'စာပို့ရန်', sending: 'ပို့နေပါသည်...',
     invalidProof: 'ပူးတွဲအကြောင်းအရာကို အတည်မပြုနိုင်ပါ။ SuperMega မှ တောင်းဆိုချက်ကို ပြန်ဖွင့်ပါ။', checkForm: 'ဖြည့်ထားသော အချက်အလက်များကို စစ်ဆေးပြီး ပြန်ကြိုးစားပါ။',
@@ -1234,13 +1224,13 @@ const contactContentEnd = contactHtml.indexOf('</main>', contactContentStart) + 
 assert(contactContentStart >= 0 && contactContentEnd > contactContentStart, 'contact_content_boundary_missing')
 let myContactContent = contactHtml.slice(contactContentStart, contactContentEnd)
 myContactContent = replaceOnce(myContactContent, '<h1 data-contact-heading>Contact</h1>', '<h1 data-contact-heading>ဆက်သွယ်ရန်</h1>', 'my_contact_heading')
-myContactContent = replaceOnce(myContactContent, `<p class="contact-company-intro">${escapeHtml(manifest.company.statement)}</p>`, '<p class="contact-company-intro">SuperMega သည် မြန်မာနိုင်ငံရှိ လုပ်ငန်းများအတွက် ဆော့ဖ်ဝဲတည်ဆောက်သော ကုမ္ပဏီဖြစ်ပါသည်။ Shop သည် ကောင်တာအရောင်း၊ ကုန်လက်ကျန်နှင့် အော်ဒါနောက်ဆက်တွဲများအတွက် ပထမဆုံး ဖောက်သည်သုံး ကုန်ပစ္စည်းဖြစ်ပါသည်။</p>', 'my_contact_company')
+myContactContent = replaceOnce(myContactContent, `<p class="contact-company-intro">${escapeHtml(manifest.company.statement)}</p>`, '', 'my_contact_company_intro')
 myContactContent = replaceOnce(myContactContent, 'Tell us about your business and the workflow you want to improve. We will reply by email.', contactUiCopy.my.ledeDefault, 'my_contact_lede')
 myContactContent = replaceOnce(myContactContent, '<label>Name<input', '<label>အမည်<input', 'my_contact_name')
 myContactContent = replaceOnce(myContactContent, '<label>Email<input', '<label>အီးမေးလ်<input', 'my_contact_email')
-myContactContent = replaceOnce(myContactContent, '<label class="wide">Company (optional)<input', '<label class="wide">ကုမ္ပဏီအမည် (မဖြည့်လည်းရသည်)<input', 'my_contact_company_field')
+myContactContent = replaceOnce(myContactContent, '<label class="wide">Company (optional)<input', '<label class="wide">ကုမ္ပဏီ (မဖြည့်လည်းရ)<input', 'my_contact_company_field')
 myContactContent = replaceOnce(myContactContent, '<label class="wide">Message<textarea', '<label class="wide">စာ<textarea', 'my_contact_message')
-myContactContent = replaceOnce(myContactContent, 'placeholder="Tell us what your business needs."', 'placeholder="သင့်လုပ်ငန်းအတွက် လိုအပ်သောအရာကို ပြောပြပါ။"', 'my_contact_placeholder')
+myContactContent = replaceOnce(myContactContent, 'placeholder="Tell us what your business needs."', 'placeholder="သင့်လိုအပ်ချက်ကို ရေးပါ။"', 'my_contact_placeholder')
 myContactContent = replaceOnce(myContactContent, '>Send message</button>', '>စာပို့ရန်</button>', 'my_contact_submit')
 const myContactPage = manifest.pages.find((page) => page.route === '/my/contact/')
 const myContactHtml = documentHtml({ route: myContactPage.route, title: myContactPage.title, description: myContactPage.description, content: myContactContent + contactScript, locale: 'my' })
