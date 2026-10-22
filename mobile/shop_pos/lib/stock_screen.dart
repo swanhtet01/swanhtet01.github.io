@@ -277,20 +277,34 @@ class _StockScreenState extends State<StockScreen> {
                                       ? Theme.of(context).textTheme.titleMedium
                                       : null,
                                 );
+                                final openStockChange = () => _changeStock(
+                                  item,
+                                  showReference: showReference,
+                                );
                                 final update = OutlinedButton(
                                   key: ValueKey('stock-update-${item.id}'),
-                                  onPressed: () => _changeStock(
-                                    item,
-                                    showReference: showReference,
-                                  ),
+                                  onPressed: openStockChange,
                                   child: Text(
-                                    shopCopy(
-                                      widget.myanmar,
-                                      'Update',
-                                      'ပြင်ရန်',
-                                    ),
+                                    shopCopy(widget.myanmar, 'Update', 'ပြင်ရန်'),
                                   ),
                                 );
+                                final stockActionLabel = [
+                                  shopCopy(
+                                    widget.myanmar,
+                                    'Adjust stock for ${item.name}',
+                                    '${item.name} ၏ လက်ကျန် ပြင်ရန်',
+                                  ),
+                                  shopCopy(
+                                    widget.myanmar,
+                                    '${item.onHand} in stock',
+                                    '${shopNumber(item.onHand, myanmar: true)} ခု လက်ကျန်',
+                                  ),
+                                  if (showReference)
+                                    _stockProductReference(
+                                      item,
+                                      widget.myanmar,
+                                    ),
+                                ].join('. ');
                                 if (wide) {
                                   return ColoredBox(
                                     color: colors.surface,
@@ -310,27 +324,58 @@ class _StockScreenState extends State<StockScreen> {
                                   );
                                 }
                                 return Card(
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 8,
-                                    ),
-                                    child: compact
-                                        ? Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.stretch,
-                                            children: [
-                                              details,
-                                              const SizedBox(height: 8),
-                                              Row(
-                                                children: [
-                                                  Expanded(child: onHand),
-                                                  update,
-                                                ],
+                                  clipBehavior: Clip.antiAlias,
+                                  child: compact
+                                      ? Semantics(
+                                          button: true,
+                                          label: stockActionLabel,
+                                          onTap: openStockChange,
+                                          child: ExcludeSemantics(
+                                            child: InkWell(
+                                              key: ValueKey(
+                                                'stock-row-${item.id}',
                                               ),
-                                            ],
-                                          )
-                                        : Row(
+                                              onTap: openStockChange,
+                                              child: Padding(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 12,
+                                                      vertical: 12,
+                                                    ),
+                                                child: Row(
+                                                  children: [
+                                                    Expanded(
+                                                      child: Column(
+                                                        crossAxisAlignment:
+                                                            CrossAxisAlignment
+                                                                .start,
+                                                        children: [
+                                                          details,
+                                                          const SizedBox(
+                                                            height: 4,
+                                                          ),
+                                                          onHand,
+                                                        ],
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 8),
+                                                    Icon(
+                                                      Icons.chevron_right,
+                                                      color: colors
+                                                          .onSurfaceVariant,
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        )
+                                      : Padding(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                            vertical: 8,
+                                          ),
+                                          child: Row(
                                             children: [
                                               Expanded(
                                                 child: Column(
@@ -343,7 +388,7 @@ class _StockScreenState extends State<StockScreen> {
                                               update,
                                             ],
                                           ),
-                                  ),
+                                        ),
                                 );
                               },
                             ),

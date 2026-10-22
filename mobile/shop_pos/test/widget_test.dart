@@ -1930,6 +1930,67 @@ void main() {
     await database.close();
   });
 
+  testWidgets('phone stock row opens adjustment and cancel keeps the count', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+    addTearDown(semantics.dispose);
+    tester.view.physicalSize = const Size(320, 800);
+    tester.view.devicePixelRatio = 1;
+    tester.platformDispatcher.textScaleFactorTestValue = 1.3;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    final database = ShopDatabase(NativeDatabase.memory());
+    await database.addProduct(
+      id: 'rice-phone',
+      name: 'အလွန်ရှည်သော ကုန်ပစ္စည်းအမည် ဆန်အိတ်',
+      sku: 'RICE-L',
+      priceMmk: 12000,
+      openingStock: 2,
+    );
+    await database.addProduct(
+      id: 'rice-phone-small',
+      name: 'အလွန်ရှည်သော ကုန်ပစ္စည်းအမည် ဆန်အိတ်',
+      sku: 'RICE-S',
+      priceMmk: 6000,
+      openingStock: 4,
+    );
+    await tester.pumpWidget(
+      ShopApp(
+        initialCounter: true,
+        database: database,
+        authClient: null,
+        apiBaseUrl: 'https://app.supermega.dev',
+        initialMyanmar: true,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('နောက်ထပ်'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('လက်ကျန်'));
+    await tester.pumpAndSettle();
+    expect(find.text('ပြင်ရန်'), findsNothing);
+    expect(find.byKey(const ValueKey('stock-row-rice-phone')), findsOneWidget);
+    expect(find.bySemanticsLabel(RegExp('၂.*RICE-L')), findsOneWidget);
+    expect(find.bySemanticsLabel(RegExp('၄.*RICE-S')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.byKey(const ValueKey('stock-row-rice-phone')));
+    await tester.pumpAndSettle();
+    expect(find.text('လက်ခံရန်'), findsOneWidget);
+    await tester.tap(find.text('မလုပ်တော့ပါ'));
+    await tester.pumpAndSettle();
+    expect(
+      (await database.readActiveProducts())
+          .singleWhere((item) => item.id == 'rice-phone')
+          .onHand,
+      2,
+    );
+    expect(tester.takeException(), isNull);
+    await database.close();
+  });
+
   testWidgets(
     'stock identifies same-name variants and accepts Myanmar digits',
     (tester) async {
