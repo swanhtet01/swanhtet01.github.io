@@ -7,6 +7,10 @@
 This file records volatile facts. It cannot widen the product scope, grant a
 production action, or replace exact PR and CI evidence.
 
+No local demo, passing test, healthy provider, or generated artifact is proof of a live customer system, revenue, production persistence, or autonomous operation.
+
+Add provider-backed AI, payment, shipping, tax, publishing, and broader marketing only after their product gate has measured pilot evidence.
+
 ## Candidate
 
 | Item | Current fact |
