@@ -1230,12 +1230,9 @@ class _ShopHomeState extends State<ShopHome> {
                                 child: _pendingWalletCheckoutCard(),
                               ),
                             Padding(
-                              padding: const EdgeInsets.fromLTRB(
-                                16,
-                                14,
-                                12,
-                                10,
-                              ),
+                              padding: width < 380
+                                  ? const EdgeInsets.fromLTRB(16, 6, 12, 4)
+                                  : const EdgeInsets.fromLTRB(16, 14, 12, 10),
                               child: _catalogHeader(products),
                             ),
                             if (products.isNotEmpty) ...[
@@ -1245,7 +1242,7 @@ class _ShopHomeState extends State<ShopHome> {
                                 ),
                                 child: _searchField(products),
                               ),
-                              const SizedBox(height: 8),
+                              SizedBox(height: width < 380 ? 4 : 8),
                             ],
                             Expanded(
                               child: LayoutBuilder(
@@ -1429,9 +1426,12 @@ class _ShopHomeState extends State<ShopHome> {
 
   Widget _catalogHeader(List<ShopProduct> products) => LayoutBuilder(
     builder: (context, constraints) {
+      final narrowPhone = MediaQuery.sizeOf(context).width < 380;
       final title = Text(
         shopCopy(widget.myanmar, 'Products', 'ကုန်ပစ္စည်းများ'),
-        style: Theme.of(context).textTheme.titleLarge,
+        style: narrowPhone
+            ? Theme.of(context).textTheme.titleMedium
+            : Theme.of(context).textTheme.titleLarge,
       );
       if (products.isEmpty) return title;
       final addButton = OutlinedButton.icon(
@@ -1598,6 +1598,10 @@ class _ShopHomeState extends State<ShopHome> {
       }
     },
     decoration: InputDecoration(
+      isDense: MediaQuery.sizeOf(context).width < 380,
+      contentPadding: MediaQuery.sizeOf(context).width < 380
+          ? const EdgeInsets.symmetric(horizontal: 12, vertical: 8)
+          : null,
       prefixIcon: const Icon(Icons.search),
       hintText: shopCopy(
         widget.myanmar,
@@ -1803,9 +1807,10 @@ class _ShopHomeState extends State<ShopHome> {
                 vertical: touchCompactRow
                     ? 2
                     : narrowProductRow
-                    ? 4
+                    ? 0
                     : 10,
               ),
+              minVerticalPadding: narrowProductRow ? 0 : null,
               leading:
                   !_hasProductPhotos &&
                       photoSnapshot.data == null &&

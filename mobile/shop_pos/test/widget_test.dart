@@ -1672,16 +1672,13 @@ void main() {
         ('rice', 'KAUNG ရန်ကုန် ဆန်', 12450),
         ('noodles', 'MAMA ကြက်သား အမြန်ခေါက်ဆွဲ', 2950),
       ]) {
-        debugPrint('density fixture: adding $id');
         await database.addProduct(
           id: id,
           name: name,
           priceMmk: price,
           openingStock: 20,
         );
-        debugPrint('density fixture: added $id');
       }
-      debugPrint('density fixture: products added');
       await tester.pumpWidget(
         ShopApp(
           database: database,
@@ -1691,17 +1688,18 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      debugPrint('density fixture: Shop mounted');
       await tester.tap(
         find.descendant(
           of: find.byType(NavigationBar),
           matching: find.text('ရောင်းရန်'),
         ),
       );
-      debugPrint('density fixture: Sell tapped');
       await tester.pumpAndSettle();
-      debugPrint('density fixture: Sell settled');
       expect(find.text('ကုန်ပစ္စည်းများ'), findsOneWidget);
+      expect(
+        tester.getSize(find.byType(TextField).first).height,
+        greaterThanOrEqualTo(44),
+      );
       expect(
         find.descendant(
           of: find.byType(ShopTaskPageHeader),
@@ -1734,18 +1732,10 @@ void main() {
         'KAUNG ရန်ကုန် ဆန်',
       );
       expect(tester.takeException(), isNull);
-      debugPrint('density fixture: checks passed');
-    } catch (error) {
-      debugPrint('density fixture: failed assertion: $error');
-      rethrow;
     } finally {
-      debugPrint('density fixture: teardown');
       await tester.pumpWidget(const SizedBox.shrink());
-      debugPrint('density fixture: unmounted');
       await tester.pump(const Duration(milliseconds: 1));
-      debugPrint('density fixture: disposed');
       await database.close();
-      debugPrint('density fixture: closed');
     }
   });
 
