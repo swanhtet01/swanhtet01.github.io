@@ -10,11 +10,14 @@ const outputDir = isolatedOutputId
   ? resolve('.tmp', `supermega-public-output-${isolatedOutputId}`, 'static')
   : resolve('.vercel/output/static')
 const html = readFileSync(resolve(outputDir, 'contact/index.html'), 'utf8')
+const myanmarHtml = readFileSync(resolve(outputDir, 'my/contact/index.html'), 'utf8')
 const page = html.match(/<main\b[\s\S]*?<\/main>/)?.[0] ?? ''
+const myanmarPage = myanmarHtml.match(/<main\b[\s\S]*?<\/main>/)?.[0] ?? ''
 const formHtml = page.match(/<form class="contact-form"[\s\S]*?<\/form>/)?.[0] ?? ''
 const script = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
   .map(match => match[1]).find(value => value.includes('[data-contact-form]'))
 assert.ok(script, 'actual generated contact script exists')
+assert.equal([...myanmarHtml.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(match => match[1]).find(value => value.includes('[data-contact-form]')), script, 'English and Burmese reuse one receipt contract')
 
 test('contact form stays concise and does not make customers classify the request', () => {
   assert.match(page, /<h1 data-contact-heading>Contact<\/h1>/)
@@ -33,7 +36,7 @@ test('contact form stays concise and does not make customers classify the reques
   assert.match(formHtml, /name="goal" required maxlength="4000"/)
 })
 
-function harness(responses, search = '', hash = '') {
+function harness(responses, search = '', hash = '', locale = 'en') {
   const fields = new Map()
   const events = new Map()
   const windowEvents = new Map()
@@ -42,11 +45,13 @@ function harness(responses, search = '', hash = '') {
   const timers = new Map()
   const headings = new Map()
   const historyCalls = []
-  const location = { search, hash, pathname: '/contact/', href: 'https://supermega.dev/contact/' + search + hash }
+  const route = locale === 'my' ? '/my/contact/' : '/contact/'
+  const location = { origin: 'https://supermega.dev', search, hash, pathname: route, href: 'https://supermega.dev' + route + search + hash }
+  const languageSwitch = { href: locale === 'my' ? '/contact/' : '/my/contact/' }
   let timerId = 0
   const form = {
     querySelector(selector) {
-      if (!fields.has(selector)) fields.set(selector, { open: true, value: selector === '[name="product"]' ? 'guide' : '', placeholder: selector === '[name="goal"]' ? 'Tell us what your business needs.' : '', selectedOptions: [], addEventListener(name, callback) { events.set(selector + ':' + name, callback) } })
+      if (!fields.has(selector)) fields.set(selector, { open: true, value: selector === '[name="product"]' ? 'guide' : '', placeholder: selector === '[name="goal"]' ? 'Tell us what your business needs.' : '', selectedOptions: [], validity: { typeMismatch: false }, setCustomValidity(message) { this.validationMessage = message }, addEventListener(name, callback) { events.set(selector + ':' + name, callback) } })
       return fields.get(selector)
     },
     addEventListener(name, callback) { if (name === 'submit') handler = callback; else events.set('form:' + name, callback) },
@@ -55,10 +60,11 @@ function harness(responses, search = '', hash = '') {
   let keys = 0
   const crypto = { randomUUID: () => 'local-retry-key-' + ++keys }
   runInNewContext(script, {
-    document: { querySelector: selector => {
+    document: { documentElement: { lang: locale }, querySelector: selector => {
       if (selector === '[data-contact-form]') return form
+      if (selector === '[data-language-switch]') return languageSwitch
       if (['[data-contact-heading]', '[data-contact-lede]'].includes(selector)) {
-        if (!headings.has(selector)) headings.set(selector, { textContent: selector === '[data-contact-heading]' ? 'Contact' : 'Tell us about your business and the workflow you want to improve. We will reply by email.' })
+        if (!headings.has(selector)) headings.set(selector, { textContent: selector === '[data-contact-heading]' ? (locale === 'my' ? 'ဆက်သွယ်ရန်' : 'Contact') : 'Tell us about your business and the workflow you want to improve. We will reply by email.' })
         return headings.get(selector)
       }
       return null
@@ -69,7 +75,7 @@ function harness(responses, search = '', hash = '') {
       Object.assign(location, { href: next.href, hash: next.hash, search: next.search, pathname: next.pathname })
     } },
     location,
-    URLSearchParams, window: { crypto, addEventListener(name, callback) { windowEvents.set(name, callback) }, removeEventListener(name, callback) { if (windowEvents.get(name) === callback) windowEvents.delete(name) } }, crypto,
+    URL, URLSearchParams, window: { crypto, addEventListener(name, callback) { windowEvents.set(name, callback) }, removeEventListener(name, callback) { if (windowEvents.get(name) === callback) windowEvents.delete(name) } }, crypto,
     AbortController,
     setTimeout(callback, delay) { assert.equal(delay, 20000); timers.set(++timerId, callback); return timerId },
     clearTimeout(id) { timers.delete(id) },
@@ -88,7 +94,7 @@ function harness(responses, search = '', hash = '') {
     },
   })
   if (!hash) form.querySelector('[name="goal"]').value = 'Please build my business website'
-  return { invalid: field => events.get('form:invalid')({ target: form.querySelector('[name="' + field + '"]') }), reset: () => form.reset(), fields, headings, calls, timers, windowEvents, historyCalls, location, changeProduct: value => { form.querySelector('[name="product"]').value = value; events.get('[name="product"]:change')() }, expire: () => { for (const callback of [...timers.values()]) callback() }, submit: () => handler({ preventDefault() {} }), resets: () => resets }
+  return { invalid: field => events.get('form:invalid')?.({ target: form.querySelector('[name="' + field + '"]') }), input: field => events.get('form:input')?.({ target: form.querySelector('[name="' + field + '"]') }), reset: () => form.reset(), fields, headings, calls, timers, windowEvents, historyCalls, location, languageSwitch, changeProduct: value => { form.querySelector('[name="product"]').value = value; events.get('[name="product"]:change')() }, expire: () => { for (const callback of [...timers.values()]) callback() }, submit: () => handler({ preventDefault() {} }), resets: () => resets }
 }
 
 test('only active public product links set product context; internal routes fall back to the general brief', () => {
@@ -140,6 +146,30 @@ test('Shop handoffs preserve valid context and unsupported internal routes canno
 })
 
 const receipt = { status: 'ready', request_id: 'LEAD-0123456789ABCDEF', proof_bound: false }
+test('Burmese contact route keeps the same safe receipt contract with Burmese controls and states', async () => {
+  for (const token of ['<label>အမည်<input', '<label>အီးမေးလ်<input', '<label class="wide">စာ<textarea', '>စာပို့ရန်</button>']) assert.match(myanmarPage, new RegExp(token))
+  assert.doesNotMatch(myanmarPage, />Send message<\/button>|>Company \(optional\)<input/)
+  const state = harness([new Error('connection lost'), { body: receipt }], '?product=shop&utm_source=example&private=discard', '', 'my')
+  assert.equal(state.headings.get('[data-contact-heading]').textContent, 'Shop အသုံးပြုပုံကို မေးမြန်းရန်')
+  assert.equal(state.languageSwitch.href, '/contact/?product=shop&utm_source=example')
+  state.invalid('name')
+  assert.equal(state.fields.get('[name="name"]').validationMessage, 'ဤအချက်အလက်ကို ဖြည့်ပါ။')
+  state.input('name')
+  assert.equal(state.fields.get('[name="name"]').validationMessage, '')
+  state.input('email')
+  state.fields.get('[name="email"]').validity.typeMismatch = true
+  state.invalid('email')
+  assert.equal(state.fields.get('[name="email"]').validationMessage, 'မှန်ကန်သော အီးမေးလ်လိပ်စာကို ဖြည့်ပါ။')
+  state.input('email')
+  await state.submit()
+  assert.match(state.fields.get('[data-form-status]').textContent, /သင့်စာကို လက်ခံရရှိခဲ့ကြောင်း အတည်မပြုနိုင်သေးပါ/)
+  await state.submit()
+  assert.equal(state.calls[0].body, state.calls[1].body)
+  assert.equal(JSON.parse(state.calls[0].body).source_url, 'https://supermega.dev/my/contact/?product=shop&utm_source=example&private=discard')
+  assert.match(state.fields.get('[data-form-status]').textContent, /စာလက်ခံရရှိပါပြီ: LEAD-0123456789ABCDEF/)
+  assert.equal(state.headings.get('[data-contact-heading]').textContent, 'စာပို့ပြီးပါပြီ။')
+  assert.equal(state.fields.get('button[type="submit"]').textContent, 'နောက်ထပ်စာပို့ရန်')
+})
 test('one clear message prompt stays consistent across product links', () => {
   for (const product of ['website', 'ecommerce', 'shop', 'guide']) {
     const state = harness([], '?product=' + product)
@@ -405,7 +435,7 @@ test('confirmed handoff resets entry guidance only when no later edits remain', 
     assert.equal(state.headings.get('[data-contact-heading]').textContent, edited ? originalHeading : 'Message sent.')
     if (edited) assert.equal(state.fields.get('[name="goal"]').value, 'Later unsent brief')
     else {
-      assert.equal(state.fields.get('button[type="submit"]').textContent, 'Send another message')
+      assert.equal(state.fields.get('button[type="submit"]').textContent, 'Send another message.')
       assert.equal(state.headings.get('[data-contact-lede]').textContent, 'Reference: '+receipt.request_id+'. Keep it for follow-up.')
     }
     assert.match(state.fields.get('[data-form-status]').textContent, /Message received: LEAD-/)

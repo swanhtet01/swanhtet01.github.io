@@ -51,15 +51,20 @@ export function validatePreviewLinks(html, policy, products, options = {}) {
     '/images/actual-commerce-order-request.png', '/images/actual-commerce-order-request-mobile.png',
   ])
   const publicOrigin = options.publicOrigin || 'https://supermega.dev'
+  const shopPhotoCredits = new Set([
+    'https://world.openfoodfacts.org/cgi/product_image.pl?code=8850987101526&id=front_en',
+    'https://creativecommons.org/licenses/by-sa/3.0/',
+  ])
   for (const href of hrefs) {
     if (!href || /[\s\\]|%|&(?:#|[a-z]+;)/i.test(href) || href.startsWith('//')) throw new Error('public_preview_href_unsafe')
     if (/\/plant(?:\/|\?|#|$)|\/operations\/production|[?&](?:product|demo)=(?:plant|production|factory)(?:&|$)/i.test(href)) throw new Error('public_preview_retired_entry')
     if (href === 'mailto:swanhtet@supermega.dev') continue
+    if (shopPhotoCredits.has(href)) continue
     const url = new URL(href, publicOrigin)
     if (url.username || url.password || url.protocol !== 'https:') throw new Error('public_preview_href_unsafe')
     if (url.origin === origin) throw new Error('public_preview_app_route_invalid')
     else if (url.origin !== publicOrigin) throw new Error('public_preview_production_escape')
-    else if (!['/', '/shop/', '/website/', '/ecommerce/', '/contact/', '/privacy/'].includes(url.pathname)
+    else if (!['/', '/shop/', '/website/', '/ecommerce/', '/contact/', '/privacy/', '/my/shop/', '/my/contact/', '/my/privacy/'].includes(url.pathname)
       && !(galleryPaths.has(url.pathname) && !url.search && !url.hash)) throw new Error('public_preview_public_route_invalid')
   }
   if (options.requireActions !== false

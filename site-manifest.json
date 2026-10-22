@@ -1030,9 +1030,45 @@
       "route": "/privacy/",
       "file": "privacy/index.html",
       "title": "Privacy | SuperMega"
+    },
+    {
+      "route": "/my/shop/",
+      "file": "my/shop/index.html",
+      "title": "ဆိုင် | အရောင်းနှင့် ကုန်လက်ကျန် | SuperMega",
+      "description": "SuperMega ဆိုင်၏ ဘရောက်ဇာလုပ်ငန်းခွင်တွင် ကောင်တာအရောင်း၊ မှတ်တမ်းတင်ထားသော အော်ဒါများနှင့် ကုန်လက်ကျန်ကို ကြည့်ရှုနိုင်ပါသည်။",
+      "language": "my",
+      "localizedOf": "/shop/"
+    },
+    {
+      "route": "/my/contact/",
+      "file": "my/contact/index.html",
+      "title": "ဆက်သွယ်ရန် | SuperMega",
+      "description": "သင့်လုပ်ငန်းအတွက် လိုအပ်သော အရာများကို SuperMega သို့ ပြောပြပြီး အီးမေးလ်ဖြင့် ပြန်လည်ဆက်သွယ်မှု ရယူပါ။",
+      "language": "my",
+      "localizedOf": "/contact/"
+    },
+    {
+      "route": "/my/privacy/",
+      "file": "my/privacy/index.html",
+      "title": "ကိုယ်ရေးအချက်အလက် မူဝါဒ | SuperMega",
+      "description": "အများပြည်သူဆက်သွယ်ရေး တောင်းဆိုချက်များနှင့် လုပ်ငန်းဆိုင်ရာ အချက်အလက်များကို SuperMega က မည်သို့ကိုင်တွယ်သည်ကို ဖတ်ရှုပါ။",
+      "language": "my",
+      "localizedOf": "/privacy/"
     }
   ],
   "redirects": [
+    {
+      "source": "^/my/shop$",
+      "destination": "/my/shop/"
+    },
+    {
+      "source": "^/my/contact$",
+      "destination": "/my/contact/"
+    },
+    {
+      "source": "^/my/privacy$",
+      "destination": "/my/privacy/"
+    },
     {
       "source": "^/solutions/?$",
       "destination": "/shop/"

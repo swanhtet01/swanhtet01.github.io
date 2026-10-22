@@ -101,8 +101,21 @@ test('public preview rejects sign-in actions even with a valid walkthrough', () 
   }
 })
 
+test('Burmese routes and fixed Shop photo credits stay within the preview boundary', () => {
+  const options = { publicOrigin: 'https://public-preview.example' }
+  for (const href of ['/my/shop/', '/my/contact/?product=shop', '/my/privacy/',
+    'https://world.openfoodfacts.org/cgi/product_image.pl?code=8850987101526&amp;id=front_en',
+    'https://creativecommons.org/licenses/by-sa/3.0/']) {
+    validatePreviewLinks(html + `<a href="${href}">Continue</a>`, policy, products, options)
+  }
+  for (const href of ['/my/plant/', 'https://world.openfoodfacts.org/cgi/product_image.pl?code=other&amp;id=front_en',
+    'https://creativecommons.org/licenses/by-sa/4.0/']) {
+    assert.throws(() => validatePreviewLinks(html + `<a href="${href}">Continue</a>`, policy, products, options))
+  }
+})
+
 test('current generated pages have no public app login or production escapes', () => {
-  for (const path of ['index.html', 'shop/index.html', 'website/index.html', 'ecommerce/index.html', 'contact/index.html', 'privacy/index.html']) {
+  for (const path of ['index.html', 'shop/index.html', 'website/index.html', 'ecommerce/index.html', 'contact/index.html', 'privacy/index.html', 'my/shop/index.html', 'my/contact/index.html', 'my/privacy/index.html']) {
     const source = readFileSync(resolve(staticDir, path), 'utf8')
     const canonicalSource = currentRelease.previewNavigation
       ? source.replaceAll(`href="${currentRelease.previewNavigation.origin}/`, 'href="https://app.supermega.dev/')

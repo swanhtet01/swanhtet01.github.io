@@ -123,7 +123,7 @@ for (const product of publicProducts) {
     if (!template.outcome?.trim() || !template.metric?.trim() || template.workflow?.length < 5 || template.entryPoints?.length < 3) fail('public_template_contract_incomplete', { product: product.id, template: template.id })
   }
 }
-if (manifest.pages?.map((page) => page.route).join(',') !== '/,/shop/,/plant/,/website/,/ecommerce/,/contact/,/privacy/') fail('public_page_surface_not_minimal')
+if (manifest.pages?.map((page) => page.route).join(',') !== '/,/shop/,/plant/,/website/,/ecommerce/,/contact/,/privacy/,/my/shop/,/my/contact/,/my/privacy/') fail('public_page_surface_not_minimal')
 for (const landingPage of manifest.pages.filter((page) => page.productId)) {
   if (landingPage.route !== `/${landingPage.productId}/` || landingPage.file !== `${landingPage.productId}/index.html`) fail('landing_page_route_drift', { route: landingPage.route })
   if (landingPage.liveGate !== 'post-release') fail('landing_page_live_gate_missing', { route: landingPage.route })
@@ -261,18 +261,25 @@ const pages = new Map(manifest.pages.filter(page => !page.redirectTo).map((page)
   } : {}), html: readStatic(page.file) }]
 }))
 const homePage = manifest.pages.find((page) => page.route === '/')
+const englishOnlyShared = new Set(['<a class="skip-link" href="#content">Skip to content</a>', 'aria-label="SuperMega Shop"', '<nav class="nav-links" aria-label="Main navigation">', 'href="/privacy/">Privacy</a>'])
 for (const [route, page] of pages) {
   if (!page.html.includes(`<title>${page.title}</title>`)) fail('page_title_drift', { route, expected: page.title })
   for (const token of sharedRequired) {
+    if (page.language === 'my' && englishOnlyShared.has(token)) continue
     if (!page.html.includes(token)) fail('shared_brand_contract_missing', { route, token })
   }
-  const footerHref = '/shop/'
-  const footerLabel = 'SuperMega Shop'
+  if (page.language === 'my') {
+    for (const token of ['<html lang="my">', '<a class="skip-link" href="#content">အကြောင်းအရာသို့ သွားရန်</a>', 'aria-label="SuperMega ဆိုင်"', '<nav class="nav-links" aria-label="အဓိက လမ်းညွှန်">', 'href="/my/privacy/">ကိုယ်ရေးအချက်အလက် မူဝါဒ</a>', '/fonts/noto-sans-myanmar.woff2']) {
+      if (!page.html.includes(token)) fail('myanmar_shared_contract_missing', { route, token })
+    }
+  }
+  const footerHref = page.language === 'my' ? '/my/shop/' : '/shop/'
+  const footerLabel = page.language === 'my' ? 'SuperMega ဆိုင်' : 'SuperMega Shop'
   const footerBrand = `<a class="brand" href="${footerHref}" aria-label="${footerLabel}"><span class="brand-mark" aria-hidden="true">`
   if (!page.html.includes(footerBrand)) fail('shared_footer_brand_missing', { route, footerHref })
-  const publicLogin = `<a href="${appOrigin}/login?product=shop">Login</a>`
-  if (page.html.includes(publicLogin)) fail('shared_public_login_present', { route })
-  const expectedActive = route === '/shop/' ? 'Shop' : route === '/contact/' ? 'Contact' : null
+  const header = page.html.match(/<header\b[\s\S]*?<\/header>/)?.[0] || ''
+  if (/<a\b[^>]*href="[^"]*\/login(?:\?[^\"]*)?"/i.test(header) || />\s*(?:Login|အကောင့်ဝင်ရန်)\s*<\/a>/.test(header)) fail('shared_public_login_present', { route })
+  const expectedActive = route === '/shop/' ? 'Shop' : route === '/contact/' ? 'Contact' : route === '/my/shop/' ? 'ဆိုင်' : route === '/my/contact/' ? 'ဆက်သွယ်ရန်' : null
   const activeLinks = [...page.html.matchAll(/<a\b[^>]*aria-current="page"[^>]*>([^<]+)<\/a>/g)].map(match => match[1])
   if (activeLinks.join(',') !== (expectedActive || '')) fail('shared_navigation_active_state_drift', { route, expectedActive, activeLinks })
   const copyWithoutExternalDestinations = page.html.replace(/\bhref="https?:\/\/[^\"]+"/gi, '')
@@ -296,8 +303,8 @@ for (const [route, page] of pages) {
     if (!page.html.includes(`<meta property="og:description" content="${page.description}" />`)) fail('page_open_graph_description_drift', { route, expected: page.description })
   }
   // Landing pages carry their per-product share card; every other page keeps the generic card.
-  const activeLanding = publicProducts.some(product => product.id === page.productId)
-  const pageShareImage = new URL(activeLanding ? `/og-card-${page.productId}.png` : '/og-card.png', `${manifest.release.productionDomain}/`).href
+  const activeLanding = route === '/my/shop/' || publicProducts.some(product => product.id === page.productId)
+  const pageShareImage = new URL(activeLanding ? `/og-card-${page.productId || 'shop'}.png` : '/og-card.png', `${manifest.release.productionDomain}/`).href
   for (const token of [
     '<meta property="og:type" content="website" />',
     '<meta property="og:site_name" content="SuperMega" />',
@@ -311,7 +318,8 @@ for (const [route, page] of pages) {
     if (!page.html.includes(token)) fail('page_open_graph_missing', { route, token })
   }
   if (activeLanding && page.html.includes(`content="${new URL('/og-card.png', `${manifest.release.productionDomain}/`).href}"`)) fail('landing_page_generic_share_card_present', { route })
-  if (route !== '/' && !page.html.includes('href="/contact/">Contact</a>')) fail('support_footer_contact_missing', { route })
+  const footerContact = page.language === 'my' ? 'href="/my/contact/">ဆက်သွယ်ရန်</a>' : 'href="/contact/">Contact</a>'
+  if (route !== '/' && !page.html.includes(footerContact)) fail('support_footer_contact_missing', { route })
 }
 const pageTitles = manifest.pages.map((page) => page.title)
 if (new Set(pageTitles).size !== pageTitles.length) fail('page_titles_not_unique')
@@ -322,10 +330,10 @@ if (new Set(pageTitles).size !== pageTitles.length) fail('page_titles_not_unique
 const jsonLdBlocks = (html) => [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map((match) => match[1])
 const executableScriptCount = (html) => (html.match(/<script(?![^>]*type="application\/ld\+json")[\s>]/g) || []).length
 for (const [route, page] of pages) {
-  const expectedExecutable = route === '/contact/' || page.html.includes('data-platform-carousel') ? 2 : 1
+  const expectedExecutable = route === '/contact/' || route === '/my/contact/' || page.html.includes('data-platform-carousel') ? 2 : 1
   if (executableScriptCount(page.html) !== expectedExecutable) fail('unexpected_executable_script_element', { route, expected: expectedExecutable })
   const blocks = jsonLdBlocks(page.html)
-  const landingProduct = publicProducts.find((product) => `/${product.id}/` === route)
+  const landingProduct = publicProducts.find((product) => `/${product.id}/` === route || (route === '/my/shop/' && product.id === 'shop'))
   const expectedBlocks = landingProduct ? 1 : 0
   if (blocks.length !== expectedBlocks) fail('structured_data_block_count_wrong', { route, expected: expectedBlocks, actual: blocks.length })
   if (!expectedBlocks) continue
@@ -342,7 +350,7 @@ for (const [route, page] of pages) {
 const publicObservability = readStatic('vercel-insights.js')
 for (const token of [
   '["supermega.dev","www.supermega.dev"]',
-  '["/shop/","/contact/","/privacy/"]',
+  '["/shop/","/contact/","/privacy/","/my/shop/","/my/contact/","/my/privacy/"]',
   "window.va('beforeSend'",
   "window.si('beforeSend'",
   "event.type !== expectedType",
@@ -388,7 +396,7 @@ for (const [route, html] of [['/shop/', pages.get('/shop/').html], ...publicProd
     ? `/contact/?product=${routeProduct.id}`
     : null
   const galleryViews = { shop: 3, website: 2, ecommerce: 2 }
-  const expectedLinks = route === '/shop/' ? 10 : 4 + Number(Boolean(contactActionTarget))
+  const expectedLinks = route === '/shop/' ? 11 : 5 + Number(Boolean(contactActionTarget))
   if ((body.match(/<a\b/g) || []).length !== expectedLinks) fail('marketing_link_surface_drift', { route, expectedLinks })
   const publicLogin = `href="${appOrigin}/login?product=shop"`
   if (countOccurrences(body, publicLogin) !== 0) fail('public_login_action_present', { route })
@@ -456,7 +464,8 @@ if (shopBody.includes('platform-device-capture') || shopBody.includes('data-plat
 for (const [route, html] of [['/', home], ['/shop/', shopPage]]) {
   if (!html.includes('<html lang="en">')) fail('marketing_page_not_english', { route })
   if (html.includes('data-language-toggle') || html.includes('src="/site-language.js"')) fail('marketing_language_control_present', { route })
-  if (html.includes('data-i18n=') || /[\u1000-\u109f]/u.test(html)) fail('marketing_myanmar_copy_present', { route })
+  const withoutLanguageSwitch = html.replace(/<a href="\/my\/(?:shop|contact|privacy)\/" data-language-switch hreflang="my">မြန်မာ<\/a>/g, '')
+  if (html.includes('data-i18n=') || /[\u1000-\u109f]/u.test(withoutLanguageSwitch)) fail('marketing_myanmar_copy_outside_switch', { route })
 }
 for (const token of ['Sell at the counter.', 'Stay ahead of stock.', 'aria-label="Orders and stock"', 'Shop browser workspace · synthetic local records', 'See recorded orders and stock in the Shop browser workspace.']) {
   if (!shopPage.includes(token)) fail('shop_page_scope_missing', { token })
@@ -501,7 +510,24 @@ const privacy = pages.get('/privacy/')?.html || ''
 for (const token of ['Contact requests', 'Product data', 'AI processing', 'Deletion', 'optional attached request summary, outcome status, and digest', 'digest-bound aggregate outcome', 'excludes raw product records, questions, approval contents, and account details']) {
   if (!privacy.includes(token)) fail('privacy_contract_missing', { token })
 }
-if (!privacy.includes('three public page paths') || privacy.includes('four public page paths')) fail('privacy_analytics_route_count_drift')
+if (!privacy.includes('six public page paths') || privacy.includes('four public page paths')) fail('privacy_analytics_route_count_drift')
+
+for (const [route, englishRoute, switchHref] of [['/my/shop/', '/shop/', '/shop/'], ['/my/contact/', '/contact/', '/contact/'], ['/my/privacy/', '/privacy/', '/privacy/']]) {
+  const page = pages.get(route)?.html || ''
+  if (!page.includes('<html lang="my">') || !page.includes(`href="${switchHref}" data-language-switch hreflang="en"`)) fail('myanmar_route_or_switch_missing', { route })
+  if (!page.includes(`<link rel="canonical" href="https://supermega.dev${route}" />`)
+    || !page.includes(`<link rel="alternate" hreflang="en" href="https://supermega.dev${englishRoute}" />`)
+    || !page.includes(`<link rel="alternate" hreflang="my" href="https://supermega.dev${route}" />`)) fail('myanmar_seo_alternates_missing', { route })
+}
+const myContact = pages.get('/my/contact/')?.html || ''
+const myShop = pages.get('/my/shop/')?.html || ''
+if (countOccurrences(myShop, 'class="shop-photo-credit"') !== 1
+  || !myShop.includes('MAMA photo:') || !myShop.includes('twindel / Open Food Facts')
+  || !myShop.includes('https://creativecommons.org/licenses/by-sa/3.0/')) fail('myanmar_shop_photo_attribution_missing')
+for (const token of ['action="/api/contact-submissions"', 'name="idempotency_key"', 'name="source_url"', '>အမည်<input', '>အီးမေးလ်<input', '>စာပို့ရန်</button>', 'စာလက်ခံရရှိပါပြီ']) {
+  if (!myContact.includes(token)) fail('myanmar_contact_contract_missing', { token })
+}
+if (myContact.includes('>Send message</button>') || myContact.includes('>Company (optional)<input')) fail('myanmar_contact_english_form_copy')
 
 const favicon = readStatic('favicon.svg')
 const faviconAccent = manifest.brand.colors.accent
@@ -571,6 +597,11 @@ for (const asset of publicGalleryEvidence.assets) {
 }
 
 const sitemap = readStatic('sitemap.xml')
+for (const [english, myanmar] of [['/shop/', '/my/shop/'], ['/contact/', '/my/contact/'], ['/privacy/', '/my/privacy/']]) {
+  for (const [lang, route] of [['en', english], ['my', myanmar]]) {
+    if (!sitemap.includes(`<xhtml:link rel="alternate" hreflang="${lang}" href="https://supermega.dev${route}"/>`)) fail('sitemap_language_alternate_missing', { english, myanmar, lang })
+  }
+}
 for (const page of manifest.pages) {
   const canonical = new URL(page.route, `${manifest.release.productionDomain}/`).href
   if (page.redirectTo) {
