@@ -2059,6 +2059,7 @@ class _ShopHomeState extends State<ShopHome> {
   );
 
   Widget _cartPanel(List<ShopProduct> products, {StateSetter? refresh}) {
+    final compactCart = MediaQuery.sizeOf(context).width < 520;
     final byId = {for (final item in products) item.id: item};
     final hasUnavailableProducts = _cartHasUnavailableProducts(products);
     final entries = _pendingWalletCheckout != null
@@ -2078,14 +2079,11 @@ class _ShopHomeState extends State<ShopHome> {
                     style: Theme.of(context).textTheme.titleLarge,
                   ),
                 ),
-                if (_cart.isNotEmpty && _pendingWalletCheckout == null)
-                  IconButton(
+                if (!compactCart &&
+                    _cart.isNotEmpty &&
+                    _pendingWalletCheckout == null)
+                  TextButton.icon(
                     key: const ValueKey('shop-hold-sale'),
-                    tooltip: shopCopy(
-                      widget.myanmar,
-                      'Hold this sale',
-                      'ဤအရောင်းကို ခဏသိမ်းရန်',
-                    ),
                     onPressed:
                         !_checkoutReady ||
                             _walletStarting ||
@@ -2094,6 +2092,7 @@ class _ShopHomeState extends State<ShopHome> {
                         ? null
                         : () => _holdCurrentSale(refresh: refresh),
                     icon: const Icon(Icons.bookmark_add_outlined),
+                    label: Text(shopCopy(widget.myanmar, 'Hold', 'ခဏသိမ်း')),
                   ),
                 if (_cart.isNotEmpty)
                   TextButton(
@@ -2283,7 +2282,35 @@ class _ShopHomeState extends State<ShopHome> {
                     if (constraints.maxWidth < 520) {
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [cash, const SizedBox(height: 8), wallet],
+                        children: [
+                          cash,
+                          const SizedBox(height: 8),
+                          wallet,
+                          if (compactCart && _cart.isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: TextButton.icon(
+                                key: const ValueKey('shop-hold-sale'),
+                                onPressed:
+                                    !_checkoutReady ||
+                                        _walletStarting ||
+                                        _cashConfirming ||
+                                        _saving
+                                    ? null
+                                    : () => _holdCurrentSale(refresh: refresh),
+                                icon: const Icon(Icons.bookmark_add_outlined),
+                                label: Text(
+                                  shopCopy(
+                                    widget.myanmar,
+                                    'Hold sale',
+                                    'အရောင်း ခဏသိမ်း',
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
                       );
                     }
                     return Row(

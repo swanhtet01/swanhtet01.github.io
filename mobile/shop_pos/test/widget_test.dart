@@ -70,6 +70,13 @@ void main() {
             find.textContaining(myanmar ? 'အရောင်းစစ်ရန်' : 'Review sale'),
           );
           await tester.pumpAndSettle();
+          expect(
+            find.text(myanmar ? 'အရောင်း ခဏသိမ်း' : 'Hold sale'),
+            findsOneWidget,
+          );
+          await tester.ensureVisible(
+            find.byKey(const ValueKey('shop-hold-sale')),
+          );
           await tester.tap(find.byKey(const ValueKey('shop-hold-sale')));
           await tester.pumpAndSettle();
           await tester.enterText(
@@ -166,6 +173,14 @@ void main() {
         'held-compact',
       );
       expect(await database.readHeldSaleTickets(), isEmpty);
+      await tester.ensureVisible(find.textContaining('အရောင်းစစ်ရန်'));
+      await tester.tap(find.textContaining('အရောင်းစစ်ရန်'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('shop-hold-sale')),
+      );
+      expect(find.text('အရောင်း ခဏသိမ်း'), findsOneWidget);
+      expect(tester.takeException(), isNull);
     } finally {
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump(const Duration(milliseconds: 1));
