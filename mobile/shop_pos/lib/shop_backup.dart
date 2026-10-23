@@ -828,8 +828,7 @@ abstract final class ShopBackup {
                   ? !_collisionWorkspaceBindingValid(connection)
                   : !_v12WorkspaceBindingValid(
                       connection,
-                      allowUnboundHistory:
-                          allowRuntimeUnboundCorrectionHistory,
+                      allowUnboundHistory: allowRuntimeUnboundCorrectionHistory,
                     )));
       final profileInvalid =
           hasProfileSchema &&

@@ -347,9 +347,8 @@ void main() {
     () async {
       expect(ShopCorrectionReceiptVerifier.production().hasPinnedKeys, isFalse);
       expect(
-        ShopCorrectionReceiptVerifier({
-          _testKeyId: 'not-a-public-key',
-        }).hasPinnedKeys,
+        ShopCorrectionReceiptVerifier({_testKeyId: 'not-a-public-key'})
+            .hasPinnedKeys,
         isFalse,
       );
       var userReads = 0;
@@ -561,10 +560,8 @@ void main() {
       _authorize(
         _service(
           MockClient(
-            (_) async => _jsonResponse(
-              await _envelope(receipt: extraReceipt),
-              200,
-            ),
+            (_) async =>
+                _jsonResponse(await _envelope(receipt: extraReceipt), 200),
           ),
         ),
       ),
@@ -598,10 +595,8 @@ void main() {
           _authorize(
             _service(
               MockClient(
-                (_) async => _jsonResponse(
-                  await _envelope(receipt: entry.value),
-                  200,
-                ),
+                (_) async =>
+                    _jsonResponse(await _envelope(receipt: entry.value), 200),
               ),
             ),
           ),
@@ -617,18 +612,13 @@ void main() {
     () async {
       final cases = <String, Map<String, Object?>>{
         'contract': await _receipt(contract: 'wrong.contract'),
-        'digest': {
-          ...(await _receipt()),
-          'receiptDigest': _repeat('0', 64),
-        },
+        'digest': {...(await _receipt()), 'receiptDigest': _repeat('0', 64)},
         'command': await _receipt(commandDigest: _repeat('0', 64)),
         'ttl': await _receipt(
           issuedAtMillis: _now.millisecondsSinceEpoch - 1000,
           expiresAtMillis: _now.millisecondsSinceEpoch + 300001,
         ),
-        'capability': await _receipt(
-          capability: 'shop.sale.reconcile_wallet',
-        ),
+        'capability': await _receipt(capability: 'shop.sale.reconcile_wallet'),
         'actor': await _receipt(actorId: 'different-owner'),
         'workspace': await _receipt(workspaceId: 'workspace-shop-b'),
       };

@@ -1061,27 +1061,25 @@ Map<String, String> shopWorkspaceCollisionPrefixDefinitionsV12() {
   return definitions;
 }
 
-Map<String, String> shopAuthorizationProofSchemaDefinitionsV14() =>
-    <String, String>{
-      'shop_correction_authorization_proofs':
-          shopCorrectionAuthorizationProofsV14Sql,
-      'shop_correction_authorization_proofs_no_update':
-          shopImmutableTriggerV11Sql(
-            table: 'shop_correction_authorization_proofs',
-            operation: 'update',
-            message: 'Shop correction authorization proofs are immutable',
-          ),
-      'shop_correction_authorization_proofs_no_delete':
-          shopImmutableTriggerV11Sql(
-            table: 'shop_correction_authorization_proofs',
-            operation: 'delete',
-            message: 'Shop correction authorization proofs are immutable',
-          ),
-      'shop_sale_reversals_require_signed_proof':
-          shopSaleReversalsRequireSignedProofV14Sql,
-      'shop_wallet_reconciliations_require_signed_proof':
-          shopWalletReconciliationsRequireSignedProofV14Sql,
-    };
+Map<String, String>
+shopAuthorizationProofSchemaDefinitionsV14() => <String, String>{
+  'shop_correction_authorization_proofs':
+      shopCorrectionAuthorizationProofsV14Sql,
+  'shop_correction_authorization_proofs_no_update': shopImmutableTriggerV11Sql(
+    table: 'shop_correction_authorization_proofs',
+    operation: 'update',
+    message: 'Shop correction authorization proofs are immutable',
+  ),
+  'shop_correction_authorization_proofs_no_delete': shopImmutableTriggerV11Sql(
+    table: 'shop_correction_authorization_proofs',
+    operation: 'delete',
+    message: 'Shop correction authorization proofs are immutable',
+  ),
+  'shop_sale_reversals_require_signed_proof':
+      shopSaleReversalsRequireSignedProofV14Sql,
+  'shop_wallet_reconciliations_require_signed_proof':
+      shopWalletReconciliationsRequireSignedProofV14Sql,
+};
 
 String canonicalShopSchemaSql(String value) {
   final output = StringBuffer();
@@ -1192,11 +1190,14 @@ class ShopDatabase extends _$ShopDatabase {
         setup: (raw) => raw.execute('PRAGMA journal_mode = DELETE'),
       ),
       correctionReceiptVerifier:
-          correctionReceiptVerifier ?? ShopCorrectionReceiptVerifier.production(),
+          correctionReceiptVerifier ??
+          ShopCorrectionReceiptVerifier.production(),
     );
     try {
       await database.verifyReadyForUse();
-      final row = await database.customSelect('PRAGMA user_version').getSingle();
+      final row = await database
+          .customSelect('PRAGMA user_version')
+          .getSingle();
       if (row.read<int>('user_version') != database.schemaVersion) {
         throw StateError('The staged Shop restore did not reach schema v14.');
       }
@@ -1479,17 +1480,15 @@ class ShopDatabase extends _$ShopDatabase {
       customStatement(shopMigrationProvenanceV13Sql);
 
   Future<void> _createCorrectionAuthorizationProofLedger() async {
-    for (final definition in shopAuthorizationProofSchemaDefinitionsV14().values) {
+    for (final definition
+        in shopAuthorizationProofSchemaDefinitionsV14().values) {
       await customStatement(definition);
     }
   }
 
   Future<void> _recordLegacyCorrectionAuthorizationProofs() async {
     for (final source in const [
-      (
-        table: 'shop_sale_reversals',
-        capability: 'shop.sale.reverse',
-      ),
+      (table: 'shop_sale_reversals', capability: 'shop.sale.reverse'),
       (
         table: 'shop_wallet_reversal_reconciliations',
         capability: 'shop.sale.reconcile_wallet',
@@ -1505,12 +1504,8 @@ class ShopDatabase extends _$ShopDatabase {
         final actorRole = row.read<String>('authorized_actor_role');
         final capability = row.read<String>('authorization_capability');
         final receiptSource = row.read<String>('authorization_source');
-        final commandDigest = row.read<String>(
-          'authorization_command_digest',
-        );
-        final issuedAtMillis = row.read<int>(
-          'authorization_issued_at_millis',
-        );
+        final commandDigest = row.read<String>('authorization_command_digest');
+        final issuedAtMillis = row.read<int>('authorization_issued_at_millis');
         final verifiedAtMillis = row.read<int>(
           'authorization_verified_at_millis',
         );
@@ -1551,9 +1546,7 @@ class ShopDatabase extends _$ShopDatabase {
           'VALUES (?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
           variables: [
             Variable<String>(receiptId),
-            Variable<String>(
-              shopCorrectionAuthorizationProofKindLegacyV1,
-            ),
+            Variable<String>(shopCorrectionAuthorizationProofKindLegacyV1),
             Variable<String>(row.read<String>('operation_id')),
             Variable<String>(receiptDigest),
             Variable<String>(workspaceId),
@@ -2501,8 +2494,7 @@ class ShopDatabase extends _$ShopDatabase {
       final capability = proof.read<String>('capability');
       final table = switch (capability) {
         'shop.sale.reverse' => 'shop_sale_reversals',
-        'shop.sale.reconcile_wallet' =>
-          'shop_wallet_reversal_reconciliations',
+        'shop.sale.reconcile_wallet' => 'shop_wallet_reversal_reconciliations',
         _ => null,
       };
       if (table == null) return false;

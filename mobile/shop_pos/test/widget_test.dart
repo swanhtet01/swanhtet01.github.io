@@ -1992,101 +1992,87 @@ void main() {
   );
 
   for (final myanmar in const [false, true]) {
-    testWidgets(
-      'migrated correction evidence is explicitly unverified in '
-      '${myanmar ? 'Burmese' : 'English'}',
-      (tester) async {
-        _usePhoneViewport(tester);
-        final recordedAt = DateTime(
-          2026,
-          10,
-          22,
-          17,
-          40,
-        ).millisecondsSinceEpoch;
-        final database = _RecentSalesFixtureDatabase([
-          ShopSaleReceipt(
-            id: 'legacy-proof-sale',
-            operationId: 'legacy-proof-sale-operation',
-            totalMmk: 2500,
-            createdAtMillis: recordedAt - 1000,
-            paymentMethod: 'kbzpay',
-            lines: const [
-              ShopSaleReceiptLine(
-                id: 'legacy-proof-sale-line',
-                productId: 'legacy-proof-tea',
-                productName: 'Tea',
-                unitPriceMmk: 2500,
-                quantity: 1,
-                lineTotalMmk: 2500,
-              ),
-            ],
-            reversal: ShopSaleReversal(
-              id: 'legacy-proof-reversal',
-              operationId: 'legacy-proof-reversal-operation',
-              saleId: 'legacy-proof-sale',
-              originalTotalMmk: 2500,
-              originalPaymentMethod: 'kbzpay',
-              originalCreatedAtMillis: recordedAt - 1000,
-              restockItems: false,
-              reason: 'Migrated audit fixture',
-              paymentResolution: 'external_pending',
-              cashDrawerDeltaMmk: 0,
-              authorizedActorId: 'owner-legacy-fixture',
-              authorizedActorLabel: 'Legacy fixture owner',
-              authorizationReceiptId: 'legacy-fixture-receipt',
-              authorizationProofKind:
-                  shopCorrectionAuthorizationProofKindLegacyV1,
-              createdAtMillis: recordedAt,
-              walletReconciliationOutcome: 'money_returned',
-              walletEvidenceReference: 'Legacy provider reference',
-              walletReconciledActorLabel: 'Legacy fixture owner',
-              walletReconciledAtMillis: recordedAt + 1000,
-              walletReconciliationProofKind:
-                  shopCorrectionAuthorizationProofKindLegacyV1,
-              lines: const [],
+    testWidgets('migrated correction evidence is explicitly unverified in '
+        '${myanmar ? 'Burmese' : 'English'}', (tester) async {
+      _usePhoneViewport(tester);
+      final recordedAt = DateTime(2026, 10, 22, 17, 40).millisecondsSinceEpoch;
+      final database = _RecentSalesFixtureDatabase([
+        ShopSaleReceipt(
+          id: 'legacy-proof-sale',
+          operationId: 'legacy-proof-sale-operation',
+          totalMmk: 2500,
+          createdAtMillis: recordedAt - 1000,
+          paymentMethod: 'kbzpay',
+          lines: const [
+            ShopSaleReceiptLine(
+              id: 'legacy-proof-sale-line',
+              productId: 'legacy-proof-tea',
+              productName: 'Tea',
+              unitPriceMmk: 2500,
+              quantity: 1,
+              lineTotalMmk: 2500,
             ),
+          ],
+          reversal: ShopSaleReversal(
+            id: 'legacy-proof-reversal',
+            operationId: 'legacy-proof-reversal-operation',
+            saleId: 'legacy-proof-sale',
+            originalTotalMmk: 2500,
+            originalPaymentMethod: 'kbzpay',
+            originalCreatedAtMillis: recordedAt - 1000,
+            restockItems: false,
+            reason: 'Migrated audit fixture',
+            paymentResolution: 'external_pending',
+            cashDrawerDeltaMmk: 0,
+            authorizedActorId: 'owner-legacy-fixture',
+            authorizedActorLabel: 'Legacy fixture owner',
+            authorizationReceiptId: 'legacy-fixture-receipt',
+            authorizationProofKind:
+                shopCorrectionAuthorizationProofKindLegacyV1,
+            createdAtMillis: recordedAt,
+            walletReconciliationOutcome: 'money_returned',
+            walletEvidenceReference: 'Legacy provider reference',
+            walletReconciledActorLabel: 'Legacy fixture owner',
+            walletReconciledAtMillis: recordedAt + 1000,
+            walletReconciliationProofKind:
+                shopCorrectionAuthorizationProofKindLegacyV1,
+            lines: const [],
           ),
-        ]);
-        try {
-          await tester.pumpWidget(
-            MaterialApp(
-              home: RecentSalesScreen(
-                database: database,
-                myanmar: myanmar,
-              ),
-            ),
-          );
-          await tester.pumpAndSettle();
-          await tester.tap(
-            find.text(myanmar ? '၂,၅၀၀ ကျပ်' : '2,500 MMK'),
-          );
-          await tester.pumpAndSettle();
+        ),
+      ]);
+      try {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: RecentSalesScreen(database: database, myanmar: myanmar),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.text(myanmar ? '၂,၅၀၀ ကျပ်' : '2,500 MMK'));
+        await tester.pumpAndSettle();
 
-          expect(
-            find.text(
-              myanmar
-                  ? 'ပြင်ဆင်မှုခွင့်ပြုချက်: မှတ်တမ်းဟောင်းမှ ပြောင်းရွှေ့ထားပြီး ဆာဗာခွင့်ပြုချက်ကို အတည်မပြုထားပါ။'
-                  : 'Correction authorization: Migrated record — server authorization unverified.',
-            ),
-            findsOneWidget,
-          );
-          expect(
-            find.text(
-              myanmar
-                  ? 'Wallet စာရင်းညှိခြင်း ခွင့်ပြုချက်: မှတ်တမ်းဟောင်းမှ ပြောင်းရွှေ့ထားပြီး ဆာဗာခွင့်ပြုချက်ကို အတည်မပြုထားပါ။'
-                  : 'Wallet reconciliation authorization: Migrated record — server authorization unverified.',
-            ),
-            findsOneWidget,
-          );
-          expect(tester.takeException(), isNull);
-        } finally {
-          await tester.pumpWidget(const SizedBox.shrink());
-          await tester.pump(const Duration(milliseconds: 1));
-          await database.close();
-        }
-      },
-    );
+        expect(
+          find.text(
+            myanmar
+                ? 'ပြင်ဆင်မှုခွင့်ပြုချက်: မှတ်တမ်းဟောင်းမှ ပြောင်းရွှေ့ထားပြီး ဆာဗာခွင့်ပြုချက်ကို အတည်မပြုထားပါ။'
+                : 'Correction authorization: Migrated record — server authorization unverified.',
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.text(
+            myanmar
+                ? 'Wallet စာရင်းညှိခြင်း ခွင့်ပြုချက်: မှတ်တမ်းဟောင်းမှ ပြောင်းရွှေ့ထားပြီး ဆာဗာခွင့်ပြုချက်ကို အတည်မပြုထားပါ။'
+                : 'Wallet reconciliation authorization: Migrated record — server authorization unverified.',
+          ),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+      } finally {
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump(const Duration(milliseconds: 1));
+        await database.close();
+      }
+    });
   }
 
   testWidgets(

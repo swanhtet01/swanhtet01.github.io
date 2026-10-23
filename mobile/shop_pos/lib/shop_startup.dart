@@ -15,9 +15,7 @@ import 'shop_database.dart';
 
 typedef PickShopBackup = Future<XFile?> Function();
 typedef BuildOpenedShop = Widget Function(ShopDatabase database, bool myanmar);
-typedef CloseOpenedShopDatabase = Future<void> Function(
-  ShopDatabase database,
-);
+typedef CloseOpenedShopDatabase = Future<void> Function(ShopDatabase database);
 
 /// Selects a new local Shop or restores an archive before Drift opens a file.
 /// An existing database never enters the restore path.

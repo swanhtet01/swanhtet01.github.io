@@ -168,8 +168,7 @@ bool _constantTimeTextEquals(String actual, String expected) {
 String shopCorrectionAuthorizationSignatureMessage({
   required String keyId,
   required String receiptDigest,
-}) =>
-    '$shopCorrectionAuthorizationSignatureContract\n$keyId\n$receiptDigest';
+}) => '$shopCorrectionAuthorizationSignatureContract\n$keyId\n$receiptDigest';
 
 class ShopCorrectionAuthorization {
   const ShopCorrectionAuthorization({
@@ -265,10 +264,7 @@ class ShopCorrectionReceiptVerifier {
         ),
         signature: Signature(
           signatureBytes,
-          publicKey: SimplePublicKey(
-            publicKeyBytes,
-            type: KeyPairType.ed25519,
-          ),
+          publicKey: SimplePublicKey(publicKeyBytes, type: KeyPairType.ed25519),
         ),
       );
     } catch (_) {

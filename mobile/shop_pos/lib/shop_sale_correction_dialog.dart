@@ -54,8 +54,7 @@ class _ShopSaleCorrectionDialog extends StatefulWidget {
       _ShopSaleCorrectionDialogState();
 }
 
-class _ShopSaleCorrectionDialogState
-    extends State<_ShopSaleCorrectionDialog> {
+class _ShopSaleCorrectionDialogState extends State<_ShopSaleCorrectionDialog> {
   final _formKey = GlobalKey<FormState>();
   final _reasonController = TextEditingController();
   bool? _restockItems;
@@ -282,7 +281,10 @@ class _ShopSaleCorrectionDialogState
         ),
         title: Text(
           _reviewing
-              ? _copy('Review full-sale correction', 'အရောင်းတစ်ခုလုံး ပြင်ဆင်မှုကို စစ်ဆေးရန်')
+              ? _copy(
+                  'Review full-sale correction',
+                  'အရောင်းတစ်ခုလုံး ပြင်ဆင်မှုကို စစ်ဆေးရန်',
+                )
               : _copy('Correct sale', 'အရောင်းပြင်ဆင်ရန်'),
         ),
         content: SizedBox(
@@ -389,7 +391,10 @@ class _ShopSaleCorrectionDialogState
               ChoiceChip(
                 key: const ValueKey('shop-correction-restock-all'),
                 label: Text(
-                  _copy('Return all to stock', 'အားလုံးကို လက်ကျန်ထဲ ပြန်ထည့်မည်'),
+                  _copy(
+                    'Return all to stock',
+                    'အားလုံးကို လက်ကျန်ထဲ ပြန်ထည့်မည်',
+                  ),
                 ),
                 selected: _restockItems == true,
                 onSelected: _busy
@@ -464,20 +469,23 @@ class _ShopSaleCorrectionDialogState
         const SizedBox(height: 16),
         _saleSummary(context),
         const Divider(height: 28),
-        _reviewRow(
-          _copy('Reason', 'အကြောင်းရင်း'),
-          command.reason,
-        ),
+        _reviewRow(_copy('Reason', 'အကြောင်းရင်း'), command.reason),
         _reviewRow(
           _copy('Stock', 'လက်ကျန်'),
           command.restockItems
-              ? _copy('Return every original quantity', 'မူလအရေအတွက်အားလုံးကို ပြန်ထည့်မည်')
+              ? _copy(
+                  'Return every original quantity',
+                  'မူလအရေအတွက်အားလုံးကို ပြန်ထည့်မည်',
+                )
               : _copy('No stock change', 'လက်ကျန်ကို မပြောင်းပါ'),
         ),
         _reviewRow(
           _copy('Money', 'ငွေပေးချေမှု'),
           _isCash
-              ? _copy('Full cash returned now', 'ငွေသားအပြည့် ယခုပင် ပြန်ပေးပြီး')
+              ? _copy(
+                  'Full cash returned now',
+                  'ငွေသားအပြည့် ယခုပင် ပြန်ပေးပြီး',
+                )
               : _copy(
                   'No money return recorded; provider follow-up pending',
                   'ငွေပြန်ပေးမှု မမှတ်တမ်းတင်ပါ၊ ဝန်ဆောင်မှုပေးသူနှင့် ဆက်လက်စစ်ဆေးရန် ဆိုင်းငံ့ထားသည်',
@@ -513,9 +521,7 @@ class _ShopSaleCorrectionDialogState
                     ),
                   ),
                   const SizedBox(width: 8),
-                  Text(
-                    shopMmk(line.lineTotalMmk, myanmar: widget.myanmar),
-                  ),
+                  Text(shopMmk(line.lineTotalMmk, myanmar: widget.myanmar)),
                 ],
               ),
             ),
@@ -561,10 +567,7 @@ class _ShopSaleCorrectionDialogState
       color: Theme.of(context).colorScheme.primaryContainer,
       borderRadius: BorderRadius.circular(12),
     ),
-    child: Padding(
-      padding: const EdgeInsets.all(12),
-      child: Text(text),
-    ),
+    child: Padding(padding: const EdgeInsets.all(12), child: Text(text)),
   );
 
   Widget _errorMessage(BuildContext context, String error) => Semantics(

@@ -325,140 +325,135 @@ void main() {
     },
   );
 
-  test(
-    'v14 direct open and restore reject workspace binding and trigger tampering',
-    () async {
-      final base = File('${directory.path}/workspace-binding-base.sqlite');
-      await _writeWalletReversalSnapshot(base);
-      ShopBackup.verifySnapshot(base, expectedSchemaVersion: 14);
-      final cases = <({String name, void Function(Database) mutate})>[
-        (
-          name: 'binding-deleted',
-          mutate: (connection) {
-            connection.execute(
-              'DROP TRIGGER shop_managed_workspace_binding_no_delete',
-            );
-            connection.execute('DELETE FROM shop_managed_workspace_binding');
-            connection.execute(
-              shopImmutableTriggerV11Sql(
-                table: 'shop_managed_workspace_binding',
-                operation: 'delete',
-                message: 'Managed Shop workspace binding is immutable',
-              ),
-            );
-          },
-        ),
-        (
-          name: 'binding-deleted-with-forged-legacy-provenance',
-          mutate: (connection) {
-            connection.execute(
-              'DROP TRIGGER shop_managed_workspace_binding_no_delete',
-            );
-            connection.execute('DELETE FROM shop_managed_workspace_binding');
-            connection.execute(
-              shopImmutableTriggerV11Sql(
-                table: 'shop_managed_workspace_binding',
-                operation: 'delete',
-                message: 'Managed Shop workspace binding is immutable',
-              ),
-            );
-            connection.execute(
-              'INSERT INTO shop_v13_migration_provenance '
-              "(singleton, reason) VALUES (1, 'legacy_unbound_correction_history')",
-            );
-          },
-        ),
-        (
-          name: 'workspace-mismatch',
-          mutate: (connection) {
-            connection.execute(
-              'DROP TRIGGER shop_managed_workspace_binding_no_update',
-            );
-            connection.execute(
-              "UPDATE shop_managed_workspace_binding SET workspace_id = 'workspace-other'",
-            );
-            connection.execute(
-              shopImmutableTriggerV11Sql(
-                table: 'shop_managed_workspace_binding',
-                operation: 'update',
-                message: 'Managed Shop workspace binding is immutable',
-              ),
-            );
-          },
-        ),
-        (
-          name: 'malformed-actor',
-          mutate: (connection) {
-            connection.execute(
-              'DROP TRIGGER shop_managed_workspace_binding_no_update',
-            );
-            connection.execute('PRAGMA ignore_check_constraints = ON');
-            connection.execute(
-              "UPDATE shop_managed_workspace_binding SET attached_actor_id = 'bad actor'",
-            );
-            connection.execute('PRAGMA ignore_check_constraints = OFF');
-            connection.execute(
-              shopImmutableTriggerV11Sql(
-                table: 'shop_managed_workspace_binding',
-                operation: 'update',
-                message: 'Managed Shop workspace binding is immutable',
-              ),
-            );
-          },
-        ),
-        (
-          name: 'no-op-workspace-guard',
-          mutate: (connection) {
-            connection.execute(
-              'DROP TRIGGER shop_sale_reversals_require_workspace_binding',
-            );
-            connection.execute('''
+  test('v14 direct open and restore reject workspace binding and trigger tampering', () async {
+    final base = File('${directory.path}/workspace-binding-base.sqlite');
+    await _writeWalletReversalSnapshot(base);
+    ShopBackup.verifySnapshot(base, expectedSchemaVersion: 14);
+    final cases = <({String name, void Function(Database) mutate})>[
+      (
+        name: 'binding-deleted',
+        mutate: (connection) {
+          connection.execute(
+            'DROP TRIGGER shop_managed_workspace_binding_no_delete',
+          );
+          connection.execute('DELETE FROM shop_managed_workspace_binding');
+          connection.execute(
+            shopImmutableTriggerV11Sql(
+              table: 'shop_managed_workspace_binding',
+              operation: 'delete',
+              message: 'Managed Shop workspace binding is immutable',
+            ),
+          );
+        },
+      ),
+      (
+        name: 'binding-deleted-with-forged-legacy-provenance',
+        mutate: (connection) {
+          connection.execute(
+            'DROP TRIGGER shop_managed_workspace_binding_no_delete',
+          );
+          connection.execute('DELETE FROM shop_managed_workspace_binding');
+          connection.execute(
+            shopImmutableTriggerV11Sql(
+              table: 'shop_managed_workspace_binding',
+              operation: 'delete',
+              message: 'Managed Shop workspace binding is immutable',
+            ),
+          );
+          connection.execute(
+            'INSERT INTO shop_v13_migration_provenance '
+            "(singleton, reason) VALUES (1, 'legacy_unbound_correction_history')",
+          );
+        },
+      ),
+      (
+        name: 'workspace-mismatch',
+        mutate: (connection) {
+          connection.execute(
+            'DROP TRIGGER shop_managed_workspace_binding_no_update',
+          );
+          connection.execute(
+            "UPDATE shop_managed_workspace_binding SET workspace_id = 'workspace-other'",
+          );
+          connection.execute(
+            shopImmutableTriggerV11Sql(
+              table: 'shop_managed_workspace_binding',
+              operation: 'update',
+              message: 'Managed Shop workspace binding is immutable',
+            ),
+          );
+        },
+      ),
+      (
+        name: 'malformed-actor',
+        mutate: (connection) {
+          connection.execute(
+            'DROP TRIGGER shop_managed_workspace_binding_no_update',
+          );
+          connection.execute('PRAGMA ignore_check_constraints = ON');
+          connection.execute(
+            "UPDATE shop_managed_workspace_binding SET attached_actor_id = 'bad actor'",
+          );
+          connection.execute('PRAGMA ignore_check_constraints = OFF');
+          connection.execute(
+            shopImmutableTriggerV11Sql(
+              table: 'shop_managed_workspace_binding',
+              operation: 'update',
+              message: 'Managed Shop workspace binding is immutable',
+            ),
+          );
+        },
+      ),
+      (
+        name: 'no-op-workspace-guard',
+        mutate: (connection) {
+          connection.execute(
+            'DROP TRIGGER shop_sale_reversals_require_workspace_binding',
+          );
+          connection.execute('''
               CREATE TRIGGER shop_sale_reversals_require_workspace_binding
               BEFORE INSERT ON shop_sale_reversals BEGIN SELECT 1; END
             ''');
-          },
-        ),
-      ];
-      for (final testCase in cases) {
-        final corrupt = File(
-          '${directory.path}/binding-${testCase.name}.sqlite',
-        );
-        await corrupt.writeAsBytes(await base.readAsBytes());
-        final connection = sqlite3.open(corrupt.path);
-        try {
-          testCase.mutate(connection);
-        } finally {
-          connection.close();
-        }
-        expect(
-          () => ShopBackup.verifySnapshot(
-            corrupt,
-            expectedSchemaVersion: 14,
-            allowRuntimeUnboundCorrectionHistory: true,
-          ),
-          throwsFormatException,
-        );
-        final opened = ShopDatabase.withCorrectionReceiptVerifier(
-          executor: NativeDatabase(corrupt),
-          correctionReceiptVerifier: _backupCorrectionVerifier,
-        );
-        try {
-          await expectLater(
-            opened.verifyReadyForUse(),
-            throwsA(isA<StateError>()),
-          );
-        } finally {
-          await opened.close();
-        }
-        await _expectAuthenticatedRestoreRejected(
-          directory: directory,
-          snapshot: corrupt,
-          stem: 'binding-${testCase.name}',
-          schemaVersion: 14,
-        );
+        },
+      ),
+    ];
+    for (final testCase in cases) {
+      final corrupt = File('${directory.path}/binding-${testCase.name}.sqlite');
+      await corrupt.writeAsBytes(await base.readAsBytes());
+      final connection = sqlite3.open(corrupt.path);
+      try {
+        testCase.mutate(connection);
+      } finally {
+        connection.close();
       }
-    },
-  );
+      expect(
+        () => ShopBackup.verifySnapshot(
+          corrupt,
+          expectedSchemaVersion: 14,
+          allowRuntimeUnboundCorrectionHistory: true,
+        ),
+        throwsFormatException,
+      );
+      final opened = ShopDatabase.withCorrectionReceiptVerifier(
+        executor: NativeDatabase(corrupt),
+        correctionReceiptVerifier: _backupCorrectionVerifier,
+      );
+      try {
+        await expectLater(
+          opened.verifyReadyForUse(),
+          throwsA(isA<StateError>()),
+        );
+      } finally {
+        await opened.close();
+      }
+      await _expectAuthenticatedRestoreRejected(
+        directory: directory,
+        snapshot: corrupt,
+        stem: 'binding-${testCase.name}',
+        schemaVersion: 14,
+      );
+    }
+  });
 
   test(
     'backup verification and direct open reject base schema drift',
@@ -561,14 +556,8 @@ void main() {
             ),
           ),
         ),
-        (
-          name: 'missing',
-          mutate: _deleteImmutableProofRows,
-        ),
-        (
-          name: 'orphan',
-          mutate: _insertOrphanLegacyProof,
-        ),
+        (name: 'missing', mutate: _deleteImmutableProofRows),
+        (name: 'orphan', mutate: _insertOrphanLegacyProof),
       ];
       for (final testCase in cases) {
         final corrupt = File(
@@ -1532,66 +1521,66 @@ void main() {
     },
   );
 
-  test('v13 correction history migrates as explicit unverified legacy proof', () async {
-    final legacy = File('${directory.path}/legacy-correction-v13.sqlite');
-    await _writeWalletReversalSnapshot(legacy, reconciled: true);
-    final raw = sqlite3.open(legacy.path);
-    try {
-      _removeV14AuthorizationProofsForLegacyFixture(raw);
-      raw.execute('PRAGMA user_version = 13');
-    } finally {
-      raw.close();
-    }
-    ShopBackup.verifySnapshot(legacy, expectedSchemaVersion: 13);
+  test(
+    'v13 correction history migrates as explicit unverified legacy proof',
+    () async {
+      final legacy = File('${directory.path}/legacy-correction-v13.sqlite');
+      await _writeWalletReversalSnapshot(legacy, reconciled: true);
+      final raw = sqlite3.open(legacy.path);
+      try {
+        _removeV14AuthorizationProofsForLegacyFixture(raw);
+        raw.execute('PRAGMA user_version = 13');
+      } finally {
+        raw.close();
+      }
+      ShopBackup.verifySnapshot(legacy, expectedSchemaVersion: 13);
 
-    final migrated = ShopDatabase(NativeDatabase(legacy));
-    try {
-      await migrated.verifyReadyForUse();
-      expect(
-        (await migrated.customSelect('PRAGMA user_version').getSingle())
-            .read<int>('user_version'),
-        14,
-      );
-      final proofs = await migrated
-          .customSelect(
-            'SELECT proof_kind, key_id, signature, capability '
-            'FROM shop_correction_authorization_proofs ORDER BY capability',
-          )
-          .get();
-      expect(proofs, hasLength(2));
-      expect(
-        proofs.map((proof) => proof.read<String>('proof_kind')),
-        everyElement(shopCorrectionAuthorizationProofKindLegacyV1),
-      );
-      expect(
-        proofs.map((proof) => proof.readNullable<String>('key_id')),
-        everyElement(isNull),
-      );
-      expect(
-        proofs.map((proof) => proof.readNullable<String>('signature')),
-        everyElement(isNull),
-      );
-      expect(
-        proofs.map((proof) => proof.read<String>('capability')).toSet(),
-        {
-          'shop.sale.reverse',
-          'shop.sale.reconcile_wallet',
-        },
-      );
-      final reversal = (await migrated.readRecentSales()).single.reversal!;
-      expect(
-        reversal.authorizationProofKind,
-        shopCorrectionAuthorizationProofKindLegacyV1,
-      );
-      expect(
-        reversal.walletReconciliationProofKind,
-        shopCorrectionAuthorizationProofKindLegacyV1,
-      );
-    } finally {
-      await migrated.close();
-    }
-    ShopBackup.verifySnapshot(legacy, expectedSchemaVersion: 14);
-  });
+      final migrated = ShopDatabase(NativeDatabase(legacy));
+      try {
+        await migrated.verifyReadyForUse();
+        expect(
+          (await migrated.customSelect('PRAGMA user_version').getSingle())
+              .read<int>('user_version'),
+          14,
+        );
+        final proofs = await migrated
+            .customSelect(
+              'SELECT proof_kind, key_id, signature, capability '
+              'FROM shop_correction_authorization_proofs ORDER BY capability',
+            )
+            .get();
+        expect(proofs, hasLength(2));
+        expect(
+          proofs.map((proof) => proof.read<String>('proof_kind')),
+          everyElement(shopCorrectionAuthorizationProofKindLegacyV1),
+        );
+        expect(
+          proofs.map((proof) => proof.readNullable<String>('key_id')),
+          everyElement(isNull),
+        );
+        expect(
+          proofs.map((proof) => proof.readNullable<String>('signature')),
+          everyElement(isNull),
+        );
+        expect(
+          proofs.map((proof) => proof.read<String>('capability')).toSet(),
+          {'shop.sale.reverse', 'shop.sale.reconcile_wallet'},
+        );
+        final reversal = (await migrated.readRecentSales()).single.reversal!;
+        expect(
+          reversal.authorizationProofKind,
+          shopCorrectionAuthorizationProofKindLegacyV1,
+        );
+        expect(
+          reversal.walletReconciliationProofKind,
+          shopCorrectionAuthorizationProofKindLegacyV1,
+        );
+      } finally {
+        await migrated.close();
+      }
+      ShopBackup.verifySnapshot(legacy, expectedSchemaVersion: 14);
+    },
+  );
 
   test(
     'malformed v13 authorization evidence rolls back migration and restore',
@@ -1603,27 +1592,22 @@ void main() {
       final raw = sqlite3.open(legacy.path);
       try {
         _removeV14AuthorizationProofsForLegacyFixture(raw);
-        final reversal = raw.select(
-          'SELECT * FROM shop_sale_reversals LIMIT 1',
-        ).single;
+        final reversal = raw
+            .select('SELECT * FROM shop_sale_reversals LIMIT 1')
+            .single;
         const malformedActorLabel = ' Backup test owner ';
-        final legacyDigest =
-            shopLegacyCorrectionAuthorizationReceiptDigestV1(
-              source: reversal['authorization_source'] as String,
-              receiptId: reversal['authorization_receipt_id'] as String,
-              workspaceId:
-                  reversal['authorization_workspace_id'] as String,
-              actorId: reversal['authorized_actor_id'] as String,
-              actorLabel: malformedActorLabel,
-              actorRole: reversal['authorized_actor_role'] as String,
-              capability: reversal['authorization_capability'] as String,
-              commandDigest:
-                  reversal['authorization_command_digest'] as String,
-              issuedAtMillis:
-                  reversal['authorization_issued_at_millis'] as int,
-              expiresAtMillis:
-                  reversal['authorization_expires_at_millis'] as int,
-            );
+        final legacyDigest = shopLegacyCorrectionAuthorizationReceiptDigestV1(
+          source: reversal['authorization_source'] as String,
+          receiptId: reversal['authorization_receipt_id'] as String,
+          workspaceId: reversal['authorization_workspace_id'] as String,
+          actorId: reversal['authorized_actor_id'] as String,
+          actorLabel: malformedActorLabel,
+          actorRole: reversal['authorized_actor_role'] as String,
+          capability: reversal['authorization_capability'] as String,
+          commandDigest: reversal['authorization_command_digest'] as String,
+          issuedAtMillis: reversal['authorization_issued_at_millis'] as int,
+          expiresAtMillis: reversal['authorization_expires_at_millis'] as int,
+        );
         _mutateImmutableAuditRow(
           raw,
           table: 'shop_sale_reversals',
@@ -1858,43 +1842,43 @@ void main() {
     },
   );
 
-  test('runtime preflight accepts only the exact unbound correction-v12 shape', () async {
-    final legacy = File('${directory.path}/unbound-correction-v12.sqlite');
-    await _writeWalletReversalSnapshot(legacy);
-    final connection = sqlite3.open(legacy.path);
-    try {
-      _removeV14AuthorizationProofsForLegacyFixture(connection);
-      connection.execute('DROP TABLE shop_business_profile');
-      connection.execute('DROP TABLE shop_v13_migration_provenance');
-      connection.execute(
-        'DROP TRIGGER shop_managed_workspace_binding_no_delete',
-      );
-      connection.execute('DELETE FROM shop_managed_workspace_binding');
-      connection.execute(
-        shopImmutableTriggerV11Sql(
-          table: 'shop_managed_workspace_binding',
-          operation: 'delete',
-          message: 'Managed Shop workspace binding is immutable',
-        ),
-      );
-      connection.execute('PRAGMA user_version = 12');
-    } finally {
-      connection.close();
-    }
+  test(
+    'runtime preflight accepts only the exact unbound correction-v12 shape',
+    () async {
+      final legacy = File('${directory.path}/unbound-correction-v12.sqlite');
+      await _writeWalletReversalSnapshot(legacy);
+      final connection = sqlite3.open(legacy.path);
+      try {
+        _removeV14AuthorizationProofsForLegacyFixture(connection);
+        connection.execute('DROP TABLE shop_business_profile');
+        connection.execute('DROP TABLE shop_v13_migration_provenance');
+        connection.execute(
+          'DROP TRIGGER shop_managed_workspace_binding_no_delete',
+        );
+        connection.execute('DELETE FROM shop_managed_workspace_binding');
+        connection.execute(
+          shopImmutableTriggerV11Sql(
+            table: 'shop_managed_workspace_binding',
+            operation: 'delete',
+            message: 'Managed Shop workspace binding is immutable',
+          ),
+        );
+        connection.execute('PRAGMA user_version = 12');
+      } finally {
+        connection.close();
+      }
 
-    expect(
-      () => ShopBackup.verifySnapshot(
+      expect(
+        () => ShopBackup.verifySnapshot(legacy, expectedSchemaVersion: 12),
+        throwsFormatException,
+      );
+      ShopBackup.verifySnapshot(
         legacy,
         expectedSchemaVersion: 12,
-      ),
-      throwsFormatException,
-    );
-    ShopBackup.verifySnapshot(
-      legacy,
-      expectedSchemaVersion: 12,
-      allowRuntimeUnboundCorrectionHistory: true,
-    );
-  });
+        allowRuntimeUnboundCorrectionHistory: true,
+      );
+    },
+  );
 
   test('both schema-11 meanings fail closed before mutation', () async {
     final mixed = File('${directory.path}/mixed-v11.sqlite');
@@ -2729,42 +2713,43 @@ void main() {
     }
   });
 
-  testWidgets('builder failure closes the verified database and blocks access', (
-    tester,
-  ) async {
-    final documents = Directory.systemTemp.createTempSync(
-      'shop-builder-failure-',
-    );
-    final closeRecorder = _DatabaseCloseRecorder();
-    var buildCalls = 0;
-    try {
-      await tester.pumpWidget(
-        ShopStartup(
-          documents: documents,
-          importScratchRoot: documents,
-          initialMyanmar: false,
-          buildShop: (_, _) {
-            buildCalls++;
-            throw StateError('synthetic builder failure');
-          },
-          closeDatabase: closeRecorder.call,
-        ),
+  testWidgets(
+    'builder failure closes the verified database and blocks access',
+    (tester) async {
+      final documents = Directory.systemTemp.createTempSync(
+        'shop-builder-failure-',
       );
-      await _pumpUntil(tester, find.text('Start new Shop'));
-      await tester.tap(find.text('Start new Shop'));
-      await _pumpUntil(tester, find.textContaining('cannot safely open'));
-      await tester.runAsync(closeRecorder.wait);
+      final closeRecorder = _DatabaseCloseRecorder();
+      var buildCalls = 0;
+      try {
+        await tester.pumpWidget(
+          ShopStartup(
+            documents: documents,
+            importScratchRoot: documents,
+            initialMyanmar: false,
+            buildShop: (_, _) {
+              buildCalls++;
+              throw StateError('synthetic builder failure');
+            },
+            closeDatabase: closeRecorder.call,
+          ),
+        );
+        await _pumpUntil(tester, find.text('Start new Shop'));
+        await tester.tap(find.text('Start new Shop'));
+        await _pumpUntil(tester, find.textContaining('cannot safely open'));
+        await tester.runAsync(closeRecorder.wait);
 
-      expect(buildCalls, 1);
-      expect(find.text('Start new Shop'), findsNothing);
-      expect(find.text('Restore backup'), findsNothing);
-      expect(tester.takeException(), isNull);
-    } finally {
-      await tester.pumpWidget(const SizedBox.shrink());
-      await tester.runAsync(closeRecorder.wait);
-      documents.deleteSync(recursive: true);
-    }
-  });
+        expect(buildCalls, 1);
+        expect(find.text('Start new Shop'), findsNothing);
+        expect(find.text('Restore backup'), findsNothing);
+        expect(tester.takeException(), isNull);
+      } finally {
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.runAsync(closeRecorder.wait);
+        documents.deleteSync(recursive: true);
+      }
+    },
+  );
 
   testWidgets('wrong password keeps restore choice and local data empty', (
     tester,

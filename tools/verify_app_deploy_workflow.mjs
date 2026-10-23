@@ -375,7 +375,8 @@ try { appRuntimeEvidence = JSON.parse(appRuntimeBundle.stdout) } catch { /* Miss
 requireContract('actual app entrypoint imports from isolated source with pinned dependencies',
   appRuntimeBundle.status === 0 && appRuntimeEvidence?.ok === true
   && appRuntimeEvidence.evidence === 'isolated_source_cold_import'
-  && appRuntimeEvidence.requiredRoutes === 8 && appRuntimeEvidence.dependencyPins === 9
+  && appRuntimeEvidence.requiredRoutes === 8 && appRuntimeEvidence.dependencyPins === 10
+  && appRuntimeEvidence.correctionReceiptModule === true
   && appRuntimeEvidence.providerPackage === false && appRuntimeEvidence.hostedAcceptance === false)
 if (appRuntimeBundle.status !== 0) console.error('Isolated app runtime probe failed; run tools/test_app_runtime_bundle.py for details.')
 
