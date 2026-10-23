@@ -773,10 +773,7 @@ void main() {
         );
         expect(find.text(myanmar ? 'ယနေ့' : 'Today'), findsWidgets);
         expect(
-          find.descendant(
-            of: find.byType(AppBar),
-            matching: find.text('Shop'),
-          ),
+          find.descendant(of: find.byType(AppBar), matching: find.text('Shop')),
           findsOneWidget,
         );
         expect(find.text('SuperMega Shop'), findsNothing);
