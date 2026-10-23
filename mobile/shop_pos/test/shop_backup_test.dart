@@ -23,10 +23,15 @@ final _thumbnail = base64Decode(
   'AAAADUlEQVR4nGPQyNjxHwAETAJIB09U9wAAAABJRU5ErkJggg==',
 );
 
-Future<void> _pumpUntil(WidgetTester tester, Finder finder) async {
+Future<void> _pumpUntil(
+  WidgetTester tester,
+  Finder finder, {
+  _OpenedDatabaseVerifier? databaseVerifier,
+}) async {
   for (var attempt = 0; attempt < 200; attempt++) {
     await tester.pump();
     if (finder.evaluate().isNotEmpty) return;
+    if (await databaseVerifier?.service(tester) ?? false) continue;
     await tester.runAsync(() async {
       await Future<void>.delayed(const Duration(milliseconds: 25));
     });
@@ -67,8 +72,55 @@ Future<void> _verifyStartupDatabase(File file) async {
   ShopBackup.verifySnapshot(file, allowRuntimeUnboundCorrectionHistory: true);
 }
 
-ShopDatabase _openStartupDatabase(Directory documents) =>
-    ShopDatabase(NativeDatabase(ShopDatabase.privateDatabaseFile(documents)));
+class _OpenedDatabaseVerification {
+  const _OpenedDatabaseVerification(this.database, this.completion);
+
+  final ShopDatabase database;
+  final Completer<void> completion;
+}
+
+class _OpenedDatabaseVerifier {
+  _OpenedDatabaseVerification? _pending;
+
+  Future<void> call(ShopDatabase database) {
+    if (_pending != null) {
+      throw StateError('A Shop database verification is already pending.');
+    }
+    final completion = Completer<void>();
+    _pending = _OpenedDatabaseVerification(database, completion);
+    return completion.future;
+  }
+
+  Future<bool> service(WidgetTester tester) async {
+    final request = _pending;
+    if (request == null) return false;
+    _pending = null;
+
+    Object? failure;
+    StackTrace? failureStack;
+    try {
+      await tester.runAsync(() async {
+        try {
+          await request.database.verifyReadyForUse();
+        } catch (error, stackTrace) {
+          failure = error;
+          failureStack = stackTrace;
+        }
+      });
+    } catch (error, stackTrace) {
+      failure = error;
+      failureStack = stackTrace;
+    }
+
+    final error = failure;
+    if (error == null) {
+      request.completion.complete();
+    } else {
+      request.completion.completeError(error, failureStack!);
+    }
+    return true;
+  }
+}
 
 void main() {
   late Directory directory;
@@ -2641,6 +2693,7 @@ void main() {
   testWidgets('fresh install restores before Shop opens', (tester) async {
     final documents = Directory.systemTemp.createTempSync('shop-first-run-');
     final closeRecorder = _DatabaseCloseRecorder();
+    final databaseVerifier = _OpenedDatabaseVerifier();
     try {
       await tester.pumpWidget(
         ShopStartup(
@@ -2652,7 +2705,7 @@ void main() {
               const MaterialApp(home: Scaffold(body: Text('Opened Shop'))),
           closeDatabase: closeRecorder.call,
           verifyDatabaseFile: _verifyStartupDatabase,
-          databaseFactory: _openStartupDatabase,
+          verifyOpenedDatabase: databaseVerifier.call,
         ),
       );
       await _pumpUntil(tester, find.text('Start new Shop'));
@@ -2666,7 +2719,11 @@ void main() {
       expect(ShopDatabase.privateDatabaseFile(documents).existsSync(), isFalse);
       await tester.enterText(find.byType(TextField), _password);
       await tester.tap(find.text('Restore and open Shop'));
-      await _pumpUntil(tester, find.text('Opened Shop'));
+      await _pumpUntil(
+        tester,
+        find.text('Opened Shop'),
+        databaseVerifier: databaseVerifier,
+      );
       await tester.pump(const Duration(milliseconds: 1));
       expect(find.text('Opened Shop'), findsOneWidget);
       final restoredFile = ShopDatabase.privateDatabaseFile(documents);
@@ -2696,6 +2753,7 @@ void main() {
     final documents = Directory.systemTemp.createTempSync('shop-new-');
     ShopDatabase? opened;
     final closeRecorder = _DatabaseCloseRecorder();
+    final databaseVerifier = _OpenedDatabaseVerifier();
     try {
       await tester.pumpWidget(
         ShopStartup(
@@ -2707,12 +2765,16 @@ void main() {
             return const MaterialApp(home: Scaffold(body: Text('Opened Shop')));
           },
           closeDatabase: closeRecorder.call,
-          databaseFactory: _openStartupDatabase,
+          verifyOpenedDatabase: databaseVerifier.call,
         ),
       );
       await _pumpUntil(tester, find.text('Start new Shop'));
       await tester.tap(find.text('Start new Shop'));
-      await _pumpUntil(tester, find.text('Opened Shop'));
+      await _pumpUntil(
+        tester,
+        find.text('Opened Shop'),
+        databaseVerifier: databaseVerifier,
+      );
       await tester.pump(const Duration(milliseconds: 1));
       expect(find.text('Opened Shop'), findsOneWidget);
       expect(ShopDatabase.privateDatabaseFile(documents).existsSync(), isTrue);
@@ -2730,6 +2792,7 @@ void main() {
         'shop-builder-failure-',
       );
       final closeRecorder = _DatabaseCloseRecorder();
+      final databaseVerifier = _OpenedDatabaseVerifier();
       var buildCalls = 0;
       try {
         await tester.pumpWidget(
@@ -2742,12 +2805,16 @@ void main() {
               throw StateError('synthetic builder failure');
             },
             closeDatabase: closeRecorder.call,
-            databaseFactory: _openStartupDatabase,
+            verifyOpenedDatabase: databaseVerifier.call,
           ),
         );
         await _pumpUntil(tester, find.text('Start new Shop'));
         await tester.tap(find.text('Start new Shop'));
-        await _pumpUntil(tester, find.textContaining('cannot safely open'));
+        await _pumpUntil(
+          tester,
+          find.textContaining('cannot safely open'),
+          databaseVerifier: databaseVerifier,
+        );
         await tester.runAsync(closeRecorder.wait);
 
         expect(buildCalls, 1);
@@ -2767,6 +2834,7 @@ void main() {
   ) async {
     final documents = Directory.systemTemp.createTempSync('shop-wrong-pass-');
     final closeRecorder = _DatabaseCloseRecorder();
+    final databaseVerifier = _OpenedDatabaseVerifier();
     try {
       await tester.pumpWidget(
         ShopStartup(
@@ -2778,7 +2846,7 @@ void main() {
               const MaterialApp(home: Scaffold(body: Text('Opened Shop'))),
           closeDatabase: closeRecorder.call,
           verifyDatabaseFile: _verifyStartupDatabase,
-          databaseFactory: _openStartupDatabase,
+          verifyOpenedDatabase: databaseVerifier.call,
         ),
       );
       await _pumpUntil(tester, find.text('Start new Shop'));
@@ -2792,7 +2860,11 @@ void main() {
       expect(ShopDatabase.privateDatabaseFile(documents).existsSync(), isFalse);
       await tester.enterText(find.byType(TextField), _password);
       await tester.tap(find.text('Restore and open Shop'));
-      await _pumpUntil(tester, find.text('Opened Shop'));
+      await _pumpUntil(
+        tester,
+        find.text('Opened Shop'),
+        databaseVerifier: databaseVerifier,
+      );
       await tester.pump(const Duration(milliseconds: 1));
       expect(find.text('Opened Shop'), findsOneWidget);
     } finally {
@@ -2831,6 +2903,7 @@ void main() {
     final documents = Directory.systemTemp.createTempSync('shop-existing-');
     ShopDatabase? opened;
     final closeRecorder = _DatabaseCloseRecorder();
+    final databaseVerifier = _OpenedDatabaseVerifier();
     try {
       await tester.runAsync(
         () => ShopBackup.restoreIntoEmptyDatabase(
@@ -2850,10 +2923,14 @@ void main() {
           },
           closeDatabase: closeRecorder.call,
           verifyDatabaseFile: _verifyStartupDatabase,
-          databaseFactory: _openStartupDatabase,
+          verifyOpenedDatabase: databaseVerifier.call,
         ),
       );
-      await _pumpUntil(tester, find.text('Opened Shop'));
+      await _pumpUntil(
+        tester,
+        find.text('Opened Shop'),
+        databaseVerifier: databaseVerifier,
+      );
       await tester.pump(const Duration(milliseconds: 1));
       expect(find.text('Opened Shop'), findsOneWidget);
       expect(find.text('Restore backup'), findsNothing);

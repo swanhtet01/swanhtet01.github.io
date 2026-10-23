@@ -17,7 +17,7 @@ typedef PickShopBackup = Future<XFile?> Function();
 typedef BuildOpenedShop = Widget Function(ShopDatabase database, bool myanmar);
 typedef CloseOpenedShopDatabase = Future<void> Function(ShopDatabase database);
 typedef VerifyShopDatabaseFile = Future<void> Function(File file);
-typedef OpenShopDatabase = ShopDatabase Function(Directory documents);
+typedef VerifyOpenedShopDatabase = Future<void> Function(ShopDatabase database);
 
 /// Selects a new local Shop or restores an archive before Drift opens a file.
 /// An existing database never enters the restore path.
@@ -30,7 +30,7 @@ class ShopStartup extends StatefulWidget {
     this.importScratchRoot,
     this.closeDatabase,
     this.verifyDatabaseFile,
-    this.databaseFactory,
+    this.verifyOpenedDatabase,
     super.key,
   });
 
@@ -48,9 +48,9 @@ class ShopStartup extends StatefulWidget {
   /// same-isolate verifier so Flutter's fake-async widget zone cannot stall it.
   final VerifyShopDatabaseFile? verifyDatabaseFile;
 
-  /// Defaults to the platform Drift opener. Tests may use a same-isolate
-  /// native executor while retaining the same eager semantic verification.
-  final OpenShopDatabase? databaseFactory;
+  /// Defaults to the database's eager semantic verifier. Widget tests may run
+  /// that same verifier in Flutter's real-async zone.
+  final VerifyOpenedShopDatabase? verifyOpenedDatabase;
 
   @override
   State<ShopStartup> createState() => _ShopStartupState();
@@ -148,14 +148,17 @@ class _ShopStartupState extends State<ShopStartup> {
           await verifier(_databaseFile);
         }
       }
-      pendingDatabase =
-          widget.databaseFactory?.call(widget.documents) ??
-          ShopDatabase.inPrivateDocuments(widget.documents);
+      pendingDatabase = ShopDatabase.inPrivateDocuments(widget.documents);
 
       // Opening Drift is deliberately eager here. The verified database stays
       // local until migrations, structure, and semantic audit checks pass, so
       // no application widget can observe an unsafe existing or restored file.
-      await pendingDatabase.verifyReadyForUse();
+      final openedVerifier = widget.verifyOpenedDatabase;
+      if (openedVerifier == null) {
+        await pendingDatabase.verifyReadyForUse();
+      } else {
+        await openedVerifier(pendingDatabase);
+      }
       if (!mounted) return;
 
       final openedShop = widget.buildShop(pendingDatabase, _myanmar);
