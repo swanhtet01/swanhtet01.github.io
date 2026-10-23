@@ -38,10 +38,10 @@ owner-approved product outcome and gate require it.
 | Item | Current fact |
 | --- | --- |
 | Integration PR | [#734 — Unify Shop app first-use and public launch candidate](https://github.com/swanhtet01/swanhtet01.github.io/pull/734) |
-| State | Open draft; verified product/evidence checkpoint `2366ad92` was CLEAN with App/native/security/Kernel CI pass. Documentation-only successors add no product evidence; independent last-push review, signing, deployment, and merchant acceptance remain open |
+| State | Open draft; verified evidence successor `b7e4703c` was CLEAN with App/native/security/Kernel CI pass. Documentation-only successors add no product evidence; independent last-push review, signing, deployment, and merchant acceptance remain open |
 | Integration branch | `codex/shop-public-main-port-20261022` |
-| Final evidence candidate | `2366ad9209e7b6901f00202fa3083e875fbb88c4` / tree `2f403aecd841a13f629d7e04314fffb49ba3c47c` |
-| Native capture source | `66682d111b875f61fe1f27298958766728094ee3` / native tree `d8c1cd60d6d80c5fc72bc052d8006bc9d4258220` |
+| Final evidence candidate | `b7e4703c81b5a238a12a3c36b6c718a7f4a6c2e6` / tree `ad5584232bcda6dab3b2f0b3ce91c91f4ecb45ef` |
+| Native capture source | `523064bd28e2d5f949766449b862c0b6aaf9c365` / native tree `416545b3952b477e39d5c64d159c6bf27fc2e881` |
 | Gallery evidence successor | `172773a3cfa0996a4aa058148e50513d71da5ae2`; final head preserves the same native tree |
 | PostgreSQL evidence checkpoint | `b1ee4cc2884dda1ab753e8d2e4ecc6c6216a36ef` / tree `6996864df311db4748fcca3ec75c030dd0fcab3e` |
 | Inactive promotion envelope | PR #730; use only after #734 passes and is explicitly promoted |
@@ -56,26 +56,26 @@ unavailable; normal selling remains offline.
 
 ## Exact evidence
 
-- [Required App CI 39980080495](https://github.com/swanhtet01/swanhtet01.github.io/actions/runs/39980080495)
-  passed at exact head `2366ad92`: PostgreSQL/API and migration/RLS guards,
+- [Required App CI 39994612551](https://github.com/swanhtet01/swanhtet01.github.io/actions/runs/39994612551)
+  passed at exact head `b7e4703c`: PostgreSQL/API and migration/RLS guards,
   dependencies, lint, canonical build, HQ verification, release workflow
   contracts, and desktop/390 px journeys.
-- [Native run 39980088191](https://github.com/swanhtet01/swanhtet01.github.io/actions/runs/39980088191)
-  checked out PR merge `d26580c9` containing source head `2366ad92` with the
+- [Native run 39994619858](https://github.com/swanhtet01/swanhtet01.github.io/actions/runs/39994619858)
+  checked out PR merge `25b06956` containing source head `b7e4703c` with the
   same candidate tree, then passed formatting, analysis, isolated first-sale
   and restore, all Flutter tests, bundled-font renders, Android debug,
   unsigned iPad/iOS, and Windows restore/no-replace plus unsigned packaging.
 - Candidate-tree QA artifacts from that merge-ref run: Android debug
-  `12513287589`
-  (`sha256:db36b6666ef3793d6021ce3f1166094ab2d1630a1e002a9bd44f00b1cebe9298`),
-  Flutter renders `12512649344`
-  (`sha256:6650195e55f6e05ccdf136e45ffca211df733534aeb33bf2cde2dcb31de26c33`),
-  and unsigned Windows `12514157027`
-  (`sha256:1f2ac5aec276c9e1fc8ebea74793700937948203f7645f80823fdf43fd0f4744`).
+  `12520031212`
+  (`sha256:b90965e9028326e4ac30cbe081bacee4f97cca7704432729adfed547da078d74`),
+  Flutter renders `12519716380`
+  (`sha256:7b14bd5a78822cbcd5a1e46911bd89b4664216964d4ffcdd16a2e91e0797713f`),
+  and unsigned Windows `12519234730`
+  (`sha256:55a0595088b5f0299cac92d3b4d4080b4ad34e3d9062fd31ec92db8438fb418d`).
   iOS passed `--no-codesign`; no signed iOS artifact is retained.
-- Gallery provenance pins source `66682d11`, CI merge `ab513846`, native run
-  `39976672663`, artifact `12511362696`, and original archive
-  `sha256:8c40183fec41ff8fe45599439a6724792f96b394e9913b6ddf74806f63c8d993`.
+- Gallery provenance pins source `523064bd`, CI merge `4219c5d4`, native run
+  `39991770709`, artifact `12517843109`, and original archive
+  `sha256:b7e4fb1a51b956a17d66694df346625ac53c2dba33a1ce463ece12d58e39b656`.
   Strict local public build/gallery/responsive checks passed for EN/MY at
   390/768/1440 px. Release checkout now retains capture-source history.
 - The Windows PostgreSQL 17.10 rehearsal remains bound to implementation tree
@@ -84,7 +84,7 @@ unavailable; normal selling remains offline.
   receipt digest
   `sha256:8c3ece4d69c0dd815a14e762fb01602229ab14214acb9147774617bce0d18c72`,
   and `hostedActivationProven=false`.
-- Security `39980088274` and Kernel `39980088206` pass against the same PR
+- Security `39994620030` and Kernel `39994620008` pass against the same PR
   merge-ref/source-tree pairing. Kernel production release remains
   intentionally owner-gated.
 
@@ -125,15 +125,16 @@ v14 and hosted PostgreSQL/Supabase schema profile v13 are separate contracts.
   sale UI, preserve leading zeros, exercise intentional repeated scans, send
   exact ESC/POS bytes to a loopback TCP printer, validate 384/420/576-dot
   EN/MY raster output, and keep sale/stock/outbox totals unchanged across
-  uncertain printing and operator reprint. This is simulator/protocol evidence,
-  not model certification; 420 dots remains builder-only.
+  uncertain printing and operator reprint. A bounded flush deadline tears down
+  stalled delivery without automatic retry. This is simulator/protocol
+  evidence, not model certification; 420 dots remains builder-only.
 
 ## Not proven
 
 - No production deployment, alias promotion, merge, or production database
   mutation has occurred.
 - Live `supermega.dev` and `app.supermega.dev` still report predecessor
-  `5479c5d1`; no immutable protected preview has been accepted for `2366ad92`.
+  `5479c5d1`; no immutable protected preview has been accepted for `b7e4703c`.
   Direct previews stay disabled, and the production workflow is not preview
   evidence. Live retired product routes also need an owner-approved release of
   the already-verified Shop-first route policy.
@@ -191,7 +192,7 @@ backup, and restore review; no blind merge or cherry-pick is allowed.
 
 ## Next action
 
-1. Keep final evidence candidate `2366ad92` stable, correction default-dark,
+1. Keep final evidence candidate `b7e4703c` stable, correction default-dark,
    and PR #734 draft pending the owner-gated release decision.
 2. The owner must approve fixed provider team/project identities and a separate
    protected non-production preview lane before EN/MY 390/768/1440 hosted
