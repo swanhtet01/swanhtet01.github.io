@@ -16,6 +16,8 @@ import 'shop_database.dart';
 typedef PickShopBackup = Future<XFile?> Function();
 typedef BuildOpenedShop = Widget Function(ShopDatabase database, bool myanmar);
 typedef CloseOpenedShopDatabase = Future<void> Function(ShopDatabase database);
+typedef VerifyShopDatabaseFile = Future<void> Function(File file);
+typedef OpenShopDatabase = ShopDatabase Function(Directory documents);
 
 /// Selects a new local Shop or restores an archive before Drift opens a file.
 /// An existing database never enters the restore path.
@@ -27,6 +29,8 @@ class ShopStartup extends StatefulWidget {
     this.pickBackup,
     this.importScratchRoot,
     this.closeDatabase,
+    this.verifyDatabaseFile,
+    this.databaseFactory,
     super.key,
   });
 
@@ -39,6 +43,14 @@ class ShopStartup extends StatefulWidget {
   /// Application callers use [ShopDatabase.close]. Tests may inject a wrapper
   /// so platform file-handle release can be awaited deterministically.
   final CloseOpenedShopDatabase? closeDatabase;
+
+  /// Defaults to the isolated, fail-closed snapshot preflight. Tests may use a
+  /// same-isolate verifier so Flutter's fake-async widget zone cannot stall it.
+  final VerifyShopDatabaseFile? verifyDatabaseFile;
+
+  /// Defaults to the platform Drift opener. Tests may use a same-isolate
+  /// native executor while retaining the same eager semantic verification.
+  final OpenShopDatabase? databaseFactory;
 
   @override
   State<ShopStartup> createState() => _ShopStartupState();
@@ -123,15 +135,22 @@ class _ShopStartupState extends State<ShopStartup> {
     ShopDatabase? pendingDatabase;
     try {
       if (await _databaseFile.length() > 0) {
-        final databasePath = _databaseFile.path;
-        await Isolate.run(
-          () => ShopBackup.verifySnapshot(
-            File(databasePath),
-            allowRuntimeUnboundCorrectionHistory: true,
-          ),
-        );
+        final verifier = widget.verifyDatabaseFile;
+        if (verifier == null) {
+          final databasePath = _databaseFile.path;
+          await Isolate.run(
+            () => ShopBackup.verifySnapshot(
+              File(databasePath),
+              allowRuntimeUnboundCorrectionHistory: true,
+            ),
+          );
+        } else {
+          await verifier(_databaseFile);
+        }
       }
-      pendingDatabase = ShopDatabase.inPrivateDocuments(widget.documents);
+      pendingDatabase =
+          widget.databaseFactory?.call(widget.documents) ??
+          ShopDatabase.inPrivateDocuments(widget.documents);
 
       // Opening Drift is deliberately eager here. The verified database stays
       // local until migrations, structure, and semantic audit checks pass, so

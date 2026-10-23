@@ -2570,6 +2570,9 @@ void main() {
         );
         await database.customStatement('DROP TABLE shop_sale_reversal_lines');
         await database.customStatement('DROP TABLE shop_sale_reversals');
+        await database.customStatement(
+          'DROP TABLE shop_correction_authorization_proofs',
+        );
         await database.customStatement('DROP TABLE shop_cash_shift_sales');
         await database.customStatement('DROP TABLE shop_cash_shifts');
         await database.customStatement('PRAGMA user_version = 5');

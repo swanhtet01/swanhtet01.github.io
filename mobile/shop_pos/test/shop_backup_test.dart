@@ -63,6 +63,16 @@ Future<void> _disposeOpenedStartup(
   await tester.runAsync(closeRecorder.wait);
 }
 
+Future<void> _verifyStartupDatabase(File file) async {
+  ShopBackup.verifySnapshot(
+    file,
+    allowRuntimeUnboundCorrectionHistory: true,
+  );
+}
+
+ShopDatabase _openStartupDatabase(Directory documents) =>
+    ShopDatabase(NativeDatabase(ShopDatabase.privateDatabaseFile(documents)));
+
 void main() {
   late Directory directory;
   late ShopDatabase database;
@@ -2644,6 +2654,8 @@ void main() {
           buildShop: (_, _) =>
               const MaterialApp(home: Scaffold(body: Text('Opened Shop'))),
           closeDatabase: closeRecorder.call,
+          verifyDatabaseFile: _verifyStartupDatabase,
+          databaseFactory: _openStartupDatabase,
         ),
       );
       await _pumpUntil(tester, find.text('Start new Shop'));
@@ -2698,6 +2710,7 @@ void main() {
             return const MaterialApp(home: Scaffold(body: Text('Opened Shop')));
           },
           closeDatabase: closeRecorder.call,
+          databaseFactory: _openStartupDatabase,
         ),
       );
       await _pumpUntil(tester, find.text('Start new Shop'));
@@ -2732,6 +2745,7 @@ void main() {
               throw StateError('synthetic builder failure');
             },
             closeDatabase: closeRecorder.call,
+            databaseFactory: _openStartupDatabase,
           ),
         );
         await _pumpUntil(tester, find.text('Start new Shop'));
@@ -2766,6 +2780,8 @@ void main() {
           buildShop: (_, _) =>
               const MaterialApp(home: Scaffold(body: Text('Opened Shop'))),
           closeDatabase: closeRecorder.call,
+          verifyDatabaseFile: _verifyStartupDatabase,
+          databaseFactory: _openStartupDatabase,
         ),
       );
       await _pumpUntil(tester, find.text('Start new Shop'));
@@ -2836,6 +2852,8 @@ void main() {
             return const MaterialApp(home: Scaffold(body: Text('Opened Shop')));
           },
           closeDatabase: closeRecorder.call,
+          verifyDatabaseFile: _verifyStartupDatabase,
+          databaseFactory: _openStartupDatabase,
         ),
       );
       await _pumpUntil(tester, find.text('Opened Shop'));
