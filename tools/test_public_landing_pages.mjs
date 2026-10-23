@@ -54,7 +54,9 @@ for (const token of ['How it works at the counter', 'Search or scan', 'Review th
   check(shop.includes(token), 'shop_access_and_workflow:' + token)
 }
 for (const token of ['Pilot sign in', 'Before you start', 'Where do I sign in?', 'Can I download Shop now?', 'Does selling require internet?', 'Sending the contact form does not create an account.']) check(shop.includes(token), 'shop_access_faq:' + token)
+for (const token of ['private browser portal', 'It is not the Shop installer or public signup.', 'supplied separately during assisted setup']) check(shop.includes(token), 'shop_login_boundary:' + token)
 for (const token of ['စမ်းသပ်အသုံးပြုသူ ဝင်ရန်', 'မစတင်မီ', 'ဘယ်နေရာမှ ဝင်ရမည်နည်း။', 'Shop ကို ယခု ဒေါင်းလုဒ်ရနိုင်ပါသလား။', 'ဆက်သွယ်ရေးဖောင်ပို့ခြင်းတစ်ခုတည်းဖြင့် အကောင့် မဖန်တီးပါ။']) check(myShop.includes(token), 'my_shop_access_faq:' + token)
+for (const token of ['သီးသန့်ဘရောက်ဇာပေါ်တယ်', 'အများပြည်သူအကောင့်ဖွင့်ရာ မဟုတ်ပါ', 'သီးခြားတပ်ဆင်ပေးပါမည်']) check(myShop.includes(token), 'my_shop_login_boundary:' + token)
 check((shop.match(/<details>/g) || []).length === 5 && (myShop.match(/<details>/g) || []).length === 5, 'five_access_faqs_en_my')
 for (const token of ['ကောင်တာတွင် အလုပ်လုပ်ပုံ', 'ရှာပါ သို့မဟုတ် စကင်ဖတ်ပါ', 'ပြင်ဆင်နိုင်သော အစပျိုးပုံစံများ', 'မီနီမတ်', 'လက်ဖက်ရည်နှင့် ကော်ဖီ', 'ဖက်ရှင်', 'အလှအပနှင့် စပါ', 'Shop ရယူရန်', 'Android တက်ဘလက်', 'iPad', 'Windows ကွန်ပျူတာ']) {
   check(myShop.includes(token), 'my_shop_access_and_workflow:' + token)

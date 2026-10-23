@@ -375,6 +375,9 @@ for (const token of ['Shop for Myanmar retailers', 'Sell clearly. Keep stock acc
 for (const token of ['How it works at the counter', 'Search or scan', 'Editable starting points', 'How to get Shop', 'Public downloads and self-service signup are not open yet', 'The web app, macOS and iPhone are not current customer Shop products.', 'Before you start', 'Where do I sign in?', 'Sending the contact form does not create an account.']) {
   if (!shopBody.includes(token)) fail('shop_access_story_missing:' + token)
 }
+for (const token of ['private browser portal', 'It is not the Shop installer or public signup.', 'supplied separately during assisted setup']) {
+  if (!shopBody.includes(token)) fail(`shop_login_boundary_missing:${token}`)
+}
 if (countOccurrences(shopBody, 'class="shop-template-card"') !== 4) fail('shop_template_count_wrong')
 if (countOccurrences(shopBody, 'class="shop-platform-card"') !== 3) fail('shop_platform_count_wrong')
 if (countOccurrences(shopBody, 'class="shop-proof-card"') !== 3) fail('shop_compact_proof_count_wrong')

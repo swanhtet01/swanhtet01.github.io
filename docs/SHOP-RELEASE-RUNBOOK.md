@@ -477,9 +477,12 @@ Correction acceptance within Gate 5 remains open for two exact reasons:
    unproven. A typed name, shift label, shared PIN, locally constructed receipt,
    raw Supabase session, or broad write role is insufficient authority.
 2. The engine reverses a complete sale only. Partial returns and exchanges are
-   not implemented. Swan and Vivian must explicitly accept full-sale reversal
-   as the November correction/refund scope or retain partial/exchange as a
-   blocker. This runbook cannot silently narrow the merchant outcome.
+   not implemented. Swan recorded the founder scope decision on 23 October
+   2026: full-sale-only correction/refund is accepted for launch; partial/item
+   refunds and exchanges are deferred. Vivian must still confirm that this
+   disclosed customer promise is acceptable during the exact-candidate merchant
+   journey. This decision does not close authorization, signed-install, or
+   merchant-acceptance evidence.
 
 Pre-hardening schema-v11 wallet-reconciliation rows using the earlier four-key
 fingerprint intentionally fail current replay and restore. Before launch, prove
