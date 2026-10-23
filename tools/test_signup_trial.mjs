@@ -363,5 +363,5 @@ check(submission.includes('...identity,') && submission.includes('shopIndustryPa
 
 console.log(`signup trial contract: ${checks} checks passed`)
 
-check(unavailableLogin.includes('className="core-button primary" href={managedAccountRequestUrl(productIntent)}>Contact us about Shop</a>'), 'unavailable login has product-aware Shop contact as primary action')
+check(unavailableLogin.includes("{shopAccessIntent ? 'Contact us about Shop' : 'Contact support'}</a>"), 'unavailable login labels Shop and retained product setup honestly')
 check(!unavailableLogin.includes('Try a sample'), 'unavailable login does not promise a removed sample chooser')

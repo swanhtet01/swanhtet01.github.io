@@ -119,6 +119,8 @@ try {
           disclosureText: disclosure?.textContent.trim() || '',
           storySectionCount: storySections.length,
           storyHeadingSizes: storyHeadings.map(heading => Number.parseFloat(getComputedStyle(heading).fontSize)),
+          storyHeadingLineHeights: storyHeadings.map(heading => Number.parseFloat(getComputedStyle(heading).lineHeight)),
+          storyHeadingTracking: storyHeadings.map(heading => getComputedStyle(heading).letterSpacing),
           templateCount: document.querySelectorAll('.shop-template-card').length,
           platformCount: document.querySelectorAll('.shop-platform-card').length,
           deviceLabels: [...document.querySelectorAll('figcaption')].some(node => /^(Desktop|Tablet|Phone)$/.test(node.textContent.trim())),
@@ -146,6 +148,8 @@ try {
       if (!result.disclosureVisible || result.disclosureText !== expectedDisclosure) failures.push('sample_disclosure')
       if (result.storySectionCount !== 5 || result.templateCount !== 4 || result.platformCount !== 3) failures.push('story_structure')
       if (result.storyHeadingSizes.length !== 5 || result.storyHeadingSizes.some(size => size < 28)) failures.push('story_readability')
+      if (expectedLang === 'my' && (result.storyHeadingLineHeights.some((height, index) => height < result.storyHeadingSizes[index] * 1.45)
+        || result.storyHeadingTracking.some(value => value !== 'normal' && Math.abs(Number.parseFloat(value)) > 0.01))) failures.push('myanmar_story_typography')
       if (result.deviceLabels) failures.push('device_label')
       if (result.forbiddenCopy) failures.push('copy')
       cases.push({ route, ...viewport, ...result, failures })

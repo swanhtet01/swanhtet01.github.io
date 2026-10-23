@@ -36,6 +36,8 @@ test('unavailable sign-in offers saved work and assisted setup without demo entr
   assert.match(unavailable, /Contact us about Shop/)
   assert.match(unavailable, /Shop pilot access is issued during assisted setup/)
   assert.match(unavailable, /Native Shop can make its first local sale without this managed account/)
+  assert.match(unavailable, /shopAccessIntent \? 'Contact us about Shop' : 'Contact support'/)
+  assert.match(unavailable, /Contact support for account access\. Your saved work is still available on this device\./)
   assert.doesNotMatch(unavailable, /Free trial|Try free demo|Try a sample/)
   assert.match(source, /Date\.now\(\) < cooldownUntil/)
 })

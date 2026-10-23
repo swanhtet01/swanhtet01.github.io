@@ -46,14 +46,14 @@ test('rendered review login offers no sample, trial activation or self-registrat
     module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText
   const elements = tree => Array.isArray(tree) ? tree.flatMap(elements) : tree && typeof tree === 'object' ? [tree, ...elements(tree.props?.children)] : []
   const text = tree => Array.isArray(tree) ? tree.map(text).join('') : tree && typeof tree === 'object' ? text(tree.props?.children) : typeof tree === 'string' ? tree : ''
-  for (const hostname of ['localhost', 'app.supermega.dev']) for (const ready of [true, false]) for (const reviewing of [true, false]) {
+  for (const hostname of ['localhost', 'app.supermega.dev']) for (const ready of [true, false]) for (const reviewing of [true, false]) for (const product of reviewing ? ['website'] : ['shop', 'website']) {
     const exports = {}
     const jsx = (type, props) => ({ type, props })
     const dependencies = {
       react: { useState: init => [typeof init === 'function' ? init() : init, () => {}], useRef: init => ({ current: init }), useEffect() {} },
       'react/jsx-runtime': { jsx, jsxs: jsx, Fragment: 'fragment' },
       'react-router': { Link: 'a', useNavigate: () => () => {},
-        useLocation: () => ({ search: reviewing ? `?product=website&review=${id}` : '?product=shop' }),
+        useLocation: () => ({ search: reviewing ? `?product=website&review=${id}` : `?product=${product}` }),
         useOutletContext: () => ({ status: ready ? 'enterprise' : 'checking', signupPolicy: { termsVersion: 'test' } }) },
       './CoreShell': { PageHeading: 'heading' }, './i18n-actions': { bi: value => value },
       './production-entry': productionEntry, './account-routes': routes, './managed-trial': { managedTrialAuthConfigured: () => true },
@@ -68,7 +68,8 @@ test('rendered review login offers no sample, trial activation or self-registrat
       assert.match(content, ready ? /existing setup conversation/ : /Review sign-in is unavailable/)
       if (ready) assert.equal(nodes.find(node => text(node) === 'Forgot password?').props.to, `/account/recovery?product=website&review=${id}`)
     } else {
-      assert.match(content, ready ? /Create an account/ : /Contact us about Shop/)
+      assert.match(content, ready ? /Create an account/ : product === 'shop' ? /Contact us about Shop/ : /Contact support/)
+      if (!ready && product === 'website') assert.doesNotMatch(content, /Native Shop|Contact us about Shop/)
       if (!ready) {
         if (hostname === 'localhost') assert.match(content, /Saved work on this device/)
         else {

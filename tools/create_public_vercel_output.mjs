@@ -762,6 +762,8 @@ const myanmarPublicStyle = `
   html:lang(my) body[data-view="shop"] .shop-hero-copy > p:not(.eyebrow) { max-width: 100%; font-size: 17px; line-height: 1.85; }
   html:lang(my) body[data-view="shop"] .shop-hero-app { max-width: 1000px; }
   html:lang(my) body[data-view="shop"] .shop-lead-capture figcaption { line-height: 1.8; }
+  html:lang(my) body[data-view="shop"] .shop-section-heading h2, html:lang(my) body[data-view="shop"] .shop-evidence-copy h3 { letter-spacing: 0; line-height: 1.6; }
+  html:lang(my) body[data-view="shop"] .shop-section-heading p, html:lang(my) body[data-view="shop"] .shop-workflow-card p, html:lang(my) body[data-view="shop"] .shop-template-card p, html:lang(my) body[data-view="shop"] .shop-platform-card p, html:lang(my) body[data-view="shop"] .shop-evidence-copy p, html:lang(my) body[data-view="shop"] .shop-access-steps li, html:lang(my) body[data-view="shop"] .shop-access-note { line-height: 1.9; }
   html:lang(my) body[data-view="contact"] .contact-page .page-hero h1 { max-width: 100%; margin-bottom: 22px; font-size: clamp(32px, 3vw, 38px); line-height: 1.6; letter-spacing: 0; }
   html:lang(my) body[data-view="contact"] .contact-company-intro { max-width: 480px; font-size: 16px; line-height: 1.85; }
   html:lang(my) body[data-view="contact"] .contact-direct { line-height: 1.85; }
@@ -924,11 +926,11 @@ function shopLandingSections(locale = 'en') {
   captions: ['နမူနာဒေတာဖြင့် ရောင်းချမှုမြင်ကွင်း', 'နမူနာဒေတာဖြင့် ကုန်လက်ကျန်မြင်ကွင်း', 'နမူနာဒေတာဖြင့် ယနေ့မြင်ကွင်း'],
   templatesEyebrow: 'ပြင်ဆင်နိုင်သော အစပျိုးပုံစံများ', templatesTitle: 'သင့်ဆိုင်ပုံစံမှ စတင်ပါ။', templatesBody: 'ပုံစံတစ်ခုကို ရွေးပြီး ကုန်ပစ္စည်း၊ အမျိုးအစားနှင့် လုပ်ငန်းစဉ်ကို သင့်ဆိုင်အတွက် ပြင်ဆင်ပါ။ ၎င်းတို့သည် စာရင်းသွင်းအစီအစဉ်များ မဟုတ်ပါ။',
   templates: [['မီနီမတ်', 'နေ့စဉ်သုံးကုန်နှင့် ဘားကုဒ်ရောင်းချမှုအတွက်။'], ['လက်ဖက်ရည်နှင့် ကော်ဖီ', 'အချိုရည်နှင့် မှာယူပြီး ပြင်ဆင်ရသည့် ပစ္စည်းများအတွက်။'], ['ဖက်ရှင်', 'အရွယ်အစား၊ အရောင်နှင့် အပိုပစ္စည်းများအတွက်။'], ['အလှအပနှင့် စပါ', 'အလှကုန်၊ အိမ်သုံးပစ္စည်းနှင့် ဝန်ဆောင်မှုရောင်းချသူများအတွက်။']],
-  accessEyebrow: 'Shop ရယူရန်', accessTitle: 'Local Pilot ဖြင့် အကူအညီပေး၍ စတင်ပါ။', accessBody: 'အများပြည်သူအတွက် ဒေါင်းလုဒ်နှင့် ကိုယ်တိုင်အကောင့်ဖွင့်ခြင်းကို မဖွင့်ရသေးပါ။ Pilot အကောင့်ကို စတင်တပ်ဆင်စဉ် ထုတ်ပေးပါသည်။',
-  accessSteps: ['သင်ရောင်းသည့်ပစ္စည်းနှင့် လက်ရှိလုပ်ငန်းစဉ်ကို ပြောပြပါ။', 'SuperMega က စက်နှင့် လုပ်ငန်းစဉ် ကိုက်ညီမှုကို စစ်ဆေးပါမည်။', 'လက်မှတ်ထိုးထားသော pilot အက်ပ် အဆင်သင့်ဖြစ်သောအခါ အကူအညီဖြင့် တပ်ဆင်ပေးပါမည်။'],
-  platformEyebrow: 'စက်အမျိုးအစား', platformTitle: 'Pilot အတွက် ရည်ရွယ်ထားသော စက်များ။', platformBody: 'Android tablet၊ iPad နှင့် Windows PC ကို ရည်ရွယ်ထားပါသည်။ အများပြည်သူဒေါင်းလုဒ် မရှိသေးပါ။',
-  platforms: [['Android tablet', 'Pilot ရည်ရွယ်ချက်။ လက်မှတ်ထိုးထားသော ဖြန့်ချိမှု မရသေးပါ။'], ['iPad', 'Pilot ရည်ရွယ်ချက်။ လက်မှတ်ထိုးထားသော ဖြန့်ချိမှု မရသေးပါ။'], ['Windows PC', 'Pilot ရည်ရွယ်ချက်။ လက်မှတ်ထိုးထားသော installer မရသေးပါ။']],
-  platformNote: 'Web app၊ macOS နှင့် iPhone ကို လက်ရှိ customer Shop ထုတ်ကုန်အဖြစ် မပေးသေးပါ။ ပုံမှန်ရောင်းချမှုသည် အင်တာနက်မကောင်းသည့်အချိန်တွင် ဆက်လုပ်နိုင်သော်လည်း manager correction သည် online authorization လိုအပ်ပါသည်။',
+  accessEyebrow: 'Shop ရယူရန်', accessTitle: 'ဒေသတွင်း စမ်းသပ်အသုံးပြုမှုကို အကူအညီဖြင့် စတင်ပါ။', accessBody: 'အများပြည်သူအတွက် ဒေါင်းလုဒ်နှင့် ကိုယ်တိုင်အကောင့်ဖွင့်ခြင်းကို မဖွင့်ရသေးပါ။ စမ်းသပ်အသုံးပြုခွင့်ကို စတင်တပ်ဆင်စဉ် ထုတ်ပေးပါသည်။',
+  accessSteps: ['သင်ရောင်းသည့်ပစ္စည်းနှင့် လက်ရှိလုပ်ငန်းစဉ်ကို ပြောပြပါ။', 'SuperMega က စက်နှင့် လုပ်ငန်းစဉ် ကိုက်ညီမှုကို စစ်ဆေးပါမည်။', 'လက်မှတ်ထိုးထားသော စမ်းသပ်အက်ပ် အဆင်သင့်ဖြစ်သောအခါ အကူအညီဖြင့် တပ်ဆင်ပေးပါမည်။'],
+  platformEyebrow: 'စက်အမျိုးအစား', platformTitle: 'စမ်းသပ်အသုံးပြုရန် ရည်ရွယ်ထားသော စက်များ။', platformBody: 'Android တက်ဘလက်၊ iPad နှင့် Windows ကွန်ပျူတာကို ရည်ရွယ်ထားပါသည်။ အများပြည်သူဒေါင်းလုဒ် မရှိသေးပါ။',
+  platforms: [['Android တက်ဘလက်', 'စမ်းသပ်အသုံးပြုရန် ရည်ရွယ်ထားပါသည်။ လက်မှတ်ထိုးထားသော ဖြန့်ချိမှု မရသေးပါ။'], ['iPad', 'စမ်းသပ်အသုံးပြုရန် ရည်ရွယ်ထားပါသည်။ လက်မှတ်ထိုးထားသော ဖြန့်ချိမှု မရသေးပါ။'], ['Windows ကွန်ပျူတာ', 'စမ်းသပ်အသုံးပြုရန် ရည်ရွယ်ထားပါသည်။ လက်မှတ်ထိုးထားသော တပ်ဆင်ဖိုင် မရသေးပါ။']],
+  platformNote: 'ဝဘ်အက်ပ်၊ macOS နှင့် iPhone ကို သုံးစွဲသူများအတွက် လက်ရှိ Shop ထုတ်ကုန်အဖြစ် မပေးသေးပါ။ ပုံမှန်ရောင်းချမှုသည် အင်တာနက်မတည်ငြိမ်ချိန်တွင် ဆက်လုပ်နိုင်ပါသည်။ မန်နေဂျာက အရောင်းပြင်ဆင်ရန် အွန်လိုင်းခွင့်ပြုချက် လိုအပ်ပါသည်။',
  } : {
   loopEyebrow: 'How it works at the counter', loopTitle: 'One clear loop for every sale.', loopBody: 'Move from finding an item to reviewing the day without switching between disconnected tools.',
   steps: [['Search or scan', 'Find by product name, SKU or barcode and add the right item to the basket.'], ['Review the total and take payment', 'Confirm items, quantities and payment before the sale is completed.'], ['Check stock and Today', 'See updated stock and the items that need attention after the sale.']],
