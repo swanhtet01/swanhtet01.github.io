@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from hashlib import sha256
@@ -16,11 +17,18 @@ from supermega_runtime.trial_runtime import (
     SHOP_CORRECTION_AUTHORIZATION_WINDOW_ENV,
     create_trial_router,
 )
+from supermega_runtime.shop_correction_receipts import (
+    SHOP_CORRECTION_SIGNING_KEY_ENV,
+    SHOP_CORRECTION_SIGNING_KEY_ID_ENV,
+    ShopCorrectionReceiptSigner,
+    verify_shop_correction_signature,
+)
 from supermega_runtime.trial_store import (
     InMemoryTrialStore,
     PostgresTrialStore,
     TrialAuthorizationExpired,
     TrialIdempotencyConflict,
+    TrialStoreError,
     TrialPrincipal,
     shop_correction_authorization_receipt_digest,
 )
@@ -30,6 +38,12 @@ WORKSPACE_ID = "shop-correction-test"
 OWNER_ID = "11111111-1111-4111-8111-111111111111"
 OTHER_ID = "22222222-2222-4222-8222-222222222222"
 SESSION_ID = "33333333-3333-4333-8333-333333333333"
+TEST_KEY_ID = "shop-test-2026"
+TEST_PRIVATE_SEED = base64.urlsafe_b64encode(bytes(range(32))).decode().rstrip("=")
+TEST_SIGNER = ShopCorrectionReceiptSigner.from_private_seed(
+    key_id=TEST_KEY_ID,
+    private_seed_base64url=TEST_PRIVATE_SEED,
+)
 
 
 def _reducer(*_args):
@@ -59,7 +73,11 @@ def _store(
     products: tuple[str, ...] = ("commerce",),
     write_enabled: bool = True,
 ) -> InMemoryTrialStore:
-    store = InMemoryTrialStore(reducer=_reducer, write_enabled=write_enabled)
+    store = InMemoryTrialStore(
+        reducer=_reducer,
+        write_enabled=write_enabled,
+        shop_correction_signer=TEST_SIGNER,
+    )
     store.provision_membership(
         workspace_id=WORKSPACE_ID,
         actor_id=actor_id,
@@ -185,7 +203,12 @@ class _CorrectionCursor:
 
 class _CorrectionPostgresStore(PostgresTrialStore):
     def __init__(self) -> None:
-        super().__init__("postgresql://unused", reducer=_reducer, write_enabled=True)
+        super().__init__(
+            "postgresql://unused",
+            reducer=_reducer,
+            write_enabled=True,
+            shop_correction_signer=TEST_SIGNER,
+        )
         self.cursor = _CorrectionCursor()
         self.guard_calls = 0
 
@@ -201,6 +224,23 @@ class _CorrectionPostgresStore(PostgresTrialStore):
 
 
 class ShopCorrectionAuthorizationTests(unittest.TestCase):
+    def test_signature_matches_cross_runtime_fixed_vector(self) -> None:
+        digest = (
+            "5a5f97683a99e72307cf42b5bdbd682f"
+            "ad42fc221d426d811c9a8d631e42aae3"
+        )
+        self.assertEqual(
+            TEST_SIGNER.public_key_base64url,
+            "A6EHv_POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg",
+        )
+        self.assertEqual(
+            TEST_SIGNER.sign(receipt_digest=digest),
+            (
+                "U6guGGkNNvx5Yq9aH1rSQmbE8bGH3PXCEAZYWNQOf_X7-"
+                "hE9aWl2Mej8uU7t5OMzjFPJy7GvqcwXTHIPau-oBg"
+            ),
+        )
+
     def test_receipt_digest_matches_native_fixed_vector(self) -> None:
         self.assertEqual(
             shop_correction_authorization_receipt_digest(
@@ -215,7 +255,7 @@ class ShopCorrectionAuthorizationTests(unittest.TestCase):
                 issued_at_millis=1000,
                 expires_at_millis=301000,
             ),
-            "42832341daffab7ac3967f57d91665a01b6303addc0ecfada3dce9c76a584902",
+            "5a5f97683a99e72307cf42b5bdbd682fad42fc221d426d811c9a8d631e42aae3",
         )
         self.assertEqual(
             shop_correction_authorization_receipt_digest(
@@ -230,7 +270,7 @@ class ShopCorrectionAuthorizationTests(unittest.TestCase):
                 issued_at_millis=2000,
                 expires_at_millis=302000,
             ),
-            "941c1a39aea89a13cdefdf48f7d6d4f02a125ccb2eab8e555142de7ba48053f4",
+            "14b1604b664f7a4761d52336383683756f400b04d5951c843afedaad9a88443d",
         )
 
     def test_gate_is_exact_and_checked_before_auth_or_body(self) -> None:
@@ -263,6 +303,41 @@ class ShopCorrectionAuthorizationTests(unittest.TestCase):
                 )
         self.assertEqual(calls, 0)
 
+    def test_open_gate_without_signer_fails_before_auth_or_body(self) -> None:
+        calls = 0
+
+        def resolver(_request):
+            nonlocal calls
+            calls += 1
+            raise AssertionError("unsigned route must not resolve identity")
+
+        with patch.dict(
+            os.environ,
+            {
+                SHOP_CORRECTION_AUTHORIZATION_WINDOW_ENV: "open",
+                SHOP_CORRECTION_SIGNING_KEY_ENV: "",
+                SHOP_CORRECTION_SIGNING_KEY_ID_ENV: "",
+            },
+        ):
+            store = InMemoryTrialStore(reducer=_reducer, write_enabled=True)
+            app = FastAPI()
+            app.include_router(
+                create_trial_router(store=store, resolve_principal=resolver)
+            )
+            response = TestClient(app).post(
+                "/api/trial/v1/shop/correction-authorizations",
+                content=b"not-json",
+                headers={"content-type": "text/plain"},
+            )
+
+        self.assertEqual(response.status_code, 503, response.text)
+        self.assertEqual(
+            response.json()["detail"]["code"],
+            "shop_correction_authorization_signing_unavailable",
+        )
+        self.assertEqual(calls, 0)
+        self.assertEqual(store._events, {})
+
     def test_owner_receives_five_minute_audit_receipt_without_money_claim(self) -> None:
         store = _store()
         body = _request_body()
@@ -281,7 +356,7 @@ class ShopCorrectionAuthorizationTests(unittest.TestCase):
         receipt = payload["authorization"]
         self.assertEqual(
             receipt["contract"],
-            "supermega.shop.correction-authorization-receipt.v1",
+            "supermega.shop.correction-authorization-receipt.v2",
         )
         self.assertEqual(receipt["workspaceId"], WORKSPACE_ID)
         self.assertEqual(receipt["actorId"], OWNER_ID)
@@ -308,6 +383,15 @@ class ShopCorrectionAuthorizationTests(unittest.TestCase):
                 issued_at_millis=receipt["issuedAtMillis"],
                 expires_at_millis=receipt["expiresAtMillis"],
             ),
+        )
+        self.assertEqual(receipt["keyId"], TEST_KEY_ID)
+        self.assertTrue(
+            verify_shop_correction_signature(
+                key_id=receipt["keyId"],
+                receipt_digest=receipt["receiptDigest"],
+                signature=receipt["signature"],
+                public_keys={TEST_KEY_ID: TEST_SIGNER.public_key_base64url},
+            )
         )
         self.assertFalse(payload["idempotent_replay"])
         self.assertFalse(payload["local_mutation_performed"])
@@ -375,6 +459,84 @@ class ShopCorrectionAuthorizationTests(unittest.TestCase):
         self.assertEqual(
             changed.json()["detail"]["code"], "trial_idempotency_conflict"
         )
+
+    def test_tampered_persisted_receipt_is_never_replayed(self) -> None:
+        def mutate_and_resign_digest(field: str, value: object):
+            def mutation(receipt: dict[str, object]) -> None:
+                receipt[field] = value
+                receipt["receiptDigest"] = shop_correction_authorization_receipt_digest(
+                    source=str(receipt["source"]),
+                    receipt_id=str(receipt["receiptId"]),
+                    workspace_id=str(receipt["workspaceId"]),
+                    actor_id=str(receipt["actorId"]),
+                    actor_label=str(receipt["actorLabel"]),
+                    actor_role=str(receipt["actorRole"]),
+                    capability=str(receipt["capability"]),
+                    command_digest=str(receipt["commandDigest"]),
+                    issued_at_millis=int(receipt["issuedAtMillis"]),
+                    expires_at_millis=int(receipt["expiresAtMillis"]),
+                )
+
+            return mutation
+
+        mutations = {
+            "unsigned": lambda receipt: receipt.pop("signature"),
+            "signature": lambda receipt: receipt.__setitem__(
+                "signature", "A" * 86
+            ),
+            "keyId": lambda receipt: receipt.__setitem__(
+                "keyId", "attacker-key"
+            ),
+            "workspaceId": mutate_and_resign_digest(
+                "workspaceId", "another-workspace"
+            ),
+            "actorId": mutate_and_resign_digest("actorId", OTHER_ID),
+            "actorRole": mutate_and_resign_digest("actorRole", "manager"),
+            "capability": mutate_and_resign_digest(
+                "capability", "shop.sale.reconcile_wallet"
+            ),
+            "commandDigest": mutate_and_resign_digest(
+                "commandDigest", "f" * 64
+            ),
+            "receiptId": mutate_and_resign_digest("receiptId", str(uuid4())),
+            "issuedAtMillis": mutate_and_resign_digest(
+                "issuedAtMillis", 1_700_000_000_000
+            ),
+            "expiresAtMillis": mutate_and_resign_digest(
+                "expiresAtMillis", 1_900_000_000_000
+            ),
+        }
+        for name, mutate in mutations.items():
+            with self.subTest(field=name):
+                store = _store()
+                body = _request_body()
+                first = store.issue_shop_correction_authorization(
+                    _principal(), **body
+                )
+                event_key = (WORKSPACE_ID, body["authorization_request_id"])
+                fingerprint, actor_id, actor_kind, receipt = store._events[
+                    event_key
+                ]
+                mutate(receipt)
+                store._events[event_key] = (
+                    fingerprint,
+                    actor_id,
+                    actor_kind,
+                    receipt,
+                )
+
+                with self.assertRaises(TrialStoreError):
+                    store.issue_shop_correction_authorization(
+                        _principal(), **body
+                    )
+                self.assertEqual(len(store._events), 1)
+                self.assertEqual(
+                    store._events[event_key][3]["receiptId"],
+                    receipt["receiptId"],
+                )
+                self.assertNotEqual(
+                    store._events[event_key][3], first.to_dict()
+                )
 
     def test_postgres_path_uses_one_immutable_event_and_db_clock(self) -> None:
         store = _CorrectionPostgresStore()

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:cryptography/cryptography.dart';
 import 'package:drift/drift.dart' hide isNotNull, isNull;
 import 'package:drift/native.dart';
 import 'package:flutter/foundation.dart';
@@ -20,6 +21,13 @@ import 'package:supermega_shop/shop_models.dart';
 import 'package:supermega_shop/shop_today_screen.dart';
 import 'package:supermega_shop/stock_screen.dart';
 import 'package:supermega_shop/wallet_setup_screen.dart';
+
+const _widgetCorrectionKeyId = 'shop-test-2026';
+const _widgetCorrectionPublicKey =
+    'A6EHv_POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg';
+final _widgetCorrectionReceiptVerifier = ShopCorrectionReceiptVerifier({
+  _widgetCorrectionKeyId: _widgetCorrectionPublicKey,
+});
 
 Finder _merchantQrSemantics(String provider) => find.byWidgetPredicate(
   (widget) =>
@@ -1917,6 +1925,8 @@ void main() {
             authorizedActorId: 'owner-timestamp-fixture',
             authorizedActorLabel: 'Timestamp fixture owner',
             authorizationReceiptId: 'timestamp-fixture-receipt',
+            authorizationProofKind:
+                shopCorrectionAuthorizationProofKindSignedV2,
             createdAtMillis: reversedAt,
             lines: const [],
           ),
@@ -1981,11 +1991,112 @@ void main() {
     },
   );
 
+  for (final myanmar in const [false, true]) {
+    testWidgets(
+      'migrated correction evidence is explicitly unverified in '
+      '${myanmar ? 'Burmese' : 'English'}',
+      (tester) async {
+        _usePhoneViewport(tester);
+        final recordedAt = DateTime(
+          2026,
+          10,
+          22,
+          17,
+          40,
+        ).millisecondsSinceEpoch;
+        final database = _RecentSalesFixtureDatabase([
+          ShopSaleReceipt(
+            id: 'legacy-proof-sale',
+            operationId: 'legacy-proof-sale-operation',
+            totalMmk: 2500,
+            createdAtMillis: recordedAt - 1000,
+            paymentMethod: 'kbzpay',
+            lines: const [
+              ShopSaleReceiptLine(
+                id: 'legacy-proof-sale-line',
+                productId: 'legacy-proof-tea',
+                productName: 'Tea',
+                unitPriceMmk: 2500,
+                quantity: 1,
+                lineTotalMmk: 2500,
+              ),
+            ],
+            reversal: ShopSaleReversal(
+              id: 'legacy-proof-reversal',
+              operationId: 'legacy-proof-reversal-operation',
+              saleId: 'legacy-proof-sale',
+              originalTotalMmk: 2500,
+              originalPaymentMethod: 'kbzpay',
+              originalCreatedAtMillis: recordedAt - 1000,
+              restockItems: false,
+              reason: 'Migrated audit fixture',
+              paymentResolution: 'external_pending',
+              cashDrawerDeltaMmk: 0,
+              authorizedActorId: 'owner-legacy-fixture',
+              authorizedActorLabel: 'Legacy fixture owner',
+              authorizationReceiptId: 'legacy-fixture-receipt',
+              authorizationProofKind:
+                  shopCorrectionAuthorizationProofKindLegacyV1,
+              createdAtMillis: recordedAt,
+              walletReconciliationOutcome: 'money_returned',
+              walletEvidenceReference: 'Legacy provider reference',
+              walletReconciledActorLabel: 'Legacy fixture owner',
+              walletReconciledAtMillis: recordedAt + 1000,
+              walletReconciliationProofKind:
+                  shopCorrectionAuthorizationProofKindLegacyV1,
+              lines: const [],
+            ),
+          ),
+        ]);
+        try {
+          await tester.pumpWidget(
+            MaterialApp(
+              home: RecentSalesScreen(
+                database: database,
+                myanmar: myanmar,
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          await tester.tap(
+            find.text(myanmar ? '၂,၅၀၀ ကျပ်' : '2,500 MMK'),
+          );
+          await tester.pumpAndSettle();
+
+          expect(
+            find.text(
+              myanmar
+                  ? 'ပြင်ဆင်မှုခွင့်ပြုချက်: မှတ်တမ်းဟောင်းမှ ပြောင်းရွှေ့ထားပြီး ဆာဗာခွင့်ပြုချက်ကို အတည်မပြုထားပါ။'
+                  : 'Correction authorization: Migrated record — server authorization unverified.',
+            ),
+            findsOneWidget,
+          );
+          expect(
+            find.text(
+              myanmar
+                  ? 'Wallet စာရင်းညှိခြင်း ခွင့်ပြုချက်: မှတ်တမ်းဟောင်းမှ ပြောင်းရွှေ့ထားပြီး ဆာဗာခွင့်ပြုချက်ကို အတည်မပြုထားပါ။'
+                  : 'Wallet reconciliation authorization: Migrated record — server authorization unverified.',
+            ),
+            findsOneWidget,
+          );
+          expect(tester.takeException(), isNull);
+        } finally {
+          await tester.pumpWidget(const SizedBox.shrink());
+          await tester.pump(const Duration(milliseconds: 1));
+          await database.close();
+        }
+      },
+    );
+  }
+
   testWidgets(
     'cash reversal reports net and audit detail without ordinary reprint',
     (tester) async {
       SharedPreferences.setMockInitialValues({});
-      final database = ShopDatabase(NativeDatabase.memory());
+      final database = ShopDatabase.withCorrectionReceiptVerifier(
+        executor: NativeDatabase.memory(),
+        correctionReceiptVerifier: _widgetCorrectionReceiptVerifier,
+      );
       try {
         await _attachWidgetWorkspace(database);
         await database.addProduct(
@@ -2014,7 +2125,7 @@ void main() {
         );
         await database.recordAuthorizedFullSaleReversal(
           command: command,
-          authorization: _widgetCorrectionAuthorization(
+          authorization: await _widgetCorrectionAuthorization(
             command.commandDigest,
             capability: 'shop.sale.reverse',
             receiptId: 'widget-cash-reversal-receipt',
@@ -2066,7 +2177,10 @@ void main() {
   testWidgets(
     'wallet reversal never presents local pending as money returned',
     (tester) async {
-      final database = ShopDatabase(NativeDatabase.memory());
+      final database = ShopDatabase.withCorrectionReceiptVerifier(
+        executor: NativeDatabase.memory(),
+        correctionReceiptVerifier: _widgetCorrectionReceiptVerifier,
+      );
       try {
         await _attachWidgetWorkspace(database);
         await database.addProduct(
@@ -2103,7 +2217,7 @@ void main() {
         );
         await database.recordAuthorizedFullSaleReversal(
           command: command,
-          authorization: _widgetCorrectionAuthorization(
+          authorization: await _widgetCorrectionAuthorization(
             command.commandDigest,
             capability: 'shop.sale.reverse',
             receiptId: 'widget-wallet-reversal-receipt',
@@ -2139,7 +2253,10 @@ void main() {
     testWidgets('confirmed wallet $outcome shows its evidence-backed outcome', (
       tester,
     ) async {
-      final database = ShopDatabase(NativeDatabase.memory());
+      final database = ShopDatabase.withCorrectionReceiptVerifier(
+        executor: NativeDatabase.memory(),
+        correctionReceiptVerifier: _widgetCorrectionReceiptVerifier,
+      );
       try {
         await _attachWidgetWorkspace(database);
         final operationPrefix = 'widget-wallet-$outcome';
@@ -2176,7 +2293,7 @@ void main() {
         );
         final reversal = await database.recordAuthorizedFullSaleReversal(
           command: reversalCommand,
-          authorization: _widgetCorrectionAuthorization(
+          authorization: await _widgetCorrectionAuthorization(
             reversalCommand.commandDigest,
             capability: 'shop.sale.reverse',
             receiptId: '$operationPrefix-reversal-receipt',
@@ -2192,7 +2309,7 @@ void main() {
             );
         final reconciled = await database.recordAuthorizedWalletReconciliation(
           command: reconciliationCommand,
-          authorization: _widgetCorrectionAuthorization(
+          authorization: await _widgetCorrectionAuthorization(
             reconciliationCommand.commandDigest,
             capability: 'shop.sale.reconcile_wallet',
             receiptId: '$operationPrefix-reconciliation-receipt',
@@ -5882,11 +5999,11 @@ Future<ShopManagedWorkspaceBinding> _attachWidgetWorkspace(
   ),
 );
 
-ShopCorrectionAuthorization _widgetCorrectionAuthorization(
+Future<ShopCorrectionAuthorization> _widgetCorrectionAuthorization(
   String commandDigest, {
   required String capability,
   required String receiptId,
-}) {
+}) async {
   final now = DateTime.now().millisecondsSinceEpoch;
   final issuedAtMillis = now - 1000;
   final expiresAtMillis =
@@ -5896,20 +6013,33 @@ ShopCorrectionAuthorization _widgetCorrectionAuthorization(
   const actorLabel = 'Widget test owner';
   const actorRole = 'owner';
   const source = 'managed_membership_receipt_v1';
+  final receiptDigest = shopCorrectionAuthorizationReceiptDigest(
+    source: source,
+    receiptId: receiptId,
+    workspaceId: workspaceId,
+    actorId: actorId,
+    actorLabel: actorLabel,
+    actorRole: actorRole,
+    capability: capability,
+    commandDigest: commandDigest,
+    issuedAtMillis: issuedAtMillis,
+    expiresAtMillis: expiresAtMillis,
+  );
+  final keyPair = await Ed25519().newKeyPairFromSeed(
+    List<int>.generate(32, (index) => index),
+  );
+  final signed = await Ed25519().sign(
+    utf8.encode(
+      shopCorrectionAuthorizationSignatureMessage(
+        keyId: _widgetCorrectionKeyId,
+        receiptDigest: receiptDigest,
+      ),
+    ),
+    keyPair: keyPair,
+  );
   return ShopCorrectionAuthorization(
     receiptId: receiptId,
-    receiptDigest: shopCorrectionAuthorizationReceiptDigest(
-      source: source,
-      receiptId: receiptId,
-      workspaceId: workspaceId,
-      actorId: actorId,
-      actorLabel: actorLabel,
-      actorRole: actorRole,
-      capability: capability,
-      commandDigest: commandDigest,
-      issuedAtMillis: issuedAtMillis,
-      expiresAtMillis: expiresAtMillis,
-    ),
+    receiptDigest: receiptDigest,
     workspaceId: workspaceId,
     actorId: actorId,
     actorLabel: actorLabel,
@@ -5919,6 +6049,8 @@ ShopCorrectionAuthorization _widgetCorrectionAuthorization(
     commandDigest: commandDigest,
     issuedAtMillis: issuedAtMillis,
     expiresAtMillis: expiresAtMillis,
+    keyId: _widgetCorrectionKeyId,
+    signature: base64Url.encode(signed.bytes).replaceAll('=', ''),
   );
 }
 

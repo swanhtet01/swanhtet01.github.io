@@ -2,17 +2,59 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:crypto/crypto.dart' as crypto;
+import 'package:cryptography/cryptography.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:supermega_shop/shop_correction_authorization_service.dart';
-import 'package:supermega_shop/shop_database.dart';
+import 'package:supermega_shop/shop_correction_receipt.dart';
 
 const _requestId = '11ecf4e2-f7ac-4e1d-8d5f-6edb796550dc';
 const _receiptId = '784900b0-0293-4e0a-82e9-419e7dd543da';
 const _workspaceId = 'workspace-shop-a';
 const _ownerId = '2f8d24d8-308c-4dc8-a352-7b61df756728';
 const _capability = 'shop.sale.reverse';
+const _testKeyId = 'test-2026-10-23';
+const _goldenPublicKey = 'A6EHv_POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg';
+const _goldenReceiptDigest =
+    '056d98f0748d216b8a9f100e842d36911195089c445ef16621550ff7579c73e7';
+const _goldenSignature =
+    'TY1bqpcyRA2XVcIyzMxdRLnixlsQ5QkFcfiBwjZtbrfARwBagw6gMI209eTwF_hE'
+    'ubP5TjHlRueZM4q2xJzbBA';
+const _testSeed = <int>[
+  0,
+  1,
+  2,
+  3,
+  4,
+  5,
+  6,
+  7,
+  8,
+  9,
+  10,
+  11,
+  12,
+  13,
+  14,
+  15,
+  16,
+  17,
+  18,
+  19,
+  20,
+  21,
+  22,
+  23,
+  24,
+  25,
+  26,
+  27,
+  28,
+  29,
+  30,
+  31,
+];
 const _fingerprint =
     '{"operationId":"reversal-1","saleId":"sale-1",'
     '"saleSnapshotDigest":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
@@ -24,10 +66,14 @@ final _commandDigest = crypto.sha256
     .convert(utf8.encode(_fingerprint))
     .toString();
 final _now = DateTime.utc(2026, 10, 22, 12);
+late final SimpleKeyPair _testKeyPair;
+late final ShopCorrectionReceiptVerifier _testReceiptVerifier;
 
 String _repeat(String value, int count) => List.filled(count, value).join();
+String _base64UrlNoPadding(List<int> value) =>
+    base64Url.encode(value).replaceAll('=', '');
 
-Map<String, Object?> _receipt({
+Future<Map<String, Object?>> _receipt({
   String contract = shopCorrectionAuthorizationReceiptContract,
   String receiptId = _receiptId,
   String workspaceId = _workspaceId,
@@ -37,27 +83,41 @@ Map<String, Object?> _receipt({
   String? commandDigest,
   int? issuedAtMillis,
   int? expiresAtMillis,
-}) {
+  String keyId = _testKeyId,
+  String? signature,
+}) async {
   final issued = issuedAtMillis ?? _now.millisecondsSinceEpoch - 1000;
   final expires = expiresAtMillis ?? issued + 300000;
   final digest = commandDigest ?? _commandDigest;
   const source = 'managed_membership_receipt_v1';
   const role = 'owner';
+  final receiptDigest = shopCorrectionAuthorizationReceiptDigest(
+    source: source,
+    receiptId: receiptId,
+    workspaceId: workspaceId,
+    actorId: actorId,
+    actorLabel: actorLabel,
+    actorRole: role,
+    capability: capability,
+    commandDigest: digest,
+    issuedAtMillis: issued,
+    expiresAtMillis: expires,
+  );
+  final signed = await Ed25519().sign(
+    utf8.encode(
+      shopCorrectionAuthorizationSignatureMessage(
+        keyId: keyId,
+        receiptDigest: receiptDigest,
+      ),
+    ),
+    keyPair: _testKeyPair,
+  );
   return {
     'contract': contract,
     'receiptId': receiptId,
-    'receiptDigest': shopCorrectionAuthorizationReceiptDigest(
-      source: source,
-      receiptId: receiptId,
-      workspaceId: workspaceId,
-      actorId: actorId,
-      actorLabel: actorLabel,
-      actorRole: role,
-      capability: capability,
-      commandDigest: digest,
-      issuedAtMillis: issued,
-      expiresAtMillis: expires,
-    ),
+    'receiptDigest': receiptDigest,
+    'keyId': keyId,
+    'signature': signature ?? _base64UrlNoPadding(signed.bytes),
     'workspaceId': workspaceId,
     'actorId': actorId,
     'actorLabel': actorLabel,
@@ -70,11 +130,11 @@ Map<String, Object?> _receipt({
   };
 }
 
-Map<String, Object?> _envelope({
+Future<Map<String, Object?>> _envelope({
   Map<String, Object?>? receipt,
   bool replay = false,
-}) => {
-  'authorization': receipt ?? _receipt(),
+}) async => {
+  'authorization': receipt ?? await _receipt(),
   'idempotent_replay': replay,
   'local_mutation_performed': false,
   'money_returned': false,
@@ -106,6 +166,7 @@ ShopCorrectionAuthorizationService _service(
   Future<String?> Function()? currentUserId,
   DateTime Function()? clock,
   Uri? endpoint,
+  ShopCorrectionReceiptVerifier? receiptVerifier,
   Duration requestTimeout = const Duration(seconds: 15),
 }) => ShopCorrectionAuthorizationService(
   endpoint:
@@ -115,6 +176,7 @@ ShopCorrectionAuthorizationService _service(
   currentUserId: currentUserId ?? () async => _ownerId,
   clock: clock ?? () => _now,
   client: client,
+  receiptVerifier: receiptVerifier ?? _testReceiptVerifier,
   requestTimeout: requestTimeout,
 );
 
@@ -133,6 +195,15 @@ Future<ShopCorrectionAuthorizationResult> _authorize(
 );
 
 void main() {
+  setUpAll(() async {
+    final algorithm = Ed25519();
+    _testKeyPair = await algorithm.newKeyPairFromSeed(_testSeed);
+    final publicKey = await _testKeyPair.extractPublicKey();
+    _testReceiptVerifier = ShopCorrectionReceiptVerifier({
+      _testKeyId: _base64UrlNoPadding(publicKey.bytes),
+    });
+  });
+
   test('endpoint is fixed under a clean HTTPS origin', () {
     expect(
       shopCorrectionAuthorizationEndpoint('https://app.supermega.dev')
@@ -158,6 +229,15 @@ void main() {
     }
   });
 
+  test('v2 digest and Ed25519 proof match the cross-runtime vector', () async {
+    final publicKey = await _testKeyPair.extractPublicKey();
+    final receipt = await _receipt();
+
+    expect(_base64UrlNoPadding(publicKey.bytes), _goldenPublicKey);
+    expect(receipt['receiptDigest'], _goldenReceiptDigest);
+    expect(receipt['signature'], _goldenSignature);
+  });
+
   test(
     'a directly supplied insecure endpoint fails before network use',
     () async {
@@ -165,7 +245,7 @@ void main() {
       final service = _service(
         MockClient((_) async {
           calls++;
-          return _jsonResponse(_envelope(), 200);
+          return _jsonResponse(await _envelope(), 200);
         }),
         endpoint: Uri.parse(
           'http://app.supermega.dev$shopCorrectionAuthorizationPath',
@@ -187,7 +267,7 @@ void main() {
       final service = _service(
         MockClient((_) async {
           calls++;
-          return _jsonResponse(_envelope(), 200);
+          return _jsonResponse(await _envelope(), 200);
         }),
         accessToken: () async {
           tokenReads++;
@@ -212,7 +292,7 @@ void main() {
     final service = _service(
       MockClient((_) async {
         calls++;
-        return _jsonResponse(_envelope(), 200);
+        return _jsonResponse(await _envelope(), 200);
       }),
       currentUserId: () => stalledUser.future,
       requestTimeout: const Duration(milliseconds: 10),
@@ -231,7 +311,7 @@ void main() {
       MockClient((request) async {
         calls++;
         sent = request;
-        return _jsonResponse(_envelope(), 200);
+        return _jsonResponse(await _envelope(), 200);
       }),
     );
 
@@ -258,11 +338,63 @@ void main() {
     expect(result.authorization.workspaceId, _workspaceId);
     expect(result.authorization.actorId, _ownerId);
     expect(result.authorization.commandDigest, _commandDigest);
+    expect(result.authorization.keyId, _testKeyId);
+    expect(result.authorization.signature, hasLength(86));
   });
+
+  test(
+    'an empty production-style keyring fails before authority reads',
+    () async {
+      expect(ShopCorrectionReceiptVerifier.production().hasPinnedKeys, isFalse);
+      expect(
+        ShopCorrectionReceiptVerifier({
+          _testKeyId: 'not-a-public-key',
+        }).hasPinnedKeys,
+        isFalse,
+      );
+      var userReads = 0;
+      var tokenReads = 0;
+      var calls = 0;
+      final service = _service(
+        MockClient((_) async {
+          calls++;
+          return _jsonResponse(await _envelope(), 200);
+        }),
+        currentUserId: () async {
+          userReads++;
+          return _ownerId;
+        },
+        accessToken: () async {
+          tokenReads++;
+          return 'must-not-be-read';
+        },
+        receiptVerifier: ShopCorrectionReceiptVerifier(
+          const <String, String>{},
+        ),
+      );
+
+      expect(
+        await service.canRequestAuthorization(
+          workspaceId: _workspaceId,
+          capability: _capability,
+        ),
+        isFalse,
+      );
+      await expectLater(
+        _authorize(service),
+        _throwsCode('authorization_unavailable'),
+      );
+      expect(userReads, 0);
+      expect(tokenReads, 0);
+      expect(calls, 0);
+    },
+  );
 
   test('exact replay preserves the receipt and reports no new write', () async {
     final service = _service(
-      MockClient((_) async => _jsonResponse(_envelope(replay: true), 200)),
+      MockClient(
+        (_) async => _jsonResponse(await _envelope(replay: true), 200),
+      ),
     );
     final result = await _authorize(service);
     expect(result.idempotentReplay, isTrue);
@@ -284,8 +416,8 @@ void main() {
         MockClient((request) async {
           sent = request;
           return _jsonResponse(
-            _envelope(
-              receipt: _receipt(
+            await _envelope(
+              receipt: await _receipt(
                 capability: 'shop.sale.reconcile_wallet',
                 commandDigest: digest,
               ),
@@ -312,7 +444,7 @@ void main() {
     var calls = 0;
     final client = MockClient((_) async {
       calls++;
-      return _jsonResponse(_envelope(), 200);
+      return _jsonResponse(await _envelope(), 200);
     });
     await expectLater(
       _authorize(_service(client, currentUserId: () async => null)),
@@ -336,7 +468,7 @@ void main() {
         _service(
           MockClient((_) async {
             calls++;
-            return _jsonResponse(_envelope(), 200);
+            return _jsonResponse(await _envelope(), 200);
           }),
           currentUserId: () => changingUser(beforeSend),
         ),
@@ -351,7 +483,7 @@ void main() {
         _service(
           MockClient((_) async {
             calls++;
-            return _jsonResponse(_envelope(), 200);
+            return _jsonResponse(await _envelope(), 200);
           }),
           currentUserId: () => changingUser(afterSend),
         ),
@@ -416,7 +548,7 @@ void main() {
   });
 
   test('extra envelope or receipt keys fail closed', () async {
-    final extraEnvelope = _envelope()..['unexpected'] = true;
+    final extraEnvelope = (await _envelope())..['unexpected'] = true;
     await expectLater(
       _authorize(
         _service(MockClient((_) async => _jsonResponse(extraEnvelope, 200))),
@@ -424,12 +556,15 @@ void main() {
       _throwsCode('invalid_response'),
     );
 
-    final extraReceipt = _receipt()..['unexpected'] = true;
+    final extraReceipt = (await _receipt())..['unexpected'] = true;
     await expectLater(
       _authorize(
         _service(
           MockClient(
-            (_) async => _jsonResponse(_envelope(receipt: extraReceipt), 200),
+            (_) async => _jsonResponse(
+              await _envelope(receipt: extraReceipt),
+              200,
+            ),
           ),
         ),
       ),
@@ -438,28 +573,75 @@ void main() {
   });
 
   test(
-    'wrong contract, digest, TTL, capability, actor, or workspace fails',
+    'unsigned, locally hashed, invalid, and unknown-key proofs fail',
     () async {
+      final missingSignature = (await _receipt())..remove('signature');
+      final locallyHashed = await _receipt(signature: _repeat('A', 86));
+      final unknownKey = await _receipt(keyId: 'unknown-test-key');
+      final badSignature = await _receipt();
+      final originalSignature = badSignature['signature']! as String;
+      badSignature['signature'] =
+          '${originalSignature.substring(0, originalSignature.length - 1)}'
+          '${originalSignature.endsWith('A') ? 'Q' : 'A'}';
+      final paddedSignature = await _receipt();
+      paddedSignature['signature'] = '${paddedSignature['signature']}=';
+
       final cases = <String, Map<String, Object?>>{
-        'contract': _receipt(contract: 'wrong.contract'),
-        'digest': {..._receipt(), 'receiptDigest': _repeat('0', 64)},
-        'command': _receipt(commandDigest: _repeat('0', 64)),
-        'ttl': _receipt(
-          issuedAtMillis: _now.millisecondsSinceEpoch - 1000,
-          expiresAtMillis: _now.millisecondsSinceEpoch + 300001,
-        ),
-        'capability': _receipt(capability: 'shop.sale.reconcile_wallet'),
-        'actor': _receipt(actorId: 'different-owner'),
-        'workspace': _receipt(workspaceId: 'workspace-shop-b'),
+        'missing signature': missingSignature,
+        'locally hashed without server signature': locallyHashed,
+        'unknown key': unknownKey,
+        'invalid signature': badSignature,
+        'non-canonical signature': paddedSignature,
       };
       for (final entry in cases.entries) {
         await expectLater(
           _authorize(
             _service(
               MockClient(
-                (_) async =>
-                    _jsonResponse(_envelope(receipt: entry.value), 200),
+                (_) async => _jsonResponse(
+                  await _envelope(receipt: entry.value),
+                  200,
+                ),
               ),
+            ),
+          ),
+          _throwsCode('invalid_response'),
+          reason: entry.key,
+        );
+      }
+    },
+  );
+
+  test(
+    'wrong contract, digest, TTL, capability, actor, or workspace fails',
+    () async {
+      final cases = <String, Map<String, Object?>>{
+        'contract': await _receipt(contract: 'wrong.contract'),
+        'digest': {
+          ...(await _receipt()),
+          'receiptDigest': _repeat('0', 64),
+        },
+        'command': await _receipt(commandDigest: _repeat('0', 64)),
+        'ttl': await _receipt(
+          issuedAtMillis: _now.millisecondsSinceEpoch - 1000,
+          expiresAtMillis: _now.millisecondsSinceEpoch + 300001,
+        ),
+        'capability': await _receipt(
+          capability: 'shop.sale.reconcile_wallet',
+        ),
+        'actor': await _receipt(actorId: 'different-owner'),
+        'workspace': await _receipt(workspaceId: 'workspace-shop-b'),
+      };
+      for (final entry in cases.entries) {
+        await expectLater(
+          _authorize(
+            _service(
+              MockClient((_) async {
+                return _jsonResponse(
+                  await _envelope(receipt: entry.value),
+                  200,
+                );
+              }),
             ),
           ),
           _throwsCode('invalid_response'),
@@ -476,7 +658,9 @@ void main() {
         _service(
           MockClient(
             (_) async => _jsonResponse(
-              _envelope(receipt: _receipt(issuedAtMillis: futureIssued)),
+              await _envelope(
+                receipt: await _receipt(issuedAtMillis: futureIssued),
+              ),
               200,
             ),
           ),
@@ -491,7 +675,9 @@ void main() {
         _service(
           MockClient(
             (_) async => _jsonResponse(
-              _envelope(receipt: _receipt(issuedAtMillis: expiredIssued)),
+              await _envelope(
+                receipt: await _receipt(issuedAtMillis: expiredIssued),
+              ),
               200,
             ),
           ),
@@ -540,7 +726,7 @@ void main() {
     final service = _service(
       MockClient((_) async {
         calls++;
-        return _jsonResponse(_envelope(), 200);
+        return _jsonResponse(await _envelope(), 200);
       }),
     );
     await expectLater(

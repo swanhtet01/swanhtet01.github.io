@@ -8,13 +8,53 @@ Flutter Shop targets Android tablets, iPad, and Windows PC. CI produces Android 
 - Photograph a paper menu on Android/iPad, or choose an existing photo on Windows; explicitly consent to cloud processing and receive editable English or Burmese candidates. Confirm name, price, and opening stock for every row; then import the accepted batch atomically into the local catalog. Choosing a desktop photo does not delete the merchant's original file.
 - If Android restarts while the camera is open, Shop offers the recovered photo for review at the counter. Recovery never uploads the image or preserves cloud consent; discarding or leaving the import screen deletes the temporary camera file.
 - Open Recent sales to find a committed sale by saved item or receipt ID. The list is bounded and ordered by the latest sale or reversal activity; it retains the original item, price, payment, amount, and time snapshots. Reversed receipts are visibly marked and cannot be reprinted as ordinary valid receipts.
-- Schema v12 contains an atomic, append-only full-sale reversal core with an explicit all-items restock choice, original-price preservation, retry protection, daily gross/reversal/net reporting, and encrypted-backup validation. A cash reversal requires an explicit full-cash-return attestation bound to the exact reviewed open shift; a later shift cannot consume that authorization. Wallet reversals remain local reconciliation liabilities until a separate evidence-backed outcome says either money was returned or the original payment was not received; the incoming checkout record is never rewritten to imply settlement.
-- The native app deliberately exposes no reversal or wallet-reconciliation button yet. Source contains a default-dark managed owner receipt issuer, a strict `app.supermega.dev` authorization client, and an immutable one-workspace database anchor. Authenticated workspace discovery is not wired to that anchor, and its locally constructible selection object is not authority. The unkeyed receipt digest detects inconsistent fields but is not server-authentic proof; receipt consumption is not globally enforced across cloned databases, and expiry still trusts device time. Keep correction unavailable until those boundaries and hosted PostgreSQL/RLS authorization behavior are proven. Partial returns and exchanges remain an explicit launch decision.
-- Search only the current private Wi-Fi subnet for possible ESC/POS devices on port 9100 after the operator starts discovery. Select a candidate, send a test slip, and confirm the paper before enabling receipts for the current app session. A remembered IP alone never authorizes printing after restart or a detected IP/subnet change; find and test the printer again. Completed sales print after the local transaction commits; a printer failure does not undo the sale and offers a retry. A different Wi-Fi reusing the same IP/subnet is not yet distinguishable; physical printer identity and receipt acceptance remain release gates.
+- The committed all-required-CI-green anchor uses native SQLite schema v13. It
+  preserves the atomic, append-only full-sale reversal core introduced in v11
+  and reconciles the two historical v11/v12 schema meanings. Reversal keeps an
+  explicit all-items restock choice, original-price preservation, retry
+  protection, daily gross/reversal/net reporting, and encrypted-backup
+  validation. A cash reversal requires an explicit full-cash-return attestation
+  bound to the exact reviewed open shift; a later shift cannot consume that
+  authorization. Wallet reversals remain local reconciliation liabilities until
+  a separate evidence-backed outcome says either money was returned or the
+  original payment was not received; the incoming checkout record is never
+  rewritten to imply settlement.
+- The current uncommitted security increment moves the native database to
+  schema v14. It stores an immutable `signed_v2` authorization proof, verifies
+  its Ed25519 signature against a reviewed public key pinned in source, and
+  labels migrated v1 digests `legacy_unverified_v1` so they remain audit history
+  rather than reusable authority. Its direct-open, migration, restore, and
+  backup contracts are still working-tree evidence until exact-head native and
+  App CI pass.
+- The native app deliberately exposes no reversal or wallet-reconciliation
+  action. The production public-key ring is empty, no production issuer signing
+  secret is configured in this environment, authenticated workspace discovery
+  is not wired to the immutable anchor, and the dormant correction dialog is
+  not wired into Recent sales. The issuer and action therefore fail closed.
+  Pilot correction is an online-authorized workspace-owner action; normal selling
+  remains offline. Do not imply offline correction parity, and defer
+  device-bound manager credentials or passkeys until there is a reviewed threat
+  model and merchant need. Global receipt consumption across cloned databases
+  and trusted time/device-clock rollback remain blockers even after a local
+  signature verifies. Partial returns and exchanges remain an explicit launch
+  decision.
+- Search only the current private Wi-Fi subnet for possible ESC/POS devices on
+  port 9100 after the operator starts discovery. Select a candidate, send a test
+  slip, and confirm the paper before enabling receipts for the current app
+  session. A remembered IP alone never authorizes printing after restart or a
+  detected IP/subnet change; find and test the printer again. Completed sales
+  print after the local transaction commits; a printer failure does not undo the
+  sale and offers a retry. A different Wi-Fi reusing the same IP/subnet is not
+  yet distinguishable; physical printer identity and receipt acceptance remain
+  release gates. This source does not implement or prove USB/Bluetooth ESC/POS
+  printing; scanner transports are a separate acceptance surface.
 - Store KBZPay/WavePay merchant details and the exact issuer-confirmed static Myanmar MMQR payload. Checkout shows the amount separately, so the customer enters it in their wallet. The cashier must verify receipt in the wallet app. This is not an amount-specific payment intent and does not settle automatically.
 - Persist a wallet checkout intent before showing the QR. If the app closes while the customer is paying, the basket and amount remain available to resume; sale, stock movement, and outbox event commit together only after the cashier confirms receipt. Cancelling requires an explicit confirmation that no payment arrived.
 - Block any different sale in the same database transaction while a wallet intent remains pending, even if the app has not finished restoring its screen state. Older pending checkouts without a saved QR use a manual wallet-app reconciliation dialog rather than showing an unverified replacement QR.
-- Choose English or Burmese in Settings. Review device language rendering and Myanmar-script receipt output on supported hardware before release.
+- Choose English or Burmese in Settings. Before release, validate the actual
+  bundled Inter and Noto Sans Myanmar UI fonts at 390 px and at 320 px with
+  1.5× text scale, then review Myanmar-script receipt output on supported
+  hardware.
 - Export an encrypted local backup that includes reversal, restock, wallet-reconciliation, cash-close, workspace-binding, and retry audit records. Restore remains empty-target-only; a local archive is not cloud backup or cross-device sync. Pre-hardening schema-v11 wallet reconciliation rows with the earlier four-key fingerprint intentionally fail current replay and restore; prove no retained launch data needs compatibility or add an explicit versioned migration.
 
 ## AI and privacy boundary
@@ -47,4 +87,12 @@ flutter analyze
 flutter test
 ```
 
-The native CI workflow builds Android and unsigned iOS candidates, then attempts to generate a Windows runner in the clean CI checkout and build a Windows QA archive. This does not prove installation, hardware compatibility, signing, update, or end-user quality. Source-level flows are not customer acceptance. Android/iPad/Windows device use, process-kill recovery on a persistent database, named device and printer output, wallet payment rehearsal, Burmese receipt rendering, hosted auth/tenant isolation, cloud sync, and backup/restore remain release gates. Do not call local outbox entries “synced” or “backed up.”
+The native CI workflow builds Android and unsigned iOS candidates, then attempts
+to generate a Windows runner in the clean CI checkout and build a Windows QA
+archive. This does not prove installation, hardware compatibility, signing,
+update, or end-user quality. Source-level flows are not customer acceptance.
+Android/iPad/Windows device use, process-kill recovery on a persistent database,
+actual-font 390 px and 320 px/1.5× text-scale layout, named device and LAN
+printer output, wallet payment rehearsal, Burmese receipt rendering, hosted
+auth/tenant isolation, cloud sync, and backup/restore remain release gates. Do
+not call local outbox entries “synced” or “backed up.”

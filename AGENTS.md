@@ -59,10 +59,10 @@ authority, product scope, or infrastructure actions by implication.
 
 ## Current product boundary
 
-The active release is native SuperMega Shop. Do not add Plant, Sites/Website,
-Commerce/Ecommerce, Spa, SOL, Connected Orders, or client-specific scope unless
-the owner explicitly changes the goal. Preserve existing code and data for
-parked products; parked does not mean delete.
+The active release is native Shop, a SuperMega product. Do not add Plant,
+Sites/Website, Commerce/Ecommerce, Spa, SOL, Connected Orders, or
+client-specific scope unless the owner explicitly changes the goal. Preserve
+existing code and data for parked products; parked does not mean delete.
 
 For Shop:
 
@@ -73,8 +73,15 @@ For Shop:
 - never infer wallet settlement from a QR, phone number, screenshot, or button;
 - never expose a money/stock correction from a typed name, shift label, shared
   PIN, locally constructed receipt object, raw session, or broad role. Require
-  the configured verifier to bind named membership, workspace, exact command,
-  narrow capability, expiry, and revocation state;
+  server-authentic asymmetric proof verified against a reviewed, source-pinned
+  public key. The online issuer must recheck active owner membership and bind
+  workspace, actor, exact command, narrow capability, and expiry into that
+  proof; if its key or issuer is absent, the correction action stays
+  unavailable;
+- treat pilot correction as an online-authorized workspace-owner action while normal
+  selling remains offline. Do not claim offline correction parity or add
+  device-bound manager credentials/passkeys without a reviewed threat model
+  and demonstrated merchant need;
 - never call a local outbox entry synchronized or a backup recoverable without
   acknowledgement and restore evidence;
 - keep Connected Orders default-off until its hosted identity, sync, conflict,
@@ -134,6 +141,10 @@ so and rely on exact-head CI without claiming a local run.
 Money, stock, backup, restore, migration, privacy, signing, and release changes
 need their focused regression plus the broader affected gate. Never suppress
 build output or treat stale artifacts as verification.
+
+Native Shop SQLite schema versions and hosted PostgreSQL/Supabase schema
+profiles are independent contracts. Always name the datastore and never use
+evidence for one as proof of the other.
 
 ## Authority and safety boundaries
 

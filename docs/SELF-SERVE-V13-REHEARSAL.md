@@ -1,5 +1,10 @@
 # Current private-chain rehearsal
 
+This document's v13 is the hosted PostgreSQL/Supabase `v13-self-serve`
+profile. It is independent of native Shop's committed green-anchor SQLite
+`user_version = 13` and the current uncommitted native schema-v14 security
+increment.
+
 Local execution only:
 
 ```
@@ -67,13 +72,14 @@ and [column privileges](https://supabase.com/docs/guides/database/postgres/colum
 
 ## Full release database rehearsal
 
-The source-owned release runner now applies the exact 15 private migrations
+The source-owned release runner now applies the exact 23 private migrations
 through schema 13 plus durable attempt budgets. It retains all 56 prior product,
 approval, identity and recovery checks, then runs the same actual account/billing
-exercise above and four restore checks (72 behavior checks total). Both catalogs
-must pass the exact 33-name current validator matrix. Legacy helper defaults remain
-v11 solely for baseline/adversarial tests; the release entry explicitly selects
-`CURRENT_MIGRATIONS` and `v13-self-serve` for both fresh and restored databases.
+exercise above and the current recovery checks (74 behavior checks total). Both
+catalogs must pass the exact 33-name current validator matrix. Legacy helper
+defaults remain v11 solely for baseline/adversarial tests; the release entry
+explicitly selects `CURRENT_MIGRATIONS` and `v13-self-serve` for both fresh and
+restored databases.
 
 Run once from an exact clean committed checkout, using already-installed tools:
 
@@ -89,6 +95,12 @@ LF-normalized implementation bytes, exact migration names/profile, both catalogs
 all behavior checks and equal full private-row/session snapshot digests. The
 consumer rebuilds it from the raw report; digest integrity is not independent
 authenticity or an owner approval. All hosted/production authority remains false.
+
+Keep four digest labels distinct when recording evidence: the sanitized receipt
+file's byte SHA-256, the external raw JSON file's byte SHA-256 and line-ending
+form, the tracked LF-normalized raw file's byte SHA-256, and the receipt's
+canonical `rawReportDigest`. None can be substituted for another, and a GitHub
+artifact archive digest would be a fifth, separate value.
 
 Use a new output outside the checkout. Existing outputs fail before database work;
 no historical tracked HQ receipt is overwritten. A failed run retains its safe raw

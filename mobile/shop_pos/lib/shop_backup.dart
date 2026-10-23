@@ -20,6 +20,7 @@ enum _ShopSnapshotSchemaKind {
   correctionWorkspaceV12,
   profileWorkspaceCollisionV12,
   unifiedV13,
+  unifiedV14,
 }
 
 enum _SnapshotColumnGroupState { none, partial, exact }
@@ -44,7 +45,7 @@ class _SnapshotSchemaObject {
 /// the database so an interrupted export or restore cannot retain plaintext.
 abstract final class ShopBackup {
   static const formatVersion = 1;
-  static const supportedSchemaVersion = 13;
+  static const supportedSchemaVersion = 14;
   static const oldestSupportedSchemaVersion = 6;
   static const maxSnapshotBytes = 64 * 1024 * 1024;
 
@@ -139,6 +140,24 @@ abstract final class ShopBackup {
     'template_id',
     'template_version',
     'updated_at_millis',
+  };
+  static const _v14AuthorizationProofColumns = <String>{
+    'receipt_id',
+    'proof_kind',
+    'local_operation_id',
+    'receipt_digest',
+    'key_id',
+    'signature',
+    'workspace_id',
+    'actor_id',
+    'actor_label',
+    'actor_role',
+    'capability',
+    'source',
+    'command_digest',
+    'issued_at_millis',
+    'expires_at_millis',
+    'verified_at_millis',
   };
 
   static final _cipher = AesGcm.with256bits();
@@ -245,6 +264,7 @@ abstract final class ShopBackup {
     required File archive,
     required File target,
     required String password,
+    ShopCorrectionReceiptVerifier? correctionReceiptVerifier,
     Future<void> Function()? beforePublishForTest,
     Future<void> Function()? afterPublishForTest,
   }) async {
@@ -280,7 +300,10 @@ abstract final class ShopBackup {
         );
         await stagedFile.writeAsBytes(cleartext, flush: true);
         verifySnapshot(stagedFile, expectedSchemaVersion: archiveBytes[5]);
-        await ShopDatabase.migrateAndVerifyRestoreFile(stagedFile);
+        await ShopDatabase.migrateAndVerifyRestoreFile(
+          stagedFile,
+          correctionReceiptVerifier: correctionReceiptVerifier,
+        );
         await _requireNoSidecars(stagedFile);
         if (await stagedFile.length() > maxSnapshotBytes) {
           throw StateError(
@@ -588,7 +611,15 @@ abstract final class ShopBackup {
   }
 
   /// Read-only verification without Drift's automatic schema migrations.
-  static void verifySnapshot(File file, {int? expectedSchemaVersion}) {
+  ///
+  /// Backup/export callers keep the strict default. Startup may opt into
+  /// legacy unbound correction history only so a known v11/v12 origin or an
+  /// exact unified provenance marker can be validated before the first DDL.
+  static void verifySnapshot(
+    File file, {
+    int? expectedSchemaVersion,
+    bool allowRuntimeUnboundCorrectionHistory = false,
+  }) {
     final connection = sqlite3.open(file.path, mode: OpenMode.readOnly);
     try {
       final version = connection.select('PRAGMA user_version');
@@ -601,19 +632,29 @@ abstract final class ShopBackup {
       final schemaVersion = version.length == 1
           ? version.single['user_version'] as int
           : -1;
-      final schemaKind = _classifySnapshotSchema(connection, schemaVersion);
+      final schemaKind = _classifySnapshotSchema(
+        connection,
+        schemaVersion,
+        allowRuntimeUnboundCorrectionHistory:
+            allowRuntimeUnboundCorrectionHistory,
+      );
       final hasCorrectionSchema =
           schemaKind == _ShopSnapshotSchemaKind.correctionV11 ||
           schemaKind == _ShopSnapshotSchemaKind.correctionWorkspaceV12 ||
-          schemaKind == _ShopSnapshotSchemaKind.unifiedV13;
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV13 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV14;
       final hasWorkspaceSchema =
           schemaKind == _ShopSnapshotSchemaKind.correctionWorkspaceV12 ||
           schemaKind == _ShopSnapshotSchemaKind.profileWorkspaceCollisionV12 ||
-          schemaKind == _ShopSnapshotSchemaKind.unifiedV13;
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV13 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV14;
       final hasProfileSchema =
           schemaKind == _ShopSnapshotSchemaKind.profileV11 ||
           schemaKind == _ShopSnapshotSchemaKind.profileWorkspaceCollisionV12 ||
-          schemaKind == _ShopSnapshotSchemaKind.unifiedV13;
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV13 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV14;
+      final hasAuthorizationProofSchema =
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV14;
       final objects = _readSnapshotSchemaObjects(connection);
       final baseSchemaValid =
           objects != null &&
@@ -669,6 +710,13 @@ abstract final class ShopBackup {
                     connection,
                     'shop_business_profile',
                     _profileRequiredColumns,
+                  ))) &&
+          (!hasAuthorizationProofSchema ||
+              (tables.contains('shop_correction_authorization_proofs') &&
+                  _tableHasColumns(
+                    connection,
+                    'shop_correction_authorization_proofs',
+                    _v14AuthorizationProofColumns,
                   )));
       final walletIntents = schemaValid
           ? connection.select(
@@ -764,15 +812,25 @@ abstract final class ShopBackup {
       final reversalAuditInvalid =
           hasCorrectionSchema &&
           (!schemaValid ||
-              !_v11ReversalAuditValid(connection) ||
+              !_v11ReversalAuditValid(
+                connection,
+                hasAuthorizationProofs: hasAuthorizationProofSchema,
+              ) ||
               !_correctionDefinitionsValid(connection));
+      final authorizationProofInvalid =
+          hasAuthorizationProofSchema &&
+          (!schemaValid || !_v14AuthorizationProofsValid(connection));
       final workspaceBindingInvalid =
           hasWorkspaceSchema &&
           (!schemaValid ||
               (schemaKind ==
                       _ShopSnapshotSchemaKind.profileWorkspaceCollisionV12
                   ? !_collisionWorkspaceBindingValid(connection)
-                  : !_v12WorkspaceBindingValid(connection)));
+                  : !_v12WorkspaceBindingValid(
+                      connection,
+                      allowUnboundHistory:
+                          allowRuntimeUnboundCorrectionHistory,
+                    )));
       final profileInvalid =
           hasProfileSchema &&
           (!schemaValid || !_businessProfileRowsValid(connection));
@@ -792,6 +850,7 @@ abstract final class ShopBackup {
           (schemaVersion >= 9 && !hasReorderLevel) ||
           (schemaVersion >= 10 && !tables.contains('shop_held_sales')) ||
           reversalAuditInvalid ||
+          authorizationProofInvalid ||
           workspaceBindingInvalid ||
           profileInvalid ||
           invalidReorderLevel ||
@@ -877,10 +936,14 @@ abstract final class ShopBackup {
   static Map<String, String> get _v12SchemaDefinitions =>
       shopWorkspaceSchemaDefinitionsV12();
 
+  static Map<String, String> get _v14AuthorizationProofDefinitions =>
+      shopAuthorizationProofSchemaDefinitionsV14();
+
   static _ShopSnapshotSchemaKind? _classifySnapshotSchema(
     Database connection,
-    int schemaVersion,
-  ) {
+    int schemaVersion, {
+    required bool allowRuntimeUnboundCorrectionHistory,
+  }) {
     if (schemaVersion < oldestSupportedSchemaVersion ||
         schemaVersion > supportedSchemaVersion) {
       return null;
@@ -895,9 +958,11 @@ abstract final class ShopBackup {
     }
     final auditDefinitions = _v11SchemaDefinitions;
     final workspaceDefinitions = _v12SchemaDefinitions;
+    final proofDefinitions = _v14AuthorizationProofDefinitions;
     final collisionDefinitions = shopWorkspaceCollisionPrefixDefinitionsV12();
     final auditNames = auditDefinitions.keys.toSet();
     final workspaceNames = workspaceDefinitions.keys.toSet();
+    final proofNames = proofDefinitions.keys.toSet();
     const profileNames = {'shop_business_profile'};
     final presentNames = objects.keys.toSet();
     final cashState = _reversalCashColumnState(connection);
@@ -907,6 +972,7 @@ abstract final class ShopBackup {
     final hasAnyWorkspace = presentNames
         .intersection(workspaceNames)
         .isNotEmpty;
+    final hasAnyProof = presentNames.intersection(proofNames).isNotEmpty;
     final hasProfile = presentNames.intersection(profileNames).isNotEmpty;
     final auditExact =
         cashState == _SnapshotColumnGroupState.exact &&
@@ -920,6 +986,11 @@ abstract final class ShopBackup {
       objects,
       collisionDefinitions,
       workspaceNames,
+    );
+    final proofExact = _snapshotDefinitionGroupExact(
+      objects,
+      proofDefinitions,
+      proofNames,
     );
     final profileExact =
         _snapshotDefinitionGroupExact(objects, const {
@@ -944,6 +1015,7 @@ abstract final class ShopBackup {
     if (schemaVersion < 11 &&
         !hasAnyAudit &&
         !hasAnyWorkspace &&
+        !hasAnyProof &&
         !hasProfile &&
         triggersMatch(const []) &&
         _snapshotObjectNamesExact(
@@ -955,6 +1027,7 @@ abstract final class ShopBackup {
     if (schemaVersion == 11) {
       if (auditExact &&
           !hasAnyWorkspace &&
+          !hasAnyProof &&
           !hasProfile &&
           triggersMatch([auditDefinitions]) &&
           _snapshotObjectNamesExact(objects, {
@@ -966,6 +1039,7 @@ abstract final class ShopBackup {
       if (profileExact &&
           !hasAnyAudit &&
           !hasAnyWorkspace &&
+          !hasAnyProof &&
           triggersMatch(const []) &&
           _snapshotObjectNamesExact(objects, {
             ..._snapshotExpectedBaseObjectNames(schemaVersion),
@@ -977,6 +1051,7 @@ abstract final class ShopBackup {
     if (schemaVersion == 12) {
       if (auditExact &&
           workspaceExact &&
+          !hasAnyProof &&
           !hasProfile &&
           triggersMatch([auditDefinitions, workspaceDefinitions]) &&
           _snapshotObjectNamesExact(objects, {
@@ -989,6 +1064,7 @@ abstract final class ShopBackup {
       if (profileExact &&
           !hasAnyAudit &&
           collisionWorkspaceExact &&
+          !hasAnyProof &&
           _collisionWorkspaceBindingValid(connection) &&
           triggersMatch([collisionDefinitions]) &&
           _snapshotObjectNamesExact(objects, {
@@ -1010,7 +1086,13 @@ abstract final class ShopBackup {
           },
           const {'shop_v13_migration_provenance'},
         ) &&
-        _migrationProvenanceEmpty(connection) &&
+        _migrationProvenanceValid(
+          connection,
+          allowRuntimeUnboundCorrectionHistory:
+              allowRuntimeUnboundCorrectionHistory,
+          hasAuthorizationProofs: false,
+        ) &&
+        !hasAnyProof &&
         triggersMatch([auditDefinitions, workspaceDefinitions]) &&
         _snapshotObjectNamesExact(objects, {
           ..._snapshotExpectedBaseObjectNames(schemaVersion),
@@ -1020,6 +1102,39 @@ abstract final class ShopBackup {
           'shop_v13_migration_provenance',
         })) {
       return _ShopSnapshotSchemaKind.unifiedV13;
+    }
+    if (schemaVersion == 14 &&
+        auditExact &&
+        workspaceExact &&
+        profileExact &&
+        proofExact &&
+        _snapshotDefinitionGroupExact(
+          objects,
+          const {
+            'shop_v13_migration_provenance': shopMigrationProvenanceV13Sql,
+          },
+          const {'shop_v13_migration_provenance'},
+        ) &&
+        _migrationProvenanceValid(
+          connection,
+          allowRuntimeUnboundCorrectionHistory:
+              allowRuntimeUnboundCorrectionHistory,
+          hasAuthorizationProofs: true,
+        ) &&
+        triggersMatch([
+          auditDefinitions,
+          workspaceDefinitions,
+          proofDefinitions,
+        ]) &&
+        _snapshotObjectNamesExact(objects, {
+          ..._snapshotExpectedBaseObjectNames(schemaVersion),
+          ...auditDefinitions.keys,
+          ...workspaceDefinitions.keys,
+          ...proofDefinitions.keys,
+          'shop_business_profile',
+          'shop_v13_migration_provenance',
+        })) {
+      return _ShopSnapshotSchemaKind.unifiedV14;
     }
     return null;
   }
@@ -1204,11 +1319,49 @@ abstract final class ShopBackup {
     }
   }
 
-  static bool _migrationProvenanceEmpty(Database connection) {
+  static bool _migrationProvenanceValid(
+    Database connection, {
+    required bool allowRuntimeUnboundCorrectionHistory,
+    required bool hasAuthorizationProofs,
+  }) {
     try {
-      return connection
-          .select('SELECT 1 FROM shop_v13_migration_provenance LIMIT 1')
-          .isEmpty;
+      final provenance = connection.select(
+        'SELECT singleton, reason FROM shop_v13_migration_provenance',
+      );
+      if (provenance.length > 1 ||
+          provenance.any(
+            (row) =>
+                row['singleton'] != 1 ||
+                row['reason'] != 'legacy_unbound_correction_history',
+          )) {
+        return false;
+      }
+      if (!allowRuntimeUnboundCorrectionHistory) return provenance.isEmpty;
+
+      final binding = connection.select(
+        'SELECT 1 FROM shop_managed_workspace_binding LIMIT 2',
+      );
+      final corrections = connection.select(
+        'SELECT authorization_receipt_id FROM shop_sale_reversals UNION ALL '
+        'SELECT authorization_receipt_id '
+        'FROM shop_wallet_reversal_reconciliations',
+      );
+      if (binding.length > 1) return false;
+      if (binding.isNotEmpty || corrections.isEmpty) {
+        return provenance.isEmpty;
+      }
+      if (provenance.length != 1) return false;
+      if (!hasAuthorizationProofs) return true;
+
+      final proofs = connection.select(
+        'SELECT proof_kind FROM shop_correction_authorization_proofs',
+      );
+      return proofs.length == corrections.length &&
+          proofs.every(
+            (row) =>
+                row['proof_kind'] ==
+                shopCorrectionAuthorizationProofKindLegacyV1,
+          );
     } on Object {
       return false;
     }
@@ -1229,7 +1382,10 @@ abstract final class ShopBackup {
   static String _sha256Hex(String value) =>
       crypto.sha256.convert(utf8.encode(value)).toString();
 
-  static bool _v12WorkspaceBindingValid(Database connection) {
+  static bool _v12WorkspaceBindingValid(
+    Database connection, {
+    required bool allowUnboundHistory,
+  }) {
     try {
       final bindings = connection.select(
         'SELECT singleton, workspace_id, discovery_contract, '
@@ -1238,28 +1394,28 @@ abstract final class ShopBackup {
       );
       if (bindings.length > 1) return false;
 
-      final correctionWorkspaces = connection
-          .select(
-            'SELECT authorization_workspace_id AS workspace_id '
-            'FROM shop_sale_reversals UNION '
-            'SELECT authorization_workspace_id AS workspace_id '
-            'FROM shop_wallet_reversal_reconciliations',
-          )
-          .map((row) => row['workspace_id'])
-          .toList(growable: false);
+      final corrections = connection.select(
+        'SELECT authorization_workspace_id AS workspace_id, '
+        'authorized_actor_id AS actor_id FROM shop_sale_reversals UNION '
+        'SELECT authorization_workspace_id AS workspace_id, '
+        'authorized_actor_id AS actor_id '
+        'FROM shop_wallet_reversal_reconciliations',
+      );
       final id = RegExp(r'^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$');
-      if (correctionWorkspaces.any(
-        (workspaceId) => workspaceId is! String || !id.hasMatch(workspaceId),
+      if (corrections.any(
+        (row) =>
+            row['workspace_id'] is! String ||
+            !id.hasMatch(row['workspace_id'] as String) ||
+            row['actor_id'] is! String ||
+            !id.hasMatch(row['actor_id'] as String),
       )) {
         return false;
       }
       if (bindings.isEmpty) {
-        // A v11 database migrates without inventing attach authority and its
-        // history remains readable, but it cannot become a v13 backup until a
-        // matching authenticated selection is attached. This strict rule also
-        // makes deletion of an established binding detectable when correction
-        // history exists.
-        return correctionWorkspaces.isEmpty;
+        // Runtime preflight may preserve a known legacy-unbound migration
+        // shape without inventing attach authority. Backup verification stays
+        // strict until a matching authenticated selection is attached.
+        return corrections.isEmpty || allowUnboundHistory;
       }
 
       final binding = bindings.single;
@@ -1275,7 +1431,11 @@ abstract final class ShopBackup {
           id.hasMatch(actorId) &&
           attachedAtMillis is int &&
           attachedAtMillis > 0 &&
-          correctionWorkspaces.every((value) => value == workspaceId);
+          corrections.every(
+            (row) =>
+                row['workspace_id'] == workspaceId &&
+                row['actor_id'] == actorId,
+          );
     } on Object {
       return false;
     }
@@ -1315,7 +1475,197 @@ abstract final class ShopBackup {
     return actual.runtimeType == expected.runtimeType && actual == expected;
   }
 
-  static bool _v11DigestsAndEventsValid(Database connection) {
+  static bool _authorizationReceiptValid({
+    required Database connection,
+    required bool hasAuthorizationProofs,
+    required String localOperationId,
+    required String receiptDigest,
+    required String source,
+    required String receiptId,
+    required String workspaceId,
+    required String actorId,
+    required String actorLabel,
+    required String actorRole,
+    required String capability,
+    required String commandDigest,
+    required int issuedAtMillis,
+    required int verifiedAtMillis,
+    required int expiresAtMillis,
+  }) {
+    if (!hasAuthorizationProofs) {
+      return shopLegacyCorrectionAuthorizationReceiptDigestMatchesV1(
+        receiptDigest: receiptDigest,
+        source: source,
+        receiptId: receiptId,
+        workspaceId: workspaceId,
+        actorId: actorId,
+        actorLabel: actorLabel,
+        actorRole: actorRole,
+        capability: capability,
+        commandDigest: commandDigest,
+        issuedAtMillis: issuedAtMillis,
+        expiresAtMillis: expiresAtMillis,
+      );
+    }
+    final proofs = connection.select(
+      'SELECT * FROM shop_correction_authorization_proofs '
+      'WHERE receipt_id = ? AND local_operation_id = ?',
+      [receiptId, localOperationId],
+    );
+    if (proofs.length != 1) return false;
+    final proof = proofs.single;
+    return _v14AuthorizationProofRowValid(proof) &&
+        proof['receipt_digest'] == receiptDigest &&
+        proof['source'] == source &&
+        proof['workspace_id'] == workspaceId &&
+        proof['actor_id'] == actorId &&
+        proof['actor_label'] == actorLabel &&
+        proof['actor_role'] == actorRole &&
+        proof['capability'] == capability &&
+        proof['command_digest'] == commandDigest &&
+        proof['issued_at_millis'] == issuedAtMillis &&
+        proof['verified_at_millis'] == verifiedAtMillis &&
+        proof['expires_at_millis'] == expiresAtMillis;
+  }
+
+  static bool _v14AuthorizationProofsValid(Database connection) {
+    try {
+      final proofs = connection.select(
+        'SELECT * FROM shop_correction_authorization_proofs '
+        'ORDER BY receipt_id',
+      );
+      if (proofs.any((proof) => !_v14AuthorizationProofRowValid(proof))) {
+        return false;
+      }
+      final actions = connection.select('''
+        SELECT operation_id, authorization_receipt_id
+        FROM shop_sale_reversals
+        UNION ALL
+        SELECT operation_id, authorization_receipt_id
+        FROM shop_wallet_reversal_reconciliations
+      ''');
+      if (proofs.length != actions.length) return false;
+      final proofKeys = <String>{
+        for (final proof in proofs)
+          jsonEncode([proof['receipt_id'], proof['local_operation_id']]),
+      };
+      final actionKeys = <String>{};
+      for (final action in actions) {
+        final operationId = action['operation_id'];
+        final receiptId = action['authorization_receipt_id'];
+        if (operationId is! String || receiptId is! String) return false;
+        actionKeys.add(jsonEncode([receiptId, operationId]));
+      }
+      return proofKeys.length == proofs.length &&
+          actionKeys.length == actions.length &&
+          proofKeys.length == actionKeys.length &&
+          proofKeys.containsAll(actionKeys);
+    } on Object {
+      return false;
+    }
+  }
+
+  static bool _v14AuthorizationProofRowValid(Row proof) {
+    // This synchronous sqlite3 pass validates the canonical fields and signed
+    // envelope shape. The staged ShopDatabase open performs the Ed25519 check
+    // with the configured pinned-key verifier before restore publication.
+    final receiptId = proof['receipt_id'];
+    final proofKind = proof['proof_kind'];
+    final localOperationId = proof['local_operation_id'];
+    final receiptDigest = proof['receipt_digest'];
+    final keyId = proof['key_id'];
+    final signature = proof['signature'];
+    final workspaceId = proof['workspace_id'];
+    final actorId = proof['actor_id'];
+    final actorLabel = proof['actor_label'];
+    final actorRole = proof['actor_role'];
+    final capability = proof['capability'];
+    final source = proof['source'];
+    final commandDigest = proof['command_digest'];
+    final issuedAtMillis = proof['issued_at_millis'];
+    final expiresAtMillis = proof['expires_at_millis'];
+    final verifiedAtMillis = proof['verified_at_millis'];
+    final id = RegExp(r'^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$');
+    final digest = RegExp(r'^[0-9a-f]{64}$');
+    final boundedText = RegExp(r'^[^\x00-\x1f\x7f]{1,160}$');
+    if (receiptId is! String ||
+        !boundedText.hasMatch(receiptId) ||
+        receiptId != receiptId.trim() ||
+        localOperationId is! String ||
+        !boundedText.hasMatch(localOperationId) ||
+        localOperationId != localOperationId.trim() ||
+        receiptDigest is! String ||
+        !digest.hasMatch(receiptDigest) ||
+        workspaceId is! String ||
+        !id.hasMatch(workspaceId) ||
+        actorId is! String ||
+        !id.hasMatch(actorId) ||
+        actorLabel is! String ||
+        !boundedText.hasMatch(actorLabel) ||
+        actorLabel != actorLabel.trim() ||
+        actorRole is! String ||
+        actorRole != 'owner' ||
+        capability is! String ||
+        !const {
+          'shop.sale.reverse',
+          'shop.sale.reconcile_wallet',
+        }.contains(capability) ||
+        source is! String ||
+        source != 'managed_membership_receipt_v1' ||
+        commandDigest is! String ||
+        !digest.hasMatch(commandDigest) ||
+        issuedAtMillis is! int ||
+        issuedAtMillis <= 0 ||
+        expiresAtMillis is! int ||
+        verifiedAtMillis is! int ||
+        verifiedAtMillis < issuedAtMillis ||
+        expiresAtMillis < verifiedAtMillis ||
+        expiresAtMillis - issuedAtMillis != 300000) {
+      return false;
+    }
+    if (proofKind == 'signed_v2') {
+      return keyId is String &&
+          RegExp(r'^[a-z0-9][a-z0-9._-]{0,31}$').hasMatch(keyId) &&
+          signature is String &&
+          RegExp(r'^[A-Za-z0-9_-]{86}$').hasMatch(signature) &&
+          shopCorrectionAuthorizationReceiptDigestMatches(
+            receiptDigest: receiptDigest,
+            source: source,
+            receiptId: receiptId,
+            workspaceId: workspaceId,
+            actorId: actorId,
+            actorLabel: actorLabel,
+            actorRole: actorRole,
+            capability: capability,
+            commandDigest: commandDigest,
+            issuedAtMillis: issuedAtMillis,
+            expiresAtMillis: expiresAtMillis,
+          );
+    }
+    if (proofKind == 'legacy_unverified_v1') {
+      return keyId == null &&
+          signature == null &&
+          shopLegacyCorrectionAuthorizationReceiptDigestMatchesV1(
+            receiptDigest: receiptDigest,
+            source: source,
+            receiptId: receiptId,
+            workspaceId: workspaceId,
+            actorId: actorId,
+            actorLabel: actorLabel,
+            actorRole: actorRole,
+            capability: capability,
+            commandDigest: commandDigest,
+            issuedAtMillis: issuedAtMillis,
+            expiresAtMillis: expiresAtMillis,
+          );
+    }
+    return false;
+  }
+
+  static bool _v11DigestsAndEventsValid(
+    Database connection, {
+    required bool hasAuthorizationProofs,
+  }) {
     try {
       final reversals = connection.select(
         'SELECT * FROM shop_sale_reversals ORDER BY id',
@@ -1344,6 +1694,8 @@ abstract final class ShopBackup {
         final authorizationSource = reversal['authorization_source'];
         final authorizationIssuedAtMillis =
             reversal['authorization_issued_at_millis'];
+        final authorizationVerifiedAtMillis =
+            reversal['authorization_verified_at_millis'];
         final authorizationExpiresAtMillis =
             reversal['authorization_expires_at_millis'];
         final createdAtMillis = reversal['created_at_millis'];
@@ -1367,6 +1719,7 @@ abstract final class ShopBackup {
             authorizationCapability is! String ||
             authorizationSource is! String ||
             authorizationIssuedAtMillis is! int ||
+            authorizationVerifiedAtMillis is! int ||
             authorizationExpiresAtMillis is! int ||
             createdAtMillis is! int) {
           return false;
@@ -1426,7 +1779,10 @@ abstract final class ShopBackup {
         });
         if (reversal['request_fingerprint'] != requestFingerprint ||
             authorizationCommandDigest != _sha256Hex(requestFingerprint) ||
-            !shopCorrectionAuthorizationReceiptDigestMatches(
+            !_authorizationReceiptValid(
+              connection: connection,
+              hasAuthorizationProofs: hasAuthorizationProofs,
+              localOperationId: operationId,
               receiptDigest: authorizationReceiptDigest,
               source: authorizationSource,
               receiptId: authorizationReceiptId,
@@ -1437,6 +1793,7 @@ abstract final class ShopBackup {
               capability: authorizationCapability,
               commandDigest: authorizationCommandDigest,
               issuedAtMillis: authorizationIssuedAtMillis,
+              verifiedAtMillis: authorizationVerifiedAtMillis,
               expiresAtMillis: authorizationExpiresAtMillis,
             )) {
           return false;
@@ -1519,6 +1876,8 @@ abstract final class ShopBackup {
         final authorizationSource = reconciliation['authorization_source'];
         final authorizationIssuedAtMillis =
             reconciliation['authorization_issued_at_millis'];
+        final authorizationVerifiedAtMillis =
+            reconciliation['authorization_verified_at_millis'];
         final authorizationExpiresAtMillis =
             reconciliation['authorization_expires_at_millis'];
         final createdAtMillis = reconciliation['created_at_millis'];
@@ -1538,6 +1897,7 @@ abstract final class ShopBackup {
             authorizationCapability is! String ||
             authorizationSource is! String ||
             authorizationIssuedAtMillis is! int ||
+            authorizationVerifiedAtMillis is! int ||
             authorizationExpiresAtMillis is! int ||
             createdAtMillis is! int) {
           return false;
@@ -1569,7 +1929,10 @@ abstract final class ShopBackup {
         });
         if (reconciliation['request_fingerprint'] != requestFingerprint ||
             authorizationCommandDigest != _sha256Hex(requestFingerprint) ||
-            !shopCorrectionAuthorizationReceiptDigestMatches(
+            !_authorizationReceiptValid(
+              connection: connection,
+              hasAuthorizationProofs: hasAuthorizationProofs,
+              localOperationId: operationId,
               receiptDigest: authorizationReceiptDigest,
               source: authorizationSource,
               receiptId: authorizationReceiptId,
@@ -1580,6 +1943,7 @@ abstract final class ShopBackup {
               capability: authorizationCapability,
               commandDigest: authorizationCommandDigest,
               issuedAtMillis: authorizationIssuedAtMillis,
+              verifiedAtMillis: authorizationVerifiedAtMillis,
               expiresAtMillis: authorizationExpiresAtMillis,
             )) {
           return false;
@@ -1795,7 +2159,10 @@ abstract final class ShopBackup {
     }
   }
 
-  static bool _v11ReversalAuditValid(Database connection) {
+  static bool _v11ReversalAuditValid(
+    Database connection, {
+    required bool hasAuthorizationProofs,
+  }) {
     final invalidReversal = connection.select('''
       SELECT 1
       FROM shop_sale_reversals r
@@ -1946,7 +2313,10 @@ abstract final class ShopBackup {
         !duplicateAuditIdentity &&
         !reusedAuthorizationReceipt &&
         !invalidReconciliation &&
-        _v11DigestsAndEventsValid(connection) &&
+        _v11DigestsAndEventsValid(
+          connection,
+          hasAuthorizationProofs: hasAuthorizationProofs,
+        ) &&
         _v11CashShiftsValid(connection);
   }
 

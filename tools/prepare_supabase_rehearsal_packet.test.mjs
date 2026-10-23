@@ -59,7 +59,7 @@ test('binds the complete candidate chain without granting baseline or migration 
   assert.doesNotMatch(JSON.stringify(packet), /postgres(?:ql)?:\/\//i)
   assert.equal(manifest.scripts['database:supabase:packet'], 'node tools/prepare_supabase_rehearsal_packet.mjs')
   assert.match(ignoreRules, /^\.tmp\/$/m)
-  assert.match(runbook, /all 23 committed migrations/)
+  assert.match(runbook, /all 24 committed migrations/)
   assert.match(runbook, /Validate core schema v13 and every post-v13 extension/)
   assert.match(runbook, /supermega_trial_login/)
   assert.doesNotMatch(runbook, /supermega_trial_runtime|Runtime readiness requires schema version 10/)

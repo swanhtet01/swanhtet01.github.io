@@ -2450,6 +2450,8 @@ def create_trial_router(
         # gate remains closed. Check this before auth, parsing, or storage.
         if not shop_correction_authorization_window_open():
             raise _error(503, "shop_correction_authorization_window_closed")
+        if not store.shop_correction_authorization_signing_ready():
+            raise _error(503, "shop_correction_authorization_signing_unavailable")
         principal = _resolve_principal(request, resolve_principal)
         raw_body = await _bounded_json_body(
             request,

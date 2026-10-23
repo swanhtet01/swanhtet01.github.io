@@ -19,6 +19,12 @@ from supermega_runtime.shop_inventory_runtime import (
     ShopInventoryValidationError,
     restamp_latest_shop_inventory_command,
 )
+from supermega_runtime.shop_correction_receipts import (
+    SHOP_CORRECTION_AUTHORIZATION_CONTRACT,
+    ShopCorrectionReceiptSigner,
+    ShopCorrectionSigningError,
+    load_shop_correction_receipt_signer,
+)
 
 
 TRIAL_SCHEMA_COMPONENT = "private_trial_backend"
@@ -141,9 +147,6 @@ PRODUCT_ACCEPTANCE_SURFACES = {
 }
 PRODUCT_ACCEPTANCE_CONTRACT = "supermega.hosted_product_acceptance.v1"
 PRODUCT_ACCEPTANCE_EVENT_TYPE = "client.product_acceptance.recorded"
-SHOP_CORRECTION_AUTHORIZATION_CONTRACT = (
-    "supermega.shop.correction-authorization-receipt.v1"
-)
 SHOP_CORRECTION_AUTHORIZATION_EVENT_TYPE = (
     "commerce.shop_correction_authorization.issued"
 )
@@ -914,6 +917,8 @@ class ShopCorrectionAuthorizationReceipt:
     command_digest: str
     issued_at_millis: int
     expires_at_millis: int
+    key_id: str
+    signature: str
     idempotent_replay: bool = False
 
     def to_dict(self) -> JsonObject:
@@ -930,6 +935,8 @@ class ShopCorrectionAuthorizationReceipt:
             "commandDigest": self.command_digest,
             "issuedAtMillis": self.issued_at_millis,
             "expiresAtMillis": self.expires_at_millis,
+            "keyId": self.key_id,
+            "signature": self.signature,
         }
 
 
@@ -1023,6 +1030,8 @@ class TrialStore(Protocol):
         request_fingerprint: str,
         confirmation: str,
     ) -> ShopCorrectionAuthorizationReceipt: ...
+
+    def shop_correction_authorization_signing_ready(self) -> bool: ...
 
     def apply_command(
         self,
@@ -3290,7 +3299,7 @@ def shop_correction_authorization_receipt_digest(
 ) -> str:
     """Digest the ordered cross-runtime receipt projection.
 
-    The order and domain separator are part of the native/server v1 contract.
+    The order and domain separator are part of the native/server v2 contract.
     This intentionally is not the store's sorted-key command fingerprint.
     """
 
@@ -3317,6 +3326,17 @@ def shop_correction_authorization_receipt_digest(
         )
     ).encode("utf-8")
     return sha256(encoded).hexdigest()
+
+
+def _configured_shop_correction_signer(
+    explicit: ShopCorrectionReceiptSigner | None,
+) -> ShopCorrectionReceiptSigner | None:
+    if explicit is not None:
+        return explicit
+    try:
+        return load_shop_correction_receipt_signer()
+    except ShopCorrectionSigningError:
+        return None
 
 
 def _shop_correction_json_object(pairs: list[tuple[str, Any]]) -> JsonObject:
@@ -3557,6 +3577,7 @@ def _shop_correction_authorization_request(
 def _shop_correction_receipt_from_mapping(
     value: object,
     *,
+    signer: ShopCorrectionReceiptSigner,
     workspace_id: str,
     actor_id: str,
     capability: str,
@@ -3578,6 +3599,8 @@ def _shop_correction_receipt_from_mapping(
         "commandDigest",
         "issuedAtMillis",
         "expiresAtMillis",
+        "keyId",
+        "signature",
     }
     if set(value) != expected_keys:
         raise TrialStoreError("Shop correction authorization evidence is invalid.")
@@ -3601,6 +3624,8 @@ def _shop_correction_receipt_from_mapping(
         command_digest=str(value.get("commandDigest") or ""),
         issued_at_millis=issued_at_millis,
         expires_at_millis=expires_at_millis,
+        key_id=str(value.get("keyId") or ""),
+        signature=str(value.get("signature") or ""),
         idempotent_replay=idempotent_replay,
     )
     expected_digest = shop_correction_authorization_receipt_digest(
@@ -3629,6 +3654,11 @@ def _shop_correction_receipt_from_mapping(
         or receipt.issued_at_millis <= 0
         or receipt.expires_at_millis - receipt.issued_at_millis
         != SHOP_CORRECTION_AUTHORIZATION_TTL_MILLIS
+        or receipt.key_id != signer.key_id
+        or not signer.verify(
+            receipt_digest=receipt.receipt_digest,
+            signature=receipt.signature,
+        )
     ):
         raise TrialStoreError("Shop correction authorization evidence is invalid.")
     return receipt
@@ -3636,6 +3666,7 @@ def _shop_correction_receipt_from_mapping(
 
 def _new_shop_correction_authorization_receipt(
     *,
+    signer: ShopCorrectionReceiptSigner,
     workspace_id: str,
     actor_id: str,
     capability: str,
@@ -3668,6 +3699,8 @@ def _new_shop_correction_authorization_receipt(
         command_digest=command_digest,
         issued_at_millis=issued_at_millis,
         expires_at_millis=expires_at_millis,
+        key_id=signer.key_id,
+        signature=signer.sign(receipt_digest=receipt_digest),
     )
 
 
@@ -3970,10 +4003,23 @@ class PostgresTrialStore:
     probe succeeds with a dedicated non-BYPASSRLS login role.
     """
 
-    def __init__(self, database_url: str, *, reducer: StateReducer, write_enabled: bool = False):
+    def __init__(
+        self,
+        database_url: str,
+        *,
+        reducer: StateReducer,
+        write_enabled: bool = False,
+        shop_correction_signer: ShopCorrectionReceiptSigner | None = None,
+    ):
         self.database_url = str(database_url or "").strip()
         self.reducer = reducer
         self.write_enabled = bool(write_enabled)
+        self._shop_correction_signer = _configured_shop_correction_signer(
+            shop_correction_signer
+        )
+
+    def shop_correction_authorization_signing_ready(self) -> bool:
+        return self._shop_correction_signer is not None
 
     def _connect(self):
         if not self.database_url:
@@ -5214,8 +5260,8 @@ class PostgresTrialStore:
         if not isinstance(row, Mapping) or str(row.get("owner_actor_id") or "") != principal.actor_id:
             raise TrialPermissionDenied("shop.owner")
 
-    @staticmethod
     def _load_shop_correction_authorization_replay(
+        self,
         cursor: Any,
         *,
         principal: TrialPrincipal,
@@ -5251,8 +5297,12 @@ class PostgresTrialStore:
                 raise TrialStoreError(
                     "Shop correction authorization evidence is invalid."
                 ) from exc
+        signer = self._shop_correction_signer
+        if signer is None:
+            raise TrialNotReadyError(("shop_correction_signing_ready",))
         return _shop_correction_receipt_from_mapping(
             result,
+            signer=signer,
             workspace_id=principal.workspace_id,
             actor_id=principal.actor_id,
             capability=capability,
@@ -5270,6 +5320,9 @@ class PostgresTrialStore:
         request_fingerprint: str,
         confirmation: str,
     ) -> ShopCorrectionAuthorizationReceipt:
+        signer = self._shop_correction_signer
+        if signer is None:
+            raise TrialNotReadyError(("shop_correction_signing_ready",))
         (
             request_id,
             capability_value,
@@ -5326,6 +5379,7 @@ class PostgresTrialStore:
                     raise TrialAuthorizationExpired(request_id)
                 return replay
             receipt = _new_shop_correction_authorization_receipt(
+                signer=signer,
                 workspace_id=normalized.workspace_id,
                 actor_id=normalized.actor_id,
                 capability=capability_value,
@@ -5986,6 +6040,7 @@ class InMemoryTrialStore:
         schema_ready: bool = True,
         audit_ready: bool = True,
         write_enabled: bool = True,
+        shop_correction_signer: ShopCorrectionReceiptSigner | None = None,
     ):
         self.reducer = reducer
         self.database_ready = bool(database_ready)
@@ -5993,6 +6048,9 @@ class InMemoryTrialStore:
         self.schema_ready = bool(schema_ready)
         self.audit_ready = bool(audit_ready)
         self.write_enabled = bool(write_enabled)
+        self._shop_correction_signer = _configured_shop_correction_signer(
+            shop_correction_signer
+        )
         self._memberships: dict[tuple[str, str], tuple[str, str, frozenset[str]]] = {}
         self._states: dict[tuple[str, str], TrialState] = {}
         self._events: dict[tuple[str, str], tuple[str, str, str, JsonObject]] = {}
@@ -6007,6 +6065,9 @@ class InMemoryTrialStore:
         self._workspace_product_entitlements: dict[str, tuple[str, ...]] = {}
         self._workspace_owner_actor_ids: dict[str, str] = {}
         self._lock = RLock()
+
+    def shop_correction_authorization_signing_ready(self) -> bool:
+        return self._shop_correction_signer is not None
 
     def provision_membership(
         self,
@@ -6299,6 +6360,9 @@ class InMemoryTrialStore:
         request_fingerprint: str,
         confirmation: str,
     ) -> ShopCorrectionAuthorizationReceipt:
+        signer = self._shop_correction_signer
+        if signer is None:
+            raise TrialNotReadyError(("shop_correction_signing_ready",))
         (
             request_id,
             capability_value,
@@ -6348,6 +6412,7 @@ class InMemoryTrialStore:
             if replay is not None:
                 receipt = _shop_correction_receipt_from_mapping(
                     replay,
+                    signer=signer,
                     workspace_id=normalized.workspace_id,
                     actor_id=normalized.actor_id,
                     capability=capability_value,
@@ -6358,6 +6423,7 @@ class InMemoryTrialStore:
                     raise TrialAuthorizationExpired(request_id)
                 return receipt
             receipt = _new_shop_correction_authorization_receipt(
+                signer=signer,
                 workspace_id=normalized.workspace_id,
                 actor_id=normalized.actor_id,
                 capability=capability_value,
@@ -6388,6 +6454,7 @@ class InMemoryTrialStore:
             )
             record = _shop_correction_receipt_from_mapping(
                 readback,
+                signer=signer,
                 workspace_id=normalized.workspace_id,
                 actor_id=normalized.actor_id,
                 capability=capability_value,

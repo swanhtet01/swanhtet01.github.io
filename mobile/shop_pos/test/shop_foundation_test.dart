@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:cryptography/cryptography.dart';
 import 'package:drift/drift.dart' show Variable;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
@@ -17,8 +18,15 @@ import 'package:supermega_shop/shop_copy.dart';
 import 'package:supermega_shop/shop_database.dart';
 import 'package:supermega_shop/shop_models.dart';
 
+const _testCorrectionKeyId = 'shop-test-2026';
+const _testCorrectionPublicKey =
+    'A6EHv_POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg';
+final _testCorrectionReceiptVerifier = ShopCorrectionReceiptVerifier({
+  _testCorrectionKeyId: _testCorrectionPublicKey,
+});
+
 void main() {
-  test('correction authorization receipt v1 digest is stable', () {
+  test('correction authorization receipt v2 digest is stable', () {
     expect(
       shopCorrectionAuthorizationReceiptDigest(
         source: 'managed_membership_receipt_v1',
@@ -32,7 +40,7 @@ void main() {
         issuedAtMillis: 1000,
         expiresAtMillis: 301000,
       ),
-      '42832341daffab7ac3967f57d91665a01b6303addc0ecfada3dce9c76a584902',
+      '5a5f97683a99e72307cf42b5bdbd682fad42fc221d426d811c9a8d631e42aae3',
     );
     expect(
       shopCorrectionAuthorizationReceiptDigest(
@@ -47,7 +55,7 @@ void main() {
         issuedAtMillis: 2000,
         expiresAtMillis: 302000,
       ),
-      '941c1a39aea89a13cdefdf48f7d6d4f02a125ccb2eab8e555142de7ba48053f4',
+      '14b1604b664f7a4761d52336383683756f400b04d5951c843afedaad9a88443d',
     );
   });
 
@@ -358,7 +366,10 @@ void main() {
     late ShopDatabase database;
 
     setUp(() {
-      database = ShopDatabase(NativeDatabase.memory());
+      database = ShopDatabase.withCorrectionReceiptVerifier(
+        executor: NativeDatabase.memory(),
+        correctionReceiptVerifier: _testCorrectionReceiptVerifier,
+      );
     });
 
     tearDown(() async {
@@ -374,7 +385,7 @@ void main() {
         throwsA(
           predicate(
             (error) => error.toString().contains(
-              'Shop correction requires the bound workspace',
+              'Shop correction requires a signed authorization proof',
             ),
           ),
         ),
@@ -399,7 +410,7 @@ void main() {
         throwsA(
           predicate(
             (error) => error.toString().contains(
-              'Shop correction requires the bound workspace',
+              'Shop correction requires a signed authorization proof',
             ),
           ),
         ),
@@ -413,7 +424,7 @@ void main() {
         throwsA(
           predicate(
             (error) => error.toString().contains(
-              'Shop reconciliation requires the bound workspace',
+              'Shop reconciliation requires a signed authorization proof',
             ),
           ),
         ),
@@ -421,12 +432,22 @@ void main() {
       final replay = await database.attachAuthenticatedManagedWorkspace(
         const ShopAuthenticatedWorkspaceSelection(
           workspaceId: 'workspace-shop-test',
-          actorId: 'successor-owner',
+          actorId: 'owner-test',
         ),
       );
       expect(replay.workspaceId, attached.workspaceId);
       expect(replay.attachedActorId, 'owner-test');
       expect(replay.attachedAtMillis, attached.attachedAtMillis);
+
+      await expectLater(
+        database.attachAuthenticatedManagedWorkspace(
+          const ShopAuthenticatedWorkspaceSelection(
+            workspaceId: 'workspace-shop-test',
+            actorId: 'successor-owner',
+          ),
+        ),
+        throwsA(isA<StateError>()),
+      );
 
       await expectLater(
         database.attachAuthenticatedManagedWorkspace(
@@ -541,7 +562,7 @@ void main() {
         reason: 'Customer returned the complete sale',
         confirmCashReturned: true,
       );
-      final authorization = _correctionAuthorization(
+      final authorization = await _correctionAuthorization(
         command.commandDigest,
         capability: 'shop.sale.reverse',
         receiptId: 'cash-reversal-receipt',
@@ -559,11 +580,23 @@ void main() {
       await expectLater(
         database.recordAuthorizedFullSaleReversal(
           command: command,
-          authorization: _correctionAuthorization(
+          authorization: await _correctionAuthorization(
             command.commandDigest,
             capability: 'shop.sale.reverse',
             receiptId: 'foreign-workspace-receipt',
             workspaceId: 'workspace-other',
+          ),
+        ),
+        throwsA(isA<StateError>()),
+      );
+      await expectLater(
+        database.recordAuthorizedFullSaleReversal(
+          command: command,
+          authorization: await _correctionAuthorization(
+            command.commandDigest,
+            capability: 'shop.sale.reverse',
+            receiptId: 'foreign-actor-receipt',
+            actorId: 'owner-other',
           ),
         ),
         throwsA(isA<StateError>()),
@@ -582,6 +615,8 @@ void main() {
           commandDigest: authorization.commandDigest,
           issuedAtMillis: authorization.issuedAtMillis,
           expiresAtMillis: authorization.expiresAtMillis,
+          keyId: authorization.keyId,
+          signature: authorization.signature,
         ),
         ShopCorrectionAuthorization(
           receiptId: authorization.receiptId,
@@ -595,6 +630,25 @@ void main() {
           commandDigest: authorization.commandDigest,
           issuedAtMillis: authorization.issuedAtMillis,
           expiresAtMillis: authorization.expiresAtMillis,
+          keyId: authorization.keyId,
+          signature: authorization.signature,
+        ),
+        ShopCorrectionAuthorization(
+          receiptId: authorization.receiptId,
+          receiptDigest: authorization.receiptDigest,
+          workspaceId: authorization.workspaceId,
+          actorId: authorization.actorId,
+          actorLabel: authorization.actorLabel,
+          actorRole: authorization.actorRole,
+          capability: authorization.capability,
+          source: authorization.source,
+          commandDigest: authorization.commandDigest,
+          issuedAtMillis: authorization.issuedAtMillis,
+          expiresAtMillis: authorization.expiresAtMillis,
+          keyId: authorization.keyId,
+          signature: base64Url
+              .encode(List<int>.filled(64, 0))
+              .replaceAll('=', ''),
         ),
       ]) {
         await expectLater(
@@ -637,18 +691,22 @@ void main() {
         ),
         throwsA(isA<StateError>()),
       );
-      final reversal = await database.recordAuthorizedFullSaleReversal(
-        command: command,
-        authorization: authorization,
-      );
-      final replay = await database.recordAuthorizedFullSaleReversal(
-        command: command,
-        authorization: authorization,
-      );
+      final concurrentResults = await Future.wait([
+        database.recordAuthorizedFullSaleReversal(
+          command: command,
+          authorization: authorization,
+        ),
+        database.recordAuthorizedFullSaleReversal(
+          command: command,
+          authorization: authorization,
+        ),
+      ]);
+      final reversal = concurrentResults.first;
+      final replay = concurrentResults.last;
       await expectLater(
         database.recordAuthorizedFullSaleReversal(
           command: command,
-          authorization: _correctionAuthorization(
+          authorization: await _correctionAuthorization(
             command.commandDigest,
             capability: 'shop.sale.reverse',
             receiptId: authorization.receiptId,
@@ -660,7 +718,7 @@ void main() {
       await expectLater(
         database.recordAuthorizedFullSaleReversal(
           command: command,
-          authorization: _correctionAuthorization(
+          authorization: await _correctionAuthorization(
             command.commandDigest,
             capability: 'shop.sale.reverse',
             receiptId: 'different-replay-receipt',
@@ -670,6 +728,16 @@ void main() {
       );
 
       expect(reversal.id, replay.id);
+      expect(
+        (await database
+                .customSelect(
+                  'SELECT COUNT(*) AS total '
+                  'FROM shop_correction_authorization_proofs',
+                )
+                .getSingle())
+            .read<int>('total'),
+        1,
+      );
       expect(reversal.originalTotalMmk, 5000);
       expect(reversal.originalPaymentMethod, 'cash');
       expect(reversal.cashDrawerDeltaMmk, -5000);
@@ -725,7 +793,7 @@ void main() {
       await expectLater(
         database.recordAuthorizedFullSaleReversal(
           command: changedCommand,
-          authorization: _correctionAuthorization(
+          authorization: await _correctionAuthorization(
             changedCommand.commandDigest,
             capability: 'shop.sale.reverse',
             receiptId: 'changed-retry-receipt',
@@ -806,33 +874,11 @@ void main() {
       final expiresAtMillis =
           issuedAtMillis + const Duration(minutes: 6).inMilliseconds;
       const receiptId = 'receipt-with-six-minute-ttl';
-      const workspaceId = 'workspace-shop-test';
-      const actorId = 'owner-test';
-      const actorLabel = 'Test owner';
-      const actorRole = 'owner';
       const capability = 'shop.sale.reverse';
-      const source = 'managed_membership_receipt_v1';
-      final authorization = ShopCorrectionAuthorization(
-        receiptId: receiptId,
-        receiptDigest: shopCorrectionAuthorizationReceiptDigest(
-          source: source,
-          receiptId: receiptId,
-          workspaceId: workspaceId,
-          actorId: actorId,
-          actorLabel: actorLabel,
-          actorRole: actorRole,
-          capability: capability,
-          commandDigest: command.commandDigest,
-          issuedAtMillis: issuedAtMillis,
-          expiresAtMillis: expiresAtMillis,
-        ),
-        workspaceId: workspaceId,
-        actorId: actorId,
-        actorLabel: actorLabel,
-        actorRole: actorRole,
+      final authorization = await _correctionAuthorization(
+        command.commandDigest,
         capability: capability,
-        source: source,
-        commandDigest: command.commandDigest,
+        receiptId: receiptId,
         issuedAtMillis: issuedAtMillis,
         expiresAtMillis: expiresAtMillis,
       );
@@ -870,6 +916,67 @@ void main() {
       expect(reviewAfter.expectedCashMmk, reviewBefore.expectedCashMmk);
     });
 
+    test('expired signed correction authorization cannot mutate records', () async {
+      await _attachTestWorkspace(database);
+      await database.addProduct(
+        id: 'expired-proof-product',
+        name: 'Expired proof item',
+        priceMmk: 1500,
+        openingStock: 2,
+      );
+      await database.openCashShift(
+        operationId: 'expired-proof-shift',
+        operatorLabel: 'May',
+        openingFloatMmk: 5000,
+      );
+      final sale = await database.recordCashSale(
+        operationId: 'expired-proof-sale',
+        lines: const [
+          ShopSaleLineInput(productId: 'expired-proof-product', quantity: 1),
+        ],
+      );
+      final command = await database.previewFullSaleReversal(
+        operationId: 'expired-proof-reversal',
+        saleId: sale.id,
+        restockItems: true,
+        reason: 'Expired authorization must remain read only',
+        confirmCashReturned: true,
+      );
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final authorization = await _correctionAuthorization(
+        command.commandDigest,
+        capability: 'shop.sale.reverse',
+        receiptId: 'expired-proof-receipt',
+        issuedAtMillis: now - const Duration(minutes: 10).inMilliseconds,
+        expiresAtMillis: now - const Duration(minutes: 5).inMilliseconds,
+      );
+      final movementCount = await database.countStockMovements();
+      final outboxCount = await database.countOutboxOperations();
+
+      await expectLater(
+        database.recordAuthorizedFullSaleReversal(
+          command: command,
+          authorization: authorization,
+        ),
+        throwsA(isA<StateError>()),
+      );
+
+      expect(await database.readSaleReversalForSale(sale.id), isNull);
+      expect(await database.countStockMovements(), movementCount);
+      expect(await database.countOutboxOperations(), outboxCount);
+      expect(
+        (await database
+                .customSelect(
+                  'SELECT COUNT(*) AS total '
+                  'FROM shop_correction_authorization_proofs',
+                )
+                .getSingle())
+            .read<int>('total'),
+        0,
+      );
+      expect((await database.readActiveProducts()).single.onHand, 1);
+    });
+
     test(
       'cash reversal cannot reopen exhausted gross shift capacity',
       () async {
@@ -901,7 +1008,7 @@ void main() {
         );
         await database.recordAuthorizedFullSaleReversal(
           command: command,
-          authorization: _correctionAuthorization(
+          authorization: await _correctionAuthorization(
             command.commandDigest,
             capability: 'shop.sale.reverse',
             receiptId: 'gross-cap-reversal-receipt',
@@ -987,7 +1094,7 @@ void main() {
         await expectLater(
           database.recordAuthorizedFullSaleReversal(
             command: command,
-            authorization: _correctionAuthorization(
+            authorization: await _correctionAuthorization(
               command.commandDigest,
               capability: 'shop.sale.reverse',
               receiptId: 'shift-bound-reversal-receipt',
@@ -1041,7 +1148,7 @@ void main() {
       );
       var reversal = await database.recordAuthorizedFullSaleReversal(
         command: command,
-        authorization: _correctionAuthorization(
+        authorization: await _correctionAuthorization(
           command.commandDigest,
           capability: 'shop.sale.reverse',
           receiptId: 'wallet-reversal-receipt',
@@ -1122,7 +1229,7 @@ void main() {
           'evidenceReference': 'KBZPay merchant history reference 42',
         }),
       );
-      final reconciliationAuthorization = _correctionAuthorization(
+      final reconciliationAuthorization = await _correctionAuthorization(
         reconciliation.commandDigest,
         capability: 'shop.sale.reconcile_wallet',
         receiptId: 'wallet-confirmation-receipt',
@@ -1130,7 +1237,7 @@ void main() {
       await expectLater(
         database.recordAuthorizedWalletReconciliation(
           command: reconciliation,
-          authorization: _correctionAuthorization(
+          authorization: await _correctionAuthorization(
             reconciliation.commandDigest,
             capability: 'shop.sale.reconcile_wallet',
             receiptId: 'foreign-wallet-confirmation-receipt',
@@ -1168,7 +1275,7 @@ void main() {
       await expectLater(
         database.recordAuthorizedWalletReconciliation(
           command: reconciliation,
-          authorization: _correctionAuthorization(
+          authorization: await _correctionAuthorization(
             reconciliation.commandDigest,
             capability: 'shop.sale.reconcile_wallet',
             receiptId: 'wallet-reversal-receipt',
@@ -3059,34 +3166,50 @@ void main() {
   });
 }
 
-ShopCorrectionAuthorization _correctionAuthorization(
+Future<ShopCorrectionAuthorization> _correctionAuthorization(
   String commandDigest, {
   required String capability,
   required String receiptId,
   String workspaceId = 'workspace-shop-test',
-}) {
+  String actorId = 'owner-test',
+  String actorLabel = 'Test owner',
+  int? issuedAtMillis,
+  int? expiresAtMillis,
+}) async {
   final now = DateTime.now().millisecondsSinceEpoch;
-  final issuedAtMillis = now - 1000;
-  final expiresAtMillis =
-      issuedAtMillis + const Duration(minutes: 5).inMilliseconds;
-  const actorId = 'owner-test';
-  const actorLabel = 'Test owner';
+  final issued = issuedAtMillis ?? now - 1000;
+  final expires =
+      expiresAtMillis ??
+      issued + const Duration(minutes: 5).inMilliseconds;
   const actorRole = 'owner';
   const source = 'managed_membership_receipt_v1';
+  final receiptDigest = shopCorrectionAuthorizationReceiptDigest(
+    source: source,
+    receiptId: receiptId,
+    workspaceId: workspaceId,
+    actorId: actorId,
+    actorLabel: actorLabel,
+    actorRole: actorRole,
+    capability: capability,
+    commandDigest: commandDigest,
+    issuedAtMillis: issued,
+    expiresAtMillis: expires,
+  );
+  final keyPair = await Ed25519().newKeyPairFromSeed(
+    List<int>.generate(32, (index) => index),
+  );
+  final signed = await Ed25519().sign(
+    utf8.encode(
+      shopCorrectionAuthorizationSignatureMessage(
+        keyId: _testCorrectionKeyId,
+        receiptDigest: receiptDigest,
+      ),
+    ),
+    keyPair: keyPair,
+  );
   return ShopCorrectionAuthorization(
     receiptId: receiptId,
-    receiptDigest: shopCorrectionAuthorizationReceiptDigest(
-      source: source,
-      receiptId: receiptId,
-      workspaceId: workspaceId,
-      actorId: actorId,
-      actorLabel: actorLabel,
-      actorRole: actorRole,
-      capability: capability,
-      commandDigest: commandDigest,
-      issuedAtMillis: issuedAtMillis,
-      expiresAtMillis: expiresAtMillis,
-    ),
+    receiptDigest: receiptDigest,
     workspaceId: workspaceId,
     actorId: actorId,
     actorLabel: actorLabel,
@@ -3094,8 +3217,10 @@ ShopCorrectionAuthorization _correctionAuthorization(
     capability: capability,
     source: source,
     commandDigest: commandDigest,
-    issuedAtMillis: issuedAtMillis,
-    expiresAtMillis: expiresAtMillis,
+    issuedAtMillis: issued,
+    expiresAtMillis: expires,
+    keyId: _testCorrectionKeyId,
+    signature: base64Url.encode(signed.bytes).replaceAll('=', ''),
   );
 }
 

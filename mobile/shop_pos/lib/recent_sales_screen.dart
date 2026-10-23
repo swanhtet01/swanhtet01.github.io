@@ -594,6 +594,15 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
                         Text(
                           '${shopCopy(widget.myanmar, 'Recorded actor', 'မှတ်တမ်းတင်သူ')}: ${reversal.authorizedActorLabel}',
                         ),
+                        if (reversal.authorizationProofKind ==
+                            shopCorrectionAuthorizationProofKindLegacyV1)
+                          Text(
+                            shopCopy(
+                              widget.myanmar,
+                              'Correction authorization: Migrated record — server authorization unverified.',
+                              'ပြင်ဆင်မှုခွင့်ပြုချက်: မှတ်တမ်းဟောင်းမှ ပြောင်းရွှေ့ထားပြီး ဆာဗာခွင့်ပြုချက်ကို အတည်မပြုထားပါ။',
+                            ),
+                          ),
                         Text(
                           reversal.restockItems
                               ? shopCopy(
@@ -638,6 +647,15 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
                           Text(
                             '${shopCopy(widget.myanmar, 'Reconciled', 'စာရင်းညှိချိန်')}: ${_when(dialogContext, reconciledAt)}'
                             '${reversal.walletReconciledActorLabel == null ? '' : ' · ${reversal.walletReconciledActorLabel}'}',
+                          ),
+                        if (reversal.walletReconciliationProofKind ==
+                            shopCorrectionAuthorizationProofKindLegacyV1)
+                          Text(
+                            shopCopy(
+                              widget.myanmar,
+                              'Wallet reconciliation authorization: Migrated record — server authorization unverified.',
+                              'Wallet စာရင်းညှိခြင်း ခွင့်ပြုချက်: မှတ်တမ်းဟောင်းမှ ပြောင်းရွှေ့ထားပြီး ဆာဗာခွင့်ပြုချက်ကို အတည်မပြုထားပါ။',
+                            ),
                           ),
                       ],
                     ),

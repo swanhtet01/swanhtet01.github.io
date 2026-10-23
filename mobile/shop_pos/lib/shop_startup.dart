@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
@@ -14,6 +15,9 @@ import 'shop_database.dart';
 
 typedef PickShopBackup = Future<XFile?> Function();
 typedef BuildOpenedShop = Widget Function(ShopDatabase database, bool myanmar);
+typedef CloseOpenedShopDatabase = Future<void> Function(
+  ShopDatabase database,
+);
 
 /// Selects a new local Shop or restores an archive before Drift opens a file.
 /// An existing database never enters the restore path.
@@ -24,6 +28,7 @@ class ShopStartup extends StatefulWidget {
     required this.buildShop,
     this.pickBackup,
     this.importScratchRoot,
+    this.closeDatabase,
     super.key,
   });
 
@@ -32,6 +37,10 @@ class ShopStartup extends StatefulWidget {
   final BuildOpenedShop buildShop;
   final PickShopBackup? pickBackup;
   final Directory? importScratchRoot;
+
+  /// Application callers use [ShopDatabase.close]. Tests may inject a wrapper
+  /// so platform file-handle release can be awaited deterministically.
+  final CloseOpenedShopDatabase? closeDatabase;
 
   @override
   State<ShopStartup> createState() => _ShopStartupState();
@@ -43,7 +52,9 @@ class _ShopStartupState extends State<ShopStartup> {
   bool _checking = true;
   bool _busy = false;
   bool _blocked = false;
+  bool _opening = false;
   Widget? _openedShop;
+  ShopDatabase? _openedDatabase;
   File? _selectedArchive;
   String? _selectedName;
   String? _message;
@@ -81,7 +92,7 @@ class _ShopStartupState extends State<ShopStartup> {
       final presence = await ShopBackup.inspectStore(_databaseFile);
       if (!mounted) return;
       if (presence == ShopStorePresence.existing) {
-        _openShop();
+        await _openShop();
       } else {
         setState(() {
           _blocked = presence != ShopStorePresence.empty;
@@ -105,13 +116,63 @@ class _ShopStartupState extends State<ShopStartup> {
     }
   }
 
-  void _openShop() {
-    final database = ShopDatabase.inPrivateDocuments(widget.documents);
-    setState(() {
-      _openedShop = widget.buildShop(database, _myanmar);
-      _checking = false;
-      _busy = false;
-    });
+  Future<void> _closeDatabase(ShopDatabase database) =>
+      (widget.closeDatabase ?? (database) => database.close())(database);
+
+  Future<void> _openShop() async {
+    if (_opening || _openedDatabase != null) return;
+    _opening = true;
+    ShopDatabase? pendingDatabase;
+    try {
+      if (await _databaseFile.length() > 0) {
+        final databasePath = _databaseFile.path;
+        await Isolate.run(
+          () => ShopBackup.verifySnapshot(
+            File(databasePath),
+            allowRuntimeUnboundCorrectionHistory: true,
+          ),
+        );
+      }
+      pendingDatabase = ShopDatabase.inPrivateDocuments(widget.documents);
+
+      // Opening Drift is deliberately eager here. The verified database stays
+      // local until migrations, structure, and semantic audit checks pass, so
+      // no application widget can observe an unsafe existing or restored file.
+      await pendingDatabase.verifyReadyForUse();
+      if (!mounted) return;
+
+      final openedShop = widget.buildShop(pendingDatabase, _myanmar);
+      if (!mounted) return;
+
+      final acceptedDatabase = pendingDatabase;
+      setState(() {
+        _openedDatabase = acceptedDatabase;
+        _openedShop = openedShop;
+        _checking = false;
+        _busy = false;
+        _message = null;
+      });
+      pendingDatabase = null;
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _blocked = true;
+          _checking = false;
+          _busy = false;
+          _message = shopCopy(
+            _myanmar,
+            'Shop found local data it cannot safely open. Your records were not changed. Close the app and contact support.',
+            'Shop တွင် လုံခြုံစွာ မဖွင့်နိုင်သော စက်တွင်းဒေတာ တွေ့ရှိသည်။ မှတ်တမ်းများ မပြောင်းလဲပါ။ အက်ပ်ကို ပိတ်ပြီး အကူအညီတောင်းပါ။',
+          );
+        });
+      }
+    } finally {
+      _opening = false;
+      final rejectedDatabase = pendingDatabase;
+      if (rejectedDatabase != null) {
+        await _closeDatabase(rejectedDatabase);
+      }
+    }
   }
 
   Future<void> _startNew() async {
@@ -119,7 +180,7 @@ class _ShopStartupState extends State<ShopStartup> {
     setState(() => _busy = true);
     try {
       await ShopBackup.reserveNewStore(_databaseFile);
-      if (mounted) _openShop();
+      if (mounted) await _openShop();
     } catch (_) {
       if (mounted) {
         setState(() {
@@ -261,7 +322,7 @@ class _ShopStartupState extends State<ShopStartup> {
       );
       _password.clear();
       removeArchive = true;
-      if (mounted) _openShop();
+      if (mounted) await _openShop();
     } catch (_) {
       _password.clear();
       final targetType = await FileSystemEntity.type(
@@ -317,6 +378,9 @@ class _ShopStartupState extends State<ShopStartup> {
   @override
   void dispose() {
     _password.dispose();
+    final database = _openedDatabase;
+    _openedDatabase = null;
+    if (database != null) unawaited(_closeDatabase(database));
     final archive = _selectedArchive;
     if (archive != null) {
       unawaited(() async {

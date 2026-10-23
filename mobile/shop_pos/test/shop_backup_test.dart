@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -33,12 +34,48 @@ Future<void> _pumpUntil(WidgetTester tester, Finder finder) async {
   throw TestFailure('The expected Shop state did not appear: $finder');
 }
 
+class _DatabaseCloseRecorder {
+  final _started = Completer<void>();
+  Future<void>? _completion;
+
+  Future<void> call(ShopDatabase database) {
+    final completion = database.close();
+    _completion = completion;
+    if (!_started.isCompleted) _started.complete();
+    return completion;
+  }
+
+  Future<void> wait() async {
+    await _started.future.timeout(const Duration(seconds: 5));
+    final completion = _completion;
+    if (completion == null) {
+      throw StateError('The Shop database close did not start.');
+    }
+    await completion;
+  }
+}
+
+Future<void> _disposeOpenedStartup(
+  WidgetTester tester,
+  _DatabaseCloseRecorder closeRecorder,
+) async {
+  await tester.pumpWidget(const SizedBox.shrink());
+  await tester.runAsync(closeRecorder.wait);
+}
+
 void main() {
   late Directory directory;
   late ShopDatabase database;
   late File archive;
 
   setUpAll(() async {
+    _backupCorrectionKeyPair = await Ed25519().newKeyPairFromSeed(
+      List<int>.generate(32, (index) => index + 1),
+    );
+    final publicKey = await _backupCorrectionKeyPair.extractPublicKey();
+    _backupCorrectionVerifier = ShopCorrectionReceiptVerifier({
+      _backupCorrectionKeyId: _base64UrlNoPadding(publicKey.bytes),
+    });
     directory = await Directory.systemTemp.createTemp('shop-backup-test-');
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(_pathProviderChannel, (call) async {
@@ -91,7 +128,7 @@ void main() {
     () async {
       final bytes = await archive.readAsBytes();
       expect(bytes.sublist(0, 4), ascii.encode('SMBK'));
-      expect(bytes[5], 13);
+      expect(bytes[5], 14);
       expect(
         bytes.sublist(0, 16),
         isNot(ascii.encode('SQLite format 3\u0000')),
@@ -132,7 +169,10 @@ void main() {
   );
 
   test('encrypted backup preserves a pending wallet reversal and exact retry state', () async {
-    final source = ShopDatabase(NativeDatabase.memory());
+    final source = ShopDatabase.withCorrectionReceiptVerifier(
+      executor: NativeDatabase.memory(),
+      correctionReceiptVerifier: _backupCorrectionVerifier,
+    );
     try {
       await source.addProduct(
         id: 'backup-reversal-product',
@@ -166,7 +206,7 @@ void main() {
         reason: 'Full sale returned',
         confirmCashReturned: false,
       );
-      final authorization = _backupAuthorization(
+      final authorization = await _backupAuthorization(
         command.commandDigest,
         capability: 'shop.sale.reverse',
         receiptId: 'backup-reversal-receipt',
@@ -188,8 +228,12 @@ void main() {
         archive: reversalArchive,
         target: target,
         password: _password,
+        correctionReceiptVerifier: _backupCorrectionVerifier,
       );
-      final restored = ShopDatabase(NativeDatabase(target));
+      final restored = ShopDatabase.withCorrectionReceiptVerifier(
+        executor: NativeDatabase(target),
+        correctionReceiptVerifier: _backupCorrectionVerifier,
+      );
       try {
         final restoredBinding = await restored.readManagedWorkspaceBinding();
         expect(restoredBinding?.workspaceId, sourceBinding.workspaceId);
@@ -219,7 +263,7 @@ void main() {
         );
         final confirmed = await restored.recordAuthorizedWalletReconciliation(
           command: reconciliation,
-          authorization: _backupAuthorization(
+          authorization: await _backupAuthorization(
             reconciliation.commandDigest,
             capability: 'shop.sale.reconcile_wallet',
             receiptId: 'backup-confirmation-receipt',
@@ -252,8 +296,12 @@ void main() {
           archive: cashArchive,
           target: target,
           password: _password,
+          correctionReceiptVerifier: _backupCorrectionVerifier,
         );
-        final restored = ShopDatabase(NativeDatabase(target));
+        final restored = ShopDatabase.withCorrectionReceiptVerifier(
+          executor: NativeDatabase(target),
+          correctionReceiptVerifier: _backupCorrectionVerifier,
+        );
         try {
           final shift = await restored.readLatestCashShift();
           expect(shift?.state, 'closed');
@@ -278,11 +326,11 @@ void main() {
   );
 
   test(
-    'authenticated v13 restore rejects workspace binding and trigger tampering',
+    'v14 direct open and restore reject workspace binding and trigger tampering',
     () async {
       final base = File('${directory.path}/workspace-binding-base.sqlite');
       await _writeWalletReversalSnapshot(base);
-      ShopBackup.verifySnapshot(base, expectedSchemaVersion: 13);
+      ShopBackup.verifySnapshot(base, expectedSchemaVersion: 14);
       final cases = <({String name, void Function(Database) mutate})>[
         (
           name: 'binding-deleted',
@@ -297,6 +345,26 @@ void main() {
                 operation: 'delete',
                 message: 'Managed Shop workspace binding is immutable',
               ),
+            );
+          },
+        ),
+        (
+          name: 'binding-deleted-with-forged-legacy-provenance',
+          mutate: (connection) {
+            connection.execute(
+              'DROP TRIGGER shop_managed_workspace_binding_no_delete',
+            );
+            connection.execute('DELETE FROM shop_managed_workspace_binding');
+            connection.execute(
+              shopImmutableTriggerV11Sql(
+                table: 'shop_managed_workspace_binding',
+                operation: 'delete',
+                message: 'Managed Shop workspace binding is immutable',
+              ),
+            );
+            connection.execute(
+              'INSERT INTO shop_v13_migration_provenance '
+              "(singleton, reason) VALUES (1, 'legacy_unbound_correction_history')",
             );
           },
         ),
@@ -362,11 +430,31 @@ void main() {
         } finally {
           connection.close();
         }
+        expect(
+          () => ShopBackup.verifySnapshot(
+            corrupt,
+            expectedSchemaVersion: 14,
+            allowRuntimeUnboundCorrectionHistory: true,
+          ),
+          throwsFormatException,
+        );
+        final opened = ShopDatabase.withCorrectionReceiptVerifier(
+          executor: NativeDatabase(corrupt),
+          correctionReceiptVerifier: _backupCorrectionVerifier,
+        );
+        try {
+          await expectLater(
+            opened.verifyReadyForUse(),
+            throwsA(isA<StateError>()),
+          );
+        } finally {
+          await opened.close();
+        }
         await _expectAuthenticatedRestoreRejected(
           directory: directory,
           snapshot: corrupt,
           stem: 'binding-${testCase.name}',
-          schemaVersion: 13,
+          schemaVersion: 14,
         );
       }
     },
@@ -377,7 +465,7 @@ void main() {
     () async {
       final base = File('${directory.path}/base-schema-contract.sqlite');
       await database.exportVerifiedLocalSnapshot(base);
-      ShopBackup.verifySnapshot(base, expectedSchemaVersion: 13);
+      ShopBackup.verifySnapshot(base, expectedSchemaVersion: 14);
       final cases = <({String name, void Function(Database) mutate})>[
         (
           name: 'missing-critical-index',
@@ -423,7 +511,7 @@ void main() {
           raw.close();
         }
         expect(
-          () => ShopBackup.verifySnapshot(corrupt, expectedSchemaVersion: 13),
+          () => ShopBackup.verifySnapshot(corrupt, expectedSchemaVersion: 14),
           throwsFormatException,
         );
         final opened = ShopDatabase(NativeDatabase(corrupt));
@@ -437,11 +525,90 @@ void main() {
   );
 
   test(
-    'authenticated v13 restore rejects reversal digest and event corruption',
+    'v14 proof tampering and orphan proofs fail direct open and restore',
+    () async {
+      final base = File('${directory.path}/proof-ledger-base.sqlite');
+      await _writeWalletReversalSnapshot(base);
+      ShopBackup.verifySnapshot(base, expectedSchemaVersion: 14);
+      final cases = <({String name, void Function(Database) mutate})>[
+        (
+          name: 'signature',
+          mutate: (connection) => _mutateImmutableProofRow(
+            connection,
+            mutate: () => connection.execute(
+              'UPDATE shop_correction_authorization_proofs SET signature = ?',
+              [List<String>.filled(86, 'A').join()],
+            ),
+          ),
+        ),
+        (
+          name: 'key-id',
+          mutate: (connection) => _mutateImmutableProofRow(
+            connection,
+            mutate: () => connection.execute(
+              "UPDATE shop_correction_authorization_proofs SET key_id = 'unknown-test-key'",
+            ),
+          ),
+        ),
+        (
+          name: 'command',
+          mutate: (connection) => _mutateImmutableProofRow(
+            connection,
+            mutate: () => connection.execute(
+              'UPDATE shop_correction_authorization_proofs '
+              'SET command_digest = ?',
+              [List<String>.filled(64, '0').join()],
+            ),
+          ),
+        ),
+        (
+          name: 'missing',
+          mutate: _deleteImmutableProofRows,
+        ),
+        (
+          name: 'orphan',
+          mutate: _insertOrphanLegacyProof,
+        ),
+      ];
+      for (final testCase in cases) {
+        final corrupt = File(
+          '${directory.path}/proof-ledger-${testCase.name}.sqlite',
+        );
+        await corrupt.writeAsBytes(await base.readAsBytes());
+        final connection = sqlite3.open(corrupt.path);
+        try {
+          testCase.mutate(connection);
+        } finally {
+          connection.close();
+        }
+
+        final opened = ShopDatabase.withCorrectionReceiptVerifier(
+          executor: NativeDatabase(corrupt),
+          correctionReceiptVerifier: _backupCorrectionVerifier,
+        );
+        try {
+          await expectLater(
+            opened.verifyReadyForUse(),
+            throwsA(isA<StateError>()),
+          );
+        } finally {
+          await opened.close();
+        }
+        await _expectV14ProofRestoreRejected(
+          directory: directory,
+          snapshot: corrupt,
+          stem: 'proof-ledger-${testCase.name}',
+        );
+      }
+    },
+  );
+
+  test(
+    'authenticated v14 restore rejects reversal digest and event corruption',
     () async {
       final base = File('${directory.path}/verifier-wallet-base.sqlite');
       await _writeWalletReversalSnapshot(base);
-      ShopBackup.verifySnapshot(base, expectedSchemaVersion: 13);
+      ShopBackup.verifySnapshot(base, expectedSchemaVersion: 14);
       final cases = <({String name, void Function(Database) mutate})>[
         (
           name: 'sale-snapshot-digest',
@@ -563,16 +730,16 @@ void main() {
           directory: directory,
           snapshot: corrupt,
           stem: 'verifier-${testCase.name}',
-          schemaVersion: 13,
+          schemaVersion: 14,
         );
       }
     },
   );
 
-  test('authenticated v13 restore rejects reconciliation command and event corruption', () async {
+  test('authenticated v14 restore rejects reconciliation command and event corruption', () async {
     final base = File('${directory.path}/verifier-reconciled-base.sqlite');
     await _writeWalletReversalSnapshot(base, reconciled: true);
-    ShopBackup.verifySnapshot(base, expectedSchemaVersion: 13);
+    ShopBackup.verifySnapshot(base, expectedSchemaVersion: 14);
     final cases = <({String name, void Function(Database) mutate})>[
       (
         name: 'reconciliation-request',
@@ -685,12 +852,12 @@ void main() {
         directory: directory,
         snapshot: corrupt,
         stem: 'verifier-${testCase.name}',
-        schemaVersion: 13,
+        schemaVersion: 14,
       );
     }
   });
 
-  test('authenticated v13 restore rejects cash-close snapshot and event corruption', () async {
+  test('authenticated v14 restore rejects cash-close snapshot and event corruption', () async {
     final source = await _closedCashReversalDatabase();
     final base = File('${directory.path}/verifier-cash-base.sqlite');
     try {
@@ -698,7 +865,7 @@ void main() {
     } finally {
       await source.close();
     }
-    ShopBackup.verifySnapshot(base, expectedSchemaVersion: 13);
+    ShopBackup.verifySnapshot(base, expectedSchemaVersion: 14);
     final cases = <({String name, void Function(Database) mutate})>[
       (
         name: 'cash-close-reversal-total',
@@ -749,7 +916,7 @@ void main() {
         directory: directory,
         snapshot: corrupt,
         stem: 'verifier-${testCase.name}',
-        schemaVersion: 13,
+        schemaVersion: 14,
       );
     }
   });
@@ -1047,7 +1214,7 @@ void main() {
     },
   );
 
-  test('v6 archive migrates to v13 before its catalog is published', () async {
+  test('v6 archive migrates to v14 before its catalog is published', () async {
     final legacy = File('${directory.path}/legacy-v6.sqlite');
     await database.exportVerifiedLocalSnapshot(legacy);
     final connection = sqlite3.open(legacy.path);
@@ -1090,7 +1257,7 @@ void main() {
       target: target,
       password: _password,
     );
-    ShopBackup.verifySnapshot(target, expectedSchemaVersion: 13);
+    ShopBackup.verifySnapshot(target, expectedSchemaVersion: 14);
     final migrated = ShopDatabase(NativeDatabase(target));
     try {
       expect(
@@ -1102,7 +1269,7 @@ void main() {
       expect(
         (await migrated.customSelect('PRAGMA user_version').getSingle())
             .read<int>('user_version'),
-        13,
+        14,
       );
     } finally {
       await migrated.close();
@@ -1129,7 +1296,7 @@ void main() {
       expect(
         (await upgraded.customSelect('PRAGMA user_version').getSingle())
             .read<int>('user_version'),
-        13,
+        14,
       );
     } finally {
       await upgraded.close();
@@ -1169,12 +1336,12 @@ void main() {
       expect(
         (await upgraded.customSelect('PRAGMA user_version').getSingle())
             .read<int>('user_version'),
-        13,
+        14,
       );
     } finally {
       await upgraded.close();
     }
-    ShopBackup.verifySnapshot(old, expectedSchemaVersion: 13);
+    ShopBackup.verifySnapshot(old, expectedSchemaVersion: 14);
   });
 
   test(
@@ -1209,18 +1376,21 @@ void main() {
       );
       final raw = sqlite3.open(target.path, mode: OpenMode.readOnly);
       try {
-        expect(raw.select('PRAGMA user_version').single['user_version'], 13);
+        expect(raw.select('PRAGMA user_version').single['user_version'], 14);
       } finally {
         raw.close();
       }
 
-      final migrated = ShopDatabase(NativeDatabase(target));
+      final migrated = ShopDatabase.withCorrectionReceiptVerifier(
+        executor: NativeDatabase(target),
+        correctionReceiptVerifier: _backupCorrectionVerifier,
+      );
       try {
         expect(await migrated.readManagedWorkspaceBinding(), isNull);
         expect(
           (await migrated.customSelect('PRAGMA user_version').getSingle())
               .read<int>('user_version'),
-          13,
+          14,
         );
         final recent = (await migrated.readRecentSales()).single;
         expect(recent.reversal?.id, 'verifier-wallet-reversal');
@@ -1231,7 +1401,7 @@ void main() {
           outcome: 'payment_not_received',
           evidenceReference: 'Legacy provider history reference',
         );
-        final authorization = _backupAuthorization(
+        final authorization = await _backupAuthorization(
           command.commandDigest,
           capability: 'shop.sale.reconcile_wallet',
           receiptId: 'legacy-v11-confirmation-receipt',
@@ -1243,9 +1413,14 @@ void main() {
         expect(
           () => ShopBackup.verifySnapshot(
             unboundSnapshot,
-            expectedSchemaVersion: 13,
+            expectedSchemaVersion: 14,
           ),
           throwsFormatException,
+        );
+        ShopBackup.verifySnapshot(
+          unboundSnapshot,
+          expectedSchemaVersion: 14,
+          allowRuntimeUnboundCorrectionHistory: true,
         );
         final outboxBefore = await migrated.countOutboxOperations();
         await expectLater(
@@ -1276,7 +1451,7 @@ void main() {
           '${directory.path}/legacy-v11-migrated-attached.sqlite',
         );
         await migrated.exportVerifiedLocalSnapshot(attachedSnapshot);
-        ShopBackup.verifySnapshot(attachedSnapshot, expectedSchemaVersion: 13);
+        ShopBackup.verifySnapshot(attachedSnapshot, expectedSchemaVersion: 14);
       } finally {
         await migrated.close();
       }
@@ -1284,7 +1459,7 @@ void main() {
   );
 
   test(
-    'authenticated profile-v11 backup migrates to v13 without rewriting data',
+    'authenticated profile-v11 backup migrates to v14 without rewriting data',
     () async {
       final legacy = File('${directory.path}/legacy-v11-profile.sqlite');
       await database.exportVerifiedLocalSnapshot(legacy);
@@ -1327,7 +1502,7 @@ void main() {
         expect(
           (await migrated.customSelect('PRAGMA user_version').getSingle())
               .read<int>('user_version'),
-          13,
+          14,
         );
         final profile = await migrated
             .customSelect(
@@ -1353,12 +1528,180 @@ void main() {
       } finally {
         await migrated.close();
       }
-      ShopBackup.verifySnapshot(target, expectedSchemaVersion: 13);
+      ShopBackup.verifySnapshot(target, expectedSchemaVersion: 14);
+    },
+  );
+
+  test('v13 correction history migrates as explicit unverified legacy proof', () async {
+    final legacy = File('${directory.path}/legacy-correction-v13.sqlite');
+    await _writeWalletReversalSnapshot(legacy, reconciled: true);
+    final raw = sqlite3.open(legacy.path);
+    try {
+      _removeV14AuthorizationProofsForLegacyFixture(raw);
+      raw.execute('PRAGMA user_version = 13');
+    } finally {
+      raw.close();
+    }
+    ShopBackup.verifySnapshot(legacy, expectedSchemaVersion: 13);
+
+    final migrated = ShopDatabase(NativeDatabase(legacy));
+    try {
+      await migrated.verifyReadyForUse();
+      expect(
+        (await migrated.customSelect('PRAGMA user_version').getSingle())
+            .read<int>('user_version'),
+        14,
+      );
+      final proofs = await migrated
+          .customSelect(
+            'SELECT proof_kind, key_id, signature, capability '
+            'FROM shop_correction_authorization_proofs ORDER BY capability',
+          )
+          .get();
+      expect(proofs, hasLength(2));
+      expect(
+        proofs.map((proof) => proof.read<String>('proof_kind')),
+        everyElement(shopCorrectionAuthorizationProofKindLegacyV1),
+      );
+      expect(
+        proofs.map((proof) => proof.readNullable<String>('key_id')),
+        everyElement(isNull),
+      );
+      expect(
+        proofs.map((proof) => proof.readNullable<String>('signature')),
+        everyElement(isNull),
+      );
+      expect(
+        proofs.map((proof) => proof.read<String>('capability')).toSet(),
+        {
+          'shop.sale.reverse',
+          'shop.sale.reconcile_wallet',
+        },
+      );
+      final reversal = (await migrated.readRecentSales()).single.reversal!;
+      expect(
+        reversal.authorizationProofKind,
+        shopCorrectionAuthorizationProofKindLegacyV1,
+      );
+      expect(
+        reversal.walletReconciliationProofKind,
+        shopCorrectionAuthorizationProofKindLegacyV1,
+      );
+    } finally {
+      await migrated.close();
+    }
+    ShopBackup.verifySnapshot(legacy, expectedSchemaVersion: 14);
+  });
+
+  test(
+    'malformed v13 authorization evidence rolls back migration and restore',
+    () async {
+      final legacy = File(
+        '${directory.path}/malformed-v13-authorization.sqlite',
+      );
+      await _writeWalletReversalSnapshot(legacy);
+      final raw = sqlite3.open(legacy.path);
+      try {
+        _removeV14AuthorizationProofsForLegacyFixture(raw);
+        final reversal = raw.select(
+          'SELECT * FROM shop_sale_reversals LIMIT 1',
+        ).single;
+        const malformedActorLabel = ' Backup test owner ';
+        final legacyDigest =
+            shopLegacyCorrectionAuthorizationReceiptDigestV1(
+              source: reversal['authorization_source'] as String,
+              receiptId: reversal['authorization_receipt_id'] as String,
+              workspaceId:
+                  reversal['authorization_workspace_id'] as String,
+              actorId: reversal['authorized_actor_id'] as String,
+              actorLabel: malformedActorLabel,
+              actorRole: reversal['authorized_actor_role'] as String,
+              capability: reversal['authorization_capability'] as String,
+              commandDigest:
+                  reversal['authorization_command_digest'] as String,
+              issuedAtMillis:
+                  reversal['authorization_issued_at_millis'] as int,
+              expiresAtMillis:
+                  reversal['authorization_expires_at_millis'] as int,
+            );
+        _mutateImmutableAuditRow(
+          raw,
+          table: 'shop_sale_reversals',
+          mutate: () => raw.execute(
+            'UPDATE shop_sale_reversals SET authorized_actor_label = ?, '
+            'authorization_receipt_digest = ?',
+            [malformedActorLabel, legacyDigest],
+          ),
+        );
+        raw.execute('PRAGMA user_version = 13');
+      } finally {
+        raw.close();
+      }
+
+      ShopBackup.verifySnapshot(legacy, expectedSchemaVersion: 13);
+      for (var attempt = 0; attempt < 2; attempt++) {
+        final reopened = ShopDatabase.withCorrectionReceiptVerifier(
+          executor: NativeDatabase(legacy),
+          correctionReceiptVerifier: _backupCorrectionVerifier,
+        );
+        try {
+          await expectLater(
+            reopened.verifyReadyForUse(),
+            throwsA(isA<StateError>()),
+          );
+        } finally {
+          await reopened.close();
+        }
+        final unchanged = sqlite3.open(legacy.path);
+        try {
+          expect(unchanged.userVersion, 13);
+          expect(
+            unchanged.select(
+              "SELECT 1 FROM sqlite_master WHERE type = 'table' "
+              "AND name = 'shop_correction_authorization_proofs'",
+            ),
+            isEmpty,
+          );
+          expect(
+            unchanged
+                .select(
+                  'SELECT authorized_actor_label FROM shop_sale_reversals',
+                )
+                .single['authorized_actor_label'],
+            ' Backup test owner ',
+          );
+        } finally {
+          unchanged.close();
+        }
+      }
+
+      final archive = File(
+        '${directory.path}/malformed-v13-authorization.smbak',
+      );
+      await _writeAuthenticatedArchive(
+        archive,
+        await legacy.readAsBytes(),
+        schemaVersion: 13,
+      );
+      final target = File(
+        '${directory.path}/malformed-v13-authorization-restored.sqlite',
+      );
+      await expectLater(
+        ShopBackup.restoreIntoEmptyDatabase(
+          archive: archive,
+          target: target,
+          password: _password,
+          correctionReceiptVerifier: _backupCorrectionVerifier,
+        ),
+        throwsA(anyOf(isA<FormatException>(), isA<StateError>())),
+      );
+      expect(await target.exists(), isFalse);
+      await _expectNoScratch(directory);
     },
   );
 
   test(
-    'v13 detects deletion of legacy unbound correction provenance',
+    'v14 detects deletion of legacy unbound correction provenance',
     () async {
       final legacy = File('${directory.path}/legacy-v11-provenance.sqlite');
       await _writeWalletReversalSnapshot(legacy);
@@ -1383,6 +1726,11 @@ void main() {
       } finally {
         await migrated.close();
       }
+      ShopBackup.verifySnapshot(
+        legacy,
+        expectedSchemaVersion: 14,
+        allowRuntimeUnboundCorrectionHistory: true,
+      );
 
       final tamper = sqlite3.open(legacy.path);
       try {
@@ -1390,6 +1738,14 @@ void main() {
       } finally {
         tamper.close();
       }
+      expect(
+        () => ShopBackup.verifySnapshot(
+          legacy,
+          expectedSchemaVersion: 14,
+          allowRuntimeUnboundCorrectionHistory: true,
+        ),
+        throwsFormatException,
+      );
       final reopened = ShopDatabase(NativeDatabase(legacy));
       try {
         await expectLater(reopened.countSales(), throwsA(isA<StateError>()));
@@ -1399,7 +1755,7 @@ void main() {
     },
   );
 
-  test('exact profile-workspace collision v12 repairs to v13 with an empty binding', () async {
+  test('exact profile-workspace collision v12 repairs to v14 with an empty binding', () async {
     final collision = File('${directory.path}/profile-collision-v12.sqlite');
     await database.exportVerifiedLocalSnapshot(collision);
     final connection = sqlite3.open(collision.path);
@@ -1440,7 +1796,7 @@ void main() {
       expect(
         (await migrated.customSelect('PRAGMA user_version').getSingle())
             .read<int>('user_version'),
-        13,
+        14,
       );
       expect(
         (await migrated
@@ -1457,16 +1813,17 @@ void main() {
     } finally {
       await migrated.close();
     }
-    ShopBackup.verifySnapshot(target, expectedSchemaVersion: 13);
+    ShopBackup.verifySnapshot(target, expectedSchemaVersion: 14);
   });
 
   test(
-    'exact correction-workspace v12 preserves binding and reversal at v13',
+    'exact correction-workspace v12 preserves binding and reversal at v14',
     () async {
       final legacy = File('${directory.path}/legacy-correction-v12.sqlite');
       await _writeWalletReversalSnapshot(legacy);
       final connection = sqlite3.open(legacy.path);
       try {
+        _removeV14AuthorizationProofsForLegacyFixture(connection);
         connection.execute('DROP TABLE shop_business_profile');
         connection.execute('DROP TABLE shop_v13_migration_provenance');
         connection.execute('PRAGMA user_version = 12');
@@ -1479,7 +1836,7 @@ void main() {
         expect(
           (await migrated.customSelect('PRAGMA user_version').getSingle())
               .read<int>('user_version'),
-          13,
+          14,
         );
         expect(
           (await migrated.readManagedWorkspaceBinding())?.workspaceId,
@@ -1497,9 +1854,47 @@ void main() {
       } finally {
         await migrated.close();
       }
-      ShopBackup.verifySnapshot(legacy, expectedSchemaVersion: 13);
+      ShopBackup.verifySnapshot(legacy, expectedSchemaVersion: 14);
     },
   );
+
+  test('runtime preflight accepts only the exact unbound correction-v12 shape', () async {
+    final legacy = File('${directory.path}/unbound-correction-v12.sqlite');
+    await _writeWalletReversalSnapshot(legacy);
+    final connection = sqlite3.open(legacy.path);
+    try {
+      _removeV14AuthorizationProofsForLegacyFixture(connection);
+      connection.execute('DROP TABLE shop_business_profile');
+      connection.execute('DROP TABLE shop_v13_migration_provenance');
+      connection.execute(
+        'DROP TRIGGER shop_managed_workspace_binding_no_delete',
+      );
+      connection.execute('DELETE FROM shop_managed_workspace_binding');
+      connection.execute(
+        shopImmutableTriggerV11Sql(
+          table: 'shop_managed_workspace_binding',
+          operation: 'delete',
+          message: 'Managed Shop workspace binding is immutable',
+        ),
+      );
+      connection.execute('PRAGMA user_version = 12');
+    } finally {
+      connection.close();
+    }
+
+    expect(
+      () => ShopBackup.verifySnapshot(
+        legacy,
+        expectedSchemaVersion: 12,
+      ),
+      throwsFormatException,
+    );
+    ShopBackup.verifySnapshot(
+      legacy,
+      expectedSchemaVersion: 12,
+      allowRuntimeUnboundCorrectionHistory: true,
+    );
+  });
 
   test('both schema-11 meanings fail closed before mutation', () async {
     final mixed = File('${directory.path}/mixed-v11.sqlite');
@@ -1700,12 +2095,12 @@ void main() {
         expect(
           (await upgraded.customSelect('PRAGMA user_version').getSingle())
               .read<int>('user_version'),
-          13,
+          14,
         );
       } finally {
         await upgraded.close();
       }
-      ShopBackup.verifySnapshot(old, expectedSchemaVersion: 13);
+      ShopBackup.verifySnapshot(old, expectedSchemaVersion: 14);
     },
   );
 
@@ -1734,16 +2129,16 @@ void main() {
         expect(
           (await migrated.customSelect('PRAGMA user_version').getSingle())
               .read<int>('user_version'),
-          13,
+          14,
         );
       } finally {
         await migrated.close();
       }
-      ShopBackup.verifySnapshot(old, expectedSchemaVersion: 13);
+      ShopBackup.verifySnapshot(old, expectedSchemaVersion: 14);
     },
   );
 
-  test('v13 backup preserves custom and disabled low-stock alerts', () async {
+  test('v14 backup preserves custom and disabled low-stock alerts', () async {
     final source = ShopDatabase(NativeDatabase.memory());
     try {
       await source.addProduct(
@@ -1781,7 +2176,7 @@ void main() {
         target: restored,
         password: _password,
       );
-      ShopBackup.verifySnapshot(restored, expectedSchemaVersion: 13);
+      ShopBackup.verifySnapshot(restored, expectedSchemaVersion: 14);
       final reopened = ShopDatabase(NativeDatabase(restored));
       try {
         final products = {
@@ -1799,7 +2194,7 @@ void main() {
     }
   });
 
-  test('v13 snapshot rejects a same-name no-op audit trigger', () async {
+  test('v14 snapshot rejects a same-name no-op audit trigger', () async {
     final corrupt = File('${directory.path}/noop-audit-trigger.sqlite');
     await database.exportVerifiedLocalSnapshot(corrupt);
     final connection = sqlite3.open(corrupt.path);
@@ -1813,13 +2208,13 @@ void main() {
       connection.close();
     }
     expect(
-      () => ShopBackup.verifySnapshot(corrupt, expectedSchemaVersion: 13),
+      () => ShopBackup.verifySnapshot(corrupt, expectedSchemaVersion: 14),
       throwsFormatException,
     );
   });
 
   test(
-    'authenticated v13 restore rejects an extra executable trigger',
+    'authenticated v14 restore rejects an extra executable trigger',
     () async {
       final corrupt = File('${directory.path}/extra-audit-trigger.sqlite');
       await database.exportVerifiedLocalSnapshot(corrupt);
@@ -1836,13 +2231,13 @@ void main() {
         directory: directory,
         snapshot: corrupt,
         stem: 'extra-audit-trigger',
-        schemaVersion: 13,
+        schemaVersion: 14,
       );
     },
   );
 
   test(
-    'authenticated v13 restore preserves quoted CHECK literal case',
+    'authenticated v14 restore preserves quoted CHECK literal case',
     () async {
       final corrupt = File('${directory.path}/changed-check-literal.sqlite');
       await database.exportVerifiedLocalSnapshot(corrupt);
@@ -1871,13 +2266,13 @@ void main() {
         directory: directory,
         snapshot: corrupt,
         stem: 'changed-check-literal',
-        schemaVersion: 13,
+        schemaVersion: 14,
       );
     },
   );
 
   test(
-    'authenticated v13 restore rejects changed audit column types',
+    'authenticated v14 restore rejects changed audit column types',
     () async {
       final corrupt = File('${directory.path}/changed-audit-column.sqlite');
       await database.exportVerifiedLocalSnapshot(corrupt);
@@ -1897,12 +2292,12 @@ void main() {
         directory: directory,
         snapshot: corrupt,
         stem: 'changed-audit-column',
-        schemaVersion: 13,
+        schemaVersion: 14,
       );
     },
   );
 
-  test('v13 snapshots reject missing or invalid alert settings', () async {
+  test('v14 snapshots reject missing or invalid alert settings', () async {
     final missing = File('${directory.path}/missing-reorder.sqlite');
     await database.exportVerifiedLocalSnapshot(missing);
     final missingConnection = sqlite3.open(missing.path);
@@ -1919,7 +2314,9 @@ void main() {
     await database.exportVerifiedLocalSnapshot(invalid);
     final invalidConnection = sqlite3.open(invalid.path);
     try {
+      invalidConnection.execute('PRAGMA ignore_check_constraints = ON');
       invalidConnection.execute('UPDATE shop_products SET reorder_level = -1');
+      invalidConnection.execute('PRAGMA ignore_check_constraints = OFF');
     } finally {
       invalidConnection.close();
     }
@@ -1957,7 +2354,7 @@ void main() {
     expect(() => ShopBackup.verifySnapshot(corrupt), throwsFormatException);
   });
 
-  test('v13 snapshot rejects a malformed pending wallet basket', () async {
+  test('v14 snapshot rejects a malformed pending wallet basket', () async {
     final corrupt = File('${directory.path}/malformed-wallet.sqlite');
     await database.exportVerifiedLocalSnapshot(corrupt);
     final connection = sqlite3.open(corrupt.path);
@@ -2252,6 +2649,7 @@ void main() {
 
   testWidgets('fresh install restores before Shop opens', (tester) async {
     final documents = Directory.systemTemp.createTempSync('shop-first-run-');
+    final closeRecorder = _DatabaseCloseRecorder();
     try {
       await tester.pumpWidget(
         ShopStartup(
@@ -2261,6 +2659,7 @@ void main() {
           pickBackup: () async => XFile(archive.path),
           buildShop: (_, _) =>
               const MaterialApp(home: Scaffold(body: Text('Opened Shop'))),
+          closeDatabase: closeRecorder.call,
         ),
       );
       await _pumpUntil(tester, find.text('Start new Shop'));
@@ -2293,9 +2692,7 @@ void main() {
         restored.close();
       }
     } finally {
-      await tester.pumpWidget(const SizedBox.shrink());
-      // The static builder never queries the lazy executor; the normal-async
-      // Drift reopen test above verifies opening, querying, and closing it.
+      await _disposeOpenedStartup(tester, closeRecorder);
       documents.deleteSync(recursive: true);
     }
   });
@@ -2305,6 +2702,7 @@ void main() {
   ) async {
     final documents = Directory.systemTemp.createTempSync('shop-new-');
     ShopDatabase? opened;
+    final closeRecorder = _DatabaseCloseRecorder();
     try {
       await tester.pumpWidget(
         ShopStartup(
@@ -2315,6 +2713,7 @@ void main() {
             opened = database;
             return const MaterialApp(home: Scaffold(body: Text('Opened Shop')));
           },
+          closeDatabase: closeRecorder.call,
         ),
       );
       await _pumpUntil(tester, find.text('Start new Shop'));
@@ -2325,8 +2724,44 @@ void main() {
       expect(ShopDatabase.privateDatabaseFile(documents).existsSync(), isTrue);
       expect(opened, isNotNull);
     } finally {
+      await _disposeOpenedStartup(tester, closeRecorder);
+      documents.deleteSync(recursive: true);
+    }
+  });
+
+  testWidgets('builder failure closes the verified database and blocks access', (
+    tester,
+  ) async {
+    final documents = Directory.systemTemp.createTempSync(
+      'shop-builder-failure-',
+    );
+    final closeRecorder = _DatabaseCloseRecorder();
+    var buildCalls = 0;
+    try {
+      await tester.pumpWidget(
+        ShopStartup(
+          documents: documents,
+          importScratchRoot: documents,
+          initialMyanmar: false,
+          buildShop: (_, _) {
+            buildCalls++;
+            throw StateError('synthetic builder failure');
+          },
+          closeDatabase: closeRecorder.call,
+        ),
+      );
+      await _pumpUntil(tester, find.text('Start new Shop'));
+      await tester.tap(find.text('Start new Shop'));
+      await _pumpUntil(tester, find.textContaining('cannot safely open'));
+      await tester.runAsync(closeRecorder.wait);
+
+      expect(buildCalls, 1);
+      expect(find.text('Start new Shop'), findsNothing);
+      expect(find.text('Restore backup'), findsNothing);
+      expect(tester.takeException(), isNull);
+    } finally {
       await tester.pumpWidget(const SizedBox.shrink());
-      // The static builder does not open Drift's lazy executor.
+      await tester.runAsync(closeRecorder.wait);
       documents.deleteSync(recursive: true);
     }
   });
@@ -2335,6 +2770,7 @@ void main() {
     tester,
   ) async {
     final documents = Directory.systemTemp.createTempSync('shop-wrong-pass-');
+    final closeRecorder = _DatabaseCloseRecorder();
     try {
       await tester.pumpWidget(
         ShopStartup(
@@ -2344,6 +2780,7 @@ void main() {
           pickBackup: () async => XFile(archive.path),
           buildShop: (_, _) =>
               const MaterialApp(home: Scaffold(body: Text('Opened Shop'))),
+          closeDatabase: closeRecorder.call,
         ),
       );
       await _pumpUntil(tester, find.text('Start new Shop'));
@@ -2361,7 +2798,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 1));
       expect(find.text('Opened Shop'), findsOneWidget);
     } finally {
-      await tester.pumpWidget(const SizedBox.shrink());
+      await _disposeOpenedStartup(tester, closeRecorder);
       documents.deleteSync(recursive: true);
     }
   });
@@ -2395,6 +2832,7 @@ void main() {
   testWidgets('existing Shop opens without offering restore', (tester) async {
     final documents = Directory.systemTemp.createTempSync('shop-existing-');
     ShopDatabase? opened;
+    final closeRecorder = _DatabaseCloseRecorder();
     try {
       await tester.runAsync(
         () => ShopBackup.restoreIntoEmptyDatabase(
@@ -2412,6 +2850,7 @@ void main() {
             opened = database;
             return const MaterialApp(home: Scaffold(body: Text('Opened Shop')));
           },
+          closeDatabase: closeRecorder.call,
         ),
       );
       await _pumpUntil(tester, find.text('Opened Shop'));
@@ -2421,11 +2860,77 @@ void main() {
       expect(opened, isNotNull);
       ShopBackup.verifySnapshot(ShopDatabase.privateDatabaseFile(documents));
     } finally {
-      await tester.pumpWidget(const SizedBox.shrink());
-      // The static builder does not open Drift's lazy executor.
+      await _disposeOpenedStartup(tester, closeRecorder);
       documents.deleteSync(recursive: true);
     }
   });
+
+  testWidgets(
+    'semantically invalid existing Shop never reaches the application',
+    (tester) async {
+      final documents = Directory.systemTemp.createTempSync(
+        'shop-invalid-existing-',
+      );
+      var buildCalls = 0;
+      try {
+        final target = ShopDatabase.privateDatabaseFile(documents);
+        await tester.runAsync(
+          () => ShopBackup.restoreIntoEmptyDatabase(
+            archive: archive,
+            target: target,
+            password: _password,
+          ),
+        );
+        final connection = sqlite3.open(target.path);
+        late int originalVersion;
+        try {
+          originalVersion = connection.userVersion;
+          connection.execute('PRAGMA ignore_check_constraints = ON');
+          connection.execute('UPDATE shop_products SET reorder_level = -1');
+          connection.execute('PRAGMA ignore_check_constraints = OFF');
+        } finally {
+          connection.close();
+        }
+
+        await tester.pumpWidget(
+          ShopStartup(
+            documents: documents,
+            importScratchRoot: documents,
+            initialMyanmar: false,
+            buildShop: (_, _) {
+              buildCalls++;
+              return const MaterialApp(
+                home: Scaffold(body: Text('Opened unsafe Shop')),
+              );
+            },
+          ),
+        );
+        await _pumpUntil(tester, find.textContaining('cannot safely open'));
+
+        expect(buildCalls, 0);
+        expect(find.text('Opened unsafe Shop'), findsNothing);
+        expect(find.text('Start new Shop'), findsNothing);
+        expect(find.text('Restore backup'), findsNothing);
+        expect(target.existsSync(), isTrue);
+        final preserved = sqlite3.open(target.path, mode: OpenMode.readOnly);
+        try {
+          expect(preserved.userVersion, originalVersion);
+          expect(
+            preserved.select(
+              'SELECT reorder_level FROM shop_products WHERE id = ?',
+              ['rice'],
+            ).single['reorder_level'],
+            -1,
+          );
+        } finally {
+          preserved.close();
+        }
+      } finally {
+        await tester.pumpWidget(const SizedBox.shrink());
+        documents.deleteSync(recursive: true);
+      }
+    },
+  );
 
   testWidgets('orphaned WAL blocks first-run actions without deletion', (
     tester,
@@ -2725,6 +3230,7 @@ void _removeV12ObjectsForLegacyFixture(Database connection) {
 }
 
 void _removeWorkspaceObjectsKeepingProfile(Database connection) {
+  _removeV14AuthorizationProofsForLegacyFixture(connection);
   for (final trigger in const [
     'shop_wallet_reversal_reconciliations_require_workspace_binding',
     'shop_sale_reversals_require_workspace_binding',
@@ -2738,7 +3244,55 @@ void _removeWorkspaceObjectsKeepingProfile(Database connection) {
   connection.execute('DROP TABLE shop_v13_migration_provenance');
 }
 
+void _removeV14AuthorizationProofsForLegacyFixture(Database connection) {
+  for (final table in const [
+    'shop_sale_reversals',
+    'shop_wallet_reversal_reconciliations',
+  ]) {
+    final rows = connection.select('SELECT * FROM $table');
+    if (rows.isEmpty) continue;
+    connection.execute('DROP TRIGGER ${table}_no_update');
+    for (final row in rows) {
+      final receiptId = row['authorization_receipt_id'] as String;
+      final digest = shopLegacyCorrectionAuthorizationReceiptDigestV1(
+        source: row['authorization_source'] as String,
+        receiptId: receiptId,
+        workspaceId: row['authorization_workspace_id'] as String,
+        actorId: row['authorized_actor_id'] as String,
+        actorLabel: row['authorized_actor_label'] as String,
+        actorRole: row['authorized_actor_role'] as String,
+        capability: row['authorization_capability'] as String,
+        commandDigest: row['authorization_command_digest'] as String,
+        issuedAtMillis: row['authorization_issued_at_millis'] as int,
+        expiresAtMillis: row['authorization_expires_at_millis'] as int,
+      );
+      connection.execute(
+        'UPDATE $table SET authorization_receipt_digest = ? '
+        'WHERE authorization_receipt_id = ?',
+        [digest, receiptId],
+      );
+    }
+    connection.execute(
+      shopImmutableTriggerV11Sql(
+        table: table,
+        operation: 'update',
+        message: 'Shop reversal audit records are immutable',
+      ),
+    );
+  }
+  for (final trigger in const [
+    'shop_wallet_reconciliations_require_signed_proof',
+    'shop_sale_reversals_require_signed_proof',
+    'shop_correction_authorization_proofs_no_update',
+    'shop_correction_authorization_proofs_no_delete',
+  ]) {
+    connection.execute('DROP TRIGGER $trigger');
+  }
+  connection.execute('DROP TABLE shop_correction_authorization_proofs');
+}
+
 void _removeCorrectionObjectsForCollisionFixture(Database connection) {
+  _removeV14AuthorizationProofsForLegacyFixture(connection);
   for (final trigger in const [
     'shop_wallet_reversal_reconciliations_require_workspace_binding',
     'shop_sale_reversals_require_workspace_binding',
@@ -2758,11 +3312,18 @@ Future<ShopManagedWorkspaceBinding> _attachBackupWorkspace(
   ),
 );
 
-ShopCorrectionAuthorization _backupAuthorization(
+const _backupCorrectionKeyId = 'backup-test-ed25519-v1';
+late SimpleKeyPair _backupCorrectionKeyPair;
+late ShopCorrectionReceiptVerifier _backupCorrectionVerifier;
+
+String _base64UrlNoPadding(List<int> value) =>
+    base64Url.encode(value).replaceAll('=', '');
+
+Future<ShopCorrectionAuthorization> _backupAuthorization(
   String commandDigest, {
   required String capability,
   required String receiptId,
-}) {
+}) async {
   final now = DateTime.now().millisecondsSinceEpoch;
   final issuedAtMillis = now - 1000;
   final expiresAtMillis =
@@ -2772,20 +3333,30 @@ ShopCorrectionAuthorization _backupAuthorization(
   const actorLabel = 'Backup test owner';
   const actorRole = 'owner';
   const source = 'managed_membership_receipt_v1';
+  final receiptDigest = shopCorrectionAuthorizationReceiptDigest(
+    source: source,
+    receiptId: receiptId,
+    workspaceId: workspaceId,
+    actorId: actorId,
+    actorLabel: actorLabel,
+    actorRole: actorRole,
+    capability: capability,
+    commandDigest: commandDigest,
+    issuedAtMillis: issuedAtMillis,
+    expiresAtMillis: expiresAtMillis,
+  );
+  final signed = await Ed25519().sign(
+    utf8.encode(
+      shopCorrectionAuthorizationSignatureMessage(
+        keyId: _backupCorrectionKeyId,
+        receiptDigest: receiptDigest,
+      ),
+    ),
+    keyPair: _backupCorrectionKeyPair,
+  );
   return ShopCorrectionAuthorization(
     receiptId: receiptId,
-    receiptDigest: shopCorrectionAuthorizationReceiptDigest(
-      source: source,
-      receiptId: receiptId,
-      workspaceId: workspaceId,
-      actorId: actorId,
-      actorLabel: actorLabel,
-      actorRole: actorRole,
-      capability: capability,
-      commandDigest: commandDigest,
-      issuedAtMillis: issuedAtMillis,
-      expiresAtMillis: expiresAtMillis,
-    ),
+    receiptDigest: receiptDigest,
     workspaceId: workspaceId,
     actorId: actorId,
     actorLabel: actorLabel,
@@ -2795,6 +3366,8 @@ ShopCorrectionAuthorization _backupAuthorization(
     commandDigest: commandDigest,
     issuedAtMillis: issuedAtMillis,
     expiresAtMillis: expiresAtMillis,
+    keyId: _backupCorrectionKeyId,
+    signature: _base64UrlNoPadding(signed.bytes),
   );
 }
 
@@ -2802,7 +3375,10 @@ Future<void> _writeWalletReversalSnapshot(
   File target, {
   bool reconciled = false,
 }) async {
-  final source = ShopDatabase(NativeDatabase.memory());
+  final source = ShopDatabase.withCorrectionReceiptVerifier(
+    executor: NativeDatabase.memory(),
+    correctionReceiptVerifier: _backupCorrectionVerifier,
+  );
   try {
     await source.addProduct(
       id: 'verifier-wallet-product',
@@ -2839,7 +3415,7 @@ Future<void> _writeWalletReversalSnapshot(
     await _attachBackupWorkspace(source);
     await source.recordAuthorizedFullSaleReversal(
       command: reversal,
-      authorization: _backupAuthorization(
+      authorization: await _backupAuthorization(
         reversal.commandDigest,
         capability: 'shop.sale.reverse',
         receiptId: 'verifier-wallet-reversal-receipt',
@@ -2854,7 +3430,7 @@ Future<void> _writeWalletReversalSnapshot(
       );
       await source.recordAuthorizedWalletReconciliation(
         command: reconciliation,
-        authorization: _backupAuthorization(
+        authorization: await _backupAuthorization(
           reconciliation.commandDigest,
           capability: 'shop.sale.reconcile_wallet',
           receiptId: 'verifier-wallet-reconciliation-receipt',
@@ -2868,7 +3444,10 @@ Future<void> _writeWalletReversalSnapshot(
 }
 
 Future<ShopDatabase> _closedCashReversalDatabase() async {
-  final source = ShopDatabase(NativeDatabase.memory());
+  final source = ShopDatabase.withCorrectionReceiptVerifier(
+    executor: NativeDatabase.memory(),
+    correctionReceiptVerifier: _backupCorrectionVerifier,
+  );
   try {
     await source.addProduct(
       id: 'verifier-cash-product',
@@ -2897,7 +3476,7 @@ Future<ShopDatabase> _closedCashReversalDatabase() async {
     await _attachBackupWorkspace(source);
     await source.recordAuthorizedFullSaleReversal(
       command: reversal,
-      authorization: _backupAuthorization(
+      authorization: await _backupAuthorization(
         reversal.commandDigest,
         capability: 'shop.sale.reverse',
         receiptId: 'verifier-cash-reversal-receipt',
@@ -2936,6 +3515,112 @@ void _mutateImmutableAuditRow(
   );
 }
 
+void _mutateImmutableProofRow(
+  Database connection, {
+  required void Function() mutate,
+}) {
+  connection.execute(
+    'DROP TRIGGER shop_correction_authorization_proofs_no_update',
+  );
+  mutate();
+  connection.execute(
+    shopImmutableTriggerV11Sql(
+      table: 'shop_correction_authorization_proofs',
+      operation: 'update',
+      message: 'Shop correction authorization proofs are immutable',
+    ),
+  );
+}
+
+void _deleteImmutableProofRows(Database connection) {
+  connection.execute(
+    'DROP TRIGGER shop_correction_authorization_proofs_no_delete',
+  );
+  connection.execute('DELETE FROM shop_correction_authorization_proofs');
+  connection.execute(
+    shopImmutableTriggerV11Sql(
+      table: 'shop_correction_authorization_proofs',
+      operation: 'delete',
+      message: 'Shop correction authorization proofs are immutable',
+    ),
+  );
+}
+
+void _insertOrphanLegacyProof(Database connection) {
+  const receiptId = 'orphan-legacy-proof';
+  const operationId = 'orphan-legacy-operation';
+  const workspaceId = 'workspace-backup-test';
+  const actorId = 'owner-backup-test';
+  const actorLabel = 'Backup test owner';
+  const actorRole = 'owner';
+  const capability = 'shop.sale.reverse';
+  const source = 'managed_membership_receipt_v1';
+  const commandDigest =
+      '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+  const issuedAtMillis = 1729555200000;
+  const expiresAtMillis = 1729555500000;
+  final receiptDigest = shopLegacyCorrectionAuthorizationReceiptDigestV1(
+    source: source,
+    receiptId: receiptId,
+    workspaceId: workspaceId,
+    actorId: actorId,
+    actorLabel: actorLabel,
+    actorRole: actorRole,
+    capability: capability,
+    commandDigest: commandDigest,
+    issuedAtMillis: issuedAtMillis,
+    expiresAtMillis: expiresAtMillis,
+  );
+  connection.execute(
+    'INSERT INTO shop_correction_authorization_proofs '
+    '(receipt_id, proof_kind, local_operation_id, receipt_digest, key_id, '
+    'signature, workspace_id, actor_id, actor_label, actor_role, capability, '
+    'source, command_digest, issued_at_millis, expires_at_millis, '
+    'verified_at_millis) VALUES (?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    [
+      receiptId,
+      shopCorrectionAuthorizationProofKindLegacyV1,
+      operationId,
+      receiptDigest,
+      workspaceId,
+      actorId,
+      actorLabel,
+      actorRole,
+      capability,
+      source,
+      commandDigest,
+      issuedAtMillis,
+      expiresAtMillis,
+      issuedAtMillis,
+    ],
+  );
+}
+
+Future<void> _expectV14ProofRestoreRejected({
+  required Directory directory,
+  required File snapshot,
+  required String stem,
+}) async {
+  final archive = File('${directory.path}/$stem.smbak');
+  await _writeAuthenticatedArchive(
+    archive,
+    await snapshot.readAsBytes(),
+    schemaVersion: 14,
+  );
+  final target = File('${directory.path}/$stem-restored.sqlite');
+  await expectLater(
+    ShopBackup.restoreIntoEmptyDatabase(
+      archive: archive,
+      target: target,
+      password: _password,
+      correctionReceiptVerifier: _backupCorrectionVerifier,
+    ),
+    throwsA(anyOf(isA<FormatException>(), isA<StateError>())),
+  );
+  expect(await target.exists(), isFalse);
+  await _expectNoScratch(directory);
+}
+
 Future<void> _expectAuthenticatedRestoreRejected({
   required Directory directory,
   required File snapshot,
@@ -2954,6 +3639,7 @@ Future<void> _expectAuthenticatedRestoreRejected({
       archive: archive,
       target: target,
       password: _password,
+      correctionReceiptVerifier: _backupCorrectionVerifier,
     ),
     throwsFormatException,
   );

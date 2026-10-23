@@ -5,10 +5,12 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart' as crypto;
 import 'package:http/http.dart' as http;
 
-import 'shop_database.dart';
+import 'shop_correction_receipt.dart';
 
 const shopCorrectionAuthorizationPath =
     '/api/trial/v1/shop/correction-authorizations';
+const shopFullSaleReversalCapability = 'shop.sale.reverse';
+const shopWalletReconciliationCapability = 'shop.sale.reconcile_wallet';
 
 const _maximumResponseBytes = 16 * 1024;
 const _authorizationTtlMillis = 5 * 60 * 1000;
@@ -24,8 +26,8 @@ final _canonicalUuid = RegExp(
 final _controlCharacters = RegExp(r'[\x00-\x1f\x7f]');
 
 const _confirmationByCapability = <String, String>{
-  'shop.sale.reverse': 'AUTHORIZE FULL SALE REVERSAL',
-  'shop.sale.reconcile_wallet': 'AUTHORIZE WALLET RECONCILIATION',
+  shopFullSaleReversalCapability: 'AUTHORIZE FULL SALE REVERSAL',
+  shopWalletReconciliationCapability: 'AUTHORIZE WALLET RECONCILIATION',
 };
 
 const _envelopeKeys = <String>{
@@ -41,6 +43,8 @@ const _receiptKeys = <String>{
   'contract',
   'receiptId',
   'receiptDigest',
+  'keyId',
+  'signature',
   'workspaceId',
   'actorId',
   'actorLabel',
@@ -95,22 +99,44 @@ class ShopCorrectionAuthorizationResult {
   final bool externalWritesPerformed;
 }
 
+/// Narrow seam used by the operator flow.
+///
+/// Implementations must obtain authorization from the managed capability
+/// boundary. A local role label or workspace ID is never sufficient.
+abstract interface class ShopCorrectionAuthorizer {
+  Future<bool> canRequestAuthorization({
+    required String workspaceId,
+    required String capability,
+  });
+
+  Future<ShopCorrectionAuthorizationResult> authorize({
+    required String authorizationRequestId,
+    required String workspaceId,
+    required String capability,
+    required String commandDigest,
+    required String requestFingerprint,
+  });
+}
+
 /// Obtains a short-lived, exact-command owner receipt from the managed server.
 ///
 /// The caller owns both the local operation ID inside [requestFingerprint] and
 /// [authorizationRequestId]. Retrying an uncertain request must reuse the same
 /// authorization request ID until the server reports that it expired.
-class ShopCorrectionAuthorizationService {
+class ShopCorrectionAuthorizationService implements ShopCorrectionAuthorizer {
   ShopCorrectionAuthorizationService({
     required this.endpoint,
     required this.accessToken,
     required this.currentUserId,
     http.Client? client,
     DateTime Function()? clock,
+    ShopCorrectionReceiptVerifier? receiptVerifier,
     this.requestTimeout = const Duration(seconds: 15),
   }) : _client = client ?? http.Client(),
        _ownsClient = client == null,
-       _clock = clock ?? DateTime.now;
+       _clock = clock ?? DateTime.now,
+       _receiptVerifier =
+           receiptVerifier ?? ShopCorrectionReceiptVerifier.production();
 
   final Uri endpoint;
   final Future<String?> Function() accessToken;
@@ -119,7 +145,34 @@ class ShopCorrectionAuthorizationService {
   final http.Client _client;
   final bool _ownsClient;
   final DateTime Function() _clock;
+  final ShopCorrectionReceiptVerifier _receiptVerifier;
 
+  @override
+  Future<bool> canRequestAuthorization({
+    required String workspaceId,
+    required String capability,
+  }) async {
+    if (!_receiptVerifier.hasPinnedKeys ||
+        !_validEndpoint(endpoint) ||
+        !_identifier.hasMatch(workspaceId) ||
+        !_confirmationByCapability.containsKey(capability)) {
+      return false;
+    }
+    try {
+      final userId = await currentUserId();
+      final token = (await accessToken())?.trim();
+      return userId != null &&
+          _identifier.hasMatch(userId) &&
+          token != null &&
+          token.isNotEmpty &&
+          token.length <= 8192 &&
+          !_controlCharacters.hasMatch(token);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  @override
   Future<ShopCorrectionAuthorizationResult> authorize({
     required String authorizationRequestId,
     required String workspaceId,
@@ -147,6 +200,11 @@ class ShopCorrectionAuthorizationService {
     required String commandDigest,
     required String requestFingerprint,
   }) async {
+    if (!_receiptVerifier.hasPinnedKeys) {
+      throw const ShopCorrectionAuthorizationException(
+        'authorization_unavailable',
+      );
+    }
     if (!_validEndpoint(endpoint)) {
       throw const ShopCorrectionAuthorizationException('endpoint_unavailable');
     }
@@ -222,7 +280,7 @@ class ShopCorrectionAuthorizationService {
       if (await currentUserId() != initialUserId) {
         throw const ShopCorrectionAuthorizationException('session_changed');
       }
-      return _parseSuccess(
+      return await _parseSuccess(
         responseBytes,
         workspaceId: workspaceId,
         capability: capability,
@@ -255,13 +313,13 @@ class ShopCorrectionAuthorizationService {
     return bytes.takeBytes();
   }
 
-  ShopCorrectionAuthorizationResult _parseSuccess(
+  Future<ShopCorrectionAuthorizationResult> _parseSuccess(
     Uint8List responseBytes, {
     required String workspaceId,
     required String capability,
     required String commandDigest,
     required String currentUserId,
-  }) {
+  }) async {
     Object? decoded;
     try {
       decoded = jsonDecode(utf8.decode(responseBytes));
@@ -290,6 +348,8 @@ class ShopCorrectionAuthorizationService {
 
     final receiptId = receipt['receiptId'];
     final receiptDigest = receipt['receiptDigest'];
+    final keyId = receipt['keyId'];
+    final signature = receipt['signature'];
     final actorId = receipt['actorId'];
     final actorLabel = receipt['actorLabel'];
     final issuedAtMillis = receipt['issuedAtMillis'];
@@ -299,6 +359,8 @@ class ShopCorrectionAuthorizationService {
         !_canonicalUuid.hasMatch(receiptId) ||
         receiptDigest is! String ||
         !_lowerHexDigest.hasMatch(receiptDigest) ||
+        keyId is! String ||
+        signature is! String ||
         receipt['workspaceId'] != workspaceId ||
         actorId is! String ||
         actorId != currentUserId ||
@@ -337,20 +399,27 @@ class ShopCorrectionAuthorizationService {
       throw const ShopCorrectionAuthorizationException('invalid_response');
     }
 
+    final authorization = ShopCorrectionAuthorization(
+      receiptId: receiptId,
+      receiptDigest: receiptDigest,
+      workspaceId: workspaceId,
+      actorId: actorId,
+      actorLabel: actorLabel,
+      actorRole: 'owner',
+      capability: capability,
+      source: _authorizationSource,
+      commandDigest: commandDigest,
+      issuedAtMillis: issuedAtMillis,
+      expiresAtMillis: expiresAtMillis,
+      keyId: keyId,
+      signature: signature,
+    );
+    if (!await _receiptVerifier.verify(authorization)) {
+      throw const ShopCorrectionAuthorizationException('invalid_response');
+    }
+
     return ShopCorrectionAuthorizationResult(
-      authorization: ShopCorrectionAuthorization(
-        receiptId: receiptId,
-        receiptDigest: receiptDigest,
-        workspaceId: workspaceId,
-        actorId: actorId,
-        actorLabel: actorLabel,
-        actorRole: 'owner',
-        capability: capability,
-        source: _authorizationSource,
-        commandDigest: commandDigest,
-        issuedAtMillis: issuedAtMillis,
-        expiresAtMillis: expiresAtMillis,
-      ),
+      authorization: authorization,
       idempotentReplay: replay,
       externalWritesPerformed: externalWrites,
     );
