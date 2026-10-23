@@ -4646,6 +4646,11 @@ void main() {
               .text,
           '0099999999999',
         );
+        await tester.tap(find.text('Cancel'));
+        await tester.pumpAndSettle();
+        expect(find.byType(AlertDialog), findsNothing);
+        await tester.tap(search);
+        expect(tester.widget<TextField>(search).focusNode!.hasFocus, isTrue);
         expect(await database.countSales(), 0);
         expect((await database.readActiveProducts()).single.onHand, 3);
       } finally {
