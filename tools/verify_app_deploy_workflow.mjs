@@ -5,6 +5,7 @@ import { join, resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
 
 import { validateSchedulerExecutionBudget } from './scheduler_authority_contract.mjs'
+import { verifyPythonDependencyContract } from './verify_python_dependency_contract.mjs'
 
 const normalizeSourceText = (value) => value.replace(/\r\n?/g, '\n')
 const readFile = async (...args) => {
@@ -18,6 +19,10 @@ const workflow = await readFile(resolve(root, '.github/workflows/supermega-publi
 const ciWorkflow = await readFile(resolve(root, '.github/workflows/showroom-ci.yml'), 'utf8')
 const renderedJourneyVerifier = await readFile(resolve(root, 'tools/verify_app_entry_rendered.mjs'), 'utf8')
 const dependencyAuditWorkflow = await readFile(resolve(root, '.github/workflows/dependency-security.yml'), 'utf8')
+const pyproject = await readFile(resolve(root, 'pyproject.toml'), 'utf8')
+const uvLock = await readFile(resolve(root, 'uv.lock'), 'utf8')
+const requirements = await readFile(resolve(root, 'requirements.txt'), 'utf8')
+const requirementsTest = await readFile(resolve(root, 'requirements-test.txt'), 'utf8')
 const publicHealthWorkflow = await readFile(resolve(root, '.github/workflows/supermega-public-live-health.yml'), 'utf8')
 const kernelWorkflow = await readFile(resolve(root, '.github/workflows/kernel-deploy.yml'), 'utf8')
 const generator = await readFile(resolve(root, 'tools/write_app_vercel_config.mjs'), 'utf8')
@@ -47,6 +52,22 @@ const agentConnectorMap = previewServer.slice(
 )
 const failures = []
 const checks = []
+const pythonDependencyContract = verifyPythonDependencyContract({
+  pyproject,
+  uvLock,
+  requirements,
+  requirementsTest,
+  workflows: {
+    appCi: ciWorkflow,
+    security: dependencyAuditWorkflow,
+    coordinatedRelease: appWorkflow,
+    publicRelease: workflow,
+  },
+})
+requireContract(
+  'required Python workflows consume the frozen hashed dependency graph',
+  pythonDependencyContract.ok,
+)
 
 // Exact supported PR event shape has no path, branch, or draft exclusions.
 const allPullRequests = source => {
@@ -72,7 +93,7 @@ requireContract('push and PR CI cannot cancel each other and fork branches remai
 const budgetSqlStep = ciWorkflow.split('      - name: Verify durable signup budgets on disposable PostgreSQL\n')[1]?.split('      - name:')[0] || ''
 requireContract('app CI executes real disposable PostgreSQL signup budget tests',
   budgetSqlStep.includes("SUPERMEGA_TEST_DISPOSABLE_PG17: '1'")
-  && budgetSqlStep.includes('run: python -m unittest tests.test_self_serve_durable_budget -v')
+  && budgetSqlStep.includes('run: uv run --frozen --group test python -m unittest tests.test_self_serve_durable_budget -v')
   && !/^        (?:if|continue-on-error):/m.test(budgetSqlStep))
 const appCiName = "    name: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && 'Same-repository PR uses push checks' || 'SuperMega App CI' }}"
 const appCiCondition = "    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository }}"
@@ -93,7 +114,7 @@ requireContract('all dependency audit packages remain covered',
   ['platform\n            directory: .\n', 'app\n            directory: showroom\n', 'kernel\n            directory: kernel\n']
     .every(entry => dependencyAuditWorkflow.includes(`          - package: ${entry}`))
   && dependencyAuditWorkflow.includes('      fail-fast: false\n')
-  && dependencyAuditWorkflow.includes('run: pip-audit -r requirements-test.txt'))
+  && dependencyAuditWorkflow.includes('run: uv run --frozen --group test --group audit pip-audit --local --skip-editable'))
 
 for (const filter of ['paths', 'paths-ignore', 'branches', 'branches-ignore']) {
   requireContract(`all-PR guard rejects ${filter}`, !allPullRequests(ciWorkflow.replace('  workflow_dispatch:', `    ${filter}: [main]\n  workflow_dispatch:`)))
@@ -669,11 +690,13 @@ requireContract('core workflows use Node 24 action revisions',
   && (coreWorkflowActions.match(/actions\/setup-node@820762786026740c76f36085b0efc47a31fe5020/g) || []).length === 6
   && (coreWorkflowActions.match(/actions\/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97/g) || []).length === 3
   && !/(?:11d5960a326750d5838078e36cf38b85af677262|49933ea5288caeca8642d1e84afbd3f7d6820020|a26af69be951a213d495a4c3e4e4022e16d87065)/.test(coreWorkflowActions))
-requireContract('coordinated release caches python verifier dependencies',
-  workflow.includes("cache: 'pip'")
-  && workflow.includes('cache-dependency-path: requirements-test.txt')
-  && workflow.indexOf("cache: 'pip'") < workflow.indexOf('python -m pip install --disable-pip-version-check -r requirements-test.txt'))
-requireContract('uv build tool is immutable', workflow.includes('astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9') && workflow.includes("version: '0.11.30'"))
+requireContract('coordinated release caches frozen python verifier dependencies',
+  workflow.includes('cache-dependency-glob: uv.lock')
+  && workflow.indexOf('cache-dependency-glob: uv.lock') < workflow.indexOf('uv sync --frozen --group test'))
+requireContract('uv build tool is immutable',
+  [workflow, appWorkflow, ciWorkflow, dependencyAuditWorkflow].every(source =>
+    source.includes('astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9')
+    && source.includes("version: '0.11.30'")))
 requireContract('stale Cloud Run release authority is retired', !existsSync(resolve(root, '.github/workflows/supermega-app-cloud-run.yml')))
 requireContract('orphan enterprise and free-mode gates are retired',
   !existsSync(resolve(root, '.github/workflows/supermega-enterprise-gate.yml'))

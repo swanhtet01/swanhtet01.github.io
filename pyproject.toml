@@ -14,3 +14,13 @@ dependencies = [
   "opentelemetry-instrumentation-psycopg==0.66b1",
   "opentelemetry-exporter-otlp-proto-grpc==1.45.1",
 ]
+
+[dependency-groups]
+test = [
+  "httpx==0.28.1",
+  "SQLAlchemy==2.0.51",
+  "sqlmodel==0.0.39",
+]
+audit = [
+  "pip-audit==2.10.1",
+]
