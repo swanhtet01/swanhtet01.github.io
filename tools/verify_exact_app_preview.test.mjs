@@ -532,6 +532,7 @@ test('builds and validates the exact twenty-eight-case technical preview proof',
     'Sell clearly. Keep stock accurate.',
     'Contact us about Shop',
     'Sign in',
+    'Illustrative Shop preview with synthetic sample data.',
   ])
   assert.deepEqual(
     derivePublicHomepageExpectedText({ manifest, generatorSource }),
@@ -547,6 +548,7 @@ test('builds and validates the exact twenty-eight-case technical preview proof',
     "replaceOnce(heroWithPreview, 'Shop for Myanmar retailers'",
     "replaceOnce(heroWithPreview, 'Sell clearly. Keep stock accurate.'",
     "replaceOnce(heroWithPreview, 'href=\"/contact/?product=shop\">Contact us about Shop'",
+    "'Illustrative Shop preview with synthetic sample data.'",
   ]) {
     assert.throws(
       () => derivePublicHomepageExpectedText({
