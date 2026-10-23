@@ -1228,14 +1228,10 @@ class ShopDatabase extends _$ShopDatabase {
 
   ShopDatabase.withCorrectionReceiptVerifier({
     QueryExecutor? executor,
-    required ShopCorrectionReceiptVerifier correctionReceiptVerifier,
-  }) : _correctionReceiptVerifier = correctionReceiptVerifier,
-       super(executor ?? driftDatabase(name: 'supermega_shop'));
+    required this.correctionReceiptVerifier,
+  }) : super(executor ?? driftDatabase(name: 'supermega_shop'));
 
-  final ShopCorrectionReceiptVerifier _correctionReceiptVerifier;
-
-  ShopCorrectionReceiptVerifier get correctionReceiptVerifier =>
-      _correctionReceiptVerifier;
+  final ShopCorrectionReceiptVerifier correctionReceiptVerifier;
 
   @override
   int get schemaVersion => 14;
@@ -2571,7 +2567,7 @@ class ShopDatabase extends _$ShopDatabase {
           signature == null ||
           !keyIdPattern.hasMatch(keyId) ||
           !signaturePattern.hasMatch(signature) ||
-          !await _correctionReceiptVerifier.verify(
+          !await correctionReceiptVerifier.verify(
             ShopCorrectionAuthorization(
               receiptId: receiptId,
               receiptDigest: receiptDigest,
@@ -2932,7 +2928,7 @@ class ShopDatabase extends _$ShopDatabase {
       await customStatement('VACUUM INTO ?', [target.path]);
       final snapshot = ShopDatabase.withCorrectionReceiptVerifier(
         executor: NativeDatabase(target),
-        correctionReceiptVerifier: _correctionReceiptVerifier,
+        correctionReceiptVerifier: correctionReceiptVerifier,
       );
       try {
         await snapshot.verifyReadyForUse();
@@ -4239,7 +4235,7 @@ class ShopDatabase extends _$ShopDatabase {
         authorization.expiresAtMillis <= authorization.issuedAtMillis ||
         authorization.expiresAtMillis - authorization.issuedAtMillis !=
             const Duration(minutes: 5).inMilliseconds ||
-        !await _correctionReceiptVerifier.verify(authorization)) {
+        !await correctionReceiptVerifier.verify(authorization)) {
       throw StateError('Correction authorization is missing or invalid.');
     }
   }
