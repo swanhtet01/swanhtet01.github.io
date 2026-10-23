@@ -522,7 +522,7 @@ void main() {
         expect(printLines, contains('အရောင်းအမှတ် ${receipt.id}'));
         expect(printLines, contains('ငွေပေးချေမှု: ငွေသား'));
         expect(printLines, isNot(contains('Sale ${receipt.id}')));
-        expect(printLines, isNot(contains('CASH')));
+        expect(printLines.join('\n'), isNot(contains('CASH')));
 
         final englishPrintLines = shopReceiptTextLines(
           receipt,
