@@ -2,7 +2,6 @@
 // screenshots and must not be published as hardware acceptance evidence.
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:cryptography/cryptography.dart';
