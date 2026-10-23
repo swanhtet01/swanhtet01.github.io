@@ -38,12 +38,12 @@ owner-approved product outcome and gate require it.
 | Item | Current fact |
 | --- | --- |
 | Integration PR | [#734 — Unify Shop app first-use and public launch candidate](https://github.com/swanhtet01/swanhtet01.github.io/pull/734) |
-| State | Open draft; source-candidate App CI and content-equivalent native merge-ref CI pass; not merged, signed, deployed, or merchant-accepted |
+| State | Open draft and CLEAN; exact-source App/native CI and independent last-push review pass; not merged, signed, deployed, or merchant-accepted |
 | Integration branch | `codex/shop-public-main-port-20261022` |
-| Product/source candidate | `c6bdeabcfa9e60ea6719e206eccd20dfd76fa9da` / tree `1ac768d7a193c412822bebea8ed149fcd9838a46` |
-| Presentation predecessor | `4f5c0307713371e579ba295ac8adc82cee03d7a0` |
-| Status-only successor | The branch head after `c6bdeabc` changes this release-truth file only; use PR #734 for its exact identity |
-| Native Shop tree | `d6186aea369bcea7d2d3cdcb4e22c2b0e3fe878a` |
+| Product/source candidate | `1f688118a3c6b5e59f131501141a0a216ac08ef0` / tree `09eb71bb39fc77304bfbcf117731ad45ec384286` |
+| Product-code predecessor | `2741ed050e7a597d0d8fa63afdb2312fd3eec35c` |
+| Status-only successor | This file's successor changes release truth only; use PR #734 for its exact identity |
+| Native Shop tree | `d7096a582218b6a28f846f75b1ef721bbe5dfc37` |
 | PostgreSQL evidence checkpoint | `b1ee4cc2884dda1ab753e8d2e4ecc6c6216a36ef` / tree `6996864df311db4748fcca3ec75c030dd0fcab3e` |
 | Inactive promotion envelope | PR #730; use only after #734 passes and is explicitly promoted |
 | Paused source set | PR #751 at `945ce70f792fd856c767f64e6b3e45e4d8f4ee3e`; review and port bounded changes, never merge wholesale |
@@ -54,36 +54,36 @@ Commit `b1ee4cc2` remains the exact five-file PostgreSQL-17 evidence successor
 to `efc9897b`; its original CI failure was only this file's former conciseness
 violation. Later candidates preserved that verified receipt, repaired the
 concise status, and passed the required HQ contract. The active candidate adds
-the bounded Shop-first public presentation and exact capture provenance, and
-aligns printed receipt/test-slip product naming to Shop without changing the
-signed correction, migration, backup, restore, or runtime boundary.
+the bounded Shop-first presentation and the fail-closed operator entry to the
+already-reviewed signed correction boundary. Empty production receipt pins
+keep that action unavailable; normal selling remains offline.
 
 ## Exact evidence
 
-- [Required App CI 39940075423](https://github.com/swanhtet01/swanhtet01.github.io/actions/runs/39940075423)
-  passed at exact push head `c6bdeabc`: exact checkout, PostgreSQL/API and
+- [Required App CI 39954480669](https://github.com/swanhtet01/swanhtet01.github.io/actions/runs/39954480669)
+  passed at exact push head `1f688118`: exact checkout, PostgreSQL/API and
   migration/RLS guards, dependencies, lint, canonical build, HQ verification,
   and desktop/390 px product journeys.
-- [Native run 39940081583](https://github.com/swanhtet01/swanhtet01.github.io/actions/runs/39940081583)
-  passed on PR merge-ref `dd9e07bd74476bf1b8453379cf36f5f59c81caeb`,
-  whose parents are base `f8c68861` and source `c6bdeabc`; its tree
-  `1ac768d7a193c412822bebea8ed149fcd9838a46` exactly matches the source
+- [Native run 39954486180](https://github.com/swanhtet01/swanhtet01.github.io/actions/runs/39954486180)
+  passed on PR merge-ref `cfa929aff38b2da4cb275d60f80f90f64cace0d1`,
+  whose parents are base `f8c68861` and source `1f688118`; its tree
+  `09eb71bb39fc77304bfbcf117731ad45ec384286` exactly matches the source
   candidate tree. It passed formatting, analysis, isolated
   first-sale and first-run restore, full Flutter tests, bundled-font renders,
   Android debug APK, unsigned iPad/iOS, and Windows restore/no-replace,
   unsigned build, and package retention.
-- The retained source-equivalent artifacts expire 30 October 2026: Android
-  debug `supermega-shop-android-debug-dd9e07bd74476bf1b8453379cf36f5f59c81caeb`
-  (`12494739751`,
-  `sha256:930d48fb11fbf47d603638f75323a0dfaa14622b7282a50d9b948cba578fc27c`),
+- The retained source-equivalent artifacts expire 6 November 2026: Android
+  debug `supermega-shop-android-debug-cfa929aff38b2da4cb275d60f80f90f64cace0d1`
+  (`12501449821`,
+  `sha256:456c9153130401320454ebe7e9891157a78d84a61b078904cfe67321312f605c`),
   Flutter renders
-  `supermega-shop-flutter-renders-dd9e07bd74476bf1b8453379cf36f5f59c81caeb`
-  (`12496350175`,
-  `sha256:6bdd38bd61f441b61ebc8852440d56cd13d6dcf1ada53a7725d53f82bebef92a`),
+  `supermega-shop-flutter-renders-cfa929aff38b2da4cb275d60f80f90f64cace0d1`
+  (`12501059933`,
+  `sha256:cc92cf9f1ac85321c485cf9719fa42e590214065121abf8f0102d6e0305fb764`),
   and unsigned Windows
-  `supermega-shop-windows-unsigned-dd9e07bd74476bf1b8453379cf36f5f59c81caeb`
-  (`12496430891`,
-  `sha256:c7099b5f5e51c2de2ae8dcdd508674c0e946c86d1b2d0639f4ca7151e1b06487`).
+  `supermega-shop-windows-unsigned-cfa929aff38b2da4cb275d60f80f90f64cace0d1`
+  (`12503075582`,
+  `sha256:3dbced5517061974db023e26513904f0ef43a78f8fedd35c7ec86fbe615ceaa2`).
   iOS passed `--no-codesign`; no installable iOS artifact is retained.
 - The isolated Windows PostgreSQL 17.10 rehearsal bound to `efc9897b` / tree
   `fad006a…` passed 74 checks across 51 implementation files. Its implementation
@@ -102,8 +102,9 @@ signed correction, migration, backup, restore, or runtime boundary.
   preview-rehearsal proposal, and verified the receipt.
 - Exact-candidate repository security, Kernel, and dependency checks pass.
   Production release remains owner-gated.
-- Independent last-push review found no release-blocking issue in the bounded
-  presentation repair, capture provenance, or exact-head check set.
+- Independent last-push review passed for `2741ed05..1f688118`; it found no
+  release-blocking authorization, mutation, wallet-truth, privacy, or layout
+  defect. Installed, hardware, signing, and merchant gates remain separate.
 
 These are source, local, and CI evidence only. Unsigned CI packages are QA
 artifacts, not supported installers or a public release. Native SQLite schema
@@ -121,10 +122,12 @@ v14 and hosted PostgreSQL/Supabase schema profile v13 are separate contracts.
 - Full-sale reversal remains append-only: original sales and prices are
   immutable, restock is explicit, stock and cash-shift effects are once-only,
   and wallet follow-up never implies money moved without external evidence.
-- The correction dialog exists as reviewed source but is not wired into the
-  operator path. Production public pins and the issuer signing secret are
-  absent, so the issuer and action remain default-dark. Normal selling remains
-  offline; pilot correction is online-authorized only.
+- Sale details now exposes one restrained full-sale `Correct sale` path only
+  when immutable workspace/actor binding and the authorization service are
+  available. The server-signed command is rechecked at mutation time, retries
+  are once-only, and EN/MY small-phone flows pass. Production public pins and
+  the issuer signing secret are absent, so the action remains default-dark.
+  Normal selling remains offline; pilot correction is online-authorized only.
 - Backup and restore validate migrations, receipt/proof integrity, immutable
   linked records, workspace binding, wallet uncertainty, and corruption
   failure paths.
@@ -142,7 +145,7 @@ v14 and hosted PostgreSQL/Supabase schema profile v13 are separate contracts.
 - No production deployment, alias promotion, merge, or production database
   mutation has occurred.
 - No immutable protected public preview has been accepted for source candidate
-  `c6bdeabc`. The repository intentionally disables direct previews; the
+  `1f688118`. The repository intentionally disables direct previews; the
   existing production-only workflow cannot be used as preview evidence.
 - No signed Android, iPad, or Windows distribution has been accepted.
 - Installed restart/update and encrypted restore are not accepted on the target
@@ -196,7 +199,7 @@ backup, and restore review; no blind merge or cherry-pick is allowed.
 
 ## Next action
 
-1. Keep source candidate `c6bdeabc` stable, correction default-dark, and PR
+1. Keep product candidate `1f688118` stable, correction default-dark, and PR
    #734 draft pending independent review of the final status-only successor.
 2. The owner must approve fixed provider team/project identities and a separate
    protected non-production preview lane before EN/MY 390/768/1440 hosted
@@ -204,10 +207,10 @@ backup, and restore review; no blind merge or cherry-pick is allowed.
 3. Complete installed signed restart/update, encrypted restore, physical
    scanner, and Burmese receipt acceptance. Hardware evidence remains local and
    device-specific.
-4. Then prove the owner correction entry path on the exact candidate, decide
-   full-sale-only versus partial-return/exchange scope, and complete the clean
-   install → preset → catalog path → guided first sale journey in full English
-   and Burmese.
+4. Validate the online owner correction entry on the signed installed build,
+   decide full-sale-only versus partial-return/exchange scope, and complete the
+   clean install → preset → catalog path → guided first sale journey in full
+   English and Burmese.
 5. Finish Vivian's merchant journey, commercial/support decisions, and the
    Swan/Vivian joint go/no-go.
    The proposed 1 November date remains conditional on every applicable gate in
