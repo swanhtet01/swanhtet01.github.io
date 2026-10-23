@@ -14,9 +14,9 @@
     }
   },
   "company": {
-    "positioning": "Operating software for Myanmar businesses.",
+    "positioning": "Shop for Myanmar retailers.",
     "statement": "SuperMega is a Myanmar software company. Shop is our first customer product for counter sales, stock and daily insight.",
-    "headline": "Operating software for Myanmar businesses.",
+    "headline": "Shop for Myanmar retailers.",
     "supporting": "SuperMega is a Myanmar software company. Shop is our first customer product for counter sales, stock and daily insight.",
     "publicPricing": false
   },
@@ -987,7 +987,7 @@
       "route": "/",
       "file": "index.html",
       "redirectTo": "/shop/",
-      "title": "SuperMega | Operating software for Myanmar businesses",
+      "title": "SuperMega | Shop for Myanmar retailers",
       "description": "SuperMega is a Myanmar software company. Shop is our first customer product for counter sales, stock and daily insight."
     },
     {

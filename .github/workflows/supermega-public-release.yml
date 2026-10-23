@@ -269,6 +269,17 @@ jobs:
           npx --yes vercel@56.1.0 api "/v10/projects/$PUBLIC_VERCEL_PROJECT_ID/env?teamId=$VERCEL_ORG_ID" --raw --token="$VERCEL_TOKEN" | node tools/verify_vercel_environment_state.mjs public
           npx --yes vercel@56.1.0 api "/v1/security/firewall/config/active?projectId=$PUBLIC_VERCEL_PROJECT_ID&teamId=$VERCEL_ORG_ID" --raw --token="$VERCEL_TOKEN" | node tools/verify_public_firewall_state.mjs
 
+      - name: Verify public runtime destinations
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_PROJECT_ID: ${{ env.PUBLIC_VERCEL_PROJECT_ID }}
+          SUPERMEGA_EXPECTED_LEAD_WEBHOOK_ORIGIN: ${{ vars.SUPERMEGA_APPROVED_LEAD_WEBHOOK_ORIGIN }}
+        run: |
+          EXPECTED_SUPABASE_ORIGIN="$(node -e "const value=require('./package.json').supermega.productionSupabaseProjectRef; if(!/^[a-z]{20}$/.test(value))process.exit(1); process.stdout.write('https://'+value+'.supabase.co')")"
+          SUPERMEGA_EXPECTED_PUBLIC_SUPABASE_ORIGIN="$EXPECTED_SUPABASE_ORIGIN" \
+            npx --yes vercel@56.1.0 env run --environment=production --token="$VERCEL_TOKEN" -- \
+              node tools/verify_public_runtime_environment_values.mjs
+
       - name: Generate and verify the prebuilt artifact
         env:
           SUPERMEGA_HQ_VERIFY_MODE: release-contracts
