@@ -38,7 +38,7 @@ owner-approved product outcome and gate require it.
 | Item | Current fact |
 | --- | --- |
 | Integration PR | [#734 — Unify Shop app first-use and public launch candidate](https://github.com/swanhtet01/swanhtet01.github.io/pull/734) |
-| State | Open draft and CLEAN; exact-head App/native/security/Kernel CI pass; independent last-push review, signing, deployment, and merchant acceptance remain open |
+| State | Open draft; verified product/evidence checkpoint `2366ad92` was CLEAN with App/native/security/Kernel CI pass. Documentation-only successors add no product evidence; independent last-push review, signing, deployment, and merchant acceptance remain open |
 | Integration branch | `codex/shop-public-main-port-20261022` |
 | Final evidence candidate | `2366ad9209e7b6901f00202fa3083e875fbb88c4` / tree `2f403aecd841a13f629d7e04314fffb49ba3c47c` |
 | Native capture source | `66682d111b875f61fe1f27298958766728094ee3` / native tree `d8c1cd60d6d80c5fc72bc052d8006bc9d4258220` |
