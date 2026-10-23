@@ -3002,9 +3002,8 @@ void main() {
         '420 dot padding proof',
         textDirection: ui.TextDirection.rtl,
       );
-      final paddedBlocks = _rasterBlocks(
-        padded.bytes,
-      ).where((block) => block.widthBytes == 53);
+      final paddedBlocks = _rasterBlocks(padded.bytes)
+          .where((block) => block.widthBytes == 53);
       expect(paddedBlocks, isNotEmpty);
       expect(
         paddedBlocks.every(
