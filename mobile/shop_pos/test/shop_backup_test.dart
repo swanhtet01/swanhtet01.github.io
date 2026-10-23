@@ -64,10 +64,7 @@ Future<void> _disposeOpenedStartup(
 }
 
 Future<void> _verifyStartupDatabase(File file) async {
-  ShopBackup.verifySnapshot(
-    file,
-    allowRuntimeUnboundCorrectionHistory: true,
-  );
+  ShopBackup.verifySnapshot(file, allowRuntimeUnboundCorrectionHistory: true);
 }
 
 ShopDatabase _openStartupDatabase(Directory documents) =>
