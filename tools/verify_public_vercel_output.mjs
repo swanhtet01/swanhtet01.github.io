@@ -462,6 +462,7 @@ const myContact = pages.get('/my/contact/')?.html || ''
 const myShop = pages.get('/my/shop/')?.html || ''
 if (countOccurrences(myShop, 'class="button button-primary"') !== 1
   || !myShop.includes('href="/my/contact/?product=shop">Shop အကြောင်း ဆက်သွယ်ရန်')) fail('myanmar_shop_primary_action_wrong')
+if (!myShop.includes('ကုန်ပစ္စည်းရှာပါ၊ ငွေပေးချေမှုကို မှတ်တမ်းတင်ပါ၊ အင်တာနက်မတည်ငြိမ်သည့်အချိန်တွင်ပင် အာရုံစိုက်ရန်လိုသည်များကို ကြည့်ပါ။')) fail('myanmar_shop_approved_body_missing')
 for (const token of [
   'src="/images/native-shop/shop_checkout_1200_my.png"',
   '<source media="(max-width:650px)" srcset="/images/native-shop/shop_sell_390_my.png" width="390" height="844" />',

@@ -4,10 +4,8 @@
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: native Shop candidate and its public evidence
 
-This file records volatile facts. It cannot widen product scope, grant a
-production action, or replace exact PR and CI evidence. A passing local check,
-CI job, preview, or generated artifact is not proof of a signed release,
-merchant acceptance, production persistence, or revenue.
+This file records volatile facts; it cannot widen scope or authorize release.
+No local demo, passing test, healthy provider, or generated artifact is proof of a live customer system, revenue, production persistence, or autonomous operation.
 
 ## Retained browser compatibility invariants
 
@@ -22,6 +20,8 @@ The customer portfolio is exactly **Shop**, **Plant**, **Website**, and **Ecomme
 The retained compatibility routes are `/shop/`, `/plant/`, `/website/`, and `/ecommerce/`. `/agents/` — compatibility-only path to HQ; it is not a product route or separate workspace. `commerce` and `production` remain stable internal runtime identifiers while the retained browser records exist. Ecommerce is not a second Shop back office.
 
 The default app remains an isolated browser-local trial. Managed mode remains locked behind authenticated tenant identity and the existing security/readiness gates. External sends, payments, publishing, access changes, deployment, and production writes remain owner-approved.
+
+Add provider-backed AI, payment, shipping, tax, publishing, and broader marketing only after their product gate has measured pilot evidence.
 
 ## Internal company system and R&D
 
