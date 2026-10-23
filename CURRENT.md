@@ -38,9 +38,9 @@ owner-approved product outcome and gate require it.
 | Item | Current fact |
 | --- | --- |
 | Integration PR | [#734 — Unify Shop app first-use and public launch candidate](https://github.com/swanhtet01/swanhtet01.github.io/pull/734) |
-| State | Open draft; verified evidence successor `b7e4703c` was CLEAN with App/native/security/Kernel CI pass. Documentation-only successors add no product evidence; independent last-push review, signing, deployment, and merchant acceptance remain open |
+| State | Open draft; verified evidence successor `a1fbb17a` was CLEAN with App/native/security/Kernel CI pass. Independent last-push review, signing, deployment, and merchant acceptance remain open |
 | Integration branch | `codex/shop-public-main-port-20261022` |
-| Final evidence candidate | `b7e4703c81b5a238a12a3c36b6c718a7f4a6c2e6` / tree `ad5584232bcda6dab3b2f0b3ce91c91f4ecb45ef` |
+| Final evidence candidate | `a1fbb17a72592cd7dfb8da718cc3846f2fae5201` / tree `3bed24bf7fb10cb29eee661b6a7b1af4d51b1591` |
 | Native capture source | `523064bd28e2d5f949766449b862c0b6aaf9c365` / native tree `416545b3952b477e39d5c64d159c6bf27fc2e881` |
 | Gallery evidence successor | `172773a3cfa0996a4aa058148e50513d71da5ae2`; final head preserves the same native tree |
 | PostgreSQL evidence checkpoint | `b1ee4cc2884dda1ab753e8d2e4ecc6c6216a36ef` / tree `6996864df311db4748fcca3ec75c030dd0fcab3e` |
@@ -56,22 +56,22 @@ unavailable; normal selling remains offline.
 
 ## Exact evidence
 
-- [Required App CI 39994612551](https://github.com/swanhtet01/swanhtet01.github.io/actions/runs/39994612551)
-  passed at exact head `b7e4703c`: PostgreSQL/API and migration/RLS guards,
+- [Required App CI 40000937950](https://github.com/swanhtet01/swanhtet01.github.io/actions/runs/40000937950)
+  passed at exact head `a1fbb17a`: PostgreSQL/API and migration/RLS guards,
   dependencies, lint, canonical build, HQ verification, release workflow
   contracts, and desktop/390 px journeys.
-- [Native run 39994619858](https://github.com/swanhtet01/swanhtet01.github.io/actions/runs/39994619858)
-  checked out PR merge `25b06956` containing source head `b7e4703c` with the
-  same candidate tree, then passed formatting, analysis, isolated first-sale
+- [Native run 40000944090](https://github.com/swanhtet01/swanhtet01.github.io/actions/runs/40000944090)
+  checked out PR merge `edb00452` containing source head `a1fbb17a` with the
+  same native tree, then passed formatting, analysis, isolated first-sale
   and restore, all Flutter tests, bundled-font renders, Android debug,
   unsigned iPad/iOS, and Windows restore/no-replace plus unsigned packaging.
 - Candidate-tree QA artifacts from that merge-ref run: Android debug
-  `12520031212`
-  (`sha256:b90965e9028326e4ac30cbe081bacee4f97cca7704432729adfed547da078d74`),
-  Flutter renders `12519716380`
-  (`sha256:7b14bd5a78822cbcd5a1e46911bd89b4664216964d4ffcdd16a2e91e0797713f`),
-  and unsigned Windows `12519234730`
-  (`sha256:55a0595088b5f0299cac92d3b4d4080b4ad34e3d9062fd31ec92db8438fb418d`).
+  `12522891209`
+  (`sha256:e7a3fb18e7fd4741a076cf31bc2237b0cfd503dac7cdba1c46228da725b1353f`),
+  Flutter renders `12521972801`
+  (`sha256:ed666aa2ba206240d772569f3714c1d0637f51c6265c60942c80c9b85e9bbd8d`),
+  and unsigned Windows `12522352970`
+  (`sha256:30ca94e30ae2bf5dad8d46fd4a9a13e27e05070800d39b1fa19e6d3d4a2b912a`).
   iOS passed `--no-codesign`; no signed iOS artifact is retained.
 - Gallery provenance pins source `523064bd`, CI merge `4219c5d4`, native run
   `39991770709`, artifact `12517843109`, and original archive
@@ -84,7 +84,7 @@ unavailable; normal selling remains offline.
   receipt digest
   `sha256:8c3ece4d69c0dd815a14e762fb01602229ab14214acb9147774617bce0d18c72`,
   and `hostedActivationProven=false`.
-- Security `39994620030` and Kernel `39994620008` pass against the same PR
+- Security `40000944022` and Kernel `40000944046` pass against the same PR
   merge-ref/source-tree pairing. Kernel production release remains
   intentionally owner-gated.
 
@@ -121,6 +121,10 @@ v14 and hosted PostgreSQL/Supabase schema profile v13 are separate contracts.
   illustrative-data disclosure, and uses a non-overlapping responsive product
   tableau. Exact-source EN/MY checks pass at 390 px, 768 px, and 1440 px; this
   remains source and CI evidence, not a protected deployed preview.
+- Public release now verifies effective contact-delivery destinations before
+  building: Supabase must match the source-bound project origin, and an optional
+  webhook must match an explicit approved HTTPS origin. The audit is redacted
+  and fails closed on incomplete, private, loopback, or ambiguous targets.
 - Hardware-free compatibility tests inject CR/LF/Tab scanner input into the
   sale UI, preserve leading zeros, exercise intentional repeated scans, send
   exact ESC/POS bytes to a loopback TCP printer, validate 384/420/576-dot
@@ -134,7 +138,7 @@ v14 and hosted PostgreSQL/Supabase schema profile v13 are separate contracts.
 - No production deployment, alias promotion, merge, or production database
   mutation has occurred.
 - Live `supermega.dev` and `app.supermega.dev` still report predecessor
-  `5479c5d1`; no immutable protected preview has been accepted for `b7e4703c`.
+  `5479c5d1`; no immutable protected preview has been accepted for `a1fbb17a`.
   Direct previews stay disabled, and the production workflow is not preview
   evidence. Live retired product routes also need an owner-approved release of
   the already-verified Shop-first route policy.
@@ -192,7 +196,7 @@ backup, and restore review; no blind merge or cherry-pick is allowed.
 
 ## Next action
 
-1. Keep final evidence candidate `b7e4703c` stable, correction default-dark,
+1. Keep final evidence candidate `a1fbb17a` stable, correction default-dark,
    and PR #734 draft pending the owner-gated release decision.
 2. The owner must approve fixed provider team/project identities and a separate
    protected non-production preview lane before EN/MY 390/768/1440 hosted
