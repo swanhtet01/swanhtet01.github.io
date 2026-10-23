@@ -7,9 +7,9 @@ Who this is for: counter-first businesses that sell and track stock — the mani
 Current public page:
 
 - `Shop | Sales and stock | SuperMega`
-- `Preview SuperMega Shop for counter sales, stock and daily insight using sample app screens.`
+- `Shop helps Myanmar retailers keep sales clear and stock accurate.`
 
-The public website shows three distinct native Shop app captures with synthetic sample data and prices. Request a walkthrough through Contact; existing merchants have a secondary Sign in route. These captures do not prove a preloaded catalog or physical-device acceptance.
+The public website shows one composed view of three native Shop workflows using synthetic sample data. Contact SuperMega about Shop through the single primary action; existing merchants have a secondary Sign in route. These captures do not prove a preloaded catalog or physical-device acceptance.
 
 Historical internal positioning: POS-independent Shop Profit Control was the acquisition and diagnostic wedge; it is no longer the public website pitch. Its first job selects and prioritizes one accountable money leak or operating risk, with the accountable role, due point, next action, and objective closure made explicit. It does not replace a POS and it does not turn a local projection into customer, pilot, or commercial proof.
 

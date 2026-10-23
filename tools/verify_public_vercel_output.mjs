@@ -162,7 +162,7 @@ const sharedRequired = [
   '.header-inner { min-height: 76px; display: flex; align-items: center; justify-content: space-between; gap: 24px; }',
   '.nav-links { display: flex; min-width: 0; align-items: center; justify-content: flex-end; gap: 10px; }',
   '.nav-links a { min-height: 48px; display: inline-flex; align-items: center; border: 1px solid transparent; border-radius: 8px; padding: 0 15px; color: var(--brand-muted); font-size: .9rem; font-weight: 600; text-decoration: none; transition: color 160ms ease, background-color 160ms ease, border-color 160ms ease; }',
-  'aria-label="SuperMega Shop"',
+  'aria-label="SuperMega"',
   '<nav class="nav-links" aria-label="Main navigation">',
   '<span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 72 44" width="30" height="18" focusable="false"><path d="M10 9 26 22 10 35M35 35h27" fill="none" stroke="#2563eb" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>',
   '<span class="brand-word">SuperMega</span>',
@@ -230,7 +230,7 @@ const pages = new Map(manifest.pages.filter(page => !page.redirectTo).map((page)
   } : {}), html: readStatic(page.file) }]
 }))
 const homePage = manifest.pages.find((page) => page.route === '/')
-const englishOnlyShared = new Set(['<a class="skip-link" href="#content">Skip to content</a>', 'aria-label="SuperMega Shop"', '<nav class="nav-links" aria-label="Main navigation">', 'href="/privacy/">Privacy</a>'])
+const englishOnlyShared = new Set(['<a class="skip-link" href="#content">Skip to content</a>', '<nav class="nav-links" aria-label="Main navigation">', 'href="/privacy/">Privacy</a>'])
 for (const [route, page] of pages) {
   if (!page.html.includes(`<title>${page.title}</title>`)) fail('page_title_drift', { route, expected: page.title })
   for (const token of sharedRequired) {
@@ -238,19 +238,22 @@ for (const [route, page] of pages) {
     if (!page.html.includes(token)) fail('shared_brand_contract_missing', { route, token })
   }
   if (page.language === 'my') {
-    for (const token of ['<html lang="my">', '<a class="skip-link" href="#content">အကြောင်းအရာသို့ သွားရန်</a>', 'aria-label="SuperMega ဆိုင်"', '<nav class="nav-links" aria-label="အဓိက လမ်းညွှန်">', 'href="/my/privacy/">ကိုယ်ရေးအချက်အလက် မူဝါဒ</a>', '/fonts/noto-sans-myanmar.woff2']) {
+    for (const token of ['<html lang="my">', '<a class="skip-link" href="#content">အကြောင်းအရာသို့ သွားရန်</a>', 'aria-label="SuperMega"', '<nav class="nav-links" aria-label="အဓိက လမ်းညွှန်">', 'href="/my/privacy/">ကိုယ်ရေးအချက်အလက် မူဝါဒ</a>', '/fonts/noto-sans-myanmar.woff2']) {
       if (!page.html.includes(token)) fail('myanmar_shared_contract_missing', { route, token })
     }
   }
   const footerHref = page.language === 'my' ? '/my/shop/' : '/shop/'
-  const footerLabel = page.language === 'my' ? 'SuperMega ဆိုင်' : 'SuperMega Shop'
-  const footerBrand = `<a class="brand" href="${footerHref}" aria-label="${footerLabel}"><span class="brand-mark" aria-hidden="true">`
+  const footerBrand = `<a class="brand" href="${footerHref}" aria-label="SuperMega"><span class="brand-mark" aria-hidden="true">`
   if (!page.html.includes(footerBrand)) fail('shared_footer_brand_missing', { route, footerHref })
+  const companyStatement = page.language === 'my'
+    ? 'SuperMega သည် မြန်မာနိုင်ငံမှ ဆော့ဖ်ဝဲကုမ္ပဏီဖြစ်ပြီး Shop အက်ပ်ကို ဖန်တီးပါသည်။'
+    : 'SuperMega is a Myanmar software company and the maker of Shop.'
+  if (!page.html.includes(companyStatement)) fail('shared_footer_company_statement_missing', { route })
   const header = page.html.match(/<header\b[\s\S]*?<\/header>/)?.[0] || ''
   const signIn = `<a class="nav-sign-in" href="${appOrigin}/login">${page.language === 'my' ? 'ဝင်ရန်' : 'Sign in'}</a>`
   if (countOccurrences(header, signIn) !== 1
     || [...header.matchAll(/<a\b[^>]*href="[^"]*\/login[^"]*"[^>]*>/gi)].length !== 1) fail('shared_public_login_drift', { route })
-  const expectedActive = route === '/shop/' ? 'Shop' : route === '/contact/' ? 'Contact' : route === '/my/shop/' ? 'ဆိုင်' : route === '/my/contact/' ? 'ဆက်သွယ်ရန်' : null
+  const expectedActive = route === '/shop/' || route === '/my/shop/' ? 'Shop' : route === '/contact/' ? 'Contact' : route === '/my/contact/' ? 'ဆက်သွယ်ရန်' : null
   const activeLinks = [...page.html.matchAll(/<a\b[^>]*aria-current="page"[^>]*>([^<]+)<\/a>/g)].map(match => match[1])
   if (activeLinks.join(',') !== (expectedActive || '')) fail('shared_navigation_active_state_drift', { route, expectedActive, activeLinks })
   const copyWithoutExternalDestinations = page.html.replace(/\bhref="https?:\/\/[^\"]+"/gi, '')
@@ -359,11 +362,15 @@ const shopPageHtml = pages.get('/shop/').html
 for (const [route, html] of [['/shop/', shopPageHtml]]) {
   if (!html.includes('width: max-content;') || !html.includes('min-height: 48px;') || !html.includes('background: #202432;') || !html.includes('.button:focus-visible')) fail('marketing_primary_action_layout_missing', { route })
 }
-// Shop is the only customer product. App imagery stays static; the one
-// merchant action requests a walkthrough rather than promising live access.
+// Shop is the only customer product. App imagery stays static and the one
+// merchant action leads to the truthful contact path.
 const shopPage = pages.get('/shop/')?.html || ''
 const shopBody = shopPage.slice(shopPage.indexOf('<body'))
-if (!shopBody.includes('class="button button-primary" href="/contact/?product=shop">Request a Shop walkthrough')) fail('shop_primary_action_missing')
+if (!shopBody.includes('class="button button-primary" href="/contact/?product=shop">Contact us about Shop')) fail('shop_primary_action_missing')
+if (countOccurrences(shopBody, 'class="button button-primary"') !== 1) fail('shop_primary_action_count_wrong')
+for (const token of ['Shop for Myanmar retailers', 'Sell clearly. Keep stock accurate.']) {
+  if (!shopBody.includes(token)) fail('shop_approved_copy_missing', { token })
+}
 if (shopBody.includes('data-platform-carousel') || shopBody.includes('data-device-choice')
   || shopBody.includes('class="pos-window"') || shopBody.includes('shop-sample-demo.js')
   || /<a\b[^>]*>\s*<img\b[^>]*src="\/images\/native-shop\//i.test(shopBody)) fail('shop_gallery_interaction_or_mock_present')
@@ -372,21 +379,23 @@ if (shopBody.includes('>Company</a>') || shopBody.includes('href="' + appOrigin 
   || countOccurrences(shopBody, `href="${appOrigin}/login"`) !== 1) fail('shop_public_access_scope_drift')
 for (const token of [
   'class="native-shop-gallery"',
+  'class="native-shop-tableau"',
   'src="/images/native-shop/shop_checkout_1200_en.png"',
   '<source media="(max-width:650px)" srcset="/images/native-shop/shop_sell_390_en.png" width="390" height="844" />',
-  'src="/images/native-shop/shop_today_390_en.png"',
+  '<source media="(max-width:1100px)" srcset="/images/native-shop/shop_checkout_820_en.png" width="820" height="1000" />',
+  'src="/images/native-shop/shop_today_820_en.png"',
+  '<source media="(max-width:650px)" srcset="/images/native-shop/shop_today_390_en.png" width="390" height="844" />',
   'src="/images/native-shop/shop_stock_820_en.png"',
   '<source media="(max-width:650px)" srcset="/images/native-shop/shop_stock_390_en.png" width="390" height="844" />',
-  '<figcaption>Counter sale</figcaption>',
+  '<figcaption>Sell</figcaption>',
   '<figcaption>Stock</figcaption>',
   '<figcaption>Today</figcaption>',
-  'Shop app preview with sample data and prices.',
 ]) if (!shopPage.includes(token)) fail('shop_native_gallery_missing', { token })
-if (shopPage.includes('class="native-shop-stock"') || shopPage.includes('<figcaption>Desktop')
+if (shopPage.includes('native-shop-shots-pair') || shopPage.includes('<figcaption>Desktop')
   || shopPage.includes('<figcaption>Tablet') || shopPage.includes('<figcaption>Phone')) fail('shop_redundant_gallery_or_device_caption')
 if (shopPage.includes('/images/actual-shop-') || shopPage.includes('Shop browser workspace')
   || shopPage.includes('Shop browser counter sale preview')
-  || /no setup fee|printer-sourcing markup|Shop is subscription-only/i.test(shopPage)) fail('shop_unsupported_claim_or_old_capture')
+  || /SuperMega Shop|Request a Shop pilot|Request a Shop walkthrough|receipt printing|cloud backup|AI-powered|no setup fee|printer-sourcing markup|Shop is subscription-only/i.test(shopPage)) fail('shop_unsupported_claim_or_old_capture')
 for (const [route, html] of [['/', home], ['/shop/', shopPage]]) {
   if (!html.includes('<html lang="en">')) fail('marketing_page_not_english', { route })
   const withoutLanguageSwitch = html.replace(/<a href="\/my\/(?:shop|contact|privacy)\/" data-language-switch hreflang="my">မြန်မာ<\/a>/g, '')
@@ -442,16 +451,19 @@ for (const [route, englishRoute, switchHref] of [['/my/shop/', '/shop/', '/shop/
 }
 const myContact = pages.get('/my/contact/')?.html || ''
 const myShop = pages.get('/my/shop/')?.html || ''
+if (countOccurrences(myShop, 'class="button button-primary"') !== 1
+  || !myShop.includes('href="/my/contact/?product=shop">Shop အကြောင်း ဆက်သွယ်ရန်')) fail('myanmar_shop_primary_action_wrong')
 for (const token of [
   'src="/images/native-shop/shop_checkout_1200_my.png"',
   '<source media="(max-width:650px)" srcset="/images/native-shop/shop_sell_390_my.png" width="390" height="844" />',
-  'src="/images/native-shop/shop_today_390_my.png"',
+  '<source media="(max-width:1100px)" srcset="/images/native-shop/shop_checkout_820_my.png" width="820" height="1000" />',
+  'src="/images/native-shop/shop_today_820_my.png"',
+  '<source media="(max-width:650px)" srcset="/images/native-shop/shop_today_390_my.png" width="390" height="844" />',
   'src="/images/native-shop/shop_stock_820_my.png"',
   '<source media="(max-width:650px)" srcset="/images/native-shop/shop_stock_390_my.png" width="390" height="844" />',
-  '<figcaption>ကောင်တာအရောင်း</figcaption>',
+  '<figcaption>ရောင်းချမှု</figcaption>',
   '<figcaption>ကုန်လက်ကျန်</figcaption>',
   '<figcaption>ယနေ့</figcaption>',
-  'နမူနာအချက်အလက်နှင့် ဈေးနှုန်းများဖြင့် ပြထားသော ဆိုင်အက်ပ်မျက်နှာပြင်များ။',
 ]) if (!myShop.includes(token)) fail('myanmar_shop_native_gallery_missing', { token })
 if (/\/images\/native-shop\/[^"]+_en\.png/.test(myShop)
   || myShop.includes('/images/actual-shop-')

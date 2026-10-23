@@ -16,7 +16,7 @@ const app = { origin: 'https://megaos-123456789-swanhtet01s-projects.vercel.app'
   projectId: 'prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG', deploymentId: 'dpl_12345678', commit }
 const policy = previewProfile({ profile: 'isolated-pair', expectedCommit: commit, appBinding: JSON.stringify(app) })
 const products = ['shop', 'website', 'ecommerce', 'plant'].map(id => ({ id }))
-const html = `<a class="button button-primary" href="/contact/?product=shop">Request a Shop walkthrough</a><a class="nav-sign-in" href="${app.origin}/login">Sign in</a>`
+const html = `<a class="button button-primary" href="/contact/?product=shop">Contact us about Shop</a><a class="nav-sign-in" href="${app.origin}/login">Sign in</a>`
 test('requires explicit profile, exact SHA and app binding', () => {
   for (const input of [{}, { profile: 'isolated-pair', expectedCommit: commit },
     { profile: 'isolated-pair', expectedCommit: 'main' }, { profile: 'unknown', expectedCommit: commit }]) assert.throws(() => previewProfile(input))
@@ -78,7 +78,7 @@ test('native gallery is read-only and no image is a preview navigation action', 
 })
 
 
-test('public site keeps Shop walkthrough and a single safe sign-in link', () => {
+test('public site keeps one Shop contact action and a single safe sign-in link', () => {
   validatePreviewLinks(html, policy, products)
   for (const suffix of ['/login?product=shop', '/?choose=1', '/shop/?tab=today', '/settings/?product=website', '/login?product=website', '/login?product=shop&next=/shop/']) {
     assert.throws(() => validatePreviewLinks(html + `<a href="${app.origin}${suffix}">Open</a>`, policy, products))

@@ -95,7 +95,7 @@ async function readPage(route) {
   for (const token of [
     `meta name="supermega-brand-version" content="${manifest.brand.version}"`,
     `meta name="supermega-context-version" content="${manifest.contextVersion}"`,
-    isMyanmarPage ? 'aria-label="SuperMega ဆိုင်"' : 'aria-label="SuperMega Shop"',
+    'aria-label="SuperMega"',
     `class="brand-mark" aria-hidden="true">${brandMarkHtml}</span>`,
     isMyanmarPage
       ? 'href="/my/privacy/">ကိုယ်ရေးအချက်အလက် မူဝါဒ</a>'
@@ -194,7 +194,7 @@ async function verifyOnce() {
       'landing_public_app_action_drift', { product: product.id, appLinks })
     if (product.id === 'shop') {
       assert(landing.includes(shopAction), 'shop_manifest_action_missing')
-      assert(landing.includes('href="/contact/?product=shop">Request a Shop walkthrough'), 'shop_contact_action_missing')
+      assert(landing.includes('href="/contact/?product=shop">Contact us about Shop'), 'shop_contact_action_missing')
     }
     assert(landing.includes('href="/contact/">Contact</a>'), 'landing_contact_route_missing', { product: product.id })
   }

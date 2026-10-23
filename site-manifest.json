@@ -70,7 +70,7 @@
         "See the sale in Today and the updated stock quantity."
       ],
       "primaryCta": {
-        "label": "Request a Shop walkthrough",
+        "label": "Contact us about Shop",
         "url": "/contact/?product=shop"
       },
       "secondaryCta": {
@@ -994,7 +994,7 @@
       "route": "/shop/",
       "file": "shop/index.html",
       "title": "Shop | Sales and stock | SuperMega",
-      "description": "Preview SuperMega Shop for counter sales, stock and daily insight using sample app screens.",
+      "description": "Shop helps Myanmar retailers keep sales clear and stock accurate.",
       "productId": "shop",
       "liveGate": "post-release"
     },
@@ -1034,8 +1034,8 @@
     {
       "route": "/my/shop/",
       "file": "my/shop/index.html",
-      "title": "ဆိုင် | အရောင်းနှင့် ကုန်လက်ကျန် | SuperMega",
-      "description": "နမူနာအချက်အလက်များဖြင့် ကောင်တာအရောင်း၊ ကုန်လက်ကျန်နှင့် နေ့စဉ်အရောင်းကို ပြထားသော SuperMega ဆိုင်အက်ပ်ကို ကြည့်ရှုပါ။",
+      "title": "Shop | အရောင်းနှင့် ကုန်လက်ကျန် | SuperMega",
+      "description": "Shop သည် မြန်မာလက်လီဆိုင်များ၏ အရောင်းကို ရှင်းလင်းစေပြီး ကုန်လက်ကျန်ကို မှန်ကန်စွာ ထိန်းပေးသည်။",
       "language": "my",
       "localizedOf": "/shop/"
     },

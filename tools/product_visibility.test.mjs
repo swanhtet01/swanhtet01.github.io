@@ -122,12 +122,20 @@ test('generated public entry and contact expose only Shop', async () => {
     assert.equal((fullPage.match(/href="https:\/\/app\.supermega\.dev\/login"/g) ?? []).length, 1)
     assert.match(page, /src="\/images\/native-shop\/shop_checkout_1200_en\.png"/)
     assert.match(page, /srcset="\/images\/native-shop\/shop_sell_390_en\.png"/)
+    assert.match(page, />Shop for Myanmar retailers<\/p>/)
+    assert.match(page, /Sell clearly\. Keep stock accurate\./)
+    assert.match(page, />Contact us about Shop<\/a>/)
+    assert.match(page, /class="native-shop-tableau"/)
     assert.doesNotMatch(page, /data-platform-carousel|Open Ecommerce|Open Website/)
+    assert.doesNotMatch(fullPage, /SuperMega Shop|Request a Shop pilot|Request a Shop walkthrough/)
+    assert.doesNotMatch(page, />Desktop<|>Tablet<|>Phone</)
     assert.doesNotMatch(page, /product=plant|href="\/plant\//)
   }
   const myShop = main(await html('my/shop/index.html'))
   assert.match(myShop, /src="\/images\/native-shop\/shop_checkout_1200_my\.png"/)
   assert.match(myShop, /srcset="\/images\/native-shop\/shop_sell_390_my\.png"/)
+  assert.match(myShop, />မြန်မာ လက်လီဆိုင်များအတွက် Shop<\/p>/)
+  assert.match(myShop, /Shop အကြောင်း ဆက်သွယ်ရန်/)
 })
 
 test('Plant public route becomes compatibility-only, not sales or new setup', async () => {

@@ -41,6 +41,7 @@ export function validatePreviewLinks(html, policy, products, options = {}) {
   const publicOrigin = options.publicOrigin || 'https://supermega.dev'
   for (const href of hrefs) {
     if (!href || /[\s\\]|%|&(?:#|[a-z]+;)/i.test(href) || href.startsWith('//')) throw new Error('public_preview_href_unsafe')
+    if (href === '/') throw new Error('public_preview_company_destination_removed')
     if (/\/plant(?:\/|\?|#|$)|\/operations\/production|[?&](?:product|demo)=(?:plant|production|factory)(?:&|$)/i.test(href)) throw new Error('public_preview_retired_entry')
     if (href === 'mailto:swanhtet@supermega.dev') continue
     const url = new URL(href, publicOrigin)
@@ -52,8 +53,8 @@ export function validatePreviewLinks(html, policy, products, options = {}) {
     else if (!['/', '/shop/', '/contact/', '/privacy/', '/my/shop/', '/my/contact/', '/my/privacy/'].includes(url.pathname)) throw new Error('public_preview_public_route_invalid')
   }
   if (options.requireActions !== false
-    && !html.includes('<a class="button button-primary" href="/contact/?product=shop">Request a Shop walkthrough</a>')) {
-    throw new Error('public_preview_action_missing:shop_walkthrough')
+    && !html.includes('<a class="button button-primary" href="/contact/?product=shop">Contact us about Shop</a>')) {
+    throw new Error('public_preview_action_missing:shop_contact')
   }
   const signInCount = hrefs.filter(href => href === origin + '/login').length
   if (signInCount > 1 || (options.requireActions !== false && signInCount !== 1)) {

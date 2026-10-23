@@ -90,7 +90,7 @@ for (const page of publicPages) {
   for (const token of [
     `meta name="supermega-brand-version" content="${manifest.brand.version}"`,
     `meta name="supermega-context-version" content="${manifest.contextVersion}"`,
-    page.language === 'my' ? 'aria-label="SuperMega ဆိုင်"' : 'aria-label="SuperMega Shop"',
+    'aria-label="SuperMega"',
   ]) {
     if (!html.includes(token)) throw new Error(`preview_shared_contract_missing:${page.route}:${token}`)
   }
