@@ -250,7 +250,7 @@ for (const [route, page] of pages) {
     : 'SuperMega is a Myanmar software company and the maker of Shop.'
   if (!page.html.includes(companyStatement)) fail('shared_footer_company_statement_missing', { route })
   const header = page.html.match(/<header\b[\s\S]*?<\/header>/)?.[0] || ''
-  const signIn = `<a class="nav-sign-in" href="${appOrigin}/login">${page.language === 'my' ? 'ဝင်ရန်' : 'Sign in'}</a>`
+  const signIn = `<a class="nav-sign-in" href="${appOrigin}/login">${page.language === 'my' ? 'စမ်းသပ်အသုံးပြုသူ ဝင်ရန်' : 'Pilot sign in'}</a>`
   if (countOccurrences(header, signIn) !== 1
     || [...header.matchAll(/<a\b[^>]*href="[^"]*\/login[^"]*"[^>]*>/gi)].length !== 1) fail('shared_public_login_drift', { route })
   const expectedActive = route === '/shop/' || route === '/my/shop/' ? 'Shop' : route === '/contact/' ? 'Contact' : route === '/my/contact/' ? 'ဆက်သွယ်ရန်' : null
@@ -368,14 +368,16 @@ const shopPage = pages.get('/shop/')?.html || ''
 const shopBody = shopPage.slice(shopPage.indexOf('<body'))
 if (!shopBody.includes('class="button button-primary" href="/contact/?product=shop">Contact us about Shop')) fail('shop_primary_action_missing')
 if (countOccurrences(shopBody, 'class="button button-primary"') !== 1) fail('shop_primary_action_count_wrong')
+if (!shopBody.includes('class="shop-access-link" href="/contact/?product=shop">Contact us about Shop</a>')) fail('shop_access_secondary_action_missing')
 for (const token of ['Shop for Myanmar retailers', 'Sell clearly. Keep stock accurate.', 'Find an item, take payment and see what needs attention—even when the connection is unreliable.']) {
   if (!shopBody.includes(token)) fail('shop_approved_copy_missing', { token })
 }
-for (const token of ['How it works at the counter', 'Search or scan', 'Editable starting points', 'How to get Shop', 'Public downloads and self-service signup are not open yet', 'The web app, macOS and iPhone are not current customer Shop products.']) {
+for (const token of ['How it works at the counter', 'Search or scan', 'Editable starting points', 'How to get Shop', 'Public downloads and self-service signup are not open yet', 'The web app, macOS and iPhone are not current customer Shop products.', 'Before you start', 'Where do I sign in?', 'Sending the contact form does not create an account.']) {
   if (!shopBody.includes(token)) fail('shop_access_story_missing:' + token)
 }
 if (countOccurrences(shopBody, 'class="shop-template-card"') !== 4) fail('shop_template_count_wrong')
 if (countOccurrences(shopBody, 'class="shop-platform-card"') !== 3) fail('shop_platform_count_wrong')
+if (countOccurrences(shopBody, 'class="shop-proof-card"') !== 3) fail('shop_compact_proof_count_wrong')
 if (/href="[^"]*\.(?:apk|ipa|exe|msi|dmg|zip)"/i.test(shopBody)) fail('shop_unsigned_download_exposed')
 if (shopBody.includes('data-platform-carousel') || shopBody.includes('data-device-choice')
   || shopBody.includes('class="pos-window"') || shopBody.includes('shop-sample-demo.js')

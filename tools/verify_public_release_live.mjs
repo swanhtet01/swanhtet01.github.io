@@ -102,7 +102,7 @@ async function readPage(route) {
       : 'href="/privacy/">Privacy</a>',
   ]) assert(html.includes(token), 'page_shared_contract_missing', { route, token })
   const expectedSignInOpening = `<a class="nav-sign-in" href="${appOrigin}/login">`
-  const expectedSignIn = `${expectedSignInOpening}${isMyanmarPage ? 'ဝင်ရန်' : 'Sign in'}</a>`
+  const expectedSignIn = `${expectedSignInOpening}${isMyanmarPage ? 'စမ်းသပ်အသုံးပြုသူ ဝင်ရန်' : 'Pilot sign in'}</a>`
   const signInLinks = [...html.matchAll(/<a\b[^>]*\bhref="https:\/\/[^"]+\/login[^"]*"[^>]*>/gi)]
   assert(html.includes(expectedSignIn) && signInLinks.length === 1 && signInLinks[0][0] === expectedSignInOpening,
     'page_shop_sign_in_drift', { route })

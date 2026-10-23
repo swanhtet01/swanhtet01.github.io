@@ -687,11 +687,14 @@ body[data-view="shop"] .shop-section-heading { max-width: 700px; margin-bottom: 
 body[data-view="shop"] .shop-section-heading .eyebrow { margin: 0 0 10px; }
 body[data-view="shop"] .shop-section-heading h2 { max-width: 18ch; margin: 0; color: #121826; font-size: clamp(32px,4vw,52px); line-height: 1.08; letter-spacing: -.035em; }
 body[data-view="shop"] .shop-section-heading p { max-width: 58ch; margin: 16px 0 0; color: #4f5b6e; font-size: 17px; line-height: 1.65; }
-body[data-view="shop"] .shop-workflow-grid, body[data-view="shop"] .shop-template-grid, body[data-view="shop"] .shop-platform-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 16px; }
-body[data-view="shop"] .shop-workflow-card, body[data-view="shop"] .shop-template-card, body[data-view="shop"] .shop-platform-card { min-width: 0; padding: 24px; border: 1px solid #dfe5ee; border-radius: 14px; background: #fff; }
+body[data-view="shop"] .shop-workflow-grid, body[data-view="shop"] .shop-proof-grid, body[data-view="shop"] .shop-template-grid, body[data-view="shop"] .shop-platform-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 16px; }
+body[data-view="shop"] .shop-workflow-card, body[data-view="shop"] .shop-proof-card, body[data-view="shop"] .shop-template-card, body[data-view="shop"] .shop-platform-card { min-width: 0; padding: 24px; border: 1px solid #dfe5ee; border-radius: 14px; background: #fff; }
 body[data-view="shop"] .shop-step { display: inline-grid; place-items: center; width: 32px; height: 32px; margin-bottom: 28px; border-radius: 999px; color: #1d4ed8; background: #eaf1ff; font-size: 13px; font-weight: 750; }
 body[data-view="shop"] .shop-workflow-card h3, body[data-view="shop"] .shop-template-card h3, body[data-view="shop"] .shop-platform-card h3 { margin: 0; color: #121826; font-size: 20px; line-height: 1.25; }
 body[data-view="shop"] .shop-workflow-card p, body[data-view="shop"] .shop-template-card p, body[data-view="shop"] .shop-platform-card p { margin: 10px 0 0; color: #596579; font-size: 15px; line-height: 1.65; }
+body[data-view="shop"] .shop-proof-card span { display: block; margin-bottom: 42px; color: #2563eb; font-size: 12px; font-weight: 760; letter-spacing: .08em; }
+body[data-view="shop"] .shop-proof-card h3 { margin: 0; color: #121826; font-size: 24px; line-height: 1.2; }
+body[data-view="shop"] .shop-proof-card p { margin: 12px 0 0; color: #596579; font-size: 16px; line-height: 1.65; }
 body[data-view="shop"] .shop-evidence-list { display: grid; gap: clamp(44px,6vw,76px); }
 body[data-view="shop"] .shop-evidence { display: grid; grid-template-columns: minmax(220px,.7fr) minmax(0,1.3fr); align-items: center; gap: clamp(28px,5vw,72px); }
 body[data-view="shop"] .shop-evidence:nth-child(even) { grid-template-columns: minmax(0,1.3fr) minmax(220px,.7fr); }
@@ -708,11 +711,21 @@ body[data-view="shop"] .shop-access-panel { display: grid; grid-template-columns
 body[data-view="shop"] .shop-access-panel .shop-section-heading { margin: 0; }
 body[data-view="shop"] .shop-access-panel .eyebrow, body[data-view="shop"] .shop-access-panel h2 { color: #fff; }
 body[data-view="shop"] .shop-access-panel .shop-section-heading p { color: #c9d2e3; }
+body[data-view="shop"] .shop-access-link { display: inline-flex; min-height: 48px; align-items: center; margin-top: 22px; color: #fff; font-weight: 720; text-underline-offset: 4px; }
+body[data-view="shop"] .shop-access-link:focus-visible { border-radius: 4px; outline: 3px solid rgba(255,255,255,.45); outline-offset: 3px; }
 body[data-view="shop"] .shop-access-steps { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; counter-reset: access; }
 body[data-view="shop"] .shop-access-steps li { position: relative; min-height: 74px; padding: 0 0 22px 48px; border-left: 1px solid #46516a; color: #dbe3f1; line-height: 1.6; counter-increment: access; }
 body[data-view="shop"] .shop-access-steps li:last-child { min-height: 0; padding-bottom: 0; border-left-color: transparent; }
 body[data-view="shop"] .shop-access-steps li::before { position: absolute; top: 0; left: -17px; display: grid; place-items: center; width: 32px; height: 32px; border: 1px solid #77839d; border-radius: 999px; background: #111a2e; content: counter(access); font-size: 12px; font-weight: 750; }
 body[data-view="shop"] .shop-access-note { margin: 26px 0 0; color: #667085; font-size: 14px; line-height: 1.65; }
+body[data-view="shop"] .shop-faq-list { display: grid; max-width: 900px; border-top: 1px solid #dfe5ee; }
+body[data-view="shop"] .shop-faq-list details { border-bottom: 1px solid #dfe5ee; }
+body[data-view="shop"] .shop-faq-list summary { min-height: 58px; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 15px 4px; color: #121826; font-size: 18px; font-weight: 720; line-height: 1.45; cursor: pointer; list-style: none; }
+body[data-view="shop"] .shop-faq-list summary::-webkit-details-marker { display: none; }
+body[data-view="shop"] .shop-faq-list summary::after { flex: 0 0 auto; color: #2563eb; content: "+"; font-size: 24px; font-weight: 500; }
+body[data-view="shop"] .shop-faq-list details[open] summary::after { content: "−"; }
+body[data-view="shop"] .shop-faq-list summary:focus-visible { border-radius: 6px; outline: 3px solid rgba(37,99,235,.28); outline-offset: 3px; }
+body[data-view="shop"] .shop-faq-list p { max-width: 72ch; margin: 0; padding: 0 44px 22px 4px; color: #596579; font-size: 16px; line-height: 1.7; }
 body[data-view="shop"] .shop-inventory-proof { padding-block: clamp(44px,6vw,78px); background: #fff; }
 body[data-view="shop"] .shop-inventory-proof .wrap { display: grid; grid-template-columns: minmax(220px,.7fr) minmax(0,1fr); align-items: center; gap: clamp(28px,5vw,76px); }
 body[data-view="shop"] .shop-inventory-proof-copy { max-width: 360px; }
@@ -736,8 +749,8 @@ body[data-view="contact"] .contact-page .contact-form .button { width: max-conte
   body[data-view="shop"] .shop-inventory-proof-copy { max-width: 540px; }
   body[data-view="shop"] .shop-story-section { padding-block: 48px; }
   body[data-view="shop"] .shop-section-heading h2 { font-size: 32px; line-height: 1.16; }
-  body[data-view="shop"] .shop-workflow-grid, body[data-view="shop"] .shop-template-grid, body[data-view="shop"] .shop-platform-grid { grid-template-columns: 1fr; }
-  body[data-view="shop"] .shop-workflow-card, body[data-view="shop"] .shop-template-card, body[data-view="shop"] .shop-platform-card { padding: 20px; }
+  body[data-view="shop"] .shop-workflow-grid, body[data-view="shop"] .shop-proof-grid, body[data-view="shop"] .shop-template-grid, body[data-view="shop"] .shop-platform-grid { grid-template-columns: 1fr; }
+  body[data-view="shop"] .shop-workflow-card, body[data-view="shop"] .shop-proof-card, body[data-view="shop"] .shop-template-card, body[data-view="shop"] .shop-platform-card { padding: 20px; }
   body[data-view="shop"] .shop-step { margin-bottom: 18px; }
   body[data-view="shop"] .shop-evidence, body[data-view="shop"] .shop-evidence:nth-child(even) { grid-template-columns: 1fr; gap: 20px; }
   body[data-view="shop"] .shop-evidence:nth-child(even) .shop-evidence-copy { order: 0; }
@@ -764,6 +777,7 @@ const myanmarPublicStyle = `
   html:lang(my) body[data-view="shop"] .shop-lead-capture figcaption { line-height: 1.8; }
   html:lang(my) body[data-view="shop"] .shop-section-heading h2, html:lang(my) body[data-view="shop"] .shop-evidence-copy h3 { letter-spacing: 0; line-height: 1.6; }
   html:lang(my) body[data-view="shop"] .shop-section-heading p, html:lang(my) body[data-view="shop"] .shop-workflow-card p, html:lang(my) body[data-view="shop"] .shop-template-card p, html:lang(my) body[data-view="shop"] .shop-platform-card p, html:lang(my) body[data-view="shop"] .shop-evidence-copy p, html:lang(my) body[data-view="shop"] .shop-access-steps li, html:lang(my) body[data-view="shop"] .shop-access-note { line-height: 1.9; }
+  html:lang(my) body[data-view="shop"] .shop-faq-list summary, html:lang(my) body[data-view="shop"] .shop-faq-list p { line-height: 1.9; }
   html:lang(my) body[data-view="contact"] .contact-page .page-hero h1 { max-width: 100%; margin-bottom: 22px; font-size: clamp(32px, 3vw, 38px); line-height: 1.6; letter-spacing: 0; }
   html:lang(my) body[data-view="contact"] .contact-company-intro { max-width: 480px; font-size: 16px; line-height: 1.85; }
   html:lang(my) body[data-view="contact"] .contact-direct { line-height: 1.85; }
@@ -927,10 +941,13 @@ function shopLandingSections(locale = 'en') {
   templatesEyebrow: 'ပြင်ဆင်နိုင်သော အစပျိုးပုံစံများ', templatesTitle: 'သင့်ဆိုင်ပုံစံမှ စတင်ပါ။', templatesBody: 'ပုံစံတစ်ခုကို ရွေးပြီး ကုန်ပစ္စည်း၊ အမျိုးအစားနှင့် လုပ်ငန်းစဉ်ကို သင့်ဆိုင်အတွက် ပြင်ဆင်ပါ။ ၎င်းတို့သည် စာရင်းသွင်းအစီအစဉ်များ မဟုတ်ပါ။',
   templates: [['မီနီမတ်', 'နေ့စဉ်သုံးကုန်နှင့် ဘားကုဒ်ရောင်းချမှုအတွက်။'], ['လက်ဖက်ရည်နှင့် ကော်ဖီ', 'အချိုရည်နှင့် မှာယူပြီး ပြင်ဆင်ရသည့် ပစ္စည်းများအတွက်။'], ['ဖက်ရှင်', 'အရွယ်အစား၊ အရောင်နှင့် အပိုပစ္စည်းများအတွက်။'], ['အလှအပနှင့် စပါ', 'အလှကုန်၊ အိမ်သုံးပစ္စည်းနှင့် ဝန်ဆောင်မှုရောင်းချသူများအတွက်။']],
   accessEyebrow: 'Shop ရယူရန်', accessTitle: 'ဒေသတွင်း စမ်းသပ်အသုံးပြုမှုကို အကူအညီဖြင့် စတင်ပါ။', accessBody: 'အများပြည်သူအတွက် ဒေါင်းလုဒ်နှင့် ကိုယ်တိုင်အကောင့်ဖွင့်ခြင်းကို မဖွင့်ရသေးပါ။ စမ်းသပ်အသုံးပြုခွင့်ကို စတင်တပ်ဆင်စဉ် ထုတ်ပေးပါသည်။',
+  accessLink: 'Shop အကြောင်း ဆက်သွယ်ရန်',
   accessSteps: ['သင်ရောင်းသည့်ပစ္စည်းနှင့် လက်ရှိလုပ်ငန်းစဉ်ကို ပြောပြပါ။', 'SuperMega က စက်နှင့် လုပ်ငန်းစဉ် ကိုက်ညီမှုကို စစ်ဆေးပါမည်။', 'လက်မှတ်ထိုးထားသော စမ်းသပ်အက်ပ် အဆင်သင့်ဖြစ်သောအခါ အကူအညီဖြင့် တပ်ဆင်ပေးပါမည်။'],
   platformEyebrow: 'စက်အမျိုးအစား', platformTitle: 'စမ်းသပ်အသုံးပြုရန် ရည်ရွယ်ထားသော စက်များ။', platformBody: 'Android တက်ဘလက်၊ iPad နှင့် Windows ကွန်ပျူတာကို ရည်ရွယ်ထားပါသည်။ အများပြည်သူဒေါင်းလုဒ် မရှိသေးပါ။',
   platforms: [['Android တက်ဘလက်', 'စမ်းသပ်အသုံးပြုရန် ရည်ရွယ်ထားပါသည်။ လက်မှတ်ထိုးထားသော ဖြန့်ချိမှု မရသေးပါ။'], ['iPad', 'စမ်းသပ်အသုံးပြုရန် ရည်ရွယ်ထားပါသည်။ လက်မှတ်ထိုးထားသော ဖြန့်ချိမှု မရသေးပါ။'], ['Windows ကွန်ပျူတာ', 'စမ်းသပ်အသုံးပြုရန် ရည်ရွယ်ထားပါသည်။ လက်မှတ်ထိုးထားသော တပ်ဆင်ဖိုင် မရသေးပါ။']],
   platformNote: 'ဝဘ်အက်ပ်၊ macOS နှင့် iPhone ကို သုံးစွဲသူများအတွက် လက်ရှိ Shop ထုတ်ကုန်အဖြစ် မပေးသေးပါ။ ပုံမှန်ရောင်းချမှုသည် အင်တာနက်မတည်ငြိမ်ချိန်တွင် ဆက်လုပ်နိုင်ပါသည်။ မန်နေဂျာက အရောင်းပြင်ဆင်ရန် အွန်လိုင်းခွင့်ပြုချက် လိုအပ်ပါသည်။',
+  faqEyebrow: 'မစတင်မီ', faqTitle: 'အဆင်သင့်ဖြစ်သည်နှင့် မဖြစ်သေးသည်ကို သိထားပါ။', faqBody: 'Shop ကို လက်ရှိတွင် အကူအညီဖြင့် စမ်းသပ်အသုံးပြုနိုင်ပါသည်။ ဤအချက်များက တပ်ဆင်မှုနှင့် အကူအညီကို ရှင်းလင်းစေပါသည်။',
+  faqs: [['ဘယ်နေရာမှ ဝင်ရမည်နည်း။', 'SuperMega က အကောင့်သတ်မှတ်ပေးပြီးသော လက်ရှိစမ်းသပ်အသုံးပြုသူများသာ အပေါ်ရှိ စမ်းသပ်အသုံးပြုသူ ဝင်ရန် လင့်ခ်ကို သုံးပါ။ အသုံးပြုသူအသစ်များသည် ဦးစွာ Shop အကြောင်း ဆက်သွယ်ပါ။'], ['Shop ကို ယခု ဒေါင်းလုဒ်ရနိုင်ပါသလား။', 'အများပြည်သူဒေါင်းလုဒ် မရှိသေးပါ။ စက်နှင့် လက်မှတ်ထိုးခြင်း စစ်ဆေးချက်များပြီးမှ အတည်ပြုထားသောအက်ပ်ကို အကူအညီဖြင့် တပ်ဆင်ပေးပါမည်။'], ['ရောင်းချရန် အင်တာနက် လိုအပ်ပါသလား။', 'ပုံမှန်ရောင်းချမှုကို အင်တာနက်မတည်ငြိမ်ချိန်တွင် ဆက်လုပ်နိုင်ပါသည်။ အရောင်းပြင်ဆင်မှုအတွက် ပိုင်ရှင်၏ အွန်လိုင်းခွင့်ပြုချက် လိုအပ်ပါသည်။'], ['မည်သည့်စက်နှင့် ဟာ့ဒ်ဝဲများကို သုံးနိုင်ပါသလဲ။', 'Android တက်ဘလက်၊ iPad နှင့် Windows ကွန်ပျူတာတို့သည် လက်ရှိ ရည်ရွယ်ထားသော စက်များဖြစ်ပါသည်။ သတ်မှတ်စကင်နာနှင့် ကွန်ရက်ပရင်တာများကို လက်တွေ့စမ်းသပ်ပြီးမှသာ အသုံးပြုနိုင်ကြောင်း ကတိပြုပါမည်။'], ['ဆက်သွယ်ပြီးနောက် ဘာဖြစ်မည်နည်း။', 'SuperMega က သင့်ဆိုင်လုပ်ငန်းစဉ်နှင့် စက်ကို စစ်ဆေးပြီး ကုန်ပစ္စည်းထည့်သွင်းပုံနှင့် ပထမဆုံးအရောင်းအတွက် အကူအညီပေးပါမည်။ ဆက်သွယ်ရေးဖောင်ပို့ခြင်းတစ်ခုတည်းဖြင့် အကောင့် မဖန်တီးပါ။']],
  } : {
   loopEyebrow: 'How it works at the counter', loopTitle: 'One clear loop for every sale.', loopBody: 'Move from finding an item to reviewing the day without switching between disconnected tools.',
   steps: [['Search or scan', 'Find by product name, SKU or barcode and add the right item to the basket.'], ['Review the total and take payment', 'Confirm items, quantities and payment before the sale is completed.'], ['Check stock and Today', 'See updated stock and the items that need attention after the sale.']],
@@ -940,23 +957,22 @@ function shopLandingSections(locale = 'en') {
   templatesEyebrow: 'Editable starting points', templatesTitle: 'Start with the shape of your shop.', templatesBody: 'Choose a starting preset, then edit products, categories and workflow for your business. Templates are not subscription plans.',
   templates: [['Mini-mart', 'For everyday goods and barcode-led selling.'], ['Tea and coffee', 'For drinks and made-to-order items.'], ['Fashion', 'For sizes, colours and accessories.'], ['Beauty and spa', 'For beauty, household and service sellers.']],
   accessEyebrow: 'How to get Shop', accessTitle: 'Start with an assisted Local Pilot.', accessBody: 'Public downloads and self-service signup are not open yet. Pilot account access is issued during assisted setup.',
+  accessLink: 'Contact us about Shop',
   accessSteps: ['Tell us what you sell and how your counter works today.', 'SuperMega confirms the device and workflow fit.', 'When the signed pilot build is ready, we provide it with assisted setup.'],
   platformEyebrow: 'Platform availability', platformTitle: 'Pilot devices, stated honestly.', platformBody: 'Android tablets, iPad and Windows PCs are the current pilot targets. There is no public installer yet.',
   platforms: [['Android tablet', 'Pilot target. Signed distribution is still pending.'], ['iPad', 'Pilot target. Signed distribution is still pending.'], ['Windows PC', 'Pilot target. A signed installer is still pending.']],
   platformNote: 'The web app, macOS and iPhone are not current customer Shop products. Normal selling can continue through an unreliable connection; manager correction requires online authorization.',
+  faqEyebrow: 'Before you start', faqTitle: 'Know what is ready—and what is not.', faqBody: 'Shop is currently an assisted pilot. These boundaries keep setup and support clear.',
+  faqs: [['Where do I sign in?', 'Existing pilot users use Pilot sign in after SuperMega assigns their account. New users contact us about Shop first.'], ['Can I download Shop now?', 'There is no public download yet. An approved signed build will be supplied during assisted setup after the device and signing checks pass.'], ['Does selling require internet?', 'Normal selling can continue through an unreliable connection. Correcting a sale requires online owner authorization.'], ['Which devices and hardware can I use?', 'Android tablets, iPad and Windows PCs are the current pilot targets. Specific scanners and network printers are promised only after physical acceptance.'], ['What happens after I contact SuperMega?', 'We check the shop workflow and device, then help choose a catalog path and guide the first sale. Sending the contact form does not create an account.']],
  }
- const suffix = my ? 'my' : 'en'
- const images = [
-  shopEvidenceImage(`shop_checkout_1200_${suffix}.png`, my ? 'Shop ရောင်းချမှုနှင့် ခြင်းမြင်ကွင်း' : 'Shop sale and basket view', copy.captions[0], `shop_sell_390_${suffix}.png`),
-  shopEvidenceImage(`shop_stock_820_${suffix}.png`, my ? 'Shop ကုန်လက်ကျန်မြင်ကွင်း' : 'Shop stock view', copy.captions[1], `shop_stock_390_${suffix}.png`),
-  shopEvidenceImage(`shop_today_820_${suffix}.png`, my ? 'Shop ယနေ့မြင်ကွင်း' : 'Shop Today view', copy.captions[2], `shop_today_390_${suffix}.png`),
- ]
+ const contactHref = my ? '/my/contact/?product=shop' : '/contact/?product=shop'
  const heading = (eyebrow, id, title, body) => `<div class="shop-section-heading"><p class="eyebrow">${eyebrow}</p><h2 id="${id}">${title}</h2><p>${body}</p></div>`
  return `<section class="shop-story-section" aria-labelledby="shop-loop-title"><div class="wrap">${heading(copy.loopEyebrow, 'shop-loop-title', copy.loopTitle, copy.loopBody)}<div class="shop-workflow-grid">${copy.steps.map(([title, body], index) => `<article class="shop-workflow-card"><span class="shop-step">${index + 1}</span><h3>${title}</h3><p>${body}</p></article>`).join('')}</div></div></section>
-<section class="shop-story-section" aria-labelledby="shop-proof-title"><div class="wrap">${heading(copy.proofEyebrow, 'shop-proof-title', copy.proofTitle, copy.proofBody)}<div class="shop-evidence-list">${copy.evidence.map(([title, body], index) => `<article class="shop-evidence"><div class="shop-evidence-copy"><h3>${title}</h3><p>${body}</p></div>${images[index]}</article>`).join('')}</div></div></section>
+<section class="shop-story-section" aria-labelledby="shop-proof-title"><div class="wrap">${heading(copy.proofEyebrow, 'shop-proof-title', copy.proofTitle, copy.proofBody)}<div class="shop-proof-grid">${copy.evidence.map(([title, body], index) => `<article class="shop-proof-card"><span>0${index + 1}</span><h3>${title}</h3><p>${body}</p></article>`).join('')}</div></div></section>
 <section class="shop-story-section" aria-labelledby="shop-templates-title"><div class="wrap">${heading(copy.templatesEyebrow, 'shop-templates-title', copy.templatesTitle, copy.templatesBody)}<div class="shop-template-grid">${copy.templates.map(([title, body]) => `<article class="shop-template-card"><h3>${title}</h3><p>${body}</p></article>`).join('')}</div></div></section>
-<section class="shop-story-section" aria-labelledby="shop-access-title"><div class="wrap"><div class="shop-access-panel">${heading(copy.accessEyebrow, 'shop-access-title', copy.accessTitle, copy.accessBody)}<ol class="shop-access-steps">${copy.accessSteps.map(step => `<li>${step}</li>`).join('')}</ol></div></div></section>
-<section class="shop-story-section" aria-labelledby="shop-platform-title"><div class="wrap">${heading(copy.platformEyebrow, 'shop-platform-title', copy.platformTitle, copy.platformBody)}<div class="shop-platform-grid">${copy.platforms.map(([title, body]) => `<article class="shop-platform-card"><h3>${title}</h3><p>${body}</p></article>`).join('')}</div><p class="shop-access-note">${copy.platformNote}</p></div></section>`
+<section class="shop-story-section" aria-labelledby="shop-access-title"><div class="wrap"><div class="shop-access-panel"><div class="shop-access-copy">${heading(copy.accessEyebrow, 'shop-access-title', copy.accessTitle, copy.accessBody)}<a class="shop-access-link" href="${contactHref}">${copy.accessLink}</a></div><ol class="shop-access-steps">${copy.accessSteps.map(step => `<li>${step}</li>`).join('')}</ol></div></div></section>
+<section class="shop-story-section" aria-labelledby="shop-platform-title"><div class="wrap">${heading(copy.platformEyebrow, 'shop-platform-title', copy.platformTitle, copy.platformBody)}<div class="shop-platform-grid">${copy.platforms.map(([title, body]) => `<article class="shop-platform-card"><h3>${title}</h3><p>${body}</p></article>`).join('')}</div><p class="shop-access-note">${copy.platformNote}</p></div></section>
+<section class="shop-story-section" aria-labelledby="shop-faq-title"><div class="wrap">${heading(copy.faqEyebrow, 'shop-faq-title', copy.faqTitle, copy.faqBody)}<div class="shop-faq-list">${copy.faqs.map(([question, answer]) => `<details><summary>${question}</summary><p>${answer}</p></details>`).join('')}</div></div></section>`
 }
 function productStory(id, standalone = false) {
  const item=stories[id], label=publicProducts.find(product=>product.id===id).name

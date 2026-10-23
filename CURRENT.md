@@ -34,9 +34,9 @@ owner-approved product outcome and gate require it.
 | Item | Current fact |
 | --- | --- |
 | Integration PR | [#734 — Unify Shop app first-use and public launch candidate](https://github.com/swanhtet01/swanhtet01.github.io/pull/734) |
-| State | Open draft and CLEAN at verified presentation successor `946315b1`; App/native/security/Kernel CI pass. Independent eligible human review, protected preview, signing, and merchant acceptance remain open |
+| State | Open draft and CLEAN at verified presentation successor `1dd259e2`; App/native/security/Kernel CI pass. A bounded website-clarity successor is under local verification; independent eligible human review, exact preview, signing, and merchant acceptance remain open |
 | Integration branch | `codex/shop-public-main-port-20261022` |
-| Final evidence candidate | `946315b1ba88d0b46f9c0e91656a5529106cb564` / tree `683cb6baf1c96cc32ae423377b3e8883fe44cb02` |
+| Final evidence candidate | `1dd259e23dcaf1c5ca4b152f5d1c3ecf70bbc202` / tree `02910dd1e4ca2ec6ff73a9c08ff306d8165bb7ae` |
 | Native capture source | `523064bd28e2d5f949766449b862c0b6aaf9c365` / native tree `416545b3952b477e39d5c64d159c6bf27fc2e881` |
 | Gallery evidence successor | `172773a3cfa0996a4aa058148e50513d71da5ae2`; final head preserves the same native tree |
 | PostgreSQL evidence checkpoint | `b1ee4cc2884dda1ab753e8d2e4ecc6c6216a36ef` / tree `6996864df311db4748fcca3ec75c030dd0fcab3e` |
@@ -52,22 +52,22 @@ unavailable; normal selling remains offline.
 
 ## Exact evidence
 
-- [Required App CI 40017974033](https://github.com/swanhtet01/swanhtet01.github.io/actions/runs/40017974033)
-  passed at exact head `946315b1`: PostgreSQL/API and migration/RLS guards,
+- [Required App CI 40020906422](https://github.com/swanhtet01/swanhtet01.github.io/actions/runs/40020906422)
+  passed at exact head `1dd259e2`: PostgreSQL/API and migration/RLS guards,
   dependencies, lint, canonical build, HQ verification, release workflow
   contracts, and desktop/390 px journeys.
-- [Native run 40017981292](https://github.com/swanhtet01/swanhtet01.github.io/actions/runs/40017981292)
-  checked out PR merge `e4a9f55f` containing source head `946315b1` and exact
-  candidate tree `683cb6ba`, then passed formatting, analysis, isolated first-sale
+- [Native run 40020912969](https://github.com/swanhtet01/swanhtet01.github.io/actions/runs/40020912969)
+  checked out PR merge `7dd0557d` containing source head `1dd259e2` and exact
+  candidate tree `02910dd1`, then passed formatting, analysis, isolated first-sale
   and restore, all Flutter tests, bundled-font renders, Android debug,
   unsigned iPad/iOS, and Windows restore/no-replace plus unsigned packaging.
 - Candidate-tree QA artifacts from that merge-ref run: Android debug
-  `12529806682`
-  (`sha256:64ccc6e4127637b68a9d03306a7ddd8540daa490cac17565afbaa1a8f743a00c`),
-  Flutter renders `12529033017`
-  (`sha256:00d37c21242512d0764adea3347de03505526183dc789fb07b3a5958dbe8ae1c`),
-  and unsigned Windows `12529872529`
-  (`sha256:107680289be01646da26a9daddf2302654191c8d58f53e805ad67121950cd2b2`).
+  `12530687828`
+  (`sha256:5b66d862ac944e7b202f3b7c8c311d64a3e802c4a0b90e2f8912d74ac793fa83`),
+  Flutter renders `12529459734`
+  (`sha256:37009d8662c86ac699fec79fa00900eed9f5403dcea2f21511f68a63c0f50fa8`),
+  and unsigned Windows `12531691403`
+  (`sha256:920e23e3aebb82588f7ddd3bc1c6d4c8bbeca2b60ed6dadae3f148637ffcf020`).
   iOS passed `--no-codesign`; no signed iOS artifact is retained.
 - Gallery provenance pins source `523064bd`, CI merge `4219c5d4`, native run
   `39991770709`, artifact `12517843109`, and original archive
@@ -80,7 +80,7 @@ unavailable; normal selling remains offline.
   receipt digest
   `sha256:8c3ece4d69c0dd815a14e762fb01602229ab14214acb9147774617bce0d18c72`,
   and `hostedActivationProven=false`.
-- Dependency security `40017981294` and Kernel `40017981523` pass against the
+- Dependency security `40020913105` and Kernel `40020912973` pass against the
   same source head. Kernel production release remains
   intentionally owner-gated.
 
@@ -138,7 +138,7 @@ v14 and hosted PostgreSQL/Supabase schema profile v13 are separate contracts.
   mutation has occurred.
 - Live `supermega.dev` and `app.supermega.dev` still report predecessor
   `5479c5d1`; the existing paired protected previews report `f944f66b`, and no
-  immutable protected preview has been accepted for `946315b1` or its successor.
+  immutable protected preview has been accepted for `1dd259e2` or its successor.
   Direct previews stay disabled, and the production workflow is not preview
   evidence. Live retired product routes also need an owner-approved release of
   the already-verified Shop-first route policy.
@@ -196,7 +196,7 @@ backup, and restore review; no blind merge or cherry-pick is allowed.
 
 ## Next action
 
-1. Keep final evidence candidate `946315b1` and any bounded documentation/copy
+1. Keep final evidence candidate `1dd259e2` and any bounded documentation/copy
    successor stable, correction default-dark,
    and PR #734 draft pending the owner-gated release decision.
 2. The owner must approve fixed provider team/project identities and a separate

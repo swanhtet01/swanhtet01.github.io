@@ -143,14 +143,14 @@ export function derivePublicHomepageExpectedText({ manifest, generatorSource }) 
     "replaceOnce(heroWithPreview, 'Shop for Myanmar retailers'",
     "replaceOnce(heroWithPreview, 'Sell clearly. Keep stock accurate.'",
     "replaceOnce(heroWithPreview, 'href=\"/contact/?product=shop\">Contact us about Shop'",
-    'content:`<main id="content">${heroWithPreview}${nativeShopHero(locale)}</main>',
+    'content:`<main id="content">${heroWithPreview}${nativeShopHero(locale)}${shopLandingSections(locale)}</main>${productAction(product)}`',
     "'Illustrative Shop preview with synthetic sample data.'",
   ]
   if (requiredGeneratorBindings.some((fragment) => !occursExactlyOnce(generatorSource, fragment))) {
     fail('exact_app_preview_public_generator_binding_drift')
   }
   const expected = ['Shop for Myanmar retailers', 'Sell clearly. Keep stock accurate.',
-    'Contact us about Shop', 'Sign in', 'Illustrative Shop preview with synthetic sample data.']
+    'Contact us about Shop', 'Pilot sign in', 'Illustrative Shop preview with synthetic sample data.']
   if (RETIRED_PUBLIC_HOME_EXPECTED_TEXT.some((retired) => (
     generatorSource.includes(retired) || expected.some((value) => value.includes(retired))
   ))) fail('exact_app_preview_public_retired_copy_present')

@@ -531,7 +531,7 @@ test('builds and validates the exact twenty-eight-case technical preview proof',
     'Shop for Myanmar retailers',
     'Sell clearly. Keep stock accurate.',
     'Contact us about Shop',
-    'Sign in',
+    'Pilot sign in',
     'Illustrative Shop preview with synthetic sample data.',
   ])
   assert.deepEqual(

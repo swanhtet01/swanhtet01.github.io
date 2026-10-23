@@ -63,6 +63,7 @@ try {
   cdp = await Cdp.connect(started.wsUrl)
   const { targetId } = await cdp.send('Target.createTarget', { url: 'about:blank' })
   const { sessionId } = await cdp.send('Target.attachToTarget', { targetId, flatten: true })
+  await cdp.send('Target.activateTarget', { targetId })
   await cdp.send('Page.enable', {}, sessionId)
   await cdp.send('Runtime.enable', {}, sessionId)
   const { port } = server.address()
@@ -74,6 +75,19 @@ try {
       }, sessionId)
       await cdp.send('Page.navigate', { url: `http://127.0.0.1:${port}${route}` }, sessionId)
       await waitForReady(cdp, sessionId)
+      const faqFocusVisible = await evaluate(cdp, sessionId, `(() => {
+        const summary = document.querySelector('.shop-faq-list summary')
+        if (!summary) return false
+        summary.focus()
+        const style = getComputedStyle(summary)
+        return style.outlineStyle !== 'none' && Number.parseFloat(style.outlineWidth) > 0
+      })()`)
+      await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Enter', code: 'Enter', text: '\r', unmodifiedText: '\r', windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13 }, sessionId)
+      await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13 }, sessionId)
+      const faqOpenedWithEnter = await evaluate(cdp, sessionId, `document.querySelector('.shop-faq-list details')?.open === true`)
+      await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: ' ', code: 'Space', text: ' ', unmodifiedText: ' ', windowsVirtualKeyCode: 32, nativeVirtualKeyCode: 32 }, sessionId)
+      await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: ' ', code: 'Space', windowsVirtualKeyCode: 32, nativeVirtualKeyCode: 32 }, sessionId)
+      const faqClosedWithSpace = await evaluate(cdp, sessionId, `document.querySelector('.shop-faq-list details')?.open === false`)
       const result = await evaluate(cdp, sessionId, `(() => {
         const visible = element => Boolean(element && element.getClientRects().length && getComputedStyle(element).visibility !== 'hidden')
         const primary = [...document.querySelectorAll('.button-primary')].filter(visible)
@@ -91,17 +105,39 @@ try {
         const disclosure = document.querySelector('.native-shop-disclosure')
         const storySections = [...document.querySelectorAll('.shop-story-section')].filter(visible)
         const storyHeadings = storySections.map(section => section.querySelector('h2')).filter(visible)
+        const accessLink = document.querySelector('.shop-access-link')
+        const faqItems = [...document.querySelectorAll('.shop-faq-list details')]
+        const faqSummaries = faqItems.map(item => item.querySelector('summary')).filter(visible)
         const switchLink = document.querySelector('[data-language-switch]')
         const focusTarget = primary[0]
         focusTarget && focusTarget.focus()
         const focusStyle = focusTarget ? getComputedStyle(focusTarget) : null
+        const primaryFocusVisible = Boolean(focusStyle && focusStyle.outlineStyle !== 'none' && Number.parseFloat(focusStyle.outlineWidth) > 0)
+        accessLink && accessLink.focus()
+        const accessFocusStyle = accessLink ? getComputedStyle(accessLink) : null
+        const faqSummaryHeights = faqSummaries.map(summary => Math.round(summary.getBoundingClientRect().height))
+        faqItems.forEach(item => { item.open = true })
+        const faqGeometryValid = faqItems.every(item => {
+          const summary = item.querySelector('summary')?.getBoundingClientRect()
+          const answer = item.querySelector('p')?.getBoundingClientRect()
+          const bounds = item.getBoundingClientRect()
+          return summary && answer && answer.top >= summary.bottom - 1
+            && answer.left >= bounds.left - 1 && answer.right <= bounds.right + 1
+            && answer.bottom <= bounds.bottom + 1
+        })
         return {
           lang: document.documentElement.lang,
           viewportWidth: innerWidth,
           scrollWidth: document.documentElement.scrollWidth,
           primaryCount: primary.length,
           targetHeights: targets.map(element => Math.round(element.getBoundingClientRect().height)),
-          focusVisible: Boolean(focusStyle && focusStyle.outlineStyle !== 'none' && Number.parseFloat(focusStyle.outlineWidth) > 0),
+          focusVisible: primaryFocusVisible,
+          accessLinkVisible: visible(accessLink),
+          accessLinkHeight: Math.round(accessLink?.getBoundingClientRect().height || 0),
+          accessLinkFocusVisible: Boolean(accessFocusStyle && accessFocusStyle.outlineStyle !== 'none' && Number.parseFloat(accessFocusStyle.outlineWidth) > 0),
+          faqCount: faqItems.length,
+          faqSummaryHeights,
+          faqGeometryValid,
           switchHref: switchLink && switchLink.getAttribute('href'),
           tableauCount: document.querySelectorAll('.native-shop-tableau').length,
           figureCount: figures.length,
@@ -127,6 +163,10 @@ try {
           forbiddenCopy: /SuperMega Shop|Request a Shop pilot|Request a Shop walkthrough/i.test(document.body.innerText),
         }
       })()`)
+      result.faqFocusVisible = faqFocusVisible
+      result.faqOpenedWithEnter = faqOpenedWithEnter
+      result.faqClosedWithSpace = faqClosedWithSpace
+      result.faqKeyboardInteraction = faqOpenedWithEnter && faqClosedWithSpace
       const expectedLang = route.startsWith('/my/') ? 'my' : 'en'
       const expectedSwitch = expectedLang === 'my' ? '/shop/' : '/my/shop/'
       const failures = []
@@ -135,6 +175,9 @@ try {
       if (result.primaryCount !== 1) failures.push('primary_action')
       if (result.targetHeights.some(height => height < 48)) failures.push('touch_target')
       if (!result.focusVisible) failures.push('keyboard_focus')
+      if (!result.accessLinkVisible || result.accessLinkHeight < 48 || !result.accessLinkFocusVisible) failures.push('secondary_action_accessibility')
+      if (result.faqCount !== 5 || result.faqSummaryHeights.some(height => height < 48) || !result.faqGeometryValid
+        || !result.faqFocusVisible || !result.faqKeyboardInteraction) failures.push('faq_accessibility')
       if (result.switchHref !== expectedSwitch) failures.push('language_switch')
       if (result.tableauCount !== 1 || result.figureCount !== 3 || result.tableauHeight < 360) failures.push('tableau')
       if (!result.imagesLoaded || !result.imagesUnclipped) failures.push('image_bounds')
@@ -146,8 +189,8 @@ try {
         ? 'နမူနာဒေတာဖြင့် ဖော်ပြထားသော Shop အက်ပ်မြင်ကွင်း။'
         : 'Illustrative Shop preview with synthetic sample data.'
       if (!result.disclosureVisible || result.disclosureText !== expectedDisclosure) failures.push('sample_disclosure')
-      if (result.storySectionCount !== 5 || result.templateCount !== 4 || result.platformCount !== 3) failures.push('story_structure')
-      if (result.storyHeadingSizes.length !== 5 || result.storyHeadingSizes.some(size => size < 28)) failures.push('story_readability')
+      if (result.storySectionCount !== 6 || result.templateCount !== 4 || result.platformCount !== 3) failures.push('story_structure')
+      if (result.storyHeadingSizes.length !== 6 || result.storyHeadingSizes.some(size => size < 28)) failures.push('story_readability')
       if (expectedLang === 'my' && (result.storyHeadingLineHeights.some((height, index) => height < result.storyHeadingSizes[index] * 1.45)
         || result.storyHeadingTracking.some(value => value !== 'normal' && Math.abs(Number.parseFloat(value)) > 0.01))) failures.push('myanmar_story_typography')
       if (result.deviceLabels) failures.push('device_label')

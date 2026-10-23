@@ -39,8 +39,10 @@ for (const [route, html, locale] of [
 }
 check(shop.includes('<a class="button button-primary" href="/contact/?product=shop">Contact us about Shop</a>'), 'shop_single_action')
 check((shop.match(/class="button button-primary"/g) || []).length === 1, 'shop_exactly_one_primary_action')
+check(shop.includes('<a class="shop-access-link" href="/contact/?product=shop">Contact us about Shop</a>'), 'shop_access_secondary_action')
 check(myShop.includes('href="/my/contact/?product=shop">Shop အကြောင်း ဆက်သွယ်ရန်</a>'), 'my_shop_action')
 check((myShop.match(/class="button button-primary"/g) || []).length === 1, 'my_shop_exactly_one_primary_action')
+check(myShop.includes('<a class="shop-access-link" href="/my/contact/?product=shop">Shop အကြောင်း ဆက်သွယ်ရန်</a>'), 'my_shop_access_secondary_action')
 check(shop.includes('Shop for Myanmar retailers') && shop.includes('Sell clearly. Keep stock accurate.') && shop.includes('Find an item, take payment and see what needs attention—even when the connection is unreliable.'), 'shop_approved_copy')
 check(myShop.includes('မြန်မာ လက်လီဆိုင်များအတွက် Shop')
   && myShop.includes('ရောင်းချမှု ရှင်းလင်းပါစေ။ ကုန်လက်ကျန် မှန်ကန်ပါစေ။')
@@ -51,6 +53,9 @@ check(myShop.includes('နမူနာဒေတာဖြင့် ဖော်�
 for (const token of ['How it works at the counter', 'Search or scan', 'Review the total and take payment', 'Check stock and Today', 'Editable starting points', 'Mini-mart', 'Tea and coffee', 'Fashion', 'Beauty and spa', 'How to get Shop', 'assisted Local Pilot', 'Public downloads and self-service signup are not open yet', 'Android tablet', 'iPad', 'Windows PC', 'Signed distribution is still pending', 'A signed installer is still pending']) {
   check(shop.includes(token), 'shop_access_and_workflow:' + token)
 }
+for (const token of ['Pilot sign in', 'Before you start', 'Where do I sign in?', 'Can I download Shop now?', 'Does selling require internet?', 'Sending the contact form does not create an account.']) check(shop.includes(token), 'shop_access_faq:' + token)
+for (const token of ['စမ်းသပ်အသုံးပြုသူ ဝင်ရန်', 'မစတင်မီ', 'ဘယ်နေရာမှ ဝင်ရမည်နည်း။', 'Shop ကို ယခု ဒေါင်းလုဒ်ရနိုင်ပါသလား။', 'ဆက်သွယ်ရေးဖောင်ပို့ခြင်းတစ်ခုတည်းဖြင့် အကောင့် မဖန်တီးပါ။']) check(myShop.includes(token), 'my_shop_access_faq:' + token)
+check((shop.match(/<details>/g) || []).length === 5 && (myShop.match(/<details>/g) || []).length === 5, 'five_access_faqs_en_my')
 for (const token of ['ကောင်တာတွင် အလုပ်လုပ်ပုံ', 'ရှာပါ သို့မဟုတ် စကင်ဖတ်ပါ', 'ပြင်ဆင်နိုင်သော အစပျိုးပုံစံများ', 'မီနီမတ်', 'လက်ဖက်ရည်နှင့် ကော်ဖီ', 'ဖက်ရှင်', 'အလှအပနှင့် စပါ', 'Shop ရယူရန်', 'Android တက်ဘလက်', 'iPad', 'Windows ကွန်ပျူတာ']) {
   check(myShop.includes(token), 'my_shop_access_and_workflow:' + token)
 }
@@ -58,6 +63,7 @@ check(!/Local Pilot|Pilot target|Signed distribution|installer|Web app|customer 
 check(shop.includes('The web app, macOS and iPhone are not current customer Shop products.'), 'unsupported_platforms_stated_honestly')
 check((shop.match(/class="shop-template-card"/g) || []).length === 4 && (myShop.match(/class="shop-template-card"/g) || []).length === 4, 'four_editable_templates_en_my')
 check((shop.match(/class="shop-platform-card"/g) || []).length === 3 && (myShop.match(/class="shop-platform-card"/g) || []).length === 3, 'three_pilot_platform_targets_en_my')
+check((shop.match(/class="shop-proof-card"/g) || []).length === 3 && (myShop.match(/class="shop-proof-card"/g) || []).length === 3, 'three_compact_proof_cards_en_my')
 check(shop.includes('shop_checkout_1200_en.png') && shop.includes('shop_stock_820_en.png') && shop.includes('shop_today_820_en.png'), 'en_three_workflows')
 check(myShop.includes('shop_checkout_1200_my.png') && myShop.includes('shop_stock_820_my.png') && myShop.includes('shop_today_820_my.png'), 'my_three_workflows')
 for (const [html, suffix] of [[shop, 'en'], [myShop, 'my']]) {
