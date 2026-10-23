@@ -787,6 +787,227 @@ const shopWalletReversalReconciliationsRequireWorkspaceBindingV12Sql = '''
   END
 ''';
 
+/// The exact singleton table shipped by PR #751 when that branch called
+/// itself schema 11. The historical identifiers are data compatibility
+/// values; later UI labels must not rewrite them during migration.
+const shopBusinessProfileV11Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_business_profile (
+    singleton_key INTEGER PRIMARY KEY NOT NULL CHECK (singleton_key = 1),
+    schema_id TEXT NOT NULL
+      CHECK (schema_id = 'supermega.shop.business_profile.v1'),
+    template_id TEXT NOT NULL
+      CHECK (template_id IN (
+        'mini-mart', 'cafe-takeaway', 'fashion-accessories',
+        'beauty-household', 'custom'
+      )),
+    template_version INTEGER NOT NULL CHECK (template_version = 1),
+    updated_at_millis INTEGER NOT NULL CHECK (updated_at_millis >= 0)
+  )
+''';
+
+/// Distinguishes a legitimate correction-v11/v12 migration that had audit
+/// history before authenticated workspace attachment. It grants no identity,
+/// role, capability, or workspace authority and is removed on real attach.
+const shopMigrationProvenanceV13Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_v13_migration_provenance (
+    singleton INTEGER PRIMARY KEY NOT NULL CHECK (singleton = 1),
+    reason TEXT NOT NULL CHECK (
+      reason = 'legacy_unbound_correction_history'
+    )
+  )
+''';
+
+const shopCashShiftsOneOpenV6Sql = '''
+  CREATE UNIQUE INDEX IF NOT EXISTS shop_cash_shifts_one_open
+  ON shop_cash_shifts(state) WHERE state = 'open'
+''';
+
+const shopCashShiftSalesShiftIdV6Sql = '''
+  CREATE INDEX IF NOT EXISTS shop_cash_shift_sales_shift_id
+  ON shop_cash_shift_sales(shift_id)
+''';
+
+const shopHeldSalesUpdatedV10Sql = '''
+  CREATE INDEX IF NOT EXISTS shop_held_sales_updated
+  ON shop_held_sales(updated_at_millis DESC)
+''';
+
+const shopKnownBaseObjectNames = <String>{
+  'menu_import_drafts',
+  'merchant_wallet_profiles',
+  'shop_products',
+  'shop_sales',
+  'shop_sale_lines',
+  'shop_stock_movements',
+  'shop_sync_outbox',
+  'shop_wallet_checkout_intents',
+  'shop_cash_shifts',
+  'shop_cash_shifts_one_open',
+  'shop_cash_shift_sales',
+  'shop_cash_shift_sales_shift_id',
+  'shop_product_images',
+  'shop_counter_drafts',
+  'shop_held_sales',
+  'shop_held_sales_updated',
+};
+
+const shopBaseTableColumnsV6 = <String, Set<String>>{
+  'menu_import_drafts': {
+    'id',
+    'batch_id',
+    'category',
+    'name',
+    'description',
+    'price_mmk',
+    'sku',
+    'barcode',
+    'opening_stock',
+    'review_state',
+    'created_at_millis',
+  },
+  'merchant_wallet_profiles': {
+    'provider',
+    'merchant_phone',
+    'official_qr_payload',
+    'issuer_confirmed',
+    'updated_at_millis',
+  },
+  'shop_products': {
+    'id',
+    'name',
+    'category',
+    'description',
+    'sku',
+    'barcode',
+    'price_mmk',
+    'on_hand',
+    'updated_at_millis',
+    'archived',
+  },
+  'shop_sales': {
+    'id',
+    'operation_id',
+    'request_fingerprint',
+    'total_mmk',
+    'payment_method',
+    'created_at_millis',
+  },
+  'shop_sale_lines': {
+    'id',
+    'sale_id',
+    'product_id',
+    'product_name',
+    'unit_price_mmk',
+    'quantity',
+    'line_total_mmk',
+  },
+  'shop_stock_movements': {
+    'id',
+    'sale_id',
+    'product_id',
+    'quantity_delta',
+    'reason',
+    'created_at_millis',
+  },
+  'shop_sync_outbox': {
+    'operation_id',
+    'event_type',
+    'payload_json',
+    'state',
+    'created_at_millis',
+  },
+  'shop_wallet_checkout_intents': {
+    'operation_id',
+    'payment_method',
+    'request_fingerprint',
+    'total_mmk',
+    'merchant_phone',
+    'merchant_qr_payload',
+    'basket_json',
+    'state',
+    'created_at_millis',
+  },
+  'shop_cash_shifts': {
+    'id',
+    'open_operation_id',
+    'operator_label',
+    'opening_float_mmk',
+    'opened_at_millis',
+    'state',
+    'close_operation_id',
+    'closed_at_millis',
+    'cash_sales_count',
+    'cash_sales_total_mmk',
+    'wallet_sales_count',
+    'wallet_sales_total_mmk',
+    'expected_cash_mmk',
+    'counted_cash_mmk',
+    'difference_mmk',
+    'review_sale_count',
+    'review_cash_total_mmk',
+  },
+  'shop_cash_shift_sales': {'sale_id', 'shift_id'},
+};
+
+const shopProductImageColumnsV7 = {
+  'product_id',
+  'image_png',
+  'updated_at_millis',
+};
+
+const shopCounterDraftColumnsV8 = {
+  'slot',
+  'operation_id',
+  'basket_json',
+  'updated_at_millis',
+};
+
+const shopHeldSaleColumnsV10 = {
+  'id',
+  'name',
+  'operation_id',
+  'basket_json',
+  'created_at_millis',
+  'updated_at_millis',
+};
+
+Map<String, Set<String>> shopBaseTableColumnsForVersion(int schemaVersion) {
+  if (schemaVersion < 6 || schemaVersion > 13) return const {};
+  return <String, Set<String>>{
+    for (final entry in shopBaseTableColumnsV6.entries)
+      entry.key: <String>{
+        ...entry.value,
+        if (entry.key == 'shop_products' && schemaVersion >= 9)
+          'reorder_level',
+      },
+    if (schemaVersion >= 7)
+      'shop_product_images': shopProductImageColumnsV7,
+    if (schemaVersion >= 8)
+      'shop_counter_drafts': shopCounterDraftColumnsV8,
+    if (schemaVersion >= 10) 'shop_held_sales': shopHeldSaleColumnsV10,
+  };
+}
+
+Map<String, String> shopCriticalIndexDefinitions(int schemaVersion) => {
+  if (schemaVersion >= 6)
+    'shop_cash_shifts_one_open': shopCashShiftsOneOpenV6Sql,
+  if (schemaVersion >= 6)
+    'shop_cash_shift_sales_shift_id': shopCashShiftSalesShiftIdV6Sql,
+  if (schemaVersion >= 10)
+    'shop_held_sales_updated': shopHeldSalesUpdatedV10Sql,
+};
+
+String shopSchemaObjectTypeForDefinition(String definition) {
+  final sql = canonicalShopSchemaSql(definition);
+  if (sql.startsWith('create table')) return 'table';
+  if (sql.startsWith('create index') ||
+      sql.startsWith('create unique index')) {
+    return 'index';
+  }
+  if (sql.startsWith('create trigger')) return 'trigger';
+  throw ArgumentError.value(definition, 'definition', 'Unknown schema object');
+}
+
 String shopImmutableTriggerV11Sql({
   required String table,
   required String operation,
@@ -798,6 +1019,140 @@ String shopImmutableTriggerV11Sql({
     SELECT RAISE(ABORT, '$message');
   END
 ''';
+
+Map<String, String> shopReversalSchemaDefinitionsV11() {
+  final definitions = <String, String>{
+    'shop_sale_reversals': shopSaleReversalsV11Sql,
+    'shop_sale_reversal_lines': shopSaleReversalLinesV11Sql,
+    'shop_wallet_reversal_reconciliations':
+        shopWalletReversalReconciliationsV11Sql,
+  };
+  for (final table in const [
+    'shop_sale_reversals',
+    'shop_sale_reversal_lines',
+    'shop_wallet_reversal_reconciliations',
+    'shop_sales',
+    'shop_sale_lines',
+    'shop_stock_movements',
+  ]) {
+    final message = table == 'shop_stock_movements'
+        ? 'Completed Shop stock movements are immutable'
+        : table == 'shop_sales' || table == 'shop_sale_lines'
+        ? 'Completed Shop sales are immutable'
+        : 'Shop reversal audit records are immutable';
+    for (final operation in const ['update', 'delete']) {
+      definitions['${table}_no_$operation'] = shopImmutableTriggerV11Sql(
+        table: table,
+        operation: operation,
+        message: message,
+      );
+    }
+  }
+  return definitions;
+}
+
+Map<String, String> shopWorkspaceSchemaDefinitionsV12() => <String, String>{
+  'shop_managed_workspace_binding': shopManagedWorkspaceBindingV12Sql,
+  'shop_managed_workspace_binding_no_update': shopImmutableTriggerV11Sql(
+    table: 'shop_managed_workspace_binding',
+    operation: 'update',
+    message: 'Managed Shop workspace binding is immutable',
+  ),
+  'shop_managed_workspace_binding_no_delete': shopImmutableTriggerV11Sql(
+    table: 'shop_managed_workspace_binding',
+    operation: 'delete',
+    message: 'Managed Shop workspace binding is immutable',
+  ),
+  'shop_managed_workspace_binding_insert_guard':
+      shopManagedWorkspaceBindingInsertGuardV12Sql,
+  'shop_sale_reversals_require_workspace_binding':
+      shopSaleReversalsRequireWorkspaceBindingV12Sql,
+  'shop_wallet_reversal_reconciliations_require_workspace_binding':
+      shopWalletReversalReconciliationsRequireWorkspaceBindingV12Sql,
+};
+
+Map<String, String> shopWorkspaceCollisionPrefixDefinitionsV12() {
+  final definitions = shopWorkspaceSchemaDefinitionsV12();
+  definitions.remove('shop_sale_reversals_require_workspace_binding');
+  definitions.remove(
+    'shop_wallet_reversal_reconciliations_require_workspace_binding',
+  );
+  return definitions;
+}
+
+String canonicalShopSchemaSql(String value) {
+  final output = StringBuffer();
+  final ifNotExists = RegExp(r'if\s+not\s+exists\b', caseSensitive: false);
+  var index = 0;
+  var pendingSpace = false;
+  while (index < value.length) {
+    final character = value[index];
+    if (character == "'" ||
+        character == '"' ||
+        character == '`' ||
+        character == '[') {
+      if (pendingSpace && output.length > 0) output.write(' ');
+      pendingSpace = false;
+      final closing = character == '[' ? ']' : character;
+      output.write(character);
+      index++;
+      while (index < value.length) {
+        final quoted = value[index];
+        output.write(quoted);
+        index++;
+        if (quoted != closing) continue;
+        if (closing != ']' && index < value.length && value[index] == closing) {
+          output.write(value[index]);
+          index++;
+          continue;
+        }
+        break;
+      }
+      continue;
+    }
+
+    final optionalClause = ifNotExists.matchAsPrefix(value, index);
+    final hasWordBefore =
+        index > 0 && RegExp(r'[A-Za-z0-9_]').hasMatch(value[index - 1]);
+    if (!hasWordBefore && optionalClause != null) {
+      index = optionalClause.end;
+      pendingSpace = true;
+      continue;
+    }
+    if (RegExp(r'\s').hasMatch(character)) {
+      pendingSpace = true;
+      index++;
+      continue;
+    }
+    if (pendingSpace && output.length > 0) output.write(' ');
+    pendingSpace = false;
+    output.write(character.toLowerCase());
+    index++;
+  }
+  return output.toString().trim();
+}
+
+enum _ShopUpgradeOrigin {
+  legacy,
+  correctionV11,
+  profileV11,
+  correctionWorkspaceV12,
+  profileWorkspaceCollisionV12,
+}
+
+enum _ColumnGroupState { none, partial, exact }
+
+class _ShopSchemaObject {
+  const _ShopSchemaObject({
+    required this.type,
+    required this.table,
+    required this.sql,
+  });
+
+  final String type;
+  final String table;
+  final String sql;
+}
 
 @DriftDatabase(
   tables: [
@@ -818,6 +1173,30 @@ class ShopDatabase extends _$ShopDatabase {
   static File privateDatabaseFile(Directory documents) =>
       File('${documents.path}${Platform.pathSeparator}supermega_shop.sqlite');
 
+  /// Migrates and fully opens a restore candidate before it is published.
+  ///
+  /// DELETE journaling keeps all transient state beside the staged file and
+  /// guarantees that closing the database leaves one self-contained SQLite
+  /// file for the restore layer to verify and hard-link without replacement.
+  static Future<void> migrateAndVerifyRestoreFile(File file) async {
+    final database = ShopDatabase(
+      NativeDatabase(
+        file,
+        setup: (raw) => raw.execute('PRAGMA journal_mode = DELETE'),
+      ),
+    );
+    try {
+      final row = await database
+          .customSelect('PRAGMA user_version')
+          .getSingle();
+      if (row.read<int>('user_version') != database.schemaVersion) {
+        throw StateError('The staged Shop restore did not reach schema v13.');
+      }
+    } finally {
+      await database.close();
+    }
+  }
+
   factory ShopDatabase.inPrivateDocuments(Directory documents) => ShopDatabase(
     driftDatabase(
       name: 'supermega_shop',
@@ -831,11 +1210,12 @@ class ShopDatabase extends _$ShopDatabase {
     : super(executor ?? driftDatabase(name: 'supermega_shop'));
 
   @override
-  int get schemaVersion => 12;
+  int get schemaVersion => 13;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
-    onCreate: (migrator) async {
+    onCreate: (migrator) => transaction(() async {
+      await _requireEmptyCreateOrigin();
       await migrator.createAll();
       await _createWalletCheckoutTable();
       await _createCashShiftTables();
@@ -844,14 +1224,15 @@ class ShopDatabase extends _$ShopDatabase {
       await _createHeldSaleTable();
       await _createSaleReversalTables();
       await _createManagedWorkspaceBinding();
-    },
-    onUpgrade: (migrator, from, to) async {
-      if (from < 11) {
-        await _requireNoReservedV11Objects();
-      }
-      if (from < 12) {
-        await _requireNoReservedV12Objects();
-      }
+      await _createBusinessProfileTable();
+      await _createMigrationProvenanceTable();
+      await _requireUnifiedV13Schema();
+    }),
+    onUpgrade: (migrator, from, to) => transaction(() async {
+      // Version 11 has two historical meanings. Classify the complete reserved
+      // schema before the first DDL statement so a branch-hop database cannot
+      // be silently relabelled or partially repaired.
+      final origin = await _classifyUpgradeOrigin(from);
       if (from < 2) {
         await migrator.createTable(shopProducts);
         await migrator.createTable(shopSales);
@@ -906,7 +1287,11 @@ class ShopDatabase extends _$ShopDatabase {
       if (from < 10) {
         await _createHeldSaleTable();
       }
-      if (from < 11) {
+      final needsCorrectionSchema =
+          from < 11 ||
+          origin == _ShopUpgradeOrigin.profileV11 ||
+          origin == _ShopUpgradeOrigin.profileWorkspaceCollisionV12;
+      if (needsCorrectionSchema) {
         await _ensureColumn(
           'shop_cash_shifts',
           'cash_reversal_count',
@@ -934,14 +1319,29 @@ class ShopDatabase extends _$ShopDatabase {
         );
         await _createSaleReversalTables();
       }
-      if (from < 12) {
+      final needsWorkspaceSchema =
+          from < 12 ||
+          origin == _ShopUpgradeOrigin.profileWorkspaceCollisionV12;
+      if (needsWorkspaceSchema) {
         // A legacy correction receipt is audit evidence, not workspace attach
         // authority. Leave the migrated database unbound until an explicit
         // authenticated selection is attached.
         await _createManagedWorkspaceBinding();
       }
+      final profileAlreadyPresent =
+          origin == _ShopUpgradeOrigin.profileV11 ||
+          origin == _ShopUpgradeOrigin.profileWorkspaceCollisionV12;
+      if (!profileAlreadyPresent) {
+        await _createBusinessProfileTable();
+      }
+      await _createMigrationProvenanceTable();
+      await _recordLegacyUnboundCorrectionHistory();
+      await _requireUnifiedV13Schema();
+    }),
+    beforeOpen: (_) async {
+      await customStatement('PRAGMA foreign_keys = ON');
+      await _requireUnifiedV13Schema();
     },
-    beforeOpen: (_) => customStatement('PRAGMA foreign_keys = ON'),
   );
 
   Future<void> _createWalletCheckoutTable({bool includeQrSnapshot = true}) {
@@ -990,20 +1390,14 @@ class ShopDatabase extends _$ShopDatabase {
         review_cash_drawer_outflow_mmk INTEGER
       )
     ''');
-    await customStatement('''
-      CREATE UNIQUE INDEX IF NOT EXISTS shop_cash_shifts_one_open
-      ON shop_cash_shifts(state) WHERE state = 'open'
-    ''');
+    await customStatement(shopCashShiftsOneOpenV6Sql);
     await customStatement('''
       CREATE TABLE IF NOT EXISTS shop_cash_shift_sales (
         sale_id TEXT PRIMARY KEY NOT NULL REFERENCES shop_sales(id),
         shift_id TEXT NOT NULL REFERENCES shop_cash_shifts(id)
       )
     ''');
-    await customStatement('''
-      CREATE INDEX IF NOT EXISTS shop_cash_shift_sales_shift_id
-      ON shop_cash_shift_sales(shift_id)
-    ''');
+    await customStatement(shopCashShiftSalesShiftIdV6Sql);
   }
 
   Future<void> _createProductImageTable() => customStatement('''
@@ -1034,10 +1428,28 @@ class ShopDatabase extends _$ShopDatabase {
         updated_at_millis INTEGER NOT NULL
       )
     ''');
-    await customStatement('''
-      CREATE INDEX IF NOT EXISTS shop_held_sales_updated
-      ON shop_held_sales(updated_at_millis DESC)
-    ''');
+    await customStatement(shopHeldSalesUpdatedV10Sql);
+  }
+
+  Future<void> _createBusinessProfileTable() =>
+      customStatement(shopBusinessProfileV11Sql);
+
+  Future<void> _createMigrationProvenanceTable() =>
+      customStatement(shopMigrationProvenanceV13Sql);
+
+  Future<void> _recordLegacyUnboundCorrectionHistory() async {
+    final hasBinding = await customSelect(
+      'SELECT 1 FROM shop_managed_workspace_binding LIMIT 1',
+    ).getSingleOrNull();
+    final hasCorrectionHistory = await customSelect(
+      'SELECT 1 FROM shop_sale_reversals LIMIT 1',
+    ).getSingleOrNull();
+    if (hasBinding == null && hasCorrectionHistory != null) {
+      await customStatement(
+        'INSERT INTO shop_v13_migration_provenance (singleton, reason) '
+        "VALUES (1, 'legacy_unbound_correction_history')",
+      );
+    }
   }
 
   Future<void> _createSaleReversalTables() async {
@@ -1169,6 +1581,10 @@ class ShopDatabase extends _$ShopDatabase {
           Variable<String>(authenticatedSelection.actorId),
           Variable<int>(now),
         ],
+      );
+      await customStatement(
+        'DELETE FROM shop_v13_migration_provenance '
+        "WHERE singleton = 1 AND reason = 'legacy_unbound_correction_history'",
       );
       return (await readManagedWorkspaceBinding())!;
     });
@@ -1607,68 +2023,493 @@ class ShopDatabase extends _$ShopDatabase {
     await customStatement('ALTER TABLE $table ADD COLUMN $column $declaration');
   }
 
-  Future<void> _requireNoReservedV11Objects() async {
-    const auditTables = {
-      'shop_sale_reversals',
-      'shop_sale_reversal_lines',
-      'shop_wallet_reversal_reconciliations',
-    };
-    const protectedTables = {
-      ...auditTables,
-      'shop_sales',
-      'shop_sale_lines',
-      'shop_stock_movements',
-    };
-    final reservedNames = <String>{
-      ...auditTables,
-      for (final table in protectedTables) '${table}_no_update',
-      for (final table in protectedTables) '${table}_no_delete',
-    };
+  Future<void> _requireEmptyCreateOrigin() async {
     final objects = await customSelect(
-      "SELECT name FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'",
+      "SELECT 1 FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' LIMIT 1",
     ).get();
-    final hasReservedObject = objects.any(
-      (row) => reservedNames.contains(row.read<String>('name').toLowerCase()),
+    if (objects.isNotEmpty) {
+      throw StateError(
+        'A schema-zero Shop database must be empty before creation.',
+      );
+    }
+  }
+
+  Future<_ShopUpgradeOrigin> _classifyUpgradeOrigin(int from) async {
+    if (from < 1 || from > 12) {
+      throw StateError('This Shop database version cannot migrate to v13.');
+    }
+    await _requireDatabaseIntegrity();
+    final objects = await _readSchemaObjects();
+    if (objects.values.any((object) => object.type == 'view')) {
+      throw StateError('This Shop database contains an unknown schema view.');
+    }
+
+    final auditDefinitions = shopReversalSchemaDefinitionsV11();
+    final workspaceDefinitions = shopWorkspaceSchemaDefinitionsV12();
+    final collisionDefinitions = shopWorkspaceCollisionPrefixDefinitionsV12();
+    final auditNames = auditDefinitions.keys.toSet();
+    final workspaceNames = workspaceDefinitions.keys.toSet();
+    const profileNames = {'shop_business_profile'};
+    final presentNames = objects.keys.toSet();
+    final cashState = await _reversalCashColumnState();
+    if (from >= 6 && !await _baseSchemaExact(from, objects)) {
+      throw StateError('This Shop database has an unknown base schema.');
+    }
+    final hasAnyAuditObject = presentNames.intersection(auditNames).isNotEmpty;
+    final hasAnyWorkspaceObject =
+        presentNames.intersection(workspaceNames).isNotEmpty;
+    final hasProfileObject =
+        presentNames.intersection(profileNames).isNotEmpty;
+    final hasAnyAudit = hasAnyAuditObject || cashState != _ColumnGroupState.none;
+    final auditExact =
+        cashState == _ColumnGroupState.exact &&
+        _definitionGroupExact(objects, auditDefinitions, auditNames);
+    final workspaceExact = _definitionGroupExact(
+      objects,
+      workspaceDefinitions,
+      workspaceNames,
     );
-    final shiftColumns = await customSelect(
-      'PRAGMA table_info(shop_cash_shifts)',
+    final collisionWorkspaceExact = _definitionGroupExact(
+      objects,
+      collisionDefinitions,
+      workspaceNames,
+    );
+    final profileExact =
+        _definitionGroupExact(
+          objects,
+          const {'shop_business_profile': shopBusinessProfileV11Sql},
+          profileNames,
+        ) &&
+        await _businessProfileRowsValid();
+
+    bool triggersMatch(Iterable<Map<String, String>> groups) {
+      final expected = <String>{
+        for (final group in groups)
+          for (final entry in group.entries)
+            if (!canonicalShopSchemaSql(
+              entry.value,
+            ).startsWith('create table'))
+              entry.key,
+      };
+      final actual = objects.entries
+          .where((entry) => entry.value.type == 'trigger')
+          .map((entry) => entry.key)
+          .toSet();
+      return actual.length == expected.length && actual.containsAll(expected);
+    }
+
+    _ShopUpgradeOrigin? origin;
+    Set<String>? expectedNames;
+    if (from < 11) {
+      if (!hasAnyAudit &&
+          !hasAnyWorkspaceObject &&
+          !hasProfileObject &&
+          triggersMatch(const [])) {
+        origin = _ShopUpgradeOrigin.legacy;
+        expectedNames = _expectedSchemaObjectNames(from);
+      }
+    } else if (from == 11) {
+      if (auditExact &&
+          !hasProfileObject &&
+          !hasAnyWorkspaceObject &&
+          triggersMatch([auditDefinitions])) {
+        origin = _ShopUpgradeOrigin.correctionV11;
+        expectedNames = {
+          ..._expectedSchemaObjectNames(from),
+          ...auditDefinitions.keys,
+        };
+      }
+      if (profileExact &&
+          !hasAnyAudit &&
+          !hasAnyWorkspaceObject &&
+          triggersMatch(const [])) {
+        origin = _ShopUpgradeOrigin.profileV11;
+        expectedNames = {
+          ..._expectedSchemaObjectNames(from),
+          'shop_business_profile',
+        };
+      }
+    } else if (from == 12) {
+      if (auditExact &&
+          workspaceExact &&
+          !hasProfileObject &&
+          await _workspaceBindingRowsValid(allowUnboundHistory: true) &&
+          triggersMatch([auditDefinitions, workspaceDefinitions])) {
+        origin = _ShopUpgradeOrigin.correctionWorkspaceV12;
+        expectedNames = {
+          ..._expectedSchemaObjectNames(from),
+          ...auditDefinitions.keys,
+          ...workspaceDefinitions.keys,
+        };
+      }
+      if (profileExact &&
+          !hasAnyAudit &&
+          collisionWorkspaceExact &&
+          await _workspaceBindingIsEmpty() &&
+          triggersMatch([collisionDefinitions])) {
+        origin = _ShopUpgradeOrigin.profileWorkspaceCollisionV12;
+        expectedNames = {
+          ..._expectedSchemaObjectNames(from),
+          ...collisionDefinitions.keys,
+          'shop_business_profile',
+        };
+      }
+    }
+
+    if (origin != null &&
+        (from < 6 || _sameSchemaObjectNames(objects, expectedNames!))) {
+      return origin;
+    }
+
+    throw StateError(
+      'This Shop database has an unknown or partial v11/v12 schema.',
+    );
+  }
+
+  Future<void> _requireUnifiedV13Schema() async {
+    await _requireDatabaseIntegrity();
+    final objects = await _readSchemaObjects();
+    final auditDefinitions = shopReversalSchemaDefinitionsV11();
+    final workspaceDefinitions = shopWorkspaceSchemaDefinitionsV12();
+    final expectedTriggers = <String>{
+      for (final definitions in [auditDefinitions, workspaceDefinitions])
+        for (final entry in definitions.entries)
+          if (!canonicalShopSchemaSql(entry.value).startsWith('create table'))
+            entry.key,
+    };
+    final actualTriggers = objects.entries
+        .where((entry) => entry.value.type == 'trigger')
+        .map((entry) => entry.key)
+        .toSet();
+    final expectedNames = {
+      ..._expectedSchemaObjectNames(schemaVersion),
+      ...auditDefinitions.keys,
+      ...workspaceDefinitions.keys,
+      'shop_business_profile',
+      'shop_v13_migration_provenance',
+    };
+    final valid =
+        objects.values.every((object) => object.type != 'view') &&
+        await _baseSchemaExact(schemaVersion, objects) &&
+        _sameSchemaObjectNames(objects, expectedNames) &&
+        await _reversalCashColumnState() == _ColumnGroupState.exact &&
+        _definitionGroupExact(
+          objects,
+          auditDefinitions,
+          auditDefinitions.keys.toSet(),
+        ) &&
+        _definitionGroupExact(
+          objects,
+          workspaceDefinitions,
+          workspaceDefinitions.keys.toSet(),
+        ) &&
+        _definitionGroupExact(
+          objects,
+          const {'shop_business_profile': shopBusinessProfileV11Sql},
+          const {'shop_business_profile'},
+        ) &&
+        _definitionGroupExact(
+          objects,
+          const {
+            'shop_v13_migration_provenance': shopMigrationProvenanceV13Sql,
+          },
+          const {'shop_v13_migration_provenance'},
+        ) &&
+        await _businessProfileRowsValid() &&
+        await _v13WorkspaceBindingRowsValid() &&
+        actualTriggers.length == expectedTriggers.length &&
+        actualTriggers.containsAll(expectedTriggers);
+    if (!valid) {
+      throw StateError('The unified Shop v13 schema failed verification.');
+    }
+  }
+
+  Future<void> _requireDatabaseIntegrity() async {
+    final integrity = await customSelect('PRAGMA integrity_check').get();
+    final brokenReferences = await customSelect('PRAGMA foreign_key_check').get();
+    if (integrity.length != 1 ||
+        integrity.single.read<String>('integrity_check') != 'ok' ||
+        brokenReferences.isNotEmpty) {
+      throw StateError('The Shop database failed integrity checks.');
+    }
+  }
+
+  Future<Map<String, _ShopSchemaObject>> _readSchemaObjects() async {
+    final rows = await customSelect(
+      "SELECT type, name, tbl_name, sql FROM sqlite_master "
+      "WHERE name NOT LIKE 'sqlite_%' "
+      "AND type IN ('table', 'trigger', 'view', 'index')",
     ).get();
-    const reservedShiftColumns = {
+    final objects = <String, _ShopSchemaObject>{};
+    for (final row in rows) {
+      final name = row.read<String>('name').toLowerCase();
+      if (objects.containsKey(name)) {
+        throw StateError('The Shop database has duplicate schema names.');
+      }
+      objects[name] = _ShopSchemaObject(
+        type: row.read<String>('type').toLowerCase(),
+        table: row.read<String>('tbl_name').toLowerCase(),
+        sql: row.read<String>('sql'),
+      );
+    }
+    return objects;
+  }
+
+  Set<String> _expectedSchemaObjectNames(int version) => {
+    ...shopBaseTableColumnsForVersion(version).keys,
+    ...shopCriticalIndexDefinitions(version).keys,
+  };
+
+  bool _sameSchemaObjectNames(
+    Map<String, _ShopSchemaObject> objects,
+    Set<String> expected,
+  ) =>
+      objects.length == expected.length && objects.keys.toSet().containsAll(expected);
+
+  Future<bool> _baseSchemaExact(
+    int version,
+    Map<String, _ShopSchemaObject> objects,
+  ) async {
+    final columns = shopBaseTableColumnsForVersion(version);
+    if (columns.isEmpty) return false;
+    for (final entry in columns.entries) {
+      if (objects[entry.key]?.type != 'table' ||
+          !await _tableColumnsExact(entry.key, entry.value)) {
+        return false;
+      }
+    }
+    final indexes = shopCriticalIndexDefinitions(version);
+    return _definitionGroupExact(objects, indexes, indexes.keys.toSet());
+  }
+
+  Future<bool> _tableColumnsExact(
+    String table,
+    Set<String> expected,
+  ) async {
+    final rows = await customSelect('PRAGMA table_info($table)').get();
+    final actual = rows
+        .map((row) => row.read<String>('name').toLowerCase())
+        .toSet();
+    if (table == 'shop_cash_shifts') {
+      actual.removeAll(const {
+        'cash_reversal_count',
+        'cash_reversal_total_mmk',
+        'cash_drawer_outflow_mmk',
+        'review_cash_reversal_count',
+        'review_cash_drawer_outflow_mmk',
+      });
+    }
+    return actual.length == expected.length && actual.containsAll(expected);
+  }
+
+  bool _definitionGroupExact(
+    Map<String, _ShopSchemaObject> objects,
+    Map<String, String> expected,
+    Set<String> reservedNames,
+  ) {
+    final present = objects.keys.toSet().intersection(reservedNames);
+    if (present.length != expected.length ||
+        !present.containsAll(expected.keys)) {
+      return false;
+    }
+    for (final entry in expected.entries) {
+      final object = objects[entry.key];
+      final expectedType = shopSchemaObjectTypeForDefinition(entry.value);
+      if (object == null ||
+          object.type != expectedType ||
+          canonicalShopSchemaSql(object.sql) !=
+              canonicalShopSchemaSql(entry.value)) {
+        return false;
+      }
+      if (expectedType == 'trigger' || expectedType == 'index') {
+        final target = RegExp(
+          r'\bon\s+([a-z0-9_]+)',
+        ).firstMatch(canonicalShopSchemaSql(entry.value));
+        if (target == null || object.table != target.group(1)) return false;
+      }
+    }
+    return true;
+  }
+
+  Future<_ColumnGroupState> _reversalCashColumnState() async {
+    const names = [
       'cash_reversal_count',
       'cash_reversal_total_mmk',
       'cash_drawer_outflow_mmk',
       'review_cash_reversal_count',
       'review_cash_drawer_outflow_mmk',
+    ];
+    final rows = await customSelect('PRAGMA table_info(shop_cash_shifts)').get();
+    final byName = <String, QueryRow>{
+      for (final row in rows) row.read<String>('name').toLowerCase(): row,
     };
-    final hasReservedShiftColumn = shiftColumns.any(
-      (row) =>
-          reservedShiftColumns.contains(row.read<String>('name').toLowerCase()),
-    );
-    if (hasReservedObject || hasReservedShiftColumn) {
-      throw StateError(
-        'This legacy Shop database contains reserved future audit objects.',
-      );
+    final present = names.where(byName.containsKey).toList(growable: false);
+    if (present.isEmpty) return _ColumnGroupState.none;
+    if (present.length != names.length) return _ColumnGroupState.partial;
+    final orderedNames = rows
+        .map((row) => row.read<String>('name').toLowerCase())
+        .toList(growable: false);
+    if (orderedNames.length < names.length ||
+        !_sameStrings(
+          orderedNames.sublist(orderedNames.length - names.length),
+          names,
+        )) {
+      return _ColumnGroupState.partial;
+    }
+    for (final name in names) {
+      final row = byName[name]!;
+      if (row.read<String>('type').toUpperCase() != 'INTEGER' ||
+          row.read<int>('notnull') != 0 ||
+          row.data['dflt_value'] != null ||
+          row.read<int>('pk') != 0) {
+        return _ColumnGroupState.partial;
+      }
+    }
+    return _ColumnGroupState.exact;
+  }
+
+  bool _sameStrings(List<String> actual, List<String> expected) {
+    if (actual.length != expected.length) return false;
+    for (var index = 0; index < actual.length; index++) {
+      if (actual[index] != expected[index]) return false;
+    }
+    return true;
+  }
+
+  Future<bool> _businessProfileRowsValid() async {
+    try {
+      final rows = await customSelect(
+        'SELECT singleton_key, schema_id, template_id, template_version, '
+        'updated_at_millis FROM shop_business_profile',
+      ).get();
+      if (rows.length > 1) return false;
+      if (rows.isEmpty) return true;
+      const templates = {
+        'mini-mart',
+        'cafe-takeaway',
+        'fashion-accessories',
+        'beauty-household',
+        'custom',
+      };
+      final row = rows.single;
+      final updatedAt = row.data['updated_at_millis'];
+      return row.data['singleton_key'] == 1 &&
+          row.data['schema_id'] == 'supermega.shop.business_profile.v1' &&
+          templates.contains(row.data['template_id']) &&
+          row.data['template_version'] == 1 &&
+          updatedAt is int &&
+          updatedAt >= 0;
+    } on Object {
+      return false;
     }
   }
 
-  Future<void> _requireNoReservedV12Objects() async {
-    const reservedNames = {
-      'shop_managed_workspace_binding',
-      'shop_managed_workspace_binding_no_update',
-      'shop_managed_workspace_binding_no_delete',
-      'shop_managed_workspace_binding_insert_guard',
-      'shop_sale_reversals_require_workspace_binding',
-      'shop_wallet_reversal_reconciliations_require_workspace_binding',
-    };
-    final objects = await customSelect(
-      "SELECT name FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'",
-    ).get();
-    if (objects.any(
-      (row) => reservedNames.contains(row.read<String>('name').toLowerCase()),
-    )) {
-      throw StateError(
-        'This legacy Shop database contains reserved future workspace objects.',
-      );
+  Future<bool> _workspaceBindingIsEmpty() async {
+    try {
+      final rows = await customSelect(
+        'SELECT 1 FROM shop_managed_workspace_binding LIMIT 1',
+      ).get();
+      return rows.isEmpty;
+    } on Object {
+      return false;
+    }
+  }
+
+  Future<bool> _workspaceBindingRowsValid({
+    required bool allowUnboundHistory,
+  }) async {
+    try {
+      final bindings = await customSelect(
+        'SELECT singleton, workspace_id, discovery_contract, '
+        'attached_actor_id, attached_at_millis '
+        'FROM shop_managed_workspace_binding',
+      ).get();
+      if (bindings.length > 1) return false;
+      final correctionRows = await customSelect(
+        'SELECT authorization_workspace_id AS workspace_id '
+        'FROM shop_sale_reversals UNION '
+        'SELECT authorization_workspace_id AS workspace_id '
+        'FROM shop_wallet_reversal_reconciliations',
+      ).get();
+      final workspaces = correctionRows
+          .map((row) => row.data['workspace_id'])
+          .toList(growable: false);
+      final id = RegExp(r'^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$');
+      if (workspaces.any((value) => value is! String || !id.hasMatch(value))) {
+        return false;
+      }
+      if (bindings.isEmpty) return allowUnboundHistory || workspaces.isEmpty;
+      final binding = bindings.single;
+      final workspaceId = binding.data['workspace_id'];
+      final actorId = binding.data['attached_actor_id'];
+      final attachedAt = binding.data['attached_at_millis'];
+      return binding.data['singleton'] == 1 &&
+          workspaceId is String &&
+          id.hasMatch(workspaceId) &&
+          binding.data['discovery_contract'] ==
+              shopManagedWorkspaceDirectoryContract &&
+          actorId is String &&
+          id.hasMatch(actorId) &&
+          attachedAt is int &&
+          attachedAt > 0 &&
+          workspaces.every((value) => value == workspaceId);
+    } on Object {
+      return false;
+    }
+  }
+
+  Future<bool> _v13WorkspaceBindingRowsValid() async {
+    try {
+      final provenance = await customSelect(
+        'SELECT singleton, reason FROM shop_v13_migration_provenance',
+      ).get();
+      if (provenance.length > 1 ||
+          provenance.any(
+            (row) =>
+                row.data['singleton'] != 1 ||
+                row.data['reason'] != 'legacy_unbound_correction_history',
+          )) {
+        return false;
+      }
+      final bindings = await customSelect(
+        'SELECT singleton, workspace_id, discovery_contract, '
+        'attached_actor_id, attached_at_millis '
+        'FROM shop_managed_workspace_binding',
+      ).get();
+      if (bindings.length > 1) return false;
+      final correctionRows = await customSelect(
+        'SELECT authorization_workspace_id AS workspace_id '
+        'FROM shop_sale_reversals UNION '
+        'SELECT authorization_workspace_id AS workspace_id '
+        'FROM shop_wallet_reversal_reconciliations',
+      ).get();
+      final workspaces = correctionRows
+          .map((row) => row.data['workspace_id'])
+          .toList(growable: false);
+      final id = RegExp(r'^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$');
+      if (workspaces.any((value) => value is! String || !id.hasMatch(value))) {
+        return false;
+      }
+      if (bindings.isEmpty) {
+        return workspaces.isEmpty ? provenance.isEmpty : provenance.length == 1;
+      }
+      if (provenance.isNotEmpty) return false;
+      final binding = bindings.single;
+      final workspaceId = binding.data['workspace_id'];
+      final actorId = binding.data['attached_actor_id'];
+      final attachedAt = binding.data['attached_at_millis'];
+      return binding.data['singleton'] == 1 &&
+          workspaceId is String &&
+          id.hasMatch(workspaceId) &&
+          binding.data['discovery_contract'] ==
+              shopManagedWorkspaceDirectoryContract &&
+          actorId is String &&
+          id.hasMatch(actorId) &&
+          attachedAt is int &&
+          attachedAt > 0 &&
+          workspaces.every((value) => value == workspaceId);
+    } on Object {
+      return false;
     }
   }
 

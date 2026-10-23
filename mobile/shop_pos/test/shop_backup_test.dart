@@ -91,7 +91,7 @@ void main() {
     () async {
       final bytes = await archive.readAsBytes();
       expect(bytes.sublist(0, 4), ascii.encode('SMBK'));
-      expect(bytes[5], 12);
+      expect(bytes[5], 13);
       expect(
         bytes.sublist(0, 16),
         isNot(ascii.encode('SQLite format 3\u0000')),
@@ -278,11 +278,11 @@ void main() {
   );
 
   test(
-    'authenticated v12 restore rejects workspace binding and trigger tampering',
+    'authenticated v13 restore rejects workspace binding and trigger tampering',
     () async {
       final base = File('${directory.path}/workspace-binding-base.sqlite');
       await _writeWalletReversalSnapshot(base);
-      ShopBackup.verifySnapshot(base, expectedSchemaVersion: 12);
+      ShopBackup.verifySnapshot(base, expectedSchemaVersion: 13);
       final cases = <({String name, void Function(Database) mutate})>[
         (
           name: 'binding-deleted',
@@ -366,18 +366,85 @@ void main() {
           directory: directory,
           snapshot: corrupt,
           stem: 'binding-${testCase.name}',
-          schemaVersion: 12,
+          schemaVersion: 13,
         );
       }
     },
   );
 
   test(
-    'authenticated v12 restore rejects reversal digest and event corruption',
+    'backup verification and direct open reject base schema drift',
+    () async {
+      final base = File('${directory.path}/base-schema-contract.sqlite');
+      await database.exportVerifiedLocalSnapshot(base);
+      ShopBackup.verifySnapshot(base, expectedSchemaVersion: 13);
+      final cases = <({String name, void Function(Database) mutate})>[
+        (
+          name: 'missing-critical-index',
+          mutate: (connection) =>
+              connection.execute('DROP INDEX shop_cash_shifts_one_open'),
+        ),
+        (
+          name: 'wrong-critical-index-target',
+          mutate: (connection) {
+            connection.execute('DROP INDEX shop_cash_shift_sales_shift_id');
+            connection.execute(
+              'CREATE INDEX shop_cash_shift_sales_shift_id ON shop_sales(id)',
+            );
+          },
+        ),
+        (
+          name: 'extra-index',
+          mutate: (connection) => connection.execute(
+            'CREATE INDEX unexpected_shop_index ON shop_sales(id)',
+          ),
+        ),
+        (
+          name: 'extra-table',
+          mutate: (connection) =>
+              connection.execute('CREATE TABLE unexpected_shop_table (id) '),
+        ),
+        (
+          name: 'extra-column',
+          mutate: (connection) => connection.execute(
+            'ALTER TABLE shop_products ADD COLUMN unexpected_value TEXT',
+          ),
+        ),
+      ];
+      for (final testCase in cases) {
+        final corrupt = File(
+          '${directory.path}/base-schema-${testCase.name}.sqlite',
+        );
+        await corrupt.writeAsBytes(await base.readAsBytes());
+        final raw = sqlite3.open(corrupt.path);
+        try {
+          testCase.mutate(raw);
+        } finally {
+          raw.close();
+        }
+        expect(
+          () => ShopBackup.verifySnapshot(
+            corrupt,
+            expectedSchemaVersion: 13,
+          ),
+          throwsFormatException,
+        );
+        final opened = ShopDatabase(NativeDatabase(corrupt));
+        try {
+          await expectLater(opened.countSales(), throwsA(isA<StateError>()));
+        } finally {
+          await opened.close();
+        }
+      }
+    },
+  );
+
+  test(
+    'authenticated v13 restore rejects reversal digest and event corruption',
     () async {
       final base = File('${directory.path}/verifier-wallet-base.sqlite');
       await _writeWalletReversalSnapshot(base);
-      ShopBackup.verifySnapshot(base, expectedSchemaVersion: 12);
+      ShopBackup.verifySnapshot(base, expectedSchemaVersion: 13);
       final cases = <({String name, void Function(Database) mutate})>[
         (
           name: 'sale-snapshot-digest',
@@ -499,16 +566,16 @@ void main() {
           directory: directory,
           snapshot: corrupt,
           stem: 'verifier-${testCase.name}',
-          schemaVersion: 12,
+          schemaVersion: 13,
         );
       }
     },
   );
 
-  test('authenticated v12 restore rejects reconciliation command and event corruption', () async {
+  test('authenticated v13 restore rejects reconciliation command and event corruption', () async {
     final base = File('${directory.path}/verifier-reconciled-base.sqlite');
     await _writeWalletReversalSnapshot(base, reconciled: true);
-    ShopBackup.verifySnapshot(base, expectedSchemaVersion: 12);
+    ShopBackup.verifySnapshot(base, expectedSchemaVersion: 13);
     final cases = <({String name, void Function(Database) mutate})>[
       (
         name: 'reconciliation-request',
@@ -621,12 +688,12 @@ void main() {
         directory: directory,
         snapshot: corrupt,
         stem: 'verifier-${testCase.name}',
-        schemaVersion: 12,
+        schemaVersion: 13,
       );
     }
   });
 
-  test('authenticated v12 restore rejects cash-close snapshot and event corruption', () async {
+  test('authenticated v13 restore rejects cash-close snapshot and event corruption', () async {
     final source = await _closedCashReversalDatabase();
     final base = File('${directory.path}/verifier-cash-base.sqlite');
     try {
@@ -634,7 +701,7 @@ void main() {
     } finally {
       await source.close();
     }
-    ShopBackup.verifySnapshot(base, expectedSchemaVersion: 12);
+    ShopBackup.verifySnapshot(base, expectedSchemaVersion: 13);
     final cases = <({String name, void Function(Database) mutate})>[
       (
         name: 'cash-close-reversal-total',
@@ -685,7 +752,7 @@ void main() {
         directory: directory,
         snapshot: corrupt,
         stem: 'verifier-${testCase.name}',
-        schemaVersion: 12,
+        schemaVersion: 13,
       );
     }
   });
@@ -983,7 +1050,7 @@ void main() {
     },
   );
 
-  test('v6 archive restores, then migrates its catalog to v12', () async {
+  test('v6 archive migrates to v13 before its catalog is published', () async {
     final legacy = File('${directory.path}/legacy-v6.sqlite');
     await database.exportVerifiedLocalSnapshot(legacy);
     final connection = sqlite3.open(legacy.path);
@@ -1026,6 +1093,7 @@ void main() {
       target: target,
       password: _password,
     );
+    ShopBackup.verifySnapshot(target, expectedSchemaVersion: 13);
     final migrated = ShopDatabase(NativeDatabase(target));
     try {
       expect(
@@ -1037,7 +1105,7 @@ void main() {
       expect(
         (await migrated.customSelect('PRAGMA user_version').getSingle())
             .read<int>('user_version'),
-        12,
+        13,
       );
     } finally {
       await migrated.close();
@@ -1064,7 +1132,7 @@ void main() {
       expect(
         (await upgraded.customSelect('PRAGMA user_version').getSingle())
             .read<int>('user_version'),
-        12,
+        13,
       );
     } finally {
       await upgraded.close();
@@ -1104,12 +1172,12 @@ void main() {
       expect(
         (await upgraded.customSelect('PRAGMA user_version').getSingle())
             .read<int>('user_version'),
-        12,
+        13,
       );
     } finally {
       await upgraded.close();
     }
-    ShopBackup.verifySnapshot(old, expectedSchemaVersion: 12);
+    ShopBackup.verifySnapshot(old, expectedSchemaVersion: 13);
   });
 
   test(
@@ -1142,7 +1210,12 @@ void main() {
         target: target,
         password: _password,
       );
-      ShopBackup.verifySnapshot(target, expectedSchemaVersion: 11);
+      final raw = sqlite3.open(target.path, mode: OpenMode.readOnly);
+      try {
+        expect(raw.select('PRAGMA user_version').single['user_version'], 13);
+      } finally {
+        raw.close();
+      }
 
       final migrated = ShopDatabase(NativeDatabase(target));
       try {
@@ -1150,7 +1223,7 @@ void main() {
         expect(
           (await migrated.customSelect('PRAGMA user_version').getSingle())
               .read<int>('user_version'),
-          12,
+          13,
         );
         final recent = (await migrated.readRecentSales()).single;
         expect(recent.reversal?.id, 'verifier-wallet-reversal');
@@ -1173,7 +1246,7 @@ void main() {
         expect(
           () => ShopBackup.verifySnapshot(
             unboundSnapshot,
-            expectedSchemaVersion: 12,
+            expectedSchemaVersion: 13,
           ),
           throwsFormatException,
         );
@@ -1206,12 +1279,267 @@ void main() {
           '${directory.path}/legacy-v11-migrated-attached.sqlite',
         );
         await migrated.exportVerifiedLocalSnapshot(attachedSnapshot);
-        ShopBackup.verifySnapshot(attachedSnapshot, expectedSchemaVersion: 12);
+        ShopBackup.verifySnapshot(attachedSnapshot, expectedSchemaVersion: 13);
       } finally {
         await migrated.close();
       }
     },
   );
+
+  test(
+    'authenticated profile-v11 backup migrates to v13 without rewriting data',
+    () async {
+      final legacy = File('${directory.path}/legacy-v11-profile.sqlite');
+      await database.exportVerifiedLocalSnapshot(legacy);
+      final connection = sqlite3.open(legacy.path);
+      try {
+        connection.execute(
+          'INSERT INTO shop_business_profile '
+          '(singleton_key, schema_id, template_id, template_version, '
+          'updated_at_millis) VALUES (1, ?, ?, 1, ?)',
+          [
+            'supermega.shop.business_profile.v1',
+            'cafe-takeaway',
+            1729555200000,
+          ],
+        );
+        _removeWorkspaceObjectsKeepingProfile(connection);
+        _removeCorrectionObjectsKeepingProfile(connection);
+        connection.execute('PRAGMA user_version = 11');
+      } finally {
+        connection.close();
+      }
+      ShopBackup.verifySnapshot(legacy, expectedSchemaVersion: 11);
+
+      final archive = File('${directory.path}/legacy-v11-profile.smbak');
+      await _writeAuthenticatedArchive(
+        archive,
+        await legacy.readAsBytes(),
+        schemaVersion: 11,
+      );
+      final target = File(
+        '${directory.path}/legacy-v11-profile-restored.sqlite',
+      );
+      await ShopBackup.restoreIntoEmptyDatabase(
+        archive: archive,
+        target: target,
+        password: _password,
+      );
+      final migrated = ShopDatabase(NativeDatabase(target));
+      try {
+        expect(
+          (await migrated.customSelect('PRAGMA user_version').getSingle())
+              .read<int>('user_version'),
+          13,
+        );
+        final profile = await migrated.customSelect(
+          'SELECT schema_id, template_id, template_version, updated_at_millis '
+          'FROM shop_business_profile',
+        ).getSingle();
+        expect(profile.read<String>('schema_id'),
+            'supermega.shop.business_profile.v1');
+        expect(profile.read<String>('template_id'), 'cafe-takeaway');
+        expect(profile.read<int>('template_version'), 1);
+        expect(profile.read<int>('updated_at_millis'), 1729555200000);
+        expect(await migrated.readManagedWorkspaceBinding(), isNull);
+        expect(await migrated.countSales(), 1);
+        expect(
+          await migrated
+              .customSelect('SELECT 1 FROM shop_sale_reversals')
+              .get(),
+          isEmpty,
+        );
+      } finally {
+        await migrated.close();
+      }
+      ShopBackup.verifySnapshot(target, expectedSchemaVersion: 13);
+    },
+  );
+
+  test(
+    'v13 detects deletion of legacy unbound correction provenance',
+    () async {
+      final legacy = File('${directory.path}/legacy-v11-provenance.sqlite');
+      await _writeWalletReversalSnapshot(legacy);
+      final source = sqlite3.open(legacy.path);
+      try {
+        _removeV12ObjectsForLegacyFixture(source);
+        source.execute('PRAGMA user_version = 11');
+      } finally {
+        source.close();
+      }
+
+      final migrated = ShopDatabase(NativeDatabase(legacy));
+      try {
+        expect((await migrated.readRecentSales()).single.reversal, isNotNull);
+        final marker = await migrated.customSelect(
+          'SELECT reason FROM shop_v13_migration_provenance',
+        ).getSingle();
+        expect(
+          marker.read<String>('reason'),
+          'legacy_unbound_correction_history',
+        );
+      } finally {
+        await migrated.close();
+      }
+
+      final tamper = sqlite3.open(legacy.path);
+      try {
+        tamper.execute('DELETE FROM shop_v13_migration_provenance');
+      } finally {
+        tamper.close();
+      }
+      final reopened = ShopDatabase(NativeDatabase(legacy));
+      try {
+        await expectLater(
+          reopened.countSales(),
+          throwsA(isA<StateError>()),
+        );
+      } finally {
+        await reopened.close();
+      }
+    },
+  );
+
+  test(
+    'exact profile-workspace collision v12 repairs to v13 with an empty binding',
+    () async {
+      final collision = File('${directory.path}/profile-collision-v12.sqlite');
+      await database.exportVerifiedLocalSnapshot(collision);
+      final connection = sqlite3.open(collision.path);
+      try {
+        connection.execute(
+          'INSERT INTO shop_business_profile '
+          '(singleton_key, schema_id, template_id, template_version, '
+          'updated_at_millis) VALUES (1, ?, ?, 1, ?)',
+          [
+            'supermega.shop.business_profile.v1',
+            'beauty-household',
+            1729555200001,
+          ],
+        );
+        _removeCorrectionObjectsForCollisionFixture(connection);
+        connection.execute('PRAGMA user_version = 12');
+      } finally {
+        connection.close();
+      }
+      ShopBackup.verifySnapshot(collision, expectedSchemaVersion: 12);
+
+      final archive = File('${directory.path}/profile-collision-v12.smbak');
+      await _writeAuthenticatedArchive(
+        archive,
+        await collision.readAsBytes(),
+        schemaVersion: 12,
+      );
+      final target = File(
+        '${directory.path}/profile-collision-v12-restored.sqlite',
+      );
+      await ShopBackup.restoreIntoEmptyDatabase(
+        archive: archive,
+        target: target,
+        password: _password,
+      );
+      final migrated = ShopDatabase(NativeDatabase(target));
+      try {
+        expect(
+          (await migrated.customSelect('PRAGMA user_version').getSingle())
+              .read<int>('user_version'),
+          13,
+        );
+        expect(
+          (await migrated.customSelect(
+            'SELECT template_id FROM shop_business_profile',
+          ).getSingle()).read<String>('template_id'),
+          'beauty-household',
+        );
+        expect(await migrated.readManagedWorkspaceBinding(), isNull);
+        expect(
+          await migrated
+              .customSelect('SELECT 1 FROM shop_sale_reversals')
+              .get(),
+          isEmpty,
+        );
+      } finally {
+        await migrated.close();
+      }
+      ShopBackup.verifySnapshot(target, expectedSchemaVersion: 13);
+    },
+  );
+
+  test('exact correction-workspace v12 preserves binding and reversal at v13',
+      () async {
+    final legacy = File('${directory.path}/legacy-correction-v12.sqlite');
+    await _writeWalletReversalSnapshot(legacy);
+    final connection = sqlite3.open(legacy.path);
+    try {
+      connection.execute('DROP TABLE shop_business_profile');
+      connection.execute('DROP TABLE shop_v13_migration_provenance');
+      connection.execute('PRAGMA user_version = 12');
+    } finally {
+      connection.close();
+    }
+    ShopBackup.verifySnapshot(legacy, expectedSchemaVersion: 12);
+    final migrated = ShopDatabase(NativeDatabase(legacy));
+    try {
+      expect(
+        (await migrated.customSelect('PRAGMA user_version').getSingle())
+            .read<int>('user_version'),
+        13,
+      );
+      expect(
+        (await migrated.readManagedWorkspaceBinding())?.workspaceId,
+        'workspace-backup-test',
+      );
+      final recent = (await migrated.readRecentSales()).single;
+      expect(recent.reversal?.id, 'verifier-wallet-reversal');
+      expect(recent.reversal?.walletReconciliationPending, isTrue);
+      expect(
+        await migrated.customSelect('SELECT 1 FROM shop_business_profile').get(),
+        isEmpty,
+      );
+    } finally {
+      await migrated.close();
+    }
+    ShopBackup.verifySnapshot(legacy, expectedSchemaVersion: 13);
+  });
+
+  test('both schema-11 meanings fail closed before mutation', () async {
+    final mixed = File('${directory.path}/mixed-v11.sqlite');
+    await database.exportVerifiedLocalSnapshot(mixed);
+    final connection = sqlite3.open(mixed.path);
+    try {
+      _removeWorkspaceObjectsKeepingProfile(connection);
+      connection.execute('PRAGMA user_version = 11');
+    } finally {
+      connection.close();
+    }
+    expect(
+      () => ShopBackup.verifySnapshot(mixed, expectedSchemaVersion: 11),
+      throwsFormatException,
+    );
+    final upgrading = ShopDatabase(NativeDatabase(mixed));
+    try {
+      await expectLater(upgrading.countSales(), throwsA(isA<StateError>()));
+    } finally {
+      await upgrading.close();
+    }
+    final after = sqlite3.open(mixed.path, mode: OpenMode.readOnly);
+    try {
+      expect(
+        after.select('PRAGMA user_version').single['user_version'],
+        11,
+      );
+      final names = after
+          .select("SELECT name FROM sqlite_master WHERE type = 'table'")
+          .map((row) => row['name'])
+          .toSet();
+      expect(names, contains('shop_business_profile'));
+      expect(names, contains('shop_sale_reversals'));
+      expect(names, isNot(contains('shop_managed_workspace_binding')));
+    } finally {
+      after.close();
+    }
+  });
 
   test(
     'authenticated v10 restores reject case-insensitive reserved v11 names',
@@ -1296,6 +1624,37 @@ void main() {
     },
   );
 
+  test('direct v10 migration rejects a missing critical base index', () async {
+    final legacy = File('${directory.path}/legacy-v10-missing-index.sqlite');
+    await database.exportVerifiedLocalSnapshot(legacy);
+    final connection = sqlite3.open(legacy.path);
+    try {
+      _removeV11ObjectsForLegacyFixture(connection);
+      connection.execute('DROP INDEX shop_cash_shifts_one_open');
+      connection.execute('PRAGMA user_version = 10');
+    } finally {
+      connection.close();
+    }
+    final upgrading = ShopDatabase(NativeDatabase(legacy));
+    try {
+      await expectLater(upgrading.countSales(), throwsA(isA<StateError>()));
+    } finally {
+      await upgrading.close();
+    }
+    final after = sqlite3.open(legacy.path, mode: OpenMode.readOnly);
+    try {
+      expect(after.select('PRAGMA user_version').single['user_version'], 10);
+      expect(
+        after.select(
+          "SELECT 1 FROM sqlite_master WHERE name = 'shop_sale_reversals'",
+        ),
+        isEmpty,
+      );
+    } finally {
+      after.close();
+    }
+  });
+
   test(
     'v11 verification and migration reject a reserved v12 binding table',
     () async {
@@ -1346,12 +1705,12 @@ void main() {
         expect(
           (await upgraded.customSelect('PRAGMA user_version').getSingle())
               .read<int>('user_version'),
-          12,
+          13,
         );
       } finally {
         await upgraded.close();
       }
-      ShopBackup.verifySnapshot(old, expectedSchemaVersion: 12);
+      ShopBackup.verifySnapshot(old, expectedSchemaVersion: 13);
     },
   );
 
@@ -1380,16 +1739,16 @@ void main() {
         expect(
           (await migrated.customSelect('PRAGMA user_version').getSingle())
               .read<int>('user_version'),
-          12,
+          13,
         );
       } finally {
         await migrated.close();
       }
-      ShopBackup.verifySnapshot(old, expectedSchemaVersion: 12);
+      ShopBackup.verifySnapshot(old, expectedSchemaVersion: 13);
     },
   );
 
-  test('v12 backup preserves custom and disabled low-stock alerts', () async {
+  test('v13 backup preserves custom and disabled low-stock alerts', () async {
     final source = ShopDatabase(NativeDatabase.memory());
     try {
       await source.addProduct(
@@ -1427,7 +1786,7 @@ void main() {
         target: restored,
         password: _password,
       );
-      ShopBackup.verifySnapshot(restored, expectedSchemaVersion: 12);
+      ShopBackup.verifySnapshot(restored, expectedSchemaVersion: 13);
       final reopened = ShopDatabase(NativeDatabase(restored));
       try {
         final products = {
@@ -1445,7 +1804,7 @@ void main() {
     }
   });
 
-  test('v12 snapshot rejects a same-name no-op audit trigger', () async {
+  test('v13 snapshot rejects a same-name no-op audit trigger', () async {
     final corrupt = File('${directory.path}/noop-audit-trigger.sqlite');
     await database.exportVerifiedLocalSnapshot(corrupt);
     final connection = sqlite3.open(corrupt.path);
@@ -1459,13 +1818,13 @@ void main() {
       connection.close();
     }
     expect(
-      () => ShopBackup.verifySnapshot(corrupt, expectedSchemaVersion: 12),
+      () => ShopBackup.verifySnapshot(corrupt, expectedSchemaVersion: 13),
       throwsFormatException,
     );
   });
 
   test(
-    'authenticated v12 restore rejects an extra executable trigger',
+    'authenticated v13 restore rejects an extra executable trigger',
     () async {
       final corrupt = File('${directory.path}/extra-audit-trigger.sqlite');
       await database.exportVerifiedLocalSnapshot(corrupt);
@@ -1482,13 +1841,13 @@ void main() {
         directory: directory,
         snapshot: corrupt,
         stem: 'extra-audit-trigger',
-        schemaVersion: 12,
+        schemaVersion: 13,
       );
     },
   );
 
   test(
-    'authenticated v12 restore preserves quoted CHECK literal case',
+    'authenticated v13 restore preserves quoted CHECK literal case',
     () async {
       final corrupt = File('${directory.path}/changed-check-literal.sqlite');
       await database.exportVerifiedLocalSnapshot(corrupt);
@@ -1517,13 +1876,13 @@ void main() {
         directory: directory,
         snapshot: corrupt,
         stem: 'changed-check-literal',
-        schemaVersion: 12,
+        schemaVersion: 13,
       );
     },
   );
 
   test(
-    'authenticated v12 restore rejects changed audit column types',
+    'authenticated v13 restore rejects changed audit column types',
     () async {
       final corrupt = File('${directory.path}/changed-audit-column.sqlite');
       await database.exportVerifiedLocalSnapshot(corrupt);
@@ -1543,12 +1902,12 @@ void main() {
         directory: directory,
         snapshot: corrupt,
         stem: 'changed-audit-column',
-        schemaVersion: 12,
+        schemaVersion: 13,
       );
     },
   );
 
-  test('v12 snapshots reject missing or invalid alert settings', () async {
+  test('v13 snapshots reject missing or invalid alert settings', () async {
     final missing = File('${directory.path}/missing-reorder.sqlite');
     await database.exportVerifiedLocalSnapshot(missing);
     final missingConnection = sqlite3.open(missing.path);
@@ -1603,7 +1962,7 @@ void main() {
     expect(() => ShopBackup.verifySnapshot(corrupt), throwsFormatException);
   });
 
-  test('v12 snapshot rejects a malformed pending wallet basket', () async {
+  test('v13 snapshot rejects a malformed pending wallet basket', () async {
     final corrupt = File('${directory.path}/malformed-wallet.sqlite');
     await database.exportVerifiedLocalSnapshot(corrupt);
     final connection = sqlite3.open(corrupt.path);
@@ -2335,6 +2694,10 @@ Future<void> _expectNoScratch(Directory parent) async {
 
 void _removeV11ObjectsForLegacyFixture(Database connection) {
   _removeV12ObjectsForLegacyFixture(connection);
+  _removeCorrectionObjectsKeepingProfile(connection);
+}
+
+void _removeCorrectionObjectsKeepingProfile(Database connection) {
   connection.execute('DROP TABLE shop_wallet_reversal_reconciliations');
   connection.execute('DROP TABLE shop_sale_reversal_lines');
   connection.execute('DROP TABLE shop_sale_reversals');
@@ -2358,6 +2721,11 @@ void _removeV11ObjectsForLegacyFixture(Database connection) {
 }
 
 void _removeV12ObjectsForLegacyFixture(Database connection) {
+  _removeWorkspaceObjectsKeepingProfile(connection);
+  connection.execute('DROP TABLE shop_business_profile');
+}
+
+void _removeWorkspaceObjectsKeepingProfile(Database connection) {
   for (final trigger in const [
     'shop_wallet_reversal_reconciliations_require_workspace_binding',
     'shop_sale_reversals_require_workspace_binding',
@@ -2368,6 +2736,18 @@ void _removeV12ObjectsForLegacyFixture(Database connection) {
     connection.execute('DROP TRIGGER $trigger');
   }
   connection.execute('DROP TABLE shop_managed_workspace_binding');
+  connection.execute('DROP TABLE shop_v13_migration_provenance');
+}
+
+void _removeCorrectionObjectsForCollisionFixture(Database connection) {
+  for (final trigger in const [
+    'shop_wallet_reversal_reconciliations_require_workspace_binding',
+    'shop_sale_reversals_require_workspace_binding',
+  ]) {
+    connection.execute('DROP TRIGGER $trigger');
+  }
+  connection.execute('DROP TABLE shop_v13_migration_provenance');
+  _removeCorrectionObjectsKeepingProfile(connection);
 }
 
 Future<ShopManagedWorkspaceBinding> _attachBackupWorkspace(

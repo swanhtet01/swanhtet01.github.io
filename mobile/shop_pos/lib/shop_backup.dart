@@ -13,6 +13,29 @@ import 'shop_database.dart';
 
 enum ShopStorePresence { empty, existing, interrupted, unsafe }
 
+enum _ShopSnapshotSchemaKind {
+  legacy,
+  correctionV11,
+  profileV11,
+  correctionWorkspaceV12,
+  profileWorkspaceCollisionV12,
+  unifiedV13,
+}
+
+enum _SnapshotColumnGroupState { none, partial, exact }
+
+class _SnapshotSchemaObject {
+  const _SnapshotSchemaObject({
+    required this.type,
+    required this.table,
+    required this.sql,
+  });
+
+  final String type;
+  final String table;
+  final String sql;
+}
+
 /// An offline, password-encrypted export format for a single Shop device.
 ///
 /// This is a storage primitive, not a cloud sync or backup UI. The SQLite
@@ -21,7 +44,7 @@ enum ShopStorePresence { empty, existing, interrupted, unsafe }
 /// the database so an interrupted export or restore cannot retain plaintext.
 abstract final class ShopBackup {
   static const formatVersion = 1;
-  static const supportedSchemaVersion = 12;
+  static const supportedSchemaVersion = 13;
   static const oldestSupportedSchemaVersion = 6;
   static const maxSnapshotBytes = 64 * 1024 * 1024;
 
@@ -30,115 +53,6 @@ abstract final class ShopBackup {
   static const _macLength = 16;
   static const _headerLength = 4 + 1 + 1 + _saltLength + _nonceLength;
   static const _magic = [0x53, 0x4d, 0x42, 0x4b]; // SMBK
-  static const _requiredTables = {
-    'menu_import_drafts',
-    'merchant_wallet_profiles',
-    'shop_products',
-    'shop_sales',
-    'shop_sale_lines',
-    'shop_stock_movements',
-    'shop_sync_outbox',
-    'shop_wallet_checkout_intents',
-    'shop_cash_shifts',
-    'shop_cash_shift_sales',
-  };
-  static const _requiredColumns = <String, Set<String>>{
-    'menu_import_drafts': {
-      'id',
-      'batch_id',
-      'category',
-      'name',
-      'description',
-      'price_mmk',
-      'sku',
-      'barcode',
-      'opening_stock',
-      'review_state',
-      'created_at_millis',
-    },
-    'merchant_wallet_profiles': {
-      'provider',
-      'merchant_phone',
-      'official_qr_payload',
-      'issuer_confirmed',
-      'updated_at_millis',
-    },
-    'shop_products': {
-      'id',
-      'name',
-      'category',
-      'description',
-      'sku',
-      'barcode',
-      'price_mmk',
-      'on_hand',
-      'updated_at_millis',
-      'archived',
-    },
-    'shop_sales': {
-      'id',
-      'operation_id',
-      'request_fingerprint',
-      'total_mmk',
-      'payment_method',
-      'created_at_millis',
-    },
-    'shop_sale_lines': {
-      'id',
-      'sale_id',
-      'product_id',
-      'product_name',
-      'unit_price_mmk',
-      'quantity',
-      'line_total_mmk',
-    },
-    'shop_stock_movements': {
-      'id',
-      'sale_id',
-      'product_id',
-      'quantity_delta',
-      'reason',
-      'created_at_millis',
-    },
-    'shop_sync_outbox': {
-      'operation_id',
-      'event_type',
-      'payload_json',
-      'state',
-      'created_at_millis',
-    },
-    'shop_wallet_checkout_intents': {
-      'operation_id',
-      'payment_method',
-      'request_fingerprint',
-      'total_mmk',
-      'merchant_phone',
-      'merchant_qr_payload',
-      'basket_json',
-      'state',
-      'created_at_millis',
-    },
-    'shop_cash_shifts': {
-      'id',
-      'open_operation_id',
-      'operator_label',
-      'opening_float_mmk',
-      'opened_at_millis',
-      'state',
-      'close_operation_id',
-      'closed_at_millis',
-      'cash_sales_count',
-      'cash_sales_total_mmk',
-      'wallet_sales_count',
-      'wallet_sales_total_mmk',
-      'expected_cash_mmk',
-      'counted_cash_mmk',
-      'difference_mmk',
-      'review_sale_count',
-      'review_cash_total_mmk',
-    },
-    'shop_cash_shift_sales': {'sale_id', 'shift_id'},
-  };
   static const _v11RequiredColumns = <String, Set<String>>{
     'shop_sale_reversals': {
       'id',
@@ -218,6 +132,13 @@ abstract final class ShopBackup {
       'attached_actor_id',
       'attached_at_millis',
     },
+  };
+  static const _profileRequiredColumns = <String>{
+    'singleton_key',
+    'schema_id',
+    'template_id',
+    'template_version',
+    'updated_at_millis',
   };
 
   static final _cipher = AesGcm.with256bits();
@@ -359,6 +280,12 @@ abstract final class ShopBackup {
         );
         await stagedFile.writeAsBytes(cleartext, flush: true);
         verifySnapshot(stagedFile, expectedSchemaVersion: archiveBytes[5]);
+        await ShopDatabase.migrateAndVerifyRestoreFile(stagedFile);
+        await _requireNoSidecars(stagedFile);
+        if (await stagedFile.length() > maxSnapshotBytes) {
+          throw StateError('The migrated Shop database exceeds the size limit.');
+        }
+        final migratedBytes = await stagedFile.readAsBytes();
         // Recheck sidecars immediately before the atomic no-replace link. The
         // link itself closes the target-creation race that rename leaves open.
         await _requireEmptyRestoreDestination(target);
@@ -368,9 +295,7 @@ abstract final class ShopBackup {
         published = true;
         if (afterPublishForTest != null) await afterPublishForTest();
         await _requireNoSidecars(target);
-        verifySnapshot(target, expectedSchemaVersion: archiveBytes[5]);
-        await _requireNoSidecars(target);
-        if (!await _sameFileBytes(target, cleartext)) {
+        if (!await _sameFileBytes(target, migratedBytes)) {
           throw StateError('The Shop database changed during restore.');
         }
         verifiedPublication = true;
@@ -674,19 +599,28 @@ abstract final class ShopBackup {
       final schemaVersion = version.length == 1
           ? version.single['user_version'] as int
           : -1;
-      final legacyHasReservedV11Objects =
-          schemaVersion >= oldestSupportedSchemaVersion &&
-          schemaVersion < 11 &&
-          !_legacyV11ObjectsAbsent(connection, tables);
-      final legacyHasReservedV12Objects =
-          schemaVersion >= oldestSupportedSchemaVersion &&
-          schemaVersion < 12 &&
-          !_legacyV12ObjectsAbsent(connection);
-      final baseSchemaValid = _requiredColumns.entries.every(
-        (entry) =>
-            tables.contains(entry.key) &&
-            _tableHasColumns(connection, entry.key, entry.value),
+      final schemaKind = _classifySnapshotSchema(
+        connection,
+        schemaVersion,
       );
+      final hasCorrectionSchema =
+          schemaKind == _ShopSnapshotSchemaKind.correctionV11 ||
+          schemaKind == _ShopSnapshotSchemaKind.correctionWorkspaceV12 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV13;
+      final hasWorkspaceSchema =
+          schemaKind == _ShopSnapshotSchemaKind.correctionWorkspaceV12 ||
+          schemaKind ==
+              _ShopSnapshotSchemaKind.profileWorkspaceCollisionV12 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV13;
+      final hasProfileSchema =
+          schemaKind == _ShopSnapshotSchemaKind.profileV11 ||
+          schemaKind ==
+              _ShopSnapshotSchemaKind.profileWorkspaceCollisionV12 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV13;
+      final objects = _readSnapshotSchemaObjects(connection);
+      final baseSchemaValid =
+          objects != null &&
+          _snapshotBaseSchemaExact(connection, schemaVersion, objects);
       final schemaValid =
           baseSchemaValid &&
           (schemaVersion < 7 ||
@@ -714,7 +648,7 @@ abstract final class ShopBackup {
                     'created_at_millis',
                     'updated_at_millis',
                   }))) &&
-          (schemaVersion < 11 ||
+          (!hasCorrectionSchema ||
               (_v11RequiredColumns.entries.every(
                     (entry) =>
                         tables.contains(entry.key) &&
@@ -726,12 +660,19 @@ abstract final class ShopBackup {
                     _v11CashShiftColumns,
                   ) &&
                   _v11CashShiftColumnDefinitionsValid(connection))) &&
-          (schemaVersion < 12 ||
+          (!hasWorkspaceSchema ||
               _v12RequiredColumns.entries.every(
                 (entry) =>
                     tables.contains(entry.key) &&
                     _tableHasColumns(connection, entry.key, entry.value),
-              ));
+              )) &&
+          (!hasProfileSchema ||
+              (tables.contains('shop_business_profile') &&
+                  _tableHasColumns(
+                    connection,
+                    'shop_business_profile',
+                    _profileRequiredColumns,
+                  )));
       final walletIntents = schemaValid
           ? connection.select(
               'SELECT operation_id, payment_method, request_fingerprint, '
@@ -824,13 +765,20 @@ abstract final class ShopBackup {
             ['integer'],
           ).isNotEmpty;
       final reversalAuditInvalid =
-          schemaVersion >= 11 &&
+          hasCorrectionSchema &&
           (!schemaValid ||
               !_v11ReversalAuditValid(connection) ||
-              !_schemaDefinitionsValid(connection, schemaVersion));
+              !_correctionDefinitionsValid(connection));
       final workspaceBindingInvalid =
-          schemaVersion >= 12 &&
-          (!schemaValid || !_v12WorkspaceBindingValid(connection));
+          hasWorkspaceSchema &&
+          (!schemaValid ||
+              (schemaKind ==
+                      _ShopSnapshotSchemaKind.profileWorkspaceCollisionV12
+                  ? !_collisionWorkspaceBindingValid(connection)
+                  : !_v12WorkspaceBindingValid(connection)));
+      final profileInvalid =
+          hasProfileSchema &&
+          (!schemaValid || !_businessProfileRowsValid(connection));
       if (version.length != 1 ||
           schemaVersion < oldestSupportedSchemaVersion ||
           schemaVersion > supportedSchemaVersion ||
@@ -839,17 +787,16 @@ abstract final class ShopBackup {
           integrity.length != 1 ||
           integrity.single['integrity_check'] != 'ok' ||
           brokenReferences.isNotEmpty ||
-          !tables.containsAll(_requiredTables) ||
+          schemaKind == null ||
           !schemaValid ||
-          legacyHasReservedV11Objects ||
-          legacyHasReservedV12Objects ||
           walletInvalid ||
           (schemaVersion >= 7 && !tables.contains('shop_product_images')) ||
           (schemaVersion >= 8 && !tables.contains('shop_counter_drafts')) ||
           (schemaVersion >= 9 && !hasReorderLevel) ||
           (schemaVersion >= 10 && !tables.contains('shop_held_sales')) ||
-          (schemaVersion >= 11 && reversalAuditInvalid) ||
-          (schemaVersion >= 12 && workspaceBindingInvalid) ||
+          reversalAuditInvalid ||
+          workspaceBindingInvalid ||
+          profileInvalid ||
           invalidReorderLevel ||
           draftInvalid ||
           heldInvalid ||
@@ -893,6 +840,23 @@ abstract final class ShopBackup {
     return columns.containsAll(required);
   }
 
+  static bool _tableHasExactBaseColumns(
+    Database connection,
+    String table,
+    Set<String> expected,
+  ) {
+    final columns = connection
+        .select('PRAGMA table_info($table)')
+        .map((row) => row['name'])
+        .whereType<String>()
+        .map((name) => name.toLowerCase())
+        .toSet();
+    if (table == 'shop_cash_shifts') {
+      columns.removeAll(_v11CashShiftColumns);
+    }
+    return columns.length == expected.length && columns.containsAll(expected);
+  }
+
   static bool _v11CashShiftColumnDefinitionsValid(Database connection) {
     final columns = <String, Row>{
       for (final row in connection.select(
@@ -910,202 +874,365 @@ abstract final class ShopBackup {
     });
   }
 
-  static Map<String, String> get _v11SchemaDefinitions {
-    final definitions = <String, String>{
-      'shop_sale_reversals': shopSaleReversalsV11Sql,
-      'shop_sale_reversal_lines': shopSaleReversalLinesV11Sql,
-      'shop_wallet_reversal_reconciliations':
-          shopWalletReversalReconciliationsV11Sql,
-    };
-    for (final table in const [
-      'shop_sale_reversals',
-      'shop_sale_reversal_lines',
-      'shop_wallet_reversal_reconciliations',
-      'shop_sales',
-      'shop_sale_lines',
-      'shop_stock_movements',
-    ]) {
-      final message = table == 'shop_stock_movements'
-          ? 'Completed Shop stock movements are immutable'
-          : table == 'shop_sales' || table == 'shop_sale_lines'
-          ? 'Completed Shop sales are immutable'
-          : 'Shop reversal audit records are immutable';
-      for (final operation in const ['update', 'delete']) {
-        definitions['${table}_no_$operation'] = shopImmutableTriggerV11Sql(
-          table: table,
-          operation: operation,
-          message: message,
+  static Map<String, String> get _v11SchemaDefinitions =>
+      shopReversalSchemaDefinitionsV11();
+
+  static Map<String, String> get _v12SchemaDefinitions =>
+      shopWorkspaceSchemaDefinitionsV12();
+
+  static _ShopSnapshotSchemaKind? _classifySnapshotSchema(
+    Database connection,
+    int schemaVersion,
+  ) {
+    if (schemaVersion < oldestSupportedSchemaVersion ||
+        schemaVersion > supportedSchemaVersion) {
+      return null;
+    }
+    final objects = _readSnapshotSchemaObjects(connection);
+    if (objects == null || objects.values.any((object) => object.type == 'view')) {
+      return null;
+    }
+    if (!_snapshotBaseSchemaExact(connection, schemaVersion, objects)) {
+      return null;
+    }
+    final auditDefinitions = _v11SchemaDefinitions;
+    final workspaceDefinitions = _v12SchemaDefinitions;
+    final collisionDefinitions = shopWorkspaceCollisionPrefixDefinitionsV12();
+    final auditNames = auditDefinitions.keys.toSet();
+    final workspaceNames = workspaceDefinitions.keys.toSet();
+    const profileNames = {'shop_business_profile'};
+    final presentNames = objects.keys.toSet();
+    final cashState = _reversalCashColumnState(connection);
+    final hasAnyAudit =
+        presentNames.intersection(auditNames).isNotEmpty ||
+        cashState != _SnapshotColumnGroupState.none;
+    final hasAnyWorkspace =
+        presentNames.intersection(workspaceNames).isNotEmpty;
+    final hasProfile = presentNames.intersection(profileNames).isNotEmpty;
+    final auditExact =
+        cashState == _SnapshotColumnGroupState.exact &&
+        _snapshotDefinitionGroupExact(
+          objects,
+          auditDefinitions,
+          auditNames,
         );
+    final workspaceExact = _snapshotDefinitionGroupExact(
+      objects,
+      workspaceDefinitions,
+      workspaceNames,
+    );
+    final collisionWorkspaceExact = _snapshotDefinitionGroupExact(
+      objects,
+      collisionDefinitions,
+      workspaceNames,
+    );
+    final profileExact =
+        _snapshotDefinitionGroupExact(
+          objects,
+          const {'shop_business_profile': shopBusinessProfileV11Sql},
+          profileNames,
+        ) &&
+        _businessProfileRowsValid(connection);
+
+    bool triggersMatch(Iterable<Map<String, String>> groups) {
+      final expected = <String>{
+        for (final group in groups)
+          for (final entry in group.entries)
+            if (!canonicalShopSchemaSql(
+              entry.value,
+            ).startsWith('create table'))
+              entry.key,
+      };
+      final actual = objects.entries
+          .where((entry) => entry.value.type == 'trigger')
+          .map((entry) => entry.key)
+          .toSet();
+      return actual.length == expected.length && actual.containsAll(expected);
+    }
+
+    if (schemaVersion < 11 &&
+        !hasAnyAudit &&
+        !hasAnyWorkspace &&
+        !hasProfile &&
+        triggersMatch(const []) &&
+        _snapshotObjectNamesExact(
+          objects,
+          _snapshotExpectedBaseObjectNames(schemaVersion),
+        )) {
+      return _ShopSnapshotSchemaKind.legacy;
+    }
+    if (schemaVersion == 11) {
+      if (auditExact &&
+          !hasAnyWorkspace &&
+          !hasProfile &&
+          triggersMatch([auditDefinitions]) &&
+          _snapshotObjectNamesExact(objects, {
+            ..._snapshotExpectedBaseObjectNames(schemaVersion),
+            ...auditDefinitions.keys,
+          })) {
+        return _ShopSnapshotSchemaKind.correctionV11;
+      }
+      if (profileExact &&
+          !hasAnyAudit &&
+          !hasAnyWorkspace &&
+          triggersMatch(const []) &&
+          _snapshotObjectNamesExact(objects, {
+            ..._snapshotExpectedBaseObjectNames(schemaVersion),
+            'shop_business_profile',
+          })) {
+        return _ShopSnapshotSchemaKind.profileV11;
       }
     }
-    return definitions;
+    if (schemaVersion == 12) {
+      if (auditExact &&
+          workspaceExact &&
+          !hasProfile &&
+          triggersMatch([auditDefinitions, workspaceDefinitions]) &&
+          _snapshotObjectNamesExact(objects, {
+            ..._snapshotExpectedBaseObjectNames(schemaVersion),
+            ...auditDefinitions.keys,
+            ...workspaceDefinitions.keys,
+          })) {
+        return _ShopSnapshotSchemaKind.correctionWorkspaceV12;
+      }
+      if (profileExact &&
+          !hasAnyAudit &&
+          collisionWorkspaceExact &&
+          _collisionWorkspaceBindingValid(connection) &&
+          triggersMatch([collisionDefinitions]) &&
+          _snapshotObjectNamesExact(objects, {
+            ..._snapshotExpectedBaseObjectNames(schemaVersion),
+            ...collisionDefinitions.keys,
+            'shop_business_profile',
+          })) {
+        return _ShopSnapshotSchemaKind.profileWorkspaceCollisionV12;
+      }
+    }
+    if (schemaVersion == 13 &&
+        auditExact &&
+        workspaceExact &&
+        profileExact &&
+        _snapshotDefinitionGroupExact(
+          objects,
+          const {
+            'shop_v13_migration_provenance': shopMigrationProvenanceV13Sql,
+          },
+          const {'shop_v13_migration_provenance'},
+        ) &&
+        _migrationProvenanceEmpty(connection) &&
+        triggersMatch([auditDefinitions, workspaceDefinitions]) &&
+        _snapshotObjectNamesExact(objects, {
+          ..._snapshotExpectedBaseObjectNames(schemaVersion),
+          ...auditDefinitions.keys,
+          ...workspaceDefinitions.keys,
+          'shop_business_profile',
+          'shop_v13_migration_provenance',
+        })) {
+      return _ShopSnapshotSchemaKind.unifiedV13;
+    }
+    return null;
   }
 
-  static const _v11AuditTableNames = {
-    'shop_sale_reversals',
-    'shop_sale_reversal_lines',
-    'shop_wallet_reversal_reconciliations',
-  };
-
-  static Map<String, String> get _v12SchemaDefinitions => <String, String>{
-    'shop_managed_workspace_binding': shopManagedWorkspaceBindingV12Sql,
-    'shop_managed_workspace_binding_no_update': shopImmutableTriggerV11Sql(
-      table: 'shop_managed_workspace_binding',
-      operation: 'update',
-      message: 'Managed Shop workspace binding is immutable',
-    ),
-    'shop_managed_workspace_binding_no_delete': shopImmutableTriggerV11Sql(
-      table: 'shop_managed_workspace_binding',
-      operation: 'delete',
-      message: 'Managed Shop workspace binding is immutable',
-    ),
-    'shop_managed_workspace_binding_insert_guard':
-        shopManagedWorkspaceBindingInsertGuardV12Sql,
-    'shop_sale_reversals_require_workspace_binding':
-        shopSaleReversalsRequireWorkspaceBindingV12Sql,
-    'shop_wallet_reversal_reconciliations_require_workspace_binding':
-        shopWalletReversalReconciliationsRequireWorkspaceBindingV12Sql,
-  };
-
-  static bool _legacyV11ObjectsAbsent(Database connection, Set<String> tables) {
-    final reservedNames = _v11SchemaDefinitions.keys
-        .map((name) => name.toLowerCase())
-        .toSet();
-    final existingNames = connection
-        .select('SELECT name FROM sqlite_master')
-        .map((row) => row['name'])
-        .whereType<String>()
-        .map((name) => name.toLowerCase())
-        .toSet();
-    if (existingNames.intersection(reservedNames).isNotEmpty) return false;
-    final lowerTables = tables.map((name) => name.toLowerCase()).toSet();
-    if (!lowerTables.contains('shop_cash_shifts')) return true;
-    final columns = connection
-        .select('PRAGMA table_info(shop_cash_shifts)')
-        .map((row) => row['name'])
-        .whereType<String>()
-        .map((name) => name.toLowerCase())
-        .toSet();
-    return columns.intersection(_v11CashShiftColumns).isEmpty;
-  }
-
-  static bool _legacyV12ObjectsAbsent(Database connection) {
-    final reservedNames = _v12SchemaDefinitions.keys
-        .map((name) => name.toLowerCase())
-        .toSet();
-    final existingNames = connection
-        .select('SELECT name FROM sqlite_master')
-        .map((row) => row['name'])
-        .whereType<String>()
-        .map((name) => name.toLowerCase())
-        .toSet();
-    return existingNames.intersection(reservedNames).isEmpty;
-  }
-
-  static bool _schemaDefinitionsValid(Database connection, int schemaVersion) {
-    final actualSql = <String, String>{};
-    final actualTypes = <String, String>{};
-    final triggerTables = <String, String>{};
+  static Map<String, _SnapshotSchemaObject>? _readSnapshotSchemaObjects(
+    Database connection,
+  ) {
+    final objects = <String, _SnapshotSchemaObject>{};
     for (final row in connection.select(
       "SELECT type, name, tbl_name, sql FROM sqlite_master "
-      "WHERE type IN ('table', 'trigger')",
+      "WHERE name NOT LIKE 'sqlite_%' "
+      "AND type IN ('table', 'trigger', 'view', 'index')",
     )) {
       final type = row['type'];
       final name = row['name'];
-      final sql = row['sql'];
-      if (type is! String || name is! String || sql is! String) continue;
-      final lowerName = name.toLowerCase();
-      if (actualSql.containsKey(lowerName)) return false;
-      actualSql[lowerName] = sql;
-      actualTypes[lowerName] = type.toLowerCase();
       final table = row['tbl_name'];
-      if (type.toLowerCase() == 'trigger' && table is String) {
-        triggerTables[lowerName] = table.toLowerCase();
+      final sql = row['sql'];
+      if (type is! String ||
+          name is! String ||
+          table is! String ||
+          sql is! String) {
+        return null;
+      }
+      final lowerName = name.toLowerCase();
+      if (objects.containsKey(lowerName)) return null;
+      objects[lowerName] = _SnapshotSchemaObject(
+        type: type.toLowerCase(),
+        table: table.toLowerCase(),
+        sql: sql,
+      );
+    }
+    return objects;
+  }
+
+  static bool _snapshotDefinitionGroupExact(
+    Map<String, _SnapshotSchemaObject> objects,
+    Map<String, String> expected,
+    Set<String> reservedNames,
+  ) {
+    final present = objects.keys.toSet().intersection(reservedNames);
+    if (present.length != expected.length ||
+        !present.containsAll(expected.keys)) {
+      return false;
+    }
+    for (final entry in expected.entries) {
+      final object = objects[entry.key];
+      final expectedSql = canonicalShopSchemaSql(entry.value);
+      final expectedType = shopSchemaObjectTypeForDefinition(entry.value);
+      if (object == null ||
+          object.type != expectedType ||
+          canonicalShopSchemaSql(object.sql) != expectedSql) {
+        return false;
+      }
+      if (expectedType == 'trigger' || expectedType == 'index') {
+        final target = RegExp(r'\bon\s+([a-z0-9_]+)').firstMatch(expectedSql);
+        if (target == null || object.table != target.group(1)) return false;
       }
     }
+    return true;
+  }
 
-    final definitions = <String, String>{
-      ..._v11SchemaDefinitions,
-      if (schemaVersion >= 12) ..._v12SchemaDefinitions,
-    };
-    final expectedTableNames = <String>{
-      ..._v11AuditTableNames,
-      if (schemaVersion >= 12) 'shop_managed_workspace_binding',
-    };
-    for (final entry in definitions.entries) {
-      final name = entry.key.toLowerCase();
-      final expectedType = expectedTableNames.contains(name)
-          ? 'table'
-          : 'trigger';
-      if (actualTypes[name] != expectedType ||
-          actualSql[name] == null ||
-          _canonicalSchemaSql(actualSql[name]!) !=
-              _canonicalSchemaSql(entry.value)) {
+  static Set<String> _snapshotExpectedBaseObjectNames(int schemaVersion) => {
+    ...shopBaseTableColumnsForVersion(schemaVersion).keys,
+    ...shopCriticalIndexDefinitions(schemaVersion).keys,
+  };
+
+  static bool _snapshotObjectNamesExact(
+    Map<String, _SnapshotSchemaObject> objects,
+    Set<String> expected,
+  ) =>
+      objects.length == expected.length && objects.keys.toSet().containsAll(expected);
+
+  static bool _snapshotBaseSchemaExact(
+    Database connection,
+    int schemaVersion,
+    Map<String, _SnapshotSchemaObject> objects,
+  ) {
+    final columns = shopBaseTableColumnsForVersion(schemaVersion);
+    if (columns.isEmpty) return false;
+    for (final entry in columns.entries) {
+      if (objects[entry.key]?.type != 'table' ||
+          !_tableHasExactBaseColumns(connection, entry.key, entry.value)) {
         return false;
       }
     }
-
-    final expectedTriggerNames = definitions.keys
-        .map((name) => name.toLowerCase())
-        .where((name) => !expectedTableNames.contains(name))
-        .toSet();
-    final actualTriggerNames = triggerTables.keys.toSet();
-    return actualTriggerNames.length == expectedTriggerNames.length &&
-        actualTriggerNames.containsAll(expectedTriggerNames);
+    final indexes = shopCriticalIndexDefinitions(schemaVersion);
+    return _snapshotDefinitionGroupExact(
+      objects,
+      indexes,
+      indexes.keys.toSet(),
+    );
   }
 
-  static String _canonicalSchemaSql(String value) {
-    final output = StringBuffer();
-    final ifNotExists = RegExp(r'if\s+not\s+exists\b', caseSensitive: false);
-    var index = 0;
-    var pendingSpace = false;
-    while (index < value.length) {
-      final character = value[index];
-      if (character == "'" ||
-          character == '"' ||
-          character == '`' ||
-          character == '[') {
-        if (pendingSpace && output.length > 0) output.write(' ');
-        pendingSpace = false;
-        final closing = character == '[' ? ']' : character;
-        output.write(character);
-        index++;
-        while (index < value.length) {
-          final quoted = value[index];
-          output.write(quoted);
-          index++;
-          if (quoted != closing) continue;
-          if (closing != ']' &&
-              index < value.length &&
-              value[index] == closing) {
-            output.write(value[index]);
-            index++;
-            continue;
-          }
-          break;
-        }
-        continue;
-      }
-
-      final optionalClause = ifNotExists.matchAsPrefix(value, index);
-      final hasWordBefore =
-          index > 0 && RegExp(r'[A-Za-z0-9_]').hasMatch(value[index - 1]);
-      if (!hasWordBefore && optionalClause != null) {
-        index = optionalClause.end;
-        pendingSpace = true;
-        continue;
-      }
-      if (RegExp(r'\s').hasMatch(character)) {
-        pendingSpace = true;
-        index++;
-        continue;
-      }
-      if (pendingSpace && output.length > 0) output.write(' ');
-      pendingSpace = false;
-      output.write(character.toLowerCase());
-      index++;
+  static _SnapshotColumnGroupState _reversalCashColumnState(
+    Database connection,
+  ) {
+    const ordered = [
+      'cash_reversal_count',
+      'cash_reversal_total_mmk',
+      'cash_drawer_outflow_mmk',
+      'review_cash_reversal_count',
+      'review_cash_drawer_outflow_mmk',
+    ];
+    final rows = connection.select('PRAGMA table_info(shop_cash_shifts)');
+    final byName = <String, Row>{
+      for (final row in rows)
+        if (row['name'] is String) (row['name'] as String).toLowerCase(): row,
+    };
+    final present = ordered.where(byName.containsKey).toList(growable: false);
+    if (present.isEmpty) return _SnapshotColumnGroupState.none;
+    if (present.length != ordered.length) {
+      return _SnapshotColumnGroupState.partial;
     }
-    return output.toString().trim();
+    final names = rows
+        .map((row) => row['name'])
+        .whereType<String>()
+        .map((name) => name.toLowerCase())
+        .toList(growable: false);
+    if (names.length < ordered.length ||
+        !_sameOrderedStrings(
+          names.sublist(names.length - ordered.length),
+          ordered,
+        )) {
+      return _SnapshotColumnGroupState.partial;
+    }
+    for (final name in ordered) {
+      final row = byName[name]!;
+      if ((row['type'] as String?)?.toUpperCase() != 'INTEGER' ||
+          row['notnull'] != 0 ||
+          row['dflt_value'] != null ||
+          row['pk'] != 0) {
+        return _SnapshotColumnGroupState.partial;
+      }
+    }
+    return _SnapshotColumnGroupState.exact;
+  }
+
+  static bool _sameOrderedStrings(List<String> actual, List<String> expected) {
+    if (actual.length != expected.length) return false;
+    for (var index = 0; index < actual.length; index++) {
+      if (actual[index] != expected[index]) return false;
+    }
+    return true;
+  }
+
+  static bool _businessProfileRowsValid(Database connection) {
+    try {
+      final rows = connection.select(
+        'SELECT singleton_key, schema_id, template_id, template_version, '
+        'updated_at_millis FROM shop_business_profile',
+      );
+      if (rows.length > 1) return false;
+      if (rows.isEmpty) return true;
+      const templates = {
+        'mini-mart',
+        'cafe-takeaway',
+        'fashion-accessories',
+        'beauty-household',
+        'custom',
+      };
+      final row = rows.single;
+      final updatedAt = row['updated_at_millis'];
+      return row['singleton_key'] == 1 &&
+          row['schema_id'] == 'supermega.shop.business_profile.v1' &&
+          templates.contains(row['template_id']) &&
+          row['template_version'] == 1 &&
+          updatedAt is int &&
+          updatedAt >= 0;
+    } on Object {
+      return false;
+    }
+  }
+
+  static bool _collisionWorkspaceBindingValid(Database connection) {
+    try {
+      return connection
+          .select('SELECT 1 FROM shop_managed_workspace_binding LIMIT 1')
+          .isEmpty;
+    } on Object {
+      return false;
+    }
+  }
+
+  static bool _migrationProvenanceEmpty(Database connection) {
+    try {
+      return connection
+          .select('SELECT 1 FROM shop_v13_migration_provenance LIMIT 1')
+          .isEmpty;
+    } on Object {
+      return false;
+    }
+  }
+
+  static bool _correctionDefinitionsValid(Database connection) {
+    final objects = _readSnapshotSchemaObjects(connection);
+    if (objects == null) return false;
+    final definitions = _v11SchemaDefinitions;
+    return _snapshotDefinitionGroupExact(
+          objects,
+          definitions,
+          definitions.keys.toSet(),
+        ) &&
+        _reversalCashColumnState(connection) ==
+            _SnapshotColumnGroupState.exact;
   }
 
   static String _sha256Hex(String value) =>
@@ -1137,7 +1264,7 @@ abstract final class ShopBackup {
       }
       if (bindings.isEmpty) {
         // A v11 database migrates without inventing attach authority and its
-        // history remains readable, but it cannot become a v12 backup until a
+        // history remains readable, but it cannot become a v13 backup until a
         // matching authenticated selection is attached. This strict rule also
         // makes deletion of an established binding detectable when correction
         // history exists.
