@@ -68,18 +68,26 @@ jobs:
           name: supermega-shop-flutter-renders-${{ github.sha }}
           path: mobile/shop_pos/test/goldens/shop_*.png
           if-no-files-found: warn
-          retention-days: 7
+          retention-days: 14
 
       - name: Build Android debug APK
         run: flutter build apk --debug --no-pub
+
+      - name: Record Android debug APK checksum
+        run: |
+          cd build/app/outputs/flutter-apk
+          sha256sum app-debug.apk > app-debug.apk.sha256
+          sha256sum --check app-debug.apk.sha256
 
       - name: Retain Android debug APK for device QA
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: supermega-shop-android-debug-${{ github.sha }}
-          path: mobile/shop_pos/build/app/outputs/flutter-apk/app-debug.apk
+          path: |
+            mobile/shop_pos/build/app/outputs/flutter-apk/app-debug.apk
+            mobile/shop_pos/build/app/outputs/flutter-apk/app-debug.apk.sha256
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 14
 
   ios:
     name: Build iPad/iOS app
@@ -149,12 +157,22 @@ jobs:
         run: |
           $releaseDir = 'build/windows/x64/runner/Release'
           if (-not (Test-Path -LiteralPath $releaseDir)) { throw 'Windows release directory is missing.' }
-          Compress-Archive -Path (Join-Path $releaseDir '*') -DestinationPath 'build/supermega-shop-windows-unsigned.zip'
+          $packagePath = 'build/supermega-shop-windows-unsigned.zip'
+          $checksumPath = "$packagePath.sha256"
+          Compress-Archive -Path (Join-Path $releaseDir '*') -DestinationPath $packagePath
+          $checksum = (Get-FileHash -Algorithm SHA256 -LiteralPath $packagePath).Hash.ToLowerInvariant()
+          Set-Content -LiteralPath $checksumPath -Value "$checksum  supermega-shop-windows-unsigned.zip" -Encoding ascii
+          if (-not (Test-Path -LiteralPath $checksumPath)) { throw 'Windows package checksum is missing.' }
+          $recordedChecksum = (Get-Content -LiteralPath $checksumPath -Raw).Trim()
+          $expectedChecksum = "$checksum  supermega-shop-windows-unsigned.zip"
+          if ($recordedChecksum -cne $expectedChecksum) { throw 'Windows package checksum verification failed.' }
 
       - name: Retain Windows QA package
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: supermega-shop-windows-unsigned-${{ github.sha }}
-          path: mobile/shop_pos/build/supermega-shop-windows-unsigned.zip
+          path: |
+            mobile/shop_pos/build/supermega-shop-windows-unsigned.zip
+            mobile/shop_pos/build/supermega-shop-windows-unsigned.zip.sha256
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 14
