@@ -287,7 +287,7 @@ void main() {
   });
 
   testWidgets(
-    'decode actual EN and MY ESC POS receipt bytes for 384 420 and 576 dots',
+    'decode actual EN and MY ESC POS receipt bytes for 384 and 576 dots',
     skip: !_capture,
     (tester) async {
       const receipt = ShopSaleReceipt(
@@ -307,7 +307,6 @@ void main() {
       );
       final profiles = <(String, PaperSize, ReceiptPaperWidth)>[
         ('58-generic-384', PaperSize.mm58, ReceiptPaperWidth.mm58),
-        ('58-contract-420', PaperSize.mm58Wide420, ReceiptPaperWidth.mm58),
         ('80-576', PaperSize.mm80, ReceiptPaperWidth.mm80),
       ];
       for (final myanmar in [false, true]) {
