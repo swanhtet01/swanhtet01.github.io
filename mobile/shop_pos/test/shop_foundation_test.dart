@@ -524,10 +524,7 @@ void main() {
         expect(printLines, isNot(contains('Sale ${receipt.id}')));
         expect(printLines.join('\n'), isNot(contains('CASH')));
 
-        final englishPrintLines = shopReceiptTextLines(
-          receipt,
-          myanmar: false,
-        );
+        final englishPrintLines = shopReceiptTextLines(receipt, myanmar: false);
         expect(englishPrintLines, contains('Sale ${receipt.id}'));
         expect(englishPrintLines, contains('Payment: Cash'));
       },
