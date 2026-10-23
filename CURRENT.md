@@ -9,6 +9,10 @@ production action, or replace exact PR and CI evidence. A passing local check,
 CI job, preview, or generated artifact is not proof of a signed release,
 merchant acceptance, production persistence, or revenue.
 
+No local demo, passing test, healthy provider, or generated artifact is proof of a live customer system, revenue, production persistence, or autonomous operation.
+
+Add provider-backed AI, payment, shipping, tax, publishing, and broader marketing only after their product gate has measured pilot evidence.
+
 ## Retained browser compatibility invariants
 
 These statements protect data, routes, and safety boundaries in the parked
