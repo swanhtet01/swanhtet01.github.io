@@ -408,12 +408,12 @@ if (!contactMain.includes(`<p class="contact-company-intro">${manifest.company.s
 if (contactMain.includes('SuperMega · Myanmar')) fail('contact_redundant_brand_eyebrow')
 for (const token of [
   'data-contact-form', 'action="/api/contact-submissions"', 'name="name"', 'name="email"',
-  'name="company"', 'name="product"', 'value="guide"', 'name="template"', 'name="goal"',
+  'name="company"', 'name="product"', 'value="guide"', 'name="plan"', 'name="template"', 'name="service"', 'name="goal"',
   'name="idempotency_key"', 'name="proof_contract"', 'name="proof_digest"', 'class="contact-honeypot"',
   'x-idempotency-key', 'Email',
   'placeholder="Tell us what your business needs."', 'Company (optional)', '>Send message</button>',
   'Message received:', 'Keep this reference if you need to follow up.',
-  "shop:'Shop'", "website:'Sites'", "ecommerce:'Commerce'",
+  "shop:'Shop'", '"mini-mart"', '"tea-coffee"', '"fashion"', '"beauty-spa"', "'shop-pilot'", "'assisted-launch'",
 ]) {
   if (!contact.includes(token)) fail('contact_contract_missing', { token })
 }
@@ -425,6 +425,9 @@ for (const token of [
 }
 for (const token of ['Request managed company intelligence.', "submit.textContent='Request managed pilot'", 'managedIntelligenceRequest']) {
   if (contact.includes(token)) fail('retired_managed_pilot_pitch_present', { token })
+}
+for (const token of ["website:'Sites'", "ecommerce:'Commerce'", "production:'Plant'", "'managed-cloud'", "'multi-site'"]) {
+  if (contact.includes(token)) fail('legacy_contact_offer_present', { token })
 }
 if (countOccurrences(contactMain, 'href="mailto:swanhtet@supermega.dev"') !== 1
   || !contactMain.includes('<form class="contact-form" hidden action="/api/contact-submissions"')
@@ -541,7 +544,7 @@ for (const name of expectedFunctionNames) {
   if (functionConfig.handler !== 'index.js' || functionConfig.runtime !== 'nodejs24.x') fail('function_runtime_drift', { name, functionConfig })
 }
 const contactFunction = readFileSync(resolve(functionsDir, 'contact-submissions.js.func', 'index.js'), 'utf8')
-for (const token of ['supermega_leads', 'SUPABASE_SERVICE_ROLE_KEY', 'RESEND_API_KEY', 'TELEGRAM_BOT_TOKEN', 'SUPERMEGA_LEAD_WEBHOOK_URL', 'SUPERMEGA_CONTACT_IDEMPOTENCY_SECRET', 'required_fields_missing', 'product_not_supported', 'idempotency_key_required', 'idempotency_conflict', 'rate_limited', 'supermega.managed_trial_proof.v2', 'proof_outcome', 'proof_outcome_digest', 'proof_outcome_accepted', 'trial_proof_invalid', 'client_provided_summary', 'CONTACT_FINGERPRINT_CURRENT_VERSION', 'proof_bound', 'privacyUrl', 'resolution=ignore-duplicates,return=representation', "'idempotency-key'"]) {
+for (const token of ['supermega_leads', 'SUPABASE_SERVICE_ROLE_KEY', 'RESEND_API_KEY', 'TELEGRAM_BOT_TOKEN', 'SUPERMEGA_LEAD_WEBHOOK_URL', 'SUPERMEGA_CONTACT_IDEMPOTENCY_SECRET', 'required_fields_missing', 'product_not_supported', 'idempotency_key_required', 'idempotency_conflict', 'rate_limited', 'supermega.managed_trial_proof.v2', 'proof_outcome', 'proof_outcome_digest', 'proof_outcome_accepted', 'trial_proof_invalid', 'client_provided_summary', 'CONTACT_FINGERPRINT_CURRENT_VERSION', 'SHOP_TEMPLATES', 'shop-pilot', 'assisted-launch', 'proof_bound', 'privacyUrl', 'resolution=ignore-duplicates,return=representation', "'idempotency-key'"]) {
   if (!contactFunction.includes(token)) fail('contact_runtime_contract_missing', { token })
 }
 if (/\bvision\b/i.test(contactFunction)) fail('retired_product_present_in_contact_runtime')

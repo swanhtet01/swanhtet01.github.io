@@ -324,6 +324,36 @@ Record each step as PASS, FAIL, BLOCKED, or NOT RUN, with build/device/language.
 A failure states its merchant impact and expected behavior. Acceptance is not
 delegated to the implementation agent.
 
+Use this record for each exact installed candidate. Keep private merchant data,
+photos, receipts, and logs in the approved private store; this repository keeps
+only status and non-secret references. The browser-local playbook in
+`docs/demo-playbooks/shop.md` is rehearsal evidence and cannot satisfy this
+native merchant-acceptance gate.
+
+```text
+Exact candidate / signed build:
+Device, OS and installation channel:
+Language: EN | MY
+Representative-data owner:
+
+Journey step | Expected | Observed | PASS/FAIL/BLOCKED/NOT RUN | Private evidence reference
+Catalog:
+Sale:
+Stock:
+Correction/refund:
+Close:
+Export:
+Restart:
+Restore:
+
+Merchant-impact findings:
+Full-sale-only correction accepted for launch: YES | NO | UNDECIDED
+Partial return/exchange required for launch: YES | NO | UNDECIDED
+Commercial/support blockers:
+Vivian disposition: ACCEPT | REJECT | BLOCKED
+Vivian / date:
+```
+
 The committed native SQLite v13 anchor has a source-level full-sale reversal
 engine: it preserves the original receipt and prices, records an immutable
 linked audit, makes restock an explicit all-or-none choice, protects retries,
@@ -351,18 +381,22 @@ Gate 5 remains open for two exact reasons:
    receipt digest with Ed25519 and the native verifier accepts only a known key
    pinned in source. The production public-key ring is empty, no production
    issuer signing secret is configured in this environment, authenticated
-   managed-workspace discovery is not wired to the anchor, and the dormant
-   correction dialog is not wired into Recent sales. The issuer and action
-   therefore remain default-dark. Pilot correction is an online-authorized
-   workspace-owner action; normal selling remains offline. Do not imply offline
-   correction parity. Defer device-bound offline manager credentials/passkeys
-   until a reviewed threat model and demonstrated merchant need exist. Global
-   receipt consumption across cloned databases and trusted time/device-clock
-   rollback remain blockers even after local signature verification, and real
-   PostgreSQL/RLS tenant isolation, revoked-session, replay, owner-transfer,
-   and expiry behavior remain unproven. A typed name, shift label, shared PIN,
-   locally constructed receipt, raw Supabase session, or broad write role is
-   insufficient authority.
+   managed-workspace discovery is not wired to the anchor. Recent sales now
+   contains the restrained correction entry and rechecks the immutable
+   workspace/actor binding before opening the reviewed dialog, but empty pins
+   and absent issuer configuration keep the action unreachable and
+   default-dark. Reversal acceptance rows remain `BLOCKED` until that exact
+   signed installed build has the reviewed issuer, pins, workspace anchor, and
+   operator-authority evidence. Pilot correction is an online-authorized
+   workspace-owner action; normal selling remains offline. Do not imply
+   offline correction parity. Defer device-bound offline manager
+   credentials/passkeys until a reviewed threat model and demonstrated
+   merchant need exist. Global receipt consumption across cloned databases and
+   trusted time/device-clock rollback remain blockers even after local
+   signature verification, and real PostgreSQL/RLS tenant isolation,
+   revoked-session, replay, owner-transfer, and expiry behavior remain
+   unproven. A typed name, shift label, shared PIN, locally constructed receipt,
+   raw Supabase session, or broad write role is insufficient authority.
 2. The engine reverses a complete sale only. Partial returns and exchanges are
    not implemented. Swan and Vivian must explicitly accept full-sale reversal
    as the November correction/refund scope or retain partial/exchange as a

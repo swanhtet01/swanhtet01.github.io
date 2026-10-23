@@ -27,13 +27,16 @@ Flutter Shop targets Android tablets, iPad, and Windows PC. CI produces Android 
   backup contracts have focused regression and exact-head native/App CI
   evidence. Installed-device, hosted authorization, and merchant acceptance
   remain separate gates.
-- The native app deliberately exposes no reversal or wallet-reconciliation
-  action. The production public-key ring is empty, no production issuer signing
-  secret is configured in this environment, authenticated workspace discovery
-  is not wired to the immutable anchor, and the dormant correction dialog is
-  not wired into Recent sales. The issuer and action therefore fail closed.
-  Pilot correction is an online-authorized workspace-owner action; normal selling
-  remains offline. Do not imply offline correction parity, and defer
+- Recent sales exposes one restrained, full-sale `Correct sale` action only
+  when the immutable workspace/actor binding and correction authorization
+  service are available. The reviewed command, denial, expiry, retry,
+  already-reversed, cash-shift, wallet-follow-up, and EN/MY small-phone paths
+  have automated coverage. The production public-key ring is empty, no
+  production issuer signing secret is configured, and no authoritative hosted
+  workspace capability is attached, so the issuer and action remain
+  default-dark and fail closed. Pilot correction is an online-authorized
+  workspace-owner action; normal selling remains offline. Do not imply offline
+  correction parity, and defer
   device-bound manager credentials or passkeys until there is a reviewed threat
   model and merchant need. Global receipt consumption across cloned databases
   and trusted time/device-clock rollback remain blockers even after a local

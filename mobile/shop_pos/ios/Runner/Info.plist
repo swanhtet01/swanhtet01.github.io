@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>SuperMega Shop</string>
+	<string>Shop</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Scan product barcodes for sales and take a photo of a paper menu to prepare product drafts.</string>
 	<key>NSPhotoLibraryUsageDescription</key>

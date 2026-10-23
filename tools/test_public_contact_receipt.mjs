@@ -29,8 +29,10 @@ test('contact form stays concise and does not make customers classify the reques
   assert.match(formHtml, /<label class="wide">Message<textarea/)
   assert.match(formHtml, /placeholder="Tell us what your business needs\."/)
   assert.match(formHtml, /<input type="hidden" name="product" value="guide"/)
+  assert.match(formHtml, /<input type="hidden" name="plan"/)
   assert.doesNotMatch(page, /<select\b|trial-proof-summary|Attached request details|What to include|Readiness|Behavior|Decisions|Reply email|What would you like us to prepare\?|Do not paste|Brief tips|Your brief|request summary/)
-  assert.match(formHtml, /<input type="hidden" name="template" maxlength="120"/)
+  assert.match(formHtml, /<input type="hidden" name="template"/)
+  assert.match(formHtml, /<input type="hidden" name="service"/)
   assert.doesNotMatch(page, /Template, if known|>Send workflow<|>Send the workflow</)
   assert.match(formHtml, />Send message<\/button>/)
   assert.match(formHtml, /name="goal" required maxlength="4000"/)
@@ -125,12 +127,16 @@ test('prefilled message stays editable and does not claim setup is complete', ()
 })
 
 test('Shop handoffs preserve valid context and unsupported internal routes cannot set product or template', () => {
-  const state = harness([], '?product=shop&template=example-template')
+  const state = harness([], '?product=shop&template=mini-mart&service=assisted-launch')
   assert.equal(state.fields.get('[name="product"]').value, 'shop')
-  assert.equal(state.fields.get('[name="template"]').value, 'example-template')
+  assert.equal(state.fields.get('[name="plan"]').value, 'shop-pilot')
+  assert.equal(state.fields.get('[name="template"]').value, 'mini-mart')
+  assert.equal(state.fields.get('[name="service"]').value, 'assisted-launch')
   state.fields.get('[name="company"]').value = 'Example business'
   state.changeProduct('guide')
+  assert.equal(state.fields.get('[name="plan"]').value, '')
   assert.equal(state.fields.get('[name="template"]').value, '')
+  assert.equal(state.fields.get('[name="service"]').value, '')
   assert.equal(state.fields.get('[name="company"]').value, 'Example business')
   assert.equal(state.fields.get('[name="goal"]').value, 'Please build my business website')
   assert.equal(state.calls.length, 0)
@@ -140,7 +146,7 @@ test('Shop handoffs preserve valid context and unsupported internal routes canno
     assert.equal(internal.fields.get('[name="template"]').value, '')
     assert.equal(internal.headings.get('[data-contact-heading]').textContent, 'Contact')
   }
-  for (const search of ['?product=unknown&template=example', '?product=guide&template=example', '?product=website&template=' + 'a'.repeat(121), '?product=website&template=%3Cbad%3E']) {
+  for (const search of ['?product=shop&template=example-template', '?product=unknown&template=example', '?product=guide&template=example', '?product=website&template=' + 'a'.repeat(121), '?product=website&template=%3Cbad%3E']) {
     assert.equal(harness([], search).fields.get('[name="template"]').value, '')
   }
 })

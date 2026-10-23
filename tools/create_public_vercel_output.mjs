@@ -958,11 +958,11 @@ const contactUiCopy = {
 const contactScript = `<script>(function(){
   var copy=${JSON.stringify(contactUiCopy)}[document.documentElement&&document.documentElement.lang==='my'?'my':'en'];
   var form=document.querySelector('[data-contact-form]');if(!form)return;
-  var query=new URLSearchParams(location.search),handoff=new URLSearchParams(location.hash.slice(1)),status=form.querySelector('[data-form-status]'),submit=form.querySelector('button[type="submit"]'),product=form.querySelector('[name="product"]'),template=form.querySelector('[name="template"]'),company=form.querySelector('[name="company"]'),goal=form.querySelector('[name="goal"]'),heading=document.querySelector('[data-contact-heading]'),lede=document.querySelector('[data-contact-lede]'),requestKey=form.querySelector('[name="idempotency_key"]'),source=form.querySelector('[name="source_url"]'),referrer=form.querySelector('[name="referrer"]'),proofSummary=document.querySelector('[data-trial-proof]');
+  var query=new URLSearchParams(location.search),handoff=new URLSearchParams(location.hash.slice(1)),status=form.querySelector('[data-form-status]'),submit=form.querySelector('button[type="submit"]'),product=form.querySelector('[name="product"]'),plan=form.querySelector('[name="plan"]'),template=form.querySelector('[name="template"]'),service=form.querySelector('[name="service"]'),company=form.querySelector('[name="company"]'),goal=form.querySelector('[name="goal"]'),heading=document.querySelector('[data-contact-heading]'),lede=document.querySelector('[data-contact-lede]'),requestKey=form.querySelector('[name="idempotency_key"]'),source=form.querySelector('[name="source_url"]'),referrer=form.querySelector('[name="referrer"]'),proofSummary=document.querySelector('[data-trial-proof]');
   var languageSwitch=document.querySelector('[data-language-switch]');
   if(languageSwitch){
     var destination=new URL(languageSwitch.href,location.origin),allowedQuery=new URLSearchParams();
-    ['product','template','utm_source','utm_medium','utm_campaign','utm_content','utm_term'].forEach(function(name){var value=query.get(name);if(value&&value.length<=160)allowedQuery.set(name,value)});
+    ['product','template','service','utm_source','utm_medium','utm_campaign','utm_content','utm_term'].forEach(function(name){var value=query.get(name);if(value&&value.length<=160)allowedQuery.set(name,value)});
     destination.search=allowedQuery.toString();languageSwitch.href=destination.pathname+destination.search;
   }
   if(document.documentElement&&document.documentElement.lang==='my'){
@@ -978,12 +978,16 @@ const contactScript = `<script>(function(){
     if(!attempted)return {attempted:false,proof:null};
     var outcomeStarted=values.proof_outcome!=='not_started',outcomeDigestValid=outcomeStarted?/^sha256:[0-9a-f]{64}$/.test(values.proof_outcome_digest):values.proof_outcome_digest==='',outcomeAccepted=values.proof_outcome_accepted==='true',contextAttempted=contextProofNames.some(function(name){return values[name]});
     var contextValid=!contextAttempted||(values.proof_context_contract==='supermega.ai_context_export.v1'&&/^sha256:[0-9a-f]{64}$/.test(values.proof_context_digest)&&values.proof_context_outcome_digest===values.proof_outcome_digest&&values.proof_context_approved==='true'&&values.proof_context_raw_records==='false'&&Number(values.proof_sources)>0&&Number(values.proof_behavior)>0&&Number(values.proof_decisions)>0&&outcomeAccepted);
-    var valid=values.proof_contract==='supermega.managed_trial_proof.v2'&&values.proof_version==='2'&&/^sha256:[0-9a-f]{64}$/.test(values.proof_digest)&&/^(shop|plant|website|ecommerce)$/.test(values.proof_product)&&/^[a-z0-9][a-z0-9._-]{0,119}$/.test(values.proof_template)&&boundedInteger(values.proof_readiness,100)&&boundedInteger(values.proof_sources,1000000)&&boundedInteger(values.proof_behavior,1000000)&&boundedInteger(values.proof_decisions,1000000)&&/^(not_started|collecting|target_met|improved|unchanged|regressed)$/.test(values.proof_outcome)&&outcomeDigestValid&&/^(true|false)$/.test(values.proof_outcome_accepted)&&(!outcomeAccepted||/^(target_met|improved)$/.test(values.proof_outcome))&&values.proof_raw_records==='false'&&values.proof_product===(query.get('product')||'')&&values.proof_template===(query.get('template')||'')&&contextValid;
+    var valid=values.proof_contract==='supermega.managed_trial_proof.v2'&&values.proof_version==='2'&&/^sha256:[0-9a-f]{64}$/.test(values.proof_digest)&&values.proof_product==='shop'&&shopTemplates.includes(values.proof_template)&&boundedInteger(values.proof_readiness,100)&&boundedInteger(values.proof_sources,1000000)&&boundedInteger(values.proof_behavior,1000000)&&boundedInteger(values.proof_decisions,1000000)&&/^(not_started|collecting|target_met|improved|unchanged|regressed)$/.test(values.proof_outcome)&&outcomeDigestValid&&/^(true|false)$/.test(values.proof_outcome_accepted)&&(!outcomeAccepted||/^(target_met|improved)$/.test(values.proof_outcome))&&values.proof_raw_records==='false'&&values.proof_product===(query.get('product')||'')&&values.proof_template===(query.get('template')||'')&&contextValid;
     return {attempted:true,proof:valid?values:null};
   }
+  var shopTemplates=${JSON.stringify(['mini-mart', 'tea-coffee', 'fashion', 'beauty-spa'])};
   var requestedProduct=query.get('product');if(product&&${JSON.stringify(['guide', ...publicProducts.map(item => item.id)])}.includes(requestedProduct||''))product.value=requestedProduct;
   var requestedTemplate=query.get('template')||'';
-  if(template&&product&&requestedProduct!=='guide'&&product.value===requestedProduct&&/^[a-z0-9][a-z0-9._-]{0,119}$/.test(requestedTemplate))template.value=requestedTemplate;
+  if(template&&product&&product.value==='shop'&&requestedProduct==='shop'&&shopTemplates.includes(requestedTemplate))template.value=requestedTemplate;
+  if(plan)plan.value=product&&product.value==='shop'?'shop-pilot':'';
+  var requestedService=query.get('service')||'';
+  if(service&&product&&product.value==='shop'&&requestedService==='assisted-launch')service.value=requestedService;
   if(handoff.get('company')&&company)company.value=handoff.get('company').slice(0,180);
   if(handoff.get('goal')&&goal)goal.value=handoff.get('goal').slice(0,4000);
   var claimInput=form.querySelector('[name="trial_claim_code"]'),claimValue=(handoff.get('claim')||'').toUpperCase();
@@ -1001,12 +1005,12 @@ const contactScript = `<script>(function(){
   }
   function updateServiceSummary(){
     if(!heading)return;
-    var serviceName=product&&({website:'Sites',ecommerce:'Commerce',shop:'Shop'})[product.value];
+    var serviceName=product&&({shop:'Shop'})[product.value];
     heading.textContent=serviceName?(serviceName==='Shop'?copy.headingShop:copy.headingServiceStart+serviceName+copy.headingServiceEnd):copy.headingDefault;
     if(lede)lede.textContent=serviceName==='Shop'?copy.ledeShop:copy.ledeDefault;
   }
   updateServiceSummary();
-  if(product)product.addEventListener('change',function(){if(template)template.value='';detachProofIfChanged();updateServiceSummary()});
+  if(product)product.addEventListener('change',function(){if(plan)plan.value=product.value==='shop'?'shop-pilot':'';if(template)template.value='';if(service)service.value='';detachProofIfChanged();updateServiceSummary()});
   if(template)template.addEventListener('input',detachProofIfChanged);
   if(handoff.toString()){
     if(proof)status.textContent=copy.contextAttached;
@@ -1064,7 +1068,7 @@ let contactHtml = documentHtml({
   route: '/contact/',
   title: 'Contact | SuperMega',
   description: 'Tell SuperMega which company workflow should run better.',
-  content: `<main class="frame contact-page" id="content"><section class="page-hero"><span class="eyebrow">SuperMega · Myanmar</span><h1 data-contact-heading>Contact SuperMega.</h1><p class="lede" data-contact-lede>SuperMega builds business software for Myanmar. Shop brings counter sales, stock and order follow-up together for retailers.</p></section><section class="contact-layout"><form class="contact-form" action="/api/contact-submissions" method="post" data-contact-form><div class="field-grid"><label>Name<input name="name" autocomplete="name" required maxlength="120" /></label><label>Email<input name="email" type="email" autocomplete="email" required maxlength="180" /></label><label class="wide">Company (optional)<input name="company" autocomplete="organization" maxlength="180" /></label><input type="hidden" name="product" value="guide" /><input type="hidden" name="template" maxlength="120" /><label class="wide">Message<textarea name="goal" required maxlength="4000" placeholder="Share a few details about your request."></textarea></label></div><input type="hidden" name="source_url" /><input type="hidden" name="referrer" /><input type="hidden" name="idempotency_key" /><input type="hidden" name="trial_claim_code" /><input type="hidden" name="proof_contract" /><input type="hidden" name="proof_version" /><input type="hidden" name="proof_digest" /><input type="hidden" name="proof_product" /><input type="hidden" name="proof_template" /><input type="hidden" name="proof_readiness" /><input type="hidden" name="proof_sources" /><input type="hidden" name="proof_behavior" /><input type="hidden" name="proof_decisions" /><input type="hidden" name="proof_raw_records" /><input type="hidden" name="proof_context_contract" /><input type="hidden" name="proof_context_digest" /><input type="hidden" name="proof_context_outcome_digest" /><input type="hidden" name="proof_context_approved" /><input type="hidden" name="proof_context_raw_records" /><input class="contact-honeypot" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" inert /><button class="button primary" type="submit">Send message</button><p class="form-status" data-form-status aria-live="polite"></p></form></section></main>${contactScript}`,
+  content: `<main class="frame contact-page" id="content"><section class="page-hero"><span class="eyebrow">SuperMega · Myanmar</span><h1 data-contact-heading>Contact SuperMega.</h1><p class="lede" data-contact-lede>SuperMega builds business software for Myanmar. Shop brings counter sales, stock and order follow-up together for retailers.</p></section><section class="contact-layout"><form class="contact-form" action="/api/contact-submissions" method="post" data-contact-form><div class="field-grid"><label>Name<input name="name" autocomplete="name" required maxlength="120" /></label><label>Email<input name="email" type="email" autocomplete="email" required maxlength="180" /></label><label class="wide">Company (optional)<input name="company" autocomplete="organization" maxlength="180" /></label><input type="hidden" name="product" value="guide" /><input type="hidden" name="plan" /><input type="hidden" name="template" /><input type="hidden" name="service" /><label class="wide">Message<textarea name="goal" required maxlength="4000" placeholder="Share a few details about your request."></textarea></label></div><input type="hidden" name="source_url" /><input type="hidden" name="referrer" /><input type="hidden" name="idempotency_key" /><input type="hidden" name="trial_claim_code" /><input type="hidden" name="proof_contract" /><input type="hidden" name="proof_version" /><input type="hidden" name="proof_digest" /><input type="hidden" name="proof_product" /><input type="hidden" name="proof_template" /><input type="hidden" name="proof_readiness" /><input type="hidden" name="proof_sources" /><input type="hidden" name="proof_behavior" /><input type="hidden" name="proof_decisions" /><input type="hidden" name="proof_raw_records" /><input type="hidden" name="proof_context_contract" /><input type="hidden" name="proof_context_digest" /><input type="hidden" name="proof_context_outcome_digest" /><input type="hidden" name="proof_context_approved" /><input type="hidden" name="proof_context_raw_records" /><input class="contact-honeypot" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" inert /><button class="button primary" type="submit">Send message</button><p class="form-status" data-form-status aria-live="polite"></p></form></section></main>${contactScript}`,
 })
 contactHtml = replaceOnce(contactHtml, 'Contact SuperMega.', 'Contact', 'contact_heading_copy')
 contactHtml = replaceOnce(contactHtml, '<span class="eyebrow">SuperMega · Myanmar</span>', '', 'contact_redundant_eyebrow')
@@ -1149,7 +1153,7 @@ const RATE_LIMIT = 5
 const RATE_WINDOW_MS = 10 * 60 * 1000
 const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000
 const CACHE_LIMIT = 2000
-const CONTACT_FINGERPRINT_CURRENT_VERSION = 3
+const CONTACT_FINGERPRINT_CURRENT_VERSION = 4
 const CONTACT_FINGERPRINT_LEGACY_VERSION = 1
 const CONTACT_FINGERPRINT_ALGORITHM = 'sha256'
 const TRIAL_PROOF_CONTRACT = 'supermega.managed_trial_proof.v2'
@@ -1157,6 +1161,7 @@ const TRIAL_PROOF_VERSION = 2
 const TRIAL_PROOF_BASE_FIELDS = ['proof_contract', 'proof_version', 'proof_digest', 'proof_product', 'proof_template', 'proof_readiness', 'proof_sources', 'proof_behavior', 'proof_decisions', 'proof_outcome', 'proof_outcome_digest', 'proof_outcome_accepted', 'proof_raw_records']
 const APPROVED_CONTEXT_FIELDS = ['proof_context_contract', 'proof_context_digest', 'proof_context_outcome_digest', 'proof_context_approved', 'proof_context_raw_records']
 const TRIAL_PROOF_FIELDS = [...TRIAL_PROOF_BASE_FIELDS, ...APPROVED_CONTEXT_FIELDS]
+const SHOP_TEMPLATES = new Set(['mini-mart', 'tea-coffee', 'fashion', 'beauty-spa'])
 const replayCache = new Map()
 const inFlightRequests = new Map()
 const rateBuckets = new Map()
@@ -1258,8 +1263,8 @@ function normalizeTrialProof(payload, product, template) {
   if (proof.contract !== TRIAL_PROOF_CONTRACT
     || proof.version !== TRIAL_PROOF_VERSION
     || !/^sha256:[0-9a-f]{64}$/.test(proof.summary_digest)
-    || !/^(shop|plant|website|ecommerce)$/.test(proof.product)
-    || !/^[a-z0-9][a-z0-9._-]{0,119}$/.test(proof.template)
+    || proof.product !== 'shop'
+    || !SHOP_TEMPLATES.has(proof.template)
     || proof.readiness_score === null
     || proof.source_record_count === null
     || proof.behavior_signal_count === null
@@ -1296,18 +1301,26 @@ function normalizeTrialProof(payload, product, template) {
   return proof
 }
 
-function normalizePayload(payload) {
+function normalizePayload(payload, { allowRuntimeProduct = false } = {}) {
   const requestedProduct = text(payload.product, 40).toLowerCase()
-  const product = requestedProduct === 'shop' ? 'commerce' : requestedProduct === 'plant' ? 'production' : requestedProduct
-  const template = text(payload.template, 120)
-  const safeProduct = ['commerce', 'production', 'website', 'ecommerce', 'guide'].includes(product) ? product : ''
+  const publicShop = requestedProduct === 'shop'
+  const runtimeProduct = allowRuntimeProduct && ['commerce', 'production', 'website', 'ecommerce'].includes(requestedProduct) ? requestedProduct : ''
+  const product = publicShop ? 'commerce' : requestedProduct === 'guide' ? 'guide' : runtimeProduct
+  const template = text(payload.template, 120).toLowerCase()
+  const plan = text(payload.plan, 40).toLowerCase()
+  const service = text(payload.service, 40).toLowerCase()
+  if (publicShop) {
+    if ((plan && plan !== 'shop-pilot') || (template && !SHOP_TEMPLATES.has(template)) || (service && service !== 'assisted-launch')) throw new Error('contact_intake_invalid')
+  } else if (product === 'guide' && (plan || template || service)) throw new Error('contact_intake_invalid')
   const claimCode = text(payload.trial_claim_code, 20).toUpperCase()
   const safe = {
     name: text(payload.name, 120),
     email: text(payload.email, 180).toLowerCase(),
     company: text(payload.company, 180),
-    product: safeProduct,
+    product,
+    plan: publicShop ? 'shop-pilot' : '',
     template,
+    service: publicShop ? service : '',
     goal: text(payload.goal, 4000),
     source_url: privacyUrl(payload.source_url, 700),
     referrer: privacyUrl(payload.referrer, 700),
@@ -1335,8 +1348,10 @@ function historicalFingerprints(payload, safe) {
     catch { return text(source.split('#')[0], 700) }
   }
   const previous = { ...safe, source_url: oldUrl(payload.source_url), referrer: oldUrl(payload.referrer) }
+  const { plan: _plan, service: _service, ...versionThree } = safe
   const version = safe.trial_proof ? 2 : 1
-  return { [version]: payloadFingerprint(previous, version) }
+  const { plan: _previousPlan, service: _previousService, ...legacyPrevious } = previous
+  return { [version]: payloadFingerprint(legacyPrevious, version), 3: payloadFingerprint(versionThree, 3) }
 }
 
 function payloadFingerprint(safe, version = fingerprintVersion(safe)) {
@@ -1403,9 +1418,6 @@ function sourceAttribution(sourceUrl) {
 function deliveryNextStep(workflow) {
   const steps = {
     commerce: 'Validate the Shop trade, import source and first-sale workflow; return one scoped setup plan.',
-    website: 'Validate the public source material and desired contact action; prepare the page plan and preview scope.',
-    ecommerce: 'Validate the catalog source, request flow and Shop handoff; prepare the catalog cleanup scope.',
-    production: 'Validate the operating workflow, accountable roles and sample boundary; prepare the Plant setup scope.',
     guide: 'Choose the smallest suitable product path and return one scoped setup recommendation.',
   }
   return steps[text(workflow, 40).toLowerCase()] || steps.guide
@@ -1475,19 +1487,22 @@ function legacySafeFromRow(row) {
     goal: pick('goal', 'goal', true),
     source_url: pick('source_url', 'source_url'),
     referrer: pick('referrer', 'referrer'),
-  })
+  }, { allowRuntimeProduct: true })
 }
 
 function storedFingerprint(row) {
   if (!row || typeof row !== 'object' || Array.isArray(row)) throw new Error('lead_store_ambiguous_row')
   const raw = row.raw && typeof row.raw === 'object' && !Array.isArray(row.raw) ? row.raw : null
   const marker = raw?.contact_idempotency
-  if (marker === undefined) return { fingerprint: payloadFingerprint(legacySafeFromRow(row)), legacy: true }
+  if (marker === undefined) {
+    const { plan: _plan, service: _service, ...versionThree } = legacySafeFromRow(row)
+    return { fingerprint: payloadFingerprint(versionThree, 3), version: 3, legacy: true }
+  }
   if (
     !marker ||
     typeof marker !== 'object' ||
     Array.isArray(marker) ||
-    ![CONTACT_FINGERPRINT_LEGACY_VERSION, 2, CONTACT_FINGERPRINT_CURRENT_VERSION].includes(marker.version) ||
+    ![CONTACT_FINGERPRINT_LEGACY_VERSION, 2, 3, CONTACT_FINGERPRINT_CURRENT_VERSION].includes(marker.version) ||
     marker.algorithm !== CONTACT_FINGERPRINT_ALGORITHM ||
     typeof marker.payload_fingerprint !== 'string' ||
     !/^[a-f0-9]{64}$/.test(marker.payload_fingerprint)
@@ -1575,16 +1590,10 @@ async function sendWebhook(record) {
 function acknowledgementPlan(workflow, locale) {
   const englishPlans = {
     commerce: 'For Shop, we prepare your catalog, stock and sales workflow.',
-    website: 'For Sites, we prepare your pages, content and responsive layout for your review.',
-    ecommerce: 'For Commerce, we prepare your catalog, storefront and order workflow for your review.',
-    production: 'For Plant, we prepare the operating workflow and role boundaries for your review.',
     guide: 'For a guided recommendation, we review the brief and recommend the suitable product.',
   }
   const myanmarPlans = {
     commerce: 'Shop အတွက် သင့်ကုန်ပစ္စည်းစာရင်း၊ ကုန်လက်ကျန်နှင့် အရောင်းလုပ်ငန်းစဉ်ကို သုံးသပ်ရန် ပြင်ဆင်ပါမည်။',
-    website: 'Sites အတွက် သင့်စာမျက်နှာများ၊ အကြောင်းအရာနှင့် စက်အမျိုးမျိုးတွင် ပြသပုံကို သုံးသပ်ရန် ပြင်ဆင်ပါမည်။',
-    ecommerce: 'Commerce အတွက် သင့်ကုန်ပစ္စည်းစာရင်း၊ အွန်လိုင်းဆိုင်နှင့် အော်ဒါလုပ်ငန်းစဉ်ကို သုံးသပ်ရန် ပြင်ဆင်ပါမည်။',
-    production: 'Plant အတွက် လုပ်ငန်းစဉ်နှင့် တာဝန်ခွဲဝေမှုကို သုံးသပ်ရန် ပြင်ဆင်ပါမည်။',
     guide: 'သင့်စာကို သုံးသပ်ပြီး သင့်တော်သော ကုန်ပစ္စည်းကို အကြံပြုပါမည်။',
   }
   const plans = locale === 'my' ? myanmarPlans : englishPlans

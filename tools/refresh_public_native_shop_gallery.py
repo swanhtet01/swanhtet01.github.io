@@ -28,12 +28,27 @@ def main() -> None:
     parser.add_argument("--run", type=int, required=True)
     parser.add_argument("--artifact", type=int, required=True)
     parser.add_argument("--head", required=True, help="Exact workflow_dispatch source commit")
+    parser.add_argument(
+        "--ci-merge",
+        required=True,
+        help="Exact CI merge commit used to name the retained artifact",
+    )
     args = parser.parse_args()
 
     head = args.head.lower()
+    ci_merge = args.ci_merge.lower()
     if git("rev-parse", "HEAD") != head:
         raise SystemExit("checkout HEAD differs from the capture source commit")
     native_tree = git("rev-parse", "HEAD:mobile/shop_pos")
+    try:
+        ci_native_tree = git("rev-parse", f"{ci_merge}:mobile/shop_pos")
+    except subprocess.CalledProcessError as error:
+        raise SystemExit("CI merge commit is unavailable or lacks the native tree") from error
+    ci_parents = git("rev-list", "--parents", "-n", "1", ci_merge).split()[1:]
+    if head not in ci_parents:
+        raise SystemExit("capture source commit is not a direct parent of the CI merge")
+    if ci_native_tree != native_tree:
+        raise SystemExit("CI merge native tree differs from the capture source commit")
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
     for name, width, height in (
         ("shop_checkout_1200_my.png", 1200, 900),
@@ -68,15 +83,18 @@ def main() -> None:
         asset["sha256"] = digest(members[name])
     manifest.update(
         sourceHead=head,
-        ciMergeCommit=head,
+        ciMergeCommit=ci_merge,
         nativeTree=native_tree,
         workflowRun=args.run,
         artifactId=args.artifact,
-        artifactName=f"supermega-shop-flutter-renders-{head}",
+        artifactName=f"supermega-shop-flutter-renders-{ci_merge}",
         artifactArchiveSha256=digest(archive),
     )
     MANIFEST.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    print(f"Pinned {len(members)} gallery captures to {head} / run {args.run} / artifact {args.artifact}")
+    print(
+        f"Pinned {len(members)} gallery captures to {head} "
+        f"(CI merge {ci_merge}) / run {args.run} / artifact {args.artifact}"
+    )
 
 
 if __name__ == "__main__":
