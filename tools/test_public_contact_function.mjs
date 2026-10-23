@@ -231,6 +231,27 @@ try {
   assert.equal(conflict.status, 409)
   assert.equal(conflict.body.reason, 'idempotency_conflict')
 
+  const longCampaign = 'p'.repeat(200)
+  const attributed = await invoke({
+    body: {
+      ...validSubmission,
+      source_url: `https://url-user:url-password@supermega.dev/contact/?product=shop&utm_source=facebook&utm_medium=social&utm_campaign=${longCampaign}&utm_content=hero&utm_term=pos&token=private-query&email=private-contact&password=private-password#private-fragment`,
+    },
+    headers: withKey(204, { 'x-forwarded-for': '203.0.113.204' }),
+  })
+  assert.equal(attributed.status, 202)
+  const attributedEvent = JSON.parse(delivered.options.body)
+  assert.equal(attributedEvent.record.source_url, 'https://supermega.dev/contact/')
+  assert.equal(attributedEvent.record.page_path, '/contact/')
+  assert.deepEqual(
+    Object.fromEntries(['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term'].map((field) => [field, attributedEvent.record[field]])),
+    { utm_source: 'facebook', utm_medium: 'social', utm_campaign: longCampaign.slice(0, 160), utm_content: 'hero', utm_term: 'pos' },
+  )
+  assert.doesNotMatch(
+    JSON.stringify(attributedEvent.record),
+    /url-user|url-password|private-query|private-contact|private-password|private-fragment/,
+  )
+
   for (const [index, product] of ['production', 'plant', 'website', 'ecommerce', 'commerce'].entries()) {
     const retired = await invoke({ body: { ...validSubmission, product }, headers: withKey(4 + index, { 'x-forwarded-for': `203.0.113.${11 + index}` }) })
     assert.equal(retired.status, 400)

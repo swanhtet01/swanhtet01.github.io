@@ -5,9 +5,10 @@ import test from 'node:test'
 import { verifyShopNativeCiContract } from './verify_shop_native_ci_contract.mjs'
 
 const workflow = await readFile('.github/workflows/shop-native-ci.yml', 'utf8')
+const gradleWrapper = await readFile('mobile/shop_pos/android/gradle/wrapper/gradle-wrapper.properties', 'utf8')
 
 test('native CI retains checksums for the actual Android and Windows QA files', () => {
-  const result = verifyShopNativeCiContract(workflow)
+  const result = verifyShopNativeCiContract(workflow, gradleWrapper)
   assert.deepEqual(result.failures, [])
   assert.equal(result.ok, true)
   assert.equal(result.androidArtifactKind, 'debug')
@@ -15,6 +16,41 @@ test('native CI retains checksums for the actual Android and Windows QA files', 
   assert.equal(result.windowsArtifactKind, 'unsigned')
   assert.equal(result.iosArtifactRetained, false)
   assert.equal(result.minimumRetentionDays, 14)
+  assert.equal(result.flutterVersion, '3.47.8')
+  assert.equal(result.gradleDistribution, 'gradle-9.3.1-bin.zip')
+  assert.equal(result.gradleDistributionSha256, 'b266d5ff6b90eada6dc3b20cb090e3731302e553a27c5d3e4df1f0d76beaff06')
+})
+
+test('native CI pins one exact Flutter SDK across Android, iOS, and Windows', () => {
+  const mutable = verifyShopNativeCiContract(
+    workflow.replace("flutter-version: '3.47.8'", 'channel: stable'),
+    gradleWrapper,
+  )
+  assert.ok(mutable.failures.includes('flutter_sdk_not_exactly_pinned_for_all_native_jobs'))
+  assert.ok(mutable.failures.includes('flutter_sdk_uses_mutable_stable_channel'))
+
+  const missingGuard = verifyShopNativeCiContract(
+    workflow.replace('npm run shop:native:ci-contract:verify', 'true'),
+    gradleWrapper,
+  )
+  assert.ok(missingGuard.failures.includes('native_toolchain_contract_command_missing'))
+})
+
+test('Gradle wrapper uses the checksum-pinned 9.3.1 bin distribution', () => {
+  const mutableArchive = verifyShopNativeCiContract(
+    workflow,
+    gradleWrapper.replace('gradle-9.3.1-bin.zip', 'gradle-9.3.1-all.zip'),
+  )
+  assert.ok(mutableArchive.failures.includes('gradle_distribution_not_pinned_to_expected_bin_archive'))
+
+  const wrongChecksum = verifyShopNativeCiContract(
+    workflow,
+    gradleWrapper.replace(
+      'b266d5ff6b90eada6dc3b20cb090e3731302e553a27c5d3e4df1f0d76beaff06',
+      '0'.repeat(64),
+    ),
+  )
+  assert.ok(wrongChecksum.failures.includes('gradle_distribution_sha256_missing_or_wrong'))
 })
 
 test('missing or unverified Android checksum fails closed', () => {

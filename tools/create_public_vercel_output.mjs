@@ -1532,11 +1532,13 @@ function deliveryNextStep(workflow) {
   return steps[text(workflow, 40).toLowerCase()] || steps.guide
 }
 
-function recordFrom(safe, req, idempotencyKey, fingerprint) {
+function recordFrom(safe, req, idempotencyKey, fingerprint, submittedSourceUrl) {
   const submittedAt = new Date().toISOString()
   const leadId = 'LEAD-' + keyedDigest('lead:' + idempotencyKey).slice(0, 16).toUpperCase()
   const taskId = 'TASK-' + keyedDigest('task:' + idempotencyKey).slice(0, 16).toUpperCase()
-  const attribution = sourceAttribution(safe.source_url)
+  // Derive the five bounded campaign fields before privacyUrl removes the
+  // query. The retained source URL stays credential-, query-, and fragment-free.
+  const attribution = sourceAttribution(submittedSourceUrl)
   const { trial_proof: trialProof, ...contactSafe } = safe
   return {
     lead_id: leadId,
@@ -1768,7 +1770,7 @@ module.exports = async function handler(req, res) {
 
   inFlightRequests.set(cacheKey, fingerprint)
   try {
-  const record = recordFrom(safe, req, idempotencyKey, fingerprint)
+  const record = recordFrom(safe, req, idempotencyKey, fingerprint, payload.source_url)
   let storeResult
   try { storeResult = await saveSupabase(record, fingerprint, historicalFingerprints(payload, safe)) } catch {
     send(res, 503, { status: 'error', reason: 'contact_persistence_unavailable', fallback_email: 'swanhtet@supermega.dev' })

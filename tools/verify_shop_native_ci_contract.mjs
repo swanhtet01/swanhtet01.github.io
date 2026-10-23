@@ -2,6 +2,10 @@ import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 
 const WORKFLOW_PATH = '.github/workflows/shop-native-ci.yml'
+const GRADLE_WRAPPER_PATH = 'mobile/shop_pos/android/gradle/wrapper/gradle-wrapper.properties'
+const FLUTTER_VERSION = '3.47.8'
+const GRADLE_DISTRIBUTION = 'gradle-9.3.1-bin.zip'
+const GRADLE_DISTRIBUTION_SHA256 = 'b266d5ff6b90eada6dc3b20cb090e3731302e553a27c5d3e4df1f0d76beaff06'
 
 function requireToken(source, token, failure, failures) {
   if (!source.includes(token)) failures.push(failure)
@@ -17,8 +21,37 @@ function requirePattern(source, pattern, failure, failures) {
   if (!pattern.test(source)) failures.push(failure)
 }
 
-export function verifyShopNativeCiContract(source) {
+export function verifyShopNativeCiContract(source, gradleWrapperSource = '') {
   const failures = []
+
+  const flutterVersionPins = source.match(new RegExp(`flutter-version: '${FLUTTER_VERSION.replaceAll('.', '\\.')}'`, 'g')) ?? []
+  if (flutterVersionPins.length !== 3) failures.push('flutter_sdk_not_exactly_pinned_for_all_native_jobs')
+  if (/^\s*channel:\s*stable\s*$/m.test(source)) failures.push('flutter_sdk_uses_mutable_stable_channel')
+  requireToken(
+    source,
+    'name: Verify pinned native toolchain contract',
+    'native_toolchain_contract_not_run_in_ci',
+    failures,
+  )
+  requireToken(
+    source,
+    'npm run shop:native:ci-contract:verify',
+    'native_toolchain_contract_command_missing',
+    failures,
+  )
+
+  requireToken(
+    gradleWrapperSource,
+    `distributionUrl=https\\://services.gradle.org/distributions/${GRADLE_DISTRIBUTION}`,
+    'gradle_distribution_not_pinned_to_expected_bin_archive',
+    failures,
+  )
+  requireToken(
+    gradleWrapperSource,
+    `distributionSha256Sum=${GRADLE_DISTRIBUTION_SHA256}`,
+    'gradle_distribution_sha256_missing_or_wrong',
+    failures,
+  )
 
   for (const [token, failure] of [
     ['name: supermega-shop-android-debug-${{ github.sha }}', 'android_artifact_not_explicitly_debug'],
@@ -113,13 +146,19 @@ export function verifyShopNativeCiContract(source) {
     iosArtifactRetained: false,
     innerChecksumsRequired: true,
     minimumRetentionDays: 14,
+    flutterVersion: FLUTTER_VERSION,
+    gradleDistribution: GRADLE_DISTRIBUTION,
+    gradleDistributionSha256: GRADLE_DISTRIBUTION_SHA256,
     failures,
   }
 }
 
 async function main() {
-  const source = await readFile(WORKFLOW_PATH, 'utf8')
-  const result = verifyShopNativeCiContract(source)
+  const [source, gradleWrapperSource] = await Promise.all([
+    readFile(WORKFLOW_PATH, 'utf8'),
+    readFile(GRADLE_WRAPPER_PATH, 'utf8'),
+  ])
+  const result = verifyShopNativeCiContract(source, gradleWrapperSource)
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`)
   if (!result.ok) process.exitCode = 1
 }

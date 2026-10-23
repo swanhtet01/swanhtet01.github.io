@@ -26,10 +26,14 @@ jobs:
       - name: Check out source
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
+      - name: Verify pinned native toolchain contract
+        working-directory: ${{ github.workspace }}
+        run: npm run shop:native:ci-contract:verify
+
       - name: Set up Flutter
         uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
-          channel: stable
+          flutter-version: '3.47.8'
           cache: true
 
       - name: Resolve locked dependencies
@@ -134,7 +138,7 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
-          channel: stable
+          flutter-version: '3.47.8'
           cache: true
 
       - name: Resolve locked dependencies
@@ -158,7 +162,7 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
-          channel: stable
+          flutter-version: '3.47.8'
           cache: true
 
       - name: Generate Windows runner without touching the app lockfile
