@@ -38,70 +38,52 @@ owner-approved product outcome and gate require it.
 | Item | Current fact |
 | --- | --- |
 | Integration PR | [#734 — Unify Shop app first-use and public launch candidate](https://github.com/swanhtet01/swanhtet01.github.io/pull/734) |
-| State | Open draft and CLEAN; exact-head App/native/security/Kernel CI and independent last-push review pass; not merged, signed, deployed, or merchant-accepted |
+| State | Open draft and CLEAN; exact-head App/native/security/Kernel CI pass; independent last-push review, signing, deployment, and merchant acceptance remain open |
 | Integration branch | `codex/shop-public-main-port-20261022` |
-| Final evidence candidate | `1bd6f466dd3014b395740f4db78701324be480fb` / tree `c2e29fea4cfaead48ce7067ba9ca8a05442a1227` |
-| Product/source predecessor | `620ccd2333160f2205724a617598e5b9e32f172a` / tree `aca4b50ad240c0ee7d1dea0b2a84a75f7bf521d9` |
-| Native Shop tree | `59b7fd8ca9041ca053eb14243c62297e63cf9bf6` |
+| Final evidence candidate | `2366ad9209e7b6901f00202fa3083e875fbb88c4` / tree `2f403aecd841a13f629d7e04314fffb49ba3c47c` |
+| Native capture source | `66682d111b875f61fe1f27298958766728094ee3` / native tree `d8c1cd60d6d80c5fc72bc052d8006bc9d4258220` |
+| Gallery evidence successor | `172773a3cfa0996a4aa058148e50513d71da5ae2`; final head preserves the same native tree |
 | PostgreSQL evidence checkpoint | `b1ee4cc2884dda1ab753e8d2e4ecc6c6216a36ef` / tree `6996864df311db4748fcca3ec75c030dd0fcab3e` |
 | Inactive promotion envelope | PR #730; use only after #734 passes and is explicitly promoted |
 | Paused source set | PR #751 at `945ce70f792fd856c767f64e6b3e45e4d8f4ee3e`; review and port bounded changes, never merge wholesale |
 | UI lane | #749 integrated and frozen for acceptance |
 | Parked lanes | #750 low-stock focus; Connected Orders server/sync work |
 
-Commit `b1ee4cc2` remains the exact five-file PostgreSQL-17 evidence successor
-to `efc9897b`; its original CI failure was only this file's former conciseness
-violation. Later candidates preserved that verified receipt, repaired the
-concise status, and passed the required HQ contract. The active candidate adds
-the bounded Shop-first presentation and the fail-closed operator entry to the
-already-reviewed signed correction boundary. Empty production receipt pins
-keep that action unavailable; normal selling remains offline.
+The active candidate preserves the verified PostgreSQL-17 receipt, Shop-first
+presentation, signed correction boundary, gallery provenance, and fail-closed
+release contracts. Empty production correction pins keep that action
+unavailable; normal selling remains offline.
 
 ## Exact evidence
 
-- [Required App CI 39962279126](https://github.com/swanhtet01/swanhtet01.github.io/actions/runs/39962279126)
-  passed at exact final head `1bd6f466`: exact checkout, PostgreSQL/API and
-  migration/RLS guards, dependencies, lint, canonical build, HQ verification,
-  and desktop/390 px product journeys.
-- [Native run 39962285977](https://github.com/swanhtet01/swanhtet01.github.io/actions/runs/39962285977)
-  passed on PR merge-ref `0bfc4ffb503eb0137a6495740ab694d29a396429`,
-  whose source parent is `1bd6f466`. It passed formatting, analysis, isolated
-  first-sale and first-run restore, full Flutter tests, bundled-font renders,
-  Android debug APK, unsigned iPad/iOS, and Windows restore/no-replace,
-  unsigned build, and package retention.
-- The retained final-head artifacts expire 6 November 2026: Android debug
-  `supermega-shop-android-debug-0bfc4ffb503eb0137a6495740ab694d29a396429`
-  (`12505547835`, `sha256:59cf723aea1f2f2e3f89f08842034d1c55c1d59ea39474a6aab77b1d2230c2ca`),
-  Flutter renders `supermega-shop-flutter-renders-0bfc4ffb503eb0137a6495740ab694d29a396429`
-  (`12505397268`, `sha256:7ced32c5d2222aa412c01576b9d61b2fe46035b481546a7ec0ae1ba5e8324675`),
-  and unsigned Windows `supermega-shop-windows-unsigned-0bfc4ffb503eb0137a6495740ab694d29a396429`
-  (`12506382015`, `sha256:a67eda1d909bbc9ea0145fed4a73966a70982836caf1c8701290158590baad4d`).
-  iOS passed `--no-codesign`; no installable iOS artifact is retained.
-- Gallery provenance remains bound to source-equivalent predecessor `620ccd23`,
-  native run `39959980531`, artifact `12504312432`, and archive
-  `sha256:689fd7ece58b1c366cc3aa30c47f9497cf477882c7a57d1738ade242b88d0f4a`;
-  `1bd6f466` leaves native tree `59b7fd8c` unchanged.
-- The isolated Windows PostgreSQL 17.10 rehearsal bound to `efc9897b` / tree
-  `fad006a…` passed 74 checks across 51 implementation files. Its implementation
-  digest is
-  `sha256:0ee244297bb021a71d16c84869b24c412585be2d9a013265ae5055977255dd0f`
-  and receipt digest is
-  `sha256:8c3ece4d69c0dd815a14e762fb01602229ab14214acb9147774617bce0d18c72`.
-  It records cleanup complete, no secret exposure, no provider or production
-  mutation, and `hostedActivationProven=false`.
-- The uploaded receipt/raw file hashes are respectively
-  `e8b7bde5c3db025d9a8c093fd7aa8ddbfcff64c4c659fbd54a98501a172ad307`
-  and
-  `8a5f6f0c72636a1c59746adc841f85d2b2e9b2b728adecb1780f760e1f9acfbe`.
-  Cloud independently read those Library files, matched the hashes, installed
-  the canonical pair, regenerated managed readiness, technical estate, and the
-  preview-rehearsal proposal, and verified the receipt.
-- Exact-head Security `39962285879` and Kernel `39962285910` pass; Kernel's
-  release step was intentionally skipped. Production remains owner-gated.
-- Independent final-head review passed for `1bd6f466`; it found no unresolved
-  release-blocking provenance, authorization, mutation, wallet-truth, privacy,
-  or layout defect. Installed, hardware, signing, and merchant gates remain
-  separate.
+- [Required App CI 39980080495](https://github.com/swanhtet01/swanhtet01.github.io/actions/runs/39980080495)
+  passed at exact head `2366ad92`: PostgreSQL/API and migration/RLS guards,
+  dependencies, lint, canonical build, HQ verification, release workflow
+  contracts, and desktop/390 px journeys.
+- [Native run 39980088191](https://github.com/swanhtet01/swanhtet01.github.io/actions/runs/39980088191)
+  passed formatting, analysis, isolated first-sale and restore, all Flutter
+  tests, bundled-font renders, Android debug, unsigned iPad/iOS, and Windows
+  restore/no-replace plus unsigned packaging.
+- Final-head artifacts: Android debug `12513287589`
+  (`sha256:db36b6666ef3793d6021ce3f1166094ab2d1630a1e002a9bd44f00b1cebe9298`),
+  Flutter renders `12512649344`
+  (`sha256:6650195e55f6e05ccdf136e45ffca211df733534aeb33bf2cde2dcb31de26c33`),
+  and unsigned Windows `12514157027`
+  (`sha256:1f2ac5aec276c9e1fc8ebea74793700937948203f7645f80823fdf43fd0f4744`).
+  iOS passed `--no-codesign`; no signed iOS artifact is retained.
+- Gallery provenance pins source `66682d11`, CI merge `ab513846`, native run
+  `39976672663`, artifact `12511362696`, and original archive
+  `sha256:8c40183fec41ff8fe45599439a6724792f96b394e9913b6ddf74806f63c8d993`.
+  Strict local public build/gallery/responsive checks passed for EN/MY at
+  390/768/1440 px. Release checkout now retains capture-source history.
+- The Windows PostgreSQL 17.10 rehearsal remains bound to implementation tree
+  `fad006a…`: 74 checks, 51 files, implementation digest
+  `sha256:0ee244297bb021a71d16c84869b24c412585be2d9a013265ae5055977255dd0f`,
+  receipt digest
+  `sha256:8c3ece4d69c0dd815a14e762fb01602229ab14214acb9147774617bce0d18c72`,
+  and `hostedActivationProven=false`.
+- Exact-head Security `39980088274` and Kernel `39980088206` pass. Kernel
+  production release remains intentionally owner-gated.
 
 These are source, local, and CI evidence only. Unsigned CI packages are QA
 artifacts, not supported installers or a public release. Native SQLite schema
@@ -136,13 +118,19 @@ v14 and hosted PostgreSQL/Supabase schema profile v13 are separate contracts.
   illustrative-data disclosure, and uses a non-overlapping responsive product
   tableau. Exact-source EN/MY checks pass at 390 px, 768 px, and 1440 px; this
   remains source and CI evidence, not a protected deployed preview.
+- Hardware-free compatibility tests inject CR/LF/Tab scanner input into the
+  sale UI, preserve leading zeros, exercise intentional repeated scans, send
+  exact ESC/POS bytes to a loopback TCP printer, validate 384/420/576-dot
+  EN/MY raster output, and keep sale/stock/outbox totals unchanged across
+  uncertain printing and operator reprint. This is simulator/protocol evidence,
+  not model certification; 420 dots remains builder-only.
 
 ## Not proven
 
 - No production deployment, alias promotion, merge, or production database
   mutation has occurred.
 - Live `supermega.dev` and `app.supermega.dev` still report predecessor
-  `5479c5d1`; no immutable protected preview has been accepted for `1bd6f466`.
+  `5479c5d1`; no immutable protected preview has been accepted for `2366ad92`.
   Direct previews stay disabled, and the production workflow is not preview
   evidence. Live retired product routes also need an owner-approved release of
   the already-verified Shop-first route policy.
@@ -152,6 +140,8 @@ v14 and hosted PostgreSQL/Supabase schema profile v13 are separate contracts.
 - Physical USB/Bluetooth/camera scanning is not accepted. Printing implements
   private-subnet LAN/port 9100 only; physical 58 mm/80 mm Burmese receipt proof
   is not accepted, and USB/Bluetooth printer transports are unsupported.
+  XP-80U is therefore unsupported. True mid-write reset, stalled-write timeout,
+  and paper-status behavior remain unproven; raw TCP cannot confirm paper output.
 - Empty production pins and absent issuer signing configuration intentionally
   disable correction. Offline manager credentials/passkeys remain deferred.
 - Global receipt consumption across cloned databases and trusted
@@ -198,7 +188,7 @@ backup, and restore review; no blind merge or cherry-pick is allowed.
 
 ## Next action
 
-1. Keep final evidence candidate `1bd6f466` stable, correction default-dark,
+1. Keep final evidence candidate `2366ad92` stable, correction default-dark,
    and PR #734 draft pending the owner-gated release decision.
 2. The owner must approve fixed provider team/project identities and a separate
    protected non-production preview lane before EN/MY 390/768/1440 hosted
