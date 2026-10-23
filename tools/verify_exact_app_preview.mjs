@@ -60,10 +60,10 @@ const PRODUCTION_HOSTS = new Set([
 ])
 
 export const EXACT_APP_PREVIEW_CASE_MATRIX = Object.freeze([
-  { id: 'public_desktop', surface: 'public', route: '/', width: 1280, height: 900, mobile: false, screenshot: 'public-home-desktop-1280x900.png' },
-  { id: 'public_mobile', surface: 'public', route: '/', width: 390, height: 844, mobile: true, screenshot: 'public-home-mobile-390x844.png' },
-  { id: 'transition_desktop', surface: 'transition', route: '/', width: 1280, height: 900, mobile: false, screenshot: 'public-app-transition-desktop.png' },
-  { id: 'transition_mobile', surface: 'transition', route: '/', width: 390, height: 844, mobile: true, screenshot: 'public-app-transition-mobile.png' },
+  { id: 'public_desktop', surface: 'public', route: '/shop/', width: 1280, height: 900, mobile: false, screenshot: 'public-shop-desktop-1280x900.png' },
+  { id: 'public_mobile', surface: 'public', route: '/shop/', width: 390, height: 844, mobile: true, screenshot: 'public-shop-mobile-390x844.png' },
+  { id: 'transition_desktop', surface: 'transition', route: '/shop/', width: 1280, height: 900, mobile: false, screenshot: 'public-app-transition-desktop.png' },
+  { id: 'transition_mobile', surface: 'transition', route: '/shop/', width: 390, height: 844, mobile: true, screenshot: 'public-app-transition-mobile.png' },
   { id: 'shop_desktop', surface: 'shop', route: '/shop/?template=mini-mart', width: 1280, height: 900, mobile: false, screenshot: 'shop-counter-mini-mart-desktop-1280x900.png' },
   { id: 'shop_mobile', surface: 'shop', route: '/shop/?template=mini-mart', width: 390, height: 844, mobile: true, screenshot: 'shop-counter-mini-mart-mobile-390x844.png' },
   { id: 'shop_profit_control_desktop', surface: 'shop_profit_control', route: '/shop/?tab=today', width: 1280, height: 900, mobile: false, screenshot: 'shop-profit-control-desktop-1280x900.png' },
@@ -128,11 +128,11 @@ export function derivePublicHomepageExpectedText({ manifest, generatorSource }) 
   if (shopProducts.length !== 1 || !isRecord(shopProducts[0].primaryCta)) {
     fail('exact_app_preview_public_shop_action_invalid')
   }
-  exactPublicClaim(
+  if (exactPublicClaim(
     shopProducts[0].primaryCta.label,
     'exact_app_preview_public_shop_action_invalid',
-  )
-  if (shopProducts[0].primaryCta.url !== 'https://app.supermega.dev/shop/?tab=today') {
+  ) !== 'Contact us about Shop'
+    || shopProducts[0].primaryCta.url !== '/contact/?product=shop') {
     fail('exact_app_preview_public_shop_action_invalid')
   }
   if (typeof generatorSource !== 'string' || generatorSource.length < 2
@@ -140,15 +140,15 @@ export function derivePublicHomepageExpectedText({ manifest, generatorSource }) 
     fail('exact_app_preview_public_generator_invalid')
   }
   const requiredGeneratorBindings = [
-    '<h1>Your business.<br>Working together.</h1>',
-    '<p class="lede">Manage sales and stock. Publish your website. Take orders online.</p>',
-    '<p class="platform-note">Shop. Sites. Commerce. One SuperMega account.</p>',
-    'href="https://app.supermega.dev/login">Login</a>',
+    "replaceOnce(heroWithPreview, 'Shop for Myanmar retailers'",
+    "replaceOnce(heroWithPreview, 'Sell clearly. Keep stock accurate.'",
+    "replaceOnce(heroWithPreview, 'href=\"/contact/?product=shop\">Contact us about Shop'",
+    'content:`<main id="content">${heroWithPreview}${nativeShopHero(locale)}</main>',
   ]
   if (requiredGeneratorBindings.some((fragment) => !occursExactlyOnce(generatorSource, fragment))) {
     fail('exact_app_preview_public_generator_binding_drift')
   }
-  const expected = ['Your business.', 'Working together.', 'Shop. Sites. Commerce. One SuperMega account.', 'Login']
+  const expected = ['Shop for Myanmar retailers', 'Sell clearly. Keep stock accurate.', 'Contact us about Shop', 'Sign in']
   if (RETIRED_PUBLIC_HOME_EXPECTED_TEXT.some((retired) => (
     generatorSource.includes(retired) || expected.some((value) => value.includes(retired))
   ))) fail('exact_app_preview_public_retired_copy_present')
@@ -488,7 +488,7 @@ function exactShopProfitControlResolvedPath(value) {
 }
 
 function expectedResolvedPath(spec, value) {
-  if (spec.surface === 'transition') return value === '/shop/?tab=today'
+  if (spec.surface === 'transition') return value === '/login'
   if (spec.surface === 'retired_plant') return value === spec.expectedPath
   if (spec.surface === 'shop') return exactShopResolvedPath(value)
   if (spec.surface === 'shop_profit_control') return exactShopProfitControlResolvedPath(value)
@@ -614,7 +614,7 @@ function normalizeBrowserCase(value, spec, expectedOrigin, publicOrigin) {
     exactKeys(proof, ['contract', 'publicOrigin', 'appOrigin', 'targetPath', 'visibleActionActivated',
       'destinationStable', 'pairOnlyRequests', 'noMutatingRequests'], `exact_app_preview_transition_invalid:${spec.id}`)
     if (proof.contract !== PAIRED_TRANSITION_CONTRACT || proof.publicOrigin !== publicOrigin || proof.appOrigin !== expectedOrigin
-      || proof.targetPath !== '/shop/?tab=today' || proof.visibleActionActivated !== true
+      || proof.targetPath !== '/login' || proof.visibleActionActivated !== true
       || proof.destinationStable !== true || proof.pairOnlyRequests !== true || proof.noMutatingRequests !== true) fail(`exact_app_preview_transition_invalid:${spec.id}`)
     pairedTransition = { ...proof }
   } else if (value.rendered?.pairedTransition != null) fail(`exact_app_preview_transition_unexpected:${spec.id}`)
@@ -627,7 +627,7 @@ function normalizeBrowserCase(value, spec, expectedOrigin, publicOrigin) {
       || proof.retiredUiAbsent !== true || proof.retainedDataUnchanged !== true) fail(`exact_app_preview_retirement_invalid:${spec.id}`)
     retirement = { ...proof }
   } else if (value.rendered?.retirement != null) fail(`exact_app_preview_retirement_unexpected:${spec.id}`)
-  const primaryFlow = spec.surface === 'transition' ? 'public_primary_action_to_exact_paired_app' : spec.surface === 'shop'
+  const primaryFlow = spec.surface === 'transition' ? 'public_private_login_to_exact_paired_app' : spec.surface === 'shop'
     ? 'counter_checkout_ready_above_fold'
     : spec.surface === 'shop_profit_control'
       ? 'profit_control_priority_action_and_closure_visible'
@@ -1017,7 +1017,7 @@ async function readScreenshotPayloads(report, reportPath) {
 }
 
 function expectedPath(spec) {
-  if (spec.surface === 'transition') return '/shop/?tab=today'
+  if (spec.surface === 'transition') return '/login'
   if (spec.surface === 'retired_plant') return spec.expectedPath
   if (spec.surface === 'shop') return exactShopResolvedPath
   if (spec.surface === 'shop_profit_control') return exactShopProfitControlResolvedPath
@@ -1025,7 +1025,7 @@ function expectedPath(spec) {
 }
 
 export function expectedText(spec, publicHomepageExpectedText) {
-  if (spec.surface === 'transition') return ['Profit control', 'Current leak → accountable owner → objective closure']
+  if (spec.surface === 'transition') return ['Login', 'Login is currently unavailable.', 'Contact support for account access.']
   if (spec.surface === 'public') {
     if (!Array.isArray(publicHomepageExpectedText) || publicHomepageExpectedText.length !== 4) {
       fail('exact_app_preview_public_expected_text_invalid')
@@ -1083,7 +1083,7 @@ function browserCase(spec, origin, publicHomepageExpectedText, appOrigin) {
       seed: { retained: Object.fromEntries(RETIRED_STORAGE_KEYS.map(key => [key,
         key === 'supermega.product_setups.v1' ? '{}' : JSON.stringify({ syntheticRetirementSentinel: key })])) } } : {}),
     ...(spec.surface === 'transition' ? { pairedAppOrigin: appOrigin, expectedOrigin: appOrigin,
-      pairedPublicExpectedText: publicHomepageExpectedText, expectedPathLabel: '/shop/?tab=today' } : {}),
+      pairedPublicExpectedText: publicHomepageExpectedText, expectedPathLabel: '/login' } : {}),
   }
 }
 
