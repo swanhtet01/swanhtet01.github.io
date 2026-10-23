@@ -1861,10 +1861,7 @@ void main() {
 
       expect(find.byKey(const ValueKey('shop-sale-correct')), findsNothing);
       expect(unavailableAuthorizer.lastWorkspaceId, 'workspace-widget-test');
-      expect(
-        unavailableAuthorizer.lastRequiredActorId,
-        'owner-widget-test',
-      );
+      expect(unavailableAuthorizer.lastRequiredActorId, 'owner-widget-test');
     } finally {
       await tester.pumpWidget(const SizedBox.shrink());
       await database.close();
@@ -1881,9 +1878,7 @@ void main() {
           tester.platformDispatcher.textScaleFactorTestValue = 1.5;
           addTearDown(tester.view.resetPhysicalSize);
           addTearDown(tester.view.resetDevicePixelRatio);
-          addTearDown(
-            tester.platformDispatcher.clearTextScaleFactorTestValue,
-          );
+          addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
         }
         final database = ShopDatabase(NativeDatabase.memory());
         final authorizer = _WidgetCorrectionAuthorizer(available: true);
@@ -1898,10 +1893,7 @@ void main() {
           final sale = await database.recordCashSale(
             operationId: 'cancel-sale-$myanmar',
             lines: [
-              ShopSaleLineInput(
-                productId: 'cancel-tea-$myanmar',
-                quantity: 1,
-              ),
+              ShopSaleLineInput(productId: 'cancel-tea-$myanmar', quantity: 1),
             ],
           );
           await tester.pumpWidget(
@@ -1920,19 +1912,13 @@ void main() {
             ),
           );
           await tester.pumpAndSettle();
-          await tester.tap(
-            find.text(myanmar ? '၂,၅၀၀ ကျပ်' : '2,500 MMK'),
-          );
+          await tester.tap(find.text(myanmar ? '၂,၅၀၀ ကျပ်' : '2,500 MMK'));
           await tester.pumpAndSettle();
           await tester.tap(find.byKey(const ValueKey('shop-sale-correct')));
           await tester.pumpAndSettle();
 
           expect(
-            find.text(
-              myanmar
-                  ? 'အရောင်းပြင်ဆင်ရန်'
-                  : 'Correct sale',
-            ),
+            find.text(myanmar ? 'အရောင်းပြင်ဆင်ရန်' : 'Correct sale'),
             findsOneWidget,
           );
           expect(
@@ -1969,21 +1955,22 @@ void main() {
     );
     final authorizer = _WidgetCorrectionAuthorizer(
       available: true,
-      authorize: ({
-        required authorizationRequestId,
-        required workspaceId,
-        required capability,
-        required commandDigest,
-        required requestFingerprint,
-      }) async => ShopCorrectionAuthorizationResult(
-        authorization: await _widgetCorrectionAuthorization(
-          commandDigest,
-          capability: capability,
-          receiptId: 'widget-correction-flow-receipt',
-        ),
-        idempotentReplay: false,
-        externalWritesPerformed: true,
-      ),
+      authorize:
+          ({
+            required authorizationRequestId,
+            required workspaceId,
+            required capability,
+            required commandDigest,
+            required requestFingerprint,
+          }) async => ShopCorrectionAuthorizationResult(
+            authorization: await _widgetCorrectionAuthorization(
+              commandDigest,
+              capability: capability,
+              receiptId: 'widget-correction-flow-receipt',
+            ),
+            idempotentReplay: false,
+            externalWritesPerformed: true,
+          ),
     );
     try {
       await _attachWidgetWorkspace(database);
@@ -2000,9 +1987,7 @@ void main() {
       );
       final sale = await database.recordCashSale(
         operationId: 'correct-sale',
-        lines: const [
-          ShopSaleLineInput(productId: 'correct-tea', quantity: 1),
-        ],
+        lines: const [ShopSaleLineInput(productId: 'correct-tea', quantity: 1)],
       );
       await tester.pumpWidget(
         MaterialApp(
@@ -2028,16 +2013,10 @@ void main() {
       await tester.tap(
         find.byKey(const ValueKey('shop-correction-cash-return')),
       );
-      await tester.tap(
-        find.byKey(const ValueKey('shop-correction-review')),
-      );
+      await tester.tap(find.byKey(const ValueKey('shop-correction-review')));
       await tester.pumpAndSettle();
-      await tester.tap(
-        find.byKey(const ValueKey('shop-correction-authorize')),
-      );
-      await tester.tap(
-        find.byKey(const ValueKey('shop-correction-authorize')),
-      );
+      await tester.tap(find.byKey(const ValueKey('shop-correction-authorize')));
+      await tester.tap(find.byKey(const ValueKey('shop-correction-authorize')));
       await tester.pumpAndSettle();
 
       expect(authorizer.authorizeCalls, 1);
@@ -2063,15 +2042,16 @@ void main() {
     final database = ShopDatabase(NativeDatabase.memory());
     final authorizer = _WidgetCorrectionAuthorizer(
       available: true,
-      authorize: ({
-        required authorizationRequestId,
-        required workspaceId,
-        required capability,
-        required commandDigest,
-        required requestFingerprint,
-      }) async => throw const ShopCorrectionAuthorizationException(
-        'owner_authorization_required',
-      ),
+      authorize:
+          ({
+            required authorizationRequestId,
+            required workspaceId,
+            required capability,
+            required commandDigest,
+            required requestFingerprint,
+          }) async => throw const ShopCorrectionAuthorizationException(
+            'owner_authorization_required',
+          ),
     );
     try {
       await _attachWidgetWorkspace(database);
@@ -2088,9 +2068,7 @@ void main() {
       );
       final sale = await database.recordCashSale(
         operationId: 'denied-sale',
-        lines: const [
-          ShopSaleLineInput(productId: 'denied-tea', quantity: 1),
-        ],
+        lines: const [ShopSaleLineInput(productId: 'denied-tea', quantity: 1)],
       );
       await tester.pumpWidget(
         MaterialApp(
@@ -2116,13 +2094,9 @@ void main() {
       await tester.tap(
         find.byKey(const ValueKey('shop-correction-cash-return')),
       );
-      await tester.tap(
-        find.byKey(const ValueKey('shop-correction-review')),
-      );
+      await tester.tap(find.byKey(const ValueKey('shop-correction-review')));
       await tester.pumpAndSettle();
-      await tester.tap(
-        find.byKey(const ValueKey('shop-correction-authorize')),
-      );
+      await tester.tap(find.byKey(const ValueKey('shop-correction-authorize')));
       await tester.pumpAndSettle();
 
       expect(

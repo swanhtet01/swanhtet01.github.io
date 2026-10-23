@@ -702,17 +702,12 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
                   : () {
                       if (_openingCorrection) return;
                       _openingCorrection = true;
-                      Navigator.of(dialogContext).pop(
-                        _SaleDetailsAction.correct,
-                      );
+                      Navigator.of(dialogContext)
+                          .pop(_SaleDetailsAction.correct);
                     },
               icon: const Icon(Icons.history_outlined),
               label: Text(
-                shopCopy(
-                  widget.myanmar,
-                  'Correct sale',
-                  'အရောင်းပြင်ဆင်ရန်',
-                ),
+                shopCopy(widget.myanmar, 'Correct sale', 'အရောင်းပြင်ဆင်ရန်'),
               ),
             ),
           if (sale.reversal == null)

@@ -395,9 +395,7 @@ void main() {
     () async {
       var tokenReads = 0;
       final service = _service(
-        MockClient(
-          (_) async => throw StateError('network must not be called'),
-        ),
+        MockClient((_) async => throw StateError('network must not be called')),
         accessToken: () async {
           tokenReads++;
           return 'must-not-be-read';
