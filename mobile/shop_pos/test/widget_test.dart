@@ -4636,7 +4636,16 @@ void main() {
           tester.widget<TextField>(search).controller!.text,
           '0099999999999',
         );
-        expect(tester.widget<TextField>(search).focusNode!.hasFocus, isTrue);
+        expect(find.byType(AlertDialog), findsOneWidget);
+        expect(
+          tester
+              .widget<TextFormField>(
+                find.byKey(const ValueKey('shop-product-barcode')),
+              )
+              .controller!
+              .text,
+          '0099999999999',
+        );
         expect(await database.countSales(), 0);
         expect((await database.readActiveProducts()).single.onHand, 3);
       } finally {
