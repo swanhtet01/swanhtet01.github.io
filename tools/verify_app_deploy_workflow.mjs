@@ -659,6 +659,8 @@ requireContract('production release requires an exact manual owner instruction b
   && workflow.indexOf('Require exact owner release instruction') < workflow.indexOf('Checkout the release commit')
   && workflow.indexOf('Require exact owner release instruction') < workflow.indexOf('Require production deploy credential')
   && !/^\s*push:/m.test(workflow))
+requireContract('production release checkout retains gallery capture-source history',
+  /Checkout the release commit[\s\S]*?fetch-depth:\s*0/.test(workflow))
 requireContract('deployment metadata uses the guarded runtime ref', (workflow.match(/githubCommitRef=\$\{\{ github\.ref_name \}\}/g) || []).length === 2 && !workflow.includes('githubCommitRef=main'))
 const coreWorkflowActions = `${workflow}\n${appWorkflow}\n${ciWorkflow}\n${publicHealthWorkflow}\n${kernelWorkflow}`
 requireContract('core actions are commit-pinned', !/uses:\s+[^\s#]+@v\d+/m.test(coreWorkflowActions) && /uses:\s+actions\/checkout@[0-9a-f]{40}/.test(workflow))
