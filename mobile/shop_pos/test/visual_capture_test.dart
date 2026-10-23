@@ -287,51 +287,54 @@ void main() {
   });
 
   testWidgets(
-    'decode actual EN and MY ESC POS receipt bytes for 384 and 576 dots',
+    'decode actual EN and MY ESC POS receipt bytes for 384 420 and 576 dots',
     skip: !_capture,
     (tester) async {
-      const receipt = ShopSaleReceipt(
-        id: 'synthetic-receipt',
-        operationId: 'synthetic-receipt',
-        totalMmk: 125000,
-        createdAtMillis: 1792722600000,
-        paymentMethod: 'cash',
-        lines: [
-          ShopSaleReceiptLine(
-            productName: 'လက်ဖက်ရည် နို့ဆီ ချိုချို',
-            unitPriceMmk: 2500,
-            quantity: 50,
-            lineTotalMmk: 125000,
-          ),
-        ],
-      );
-      final profiles = <(String, PaperSize, ReceiptPaperWidth)>[
-        ('58-generic-384', PaperSize.mm58, ReceiptPaperWidth.mm58),
-        ('80-576', PaperSize.mm80, ReceiptPaperWidth.mm80),
-      ];
-      for (final myanmar in [false, true]) {
-        for (final (name, paperSize, paperWidth) in profiles) {
-          final ticket = await buildShopReceiptTicket(
-            receipt,
-            myanmar: myanmar,
-            paperWidth: paperWidth,
-            rasterPaperSize: paperSize,
-          );
-          final decoded = await _decodeGsV0Receipt(
-            ticket.bytes,
-            paperDots: paperSize.widthPixels,
-          );
-          expect(decoded.blocks, greaterThan(5), reason: '$name/$myanmar');
-          expect(
-            decoded.maxRasterDots,
-            lessThanOrEqualTo(paperSize.widthPixels),
-            reason: '$name/$myanmar',
-          );
-          final locale = myanmar ? 'my' : 'en';
-          await File('test/goldens/shop_receipt_${name}_$locale.png')
-              .writeAsBytes(decoded.png);
+      await tester.runAsync(() async {
+        const receipt = ShopSaleReceipt(
+          id: 'synthetic-receipt',
+          operationId: 'synthetic-receipt',
+          totalMmk: 125000,
+          createdAtMillis: 1792722600000,
+          paymentMethod: 'cash',
+          lines: [
+            ShopSaleReceiptLine(
+              productName: 'လက်ဖက်ရည် နို့ဆီ ချိုချို',
+              unitPriceMmk: 2500,
+              quantity: 50,
+              lineTotalMmk: 125000,
+            ),
+          ],
+        );
+        final profiles = <(String, PaperSize, ReceiptPaperWidth)>[
+          ('58-generic-384', PaperSize.mm58, ReceiptPaperWidth.mm58),
+          ('58-contract-420', PaperSize.mm58Wide420, ReceiptPaperWidth.mm58),
+          ('80-576', PaperSize.mm80, ReceiptPaperWidth.mm80),
+        ];
+        for (final myanmar in [false, true]) {
+          for (final (name, paperSize, paperWidth) in profiles) {
+            final ticket = await buildShopReceiptTicket(
+              receipt,
+              myanmar: myanmar,
+              paperWidth: paperWidth,
+              rasterPaperSize: paperSize,
+            );
+            final decoded = await _decodeGsV0Receipt(
+              ticket.bytes,
+              paperDots: paperSize.widthPixels,
+            );
+            expect(decoded.blocks, greaterThan(5), reason: '$name/$myanmar');
+            expect(
+              decoded.maxRasterDots,
+              lessThanOrEqualTo(paperSize.widthPixels),
+              reason: '$name/$myanmar',
+            );
+            final locale = myanmar ? 'my' : 'en';
+            await File('test/goldens/shop_receipt_${name}_$locale.png')
+                .writeAsBytes(decoded.png);
+          }
         }
-      }
+      });
     },
   );
 
