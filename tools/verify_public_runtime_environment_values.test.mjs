@@ -35,6 +35,14 @@ test('accepts source-bound Supabase and explicitly approved webhook origins', ()
   assert.equal(result.webhookOriginBound, true)
   assert.equal(JSON.stringify(result).includes('test-only'), false)
   assert.equal(JSON.stringify(result).includes('lead-router'), false)
+
+  const publicMappedOrigin = 'https://[::ffff:808:808]'
+  const publicMapped = evaluate({
+    SUPERMEGA_LEAD_WEBHOOK_URL: `${publicMappedOrigin}/events`,
+    SUPERMEGA_EXPECTED_LEAD_WEBHOOK_ORIGIN: publicMappedOrigin,
+  })
+  assert.equal(publicMapped.ok, true)
+  assert.equal(publicMapped.webhookOriginBound, true)
 })
 
 test('requires complete Supabase delivery and the source-bound expected origin', () => {
@@ -84,6 +92,12 @@ test('rejects unsafe, private, and ambiguous webhook destinations', () => {
     'https://192.168.1.1/events',
     'https://[::1]/events',
     'https://[fd00::1]/events',
+    'https://[::ffff:0:1]/events',
+    'https://[::ffff:7f00:1]/events',
+    'https://[::ffff:a00:1]/events',
+    'https://[::ffff:a9fe:a9fe]/events',
+    'https://[::ffff:ac10:1]/events',
+    'https://[::ffff:c0a8:1]/events',
     'not-a-url',
   ]) {
     const result = evaluate({

@@ -21,13 +21,24 @@ const privateIpv4 = (hostname) => {
     || (first === 192 && second === 168)
 }
 
+const mappedIpv4 = (hostname) => {
+  const normalized = hostname.replace(/^\[|\]$/g, '').toLowerCase()
+  const match = normalized.match(/^(?:::ffff:|0:0:0:0:0:ffff:)([0-9a-f]{1,4}):([0-9a-f]{1,4})$/)
+  if (!match) return null
+  const high = Number.parseInt(match[1], 16)
+  const low = Number.parseInt(match[2], 16)
+  return `${high >>> 8}.${high & 0xff}.${low >>> 8}.${low & 0xff}`
+}
+
 const privateIpv6 = (hostname) => {
   const normalized = hostname.replace(/^\[|\]$/g, '').toLowerCase()
+  const mapped = mappedIpv4(normalized)
   return normalized === '::'
     || normalized === '::1'
     || normalized.startsWith('fc')
     || normalized.startsWith('fd')
     || /^fe[89ab]/.test(normalized)
+    || Boolean(mapped && privateIpv4(mapped))
 }
 
 const publicHostname = (hostname) => {
