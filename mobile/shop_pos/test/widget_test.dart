@@ -16,6 +16,7 @@ import 'package:supermega_shop/menu_import_screen.dart';
 import 'package:supermega_shop/printer_services.dart';
 import 'package:supermega_shop/recent_sales_screen.dart';
 import 'package:supermega_shop/shop_copy.dart';
+import 'package:supermega_shop/shop_correction_authorization_service.dart';
 import 'package:supermega_shop/shop_database.dart';
 import 'package:supermega_shop/shop_models.dart';
 import 'package:supermega_shop/shop_today_screen.dart';
@@ -1810,6 +1811,333 @@ void main() {
     expect(find.text('Rice'), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
     await database.close();
+  });
+
+  testWidgets('sale correction action stays default-dark without authority', (
+    tester,
+  ) async {
+    final database = ShopDatabase(NativeDatabase.memory());
+    try {
+      await database.addProduct(
+        id: 'dark-tea',
+        name: 'Tea',
+        priceMmk: 2500,
+        openingStock: 1,
+      );
+      await database.recordCashSale(
+        operationId: 'dark-sale',
+        lines: const [ShopSaleLineInput(productId: 'dark-tea', quantity: 1)],
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: RecentSalesScreen(database: database, myanmar: false),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('2,500 MMK'));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey('shop-sale-correct')), findsNothing);
+      expect(find.text('Reprint receipt'), findsOneWidget);
+
+      await tester.tap(find.text('Close'));
+      await tester.pumpAndSettle();
+      await _attachWidgetWorkspace(database);
+      final unavailableAuthorizer = _WidgetCorrectionAuthorizer(
+        available: false,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: RecentSalesScreen(
+            database: database,
+            myanmar: false,
+            correctionAuthorizer: unavailableAuthorizer,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('2,500 MMK'));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey('shop-sale-correct')), findsNothing);
+      expect(unavailableAuthorizer.lastWorkspaceId, 'workspace-widget-test');
+      expect(
+        unavailableAuthorizer.lastRequiredActorId,
+        'owner-widget-test',
+      );
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await database.close();
+    }
+  });
+
+  for (final myanmar in const [false, true]) {
+    testWidgets(
+      'authorized ${myanmar ? 'Burmese' : 'English'} correction opens and cancels without mutation',
+      (tester) async {
+        if (myanmar) {
+          tester.view.physicalSize = const Size(320, 900);
+          tester.view.devicePixelRatio = 1;
+          tester.platformDispatcher.textScaleFactorTestValue = 1.5;
+          addTearDown(tester.view.resetPhysicalSize);
+          addTearDown(tester.view.resetDevicePixelRatio);
+          addTearDown(
+            tester.platformDispatcher.clearTextScaleFactorTestValue,
+          );
+        }
+        final database = ShopDatabase(NativeDatabase.memory());
+        final authorizer = _WidgetCorrectionAuthorizer(available: true);
+        try {
+          await _attachWidgetWorkspace(database);
+          await database.addProduct(
+            id: 'cancel-tea-$myanmar',
+            name: 'Tea',
+            priceMmk: 2500,
+            openingStock: 1,
+          );
+          final sale = await database.recordCashSale(
+            operationId: 'cancel-sale-$myanmar',
+            lines: [
+              ShopSaleLineInput(
+                productId: 'cancel-tea-$myanmar',
+                quantity: 1,
+              ),
+            ],
+          );
+          await tester.pumpWidget(
+            MaterialApp(
+              theme: ThemeData(
+                fontFamily: myanmar ? 'NotoSansMyanmarUI' : 'Inter',
+                fontFamilyFallback: myanmar
+                    ? const ['NotoSansMyanmar', 'Inter']
+                    : const ['NotoSansMyanmarUI', 'NotoSansMyanmar'],
+              ),
+              home: RecentSalesScreen(
+                database: database,
+                myanmar: myanmar,
+                correctionAuthorizer: authorizer,
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          await tester.tap(
+            find.text(myanmar ? '၂,၅၀၀ ကျပ်' : '2,500 MMK'),
+          );
+          await tester.pumpAndSettle();
+          await tester.tap(find.byKey(const ValueKey('shop-sale-correct')));
+          await tester.pumpAndSettle();
+
+          expect(
+            find.text(
+              myanmar
+                  ? 'အရောင်းပြင်ဆင်ရန်'
+                  : 'Correct sale',
+            ),
+            findsOneWidget,
+          );
+          expect(
+            find.textContaining(
+              myanmar
+                  ? 'မူလအရောင်းနှင့် စျေးနှုန်းများ'
+                  : 'original sale and prices remain',
+            ),
+            findsOneWidget,
+          );
+          await tester.tap(
+            find.byKey(const ValueKey('shop-correction-cancel')),
+          );
+          await tester.pumpAndSettle();
+
+          expect(await database.readSaleReversalForSale(sale.id), isNull);
+          expect(authorizer.authorizeCalls, 0);
+          expect(authorizer.lastWorkspaceId, 'workspace-widget-test');
+          expect(authorizer.lastRequiredActorId, 'owner-widget-test');
+        } finally {
+          await tester.pumpWidget(const SizedBox.shrink());
+          await database.close();
+        }
+      },
+    );
+  }
+
+  testWidgets('authorized cash correction records once and reloads the sale', (
+    tester,
+  ) async {
+    final database = ShopDatabase.withCorrectionReceiptVerifier(
+      executor: NativeDatabase.memory(),
+      correctionReceiptVerifier: _widgetCorrectionReceiptVerifier,
+    );
+    final authorizer = _WidgetCorrectionAuthorizer(
+      available: true,
+      authorize: ({
+        required authorizationRequestId,
+        required workspaceId,
+        required capability,
+        required commandDigest,
+        required requestFingerprint,
+      }) async => ShopCorrectionAuthorizationResult(
+        authorization: await _widgetCorrectionAuthorization(
+          commandDigest,
+          capability: capability,
+          receiptId: 'widget-correction-flow-receipt',
+        ),
+        idempotentReplay: false,
+        externalWritesPerformed: true,
+      ),
+    );
+    try {
+      await _attachWidgetWorkspace(database);
+      await database.addProduct(
+        id: 'correct-tea',
+        name: 'Tea',
+        priceMmk: 2500,
+        openingStock: 2,
+      );
+      await database.openCashShift(
+        operationId: 'correct-shift',
+        operatorLabel: 'Owner',
+        openingFloatMmk: 5000,
+      );
+      final sale = await database.recordCashSale(
+        operationId: 'correct-sale',
+        lines: const [
+          ShopSaleLineInput(productId: 'correct-tea', quantity: 1),
+        ],
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: RecentSalesScreen(
+            database: database,
+            myanmar: false,
+            correctionAuthorizer: authorizer,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('2,500 MMK'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('shop-sale-correct')));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('shop-correction-reason')),
+        'Customer returned the full sale',
+      );
+      await tester.tap(
+        find.byKey(const ValueKey('shop-correction-restock-all')),
+      );
+      await tester.tap(
+        find.byKey(const ValueKey('shop-correction-cash-return')),
+      );
+      await tester.tap(
+        find.byKey(const ValueKey('shop-correction-review')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('shop-correction-authorize')),
+      );
+      await tester.tap(
+        find.byKey(const ValueKey('shop-correction-authorize')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(authorizer.authorizeCalls, 1);
+      expect(await database.readSaleReversalForSale(sale.id), isNotNull);
+      expect((await database.readActiveProducts()).single.onHand, 2);
+      expect(await database.countOutboxOperations(), 2);
+      expect(
+        find.text(
+          'Sale corrected. The original sale remains in the audit record.',
+        ),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await database.close();
+    }
+  });
+
+  testWidgets('denied owner authorization leaves the sale unchanged', (
+    tester,
+  ) async {
+    final database = ShopDatabase(NativeDatabase.memory());
+    final authorizer = _WidgetCorrectionAuthorizer(
+      available: true,
+      authorize: ({
+        required authorizationRequestId,
+        required workspaceId,
+        required capability,
+        required commandDigest,
+        required requestFingerprint,
+      }) async => throw const ShopCorrectionAuthorizationException(
+        'owner_authorization_required',
+      ),
+    );
+    try {
+      await _attachWidgetWorkspace(database);
+      await database.addProduct(
+        id: 'denied-tea',
+        name: 'Tea',
+        priceMmk: 2500,
+        openingStock: 2,
+      );
+      await database.openCashShift(
+        operationId: 'denied-shift',
+        operatorLabel: 'Owner',
+        openingFloatMmk: 5000,
+      );
+      final sale = await database.recordCashSale(
+        operationId: 'denied-sale',
+        lines: const [
+          ShopSaleLineInput(productId: 'denied-tea', quantity: 1),
+        ],
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: RecentSalesScreen(
+            database: database,
+            myanmar: false,
+            correctionAuthorizer: authorizer,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('2,500 MMK'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('shop-sale-correct')));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('shop-correction-reason')),
+        'Owner review is required',
+      );
+      await tester.tap(
+        find.byKey(const ValueKey('shop-correction-restock-none')),
+      );
+      await tester.tap(
+        find.byKey(const ValueKey('shop-correction-cash-return')),
+      );
+      await tester.tap(
+        find.byKey(const ValueKey('shop-correction-review')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('shop-correction-authorize')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text(
+          'This correction requires authorization from the workspace owner.',
+        ),
+        findsOneWidget,
+      );
+      expect(await database.readSaleReversalForSale(sale.id), isNull);
+      expect((await database.readActiveProducts()).single.onHand, 1);
+      expect(await database.countOutboxOperations(), 1);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await database.close();
+    }
   });
 
   testWidgets('large Burmese sale total fits enlarged phone and tablet views', (
@@ -5967,6 +6295,60 @@ void main() {
       expect(await database.countOutboxOperations(), 0);
     });
   });
+}
+
+typedef _WidgetAuthorize = Future<ShopCorrectionAuthorizationResult> Function({
+  required String authorizationRequestId,
+  required String workspaceId,
+  required String capability,
+  required String commandDigest,
+  required String requestFingerprint,
+});
+
+class _WidgetCorrectionAuthorizer implements ShopCorrectionAuthorizer {
+  _WidgetCorrectionAuthorizer({
+    required this.available,
+    _WidgetAuthorize? authorize,
+  }) : _authorizeHandler = authorize;
+
+  final bool available;
+  final _WidgetAuthorize? _authorizeHandler;
+  int authorizeCalls = 0;
+  String? lastWorkspaceId;
+  String? lastRequiredActorId;
+
+  @override
+  Future<bool> canRequestAuthorization({
+    required String workspaceId,
+    required String requiredActorId,
+    required String capability,
+  }) async {
+    lastWorkspaceId = workspaceId;
+    lastRequiredActorId = requiredActorId;
+    return available;
+  }
+
+  @override
+  Future<ShopCorrectionAuthorizationResult> authorize({
+    required String authorizationRequestId,
+    required String workspaceId,
+    required String capability,
+    required String commandDigest,
+    required String requestFingerprint,
+  }) {
+    authorizeCalls++;
+    final handler = _authorizeHandler;
+    if (handler == null) {
+      throw StateError('Authorization was not expected in this test.');
+    }
+    return handler(
+      authorizationRequestId: authorizationRequestId,
+      workspaceId: workspaceId,
+      capability: capability,
+      commandDigest: commandDigest,
+      requestFingerprint: requestFingerprint,
+    );
+  }
 }
 
 class _RecentSalesFixtureDatabase extends ShopDatabase {

@@ -24,6 +24,7 @@ import 'shop_backup.dart';
 import 'shop_backup_export_screen.dart';
 import 'shop_cash_shift_screen.dart';
 import 'shop_copy.dart';
+import 'shop_correction_authorization_service.dart';
 import 'shop_database.dart';
 import 'shop_models.dart';
 import 'shop_startup.dart';
@@ -131,11 +132,28 @@ class _ShopAppState extends State<ShopApp> {
   bool _salesOpened = false;
   bool _stockOpened = false;
   bool _hasCounterDraft = false;
+  late final ShopCorrectionAuthorizationService? _correctionAuthorizer;
 
   @override
   void initState() {
     super.initState();
+    final endpoint = shopCorrectionAuthorizationEndpoint(widget.apiBaseUrl);
+    final authClient = widget.authClient;
+    _correctionAuthorizer = endpoint != null && authClient != null
+        ? ShopCorrectionAuthorizationService(
+            endpoint: endpoint,
+            accessToken: () async =>
+                authClient.auth.currentSession?.accessToken,
+            currentUserId: () async => authClient.auth.currentSession?.user.id,
+          )
+        : null;
     unawaited(_refreshCounterDraft());
+  }
+
+  @override
+  void dispose() {
+    _correctionAuthorizer?.close();
+    super.dispose();
   }
 
   Future<void> _refreshCounterDraft() async {
@@ -442,6 +460,7 @@ class _ShopAppState extends State<ShopApp> {
               database: widget.database,
               authClient: widget.authClient,
               apiBaseUrl: widget.apiBaseUrl,
+              correctionAuthorizer: _correctionAuthorizer,
               myanmar: _myanmar,
               onLanguageChanged: _setLanguage,
             )
@@ -506,6 +525,8 @@ class _ShopAppState extends State<ShopApp> {
                                       database: widget.database,
                                       authClient: widget.authClient,
                                       apiBaseUrl: widget.apiBaseUrl,
+                                      correctionAuthorizer:
+                                          _correctionAuthorizer,
                                       myanmar: _myanmar,
                                       onLanguageChanged: _setLanguage,
                                       onToday: _showToday,
@@ -522,6 +543,8 @@ class _ShopAppState extends State<ShopApp> {
                                     RecentSalesScreen(
                                       database: widget.database,
                                       myanmar: _myanmar,
+                                      correctionAuthorizer:
+                                          _correctionAuthorizer,
                                       embeddedTaskShell: true,
                                       refreshToken: _salesRefreshToken,
                                     )
@@ -624,6 +647,7 @@ class ShopHome extends StatefulWidget {
     required this.apiBaseUrl,
     required this.myanmar,
     required this.onLanguageChanged,
+    this.correctionAuthorizer,
     this.onToday,
     this.onSales,
     this.onStock,
@@ -640,6 +664,7 @@ class ShopHome extends StatefulWidget {
   final String apiBaseUrl;
   final bool myanmar;
   final ValueChanged<bool> onLanguageChanged;
+  final ShopCorrectionAuthorizer? correctionAuthorizer;
   final VoidCallback? onToday;
   final VoidCallback? onSales;
   final VoidCallback? onStock;
@@ -3865,6 +3890,7 @@ class _ShopHomeState extends State<ShopHome> {
         builder: (_) => RecentSalesScreen(
           database: widget.database,
           myanmar: widget.myanmar,
+          correctionAuthorizer: widget.correctionAuthorizer,
         ),
       ),
     );

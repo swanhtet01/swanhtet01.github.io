@@ -106,6 +106,7 @@ class ShopCorrectionAuthorizationResult {
 abstract interface class ShopCorrectionAuthorizer {
   Future<bool> canRequestAuthorization({
     required String workspaceId,
+    required String requiredActorId,
     required String capability,
   });
 
@@ -150,16 +151,19 @@ class ShopCorrectionAuthorizationService implements ShopCorrectionAuthorizer {
   @override
   Future<bool> canRequestAuthorization({
     required String workspaceId,
+    required String requiredActorId,
     required String capability,
   }) async {
     if (!_receiptVerifier.hasPinnedKeys ||
         !_validEndpoint(endpoint) ||
         !_identifier.hasMatch(workspaceId) ||
+        !_identifier.hasMatch(requiredActorId) ||
         !_confirmationByCapability.containsKey(capability)) {
       return false;
     }
     try {
       final userId = await currentUserId();
+      if (userId != requiredActorId) return false;
       final token = (await accessToken())?.trim();
       return userId != null &&
           _identifier.hasMatch(userId) &&

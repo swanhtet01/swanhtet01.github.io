@@ -375,6 +375,7 @@ void main() {
       expect(
         await service.canRequestAuthorization(
           workspaceId: _workspaceId,
+          requiredActorId: _ownerId,
           capability: _capability,
         ),
         isFalse,
@@ -386,6 +387,32 @@ void main() {
       expect(userReads, 0);
       expect(tokenReads, 0);
       expect(calls, 0);
+    },
+  );
+
+  test(
+    'availability rejects a different bound actor before token access',
+    () async {
+      var tokenReads = 0;
+      final service = _service(
+        MockClient(
+          (_) async => throw StateError('network must not be called'),
+        ),
+        accessToken: () async {
+          tokenReads++;
+          return 'must-not-be-read';
+        },
+      );
+
+      expect(
+        await service.canRequestAuthorization(
+          workspaceId: _workspaceId,
+          requiredActorId: 'different-workspace-owner',
+          capability: _capability,
+        ),
+        isFalse,
+      );
+      expect(tokenReads, 0);
     },
   );
 

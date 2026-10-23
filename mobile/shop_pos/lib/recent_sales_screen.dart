@@ -5,14 +5,19 @@ import 'package:flutter/material.dart';
 import 'printer_services.dart';
 import 'printer_setup_screen.dart';
 import 'shop_copy.dart';
+import 'shop_correction_authorization_service.dart';
 import 'shop_database.dart';
+import 'shop_sale_correction_dialog.dart';
 import 'shop_today_screen.dart';
+
+enum _SaleDetailsAction { correct }
 
 class RecentSalesScreen extends StatefulWidget {
   const RecentSalesScreen({
     required this.database,
     required this.myanmar,
     this.reprintService,
+    this.correctionAuthorizer,
     this.embeddedTaskShell = false,
     this.refreshToken = 0,
     super.key,
@@ -21,6 +26,7 @@ class RecentSalesScreen extends StatefulWidget {
   final ShopDatabase database;
   final bool myanmar;
   final ReceiptReprintService? reprintService;
+  final ShopCorrectionAuthorizer? correctionAuthorizer;
   final bool embeddedTaskShell;
   final int refreshToken;
 
@@ -38,6 +44,24 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
   late final ReceiptReprintService _reprinter =
       widget.reprintService ?? ReceiptReprintService();
   bool _reprinting = false;
+  bool _openingCorrection = false;
+
+  Future<ShopManagedWorkspaceBinding?> _correctionBinding() async {
+    final authorizer = widget.correctionAuthorizer;
+    if (authorizer == null) return null;
+    try {
+      final binding = await widget.database.readManagedWorkspaceBinding();
+      if (binding == null) return null;
+      final available = await authorizer.canRequestAuthorization(
+        workspaceId: binding.workspaceId,
+        requiredActorId: binding.attachedActorId,
+        capability: shopFullSaleReversalCapability,
+      );
+      return available ? binding : null;
+    } catch (_) {
+      return null;
+    }
+  }
 
   Future<List<ShopSaleReceipt>> _readPage() => widget.database.readRecentSales(
     limit: _pageSize + 1,
@@ -500,12 +524,16 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
   };
 
   Future<void> _showSale(ShopSaleReceipt sale) async {
+    final correctionBinding = sale.reversal == null
+        ? await _correctionBinding()
+        : null;
+    if (!mounted) return;
     final soldTimeLabel = shopCopy(
       widget.myanmar,
       sale.reversal == null ? 'Sold' : 'Original sale',
       'မူလရောင်းချိန်',
     );
-    await showDialog<void>(
+    final action = await showDialog<_SaleDetailsAction>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: Text(
@@ -666,6 +694,27 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
           ),
         ),
         actions: [
+          if (sale.reversal == null && correctionBinding != null)
+            TextButton.icon(
+              key: const ValueKey('shop-sale-correct'),
+              onPressed: _openingCorrection
+                  ? null
+                  : () {
+                      if (_openingCorrection) return;
+                      _openingCorrection = true;
+                      Navigator.of(
+                        dialogContext,
+                      ).pop(_SaleDetailsAction.correct);
+                    },
+              icon: const Icon(Icons.history_outlined),
+              label: Text(
+                shopCopy(
+                  widget.myanmar,
+                  'Correct sale',
+                  'အရောင်းပြင်ဆင်ရန်',
+                ),
+              ),
+            ),
           if (sale.reversal == null)
             FilledButton.icon(
               onPressed: _reprinting
@@ -688,6 +737,62 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
             child: Text(shopCopy(widget.myanmar, 'Close', 'ပိတ်ရန်')),
           ),
         ],
+      ),
+    );
+    if (action == _SaleDetailsAction.correct) {
+      try {
+        await _openSaleCorrection(sale);
+      } finally {
+        _openingCorrection = false;
+      }
+    } else {
+      _openingCorrection = false;
+    }
+  }
+
+  Future<void> _openSaleCorrection(ShopSaleReceipt sale) async {
+    final binding = await _correctionBinding();
+    final authorizer = widget.correctionAuthorizer;
+    if (!mounted) return;
+    if (binding == null || authorizer == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            shopCopy(
+              widget.myanmar,
+              'Online workspace-owner authorization is unavailable. Nothing was changed.',
+              'အွန်လိုင်း လုပ်ငန်းနေရာပိုင်ရှင်ခွင့်ပြုချက် မရနိုင်ပါ။ မည်သည့်မှတ်တမ်းကိုမျှ မပြောင်းထားပါ။',
+            ),
+          ),
+        ),
+      );
+      return;
+    }
+    final result = await showShopSaleCorrectionDialog(
+      context: context,
+      database: widget.database,
+      sale: sale,
+      workspaceBinding: binding,
+      authorizer: authorizer,
+      myanmar: widget.myanmar,
+    );
+    if (!mounted || result == null) return;
+    _reload();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          result == ShopSaleCorrectionResult.corrected
+              ? shopCopy(
+                  widget.myanmar,
+                  'Sale corrected. The original sale remains in the audit record.',
+                  'အရောင်းကို ပြင်ဆင်ပြီးပါပြီ။ မူလအရောင်းသည် စာရင်းစစ်မှတ်တမ်းတွင် ဆက်လက်ရှိနေပါသည်။',
+                )
+              : shopCopy(
+                  widget.myanmar,
+                  'This sale was already corrected. The sales list was refreshed.',
+                  'ဤအရောင်းကို ပြင်ဆင်ပြီးသားဖြစ်သည်။ အရောင်းစာရင်းကို ပြန်ဖတ်ပြီးပါပြီ။',
+                ),
+        ),
       ),
     );
   }
