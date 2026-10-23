@@ -38,31 +38,41 @@ owner-approved product outcome and gate require it.
 | Item | Current fact |
 | --- | --- |
 | Integration PR | [#734 — Unify Shop app first-use and public launch candidate](https://github.com/swanhtet01/swanhtet01.github.io/pull/734) |
-| State | Open draft; not merged, signed, deployed, or independently approved |
+| State | Open draft; exact-head App/native CI and independent last-push review pass; not merged, signed, deployed, or merchant-accepted |
 | Integration branch | `codex/shop-public-main-port-20261022` |
-| Product-code predecessor | `efc9897b55a40042dd8a656b3b723026120661fa` / tree `fad006a60b74e2b8754ce022bbd652456b231783` |
-| Native Shop tree | `b0c3551a26149317242d0d12afa378540236c568` |
-| Evidence checkpoint | `b1ee4cc2884dda1ab753e8d2e4ecc6c6216a36ef` / tree `6996864df311db4748fcca3ec75c030dd0fcab3e` |
+| Exact candidate | `4f5c0307713371e579ba295ac8adc82cee03d7a0` / tree `f5d9d7f5a7e71e5ed51a946fd0cad3d43319b9a3` |
+| Product-code predecessor | `862d92401f08a9571cf60fd47a1dd6e972c0a436` |
+| Native Shop tree | `ec98fa139f45f8a4bf6a46e7058455840ce4dfc8` |
+| PostgreSQL evidence checkpoint | `b1ee4cc2884dda1ab753e8d2e4ecc6c6216a36ef` / tree `6996864df311db4748fcca3ec75c030dd0fcab3e` |
 | Inactive promotion envelope | PR #730; use only after #734 passes and is explicitly promoted |
 | Paused source set | PR #751 at `945ce70f792fd856c767f64e6b3e45e4d8f4ee3e`; review and port bounded changes, never merge wholesale |
 | UI lane | #749 integrated and frozen for acceptance |
 | Parked lanes | #750 low-stock focus; Connected Orders server/sync work |
 
-Commit `b1ee4cc2` is the exact five-file PostgreSQL-17 evidence successor to
-`efc9897b`. It changes only the canonical receipt/raw pair and three generated
-readiness records. Required App CI reached its final HQ verifier: all first 36
-HQ steps passed, including the 74-check receipt and all three readiness
-verifiers, then failed only because this file had grown beyond its existing
-14,000-character budget. That failure is documentation conciseness, not stale
-database evidence. `b1ee4cc2` remains a failed evidence checkpoint; this
-separate concise-status repair must obtain its own exact-head App CI.
+Commit `b1ee4cc2` remains the exact five-file PostgreSQL-17 evidence successor
+to `efc9897b`; its original CI failure was only this file's former conciseness
+violation. Later candidates preserved that verified receipt, repaired the
+concise status, and passed the required HQ contract. The active candidate adds
+the bounded Shop-first public presentation and exact capture provenance without
+changing the signed correction, migration, backup, restore, or runtime boundary.
 
 ## Exact evidence
 
-- [Native run 39888650319](https://github.com/swanhtet01/swanhtet01.github.io/actions/runs/39888650319)
-  passed at `efc9897b`: formatting, analysis, isolated first-sale and first-run
-  restore, full Flutter tests, bundled-font renders, Android APK, unsigned
-  iPad/iOS, and Windows restore/no-replace/build/package.
+- [Required App CI 39915343743](https://github.com/swanhtet01/swanhtet01.github.io/actions/runs/39915343743)
+  passed at exact candidate `4f5c0307`: exact checkout, PostgreSQL/API and
+  migration/RLS guards, dependencies, lint, canonical build, HQ verification,
+  and desktop/390 px product journeys.
+- [Native run 39915350078](https://github.com/swanhtet01/swanhtet01.github.io/actions/runs/39915350078)
+  passed at exact candidate `4f5c0307`: formatting, analysis, isolated
+  first-sale and first-run restore, full Flutter tests, bundled-font renders,
+  Android debug APK, unsigned iPad/iOS, and Windows restore/no-replace,
+  unsigned build, and package retention.
+- The retained exact-candidate artifacts are the Android debug archive
+  `12484643611` (`sha256:0ff072ac31652ec0e9b5d56669ccd0b0c5f8f7043b642c8a1f41d4c30ea7b03f`),
+  Flutter render archive `12485026187`
+  (`sha256:370519b2ad202d92d492424aa1cccb3dcd439532d5b2340ad40580356c3cb4bd`),
+  and unsigned Windows archive `12485556347`
+  (`sha256:fe3776e6828860955013e4cca86d70a5088b255237ffc25094a2fc315e1ab66a`).
 - The isolated Windows PostgreSQL 17.10 rehearsal bound to `efc9897b` / tree
   `fad006a…` passed 74 checks across 51 implementation files. Its implementation
   digest is
@@ -78,14 +88,10 @@ separate concise-status repair must obtain its own exact-head App CI.
   Cloud independently read those Library files, matched the hashes, installed
   the canonical pair, regenerated managed readiness, technical estate, and the
   preview-rehearsal proposal, and verified the receipt.
-- [Required App CI 39890967772](https://github.com/swanhtet01/swanhtet01.github.io/actions/runs/39890967772)
-  on `b1ee4cc2` passed exact checkout, PostgreSQL setup, API contracts,
-  migration/RLS guards, dependencies, lint, deployment-contract generation,
-  and HQ steps 1–36. It failed at step 638/668 only when
-  `verify_hq_contract.mjs` reported `HQ stays concise`.
-- [Kernel run 39890972222](https://github.com/swanhtet01/swanhtet01.github.io/actions/runs/39890972222)
-  and [dependency audit 39890972062](https://github.com/swanhtet01/swanhtet01.github.io/actions/runs/39890972062)
-  passed at the evidence head. Production release remained owner-gated.
+- Exact-candidate repository security, Kernel, and dependency checks pass.
+  Production release remains owner-gated.
+- Independent last-push review found no release-blocking issue in the bounded
+  presentation repair, capture provenance, or exact-head check set.
 
 These are source, local, and CI evidence only. Unsigned CI packages are QA
 artifacts, not supported installers or a public release. Native SQLite schema
@@ -113,11 +119,18 @@ v14 and hosted PostgreSQL/Supabase schema profile v13 are separate contracts.
 - English/Burmese native layout, catalog, barcode, cashier, receipt, printer
   discovery, offline recovery, and actionable operating surfaces remain in the
   single #734 candidate.
+- Public Shop presentation uses Shop as the product name and SuperMega as the
+  company identity, keeps one primary assisted-access action, retains the
+  illustrative-data disclosure, and uses a non-overlapping responsive product
+  tableau. Exact-source EN/MY checks pass at 390 px, 768 px, and 1440 px; this
+  remains source and CI evidence, not a protected deployed preview.
 
 ## Not proven
 
 - No production deployment, alias promotion, merge, or production database
   mutation has occurred.
+- No immutable protected public preview has been accepted for exact candidate
+  `4f5c0307`.
 - No signed Android, iPad, or Windows distribution has been accepted.
 - Installed restart/update and encrypted restore are not accepted on the target
   device set.
@@ -170,18 +183,19 @@ backup, and restore review; no blind merge or cherry-pick is allowed.
 
 ## Next action
 
-1. Run the narrow HQ contract against this concise `CURRENT.md`, then push only
-   this status repair and require exact-head App CI. Do not mix product, schema,
-   PR751, or runbook work into that commit.
-2. If App CI is green, keep correction default-dark and complete installed
-   signed restart/update, encrypted restore, physical scanner, and Burmese
-   receipt acceptance. Hardware evidence remains local and device-specific.
-3. Then prove the owner correction entry path on the exact candidate, decide
+1. Keep the correction action default-dark and the PR draft; the independent
+   last-push review for `4f5c0307` passed without a release-blocking finding.
+2. Prepare one immutable protected public preview for the exact candidate and
+   return its EN/MY 390/768/1440 evidence for Vivian review. Publishing or
+   production promotion remains an owner action.
+3. Complete installed signed restart/update, encrypted restore, physical
+   scanner, and Burmese receipt acceptance. Hardware evidence remains local and
+   device-specific.
+4. Then prove the owner correction entry path on the exact candidate, decide
    full-sale-only versus partial-return/exchange scope, and complete the clean
    install → preset → catalog path → guided first sale journey in full English
    and Burmese.
-4. Only after the app/release candidate is stable, consume one Operations
-   website brief into one exact preview for Vivian review. Do not deploy.
-5. Finish with independent last-push review and Swan/Vivian joint go/no-go.
+5. Finish Vivian's merchant journey, commercial/support decisions, and the
+   Swan/Vivian joint go/no-go.
    The proposed 1 November date remains conditional on every applicable gate in
    [`docs/SHOP-RELEASE-RUNBOOK.md`](docs/SHOP-RELEASE-RUNBOOK.md).
