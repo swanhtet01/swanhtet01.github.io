@@ -6,6 +6,7 @@ import 'package:drift/drift.dart' hide isNotNull, isNull;
 import 'package:drift/native.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
@@ -2749,6 +2750,101 @@ void main() {
     await database.close();
   });
 
+  testWidgets(
+    'ambiguous printer delivery never retries or mutates sale until operator retry',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      _usePhoneViewport(tester);
+      const range = (ip: '192.168.20.10', mask: '255.255.255.248');
+      final settings = ReceiptPrinterSettings(
+        rangeProvider: () async => range,
+        session: VerifiedPrinterSession(),
+      );
+      final candidate = (await PrinterDiscoveryService(
+        rangeProvider: () async => range,
+        probe: (host, port) async => host == '192.168.20.9',
+      ).scan()).printers.single;
+      await settings.saveAfterTest(candidate);
+
+      final database = ShopDatabase(NativeDatabase.memory());
+      try {
+        await database.addProduct(
+          id: 'tea-ambiguous-print',
+          name: 'Tea',
+          priceMmk: 2500,
+          openingStock: 2,
+        );
+        final stockMovementsBefore = await database.countStockMovements();
+        final outboxBefore = await database.countOutboxOperations();
+        final sentReceiptIds = <String>[];
+        await tester.pumpWidget(
+          MaterialApp(
+            home: ShopHome(
+              database: database,
+              authClient: null,
+              apiBaseUrl: 'https://example.invalid',
+              myanmar: false,
+              onLanguageChanged: (_) {},
+              receiptPrinterSettings: settings,
+              receiptPrintSender: (host, receipt, myanmar) async {
+                expect(host, '192.168.20.9');
+                sentReceiptIds.add(receipt.id);
+                if (sentReceiptIds.length == 1) {
+                  throw SocketException(
+                    'connection closed after an ambiguous write',
+                  );
+                }
+              },
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.byKey(const ValueKey('shop-catalog-row:tea-ambiguous-print')),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.textContaining('Review sale'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Cash sale'));
+        await tester.pumpAndSettle();
+        if (find.text('Cash received?').evaluate().isEmpty) {
+          await tester.tap(find.text('Cash sale'));
+          await tester.pumpAndSettle();
+        }
+        await tester.tap(find.text('Complete sale'));
+        await tester.pumpAndSettle();
+
+        expect(sentReceiptIds, hasLength(1));
+        expect(find.textContaining('printing unconfirmed'), findsOneWidget);
+        expect(find.textContaining('check paper before retry'), findsOneWidget);
+        expect(await database.countSales(), 1);
+        expect((await database.readActiveProducts()).single.onHand, 1);
+        expect(
+          await database.countStockMovements(),
+          stockMovementsBefore + 1,
+        );
+        expect(await database.countOutboxOperations(), outboxBefore + 1);
+
+        await tester.tap(find.text('Retry print'));
+        await tester.pumpAndSettle();
+        expect(sentReceiptIds, hasLength(2));
+        expect(sentReceiptIds.toSet(), hasLength(1));
+        expect(find.text('Receipt sent to printer.'), findsOneWidget);
+        expect(await database.countSales(), 1);
+        expect((await database.readActiveProducts()).single.onHand, 1);
+        expect(
+          await database.countStockMovements(),
+          stockMovementsBefore + 1,
+        );
+        expect(await database.countOutboxOperations(), outboxBefore + 1);
+      } finally {
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump(const Duration(milliseconds: 1));
+        await database.close();
+      }
+    },
+  );
+
   testWidgets('saved printer does not reprint after restart without a retest', (
     tester,
   ) async {
@@ -4477,6 +4573,85 @@ void main() {
       await database.close();
     }
   });
+
+  testWidgets(
+    'scan field keeps leading zeros and handles submitted CR LF Tab and repeats',
+    (tester) async {
+      _usePhoneViewport(tester);
+      final database = ShopDatabase(NativeDatabase.memory());
+      try {
+        await database.addProduct(
+          id: 'tea-wedge',
+          name: 'Tea',
+          barcode: '0012345678905',
+          priceMmk: 2500,
+          openingStock: 3,
+        );
+        await tester.pumpWidget(
+          ShopApp(
+            initialCounter: true,
+            database: database,
+            authClient: null,
+            apiBaseUrl: 'https://app.supermega.dev',
+            initialMyanmar: false,
+          ),
+        );
+        await tester.pumpAndSettle();
+        final search = find.byType(TextField);
+        await tester.tap(search);
+
+        // A submitted CR/LF string is normalized as one scan. This simulates
+        // the field value, not physical HID delivery, and preserves zeros.
+        await tester.enterText(search, '0012345678905\r\n');
+        await tester.testTextInput.receiveAction(TextInputAction.done);
+
+        // A consecutive, separately triggered Tab scan is intentional quantity
+        // two. Both durable draft writes must remain serialized.
+        await tester.enterText(search, '0012345678905');
+        await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+        await tester.pumpAndSettle();
+        expect(find.textContaining('Review sale · 2'), findsOneWidget);
+        expect(tester.widget<TextField>(search).focusNode!.hasFocus, isTrue);
+        expect(await database.countSales(), 0);
+        expect((await database.readActiveProducts()).single.onHand, 3);
+
+        // Empty Tab remains normal keyboard traversal; manual search can be
+        // focused again and never commits a sale or changes stock.
+        await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+        await tester.pump();
+        expect(tester.widget<TextField>(search).focusNode!.hasFocus, isFalse);
+        expect(FocusManager.instance.primaryFocus, isNotNull);
+        expect(
+          FocusManager.instance.primaryFocus,
+          isNot(same(tester.widget<TextField>(search).focusNode)),
+        );
+        await tester.tap(search);
+        await tester.enterText(search, 'Tea');
+        await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+        await tester.pump();
+        expect(tester.widget<TextField>(search).controller!.text, 'Tea');
+        expect(tester.widget<TextField>(search).focusNode!.hasFocus, isFalse);
+
+        // An unknown numeric scan candidate stays available for manual lookup
+        // and consumes its configured Tab terminator without changing stock.
+        await tester.tap(search);
+        await tester.enterText(search, '0099999999999');
+        await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+        await tester.pumpAndSettle();
+        expect(
+          tester.widget<TextField>(search).controller!.text,
+          '0099999999999',
+        );
+        expect(tester.widget<TextField>(search).focusNode!.hasFocus, isTrue);
+        expect(await database.countSales(), 0);
+        expect((await database.readActiveProducts()).single.onHand, 3);
+      } finally {
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump(const Duration(milliseconds: 1));
+        await database.close();
+      }
+    },
+  );
 
   testWidgets('cashier can receive and count stock outside the sale screen', (
     tester,

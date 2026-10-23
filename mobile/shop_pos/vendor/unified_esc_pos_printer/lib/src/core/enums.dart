@@ -36,6 +36,9 @@ enum TextSize {
 /// Paper size, width in dots.
 enum PaperSize {
   mm58(value: 1, widthMM: 58, widthPixels: 384),
+  // Some 58 mm configurations have a 420-dot printable area. Keep this
+  // protocol profile distinct from the common 384-dot profile.
+  mm58Wide420(value: 4, widthMM: 58, widthPixels: 420),
   mm72(value: 2, widthMM: 72, widthPixels: 512),
   mm80(value: 3, widthMM: 80, widthPixels: 576);
 

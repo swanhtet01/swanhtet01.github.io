@@ -2,6 +2,8 @@
 // screenshots and must not be published as hardware acceptance evidence.
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:cryptography/cryptography.dart';
 import 'package:drift/native.dart';
@@ -11,7 +13,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:supermega_shop/camera_barcode_scanner.dart';
 import 'package:supermega_shop/main.dart';
+import 'package:supermega_shop/printer_services.dart';
 import 'package:supermega_shop/shop_database.dart';
+import 'package:unified_esc_pos_printer/unified_esc_pos_printer.dart';
 
 final _capture = Platform.environment['SHOP_VISUAL_CAPTURE'] == '1';
 const _captureKey = ValueKey('native-shop-visual-capture');
@@ -77,6 +81,105 @@ Future<void> _resolveVisibleProductPhotos(WidgetTester tester) async {
   final rendered = tester.widgetList<RawImage>(find.byType(RawImage)).toList();
   expect(rendered, isNotEmpty);
   expect(rendered.every((image) => image.image != null), isTrue);
+}
+
+Future<({Uint8List png, int blocks, int maxRasterDots})>
+_decodeGsV0Receipt(List<int> bytes, {required int paperDots}) async {
+  final rasters = <({int widthBytes, int height, Uint8List data})>[];
+  var maxRasterDots = 0;
+  for (var index = 0; index + 8 <= bytes.length;) {
+    if (bytes[index] != 29 ||
+        bytes[index + 1] != 118 ||
+        bytes[index + 2] != 48) {
+      index++;
+      continue;
+    }
+    if (bytes[index + 3] != 0) {
+      throw StateError('Receipt raster has an unexpected density mode.');
+    }
+    final widthBytes = bytes[index + 4] | (bytes[index + 5] << 8);
+    final height = bytes[index + 6] | (bytes[index + 7] << 8);
+    final dataLength = widthBytes * height;
+    if (index + 8 + dataLength > bytes.length) {
+      throw StateError('Truncated GS v 0 receipt image.');
+    }
+    if (widthBytes > (paperDots + 7) ~/ 8) {
+      throw StateError('Receipt raster exceeds the selected printable width.');
+    }
+    final logicalRasterDots = widthBytes * 8 > paperDots
+        ? paperDots
+        : widthBytes * 8;
+    maxRasterDots = logicalRasterDots > maxRasterDots
+        ? logicalRasterDots
+        : maxRasterDots;
+    final unusedBits = widthBytes * 8 - paperDots;
+    if (unusedBits > 0) {
+      final unusedMask = (1 << unusedBits) - 1;
+      for (var y = 0; y < height; y++) {
+        final lastByte = bytes[index + 8 + (y + 1) * widthBytes - 1];
+        if ((lastByte & unusedMask) != 0) {
+          throw StateError('Receipt raster uses padding beyond paper width.');
+        }
+      }
+    }
+    rasters.add((
+      widthBytes: widthBytes,
+      height: height,
+      data: Uint8List.fromList(
+        bytes.sublist(index + 8, index + 8 + dataLength),
+      ),
+    ));
+    index += 8 + dataLength;
+  }
+  if (rasters.isEmpty) throw StateError('Receipt has no GS v 0 raster rows.');
+  final height = rasters.fold<int>(
+    0,
+    (total, raster) => total + raster.height,
+  );
+  final rgba = Uint8List(paperDots * height * 4);
+  rgba.fillRange(0, rgba.length, 255);
+  var yOffset = 0;
+  for (final raster in rasters) {
+    for (var y = 0; y < raster.height; y++) {
+      for (var byteIndex = 0; byteIndex < raster.widthBytes; byteIndex++) {
+        final packed = raster.data[y * raster.widthBytes + byteIndex];
+        for (var bit = 0; bit < 8; bit++) {
+          if ((packed & (0x80 >> bit)) == 0) continue;
+          final x = byteIndex * 8 + bit;
+          if (x >= paperDots) continue;
+          final pixel = ((yOffset + y) * paperDots + x) * 4;
+          rgba[pixel] = 0;
+          rgba[pixel + 1] = 0;
+          rgba[pixel + 2] = 0;
+        }
+      }
+    }
+    yOffset += raster.height;
+  }
+  final buffer = await ui.ImmutableBuffer.fromUint8List(rgba);
+  final descriptor = ui.ImageDescriptor.raw(
+    buffer,
+    width: paperDots,
+    height: height,
+    rowBytes: paperDots * 4,
+    pixelFormat: ui.PixelFormat.rgba8888,
+  );
+  final codec = await descriptor.instantiateCodec();
+  final image = (await codec.getNextFrame()).image;
+  try {
+    final png = await image.toByteData(format: ui.ImageByteFormat.png);
+    if (png == null) throw StateError('Receipt PNG encoding failed.');
+    return (
+      png: png.buffer.asUint8List(png.offsetInBytes, png.lengthInBytes),
+      blocks: rasters.length,
+      maxRasterDots: maxRasterDots,
+    );
+  } finally {
+    image.dispose();
+    codec.dispose();
+    descriptor.dispose();
+    buffer.dispose();
+  }
 }
 
 void main() {
@@ -184,6 +287,57 @@ void main() {
       myanmarUi.load(),
     ]);
   });
+
+  testWidgets(
+    'decode actual EN and MY ESC POS receipt bytes for 384 420 and 576 dots',
+    skip: !_capture,
+    (tester) async {
+      const receipt = ShopSaleReceipt(
+        id: 'synthetic-receipt',
+        operationId: 'synthetic-receipt',
+        totalMmk: 125000,
+        createdAtMillis: 1792722600000,
+        paymentMethod: 'cash',
+        lines: [
+          ShopSaleReceiptLine(
+            productName: 'လက်ဖက်ရည် နို့ဆီ ချိုချို',
+            unitPriceMmk: 2500,
+            quantity: 50,
+            lineTotalMmk: 125000,
+          ),
+        ],
+      );
+      final profiles = <(String, PaperSize, ReceiptPaperWidth)>[
+        ('58-generic-384', PaperSize.mm58, ReceiptPaperWidth.mm58),
+        ('58-contract-420', PaperSize.mm58Wide420, ReceiptPaperWidth.mm58),
+        ('80-576', PaperSize.mm80, ReceiptPaperWidth.mm80),
+      ];
+      for (final myanmar in [false, true]) {
+        for (final (name, paperSize, paperWidth) in profiles) {
+          final ticket = await buildShopReceiptTicket(
+            receipt,
+            myanmar: myanmar,
+            paperWidth: paperWidth,
+            rasterPaperSize: paperSize,
+          );
+          final decoded = await _decodeGsV0Receipt(
+            ticket.bytes,
+            paperDots: paperSize.widthPixels,
+          );
+          expect(decoded.blocks, greaterThan(5), reason: '$name/$myanmar');
+          expect(
+            decoded.maxRasterDots,
+            lessThanOrEqualTo(paperSize.widthPixels),
+            reason: '$name/$myanmar',
+          );
+          final locale = myanmar ? 'my' : 'en';
+          await File(
+            'test/goldens/shop_receipt_${name}_$locale.png',
+          ).writeAsBytes(decoded.png);
+        }
+      }
+    },
+  );
 
   testWidgets('first product keeps required fields first and a scan visible', (
     tester,

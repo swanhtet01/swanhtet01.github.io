@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/painting.dart';
 import 'package:network_info_plus/network_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:unified_esc_pos_printer/unified_esc_pos_printer.dart';
@@ -180,11 +181,11 @@ class ShopReceiptPrinter {
         ),
         timeout: const Duration(seconds: 5),
       );
-      final ticket = await Ticket.create(trustedPrinter.paperWidth.paperSize);
-      for (final line in shopReceiptTextLines(receipt, myanmar: myanmar)) {
-        await ticket.textRaster(line);
-      }
-      _finishReceipt(ticket, trustedPrinter.paperWidth);
+      final ticket = await buildShopReceiptTicket(
+        receipt,
+        myanmar: myanmar,
+        paperWidth: trustedPrinter.paperWidth,
+      );
       await manager.printTicket(ticket);
     } finally {
       await manager.dispose();
@@ -235,9 +236,7 @@ List<String> shopReceiptTextLines(
   'SHOP',
   myanmar ? 'အရောင်းပြေစာ' : 'SALE RECEIPT',
   'Sale ${receipt.id}',
-  DateTime.fromMillisecondsSinceEpoch(receipt.createdAtMillis)
-      .toLocal()
-      .toString(),
+  _formatReceiptTimestamp(receipt.createdAtMillis),
   '',
   for (final line in receipt.lines) ...[
     '${line.productName} x${line.quantity}',
@@ -247,6 +246,29 @@ List<String> shopReceiptTextLines(
   '${myanmar ? 'စုစုပေါင်း' : 'TOTAL'}: ${_formatMmk(receipt.totalMmk)} MMK',
   '${myanmar ? 'ငွေပေးချေမှု' : 'Payment'}: ${receipt.paymentMethod.toUpperCase()}',
 ];
+
+Future<Ticket> buildShopReceiptTicket(
+  ShopSaleReceipt receipt, {
+  required bool myanmar,
+  required ReceiptPaperWidth paperWidth,
+  PaperSize? rasterPaperSize,
+}) async {
+  final ticket = await Ticket.create(rasterPaperSize ?? paperWidth.paperSize);
+  final style = _receiptRasterStyle(myanmar);
+  for (final line in shopReceiptTextLines(receipt, myanmar: myanmar)) {
+    await ticket.textRaster(line, style: style);
+  }
+  _finishReceipt(ticket, paperWidth);
+  return ticket;
+}
+
+TextStyle _receiptRasterStyle(bool myanmar) => TextStyle(
+  fontSize: 24,
+  fontFamily: myanmar ? 'NotoSansMyanmarUI' : 'Inter',
+  fontFamilyFallback: myanmar
+      ? const ['NotoSansMyanmar', 'Inter']
+      : const ['NotoSansMyanmarUI', 'NotoSansMyanmar'],
+);
 
 const shopPrinterTestTextLines = <String>[
   'Shop',
@@ -262,6 +284,13 @@ String _formatMmk(int value) {
     output.write(digits[index]);
   }
   return output.toString();
+}
+
+String _formatReceiptTimestamp(int millis) {
+  final value = DateTime.fromMillisecondsSinceEpoch(millis).toLocal();
+  String two(int part) => part.toString().padLeft(2, '0');
+  return '${value.year}-${two(value.month)}-${two(value.day)} '
+      '${two(value.hour)}:${two(value.minute)}';
 }
 
 class Ipv4Subnet {
@@ -470,13 +499,13 @@ class PrinterDiscoveryService {
       );
       final ticket = await Ticket.create(paperWidth.paperSize);
       for (final line in shopPrinterTestTextLines) {
-        await ticket.textRaster(line);
+        await ticket.textRaster(line, style: _receiptRasterStyle(true));
       }
       _finishReceipt(ticket, paperWidth);
       await manager.printTicket(ticket);
       await manager.disconnect();
     } finally {
-      manager.dispose();
+      await manager.dispose();
     }
   }
 

@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:cryptography/cryptography.dart';
 import 'package:drift/drift.dart' show Variable;
@@ -17,6 +19,7 @@ import 'package:supermega_shop/shop_cash_shift_screen.dart';
 import 'package:supermega_shop/shop_copy.dart';
 import 'package:supermega_shop/shop_database.dart';
 import 'package:supermega_shop/shop_models.dart';
+import 'package:unified_esc_pos_printer/unified_esc_pos_printer.dart';
 
 const _testCorrectionKeyId = 'shop-test-2026';
 const _testCorrectionPublicKey = 'A6EHv_POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg';
@@ -2943,6 +2946,141 @@ void main() {
   );
 
   group('bounded printer discovery', () {
+    test('receipt raster profiles emit aligned bounded ESC POS rows', () async {
+      final receipt = ShopSaleReceipt(
+        id: 'profile-sale',
+        operationId: 'profile-sale',
+        totalMmk: 125000,
+        createdAtMillis: DateTime(2026, 10, 23, 9, 30).millisecondsSinceEpoch,
+        paymentMethod: 'cash',
+        lines: const [
+          ShopSaleReceiptLine(
+            productId: 'tea',
+            productName: 'လက်ဖက်ရည် နို့ဆီ ချိုချို',
+            unitPriceMmk: 2500,
+            quantity: 50,
+            lineTotalMmk: 125000,
+          ),
+        ],
+      );
+      final profiles = <(PaperSize, ReceiptPaperWidth)>[
+        (PaperSize.mm58, ReceiptPaperWidth.mm58),
+        (PaperSize.mm58Wide420, ReceiptPaperWidth.mm58),
+        (PaperSize.mm80, ReceiptPaperWidth.mm80),
+      ];
+
+      for (final myanmar in [false, true]) {
+        for (final (paperSize, paperWidth) in profiles) {
+          final ticket = await buildShopReceiptTicket(
+            receipt,
+            myanmar: myanmar,
+            paperWidth: paperWidth,
+            rasterPaperSize: paperSize,
+          );
+          final blocks = _rasterBlocks(ticket.bytes);
+          expect(blocks, isNotEmpty, reason: '${paperSize.name}/$myanmar');
+          expect(
+            blocks.every(
+              (block) =>
+                  block.widthBytes <= (paperSize.widthPixels + 7) ~/ 8 &&
+                  block.data.length == block.widthBytes * block.height &&
+                  block.hasInk,
+            ),
+            isTrue,
+            reason: '${paperSize.name}/$myanmar',
+          );
+          expect(
+            ticket.bytes.sublist(ticket.bytes.length - 3),
+            paperWidth.sendCutCommand ? [29, 86, 48] : [27, 100, 3],
+            reason: '${paperSize.name}/$myanmar',
+          );
+        }
+      }
+
+      final padded = await Ticket.create(PaperSize.mm58Wide420);
+      await padded.textRaster(
+        '420 dot padding proof',
+        textDirection: ui.TextDirection.rtl,
+      );
+      final paddedBlock = _rasterBlocks(padded.bytes).single;
+      expect(paddedBlock.widthBytes, 53);
+      expect(paddedBlock.hasInk, isTrue);
+      expect(
+        _unusedRasterBitsAreClear(paddedBlock, logicalWidthDots: 420),
+        isTrue,
+      );
+    });
+
+    test('actual network connector sends exact receipt bytes to loopback', () async {
+      final receipt = ShopSaleReceipt(
+        id: 'loopback-sale',
+        operationId: 'loopback-sale',
+        totalMmk: 2500,
+        createdAtMillis: 0,
+        paymentMethod: 'cash',
+      );
+      final ticket = await buildShopReceiptTicket(
+        receipt,
+        myanmar: true,
+        paperWidth: ReceiptPaperWidth.mm80,
+      );
+      final server = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+      final received = BytesBuilder(copy: false);
+      final receivedDone = Completer<void>();
+      server.listen((client) {
+        client.listen(
+          received.add,
+          onDone: () {
+            if (!receivedDone.isCompleted) receivedDone.complete();
+          },
+        );
+      });
+      final manager = PrinterManager();
+      try {
+        await manager.connect(
+          NetworkPrinterDevice(
+            name: 'loopback receipt sink',
+            host: InternetAddress.loopbackIPv4.address,
+            port: server.port,
+          ),
+        );
+        await manager.printTicket(ticket);
+        await manager.disconnect();
+        await receivedDone.future.timeout(const Duration(seconds: 2));
+        final bytes = received.takeBytes();
+        expect(bytes.take(2).toList(), [27, 64]);
+        expect(bytes.skip(2).toList(), ticket.bytes);
+      } finally {
+        await manager.dispose();
+        await server.close();
+      }
+    });
+
+    test('network connector reports connection refusal without retrying', () async {
+      final reservation = await ServerSocket.bind(
+        InternetAddress.loopbackIPv4,
+        0,
+      );
+      final refusedPort = reservation.port;
+      await reservation.close();
+      final manager = PrinterManager();
+      try {
+        await expectLater(
+          manager.connect(
+            NetworkPrinterDevice(
+              name: 'closed loopback receipt sink',
+              host: InternetAddress.loopbackIPv4.address,
+              port: refusedPort,
+            ),
+            timeout: const Duration(milliseconds: 250),
+          ),
+          throwsA(isA<PrinterConnectionException>()),
+        );
+      } finally {
+        await manager.dispose();
+      }
+    });
+
     test(
       'paper width persists and a changed profile requires retesting',
       () async {
@@ -3173,6 +3311,54 @@ void main() {
       );
     });
   });
+}
+
+List<({int widthBytes, int height, List<int> data, bool hasInk})> _rasterBlocks(
+  List<int> bytes,
+) {
+  final blocks =
+      <({int widthBytes, int height, List<int> data, bool hasInk})>[];
+  for (var index = 0; index + 8 <= bytes.length;) {
+    if (bytes[index] != 29 ||
+        bytes[index + 1] != 118 ||
+        bytes[index + 2] != 48) {
+      index++;
+      continue;
+    }
+    if (bytes[index + 3] != 0) {
+      throw StateError('Unexpected GS v 0 density mode.');
+    }
+    final widthBytes = bytes[index + 4] | (bytes[index + 5] << 8);
+    final height = bytes[index + 6] | (bytes[index + 7] << 8);
+    final dataLength = widthBytes * height;
+    if (index + 8 + dataLength > bytes.length) {
+      throw StateError('Truncated GS v 0 raster block.');
+    }
+    final data = bytes.sublist(index + 8, index + 8 + dataLength);
+    blocks.add((
+      widthBytes: widthBytes,
+      height: height,
+      data: data,
+      hasInk: data.any((byte) => byte != 0),
+    ));
+    index += 8 + dataLength;
+  }
+  return blocks;
+}
+
+bool _unusedRasterBitsAreClear(
+  ({int widthBytes, int height, List<int> data, bool hasInk}) block, {
+  required int logicalWidthDots,
+}) {
+  final unusedBits = block.widthBytes * 8 - logicalWidthDots;
+  if (unusedBits <= 0) return true;
+  final unusedMask = (1 << unusedBits) - 1;
+  for (var row = 0; row < block.height; row++) {
+    if ((block.data[(row + 1) * block.widthBytes - 1] & unusedMask) != 0) {
+      return false;
+    }
+  }
+  return true;
 }
 
 Future<ShopCorrectionAuthorization> _correctionAuthorization(

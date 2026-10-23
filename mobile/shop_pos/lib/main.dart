@@ -656,6 +656,8 @@ class ShopHome extends StatefulWidget {
     this.addProductRequest = 0,
     this.recoverMenuPhoto,
     this.cameraViewBuilder,
+    this.receiptPrinterSettings,
+    this.receiptPrintSender,
     super.key,
   });
 
@@ -673,6 +675,8 @@ class ShopHome extends StatefulWidget {
   final int addProductRequest;
   final Future<XFile?> Function()? recoverMenuPhoto;
   final ShopCameraViewBuilder? cameraViewBuilder;
+  final ReceiptPrinterSettings? receiptPrinterSettings;
+  final ReceiptPrintSender? receiptPrintSender;
 
   @override
   State<ShopHome> createState() => _ShopHomeState();
@@ -1674,6 +1678,25 @@ class _ShopHomeState extends State<ShopHome> {
       !_walletStarting &&
       _pendingWalletCheckout == null;
 
+  ReceiptPrinterSettings _printerSettings() =>
+      widget.receiptPrinterSettings ?? ReceiptPrinterSettings();
+
+  Future<void> _sendReceipt(
+    String host,
+    ShopSaleReceipt receipt,
+  ) async {
+    final sender = widget.receiptPrintSender;
+    if (sender != null) {
+      await sender(host, receipt, widget.myanmar);
+      return;
+    }
+    await ShopReceiptPrinter(settings: widget.receiptPrinterSettings).printSale(
+      host,
+      receipt,
+      myanmar: widget.myanmar,
+    );
+  }
+
   Future<void> _openCameraScanner() async {
     if (!shopCameraScanningSupported || !_canAcceptScan) return;
     final code = await Navigator.of(context).push<String>(
@@ -1765,36 +1788,57 @@ class _ShopHomeState extends State<ShopHome> {
     );
   }
 
-  Widget _searchField(List<ShopProduct> products) => TextField(
-    controller: _search,
-    focusNode: _searchFocus,
-    autofocus: defaultTargetPlatform == TargetPlatform.windows,
-    onChanged: (_) => setState(() {}),
-    // Keyboard scanners submit with Enter. Keep an already active scan field
-    // ready for the next item without opening a keyboard on an idle tablet.
-    onEditingComplete: () {},
-    onSubmitted: (value) => _acceptScannedCode(value, products),
-    decoration: InputDecoration(
-      isDense: MediaQuery.sizeOf(context).width < 380,
-      contentPadding: MediaQuery.sizeOf(context).width < 380
-          ? const EdgeInsets.symmetric(horizontal: 12, vertical: 8)
-          : null,
-      prefixIcon: const Icon(Icons.search),
-      hintText: _searchHint(products),
-      suffixIcon: _search.text.isEmpty
-          ? null
-          : IconButton(
-              tooltip: shopCopy(
-                widget.myanmar,
-                'Clear search',
-                'ရှာဖွေမှုဖျက်ရန်',
+  Widget _searchField(List<ShopProduct> products) => Focus(
+    skipTraversal: true,
+    canRequestFocus: false,
+    onKeyEvent: (_, event) {
+      // Many keyboard-wedge scanners can be configured to terminate with Tab
+      // instead of Enter. Consume that key only for an exact known code or a
+      // numeric barcode candidate; ordinary text searches keep Tab traversal.
+      final code = _search.text.trim();
+      final exactCode = products.any(
+        (item) => item.barcode == code || item.sku == code,
+      );
+      if (event is KeyDownEvent &&
+          event.logicalKey == LogicalKeyboardKey.tab &&
+          _searchFocus.hasFocus &&
+          (exactCode || RegExp(r'^[0-9]{6,64}$').hasMatch(code))) {
+        _acceptScannedCode(code, products);
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    },
+    child: TextField(
+      controller: _search,
+      focusNode: _searchFocus,
+      autofocus: defaultTargetPlatform == TargetPlatform.windows,
+      onChanged: (_) => setState(() {}),
+      // Keyboard scanners submit with Enter. Keep an already active scan field
+      // ready for the next item without opening a keyboard on an idle tablet.
+      onEditingComplete: () {},
+      onSubmitted: (value) => _acceptScannedCode(value, products),
+      decoration: InputDecoration(
+        isDense: MediaQuery.sizeOf(context).width < 380,
+        contentPadding: MediaQuery.sizeOf(context).width < 380
+            ? const EdgeInsets.symmetric(horizontal: 12, vertical: 8)
+            : null,
+        prefixIcon: const Icon(Icons.search),
+        hintText: _searchHint(products),
+        suffixIcon: _search.text.isEmpty
+            ? null
+            : IconButton(
+                tooltip: shopCopy(
+                  widget.myanmar,
+                  'Clear search',
+                  'ရှာဖွေမှုဖျက်ရန်',
+                ),
+                onPressed: () {
+                  _search.clear();
+                  setState(() {});
+                },
+                icon: const Icon(Icons.close),
               ),
-              onPressed: () {
-                _search.clear();
-                setState(() {});
-              },
-              icon: const Icon(Icons.close),
-            ),
+      ),
     ),
   );
 
@@ -3572,14 +3616,10 @@ class _ShopHomeState extends State<ShopHome> {
       var printFailed = false;
       var printerNeedsTest = false;
       try {
-        final printerSettings = ReceiptPrinterSettings();
+        final printerSettings = _printerSettings();
         final host = await printerSettings.readHost();
         if (host != null) {
-          await ShopReceiptPrinter().printSale(
-            host,
-            receipt,
-            myanmar: widget.myanmar,
-          );
+          await _sendReceipt(host, receipt);
           printed = true;
         } else {
           printerNeedsTest = await printerSettings.readSavedHost() != null;
@@ -3600,8 +3640,8 @@ class _ShopHomeState extends State<ShopHome> {
             : printFailed
             ? shopCopy(
                 widget.myanmar,
-                'Sale saved · ${_mmk(receipt.totalMmk)} · receipt not printed',
-                'အရောင်းသိမ်းပြီး · ${_mmk(receipt.totalMmk)} · ပြေစာမပုံနှိပ်နိုင်ပါ',
+                'Sale saved · ${_mmk(receipt.totalMmk)} · printing unconfirmed · check paper before retry',
+                'အရောင်းသိမ်းပြီး · ${_mmk(receipt.totalMmk)} · ပုံနှိပ်မှု မသေချာပါ · ထပ်မစမ်းမီ စာရွက်ကို စစ်ပါ',
               )
             : printerNeedsTest
             ? shopCopy(
@@ -3687,16 +3727,12 @@ class _ShopHomeState extends State<ShopHome> {
 
   Future<void> _printReceipt(ShopSaleReceipt receipt) async {
     try {
-      final host = await ReceiptPrinterSettings().readHost();
+      final host = await _printerSettings().readHost();
       if (host == null) {
         _openPrinter();
         return;
       }
-      await ShopReceiptPrinter().printSale(
-        host,
-        receipt,
-        myanmar: widget.myanmar,
-      );
+      await _sendReceipt(host, receipt);
       if (mounted) {
         _message(
           shopCopy(
@@ -3711,8 +3747,8 @@ class _ShopHomeState extends State<ShopHome> {
         _message(
           shopCopy(
             widget.myanmar,
-            'Sale is saved. Receipt could not print; check the printer and retry.',
-            'အရောင်းသိမ်းပြီးပါပြီ။ ပြေစာမပုံနှိပ်နိုင်ပါ။ ပရင်တာစစ်ပြီး ထပ်ကြိုးစားပါ။',
+            'Sale is saved. Printing could not be confirmed. Check the paper before retrying.',
+            'အရောင်းသိမ်းပြီးပါပြီ။ ပုံနှိပ်မှုကို အတည်မပြုနိုင်ပါ။ ထပ်မစမ်းမီ စာရွက်ကို စစ်ပါ။',
           ),
           action: SnackBarAction(
             label: shopCopy(widget.myanmar, 'Retry', 'ထပ်စမ်းရန်'),
@@ -3731,7 +3767,7 @@ class _ShopHomeState extends State<ShopHome> {
     );
     if (!mounted) return;
     try {
-      if (await ReceiptPrinterSettings().readHost() != null) {
+      if (await _printerSettings().readHost() != null) {
         await _printReceipt(receipt);
       } else if (mounted) {
         _message(
