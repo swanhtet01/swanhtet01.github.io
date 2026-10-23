@@ -2693,6 +2693,19 @@ void _removeV11ObjectsForLegacyFixture(Database connection) {
 }
 
 void _removeCorrectionObjectsKeepingProfile(Database connection) {
+  // Remove the v11 cash columns while the v12 binding guard's referenced
+  // correction tables still exist. The historical collision legitimately
+  // leaves that guard pointing at tables absent from its final schema, and
+  // SQLite reparses all triggers during ALTER TABLE.
+  for (final column in const [
+    'cash_reversal_count',
+    'cash_reversal_total_mmk',
+    'cash_drawer_outflow_mmk',
+    'review_cash_reversal_count',
+    'review_cash_drawer_outflow_mmk',
+  ]) {
+    connection.execute('ALTER TABLE shop_cash_shifts DROP COLUMN $column');
+  }
   connection.execute('DROP TABLE shop_wallet_reversal_reconciliations');
   connection.execute('DROP TABLE shop_sale_reversal_lines');
   connection.execute('DROP TABLE shop_sale_reversals');
@@ -2703,15 +2716,6 @@ void _removeCorrectionObjectsKeepingProfile(Database connection) {
   ]) {
     connection.execute('DROP TRIGGER ${table}_no_update');
     connection.execute('DROP TRIGGER ${table}_no_delete');
-  }
-  for (final column in const [
-    'cash_reversal_count',
-    'cash_reversal_total_mmk',
-    'cash_drawer_outflow_mmk',
-    'review_cash_reversal_count',
-    'review_cash_drawer_outflow_mmk',
-  ]) {
-    connection.execute('ALTER TABLE shop_cash_shifts DROP COLUMN $column');
   }
 }
 

@@ -2437,6 +2437,10 @@ void main() {
         await database.customStatement(
           'DROP TABLE shop_managed_workspace_binding',
         );
+        await database.customStatement(
+          'DROP TABLE shop_v13_migration_provenance',
+        );
+        await database.customStatement('DROP TABLE shop_business_profile');
         for (final table in const [
           'shop_sale_reversals',
           'shop_sale_reversal_lines',

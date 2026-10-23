@@ -1288,6 +1288,16 @@ class ShopDatabase extends _$ShopDatabase {
           origin == _ShopUpgradeOrigin.profileV11 ||
           origin == _ShopUpgradeOrigin.profileWorkspaceCollisionV12;
       if (needsCorrectionSchema) {
+        // The historical profile/workspace collision can retain a binding
+        // guard that references the correction tables it never received.
+        // Remove it before DDL reparses every trigger; the workspace repair
+        // below recreates the exact guard after the correction tables exist.
+        if (origin == _ShopUpgradeOrigin.profileWorkspaceCollisionV12) {
+          await customStatement(
+            'DROP TRIGGER shop_managed_workspace_binding_insert_guard',
+          );
+        }
+        await _createSaleReversalTables();
         await _ensureColumn(
           'shop_cash_shifts',
           'cash_reversal_count',
@@ -1313,7 +1323,6 @@ class ShopDatabase extends _$ShopDatabase {
           'review_cash_drawer_outflow_mmk',
           'INTEGER',
         );
-        await _createSaleReversalTables();
       }
       final needsWorkspaceSchema =
           from < 12 ||
