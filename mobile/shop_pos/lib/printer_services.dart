@@ -235,7 +235,7 @@ List<String> shopReceiptTextLines(
 }) => [
   'SHOP',
   myanmar ? 'အရောင်းပြေစာ' : 'SALE RECEIPT',
-  'Sale ${receipt.id}',
+  '${myanmar ? 'အရောင်းအမှတ်' : 'Sale'} ${receipt.id}',
   _formatReceiptTimestamp(receipt.createdAtMillis),
   '',
   for (final line in receipt.lines) ...[
@@ -244,8 +244,16 @@ List<String> shopReceiptTextLines(
   ],
   '',
   '${myanmar ? 'စုစုပေါင်း' : 'TOTAL'}: ${_formatMmk(receipt.totalMmk)} MMK',
-  '${myanmar ? 'ငွေပေးချေမှု' : 'Payment'}: ${receipt.paymentMethod.toUpperCase()}',
+  '${myanmar ? 'ငွေပေးချေမှု' : 'Payment'}: ${_receiptPaymentName(receipt.paymentMethod, myanmar: myanmar)}',
 ];
+
+String _receiptPaymentName(String method, {required bool myanmar}) =>
+    switch (method) {
+      'cash' => myanmar ? 'ငွေသား' : 'Cash',
+      'kbzpay' => 'KBZPay',
+      'wavepay' => 'WavePay',
+      _ => method,
+    };
 
 Future<Ticket> buildShopReceiptTicket(
   ShopSaleReceipt receipt, {

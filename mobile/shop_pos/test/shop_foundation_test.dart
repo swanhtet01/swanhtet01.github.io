@@ -519,7 +519,17 @@ void main() {
         expect(shopPrinterTestTextLines, isNot(contains('SuperMega Shop')));
         expect(printLines, contains('လက်ဖက်ရည် x2'));
         expect(printLines, contains('စုစုပေါင်း: 5,000 MMK'));
-        expect(printLines, contains('ငွေပေးချေမှု: CASH'));
+        expect(printLines, contains('အရောင်းအမှတ် ${receipt.id}'));
+        expect(printLines, contains('ငွေပေးချေမှု: ငွေသား'));
+        expect(printLines, isNot(contains('Sale ${receipt.id}')));
+        expect(printLines, isNot(contains('CASH')));
+
+        final englishPrintLines = shopReceiptTextLines(
+          receipt,
+          myanmar: false,
+        );
+        expect(englishPrintLines, contains('Sale ${receipt.id}'));
+        expect(englishPrintLines, contains('Payment: Cash'));
       },
     );
 
