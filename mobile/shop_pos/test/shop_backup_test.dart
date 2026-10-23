@@ -36,12 +36,20 @@ Future<void> _pumpUntil(
       await Future<void>.delayed(const Duration(milliseconds: 25));
     });
   }
+  await tester.pump();
+  if (finder.evaluate().isNotEmpty) return;
+  if (await databaseVerifier?.service(tester) ?? false) {
+    await tester.pump();
+    if (finder.evaluate().isNotEmpty) return;
+  }
   throw TestFailure('The expected Shop state did not appear: $finder');
 }
 
 class _DatabaseCloseRecorder {
   final _started = Completer<void>();
   Future<void>? _completion;
+
+  bool get started => _started.isCompleted;
 
   Future<void> call(ShopDatabase database) {
     final completion = database.close();
@@ -62,15 +70,25 @@ class _DatabaseCloseRecorder {
 
 Future<void> _disposeOpenedStartup(
   WidgetTester tester,
-  _DatabaseCloseRecorder closeRecorder,
-) async {
+  _DatabaseCloseRecorder closeRecorder, {
+  required bool closeExpected,
+}) async {
+  debugPrint('[shop-startup-test] disposal requested');
   await tester.pumpWidget(const SizedBox.shrink());
+  if (!closeExpected && !closeRecorder.started) {
+    debugPrint('[shop-startup-test] disposal had no opened database to close');
+    return;
+  }
   await tester.runAsync(closeRecorder.wait);
+  debugPrint('[shop-startup-test] disposal completed');
 }
 
 Future<void> _verifyStartupDatabase(File file) async {
   ShopBackup.verifySnapshot(file, allowRuntimeUnboundCorrectionHistory: true);
 }
+
+ShopDatabase _openStartupDatabase(Directory documents) =>
+    ShopDatabase(NativeDatabase(ShopDatabase.privateDatabaseFile(documents)));
 
 class _OpenedDatabaseVerification {
   const _OpenedDatabaseVerification(this.database, this.completion);
@@ -81,11 +99,15 @@ class _OpenedDatabaseVerification {
 
 class _OpenedDatabaseVerifier {
   _OpenedDatabaseVerification? _pending;
+  bool _serviced = false;
+
+  bool get wasServiced => _serviced;
 
   Future<void> call(ShopDatabase database) {
     if (_pending != null) {
       throw StateError('A Shop database verification is already pending.');
     }
+    debugPrint('[shop-startup-test] eager verification requested');
     final completion = Completer<void>();
     _pending = _OpenedDatabaseVerification(database, completion);
     return completion.future;
@@ -95,29 +117,29 @@ class _OpenedDatabaseVerifier {
     final request = _pending;
     if (request == null) return false;
     _pending = null;
+    _serviced = true;
 
-    Object? failure;
-    StackTrace? failureStack;
-    try {
-      await tester.runAsync(() async {
-        try {
-          await request.database.verifyReadyForUse();
-        } catch (error, stackTrace) {
-          failure = error;
-          failureStack = stackTrace;
-        }
-      });
-    } catch (error, stackTrace) {
-      failure = error;
-      failureStack = stackTrace;
-    }
+    Object? verificationFailure;
+    StackTrace? verificationFailureStack;
+    debugPrint('[shop-startup-test] verifier service started');
+    await tester.runAsync(() async {
+      try {
+        await request.database.verifyReadyForUse();
+      } catch (error, stackTrace) {
+        verificationFailure = error;
+        verificationFailureStack = stackTrace;
+      }
+    });
 
-    final error = failure;
+    final error = verificationFailure;
     if (error == null) {
+      debugPrint('[shop-startup-test] verifier service accepted database');
       request.completion.complete();
     } else {
-      request.completion.completeError(error, failureStack!);
+      debugPrint('[shop-startup-test] verifier service rejected database');
+      request.completion.completeError(error, verificationFailureStack!);
     }
+    debugPrint('[shop-startup-test] verifier service completed');
     return true;
   }
 }
@@ -2705,6 +2727,7 @@ void main() {
               const MaterialApp(home: Scaffold(body: Text('Opened Shop'))),
           closeDatabase: closeRecorder.call,
           verifyDatabaseFile: _verifyStartupDatabase,
+          databaseFactory: _openStartupDatabase,
           verifyOpenedDatabase: databaseVerifier.call,
         ),
       );
@@ -2742,7 +2765,11 @@ void main() {
         restored.close();
       }
     } finally {
-      await _disposeOpenedStartup(tester, closeRecorder);
+      await _disposeOpenedStartup(
+        tester,
+        closeRecorder,
+        closeExpected: databaseVerifier.wasServiced,
+      );
       documents.deleteSync(recursive: true);
     }
   });
@@ -2765,6 +2792,7 @@ void main() {
             return const MaterialApp(home: Scaffold(body: Text('Opened Shop')));
           },
           closeDatabase: closeRecorder.call,
+          databaseFactory: _openStartupDatabase,
           verifyOpenedDatabase: databaseVerifier.call,
         ),
       );
@@ -2780,7 +2808,11 @@ void main() {
       expect(ShopDatabase.privateDatabaseFile(documents).existsSync(), isTrue);
       expect(opened, isNotNull);
     } finally {
-      await _disposeOpenedStartup(tester, closeRecorder);
+      await _disposeOpenedStartup(
+        tester,
+        closeRecorder,
+        closeExpected: databaseVerifier.wasServiced,
+      );
       documents.deleteSync(recursive: true);
     }
   });
@@ -2805,6 +2837,7 @@ void main() {
               throw StateError('synthetic builder failure');
             },
             closeDatabase: closeRecorder.call,
+            databaseFactory: _openStartupDatabase,
             verifyOpenedDatabase: databaseVerifier.call,
           ),
         );
@@ -2822,8 +2855,11 @@ void main() {
         expect(find.text('Restore backup'), findsNothing);
         expect(tester.takeException(), isNull);
       } finally {
-        await tester.pumpWidget(const SizedBox.shrink());
-        await tester.runAsync(closeRecorder.wait);
+        await _disposeOpenedStartup(
+          tester,
+          closeRecorder,
+          closeExpected: databaseVerifier.wasServiced,
+        );
         documents.deleteSync(recursive: true);
       }
     },
@@ -2846,6 +2882,7 @@ void main() {
               const MaterialApp(home: Scaffold(body: Text('Opened Shop'))),
           closeDatabase: closeRecorder.call,
           verifyDatabaseFile: _verifyStartupDatabase,
+          databaseFactory: _openStartupDatabase,
           verifyOpenedDatabase: databaseVerifier.call,
         ),
       );
@@ -2868,7 +2905,11 @@ void main() {
       await tester.pump(const Duration(milliseconds: 1));
       expect(find.text('Opened Shop'), findsOneWidget);
     } finally {
-      await _disposeOpenedStartup(tester, closeRecorder);
+      await _disposeOpenedStartup(
+        tester,
+        closeRecorder,
+        closeExpected: databaseVerifier.wasServiced,
+      );
       documents.deleteSync(recursive: true);
     }
   });
@@ -2923,6 +2964,7 @@ void main() {
           },
           closeDatabase: closeRecorder.call,
           verifyDatabaseFile: _verifyStartupDatabase,
+          databaseFactory: _openStartupDatabase,
           verifyOpenedDatabase: databaseVerifier.call,
         ),
       );
@@ -2937,7 +2979,11 @@ void main() {
       expect(opened, isNotNull);
       ShopBackup.verifySnapshot(ShopDatabase.privateDatabaseFile(documents));
     } finally {
-      await _disposeOpenedStartup(tester, closeRecorder);
+      await _disposeOpenedStartup(
+        tester,
+        closeRecorder,
+        closeExpected: databaseVerifier.wasServiced,
+      );
       documents.deleteSync(recursive: true);
     }
   });

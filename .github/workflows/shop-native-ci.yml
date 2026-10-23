@@ -46,6 +46,9 @@ jobs:
       - name: Check first-sale widget in isolation
         run: timeout --signal=TERM --kill-after=10s 90s flutter test test/widget_test.dart --plain-name 'empty catalog can make a durable cash sale' --reporter expanded --timeout 60s
 
+      - name: Check first-run restore in isolation
+        run: timeout --signal=TERM --kill-after=10s 60s flutter test test/shop_backup_test.dart --plain-name 'fresh install restores before Shop opens' --reporter expanded --timeout 45s
+
       - name: Run Flutter tests
         run: timeout --signal=TERM --kill-after=10s 180s flutter test --concurrency=1 --reporter expanded --timeout 2m
 
