@@ -1027,7 +1027,7 @@ function expectedPath(spec) {
 }
 
 export function expectedText(spec, publicHomepageExpectedText) {
-  if (spec.surface === 'transition') return ['Login', 'Login is currently unavailable.', 'Contact support for account access.']
+  if (spec.surface === 'transition') return ['Login', 'Login is currently unavailable.', 'Shop pilot access is issued during assisted setup.', 'Contact us about Shop']
   if (spec.surface === 'public') {
     if (!Array.isArray(publicHomepageExpectedText) || publicHomepageExpectedText.length !== 5) {
       fail('exact_app_preview_public_expected_text_invalid')

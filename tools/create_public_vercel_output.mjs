@@ -681,6 +681,38 @@ body[data-view="shop"] .shop-hero h1 { max-width: none; }
 body[data-view="shop"] .shop-hero-copy > p { max-width: 52ch; }
 body[data-view="shop"] .shop-hero-app { width: 100%; max-width: 1100px; justify-self: center; }
 body[data-view="shop"] .shop-lead-capture { max-width: none; margin: 0; padding: 10px; border-color: #dfe5ee; border-radius: 13px; box-shadow: 0 20px 44px rgba(20,35,65,.10); }
+body[data-view="shop"] .shop-story-section { padding-block: clamp(54px,7vw,92px); }
+body[data-view="shop"] .shop-story-section:nth-of-type(even) { background: #f6f8fc; }
+body[data-view="shop"] .shop-section-heading { max-width: 700px; margin-bottom: clamp(28px,4vw,48px); }
+body[data-view="shop"] .shop-section-heading .eyebrow { margin: 0 0 10px; }
+body[data-view="shop"] .shop-section-heading h2 { max-width: 18ch; margin: 0; color: #121826; font-size: clamp(32px,4vw,52px); line-height: 1.08; letter-spacing: -.035em; }
+body[data-view="shop"] .shop-section-heading p { max-width: 58ch; margin: 16px 0 0; color: #4f5b6e; font-size: 17px; line-height: 1.65; }
+body[data-view="shop"] .shop-workflow-grid, body[data-view="shop"] .shop-template-grid, body[data-view="shop"] .shop-platform-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 16px; }
+body[data-view="shop"] .shop-workflow-card, body[data-view="shop"] .shop-template-card, body[data-view="shop"] .shop-platform-card { min-width: 0; padding: 24px; border: 1px solid #dfe5ee; border-radius: 14px; background: #fff; }
+body[data-view="shop"] .shop-step { display: inline-grid; place-items: center; width: 32px; height: 32px; margin-bottom: 28px; border-radius: 999px; color: #1d4ed8; background: #eaf1ff; font-size: 13px; font-weight: 750; }
+body[data-view="shop"] .shop-workflow-card h3, body[data-view="shop"] .shop-template-card h3, body[data-view="shop"] .shop-platform-card h3 { margin: 0; color: #121826; font-size: 20px; line-height: 1.25; }
+body[data-view="shop"] .shop-workflow-card p, body[data-view="shop"] .shop-template-card p, body[data-view="shop"] .shop-platform-card p { margin: 10px 0 0; color: #596579; font-size: 15px; line-height: 1.65; }
+body[data-view="shop"] .shop-evidence-list { display: grid; gap: clamp(44px,6vw,76px); }
+body[data-view="shop"] .shop-evidence { display: grid; grid-template-columns: minmax(220px,.7fr) minmax(0,1.3fr); align-items: center; gap: clamp(28px,5vw,72px); }
+body[data-view="shop"] .shop-evidence:nth-child(even) { grid-template-columns: minmax(0,1.3fr) minmax(220px,.7fr); }
+body[data-view="shop"] .shop-evidence:nth-child(even) .shop-evidence-copy { order: 2; }
+body[data-view="shop"] .shop-evidence-copy h3 { margin: 0; color: #121826; font-size: clamp(28px,3vw,40px); line-height: 1.12; letter-spacing: -.025em; }
+body[data-view="shop"] .shop-evidence-copy p { margin: 14px 0 0; color: #4f5b6e; font-size: 16px; line-height: 1.65; }
+body[data-view="shop"] .shop-evidence figure { min-width: 0; margin: 0; }
+body[data-view="shop"] .shop-evidence picture, body[data-view="shop"] .shop-evidence img { display: block; width: 100%; }
+body[data-view="shop"] .shop-evidence img { height: auto; border: 1px solid #dfe5ee; border-radius: 12px; background: #fff; box-shadow: 0 18px 42px rgba(20,35,65,.08); }
+body[data-view="shop"] .shop-evidence figcaption { padding-top: 10px; color: #667085; font-size: 12px; line-height: 1.5; }
+body[data-view="shop"] .shop-template-grid { grid-template-columns: repeat(4,minmax(0,1fr)); }
+body[data-view="shop"] .shop-template-card { padding: 22px; }
+body[data-view="shop"] .shop-access-panel { display: grid; grid-template-columns: minmax(0,.85fr) minmax(0,1.15fr); gap: clamp(28px,5vw,72px); align-items: start; padding: clamp(28px,4vw,48px); border: 1px solid #d8deea; border-radius: 16px; background: #111a2e; color: #fff; }
+body[data-view="shop"] .shop-access-panel .shop-section-heading { margin: 0; }
+body[data-view="shop"] .shop-access-panel .eyebrow, body[data-view="shop"] .shop-access-panel h2 { color: #fff; }
+body[data-view="shop"] .shop-access-panel .shop-section-heading p { color: #c9d2e3; }
+body[data-view="shop"] .shop-access-steps { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; counter-reset: access; }
+body[data-view="shop"] .shop-access-steps li { position: relative; min-height: 74px; padding: 0 0 22px 48px; border-left: 1px solid #46516a; color: #dbe3f1; line-height: 1.6; counter-increment: access; }
+body[data-view="shop"] .shop-access-steps li:last-child { min-height: 0; padding-bottom: 0; border-left-color: transparent; }
+body[data-view="shop"] .shop-access-steps li::before { position: absolute; top: 0; left: -17px; display: grid; place-items: center; width: 32px; height: 32px; border: 1px solid #77839d; border-radius: 999px; background: #111a2e; content: counter(access); font-size: 12px; font-weight: 750; }
+body[data-view="shop"] .shop-access-note { margin: 26px 0 0; color: #667085; font-size: 14px; line-height: 1.65; }
 body[data-view="shop"] .shop-inventory-proof { padding-block: clamp(44px,6vw,78px); background: #fff; }
 body[data-view="shop"] .shop-inventory-proof .wrap { display: grid; grid-template-columns: minmax(220px,.7fr) minmax(0,1fr); align-items: center; gap: clamp(28px,5vw,76px); }
 body[data-view="shop"] .shop-inventory-proof-copy { max-width: 360px; }
@@ -702,6 +734,14 @@ body[data-view="contact"] .contact-page .contact-form .button { width: max-conte
   body[data-view="shop"] .shop-hero .button-primary { width: 100%; justify-content: center; }
   body[data-view="shop"] .shop-inventory-proof .wrap { grid-template-columns: 1fr; }
   body[data-view="shop"] .shop-inventory-proof-copy { max-width: 540px; }
+  body[data-view="shop"] .shop-story-section { padding-block: 48px; }
+  body[data-view="shop"] .shop-section-heading h2 { font-size: 32px; line-height: 1.16; }
+  body[data-view="shop"] .shop-workflow-grid, body[data-view="shop"] .shop-template-grid, body[data-view="shop"] .shop-platform-grid { grid-template-columns: 1fr; }
+  body[data-view="shop"] .shop-workflow-card, body[data-view="shop"] .shop-template-card, body[data-view="shop"] .shop-platform-card { padding: 20px; }
+  body[data-view="shop"] .shop-step { margin-bottom: 18px; }
+  body[data-view="shop"] .shop-evidence, body[data-view="shop"] .shop-evidence:nth-child(even) { grid-template-columns: 1fr; gap: 20px; }
+  body[data-view="shop"] .shop-evidence:nth-child(even) .shop-evidence-copy { order: 0; }
+  body[data-view="shop"] .shop-access-panel { grid-template-columns: 1fr; padding: 26px 22px; }
   body[data-view="contact"] .contact-page { padding-block: 32px 52px; }
   body[data-view="contact"] .contact-page .contact-form { padding: 20px; }
   body[data-view="contact"] .contact-page .contact-form .button { width: 100%; }
@@ -709,7 +749,9 @@ body[data-view="contact"] .contact-page .contact-form .button { width: max-conte
 @media (max-width: 1100px) {
   body[data-view="shop"] .shop-hero .wrap { grid-template-columns: minmax(0,1fr); gap: 28px; }
   body[data-view="shop"] .shop-hero-copy { max-width: 720px; }
+  body[data-view="shop"] .shop-template-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
 }
+@media (max-width: 760px) { body[data-view="shop"] .shop-template-grid { grid-template-columns: 1fr; } }
 @media (min-width: 761px) and (max-width: 1100px) { body[data-view="shop"] .shop-hero-copy { margin-inline: auto; text-align: center; justify-items: center; } body[data-view="shop"] .shop-hero h1 { max-width: 22ch; } }
 `).replace(/\r\n?/g, '\n')
 
@@ -865,6 +907,55 @@ function nativeShopHero(locale = 'en') {
  const disclosure = my ? 'နမူနာဒေတာဖြင့် ဖော်ပြထားသော Shop အက်ပ်မြင်ကွင်း။' : 'Illustrative Shop preview with synthetic sample data.'
  return `<section class="native-shop-gallery" aria-label="${my ? 'Shop အက်ပ် လုပ်ငန်းစဉ်များ' : 'Shop product workflows'}"><div class="wrap"><div class="native-shop-tableau" role="group" aria-label="${my ? 'ရောင်းချမှု၊ ကုန်လက်ကျန်နှင့် ယနေ့လုပ်ငန်းအချက်များ' : 'Selling, stock and daily attention'}">${primary}${stock}${today}</div><p class="native-shop-disclosure">${disclosure}</p></div></section>`
 }
+function shopEvidenceImage(file, alt, caption, mobileFile = null) {
+ const asset = nativeShopGallery.assets.find(item => item.file === file)
+ const mobileAsset = mobileFile ? nativeShopGallery.assets.find(item => item.file === mobileFile) : null
+ assert(asset, `native_shop_story_asset_missing:${file}`)
+ if (mobileFile) assert(mobileAsset, `native_shop_story_asset_missing:${mobileFile}`)
+ return `<figure><picture>${mobileFile ? `<source media="(max-width:650px)" srcset="/images/native-shop/${mobileFile}" width="${mobileAsset.width}" height="${mobileAsset.height}" />` : ''}<img src="/images/native-shop/${file}" alt="${escapeHtml(alt)}" width="${asset.width}" height="${asset.height}" loading="lazy" /></picture><figcaption>${escapeHtml(caption)}</figcaption></figure>`
+}
+function shopLandingSections(locale = 'en') {
+ const my = locale === 'my'
+ const copy = my ? {
+  loopEyebrow: 'ကောင်တာတွင် အလုပ်လုပ်ပုံ', loopTitle: 'အရောင်းတစ်ခုကို ရှင်းလင်းစွာ ပြီးမြောက်စေပါ။', loopBody: 'ပစ္စည်းရှာခြင်းမှ ယနေ့အခြေအနေ ပြန်ကြည့်ခြင်းအထိ လုပ်ငန်းစဉ်တစ်ခုတည်းတွင် ဆက်လုပ်ပါ။',
+  steps: [['ရှာပါ သို့မဟုတ် စကင်ဖတ်ပါ', 'ပစ္စည်းအမည်၊ SKU သို့မဟုတ် ဘားကုဒ်ဖြင့် ခြင်းထဲထည့်ပါ။'], ['စုစုပေါင်းကို စစ်ပြီး ငွေလက်ခံပါ', 'အပြီးသတ်မီ ပစ္စည်း၊ အရေအတွက်နှင့် ငွေပေးချေမှုကို ပြန်စစ်ပါ။'], ['ကုန်လက်ကျန်နှင့် ယနေ့အခြေအနေကို ကြည့်ပါ', 'အရောင်းပြီးသည်နှင့် ကုန်လက်ကျန်နှင့် အာရုံစိုက်ရန်အချက်များကို သိနိုင်ပါသည်။']],
+  proofEyebrow: 'တကယ်မြင်ရမည့် လုပ်ငန်းစဉ်', proofTitle: 'လိုအပ်သောအချက်ကို လွယ်ကူစွာ မြင်နိုင်ပါစေ။', proofBody: 'ဤပုံများသည် နမူနာဒေတာဖြင့် ဖော်ပြထားသော လက်ရှိ Shop အက်ပ်မှ ဖြစ်ပါသည်။',
+  evidence: [['ရောင်းချမှု ရှင်းလင်းပါစေ', 'ရှာဖွေမှု၊ ခြင်းနှင့် ငွေပေးချေမှုကို တစ်နေရာတည်းတွင် ပြန်စစ်ပြီးမှ အပြီးသတ်ပါ။'], ['ကုန်လက်ကျန်ကို သိထားပါ', 'လက်ရှိအရေအတွက်နှင့် အာရုံစိုက်ရန် ပစ္စည်းများကို ကြည့်ပါ။'], ['ယနေ့လုပ်ငန်းကို ပြန်ကြည့်ပါ', 'နေ့စဉ်အရောင်းနှင့် ဆက်လက်လုပ်ဆောင်ရန် အချက်များကို တစ်နေရာတည်းတွင် ကြည့်ပါ။']],
+  captions: ['နမူနာဒေတာဖြင့် ရောင်းချမှုမြင်ကွင်း', 'နမူနာဒေတာဖြင့် ကုန်လက်ကျန်မြင်ကွင်း', 'နမူနာဒေတာဖြင့် ယနေ့မြင်ကွင်း'],
+  templatesEyebrow: 'ပြင်ဆင်နိုင်သော အစပျိုးပုံစံများ', templatesTitle: 'သင့်ဆိုင်ပုံစံမှ စတင်ပါ။', templatesBody: 'ပုံစံတစ်ခုကို ရွေးပြီး ကုန်ပစ္စည်း၊ အမျိုးအစားနှင့် လုပ်ငန်းစဉ်ကို သင့်ဆိုင်အတွက် ပြင်ဆင်ပါ။ ၎င်းတို့သည် စာရင်းသွင်းအစီအစဉ်များ မဟုတ်ပါ။',
+  templates: [['မီနီမတ်', 'နေ့စဉ်သုံးကုန်နှင့် ဘားကုဒ်ရောင်းချမှုအတွက်။'], ['လက်ဖက်ရည်နှင့် ကော်ဖီ', 'အချိုရည်နှင့် မှာယူပြီး ပြင်ဆင်ရသည့် ပစ္စည်းများအတွက်။'], ['ဖက်ရှင်', 'အရွယ်အစား၊ အရောင်နှင့် အပိုပစ္စည်းများအတွက်။'], ['အလှအပနှင့် စပါ', 'အလှကုန်၊ အိမ်သုံးပစ္စည်းနှင့် ဝန်ဆောင်မှုရောင်းချသူများအတွက်။']],
+  accessEyebrow: 'Shop ရယူရန်', accessTitle: 'Local Pilot ဖြင့် အကူအညီပေး၍ စတင်ပါ။', accessBody: 'အများပြည်သူအတွက် ဒေါင်းလုဒ်နှင့် ကိုယ်တိုင်အကောင့်ဖွင့်ခြင်းကို မဖွင့်ရသေးပါ။ Pilot အကောင့်ကို စတင်တပ်ဆင်စဉ် ထုတ်ပေးပါသည်။',
+  accessSteps: ['သင်ရောင်းသည့်ပစ္စည်းနှင့် လက်ရှိလုပ်ငန်းစဉ်ကို ပြောပြပါ။', 'SuperMega က စက်နှင့် လုပ်ငန်းစဉ် ကိုက်ညီမှုကို စစ်ဆေးပါမည်။', 'လက်မှတ်ထိုးထားသော pilot အက်ပ် အဆင်သင့်ဖြစ်သောအခါ အကူအညီဖြင့် တပ်ဆင်ပေးပါမည်။'],
+  platformEyebrow: 'စက်အမျိုးအစား', platformTitle: 'Pilot အတွက် ရည်ရွယ်ထားသော စက်များ။', platformBody: 'Android tablet၊ iPad နှင့် Windows PC ကို ရည်ရွယ်ထားပါသည်။ အများပြည်သူဒေါင်းလုဒ် မရှိသေးပါ။',
+  platforms: [['Android tablet', 'Pilot ရည်ရွယ်ချက်။ လက်မှတ်ထိုးထားသော ဖြန့်ချိမှု မရသေးပါ။'], ['iPad', 'Pilot ရည်ရွယ်ချက်။ လက်မှတ်ထိုးထားသော ဖြန့်ချိမှု မရသေးပါ။'], ['Windows PC', 'Pilot ရည်ရွယ်ချက်။ လက်မှတ်ထိုးထားသော installer မရသေးပါ။']],
+  platformNote: 'Web app၊ macOS နှင့် iPhone ကို လက်ရှိ customer Shop ထုတ်ကုန်အဖြစ် မပေးသေးပါ။ ပုံမှန်ရောင်းချမှုသည် အင်တာနက်မကောင်းသည့်အချိန်တွင် ဆက်လုပ်နိုင်သော်လည်း manager correction သည် online authorization လိုအပ်ပါသည်။',
+ } : {
+  loopEyebrow: 'How it works at the counter', loopTitle: 'One clear loop for every sale.', loopBody: 'Move from finding an item to reviewing the day without switching between disconnected tools.',
+  steps: [['Search or scan', 'Find by product name, SKU or barcode and add the right item to the basket.'], ['Review the total and take payment', 'Confirm items, quantities and payment before the sale is completed.'], ['Check stock and Today', 'See updated stock and the items that need attention after the sale.']],
+  proofEyebrow: 'Product evidence', proofTitle: 'See the work, not a device slideshow.', proofBody: 'These are current Shop app views shown with illustrative sample records.',
+  evidence: [['Keep the sale clear', 'Search, basket and payment review stay together so the cashier can confirm the sale before completing it.'], ['Know what is in stock', 'See on-hand quantities and the products that need attention.'], ['Review the day', 'See daily sales and follow-up items from one calm Today view.']],
+  captions: ['Sale view with illustrative sample records', 'Stock view with illustrative sample records', 'Today view with illustrative sample records'],
+  templatesEyebrow: 'Editable starting points', templatesTitle: 'Start with the shape of your shop.', templatesBody: 'Choose a starting preset, then edit products, categories and workflow for your business. Templates are not subscription plans.',
+  templates: [['Mini-mart', 'For everyday goods and barcode-led selling.'], ['Tea and coffee', 'For drinks and made-to-order items.'], ['Fashion', 'For sizes, colours and accessories.'], ['Beauty and spa', 'For beauty, household and service sellers.']],
+  accessEyebrow: 'How to get Shop', accessTitle: 'Start with an assisted Local Pilot.', accessBody: 'Public downloads and self-service signup are not open yet. Pilot account access is issued during assisted setup.',
+  accessSteps: ['Tell us what you sell and how your counter works today.', 'SuperMega confirms the device and workflow fit.', 'When the signed pilot build is ready, we provide it with assisted setup.'],
+  platformEyebrow: 'Platform availability', platformTitle: 'Pilot devices, stated honestly.', platformBody: 'Android tablets, iPad and Windows PCs are the current pilot targets. There is no public installer yet.',
+  platforms: [['Android tablet', 'Pilot target. Signed distribution is still pending.'], ['iPad', 'Pilot target. Signed distribution is still pending.'], ['Windows PC', 'Pilot target. A signed installer is still pending.']],
+  platformNote: 'The web app, macOS and iPhone are not current customer Shop products. Normal selling can continue through an unreliable connection; manager correction requires online authorization.',
+ }
+ const suffix = my ? 'my' : 'en'
+ const images = [
+  shopEvidenceImage(`shop_checkout_1200_${suffix}.png`, my ? 'Shop ရောင်းချမှုနှင့် ခြင်းမြင်ကွင်း' : 'Shop sale and basket view', copy.captions[0], `shop_sell_390_${suffix}.png`),
+  shopEvidenceImage(`shop_stock_820_${suffix}.png`, my ? 'Shop ကုန်လက်ကျန်မြင်ကွင်း' : 'Shop stock view', copy.captions[1], `shop_stock_390_${suffix}.png`),
+  shopEvidenceImage(`shop_today_820_${suffix}.png`, my ? 'Shop ယနေ့မြင်ကွင်း' : 'Shop Today view', copy.captions[2], `shop_today_390_${suffix}.png`),
+ ]
+ const heading = (eyebrow, id, title, body) => `<div class="shop-section-heading"><p class="eyebrow">${eyebrow}</p><h2 id="${id}">${title}</h2><p>${body}</p></div>`
+ return `<section class="shop-story-section" aria-labelledby="shop-loop-title"><div class="wrap">${heading(copy.loopEyebrow, 'shop-loop-title', copy.loopTitle, copy.loopBody)}<div class="shop-workflow-grid">${copy.steps.map(([title, body], index) => `<article class="shop-workflow-card"><span class="shop-step">${index + 1}</span><h3>${title}</h3><p>${body}</p></article>`).join('')}</div></div></section>
+<section class="shop-story-section" aria-labelledby="shop-proof-title"><div class="wrap">${heading(copy.proofEyebrow, 'shop-proof-title', copy.proofTitle, copy.proofBody)}<div class="shop-evidence-list">${copy.evidence.map(([title, body], index) => `<article class="shop-evidence"><div class="shop-evidence-copy"><h3>${title}</h3><p>${body}</p></div>${images[index]}</article>`).join('')}</div></div></section>
+<section class="shop-story-section" aria-labelledby="shop-templates-title"><div class="wrap">${heading(copy.templatesEyebrow, 'shop-templates-title', copy.templatesTitle, copy.templatesBody)}<div class="shop-template-grid">${copy.templates.map(([title, body]) => `<article class="shop-template-card"><h3>${title}</h3><p>${body}</p></article>`).join('')}</div></div></section>
+<section class="shop-story-section" aria-labelledby="shop-access-title"><div class="wrap"><div class="shop-access-panel">${heading(copy.accessEyebrow, 'shop-access-title', copy.accessTitle, copy.accessBody)}<ol class="shop-access-steps">${copy.accessSteps.map(step => `<li>${step}</li>`).join('')}</ol></div></div></section>
+<section class="shop-story-section" aria-labelledby="shop-platform-title"><div class="wrap">${heading(copy.platformEyebrow, 'shop-platform-title', copy.platformTitle, copy.platformBody)}<div class="shop-platform-grid">${copy.platforms.map(([title, body]) => `<article class="shop-platform-card"><h3>${title}</h3><p>${body}</p></article>`).join('')}</div><p class="shop-access-note">${copy.platformNote}</p></div></section>`
+}
 function productStory(id, standalone = false) {
  const item=stories[id], label=publicProducts.find(product=>product.id===id).name
  const route=manifest.pages.find(page=>page.productId===id)?.route
@@ -906,7 +997,7 @@ function shopLandingHtml(product, page, locale = 'en') {
  }
  return documentHtml({route:page.route,title:page.title,description,shareImage:`/og-card-${product.id}.png`,locale,
   schema:{'@type':'Product',name:product.name,description,url:canonical(page.route)},
-  content:`<main id="content">${heroWithPreview}${nativeShopHero(locale)}</main>${productAction(product)}`})
+  content:`<main id="content">${heroWithPreview}${nativeShopHero(locale)}${shopLandingSections(locale)}</main>${productAction(product)}`})
 }
 
 function productLandingHtml(product,page) {

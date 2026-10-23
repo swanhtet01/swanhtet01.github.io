@@ -313,7 +313,7 @@ check(loginSource.includes('href={managedAccountRequestUrl(productIntent)}>Conta
 const unavailableLogin = loginSource.slice(loginSource.indexOf('aria-label="Login unavailable"'))
 check(unavailableLogin.includes('to="/?choose=1">Saved work on this device</Link>'), 'unavailable login preserves access to existing device work')
 check(!unavailableLogin.includes('to={signupPath}'), 'unavailable login does not duplicate sample access with a signup detour')
-check(unavailableLogin.includes('Contact support for account access. Your saved work is still available on this device.'), 'saved-work access keeps the device boundary visible')
+check(unavailableLogin.includes('Shop pilot access is issued during assisted setup. Native Shop can make its first local sale without this managed account. Your saved work is still available on this device.'), 'saved-work access keeps the pilot and device boundaries visible')
 check(unavailableLogin.includes('href={managedAccountRequestUrl(productIntent)}'), 'assisted setup preserves product intent separately from samples')
 
 const coreCss = readFileSync('showroom/src/core/core-app.css', 'utf8')
@@ -363,5 +363,5 @@ check(submission.includes('...identity,') && submission.includes('shopIndustryPa
 
 console.log(`signup trial contract: ${checks} checks passed`)
 
-check(unavailableLogin.includes('className="core-button primary" href={managedAccountRequestUrl(productIntent)}>Contact support</a>'), 'unavailable login has product-aware setup as primary action')
+check(unavailableLogin.includes('className="core-button primary" href={managedAccountRequestUrl(productIntent)}>Contact us about Shop</a>'), 'unavailable login has product-aware Shop contact as primary action')
 check(!unavailableLogin.includes('Try a sample'), 'unavailable login does not promise a removed sample chooser')

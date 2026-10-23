@@ -89,6 +89,8 @@ try {
         const overlaps = (a, b) => a && b && a.left < b.right - 1 && a.right > b.left + 1
           && a.top < b.bottom - 1 && a.bottom > b.top + 1
         const disclosure = document.querySelector('.native-shop-disclosure')
+        const storySections = [...document.querySelectorAll('.shop-story-section')].filter(visible)
+        const storyHeadings = storySections.map(section => section.querySelector('h2')).filter(visible)
         const switchLink = document.querySelector('[data-language-switch]')
         const focusTarget = primary[0]
         focusTarget && focusTarget.focus()
@@ -115,6 +117,10 @@ try {
           captionSizes: figures.map(figure => Number.parseFloat(getComputedStyle(figure.querySelector('figcaption')).fontSize)),
           disclosureVisible: visible(disclosure),
           disclosureText: disclosure?.textContent.trim() || '',
+          storySectionCount: storySections.length,
+          storyHeadingSizes: storyHeadings.map(heading => Number.parseFloat(getComputedStyle(heading).fontSize)),
+          templateCount: document.querySelectorAll('.shop-template-card').length,
+          platformCount: document.querySelectorAll('.shop-platform-card').length,
           deviceLabels: [...document.querySelectorAll('figcaption')].some(node => /^(Desktop|Tablet|Phone)$/.test(node.textContent.trim())),
           forbiddenCopy: /SuperMega Shop|Request a Shop pilot|Request a Shop walkthrough/i.test(document.body.innerText),
         }
@@ -138,6 +144,8 @@ try {
         ? 'နမူနာဒေတာဖြင့် ဖော်ပြထားသော Shop အက်ပ်မြင်ကွင်း။'
         : 'Illustrative Shop preview with synthetic sample data.'
       if (!result.disclosureVisible || result.disclosureText !== expectedDisclosure) failures.push('sample_disclosure')
+      if (result.storySectionCount !== 5 || result.templateCount !== 4 || result.platformCount !== 3) failures.push('story_structure')
+      if (result.storyHeadingSizes.length !== 5 || result.storyHeadingSizes.some(size => size < 28)) failures.push('story_readability')
       if (result.deviceLabels) failures.push('device_label')
       if (result.forbiddenCopy) failures.push('copy')
       cases.push({ route, ...viewport, ...result, failures })

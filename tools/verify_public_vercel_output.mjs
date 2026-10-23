@@ -371,6 +371,12 @@ if (countOccurrences(shopBody, 'class="button button-primary"') !== 1) fail('sho
 for (const token of ['Shop for Myanmar retailers', 'Sell clearly. Keep stock accurate.']) {
   if (!shopBody.includes(token)) fail('shop_approved_copy_missing', { token })
 }
+for (const token of ['How it works at the counter', 'Search or scan', 'Editable starting points', 'How to get Shop', 'Public downloads and self-service signup are not open yet', 'The web app, macOS and iPhone are not current customer Shop products.']) {
+  if (!shopBody.includes(token)) fail('shop_access_story_missing:' + token)
+}
+if (countOccurrences(shopBody, 'class="shop-template-card"') !== 4) fail('shop_template_count_wrong')
+if (countOccurrences(shopBody, 'class="shop-platform-card"') !== 3) fail('shop_platform_count_wrong')
+if (/href="[^"]*\.(?:apk|ipa|exe|msi|dmg|zip)"/i.test(shopBody)) fail('shop_unsigned_download_exposed')
 if (shopBody.includes('data-platform-carousel') || shopBody.includes('data-device-choice')
   || shopBody.includes('class="pos-window"') || shopBody.includes('shop-sample-demo.js')
   || /<a\b[^>]*>\s*<img\b[^>]*src="\/images\/native-shop\//i.test(shopBody)) fail('shop_gallery_interaction_or_mock_present')

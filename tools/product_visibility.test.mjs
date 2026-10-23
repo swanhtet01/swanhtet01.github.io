@@ -33,7 +33,9 @@ test('unavailable sign-in offers saved work and assisted setup without demo entr
   const source = await readFile(resolve(root, 'showroom/src/core/ManagedLoginPage.tsx'), 'utf8')
   const unavailable = source.slice(source.indexOf('<section className="managed-login-panel" aria-label="Login unavailable">'))
   assert.match(unavailable, /to="\/\?choose=1">Saved work on this device/)
-  assert.match(unavailable, /Contact support/)
+  assert.match(unavailable, /Contact us about Shop/)
+  assert.match(unavailable, /Shop pilot access is issued during assisted setup/)
+  assert.match(unavailable, /Native Shop can make its first local sale without this managed account/)
   assert.doesNotMatch(unavailable, /Free trial|Try free demo|Try a sample/)
   assert.match(source, /Date\.now\(\) < cooldownUntil/)
 })
@@ -52,7 +54,7 @@ test('release assets require the current login choices and local workspace bound
   for (const [, key, required] of groups) input[key] += `${required.join('\n')}\n`
   assert.doesNotThrow(() => validate(input))
   const requiredLogin = groups.find(([name]) => name === 'company_login')[2]
-  for (const label of ['Saved work on this device', 'Contact support', 'Contact support for account access. Your saved work is still available on this device.']) {
+  for (const label of ['Saved work on this device', 'Contact us about Shop', 'Shop pilot access is issued during assisted setup. Native Shop can make its first local sale without this managed account. Your saved work is still available on this device.']) {
     assert.ok(requiredLogin.includes(label), `missing login contract: ${label}`)
   }
   for (const label of requiredLogin) {
@@ -127,6 +129,13 @@ test('generated public entry and contact expose only Shop', async () => {
     assert.match(page, />Contact us about Shop<\/a>/)
     assert.match(page, /class="native-shop-tableau"/)
     assert.match(page, /Illustrative Shop preview with synthetic sample data\./)
+    assert.match(page, /How it works at the counter/)
+    assert.match(page, /Search or scan/)
+    assert.match(page, /How to get Shop/)
+    assert.match(page, /Public downloads and self-service signup are not open yet/)
+    assert.match(page, /The web app, macOS and iPhone are not current customer Shop products\./)
+    assert.equal((page.match(/class="shop-template-card"/g) ?? []).length, 4)
+    assert.equal((page.match(/class="shop-platform-card"/g) ?? []).length, 3)
     assert.doesNotMatch(page, /data-platform-carousel|Open Ecommerce|Open Website/)
     assert.doesNotMatch(fullPage, /SuperMega Shop|Request a Shop pilot|Request a Shop walkthrough/)
     assert.doesNotMatch(page, />Desktop<|>Tablet<|>Phone</)
@@ -138,6 +147,11 @@ test('generated public entry and contact expose only Shop', async () => {
   assert.match(myShop, />မြန်မာ လက်လီဆိုင်များအတွက် Shop<\/p>/)
   assert.match(myShop, /Shop အကြောင်း ဆက်သွယ်ရန်/)
   assert.match(myShop, /နမူနာဒေတာဖြင့် ဖော်ပြထားသော Shop အက်ပ်မြင်ကွင်း။/)
+  assert.match(myShop, /ကောင်တာတွင် အလုပ်လုပ်ပုံ/)
+  assert.match(myShop, /ရှာပါ သို့မဟုတ် စကင်ဖတ်ပါ/)
+  assert.match(myShop, /Shop ရယူရန်/)
+  assert.equal((myShop.match(/class="shop-template-card"/g) ?? []).length, 4)
+  assert.equal((myShop.match(/class="shop-platform-card"/g) ?? []).length, 3)
 })
 
 test('Plant public route becomes compatibility-only, not sales or new setup', async () => {
