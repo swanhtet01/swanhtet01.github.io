@@ -4,6 +4,29 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+val shopReleaseKeystorePath = providers.gradleProperty("SHOP_ANDROID_KEYSTORE_PATH").orNull
+val shopReleaseKeyAlias = providers.gradleProperty("SHOP_ANDROID_KEY_ALIAS").orNull
+val shopReleaseStorePassword = providers.gradleProperty("SHOP_ANDROID_STORE_PASSWORD").orNull
+val shopReleaseKeyPassword = providers.gradleProperty("SHOP_ANDROID_KEY_PASSWORD").orNull
+val shopReleaseSigningAvailable = listOf(
+    shopReleaseKeystorePath,
+    shopReleaseKeyAlias,
+    shopReleaseStorePassword,
+    shopReleaseKeyPassword,
+).all { !it.isNullOrBlank() }
+
+gradle.taskGraph.whenReady {
+    val shopReleaseTaskPresent = allTasks.any {
+        it.project == project && it.name.contains("release", ignoreCase = true)
+    }
+    if (shopReleaseTaskPresent && !shopReleaseSigningAvailable) {
+        throw GradleException("shop_android_release_signing_unavailable")
+    }
+    if (shopReleaseTaskPresent && !file(shopReleaseKeystorePath!!).isFile) {
+        throw GradleException("shop_android_release_keystore_unavailable")
+    }
+}
+
 android {
     namespace = "dev.supermega.supermega_shop"
     compileSdk = flutter.compileSdkVersion
@@ -29,11 +52,22 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        if (shopReleaseSigningAvailable) {
+            create("release") {
+                storeFile = file(shopReleaseKeystorePath!!)
+                keyAlias = shopReleaseKeyAlias
+                storePassword = shopReleaseStorePassword
+                keyPassword = shopReleaseKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            if (shopReleaseSigningAvailable) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
 }

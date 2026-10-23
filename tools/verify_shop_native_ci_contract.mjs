@@ -25,6 +25,11 @@ export function verifyShopNativeCiContract(source) {
     ['sha256sum app-debug.apk > app-debug.apk.sha256', 'android_inner_checksum_not_recorded'],
     ['sha256sum --check app-debug.apk.sha256', 'android_inner_checksum_not_verified'],
     ['mobile/shop_pos/build/app/outputs/flutter-apk/app-debug.apk.sha256', 'android_checksum_not_retained'],
+    ['name: Reject unsigned Android release packaging', 'android_release_negative_gate_missing'],
+    ["grep -F 'shop_android_release_signing_unavailable'", 'android_release_failure_marker_not_verified'],
+    ["./gradlew build --console=plain", 'android_aggregate_release_gate_not_tested'],
+    ["find build/app/outputs/flutter-apk -maxdepth 1 -name 'app-release*.apk'", 'android_release_artifact_absence_not_verified'],
+    ["trap 'result=$?; cleanup_release_outputs || result=1; trap - EXIT; exit \"$result\"' EXIT", 'android_release_artifact_cleanup_not_always_run'],
     ['name: supermega-shop-windows-unsigned-${{ github.sha }}', 'windows_artifact_not_explicitly_unsigned'],
     ["Get-FileHash -Algorithm SHA256 -LiteralPath $packagePath", 'windows_inner_checksum_not_recorded'],
     ["if ($recordedChecksum -cne $expectedChecksum)", 'windows_inner_checksum_not_verified'],
@@ -32,6 +37,20 @@ export function verifyShopNativeCiContract(source) {
     ['Build iOS app without signing', 'ios_no_codesign_boundary_missing'],
     ['flutter build ios --debug --no-codesign --no-pub', 'ios_no_codesign_command_missing'],
   ]) requireToken(source, token, failure, failures)
+
+  for (const property of [
+    'SHOP_ANDROID_KEYSTORE_PATH',
+    'SHOP_ANDROID_KEY_ALIAS',
+    'SHOP_ANDROID_STORE_PASSWORD',
+    'SHOP_ANDROID_KEY_PASSWORD',
+  ]) {
+    requireToken(
+      source,
+      `unset ORG_GRADLE_PROJECT_${property}`,
+      `android_release_ci_may_inherit_signing_credentials:${property}`,
+      failures,
+    )
+  }
 
   requirePattern(
     source,
@@ -68,6 +87,12 @@ export function verifyShopNativeCiContract(source) {
   } else if (source.slice(iosStart, windowsStart).includes('actions/upload-artifact')) {
     failures.push('unsigned_ios_build_must_not_be_retained_as_installable')
   }
+  if (
+    /^\s+mobile\/shop_pos\/build\/app\/outputs\/flutter-apk\/app-release\.apk\s*$/m.test(source)
+    || /name:\s*supermega-shop-android-release-/.test(source)
+  ) {
+    failures.push('unauthorized_android_release_artifact_retained')
+  }
 
   const retainedArtifactCount = (source.match(/actions\/upload-artifact@/g) ?? []).length
   const launchWindowRetentionCount = (source.match(/retention-days:\s*14\b/g) ?? []).length
@@ -83,6 +108,7 @@ export function verifyShopNativeCiContract(source) {
     contract: 'supermega.shop.native-ci-artifact-identity.v1',
     workflow: WORKFLOW_PATH,
     androidArtifactKind: 'debug',
+    androidReleaseArtifactRetained: false,
     windowsArtifactKind: 'unsigned',
     iosArtifactRetained: false,
     innerChecksumsRequired: true,

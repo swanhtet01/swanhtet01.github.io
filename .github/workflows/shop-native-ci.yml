@@ -70,6 +70,36 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
+      - name: Reject unsigned Android release packaging
+        run: |
+          unset ORG_GRADLE_PROJECT_SHOP_ANDROID_KEYSTORE_PATH
+          unset ORG_GRADLE_PROJECT_SHOP_ANDROID_KEY_ALIAS
+          unset ORG_GRADLE_PROJECT_SHOP_ANDROID_STORE_PASSWORD
+          unset ORG_GRADLE_PROJECT_SHOP_ANDROID_KEY_PASSWORD
+          cleanup_release_outputs() {
+            release_files="$(find build/app/outputs/flutter-apk -maxdepth 1 -name 'app-release*.apk' -print 2>/dev/null)"
+            if [ -n "$release_files" ]; then
+              rm -f build/app/outputs/flutter-apk/app-release*.apk
+              return 1
+            fi
+          }
+          trap 'result=$?; cleanup_release_outputs || result=1; trap - EXIT; exit "$result"' EXIT
+          rm -f build/app/outputs/flutter-apk/app-release*.apk
+          set +e
+          release_output="$(flutter build apk --release --no-pub 2>&1)"
+          release_status=$?
+          set -e
+          test "$release_status" -ne 0
+          printf '%s\n' "$release_output" | grep -F 'shop_android_release_signing_unavailable'
+          test -z "$(find build/app/outputs/flutter-apk -maxdepth 1 -name 'app-release*.apk' -print -quit 2>/dev/null)"
+          set +e
+          aggregate_output="$(cd android && ./gradlew build --console=plain 2>&1)"
+          aggregate_status=$?
+          set -e
+          test "$aggregate_status" -ne 0
+          printf '%s\n' "$aggregate_output" | grep -F 'shop_android_release_signing_unavailable'
+          test -z "$(find build/app/outputs/flutter-apk -maxdepth 1 -name 'app-release*.apk' -print -quit 2>/dev/null)"
+
       - name: Build Android debug APK
         run: flutter build apk --debug --no-pub
 

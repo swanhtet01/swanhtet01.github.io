@@ -11,6 +11,7 @@ test('native CI retains checksums for the actual Android and Windows QA files', 
   assert.deepEqual(result.failures, [])
   assert.equal(result.ok, true)
   assert.equal(result.androidArtifactKind, 'debug')
+  assert.equal(result.androidReleaseArtifactRetained, false)
   assert.equal(result.windowsArtifactKind, 'unsigned')
   assert.equal(result.iosArtifactRetained, false)
   assert.equal(result.minimumRetentionDays, 14)
@@ -67,4 +68,29 @@ test('no-codesign iOS output cannot be retained as an installable artifact', () 
 test('native QA artifacts remain available through the launch window', () => {
   const result = verifyShopNativeCiContract(workflow.replaceAll('retention-days: 14', 'retention-days: 7'))
   assert.ok(result.failures.includes('native_artifact_retention_below_launch_window'))
+})
+
+test('Android release packaging stays fail-closed and unretained', () => {
+  const missingGate = verifyShopNativeCiContract(
+    workflow.replace('name: Reject unsigned Android release packaging', 'name: Build Android release APK'),
+  )
+  assert.ok(missingGate.failures.includes('android_release_negative_gate_missing'))
+
+  const noCleanup = verifyShopNativeCiContract(
+    workflow.replace("trap 'result=$?; cleanup_release_outputs || result=1; trap - EXIT; exit \"$result\"' EXIT", 'true'),
+  )
+  assert.ok(noCleanup.failures.includes('android_release_artifact_cleanup_not_always_run'))
+
+  const inheritedCredential = verifyShopNativeCiContract(
+    workflow.replace('unset ORG_GRADLE_PROJECT_SHOP_ANDROID_KEY_ALIAS', 'true'),
+  )
+  assert.ok(inheritedCredential.failures.includes('android_release_ci_may_inherit_signing_credentials:SHOP_ANDROID_KEY_ALIAS'))
+
+  const retainedRelease = verifyShopNativeCiContract(
+    workflow.replace(
+      'name: Retain Android debug APK for device QA',
+      'uses: actions/upload-artifact@synthetic\n        with:\n          path: |\n            mobile/shop_pos/build/app/outputs/flutter-apk/app-release.apk\n\n      - name: Retain Android debug APK for device QA',
+    ),
+  )
+  assert.ok(retainedRelease.failures.includes('unauthorized_android_release_artifact_retained'))
 })
