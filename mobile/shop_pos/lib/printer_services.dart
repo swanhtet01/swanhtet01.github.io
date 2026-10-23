@@ -255,9 +255,13 @@ Future<Ticket> buildShopReceiptTicket(
 }) async {
   final ticket = await Ticket.create(rasterPaperSize ?? paperWidth.paperSize);
   final style = _receiptRasterStyle(myanmar);
-  for (final line in shopReceiptTextLines(receipt, myanmar: myanmar)) {
-    await ticket.textRaster(line, style: style);
-  }
+  await ticket.textRaster(
+    shopReceiptTextLines(
+      receipt,
+      myanmar: myanmar,
+    ).where((line) => line.isNotEmpty).join('\n'),
+    style: style,
+  );
   _finishReceipt(ticket, paperWidth);
   return ticket;
 }
@@ -498,9 +502,10 @@ class PrinterDiscoveryService {
         timeout: const Duration(seconds: 5),
       );
       final ticket = await Ticket.create(paperWidth.paperSize);
-      for (final line in shopPrinterTestTextLines) {
-        await ticket.textRaster(line, style: _receiptRasterStyle(true));
-      }
+      await ticket.textRaster(
+        shopPrinterTestTextLines.join('\n'),
+        style: _receiptRasterStyle(true),
+      );
       _finishReceipt(ticket, paperWidth);
       await manager.printTicket(ticket);
       await manager.disconnect();

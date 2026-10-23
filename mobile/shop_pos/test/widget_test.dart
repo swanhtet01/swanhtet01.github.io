@@ -2816,6 +2816,7 @@ void main() {
 
         expect(sentReceiptIds, hasLength(1));
         expect(find.textContaining('printing unconfirmed'), findsOneWidget);
+        expect(find.textContaining('receipt may have printed'), findsOneWidget);
         expect(find.textContaining('check paper before retry'), findsOneWidget);
         expect(await database.countSales(), 1);
         expect((await database.readActiveProducts()).single.onHand, 1);

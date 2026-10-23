@@ -3635,8 +3635,8 @@ class _ShopHomeState extends State<ShopHome> {
             : printFailed
             ? shopCopy(
                 widget.myanmar,
-                'Sale saved · ${_mmk(receipt.totalMmk)} · printing unconfirmed · check paper before retry',
-                'အရောင်းသိမ်းပြီး · ${_mmk(receipt.totalMmk)} · ပုံနှိပ်မှု မသေချာပါ · ထပ်မစမ်းမီ စာရွက်ကို စစ်ပါ',
+                'Sale saved · ${_mmk(receipt.totalMmk)} · printing unconfirmed · receipt may have printed · check paper before retry',
+                'အရောင်းသိမ်းပြီး · ${_mmk(receipt.totalMmk)} · ပုံနှိပ်မှု မသေချာပါ · ပြေစာ ပုံနှိပ်ပြီး ဖြစ်နိုင်သည် · ထပ်မစမ်းမီ စာရွက်ကို စစ်ပါ',
               )
             : printerNeedsTest
             ? shopCopy(
@@ -3742,8 +3742,8 @@ class _ShopHomeState extends State<ShopHome> {
         _message(
           shopCopy(
             widget.myanmar,
-            'Sale is saved. Printing could not be confirmed. Check the paper before retrying.',
-            'အရောင်းသိမ်းပြီးပါပြီ။ ပုံနှိပ်မှုကို အတည်မပြုနိုင်ပါ။ ထပ်မစမ်းမီ စာရွက်ကို စစ်ပါ။',
+            'Sale is saved. Printing could not be confirmed; the receipt may have printed. Check the paper before retrying.',
+            'အရောင်းသိမ်းပြီးပါပြီ။ ပုံနှိပ်မှုကို အတည်မပြုနိုင်ပါ။ ပြေစာ ပုံနှိပ်ပြီး ဖြစ်နိုင်သည်။ ထပ်မစမ်းမီ စာရွက်ကို စစ်ပါ။',
           ),
           action: SnackBarAction(
             label: shopCopy(widget.myanmar, 'Retry', 'ထပ်စမ်းရန်'),
