@@ -38,11 +38,12 @@ owner-approved product outcome and gate require it.
 | Item | Current fact |
 | --- | --- |
 | Integration PR | [#734 — Unify Shop app first-use and public launch candidate](https://github.com/swanhtet01/swanhtet01.github.io/pull/734) |
-| State | Open draft; exact-head App/native CI and independent last-push review pass; not merged, signed, deployed, or merchant-accepted |
+| State | Open draft; source-candidate App CI and content-equivalent native merge-ref CI pass; not merged, signed, deployed, or merchant-accepted |
 | Integration branch | `codex/shop-public-main-port-20261022` |
-| Exact candidate | `4f5c0307713371e579ba295ac8adc82cee03d7a0` / tree `f5d9d7f5a7e71e5ed51a946fd0cad3d43319b9a3` |
-| Product-code predecessor | `862d92401f08a9571cf60fd47a1dd6e972c0a436` |
-| Native Shop tree | `ec98fa139f45f8a4bf6a46e7058455840ce4dfc8` |
+| Product/source candidate | `c6bdeabcfa9e60ea6719e206eccd20dfd76fa9da` / tree `1ac768d7a193c412822bebea8ed149fcd9838a46` |
+| Presentation predecessor | `4f5c0307713371e579ba295ac8adc82cee03d7a0` |
+| Status-only successor | The branch head after `c6bdeabc` changes this release-truth file only; use PR #734 for its exact identity |
+| Native Shop tree | `d6186aea369bcea7d2d3cdcb4e22c2b0e3fe878a` |
 | PostgreSQL evidence checkpoint | `b1ee4cc2884dda1ab753e8d2e4ecc6c6216a36ef` / tree `6996864df311db4748fcca3ec75c030dd0fcab3e` |
 | Inactive promotion envelope | PR #730; use only after #734 passes and is explicitly promoted |
 | Paused source set | PR #751 at `945ce70f792fd856c767f64e6b3e45e4d8f4ee3e`; review and port bounded changes, never merge wholesale |
@@ -53,26 +54,37 @@ Commit `b1ee4cc2` remains the exact five-file PostgreSQL-17 evidence successor
 to `efc9897b`; its original CI failure was only this file's former conciseness
 violation. Later candidates preserved that verified receipt, repaired the
 concise status, and passed the required HQ contract. The active candidate adds
-the bounded Shop-first public presentation and exact capture provenance without
-changing the signed correction, migration, backup, restore, or runtime boundary.
+the bounded Shop-first public presentation and exact capture provenance, and
+aligns printed receipt/test-slip product naming to Shop without changing the
+signed correction, migration, backup, restore, or runtime boundary.
 
 ## Exact evidence
 
-- [Required App CI 39915343743](https://github.com/swanhtet01/swanhtet01.github.io/actions/runs/39915343743)
-  passed at exact candidate `4f5c0307`: exact checkout, PostgreSQL/API and
+- [Required App CI 39940075423](https://github.com/swanhtet01/swanhtet01.github.io/actions/runs/39940075423)
+  passed at exact push head `c6bdeabc`: exact checkout, PostgreSQL/API and
   migration/RLS guards, dependencies, lint, canonical build, HQ verification,
   and desktop/390 px product journeys.
-- [Native run 39915350078](https://github.com/swanhtet01/swanhtet01.github.io/actions/runs/39915350078)
-  passed at exact candidate `4f5c0307`: formatting, analysis, isolated
+- [Native run 39940081583](https://github.com/swanhtet01/swanhtet01.github.io/actions/runs/39940081583)
+  passed on PR merge-ref `dd9e07bd74476bf1b8453379cf36f5f59c81caeb`,
+  whose parents are base `f8c68861` and source `c6bdeabc`; its tree
+  `1ac768d7a193c412822bebea8ed149fcd9838a46` exactly matches the source
+  candidate tree. It passed formatting, analysis, isolated
   first-sale and first-run restore, full Flutter tests, bundled-font renders,
   Android debug APK, unsigned iPad/iOS, and Windows restore/no-replace,
   unsigned build, and package retention.
-- The retained exact-candidate artifacts are the Android debug archive
-  `12484643611` (`sha256:0ff072ac31652ec0e9b5d56669ccd0b0c5f8f7043b642c8a1f41d4c30ea7b03f`),
-  Flutter render archive `12485026187`
-  (`sha256:370519b2ad202d92d492424aa1cccb3dcd439532d5b2340ad40580356c3cb4bd`),
-  and unsigned Windows archive `12485556347`
-  (`sha256:fe3776e6828860955013e4cca86d70a5088b255237ffc25094a2fc315e1ab66a`).
+- The retained source-equivalent artifacts expire 30 October 2026: Android
+  debug `supermega-shop-android-debug-dd9e07bd74476bf1b8453379cf36f5f59c81caeb`
+  (`12494739751`,
+  `sha256:930d48fb11fbf47d603638f75323a0dfaa14622b7282a50d9b948cba578fc27c`),
+  Flutter renders
+  `supermega-shop-flutter-renders-dd9e07bd74476bf1b8453379cf36f5f59c81caeb`
+  (`12496350175`,
+  `sha256:6bdd38bd61f441b61ebc8852440d56cd13d6dcf1ada53a7725d53f82bebef92a`),
+  and unsigned Windows
+  `supermega-shop-windows-unsigned-dd9e07bd74476bf1b8453379cf36f5f59c81caeb`
+  (`12496430891`,
+  `sha256:c7099b5f5e51c2de2ae8dcdd508674c0e946c86d1b2d0639f4ca7151e1b06487`).
+  iOS passed `--no-codesign`; no installable iOS artifact is retained.
 - The isolated Windows PostgreSQL 17.10 rehearsal bound to `efc9897b` / tree
   `fad006a…` passed 74 checks across 51 implementation files. Its implementation
   digest is
@@ -129,14 +141,15 @@ v14 and hosted PostgreSQL/Supabase schema profile v13 are separate contracts.
 
 - No production deployment, alias promotion, merge, or production database
   mutation has occurred.
-- No immutable protected public preview has been accepted for exact candidate
-  `4f5c0307`.
+- No immutable protected public preview has been accepted for source candidate
+  `c6bdeabc`. The repository intentionally disables direct previews; the
+  existing production-only workflow cannot be used as preview evidence.
 - No signed Android, iPad, or Windows distribution has been accepted.
 - Installed restart/update and encrypted restore are not accepted on the target
   device set.
-- Physical USB/Bluetooth/camera scanning and LAN/USB/Bluetooth ESC/POS 58 mm /
-  80 mm Burmese receipts are not accepted. Source support does not imply a
-  universal hardware promise.
+- Physical USB/Bluetooth/camera scanning is not accepted. Printing implements
+  private-subnet LAN/port 9100 only; physical 58 mm/80 mm Burmese receipt proof
+  is not accepted, and USB/Bluetooth printer transports are unsupported.
 - Empty production pins and absent issuer signing configuration intentionally
   disable correction. Offline manager credentials/passkeys remain deferred.
 - Global receipt consumption across cloned databases and trusted
@@ -183,11 +196,11 @@ backup, and restore review; no blind merge or cherry-pick is allowed.
 
 ## Next action
 
-1. Keep the correction action default-dark and the PR draft; the independent
-   last-push review for `4f5c0307` passed without a release-blocking finding.
-2. Prepare one immutable protected public preview for the exact candidate and
-   return its EN/MY 390/768/1440 evidence for Vivian review. Publishing or
-   production promotion remains an owner action.
+1. Keep source candidate `c6bdeabc` stable, correction default-dark, and PR
+   #734 draft pending independent review of the final status-only successor.
+2. The owner must approve fixed provider team/project identities and a separate
+   protected non-production preview lane before EN/MY 390/768/1440 hosted
+   evidence can be produced. Do not reuse the production workflow.
 3. Complete installed signed restart/update, encrypted restore, physical
    scanner, and Burmese receipt acceptance. Hardware evidence remains local and
    device-specific.
