@@ -80,6 +80,10 @@ try {
         const targets = [...document.querySelectorAll('.site-header a, .button-primary')].filter(visible)
         const tableau = document.querySelector('.native-shop-tableau')
         const figures = [...document.querySelectorAll('.native-shop-tableau .native-shop-shot')].filter(visible)
+        const images = figures.map(figure => figure.querySelector('img'))
+        const tableauBounds = tableau && tableau.getBoundingClientRect()
+        const imageBounds = images.map(image => image && image.getBoundingClientRect())
+        const disclosure = document.querySelector('.native-shop-disclosure')
         const switchLink = document.querySelector('[data-language-switch]')
         const focusTarget = primary[0]
         focusTarget && focusTarget.focus()
@@ -95,6 +99,14 @@ try {
           tableauCount: document.querySelectorAll('.native-shop-tableau').length,
           figureCount: figures.length,
           tableauHeight: tableau ? Math.round(tableau.getBoundingClientRect().height) : 0,
+          imagesLoaded: images.every(image => image && image.complete && image.naturalWidth > 0 && image.naturalHeight > 0),
+          imagesUnclipped: Boolean(tableauBounds && imageBounds.every(bounds => bounds
+            && bounds.top >= tableauBounds.top - 1 && bounds.left >= tableauBounds.left - 1
+            && bounds.right <= tableauBounds.right + 1 && bounds.bottom <= tableauBounds.bottom + 1)),
+          primaryWidth: Math.round(images[0]?.getBoundingClientRect().width || 0),
+          captionSizes: figures.map(figure => Number.parseFloat(getComputedStyle(figure.querySelector('figcaption')).fontSize)),
+          disclosureVisible: visible(disclosure),
+          disclosureText: disclosure?.textContent.trim() || '',
           deviceLabels: [...document.querySelectorAll('figcaption')].some(node => /^(Desktop|Tablet|Phone)$/.test(node.textContent.trim())),
           forbiddenCopy: /SuperMega Shop|Request a Shop pilot|Request a Shop walkthrough/i.test(document.body.innerText),
         }
@@ -109,6 +121,13 @@ try {
       if (!result.focusVisible) failures.push('keyboard_focus')
       if (result.switchHref !== expectedSwitch) failures.push('language_switch')
       if (result.tableauCount !== 1 || result.figureCount !== 3 || result.tableauHeight < 360) failures.push('tableau')
+      if (!result.imagesLoaded || !result.imagesUnclipped) failures.push('image_bounds')
+      if (viewport.width === 390 && result.primaryWidth < 320) failures.push('primary_readability')
+      if (result.captionSizes.some(size => size < 11.5)) failures.push('caption_readability')
+      const expectedDisclosure = expectedLang === 'my'
+        ? 'နမူနာဒေတာဖြင့် ဖော်ပြထားသော Shop အက်ပ်မြင်ကွင်း။'
+        : 'Illustrative Shop preview with synthetic sample data.'
+      if (!result.disclosureVisible || result.disclosureText !== expectedDisclosure) failures.push('sample_disclosure')
       if (result.deviceLabels) failures.push('device_label')
       if (result.forbiddenCopy) failures.push('copy')
       cases.push({ route, ...viewport, ...result, failures })

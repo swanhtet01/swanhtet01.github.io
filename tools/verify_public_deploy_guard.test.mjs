@@ -47,6 +47,7 @@ for (const command of [
   'node --test --test-concurrency=1 tools/public_preview_profile.test.mjs',
   'node --test tools/test_public_contact_receipt.mjs',
   'node tools/verify_public_vercel_artifact_budget.mjs',
+  'node tools/verify_public_shop_responsive.mjs',
   'npm run hq:verify',
 ]) {
   test(`removing ${command} remains blocked`, () => {

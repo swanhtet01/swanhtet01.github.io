@@ -44,6 +44,8 @@ check((myShop.match(/class="button button-primary"/g) || []).length === 1, 'my_s
 check(shop.includes('Shop for Myanmar retailers') && shop.includes('Sell clearly. Keep stock accurate.'), 'shop_approved_copy')
 check(myShop.includes('မြန်မာ လက်လီဆိုင်များအတွက် Shop') && myShop.includes('ရောင်းချမှု ရှင်းလင်းပါစေ။ ကုန်လက်ကျန် မှန်ကန်ပါစေ။'), 'my_shop_localized_copy')
 check(shop.includes('class="native-shop-gallery"') && myShop.includes('class="native-shop-gallery"'), 'native_gallery_visible')
+check(shop.includes('Illustrative Shop preview with synthetic sample data.'), 'native_gallery_disclosure_en')
+check(myShop.includes('နမူနာဒေတာဖြင့် ဖော်ပြထားသော Shop အက်ပ်မြင်ကွင်း။'), 'native_gallery_disclosure_my')
 check(shop.includes('shop_checkout_1200_en.png') && shop.includes('shop_stock_820_en.png') && shop.includes('shop_today_820_en.png'), 'en_three_workflows')
 check(myShop.includes('shop_checkout_1200_my.png') && myShop.includes('shop_stock_820_my.png') && myShop.includes('shop_today_820_my.png'), 'my_three_workflows')
 for (const [html, suffix] of [[shop, 'en'], [myShop, 'my']]) {
