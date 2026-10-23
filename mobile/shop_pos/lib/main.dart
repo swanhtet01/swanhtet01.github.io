@@ -1681,20 +1681,14 @@ class _ShopHomeState extends State<ShopHome> {
   ReceiptPrinterSettings _printerSettings() =>
       widget.receiptPrinterSettings ?? ReceiptPrinterSettings();
 
-  Future<void> _sendReceipt(
-    String host,
-    ShopSaleReceipt receipt,
-  ) async {
+  Future<void> _sendReceipt(String host, ShopSaleReceipt receipt) async {
     final sender = widget.receiptPrintSender;
     if (sender != null) {
       await sender(host, receipt, widget.myanmar);
       return;
     }
-    await ShopReceiptPrinter(settings: widget.receiptPrinterSettings).printSale(
-      host,
-      receipt,
-      myanmar: widget.myanmar,
-    );
+    await ShopReceiptPrinter(settings: widget.receiptPrinterSettings)
+        .printSale(host, receipt, myanmar: widget.myanmar);
   }
 
   Future<void> _openCameraScanner() async {

@@ -83,8 +83,10 @@ Future<void> _resolveVisibleProductPhotos(WidgetTester tester) async {
   expect(rendered.every((image) => image.image != null), isTrue);
 }
 
-Future<({Uint8List png, int blocks, int maxRasterDots})>
-_decodeGsV0Receipt(List<int> bytes, {required int paperDots}) async {
+Future<({Uint8List png, int blocks, int maxRasterDots})> _decodeGsV0Receipt(
+  List<int> bytes, {
+  required int paperDots,
+}) async {
   final rasters = <({int widthBytes, int height, Uint8List data})>[];
   var maxRasterDots = 0;
   for (var index = 0; index + 8 <= bytes.length;) {
@@ -132,10 +134,7 @@ _decodeGsV0Receipt(List<int> bytes, {required int paperDots}) async {
     index += 8 + dataLength;
   }
   if (rasters.isEmpty) throw StateError('Receipt has no GS v 0 raster rows.');
-  final height = rasters.fold<int>(
-    0,
-    (total, raster) => total + raster.height,
-  );
+  final height = rasters.fold<int>(0, (total, raster) => total + raster.height);
   final rgba = Uint8List(paperDots * height * 4);
   rgba.fillRange(0, rgba.length, 255);
   var yOffset = 0;
@@ -331,9 +330,8 @@ void main() {
             reason: '$name/$myanmar',
           );
           final locale = myanmar ? 'my' : 'en';
-          await File(
-            'test/goldens/shop_receipt_${name}_$locale.png',
-          ).writeAsBytes(decoded.png);
+          await File('test/goldens/shop_receipt_${name}_$locale.png')
+              .writeAsBytes(decoded.png);
         }
       }
     },

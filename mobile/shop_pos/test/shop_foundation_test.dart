@@ -3011,75 +3011,81 @@ void main() {
       );
     });
 
-    test('actual network connector sends exact receipt bytes to loopback', () async {
-      final receipt = ShopSaleReceipt(
-        id: 'loopback-sale',
-        operationId: 'loopback-sale',
-        totalMmk: 2500,
-        createdAtMillis: 0,
-        paymentMethod: 'cash',
-      );
-      final ticket = await buildShopReceiptTicket(
-        receipt,
-        myanmar: true,
-        paperWidth: ReceiptPaperWidth.mm80,
-      );
-      final server = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
-      final received = BytesBuilder(copy: false);
-      final receivedDone = Completer<void>();
-      server.listen((client) {
-        client.listen(
-          received.add,
-          onDone: () {
-            if (!receivedDone.isCompleted) receivedDone.complete();
-          },
+    test(
+      'actual network connector sends exact receipt bytes to loopback',
+      () async {
+        final receipt = ShopSaleReceipt(
+          id: 'loopback-sale',
+          operationId: 'loopback-sale',
+          totalMmk: 2500,
+          createdAtMillis: 0,
+          paymentMethod: 'cash',
         );
-      });
-      final manager = PrinterManager();
-      try {
-        await manager.connect(
-          NetworkPrinterDevice(
-            name: 'loopback receipt sink',
-            host: InternetAddress.loopbackIPv4.address,
-            port: server.port,
-          ),
+        final ticket = await buildShopReceiptTicket(
+          receipt,
+          myanmar: true,
+          paperWidth: ReceiptPaperWidth.mm80,
         );
-        await manager.printTicket(ticket);
-        await manager.disconnect();
-        await receivedDone.future.timeout(const Duration(seconds: 2));
-        final bytes = received.takeBytes();
-        expect(bytes.take(2).toList(), [27, 64]);
-        expect(bytes.skip(2).toList(), ticket.bytes);
-      } finally {
-        await manager.dispose();
-        await server.close();
-      }
-    });
-
-    test('network connector reports connection refusal without retrying', () async {
-      final reservation = await ServerSocket.bind(
-        InternetAddress.loopbackIPv4,
-        0,
-      );
-      final refusedPort = reservation.port;
-      await reservation.close();
-      final manager = PrinterManager();
-      try {
-        await expectLater(
-          manager.connect(
+        final server = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+        final received = BytesBuilder(copy: false);
+        final receivedDone = Completer<void>();
+        server.listen((client) {
+          client.listen(
+            received.add,
+            onDone: () {
+              if (!receivedDone.isCompleted) receivedDone.complete();
+            },
+          );
+        });
+        final manager = PrinterManager();
+        try {
+          await manager.connect(
             NetworkPrinterDevice(
-              name: 'closed loopback receipt sink',
+              name: 'loopback receipt sink',
               host: InternetAddress.loopbackIPv4.address,
-              port: refusedPort,
+              port: server.port,
             ),
-            timeout: const Duration(milliseconds: 250),
-          ),
-          throwsA(isA<PrinterConnectionException>()),
+          );
+          await manager.printTicket(ticket);
+          await manager.disconnect();
+          await receivedDone.future.timeout(const Duration(seconds: 2));
+          final bytes = received.takeBytes();
+          expect(bytes.take(2).toList(), [27, 64]);
+          expect(bytes.skip(2).toList(), ticket.bytes);
+        } finally {
+          await manager.dispose();
+          await server.close();
+        }
+      },
+    );
+
+    test(
+      'network connector reports connection refusal without retrying',
+      () async {
+        final reservation = await ServerSocket.bind(
+          InternetAddress.loopbackIPv4,
+          0,
         );
-      } finally {
-        await manager.dispose();
-      }
-    });
+        final refusedPort = reservation.port;
+        await reservation.close();
+        final manager = PrinterManager();
+        try {
+          await expectLater(
+            manager.connect(
+              NetworkPrinterDevice(
+                name: 'closed loopback receipt sink',
+                host: InternetAddress.loopbackIPv4.address,
+                port: refusedPort,
+              ),
+              timeout: const Duration(milliseconds: 250),
+            ),
+            throwsA(isA<PrinterConnectionException>()),
+          );
+        } finally {
+          await manager.dispose();
+        }
+      },
+    );
 
     test(
       'paper width persists and a changed profile requires retesting',

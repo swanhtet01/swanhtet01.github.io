@@ -2819,10 +2819,7 @@ void main() {
         expect(find.textContaining('check paper before retry'), findsOneWidget);
         expect(await database.countSales(), 1);
         expect((await database.readActiveProducts()).single.onHand, 1);
-        expect(
-          await database.countStockMovements(),
-          stockMovementsBefore + 1,
-        );
+        expect(await database.countStockMovements(), stockMovementsBefore + 1);
         expect(await database.countOutboxOperations(), outboxBefore + 1);
 
         await tester.tap(find.text('Retry print'));
@@ -2832,10 +2829,7 @@ void main() {
         expect(find.text('Receipt sent to printer.'), findsOneWidget);
         expect(await database.countSales(), 1);
         expect((await database.readActiveProducts()).single.onHand, 1);
-        expect(
-          await database.countStockMovements(),
-          stockMovementsBefore + 1,
-        );
+        expect(await database.countStockMovements(), stockMovementsBefore + 1);
         expect(await database.countOutboxOperations(), outboxBefore + 1);
       } finally {
         await tester.pumpWidget(const SizedBox.shrink());
