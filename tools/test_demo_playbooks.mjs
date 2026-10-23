@@ -56,8 +56,9 @@ check(manifest.release?.productionDomain === 'https://supermega.dev', 'manifest_
 // secondary sign-in route; the gallery is pinned to native Shop captures.
 check(publicDesign.includes('class="nav-sign-in" href="https://app.supermega.dev/login"')
   && !publicDesign.includes('>Login</a>'), 'public_shop_secondary_sign_in_route')
-check(generator.includes('class="native-shop-shot"')
-  && generator.includes('verifyNativeShopGallery(root)'), 'generator_native_shop_screenshots')
+check(generator.includes('class="native-shop-shot native-shop-shot-${placement}"')
+  && generator.includes('verifyNativeShopGallery(root)')
+  && generator.includes('class="native-shop-disclosure"'), 'generator_native_shop_screenshots')
 check(!generator.includes('function assistedSetupAction('), 'generator_setup_funnel_removed')
 check(!generator.includes('Open Shop Profit Control'), 'generator_profit_control_action_removed')
 check(publicDesign.includes("'/my/contact/' : '/contact/'")
