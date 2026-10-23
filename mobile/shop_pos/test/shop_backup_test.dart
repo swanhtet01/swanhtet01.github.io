@@ -45,26 +45,57 @@ Future<void> _pumpUntil(
   throw TestFailure('The expected Shop state did not appear: $finder');
 }
 
-class _DatabaseCloseRecorder {
-  final _started = Completer<void>();
-  Future<void>? _completion;
+class _DatabaseCloseRequest {
+  const _DatabaseCloseRequest(this.database, this.completion);
 
-  bool get started => _started.isCompleted;
+  final ShopDatabase database;
+  final Completer<void> completion;
+}
+
+class _DatabaseCloseRecorder {
+  _DatabaseCloseRequest? _pending;
+  bool _completed = false;
+
+  bool get started => _pending != null || _completed;
 
   Future<void> call(ShopDatabase database) {
-    final completion = database.close();
-    _completion = completion;
-    if (!_started.isCompleted) _started.complete();
-    return completion;
+    if (_pending != null || _completed) {
+      throw StateError('A Shop database close is already recorded.');
+    }
+    debugPrint('[shop-startup-test] database close requested');
+    final completion = Completer<void>();
+    _pending = _DatabaseCloseRequest(database, completion);
+    return completion.future;
   }
 
-  Future<void> wait() async {
-    await _started.future.timeout(const Duration(seconds: 5));
-    final completion = _completion;
-    if (completion == null) {
+  Future<void> service(WidgetTester tester) async {
+    if (_completed) return;
+    final request = _pending;
+    if (request == null) {
       throw StateError('The Shop database close did not start.');
     }
-    await completion;
+    _pending = null;
+
+    Object? closeFailure;
+    StackTrace? closeFailureStack;
+    debugPrint('[shop-startup-test] database close started');
+    await tester.runAsync(() async {
+      try {
+        await request.database.close();
+      } catch (error, stackTrace) {
+        closeFailure = error;
+        closeFailureStack = stackTrace;
+      }
+    });
+
+    _completed = true;
+    request.completion.complete();
+    await tester.pump();
+    final error = closeFailure;
+    if (error != null) {
+      Error.throwWithStackTrace(error, closeFailureStack!);
+    }
+    debugPrint('[shop-startup-test] database close completed');
   }
 }
 
@@ -79,7 +110,7 @@ Future<void> _disposeOpenedStartup(
     debugPrint('[shop-startup-test] disposal had no opened database to close');
     return;
   }
-  await tester.runAsync(closeRecorder.wait);
+  await closeRecorder.service(tester);
   debugPrint('[shop-startup-test] disposal completed');
 }
 
@@ -2848,7 +2879,7 @@ void main() {
           find.textContaining('cannot safely open'),
           databaseVerifier: databaseVerifier,
         );
-        await tester.runAsync(closeRecorder.wait);
+        await closeRecorder.service(tester);
 
         expect(buildCalls, 1);
         expect(find.text('Start new Shop'), findsNothing);
