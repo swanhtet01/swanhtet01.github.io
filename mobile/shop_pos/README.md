@@ -1,4 +1,4 @@
-# SuperMega Shop native POS candidate
+# Shop native POS candidate
 
 Flutter Shop targets Android tablets, iPad, and Windows PC. CI produces Android and unsigned Windows QA archives, but these are not signed installers or supported public downloads; the iPad build is unsigned too. Drift/SQLite is the on-device source of truth for the local catalog, completed sales, stock movements, and pending operations. The client can open offline and record local cash sales; it does not currently synchronize between devices or restore cloud backups.
 
@@ -19,13 +19,14 @@ Flutter Shop targets Android tablets, iPad, and Windows PC. CI produces Android 
   a separate evidence-backed outcome says either money was returned or the
   original payment was not received; the incoming checkout record is never
   rewritten to imply settlement.
-- The current uncommitted security increment moves the native database to
-  schema v14. It stores an immutable `signed_v2` authorization proof, verifies
+- The committed security increment moves the native database to schema v14. It
+  stores an immutable `signed_v2` authorization proof, verifies
   its Ed25519 signature against a reviewed public key pinned in source, and
   labels migrated v1 digests `legacy_unverified_v1` so they remain audit history
   rather than reusable authority. Its direct-open, migration, restore, and
-  backup contracts are still working-tree evidence until exact-head native and
-  App CI pass.
+  backup contracts have focused regression and exact-head native/App CI
+  evidence. Installed-device, hosted authorization, and merchant acceptance
+  remain separate gates.
 - The native app deliberately exposes no reversal or wallet-reconciliation
   action. The production public-key ring is empty, no production issuer signing
   secret is configured in this environment, authenticated workspace discovery

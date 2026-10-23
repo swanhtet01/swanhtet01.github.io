@@ -150,7 +150,7 @@ readiness; Swan and the Tech Leads own build-linked review and test evidence.
 ### Post-blocker product and validation contract
 
 This contract queues the next bounded work; it does not claim implementation or
-expand the current release while Gate 1 is red:
+expand the current release:
 
 - `P0`: prove the signed installed app across restart/update and encrypted
   restore on the supported device set;
@@ -333,14 +333,15 @@ consume that authorization. Wallet money-return status stays external-pending
 until separately reconciled, and the records are validated through encrypted
 backup/restore.
 
-The current uncommitted security increment advances native SQLite to schema
-v14. It verifies a v2 receipt's Ed25519 signature against a reviewed public key
+The committed security increment advances native SQLite to schema v14. It
+verifies a v2 receipt's Ed25519 signature against a reviewed public key
 pinned in source, persists one immutable `signed_v2` proof bound to workspace,
 actor, capability, exact command, expiry, and local operation, and preserves
 migrated v1 digest rows only as `legacy_unverified_v1` audit evidence. It also
 extends semantic validation across migration, direct open, backup, and staged
-restore. This is working-tree evidence until focused regressions and exact final
-source CI pass.
+restore. Focused regressions and exact-head native/App CI pass; installed-device,
+hosted authorization, global replay/time, and merchant-acceptance gates remain
+open.
 
 Gate 5 remains open for two exact reasons:
 

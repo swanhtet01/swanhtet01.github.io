@@ -174,7 +174,7 @@ class ShopReceiptPrinter {
     try {
       await manager.connect(
         NetworkPrinterDevice(
-          name: 'SuperMega Shop receipt printer',
+          name: 'Shop receipt printer',
           host: host,
           port: 9100,
         ),
@@ -232,7 +232,7 @@ List<String> shopReceiptTextLines(
   ShopSaleReceipt receipt, {
   required bool myanmar,
 }) => [
-  'SUPERMEGA SHOP',
+  'SHOP',
   myanmar ? 'အရောင်းပြေစာ' : 'SALE RECEIPT',
   'Sale ${receipt.id}',
   DateTime.fromMillisecondsSinceEpoch(receipt.createdAtMillis)
@@ -246,6 +246,12 @@ List<String> shopReceiptTextLines(
   '',
   '${myanmar ? 'စုစုပေါင်း' : 'TOTAL'}: ${_formatMmk(receipt.totalMmk)} MMK',
   '${myanmar ? 'ငွေပေးချေမှု' : 'Payment'}: ${receipt.paymentMethod.toUpperCase()}',
+];
+
+const shopPrinterTestTextLines = <String>[
+  'Shop',
+  'Printer test',
+  'ပရင်တာ စမ်းသပ်မှု',
 ];
 
 String _formatMmk(int value) {
@@ -456,16 +462,16 @@ class PrinterDiscoveryService {
     try {
       await manager.connect(
         NetworkPrinterDevice(
-          name: 'SuperMega Shop test',
+          name: 'Shop printer test',
           host: printer.host,
           port: printer.port,
         ),
         timeout: const Duration(seconds: 5),
       );
       final ticket = await Ticket.create(paperWidth.paperSize);
-      await ticket.textRaster('SuperMega Shop');
-      await ticket.textRaster('Printer test');
-      await ticket.textRaster('ပရင်တာ စမ်းသပ်မှု');
+      for (final line in shopPrinterTestTextLines) {
+        await ticket.textRaster(line);
+      }
       _finishReceipt(ticket, paperWidth);
       await manager.printTicket(ticket);
       await manager.disconnect();
