@@ -563,8 +563,11 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
                           ),
                         ),
                         const SizedBox(width: 12),
-                        Text(
-                          shopMmk(line.lineTotalMmk, myanmar: widget.myanmar),
+                        Flexible(
+                          child: Text(
+                            shopMmk(line.lineTotalMmk, myanmar: widget.myanmar),
+                            textAlign: TextAlign.end,
+                          ),
                         ),
                       ],
                     ),
@@ -577,11 +580,17 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
                         shopCopy(widget.myanmar, 'Total', 'စုစုပေါင်း'),
                       ),
                     ),
-                    Text(
-                      shopMmk(sale.totalMmk, myanmar: widget.myanmar),
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                        fontFeatures: const [FontFeature.tabularFigures()],
+                    Flexible(
+                      child: Text(
+                        shopMmk(sale.totalMmk, myanmar: widget.myanmar),
+                        textAlign: TextAlign.end,
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(
+                              fontWeight: FontWeight.w700,
+                              fontFeatures: const [
+                                FontFeature.tabularFigures(),
+                              ],
+                            ),
                       ),
                     ),
                   ],

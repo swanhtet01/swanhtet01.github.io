@@ -2010,13 +2010,19 @@ void main() {
       await tester.tap(
         find.byKey(const ValueKey('shop-correction-restock-all')),
       );
-      await tester.tap(
-        find.byKey(const ValueKey('shop-correction-cash-return')),
+      final cashReturn = find.byKey(
+        const ValueKey('shop-correction-cash-return'),
       );
-      await tester.tap(find.byKey(const ValueKey('shop-correction-review')));
+      await tester.ensureVisible(cashReturn);
+      await tester.tap(cashReturn);
+      final review = find.byKey(const ValueKey('shop-correction-review'));
+      await tester.ensureVisible(review);
+      await tester.tap(review);
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('shop-correction-authorize')));
-      await tester.tap(find.byKey(const ValueKey('shop-correction-authorize')));
+      final authorize = find.byKey(const ValueKey('shop-correction-authorize'));
+      await tester.ensureVisible(authorize);
+      await tester.tap(authorize);
+      await tester.tap(authorize);
       await tester.pumpAndSettle();
 
       expect(authorizer.authorizeCalls, 1);
@@ -2088,15 +2094,23 @@ void main() {
         find.byKey(const ValueKey('shop-correction-reason')),
         'Owner review is required',
       );
-      await tester.tap(
-        find.byKey(const ValueKey('shop-correction-restock-none')),
+      final noRestock = find.byKey(
+        const ValueKey('shop-correction-restock-none'),
       );
-      await tester.tap(
-        find.byKey(const ValueKey('shop-correction-cash-return')),
+      await tester.ensureVisible(noRestock);
+      await tester.tap(noRestock);
+      final cashReturn = find.byKey(
+        const ValueKey('shop-correction-cash-return'),
       );
-      await tester.tap(find.byKey(const ValueKey('shop-correction-review')));
+      await tester.ensureVisible(cashReturn);
+      await tester.tap(cashReturn);
+      final review = find.byKey(const ValueKey('shop-correction-review'));
+      await tester.ensureVisible(review);
+      await tester.tap(review);
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('shop-correction-authorize')));
+      final authorize = find.byKey(const ValueKey('shop-correction-authorize'));
+      await tester.ensureVisible(authorize);
+      await tester.tap(authorize);
       await tester.pumpAndSettle();
 
       expect(
