@@ -83,6 +83,11 @@ try {
         const images = figures.map(figure => figure.querySelector('img'))
         const tableauBounds = tableau && tableau.getBoundingClientRect()
         const imageBounds = images.map(image => image && image.getBoundingClientRect())
+        const figureBounds = figures.map(figure => figure.getBoundingClientRect())
+        const windowBounds = figures.map(figure => figure.querySelector('.native-shop-shot-window')?.getBoundingClientRect())
+        const captionBounds = figures.map(figure => figure.querySelector('figcaption')?.getBoundingClientRect())
+        const overlaps = (a, b) => a && b && a.left < b.right - 1 && a.right > b.left + 1
+          && a.top < b.bottom - 1 && a.bottom > b.top + 1
         const disclosure = document.querySelector('.native-shop-disclosure')
         const switchLink = document.querySelector('[data-language-switch]')
         const focusTarget = primary[0]
@@ -103,6 +108,9 @@ try {
           imagesUnclipped: Boolean(tableauBounds && imageBounds.every(bounds => bounds
             && bounds.top >= tableauBounds.top - 1 && bounds.left >= tableauBounds.left - 1
             && bounds.right <= tableauBounds.right + 1 && bounds.bottom <= tableauBounds.bottom + 1)),
+          figuresOverlap: figureBounds.some((bounds, index) => figureBounds.slice(index + 1).some(other => overlaps(bounds, other))),
+          captionsOverlapImages: captionBounds.some((bounds, index) => overlaps(bounds, windowBounds[index])),
+          primaryObscured: figureBounds.slice(1).some(bounds => overlaps(figureBounds[0], bounds)),
           primaryWidth: Math.round(images[0]?.getBoundingClientRect().width || 0),
           captionSizes: figures.map(figure => Number.parseFloat(getComputedStyle(figure.querySelector('figcaption')).fontSize)),
           disclosureVisible: visible(disclosure),
@@ -122,6 +130,8 @@ try {
       if (result.switchHref !== expectedSwitch) failures.push('language_switch')
       if (result.tableauCount !== 1 || result.figureCount !== 3 || result.tableauHeight < 360) failures.push('tableau')
       if (!result.imagesLoaded || !result.imagesUnclipped) failures.push('image_bounds')
+      if (result.figuresOverlap || result.captionsOverlapImages) failures.push('composition_overlap')
+      if (result.primaryObscured) failures.push('checkout_obscured')
       if (viewport.width === 390 && result.primaryWidth < 320) failures.push('primary_readability')
       if (result.captionSizes.some(size => size < 11.5)) failures.push('caption_readability')
       const expectedDisclosure = expectedLang === 'my'

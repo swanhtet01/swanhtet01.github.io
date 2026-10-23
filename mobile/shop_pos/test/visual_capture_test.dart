@@ -470,6 +470,15 @@ void main() {
           await tester.pumpAndSettle();
           checkpoint('today settled');
           expect(tester.takeException(), isNull);
+          expect(
+            find.descendant(
+              of: find.byType(AppBar),
+              matching: find.text('Shop'),
+            ),
+            findsOneWidget,
+          );
+          expect(find.text('SuperMega Shop'), findsNothing);
+          expect(find.text('SuperMega ဆိုင်'), findsNothing);
           checkpoint('today golden start');
           await expectLater(
             find.byKey(_captureKey),

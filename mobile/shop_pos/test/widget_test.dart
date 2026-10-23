@@ -772,6 +772,15 @@ void main() {
           contains('NotoSansMyanmar'),
         );
         expect(find.text(myanmar ? 'ယနေ့' : 'Today'), findsWidgets);
+        expect(
+          find.descendant(
+            of: find.byType(AppBar),
+            matching: find.text('Shop'),
+          ),
+          findsOneWidget,
+        );
+        expect(find.text('SuperMega Shop'), findsNothing);
+        expect(find.text('SuperMega ဆိုင်'), findsNothing);
         expect(find.text(myanmar ? 'ရောင်းရန်' : 'Sell'), findsOneWidget);
         if (width >= 1100) {
           expect(

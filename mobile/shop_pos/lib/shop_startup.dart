@@ -427,7 +427,7 @@ class _ShopStartupState extends State<ShopStartup> {
     final openedShop = _openedShop;
     if (openedShop != null) return openedShop;
     return MaterialApp(
-      title: 'SuperMega Shop',
+      title: 'Shop',
       debugShowCheckedModeBanner: false,
       locale: Locale(_myanmar ? 'my' : 'en'),
       supportedLocales: const [Locale('en'), Locale('my')],

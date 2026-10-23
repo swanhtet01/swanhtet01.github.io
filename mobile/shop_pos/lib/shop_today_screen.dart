@@ -313,7 +313,7 @@ class _ShopTodayScreenState extends State<ShopTodayScreen> {
       appBar: widget.embeddedTaskShell
           ? null
           : AppBar(
-              title: Text(_copy('SuperMega Shop', 'SuperMega ဆိုင်')),
+              title: const Text('Shop'),
               actions: compact
                   ? [
                       IconButton(

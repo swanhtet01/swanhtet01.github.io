@@ -267,7 +267,7 @@ class _ShopAppState extends State<ShopApp> {
     const accent = Color(0xff2563eb);
     return MaterialApp(
       navigatorKey: _navigatorKey,
-      title: 'SuperMega Shop',
+      title: 'Shop',
       debugShowCheckedModeBanner: false,
       locale: Locale(_myanmar ? 'my' : 'en'),
       supportedLocales: const [Locale('en'), Locale('my')],
@@ -456,9 +456,7 @@ class _ShopAppState extends State<ShopApp> {
                   final desktop = width >= 1100;
                   return Scaffold(
                     appBar: AppBar(
-                      title: Text(
-                        shopCopy(_myanmar, 'SuperMega Shop', 'SuperMega ဆိုင်'),
-                      ),
+                      title: const Text('Shop'),
                       actions: [
                         if (!desktop)
                           IconButton(
