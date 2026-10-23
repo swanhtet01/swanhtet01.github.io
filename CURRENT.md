@@ -61,10 +61,12 @@ unavailable; normal selling remains offline.
   dependencies, lint, canonical build, HQ verification, release workflow
   contracts, and desktop/390 px journeys.
 - [Native run 39980088191](https://github.com/swanhtet01/swanhtet01.github.io/actions/runs/39980088191)
-  passed formatting, analysis, isolated first-sale and restore, all Flutter
-  tests, bundled-font renders, Android debug, unsigned iPad/iOS, and Windows
-  restore/no-replace plus unsigned packaging.
-- Final-head artifacts: Android debug `12513287589`
+  checked out PR merge `d26580c9` containing source head `2366ad92` with the
+  same candidate tree, then passed formatting, analysis, isolated first-sale
+  and restore, all Flutter tests, bundled-font renders, Android debug,
+  unsigned iPad/iOS, and Windows restore/no-replace plus unsigned packaging.
+- Candidate-tree QA artifacts from that merge-ref run: Android debug
+  `12513287589`
   (`sha256:db36b6666ef3793d6021ce3f1166094ab2d1630a1e002a9bd44f00b1cebe9298`),
   Flutter renders `12512649344`
   (`sha256:6650195e55f6e05ccdf136e45ffca211df733534aeb33bf2cde2dcb31de26c33`),
@@ -82,8 +84,9 @@ unavailable; normal selling remains offline.
   receipt digest
   `sha256:8c3ece4d69c0dd815a14e762fb01602229ab14214acb9147774617bce0d18c72`,
   and `hostedActivationProven=false`.
-- Exact-head Security `39980088274` and Kernel `39980088206` pass. Kernel
-  production release remains intentionally owner-gated.
+- Security `39980088274` and Kernel `39980088206` pass against the same PR
+  merge-ref/source-tree pairing. Kernel production release remains
+  intentionally owner-gated.
 
 These are source, local, and CI evidence only. Unsigned CI packages are QA
 artifacts, not supported installers or a public release. Native SQLite schema
