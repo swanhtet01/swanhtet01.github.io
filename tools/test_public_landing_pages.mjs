@@ -41,7 +41,7 @@ check(shop.includes('<a class="button button-primary" href="/contact/?product=sh
 check((shop.match(/class="button button-primary"/g) || []).length === 1, 'shop_exactly_one_primary_action')
 check(myShop.includes('href="/my/contact/?product=shop">Shop အကြောင်း ဆက်သွယ်ရန်</a>'), 'my_shop_action')
 check((myShop.match(/class="button button-primary"/g) || []).length === 1, 'my_shop_exactly_one_primary_action')
-check(shop.includes('Shop for Myanmar retailers') && shop.includes('Sell clearly. Keep stock accurate.'), 'shop_approved_copy')
+check(shop.includes('Shop for Myanmar retailers') && shop.includes('Sell clearly. Keep stock accurate.') && shop.includes('Find an item, take payment and see what needs attention—even when the connection is unreliable.'), 'shop_approved_copy')
 check(myShop.includes('မြန်မာ လက်လီဆိုင်များအတွက် Shop') && myShop.includes('ရောင်းချမှု ရှင်းလင်းပါစေ။ ကုန်လက်ကျန် မှန်ကန်ပါစေ။'), 'my_shop_localized_copy')
 check(shop.includes('class="native-shop-gallery"') && myShop.includes('class="native-shop-gallery"'), 'native_gallery_visible')
 check(shop.includes('Illustrative Shop preview with synthetic sample data.'), 'native_gallery_disclosure_en')

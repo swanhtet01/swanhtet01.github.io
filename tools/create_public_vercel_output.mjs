@@ -994,7 +994,7 @@ function shopLandingHtml(product, page, locale = 'en') {
  if (isMyanmar) {
   heroWithPreview = replaceOnce(heroWithPreview, 'Shop for Myanmar retailers', 'မြန်မာ လက်လီဆိုင်များအတွက် Shop', 'my_shop_eyebrow')
   heroWithPreview = replaceOnce(heroWithPreview, 'Sell clearly. Keep stock accurate.', 'ရောင်းချမှု ရှင်းလင်းပါစေ။ ကုန်လက်ကျန် မှန်ကန်ပါစေ။', 'my_shop_headline')
-  heroWithPreview = replaceOnce(heroWithPreview, 'Find an item, take payment and see what needs attention.', 'ကုန်ပစ္စည်းရှာပါ၊ ငွေပေးချေမှုကို မှတ်တမ်းတင်ပါ၊ အာရုံစိုက်ရန်လိုသည်များကို ကြည့်ပါ။', 'my_shop_description')
+  heroWithPreview = replaceOnce(heroWithPreview, 'Find an item, take payment and see what needs attention—even when the connection is unreliable.', 'ကုန်ပစ္စည်းရှာပါ၊ ငွေပေးချေမှုကို မှတ်တမ်းတင်ပါ၊ အင်တာနက်မတည်ငြိမ်သည့်အချိန်တွင်ပင် အာရုံစိုက်ရန်လိုသည်များကို ကြည့်ပါ။', 'my_shop_description')
   heroWithPreview = replaceOnce(heroWithPreview, 'href="/contact/?product=shop">Contact us about Shop', 'href="/my/contact/?product=shop">Shop အကြောင်း ဆက်သွယ်ရန်', 'my_shop_cta')
  }
  return documentHtml({route:page.route,title:page.title,description,shareImage:`/og-card-${product.id}.png`,locale,

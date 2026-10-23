@@ -128,6 +128,7 @@ test('generated public entry and contact expose only Shop', async () => {
     assert.match(page, /srcset="\/images\/native-shop\/shop_sell_390_en\.png"/)
     assert.match(page, />Shop for Myanmar retailers<\/p>/)
     assert.match(page, /Sell clearly\. Keep stock accurate\./)
+    assert.match(page, /Find an item, take payment and see what needs attention—even when the connection is unreliable\./)
     assert.match(page, />Contact us about Shop<\/a>/)
     assert.match(page, /class="native-shop-tableau"/)
     assert.match(page, /Illustrative Shop preview with synthetic sample data\./)

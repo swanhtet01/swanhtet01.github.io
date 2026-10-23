@@ -368,7 +368,7 @@ const shopPage = pages.get('/shop/')?.html || ''
 const shopBody = shopPage.slice(shopPage.indexOf('<body'))
 if (!shopBody.includes('class="button button-primary" href="/contact/?product=shop">Contact us about Shop')) fail('shop_primary_action_missing')
 if (countOccurrences(shopBody, 'class="button button-primary"') !== 1) fail('shop_primary_action_count_wrong')
-for (const token of ['Shop for Myanmar retailers', 'Sell clearly. Keep stock accurate.']) {
+for (const token of ['Shop for Myanmar retailers', 'Sell clearly. Keep stock accurate.', 'Find an item, take payment and see what needs attention—even when the connection is unreliable.']) {
   if (!shopBody.includes(token)) fail('shop_approved_copy_missing', { token })
 }
 for (const token of ['How it works at the counter', 'Search or scan', 'Editable starting points', 'How to get Shop', 'Public downloads and self-service signup are not open yet', 'The web app, macOS and iPhone are not current customer Shop products.']) {
