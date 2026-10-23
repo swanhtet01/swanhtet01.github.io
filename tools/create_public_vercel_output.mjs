@@ -653,6 +653,7 @@ body[data-view="shop"] .shop-showcase-nav a { border-radius: 8px; }
 .button-secondary:hover { border-color: #aeb4c1; color: #151922; background: #f6f7f9; }
 .button:focus-visible, .button-primary:focus-visible, .nav-links a:focus-visible { outline: 3px solid #2563eb; outline-offset: 3px; }
 @media (max-width: 650px) {
+  .site-header .nav-links a { min-height: 48px; }
   .site-header .nav-links a:first-child { display: inline-flex; }
   .site-header .nav-sign-in { display: inline-flex; }
 }
