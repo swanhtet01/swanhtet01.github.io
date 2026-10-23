@@ -209,5 +209,5 @@ try {
   }
   server.close()
   browser?.kill()
-  await rm(userDataDir, { recursive: true, force: true })
+  await rm(userDataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 })
 }
