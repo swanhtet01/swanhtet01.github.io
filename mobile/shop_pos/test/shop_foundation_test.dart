@@ -3099,6 +3099,68 @@ void main() {
     );
 
     test(
+      'network write timeout destroys the socket without an automatic retry',
+      () async {
+        final server = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+        final clientClosed = Completer<void>();
+        server.listen((client) {
+          client.listen(
+            (_) {},
+            onDone: () {
+              if (!clientClosed.isCompleted) clientClosed.complete();
+            },
+            onError: (_) {
+              if (!clientClosed.isCompleted) clientClosed.complete();
+            },
+            cancelOnError: true,
+          );
+        });
+        var flushCalls = 0;
+        final stalledFlush = Completer<void>();
+        final connector = NetworkConnector(
+          writeTimeout: const Duration(milliseconds: 25),
+          flushOperation: (socket) {
+            flushCalls++;
+            if (flushCalls == 1) return socket.flush();
+            return stalledFlush.future;
+          },
+        );
+        final manager = PrinterManager(networkConnector: connector);
+        try {
+          await manager.connect(
+            NetworkPrinterDevice(
+              name: 'stalled loopback receipt sink',
+              host: InternetAddress.loopbackIPv4.address,
+              port: server.port,
+            ),
+          );
+          await expectLater(
+            manager.printBytes([1, 2, 3]),
+            throwsA(
+              isA<PrinterWriteException>().having(
+                (error) => error.cause,
+                'cause',
+                isA<TimeoutException>(),
+              ),
+            ),
+          );
+          expect(manager.state, PrinterConnectionState.disconnected);
+          expect(flushCalls, 2);
+          await expectLater(
+            manager.printBytes([4, 5, 6]),
+            throwsA(isA<PrinterStateException>()),
+          );
+          expect(flushCalls, 2);
+          await clientClosed.future.timeout(const Duration(seconds: 2));
+        } finally {
+          if (!stalledFlush.isCompleted) stalledFlush.complete();
+          await manager.dispose();
+          await server.close();
+        }
+      },
+    );
+
+    test(
       'paper width persists and a changed profile requires retesting',
       () async {
         SharedPreferences.setMockInitialValues({});

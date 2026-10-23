@@ -13,10 +13,16 @@ import 'printer_connector.dart';
 /// and `writeBytes()` throw, since explicitly using a network printer on the
 /// web is a genuine error.
 class NetworkConnector extends PrinterConnector<NetworkPrinterDevice> {
-  NetworkConnector({this.scanPort = kDefaultNetworkPort});
+  NetworkConnector({
+    this.scanPort = kDefaultNetworkPort,
+    this.writeTimeout = const Duration(seconds: 5),
+  });
 
   /// Port used for both discovery scanning and default connections.
   final int scanPort;
+
+  /// Kept in the conditional API for parity with the native connector.
+  final Duration writeTimeout;
 
   final StreamController<PrinterConnectionState> _stateController =
       StreamController<PrinterConnectionState>.broadcast();

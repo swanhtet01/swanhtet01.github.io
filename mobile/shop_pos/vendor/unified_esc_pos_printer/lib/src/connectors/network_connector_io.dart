@@ -9,6 +9,8 @@ import '../models/printer_connection_state.dart';
 import '../models/printer_device.dart';
 import 'printer_connector.dart';
 
+typedef NetworkSocketFlush = Future<void> Function(Socket socket);
+
 /// Connector for network (TCP/IP) ESC/POS printers.
 ///
 /// **Discovery:** Scans the local subnet by attempting parallel TCP connections
@@ -18,10 +20,21 @@ import 'printer_connector.dart';
 /// **Data flow:** Sends all bytes in a single [Socket.add] call followed by
 /// [Socket.flush] to avoid partial writes.
 class NetworkConnector extends PrinterConnector<NetworkPrinterDevice> {
-  NetworkConnector({this.scanPort = kDefaultNetworkPort});
+  NetworkConnector({
+    this.scanPort = kDefaultNetworkPort,
+    this.writeTimeout = const Duration(seconds: 5),
+    // IO-only deterministic seam for connector tests. Production omits it.
+    NetworkSocketFlush? flushOperation,
+  }) : _flushOperation = flushOperation ?? _flushSocket;
 
   /// Port used for both discovery scanning and default connections.
   final int scanPort;
+
+  /// Maximum time allowed for a socket flush before delivery becomes
+  /// ambiguous and the connection is destroyed. A timeout never retries.
+  final Duration writeTimeout;
+
+  final NetworkSocketFlush _flushOperation;
 
   Socket? _socket;
   PrinterConnectionState _state = PrinterConnectionState.disconnected;
@@ -138,10 +151,11 @@ class NetworkConnector extends PrinterConnector<NetworkPrinterDevice> {
 
       // Send ESC @ to initialise the printer on connect.
       _socket!.add(cInit.codeUnits);
-      await _socket!.flush();
+      await _flushOperation(_socket!).timeout(timeout);
 
       _setState(PrinterConnectionState.connected);
     } on SocketException catch (e) {
+      _destroySocket();
       _setState(PrinterConnectionState.error);
       _setState(PrinterConnectionState.disconnected);
       throw PrinterConnectionException(
@@ -149,10 +163,19 @@ class NetworkConnector extends PrinterConnector<NetworkPrinterDevice> {
         cause: e,
       );
     } on TimeoutException catch (e) {
+      _destroySocket();
       _setState(PrinterConnectionState.error);
       _setState(PrinterConnectionState.disconnected);
       throw PrinterConnectionException(
         'Connection to ${device.host}:${device.port} timed out',
+        cause: e,
+      );
+    } catch (e) {
+      _destroySocket();
+      _setState(PrinterConnectionState.error);
+      _setState(PrinterConnectionState.disconnected);
+      throw PrinterConnectionException(
+        'Cannot initialise ${device.host}:${device.port}',
         cause: e,
       );
     }
@@ -166,12 +189,16 @@ class NetworkConnector extends PrinterConnector<NetworkPrinterDevice> {
 
     try {
       _socket!.add(bytes);
-      await _socket!.flush();
+      await _flushOperation(_socket!).timeout(writeTimeout);
       _setState(PrinterConnectionState.connected);
     } catch (e) {
+      _destroySocket();
       _setState(PrinterConnectionState.error);
       _setState(PrinterConnectionState.disconnected);
-      throw PrinterWriteException('Failed to write bytes to printer', cause: e);
+      throw PrinterWriteException(
+        'Receipt delivery could not be confirmed',
+        cause: e,
+      );
     }
   }
 
@@ -181,9 +208,15 @@ class NetworkConnector extends PrinterConnector<NetworkPrinterDevice> {
     if (socket == null) return;
 
     try {
-      await socket.flush();
-    } catch (_) {
-      // Connection already broken; disconnect() handles teardown.
+      await _flushOperation(socket).timeout(writeTimeout);
+    } catch (error) {
+      _destroySocket();
+      _setState(PrinterConnectionState.error);
+      _setState(PrinterConnectionState.disconnected);
+      throw PrinterWriteException(
+        'Receipt delivery could not be confirmed',
+        cause: error,
+      );
     }
   }
 
@@ -196,11 +229,15 @@ class NetworkConnector extends PrinterConnector<NetworkPrinterDevice> {
     _setState(PrinterConnectionState.disconnecting);
 
     try {
-      await _socket?.flush();
-      await _socket?.close();
+      final socket = _socket;
+      if (socket != null) {
+        await _flushOperation(socket).timeout(writeTimeout);
+        await socket.close().timeout(writeTimeout);
+      }
+    } catch (_) {
+      // Teardown is best effort. The socket is always destroyed below.
     } finally {
-      _socket?.destroy();
-      _socket = null;
+      _destroySocket();
       _setState(PrinterConnectionState.disconnected);
     }
   }
@@ -216,6 +253,11 @@ class NetworkConnector extends PrinterConnector<NetworkPrinterDevice> {
     if (!_stateController.isClosed) _stateController.add(next);
   }
 
+  void _destroySocket() {
+    _socket?.destroy();
+    _socket = null;
+  }
+
   void _assertState(PrinterConnectionState required, String operation) {
     if (_state != required) {
       throw PrinterStateException(
@@ -226,3 +268,5 @@ class NetworkConnector extends PrinterConnector<NetworkPrinterDevice> {
     }
   }
 }
+
+Future<void> _flushSocket(Socket socket) => socket.flush();
