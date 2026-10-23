@@ -1989,6 +1989,8 @@ void main() {
         operationId: 'correct-sale',
         lines: const [ShopSaleLineInput(productId: 'correct-tea', quantity: 1)],
       );
+      final outboxCountBeforeCorrection = await database
+          .countOutboxOperations();
       await tester.pumpWidget(
         MaterialApp(
           home: RecentSalesScreen(
@@ -2028,7 +2030,10 @@ void main() {
       expect(authorizer.authorizeCalls, 1);
       expect(await database.readSaleReversalForSale(sale.id), isNotNull);
       expect((await database.readActiveProducts()).single.onHand, 2);
-      expect(await database.countOutboxOperations(), 2);
+      expect(
+        await database.countOutboxOperations(),
+        outboxCountBeforeCorrection + 1,
+      );
       expect(
         find.text(
           'Sale corrected. The original sale remains in the audit record.',
@@ -2076,6 +2081,8 @@ void main() {
         operationId: 'denied-sale',
         lines: const [ShopSaleLineInput(productId: 'denied-tea', quantity: 1)],
       );
+      final outboxCountBeforeCorrection = await database
+          .countOutboxOperations();
       await tester.pumpWidget(
         MaterialApp(
           home: RecentSalesScreen(
@@ -2121,7 +2128,10 @@ void main() {
       );
       expect(await database.readSaleReversalForSale(sale.id), isNull);
       expect((await database.readActiveProducts()).single.onHand, 1);
-      expect(await database.countOutboxOperations(), 1);
+      expect(
+        await database.countOutboxOperations(),
+        outboxCountBeforeCorrection,
+      );
     } finally {
       await tester.pumpWidget(const SizedBox.shrink());
       await database.close();

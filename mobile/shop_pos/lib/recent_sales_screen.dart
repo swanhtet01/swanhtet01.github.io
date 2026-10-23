@@ -70,7 +70,9 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
   );
 
   void _reload() {
-    setState(() => _sales = _readPage());
+    setState(() {
+      _sales = _readPage();
+    });
   }
 
   @override
