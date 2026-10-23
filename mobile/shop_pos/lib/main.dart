@@ -1803,6 +1803,7 @@ class _ShopHomeState extends State<ShopHome> {
       return KeyEventResult.ignored;
     },
     child: TextField(
+      key: const ValueKey('shop-sale-search-field'),
       controller: _search,
       focusNode: _searchFocus,
       autofocus: defaultTargetPlatform == TargetPlatform.windows,

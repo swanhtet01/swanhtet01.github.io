@@ -3244,7 +3244,7 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        final search = find.byType(TextField);
+        final search = find.byKey(const ValueKey('shop-sale-search-field'));
         expect(
           tester.widget<TextField>(search).decoration?.hintText,
           myanmar ? 'ဘားကုဒ် ဖတ်ပါ' : 'Scan a barcode',

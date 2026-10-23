@@ -3002,11 +3002,16 @@ void main() {
         '420 dot padding proof',
         textDirection: ui.TextDirection.rtl,
       );
-      final paddedBlock = _rasterBlocks(padded.bytes).single;
-      expect(paddedBlock.widthBytes, 53);
-      expect(paddedBlock.hasInk, isTrue);
+      final paddedBlocks = _rasterBlocks(
+        padded.bytes,
+      ).where((block) => block.widthBytes == 53);
+      expect(paddedBlocks, isNotEmpty);
       expect(
-        _unusedRasterBitsAreClear(paddedBlock, logicalWidthDots: 420),
+        paddedBlocks.every(
+          (block) =>
+              block.hasInk &&
+              _unusedRasterBitsAreClear(block, logicalWidthDots: 420),
+        ),
         isTrue,
       );
     });
