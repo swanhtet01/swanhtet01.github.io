@@ -977,13 +977,10 @@ Map<String, Set<String>> shopBaseTableColumnsForVersion(int schemaVersion) {
     for (final entry in shopBaseTableColumnsV6.entries)
       entry.key: <String>{
         ...entry.value,
-        if (entry.key == 'shop_products' && schemaVersion >= 9)
-          'reorder_level',
+        if (entry.key == 'shop_products' && schemaVersion >= 9) 'reorder_level',
       },
-    if (schemaVersion >= 7)
-      'shop_product_images': shopProductImageColumnsV7,
-    if (schemaVersion >= 8)
-      'shop_counter_drafts': shopCounterDraftColumnsV8,
+    if (schemaVersion >= 7) 'shop_product_images': shopProductImageColumnsV7,
+    if (schemaVersion >= 8) 'shop_counter_drafts': shopCounterDraftColumnsV8,
     if (schemaVersion >= 10) 'shop_held_sales': shopHeldSaleColumnsV10,
   };
 }
@@ -1000,8 +997,7 @@ Map<String, String> shopCriticalIndexDefinitions(int schemaVersion) => {
 String shopSchemaObjectTypeForDefinition(String definition) {
   final sql = canonicalShopSchemaSql(definition);
   if (sql.startsWith('create table')) return 'table';
-  if (sql.startsWith('create index') ||
-      sql.startsWith('create unique index')) {
+  if (sql.startsWith('create index') || sql.startsWith('create unique index')) {
     return 'index';
   }
   if (sql.startsWith('create trigger')) return 'trigger';
@@ -2056,11 +2052,12 @@ class ShopDatabase extends _$ShopDatabase {
       throw StateError('This Shop database has an unknown base schema.');
     }
     final hasAnyAuditObject = presentNames.intersection(auditNames).isNotEmpty;
-    final hasAnyWorkspaceObject =
-        presentNames.intersection(workspaceNames).isNotEmpty;
-    final hasProfileObject =
-        presentNames.intersection(profileNames).isNotEmpty;
-    final hasAnyAudit = hasAnyAuditObject || cashState != _ColumnGroupState.none;
+    final hasAnyWorkspaceObject = presentNames
+        .intersection(workspaceNames)
+        .isNotEmpty;
+    final hasProfileObject = presentNames.intersection(profileNames).isNotEmpty;
+    final hasAnyAudit =
+        hasAnyAuditObject || cashState != _ColumnGroupState.none;
     final auditExact =
         cashState == _ColumnGroupState.exact &&
         _definitionGroupExact(objects, auditDefinitions, auditNames);
@@ -2075,20 +2072,16 @@ class ShopDatabase extends _$ShopDatabase {
       workspaceNames,
     );
     final profileExact =
-        _definitionGroupExact(
-          objects,
-          const {'shop_business_profile': shopBusinessProfileV11Sql},
-          profileNames,
-        ) &&
+        _definitionGroupExact(objects, const {
+          'shop_business_profile': shopBusinessProfileV11Sql,
+        }, profileNames) &&
         await _businessProfileRowsValid();
 
     bool triggersMatch(Iterable<Map<String, String>> groups) {
       final expected = <String>{
         for (final group in groups)
           for (final entry in group.entries)
-            if (!canonicalShopSchemaSql(
-              entry.value,
-            ).startsWith('create table'))
+            if (!canonicalShopSchemaSql(entry.value).startsWith('create table'))
               entry.key,
       };
       final actual = objects.entries
@@ -2226,7 +2219,8 @@ class ShopDatabase extends _$ShopDatabase {
 
   Future<void> _requireDatabaseIntegrity() async {
     final integrity = await customSelect('PRAGMA integrity_check').get();
-    final brokenReferences = await customSelect('PRAGMA foreign_key_check').get();
+    final brokenReferences = await customSelect('PRAGMA foreign_key_check')
+        .get();
     if (integrity.length != 1 ||
         integrity.single.read<String>('integrity_check') != 'ok' ||
         brokenReferences.isNotEmpty) {
@@ -2264,7 +2258,8 @@ class ShopDatabase extends _$ShopDatabase {
     Map<String, _ShopSchemaObject> objects,
     Set<String> expected,
   ) =>
-      objects.length == expected.length && objects.keys.toSet().containsAll(expected);
+      objects.length == expected.length &&
+      objects.keys.toSet().containsAll(expected);
 
   Future<bool> _baseSchemaExact(
     int version,
@@ -2282,10 +2277,7 @@ class ShopDatabase extends _$ShopDatabase {
     return _definitionGroupExact(objects, indexes, indexes.keys.toSet());
   }
 
-  Future<bool> _tableColumnsExact(
-    String table,
-    Set<String> expected,
-  ) async {
+  Future<bool> _tableColumnsExact(String table, Set<String> expected) async {
     final rows = await customSelect('PRAGMA table_info($table)').get();
     final actual = rows
         .map((row) => row.read<String>('name').toLowerCase())
@@ -2322,9 +2314,8 @@ class ShopDatabase extends _$ShopDatabase {
         return false;
       }
       if (expectedType == 'trigger' || expectedType == 'index') {
-        final target = RegExp(
-          r'\bon\s+([a-z0-9_]+)',
-        ).firstMatch(canonicalShopSchemaSql(entry.value));
+        final target = RegExp(r'\bon\s+([a-z0-9_]+)')
+            .firstMatch(canonicalShopSchemaSql(entry.value));
         if (target == null || object.table != target.group(1)) return false;
       }
     }
@@ -2339,7 +2330,8 @@ class ShopDatabase extends _$ShopDatabase {
       'review_cash_reversal_count',
       'review_cash_drawer_outflow_mmk',
     ];
-    final rows = await customSelect('PRAGMA table_info(shop_cash_shifts)').get();
+    final rows = await customSelect('PRAGMA table_info(shop_cash_shifts)')
+        .get();
     final byName = <String, QueryRow>{
       for (final row in rows) row.read<String>('name').toLowerCase(): row,
     };

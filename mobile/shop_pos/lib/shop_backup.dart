@@ -283,7 +283,9 @@ abstract final class ShopBackup {
         await ShopDatabase.migrateAndVerifyRestoreFile(stagedFile);
         await _requireNoSidecars(stagedFile);
         if (await stagedFile.length() > maxSnapshotBytes) {
-          throw StateError('The migrated Shop database exceeds the size limit.');
+          throw StateError(
+            'The migrated Shop database exceeds the size limit.',
+          );
         }
         final migratedBytes = await stagedFile.readAsBytes();
         // Recheck sidecars immediately before the atomic no-replace link. The
@@ -599,23 +601,18 @@ abstract final class ShopBackup {
       final schemaVersion = version.length == 1
           ? version.single['user_version'] as int
           : -1;
-      final schemaKind = _classifySnapshotSchema(
-        connection,
-        schemaVersion,
-      );
+      final schemaKind = _classifySnapshotSchema(connection, schemaVersion);
       final hasCorrectionSchema =
           schemaKind == _ShopSnapshotSchemaKind.correctionV11 ||
           schemaKind == _ShopSnapshotSchemaKind.correctionWorkspaceV12 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV13;
       final hasWorkspaceSchema =
           schemaKind == _ShopSnapshotSchemaKind.correctionWorkspaceV12 ||
-          schemaKind ==
-              _ShopSnapshotSchemaKind.profileWorkspaceCollisionV12 ||
+          schemaKind == _ShopSnapshotSchemaKind.profileWorkspaceCollisionV12 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV13;
       final hasProfileSchema =
           schemaKind == _ShopSnapshotSchemaKind.profileV11 ||
-          schemaKind ==
-              _ShopSnapshotSchemaKind.profileWorkspaceCollisionV12 ||
+          schemaKind == _ShopSnapshotSchemaKind.profileWorkspaceCollisionV12 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV13;
       final objects = _readSnapshotSchemaObjects(connection);
       final baseSchemaValid =
@@ -889,7 +886,8 @@ abstract final class ShopBackup {
       return null;
     }
     final objects = _readSnapshotSchemaObjects(connection);
-    if (objects == null || objects.values.any((object) => object.type == 'view')) {
+    if (objects == null ||
+        objects.values.any((object) => object.type == 'view')) {
       return null;
     }
     if (!_snapshotBaseSchemaExact(connection, schemaVersion, objects)) {
@@ -906,16 +904,13 @@ abstract final class ShopBackup {
     final hasAnyAudit =
         presentNames.intersection(auditNames).isNotEmpty ||
         cashState != _SnapshotColumnGroupState.none;
-    final hasAnyWorkspace =
-        presentNames.intersection(workspaceNames).isNotEmpty;
+    final hasAnyWorkspace = presentNames
+        .intersection(workspaceNames)
+        .isNotEmpty;
     final hasProfile = presentNames.intersection(profileNames).isNotEmpty;
     final auditExact =
         cashState == _SnapshotColumnGroupState.exact &&
-        _snapshotDefinitionGroupExact(
-          objects,
-          auditDefinitions,
-          auditNames,
-        );
+        _snapshotDefinitionGroupExact(objects, auditDefinitions, auditNames);
     final workspaceExact = _snapshotDefinitionGroupExact(
       objects,
       workspaceDefinitions,
@@ -927,20 +922,16 @@ abstract final class ShopBackup {
       workspaceNames,
     );
     final profileExact =
-        _snapshotDefinitionGroupExact(
-          objects,
-          const {'shop_business_profile': shopBusinessProfileV11Sql},
-          profileNames,
-        ) &&
+        _snapshotDefinitionGroupExact(objects, const {
+          'shop_business_profile': shopBusinessProfileV11Sql,
+        }, profileNames) &&
         _businessProfileRowsValid(connection);
 
     bool triggersMatch(Iterable<Map<String, String>> groups) {
       final expected = <String>{
         for (final group in groups)
           for (final entry in group.entries)
-            if (!canonicalShopSchemaSql(
-              entry.value,
-            ).startsWith('create table'))
+            if (!canonicalShopSchemaSql(entry.value).startsWith('create table'))
               entry.key,
       };
       final actual = objects.entries
@@ -1099,7 +1090,8 @@ abstract final class ShopBackup {
     Map<String, _SnapshotSchemaObject> objects,
     Set<String> expected,
   ) =>
-      objects.length == expected.length && objects.keys.toSet().containsAll(expected);
+      objects.length == expected.length &&
+      objects.keys.toSet().containsAll(expected);
 
   static bool _snapshotBaseSchemaExact(
     Database connection,
@@ -1231,8 +1223,7 @@ abstract final class ShopBackup {
           definitions,
           definitions.keys.toSet(),
         ) &&
-        _reversalCashColumnState(connection) ==
-            _SnapshotColumnGroupState.exact;
+        _reversalCashColumnState(connection) == _SnapshotColumnGroupState.exact;
   }
 
   static String _sha256Hex(String value) =>
