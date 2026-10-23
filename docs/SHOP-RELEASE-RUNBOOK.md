@@ -26,6 +26,10 @@ Technical owner:
 Operations acceptance owner:
 ```
 
+A blank field, prepared template, or expected value is `NOT RUN`; it supplies no
+approval and closes no gate. Record `BLOCKED` when a required capability or
+decision is unavailable rather than leaving an ambiguous blank.
+
 Use [`../CURRENT.md`](../CURRENT.md) for the active lane. Do not copy its status
 into a second candidate document.
 
@@ -127,6 +131,40 @@ not bypass entitlement, consent, or release gates.
 The native app has no web-preview target in this repository. Public preview
 acceptance does not verify counter, stock, export, recovery, installation, or
 hardware behavior; those belong to the next gates.
+
+### Gate 2 protected-preview evidence record
+
+A blank or partially completed record is `NOT RUN`, never preview acceptance.
+Do not record access tokens, cookies, private customer data, or mutable dashboard
+links.
+
+```text
+Candidate PR / branch / commit / tree:
+Public build command / output digest:
+Provider team / project (non-secret identity):
+Deployment ID / immutable URL / access mode:
+Reviewer role / date:
+
+Route or redirect | Expected | Observed | PASS/FAIL/BLOCKED/NOT RUN
+Shop landing:
+Contact / assisted-access action:
+Sign-in utility:
+Retired product routes:
+Invalid or legacy plan intake:
+
+Locale | Viewport | Screenshot SHA-256 / private reference | Readability / clipping / overlap status
+EN | 390 px:
+MY | 390 px:
+EN | 768 px:
+MY | 768 px:
+EN | 1440 px:
+MY | 1440 px:
+
+Keyboard focus / 48 px touch targets / language switching:
+Illustrative-data disclosure / claim ledger / asset-rights references:
+Console, network, accessibility, and performance findings:
+Gate disposition / blockers:
+```
 
 ### Research-informed acceptance mapping
 
@@ -260,6 +298,7 @@ Commit / native Shop tree:
 GitHub artifact ID / name / archive digest / expiry:
 Inner build filename / SHA-256 (if independently calculated):
 Distribution path:
+Package signing status / public certificate or identity fingerprint:
 Test date / observer role:
 Private evidence reference (no secret or merchant data):
 
@@ -269,6 +308,25 @@ Device make / model:
 App build identity:
 Language(s):
 Starting database state:
+
+Clean install — each row is PASS, FAIL, BLOCKED, or NOT RUN
+Previously empty target confirmed:
+Package identity/hash verified before install:
+Install / first launch / first local record:
+
+Upgrade and rollback — run separately from clean install
+Previous signed build / package hash / database fixture:
+Upgrade path / retained IDs, counts, totals, and settings:
+Process kill during or after update / observed recovery:
+Rollback target / procedure / data-compatibility result:
+
+Backup fixture — define expected values before execution
+Synthetic fixture ID / SHA-256:
+Expected sale, reversal, stock, wallet, shift, and outbox IDs/counts/totals:
+Export filename / SHA-256:
+Encrypted backup filename / SHA-256 / password custodian (never the password):
+Fresh empty restore target identity:
+Observed restored IDs/counts/totals / mismatch:
 
 Recovery — record PASS, FAIL, BLOCKED, or NOT RUN plus expected and observed
 Process-kill and reopen / retained record IDs or counts:
@@ -281,37 +339,48 @@ Full-sale cash reversal and retry:
 Wallet reversal and separate reconciliation:
 
 Scanner
-Model / connection:
+Model / firmware / connection or transport:
+Configured suffix: CR | LF | CRLF | Tab | other:
 Leading-zero fixture / expected / observed / status:
+Intentional repeated scan / expected quantity / observed quantity / status:
+Unknown code / manual add-or-search fallback / status:
+Focus loss and return / manual typing fallback / status:
+Camera accept-once / cancel / permission denial (when applicable):
 
 58 mm printer
-Model / connection:
+Model / firmware / LAN host-subnet / port:
+Configured paper width / raster dots:
 Test-before-sale status:
-English / Burmese legibility status:
-Sale receipt only after commit status:
-Failure caused no duplicate sale status:
+EN/MY fixture / receipt ID / legibility status:
+Sale receipt only after commit / stock-outbox counts:
+Ambiguous write / paper checked before operator retry:
+Mid-write reset / stalled write / paper-status behavior:
 Restart or network-change retest status:
 Private physical-receipt reference:
 
 80 mm printer
-Model / connection:
+Model / firmware / LAN host-subnet / port:
+Configured paper width / raster dots:
 Test-before-sale status:
-English / Burmese legibility status:
-Sale receipt only after commit status:
-Failure caused no duplicate sale status:
+EN/MY fixture / receipt ID / legibility status:
+Sale receipt only after commit / stock-outbox counts:
+Ambiguous write / paper checked before operator retry:
+Mid-write reset / stalled write / paper-status behavior:
 Restart or network-change retest status:
 Private physical-receipt reference:
 
 Gate disposition / blockers:
 ```
 
-Until the trusted native correction action is available, both reversal rows in
-this record are `BLOCKED`, not `PASS` or `NOT RUN`. Never put passwords, tokens,
-private merchant data, or raw customer records in the repository. Reference
-private photos, receipts, and logs from their approved store. If either paper
-width is not exercised, its evidence row is `NOT RUN`; Gate 4 remains
-`BLOCKED` unless the intended test passes or Swan and Vivian explicitly narrow
-the supported printer promise.
+The correction entry is wired and source-tested, but both reversal rows remain
+`BLOCKED`, not `PASS` or `NOT RUN`, until the exact signed installed build has
+the reviewed issuer, public-key pins, immutable workspace binding, and real
+operator-authority evidence. Never put passwords, tokens, private merchant
+data, or raw customer records in the repository. Reference private photos,
+receipts, and logs from their approved store. If either paper width is not
+exercised, its evidence row is `NOT RUN`; Gate 4 remains `BLOCKED` unless the
+intended test passes or Swan and Vivian explicitly narrow the supported printer
+promise.
 
 ## Gate 5 — merchant journey acceptance
 
@@ -335,6 +404,16 @@ Exact candidate / signed build:
 Device, OS and installation channel:
 Language: EN | MY
 Representative-data owner:
+
+Synthetic native fixture — approve expected values before execution
+Fixture ID / SHA-256 / language:
+Products: stable ID / displayed name / barcode or SKU / opening quantity / unit price:
+Expected sale lines / payment method / total:
+Expected post-sale stock and immutable receipt ID:
+Expected correction reason / restock choice / money or wallet outcome:
+Expected gross / reversal / net / cash-return / wallet-liability close values:
+Expected export fields / SHA-256:
+Expected restart and fresh-target restore IDs/counts/totals:
 
 Journey step | Expected | Observed | PASS/FAIL/BLOCKED/NOT RUN | Private evidence reference
 Catalog:
@@ -369,11 +448,11 @@ pinned in source, persists one immutable `signed_v2` proof bound to workspace,
 actor, capability, exact command, expiry, and local operation, and preserves
 migrated v1 digest rows only as `legacy_unverified_v1` audit evidence. It also
 extends semantic validation across migration, direct open, backup, and staged
-restore. Focused regressions and exact-head native/App CI pass; installed-device,
-hosted authorization, global replay/time, and merchant-acceptance gates remain
-open.
+restore. Focused regressions, exact source-head App CI, and matching PR
+merge-ref native CI pass; installed-device, hosted authorization, global
+replay/time, and merchant-acceptance gates remain open.
 
-Gate 5 remains open for two exact reasons:
+Correction acceptance within Gate 5 remains open for two exact reasons:
 
 1. Source contains a default-dark authorization issuer at
    `POST /api/trial/v1/shop/correction-authorizations`, a strict native client,
@@ -443,6 +522,16 @@ After the final candidate push:
 - resolve findings or record an owner-approved reason and consequence;
 - repeat affected device/merchant gates after any material fix.
 
+```text
+Reviewed PR / branch / commit / tree:
+Reviewer / independence basis / date:
+App, native, security, and Kernel run links and terminal results:
+Money / stock / wallet / restore / privacy / signing / release findings:
+Finding ID | Severity | Disposition | Fix commit or owner decision / consequence:
+Affected device or merchant gates repeated:
+Final disposition: PASS | FAIL | BLOCKED
+```
+
 ## Gate 8 — joint go/no-go
 
 Swan confirms technical evidence and rollback readiness. Vivian confirms the
@@ -450,6 +539,16 @@ merchant journey and customer promise. Together they record GO, NO-GO, or GO
 WITH NAMED CONDITIONS for the exact candidate.
 
 A proposed date, draft PR, mergeable state, or green check suite is not GO.
+
+```text
+Exact PR / commit / tree / signed artifact hashes:
+Gate 0–7 evidence references and status:
+Unresolved condition | Owner | Deadline | Stop/rollback consequence:
+Technical evidence and rollback confirmed by Swan / date:
+Merchant journey and customer promise confirmed by Vivian / date:
+Decision: GO | NO-GO | GO WITH NAMED CONDITIONS
+Decision timestamp / approved release window:
+```
 
 ## Gate 9 — founder-operated release and observation
 
@@ -466,6 +565,19 @@ decision and that path exists:
 4. monitoring and recovery references are checked for private-data exposure;
 5. public claims and support materials are compared with released capability;
 6. completion, failure, rollback, or required follow-up is recorded.
+
+```text
+Owner-dispatched release identity / timestamp:
+Signed artifact / signing fingerprint / distribution reference:
+Released commit / native tree / public deployment ID:
+Read-only identity verification:
+First-use / sale / stock / export / restart / support observations:
+Monitoring and private-data check:
+Public claim comparison:
+Rollback trigger checked / rollback target / named operator:
+Outcome: COMPLETE | FAILED | ROLLED BACK | FOLLOW-UP REQUIRED
+Evidence references / follow-up owner:
+```
 
 Implementation agents never dispatch the production release workflow, mutate
 production Supabase, or automate billing/entitlement transitions. If a release
