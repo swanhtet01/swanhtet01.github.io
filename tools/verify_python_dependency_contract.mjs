@@ -77,6 +77,12 @@ export function verifyPythonDependencyContract({
     requireToken(workflows[name], 'uv sync --frozen --group test', `${name}_frozen_test_sync_missing`, failures)
     requireToken(
       workflows[name],
+      'echo "$PWD/.venv/bin" >> "$GITHUB_PATH"',
+      `${name}_frozen_environment_not_exported`,
+      failures,
+    )
+    requireToken(
+      workflows[name],
       'uv run --frozen --group test python -m unittest',
       `${name}_frozen_test_run_missing`,
       failures,

@@ -101,6 +101,7 @@ jobs:
         run: |
           uv lock --check
           uv sync --frozen --group test
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
           uv run --frozen --group test python -m unittest discover -s tests -p 'test_*.py' -v
           uv run --frozen --group test python tools/validate_supermega_database_url.py --self-test
           node tools/verify_private_trial_migrations.mjs
