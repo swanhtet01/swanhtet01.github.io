@@ -4591,7 +4591,7 @@ void main() {
           ),
         );
         await tester.pumpAndSettle();
-        final search = find.byType(TextField);
+        final search = find.byKey(const ValueKey('shop-sale-search-field'));
         await tester.tap(search);
 
         // A submitted CR/LF string is normalized as one scan. This simulates
