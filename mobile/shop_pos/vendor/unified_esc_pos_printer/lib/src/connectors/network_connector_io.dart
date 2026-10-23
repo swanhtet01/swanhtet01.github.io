@@ -9,7 +9,7 @@ import '../models/printer_connection_state.dart';
 import '../models/printer_device.dart';
 import 'printer_connector.dart';
 
-typedef NetworkSocketFlush = Future<void> Function(Socket socket);
+typedef NetworkSocketFlush = Future<void> Function();
 
 /// Connector for network (TCP/IP) ESC/POS printers.
 ///
@@ -25,7 +25,7 @@ class NetworkConnector extends PrinterConnector<NetworkPrinterDevice> {
     this.writeTimeout = const Duration(seconds: 5),
     // IO-only deterministic seam for connector tests. Production omits it.
     NetworkSocketFlush? flushOperation,
-  }) : _flushOperation = flushOperation ?? _flushSocket;
+  }) : _flushOperation = flushOperation;
 
   /// Port used for both discovery scanning and default connections.
   final int scanPort;
@@ -34,7 +34,7 @@ class NetworkConnector extends PrinterConnector<NetworkPrinterDevice> {
   /// ambiguous and the connection is destroyed. A timeout never retries.
   final Duration writeTimeout;
 
-  final NetworkSocketFlush _flushOperation;
+  final NetworkSocketFlush? _flushOperation;
 
   Socket? _socket;
   PrinterConnectionState _state = PrinterConnectionState.disconnected;
@@ -151,7 +151,7 @@ class NetworkConnector extends PrinterConnector<NetworkPrinterDevice> {
 
       // Send ESC @ to initialise the printer on connect.
       _socket!.add(cInit.codeUnits);
-      await _flushOperation(_socket!).timeout(timeout);
+      await _flushSocket().timeout(timeout);
 
       _setState(PrinterConnectionState.connected);
     } on SocketException catch (e) {
@@ -189,7 +189,7 @@ class NetworkConnector extends PrinterConnector<NetworkPrinterDevice> {
 
     try {
       _socket!.add(bytes);
-      await _flushOperation(_socket!).timeout(writeTimeout);
+      await _flushSocket().timeout(writeTimeout);
       _setState(PrinterConnectionState.connected);
     } catch (e) {
       _destroySocket();
@@ -208,7 +208,7 @@ class NetworkConnector extends PrinterConnector<NetworkPrinterDevice> {
     if (socket == null) return;
 
     try {
-      await _flushOperation(socket).timeout(writeTimeout);
+      await _flushSocket().timeout(writeTimeout);
     } catch (error) {
       _destroySocket();
       _setState(PrinterConnectionState.error);
@@ -231,7 +231,7 @@ class NetworkConnector extends PrinterConnector<NetworkPrinterDevice> {
     try {
       final socket = _socket;
       if (socket != null) {
-        await _flushOperation(socket).timeout(writeTimeout);
+        await _flushSocket().timeout(writeTimeout);
         await socket.close().timeout(writeTimeout);
       }
     } catch (_) {
@@ -258,6 +258,11 @@ class NetworkConnector extends PrinterConnector<NetworkPrinterDevice> {
     _socket = null;
   }
 
+  Future<void> _flushSocket() {
+    final flushOperation = _flushOperation;
+    return flushOperation == null ? _socket!.flush() : flushOperation();
+  }
+
   void _assertState(PrinterConnectionState required, String operation) {
     if (_state != required) {
       throw PrinterStateException(
@@ -268,5 +273,3 @@ class NetworkConnector extends PrinterConnector<NetworkPrinterDevice> {
     }
   }
 }
-
-Future<void> _flushSocket(Socket socket) => socket.flush();

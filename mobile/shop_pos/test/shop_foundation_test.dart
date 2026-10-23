@@ -3119,9 +3119,9 @@ void main() {
         final stalledFlush = Completer<void>();
         final connector = NetworkConnector(
           writeTimeout: const Duration(milliseconds: 25),
-          flushOperation: (socket) {
+          flushOperation: () {
             flushCalls++;
-            if (flushCalls == 1) return socket.flush();
+            if (flushCalls == 1) return Future<void>.value();
             return stalledFlush.future;
           },
         );

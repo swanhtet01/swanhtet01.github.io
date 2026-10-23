@@ -6,6 +6,8 @@ import '../models/printer_connection_state.dart';
 import '../models/printer_device.dart';
 import 'printer_connector.dart';
 
+typedef NetworkSocketFlush = Future<void> Function();
+
 /// Web stub for the network (TCP/IP) connector.
 ///
 /// Raw TCP sockets are unavailable in the browser, so `scan()` yields no
@@ -16,6 +18,7 @@ class NetworkConnector extends PrinterConnector<NetworkPrinterDevice> {
   NetworkConnector({
     this.scanPort = kDefaultNetworkPort,
     this.writeTimeout = const Duration(seconds: 5),
+    NetworkSocketFlush? flushOperation,
   });
 
   /// Port used for both discovery scanning and default connections.
