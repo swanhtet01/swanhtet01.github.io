@@ -118,6 +118,7 @@ Future<void> main() async {
     ShopStartup(
       documents: runtimeScope.documentsRoot,
       importScratchRoot: runtimeScope.temporaryRoot,
+      runtimeScope: runtimeScope,
       scopedPreferences: preferences,
       initialMyanmar:
           preferences.instance.getBool(preferences.keys.localeMyanmar) ?? false,
@@ -4813,6 +4814,7 @@ class _ShopSettingsScreenState extends State<ShopSettingsScreen> {
                           builder: (_) => ShopBackupExportScreen(
                             database: widget.database,
                             myanmar: _myanmar,
+                            runtimeScope: widget.runtimeScope,
                           ),
                         ),
                       ),

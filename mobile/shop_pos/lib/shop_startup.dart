@@ -5,7 +5,6 @@ import 'dart:isolate';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 
 import 'shop_backup.dart';
@@ -20,6 +19,18 @@ typedef VerifyShopDatabaseFile = Future<void> Function(File file);
 typedef OpenShopDatabase = ShopDatabase Function(Directory documents);
 typedef VerifyOpenedShopDatabase = Future<void> Function(ShopDatabase database);
 
+Future<XFile?> pickShopBackupForRuntime({
+  required ShopRuntimeScope? runtimeScope,
+  required PickShopBackup pickBackup,
+}) async {
+  if (runtimeScope != null) {
+    if (!runtimeScope.capabilities.externalFileSaving) {
+      throw StateError('shop_external_file_access_unavailable');
+    }
+  }
+  return pickBackup();
+}
+
 /// Selects a new local Shop or restores an archive before Drift opens a file.
 /// An existing database never enters the restore path.
 class ShopStartup extends StatefulWidget {
@@ -33,6 +44,7 @@ class ShopStartup extends StatefulWidget {
     this.verifyDatabaseFile,
     this.databaseFactory,
     this.verifyOpenedDatabase,
+    this.runtimeScope,
     this.scopedPreferences,
     super.key,
   });
@@ -58,6 +70,7 @@ class ShopStartup extends StatefulWidget {
   /// Defaults to the database's eager semantic verifier. Widget tests may run
   /// that same verifier in Flutter's real-async zone.
   final VerifyOpenedShopDatabase? verifyOpenedDatabase;
+  final ShopRuntimeScope? runtimeScope;
   final ShopScopedPreferences? scopedPreferences;
 
   @override
@@ -78,6 +91,8 @@ class _ShopStartupState extends State<ShopStartup> {
   String? _message;
 
   File get _databaseFile => ShopDatabase.privateDatabaseFile(widget.documents);
+  bool get _externalFileSavingAllowed =>
+      widget.runtimeScope?.capabilities.externalFileSaving ?? true;
 
   Future<bool> _hasRestoreMarker() async =>
       await FileSystemEntity.type(
@@ -221,28 +236,52 @@ class _ShopStartupState extends State<ShopStartup> {
     }
   }
 
-  Future<XFile?> _pickNativeBackup() => openFile(
-    acceptedTypeGroups: [
-      XTypeGroup(
-        label: shopCopy(_myanmar, 'SuperMega backup', 'SuperMega အရန်ကူး'),
-        extensions: const ['smbak'],
-        mimeTypes: const ['application/octet-stream'],
-        uniformTypeIdentifiers: const ['public.data'],
-      ),
-    ],
-  );
+  Future<XFile?> _pickNativeBackup() {
+    final runtimeScope = widget.runtimeScope;
+    if (runtimeScope != null) {
+      if (!runtimeScope.capabilities.externalFileSaving) {
+        throw StateError('shop_external_file_access_unavailable');
+      }
+    }
+    return openFile(
+      acceptedTypeGroups: [
+        XTypeGroup(
+          label: shopCopy(_myanmar, 'SuperMega backup', 'SuperMega အရန်ကူး'),
+          extensions: const ['smbak'],
+          mimeTypes: const ['application/octet-stream'],
+          uniformTypeIdentifiers: const ['public.data'],
+        ),
+      ],
+    );
+  }
 
   Future<void> _chooseBackup() async {
     if (_busy) return;
+    if (!_externalFileSavingAllowed) {
+      setState(() {
+        _message = shopCopy(
+          _myanmar,
+          'External backup files are unavailable in this synthetic preview.',
+          'ဤစမ်းသပ်မြင်ကွင်းတွင် ပြင်ပအရန်ကူးဖိုင်များ အသုံးပြု၍မရပါ။',
+        );
+      });
+      return;
+    }
     setState(() {
       _busy = true;
       _message = null;
     });
     File? staged;
     try {
-      final chosen = await (widget.pickBackup ?? _pickNativeBackup)();
+      final chosen = await pickShopBackupForRuntime(
+        runtimeScope: widget.runtimeScope,
+        pickBackup: widget.pickBackup ?? _pickNativeBackup,
+      );
       if (chosen == null) return;
-      final cache = widget.importScratchRoot ?? await getTemporaryDirectory();
+      final cache =
+          widget.importScratchRoot ??
+          widget.runtimeScope?.temporaryRoot ??
+          await openProductionShopTemporaryDirectory();
       staged = File(
         '${cache.path}${Platform.pathSeparator}'
         'supermega-shop-import-${const Uuid().v4()}.smbak',
@@ -516,16 +555,17 @@ class _ShopStartupState extends State<ShopStartup> {
                       ),
                     ),
                     const SizedBox(height: 12),
-                    OutlinedButton(
-                      onPressed: _busy ? null : _chooseBackup,
-                      child: Text(
-                        shopCopy(
-                          _myanmar,
-                          'Restore backup',
-                          'အရန်ကူးဖိုင် ပြန်ယူရန်',
+                    if (_externalFileSavingAllowed)
+                      OutlinedButton(
+                        onPressed: _busy ? null : _chooseBackup,
+                        child: Text(
+                          shopCopy(
+                            _myanmar,
+                            'Restore backup',
+                            'အရန်ကူးဖိုင် ပြန်ယူရန်',
+                          ),
                         ),
                       ),
-                    ),
                   ] else ...[
                     Text(
                       _selectedName ?? '',

@@ -10,11 +10,14 @@ import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqlite3/sqlite3.dart';
 import 'package:supermega_shop/shop_backup.dart';
 import 'package:supermega_shop/shop_backup_export_screen.dart';
 import 'package:supermega_shop/shop_database.dart';
 import 'package:supermega_shop/shop_models.dart';
+import 'package:supermega_shop/shop_runtime_profile.dart';
+import 'package:supermega_shop/shop_runtime_scope.dart';
 import 'package:supermega_shop/shop_startup.dart';
 
 const _password = 'correct horse battery staple';
@@ -23,6 +26,28 @@ final _thumbnail = base64Decode(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ'
   'AAAADUlEQVR4nGPQyNjxHwAETAJIB09U9wAAAABJRU5ErkJggg==',
 );
+
+ShopRuntimeConfiguration _syntheticQaConfiguration() =>
+    ShopRuntimeConfiguration.resolve(
+      runtimeProfile: ShopRuntimeConfiguration.qaRuntimeToken,
+      qaProfile: ShopRuntimeConfiguration.qaProfileId,
+      buildIdentityProfile: ShopRuntimeConfiguration.qaRuntimeToken,
+      buildIdentityQaProfile: ShopRuntimeConfiguration.qaProfileId,
+      platformIdentity: 'dev.supermega.supermega_shop.qa',
+    );
+
+Future<ShopRuntimeScope> _syntheticQaScope(
+  Directory support,
+  Directory temporary,
+) {
+  SharedPreferences.setMockInitialValues({});
+  return ShopRuntimeScope.resolve(
+    ShopRuntimeProfile.syntheticQa,
+    configuration: _syntheticQaConfiguration(),
+    supportProvider: () async => support,
+    temporaryProvider: () async => temporary,
+  );
+}
 
 Future<void> _pumpUntil(
   WidgetTester tester,
@@ -180,6 +205,7 @@ void main() {
   late Directory directory;
   late ShopDatabase database;
   late File archive;
+  late ShopRuntimeScope syntheticQaScope;
 
   setUpAll(() async {
     _backupCorrectionKeyPair = await Ed25519().newKeyPairFromSeed(
@@ -190,6 +216,10 @@ void main() {
       _backupCorrectionKeyId: _base64UrlNoPadding(publicKey.bytes),
     });
     directory = await Directory.systemTemp.createTemp('shop-backup-test-');
+    syntheticQaScope = await _syntheticQaScope(
+      await directory.createTemp('qa-support-'),
+      await directory.createTemp('qa-temp-'),
+    );
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(_pathProviderChannel, (call) async {
           if (call.method == 'getTemporaryDirectory' ||
@@ -1258,6 +1288,95 @@ void main() {
     expect(await database.countSales(), 1);
     await _expectNoScratch(directory);
   });
+
+  test('synthetic QA exporter rejects before path lookup or Save As', () async {
+    var saverCalled = false;
+
+    await expectLater(
+      ShopBackupExporter.export(
+        database: database,
+        password: _password,
+        runtimeScope: syntheticQaScope,
+        saveArchive: (_, _) async {
+          saverCalled = true;
+          return 'must-not-save';
+        },
+      ),
+      throwsA(
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          'shop_external_file_access_unavailable',
+        ),
+      ),
+    );
+
+    expect(saverCalled, isFalse);
+    expect(
+      await syntheticQaScope.temporaryRoot
+          .list(recursive: true)
+          .where((entry) => entry.path.contains('supermega-shop-export-'))
+          .toList(),
+      isEmpty,
+    );
+  });
+
+  testWidgets(
+    'synthetic QA export screen cannot invoke an injected export action',
+    (tester) async {
+      var exportCalled = false;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ShopBackupExportScreen(
+            database: database,
+            myanmar: false,
+            runtimeScope: syntheticQaScope,
+            exportAction: (_) async {
+              exportCalled = true;
+              return ShopBackupExportResult.saved;
+            },
+          ),
+        ),
+      );
+      await tester.enterText(find.byType(TextField).at(0), _password);
+      await tester.enterText(find.byType(TextField).at(1), _password);
+
+      final saveButton = tester.widget<FilledButton>(
+        find.widgetWithText(FilledButton, 'Choose where to save'),
+      );
+      expect(saveButton.onPressed, isNull);
+      expect(exportCalled, isFalse);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+    },
+  );
+
+  test(
+    'synthetic QA startup rejects before invoking the external picker',
+    () async {
+      var pickerCalled = false;
+
+      await expectLater(
+        pickShopBackupForRuntime(
+          runtimeScope: syntheticQaScope,
+          pickBackup: () async {
+            pickerCalled = true;
+            return XFile(archive.path);
+          },
+        ),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            'shop_external_file_access_unavailable',
+          ),
+        ),
+      );
+
+      expect(pickerCalled, isFalse);
+    },
+  );
 
   testWidgets('export screen validates the password before opening Save As', (
     tester,
@@ -3166,40 +3285,41 @@ void main() {
     }
   });
 
-  testWidgets('empty Myanmar startup exposes the restore path named by export', (
-    tester,
-  ) async {
-    final documents = Directory.systemTemp.createTempSync(
-      'shop-myanmar-restore-path-',
-    );
-    final closeRecorder = _DatabaseCloseRecorder();
-    final databaseVerifier = _OpenedDatabaseVerifier();
-    try {
-      await tester.pumpWidget(
-        ShopStartup(
-          documents: documents,
-          importScratchRoot: documents,
-          initialMyanmar: true,
-          buildShop: (_, _) =>
-              const MaterialApp(home: Scaffold(body: Text('Opened Shop'))),
-          closeDatabase: closeRecorder.call,
-          databaseFactory: _openStartupDatabase,
-          verifyOpenedDatabase: databaseVerifier.call,
-        ),
+  testWidgets(
+    'empty Myanmar startup exposes the restore path named by export',
+    (tester) async {
+      final documents = Directory.systemTemp.createTempSync(
+        'shop-myanmar-restore-path-',
       );
-      await _pumpUntil(tester, find.text('Shop အသစ် စတင်ရန်'));
-      expect(find.text('အရန်ကူးဖိုင် ပြန်ယူရန်'), findsOneWidget);
-      expect(find.text('ပြန်ယူပြီး Shop ဖွင့်ရန်'), findsNothing);
-      expect(tester.takeException(), isNull);
-    } finally {
-      await _disposeOpenedStartup(
-        tester,
-        closeRecorder,
-        closeExpected: databaseVerifier.wasServiced,
-      );
-      documents.deleteSync(recursive: true);
-    }
-  });
+      final closeRecorder = _DatabaseCloseRecorder();
+      final databaseVerifier = _OpenedDatabaseVerifier();
+      try {
+        await tester.pumpWidget(
+          ShopStartup(
+            documents: documents,
+            importScratchRoot: documents,
+            initialMyanmar: true,
+            buildShop: (_, _) =>
+                const MaterialApp(home: Scaffold(body: Text('Opened Shop'))),
+            closeDatabase: closeRecorder.call,
+            databaseFactory: _openStartupDatabase,
+            verifyOpenedDatabase: databaseVerifier.call,
+          ),
+        );
+        await _pumpUntil(tester, find.text('Shop အသစ် စတင်ရန်'));
+        expect(find.text('အရန်ကူးဖိုင် ပြန်ယူရန်'), findsOneWidget);
+        expect(find.text('ပြန်ယူပြီး Shop ဖွင့်ရန်'), findsNothing);
+        expect(tester.takeException(), isNull);
+      } finally {
+        await _disposeOpenedStartup(
+          tester,
+          closeRecorder,
+          closeExpected: databaseVerifier.wasServiced,
+        );
+        documents.deleteSync(recursive: true);
+      }
+    },
+  );
 
   testWidgets('Start new reserves the exact Drift database path', (
     tester,

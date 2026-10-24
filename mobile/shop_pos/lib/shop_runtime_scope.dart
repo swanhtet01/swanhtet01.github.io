@@ -14,7 +14,11 @@ const shopReceiptPaperWidthKey = 'shop_receipt_paper_width_v1';
 Future<SharedPreferences> _openShopPreferences() =>
     SharedPreferences.getInstance();
 
-Future<Directory> _openShopTemporaryDirectory() => getTemporaryDirectory();
+Future<Directory> openProductionShopDocumentsDirectory() =>
+    getApplicationDocumentsDirectory();
+
+Future<Directory> openProductionShopTemporaryDirectory() =>
+    getTemporaryDirectory();
 
 class ShopPreferenceKeys {
   const ShopPreferenceKeys._(this._prefix);
@@ -79,9 +83,9 @@ class ShopRuntimeScope {
     }
     if (!resolvedConfiguration.isSyntheticQa) {
       final documents =
-          await (documentsProvider ?? getApplicationDocumentsDirectory)();
+          await (documentsProvider ?? openProductionShopDocumentsDirectory)();
       final temporary =
-          await (temporaryProvider ?? _openShopTemporaryDirectory)();
+          await (temporaryProvider ?? openProductionShopTemporaryDirectory)();
       final preferences = await (preferencesProvider ?? _openShopPreferences)();
       return ShopRuntimeScope._(
         configuration: resolvedConfiguration,
@@ -97,7 +101,7 @@ class ShopRuntimeScope {
 
     final support = await (supportProvider ?? getApplicationSupportDirectory)();
     final temporaryParent =
-        await (temporaryProvider ?? _openShopTemporaryDirectory)();
+        await (temporaryProvider ?? openProductionShopTemporaryDirectory)();
     await _requireRealDirectory(support, 'shop_qa_support_root_invalid');
     await _requireRealDirectory(
       temporaryParent,

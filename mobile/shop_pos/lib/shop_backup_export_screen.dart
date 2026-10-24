@@ -2,15 +2,17 @@ import 'dart:io';
 
 import 'package:file_saver/file_saver.dart';
 import 'package:flutter/material.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 
 import 'shop_backup.dart';
 import 'shop_copy.dart';
 import 'shop_database.dart';
+import 'shop_runtime_scope.dart';
 
-typedef SaveEncryptedShopArchive =
-    Future<String?> Function(File archive, String suggestedName);
+typedef SaveEncryptedShopArchive = Future<String?> Function(
+  File archive,
+  String suggestedName,
+);
 
 enum ShopBackupExportResult { saved, cancelled }
 
@@ -25,15 +27,28 @@ abstract final class ShopBackupExporter {
     required SaveEncryptedShopArchive saveArchive,
     Directory? scratchRoot,
     Directory? encryptedRoot,
+    ShopRuntimeScope? runtimeScope,
     DateTime? now,
   }) async {
-    if (_active) throw StateError('A Shop backup export is already in progress.');
+    if (runtimeScope != null) {
+      if (!runtimeScope.capabilities.externalFileSaving) {
+        throw StateError('shop_external_file_access_unavailable');
+      }
+    }
+    if (_active) {
+      throw StateError('A Shop backup export is already in progress.');
+    }
     _active = true;
     File? encryptedArchive;
     try {
       final privateRoot =
-          scratchRoot ?? await getApplicationDocumentsDirectory();
-      final cacheRoot = encryptedRoot ?? await getTemporaryDirectory();
+          scratchRoot ??
+          runtimeScope?.documentsRoot ??
+          await openProductionShopDocumentsDirectory();
+      final cacheRoot =
+          encryptedRoot ??
+          runtimeScope?.temporaryRoot ??
+          await openProductionShopTemporaryDirectory();
       await cacheRoot.create(recursive: true);
       encryptedArchive = File(
         '${cacheRoot.path}${Platform.pathSeparator}'
@@ -79,6 +94,7 @@ class ShopBackupExportScreen extends StatefulWidget {
     this.exportAction,
     this.scratchRoot,
     this.encryptedRoot,
+    this.runtimeScope,
     super.key,
   });
 
@@ -91,6 +107,10 @@ class ShopBackupExportScreen extends StatefulWidget {
   final Future<ShopBackupExportResult> Function(String password)? exportAction;
   final Directory? scratchRoot;
   final Directory? encryptedRoot;
+  final ShopRuntimeScope? runtimeScope;
+
+  bool get externalFileSavingAllowed =>
+      runtimeScope?.capabilities.externalFileSaving ?? true;
 
   @override
   State<ShopBackupExportScreen> createState() => _ShopBackupExportScreenState();
@@ -103,6 +123,12 @@ class _ShopBackupExportScreenState extends State<ShopBackupExportScreen> {
   String? _message;
 
   Future<String?> _saveAs(File archive, String suggestedName) {
+    final runtimeScope = widget.runtimeScope;
+    if (runtimeScope != null) {
+      if (!runtimeScope.capabilities.externalFileSaving) {
+        throw StateError('shop_external_file_access_unavailable');
+      }
+    }
     if (!Platform.isAndroid && !Platform.isIOS && !Platform.isWindows) {
       throw UnsupportedError('Shop backup export is unavailable here.');
     }
@@ -117,6 +143,16 @@ class _ShopBackupExportScreenState extends State<ShopBackupExportScreen> {
 
   Future<void> _export() async {
     if (_busy) return;
+    if (!widget.externalFileSavingAllowed) {
+      setState(() {
+        _message = shopCopy(
+          widget.myanmar,
+          'External backup files are unavailable in this synthetic preview.',
+          'ဤစမ်းသပ်မြင်ကွင်းတွင် ပြင်ပအရန်ကူးဖိုင်များ အသုံးပြု၍မရပါ။',
+        );
+      });
+      return;
+    }
     final password = _password.text;
     if (password.runes.length < 12) {
       setState(() {
@@ -152,6 +188,7 @@ class _ShopBackupExportScreenState extends State<ShopBackupExportScreen> {
               saveArchive: widget.saveArchive ?? _saveAs,
               scratchRoot: widget.scratchRoot,
               encryptedRoot: widget.encryptedRoot,
+              runtimeScope: widget.runtimeScope,
             ));
       if (!mounted) return;
       _password.clear();
@@ -197,7 +234,9 @@ class _ShopBackupExportScreenState extends State<ShopBackupExportScreen> {
     canPop: !_busy,
     child: Scaffold(
       appBar: AppBar(
-        title: Text(shopCopy(widget.myanmar, 'Export backup', 'အရန်ကူးဖိုင် ထုတ်ယူရန်')),
+        title: Text(
+          shopCopy(widget.myanmar, 'Export backup', 'အရန်ကူးဖိုင် ထုတ်ယူရန်'),
+        ),
       ),
       body: Center(
         child: ConstrainedBox(
@@ -229,7 +268,11 @@ class _ShopBackupExportScreenState extends State<ShopBackupExportScreen> {
                 enableSuggestions: false,
                 enabled: !_busy,
                 decoration: InputDecoration(
-                  labelText: shopCopy(widget.myanmar, 'Backup password', 'အရန်ကူးစကားဝှက်'),
+                  labelText: shopCopy(
+                    widget.myanmar,
+                    'Backup password',
+                    'အရန်ကူးစကားဝှက်',
+                  ),
                 ),
               ),
               const SizedBox(height: 12),
@@ -249,12 +292,22 @@ class _ShopBackupExportScreenState extends State<ShopBackupExportScreen> {
               ),
               const SizedBox(height: 20),
               FilledButton.icon(
-                onPressed: _busy ? null : _export,
+                onPressed: !widget.externalFileSavingAllowed || _busy
+                    ? null
+                    : _export,
                 icon: const Icon(Icons.save_alt_outlined),
                 label: Text(
                   _busy
-                      ? shopCopy(widget.myanmar, 'Preparing backup…', 'အရန်ကူးဖိုင် ပြင်ဆင်နေသည်…')
-                      : shopCopy(widget.myanmar, 'Choose where to save', 'သိမ်းမည့်နေရာ ရွေးပါ'),
+                      ? shopCopy(
+                          widget.myanmar,
+                          'Preparing backup…',
+                          'အရန်ကူးဖိုင် ပြင်ဆင်နေသည်…',
+                        )
+                      : shopCopy(
+                          widget.myanmar,
+                          'Choose where to save',
+                          'သိမ်းမည့်နေရာ ရွေးပါ',
+                        ),
                 ),
               ),
               if (_message != null) ...[
