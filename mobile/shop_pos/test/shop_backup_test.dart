@@ -1658,13 +1658,11 @@ void main() {
       final reconciliation = connection
           .select('SELECT * FROM shop_wallet_reversal_reconciliations')
           .single;
-      final proof = connection
-          .select(
-            'SELECT * FROM shop_correction_authorization_proofs '
-            'WHERE capability = ?',
-            ['shop.sale.reconcile_wallet'],
-          )
-          .single;
+      final proof = connection.select(
+        'SELECT * FROM shop_correction_authorization_proofs '
+        'WHERE capability = ?',
+        ['shop.sale.reconcile_wallet'],
+      ).single;
       expect(proof['proof_kind'], 'signed_v2');
       expect(
         proof['command_digest'],
