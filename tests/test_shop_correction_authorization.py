@@ -34,6 +34,7 @@ from supermega_runtime.trial_store import (
     TrialReconciliationRequired,
     TrialStoreError,
     TrialPrincipal,
+    TrialValidationError,
     shop_correction_authorization_receipt_digest,
     shop_correction_authorization_receipt_v3_digest,
 )
@@ -416,6 +417,22 @@ class ShopCorrectionConsumptionStateMachineTests(unittest.TestCase):
             raised.exception.reasons,
             ("shop_correction_authorization_window_open",),
         )
+
+    def test_new_decision_flag_rejects_truthy_non_boolean_values(self) -> None:
+        store, body, receipt, lineage = self._authorized_store()
+        with self.assertRaises(TrialValidationError):
+            store.consume_shop_correction_authorization(
+                _principal(),
+                consumption_request_id=str(uuid4()),
+                authorization_receipt_id=receipt.receipt_id,
+                authorization_receipt_digest=receipt.receipt_digest,
+                lineage_id=lineage.lineage_id,
+                lineage_epoch=lineage.lineage_epoch,
+                capability=body["capability"],
+                semantic_target_id="sale-1",
+                command_digest=body["command_digest"],
+                allow_new_decision="open",
+            )
 
     def test_lost_response_exact_retry_returns_identical_recovery_proof(self) -> None:
         store, body, receipt, lineage = self._authorized_store()

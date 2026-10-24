@@ -22,9 +22,11 @@ from supermega_runtime.shop_inventory_runtime import (
 from supermega_runtime.shop_correction_receipts import (
     SHOP_CORRECTION_AUTHORIZATION_CONTRACT,
     SHOP_CORRECTION_AUTHORIZATION_V2_CONTRACT,
+    SHOP_CORRECTION_RECEIPT_PUBLIC_KEYS,
     ShopCorrectionReceiptSigner,
     ShopCorrectionSigningError,
     load_shop_correction_receipt_signer,
+    verify_shop_correction_signature,
 )
 
 
@@ -3550,12 +3552,26 @@ def shop_correction_authorization_receipt_v3_digest(
 def _configured_shop_correction_signer(
     explicit: ShopCorrectionReceiptSigner | None,
 ) -> ShopCorrectionReceiptSigner | None:
-    if explicit is not None:
-        return explicit
     try:
-        return load_shop_correction_receipt_signer()
+        signer = explicit or load_shop_correction_receipt_signer()
+        if signer is not None:
+            _shop_correction_verification_keys(signer)
+        return signer
     except ShopCorrectionSigningError:
         return None
+
+
+def _shop_correction_verification_keys(
+    signer: ShopCorrectionReceiptSigner,
+) -> dict[str, str]:
+    verification_keys = dict(SHOP_CORRECTION_RECEIPT_PUBLIC_KEYS)
+    configured_pin = verification_keys.get(signer.key_id)
+    if configured_pin is not None and configured_pin != signer.public_key_base64url:
+        raise ShopCorrectionSigningError(
+            "shop_correction_signing_public_pin_mismatch"
+        )
+    verification_keys.setdefault(signer.key_id, signer.public_key_base64url)
+    return verification_keys
 
 
 def _shop_correction_json_object(pairs: list[tuple[str, Any]]) -> JsonObject:
@@ -3930,6 +3946,143 @@ def _shop_correction_consumption_digest(
             )
         ).encode("utf-8")
     ).hexdigest()
+
+
+def _shop_correction_lineage_from_mapping(
+    value: object,
+    *,
+    workspace_id: str | None = None,
+    idempotent_replay: bool = False,
+) -> ShopCorrectionLineageRecord:
+    if not isinstance(value, Mapping):
+        raise TrialStoreError("Shop correction lineage evidence is invalid.")
+    try:
+        record = ShopCorrectionLineageRecord(
+            activation_request_id=str(UUID(str(value.get("activation_request_id")))),
+            workspace_id=str(value.get("workspace_id") or ""),
+            actor_id=str(value.get("actor_id") or ""),
+            lineage_id=str(UUID(str(value.get("lineage_id")))),
+            lineage_epoch=int(value.get("lineage_epoch")),
+            previous_lineage_id=(
+                None
+                if value.get("previous_lineage_id") is None
+                else str(UUID(str(value.get("previous_lineage_id"))))
+            ),
+            previous_lineage_epoch=(
+                None
+                if value.get("previous_lineage_epoch") is None
+                else int(value.get("previous_lineage_epoch"))
+            ),
+            consumption_ordinal=int(value.get("current_consumption_ordinal")),
+            consumption_digest=(
+                None
+                if value.get("current_consumption_digest") is None
+                else str(value.get("current_consumption_digest"))
+            ),
+            activated_at_millis=int(value.get("activated_at_millis")),
+            idempotent_replay=idempotent_replay,
+        )
+    except (TypeError, ValueError, AttributeError) as exc:
+        raise TrialStoreError("Shop correction lineage evidence is invalid.") from exc
+    try:
+        _shop_correction_lineage_input(
+            lineage_id=record.lineage_id,
+            lineage_epoch=record.lineage_epoch,
+            consumption_ordinal=record.consumption_ordinal,
+            consumption_digest=record.consumption_digest,
+        )
+    except TrialValidationError as exc:
+        raise TrialStoreError("Shop correction lineage evidence is invalid.") from exc
+    if (
+        not record.workspace_id
+        or (workspace_id is not None and record.workspace_id != workspace_id)
+        or not record.actor_id
+        or record.activated_at_millis <= 0
+        or ((record.previous_lineage_id is None) != (record.previous_lineage_epoch is None))
+        or (
+            record.lineage_epoch == 1
+            and (record.previous_lineage_id is not None or record.previous_lineage_epoch is not None)
+        )
+        or (
+            record.lineage_epoch > 1
+            and record.previous_lineage_epoch != record.lineage_epoch - 1
+        )
+    ):
+        raise TrialStoreError("Shop correction lineage evidence is invalid.")
+    return record
+
+
+def _shop_correction_consumption_from_mapping(
+    value: object,
+    *,
+    signer: ShopCorrectionReceiptSigner,
+    workspace_id: str,
+    response_mode: str,
+) -> ShopCorrectionConsumptionProof:
+    if not isinstance(value, Mapping):
+        raise TrialStoreError("Shop correction consumption evidence is invalid.")
+    try:
+        proof = ShopCorrectionConsumptionProof(
+            consumption_id=str(UUID(str(value.get("consumption_id")))),
+            consumption_request_id=str(UUID(str(value.get("consumption_request_id")))),
+            authorization_receipt_id=str(UUID(str(value.get("authorization_receipt_id")))),
+            authorization_receipt_digest=str(value.get("authorization_receipt_digest") or ""),
+            workspace_id=str(value.get("workspace_id") or ""),
+            actor_id=str(value.get("actor_id") or ""),
+            capability=str(value.get("capability") or ""),
+            semantic_target_id=str(value.get("semantic_target_id") or ""),
+            command_digest=str(value.get("command_digest") or ""),
+            lineage_id=str(UUID(str(value.get("lineage_id")))),
+            lineage_epoch=int(value.get("lineage_epoch")),
+            consumption_ordinal=int(value.get("consumption_ordinal")),
+            previous_consumption_digest=(
+                None
+                if value.get("previous_consumption_digest") is None
+                else str(value.get("previous_consumption_digest"))
+            ),
+            history_digest=str(value.get("history_digest") or ""),
+            consumed_at_millis=int(value.get("consumed_at_millis")),
+            key_id=str(value.get("key_id") or ""),
+            signature=str(value.get("signature") or ""),
+            response_mode=response_mode,
+        )
+    except (TypeError, ValueError, AttributeError) as exc:
+        raise TrialStoreError("Shop correction consumption evidence is invalid.") from exc
+    expected = _shop_correction_consumption_digest(
+        consumption_id=proof.consumption_id,
+        consumption_request_id=proof.consumption_request_id,
+        authorization_receipt_id=proof.authorization_receipt_id,
+        authorization_receipt_digest=proof.authorization_receipt_digest,
+        workspace_id=proof.workspace_id,
+        actor_id=proof.actor_id,
+        capability=proof.capability,
+        semantic_target_id=proof.semantic_target_id,
+        command_digest=proof.command_digest,
+        lineage_id=proof.lineage_id,
+        lineage_epoch=proof.lineage_epoch,
+        consumption_ordinal=proof.consumption_ordinal,
+        previous_consumption_digest=proof.previous_consumption_digest,
+        consumed_at_millis=proof.consumed_at_millis,
+    )
+    try:
+        verification_keys = _shop_correction_verification_keys(signer)
+    except ShopCorrectionSigningError as exc:
+        raise TrialStoreError(
+            "Shop correction signing key conflicts with its source pin."
+        ) from exc
+    if (
+        proof.workspace_id != workspace_id
+        or proof.capability not in SHOP_CORRECTION_AUTHORIZATION_CAPABILITIES
+        or proof.history_digest != expected
+        or not verify_shop_correction_signature(
+            key_id=proof.key_id,
+            receipt_digest=proof.history_digest,
+            signature=proof.signature,
+            public_keys=verification_keys,
+        )
+    ):
+        raise TrialStoreError("Shop correction consumption evidence is invalid.")
+    return proof
 
 
 def _shop_correction_receipt_from_mapping(
@@ -5875,16 +6028,173 @@ class PostgresTrialStore:
         local_consumption_ordinal: int,
         local_consumption_digest: str | None,
     ) -> ShopCorrectionLineageRecord:
-        del (
-            principal,
-            activation_request_id,
-            lineage_id,
-            expected_previous_lineage_id,
-            expected_previous_lineage_epoch,
-            local_consumption_ordinal,
-            local_consumption_digest,
+        normalized = _require_shop_correction_principal(principal)
+        request_id = _shop_correction_uuid(
+            activation_request_id, field="activation_request_id"
         )
-        raise TrialNotReadyError(("shop_correction_consumption_postgres_ready",))
+        lineage = _shop_correction_uuid(lineage_id, field="lineage_id")
+        previous_lineage = (
+            None
+            if expected_previous_lineage_id is None
+            else _shop_correction_uuid(
+                expected_previous_lineage_id,
+                field="expected_previous_lineage_id",
+            )
+        )
+        if expected_previous_lineage_epoch is not None and (
+            type(expected_previous_lineage_epoch) is not int
+            or expected_previous_lineage_epoch < 1
+        ):
+            raise TrialValidationError(
+                "expected_previous_lineage_epoch must be a positive integer."
+            )
+        _, _, ordinal, digest = _shop_correction_lineage_input(
+            lineage_id=lineage,
+            lineage_epoch=1,
+            consumption_ordinal=local_consumption_ordinal,
+            consumption_digest=local_consumption_digest,
+        )
+        activation_fingerprint = _canonical_fingerprint(
+            "shop_correction_lineage_activation",
+            {
+                "activation_request_id": request_id,
+                "lineage_id": lineage,
+                "expected_previous_lineage_id": previous_lineage,
+                "expected_previous_lineage_epoch": expected_previous_lineage_epoch,
+                "local_consumption_ordinal": ordinal,
+                "local_consumption_digest": digest,
+            },
+        )
+        command_id = str(uuid5(NAMESPACE_URL, f"{SHOP_CORRECTION_LINEAGE_CONTRACT}\n{normalized.workspace_id}\n{request_id}"))
+        select_fields = """
+            workspace_id, activation_request_id, lineage_id, lineage_epoch,
+            previous_lineage_id, previous_lineage_epoch, actor_id,
+            current_consumption_ordinal, current_consumption_digest,
+            floor(extract(epoch from activated_at) * 1000)::bigint as activated_at_millis
+        """
+        with self._guarded_cursor(
+            normalized, write=True, capability="commerce.write"
+        ) as (cursor, _capabilities):
+            if "commerce" not in self._product_entitlements(cursor, normalized.workspace_id):
+                raise TrialPermissionDenied("product.commerce")
+            self._require_active_workspace_owner(cursor, normalized)
+            self._lock(cursor, f"{normalized.workspace_id}:shop-correction-lineage")
+            self._lock(
+                cursor,
+                f"{normalized.workspace_id}:shop-correction-lineage-request:{request_id}",
+            )
+            cursor.execute(
+                f"""select {select_fields}, activation_fingerprint
+                    from app_private.shop_correction_lineages
+                    where workspace_id = %s and activation_request_id = %s""",
+                (normalized.workspace_id, request_id),
+            )
+            replay_row = cursor.fetchone()
+            cursor.execute(
+                f"""select {select_fields}
+                    from app_private.shop_correction_lineages
+                    where workspace_id = %s and superseded_at is null
+                    for update""",
+                (normalized.workspace_id,),
+            )
+            active_row = cursor.fetchone()
+            if replay_row is not None:
+                if str(replay_row.get("activation_fingerprint") or "") != activation_fingerprint:
+                    raise TrialIdempotencyConflict(request_id)
+                replay = _shop_correction_lineage_from_mapping(
+                    replay_row,
+                    workspace_id=normalized.workspace_id,
+                    idempotent_replay=True,
+                )
+                if active_row is not None and str(active_row.get("lineage_id")) == replay.lineage_id:
+                    return _shop_correction_lineage_from_mapping(
+                        active_row,
+                        workspace_id=normalized.workspace_id,
+                        idempotent_replay=True,
+                    )
+                return replay
+            if active_row is None:
+                if (
+                    previous_lineage is not None
+                    or expected_previous_lineage_epoch is not None
+                    or ordinal != 0
+                    or digest is not None
+                ):
+                    raise TrialReconciliationRequired(state="initial_watermark_not_empty")
+                epoch = 1
+            else:
+                active = _shop_correction_lineage_from_mapping(
+                    active_row, workspace_id=normalized.workspace_id
+                )
+                if (
+                    previous_lineage != active.lineage_id
+                    or expected_previous_lineage_epoch != active.lineage_epoch
+                ):
+                    raise TrialReconciliationRequired(state="stale_lineage")
+                if ordinal != active.consumption_ordinal or digest != active.consumption_digest:
+                    raise TrialReconciliationRequired(state="watermark_mismatch")
+                if lineage == active.lineage_id:
+                    raise TrialValidationError("A restored lineage must use a fresh lineage_id.")
+                epoch = active.lineage_epoch + 1
+                cursor.execute(
+                    """update app_private.shop_correction_lineages
+                       set superseded_at = transaction_timestamp()
+                       where workspace_id = %s and lineage_id = %s
+                         and superseded_at is null
+                       returning lineage_id""",
+                    (normalized.workspace_id, active.lineage_id),
+                )
+                if str((cursor.fetchone() or {}).get("lineage_id") or "") != active.lineage_id:
+                    raise TrialReconciliationRequired(state="stale_lineage")
+            cursor.execute(
+                """insert into app_private.shop_correction_lineages
+                  (workspace_id, lineage_id, lineage_epoch, activation_request_id,
+                   activation_fingerprint, actor_id, actor_kind,
+                   previous_lineage_id, previous_lineage_epoch,
+                   initial_consumption_ordinal, initial_consumption_digest,
+                   current_consumption_ordinal, current_consumption_digest)
+                values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                (
+                    normalized.workspace_id, lineage, epoch, request_id,
+                    activation_fingerprint, normalized.actor_id, normalized.actor_kind,
+                    previous_lineage, expected_previous_lineage_epoch,
+                    ordinal, digest, ordinal, digest,
+                ),
+            )
+            cursor.execute(
+                f"""select {select_fields}
+                    from app_private.shop_correction_lineages
+                    where workspace_id = %s and activation_request_id = %s""",
+                (normalized.workspace_id, request_id),
+            )
+            record = _shop_correction_lineage_from_mapping(
+                cursor.fetchone(), workspace_id=normalized.workspace_id
+            )
+            payload = {
+                "contract": SHOP_CORRECTION_LINEAGE_CONTRACT,
+                "activationRequestId": request_id,
+                "lineageId": lineage,
+                "expectedPreviousLineageId": previous_lineage,
+                "expectedPreviousLineageEpoch": expected_previous_lineage_epoch,
+                "localConsumptionOrdinal": ordinal,
+                "localConsumptionDigest": digest,
+            }
+            cursor.execute(
+                """insert into app_private.workspace_events
+                  (event_id, workspace_id, command_id, command_fingerprint, surface,
+                   event_type, actor_id, actor_kind, expected_version, resulting_version,
+                   payload_json, result_json)
+                values (%s, %s, %s, %s, 'commerce', %s, %s, %s, null, null,
+                        %s::jsonb, %s::jsonb)""",
+                (
+                    str(uuid4()), normalized.workspace_id, command_id,
+                    activation_fingerprint, SHOP_CORRECTION_LINEAGE_EVENT_TYPE,
+                    normalized.actor_id, normalized.actor_kind,
+                    json.dumps(payload, ensure_ascii=False),
+                    json.dumps(record.to_dict(), ensure_ascii=False),
+                ),
+            )
+            return record
 
     def consume_shop_correction_authorization(
         self,
@@ -5900,19 +6210,295 @@ class PostgresTrialStore:
         command_digest: str,
         allow_new_decision: bool,
     ) -> ShopCorrectionConsumptionProof:
-        del (
-            principal,
-            consumption_request_id,
-            authorization_receipt_id,
-            authorization_receipt_digest,
-            lineage_id,
-            lineage_epoch,
-            capability,
-            semantic_target_id,
-            command_digest,
-            allow_new_decision,
+        normalized = _require_shop_correction_principal(principal)
+        if type(allow_new_decision) is not bool:
+            raise TrialValidationError("allow_new_decision must be a boolean.")
+        request_id = _shop_correction_uuid(
+            consumption_request_id, field="consumption_request_id"
         )
-        raise TrialNotReadyError(("shop_correction_consumption_postgres_ready",))
+        receipt_id = _shop_correction_uuid(
+            authorization_receipt_id, field="authorization_receipt_id"
+        )
+        receipt_digest = _shop_correction_digest(
+            authorization_receipt_digest, field="authorization_receipt_digest"
+        )
+        lineage, epoch, _, _ = _shop_correction_lineage_input(
+            lineage_id=lineage_id,
+            lineage_epoch=lineage_epoch,
+            consumption_ordinal=0,
+            consumption_digest=None,
+        )
+        digest = _shop_correction_digest(command_digest, field="command_digest")
+        target = _bounded_shop_correction_text(
+            semantic_target_id, field="Shop correction semantic_target_id", maximum=120
+        )
+        if capability not in SHOP_CORRECTION_AUTHORIZATION_CAPABILITIES:
+            raise TrialValidationError("Shop correction capability is invalid.")
+        signer = self._shop_correction_signer
+        if signer is None:
+            raise TrialNotReadyError(("shop_correction_signing_ready",))
+        command_id, fingerprint = _shop_correction_consumption_identity(
+            workspace_id=normalized.workspace_id,
+            capability=capability,
+            semantic_target_id=target,
+        )
+        consumption_fields = """
+            workspace_id, consumption_id, consumption_request_id,
+            authorization_receipt_id, authorization_receipt_digest, actor_id,
+            capability, semantic_target_id, command_digest, lineage_id,
+            lineage_epoch, consumption_ordinal, previous_consumption_digest,
+            history_digest, consumed_at_millis, key_id, signature
+        """
+        with self._guarded_cursor(
+            normalized, write=True, capability="commerce.write"
+        ) as (cursor, _capabilities):
+            if "commerce" not in self._product_entitlements(cursor, normalized.workspace_id):
+                raise TrialPermissionDenied("product.commerce")
+            self._require_active_workspace_owner(cursor, normalized)
+            self._lock(cursor, f"{normalized.workspace_id}:shop-correction-lineage")
+            self._lock(cursor, f"{normalized.workspace_id}:shop-correction-target:{command_id}")
+            self._lock(cursor, f"{normalized.workspace_id}:shop-correction-request:{request_id}")
+            cursor.execute(
+                """select workspace_id, activation_request_id, lineage_id, lineage_epoch,
+                          previous_lineage_id, previous_lineage_epoch, actor_id,
+                          current_consumption_ordinal, current_consumption_digest,
+                          floor(extract(epoch from activated_at) * 1000)::bigint as activated_at_millis
+                   from app_private.shop_correction_lineages
+                   where workspace_id = %s and superseded_at is null
+                   for update""",
+                (normalized.workspace_id,),
+            )
+            active_row = cursor.fetchone()
+            if active_row is None:
+                raise TrialNotReadyError(("shop_correction_lineage_ready",))
+            active = _shop_correction_lineage_from_mapping(
+                active_row, workspace_id=normalized.workspace_id
+            )
+            if active.lineage_id != lineage or active.lineage_epoch != epoch:
+                raise TrialReconciliationRequired(state="stale_lineage")
+            cursor.execute(
+                f"""select {consumption_fields}
+                    from app_private.shop_correction_consumptions
+                    where workspace_id = %s and consumption_request_id = %s""",
+                (normalized.workspace_id, request_id),
+            )
+            request_row = cursor.fetchone()
+            cursor.execute(
+                f"""select {consumption_fields}
+                    from app_private.shop_correction_consumptions
+                    where workspace_id = %s and command_id = %s""",
+                (normalized.workspace_id, command_id),
+            )
+            existing_row = cursor.fetchone()
+            if request_row is not None and (
+                existing_row is None
+                or str(request_row.get("consumption_id")) != str(existing_row.get("consumption_id"))
+            ):
+                raise TrialIdempotencyConflict(request_id)
+            if existing_row is not None:
+                existing = _shop_correction_consumption_from_mapping(
+                    existing_row,
+                    signer=signer,
+                    workspace_id=normalized.workspace_id,
+                    response_mode="reconstruct_existing",
+                )
+                existing = replace(
+                    existing,
+                    response_mode=(
+                        "recover_same_request"
+                        if existing.consumption_request_id == request_id
+                        and existing.lineage_id == lineage
+                        and existing.lineage_epoch == epoch
+                        else "reconstruct_existing"
+                    ),
+                )
+                if (
+                    existing.authorization_receipt_id != receipt_id
+                    or existing.authorization_receipt_digest != receipt_digest
+                    or existing.actor_id != normalized.actor_id
+                    or existing.capability != capability
+                    or existing.semantic_target_id != target
+                    or existing.command_digest != digest
+                    or active.consumption_ordinal < existing.consumption_ordinal
+                ):
+                    raise TrialReconciliationRequired(state="committed_other_lineage")
+                return existing
+            cursor.execute(
+                """select payload_json, result_json
+                   from app_private.workspace_events
+                   where workspace_id = %s
+                     and event_type = %s
+                     and result_json ->> 'receiptId' = %s
+                   limit 1""",
+                (normalized.workspace_id, SHOP_CORRECTION_AUTHORIZATION_EVENT_TYPE, receipt_id),
+            )
+            authorization_row = cursor.fetchone()
+            if not isinstance(authorization_row, Mapping):
+                raise TrialNotFound("Shop correction authorization was not found.")
+            payload = authorization_row.get("payload_json") or {}
+            result = authorization_row.get("result_json") or {}
+            try:
+                if isinstance(payload, str):
+                    payload = json.loads(payload)
+                if isinstance(result, str):
+                    result = json.loads(result)
+            except json.JSONDecodeError as exc:
+                raise TrialStoreError(
+                    "Shop correction authorization evidence is invalid."
+                ) from exc
+            if not isinstance(payload, Mapping) or not isinstance(result, Mapping):
+                raise TrialStoreError("Shop correction authorization evidence is invalid.")
+            payload_request_id = str(payload.get("authorizationRequestId") or "")
+            if (
+                payload.get("contract") != SHOP_CORRECTION_AUTHORIZATION_CONTRACT
+                or payload.get("capability") != capability
+                or payload.get("commandDigest") != digest
+            ):
+                raise TrialPermissionDenied("shop.correction.consume")
+            receipt = _shop_correction_receipt_from_mapping(
+                result,
+                signer=signer,
+                workspace_id=normalized.workspace_id,
+                actor_id=normalized.actor_id,
+                finalization_request_id=payload_request_id,
+                capability=capability,
+                command_digest=digest,
+                idempotent_replay=True,
+            )
+            command = payload.get("command")
+            expected_target = (
+                command.get("saleId" if capability == "shop.sale.reverse" else "reversalId")
+                if isinstance(command, Mapping)
+                else None
+            )
+            if receipt.receipt_digest != receipt_digest or expected_target != target:
+                raise TrialPermissionDenied("shop.correction.consume")
+            if not allow_new_decision:
+                raise TrialNotReadyError(("shop_correction_authorization_window_open",))
+            cursor.execute(
+                "select floor(extract(epoch from transaction_timestamp()) * 1000)::bigint as consumed_at_millis"
+            )
+            now_row = cursor.fetchone() or {}
+            now_millis = int(now_row.get("consumed_at_millis") or 0)
+            if now_millis <= 0:
+                raise TrialStoreError("Shop correction server time is invalid.")
+            if now_millis > receipt.expires_at_millis:
+                raise TrialAuthorizationExpired(receipt.finalization_request_id)
+            ordinal = active.consumption_ordinal + 1
+            consumption_id = str(uuid5(UUID(receipt_id), request_id))
+            history_digest = _shop_correction_consumption_digest(
+                consumption_id=consumption_id,
+                consumption_request_id=request_id,
+                authorization_receipt_id=receipt_id,
+                authorization_receipt_digest=receipt_digest,
+                workspace_id=normalized.workspace_id,
+                actor_id=normalized.actor_id,
+                capability=capability,
+                semantic_target_id=target,
+                command_digest=digest,
+                lineage_id=lineage,
+                lineage_epoch=epoch,
+                consumption_ordinal=ordinal,
+                previous_consumption_digest=active.consumption_digest,
+                consumed_at_millis=now_millis,
+            )
+            signature = signer.sign(receipt_digest=history_digest)
+            expected_proof = ShopCorrectionConsumptionProof(
+                consumption_id=consumption_id,
+                consumption_request_id=request_id,
+                authorization_receipt_id=receipt_id,
+                authorization_receipt_digest=receipt_digest,
+                workspace_id=normalized.workspace_id,
+                actor_id=normalized.actor_id,
+                capability=capability,
+                semantic_target_id=target,
+                command_digest=digest,
+                lineage_id=lineage,
+                lineage_epoch=epoch,
+                consumption_ordinal=ordinal,
+                previous_consumption_digest=active.consumption_digest,
+                history_digest=history_digest,
+                consumed_at_millis=now_millis,
+                key_id=signer.key_id,
+                signature=signature,
+            )
+            cursor.execute(
+                """insert into app_private.shop_correction_consumptions
+                  (workspace_id, consumption_id, consumption_request_id,
+                   authorization_receipt_id, authorization_receipt_digest,
+                   actor_id, actor_kind, capability, semantic_target_id,
+                   command_id, command_digest, lineage_id, lineage_epoch,
+                   consumption_ordinal, previous_consumption_digest, history_digest,
+                   consumed_at_millis, key_id, signature)
+                values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                        %s, %s, %s, %s, %s, %s, %s)""",
+                (
+                    normalized.workspace_id, consumption_id, request_id,
+                    receipt_id, receipt_digest, normalized.actor_id,
+                    normalized.actor_kind, capability, target, command_id, digest,
+                    lineage, epoch, ordinal, active.consumption_digest,
+                    history_digest, now_millis, signer.key_id, signature,
+                ),
+            )
+            cursor.execute(
+                """update app_private.shop_correction_lineages
+                   set current_consumption_ordinal = %s,
+                       current_consumption_digest = %s
+                   where workspace_id = %s and lineage_id = %s
+                     and lineage_epoch = %s and superseded_at is null
+                     and current_consumption_ordinal = %s
+                     and current_consumption_digest is not distinct from %s
+                   returning current_consumption_ordinal, current_consumption_digest""",
+                (
+                    ordinal, history_digest, normalized.workspace_id, lineage,
+                    epoch, active.consumption_ordinal, active.consumption_digest,
+                ),
+            )
+            advanced = cursor.fetchone() or {}
+            if (
+                int(advanced.get("current_consumption_ordinal") or -1) != ordinal
+                or str(advanced.get("current_consumption_digest") or "") != history_digest
+            ):
+                raise TrialReconciliationRequired(state="watermark_mismatch")
+            cursor.execute(
+                f"""select {consumption_fields}
+                    from app_private.shop_correction_consumptions
+                    where workspace_id = %s and consumption_id = %s""",
+                (normalized.workspace_id, consumption_id),
+            )
+            proof = _shop_correction_consumption_from_mapping(
+                cursor.fetchone(),
+                signer=signer,
+                workspace_id=normalized.workspace_id,
+                response_mode="commit_new",
+            )
+            if proof.signed_dict() != expected_proof.signed_dict():
+                raise TrialStoreError("Shop correction consumption evidence could not be read back.")
+            audit_payload = {
+                "contract": SHOP_CORRECTION_CONSUMPTION_CONTRACT,
+                "consumptionRequestId": request_id,
+                "authorizationReceiptId": receipt_id,
+                "capability": capability,
+                "semanticTargetId": target,
+                "commandDigest": digest,
+                "lineageId": lineage,
+                "lineageEpoch": epoch,
+            }
+            cursor.execute(
+                """insert into app_private.workspace_events
+                  (event_id, workspace_id, command_id, command_fingerprint, surface,
+                   event_type, actor_id, actor_kind, expected_version, resulting_version,
+                   payload_json, result_json)
+                values (%s, %s, %s, %s, 'commerce', %s, %s, %s, null, null,
+                        %s::jsonb, %s::jsonb)""",
+                (
+                    consumption_id, normalized.workspace_id, command_id, fingerprint,
+                    SHOP_CORRECTION_CONSUMPTION_EVENT_TYPE, normalized.actor_id,
+                    normalized.actor_kind, json.dumps(audit_payload, ensure_ascii=False),
+                    json.dumps(proof.to_dict(), ensure_ascii=False),
+                ),
+            )
+            return proof
 
     def get_shop_correction_reconciliation_status(
         self,
@@ -5923,14 +6509,51 @@ class PostgresTrialStore:
         local_consumption_ordinal: int,
         local_consumption_digest: str | None,
     ) -> ShopCorrectionReconciliationStatus:
-        del (
-            principal,
-            lineage_id,
-            lineage_epoch,
-            local_consumption_ordinal,
-            local_consumption_digest,
+        normalized = _require_shop_correction_principal(principal)
+        lineage, epoch, ordinal, digest = _shop_correction_lineage_input(
+            lineage_id=lineage_id,
+            lineage_epoch=lineage_epoch,
+            consumption_ordinal=local_consumption_ordinal,
+            consumption_digest=local_consumption_digest,
         )
-        raise TrialNotReadyError(("shop_correction_consumption_postgres_ready",))
+        with self._guarded_cursor(
+            normalized, write=False, capability="commerce.write"
+        ) as (cursor, _capabilities):
+            if "commerce" not in self._product_entitlements(cursor, normalized.workspace_id):
+                raise TrialPermissionDenied("product.commerce")
+            self._require_active_workspace_owner(cursor, normalized)
+            cursor.execute(
+                """select lineage_id, lineage_epoch,
+                          current_consumption_ordinal, current_consumption_digest
+                   from app_private.shop_correction_lineages
+                   where workspace_id = %s and superseded_at is null""",
+                (normalized.workspace_id,),
+            )
+            row = cursor.fetchone()
+            if not isinstance(row, Mapping):
+                raise TrialNotReadyError(("shop_correction_lineage_ready",))
+            active_lineage = str(row.get("lineage_id") or "")
+            active_epoch = int(row.get("lineage_epoch") or 0)
+            server_ordinal = int(row.get("current_consumption_ordinal") or 0)
+            server_digest = row.get("current_consumption_digest")
+            if active_lineage != lineage or active_epoch != epoch:
+                state = "stale_lineage"
+            elif server_ordinal == ordinal and server_digest == digest:
+                state = "current"
+            else:
+                state = "reconciliation_required"
+            return ShopCorrectionReconciliationStatus(
+                workspace_id=normalized.workspace_id,
+                requested_lineage_id=lineage,
+                requested_lineage_epoch=epoch,
+                active_lineage_id=active_lineage,
+                active_lineage_epoch=active_epoch,
+                server_consumption_ordinal=server_ordinal,
+                server_consumption_digest=(None if server_digest is None else str(server_digest)),
+                local_consumption_ordinal=ordinal,
+                local_consumption_digest=digest,
+                state=state,
+            )
 
     def apply_command(
         self,
@@ -7184,6 +7807,8 @@ class InMemoryTrialStore:
         command_digest: str,
         allow_new_decision: bool,
     ) -> ShopCorrectionConsumptionProof:
+        if type(allow_new_decision) is not bool:
+            raise TrialValidationError("allow_new_decision must be a boolean.")
         request_id = _shop_correction_uuid(
             consumption_request_id, field="consumption_request_id"
         )
