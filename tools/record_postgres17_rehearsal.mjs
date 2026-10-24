@@ -98,6 +98,43 @@ export function recorderChildFailureCode(result) {
   return ''
 }
 
+export function buildRecorderFailureDiagnostic(result, rawStatus) {
+  const rawStatuses = new Set(['missing', 'unreadable', 'malformed', 'parsed_unreconciled'])
+  if (!rawStatuses.has(rawStatus)) fail('database_rehearsal_diagnostic_raw_status_invalid')
+  const spawnErrorCodes = new Set(['EACCES', 'ENOENT', 'ENOMEM', 'EPERM', 'ETIMEDOUT'])
+  const signals = new Set(['SIGABRT', 'SIGBREAK', 'SIGINT', 'SIGKILL', 'SIGTERM'])
+  const spawnError = spawnErrorCodes.has(result?.error?.code) ? result.error.code : null
+  const signal = signals.has(result?.signal) ? result.signal : null
+  return {
+    contract: 'supermega.postgres17-recorder-failure.v1',
+    phase: 'child_terminal_without_reconciled_raw',
+    terminal: {
+      exitStatus: Number.isInteger(result?.status) && result.status >= 0 ? result.status : null,
+      signal,
+      spawnError,
+    },
+    streams: {
+      stdoutBytes: typeof result?.stdout === 'string' ? Buffer.byteLength(result.stdout, 'utf8') : 0,
+      stderrBytes: typeof result?.stderr === 'string' ? Buffer.byteLength(result.stderr, 'utf8') : 0,
+      contentsRetained: false,
+    },
+    rawStatus,
+    childFailureCode: recorderChildFailureCode(result) || null,
+    rawEvidenceAccepted: false,
+    cleanupAttested: false,
+    leaseReleased: false,
+    retryAuthorized: false,
+    secretValuesRetained: false,
+  }
+}
+
+export async function writeRecorderFailureDiagnostic(destination, result, rawStatus) {
+  const path = `${destination}.diagnostic.json`
+  const diagnostic = buildRecorderFailureDiagnostic(result, rawStatus)
+  await writeFile(path, `${JSON.stringify(diagnostic, null, 2)}\n`, { encoding: 'utf8', flag: 'wx' })
+  return { path, diagnostic }
+}
+
 export async function withRecorderLease(lockPaths, operation) {
   const owned = []
   let launched = false, reconciled = false
@@ -146,11 +183,18 @@ async function record(destination) {
     // into a false database failure.
     lease.markLaunched()
     const result = spawnSync(process.execPath, [rehearsalRunner, '--expected-head', source.implementationCommit, '--evidence-file', rawPath], { cwd: root, encoding: 'utf8', timeout: 300_000, windowsHide: true })
-    let raw
-    try { raw = JSON.parse(await readFile(rawPath, 'utf8')) } catch {
+    let raw, rawParsed = false, rawStatus = 'missing'
+    try {
+      const rawText = await readFile(rawPath, 'utf8')
+      try { raw = JSON.parse(rawText); rawParsed = true } catch { rawStatus = 'malformed' }
+    } catch (error) {
+      rawStatus = error?.code === 'ENOENT' ? 'missing' : 'unreadable'
+    }
+    if (rawParsed && !recorderOutcomeReconciled(result, raw)) rawStatus = 'parsed_unreconciled'
+    if (!rawParsed || !lease.reconcile(result, raw)) {
+      await writeRecorderFailureDiagnostic(destination, result, rawStatus).catch(() => undefined)
       fail(recorderChildFailureCode(result) || 'database_rehearsal_termination_unreconciled')
     }
-    if (!lease.reconcile(result, raw)) fail('database_rehearsal_termination_unreconciled')
     if (result.status !== 0) fail('database_rehearsal_execution_failed')
     if (!same(cleanSource(), source) || !same(await implementationEvidence(), implementation)) fail('database_rehearsal_source_changed')
     const proof = buildSanitizedProof(raw, {

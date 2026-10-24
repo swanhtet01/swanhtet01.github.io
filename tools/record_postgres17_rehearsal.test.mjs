@@ -12,10 +12,12 @@ import {
   implementationEvidence,
   catalogCheckNames,
   proofDigest,
+  buildRecorderFailureDiagnostic,
   recorderChildFailureCode,
   recorderOutcomeReconciled,
   withRecorderLease,
   recordCompletionSummary,
+  writeRecorderFailureDiagnostic,
 } from './record_postgres17_rehearsal.mjs'
 
 test('missing raw evidence retains only an allowlisted sanitized child failure code', () => {
@@ -65,6 +67,52 @@ test('missing raw evidence retains only an allowlisted sanitized child failure c
   assert.equal(
     recorderChildFailureCode({ status: 1, stderr: incompleteRehearsal }),
     '',
+  )
+})
+
+test('failure diagnostics retain terminal metadata but never child output or authority', async () => {
+  const result = {
+    status: null,
+    signal: 'SIGTERM',
+    error: { code: 'ETIMEDOUT', message: 'private path and credential text' },
+    stdout: 'password=private-output',
+    stderr: 'Traceback at C:\\private\\fixture',
+  }
+  const diagnostic = buildRecorderFailureDiagnostic(result, 'missing')
+  assert.deepEqual(diagnostic.terminal, {
+    exitStatus: null,
+    signal: 'SIGTERM',
+    spawnError: 'ETIMEDOUT',
+  })
+  assert.equal(diagnostic.streams.stdoutBytes, Buffer.byteLength(result.stdout))
+  assert.equal(diagnostic.streams.stderrBytes, Buffer.byteLength(result.stderr))
+  assert.equal(diagnostic.streams.contentsRetained, false)
+  assert.equal(diagnostic.rawEvidenceAccepted, false)
+  assert.equal(diagnostic.cleanupAttested, false)
+  assert.equal(diagnostic.leaseReleased, false)
+  assert.equal(diagnostic.retryAuthorized, false)
+  assert.equal(diagnostic.secretValuesRetained, false)
+  assert.equal(JSON.stringify(diagnostic).includes('private'), false)
+  assert.equal(JSON.stringify(diagnostic).includes('password'), false)
+
+  const folder = await mkdtemp(join(tmpdir(), 'supermega-recorder-diagnostic-'))
+  const destination = join(folder, 'receipt.json')
+  try {
+    const written = await writeRecorderFailureDiagnostic(destination, result, 'missing')
+    assert.deepEqual(JSON.parse(await readFile(written.path, 'utf8')), diagnostic)
+    await assert.rejects(
+      writeRecorderFailureDiagnostic(destination, result, 'malformed'),
+      { code: 'EEXIST' },
+    )
+    assert.deepEqual(JSON.parse(await readFile(written.path, 'utf8')), diagnostic)
+  } finally { await rm(folder, { recursive: true, force: true }) }
+
+  for (const rawStatus of ['unreadable', 'malformed', 'parsed_unreconciled']) {
+    assert.equal(buildRecorderFailureDiagnostic({ status: 1 }, rawStatus).rawStatus, rawStatus)
+  }
+  assert.throws(
+    () => buildRecorderFailureDiagnostic({ status: 1 }, 'accepted'),
+    /database_rehearsal_diagnostic_raw_status_invalid/,
   )
 })
 

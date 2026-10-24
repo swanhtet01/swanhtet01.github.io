@@ -262,6 +262,17 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
             with self.assertRaisesRegex(module.RehearsalFailure, "expected_head_required"):
                 module._source_identity(None)
             git.assert_not_called()
+        with patch.object(
+            module.subprocess,
+            "run",
+            return_value=SimpleNamespace(
+                returncode=1,
+                stdout="private source error",
+            ),
+        ):
+            with self.assertRaisesRegex(module.RehearsalFailure, "source_identity_unavailable") as caught:
+                module._source_identity("a" * 40)
+            self.assertNotIn("private source error", str(caught.exception))
         result = lambda text: SimpleNamespace(returncode=0, stdout=text)
         with patch.object(module.subprocess, "run", return_value=result(" M source.py")):
             with self.assertRaisesRegex(module.RehearsalFailure, "source_dirty"):
