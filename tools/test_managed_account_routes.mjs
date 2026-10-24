@@ -11,6 +11,7 @@ import './managed_login_request_guard.test.mjs'
 
 import {
   alternateManagedWorkspaceId,
+  isPairedPublicShopEntry,
   managedAccountPath,
   managedAccountRequestUrl,
   managedPortalEntryPath,
@@ -46,6 +47,19 @@ for (const intent of [null, '', 'guide', 'settings', 'https://example.com']) {
 
 assert.equal(managedAccountPath('/login', 'commerce'), '/login?product=shop')
 assert.equal(managedAccountPath('/account/recovery', 'production'), '/account/recovery?product=plant')
+const pairedEntry = '?entry=shop-public-preview-v1&product=shop'
+assert.equal(isPairedPublicShopEntry(pairedEntry), true)
+assert.equal(managedAccountPath('/account/recovery', 'shop', pairedEntry), `/account/recovery${pairedEntry}`)
+assert.equal(managedAccountPath('/login', 'shop', pairedEntry), `/login${pairedEntry}`)
+for (const unsafe of [
+  '?entry=wrong&product=shop',
+  '?entry=shop-public-preview-v1&product=website',
+  '?entry=shop-public-preview-v1&entry=shop-public-preview-v1&product=shop',
+  '?entry=shop-public-preview-v1&product=shop&product=shop',
+]) {
+  assert.equal(isPairedPublicShopEntry(unsafe), false)
+  assert.equal(managedAccountPath('/login', 'shop', unsafe), '/login?product=shop')
+}
 assert.match(managedAccountRequestUrl('website'), /product=website/)
 assert.equal(alternateManagedWorkspaceId([
   { workspaceId: 'company-a' },

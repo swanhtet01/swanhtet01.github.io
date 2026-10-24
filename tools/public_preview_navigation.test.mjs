@@ -3,7 +3,7 @@ import { test } from 'node:test'
 import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { bindPreviewNavigation, parsePreviewAppBinding } from './public_preview_navigation.mjs'
+import { PUBLIC_PREVIEW_LOGIN_HTML_PATH, bindPreviewNavigation, parsePreviewAppBinding } from './public_preview_navigation.mjs'
 
 const root = resolve(import.meta.dirname, '..')
 const commit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim()
@@ -35,6 +35,12 @@ test('reject malformed, foreign, aliased and unbound metadata', () => {
 test('preserve escaped path/query/hash and leave SEO and unrelated targets unchanged', () => {
   const html = '<link rel="canonical" href="https://app.supermega.dev/shop/"><a href="https://app.supermega.dev/shop/?template=bakery&amp;x=1#details">Go</a><a href="https://app.supermega.dev.example.com/">Other</a>'
   assert.equal(bindPreviewNavigation(html, parse(binding)), html.replace('<a href="https://app.supermega.dev/', `<a href="${binding.origin}/`))
+})
+
+test('paired public login carries one restrictive display marker while other app links retain their route', () => {
+  const html = '<a href="https://app.supermega.dev/login">Login</a><a href="https://app.supermega.dev/shop/?tab=today">Shop</a>'
+  assert.equal(bindPreviewNavigation(html, parse(binding)),
+    `<a href="${binding.origin}${PUBLIC_PREVIEW_LOGIN_HTML_PATH}">Login</a><a href="${binding.origin}/shop/?tab=today">Shop</a>`)
 })
 
 test('actual generator maps every production app anchor, preserves default contract and SEO', () => {

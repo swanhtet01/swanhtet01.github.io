@@ -1,4 +1,4 @@
-import { parsePreviewAppBinding } from './public_preview_navigation.mjs'
+import { PUBLIC_PREVIEW_LOGIN_PATH, parsePreviewAppBinding } from './public_preview_navigation.mjs'
 
 export function previewProfile({ profile, expectedCommit, appBinding }) {
   if (!['production-contract', 'isolated-pair'].includes(profile)) throw new Error('public_preview_profile_required')
@@ -37,7 +37,8 @@ export function validatePreviewLinks(html, policy, products, options = {}) {
       return String.fromCodePoint(parseInt(entity.slice(entity[2].toLowerCase() === 'x' ? 3 : 2, -1), entity[2].toLowerCase() === 'x' ? 16 : 10))
     })
   })
-  const appPaths = new Set(['/login'])
+  const signInHref = origin + (policy.app ? PUBLIC_PREVIEW_LOGIN_PATH : '/login')
+  const appPaths = new Set([policy.app ? PUBLIC_PREVIEW_LOGIN_PATH : '/login'])
   const publicOrigin = options.publicOrigin || 'https://supermega.dev'
   for (const href of hrefs) {
     if (!href || /[\s\\]|%|&(?:#|[a-z]+;)/i.test(href) || href.startsWith('//')) throw new Error('public_preview_href_unsafe')
@@ -56,7 +57,7 @@ export function validatePreviewLinks(html, policy, products, options = {}) {
     && !html.includes('<a class="button button-primary" href="/contact/?product=shop">Contact us about Shop</a>')) {
     throw new Error('public_preview_action_missing:shop_contact')
   }
-  const signInCount = hrefs.filter(href => href === origin + '/login').length
+  const signInCount = hrefs.filter(href => href === signInHref).length
   if (signInCount > 1 || (options.requireActions !== false && signInCount !== 1)) {
     throw new Error('public_preview_action_missing:single_login')
   }

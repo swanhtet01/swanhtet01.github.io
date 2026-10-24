@@ -6,6 +6,7 @@ import { PageHeading, type RuntimeHealth } from './CoreShell'
 import { bi } from './i18n-actions'
 import {
   alternateManagedWorkspaceId,
+  isPairedPublicShopEntry,
   managedAccountPath,
   managedAccountRequestUrl,
   managedPortalEntryPath,
@@ -36,7 +37,12 @@ export function ManagedLoginPage() {
   const runtime = useOutletContext<RuntimeHealth>()
   const location = useLocation()
   const navigate = useNavigate()
-  const productIntent = new URLSearchParams(location.search).get('product')
+  const search = new URLSearchParams(location.search)
+  const productIntent = search.get('product')
+  // This marker is a display-only boundary for an exact paired public preview.
+  // It grants no access; it only removes browser-local and self-service detours.
+  const pairedPublicEntry = isPairedPublicShopEntry(location.search)
+  const publicPortalEntry = publicApp || pairedPublicEntry
   const reviewReturnPath = managedLoginReviewPath(location.search)
   const accountProductIntent = productIntent ?? (reviewReturnPath?.split('/')[1] ?? 'shop')
   const shopAccessIntent = ['shop', 'commerce'].includes(accountProductIntent.trim().toLowerCase())
@@ -109,7 +115,7 @@ export function ManagedLoginPage() {
   }, [cooldownUntil])
 
   function chooseAccountMode(create: boolean) {
-    if (busy || accountRequestPending.current || (create && reviewReturnPath)) return
+    if (busy || accountRequestPending.current || (create && (reviewReturnPath || publicPortalEntry))) return
     setCreatingAccount(create)
     setPassword('')
     setConfirmation('')
@@ -170,14 +176,14 @@ export function ManagedLoginPage() {
           setActivating(!reviewReturnPath)
           setNotice(reviewReturnPath
             ? 'Your account is signed in, but no company is assigned. Ask SuperMega to check the account assigned to your review. Creating a company will not unlock it.'
-            : publicApp ? `No workspace is assigned to ${signIn.email} yet.` : `No company is assigned to ${signIn.email} yet. Activate yours with the claim code.`)
+            : publicPortalEntry ? `No workspace is assigned to ${signIn.email} yet.` : `No company is assigned to ${signIn.email} yet. Activate yours with the claim code.`)
         } catch {
           // No usable session: stay on the sign-in form.
         }
       })
       .catch(() => setExistingIdentity(null))
     return () => { active = false }
-  }, [managedReady, reviewReturnPath, publicApp])
+  }, [managedReady, reviewReturnPath, publicPortalEntry])
 
   async function openWorkspace(signIn: ManagedWorkspaceSignIn, selectedWorkspaceId: string, destination = portalEntryPath) {
     const identity = await completeManagedWorkspaceSignIn(signIn, selectedWorkspaceId)
@@ -212,7 +218,7 @@ export function ManagedLoginPage() {
         setActivating(!reviewReturnPath)
         setNotice(reviewReturnPath
           ? 'Your account is signed in, but no company is assigned. Ask SuperMega to check the account assigned to your review. Creating a company will not unlock it.'
-          : publicApp ? `No workspace is assigned to ${signIn.email} yet.` : `No company is assigned to ${signIn.email} yet. Activate yours with the claim code.`)
+          : publicPortalEntry ? `No workspace is assigned to ${signIn.email} yet.` : `No company is assigned to ${signIn.email} yet. Activate yours with the claim code.`)
         return
       }
       setDirectory(signIn)
@@ -239,7 +245,7 @@ export function ManagedLoginPage() {
 
   async function activate(event: FormEvent) {
     event.preventDefault()
-    if (!managedReady || publicApp || reviewReturnPath || busy || accountRequestPending.current) return
+    if (!managedReady || publicPortalEntry || reviewReturnPath || busy || accountRequestPending.current) return
     accountRequestPending.current = true
     setBusy(true)
     setNoticeTone('quiet')
@@ -325,7 +331,7 @@ export function ManagedLoginPage() {
 
   return (
     <div className={`workspace-screen managed-login-screen${creatingAccount ? ' signup-entry-screen' : ''}`}>
-      <PageHeading eyebrow={reviewReturnPath ? 'Private customer review' : 'Account'} title={reviewReturnPath ? 'Open your prepared review.' : creatingAccount ? 'Create your account.' : 'Login'} copy={reviewReturnPath ? 'Sign in with the account assigned to this review.' : creatingAccount ? 'Confirm your email first. Company access is a separate step.' : managedReady ? publicApp && shopAccessIntent ? 'For existing assigned pilot accounts. Native Shop is installed separately during assisted setup.' : 'Sign in to your workspace.' : ''} />
+      <PageHeading eyebrow={reviewReturnPath ? 'Private customer review' : 'Account'} title={reviewReturnPath ? 'Open your prepared review.' : creatingAccount ? 'Create your account.' : 'Login'} copy={reviewReturnPath ? 'Sign in with the account assigned to this review.' : creatingAccount ? 'Confirm your email first. Company access is a separate step.' : managedReady ? publicPortalEntry && shopAccessIntent ? 'For existing assigned pilot accounts. Native Shop is installed separately during assisted setup.' : 'Sign in to your workspace.' : ''} />
       {existingIdentity ? <section className="managed-login-panel" aria-label="Current managed account">
         <div><span className="core-eyebrow">Connected</span><h2>{existingIdentity.email}</h2><p>Your company account is ready.</p></div>
         <div className="managed-login-actions">
@@ -351,7 +357,7 @@ export function ManagedLoginPage() {
         <button className="account-inline-link account-link-button" disabled={busy} onClick={() => chooseAccountMode(false)} type="button">Back to sign in</button>
         {sentRequest ? <button className="account-inline-link account-link-button" disabled={busy} onClick={() => chooseAccountMode(true)} type="button">Use another email</button> : null}
         <Link className="account-inline-link" to={managedAccountPath('/account/recovery', accountProductIntent, location.search)}>Reset an existing password</Link>
-      </form> : managedReady && activating && publicApp && !reviewReturnPath ? <section className="managed-login-panel" aria-label="Workspace access">
+      </form> : managedReady && activating && publicPortalEntry && !reviewReturnPath ? <section className="managed-login-panel" aria-label="Workspace access">
         <h2>No workspace assigned</h2>
         <p className="form-notice" data-tone={noticeTone} role="status">{notice}</p>
         <div className="managed-login-actions">
@@ -376,14 +382,14 @@ export function ManagedLoginPage() {
           <label>Email<input aria-describedby={credentialFieldError ? 'managed-login-notice' : undefined} aria-invalid={credentialFieldError} autoComplete="username" maxLength={160} onChange={(event) => editEmail(event.target.value)} ref={emailInputRef} required type="email" value={email} /></label>
           <label>Password<input aria-describedby={credentialFieldError ? 'managed-login-notice' : undefined} aria-invalid={credentialFieldError} autoComplete="current-password" onChange={(event) => editPassword(event.target.value)} required type="password" value={password} /></label>
           <Link className="account-inline-link" to={managedAccountPath('/account/recovery', accountProductIntent, location.search)}>Forgot password?</Link>
-          {reviewReturnPath ? <p>Need access? Ask SuperMega in your existing setup conversation. Use your existing account.</p> : signupPolicy ? <button className="account-inline-link account-link-button" onClick={() => chooseAccountMode(true)} type="button">Create an account</button> : <a className="account-inline-link" href={managedAccountRequestUrl(accountProductIntent)}>{shopAccessIntent ? 'Contact us about Shop' : 'Contact support'}</a>}
+          {reviewReturnPath ? <p>Need access? Ask SuperMega in your existing setup conversation. Use your existing account.</p> : signupPolicy && !publicPortalEntry ? <button className="account-inline-link account-link-button" onClick={() => chooseAccountMode(true)} type="button">Create an account</button> : <a className="account-inline-link" href={managedAccountRequestUrl(accountProductIntent)}>{shopAccessIntent ? 'Contact us about Shop' : 'Contact support'}</a>}
         </>}
         <button className="core-button primary" disabled={busy} type="submit">{busy ? 'Checking...' : reviewReturnPath ? 'Continue to review' : directory ? bi('Open company') : bi('Login')}</button>
         <p className="form-notice" data-tone={noticeTone} id="managed-login-notice" ref={loginNoticeRef} role="status" tabIndex={-1}>{notice}</p>
       </form> : <section className="managed-login-panel" aria-label="Login unavailable">
         {reviewReturnPath ? <div><h2>Review sign-in is unavailable here.</h2><p>Keep your original review link and ask SuperMega in your existing setup conversation to restore access. Use the account associated with this review.</p></div> : <>
-          <div><h2>Login is currently unavailable.</h2><p>{shopAccessIntent ? publicApp ? 'Shop pilot access is issued during assisted setup. Native Shop can make its first local sale without this managed account.' : 'Shop pilot access is issued during assisted setup. Native Shop can make its first local sale without this managed account. Your saved work is still available on this device.' : publicApp ? 'Contact support for account access.' : 'Contact support for account access. Your saved work is still available on this device.'}</p></div>
-          <div className="managed-login-actions"><a className="core-button primary" href={managedAccountRequestUrl(accountProductIntent)}>{shopAccessIntent ? 'Contact us about Shop' : 'Contact support'}</a>{!publicApp ? <Link className="account-inline-link" to="/?choose=1">Saved work on this device</Link> : null}{signupPolicy ? <button className="core-button" onClick={() => chooseAccountMode(true)} type="button">Create an account</button> : null}</div>
+          <div><h2>Login is currently unavailable.</h2><p>{shopAccessIntent ? publicPortalEntry ? 'Shop pilot access is issued during assisted setup. Native Shop can make its first local sale without this managed account.' : 'Shop pilot access is issued during assisted setup. Native Shop can make its first local sale without this managed account. Your saved work is still available on this device.' : publicPortalEntry ? 'Contact support for account access.' : 'Contact support for account access. Your saved work is still available on this device.'}</p></div>
+          <div className="managed-login-actions"><a className="core-button primary" href={managedAccountRequestUrl(accountProductIntent)}>{shopAccessIntent ? 'Contact us about Shop' : 'Contact support'}</a>{!publicPortalEntry ? <Link className="account-inline-link" to="/?choose=1">Saved work on this device</Link> : null}{signupPolicy && !publicPortalEntry ? <button className="core-button" onClick={() => chooseAccountMode(true)} type="button">Create an account</button> : null}</div>
         </>}
       </section>}
     </div>

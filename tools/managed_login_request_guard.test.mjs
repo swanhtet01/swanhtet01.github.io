@@ -21,7 +21,7 @@ function fixture() {
   const noop = () => {}
   const focusRef = name => ({ current: { focus(options) { focusTargets.push({ name, preventScroll: options?.preventScroll }) } } })
   return { passwords, busyStates, focusTargets, credentialErrors, context: {
-    managedReady: true, publicApp: false, busy: false, accountRequestPending: { current: false }, directory: null, reviewReturnPath: null,
+    managedReady: true, publicApp: false, publicPortalEntry: false, busy: false, accountRequestPending: { current: false }, directory: null, reviewReturnPath: null,
     email: 'synthetic@example.invalid', password: ['synthetic', 'test', 'input'].join('-'), workspaceId: '', existingIdentity: { workspaceId: 'one' },
     setBusy: value => busyStates.push(value), setPassword: value => passwords.push(value), setNoticeTone: noop, setNotice: noop,
     setActivating: noop, setDirectory: noop, setWorkspaceId: noop, setExistingIdentity: noop, setEmail: noop,
@@ -141,7 +141,7 @@ test('claim-code correction clears only claim-attributed errors', () => {
 
 test('credential-error clearing is limited to sign-in fields, not account creation', () => {
   const signupStart = source.indexOf('creatingAccount && !reviewReturnPath ? <form')
-  const signupEnd = source.indexOf('managedReady && activating && publicApp', signupStart)
+  const signupEnd = source.indexOf('managedReady && activating && publicPortalEntry', signupStart)
   const signup = source.slice(signupStart, signupEnd)
   assert.match(signup, /autoComplete="username"[^>]+onChange=\{\(event\) => setEmail\(event\.target\.value\)\}/)
   assert.match(signup, /autoComplete="new-password"[^>]+onChange=\{\(event\) => setPassword\(event\.target\.value\)\}/)

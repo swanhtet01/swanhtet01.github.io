@@ -2,7 +2,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { join, relative, resolve } from 'node:path'
 import { activeProductContracts } from '../showroom/src/core/product-visibility.ts'
-import { parsePreviewAppBinding } from './public_preview_navigation.mjs'
+import { PUBLIC_PREVIEW_LOGIN_HTML_PATH, parsePreviewAppBinding } from './public_preview_navigation.mjs'
 import { verifyNativeShopGallery } from './public_native_shop_gallery.mjs'
 
 const root = process.cwd()
@@ -42,6 +42,7 @@ const previewAppBinding = release.previewNavigation
   ? parsePreviewAppBinding(JSON.stringify(release.previewNavigation), release.commit, release.commit)
   : null
 const appOrigin = previewAppBinding?.origin || 'https://app.supermega.dev'
+const appLoginHref = appOrigin + (previewAppBinding ? PUBLIC_PREVIEW_LOGIN_HTML_PATH : '/login')
 
 function countOccurrences(value, token) {
   return value.split(token).length - 1
@@ -250,7 +251,7 @@ for (const [route, page] of pages) {
     : 'SuperMega is a Myanmar software company and the maker of Shop.'
   if (!page.html.includes(companyStatement)) fail('shared_footer_company_statement_missing', { route })
   const header = page.html.match(/<header\b[\s\S]*?<\/header>/)?.[0] || ''
-  const signIn = `<a class="nav-sign-in" href="${appOrigin}/login">${page.language === 'my' ? 'စမ်းသပ်အသုံးပြုသူ ဝင်ရန်' : 'Pilot sign in'}</a>`
+  const signIn = `<a class="nav-sign-in" href="${appLoginHref}">${page.language === 'my' ? 'စမ်းသပ်အသုံးပြုသူ ဝင်ရန်' : 'Pilot sign in'}</a>`
   if (countOccurrences(header, signIn) !== 1
     || [...header.matchAll(/<a\b[^>]*href="[^"]*\/login[^"]*"[^>]*>/gi)].length !== 1) fail('shared_public_login_drift', { route })
   const expectedActive = route === '/shop/' || route === '/my/shop/' ? 'Shop' : route === '/contact/' ? 'Contact' : route === '/my/contact/' ? 'ဆက်သွယ်ရန်' : null
@@ -387,7 +388,7 @@ if (shopBody.includes('data-platform-carousel') || shopBody.includes('data-devic
   || /<a\b[^>]*>\s*<img\b[^>]*src="\/images\/native-shop\//i.test(shopBody)) fail('shop_gallery_interaction_or_mock_present')
 if (shopBody.includes('>Company</a>') || shopBody.includes('href="' + appOrigin + '/login?product=shop"')
   || [...shopBody.matchAll(/href="https:\/\/app\.supermega\.dev\/[^"]*"/g)].some(match => match[0] !== 'href="https://app.supermega.dev/login"')
-  || countOccurrences(shopBody, `href="${appOrigin}/login"`) !== 1) fail('shop_public_access_scope_drift')
+  || countOccurrences(shopBody, `href="${appLoginHref}"`) !== 1) fail('shop_public_access_scope_drift')
 for (const token of [
   'class="native-shop-gallery"',
   'class="native-shop-tableau"',

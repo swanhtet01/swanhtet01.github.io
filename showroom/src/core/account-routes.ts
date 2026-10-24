@@ -7,6 +7,8 @@ const ACCOUNT_PRODUCT_SLUGS = {
   ecommerce: 'ecommerce',
 } as const
 
+const PAIRED_PUBLIC_SHOP_ENTRY = 'shop-public-preview-v1'
+
 function accountProductSlug(value: string | null) {
   const intent = value?.trim().toLowerCase()
   if (!intent || !Object.prototype.hasOwnProperty.call(ACCOUNT_PRODUCT_SLUGS, intent)) return null
@@ -27,7 +29,19 @@ export function managedAccountPath(path: '/login' | '/account/recovery', value: 
   const reviewPath = managedLoginReviewPath(search)
   if (reviewPath) return `${path}?product=${reviewPath.split('/')[1]}&review=${reviewPath.split('/').at(-1)}`
   const product = accountProductSlug(value)
-  return product ? `${path}?product=${encodeURIComponent(product)}` : path
+  if (!product) return path
+  const query = new URLSearchParams()
+  if (product === 'shop' && isPairedPublicShopEntry(search)) query.set('entry', PAIRED_PUBLIC_SHOP_ENTRY)
+  query.set('product', product)
+  return `${path}?${query.toString()}`
+}
+
+export function isPairedPublicShopEntry(search: string) {
+  const query = new URLSearchParams(search)
+  const entries = query.getAll('entry')
+  const products = query.getAll('product')
+  return entries.length === 1 && entries[0] === PAIRED_PUBLIC_SHOP_ENTRY
+    && products.length === 1 && products[0] === 'shop'
 }
 
 export function managedPortalEntryPath(value: string | null) {

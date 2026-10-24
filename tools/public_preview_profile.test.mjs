@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { bindPreviewNavigation } from './public_preview_navigation.mjs'
+import { PUBLIC_PREVIEW_LOGIN_HTML_PATH, PUBLIC_PREVIEW_LOGIN_PATH, bindPreviewNavigation } from './public_preview_navigation.mjs'
 import { previewProfile, validatePreviewContact, validatePreviewLinks, validatePreviewDeployment } from './public_preview_profile.mjs'
 const root = resolve(import.meta.dirname, '..')
 const isolatedOutputId = process.env.SUPERMEGA_PUBLIC_OUTPUT_ID || ''
@@ -16,7 +16,7 @@ const app = { origin: 'https://megaos-123456789-swanhtet01s-projects.vercel.app'
   projectId: 'prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG', deploymentId: 'dpl_12345678', commit }
 const policy = previewProfile({ profile: 'isolated-pair', expectedCommit: commit, appBinding: JSON.stringify(app) })
 const products = ['shop', 'website', 'ecommerce', 'plant'].map(id => ({ id }))
-const html = `<a class="button button-primary" href="/contact/?product=shop">Contact us about Shop</a><a class="nav-sign-in" href="${app.origin}/login">Sign in</a>`
+const html = `<a class="button button-primary" href="/contact/?product=shop">Contact us about Shop</a><a class="nav-sign-in" href="${app.origin}${PUBLIC_PREVIEW_LOGIN_PATH}">Sign in</a>`
 test('requires explicit profile, exact SHA and app binding', () => {
   for (const input of [{}, { profile: 'isolated-pair', expectedCommit: commit },
     { profile: 'isolated-pair', expectedCommit: 'main' }, { profile: 'unknown', expectedCommit: commit }]) assert.throws(() => previewProfile(input))
@@ -80,15 +80,15 @@ test('native gallery is read-only and no image is a preview navigation action', 
 
 test('public site keeps one Shop contact action and a single safe sign-in link', () => {
   validatePreviewLinks(html, policy, products)
-  for (const suffix of ['/login?product=shop', '/?choose=1', '/shop/?tab=today', '/settings/?product=website', '/login?product=website', '/login?product=shop&next=/shop/']) {
+  for (const suffix of ['/login', '/login?product=shop', '/?choose=1', '/shop/?tab=today', '/settings/?product=website', '/login?product=website', '/login?product=shop&next=/shop/']) {
     assert.throws(() => validatePreviewLinks(html + `<a href="${app.origin}${suffix}">Open</a>`, policy, products))
   }
-  assert.throws(() => validatePreviewLinks(html + `<a href="${app.origin}/login">Login</a>`, policy, products), /action_missing:single_login/)
+  assert.throws(() => validatePreviewLinks(html + `<a href="${app.origin}${PUBLIC_PREVIEW_LOGIN_PATH}">Login</a>`, policy, products), /action_missing:single_login/)
   assert.throws(() => validatePreviewLinks('<h1>Products</h1>', policy, products), /action_missing/)
 })
 
 test('public preview rejects extra or unbound sign-in actions', () => {
-  for (const href of [`${app.origin}/login`, `${app.origin}/login?product=shop`, 'https://app.supermega.dev/login?product=shop']) {
+  for (const href of [`${app.origin}${PUBLIC_PREVIEW_LOGIN_PATH}`, `${app.origin}/login`, `${app.origin}/login?product=shop`, 'https://app.supermega.dev/login?product=shop']) {
     assert.throws(() => validatePreviewLinks(html + `<a href="${href}">Login</a>`, policy, products))
   }
 })
@@ -113,6 +113,6 @@ test('current generated Shop, Contact and Privacy pages bind one sign-in without
     const bound = bindPreviewNavigation(canonicalSource, app)
     assert.equal(validatePreviewLinks(bound, policy, products, { publicOrigin: 'https://public-preview.example', requireActions: path === 'shop/index.html' }).pairedOrigin, app.origin)
     assert.ok(!bound.includes('href="https://app.supermega.dev/'))
-    assert.equal((bound.match(new RegExp(`href="${app.origin}/login"`, 'g')) ?? []).length, 1)
+    assert.equal(bound.split(`href="${app.origin}${PUBLIC_PREVIEW_LOGIN_HTML_PATH}"`).length - 1, 1)
   }
 })

@@ -46,14 +46,22 @@ test('rendered review login offers no sample, trial activation or self-registrat
     module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText
   const elements = tree => Array.isArray(tree) ? tree.flatMap(elements) : tree && typeof tree === 'object' ? [tree, ...elements(tree.props?.children)] : []
   const text = tree => Array.isArray(tree) ? tree.map(text).join('') : tree && typeof tree === 'object' ? text(tree.props?.children) : typeof tree === 'string' ? tree : ''
-  for (const hostname of ['localhost', 'app.supermega.dev']) for (const ready of [true, false]) for (const reviewing of [true, false]) for (const product of reviewing ? ['website'] : ['shop', 'website']) {
+  for (const entry of [
+    { hostname: 'localhost', marker: false },
+    { hostname: 'app.supermega.dev', marker: false },
+    { hostname: 'megaos-candidate-swanhtet01s-projects.vercel.app', marker: false },
+    { hostname: 'megaos-candidate-swanhtet01s-projects.vercel.app', marker: true },
+  ]) for (const ready of [true, false]) for (const reviewing of [true, false]) for (const product of reviewing ? ['website'] : ['shop', 'website']) {
+    const { hostname, marker } = entry
+    const pairedPublicShop = marker && product === 'shop'
+    const publicPortalEntry = hostname === 'app.supermega.dev' || pairedPublicShop
     const exports = {}
     const jsx = (type, props) => ({ type, props })
     const dependencies = {
       react: { useState: init => [typeof init === 'function' ? init() : init, () => {}], useRef: init => ({ current: init }), useEffect() {} },
       'react/jsx-runtime': { jsx, jsxs: jsx, Fragment: 'fragment' },
       'react-router': { Link: 'a', useNavigate: () => () => {},
-        useLocation: () => ({ search: reviewing ? `?product=website&review=${id}` : `?product=${product}` }),
+        useLocation: () => ({ search: reviewing ? `?product=website&review=${id}` : `?product=${product}${marker ? '&entry=shop-public-preview-v1' : ''}` }),
         useOutletContext: () => ({ status: ready ? 'enterprise' : 'checking', signupPolicy: { termsVersion: 'test' } }) },
       './CoreShell': { PageHeading: 'heading' }, './i18n-actions': { bi: value => value },
       './production-entry': productionEntry, './account-routes': routes, './managed-trial': { managedTrialAuthConfigured: () => true },
@@ -68,15 +76,26 @@ test('rendered review login offers no sample, trial activation or self-registrat
       assert.match(content, ready ? /existing setup conversation/ : /Review sign-in is unavailable/)
       if (ready) assert.equal(nodes.find(node => text(node) === 'Forgot password?').props.to, `/account/recovery?product=website&review=${id}`)
     } else {
-      assert.match(content, ready ? /Create an account/ : product === 'shop' ? /Contact us about Shop/ : /Contact support/)
+      assert.match(content, ready
+        ? publicPortalEntry ? product === 'shop' ? /Contact us about Shop/ : /Contact support/ : /Create an account/
+        : product === 'shop' ? /Contact us about Shop/ : /Contact support/)
       if (!ready && product === 'website') assert.doesNotMatch(content, /Native Shop|Contact us about Shop/)
       if (!ready) {
-        if (hostname === 'localhost') assert.match(content, /Saved work on this device/)
+        if (!publicPortalEntry) assert.match(content, /Saved work on this device/)
         else {
           assert.doesNotMatch(content, /Saved work on this device/)
           assert.equal(nodes.some(node => node.type === 'a' && /choose=1/.test(node.props.to ?? '')), false)
         }
         assert.doesNotMatch(content, /Try a sample/)
+      }
+      if (pairedPublicShop) {
+        assert.doesNotMatch(content, /Saved work on this device|Create an account/)
+        if (ready) assert.equal(nodes.find(node => text(node) === 'Forgot password?').props.to,
+          '/account/recovery?entry=shop-public-preview-v1&product=shop')
+        for (const node of nodes.filter(node => node.type === 'a')) {
+          const destination = String(node.props.to ?? node.props.href ?? '')
+          assert.doesNotMatch(destination, /^(?:\/?\?choose=1|\/shop\/|\/settings\/|\/setup\/)|\.(?:apk|ipa|exe|msi|dmg|zip)$/i)
+        }
       }
     }
   }
@@ -87,7 +106,9 @@ test('unavailable recovery preserves private review context without sample or ac
   const ts = require('typescript')
   const source = readFileSync(new URL('../showroom/src/core/ManagedAccountPage.tsx', import.meta.url), 'utf8')
   const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText
-  for (const pathname of ['/account/recovery', '/account/setup']) for (const reviewing of [true, false]) {
+  for (const pathname of ['/account/recovery', '/account/setup']) for (const mode of ['review', 'normal', 'paired']) {
+    const reviewing = mode === 'review'
+    const paired = mode === 'paired'
     const exports = {}, links = [], headings = []
     const jsx = (type, props) => {
       if (typeof type === 'function') return type(props)
@@ -98,7 +119,7 @@ test('unavailable recovery preserves private review context without sample or ac
     const dependencies = {
       react: { useState: init => [typeof init === 'function' ? init() : init, () => {}], useRef: init => ({ current: init }), useEffect() {} },
       'react/jsx-runtime': { jsx, jsxs: jsx },
-      'react-router': { Link: 'a', useNavigate: () => () => {}, useLocation: () => ({ pathname, search: reviewing ? `?review=${id}&product=website` : '?product=shop' }), useOutletContext: () => ({ authReady: false, status: 'demo' }) },
+      'react-router': { Link: 'a', useNavigate: () => () => {}, useLocation: () => ({ pathname, search: reviewing ? `?review=${id}&product=website` : paired ? '?entry=shop-public-preview-v1&product=shop' : '?product=shop' }), useOutletContext: () => ({ authReady: false, status: 'demo' }) },
       './CoreShell': { PageHeading: 'heading' }, './account-routes': routes, './managed-trial': {},
     }
     runInNewContext(compiled, { exports, URLSearchParams, require: name => { assert.ok(name in dependencies, name); return dependencies[name] } })
@@ -112,7 +133,7 @@ test('unavailable recovery preserves private review context without sample or ac
       assert.equal(links[0].href, routes.managedAccountRequestUrl('shop'))
       assert.equal(links[0].children, 'Contact support')
       assert.equal(links[0].to, undefined)
-      assert.equal(links[1].to, '/login?product=shop')
+      assert.equal(links[1].to, paired ? '/login?entry=shop-public-preview-v1&product=shop' : '/login?product=shop')
       assert.equal(links[1].children, 'Back to Login')
       assert.equal(links.some(link => /sample|demo|Set up your business/i.test(String(link.children))), false)
     }
