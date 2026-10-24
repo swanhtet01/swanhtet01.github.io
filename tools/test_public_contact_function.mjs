@@ -548,6 +548,42 @@ try {
     assert.doesNotMatch(acknowledgement.body.text, /Your trial claim code|one business day|founder|trial keeps working/)
   }
 
+  const burmeseAcknowledged = await invoke({
+    body: {
+      ...validSubmission,
+      goal: 'မြန်မာဘာသာဖြင့် Shop ကို စမ်းသပ်မည်။',
+      source_url: 'https://supermega.dev/my/contact/?product=shop',
+    },
+    headers: withKey(420, { 'x-forwarded-for': '203.0.113.60' }),
+    activeHandler: resendHandler,
+  })
+  assert.equal(burmeseAcknowledged.status, 202)
+  const burmeseAcknowledgement = resendMail.at(-1)
+  assert.equal(
+    burmeseAcknowledgement.body.subject,
+    'သင့်တောင်းဆိုချက်ကို လက်ခံရရှိပါပြီ - SuperMega',
+  )
+  assert.match(burmeseAcknowledgement.body.text, /သင့်တောင်းဆိုချက်ကို လက်ခံရရှိပါပြီ/)
+  assert.match(burmeseAcknowledgement.body.text, /https:\/\/supermega\.dev\/my\/shop\//)
+
+  const forgedAcknowledged = await invoke({
+    body: {
+      ...validSubmission,
+      goal: 'Keep an external source from selecting the acknowledgement locale.',
+      source_url: 'https://outside.example/my/contact/?utm_source=forged',
+    },
+    headers: withKey(421, { 'x-forwarded-for': '203.0.113.61' }),
+    activeHandler: resendHandler,
+  })
+  assert.equal(forgedAcknowledged.status, 202)
+  const forgedAcknowledgement = resendMail.at(-1)
+  assert.equal(
+    forgedAcknowledgement.body.subject,
+    'We received your request - SuperMega',
+  )
+  assert.match(forgedAcknowledgement.body.text, /confirm scope, price and timing/)
+  assert.doesNotMatch(forgedAcknowledgement.body.text, /https:\/\/supermega\.dev\/my\/shop\//)
+
   // The acknowledgement is best-effort: its failure must never fail a delivered lead.
   let ackAttempted = false
   globalThis.fetch = async (url, options) => {

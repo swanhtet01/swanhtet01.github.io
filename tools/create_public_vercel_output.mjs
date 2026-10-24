@@ -1726,7 +1726,9 @@ async function sendCustomerAcknowledgement(record) {
   if (!emailOk(record.email)) return { status: 'skipped' }
   const from = env('SUPERMEGA_CONTACT_FROM_EMAIL') || 'SuperMega <leads@supermega.dev>'
   const replyTo = env('SUPERMEGA_CONTACT_NOTIFY_EMAIL') || 'swanhtet@supermega.dev'
-  const locale = sourceAttribution(record.source_url).page_path === '/my/contact/' ? 'my' : 'en'
+  // page_path was derived from a validated public route before persistence.
+  // Do not reinterpret the privacy-stripped source URL without request context.
+  const locale = record.page_path === '/my/contact/' ? 'my' : 'en'
   const body = locale === 'my'
     ? ['မင်္ဂလာပါ ' + record.name + '၊', '', 'သင့်တောင်းဆိုချက်ကို လက်ခံရရှိပါပြီ' + (record.company ? ' — ' + record.company : '') + '။', '', acknowledgementPlan(record.workflow, locale), '', 'နောက်တစ်ဆင့် — သင့်လိုအပ်ချက်များကို သုံးသပ်ပြီး လုပ်ဆောင်မည့်အတိုင်းအတာ၊ စျေးနှုန်းနှင့် အချိန်ကို ပြန်လည်အတည်ပြုပါမည်။', '', 'ကိုးကားနံပါတ်: ' + record.lead_id].concat(record.raw.trial_claim_code ? ['လုပ်ငန်းခွင် ကိုးကားနံပါတ်: ' + record.raw.trial_claim_code] : []).concat(['', 'မေးခွန်း သို့မဟုတ် ပြင်ဆင်လိုသည့်အချက်ရှိပါက ဤအီးမေးလ်ကို ပြန်စာပို့ပါ။ စကားဝှက်များ သို့မဟုတ် ဖောက်သည်မှတ်တမ်းများ မထည့်သွင်းပါနှင့်။', '', 'SuperMega - https://supermega.dev/my/shop/']).join('\\n')
     : ['Hi ' + record.name + ',', '', 'We received your request' + (record.company ? ' for ' + record.company : '') + '.', '', acknowledgementPlan(record.workflow, locale), '', 'Next: we review your requirements and confirm scope, price and timing.', '', 'Reference: ' + record.lead_id].concat(record.raw.trial_claim_code ? ['Workspace reference: ' + record.raw.trial_claim_code] : []).concat(['', 'Reply to this email with questions or corrections. Please do not include passwords or customer records.', '', 'SuperMega - https://supermega.dev']).join('\\n')
