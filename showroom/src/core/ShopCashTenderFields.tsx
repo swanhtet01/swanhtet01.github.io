@@ -1,9 +1,12 @@
-import type { ChangeEvent } from 'react'
+import type { ChangeEvent, FocusEvent, Ref } from 'react'
 
-import { shopCashTenderMmk, type ShopCashTenderReview } from './shop-cash-tender'
+import { SHOP_CASH_TENDER_MAX_DIGITS, shopCashTenderMmk, type ShopCashTenderReview } from './shop-cash-tender'
 
-export function ShopCashTenderFields({ amountDueMmk, onChange, readOnly, review, value }: {
+export function ShopCashTenderFields({ amountDueMmk, assertive, inputRef, onBlur, onChange, readOnly, review, value }: {
   amountDueMmk: number
+  assertive: boolean
+  inputRef?: Ref<HTMLInputElement>
+  onBlur: (event: FocusEvent<HTMLInputElement>) => void
   onChange: (event: ChangeEvent<HTMLInputElement>) => void
   readOnly: boolean
   review: ShopCashTenderReview
@@ -20,11 +23,14 @@ export function ShopCashTenderFields({ amountDueMmk, onChange, readOnly, review,
       autoComplete="off"
       id="counter-cash-given"
       inputMode="numeric"
+      maxLength={SHOP_CASH_TENDER_MAX_DIGITS}
+      onBlur={onBlur}
       onChange={onChange}
+      ref={inputRef}
       readOnly={readOnly}
       value={value}
     />
-    <p aria-live="polite" id="counter-cash-feedback" role={blocked ? 'alert' : 'status'}>
+    <p aria-live={blocked && assertive ? 'assertive' : 'polite'} id="counter-cash-feedback" role={blocked && assertive ? 'alert' : 'status'}>
       {review.status === 'invalid'
         ? 'Enter a whole-MMK amount using English or Myanmar digits.'
         : review.status === 'short'

@@ -1,8 +1,8 @@
 import { spaCounterFields } from './shop-spa-counter-fields'
-import { lazy, Suspense, type ChangeEvent, type FormEvent, type KeyboardEvent, type MouseEvent, type ReactNode, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { lazy, Suspense, type ChangeEvent, type FormEvent, type KeyboardEvent, type MouseEvent, type ReactNode, useEffect, useMemo, useReducer, useRef, useState, useSyncExternalStore } from 'react'
 import { shopCounterDraftContext } from './shop-counter-draft-context'
 import { installShopSaleFocus } from './shop-sale-focus'
-import { reviewShopCashTender } from './shop-cash-tender'
+import { initialShopCashTenderGateState, reduceShopCashTenderGate, reviewShopCashTenderGate, shopCashTenderGateCanSubmit, shopCashTenderGateValue } from './shop-cash-tender'
 import { ShopCashTenderFields } from './ShopCashTenderFields'
 import { createCounterTicketSession, emptyCounterBasket, type CounterBasket } from './shop-parked-tickets'
 import {
@@ -1001,8 +1001,12 @@ function AccountableActionGate({ action, authenticatedActor, onCancel, onConfirm
   const [evidenceReference, setEvidenceReference] = useState(action?.evidenceReferenceSuggestion ?? '')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const [cashGiven, setCashGiven] = useState('')
-  const [frozenCashGiven, setFrozenCashGiven] = useState<string | null>(null)
+  const [cashTenderState, dispatchCashTender] = useReducer(
+    reduceShopCashTenderGate,
+    undefined,
+    initialShopCashTenderGateState,
+  )
+  const cashTenderInputRef = useRef<HTMLInputElement>(null)
   const dialogRef = useRef<HTMLDialogElement>(null)
   const headingRef = useRef<HTMLHeadingElement>(null)
   const previousFocusRef = useRef<HTMLElement | null>(null)
@@ -1028,12 +1032,13 @@ function AccountableActionGate({ action, authenticatedActor, onCancel, onConfirm
   const isCounterConfirmation = action.presentation === 'counter'
   const isCounterSettlement = isCounterConfirmation && action.kind === 'order_settle'
   const cashTender = isCounterSettlement ? action.cashTender : undefined
-  const effectiveCashGiven = frozenCashGiven ?? cashGiven
+  const effectiveCashGiven = shopCashTenderGateValue(cashTenderState)
   const cashTenderReview = cashTender
-    ? reviewShopCashTender(cashTender.amountDueMmk, effectiveCashGiven)
+    ? reviewShopCashTenderGate(cashTender.amountDueMmk, cashTenderState)
     : null
-  const cashTenderBlocked = cashTenderReview?.status === 'invalid'
-    || cashTenderReview?.status === 'short'
+  const cashTenderBlocked = cashTender
+    ? !shopCashTenderGateCanSubmit(cashTender.amountDueMmk, cashTenderState)
+    : false
   const isPaymentReconciliation = action.kind === 'payment_reconcile'
   // Keep the dialog locked during an unresolved submission. After an error, allow
   // recovery without trapping the operator. An error alone does not prove that a
@@ -1047,8 +1052,14 @@ function AccountableActionGate({ action, authenticatedActor, onCancel, onConfirm
     const confirmedReason = action.confirmation?.reason ?? reason.trim()
     const confirmedEvidence = action.confirmation?.evidenceReference
       ?? (action.evidenceReferenceLocked ? action.evidenceReferenceSuggestion?.trim() ?? '' : evidenceReference.trim())
-    if (!responsibleActor || !confirmedReason || !confirmedEvidence || cashTenderBlocked) return
-    if (cashTender && frozenCashGiven === null) setFrozenCashGiven(cashGiven)
+    if (!responsibleActor || !confirmedReason || !confirmedEvidence || cashTenderBlocked) {
+      if (cashTender && cashTenderBlocked) {
+        dispatchCashTender({ type: 'submit', amountDueMmk: cashTender.amountDueMmk })
+        requestAnimationFrame(() => cashTenderInputRef.current?.focus())
+      }
+      return
+    }
+    if (cashTender) dispatchCashTender({ type: 'submit', amountDueMmk: cashTender.amountDueMmk })
     setBusy(true)
     setError('')
     try {
@@ -1077,8 +1088,11 @@ function AccountableActionGate({ action, authenticatedActor, onCancel, onConfirm
         : <><label>Reason<input maxLength={180} readOnly={Boolean(action.confirmation)} required value={action.confirmation?.reason ?? reason} onChange={(event) => setReason(event.target.value)} placeholder="Why this change is correct now" /></label><label>{isPaymentReconciliation ? 'Payment evidence reference' : 'Reference'}<input maxLength={180} readOnly={Boolean(action.confirmation) || action.evidenceReferenceLocked} required value={action.confirmation?.evidenceReference ?? (action.evidenceReferenceLocked ? action.evidenceReferenceSuggestion ?? '' : evidenceReference)} onChange={(event) => setEvidenceReference(event.target.value)} placeholder={isPaymentReconciliation ? 'Internal slip file ID or counter reference' : 'Message ID, receipt, count sheet, or observation'} /></label>{isPaymentReconciliation ? <p className="form-notice">For QR payments, record an internal slip file ID or counter reference only. Do not enter a customer phone number, wallet ID, account number, or payment credentials. This records your review; it does not verify or charge a payment.</p> : null}</>}
       {cashTender && cashTenderReview ? <ShopCashTenderFields
         amountDueMmk={cashTender.amountDueMmk}
-        onChange={(event) => setCashGiven(event.target.value)}
-        readOnly={frozenCashGiven !== null || Boolean(action.confirmation)}
+        assertive={cashTenderState.validationAssertive}
+        inputRef={cashTenderInputRef}
+        onBlur={() => dispatchCashTender({ type: 'blur' })}
+        onChange={(event) => dispatchCashTender({ type: 'input', value: event.target.value })}
+        readOnly={cashTenderState.frozenValue !== null || Boolean(action.confirmation)}
         review={cashTenderReview}
         value={effectiveCashGiven}
       /> : null}
