@@ -358,6 +358,7 @@ void main() {
           RepaintBoundary(
             key: _captureKey,
             child: ShopApp(
+              testOnlyAllowMissingRuntimeScope: true,
               initialCounter: true,
               database: database,
               authClient: null,
@@ -478,6 +479,7 @@ void main() {
             RepaintBoundary(
               key: _captureKey,
               child: ShopApp(
+                testOnlyAllowMissingRuntimeScope: true,
                 initialCounter: true,
                 database: database,
                 authClient: null,
@@ -612,6 +614,7 @@ void main() {
             RepaintBoundary(
               key: _captureKey,
               child: ShopApp(
+                testOnlyAllowMissingRuntimeScope: true,
                 database: database,
                 authClient: null,
                 apiBaseUrl: 'https://example.invalid',
@@ -843,6 +846,7 @@ void main() {
             RepaintBoundary(
               key: _captureKey,
               child: ShopApp(
+                testOnlyAllowMissingRuntimeScope: true,
                 database: database,
                 authClient: null,
                 apiBaseUrl: 'https://example.invalid',
@@ -941,6 +945,7 @@ void main() {
                 ),
                 home: CameraBarcodeScanner(
                   myanmar: language == 'my',
+                  testOnlyAllowMissingRuntimeScope: true,
                   cameraViewBuilder: (context, onScanned, onError) =>
                       const ColoredBox(
                         color: Color(0xff20252a),
@@ -996,6 +1001,7 @@ void main() {
             RepaintBoundary(
               key: _captureKey,
               child: ShopApp(
+                testOnlyAllowMissingRuntimeScope: true,
                 database: database,
                 authClient: null,
                 apiBaseUrl: 'https://example.invalid',

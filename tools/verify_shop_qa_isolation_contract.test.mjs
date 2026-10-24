@@ -94,18 +94,20 @@ function fixture() {
     'mobile/shop_pos/android/app/src/production/AndroidManifest.xml': '<application android:label="Shop"/>',
     'mobile/shop_pos/android/app/src/qa/AndroidManifest.xml': '<application android:label="Shop QA"/>',
     'mobile/shop_pos/ios/Runner.xcodeproj/project.pbxproj': 'PRODUCT_BUNDLE_IDENTIFIER = dev.supermega.supermegaShop;\nPRODUCT_BUNDLE_IDENTIFIER = dev.supermega.supermegaShop;\nPRODUCT_BUNDLE_IDENTIFIER = dev.supermega.supermegaShop;\ndev.supermega.supermegaShop.qa\npath = Runner.app;\nVerify Shop build identity shop_ios_build_identity_missing shop_ios_build_configuration_unknown\nshopBuildIdentityProfile = \'synthetic_qa_v1\' shopBuildIdentityQaProfileId = \'synthetic-qa-v1\' shopBuildIdentityProfile = \'production\' shopBuildIdentityQaProfileId = \'\'\nPRODUCT_NAME = "$(TARGET_NAME)";\nPRODUCT_NAME = "$(TARGET_NAME)";\nPRODUCT_NAME = "$(TARGET_NAME)";\nPRODUCT_NAME = "$(TARGET_NAME)";\nPRODUCT_NAME = "$(TARGET_NAME)";\nPRODUCT_NAME = "$(TARGET_NAME)";',
-    'mobile/shop_pos/lib/main.dart': 'Future<void> main() async { final runtimeScope = await resolveShopRuntimeScopeForStartup(); if (!runtimeScope.capabilities.managedAuth) return; if (!runtimeScope.capabilities.camera) return; }',
+    'mobile/shop_pos/lib/main.dart': 'Future<void> main() async { final runtimeScope = await resolveShopRuntimeScopeForStartup(); if (!runtimeScope.capabilities.managedAuth) return; if (!runtimeScope.capabilities.camera) return; } class ShopHome { ShopHome({ShopRuntimeScope? scope, bool testOnlyAllowMissingRuntimeScope = false}) { requireShopRuntimeScopeOrTestSeam(scope, testOnlyAllowMissingRuntimeScope: testOnlyAllowMissingRuntimeScope); } }',
     'mobile/shop_pos/lib/shop_database.dart': "privateDatabaseFile() => 'supermega_shop.sqlite';",
     'mobile/shop_pos/lib/shop_startup.dart': 'ShopRuntimeScope scope; void pick() { if (!scope.capabilities.externalFileSaving) return; }',
     'mobile/shop_pos/lib/shop_backup_export_screen.dart': 'ShopRuntimeScope scope; void save() { if (!scope.capabilities.externalFileSaving) return; }',
     'mobile/shop_pos/lib/printer_services.dart': 'ShopRuntimeScope scope; void connect() { if (!scope.capabilities.networkPrinter) return; }',
-    'mobile/shop_pos/lib/printer_setup_screen.dart': 'ShopRuntimeScope scope; void discover() { if (!scope.capabilities.networkPrinter) return; }',
-    'mobile/shop_pos/lib/menu_import_screen.dart': 'ShopRuntimeScope scope; void pick() { if (!scope.capabilities.gallery) return; }',
+    'mobile/shop_pos/lib/printer_setup_screen.dart': 'ShopRuntimeScope scope; bool testOnlyAllowMissingRuntimeScope = false; void discover() { requireShopRuntimeScopeOrTestSeam(scope, testOnlyAllowMissingRuntimeScope: testOnlyAllowMissingRuntimeScope); if (!scope.capabilities.networkPrinter) return; }',
+    'mobile/shop_pos/lib/menu_import_screen.dart': 'ShopRuntimeScope scope; bool testOnlyAllowMissingRuntimeScope = false; void pick() { requireShopRuntimeScopeOrTestSeam(scope, testOnlyAllowMissingRuntimeScope: testOnlyAllowMissingRuntimeScope); if (!scope.capabilities.gallery) return; }',
     'mobile/shop_pos/lib/menu_import_service.dart': 'ShopRuntimeScope scope; void importRemote() { if (!scope.capabilities.remoteImport) return; }',
-    'mobile/shop_pos/lib/camera_barcode_scanner.dart': 'ShopRuntimeScope scope; void scan() { if (!scope.capabilities.camera) return; }',
+    'mobile/shop_pos/lib/camera_barcode_scanner.dart': "ShopRuntimeScope scope; bool testOnlyAllowMissingRuntimeScope = false; void scan() { requireShopRuntimeScopeOrTestSeam(scope, testOnlyAllowMissingRuntimeScope: testOnlyAllowMissingRuntimeScope); final builder = injectedBuilder; if (builder == null) throw StateError('shop_runtime_scope_required'); if (!scope.capabilities.camera) return; }",
+    'mobile/shop_pos/lib/connected_orders_screen.dart': 'ShopRuntimeScope scope; bool testOnlyAllowMissingRuntimeScope = false; void open() { requireShopRuntimeScopeOrTestSeam(scope, testOnlyAllowMissingRuntimeScope: testOnlyAllowMissingRuntimeScope); }',
     'mobile/shop_pos/lib/connected_orders_service.dart': 'ShopRuntimeScope scope; void connect() { if (!scope.capabilities.connectedOrders) return; }',
+    'mobile/shop_pos/lib/recent_sales_screen.dart': 'ShopRuntimeScope scope; bool testOnlyAllowMissingRuntimeScope = false; void reprint() { requireShopRuntimeScopeOrTestSeam(scope, testOnlyAllowMissingRuntimeScope: testOnlyAllowMissingRuntimeScope); }',
     'mobile/shop_pos/lib/shop_correction_authorization_service.dart': 'ShopRuntimeScope scope; void correct() { if (!scope.capabilities.correctionAuthorization) return; }',
-    'mobile/shop_pos/lib/shop_runtime_profile.dart': "enum ShopRuntimeProfile { production, syntheticQa } class ShopRuntimeCapabilities { static const failClosed = ShopRuntimeCapabilities(); const ShopRuntimeCapabilities(); } ShopRuntimeProfile resolve() { const a=String.fromEnvironment('SHOP_RUNTIME_PROFILE', defaultValue: shopBuildIdentityProfile); const b=String.fromEnvironment('SHOP_QA_PROFILE_ID', defaultValue: shopBuildIdentityQaProfileId); const ids={'dev.supermega.supermega_shop.qa','dev.supermega.supermegaShop.qa','dev.supermega.supermega_shop.qa.windows','production-current','dev.supermega.supermega_shop','dev.supermega.supermegaShop','dev.supermega.supermega_shop.windows'}; if (a=='synthetic_qa_v1' && b=='synthetic-qa-v1') return ShopRuntimeProfile.syntheticQa; if (a.isNotEmpty || b.isNotEmpty) throw StateError('unknown partial'); return ShopRuntimeProfile.production; }",
+    'mobile/shop_pos/lib/shop_runtime_profile.dart': "enum ShopRuntimeProfile { production, syntheticQa } class ShopRuntimeCapabilities { static const failClosed = ShopRuntimeCapabilities(); const ShopRuntimeCapabilities(); } ShopRuntimeProfile resolve() { const a=String.fromEnvironment('SHOP_RUNTIME_PROFILE', defaultValue: shopBuildIdentityProfile); const b=String.fromEnvironment('SHOP_QA_PROFILE_ID', defaultValue: shopBuildIdentityQaProfileId); const ids={'dev.supermega.supermega_shop.qa','dev.supermega.supermegaShop.qa','dev.supermega.supermega_shop.qa.windows','production-current','dev.supermega.supermega_shop','dev.supermega.supermegaShop','dev.supermega.supermega_shop.windows'}; final runtime='production'; final buildProfile='production'; final profileId=''; final buildQaProfile=''; if (runtime == 'production' && buildProfile == 'production' && profileId.isEmpty && buildQaProfile.isEmpty) return ShopRuntimeProfile.production; if (a=='synthetic_qa_v1' && b=='synthetic-qa-v1') return ShopRuntimeProfile.syntheticQa; throw StateError('unknown partial'); }",
     'mobile/shop_pos/lib/shop_runtime_scope.dart': "ShopRuntimeConfiguration.fromEnvironment(); Future<ShopRuntimeScope> resolveShopRuntimeScopeForStartup() async { return ShopRuntimeScope.resolve(ShopRuntimeProfile.production); } ShopRuntimeScope? requireShopRuntimeScopeOrTestSeam(ShopRuntimeScope? scope) { if (scope == null) throw StateError('shop_runtime_scope_required'); return scope; } class ShopRuntimeScope { static Future<ShopRuntimeScope> resolve(p) async { SharedPreferences.getInstance(); getApplicationSupportDirectory(); getTemporaryDirectory(); return ShopRuntimeScope(); } } synthetic-evidence sentinel shop_locale_myanmar shop_pending_picker_intent shop_receipt_printer_host_v1 shop_receipt_paper_width_v1",
     'mobile/shop_pos/lib/shop_build_identity.g.dart': 'synthetic_qa_v1 platform',
     'tools/generate_shop_build_identity.mjs': 'production synthetic_qa_v1 windows',
@@ -146,6 +148,52 @@ test('an injected dependency cannot implicitly authorize a missing runtime scope
       path,
     )
   }
+})
+
+test('camera and ShopHome callbacks cannot remove their explicit scope guard', () => {
+  for (const [path, token, code] of [
+    ['mobile/shop_pos/lib/camera_barcode_scanner.dart', 'requireShopRuntimeScopeOrTestSeam', 'camera_callback_scope_guard_missing'],
+    ['mobile/shop_pos/lib/main.dart', 'requireShopRuntimeScopeOrTestSeam', 'shop_home_callback_scope_guard_missing'],
+  ]) {
+    const sources = fixture()
+    sources[path] = sources[path].replace(token, 'implicitInjectedCallbackBypass')
+    const result = assessShopQaIsolationContract({ sources })
+    assert.equal(result.strictReady, false, path)
+    assert.ok(result.blockers.some(item => item.code === code), path)
+  }
+})
+
+test('every routed capability screen retains its explicit scope guard', () => {
+  for (const path of [
+    'mobile/shop_pos/lib/connected_orders_screen.dart',
+    'mobile/shop_pos/lib/menu_import_screen.dart',
+    'mobile/shop_pos/lib/printer_setup_screen.dart',
+    'mobile/shop_pos/lib/recent_sales_screen.dart',
+  ]) {
+    const sources = fixture()
+    sources[path] = sources[path].replace(
+      'requireShopRuntimeScopeOrTestSeam',
+      'implicitRoutedScreenScopeBypass',
+    )
+    const result = assessShopQaIsolationContract({ sources })
+    assert.equal(result.strictReady, false, path)
+    assert.ok(
+      result.blockers.some(item => item.code === 'routed_screen_scope_guard_missing'),
+      path,
+    )
+  }
+})
+
+test('generated production startup requires the exact production tuple', () => {
+  const sources = fixture()
+  sources['mobile/shop_pos/lib/shop_runtime_profile.dart'] =
+    sources['mobile/shop_pos/lib/shop_runtime_profile.dart'].replace(
+      "runtime == 'production'",
+      'runtime.isNotEmpty',
+    )
+  const result = assessShopQaIsolationContract({ sources })
+  assert.equal(result.strictReady, false)
+  assert.ok(result.blockers.some(item => item.code === 'exact_production_tuple_missing'))
 })
 
 test('missing existing sources and production identity or storage drift fail closed', () => {

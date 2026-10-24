@@ -5,13 +5,18 @@ import 'shop_copy.dart';
 import 'shop_runtime_scope.dart';
 
 class PrinterSetupScreen extends StatefulWidget {
-  const PrinterSetupScreen({
+  PrinterSetupScreen({
     required this.myanmar,
-    this.runtimeScope,
+    ShopRuntimeScope? runtimeScope,
+    this.testOnlyAllowMissingRuntimeScope = false,
     super.key,
-  });
+  }) : runtimeScope = requireShopRuntimeScopeOrTestSeam(
+         runtimeScope,
+         testOnlyAllowMissingRuntimeScope: testOnlyAllowMissingRuntimeScope,
+       );
   final bool myanmar;
   final ShopRuntimeScope? runtimeScope;
+  final bool testOnlyAllowMissingRuntimeScope;
 
   @override
   State<PrinterSetupScreen> createState() => _PrinterSetupScreenState();

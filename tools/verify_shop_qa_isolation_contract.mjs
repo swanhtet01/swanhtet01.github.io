@@ -19,7 +19,9 @@ const requiredExisting = [
   'mobile/shop_pos/lib/menu_import_screen.dart',
   'mobile/shop_pos/lib/menu_import_service.dart',
   'mobile/shop_pos/lib/camera_barcode_scanner.dart',
+  'mobile/shop_pos/lib/connected_orders_screen.dart',
   'mobile/shop_pos/lib/connected_orders_service.dart',
+  'mobile/shop_pos/lib/recent_sales_screen.dart',
   'mobile/shop_pos/lib/shop_correction_authorization_service.dart',
   '.github/workflows/shop-native-ci.yml',
 ]
@@ -486,6 +488,7 @@ export function assessShopQaIsolationContract({ sources }) {
   }
   if (!profile.includes('static const failClosed = ShopRuntimeCapabilities(')) add(blockers, 'runtime_fail_closed_capabilities_missing', 'fixture routes must not inherit production capabilities')
   if (!profile.includes('defaultValue: shopBuildIdentityProfile') || !profile.includes('defaultValue: shopBuildIdentityQaProfileId')) add(blockers, 'generated_runtime_tuple_default_missing', 'generated profile and QA id must bind runtime defaults')
+  if (!profile.includes("runtime == 'production'") || !profile.includes("buildProfile == 'production'") || !profile.includes('profileId.isEmpty') || !profile.includes('buildQaProfile.isEmpty')) add(blockers, 'exact_production_tuple_missing', 'generated production startup must require one exact tuple')
   for (const forbidden of ['externalIoOverride', 'ALLOW_EXTERNAL_IO', 'allowExternalIo']) {
     if (profile.includes(forbidden)) add(fatal, 'qa_external_io_override_forbidden', forbidden)
   }
@@ -503,6 +506,27 @@ export function assessShopQaIsolationContract({ sources }) {
     const text = codeOnly(sources[path] || '')
     if (/testOnlyAllowMissingRuntimeScope\s*:\s*[\s\S]{0,160}\|\|/.test(text)) {
       add(blockers, 'implicit_missing_scope_test_seam', path)
+    }
+  }
+  const camera = codeOnly(sources['mobile/shop_pos/lib/camera_barcode_scanner.dart'] || '')
+  if (!camera.includes('testOnlyAllowMissingRuntimeScope') || !camera.includes('requireShopRuntimeScopeOrTestSeam')) {
+    add(blockers, 'camera_callback_scope_guard_missing', 'camera callbacks require scope or an explicit test-only seam')
+  }
+  if (!camera.includes("if (builder == null) throw StateError('shop_runtime_scope_required')")) {
+    add(blockers, 'camera_test_seam_can_reach_device', 'the missing-scope seam must require an injected camera view')
+  }
+  if (!main.includes('testOnlyAllowMissingRuntimeScope') || !main.includes('requireShopRuntimeScopeOrTestSeam')) {
+    add(blockers, 'shop_home_callback_scope_guard_missing', 'ShopHome callbacks require scope or an explicit test-only seam')
+  }
+  for (const path of [
+    'mobile/shop_pos/lib/connected_orders_screen.dart',
+    'mobile/shop_pos/lib/menu_import_screen.dart',
+    'mobile/shop_pos/lib/printer_setup_screen.dart',
+    'mobile/shop_pos/lib/recent_sales_screen.dart',
+  ]) {
+    const source = codeOnly(sources[path] || '')
+    if (!source.includes('testOnlyAllowMissingRuntimeScope') || !source.includes('requireShopRuntimeScopeOrTestSeam')) {
+      add(blockers, 'routed_screen_scope_guard_missing', path)
     }
   }
   if (main.includes('runtimeCapabilities = ShopRuntimeCapabilities.production')) add(blockers, 'widget_default_inherits_production_capabilities', 'Shop widgets must require an explicit production scope')

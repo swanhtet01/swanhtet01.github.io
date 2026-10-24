@@ -13,15 +13,19 @@ import 'shop_models.dart';
 import 'shop_runtime_scope.dart';
 
 class MenuImportScreen extends StatefulWidget {
-  const MenuImportScreen({
+  MenuImportScreen({
     required this.database,
     required this.authClient,
     required this.apiBaseUrl,
     required this.myanmar,
     this.recoveredCameraPhoto,
-    this.runtimeScope,
+    ShopRuntimeScope? runtimeScope,
+    this.testOnlyAllowMissingRuntimeScope = false,
     super.key,
-  });
+  }) : runtimeScope = requireShopRuntimeScopeOrTestSeam(
+         runtimeScope,
+         testOnlyAllowMissingRuntimeScope: testOnlyAllowMissingRuntimeScope,
+       );
 
   final ShopDatabase database;
   final SupabaseClient? authClient;
@@ -29,6 +33,7 @@ class MenuImportScreen extends StatefulWidget {
   final bool myanmar;
   final XFile? recoveredCameraPhoto;
   final ShopRuntimeScope? runtimeScope;
+  final bool testOnlyAllowMissingRuntimeScope;
 
   @override
   State<MenuImportScreen> createState() => _MenuImportScreenState();

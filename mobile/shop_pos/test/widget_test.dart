@@ -12,8 +12,11 @@ import 'package:image_picker/image_picker.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supermega_shop/camera_barcode_scanner.dart';
+import 'package:supermega_shop/connected_orders_screen.dart';
 import 'package:supermega_shop/main.dart';
 import 'package:supermega_shop/menu_import_screen.dart';
+import 'package:supermega_shop/printer_setup_screen.dart';
 import 'package:supermega_shop/printer_services.dart';
 import 'package:supermega_shop/recent_sales_screen.dart';
 import 'package:supermega_shop/shop_copy.dart';
@@ -54,6 +57,79 @@ Future<int> _settleStock(WidgetTester tester) => tester.pumpAndSettle(
 );
 
 void main() {
+  test(
+    'ShopHome injected callbacks require an explicit missing-scope seam',
+    () {
+      final database = ShopDatabase(NativeDatabase.memory());
+      addTearDown(database.close);
+
+      expect(
+        () => ShopHome(
+          database: database,
+          authClient: null,
+          apiBaseUrl: 'https://example.invalid',
+          myanmar: false,
+          onLanguageChanged: (_) {},
+          runtimeCapabilities: ShopRuntimeCapabilities.production,
+          cameraViewBuilder: (_, _, _) => const SizedBox(),
+          receiptPrintSender: (_, _, _) async {},
+        ),
+        throwsStateError,
+      );
+    },
+  );
+
+  testWidgets('an injected camera view cannot bypass a missing scope', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: CameraBarcodeScanner(
+          myanmar: false,
+          cameraViewBuilder: (_, _, _) => const SizedBox(),
+        ),
+      ),
+    );
+
+    expect(tester.takeException(), isA<StateError>());
+  });
+
+  test('every routed capability screen rejects a missing runtime scope', () {
+    final database = ShopDatabase(NativeDatabase.memory());
+    addTearDown(database.close);
+
+    final constructors = <Widget Function()>[
+      () => ShopApp(
+        database: database,
+        authClient: null,
+        apiBaseUrl: 'https://example.invalid',
+        initialMyanmar: false,
+      ),
+      () => ShopSettingsScreen(
+        database: database,
+        myanmar: false,
+        onLanguageChanged: (_) {},
+      ),
+      () => ConnectedOrdersScreen(
+        myanmar: false,
+        authClient: null,
+        apiBaseUrl: 'https://example.invalid',
+      ),
+      () => MenuImportScreen(
+        database: database,
+        authClient: null,
+        apiBaseUrl: 'https://example.invalid',
+        myanmar: false,
+      ),
+      () => PrinterSetupScreen(myanmar: false),
+      () => RecentSalesScreen(database: database, myanmar: false),
+    ];
+
+    for (final construct in constructors) {
+      expect(construct, throwsStateError);
+    }
+  });
+
   for (final myanmar in [false, true]) {
     testWidgets(
       'cashier holds and reopens a local sale in ${myanmar ? 'MY' : 'EN'}',
@@ -70,6 +146,7 @@ void main() {
           await tester.pumpWidget(
             MaterialApp(
               home: ShopHome(
+                testOnlyAllowMissingRuntimeScope: true,
                 database: database,
                 authClient: null,
                 apiBaseUrl: 'https://example.invalid',
@@ -165,6 +242,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: ShopHome(
+            testOnlyAllowMissingRuntimeScope: true,
             database: database,
             authClient: null,
             apiBaseUrl: 'https://example.invalid',
@@ -232,6 +310,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: ShopHome(
+            testOnlyAllowMissingRuntimeScope: true,
             database: database,
             authClient: null,
             apiBaseUrl: 'https://example.invalid',
@@ -315,6 +394,7 @@ void main() {
       );
       await tester.pumpWidget(
         ShopApp(
+          testOnlyAllowMissingRuntimeScope: true,
           database: database,
           authClient: null,
           apiBaseUrl: 'https://app.supermega.dev',
@@ -393,6 +473,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: ShopHome(
+            testOnlyAllowMissingRuntimeScope: true,
             database: database,
             authClient: null,
             apiBaseUrl: 'https://example.invalid',
@@ -439,6 +520,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: ShopHome(
+            testOnlyAllowMissingRuntimeScope: true,
             database: database,
             authClient: null,
             apiBaseUrl: 'https://example.invalid',
@@ -495,6 +577,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: ShopHome(
+            testOnlyAllowMissingRuntimeScope: true,
             database: database,
             authClient: null,
             apiBaseUrl: 'https://example.invalid',
@@ -569,6 +652,7 @@ void main() {
             );
             await tester.pumpWidget(
               ShopApp(
+                testOnlyAllowMissingRuntimeScope: true,
                 database: database,
                 authClient: null,
                 apiBaseUrl: 'https://app.supermega.dev',
@@ -673,6 +757,7 @@ void main() {
     try {
       await tester.pumpWidget(
         ShopApp(
+          testOnlyAllowMissingRuntimeScope: true,
           database: database,
           authClient: null,
           apiBaseUrl: 'https://app.supermega.dev',
@@ -749,6 +834,7 @@ void main() {
         final database = ShopDatabase(NativeDatabase.memory());
         await tester.pumpWidget(
           ShopApp(
+            testOnlyAllowMissingRuntimeScope: true,
             database: database,
             authClient: null,
             apiBaseUrl: 'https://app.supermega.dev',
@@ -851,6 +937,7 @@ void main() {
       );
       await tester.pumpWidget(
         ShopApp(
+          testOnlyAllowMissingRuntimeScope: true,
           database: database,
           authClient: null,
           apiBaseUrl: 'https://app.supermega.dev',
@@ -925,6 +1012,7 @@ void main() {
       );
       await tester.pumpWidget(
         ShopApp(
+          testOnlyAllowMissingRuntimeScope: true,
           database: database,
           authClient: null,
           apiBaseUrl: 'https://app.supermega.dev',
@@ -981,6 +1069,7 @@ void main() {
             );
             await tester.pumpWidget(
               ShopApp(
+                testOnlyAllowMissingRuntimeScope: true,
                 database: database,
                 authClient: null,
                 apiBaseUrl: 'https://example.invalid',
@@ -1049,6 +1138,7 @@ void main() {
     );
     await tester.pumpWidget(
       ShopApp(
+        testOnlyAllowMissingRuntimeScope: true,
         database: database,
         authClient: null,
         apiBaseUrl: 'https://example.invalid',
@@ -1105,6 +1195,7 @@ void main() {
       );
       await tester.pumpWidget(
         ShopApp(
+          testOnlyAllowMissingRuntimeScope: true,
           database: database,
           authClient: null,
           apiBaseUrl: 'https://app.supermega.dev',
@@ -1366,6 +1457,7 @@ void main() {
       );
       await tester.pumpWidget(
         ShopApp(
+          testOnlyAllowMissingRuntimeScope: true,
           database: database,
           authClient: null,
           apiBaseUrl: 'https://app.supermega.dev',
@@ -1381,6 +1473,7 @@ void main() {
       await tester.pump();
       await tester.pumpWidget(
         ShopApp(
+          testOnlyAllowMissingRuntimeScope: true,
           database: database,
           authClient: null,
           apiBaseUrl: 'https://app.supermega.dev',
@@ -1437,6 +1530,7 @@ void main() {
       );
       await tester.pumpWidget(
         ShopApp(
+          testOnlyAllowMissingRuntimeScope: true,
           database: database,
           authClient: null,
           apiBaseUrl: 'https://example.invalid',
@@ -1494,6 +1588,7 @@ void main() {
       );
       await tester.pumpWidget(
         ShopApp(
+          testOnlyAllowMissingRuntimeScope: true,
           database: database,
           authClient: null,
           apiBaseUrl: 'https://app.supermega.dev',
@@ -1602,6 +1697,7 @@ void main() {
     );
     await tester.pumpWidget(
       ShopApp(
+        testOnlyAllowMissingRuntimeScope: true,
         database: database,
         authClient: null,
         apiBaseUrl: 'https://app.supermega.dev',
@@ -1640,6 +1736,7 @@ void main() {
       );
       await tester.pumpWidget(
         ShopApp(
+          testOnlyAllowMissingRuntimeScope: true,
           database: database,
           authClient: null,
           apiBaseUrl: 'https://app.supermega.dev',
@@ -1686,6 +1783,7 @@ void main() {
       );
       await tester.pumpWidget(
         ShopApp(
+          testOnlyAllowMissingRuntimeScope: true,
           database: database,
           authClient: null,
           apiBaseUrl: 'https://app.supermega.dev',
@@ -1705,6 +1803,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 1));
       await tester.pumpWidget(
         ShopApp(
+          testOnlyAllowMissingRuntimeScope: true,
           database: database,
           authClient: null,
           apiBaseUrl: 'https://app.supermega.dev',
@@ -1761,6 +1860,7 @@ void main() {
     );
     await tester.pumpWidget(
       ShopApp(
+        testOnlyAllowMissingRuntimeScope: true,
         database: database,
         authClient: null,
         apiBaseUrl: 'https://app.supermega.dev',
@@ -1803,7 +1903,13 @@ void main() {
       lines: const [ShopSaleLineInput(productId: 'rice', quantity: 1)],
     );
     await tester.pumpWidget(
-      MaterialApp(home: RecentSalesScreen(database: database, myanmar: false)),
+      MaterialApp(
+        home: RecentSalesScreen(
+          testOnlyAllowMissingRuntimeScope: true,
+          database: database,
+          myanmar: false,
+        ),
+      ),
     );
     await tester.pumpAndSettle();
     expect(find.text('Tea'), findsOneWidget);
@@ -1835,7 +1941,11 @@ void main() {
       );
       await tester.pumpWidget(
         MaterialApp(
-          home: RecentSalesScreen(database: database, myanmar: false),
+          home: RecentSalesScreen(
+            testOnlyAllowMissingRuntimeScope: true,
+            database: database,
+            myanmar: false,
+          ),
         ),
       );
       await tester.pumpAndSettle();
@@ -1854,6 +1964,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: RecentSalesScreen(
+            testOnlyAllowMissingRuntimeScope: true,
             database: database,
             myanmar: false,
             correctionAuthorizer: unavailableAuthorizer,
@@ -1910,6 +2021,7 @@ void main() {
                     : const ['NotoSansMyanmarUI', 'NotoSansMyanmar'],
               ),
               home: RecentSalesScreen(
+                testOnlyAllowMissingRuntimeScope: true,
                 database: database,
                 myanmar: myanmar,
                 correctionAuthorizer: authorizer,
@@ -1999,6 +2111,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: RecentSalesScreen(
+            testOnlyAllowMissingRuntimeScope: true,
             database: database,
             myanmar: false,
             correctionAuthorizer: authorizer,
@@ -2091,6 +2204,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: RecentSalesScreen(
+            testOnlyAllowMissingRuntimeScope: true,
             database: database,
             myanmar: false,
             correctionAuthorizer: authorizer,
@@ -2168,7 +2282,11 @@ void main() {
         tester.view.physicalSize = Size(width, 900);
         await tester.pumpWidget(
           MaterialApp(
-            home: RecentSalesScreen(database: database, myanmar: true),
+            home: RecentSalesScreen(
+              testOnlyAllowMissingRuntimeScope: true,
+              database: database,
+              myanmar: true,
+            ),
           ),
         );
         await tester.pumpAndSettle();
@@ -2208,7 +2326,11 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         locale: const Locale('en'),
-        home: RecentSalesScreen(database: database, myanmar: true),
+        home: RecentSalesScreen(
+          testOnlyAllowMissingRuntimeScope: true,
+          database: database,
+          myanmar: true,
+        ),
       ),
     );
     await tester.pumpAndSettle();
@@ -2272,7 +2394,11 @@ void main() {
       try {
         await tester.pumpWidget(
           MaterialApp(
-            home: RecentSalesScreen(database: database, myanmar: false),
+            home: RecentSalesScreen(
+              testOnlyAllowMissingRuntimeScope: true,
+              database: database,
+              myanmar: false,
+            ),
           ),
         );
         await tester.pumpAndSettle();
@@ -2380,7 +2506,11 @@ void main() {
       try {
         await tester.pumpWidget(
           MaterialApp(
-            home: RecentSalesScreen(database: database, myanmar: myanmar),
+            home: RecentSalesScreen(
+              testOnlyAllowMissingRuntimeScope: true,
+              database: database,
+              myanmar: myanmar,
+            ),
           ),
         );
         await tester.pumpAndSettle();
@@ -2419,6 +2549,7 @@ void main() {
       try {
         await tester.pumpWidget(
           ShopApp(
+            testOnlyAllowMissingRuntimeScope: true,
             database: database,
             authClient: null,
             apiBaseUrl: 'https://example.invalid',
@@ -2458,6 +2589,7 @@ void main() {
     try {
       await tester.pumpWidget(
         ShopApp(
+          testOnlyAllowMissingRuntimeScope: true,
           database: database,
           authClient: null,
           apiBaseUrl: '',
@@ -2532,6 +2664,7 @@ void main() {
 
         await tester.pumpWidget(
           ShopApp(
+            testOnlyAllowMissingRuntimeScope: true,
             database: database,
             authClient: null,
             apiBaseUrl: 'https://app.supermega.dev',
@@ -2546,7 +2679,11 @@ void main() {
 
         await tester.pumpWidget(
           MaterialApp(
-            home: RecentSalesScreen(database: database, myanmar: false),
+            home: RecentSalesScreen(
+              testOnlyAllowMissingRuntimeScope: true,
+              database: database,
+              myanmar: false,
+            ),
           ),
         );
         await tester.pumpAndSettle();
@@ -2624,7 +2761,11 @@ void main() {
 
         await tester.pumpWidget(
           MaterialApp(
-            home: RecentSalesScreen(database: database, myanmar: false),
+            home: RecentSalesScreen(
+              testOnlyAllowMissingRuntimeScope: true,
+              database: database,
+              myanmar: false,
+            ),
           ),
         );
         await tester.pumpAndSettle();
@@ -2716,7 +2857,11 @@ void main() {
 
         await tester.pumpWidget(
           MaterialApp(
-            home: RecentSalesScreen(database: database, myanmar: false),
+            home: RecentSalesScreen(
+              testOnlyAllowMissingRuntimeScope: true,
+              database: database,
+              myanmar: false,
+            ),
           ),
         );
         await tester.pumpAndSettle();
@@ -2801,6 +2946,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: RecentSalesScreen(
+          testOnlyAllowMissingRuntimeScope: true,
           database: database,
           myanmar: false,
           reprintService: ReceiptReprintService(
@@ -2864,6 +3010,7 @@ void main() {
         await tester.pumpWidget(
           MaterialApp(
             home: ShopHome(
+              testOnlyAllowMissingRuntimeScope: true,
               database: database,
               authClient: null,
               apiBaseUrl: 'https://example.invalid',
@@ -2946,6 +3093,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: RecentSalesScreen(
+          testOnlyAllowMissingRuntimeScope: true,
           database: database,
           myanmar: false,
           reprintService: ReceiptReprintService(
@@ -2997,6 +3145,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: ShopHome(
+          testOnlyAllowMissingRuntimeScope: true,
           database: database,
           authClient: null,
           apiBaseUrl: 'https://app.supermega.dev',
@@ -3043,6 +3192,7 @@ void main() {
         await tester.pumpWidget(
           MaterialApp(
             home: MenuImportScreen(
+              testOnlyAllowMissingRuntimeScope: true,
               database: database,
               authClient: null,
               apiBaseUrl: 'https://example.invalid',
@@ -3111,6 +3261,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: ShopHome(
+          testOnlyAllowMissingRuntimeScope: true,
           database: database,
           authClient: null,
           apiBaseUrl: 'https://app.supermega.dev',
@@ -3195,6 +3346,7 @@ void main() {
     );
     await tester.pumpWidget(
       ShopApp(
+        testOnlyAllowMissingRuntimeScope: true,
         initialCounter: true,
         database: database,
         authClient: null,
@@ -3227,6 +3379,7 @@ void main() {
     );
     await tester.pumpWidget(
       ShopApp(
+        testOnlyAllowMissingRuntimeScope: true,
         initialCounter: true,
         database: database,
         authClient: null,
@@ -3277,6 +3430,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: ShopHome(
+          testOnlyAllowMissingRuntimeScope: true,
           database: database,
           authClient: null,
           apiBaseUrl: 'https://app.supermega.dev',
@@ -3326,6 +3480,7 @@ void main() {
         addTearDown(database.close);
         await tester.pumpWidget(
           ShopApp(
+            testOnlyAllowMissingRuntimeScope: true,
             initialCounter: true,
             database: database,
             authClient: null,
@@ -3401,6 +3556,7 @@ void main() {
     addTearDown(database.close);
     await tester.pumpWidget(
       ShopApp(
+        testOnlyAllowMissingRuntimeScope: true,
         initialCounter: true,
         database: database,
         authClient: null,
@@ -3498,6 +3654,7 @@ void main() {
     try {
       await tester.pumpWidget(
         ShopApp(
+          testOnlyAllowMissingRuntimeScope: true,
           initialCounter: true,
           database: database,
           authClient: null,
@@ -3538,6 +3695,7 @@ void main() {
     try {
       await tester.pumpWidget(
         ShopApp(
+          testOnlyAllowMissingRuntimeScope: true,
           initialCounter: true,
           database: database,
           authClient: null,
@@ -3583,6 +3741,7 @@ void main() {
     try {
       await tester.pumpWidget(
         ShopApp(
+          testOnlyAllowMissingRuntimeScope: true,
           initialCounter: true,
           database: database,
           authClient: null,
@@ -3629,6 +3788,7 @@ void main() {
         );
         await tester.pumpWidget(
           ShopApp(
+            testOnlyAllowMissingRuntimeScope: true,
             database: database,
             authClient: null,
             apiBaseUrl: 'https://app.supermega.dev',
@@ -3722,6 +3882,7 @@ void main() {
           );
           await tester.pumpWidget(
             ShopApp(
+              testOnlyAllowMissingRuntimeScope: true,
               initialCounter: true,
               database: database,
               authClient: null,
@@ -3929,6 +4090,7 @@ void main() {
       );
       await tester.pumpWidget(
         ShopApp(
+          testOnlyAllowMissingRuntimeScope: true,
           database: database,
           authClient: null,
           apiBaseUrl: 'https://example.invalid',
@@ -4017,6 +4179,7 @@ void main() {
     );
     await tester.pumpWidget(
       ShopApp(
+        testOnlyAllowMissingRuntimeScope: true,
         initialCounter: true,
         database: database,
         authClient: null,
@@ -4058,6 +4221,7 @@ void main() {
     );
     await tester.pumpWidget(
       ShopApp(
+        testOnlyAllowMissingRuntimeScope: true,
         initialCounter: true,
         database: database,
         authClient: null,
@@ -4095,6 +4259,7 @@ void main() {
     );
     await tester.pumpWidget(
       ShopApp(
+        testOnlyAllowMissingRuntimeScope: true,
         initialCounter: true,
         database: database,
         authClient: null,
@@ -4173,6 +4338,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: ShopHome(
+            testOnlyAllowMissingRuntimeScope: true,
             database: database,
             authClient: null,
             apiBaseUrl: 'https://example.invalid',
@@ -4315,6 +4481,7 @@ void main() {
     );
     await tester.pumpWidget(
       ShopApp(
+        testOnlyAllowMissingRuntimeScope: true,
         initialCounter: true,
         database: database,
         authClient: null,
@@ -4352,6 +4519,7 @@ void main() {
       );
       await tester.pumpWidget(
         ShopApp(
+          testOnlyAllowMissingRuntimeScope: true,
           initialCounter: true,
           database: database,
           authClient: null,
@@ -4421,6 +4589,7 @@ void main() {
       );
       await tester.pumpWidget(
         ShopApp(
+          testOnlyAllowMissingRuntimeScope: true,
           initialCounter: true,
           database: database,
           authClient: null,
@@ -4463,6 +4632,7 @@ void main() {
     );
     await tester.pumpWidget(
       ShopApp(
+        testOnlyAllowMissingRuntimeScope: true,
         initialCounter: true,
         database: database,
         authClient: null,
@@ -4564,6 +4734,7 @@ void main() {
       );
       await tester.pumpWidget(
         ShopApp(
+          testOnlyAllowMissingRuntimeScope: true,
           initialCounter: true,
           database: database,
           authClient: null,
@@ -4612,6 +4783,7 @@ void main() {
       );
       await tester.pumpWidget(
         ShopApp(
+          testOnlyAllowMissingRuntimeScope: true,
           initialCounter: true,
           database: database,
           authClient: null,
@@ -4674,6 +4846,7 @@ void main() {
         );
         await tester.pumpWidget(
           ShopApp(
+            testOnlyAllowMissingRuntimeScope: true,
             initialCounter: true,
             database: database,
             authClient: null,
@@ -4768,6 +4941,7 @@ void main() {
     );
     await tester.pumpWidget(
       ShopApp(
+        testOnlyAllowMissingRuntimeScope: true,
         initialCounter: true,
         database: database,
         authClient: null,
@@ -5222,6 +5396,7 @@ void main() {
     );
     await tester.pumpWidget(
       ShopApp(
+        testOnlyAllowMissingRuntimeScope: true,
         initialCounter: true,
         database: database,
         authClient: null,
@@ -5315,6 +5490,7 @@ void main() {
       );
       await tester.pumpWidget(
         ShopApp(
+          testOnlyAllowMissingRuntimeScope: true,
           initialCounter: true,
           database: database,
           authClient: null,
@@ -5363,6 +5539,7 @@ void main() {
     final database = ShopDatabase(NativeDatabase.memory());
     await tester.pumpWidget(
       ShopApp(
+        testOnlyAllowMissingRuntimeScope: true,
         initialCounter: true,
         database: database,
         authClient: null,
@@ -5413,6 +5590,7 @@ void main() {
       final database = ShopDatabase(NativeDatabase.memory());
       await tester.pumpWidget(
         ShopApp(
+          testOnlyAllowMissingRuntimeScope: true,
           database: database,
           authClient: null,
           apiBaseUrl: 'https://example.invalid',
@@ -5750,6 +5928,7 @@ void main() {
       );
       await tester.pumpWidget(
         ShopApp(
+          testOnlyAllowMissingRuntimeScope: true,
           initialCounter: true,
           database: database,
           authClient: null,
@@ -5803,6 +5982,7 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpWidget(
         ShopApp(
+          testOnlyAllowMissingRuntimeScope: true,
           initialCounter: true,
           database: database,
           authClient: null,
@@ -5878,6 +6058,7 @@ void main() {
           );
           await tester.pumpWidget(
             ShopApp(
+              testOnlyAllowMissingRuntimeScope: true,
               initialCounter: true,
               database: database,
               authClient: null,
@@ -5979,6 +6160,7 @@ void main() {
         );
         await tester.pumpWidget(
           ShopApp(
+            testOnlyAllowMissingRuntimeScope: true,
             initialCounter: true,
             database: database,
             authClient: null,
@@ -6055,6 +6237,7 @@ void main() {
     );
     await tester.pumpWidget(
       ShopApp(
+        testOnlyAllowMissingRuntimeScope: true,
         initialCounter: true,
         database: database,
         authClient: null,
@@ -6126,6 +6309,7 @@ void main() {
       );
       await tester.pumpWidget(
         ShopApp(
+          testOnlyAllowMissingRuntimeScope: true,
           initialCounter: true,
           database: database,
           authClient: null,

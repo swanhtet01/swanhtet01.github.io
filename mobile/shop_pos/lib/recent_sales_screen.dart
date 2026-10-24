@@ -14,22 +14,27 @@ import 'shop_today_screen.dart';
 enum _SaleDetailsAction { correct }
 
 class RecentSalesScreen extends StatefulWidget {
-  const RecentSalesScreen({
+  RecentSalesScreen({
     required this.database,
     required this.myanmar,
     this.reprintService,
     this.correctionAuthorizer,
-    this.runtimeScope,
+    ShopRuntimeScope? runtimeScope,
+    this.testOnlyAllowMissingRuntimeScope = false,
     this.embeddedTaskShell = false,
     this.refreshToken = 0,
     super.key,
-  });
+  }) : runtimeScope = requireShopRuntimeScopeOrTestSeam(
+         runtimeScope,
+         testOnlyAllowMissingRuntimeScope: testOnlyAllowMissingRuntimeScope,
+       );
 
   final ShopDatabase database;
   final bool myanmar;
   final ReceiptReprintService? reprintService;
   final ShopCorrectionAuthorizer? correctionAuthorizer;
   final ShopRuntimeScope? runtimeScope;
+  final bool testOnlyAllowMissingRuntimeScope;
   final bool embeddedTaskShell;
   final int refreshToken;
 
@@ -819,6 +824,8 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
             builder: (_) => PrinterSetupScreen(
               myanmar: widget.myanmar,
               runtimeScope: widget.runtimeScope,
+              testOnlyAllowMissingRuntimeScope:
+                  widget.testOnlyAllowMissingRuntimeScope,
             ),
           ),
         );

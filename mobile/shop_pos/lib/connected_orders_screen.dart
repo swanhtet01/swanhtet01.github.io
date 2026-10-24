@@ -10,18 +10,23 @@ import 'shop_runtime_scope.dart';
 
 /// A read-only connected view. It does not alter this device's sale or stock.
 class ConnectedOrdersScreen extends StatefulWidget {
-  const ConnectedOrdersScreen({
+  ConnectedOrdersScreen({
     required this.myanmar,
     required this.authClient,
     required this.apiBaseUrl,
-    this.runtimeScope,
+    ShopRuntimeScope? runtimeScope,
+    this.testOnlyAllowMissingRuntimeScope = false,
     super.key,
-  });
+  }) : runtimeScope = requireShopRuntimeScopeOrTestSeam(
+         runtimeScope,
+         testOnlyAllowMissingRuntimeScope: testOnlyAllowMissingRuntimeScope,
+       );
 
   final bool myanmar;
   final SupabaseClient? authClient;
   final String apiBaseUrl;
   final ShopRuntimeScope? runtimeScope;
+  final bool testOnlyAllowMissingRuntimeScope;
 
   @override
   State<ConnectedOrdersScreen> createState() => _ConnectedOrdersScreenState();

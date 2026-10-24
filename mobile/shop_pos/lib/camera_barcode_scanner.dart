@@ -39,12 +39,14 @@ class CameraBarcodeScanner extends StatefulWidget {
     required this.myanmar,
     this.cameraViewBuilder,
     this.runtimeScope,
+    this.testOnlyAllowMissingRuntimeScope = false,
     super.key,
   });
 
   final bool myanmar;
   final ShopCameraViewBuilder? cameraViewBuilder;
   final ShopRuntimeScope? runtimeScope;
+  final bool testOnlyAllowMissingRuntimeScope;
 
   @override
   State<CameraBarcodeScanner> createState() => _CameraBarcodeScannerState();
@@ -67,13 +69,17 @@ class _CameraBarcodeScannerState extends State<CameraBarcodeScanner> {
   }
 
   Widget _cameraView() {
+    final scope = requireShopRuntimeScopeOrTestSeam(
+      widget.runtimeScope,
+      testOnlyAllowMissingRuntimeScope: widget.testOnlyAllowMissingRuntimeScope,
+    );
     final builder = widget.cameraViewBuilder;
-    if (builder != null) return builder(context, _accept, _reportError);
-    final scope = widget.runtimeScope;
-    if (scope == null) throw StateError('shop_runtime_scope_required');
-    if (!scope.capabilities.camera) {
-      throw StateError('shop_camera_unavailable');
+    if (scope == null) {
+      if (builder == null) throw StateError('shop_runtime_scope_required');
+      return builder(context, _accept, _reportError);
     }
+    if (!scope.capabilities.camera) throw StateError('shop_camera_unavailable');
+    if (builder != null) return builder(context, _accept, _reportError);
     return MobileScanner(
       onDetect: (capture) {
         for (final barcode in capture.barcodes) {

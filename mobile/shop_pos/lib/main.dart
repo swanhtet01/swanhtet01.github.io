@@ -152,17 +152,26 @@ Future<SupabaseClient> _initializeManagedAuth(
 }
 
 class ShopApp extends StatefulWidget {
-  const ShopApp({
+  ShopApp({
     required this.database,
     required this.authClient,
     required this.apiBaseUrl,
     required this.initialMyanmar,
     this.runtimeCapabilities = ShopRuntimeCapabilities.failClosed,
-    this.runtimeScope,
+    ShopRuntimeScope? runtimeScope,
+    this.testOnlyAllowMissingRuntimeScope = false,
     this.scopedPreferences,
     this.initialCounter = false,
     super.key,
-  });
+  }) : runtimeScope = requireShopRuntimeScopeOrTestSeam(
+         runtimeScope,
+         testOnlyAllowMissingRuntimeScope: testOnlyAllowMissingRuntimeScope,
+       ) {
+    if (runtimeScope != null &&
+        !identical(runtimeCapabilities, runtimeScope.capabilities)) {
+      throw StateError('shop_runtime_capabilities_mismatch');
+    }
+  }
 
   final ShopDatabase database;
   final SupabaseClient? authClient;
@@ -170,6 +179,7 @@ class ShopApp extends StatefulWidget {
   final bool initialMyanmar;
   final ShopRuntimeCapabilities runtimeCapabilities;
   final ShopRuntimeScope? runtimeScope;
+  final bool testOnlyAllowMissingRuntimeScope;
   final ShopScopedPreferences? scopedPreferences;
 
   /// Opens Counter directly for a focused cashier journey or widget test.
@@ -327,6 +337,8 @@ class _ShopAppState extends State<ShopApp> {
               onLanguageChanged: _setLanguage,
               runtimeCapabilities: widget.runtimeCapabilities,
               runtimeScope: widget.runtimeScope,
+              testOnlyAllowMissingRuntimeScope:
+                  widget.testOnlyAllowMissingRuntimeScope,
             ),
           ),
         );
@@ -556,6 +568,8 @@ class _ShopAppState extends State<ShopApp> {
               correctionAuthorizer: _correctionAuthorizer,
               runtimeCapabilities: widget.runtimeCapabilities,
               runtimeScope: widget.runtimeScope,
+              testOnlyAllowMissingRuntimeScope:
+                  widget.testOnlyAllowMissingRuntimeScope,
               scopedPreferences: widget.scopedPreferences,
               myanmar: _myanmar,
               onLanguageChanged: _setLanguage,
@@ -626,6 +640,8 @@ class _ShopAppState extends State<ShopApp> {
                                       runtimeCapabilities:
                                           widget.runtimeCapabilities,
                                       runtimeScope: widget.runtimeScope,
+                                      testOnlyAllowMissingRuntimeScope: widget
+                                          .testOnlyAllowMissingRuntimeScope,
                                       scopedPreferences:
                                           widget.scopedPreferences,
                                       myanmar: _myanmar,
@@ -645,6 +661,8 @@ class _ShopAppState extends State<ShopApp> {
                                       database: widget.database,
                                       myanmar: _myanmar,
                                       runtimeScope: widget.runtimeScope,
+                                      testOnlyAllowMissingRuntimeScope: widget
+                                          .testOnlyAllowMissingRuntimeScope,
                                       correctionAuthorizer:
                                           _correctionAuthorizer,
                                       embeddedTaskShell: true,
@@ -743,7 +761,7 @@ Widget _savedWalletLines(
 }
 
 class ShopHome extends StatefulWidget {
-  const ShopHome({
+  ShopHome({
     required this.database,
     required this.authClient,
     required this.apiBaseUrl,
@@ -761,10 +779,19 @@ class ShopHome extends StatefulWidget {
     this.receiptPrinterSettings,
     this.receiptPrintSender,
     this.runtimeCapabilities = ShopRuntimeCapabilities.failClosed,
-    this.runtimeScope,
+    ShopRuntimeScope? runtimeScope,
+    this.testOnlyAllowMissingRuntimeScope = false,
     this.scopedPreferences,
     super.key,
-  });
+  }) : runtimeScope = requireShopRuntimeScopeOrTestSeam(
+         runtimeScope,
+         testOnlyAllowMissingRuntimeScope: testOnlyAllowMissingRuntimeScope,
+       ) {
+    if (runtimeScope != null &&
+        !identical(runtimeCapabilities, runtimeScope.capabilities)) {
+      throw StateError('shop_runtime_capabilities_mismatch');
+    }
+  }
 
   final ShopDatabase database;
   final SupabaseClient? authClient;
@@ -784,6 +811,7 @@ class ShopHome extends StatefulWidget {
   final ReceiptPrintSender? receiptPrintSender;
   final ShopRuntimeCapabilities runtimeCapabilities;
   final ShopRuntimeScope? runtimeScope;
+  final bool testOnlyAllowMissingRuntimeScope;
   final ShopScopedPreferences? scopedPreferences;
 
   @override
@@ -1845,6 +1873,8 @@ class _ShopHomeState extends State<ShopHome> {
           myanmar: widget.myanmar,
           cameraViewBuilder: widget.cameraViewBuilder,
           runtimeScope: widget.runtimeScope,
+          testOnlyAllowMissingRuntimeScope:
+              widget.testOnlyAllowMissingRuntimeScope,
         ),
       ),
     );
@@ -3914,6 +3944,8 @@ class _ShopHomeState extends State<ShopHome> {
         builder: (_) => PrinterSetupScreen(
           myanmar: widget.myanmar,
           runtimeScope: runtimeScope,
+          testOnlyAllowMissingRuntimeScope:
+              widget.testOnlyAllowMissingRuntimeScope,
         ),
       ),
     );
@@ -4042,6 +4074,8 @@ class _ShopHomeState extends State<ShopHome> {
           myanmar: widget.myanmar,
           recoveredCameraPhoto: recoveredPhoto,
           runtimeScope: widget.runtimeScope,
+          testOnlyAllowMissingRuntimeScope:
+              widget.testOnlyAllowMissingRuntimeScope,
         ),
       ),
     );
@@ -4073,6 +4107,8 @@ class _ShopHomeState extends State<ShopHome> {
         builder: (_) => PrinterSetupScreen(
           myanmar: widget.myanmar,
           runtimeScope: runtimeScope,
+          testOnlyAllowMissingRuntimeScope:
+              widget.testOnlyAllowMissingRuntimeScope,
         ),
       ),
     );
@@ -4089,6 +4125,8 @@ class _ShopHomeState extends State<ShopHome> {
           database: widget.database,
           myanmar: widget.myanmar,
           runtimeScope: widget.runtimeScope,
+          testOnlyAllowMissingRuntimeScope:
+              widget.testOnlyAllowMissingRuntimeScope,
           correctionAuthorizer: widget.correctionAuthorizer,
         ),
       ),
@@ -4105,6 +4143,8 @@ class _ShopHomeState extends State<ShopHome> {
         onLanguageChanged: widget.onLanguageChanged,
         runtimeCapabilities: widget.runtimeCapabilities,
         runtimeScope: widget.runtimeScope,
+        testOnlyAllowMissingRuntimeScope:
+            widget.testOnlyAllowMissingRuntimeScope,
       ),
     ),
   );
@@ -4641,16 +4681,25 @@ class _SetupTile extends StatelessWidget {
 }
 
 class ShopSettingsScreen extends StatefulWidget {
-  const ShopSettingsScreen({
+  ShopSettingsScreen({
     required this.database,
     required this.myanmar,
     required this.onLanguageChanged,
     this.authClient,
     this.apiBaseUrl = 'https://app.supermega.dev',
     this.runtimeCapabilities = ShopRuntimeCapabilities.failClosed,
-    this.runtimeScope,
+    ShopRuntimeScope? runtimeScope,
+    this.testOnlyAllowMissingRuntimeScope = false,
     super.key,
-  });
+  }) : runtimeScope = requireShopRuntimeScopeOrTestSeam(
+         runtimeScope,
+         testOnlyAllowMissingRuntimeScope: testOnlyAllowMissingRuntimeScope,
+       ) {
+    if (runtimeScope != null &&
+        !identical(runtimeCapabilities, runtimeScope.capabilities)) {
+      throw StateError('shop_runtime_capabilities_mismatch');
+    }
+  }
 
   final ShopDatabase database;
   final SupabaseClient? authClient;
@@ -4659,6 +4708,7 @@ class ShopSettingsScreen extends StatefulWidget {
   final ValueChanged<bool> onLanguageChanged;
   final ShopRuntimeCapabilities runtimeCapabilities;
   final ShopRuntimeScope? runtimeScope;
+  final bool testOnlyAllowMissingRuntimeScope;
 
   @override
   State<ShopSettingsScreen> createState() => _ShopSettingsScreenState();
@@ -4725,6 +4775,8 @@ class _ShopSettingsScreenState extends State<ShopSettingsScreen> {
                             authClient: widget.authClient,
                             apiBaseUrl: widget.apiBaseUrl,
                             runtimeScope: widget.runtimeScope,
+                            testOnlyAllowMissingRuntimeScope:
+                                widget.testOnlyAllowMissingRuntimeScope,
                           ),
                         ),
                       ),
@@ -4749,6 +4801,8 @@ class _ShopSettingsScreenState extends State<ShopSettingsScreen> {
                           builder: (_) => PrinterSetupScreen(
                             myanmar: _myanmar,
                             runtimeScope: widget.runtimeScope,
+                            testOnlyAllowMissingRuntimeScope:
+                                widget.testOnlyAllowMissingRuntimeScope,
                           ),
                         ),
                       ),
