@@ -33,6 +33,9 @@ const implementationFiles = [
   'mobile/shop_pos/android/app/src/production/AndroidManifest.xml',
   'mobile/shop_pos/android/app/src/qa/AndroidManifest.xml',
   'mobile/shop_pos/ios/Runner.xcodeproj/xcshareddata/xcschemes/qa.xcscheme',
+  'mobile/shop_pos/ios/Runner/Info.plist',
+  'mobile/shop_pos/ios/Flutter/Debug.xcconfig',
+  'mobile/shop_pos/ios/Flutter/Release.xcconfig',
   'mobile/shop_pos/ios/Flutter/QA.xcconfig',
 ]
 
@@ -264,11 +267,11 @@ function workflowDefaultRunShells(workflow) {
 
 const workflowTuples = Object.freeze([
   { platform: 'android', profile: 'production', build: 'flutter build apk --debug --no-pub --flavor production' },
-  { platform: 'android', profile: 'synthetic_qa_v1', build: 'flutter build apk --debug --no-pub --flavor qa --dart-define=SHOP_RUNTIME_PROFILE=synthetic_qa_v1 --dart-define=SHOP_QA_PROFILE_ID=synthetic-qa-v1', artifact: 'app-qa-debug.apk' },
+  { platform: 'android', profile: 'synthetic_qa_v1', build: 'flutter build apk --debug --no-pub --flavor qa --dart-define=SHOP_RUNTIME_PROFILE=synthetic_qa_v1 --dart-define=SHOP_QA_PROFILE_ID=synthetic-qa-v1', artifact: 'app-qa-debug.apk', inspection: ['manifest application-id app-qa-debug.apk', 'dev.supermega.supermega_shop.qa', 'manifest print app-qa-debug.apk', 'android:label="Shop QA"'] },
   { platform: 'ios', profile: 'production', build: 'flutter build ios --debug --no-codesign --no-pub' },
-  { platform: 'ios', profile: 'synthetic_qa_v1', build: 'flutter build ios --debug --no-codesign --no-pub --flavor qa --dart-define=SHOP_RUNTIME_PROFILE=synthetic_qa_v1 --dart-define=SHOP_QA_PROFILE_ID=synthetic-qa-v1', artifact: 'Runner.app.zip' },
+  { platform: 'ios', profile: 'synthetic_qa_v1', build: 'flutter build ios --debug --no-codesign --no-pub --flavor qa --dart-define=SHOP_RUNTIME_PROFILE=synthetic_qa_v1 --dart-define=SHOP_QA_PROFILE_ID=synthetic-qa-v1', artifact: 'Runner.app.zip', inspection: ['Print :CFBundleIdentifier', 'dev.supermega.supermegaShop.qa', 'Print :CFBundleDisplayName', 'Print :CFBundleName', 'Shop QA'] },
   { platform: 'windows', profile: 'production', build: 'flutter build windows --release --no-pub' },
-  { platform: 'windows', profile: 'synthetic_qa_v1', build: 'flutter build windows --release --no-pub --dart-define=SHOP_RUNTIME_PROFILE=synthetic_qa_v1 --dart-define=SHOP_QA_PROFILE_ID=synthetic-qa-v1', artifact: 'supermega_shop_qa.exe', configure: true },
+  { platform: 'windows', profile: 'synthetic_qa_v1', build: 'flutter build windows --release --no-pub --dart-define=SHOP_RUNTIME_PROFILE=synthetic_qa_v1 --dart-define=SHOP_QA_PROFILE_ID=synthetic-qa-v1', artifact: 'supermega-shop-windows-qa.zip', configure: true, inspection: ["$identity.ProductName -cne 'Shop QA'", "$identity.FileDescription -cne 'Shop QA'", "$identity.InternalName -cne 'supermega_shop_qa'", "$identity.OriginalFilename -cne 'supermega_shop_qa.exe'"], package: 'Compress-Archive -Path $releaseDirectory -DestinationPath $packagePath' },
 ])
 
 function jobTargetsPlatform(job, platform) {
@@ -326,10 +329,25 @@ function qaWorkflowBlockers(workflow) {
     if (!tuple.artifact) continue
     const laterSteps = platformSteps.filter(step => step.job === matched.job && step.index > matched.buildStep)
     const artifact = escapedPattern(tuple.artifact)
-    const checksum = laterSteps.some(step => requiredStepIsUnconditional(step) && executableCommands(step.run).some(command => (
+    const inspectionStep = laterSteps.find(step => requiredStepIsUnconditional(step) && tuple.inspection?.every(token => step.run.includes(token)))
+    const checksumStep = laterSteps.find(step => requiredStepIsUnconditional(step) && executableCommands(step.run).some(command => (
       new RegExp(`^(?:sha256sum|shasum\\s+-a\\s+256)\\s+${artifact}\\s*>\\s*${artifact}\\.sha256$`, 'i').test(command)
         || new RegExp(`^Get-FileHash\\s+-Algorithm\\s+SHA256\\s+${artifact}\\s*\\|\\s*Out-File\\s+${artifact}\\.sha256$`, 'i').test(command)
+        || (tuple.platform === 'windows'
+          && step.run.includes(`$artifact = '${tuple.artifact}'`)
+          && command.includes('Get-FileHash -Algorithm SHA256 -LiteralPath $artifact')
+          && command.includes('.Hash.ToLowerInvariant()'))
     )))
+    const checksum = Boolean(checksumStep)
+    const packageStep = tuple.package
+      ? laterSteps.find(step => requiredStepIsUnconditional(step) && step.run.includes(tuple.package))
+      : inspectionStep
+    const inspectedBeforeChecksum = Boolean(inspectionStep && packageStep && checksumStep
+      && inspectionStep.index <= packageStep.index && packageStep.index < checksumStep.index)
+    const windowsCanonicalChecksum = tuple.platform !== 'windows' || laterSteps.some(step => requiredStepIsUnconditional(step)
+      && step.run.includes(`$artifact = '${tuple.artifact}'`)
+      && step.run.includes('"$digest  $artifact"')
+      && step.run.includes('if ($recorded -cne $expected)'))
     const metadata = laterSteps.some(step => requiredStepIsUnconditional(step) && executableCommands(step.run).some(command => (
       command.includes('source-sha=${{ github.sha }}')
         && /promotion-ineligible/i.test(command)
@@ -345,8 +363,8 @@ function qaWorkflowBlockers(workflow) {
       && exactArtifactEntries(step.artifactPath).has(tuple.artifact)
       && exactArtifactEntries(step.artifactPath).has(`${tuple.artifact}.sha256`)
       && exactArtifactEntries(step.artifactPath).has(`${tuple.artifact}.manifest`))
-    if (!checksum || !metadata || !upload) {
-      missing.push(`${tuple.platform}:${tuple.profile}:artifact_checksum_promotion_binding(checksum=${checksum},metadata=${metadata},upload=${Boolean(upload)})`)
+    if (!checksum || !metadata || !upload || !inspectedBeforeChecksum || !windowsCanonicalChecksum) {
+      missing.push(`${tuple.platform}:${tuple.profile}:artifact_checksum_promotion_binding(checksum=${checksum},metadata=${metadata},upload=${Boolean(upload)},inspection=${inspectedBeforeChecksum},canonical=${windowsCanonicalChecksum})`)
     }
   }
   for (const platform of ['android', 'ios', 'windows']) {
@@ -460,6 +478,9 @@ export function assessShopQaIsolationContract({ sources }) {
   for (const token of ['enum ShopRuntimeProfile', 'ShopRuntimeProfile resolve', "String.fromEnvironment('SHOP_RUNTIME_PROFILE')", "String.fromEnvironment('SHOP_QA_PROFILE_ID')", 'synthetic_qa_v1', 'synthetic-qa-v1', 'throw StateError']) {
     if (!profile.includes(token)) add(blockers, 'runtime_profile_contract_missing', token)
   }
+  for (const identity of ['dev.supermega.supermega_shop.qa', 'dev.supermega.supermegaShop.qa', 'dev.supermega.supermega_shop.qa.windows']) {
+    if (!profile.includes(identity)) add(blockers, 'runtime_qa_platform_identity_missing', identity)
+  }
   for (const forbidden of ['externalIoOverride', 'ALLOW_EXTERNAL_IO', 'allowExternalIo']) {
     if (profile.includes(forbidden)) add(fatal, 'qa_external_io_override_forbidden', forbidden)
   }
@@ -557,9 +578,12 @@ export function assessShopQaIsolationContract({ sources }) {
   const androidQa = sources['mobile/shop_pos/android/app/src/qa/AndroidManifest.xml'] || ''
   const iosScheme = sources['mobile/shop_pos/ios/Runner.xcodeproj/xcshareddata/xcschemes/qa.xcscheme'] || ''
   const iosConfig = sources['mobile/shop_pos/ios/Flutter/QA.xcconfig'] || ''
+  const iosInfo = sources['mobile/shop_pos/ios/Runner/Info.plist'] || ''
+  const iosDebug = sources['mobile/shop_pos/ios/Flutter/Debug.xcconfig'] || ''
+  const iosRelease = sources['mobile/shop_pos/ios/Flutter/Release.xcconfig'] || ''
   if (!/create\("production"\)/.test(gradle) || !/create\("qa"\)/.test(gradle) || !androidProduction.includes('Shop') || !androidQa.includes('Shop QA')) add(blockers, 'android_qa_identity_missing', 'exact production/qa flavors and manifests')
   const iosQaActions = iosScheme.match(/buildConfiguration="Debug-qa"/g) ?? []
-  if (!ios.includes('dev.supermega.supermegaShop.qa') || iosQaActions.length !== 5 || /buildConfiguration="(?:Debug|Profile|Release)"/.test(iosScheme) || !iosConfig.includes('dev.supermega.supermegaShop.qa')) add(blockers, 'ios_qa_identity_missing', 'QA scheme, config, and bundle identity')
+  if (!ios.includes('dev.supermega.supermegaShop.qa') || iosQaActions.length !== 5 || /buildConfiguration="(?:Debug|Profile|Release)"/.test(iosScheme) || !iosConfig.includes('dev.supermega.supermegaShop.qa') || !iosConfig.includes('SHOP_DISPLAY_NAME=Shop QA') || !iosInfo.includes('$(SHOP_DISPLAY_NAME)') || !iosInfo.includes('$(PRODUCT_NAME)') || !iosDebug.includes('SHOP_DISPLAY_NAME=Shop') || !iosRelease.includes('SHOP_DISPLAY_NAME=Shop')) add(blockers, 'ios_qa_identity_missing', 'QA scheme, config, bundle identity, and unchanged production label')
   if (!generator.includes('synthetic_qa_v1') || !generator.includes('production') || !generator.includes('windows')) add(blockers, 'identity_generator_missing', 'allowlisted platform/profile generator')
   if (!windows.includes('supermega_shop_qa.exe') || !windows.includes('Shop QA')) add(blockers, 'windows_qa_identity_missing', 'QA executable and product identity')
   const workflowBlockers = qaWorkflowBlockers(workflow)

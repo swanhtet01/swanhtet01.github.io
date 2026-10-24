@@ -39,14 +39,14 @@ jobs:
       - name: Resolve locked dependencies
         run: flutter pub get --enforce-lockfile
 
+      - name: Check changed Dart formatting
+        run: |
+          dart format lib/camera_barcode_scanner.dart lib/connected_orders_screen.dart lib/connected_orders_service.dart lib/main.dart lib/menu_import_screen.dart lib/menu_import_service.dart lib/printer_services.dart lib/printer_setup_screen.dart lib/recent_sales_screen.dart lib/shop_backup.dart lib/shop_backup_export_screen.dart lib/shop_build_identity.g.dart lib/shop_cash_shift_screen.dart lib/shop_copy.dart lib/shop_correction_authorization_service.dart lib/shop_correction_receipt.dart lib/shop_database.dart lib/shop_runtime_profile.dart lib/shop_runtime_scope.dart lib/shop_sale_correction_dialog.dart lib/shop_startup.dart lib/shop_today_screen.dart lib/stock_screen.dart test/shop_backup_test.dart test/shop_correction_authorization_service_test.dart test/shop_foundation_test.dart test/shop_runtime_profile_test.dart test/shop_runtime_scope_test.dart test/visual_capture_test.dart test/widget_test.dart
+          git diff --exit-code -- lib/camera_barcode_scanner.dart lib/connected_orders_screen.dart lib/connected_orders_service.dart lib/main.dart lib/menu_import_screen.dart lib/menu_import_service.dart lib/printer_services.dart lib/printer_setup_screen.dart lib/recent_sales_screen.dart lib/shop_backup.dart lib/shop_backup_export_screen.dart lib/shop_build_identity.g.dart lib/shop_cash_shift_screen.dart lib/shop_copy.dart lib/shop_correction_authorization_service.dart lib/shop_correction_receipt.dart lib/shop_database.dart lib/shop_runtime_profile.dart lib/shop_runtime_scope.dart lib/shop_sale_correction_dialog.dart lib/shop_startup.dart lib/shop_today_screen.dart lib/stock_screen.dart test/shop_backup_test.dart test/shop_correction_authorization_service_test.dart test/shop_foundation_test.dart test/shop_runtime_profile_test.dart test/shop_runtime_scope_test.dart test/visual_capture_test.dart test/widget_test.dart
+
       - name: Generate Android production identity
         working-directory: ${{ github.workspace }}
         run: node tools/generate_shop_build_identity.mjs --platform android --profile production
-
-      - name: Check changed Dart formatting
-        run: |
-          dart format lib/main.dart lib/menu_import_screen.dart lib/menu_import_service.dart lib/printer_services.dart lib/recent_sales_screen.dart lib/shop_backup.dart lib/shop_cash_shift_screen.dart lib/shop_copy.dart lib/shop_correction_authorization_service.dart lib/shop_correction_receipt.dart lib/shop_database.dart lib/shop_sale_correction_dialog.dart lib/shop_startup.dart lib/shop_today_screen.dart lib/stock_screen.dart test/shop_backup_test.dart test/shop_correction_authorization_service_test.dart test/shop_foundation_test.dart test/visual_capture_test.dart test/widget_test.dart
-          git diff --exit-code -- lib/main.dart lib/menu_import_screen.dart lib/menu_import_service.dart lib/printer_services.dart lib/recent_sales_screen.dart lib/shop_backup.dart lib/shop_cash_shift_screen.dart lib/shop_copy.dart lib/shop_correction_authorization_service.dart lib/shop_correction_receipt.dart lib/shop_database.dart lib/shop_sale_correction_dialog.dart lib/shop_startup.dart lib/shop_today_screen.dart lib/stock_screen.dart test/shop_backup_test.dart test/shop_correction_authorization_service_test.dart test/shop_foundation_test.dart test/visual_capture_test.dart test/widget_test.dart
 
       - name: Analyze Flutter source
         run: flutter analyze
@@ -251,6 +251,14 @@ jobs:
       - name: Stage Android QA artifact
         run: cp build/app/outputs/flutter-apk/app-qa-debug.apk "${{ github.workspace }}/app-qa-debug.apk"
 
+      - name: Inspect Android QA identity
+        working-directory: ${{ github.workspace }}
+        run: |
+          analyzer="$(command -v apkanalyzer)"
+          test -n "$analyzer"
+          test "$("$analyzer" manifest application-id app-qa-debug.apk)" = 'dev.supermega.supermega_shop.qa'
+          "$analyzer" manifest print app-qa-debug.apk | grep -F 'android:label="Shop QA"'
+
       - name: Hash Android QA artifact
         working-directory: ${{ github.workspace }}
         run: sha256sum app-qa-debug.apk > app-qa-debug.apk.sha256
@@ -299,6 +307,13 @@ jobs:
 
       - name: Stage iOS QA artifact
         run: ditto -c -k --sequesterRsrc --keepParent build/ios/iphoneos/Runner.app "${{ github.workspace }}/Runner.app.zip"
+
+      - name: Inspect iOS QA identity
+        run: |
+          info='build/ios/iphoneos/Runner.app/Info.plist'
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$info")" = 'dev.supermega.supermegaShop.qa'
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$info")" = 'Shop QA'
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleName' "$info")" = 'Shop QA'
 
       - name: Hash iOS QA artifact
         working-directory: ${{ github.workspace }}
@@ -357,24 +372,46 @@ jobs:
       - name: Build Windows QA
         run: flutter build windows --release --no-pub --dart-define=SHOP_RUNTIME_PROFILE=synthetic_qa_v1 --dart-define=SHOP_QA_PROFILE_ID=synthetic-qa-v1
 
-      - name: Stage Windows QA executable
-        run: Copy-Item -LiteralPath 'build\windows\x64\runner\Release\supermega_shop_qa.exe' -Destination (Join-Path $env:GITHUB_WORKSPACE 'supermega_shop_qa.exe')
+      - name: Inspect Windows QA identity
+        run: |
+          $executable = 'build\windows\x64\runner\Release\supermega_shop_qa.exe'
+          if (-not (Test-Path -LiteralPath $executable -PathType Leaf)) { throw 'shop_windows_qa_executable_missing' }
+          $identity = (Get-Item -LiteralPath $executable).VersionInfo
+          if ($identity.ProductName -cne 'Shop QA' -or
+              $identity.FileDescription -cne 'Shop QA' -or
+              $identity.InternalName -cne 'supermega_shop_qa' -or
+              $identity.OriginalFilename -cne 'supermega_shop_qa.exe') {
+            throw 'shop_windows_qa_built_identity_mismatch'
+          }
 
-      - name: Hash Windows QA executable
+      - name: Package full Windows QA runtime
+        run: |
+          $releaseDirectory = (Resolve-Path 'build\windows\x64\runner\Release').Path
+          $packagePath = Join-Path $env:GITHUB_WORKSPACE 'supermega-shop-windows-qa.zip'
+          Compress-Archive -Path $releaseDirectory -DestinationPath $packagePath -CompressionLevel Optimal
+
+      - name: Hash and verify Windows QA package
         working-directory: ${{ github.workspace }}
-        run: Get-FileHash -Algorithm SHA256 supermega_shop_qa.exe | Out-File supermega_shop_qa.exe.sha256
+        run: |
+          $artifact = 'supermega-shop-windows-qa.zip'
+          $checksumPath = "$artifact.sha256"
+          $digest = (Get-FileHash -Algorithm SHA256 -LiteralPath $artifact).Hash.ToLowerInvariant()
+          "$digest  $artifact" | Set-Content -LiteralPath $checksumPath -Encoding ascii -NoNewline
+          $expected = "$((Get-FileHash -Algorithm SHA256 -LiteralPath $artifact).Hash.ToLowerInvariant())  $artifact"
+          $recorded = (Get-Content -LiteralPath $checksumPath -Raw).Trim()
+          if ($recorded -cne $expected) { throw 'shop_windows_qa_checksum_mismatch' }
 
       - name: Bind Windows QA artifact to source
         working-directory: ${{ github.workspace }}
-        run: Write-Output "source-sha=${{ github.sha }} sha-256=$(Get-Content supermega_shop_qa.exe.sha256) promotion-ineligible" | Out-File supermega_shop_qa.exe.manifest
+        run: Write-Output "source-sha=${{ github.sha }} sha-256=$(Get-Content supermega-shop-windows-qa.zip.sha256) promotion-ineligible" | Out-File supermega-shop-windows-qa.zip.manifest
 
       - name: Upload promotion-ineligible Windows QA artifact
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: synthetic-qa-promotion-ineligible-${{ github.sha }}-sha-256-windows
           path: |
-            supermega_shop_qa.exe
-            supermega_shop_qa.exe.sha256
-            supermega_shop_qa.exe.manifest
+            supermega-shop-windows-qa.zip
+            supermega-shop-windows-qa.zip.sha256
+            supermega-shop-windows-qa.zip.manifest
           if-no-files-found: error
           retention-days: 7

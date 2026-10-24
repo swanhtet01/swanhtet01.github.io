@@ -70,6 +70,11 @@ class ShopRuntimeConfiguration {
 
   static const qaRuntimeToken = 'synthetic_qa_v1';
   static const qaProfileId = 'synthetic-qa-v1';
+  static const qaPlatformIdentities = <String>{
+    'dev.supermega.supermega_shop.qa',
+    'dev.supermega.supermegaShop.qa',
+    'dev.supermega.supermega_shop.qa.windows',
+  };
 
   final ShopRuntimeProfile profile;
   final String profileId;
@@ -132,8 +137,7 @@ class ShopRuntimeConfiguration {
         profileId == qaProfileId &&
         buildProfile == qaRuntimeToken &&
         buildQaProfile == qaProfileId &&
-        identity.isNotEmpty &&
-        identity != 'production-current';
+        qaPlatformIdentities.contains(identity);
     if (!exactQaTuple) {
       throw StateError('shop_runtime_profile_unknown_or_partial');
     }

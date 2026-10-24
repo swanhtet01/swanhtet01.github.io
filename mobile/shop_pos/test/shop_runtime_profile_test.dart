@@ -22,20 +22,22 @@ void main() {
   });
 
   test('exact generated QA tuple is fail-closed and synthetic only', () {
-    final profile = _qaProfile();
+    for (final identity in ShopRuntimeConfiguration.qaPlatformIdentities) {
+      final profile = _qaProfile(platformIdentity: identity);
 
-    expect(profile.profile, ShopRuntimeProfile.syntheticQa);
-    expect(profile.profileId, ShopRuntimeConfiguration.qaProfileId);
-    expect(profile.capabilities.syntheticEvidence, isTrue);
-    expect(profile.capabilities.loopbackPrinter, isTrue);
-    expect(profile.capabilities.managedAuth, isFalse);
-    expect(profile.capabilities.correctionAuthorization, isFalse);
-    expect(profile.capabilities.connectedOrders, isFalse);
-    expect(profile.capabilities.networkPrinter, isFalse);
-    expect(profile.capabilities.camera, isFalse);
-    expect(profile.capabilities.gallery, isFalse);
-    expect(profile.capabilities.remoteImport, isFalse);
-    expect(profile.capabilities.externalFileSaving, isFalse);
+      expect(profile.profile, ShopRuntimeProfile.syntheticQa);
+      expect(profile.profileId, ShopRuntimeConfiguration.qaProfileId);
+      expect(profile.capabilities.syntheticEvidence, isTrue);
+      expect(profile.capabilities.loopbackPrinter, isTrue);
+      expect(profile.capabilities.managedAuth, isFalse);
+      expect(profile.capabilities.correctionAuthorization, isFalse);
+      expect(profile.capabilities.connectedOrders, isFalse);
+      expect(profile.capabilities.networkPrinter, isFalse);
+      expect(profile.capabilities.camera, isFalse);
+      expect(profile.capabilities.gallery, isFalse);
+      expect(profile.capabilities.remoteImport, isFalse);
+      expect(profile.capabilities.externalFileSaving, isFalse);
+    }
   });
 
   for (final mutation in <String, ShopRuntimeConfiguration Function()>{
@@ -47,6 +49,8 @@ void main() {
         _qaProfile(buildIdentityQaProfile: 'synthetic-qa-v2'),
     'production platform identity': () =>
         _qaProfile(platformIdentity: 'production-current'),
+    'unrecognized platform identity': () =>
+        _qaProfile(platformIdentity: 'dev.example.unreviewed.qa'),
     'unknown runtime profile': () => _qaProfile(runtimeProfile: 'qa'),
   }.entries) {
     test('${mutation.key} is rejected', () {

@@ -19,6 +19,26 @@ function workflowFixture() {
             ${artifact}
             ${artifact}.sha256
             ${artifact}.manifest`
+  const inspections = Object.freeze({
+    android: `
+      - name: Inspect Android QA identity
+        run: |
+          test "$(apkanalyzer manifest application-id app-qa-debug.apk)" = 'dev.supermega.supermega_shop.qa'
+          apkanalyzer manifest print app-qa-debug.apk | grep -F 'android:label="Shop QA"'`,
+    ios: `
+      - name: Inspect iOS QA identity
+        run: |
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$info")" = 'dev.supermega.supermegaShop.qa'
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$info")" = 'Shop QA'
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleName' "$info")" = 'Shop QA'`,
+    windows: `
+      - name: Inspect Windows QA identity
+        run: |
+          $identity = (Get-Item supermega_shop_qa.exe).VersionInfo
+          if ($identity.ProductName -cne 'Shop QA' -or $identity.FileDescription -cne 'Shop QA' -or $identity.InternalName -cne 'supermega_shop_qa' -or $identity.OriginalFilename -cne 'supermega_shop_qa.exe') { throw 'mismatch' }
+      - name: Package full Windows QA runtime
+        run: Compress-Archive -Path $releaseDirectory -DestinationPath $packagePath`,
+  })
   return `jobs:
   android-production:
     steps:
@@ -32,6 +52,7 @@ function workflowFixture() {
         run: node tools/generate_shop_build_identity.mjs --platform android --profile synthetic_qa_v1
       - name: Build Android QA
         run: flutter build apk --debug --no-pub --flavor qa ${qa}
+${inspections.android}
 ${artifactSteps('app-qa-debug.apk')}
   ios-production:
     steps:
@@ -45,6 +66,7 @@ ${artifactSteps('app-qa-debug.apk')}
         run: node tools/generate_shop_build_identity.mjs --platform ios --profile synthetic_qa_v1
       - name: Build iOS QA
         run: flutter build ios --debug --no-codesign --no-pub --flavor qa ${qa}
+${inspections.ios}
 ${artifactSteps('Runner.app.zip')}
   windows-production:
     steps:
@@ -60,7 +82,8 @@ ${artifactSteps('Runner.app.zip')}
         run: ./mobile/shop_pos/scripts/configure_windows_qa_runner.ps1
       - name: Build Windows QA
         run: flutter build windows --release --no-pub ${qa}
-${artifactSteps('supermega_shop_qa.exe', 'Get-FileHash -Algorithm SHA256 supermega_shop_qa.exe | Out-File supermega_shop_qa.exe.sha256')}
+${inspections.windows}
+${artifactSteps('supermega-shop-windows-qa.zip', `$artifact = 'supermega-shop-windows-qa.zip'; $digest = (Get-FileHash -Algorithm SHA256 -LiteralPath $artifact).Hash.ToLowerInvariant(); "$digest  $artifact" | Set-Content supermega-shop-windows-qa.zip.sha256; if ($recorded -cne $expected) { throw "mismatch" }`)}
 `
 }
 
@@ -81,13 +104,16 @@ function fixture() {
     'mobile/shop_pos/lib/camera_barcode_scanner.dart': 'ShopRuntimeScope scope; void scan() { if (!scope.capabilities.camera) return; }',
     'mobile/shop_pos/lib/connected_orders_service.dart': 'ShopRuntimeScope scope; void connect() { if (!scope.capabilities.connectedOrders) return; }',
     'mobile/shop_pos/lib/shop_correction_authorization_service.dart': 'ShopRuntimeScope scope; void correct() { if (!scope.capabilities.correctionAuthorization) return; }',
-    'mobile/shop_pos/lib/shop_runtime_profile.dart': "enum ShopRuntimeProfile { production, syntheticQa } ShopRuntimeProfile resolve() { const a=String.fromEnvironment('SHOP_RUNTIME_PROFILE'); const b=String.fromEnvironment('SHOP_QA_PROFILE_ID'); if (a=='synthetic_qa_v1' && b=='synthetic-qa-v1') return ShopRuntimeProfile.syntheticQa; if (a.isNotEmpty || b.isNotEmpty) throw StateError('unknown partial'); return ShopRuntimeProfile.production; }",
+    'mobile/shop_pos/lib/shop_runtime_profile.dart': "enum ShopRuntimeProfile { production, syntheticQa } ShopRuntimeProfile resolve() { const a=String.fromEnvironment('SHOP_RUNTIME_PROFILE'); const b=String.fromEnvironment('SHOP_QA_PROFILE_ID'); const ids={'dev.supermega.supermega_shop.qa','dev.supermega.supermegaShop.qa','dev.supermega.supermega_shop.qa.windows'}; if (a=='synthetic_qa_v1' && b=='synthetic-qa-v1') return ShopRuntimeProfile.syntheticQa; if (a.isNotEmpty || b.isNotEmpty) throw StateError('unknown partial'); return ShopRuntimeProfile.production; }",
     'mobile/shop_pos/lib/shop_runtime_scope.dart': "class ShopRuntimeScope { static Future<ShopRuntimeScope> resolve(p) async { SharedPreferences.getInstance(); getApplicationSupportDirectory(); getTemporaryDirectory(); return ShopRuntimeScope(); } } synthetic-evidence sentinel shop_locale_myanmar shop_pending_picker_intent shop_receipt_printer_host_v1 shop_receipt_paper_width_v1",
     'mobile/shop_pos/lib/shop_build_identity.g.dart': 'synthetic_qa_v1 platform',
     'tools/generate_shop_build_identity.mjs': 'production synthetic_qa_v1 windows',
     'mobile/shop_pos/scripts/configure_windows_qa_runner.ps1': 'supermega_shop_qa.exe Shop QA',
     'mobile/shop_pos/ios/Runner.xcodeproj/xcshareddata/xcschemes/qa.xcscheme': '<TestAction buildConfiguration="Debug-qa"/><LaunchAction buildConfiguration="Debug-qa"/><ProfileAction buildConfiguration="Debug-qa"/><AnalyzeAction buildConfiguration="Debug-qa"/><ArchiveAction buildConfiguration="Debug-qa"/>',
-    'mobile/shop_pos/ios/Flutter/QA.xcconfig': 'PRODUCT_BUNDLE_IDENTIFIER=dev.supermega.supermegaShop.qa',
+    'mobile/shop_pos/ios/Runner/Info.plist': '<string>$(SHOP_DISPLAY_NAME)</string><string>$(PRODUCT_NAME)</string>',
+    'mobile/shop_pos/ios/Flutter/Debug.xcconfig': 'SHOP_DISPLAY_NAME=Shop',
+    'mobile/shop_pos/ios/Flutter/Release.xcconfig': 'SHOP_DISPLAY_NAME=Shop',
+    'mobile/shop_pos/ios/Flutter/QA.xcconfig': 'PRODUCT_BUNDLE_IDENTIFIER=dev.supermega.supermegaShop.qa\nSHOP_DISPLAY_NAME=Shop QA',
     '.github/workflows/shop-native-ci.yml': workflowFixture(),
   }
 }
@@ -227,6 +253,23 @@ test('exact platform identity and artifact contracts cannot be replaced by loose
     false,
     'QA scheme must not fall back to production configurations',
   )
+
+  for (const token of [
+    'manifest application-id app-qa-debug.apk',
+    'Print :CFBundleIdentifier',
+    "$identity.ProductName -cne 'Shop QA'",
+    'Compress-Archive -Path $releaseDirectory -DestinationPath $packagePath',
+    '"$digest  $artifact"',
+  ]) {
+    const sources = fixture()
+    sources['.github/workflows/shop-native-ci.yml'] =
+      sources['.github/workflows/shop-native-ci.yml'].replace(token, 'identity-check-omitted')
+    assert.equal(
+      assessShopQaIsolationContract({ sources }).strictReady,
+      false,
+      `post-build contract must require ${token}`,
+    )
+  }
 })
 
 test('wrong artifact tuple remains blocked without upgrading evidence', () => {

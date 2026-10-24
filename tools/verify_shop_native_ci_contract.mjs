@@ -6,6 +6,38 @@ const GRADLE_WRAPPER_PATH = 'mobile/shop_pos/android/gradle/wrapper/gradle-wrapp
 const FLUTTER_VERSION = '3.47.8'
 const GRADLE_DISTRIBUTION = 'gradle-9.3.1-bin.zip'
 const GRADLE_DISTRIBUTION_SHA256 = 'b266d5ff6b90eada6dc3b20cb090e3731302e553a27c5d3e4df1f0d76beaff06'
+const QA_DART_FORMAT_PATHS = Object.freeze([
+  'lib/camera_barcode_scanner.dart',
+  'lib/connected_orders_screen.dart',
+  'lib/connected_orders_service.dart',
+  'lib/main.dart',
+  'lib/menu_import_screen.dart',
+  'lib/menu_import_service.dart',
+  'lib/printer_services.dart',
+  'lib/printer_setup_screen.dart',
+  'lib/recent_sales_screen.dart',
+  'lib/shop_backup.dart',
+  'lib/shop_backup_export_screen.dart',
+  'lib/shop_build_identity.g.dart',
+  'lib/shop_cash_shift_screen.dart',
+  'lib/shop_copy.dart',
+  'lib/shop_correction_authorization_service.dart',
+  'lib/shop_correction_receipt.dart',
+  'lib/shop_database.dart',
+  'lib/shop_runtime_profile.dart',
+  'lib/shop_runtime_scope.dart',
+  'lib/shop_sale_correction_dialog.dart',
+  'lib/shop_startup.dart',
+  'lib/shop_today_screen.dart',
+  'lib/stock_screen.dart',
+  'test/shop_backup_test.dart',
+  'test/shop_correction_authorization_service_test.dart',
+  'test/shop_foundation_test.dart',
+  'test/shop_runtime_profile_test.dart',
+  'test/shop_runtime_scope_test.dart',
+  'test/visual_capture_test.dart',
+  'test/widget_test.dart',
+])
 
 function requireToken(source, token, failure, failures) {
   if (!source.includes(token)) failures.push(failure)
@@ -27,6 +59,13 @@ export function verifyShopNativeCiContract(source, gradleWrapperSource = '') {
   const flutterVersionPins = source.match(new RegExp(`flutter-version: '${FLUTTER_VERSION.replaceAll('.', '\\.')}'`, 'g')) ?? []
   if (flutterVersionPins.length !== 6) failures.push('flutter_sdk_not_exactly_pinned_for_all_native_jobs')
   if (/^\s*channel:\s*stable\s*$/m.test(source)) failures.push('flutter_sdk_uses_mutable_stable_channel')
+  const formatLine = source.split(/\r?\n/).find(line => line.trim().startsWith('dart format ')) ?? ''
+  const diffLine = source.split(/\r?\n/).find(line => line.trim().startsWith('git diff --exit-code -- ')) ?? ''
+  for (const path of QA_DART_FORMAT_PATHS) {
+    if (!formatLine.split(/\s+/).includes(path) || !diffLine.split(/\s+/).includes(path)) {
+      failures.push(`qa_dart_format_gate_missing:${path}`)
+    }
+  }
   requireToken(
     source,
     'name: Verify pinned native toolchain contract',
@@ -72,6 +111,12 @@ export function verifyShopNativeCiContract(source, gradleWrapperSource = '') {
     ['name: synthetic-qa-promotion-ineligible-${{ github.sha }}-sha-256-android', 'android_qa_artifact_not_bound_to_source_or_promotion_state'],
     ['name: synthetic-qa-promotion-ineligible-${{ github.sha }}-sha-256-ios', 'ios_qa_artifact_not_bound_to_source_or_promotion_state'],
     ['name: synthetic-qa-promotion-ineligible-${{ github.sha }}-sha-256-windows', 'windows_qa_artifact_not_bound_to_source_or_promotion_state'],
+    ["manifest application-id app-qa-debug.apk)\" = 'dev.supermega.supermega_shop.qa'", 'android_qa_postbuild_identity_not_inspected'],
+    ["Print :CFBundleIdentifier' \"$info\")\" = 'dev.supermega.supermegaShop.qa'", 'ios_qa_postbuild_identity_not_inspected'],
+    ["$identity.ProductName -cne 'Shop QA'", 'windows_qa_postbuild_identity_not_inspected'],
+    ["Compress-Archive -Path $releaseDirectory -DestinationPath $packagePath", 'windows_qa_full_runtime_not_packaged'],
+    ['"$digest  $artifact" | Set-Content -LiteralPath $checksumPath -Encoding ascii -NoNewline', 'windows_qa_canonical_checksum_not_recorded'],
+    ["if ($recorded -cne $expected)", 'windows_qa_canonical_checksum_not_verified'],
   ]) requireToken(source, token, failure, failures)
 
   for (const property of [
