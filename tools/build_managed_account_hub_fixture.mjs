@@ -15,11 +15,21 @@ await build({
     contents: `
       import React from 'react'
       import { createRoot } from 'react-dom/client'
-      import { MemoryRouter } from 'react-router'
+      import { MemoryRouter, Route, Routes, useLocation } from 'react-router'
       import './showroom/src/core/core-app.css'
       import { ManagedAccountHubPage } from './showroom/src/core/ManagedAccountHubPage'
+      function RouteProbe({ label }) {
+        const location = useLocation()
+        return <section data-route-probe="true"><h1>{label}</h1><p>{location.pathname}{location.search}</p></section>
+      }
       createRoot(document.getElementById('root')!).render(
-        <MemoryRouter initialEntries={['/account']}><ManagedAccountHubPage /></MemoryRouter>,
+        <MemoryRouter initialEntries={['/account' + window.location.search]}>
+          <Routes>
+            <Route path="/account" element={<ManagedAccountHubPage />} />
+            <Route path="/login" element={<RouteProbe label="Sign in required" />} />
+            <Route path="/settings/" element={<RouteProbe label="Shop setup" />} />
+          </Routes>
+        </MemoryRouter>,
       )
     `,
   },
@@ -51,7 +61,9 @@ await build({
             }
             export function useCurrentManagedPortalAccess() {
               const query = new URLSearchParams(location.search)
-              const viewer = query.get('access') === 'viewer'
+              const access = query.get('access')
+              if (access === 'staff' || access === 'service' || access === 'signed-out') return { status: 'reauthenticate' }
+              const viewer = access === 'viewer'
               const noShop = query.get('product') === 'none'
               return { status: 'ready', products: noShop ? [] : ['commerce'], capabilities: viewer ? [] : ['billing.read'], workspaceId: 'workspace-a', companyName: 'Mingalar Mini Mart', companyRole: viewer ? 'viewer' : 'owner', accountEmail: 'owner@example.test' }
             }
@@ -71,7 +83,10 @@ await build({
                 excluded: [], totalOutstandingMinorByCurrency: { MMK: 125000 }, recurringBillingConfigured: false, providerSettlementVerified: false, administrativeActionsExposed: false, externalWritesPerformed: false, secretValuesExposed: false,
               },
             }
-            export async function currentManagedIdentity() { return { userId: 'actor-owner', email: 'owner@example.test', workspaceId: 'workspace-a' } }
+            export async function currentManagedIdentity() {
+              const workspaceId = new URLSearchParams(location.search).get('identity') === 'other-tenant' ? 'workspace-b' : 'workspace-a'
+              return { userId: 'actor-owner', email: 'owner@example.test', workspaceId }
+            }
             export async function loadManagedAccountBilling() {
               window.__supermegaSyntheticBillingCalls = (window.__supermegaSyntheticBillingCalls || 0) + 1
               const variant = new URLSearchParams(location.search).get('variant')

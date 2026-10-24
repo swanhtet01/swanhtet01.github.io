@@ -172,7 +172,7 @@ test('account hub reports empty billing state and signed-download boundary', asy
       unavailable: [...document.querySelectorAll('.account-downloads-card li strong')].filter((node) => node.textContent.trim() === 'Not available yet').length,
       links: document.querySelectorAll('.account-downloads-card a').length,
     }))()`)
-    assert.deepEqual(state, { unavailable: 4, links: 0 })
+    assert.deepEqual(state, { unavailable: 3, links: 0 })
   })
 })
 
@@ -187,6 +187,54 @@ test('viewer without Shop or billing capability gets neither owner reads nor Sho
     assert.equal(state.billingCalls, 0)
     assert.equal(state.shopLinks, 0)
     assert.match(state.text, /Company role\s+viewer/u)
+  })
+})
+
+for (const access of ['staff', 'service']) {
+  test(`${access} identity cannot enter the merchant account hub`, async () => {
+    await withPage({ width: 390, height: 844 }, `/?access=${access}`, async (sessionId) => {
+      await waitFor(sessionId, `document.body.innerText.includes('Sign in required')`)
+      const state = await evaluate(sessionId, `(() => ({
+        text: document.body.innerText,
+        billingCalls: window.__supermegaSyntheticBillingCalls || 0,
+      }))()`)
+      assert.match(state.text, /Sign in required/u)
+      assert.match(state.text, /\/login\?entry=account-hub-v1/u)
+      assert.equal(state.billingCalls, 0)
+    })
+  })
+}
+
+test('other-tenant identity fails before the billing projection is read', async () => {
+  await withPage({ width: 390, height: 844 }, '/?identity=other-tenant', async (sessionId) => {
+    await waitFor(sessionId, `document.activeElement?.getAttribute('role') === 'alert'`)
+    const state = await evaluate(sessionId, `(() => ({
+      alert: document.querySelector('[role="alert"]')?.textContent,
+      focused: document.activeElement === document.querySelector('[role="alert"]'),
+      billingCalls: window.__supermegaSyntheticBillingCalls || 0,
+    }))()`)
+    assert.deepEqual(state, {
+      alert: 'The company account changed. Sign in again.', focused: true, billingCalls: 0,
+    })
+  })
+})
+
+test('owner setup and switch-account navigation stay on fixed internal routes', async () => {
+  await withPage({ width: 390, height: 844 }, '/', async (sessionId) => {
+    await waitFor(sessionId, `document.body.innerText.includes('Mingalar Mini Mart')`)
+    const state = await evaluate(sessionId, `(() => {
+      const links = [...document.querySelectorAll('a')]
+      return Object.fromEntries(links.map((link) => [link.textContent.trim(), link.getAttribute('href')]))
+    })()`)
+    assert.equal(state['Shop setup'], '/settings/?product=shop')
+    assert.equal(state['Backup and recovery'], '/settings/#controls')
+    assert.equal(state['Switch company or sign out'], '/login?entry=account-hub-v1')
+    assert.equal(Object.values(state).some((href) => /https?:|next=/u.test(href)), false)
+    await evaluate(sessionId, `([...document.querySelectorAll('a')].find((link) => link.textContent.trim() === 'Shop setup')).click()`)
+    await waitFor(sessionId, `Boolean(document.querySelector('[data-route-probe="true"]'))`)
+    const destination = await evaluate(sessionId, `document.querySelector('[data-route-probe="true"]').innerText`)
+    assert.match(destination, /Shop setup/u)
+    assert.match(destination, /\/settings\/\?product=shop/u)
   })
 })
 
