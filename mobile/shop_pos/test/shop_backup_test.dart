@@ -1576,6 +1576,7 @@ void main() {
         final recent = (await migrated.readRecentSales()).single;
         expect(recent.reversal?.walletReconciliationOutcome, 'money_returned');
         await _expectLegacyV11WalletReconciliationProof(migrated);
+        await _attachBackupWorkspace(migrated);
         final salesBefore = await migrated.countSales();
         final stockBefore = (await migrated.readActiveProducts()).single.onHand;
         final outboxBefore = await migrated.countOutboxOperations();
