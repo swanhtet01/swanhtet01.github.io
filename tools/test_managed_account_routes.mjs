@@ -538,7 +538,7 @@ test('Website review recovery retains only the canonical review ID and scrubs th
     assert.equal(state.calls.some(([name]) => name === 'fetch'), false, 'review URL grants no membership or preview read')
   })
   const account = readFileSync(new URL('../showroom/src/core/ManagedAccountPage.tsx', import.meta.url), 'utf8')
-  assert.ok(account.includes('managedLoginReviewPath(location.search) ?? managedPortalEntryPath(productIntent)'))
+  assert.ok(account.includes('managedLoginReviewPath(location.search) ?? managedAccountHubRecoveryEntryPath(location.search) ?? managedPortalEntryPath(productIntent)'))
   const open = account.slice(account.indexOf('async function openWorkspace'), account.indexOf('async function requestRecovery'))
   assert.ok(open.indexOf('await completeManagedWorkspaceSignIn') < open.indexOf('await loadManagedBootstrap'))
   assert.ok(open.indexOf('await loadManagedBootstrap') < open.indexOf('navigate(portalEntryPath)'))

@@ -8,6 +8,7 @@ import { RouteErrorBoundary } from './RouteErrorBoundary'
 import { bi } from './i18n-actions'
 import { recordBehaviorSignal } from './behavior-trail'
 import { activeCommerceTab, commerceTabs } from './commerce-tabs'
+import { managedAccountHubLoginPath } from './account-routes'
 import type { ClientSolutionId } from './client-onboarding'
 import {
   managedProductIsVisible,
@@ -200,7 +201,7 @@ function managedLoginPath(product: string | null) {
   return slug ? `/login?product=${slug}` : '/login'
 }
 
-type ManagedPortalAccess =
+export type ManagedPortalAccess =
   | { status: 'local'; products: readonly ClientSolutionId[]; workspaceId: '' }
   | { status: 'checking'; products: readonly ClientSolutionId[]; workspaceId: string }
   | { status: 'reauthenticate'; products: readonly ClientSolutionId[]; workspaceId: string }
@@ -216,6 +217,10 @@ type ManagedPortalAccess =
 
 const localPortalAccess: ManagedPortalAccess = { status: 'local', products: [], workspaceId: '' }
 const ManagedPortalAccessContext = createContext<ManagedPortalAccess>(localPortalAccess)
+
+export function useCurrentManagedPortalAccess() {
+  return useContext(ManagedPortalAccessContext)
+}
 
 function useManagedPortalAccess(enabled: boolean, selectedWorkspace: string, refreshKey: string): ManagedPortalAccess {
   const accessKey = enabled && selectedWorkspace ? `${selectedWorkspace}:${refreshKey}` : 'local'
@@ -420,10 +425,17 @@ export function CoreLayout() {
   const selectedManagedWorkspace = typeof window !== 'undefined' ? currentManagedWorkspace() : ''
   const portalAccess = useManagedPortalAccess(runtime.status !== 'checking', selectedManagedWorkspace, location.pathname)
   const storedSettingsSetup = customerSettingsRoute || internalBuilderRoute ? readLocalSetupReadiness() : null
-  const sensitiveAccountRoute = location.pathname.startsWith('/account/')
+  const accountRecoveryRoute = location.pathname.startsWith('/account/recovery') || location.pathname.startsWith('/account/setup')
+  const accountHubRoute = location.pathname === '/account' || location.pathname === '/account/'
+  const sensitiveAccountRoute = accountRecoveryRoute || accountHubRoute
   const loginRoute = location.pathname === '/login' || location.pathname === '/login/'
-  const accountEntryRoute = loginRoute || sensitiveAccountRoute
-  const companyLoginPath = managedLoginPath(routeProduct ?? settingsProduct ?? (storedSettingsSetup?.workspace && storedSettingsSetup.hasCanonicalProduct ? storedSettingsSetup.product : null))
+  const accountEntryRoute = loginRoute || accountRecoveryRoute
+  const protectedPortalRoute = Boolean(requestedProduct) || accountHubRoute
+  const companyLoginPath = accountHubRoute
+    ? managedAccountHubLoginPath()
+    : managedLoginPath(routeProduct ?? settingsProduct ?? (storedSettingsSetup?.workspace && storedSettingsSetup.hasCanonicalProduct ? storedSettingsSetup.product : null))
+  const accountShellPath = portalAccess.status === 'ready' ? '/account' : companyLoginPath
+  const accountShellLabel = portalAccess.status === 'ready' ? 'Account' : 'Login'
   const setupRoute = customerSettingsRoute || internalBuilderRoute
   const setupNavigation: NavigationItem = internalBuilderRoute
     ? { to: '/internal/client-builder/', label: 'Client builder' }
@@ -446,8 +458,10 @@ export function CoreLayout() {
   const mobileCommerceTab = routeProduct === 'commerce' ? activeCommerceTab(new URLSearchParams(location.search).get('tab')) : null
   const routeName = loginRoute
     ? 'Sign in'
-    : sensitiveAccountRoute
-      ? (location.pathname.startsWith('/account/recovery') ? 'Account recovery' : 'Account setup')
+    : accountHubRoute
+      ? 'Account'
+      : accountRecoveryRoute
+        ? (location.pathname.startsWith('/account/recovery') ? 'Account recovery' : 'Account setup')
       : location.pathname.startsWith('/website/')
       ? 'Website'
       : location.pathname.startsWith('/ecommerce/')
@@ -528,10 +542,10 @@ export function CoreLayout() {
         {activeNavigation.length ? <nav className="core-nav" aria-label="Application">
           {activeNavigation.map((item) => <NavLink className={({ isActive }) => navigationClass(item.to, isActive)} end={item.end} key={item.to} to={item.to}>{item.label}</NavLink>)}
         </nav> : null}
-        <div className="sidebar-foot">{routeProduct || setupRoute ? <RuntimeBadge status={runtime.status} /> : null}{!accountEntryRoute ? <Link className="account-shell-link" to={companyLoginPath}>Login</Link> : null}</div>
+        <div className="sidebar-foot">{routeProduct || setupRoute ? <RuntimeBadge status={runtime.status} /> : null}{!accountEntryRoute ? <Link className="account-shell-link" to={accountShellPath}>{accountShellLabel}</Link> : null}</div>
       </aside>
       <div className="core-stage">
-        <header className="core-topbar"><div className="mobile-brand"><Brand /></div><div className="topbar-title"><strong>{routeName}</strong><span>SuperMega</span></div><div className="topbar-meta">{!accountEntryRoute ? <Link aria-label="Login" className="account-shell-link mobile-account-link" to={companyLoginPath}>Login</Link> : null}{!accountEntryRoute ? <RuntimeBadge status={runtime.status} /> : null}</div></header>
+        <header className="core-topbar"><div className="mobile-brand"><Brand /></div><div className="topbar-title"><strong>{routeName}</strong><span>SuperMega</span></div><div className="topbar-meta">{!accountEntryRoute ? <Link aria-label={accountShellLabel} className="account-shell-link mobile-account-link" to={accountShellPath}>{accountShellLabel}</Link> : null}{!accountEntryRoute ? <RuntimeBadge status={runtime.status} /> : null}</div></header>
         {/* Shop's bottom bar is task navigation (all four links share the /shop/
             pathname, so NavLink's pathname-based isActive would mark every tab
             active — the highlight must come from the ?tab= param instead). Every
@@ -548,11 +562,11 @@ export function CoreLayout() {
           <div className="core-route-content">
             <ManagedPortalAccessContext.Provider value={portalAccess}>
               <RouteErrorBoundary resetKey={location.pathname}>
-                {requestedProduct && portalAccess.status === 'checking'
+                {protectedPortalRoute && portalAccess.status === 'checking'
                   ? <PortalAccessPanel copy="Verifying this company and its assigned products." title="Opening company portal…" />
-                  : requestedProduct && portalAccess.status === 'reauthenticate'
+                  : protectedPortalRoute && portalAccess.status === 'reauthenticate'
                     ? <Navigate replace to={companyLoginPath} />
-                    : requestedProduct && portalAccess.status === 'error'
+                    : protectedPortalRoute && portalAccess.status === 'error'
                       ? <PortalAccessPanel action={<Link className="button" to={companyLoginPath}>Sign in again</Link>} copy={portalAccess.message} title="Access issue" />
                       : requestedProduct && !managedProductAllowed
                         ? managedRouteDecision.kind === 'redirect'

@@ -8,6 +8,7 @@ const ACCOUNT_PRODUCT_SLUGS = {
 } as const
 
 const PAIRED_PUBLIC_SHOP_ENTRY = 'shop-public-preview-v1'
+const ACCOUNT_HUB_ENTRY = 'account-hub-v1'
 
 function accountProductSlug(value: string | null) {
   const intent = value?.trim().toLowerCase()
@@ -28,6 +29,7 @@ export function managedAccountRequestUrl(value: string | null) {
 export function managedAccountPath(path: '/login' | '/account/recovery', value: string | null, search = '') {
   const reviewPath = managedLoginReviewPath(search)
   if (reviewPath) return `${path}?product=${reviewPath.split('/')[1]}&review=${reviewPath.split('/').at(-1)}`
+  if (managedAccountHubEntryPath(search)) return `${path}?entry=${ACCOUNT_HUB_ENTRY}`
   const product = accountProductSlug(value)
   if (!product) return path
   const query = new URLSearchParams()
@@ -47,6 +49,33 @@ export function isPairedPublicShopEntry(search: string) {
 export function managedPortalEntryPath(value: string | null) {
   const product = accountProductSlug(value)
   return product ? `/${product}/` : '/?choose=1'
+}
+
+export function managedAccountHubLoginPath() {
+  return `/login?entry=${ACCOUNT_HUB_ENTRY}`
+}
+
+export function managedAccountHubEntryPath(search: string) {
+  const query = new URLSearchParams(search)
+  const entries = query.getAll('entry')
+  return [...query.keys()].every((key) => key === 'entry')
+    && entries.length === 1
+    && entries[0] === ACCOUNT_HUB_ENTRY
+    ? '/account'
+    : null
+}
+
+export function managedAccountHubRecoveryEntryPath(search: string) {
+  const query = new URLSearchParams(search)
+  const entries = query.getAll('entry')
+  const modes = query.getAll('mode')
+  const allowed = new Set(['entry', 'mode', 'code', 'error', 'error_code', 'error_description'])
+  return [...query.keys()].every((key) => allowed.has(key))
+    && entries.length === 1
+    && entries[0] === ACCOUNT_HUB_ENTRY
+    && (modes.length === 0 || (modes.length === 1 && modes[0] === 'recovery'))
+    ? '/account'
+    : null
 }
 
 function canonicalReviewId(value: string | null) {

@@ -33,6 +33,7 @@ import re
 from typing import Any
 from uuid import NAMESPACE_URL, uuid5
 
+from supermega_runtime.billing_contracts import MERCHANT_BILLING_SUMMARY_CONTRACT, PREMIUM_TIER
 from supermega_runtime.trial_store import TrialIdempotencyConflict
 
 
@@ -105,11 +106,9 @@ BILLING_ENTITLEMENT_READ_POLICY_DIGEST = (
 BILLING_EVENT_RESULT_CONTRACT = "supermega.managed_billing_event.v1"
 BILLING_OVERDUE_REPORT_CONTRACT = "supermega.managed_billing_overdue_report.v1"
 BILLING_STATE_CONTRACT = "supermega.managed_billing_state.v1"
-MERCHANT_BILLING_SUMMARY_CONTRACT = "supermega.merchant_billing_summary.v1"
 INVOICE_PACKET_CONTRACT = "supermega.managed-billing.invoice-packet.v1"
 MANAGED_BILLING_CONTRACT = "supermega.managed-billing.v1"
 MAX_INPUT_BYTES = 1024 * 1024
-PREMIUM_TIER = "premium"
 
 BILLING_EVENT_TYPES = (
     "billing.invoice.issued",

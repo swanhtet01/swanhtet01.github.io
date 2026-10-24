@@ -1,6 +1,7 @@
 import { managedAuthConfigurationValid } from './managed-login-availability.ts'
+import { assertManagedAccountBilling, type ManagedAccountBilling } from './managed-account-billing.ts'
 import type { Session } from '@supabase/auth-js'
-import { managedLoginReviewPath } from './account-routes.ts'
+import { managedAccountHubEntryPath, managedAccountHubRecoveryEntryPath, managedLoginReviewPath } from './account-routes.ts'
 import { validateCreateAccountRequest, type CreateAccountInput } from './signup-account.ts'
 import { readManagedSignupPolicy } from './managed-signup-policy.ts'
 import type { buildClientImportStagingPackage, ClientSolutionId } from './client-onboarding'
@@ -2510,6 +2511,9 @@ function managedAccountRedirectUrl(purpose: 'recovery' | 'signup' = 'recovery') 
     redirect.searchParams.set('review', reviewPath.split('/').at(-1)!)
     if (reviewPath.startsWith('/ecommerce/')) redirect.searchParams.set('product', 'ecommerce')
   }
+  if (purpose === 'recovery' && managedAccountHubEntryPath(window.location.search)) {
+    redirect.searchParams.set('entry', 'account-hub-v1')
+  }
   return redirect.toString()
 }
 
@@ -2637,9 +2641,11 @@ async function initializeManagedAccountSetup(): Promise<ManagedAccountSetup> {
   const query = new URLSearchParams(rawQuery)
   const fragment = new URLSearchParams(rawFragment)
   const purpose = accountPurpose(query.get('mode'), fragment.get('type'))
-  const queryAllowed = exactAuthParameters(query, ['code', 'mode', 'review', 'product', 'error', 'error_code', 'error_description'])
+  const accountHubEntry = managedAccountHubRecoveryEntryPath(rawQuery)
+  const queryAllowed = exactAuthParameters(query, ['code', 'mode', 'review', 'product', 'entry', 'error', 'error_code', 'error_description'])
     && (!query.has('review') || (purpose === 'recovery' && managedLoginReviewPath(rawQuery) !== null))
     && (!query.has('product') || (query.has('review') && query.get('product') === 'ecommerce'))
+    && (!query.has('entry') || (purpose === 'recovery' && accountHubEntry === '/account'))
   const fragmentAllowed = exactAuthParameters(fragment, ['access_token', 'refresh_token', 'expires_at', 'expires_in', 'token_type', 'type', 'error', 'error_code', 'error_description'])
   const code = query.get('code') ?? ''
   const accessToken = fragment.get('access_token') ?? ''
@@ -3488,6 +3494,18 @@ export async function loadManagedBootstrap(expectedIdentity?: ManagedIdentity) {
     expectedIdentity,
   )
   return expectedIdentity ? assertManagedBootstrapIdentity(bootstrap, expectedIdentity) : bootstrap
+}
+
+export async function loadManagedAccountBilling(
+  expectedIdentity: ManagedIdentity,
+): Promise<ManagedAccountBilling> {
+  const response = await authorizedRequest<unknown>(
+    '/api/trial/v1/account/billing',
+    { cache: 'no-store', credentials: 'omit' },
+    true,
+    expectedIdentity,
+  )
+  return assertManagedAccountBilling(response, expectedIdentity)
 }
 
 export async function loadManagedCompanyBrief(

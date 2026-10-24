@@ -7,6 +7,7 @@ import { bi } from './i18n-actions'
 import {
   alternateManagedWorkspaceId,
   isPairedPublicShopEntry,
+  managedAccountHubEntryPath,
   managedAccountPath,
   managedAccountRequestUrl,
   managedPortalEntryPath,
@@ -42,11 +43,12 @@ export function ManagedLoginPage() {
   // This marker is a display-only boundary for an exact paired public preview.
   // It grants no access; it only removes browser-local and self-service detours.
   const pairedPublicEntry = isPairedPublicShopEntry(location.search)
-  const publicPortalEntry = publicApp || pairedPublicEntry
+  const accountHubReturnPath = managedAccountHubEntryPath(location.search)
+  const publicPortalEntry = publicApp || pairedPublicEntry || Boolean(accountHubReturnPath)
   const reviewReturnPath = managedLoginReviewPath(location.search)
   const accountProductIntent = productIntent ?? (reviewReturnPath?.split('/')[1] ?? 'shop')
   const shopAccessIntent = ['shop', 'commerce'].includes(accountProductIntent.trim().toLowerCase())
-  const portalEntryPath = reviewReturnPath ?? managedPortalEntryPath(accountProductIntent)
+  const portalEntryPath = reviewReturnPath ?? accountHubReturnPath ?? managedPortalEntryPath(accountProductIntent)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [workspaceId, setWorkspaceId] = useState('')

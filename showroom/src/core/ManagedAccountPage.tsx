@@ -2,7 +2,7 @@ import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useOutletContext } from 'react-router'
 
 import { PageHeading, type RuntimeHealth } from './CoreShell'
-import { managedAccountPath, managedAccountRequestUrl, managedLoginReviewPath, managedPortalEntryPath } from './account-routes'
+import { managedAccountHubRecoveryEntryPath, managedAccountPath, managedAccountRequestUrl, managedLoginReviewPath, managedPortalEntryPath } from './account-routes'
 import {
   beginManagedAccountSetup,
   completeManagedAccountPassword,
@@ -28,7 +28,7 @@ export function ManagedAccountPage() {
   const location = useLocation()
   const navigate = useNavigate()
   const productIntent = new URLSearchParams(location.search).get('product')
-  const portalEntryPath = managedLoginReviewPath(location.search) ?? managedPortalEntryPath(productIntent)
+  const portalEntryPath = managedLoginReviewPath(location.search) ?? managedAccountHubRecoveryEntryPath(location.search) ?? managedPortalEntryPath(productIntent)
   const recoveryRequest = location.pathname === '/account/recovery' || location.pathname === '/account/recovery/'
   const managedReady = runtime.authReady && managedTrialAuthConfigured()
   const [email, setEmail] = useState('')
