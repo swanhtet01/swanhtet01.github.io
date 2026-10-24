@@ -75,6 +75,41 @@ Source-level authorization, migration, direct-open, backup, and restore
 hardening may continue while signed-device and physical-hardware evidence is
 blocked. It does not promote the candidate or satisfy those human gates.
 
+### Exact-head execution order
+
+Use this order when native source, gallery provenance, and PostgreSQL evidence
+all need refresh. It prevents one evidence update from silently invalidating
+another:
+
+1. Freeze one reviewed product-source checkpoint `P`. Documentation successors
+   must name `P`; they are not a substitute for its build identity.
+2. After branch-publication effects are verified or explicitly dispositioned,
+   fast-forward the sole integration branch to the intended reviewed tree. Do
+   not force-push, blind-merge, or create a second release lane.
+3. Run native CI for `P`. Record the source head/tree, native subtree, merge-ref
+   when applicable, run/jobs, artifact IDs, archive hashes, inner-file hashes,
+   signing state, and expiry.
+4. Inspect the rendered capture archive. Create one bounded gallery/provenance
+   successor `G` that pins the exact `P` native tree and reviewed original
+   archive; never repack or substitute captures. Verify that `G` changes no
+   native source.
+5. Run the strict public/gallery checks at `G`. Any product or native change
+   invalidates `P` and restarts at step 1.
+6. Once `G` is stable, obtain an approval naming exactly one isolated Windows
+   PostgreSQL-17 rehearsal at `G`. Retain the matching generated summary/raw
+   pair and failed-attempt diagnostics according to the lease contract. Never
+   reuse an approval or receipt from another head.
+7. Commit only the reviewed canonical evidence/readiness successor `E`. Run the
+   required App, security and Kernel checks at `E`. Bind the native PASS to `P`
+   only after proving native-tree equality through `G` and `E`; otherwise rerun
+   native CI.
+8. An independent reviewer verifies the `P → G → E` ancestry, exact changed
+   files, test receipts and remaining gates before any protected preview.
+
+An App CI failure expected from stale evidence is still a failure. Do not call
+the candidate green until every required check on the applicable final source
+or evidence successor is terminal PASS.
+
 ## Gate 2 — protected public preview
 
 Exit criteria:
