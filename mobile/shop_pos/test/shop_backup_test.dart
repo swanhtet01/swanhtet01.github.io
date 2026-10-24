@@ -1560,6 +1560,87 @@ void main() {
   );
 
   test(
+    'authentic four-key v11 wallet reconciliation upgrades and exports',
+    () async {
+      final legacy = File(
+        '${directory.path}/legacy-v11-four-key-direct.sqlite',
+      );
+      await _writeLegacyV11FourKeyWalletReconciliationSnapshot(legacy);
+
+      final migrated = ShopDatabase.withCorrectionReceiptVerifier(
+        executor: NativeDatabase(legacy),
+        correctionReceiptVerifier: _backupCorrectionVerifier,
+      );
+      try {
+        final recent = (await migrated.readRecentSales()).single;
+        expect(recent.reversal?.walletReconciliationOutcome, 'money_returned');
+        final salesBefore = await migrated.countSales();
+        final stockBefore = (await migrated.readActiveProducts()).single.stock;
+        final outboxBefore = await migrated.countOutboxOperations();
+        final archive = File(
+          '${directory.path}/legacy-v11-four-key-direct.smbak',
+        );
+
+        await ShopBackup.exportEncrypted(
+          database: migrated,
+          archive: archive,
+          password: _password,
+          scratchRoot: directory,
+        );
+
+        expect(await archive.exists(), isTrue);
+        expect(await migrated.countSales(), salesBefore);
+        expect((await migrated.readActiveProducts()).single.stock, stockBefore);
+        expect(await migrated.countOutboxOperations(), outboxBefore);
+      } finally {
+        await migrated.close();
+      }
+    },
+  );
+
+  test(
+    'authentic encrypted four-key v11 wallet archive restores once',
+    () async {
+      final legacy = File(
+        '${directory.path}/legacy-v11-four-key-archive.sqlite',
+      );
+      await _writeLegacyV11FourKeyWalletReconciliationSnapshot(legacy);
+      final archive = File(
+        '${directory.path}/legacy-v11-four-key-archive.smbak',
+      );
+      await _writeAuthenticatedArchive(
+        archive,
+        await legacy.readAsBytes(),
+        schemaVersion: 11,
+      );
+      final target = File(
+        '${directory.path}/legacy-v11-four-key-restored.sqlite',
+      );
+
+      await ShopBackup.restoreIntoEmptyDatabase(
+        archive: archive,
+        target: target,
+        password: _password,
+        correctionReceiptVerifier: _backupCorrectionVerifier,
+      );
+
+      final restored = ShopDatabase.withCorrectionReceiptVerifier(
+        executor: NativeDatabase(target),
+        correctionReceiptVerifier: _backupCorrectionVerifier,
+      );
+      try {
+        final recent = (await restored.readRecentSales()).single;
+        expect(recent.reversal?.walletReconciliationOutcome, 'money_returned');
+        expect(await restored.countSales(), 1);
+        expect((await restored.readActiveProducts()).single.stock, 3);
+        expect(await restored.countOutboxOperations(), 4);
+      } finally {
+        await restored.close();
+      }
+    },
+  );
+
+  test(
     'authenticated profile-v11 backup migrates to v14 without rewriting data',
     () async {
       final legacy = File('${directory.path}/legacy-v11-profile.sqlite');
@@ -3594,6 +3675,59 @@ Future<void> _writeWalletReversalSnapshot(
     await source.exportVerifiedLocalSnapshot(target);
   } finally {
     await source.close();
+  }
+}
+
+Future<void> _writeLegacyV11FourKeyWalletReconciliationSnapshot(
+  File target,
+) async {
+  await _writeWalletReversalSnapshot(target, reconciled: true);
+  final connection = sqlite3.open(target.path);
+  try {
+    _removeV12ObjectsForLegacyFixture(connection);
+    connection.execute(
+      'DROP TRIGGER shop_wallet_reversal_reconciliations_no_update',
+    );
+    final row = connection
+        .select('SELECT * FROM shop_wallet_reversal_reconciliations')
+        .single;
+    final fingerprint = jsonEncode(<String, Object>{
+      'operationId': row['operation_id'] as String,
+      'reversalId': row['reversal_id'] as String,
+      'outcome': row['outcome'] as String,
+      'evidenceReference': row['evidence_reference'] as String,
+    });
+    final commandDigest = crypto.sha256
+        .convert(utf8.encode(fingerprint))
+        .toString();
+    final receiptDigest = shopLegacyCorrectionAuthorizationReceiptDigestV1(
+      source: row['authorization_source'] as String,
+      receiptId: row['authorization_receipt_id'] as String,
+      workspaceId: row['authorization_workspace_id'] as String,
+      actorId: row['authorized_actor_id'] as String,
+      actorLabel: row['authorized_actor_label'] as String,
+      actorRole: row['authorized_actor_role'] as String,
+      capability: row['authorization_capability'] as String,
+      commandDigest: commandDigest,
+      issuedAtMillis: row['authorization_issued_at_millis'] as int,
+      expiresAtMillis: row['authorization_expires_at_millis'] as int,
+    );
+    connection.execute(
+      'UPDATE shop_wallet_reversal_reconciliations '
+      'SET request_fingerprint = ?, authorization_command_digest = ?, '
+      'authorization_receipt_digest = ?',
+      [fingerprint, commandDigest, receiptDigest],
+    );
+    connection.execute(
+      shopImmutableTriggerV11Sql(
+        table: 'shop_wallet_reversal_reconciliations',
+        operation: 'update',
+        message: 'Shop reversal audit records are immutable',
+      ),
+    );
+    connection.execute('PRAGMA user_version = 11');
+  } finally {
+    connection.close();
   }
 }
 
