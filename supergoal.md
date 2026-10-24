@@ -1,6 +1,6 @@
 # SuperMega Supergoal
 
-- Version: 2.1.0
+- Version: 2.2.0
 - Owners: Swan Htet (technical) and Vivian (operations and business)
 - Updated: 2026-10-23
 - Status: ACTIVE — Shop is the core product; its supporting public website,
@@ -21,6 +21,24 @@ screens. It is a real merchant completing this loop with trustworthy records:
 
 AI and automation may reduce work inside that loop. A named person remains
 accountable for every consequential decision and customer promise.
+
+## Security and quality workstream
+
+Security readiness is evidence-based, not a marketing label. SuperMega uses
+ISO/IEC 27001:2022 with Amendment 1:2024 as the organizational ISMS reference,
+ISO/IEC 27002:2022 for control guidance, ISO/IEC 25010:2023 for product quality,
+NIST CSF 2.0 and SSDF 1.1 for governance and secure development, OWASP ASVS
+5.0.0 Level 2 as the target for the merchant portal and managed APIs, and OWASP
+MASVS for the native app where applicable. These references do not establish
+certification or compliance by themselves.
+
+The scoped evidence register is
+[`docs/SUPERMEGA-SECURITY-CONTROL-EVIDENCE.md`](docs/SUPERMEGA-SECURITY-CONTROL-EVIDENCE.md).
+Every control must name its system scope, accountable owner, implemented
+mechanism, executable or operational evidence, open gap, and next proof. The
+internal console must use named staff identity, least privilege, MFA,
+offboarding and actor-attributed audit. A hostname or shared owner key is never
+an authorization boundary, and merchant sessions never grant staff authority.
 
 ## Active company bet
 
