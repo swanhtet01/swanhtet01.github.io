@@ -114,6 +114,7 @@ try {
   const invalid = await state()
   assert.deepEqual({ calls: invalid.calls, active: invalid.active, role: invalid.role, live: invalid.live }, { calls: 0, active: 'counter-cash-given', role: 'status', live: 'polite' })
   assert.match(invalid.feedback, /whole-MMK amount/)
+  assert.match(invalid.feedback, /ငွေပမာဏ/)
   await evaluate(cdp, sessionId, `document.querySelector('#action-confirm-title').focus()`)
   assert.deepEqual(await state().then((value) => ({ role: value.role, live: value.live })), { role: 'alert', live: 'assertive' })
   await input('2499')
@@ -121,11 +122,10 @@ try {
   const short = await state()
   assert.deepEqual({ calls: short.calls, active: short.active, role: short.role, live: short.live }, { calls: 0, active: 'counter-cash-given', role: 'status', live: 'polite' })
   assert.match(short.feedback, /1 MMK short/)
+  assert.match(short.feedback, /ကျသင့်ငွေထက် နည်း/)
 
   await input('3000')
-  const top = Buffer.from((await cdp.send('Page.captureScreenshot', { format: 'png', fromSurface: true }, sessionId)).data, 'base64')
-  await evaluate(cdp, sessionId, `document.querySelector('dialog.accountable-action-gate').scrollTop=99999`)
-  const bottom = Buffer.from((await cdp.send('Page.captureScreenshot', { format: 'png', fromSurface: true }, sessionId)).data, 'base64')
+  const fit = Buffer.from((await cdp.send('Page.captureScreenshot', { format: 'png', fromSurface: true }, sessionId)).data, 'base64')
   const before = await state()
   assert.equal(before.bodyWidth, before.viewport)
   assert.equal(before.dialog.scrollWidth, before.dialog.clientWidth)
@@ -155,16 +155,14 @@ try {
     contract: 'supermega.shop.cash-tender-browser.v1',
     source: process.env.SHOP_CASH_TENDER_SOURCE || 'working-tree',
     viewport: { width: 390, height: 844 },
-    checks: { invalidEnterFocusedAndPolite: true, blurAssertive: true, shortEnterNoMutation: true, ambiguousRetryFrozen: true, sameCommand: true, oneSaleEffect: true, oneStockEffect: true, nextActionBlank: true, noHorizontalOverflow: true, completionReachableByDialogScroll: true },
+    checks: { invalidEnterFocusedAndPolite: true, blurAssertive: true, shortEnterNoMutation: true, bilingualTenderCopy: true, ambiguousRetryFrozen: true, sameCommand: true, oneSaleEffect: true, oneStockEffect: true, nextActionBlank: true, noHorizontalOverflow: true, completionVisibleWithoutClipping: true },
     screenshots: [
-      { file: 'shop-cash-tender-mobile-390x844.png', bytes: top.byteLength, digest: sha256(top) },
-      { file: 'shop-cash-tender-mobile-390x844-bottom.png', bytes: bottom.byteLength, digest: sha256(bottom) },
+      { file: 'shop-cash-tender-mobile-390x844-fit.png', bytes: fit.byteLength, digest: sha256(fit) },
     ],
   }
   if (evidenceDir) {
     await mkdir(resolve(evidenceDir), { recursive: true })
-    await writeFile(resolve(evidenceDir, evidence.screenshots[0].file), top, { flag: 'wx' })
-    await writeFile(resolve(evidenceDir, evidence.screenshots[1].file), bottom, { flag: 'wx' })
+    await writeFile(resolve(evidenceDir, evidence.screenshots[0].file), fit, { flag: 'wx' })
     await writeFile(resolve(evidenceDir, 'shop-cash-tender-browser.json'), `${JSON.stringify(evidence, null, 2)}\n`, { flag: 'wx' })
   }
   console.log(JSON.stringify({ ok: true, ...evidence }))

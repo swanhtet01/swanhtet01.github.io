@@ -233,10 +233,15 @@ test('rendered tender fields expose due, given, change, deferred errors and retr
     value: '၃၀၀၀',
   })
   assert.match(change, /Amount due/)
+  assert.match(change, /လက်ခံရမည့်ငွေ/)
+  assert.match(change, /Cash given/)
+  assert.match(change, /ပေးငွေ/)
   assert.match(change, /2,500 MMK/)
   assert.match(change, /inputMode="numeric"/)
   assert.match(change, new RegExp(`maxLength="${SHOP_CASH_TENDER_MAX_DIGITS}"`))
   assert.match(change, /Change: 500 MMK/)
+  assert.match(change, /ပြန်အမ်းငွေ/)
+  assert.match(change, /lang="my"/)
   assert.match(change, /role="status"/)
 
   const short = module.render({
@@ -250,6 +255,7 @@ test('rendered tender fields expose due, given, change, deferred errors and retr
   assert.match(short, /role="status"/)
   assert.doesNotMatch(short, /aria-live="assertive"/)
   assert.match(short, /500 MMK short/)
+  assert.match(short, /ပေးထားသော ငွေသားမှာ ကျသင့်ငွေထက် နည်းပါသည်/)
 
   const attempted = module.render({
     amountDueMmk: 2_500,
