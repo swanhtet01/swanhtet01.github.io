@@ -3356,6 +3356,7 @@ class _ShopHomeState extends State<ShopHome> {
                     'Member cards identify a record only. They cannot take payment.',
                     'အသင်းဝင်ကတ်သည် မှတ်တမ်းကိုသာ ခွဲခြားသည်။ ငွေပေးချေမှု မလုပ်နိုင်ပါ။',
                   ),
+                  helperMaxLines: 8,
                   errorText: error,
                 ),
               ),

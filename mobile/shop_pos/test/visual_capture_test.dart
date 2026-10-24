@@ -1,5 +1,6 @@
 // Synthetic Flutter renders for visual review. These are not installed-device
 // screenshots and must not be published as hardware acceptance evidence.
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -10,12 +11,14 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supermega_shop/camera_barcode_scanner.dart';
 import 'package:supermega_shop/main.dart';
 import 'package:supermega_shop/printer_services.dart';
 import 'package:supermega_shop/shop_cash_shift_screen.dart';
 import 'package:supermega_shop/shop_database.dart';
-import 'package:supermega_shop/shop_operational_export_saver.dart';
+import 'package:supermega_shop/shop_runtime_profile.dart';
+import 'package:supermega_shop/shop_runtime_scope.dart';
 import 'package:unified_esc_pos_printer/unified_esc_pos_printer.dart';
 
 final _capture = Platform.environment['SHOP_VISUAL_CAPTURE'] == '1';
@@ -564,6 +567,8 @@ void main() {
               ),
             ),
           );
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 500));
           await tester.pumpAndSettle();
           final catalog = find.byKey(const ValueKey('shop-split-catalog'));
           final basket = find.byKey(const ValueKey('shop-split-basket'));
@@ -865,6 +870,14 @@ void main() {
             await tester.tap(memberSelector);
             await tester.pumpAndSettle();
             expect(tester.takeException(), isNull);
+            expect(
+              find.text(
+                language == 'my'
+                    ? 'အသင်းဝင်ကတ်သည် မှတ်တမ်းကိုသာ ခွဲခြားသည်။ ငွေပေးချေမှု မလုပ်နိုင်ပါ။'
+                    : 'Member cards identify a record only. They cannot take payment.',
+              ),
+              findsOneWidget,
+            );
             await expectLater(
               find.byKey(_captureKey),
               matchesGoldenFile(
@@ -939,31 +952,61 @@ void main() {
         final database = await _closedShiftCaptureDatabase(
           myanmar: language == 'my',
         );
+        final runtimeRoot = (await tester.runAsync(
+          () => Directory.systemTemp.createTemp('shop-visual-qa-runtime-'),
+        ))!;
+        final supportRoot = Directory('${runtimeRoot.path}/support');
+        final temporaryRoot = Directory('${runtimeRoot.path}/temporary');
+        await tester.runAsync(() async {
+          await supportRoot.create();
+          await temporaryRoot.create();
+        });
+        SharedPreferences.setMockInitialValues({});
+        final configuration = ShopRuntimeConfiguration.resolve(
+          runtimeProfile: ShopRuntimeConfiguration.qaRuntimeToken,
+          qaProfile: ShopRuntimeConfiguration.qaProfileId,
+          buildIdentityProfile: ShopRuntimeConfiguration.qaRuntimeToken,
+          buildIdentityQaProfile: ShopRuntimeConfiguration.qaProfileId,
+          platformIdentity: 'dev.supermega.supermega_shop.qa',
+        );
+        final runtimeScope = (await tester.runAsync(
+          () => ShopRuntimeScope.resolve(
+            ShopRuntimeProfile.syntheticQa,
+            configuration: configuration,
+            supportProvider: () async => supportRoot,
+            temporaryProvider: () async => temporaryRoot,
+            preferencesProvider: SharedPreferences.getInstance,
+          ),
+        ))!;
         try {
           await tester.pumpWidget(
             _syntheticCaptureBoundary(
               myanmar: language == 'my',
-              child: MaterialApp(
-                home: ShopCashShiftScreen(
-                  database: database,
-                  myanmar: language == 'my',
-                  exportAction: (_) async =>
-                      ShopOperationalExportSaveResult.cancelled,
-                  testOnlyAllowMissingRuntimeScope: true,
-                ),
+              child: ShopApp(
+                testOnlyAllowMissingRuntimeScope: true,
+                database: database,
+                authClient: null,
+                apiBaseUrl: 'https://example.invalid',
+                initialMyanmar: language == 'my',
               ),
             ),
           );
           await tester.pumpAndSettle();
-          final label = language == 'my'
-              ? 'ပိတ်ပြီးတာဝန်ချိန် CSV ထုတ်မည်'
-              : 'Export closed shift (CSV)';
-          await tester.scrollUntilVisible(
-            find.text(label),
-            300,
-            scrollable: find.byType(Scrollable).first,
+          final navigator = tester.state<NavigatorState>(
+            find.byType(Navigator).first,
           );
-          await tester.tap(find.widgetWithText(OutlinedButton, label));
+          unawaited(
+            navigator.push<void>(
+              MaterialPageRoute<void>(
+                builder: (_) => ShopCashShiftScreen(
+                  database: database,
+                  myanmar: language == 'my',
+                  runtimeScope: runtimeScope,
+                ),
+              ),
+            ),
+          );
+          await tester.pump();
           await tester.pumpAndSettle();
           expect(tester.takeException(), isNull);
           await expectLater(
@@ -972,10 +1015,34 @@ void main() {
               'goldens/shop_shift_export_${width.toInt()}_$language.png',
             ),
           );
+          final label = language == 'my'
+              ? 'ပိတ်ပြီးတာဝန်ချိန် CSV ထုတ်မည်'
+              : 'Export closed shift (CSV)';
+          final shiftScroll = find
+              .descendant(
+                of: find.byType(ShopCashShiftScreen),
+                matching: find.byType(Scrollable),
+              )
+              .first;
+          await tester.scrollUntilVisible(
+            find.text(label),
+            260,
+            scrollable: shiftScroll,
+          );
+          await tester.tap(find.widgetWithText(OutlinedButton, label));
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+          await expectLater(
+            find.byKey(_captureKey),
+            matchesGoldenFile(
+              'goldens/shop_shift_export_preview_${width.toInt()}_$language.png',
+            ),
+          );
         } finally {
           await tester.pumpWidget(const SizedBox.shrink());
           await tester.pump(const Duration(milliseconds: 1));
           await database.close();
+          await tester.runAsync(() => runtimeRoot.delete(recursive: true));
         }
       },
     );
