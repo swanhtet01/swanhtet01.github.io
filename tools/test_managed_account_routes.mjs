@@ -645,20 +645,24 @@ test('actual page effect waits during startup but scrubs terminal-disabled callb
   }, configured)
 })
 
-test('portal lazy entry exposes exactly its five account reads, never the whole Auth namespace', async () => {
+test('portal lazy entries expose bounded account reads, never the whole Auth namespace', async () => {
   const source = readFileSync('showroom/src/core/managed-portal-client.ts', 'utf8')
   assert.equal(source.replace(/\/\/[^\n]*/g, '').replace(/\s+/g, ''),
-    "export{currentManagedIdentity,discoverManagedWorkspacesForCurrentSession,loadManagedBootstrap,managedCapabilitiesFromBootstrap,managedProductsFromBootstrap,}from'./managed-trial.ts'")
+    "export{currentManagedIdentity,discoverManagedWorkspacesForCurrentSession,loadManagedBootstrap,managedProductsFromBootstrap,}from'./managed-trial.ts'")
+  const capabilitySource = readFileSync('showroom/src/core/managed-portal-capabilities-client.ts', 'utf8')
+  assert.equal(capabilitySource.replace(/\/\/[^\n]*/g, '').replace(/\s+/g, ''),
+    "export{managedCapabilitiesFromBootstrap}from'./managed-trial.ts'")
   assert.ok(coreShellSource.includes("void import('./managed-portal-client')"))
+  assert.ok(coreShellSource.includes("await import('./managed-portal-capabilities-client')"))
   assert.ok(!coreShellSource.includes("import('./managed-trial')"))
   const vite = readFileSync('showroom/vite.config.ts', 'utf8')
-  assert.match(vite, /id.includes\('\/src\/core\/managed-trial.ts'\)\s*\|\| id.includes\('\/src\/core\/managed-portal-client.ts'\)/)
+  assert.match(vite, /id.includes\('\/src\/core\/managed-trial.ts'\)\s*\|\| id.includes\('\/src\/core\/managed-portal-client.ts'\)\s*\|\| id.includes\('\/src\/core\/managed-portal-capabilities-client.ts'\)/)
   // A source-only facade must preserve function identity and perform no I/O on import.
   const portal = await import('../showroom/src/core/managed-portal-client.ts')
   const managed = await import('../showroom/src/core/managed-trial.ts')
   assert.deepEqual(Object.keys(portal).sort(), [
     'currentManagedIdentity', 'discoverManagedWorkspacesForCurrentSession', 'loadManagedBootstrap',
-    'managedCapabilitiesFromBootstrap', 'managedProductsFromBootstrap',
+    'managedProductsFromBootstrap',
   ])
   for (const key of Object.keys(portal)) assert.equal(portal[key], managed[key])
 })
@@ -1177,7 +1181,8 @@ test('public login with no assigned workspace offers support and sign-out withou
 })
 
 test('canonical queryless login defaults the Shop-labelled account flow to Shop', () => {
-  assert.ok(managedLoginSource.includes("const accountProductIntent = accountHubReturnPath ? 'guide' : productIntent ?? (reviewReturnPath?.split('/')[1] ?? 'shop')"))
+  assert.ok(managedLoginSource.includes("const accountProductIntent = productIntent ?? (reviewReturnPath?.split('/')[1] ?? 'shop')"))
+  assert.ok(managedLoginSource.includes("const supportProductIntent = accountHubReturnPath ? 'guide' : accountProductIntent"))
   assert.ok(managedLoginSource.includes('managedPortalEntryPath(accountProductIntent)'))
   assert.ok(managedLoginSource.includes("managedAccountPath('/account/recovery', accountProductIntent, location.search)"))
   assert.ok(managedLoginSource.includes('managedAccountRequestUrl(accountProductIntent)'))

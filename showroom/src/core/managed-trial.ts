@@ -2343,6 +2343,9 @@ export function managedBootstrapHasCapability(
   expectedIdentity: ManagedIdentity,
   capability: 'billing.read' | 'commerce.write' | 'production.write' | 'website.write' | 'company.write' | 'approvals.decide',
 ): boolean {
+  const verified = assertManagedBootstrapIdentity(bootstrap, expectedIdentity)
+  const capabilities = verified.readiness.capabilities
+  if (capabilities === undefined) return false
   return managedCapabilitiesFromBootstrap(bootstrap, expectedIdentity).includes(capability)
 }
 

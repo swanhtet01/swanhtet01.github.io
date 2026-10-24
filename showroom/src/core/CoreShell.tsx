@@ -214,7 +214,8 @@ function useManagedPortalAccess(enabled: boolean, selectedWorkspace: string, ref
     if (!enabled || !selectedWorkspace) return undefined
     let active = true
     void import('./managed-portal-client')
-      .then(async ({ currentManagedIdentity, discoverManagedWorkspacesForCurrentSession, loadManagedBootstrap, managedCapabilitiesFromBootstrap, managedProductsFromBootstrap }) => {
+      .then(async ({ currentManagedIdentity, discoverManagedWorkspacesForCurrentSession, loadManagedBootstrap, managedProductsFromBootstrap }) => {
+        const { managedCapabilitiesFromBootstrap } = await import('./managed-portal-capabilities-client')
         const identity = await currentManagedIdentity()
         if (!active) return
         if (!identity || identity.workspaceId !== selectedWorkspace) {
@@ -413,15 +414,12 @@ export function CoreLayout() {
   const storedSettingsSetup = customerSettingsRoute || internalBuilderRoute ? readLocalSetupReadiness() : null
   const accountRecoveryRoute = location.pathname.startsWith('/account/recovery') || location.pathname.startsWith('/account/setup')
   const accountHubRoute = location.pathname === '/account' || location.pathname === '/account/'
-  const sensitiveAccountRoute = accountRecoveryRoute || accountHubRoute
+  const sensitiveAccountRoute = location.pathname.startsWith('/account/') || accountHubRoute
   const loginRoute = location.pathname === '/login' || location.pathname === '/login/'
-  const accountEntryRoute = loginRoute || accountRecoveryRoute
+  const accountEntryRoute = loginRoute || sensitiveAccountRoute
   const protectedPortalRoute = Boolean(requestedProduct) || accountHubRoute
-  const companyLoginPath = accountHubRoute
-    ? managedAccountHubLoginPath()
-    : managedLoginPath(routeProduct ?? settingsProduct ?? (storedSettingsSetup?.workspace && storedSettingsSetup.hasCanonicalProduct ? storedSettingsSetup.product : null))
-  const accountShellPath = portalAccess.status === 'ready' ? '/account' : companyLoginPath
-  const accountShellLabel = portalAccess.status === 'ready' ? 'Account' : 'Login'
+  const companyLoginPath = managedLoginPath(routeProduct ?? settingsProduct ?? (storedSettingsSetup?.workspace && storedSettingsSetup.hasCanonicalProduct ? storedSettingsSetup.product : null))
+  const protectedLoginPath = accountHubRoute ? managedAccountHubLoginPath() : companyLoginPath
   const setupRoute = customerSettingsRoute || internalBuilderRoute
   const setupNavigation: NavigationItem = internalBuilderRoute
     ? { to: '/internal/client-builder/', label: 'Client builder' }
@@ -518,7 +516,7 @@ export function CoreLayout() {
 
   const productionEntry = productionEntryDecision(window.location.hostname, accountEntryRoute, portalAccess.status)
   if (productionEntry === 'checking') return <PortalAccessPanel title="Opening…" copy="Checking your account." />
-  if (productionEntry === 'login') return <Navigate replace to={companyLoginPath} />
+  if (productionEntry === 'login') return <Navigate replace to={protectedLoginPath} />
 
   return (
     <div className={`core-shell theme-light${routeProduct === 'commerce' ? ' shop-product-shell' : ''}${routeProduct === 'production' ? ' plant-shell' : ''}`}>
@@ -528,10 +526,10 @@ export function CoreLayout() {
         {activeNavigation.length ? <nav className="core-nav" aria-label="Application">
           {activeNavigation.map((item) => <NavLink className={({ isActive }) => navigationClass(item.to, isActive)} end={item.end} key={item.to} to={item.to}>{item.label}</NavLink>)}
         </nav> : null}
-        <div className="sidebar-foot">{routeProduct || setupRoute ? <RuntimeBadge status={runtime.status} /> : null}{!accountEntryRoute ? <Link className="account-shell-link" to={accountShellPath}>{accountShellLabel}</Link> : null}</div>
+        <div className="sidebar-foot">{routeProduct || setupRoute ? <RuntimeBadge status={runtime.status} /> : null}{!accountEntryRoute ? portalAccess.status === 'ready' ? <Link className="account-shell-link" to="/account">Account</Link> : <Link className="account-shell-link" to={companyLoginPath}>Login</Link> : null}</div>
       </aside>
       <div className="core-stage">
-        <header className="core-topbar"><div className="mobile-brand"><Brand /></div><div className="topbar-title"><strong>{routeName}</strong><span>SuperMega</span></div><div className="topbar-meta">{!accountEntryRoute ? <Link aria-label={accountShellLabel} className="account-shell-link mobile-account-link" to={accountShellPath}>{accountShellLabel}</Link> : null}{!accountEntryRoute ? <RuntimeBadge status={runtime.status} /> : null}</div></header>
+        <header className="core-topbar"><div className="mobile-brand"><Brand /></div><div className="topbar-title"><strong>{routeName}</strong><span>SuperMega</span></div><div className="topbar-meta">{!accountEntryRoute ? portalAccess.status === 'ready' ? <Link aria-label="Account" className="account-shell-link mobile-account-link" to="/account">Account</Link> : <Link aria-label="Login" className="account-shell-link mobile-account-link" to={companyLoginPath}>Login</Link> : null}{!accountEntryRoute ? <RuntimeBadge status={runtime.status} /> : null}</div></header>
         {/* Shop's bottom bar is task navigation (all four links share the /shop/
             pathname, so NavLink's pathname-based isActive would mark every tab
             active — the highlight must come from the ?tab= param instead). Every

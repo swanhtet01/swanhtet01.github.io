@@ -43,7 +43,9 @@ test('unselected local workspace remains available', () => {
 
 // Run the actual effect body with a controlled portal-client import. No React
 // scheduler, browser storage or network is used by this bounded race harness.
-const effectSource = source.slice(start, end).replace("import('./managed-portal-client')", 'Promise.resolve(client)')
+const effectSource = source.slice(start, end)
+  .replace("import('./managed-portal-client')", 'Promise.resolve(client)')
+  .replace("import('./managed-portal-capabilities-client')", 'Promise.resolve(client)')
 assert.notEqual(effectSource, source.slice(start, end))
 const effectCode = transformSync(effectSource, { loader: 'ts', format: 'cjs' }).code
 const settle = () => new Promise(resolve => setImmediate(resolve))

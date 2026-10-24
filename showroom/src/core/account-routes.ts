@@ -17,25 +17,22 @@ function accountProductSlug(value: string | null) {
 }
 
 export function managedAccountRequestUrl(value: string | null) {
-  const query = new URLSearchParams({
-    product: accountProductSlug(value) ?? 'guide',
-    template: 'managed-account',
-    utm_source: 'app',
-    utm_medium: 'business_setup',
-  })
-  return `https://supermega.dev/contact/?${query.toString()}`
+  const request = { product: accountProductSlug(value) ?? 'guide' }
+  return `https://supermega.dev/contact/?product=${request.product}&template=managed-account&utm_source=app&utm_medium=business_setup`
 }
 
 export function managedAccountPath(path: '/login' | '/account/recovery', value: string | null, search = '') {
   const reviewPath = managedLoginReviewPath(search)
-  if (reviewPath) return `${path}?product=${reviewPath.split('/')[1]}&review=${reviewPath.split('/').at(-1)}`
+  if (reviewPath) {
+    const [, product, , review] = reviewPath.split('/')
+    return `${path}?product=${product}&review=${review}`
+  }
   if (managedAccountHubEntryPath(search)) return `${path}?entry=${ACCOUNT_HUB_ENTRY}`
   const product = accountProductSlug(value)
   if (!product) return path
-  const query = new URLSearchParams()
-  if (product === 'shop' && isPairedPublicShopEntry(search)) query.set('entry', PAIRED_PUBLIC_SHOP_ENTRY)
-  query.set('product', product)
-  return `${path}?${query.toString()}`
+  return product === 'shop' && isPairedPublicShopEntry(search)
+    ? `${path}?entry=${PAIRED_PUBLIC_SHOP_ENTRY}&product=shop`
+    : `${path}?product=${product}`
 }
 
 export function isPairedPublicShopEntry(search: string) {
@@ -81,7 +78,7 @@ export function managedAccountHubRecoveryEntryPath(search: string) {
 function canonicalReviewId(value: string | null) {
   // No free-form return URL. Exact length also rejects a trailing newline,
   // which JavaScript's end-of-string regex anchor alone would accept.
-  return value?.length === 36 && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value) ? value : null
+  return value?.length === 36 && /^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/.test(value) ? value : null
 }
 
 export function managedLoginReviewPath(search: string) {
@@ -94,9 +91,13 @@ export function managedLoginReviewPath(search: string) {
   return review ? `/${product}/review/${review}` : null
 }
 
-export function customerWebsiteReviewLoginPath(reviewId: string) {
+function customerReviewLoginPath(product: 'website' | 'ecommerce', reviewId: string) {
   const review = canonicalReviewId(reviewId)
-  return review ? `/login?product=website&review=${review}` : '/login?product=website'
+  return `/login?product=${product}${review ? `&review=${review}` : ''}`
+}
+
+export function customerWebsiteReviewLoginPath(reviewId: string) {
+  return customerReviewLoginPath('website', reviewId)
 }
 
 export function alternateManagedWorkspaceId(
@@ -107,6 +108,5 @@ export function alternateManagedWorkspaceId(
 }
 
 export function customerEcommerceReviewLoginPath(reviewId: string) {
-  const review = canonicalReviewId(reviewId)
-  return review ? `/login?product=ecommerce&review=${review}` : '/login?product=ecommerce'
+  return customerReviewLoginPath('ecommerce', reviewId)
 }
