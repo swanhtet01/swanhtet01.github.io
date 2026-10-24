@@ -122,7 +122,22 @@ test('builds a four-product readiness matrix with Shop first and GitHub gate fir
   assert.equal(matrix.products[0].productId, 'shop')
   assert.equal(matrix.products[0].evidenceLevel, 'local_verified_release_candidate')
   assert.ok(matrix.products[0].currentBlockers.includes('owner_private_baseline'))
-  assert.ok(matrix.products.find((product) => product.productId === 'plant').currentBlockers.includes('shop_pilot_decision_not_complete'))
+  assert.equal(matrix.products[0].claims.defaultLaunchProduct, true)
+  assert.equal(matrix.products[0].claims.technicalWorkEligible, true)
+  const plant = matrix.products.find((product) => product.productId === 'plant')
+  assert.equal(plant.claims.outsideSuperMegaDev, true)
+  assert.equal(plant.claims.technicalWorkEligible, false)
+  assert.ok(plant.currentBlockers.includes('outside_supermega_dev_scope'))
+  for (const productId of ['website', 'ecommerce']) {
+    const product = matrix.products.find((entry) => entry.productId === productId)
+    assert.equal(product.claims.customPackageOnly, true)
+    assert.equal(product.claims.defaultLaunchProduct, false)
+    assert.equal(product.claims.technicalWorkEligible, false)
+    assert.equal(product.claims.localCandidateVerified, false)
+    assert.equal(product.evidenceLevel, 'source_mapped_unverified')
+    assert.ok(product.currentBlockers.includes('custom_package_scope_required'))
+    assert.ok(product.currentBlockers.includes('server_enforced_entitlement_missing'))
+  }
 })
 
 test('removes the Shop private-intake blocker only when Day-0 intake is accepted', () => {

@@ -59,10 +59,14 @@ authority, product scope, or infrastructure actions by implication.
 
 ## Current product boundary
 
-The active release is native Shop, a SuperMega product. Do not add Plant,
-Sites/Website, Commerce/Ecommerce, Spa, SOL, Connected Orders, or
-client-specific scope unless the owner explicitly changes the goal. Preserve
-existing code and data for parked products; parked does not mean delete.
+The active release is native Shop plus its supporting company website, shared
+infrastructure, and accountable company operations. Plant is outside
+SuperMega.dev. Preserve Sites/Website and Ecommerce code as optional custom or
+enterprise package capability, but do not treat either as a default launch
+product or active implementation lane without an owner-approved package,
+server-enforced tenant entitlement, support boundary, and acceptance contract.
+Do not add Spa, SOL, Connected Orders, or client-specific scope by implication.
+Preserve parked code and data; parked does not mean delete.
 
 For Shop:
 

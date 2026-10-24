@@ -2,7 +2,8 @@
 
 - Last verified: 2026-10-24
 - Active objective: [`supergoal.md`](supergoal.md)
-- Scope: native Shop candidate and its public evidence
+- Scope: Shop, supporting web/infrastructure, accountable operations, and
+  entitlement-gated optional packages
 
 This file records volatile facts; it cannot widen scope or authorize release.
 No local demo, passing test, healthy provider, or generated artifact is proof of a live customer system, revenue, production persistence, or autonomous operation.
@@ -15,7 +16,10 @@ launch scope or make the older portfolio a current release plan.
 
 Portfolio metadata snapshot — Last confirmed: 2026-08-21
 
-The customer portfolio is exactly **Shop**, **Plant**, **Website**, and **Ecommerce** in the retained browser registry. **AI assistance** is a shared capability inside those products, not a fifth product. SuperMega HQ, R&D, agent coordination, Ops, Console, and machine coordination are internal company systems.
+The historical four-product browser registry is compatibility evidence, not
+current scope. Shop is core; Plant is outside SuperMega.dev; Website/Sites and
+Ecommerce are optional packages gated by server entitlements and acceptance.
+AI assistance is internal shared capability, not another product.
 
 The retained compatibility routes are `/shop/`, `/plant/`, `/website/`, and `/ecommerce/`. `/agents/` — compatibility-only path to HQ; it is not a product route or separate workspace. `commerce` and `production` remain stable internal runtime identifiers while the retained browser records exist. Ecommerce is not a second Shop back office.
 
@@ -36,6 +40,7 @@ owner-approved product outcome and gate require it.
 | Integration PR | [#734 — Unify Shop app first-use and public launch candidate](https://github.com/swanhtet01/swanhtet01.github.io/pull/734) |
 | State | Open draft; product `de648ecd` and gallery checkpoint `fd90cff3` have full native/security/Kernel PASS. App CI failed only on stale PostgreSQL evidence. Review, preview, signing, installed/hardware, and merchant gates remain open |
 | Integration branch | `codex/shop-public-main-port-20261022` |
+| Local scoped source anchor | `350832eb` from `526f3616`; Shop/shared work only; unpushed, native CI NOT RUN |
 | Verified product-code anchor | `de648ecda569c639f1b5da8fcf8cd874c1f712d4` / tree `198c188372bb4a33777168f49e6260b63c330751` / native tree `5417a23dd9e5e3f99832e921c29ff55a620e642b` |
 | Native capture source | `de648ecd` / native tree `5417a23d` |
 | Gallery evidence successor | `fd90cff3dbefe65d734f0a2c88f6df7958b2cd52`; strict local provenance and public checks pass |
@@ -48,6 +53,9 @@ owner-approved product outcome and gate require it.
 The candidate preserves Shop-first presentation, signed correction, gallery
 provenance, and fail-closed release contracts. Correction stays unavailable;
 normal selling remains offline.
+
+Included: Shop QA/export/backup and shared login/auth. Excluded: Plant,
+standalone Website/Ecommerce changes, and new agent frameworks.
 
 ## Exact evidence
 

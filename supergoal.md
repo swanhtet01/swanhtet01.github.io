@@ -1,10 +1,10 @@
 # SuperMega Supergoal
 
-- Version: 2.0.5
+- Version: 2.1.0
 - Owners: Swan Htet (technical) and Vivian (operations and business)
 - Updated: 2026-10-23
-- Status: ACTIVE — Shop has an internal candidate; launch evidence remains
-  incomplete and it is not a production release or accepted merchant deployment
+- Status: ACTIVE — Shop is the core product; its supporting public website,
+  shared infrastructure, and company operations remain release support
 
 ## North star
 
@@ -24,7 +24,9 @@ accountable for every consequential decision and customer promise.
 
 ## Active company bet
 
-This launch cycle is **Shop-only and native-first**.
+This launch cycle is **Shop-core and native-first**. SuperMega.dev consists of
+Shop, the company/Shop public website and private access path, shared technical
+infrastructure, and company operations supported by accountable AI agents.
 
 Included now:
 
@@ -44,7 +46,11 @@ Included now:
 - private-subnet LAN/port-9100 ESC/POS receipt work that remains gated by real
   printer evidence; USB/Bluetooth printer support is not implied;
 - English and Burmese operator quality;
-- honest public Shop evidence and a bounded path to installation and support.
+- honest public Shop evidence and a bounded path to installation and support;
+- the supporting company website, contact/private-login journey, CI/security,
+  recovery, observability, release evidence, and operational runbooks;
+- internal AI assistance for engineering and operations, with named human
+  owners for access, money, publishing, customer promises, and release.
 
 The launch offer is Local Pilot. Assisted Launch is an optional one-time
 service, not a plan or subscription. Managed Cloud and Multi-site remain
@@ -52,10 +58,18 @@ planned/internal until their tenant identity, recovery, entitlement, support,
 and billing gates pass. Do not publish a numeric price until its owners approve
 the effective offer.
 
-Parked until Shop acceptance:
+Sites/Website and Ecommerce capabilities may later be sold as optional custom
+or enterprise packages. They are not default launch products. No package name,
+price, availability, or access promise is valid until tenant entitlements are
+server-enforced and the package has an owner-approved support and acceptance
+contract.
 
-- new Plant, Sites/Website, Commerce/Ecommerce, Spa, SOL, or client-specific
-  product work;
+Outside the current launch lane:
+
+- Plant, which is not part of SuperMega.dev;
+- standalone Sites/Website or Ecommerce expansion without a separately approved
+  custom/enterprise package and server-enforced entitlement;
+- standalone Spa, SOL, or client-specific product work;
 - new UI forks and speculative feature branches;
 - Connected Orders server/synchronization work, which stays default-off;
 - autonomous customer communication, pricing commitments, production writes,
