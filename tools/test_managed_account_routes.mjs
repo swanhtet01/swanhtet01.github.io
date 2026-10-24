@@ -205,7 +205,10 @@ async function withAuth(run, configured = true) {
     state.page = replacements.__accountHarness
     await run(mod, state)
     assert.equal(storage.get('unrelated.demo'), 'preserved')
-    assert.equal(calls.filter(([name]) => name === 'storage-write').length, 0)
+    assert.equal(
+      calls.filter(([name]) => name === 'storage-write').length,
+      state.expectedStorageWrites ?? 0,
+    )
     assert.equal(calls.filter(([name]) => name === 'updateUser').length, state.expectedPasswordUpdates ?? 0)
   } finally {
     for (const [key, descriptor] of originals) {
@@ -1163,4 +1166,113 @@ test('canonical queryless login defaults the Shop-labelled account flow to Shop'
   assert.ok(managedLoginSource.includes('managedPortalEntryPath(accountProductIntent)'))
   assert.ok(managedLoginSource.includes("managedAccountPath('/account/recovery', accountProductIntent, location.search)"))
   assert.ok(managedLoginSource.includes('managedAccountRequestUrl(accountProductIntent)'))
+})
+
+test('queryless and invalid login intents execute their bounded destinations', async () => {
+  for (const scenario of [
+    {
+      search: '',
+      expectedDestination: '/shop/',
+      expectedRecovery: '/account/recovery?product=shop',
+    },
+    {
+      search: '?product=unrecognized',
+      expectedDestination: '/?choose=1',
+      expectedRecovery: '/account/recovery',
+    },
+  ]) {
+    await withAuth(async (mod, state) => {
+      state.location.hostname = 'app.supermega.dev'
+      state.location.search = scenario.search
+      state.page.runtime = { status: 'enterprise', signupPolicy: null }
+      state.expectedStorageWrites = 1
+      state.directory = directoryBody([
+        {
+          workspace_id: 'company-one',
+          label: 'Company One',
+          access: 'owner',
+        },
+      ])
+      const destinations = []
+      state.page.navigate = (path) => destinations.push(path)
+      state.signInWithPassword = async () => {
+        state.session = { ...fixedSession }
+        return {
+          data: { session: state.session, user: fixedUser },
+          error: null,
+        }
+      }
+      state.fetch = async (url) => {
+        if (url === '/api/trial/v1/workspaces') return response(state.directory)
+        if (url === '/api/trial/v1/bootstrap') {
+          return response({
+            identity: {
+              workspace_id: 'company-one',
+              actor_id: fixedUser.id,
+              actor_kind: 'human',
+            },
+            readiness: {},
+            states: {},
+            approvals: [],
+          })
+        }
+        throw new Error(`Forbidden network ${url}`)
+      }
+
+      let tree = login(mod, state)
+      const recovery = elements(tree).find(
+        (node) =>
+          node.props?.to === scenario.expectedRecovery &&
+          /password/i.test(content(node)),
+      )
+      assert.ok(recovery)
+      input(tree, 'Email').props.onChange({
+        target: { value: fixedUser.email },
+      })
+      tree = login(mod, state)
+      input(tree, 'Password').props.onChange({
+        target: { value: 'synthetic-password' },
+      })
+      tree = login(mod, state)
+      await elements(tree)
+        .find((node) => node.type === 'form')
+        .props.onSubmit({ preventDefault() {} })
+      await finishRequest()
+
+      assert.deepEqual(destinations, [scenario.expectedDestination])
+      assert.equal(
+        state.calls.filter(([name, url]) =>
+          name === 'fetch' && url === '/api/trial/v1/bootstrap',
+        ).length,
+        1,
+      )
+    })
+  }
+
+  await withAuth(async (mod, state) => {
+    state.location.hostname = 'app.supermega.dev'
+    state.location.search = '?product=unrecognized'
+    state.page.runtime = { status: 'enterprise', signupPolicy: null }
+    state.signInWithPassword = async () => {
+      state.session = { ...fixedSession }
+      return { data: { session: state.session, user: fixedUser }, error: null }
+    }
+    let tree = login(mod, state)
+    input(tree, 'Email').props.onChange({ target: { value: fixedUser.email } })
+    tree = login(mod, state)
+    input(tree, 'Password').props.onChange({
+      target: { value: 'synthetic-password' },
+    })
+    tree = login(mod, state)
+    await elements(tree)
+      .find((node) => node.type === 'form')
+      .props.onSubmit({ preventDefault() {} })
+    await finishRequest()
+    tree = login(mod, state)
+    const support = elements(tree).find(
+      (node) => node.type === 'a' && content(node) === 'Contact support',
+    )
+    assert.ok(support)
+    assert.equal(new URL(support.props.href).searchParams.get('product'), 'guide')
+  })
 })
