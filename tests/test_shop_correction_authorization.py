@@ -30,6 +30,8 @@ from supermega_runtime.trial_store import (
     PostgresTrialStore,
     TrialAuthorizationExpired,
     TrialIdempotencyConflict,
+    TrialNotReadyError,
+    TrialReconciliationRequired,
     TrialStoreError,
     TrialPrincipal,
     shop_correction_authorization_receipt_digest,
@@ -267,6 +269,343 @@ class ShopCorrectionGlobalConsumptionGateTests(unittest.TestCase):
         )
         self.assertEqual(calls, 0)
         self.assertEqual(store._events, {})
+
+    def test_lineage_consumption_routes_stay_closed_before_auth_or_body(self) -> None:
+        calls = 0
+
+        def resolver(_request):
+            nonlocal calls
+            calls += 1
+            raise AssertionError("closed route must not resolve identity")
+
+        app = FastAPI()
+        app.include_router(create_trial_router(store=_store(), resolve_principal=resolver))
+        client = TestClient(app)
+        for path in (
+            "/api/trial/v1/shop/correction-lineages",
+            "/api/trial/v1/shop/correction-consumptions",
+            "/api/trial/v1/shop/correction-consumptions/status",
+        ):
+            response = client.post(path, content=b"not-json")
+            self.assertEqual(response.status_code, 503, response.text)
+            self.assertEqual(
+                response.json()["detail"]["code"],
+                "shop_correction_global_consumption_unavailable",
+            )
+        self.assertEqual(calls, 0)
+
+
+class ShopCorrectionConsumptionStateMachineTests(unittest.TestCase):
+    def _authorized_store(self):
+        store = _store()
+        body = _request_body()
+        receipt = store.issue_shop_correction_authorization(_principal(), **body)
+        lineage_id = str(uuid4())
+        lineage = store.activate_shop_correction_lineage(
+            _principal(),
+            activation_request_id=str(uuid4()),
+            lineage_id=lineage_id,
+            expected_previous_lineage_id=None,
+            expected_previous_lineage_epoch=None,
+            local_consumption_ordinal=0,
+            local_consumption_digest=None,
+        )
+        return store, body, receipt, lineage
+
+    def _consume(self, store, body, receipt, lineage, *, request_id=None):
+        return store.consume_shop_correction_authorization(
+            _principal(),
+            consumption_request_id=request_id or str(uuid4()),
+            authorization_receipt_id=receipt.receipt_id,
+            authorization_receipt_digest=receipt.receipt_digest,
+            lineage_id=lineage.lineage_id,
+            lineage_epoch=lineage.lineage_epoch,
+            capability=body["capability"],
+            semantic_target_id="sale-1",
+            command_digest=body["command_digest"],
+            allow_new_decision=True,
+        )
+
+    def test_initial_lineage_and_exact_activation_replay(self) -> None:
+        store = _store()
+        request_id = str(uuid4())
+        lineage_id = str(uuid4())
+        first = store.activate_shop_correction_lineage(
+            _principal(),
+            activation_request_id=request_id,
+            lineage_id=lineage_id,
+            expected_previous_lineage_id=None,
+            expected_previous_lineage_epoch=None,
+            local_consumption_ordinal=0,
+            local_consumption_digest=None,
+        )
+        replay = store.activate_shop_correction_lineage(
+            _principal(),
+            activation_request_id=request_id,
+            lineage_id=lineage_id,
+            expected_previous_lineage_id=None,
+            expected_previous_lineage_epoch=None,
+            local_consumption_ordinal=0,
+            local_consumption_digest=None,
+        )
+        self.assertEqual(first.lineage_epoch, 1)
+        self.assertFalse(first.idempotent_replay)
+        self.assertTrue(replay.idempotent_replay)
+
+    def test_concurrent_same_lineage_requests_commit_once_and_reconstruct_without_payout(self) -> None:
+        store, body, receipt, lineage = self._authorized_store()
+        request_ids = (str(uuid4()), str(uuid4()))
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            proofs = list(
+                executor.map(
+                    lambda request_id: self._consume(
+                        store,
+                        body,
+                        receipt,
+                        lineage,
+                        request_id=request_id,
+                    ),
+                    request_ids,
+                )
+            )
+        self.assertEqual(
+            sorted(proof.response_mode for proof in proofs),
+            ["commit_new", "reconstruct_existing"],
+        )
+        self.assertEqual(proofs[0].consumption_id, proofs[1].consumption_id)
+        self.assertNotIn("responseMode", proofs[0].to_dict())
+        self.assertFalse(proofs[0].to_dict()["moneyMovementPerformed"])
+        self.assertFalse(proofs[1].to_dict()["localMutationPerformed"])
+        self.assertEqual(len(store._shop_correction_consumptions), 1)
+
+    def test_closed_window_still_recovers_exact_committed_request(self) -> None:
+        store, body, receipt, lineage = self._authorized_store()
+        request_id = str(uuid4())
+        first = self._consume(store, body, receipt, lineage, request_id=request_id)
+        recovered = store.consume_shop_correction_authorization(
+            _principal(),
+            consumption_request_id=request_id,
+            authorization_receipt_id=receipt.receipt_id,
+            authorization_receipt_digest=receipt.receipt_digest,
+            lineage_id=lineage.lineage_id,
+            lineage_epoch=lineage.lineage_epoch,
+            capability=body["capability"],
+            semantic_target_id="sale-1",
+            command_digest=body["command_digest"],
+            allow_new_decision=False,
+        )
+        self.assertEqual(first.signed_dict(), recovered.signed_dict())
+        self.assertEqual(recovered.response_mode, "recover_same_request")
+
+    def test_closed_window_rejects_a_new_consumption_decision(self) -> None:
+        store, body, receipt, lineage = self._authorized_store()
+        with self.assertRaises(TrialNotReadyError) as raised:
+            store.consume_shop_correction_authorization(
+                _principal(),
+                consumption_request_id=str(uuid4()),
+                authorization_receipt_id=receipt.receipt_id,
+                authorization_receipt_digest=receipt.receipt_digest,
+                lineage_id=lineage.lineage_id,
+                lineage_epoch=lineage.lineage_epoch,
+                capability=body["capability"],
+                semantic_target_id="sale-1",
+                command_digest=body["command_digest"],
+                allow_new_decision=False,
+            )
+        self.assertEqual(
+            raised.exception.reasons,
+            ("shop_correction_authorization_window_open",),
+        )
+
+    def test_lost_response_exact_retry_returns_identical_recovery_proof(self) -> None:
+        store, body, receipt, lineage = self._authorized_store()
+        request_id = str(uuid4())
+        first = self._consume(
+            store, body, receipt, lineage, request_id=request_id
+        )
+        replay = self._consume(
+            store, body, receipt, lineage, request_id=request_id
+        )
+        self.assertEqual(first.signed_dict(), replay.signed_dict())
+        self.assertEqual(replay.response_mode, "recover_same_request")
+        self.assertEqual(len(store._shop_correction_consumptions), 1)
+
+    def test_status_is_read_only_and_activation_replay_reports_current_watermark(self) -> None:
+        store, body, receipt, lineage = self._authorized_store()
+        proof = self._consume(store, body, receipt, lineage)
+        store.write_enabled = False
+        status = store.get_shop_correction_reconciliation_status(
+            _principal(),
+            lineage_id=lineage.lineage_id,
+            lineage_epoch=lineage.lineage_epoch,
+            local_consumption_ordinal=proof.consumption_ordinal,
+            local_consumption_digest=proof.history_digest,
+        )
+        self.assertEqual(status.state, "current")
+        store.write_enabled = True
+        replay = store.activate_shop_correction_lineage(
+            _principal(),
+            activation_request_id=lineage.activation_request_id,
+            lineage_id=lineage.lineage_id,
+            expected_previous_lineage_id=None,
+            expected_previous_lineage_epoch=None,
+            local_consumption_ordinal=0,
+            local_consumption_digest=None,
+        )
+        self.assertTrue(replay.idempotent_replay)
+        self.assertEqual(replay.consumption_ordinal, proof.consumption_ordinal)
+        self.assertEqual(replay.consumption_digest, proof.history_digest)
+
+    def test_pre_correction_restore_is_quarantined_but_post_correction_rotates(self) -> None:
+        store, body, receipt, lineage = self._authorized_store()
+        proof = self._consume(store, body, receipt, lineage)
+        status = store.get_shop_correction_reconciliation_status(
+            _principal(),
+            lineage_id=lineage.lineage_id,
+            lineage_epoch=lineage.lineage_epoch,
+            local_consumption_ordinal=0,
+            local_consumption_digest=None,
+        )
+        self.assertEqual(status.state, "reconciliation_required")
+        with self.assertRaises(TrialReconciliationRequired):
+            store.activate_shop_correction_lineage(
+                _principal(),
+                activation_request_id=str(uuid4()),
+                lineage_id=str(uuid4()),
+                expected_previous_lineage_id=lineage.lineage_id,
+                expected_previous_lineage_epoch=lineage.lineage_epoch,
+                local_consumption_ordinal=0,
+                local_consumption_digest=None,
+            )
+        restored = store.activate_shop_correction_lineage(
+            _principal(),
+            activation_request_id=str(uuid4()),
+            lineage_id=str(uuid4()),
+            expected_previous_lineage_id=lineage.lineage_id,
+            expected_previous_lineage_epoch=lineage.lineage_epoch,
+            local_consumption_ordinal=proof.consumption_ordinal,
+            local_consumption_digest=proof.history_digest,
+        )
+        self.assertEqual(restored.lineage_epoch, 2)
+        stale = store.get_shop_correction_reconciliation_status(
+            _principal(),
+            lineage_id=lineage.lineage_id,
+            lineage_epoch=lineage.lineage_epoch,
+            local_consumption_ordinal=proof.consumption_ordinal,
+            local_consumption_digest=proof.history_digest,
+        )
+        self.assertEqual(stale.state, "stale_lineage")
+        original_request_reconstruction = store.consume_shop_correction_authorization(
+            _principal(),
+            consumption_request_id=proof.consumption_request_id,
+            authorization_receipt_id=receipt.receipt_id,
+            authorization_receipt_digest=receipt.receipt_digest,
+            lineage_id=restored.lineage_id,
+            lineage_epoch=restored.lineage_epoch,
+            capability=body["capability"],
+            semantic_target_id="sale-1",
+            command_digest=body["command_digest"],
+            allow_new_decision=False,
+        )
+        self.assertEqual(
+            original_request_reconstruction.response_mode,
+            "reconstruct_existing",
+        )
+        self.assertEqual(
+            original_request_reconstruction.lineage_id,
+            lineage.lineage_id,
+        )
+        app = FastAPI()
+        app.include_router(
+            create_trial_router(store=store, resolve_principal=lambda _request: _principal())
+        )
+        with patch(
+            "supermega_runtime.trial_runtime.shop_correction_global_consumption_ready",
+            new=lambda: True,
+        ):
+            response = TestClient(app).post(
+                "/api/trial/v1/shop/correction-consumptions",
+                json={
+                    "consumption_request_id": proof.consumption_request_id,
+                    "authorization_receipt_id": receipt.receipt_id,
+                    "authorization_receipt_digest": receipt.receipt_digest,
+                    "lineage_id": restored.lineage_id,
+                    "lineage_epoch": restored.lineage_epoch,
+                    "capability": body["capability"],
+                    "semantic_target_id": "sale-1",
+                    "command_digest": body["command_digest"],
+                },
+            )
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertTrue(response.json()["reconstruction_required"])
+        self.assertNotIn("responseMode", response.json()["consumption"])
+        reconstructed = store.consume_shop_correction_authorization(
+            _principal(),
+            consumption_request_id=str(uuid4()),
+            authorization_receipt_id=receipt.receipt_id,
+            authorization_receipt_digest=receipt.receipt_digest,
+            lineage_id=restored.lineage_id,
+            lineage_epoch=restored.lineage_epoch,
+            capability=body["capability"],
+            semantic_target_id="sale-1",
+            command_digest=body["command_digest"],
+            allow_new_decision=False,
+        )
+        self.assertEqual(reconstructed.response_mode, "reconstruct_existing")
+        self.assertEqual(reconstructed.consumption_id, proof.consumption_id)
+        self.assertEqual(reconstructed.lineage_id, lineage.lineage_id)
+        self.assertEqual(len(store._shop_correction_consumptions), 1)
+
+    def test_stale_lineage_cannot_consume_after_exact_restore_rotation(self) -> None:
+        store, body, receipt, lineage = self._authorized_store()
+        restored = store.activate_shop_correction_lineage(
+            _principal(),
+            activation_request_id=str(uuid4()),
+            lineage_id=str(uuid4()),
+            expected_previous_lineage_id=lineage.lineage_id,
+            expected_previous_lineage_epoch=lineage.lineage_epoch,
+            local_consumption_ordinal=0,
+            local_consumption_digest=None,
+        )
+        with self.assertRaises(TrialReconciliationRequired) as raised:
+            self._consume(store, body, receipt, lineage)
+        self.assertEqual(raised.exception.state, "stale_lineage")
+        proof = self._consume(store, body, receipt, restored)
+        self.assertEqual(proof.response_mode, "commit_new")
+        self.assertEqual(proof.lineage_id, restored.lineage_id)
+        self.assertEqual(len(store._shop_correction_consumptions), 1)
+
+    def test_member_fields_are_rejected_and_do_not_enter_consumption_proof(self) -> None:
+        app = FastAPI()
+        app.include_router(
+            create_trial_router(store=_store(), resolve_principal=lambda _request: _principal())
+        )
+        with patch(
+            "supermega_runtime.trial_runtime.shop_correction_global_consumption_ready",
+            new=lambda: True,
+        ), patch.dict(
+            os.environ,
+            {SHOP_CORRECTION_AUTHORIZATION_WINDOW_ENV: "open"},
+        ):
+            response = TestClient(app).post(
+                "/api/trial/v1/shop/correction-consumptions",
+                json={
+                    "consumption_request_id": str(uuid4()),
+                    "authorization_receipt_id": str(uuid4()),
+                    "authorization_receipt_digest": "a" * 64,
+                    "lineage_id": str(uuid4()),
+                    "lineage_epoch": 1,
+                    "capability": "shop.sale.reverse",
+                    "semantic_target_id": "sale-1",
+                    "command_digest": "b" * 64,
+                    "member_id": "member-must-not-authorize",
+                },
+            )
+        self.assertEqual(response.status_code, 422, response.text)
+        self.assertEqual(
+            response.json()["detail"]["code"],
+            "shop_correction_consumption_request_invalid",
+        )
 
 
 @patch(

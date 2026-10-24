@@ -76,6 +76,9 @@ from supermega_runtime.trial_store import (
     CommandResult,
     PostgresTrialStore,
     ShopCorrectionAuthorizationReceipt,
+    ShopCorrectionConsumptionProof,
+    ShopCorrectionLineageRecord,
+    ShopCorrectionReconciliationStatus,
     TrialAuthorizationExpired,
     TrialClaimConflict,
     TrialIdempotencyConflict,
@@ -86,6 +89,7 @@ from supermega_runtime.trial_store import (
     TrialPermissionDenied,
     TrialPrincipal,
     TrialRateLimited,
+    TrialReconciliationRequired,
     TrialReadiness,
     TrialState,
     TrialStore,
@@ -255,6 +259,37 @@ class TrialShopCorrectionAuthorizationRequest(_StrictRequest):
     command_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     request_fingerprint: str = Field(min_length=2, max_length=4096)
     confirmation: str = Field(min_length=1, max_length=40)
+
+
+class TrialShopCorrectionLineageRequest(_StrictRequest):
+    activation_request_id: UUID
+    lineage_id: UUID
+    expected_previous_lineage_id: UUID | None = None
+    expected_previous_lineage_epoch: int | None = Field(default=None, ge=1)
+    local_consumption_ordinal: int = Field(ge=0)
+    local_consumption_digest: str | None = Field(
+        default=None, pattern=r"^[0-9a-f]{64}$"
+    )
+
+
+class TrialShopCorrectionConsumptionRequest(_StrictRequest):
+    consumption_request_id: UUID
+    authorization_receipt_id: UUID
+    authorization_receipt_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    lineage_id: UUID
+    lineage_epoch: int = Field(ge=1)
+    capability: Literal["shop.sale.reverse", "shop.sale.reconcile_wallet"]
+    semantic_target_id: str = Field(min_length=1, max_length=120)
+    command_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
+class TrialShopCorrectionStatusRequest(_StrictRequest):
+    lineage_id: UUID
+    lineage_epoch: int = Field(ge=1)
+    local_consumption_ordinal: int = Field(ge=0)
+    local_consumption_digest: str | None = Field(
+        default=None, pattern=r"^[0-9a-f]{64}$"
+    )
 
 
 class TrialSelfServeWorkspaceRequest(_StrictRequest):
@@ -856,6 +891,12 @@ def _invoke(operation: Callable[[], ResultT]) -> ResultT:
             409,
             "shop_correction_authorization_expired",
             authorization_request_id=exc.authorization_request_id,
+        ) from exc
+    except TrialReconciliationRequired as exc:
+        raise _error(
+            409,
+            "shop_correction_reconciliation_required",
+            state=exc.state,
         ) from exc
     except TrialInvalidTransition as exc:
         raise _error(409, "trial_invalid_transition") from exc
@@ -2787,6 +2828,127 @@ def create_trial_router(
             headers={"Cache-Control": "private, no-store", "Pragma": "no-cache"},
         )
 
+    @router.post("/shop/correction-lineages")
+    async def activate_shop_correction_lineage(request: Request) -> JSONResponse:
+        if not shop_correction_global_consumption_ready():
+            raise _error(503, "shop_correction_global_consumption_unavailable")
+        principal = _resolve_principal(request, resolve_principal)
+        raw_body = await _bounded_json_body(
+            request,
+            maximum_bytes=4096,
+            error_prefix="shop_correction_lineage",
+        )
+        try:
+            body = TrialShopCorrectionLineageRequest.model_validate(raw_body)
+        except ValidationError as exc:
+            raise _error(422, "shop_correction_lineage_request_invalid") from exc
+        record: ShopCorrectionLineageRecord = _invoke(
+            lambda: store.activate_shop_correction_lineage(
+                principal,
+                activation_request_id=body.activation_request_id,
+                lineage_id=body.lineage_id,
+                expected_previous_lineage_id=body.expected_previous_lineage_id,
+                expected_previous_lineage_epoch=body.expected_previous_lineage_epoch,
+                local_consumption_ordinal=body.local_consumption_ordinal,
+                local_consumption_digest=body.local_consumption_digest,
+            )
+        )
+        return JSONResponse(
+            {
+                "lineage": record.to_dict(),
+                "idempotent_replay": record.idempotent_replay,
+                "local_mutation_performed": False,
+                "money_movement_performed": False,
+                "external_writes_performed": not record.idempotent_replay,
+                "secret_values_exposed": False,
+            },
+            headers={"Cache-Control": "private, no-store", "Pragma": "no-cache"},
+        )
+
+    @router.post("/shop/correction-consumptions")
+    async def consume_shop_correction_authorization(request: Request) -> JSONResponse:
+        if not shop_correction_global_consumption_ready():
+            raise _error(503, "shop_correction_global_consumption_unavailable")
+        if not store.shop_correction_authorization_signing_ready():
+            raise _error(503, "shop_correction_authorization_signing_unavailable")
+        principal = _resolve_principal(request, resolve_principal)
+        raw_body = await _bounded_json_body(
+            request,
+            maximum_bytes=4096,
+            error_prefix="shop_correction_consumption",
+        )
+        try:
+            body = TrialShopCorrectionConsumptionRequest.model_validate(raw_body)
+        except ValidationError as exc:
+            raise _error(422, "shop_correction_consumption_request_invalid") from exc
+        proof: ShopCorrectionConsumptionProof = _invoke(
+            lambda: store.consume_shop_correction_authorization(
+                principal,
+                consumption_request_id=body.consumption_request_id,
+                authorization_receipt_id=body.authorization_receipt_id,
+                authorization_receipt_digest=body.authorization_receipt_digest,
+                lineage_id=body.lineage_id,
+                lineage_epoch=body.lineage_epoch,
+                capability=body.capability,
+                semantic_target_id=body.semantic_target_id,
+                command_digest=body.command_digest,
+                allow_new_decision=shop_correction_authorization_window_open(),
+            )
+        )
+        reconstruction_required = (
+            proof.consumption_request_id != str(body.consumption_request_id)
+            or proof.lineage_id != str(body.lineage_id)
+            or proof.lineage_epoch != body.lineage_epoch
+        )
+        return JSONResponse(
+            {
+                "consumption": proof.to_dict(),
+                "idempotent_replay": proof.response_mode != "commit_new",
+                # This is derivable from the signed original request ID and the
+                # caller's request; clients must not treat this envelope flag as authority.
+                "reconstruction_required": reconstruction_required,
+                "local_mutation_performed": False,
+                "money_movement_performed": False,
+                "external_writes_performed": proof.response_mode == "commit_new",
+                "secret_values_exposed": False,
+            },
+            headers={"Cache-Control": "private, no-store", "Pragma": "no-cache"},
+        )
+
+    @router.post("/shop/correction-consumptions/status")
+    async def shop_correction_reconciliation_status(request: Request) -> JSONResponse:
+        if not shop_correction_global_consumption_ready():
+            raise _error(503, "shop_correction_global_consumption_unavailable")
+        principal = _resolve_principal(request, resolve_principal)
+        raw_body = await _bounded_json_body(
+            request,
+            maximum_bytes=2048,
+            error_prefix="shop_correction_status",
+        )
+        try:
+            body = TrialShopCorrectionStatusRequest.model_validate(raw_body)
+        except ValidationError as exc:
+            raise _error(422, "shop_correction_status_request_invalid") from exc
+        status: ShopCorrectionReconciliationStatus = _invoke(
+            lambda: store.get_shop_correction_reconciliation_status(
+                principal,
+                lineage_id=body.lineage_id,
+                lineage_epoch=body.lineage_epoch,
+                local_consumption_ordinal=body.local_consumption_ordinal,
+                local_consumption_digest=body.local_consumption_digest,
+            )
+        )
+        return JSONResponse(
+            {
+                "status": status.to_dict(),
+                "local_mutation_performed": False,
+                "money_movement_performed": False,
+                "external_writes_performed": False,
+                "secret_values_exposed": False,
+            },
+            headers={"Cache-Control": "private, no-store", "Pragma": "no-cache"},
+        )
+
     @router.post("/product-acceptance")
     def record_product_acceptance(
         request: Request,
@@ -3115,6 +3277,9 @@ __all__ = [
     "TrialProductAcceptanceRequest",
     "TrialSelfServeWorkspaceRequest",
     "TrialShopCorrectionAuthorizationRequest",
+    "TrialShopCorrectionConsumptionRequest",
+    "TrialShopCorrectionLineageRequest",
+    "TrialShopCorrectionStatusRequest",
     "TrialSignupSession",
     "create_trial_router",
     "self_serve_activation_window_open",
