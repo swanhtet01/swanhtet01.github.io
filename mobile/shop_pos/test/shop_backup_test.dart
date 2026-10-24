@@ -1574,6 +1574,7 @@ void main() {
       try {
         final recent = (await migrated.readRecentSales()).single;
         expect(recent.reversal?.walletReconciliationOutcome, 'money_returned');
+        await _expectLegacyV11WalletReconciliationProof(migrated);
         final salesBefore = await migrated.countSales();
         final stockBefore = (await migrated.readActiveProducts()).single.onHand;
         final outboxBefore = await migrated.countOutboxOperations();
@@ -1634,6 +1635,7 @@ void main() {
       try {
         final recent = (await restored.readRecentSales()).single;
         expect(recent.reversal?.walletReconciliationOutcome, 'money_returned');
+        await _expectLegacyV11WalletReconciliationProof(restored);
         expect(await restored.countSales(), 1);
         expect((await restored.readActiveProducts()).single.onHand, 3);
         expect(await restored.countOutboxOperations(), 4);
@@ -3732,6 +3734,43 @@ Future<void> _writeLegacyV11FourKeyWalletReconciliationSnapshot(
   } finally {
     connection.close();
   }
+}
+
+Future<void> _expectLegacyV11WalletReconciliationProof(
+  ShopDatabase database,
+) async {
+  final reconciliation = await database
+      .customSelect(
+        'SELECT request_fingerprint, authorization_command_digest '
+        'FROM shop_wallet_reversal_reconciliations',
+      )
+      .getSingle();
+  final fingerprint = reconciliation.read<String>('request_fingerprint');
+  final decoded = jsonDecode(fingerprint) as Map<String, dynamic>;
+  expect(
+    decoded.keys,
+    orderedEquals(const [
+      'operationId',
+      'reversalId',
+      'outcome',
+      'evidenceReference',
+    ]),
+  );
+  expect(
+    reconciliation.read<String>('authorization_command_digest'),
+    crypto.sha256.convert(utf8.encode(fingerprint)).toString(),
+  );
+  final proof = await database
+      .customSelect(
+        'SELECT proof_kind, command_digest '
+        'FROM shop_correction_authorization_proofs',
+      )
+      .getSingle();
+  expect(proof.read<String>('proof_kind'), 'legacy_unverified_v1');
+  expect(
+    proof.read<String>('command_digest'),
+    reconciliation.read<String>('authorization_command_digest'),
+  );
 }
 
 Future<ShopDatabase> _closedCashReversalDatabase() async {

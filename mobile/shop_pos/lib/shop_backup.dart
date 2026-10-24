@@ -1917,7 +1917,10 @@ abstract final class ShopBackup {
             createdAtMillis < reversalCreatedAtMillis) {
           return false;
         }
-        // Rebuild the cross-runtime command contract from immutable evidence.
+        // Rebuild the current cross-runtime command contract from immutable
+        // evidence. Historical v11 rows predate the payment fields. Preserve
+        // that exact digest only as legacy-unverified audit history; a signed
+        // v2 proof must always use the current six-key contract.
         final requestFingerprint = jsonEncode(<String, Object>{
           'operationId': operationId,
           'reversalId': reversalId,
@@ -1926,8 +1929,31 @@ abstract final class ShopBackup {
           'outcome': outcome,
           'evidenceReference': evidenceReference,
         });
-        if (reconciliation['request_fingerprint'] != requestFingerprint ||
-            authorizationCommandDigest != _sha256Hex(requestFingerprint) ||
+        final legacyRequestFingerprint = jsonEncode(<String, Object>{
+          'operationId': operationId,
+          'reversalId': reversalId,
+          'outcome': outcome,
+          'evidenceReference': evidenceReference,
+        });
+        final storedRequestFingerprint = reconciliation['request_fingerprint'];
+        final currentFingerprintValid =
+            storedRequestFingerprint == requestFingerprint &&
+            authorizationCommandDigest == _sha256Hex(requestFingerprint);
+        var legacyFingerprintValid =
+            storedRequestFingerprint == legacyRequestFingerprint &&
+            authorizationCommandDigest ==
+                _sha256Hex(legacyRequestFingerprint);
+        if (legacyFingerprintValid && hasAuthorizationProofs) {
+          final proofs = connection.select(
+            'SELECT proof_kind FROM shop_correction_authorization_proofs '
+            'WHERE receipt_id = ? AND local_operation_id = ?',
+            [authorizationReceiptId, operationId],
+          );
+          legacyFingerprintValid =
+              proofs.length == 1 &&
+              proofs.single['proof_kind'] == 'legacy_unverified_v1';
+        }
+        if ((!currentFingerprintValid && !legacyFingerprintValid) ||
             !_authorizationReceiptValid(
               connection: connection,
               hasAuthorizationProofs: hasAuthorizationProofs,
