@@ -16,6 +16,7 @@ from fastapi.testclient import TestClient
 from supermega_runtime.trial_runtime import (
     SHOP_CORRECTION_AUTHORIZATION_WINDOW_ENV,
     create_trial_router,
+    shop_correction_global_consumption_ready,
 )
 from supermega_runtime.shop_correction_receipts import (
     SHOP_CORRECTION_SIGNING_KEY_ENV,
@@ -223,6 +224,44 @@ class _CorrectionPostgresStore(PostgresTrialStore):
         return ("commerce",)
 
 
+class ShopCorrectionGlobalConsumptionGateTests(unittest.TestCase):
+    def test_global_consumption_defaults_closed_before_auth_or_body(self) -> None:
+        self.assertFalse(shop_correction_global_consumption_ready())
+        calls = 0
+
+        def resolver(_request):
+            nonlocal calls
+            calls += 1
+            raise AssertionError("closed route must not resolve identity")
+
+        store = _store()
+        app = FastAPI()
+        app.include_router(
+            create_trial_router(store=store, resolve_principal=resolver)
+        )
+        with patch.dict(
+            os.environ,
+            {SHOP_CORRECTION_AUTHORIZATION_WINDOW_ENV: "open"},
+        ):
+            response = TestClient(app).post(
+                "/api/trial/v1/shop/correction-authorizations",
+                content=b"not-json",
+                headers={"content-type": "text/plain"},
+            )
+
+        self.assertEqual(response.status_code, 503, response.text)
+        self.assertEqual(
+            response.json()["detail"]["code"],
+            "shop_correction_global_consumption_unavailable",
+        )
+        self.assertEqual(calls, 0)
+        self.assertEqual(store._events, {})
+
+
+@patch(
+    "supermega_runtime.trial_runtime.shop_correction_global_consumption_ready",
+    new=lambda: True,
+)
 class ShopCorrectionAuthorizationTests(unittest.TestCase):
     def test_signature_matches_cross_runtime_fixed_vector(self) -> None:
         digest = (

@@ -50,7 +50,7 @@ check(myShop.includes('မြန်မာ လက်လီဆိုင်မျ�
 check(shop.includes('class="native-shop-gallery"') && myShop.includes('class="native-shop-gallery"'), 'native_gallery_visible')
 check(shop.includes('Illustrative Shop preview with synthetic sample data.'), 'native_gallery_disclosure_en')
 check(myShop.includes('နမူနာဒေတာဖြင့် ဖော်ပြထားသော Shop အက်ပ်မြင်ကွင်း။'), 'native_gallery_disclosure_my')
-for (const token of ['How it works at the counter', 'Search or scan', 'Review the total and take payment', 'Check stock and Today', 'Editable starting points', 'Mini-mart', 'Tea and coffee', 'Fashion', 'Beauty and spa', 'How to get Shop', 'assisted Local Pilot', 'Public downloads and self-service signup are not open yet', 'Android tablet', 'iPad', 'Windows PC', 'Signed distribution is still pending', 'A signed installer is still pending']) {
+for (const token of ['How it works at the counter', 'Search or scan', 'Review the total and take payment', 'Check stock and Today', 'Editable starting points', 'Mini-mart', 'Tea and coffee', 'Fashion', 'Beauty and spa', 'How to get Shop', 'assisted Local Pilot', 'Public downloads and self-service signup are not open yet', 'Native Shop installation is assisted.', 'Private portal access is assigned separately when needed.', 'Android tablet', 'iPad', 'Windows PC', 'Signed distribution is still pending', 'A signed installer is still pending']) {
   check(shop.includes(token), 'shop_access_and_workflow:' + token)
 }
 for (const token of ['Pilot sign in', 'Before you start', 'Where do I sign in?', 'Can I download Shop now?', 'Does selling require internet?', 'Sending the contact form does not create an account.']) check(shop.includes(token), 'shop_access_faq:' + token)
@@ -61,6 +61,7 @@ check((shop.match(/<details>/g) || []).length === 5 && (myShop.match(/<details>/
 for (const token of ['ကောင်တာတွင် အလုပ်လုပ်ပုံ', 'ရှာပါ သို့မဟုတ် စကင်ဖတ်ပါ', 'ပြင်ဆင်နိုင်သော အစပျိုးပုံစံများ', 'မီနီမတ်', 'လက်ဖက်ရည်နှင့် ကော်ဖီ', 'ဖက်ရှင်', 'အလှအပနှင့် စပါ', 'Shop ရယူရန်', 'Android တက်ဘလက်', 'iPad', 'Windows ကွန်ပျူတာ']) {
   check(myShop.includes(token), 'my_shop_access_and_workflow:' + token)
 }
+for (const token of ['Native Shop အက်ပ်ကို အကူအညီဖြင့် တပ်ဆင်ပေးပြီး', 'သီးသန့်ဘရောက်ဇာပေါ်တယ် အသုံးပြုခွင့်ကို လိုအပ်သည့်အခါ သီးခြားသတ်မှတ်ပေးပါသည်။']) check(myShop.includes(token), 'my_shop_install_and_portal_boundary:' + token)
 check(!/Local Pilot|Pilot target|Signed distribution|installer|Web app|customer Shop|manager correction|online authorization/.test(myShop), 'my_shop_has_no_untranslated_operational_copy')
 check(shop.includes('The web app, macOS and iPhone are not current customer Shop products.'), 'unsupported_platforms_stated_honestly')
 check((shop.match(/class="shop-template-card"/g) || []).length === 4 && (myShop.match(/class="shop-template-card"/g) || []).length === 4, 'four_editable_templates_en_my')

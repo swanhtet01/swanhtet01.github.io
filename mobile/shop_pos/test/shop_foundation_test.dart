@@ -481,6 +481,88 @@ void main() {
     });
 
     test(
+      'cloned pre-correction databases expose why global consumption stays closed',
+      () async {
+        final directory = await Directory.systemTemp.createTemp(
+          'shop-correction-clone-',
+        );
+        final sourceFile = File('${directory.path}/source.sqlite');
+        final firstCloneFile = File('${directory.path}/first.sqlite');
+        final secondCloneFile = File('${directory.path}/second.sqlite');
+        final source = ShopDatabase.withCorrectionReceiptVerifier(
+          executor: NativeDatabase(sourceFile),
+          correctionReceiptVerifier: _testCorrectionReceiptVerifier,
+        );
+        try {
+          await _attachTestWorkspace(source);
+          await source.addProduct(
+            id: 'clone-replay-product',
+            name: 'Clone replay item',
+            priceMmk: 2500,
+            openingStock: 3,
+          );
+          await source.openCashShift(
+            operationId: 'clone-replay-shift',
+            operatorLabel: 'May',
+            openingFloatMmk: 10000,
+          );
+          final sale = await source.recordCashSale(
+            operationId: 'clone-replay-sale',
+            lines: const [
+              ShopSaleLineInput(
+                productId: 'clone-replay-product',
+                quantity: 2,
+              ),
+            ],
+          );
+          final command = await source.previewFullSaleReversal(
+            operationId: 'clone-replay-reversal',
+            saleId: sale.id,
+            restockItems: true,
+            reason: 'Document the blocked cross-database replay boundary',
+            confirmCashReturned: true,
+          );
+          final authorization = await _correctionAuthorization(
+            command.commandDigest,
+            capability: 'shop.sale.reverse',
+            receiptId: 'clone-replay-receipt',
+          );
+          await source.close();
+          await sourceFile.copy(firstCloneFile.path);
+          await sourceFile.copy(secondCloneFile.path);
+
+          for (final cloneFile in [firstCloneFile, secondCloneFile]) {
+            final clone = ShopDatabase.withCorrectionReceiptVerifier(
+              executor: NativeDatabase(cloneFile),
+              correctionReceiptVerifier: _testCorrectionReceiptVerifier,
+            );
+            try {
+              final reversal = await clone.recordAuthorizedFullSaleReversal(
+                command: command,
+                authorization: authorization,
+              );
+              expect(reversal.authorizationReceiptId, authorization.receiptId);
+              expect(
+                (await clone.readActiveProducts()).single.onHand,
+                3,
+              );
+              expect(await clone.countSales(), 1);
+            } finally {
+              await clone.close();
+            }
+          }
+        } finally {
+          try {
+            await source.close();
+          } on Object {
+            // The source is deliberately closed before its file is cloned.
+          }
+          await directory.delete(recursive: true);
+        }
+      },
+    );
+
+    test(
       'sale receipt keeps immutable item lines for print and reprint',
       () async {
         await database.addProduct(
@@ -3094,6 +3176,98 @@ void main() {
           );
         } finally {
           await manager.dispose();
+        }
+      },
+    );
+
+    test(
+      'network reset after a partial write requires an explicit retry',
+      () async {
+        final server = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+        final clients = <Socket>[];
+        final firstPrefix = BytesBuilder(copy: false);
+        final firstReset = Completer<void>();
+        final retryReceived = BytesBuilder(copy: false);
+        final retryDone = Completer<void>();
+        var connections = 0;
+        final subscription = server.listen((client) {
+          clients.add(client);
+          connections++;
+          if (connections == 1) {
+            client.listen(
+              (bytes) {
+                firstPrefix.add(bytes);
+                if (firstPrefix.length > 2 && !firstReset.isCompleted) {
+                  client.destroy();
+                  firstReset.complete();
+                }
+              },
+              onError: (_) {
+                if (!firstReset.isCompleted) firstReset.complete();
+              },
+              onDone: () {
+                if (!firstReset.isCompleted) firstReset.complete();
+              },
+              cancelOnError: true,
+            );
+            return;
+          }
+          client.listen(
+            retryReceived.add,
+            onDone: () {
+              if (!retryDone.isCompleted) retryDone.complete();
+            },
+          );
+        });
+        final manager = PrinterManager(
+          networkConnector: NetworkConnector(
+            writeTimeout: const Duration(seconds: 2),
+          ),
+        );
+        final device = NetworkPrinterDevice(
+          name: 'partial loopback receipt sink',
+          host: InternetAddress.loopbackIPv4.address,
+          port: server.port,
+        );
+        final firstAttempt = List<int>.filled(
+          16 * 1024 * 1024,
+          0x55,
+          growable: false,
+        );
+        const retry = [1, 2, 3, 4];
+        try {
+          await manager.connect(device);
+          await expectLater(
+            manager.printBytes(firstAttempt),
+            throwsA(isA<PrinterWriteException>()),
+          );
+          await firstReset.future.timeout(const Duration(seconds: 2));
+          final prefix = firstPrefix.takeBytes();
+          expect(prefix.take(2).toList(), [27, 64]);
+          expect(prefix.length, greaterThan(2));
+          expect(prefix.length, lessThan(firstAttempt.length + 2));
+          expect(manager.state, PrinterConnectionState.disconnected);
+          expect(connections, 1);
+
+          await expectLater(
+            manager.printBytes(retry),
+            throwsA(isA<PrinterStateException>()),
+          );
+          expect(connections, 1);
+
+          await manager.connect(device);
+          await manager.printBytes(retry);
+          await manager.disconnect();
+          await retryDone.future.timeout(const Duration(seconds: 2));
+          expect(connections, 2);
+          expect(retryReceived.takeBytes(), [27, 64, ...retry]);
+        } finally {
+          await manager.dispose();
+          for (final client in clients) {
+            client.destroy();
+          }
+          await subscription.cancel();
+          await server.close();
         }
       },
     );

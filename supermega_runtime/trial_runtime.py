@@ -164,6 +164,20 @@ def shop_correction_authorization_window_open() -> bool:
     return os.environ.get(SHOP_CORRECTION_AUTHORIZATION_WINDOW_ENV) == "open"
 
 
+def shop_correction_global_consumption_ready() -> bool:
+    """Keep correction receipts dark until server-side consumption exists.
+
+    A signed receipt that is consumed only by local SQLite can be replayed
+    against another copy of the same pre-correction database.  Device time is
+    also not an authoritative expiry clock.  This source gate deliberately has
+    no environment override: a reviewed implementation must replace it only
+    after atomic, server-time receipt consumption and its cross-database tests
+    exist.
+    """
+
+    return False
+
+
 _YANGON_TIME_ZONE = timezone(timedelta(hours=6, minutes=30))
 
 
@@ -2448,6 +2462,8 @@ def create_trial_router(
     async def issue_shop_correction_authorization(request: Request) -> JSONResponse:
         # Keep the source shippable while the hosted authorization/deployment
         # gate remains closed. Check this before auth, parsing, or storage.
+        if not shop_correction_global_consumption_ready():
+            raise _error(503, "shop_correction_global_consumption_unavailable")
         if not shop_correction_authorization_window_open():
             raise _error(503, "shop_correction_authorization_window_closed")
         if not store.shop_correction_authorization_signing_ready():
@@ -2816,4 +2832,5 @@ __all__ = [
     "create_trial_router",
     "self_serve_activation_window_open",
     "shop_correction_authorization_window_open",
+    "shop_correction_global_consumption_ready",
 ]
