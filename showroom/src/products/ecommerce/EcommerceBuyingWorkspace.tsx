@@ -412,7 +412,8 @@ export function EcommerceBuyingWorkspace({
   const customerOrderTimeline = combinedOrderTimeline.filter((entry) => (
     trackedCustomerReference && (entry.request.schema === 'supermega.ecommerce.order_request.v2'
       && entry.request.customerProfile?.phone
-      ? entry.request.customerProfile.phone === customerPhone.trim()
+      ? entry.request.customerProfile.name === customerName.trim()
+        && entry.request.customerProfile.phone === customerPhone.trim()
       : entry.request.customerReference === trackedCustomerReference)
   )).filter((entry) => !replacementRequestIds.has(entry.request.id) || Boolean(entry.order))
   const completedCustomerOrders = customerOrderTimeline.filter((entry) => entry.stage === 'completed' && entry.order?.completion)

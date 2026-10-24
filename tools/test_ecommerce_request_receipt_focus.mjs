@@ -4,6 +4,7 @@ import test from 'node:test'
 import { createRequire } from 'node:module'
 import { runInNewContext } from 'node:vm'
 import './ecommerce_request_feedback.test.mjs'
+import './ecommerce_customer_history_isolation.test.mjs'
 
 const source = await readFile(new URL('../showroom/src/products/ecommerce/EcommerceBuyingWorkspace.tsx', import.meta.url), 'utf8')
 
@@ -17,7 +18,7 @@ test('a submitted request waits for the rendered receipt before moving focus', (
 
 test('the browser-local truth boundary is the element brought into view', () => {
   assert.match(source, /<p>\{managedDeliveryConfirmed/)
-  assert.match(source, /This browser demo retained the request\./)
+  assert.match(source, /Saved on this device for Shop review\./)
   assert.match(source, /Shop still confirms stock, promise, payment, and delivery\./)
   assert.doesNotMatch(source, /requestReceiptRef/)
 })
