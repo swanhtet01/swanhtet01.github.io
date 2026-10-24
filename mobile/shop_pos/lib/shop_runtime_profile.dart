@@ -16,6 +16,7 @@ class ShopRuntimeCapabilities {
     required this.networkPrinter,
     required this.camera,
     required this.gallery,
+    required this.remoteImport,
     required this.externalFileSaving,
     required this.syntheticEvidence,
     required this.loopbackPrinter,
@@ -27,6 +28,7 @@ class ShopRuntimeCapabilities {
   final bool networkPrinter;
   final bool camera;
   final bool gallery;
+  final bool remoteImport;
   final bool externalFileSaving;
   final bool syntheticEvidence;
   final bool loopbackPrinter;
@@ -38,6 +40,7 @@ class ShopRuntimeCapabilities {
     networkPrinter: true,
     camera: true,
     gallery: true,
+    remoteImport: true,
     externalFileSaving: true,
     syntheticEvidence: false,
     loopbackPrinter: false,
@@ -50,6 +53,7 @@ class ShopRuntimeCapabilities {
     networkPrinter: false,
     camera: false,
     gallery: false,
+    remoteImport: false,
     externalFileSaving: false,
     syntheticEvidence: true,
     loopbackPrinter: true,
@@ -105,7 +109,8 @@ class ShopRuntimeConfiguration {
     final buildProfile = buildIdentityProfile.trim();
     final buildQaProfile = buildIdentityQaProfile.trim();
     final identity = platformIdentity.trim();
-    final anyQaSignal = runtime.isNotEmpty ||
+    final anyQaSignal =
+        runtime.isNotEmpty ||
         profileId.isNotEmpty ||
         buildProfile != 'production' ||
         buildQaProfile.isNotEmpty;
@@ -122,7 +127,8 @@ class ShopRuntimeConfiguration {
       );
     }
 
-    final exactQaTuple = runtime == qaRuntimeToken &&
+    final exactQaTuple =
+        runtime == qaRuntimeToken &&
         profileId == qaProfileId &&
         buildProfile == qaRuntimeToken &&
         buildQaProfile == qaProfileId &&

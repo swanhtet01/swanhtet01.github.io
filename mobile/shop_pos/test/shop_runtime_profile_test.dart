@@ -34,6 +34,7 @@ void main() {
     expect(profile.capabilities.networkPrinter, isFalse);
     expect(profile.capabilities.camera, isFalse);
     expect(profile.capabilities.gallery, isFalse);
+    expect(profile.capabilities.remoteImport, isFalse);
     expect(profile.capabilities.externalFileSaving, isFalse);
   });
 

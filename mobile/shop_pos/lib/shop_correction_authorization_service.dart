@@ -6,6 +6,7 @@ import 'package:crypto/crypto.dart' as crypto;
 import 'package:http/http.dart' as http;
 
 import 'shop_correction_receipt.dart';
+import 'shop_runtime_scope.dart';
 
 const shopCorrectionAuthorizationPath =
     '/api/trial/v1/shop/correction-authorizations';
@@ -133,9 +134,11 @@ class ShopCorrectionAuthorizationService implements ShopCorrectionAuthorizer {
     required this.currentUserId,
     http.Client? client,
     ShopCorrectionReceiptVerifier? receiptVerifier,
+    ShopRuntimeScope? runtimeScope,
     this.requestTimeout = const Duration(seconds: 15),
-  }) : _client = client ?? http.Client(),
+  }) : _client = client ?? _correctionAuthorizationClient(runtimeScope),
        _ownsClient = client == null,
+       _runtimeScope = runtimeScope,
        _receiptVerifier =
            receiptVerifier ?? ShopCorrectionReceiptVerifier.production();
 
@@ -145,6 +148,7 @@ class ShopCorrectionAuthorizationService implements ShopCorrectionAuthorizer {
   final Duration requestTimeout;
   final http.Client _client;
   final bool _ownsClient;
+  final ShopRuntimeScope? _runtimeScope;
   final ShopCorrectionReceiptVerifier _receiptVerifier;
 
   @override
@@ -153,6 +157,12 @@ class ShopCorrectionAuthorizationService implements ShopCorrectionAuthorizer {
     required String requiredActorId,
     required String capability,
   }) async {
+    final scope = _runtimeScope;
+    if (scope != null) {
+      if (!scope.capabilities.correctionAuthorization) {
+        throw StateError('shop_correction_authorization_unavailable');
+      }
+    }
     if (!_receiptVerifier.hasPinnedKeys ||
         !_validEndpoint(endpoint) ||
         !_identifier.hasMatch(workspaceId) ||
@@ -203,6 +213,12 @@ class ShopCorrectionAuthorizationService implements ShopCorrectionAuthorizer {
     required String commandDigest,
     required String requestFingerprint,
   }) async {
+    final scope = _runtimeScope;
+    if (scope != null) {
+      if (!scope.capabilities.correctionAuthorization) {
+        throw StateError('shop_correction_authorization_unavailable');
+      }
+    }
     if (!_receiptVerifier.hasPinnedKeys) {
       throw const ShopCorrectionAuthorizationException(
         'authorization_unavailable',
@@ -265,7 +281,8 @@ class ShopCorrectionAuthorizationService implements ShopCorrectionAuthorizer {
       });
 
     try {
-      final response = await _client.send(request).timeout(requestTimeout);
+      final response = await _sendAuthorizedRequest(request)
+          .timeout(requestTimeout);
       if (response.statusCode >= 300 && response.statusCode < 400) {
         throw const ShopCorrectionAuthorizationException('redirect_rejected');
       }
@@ -302,6 +319,18 @@ class ShopCorrectionAuthorizationService implements ShopCorrectionAuthorizer {
         'authorization_unavailable',
       );
     }
+  }
+
+  Future<http.StreamedResponse> _sendAuthorizedRequest(
+    http.Request request,
+  ) async {
+    final scope = _runtimeScope;
+    if (scope != null) {
+      if (!scope.capabilities.correctionAuthorization) {
+        throw StateError('shop_correction_authorization_unavailable');
+      }
+    }
+    return _client.send(request);
   }
 
   Future<Uint8List> _readBounded(http.StreamedResponse response) async {
@@ -437,6 +466,15 @@ class ShopCorrectionAuthorizationService implements ShopCorrectionAuthorizer {
   void close() {
     if (_ownsClient) _client.close();
   }
+}
+
+http.Client _correctionAuthorizationClient(ShopRuntimeScope? runtimeScope) {
+  final scope = runtimeScope;
+  if (scope == null) throw StateError('shop_runtime_scope_required');
+  if (!scope.capabilities.correctionAuthorization) {
+    throw StateError('shop_correction_authorization_unavailable');
+  }
+  return http.Client();
 }
 
 bool _validEndpoint(Uri endpoint) =>

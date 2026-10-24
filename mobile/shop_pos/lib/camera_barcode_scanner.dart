@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import 'shop_copy.dart';
+import 'shop_runtime_scope.dart';
 
 const _productBarcodeFormats = <BarcodeFormat>{
   BarcodeFormat.ean13,
@@ -37,11 +38,13 @@ class CameraBarcodeScanner extends StatefulWidget {
   const CameraBarcodeScanner({
     required this.myanmar,
     this.cameraViewBuilder,
+    this.runtimeScope,
     super.key,
   });
 
   final bool myanmar;
   final ShopCameraViewBuilder? cameraViewBuilder;
+  final ShopRuntimeScope? runtimeScope;
 
   @override
   State<CameraBarcodeScanner> createState() => _CameraBarcodeScannerState();
@@ -63,30 +66,37 @@ class _CameraBarcodeScannerState extends State<CameraBarcodeScanner> {
     setState(() => _cameraError = error);
   }
 
-  Widget _cameraView() =>
-      widget.cameraViewBuilder?.call(context, _accept, _reportError) ??
-      MobileScanner(
-        onDetect: (capture) {
-          for (final barcode in capture.barcodes) {
-            if (!_productBarcodeFormats.contains(barcode.format)) continue;
-            final code = barcode.rawValue;
-            if (code != null && code.trim().isNotEmpty) {
-              _accept(code);
-              break;
-            }
+  Widget _cameraView() {
+    final builder = widget.cameraViewBuilder;
+    if (builder != null) return builder(context, _accept, _reportError);
+    final scope = widget.runtimeScope;
+    if (scope == null) throw StateError('shop_runtime_scope_required');
+    if (!scope.capabilities.camera) {
+      throw StateError('shop_camera_unavailable');
+    }
+    return MobileScanner(
+      onDetect: (capture) {
+        for (final barcode in capture.barcodes) {
+          if (!_productBarcodeFormats.contains(barcode.format)) continue;
+          final code = barcode.rawValue;
+          if (code != null && code.trim().isNotEmpty) {
+            _accept(code);
+            break;
           }
-        },
-        onDetectError: (_, _) =>
-            _reportError(MobileScannerErrorCode.genericError),
-        errorBuilder: (_, error) {
-          // The plugin builds this while reporting camera permission errors.
-          // Move our state update outside that build frame.
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            _reportError(error.errorCode);
-          });
-          return const SizedBox.expand();
-        },
-      );
+        }
+      },
+      onDetectError: (_, _) =>
+          _reportError(MobileScannerErrorCode.genericError),
+      errorBuilder: (_, error) {
+        // The plugin builds this while reporting camera permission errors.
+        // Move our state update outside that build frame.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _reportError(error.errorCode);
+        });
+        return const SizedBox.expand();
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {

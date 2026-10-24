@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'connected_orders_service.dart';
 import 'menu_import_screen.dart';
 import 'shop_copy.dart';
+import 'shop_runtime_scope.dart';
 
 /// A read-only connected view. It does not alter this device's sale or stock.
 class ConnectedOrdersScreen extends StatefulWidget {
@@ -13,12 +14,14 @@ class ConnectedOrdersScreen extends StatefulWidget {
     required this.myanmar,
     required this.authClient,
     required this.apiBaseUrl,
+    this.runtimeScope,
     super.key,
   });
 
   final bool myanmar;
   final SupabaseClient? authClient;
   final String apiBaseUrl;
+  final ShopRuntimeScope? runtimeScope;
 
   @override
   State<ConnectedOrdersScreen> createState() => _ConnectedOrdersScreenState();
@@ -43,6 +46,7 @@ class _ConnectedOrdersScreenState extends State<ConnectedOrdersScreen> {
       _service = ConnectedOrdersService(
         endpoint: endpoint,
         accessToken: () async => auth.auth.currentSession?.accessToken,
+        runtimeScope: widget.runtimeScope,
       );
       _authSubscription = auth.auth.onAuthStateChange.listen((event) {
         if (!mounted) return;
@@ -82,7 +86,9 @@ class _ConnectedOrdersScreenState extends State<ConnectedOrdersScreen> {
     });
     try {
       final next = await service.fetch();
-      if (!mounted || generation != _requestGeneration || _activeUserId != userId) {
+      if (!mounted ||
+          generation != _requestGeneration ||
+          _activeUserId != userId) {
         return;
       }
       setState(() {
@@ -90,7 +96,9 @@ class _ConnectedOrdersScreenState extends State<ConnectedOrdersScreen> {
         _loading = false;
       });
     } on ConnectedOrdersException catch (error) {
-      if (!mounted || generation != _requestGeneration || _activeUserId != userId) {
+      if (!mounted ||
+          generation != _requestGeneration ||
+          _activeUserId != userId) {
         return;
       }
       setState(() {
@@ -100,7 +108,9 @@ class _ConnectedOrdersScreenState extends State<ConnectedOrdersScreen> {
         _loading = false;
       });
     } catch (_) {
-      if (!mounted || generation != _requestGeneration || _activeUserId != userId) {
+      if (!mounted ||
+          generation != _requestGeneration ||
+          _activeUserId != userId) {
         return;
       }
       setState(() {
@@ -115,10 +125,8 @@ class _ConnectedOrdersScreenState extends State<ConnectedOrdersScreen> {
     if (auth == null) return;
     await Navigator.of(context).push<bool>(
       MaterialPageRoute<bool>(
-        builder: (_) => EmailCodeSignInScreen(
-          authClient: auth,
-          myanmar: widget.myanmar,
-        ),
+        builder: (_) =>
+            EmailCodeSignInScreen(authClient: auth, myanmar: widget.myanmar),
       ),
     );
     if (mounted && _activeUserId != null && _snapshot == null) {
@@ -140,11 +148,23 @@ class _ConnectedOrdersScreenState extends State<ConnectedOrdersScreen> {
       return shopCopy(widget.myanmar, 'Refund due', 'ငွေပြန်အမ်းရန်ရှိ');
     }
     if (order.refundStatus == 'settled') {
-      return shopCopy(widget.myanmar, 'Refund recorded', 'ငွေပြန်အမ်းမှု မှတ်တမ်းရှိ');
+      return shopCopy(
+        widget.myanmar,
+        'Refund recorded',
+        'ငွေပြန်အမ်းမှု မှတ်တမ်းရှိ',
+      );
     }
     return order.paymentStatus == 'reconciled'
-        ? shopCopy(widget.myanmar, 'Payment recorded', 'ငွေပေးချေမှု မှတ်တမ်းရှိ')
-        : shopCopy(widget.myanmar, 'Payment not recorded', 'ငွေပေးချေမှု မမှတ်ရသေး');
+        ? shopCopy(
+            widget.myanmar,
+            'Payment recorded',
+            'ငွေပေးချေမှု မှတ်တမ်းရှိ',
+          )
+        : shopCopy(
+            widget.myanmar,
+            'Payment not recorded',
+            'ငွေပေးချေမှု မမှတ်ရသေး',
+          );
   }
 
   String _dateTime(BuildContext context, DateTime value) {
@@ -162,10 +182,7 @@ class _ConnectedOrdersScreenState extends State<ConnectedOrdersScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(text, textAlign: TextAlign.center),
-            if (action != null) ...[
-              const SizedBox(height: 16),
-              action,
-            ],
+            if (action != null) ...[const SizedBox(height: 16), action],
           ],
         ),
       ),
@@ -212,11 +229,17 @@ class _ConnectedOrdersScreenState extends State<ConnectedOrdersScreen> {
     final auth = widget.authClient;
     return Scaffold(
       appBar: AppBar(
-        title: Text(shopCopy(widget.myanmar, 'Connected orders', 'ချိတ်ဆက်အော်ဒါများ')),
+        title: Text(
+          shopCopy(widget.myanmar, 'Connected orders', 'ချိတ်ဆက်အော်ဒါများ'),
+        ),
         actions: [
           if (_activeUserId != null && _service != null)
             IconButton(
-              tooltip: shopCopy(widget.myanmar, 'Refresh orders', 'အော်ဒါများ ပြန်ဖတ်ရန်'),
+              tooltip: shopCopy(
+                widget.myanmar,
+                'Refresh orders',
+                'အော်ဒါများ ပြန်ဖတ်ရန်',
+              ),
               onPressed: _loading ? null : _refresh,
               icon: const Icon(Icons.refresh),
             ),
@@ -234,91 +257,115 @@ class _ConnectedOrdersScreenState extends State<ConnectedOrdersScreen> {
                     : _errorMessage('endpoint_unavailable'),
               )
             : _activeUserId == null
-                ? _message(
-                    shopCopy(
-                      widget.myanmar,
-                      'Sign in to see confirmed orders for your Shop account.',
-                      'Shop အကောင့်၏ အတည်ပြုပြီး အော်ဒါများကြည့်ရန် ဝင်ပါ။',
+            ? _message(
+                shopCopy(
+                  widget.myanmar,
+                  'Sign in to see confirmed orders for your Shop account.',
+                  'Shop အကောင့်၏ အတည်ပြုပြီး အော်ဒါများကြည့်ရန် ဝင်ပါ။',
+                ),
+                action: auth == null
+                    ? null
+                    : FilledButton(
+                        onPressed: _signIn,
+                        child: Text(
+                          shopCopy(widget.myanmar, 'Sign in', 'ဝင်ရန်'),
+                        ),
+                      ),
+              )
+            : _loading && snapshot == null
+            ? const Center(child: CircularProgressIndicator())
+            : snapshot == null
+            ? _message(
+                _errorMessage(error ?? 'refresh_unavailable'),
+                action: error == 'sign_in_required' && auth != null
+                    ? FilledButton(
+                        onPressed: _signIn,
+                        child: Text(
+                          shopCopy(
+                            widget.myanmar,
+                            'Sign in again',
+                            'ပြန်ဝင်ရန်',
+                          ),
+                        ),
+                      )
+                    : OutlinedButton(
+                        onPressed: _loading ? null : _refresh,
+                        child: Text(
+                          shopCopy(widget.myanmar, 'Try again', 'ထပ်စမ်းရန်'),
+                        ),
+                      ),
+              )
+            : RefreshIndicator(
+                onRefresh: _refresh,
+                child: ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    if (_loading) const LinearProgressIndicator(),
+                    if (error != null) ...[
+                      Card(
+                        color: Theme.of(context).colorScheme.errorContainer,
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Text(
+                            '${_errorMessage(error)} ${shopCopy(widget.myanmar, 'Showing an earlier read.', 'ယခင်ဖတ်ထားသော အော်ဒါများကို ပြနေသည်။')}',
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                    Text(
+                      shopCopy(
+                        widget.myanmar,
+                        'Confirmed orders · local sales and stock are separate',
+                        'အတည်ပြုပြီး အော်ဒါများ · ဤစက်၏ အရောင်းနှင့် လက်ကျန်စာရင်း သီးခြားဖြစ်သည်',
+                      ),
+                      style: Theme.of(context).textTheme.bodySmall,
                     ),
-                    action: auth == null
-                        ? null
-                        : FilledButton(
-                            onPressed: _signIn,
-                            child: Text(shopCopy(widget.myanmar, 'Sign in', 'ဝင်ရန်')),
-                          ),
-                  )
-                : _loading && snapshot == null
-                    ? const Center(child: CircularProgressIndicator())
-                    : snapshot == null
-                        ? _message(
-                            _errorMessage(error ?? 'refresh_unavailable'),
-                            action: error == 'sign_in_required' && auth != null
-                                ? FilledButton(
-                                    onPressed: _signIn,
-                                    child: Text(shopCopy(widget.myanmar, 'Sign in again', 'ပြန်ဝင်ရန်')),
-                                  )
-                                : OutlinedButton(
-                                    onPressed: _loading ? null : _refresh,
-                                    child: Text(shopCopy(widget.myanmar, 'Try again', 'ထပ်စမ်းရန်')),
-                                  ),
-                          )
-                        : RefreshIndicator(
-                            onRefresh: _refresh,
-                            child: ListView(
-                              padding: const EdgeInsets.all(16),
-                              children: [
-                                if (_loading) const LinearProgressIndicator(),
-                                if (error != null) ...[
-                                  Card(
-                                    color: Theme.of(context).colorScheme.errorContainer,
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(12),
-                                      child: Text(
-                                        '${_errorMessage(error)} ${shopCopy(widget.myanmar, 'Showing an earlier read.', 'ယခင်ဖတ်ထားသော အော်ဒါများကို ပြနေသည်။')}',
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 12),
-                                ],
-                                Text(
-                                  shopCopy(
-                                    widget.myanmar,
-                                    'Confirmed orders · local sales and stock are separate',
-                                    'အတည်ပြုပြီး အော်ဒါများ · ဤစက်၏ အရောင်းနှင့် လက်ကျန်စာရင်း သီးခြားဖြစ်သည်',
-                                  ),
-                                  style: Theme.of(context).textTheme.bodySmall,
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  snapshot.workspaceUpdatedAt == null
-                                      ? shopCopy(widget.myanmar, 'No server update yet', 'ဆာဗာတွင် ပြောင်းလဲမှု မရှိသေးပါ')
-                                      : '${shopCopy(widget.myanmar, 'Server updated', 'ဆာဗာမှ ပြောင်းလဲချိန်')} ${_dateTime(context, snapshot.workspaceUpdatedAt!)}',
-                                  style: Theme.of(context).textTheme.bodySmall,
-                                ),
-                                Text(
-                                  '${shopCopy(widget.myanmar, 'Last read', 'နောက်ဆုံးဖတ်ချိန်')} ${_dateTime(context, snapshot.receivedAt)}',
-                                  style: Theme.of(context).textTheme.bodySmall,
-                                ),
-                                const SizedBox(height: 16),
-                                if (snapshot.orders.isEmpty)
-                                  _message(shopCopy(widget.myanmar, 'No confirmed orders here yet.', 'အတည်ပြုပြီး အော်ဒါ မရှိသေးပါ။')),
-                                for (final order in snapshot.orders) ...[
-                                  _orderCard(context, order),
-                                  const SizedBox(height: 8),
-                                ],
-                              ],
-                            ),
-                          ),
+                    const SizedBox(height: 8),
+                    Text(
+                      snapshot.workspaceUpdatedAt == null
+                          ? shopCopy(
+                              widget.myanmar,
+                              'No server update yet',
+                              'ဆာဗာတွင် ပြောင်းလဲမှု မရှိသေးပါ',
+                            )
+                          : '${shopCopy(widget.myanmar, 'Server updated', 'ဆာဗာမှ ပြောင်းလဲချိန်')} ${_dateTime(context, snapshot.workspaceUpdatedAt!)}',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    Text(
+                      '${shopCopy(widget.myanmar, 'Last read', 'နောက်ဆုံးဖတ်ချိန်')} ${_dateTime(context, snapshot.receivedAt)}',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    const SizedBox(height: 16),
+                    if (snapshot.orders.isEmpty)
+                      _message(
+                        shopCopy(
+                          widget.myanmar,
+                          'No confirmed orders here yet.',
+                          'အတည်ပြုပြီး အော်ဒါ မရှိသေးပါ။',
+                        ),
+                      ),
+                    for (final order in snapshot.orders) ...[
+                      _orderCard(context, order),
+                      const SizedBox(height: 8),
+                    ],
+                  ],
+                ),
+              ),
       ),
     );
   }
 
   Widget _orderCard(BuildContext context, ConnectedOrder order) {
     final type = Theme.of(context).textTheme;
-    final items = order.lines.map((line) {
-      final name = widget.myanmar && line.nameMy != null ? line.nameMy! : line.name;
-      return '$name × ${shopNumber(line.quantity, myanmar: widget.myanmar)}';
-    }).join(' · ');
+    final items = order.lines
+        .map((line) {
+          final name = widget.myanmar && line.nameMy != null
+              ? line.nameMy!
+              : line.name;
+          return '$name × ${shopNumber(line.quantity, myanmar: widget.myanmar)}';
+        })
+        .join(' · ');
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -356,18 +403,28 @@ class _ConnectedOrdersScreenState extends State<ConnectedOrdersScreen> {
             Text(
               order.lineSnapshotsAvailable
                   ? items
-                  : shopCopy(widget.myanmar, 'Item details unavailable for this older order', 'အော်ဒါဟောင်းအတွက် ပစ္စည်းအသေးစိတ် မရှိပါ'),
+                  : shopCopy(
+                      widget.myanmar,
+                      'Item details unavailable for this older order',
+                      'အော်ဒါဟောင်းအတွက် ပစ္စည်းအသေးစိတ် မရှိပါ',
+                    ),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: type.bodyMedium,
             ),
             if (order.paymentDueAt != null) ...[
               const SizedBox(height: 4),
-              Text('${shopCopy(widget.myanmar, 'Payment due', 'ငွေပေးရန် နောက်ဆုံးချိန်')} ${_dateTime(context, order.paymentDueAt!)}', style: type.bodySmall),
+              Text(
+                '${shopCopy(widget.myanmar, 'Payment due', 'ငွေပေးရန် နောက်ဆုံးချိန်')} ${_dateTime(context, order.paymentDueAt!)}',
+                style: type.bodySmall,
+              ),
             ],
             if (order.promisedAt != null) ...[
               const SizedBox(height: 4),
-              Text('${shopCopy(widget.myanmar, 'Promised', 'ပေးပို့ရန်ကတိချိန်')} ${_dateTime(context, order.promisedAt!)}', style: type.bodySmall),
+              Text(
+                '${shopCopy(widget.myanmar, 'Promised', 'ပေးပို့ရန်ကတိချိန်')} ${_dateTime(context, order.promisedAt!)}',
+                style: type.bodySmall,
+              ),
             ],
           ],
         ),

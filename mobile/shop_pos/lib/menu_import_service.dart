@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 
 import 'shop_models.dart';
+import 'shop_runtime_scope.dart';
 
 const maxMenuPhotoBytes = 2400000;
 const _menuImportHost = 'app.supermega.dev';
@@ -39,18 +40,27 @@ class MenuImportService {
     required this.endpoint,
     required this.accessToken,
     http.Client? client,
-  }) : _client = client ?? http.Client(),
-       _ownsClient = client == null;
+    ShopRuntimeScope? runtimeScope,
+  }) : _client = client ?? _menuImportClient(runtimeScope),
+       _ownsClient = client == null,
+       _runtimeScope = runtimeScope;
 
   final Uri endpoint;
   final Future<String?> Function() accessToken;
   final http.Client _client;
   final bool _ownsClient;
+  final ShopRuntimeScope? _runtimeScope;
 
   Future<List<MenuCandidate>> parsePhoto(
     XFile photo, {
     required bool cloudConsent,
   }) async {
+    final scope = _runtimeScope;
+    if (scope != null) {
+      if (!scope.capabilities.remoteImport) {
+        throw StateError('shop_remote_import_unavailable');
+      }
+    }
     if (!cloudConsent) throw const MenuImportException('consent_required');
     if (endpoint.scheme != 'https' ||
         endpoint.host != _menuImportHost ||
@@ -80,16 +90,10 @@ class MenuImportService {
     if (mime == null) throw const MenuImportException('photo_type_invalid');
     final dataUrl = 'data:$mime;base64,${base64Encode(bytes)}';
 
-    final response = await _client
-        .post(
-          endpoint,
-          headers: {
-            'authorization': 'Bearer $token',
-            'content-type': 'application/json',
-          },
-          body: jsonEncode({'cloudConsent': true, 'imageDataUrl': dataUrl}),
-        )
-        .timeout(const Duration(seconds: 55));
+    final response = await _postMenuImport(
+      token,
+      jsonEncode({'cloudConsent': true, 'imageDataUrl': dataUrl}),
+    ).timeout(const Duration(seconds: 55));
 
     if (response.statusCode != 200) {
       String code = 'menu_import_failed';
@@ -125,6 +129,32 @@ class MenuImportService {
   void close() {
     if (_ownsClient) _client.close();
   }
+
+  Future<http.Response> _postMenuImport(String token, String body) async {
+    final scope = _runtimeScope;
+    if (scope != null) {
+      if (!scope.capabilities.remoteImport) {
+        throw StateError('shop_remote_import_unavailable');
+      }
+    }
+    return _client.post(
+      endpoint,
+      headers: {
+        'authorization': 'Bearer $token',
+        'content-type': 'application/json',
+      },
+      body: body,
+    );
+  }
+}
+
+http.Client _menuImportClient(ShopRuntimeScope? runtimeScope) {
+  final scope = runtimeScope;
+  if (scope == null) throw StateError('shop_runtime_scope_required');
+  if (!scope.capabilities.remoteImport) {
+    throw StateError('shop_remote_import_unavailable');
+  }
+  return http.Client();
 }
 
 String? _imageMime(Uint8List bytes) {

@@ -5,6 +5,8 @@ import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
+import 'shop_runtime_scope.dart';
+
 const connectedOrdersPath = '/api/trial/v1/shop/orders';
 const connectedOrdersSchema = 'supermega.shop.orders.snapshot.v1';
 const _maxResponseBytes = 2 * 1024 * 1024;
@@ -113,7 +115,8 @@ class ConnectedOrdersSnapshot {
       if (!ids.add(id)) throw const FormatException('Duplicate order.');
       final linesRaw = row['lines'];
       final available = row['lineSnapshotsAvailable'];
-      if (linesRaw is! List || available is! bool ||
+      if (linesRaw is! List ||
+          available is! bool ||
           (available && linesRaw.isEmpty) ||
           (!available && linesRaw.isNotEmpty)) {
         throw const FormatException('Invalid line snapshots.');
@@ -123,42 +126,54 @@ class ConnectedOrdersSnapshot {
         if (line is! Map<String, dynamic>) {
           throw const FormatException('Invalid order line.');
         }
-        lines.add(ConnectedOrderLine(
-          sku: _requiredString(line['sku']),
-          name: _requiredString(line['name']),
-          nameMy: _optionalString(line['nameMy']),
-          variant: _optionalString(line['variant']),
-          quantity: _positiveInt(line['quantity']),
-          unitPriceMmk: _nonNegativeInt(line['unitPriceMmk']),
-        ));
+        lines.add(
+          ConnectedOrderLine(
+            sku: _requiredString(line['sku']),
+            name: _requiredString(line['name']),
+            nameMy: _optionalString(line['nameMy']),
+            variant: _optionalString(line['variant']),
+            quantity: _positiveInt(line['quantity']),
+            unitPriceMmk: _nonNegativeInt(line['unitPriceMmk']),
+          ),
+        );
       }
       final status = _requiredString(row['status']);
       final paymentStatus = _requiredString(row['paymentStatus']);
       final refundStatus = _requiredString(row['refundStatus']);
-      if (!const {'confirmed', 'preparing', 'ready', 'completed', 'cancelled'}
-              .contains(status) ||
+      if (!const {
+            'confirmed',
+            'preparing',
+            'ready',
+            'completed',
+            'cancelled',
+          }.contains(status) ||
           !const {'pending', 'reconciled'}.contains(paymentStatus) ||
           !const {'none', 'due', 'settled'}.contains(refundStatus)) {
         throw const FormatException('Unknown order state.');
       }
-      orders.add(ConnectedOrder(
-        id: id,
-        createdAt: _requiredInstant(row['createdAt']),
-        status: status,
-        paymentStatus: paymentStatus,
-        refundStatus: refundStatus,
-        paymentDueAt: _optionalInstant(row['paymentDueAt']),
-        promisedAt: _optionalInstant(row['promisedAt']),
-        quantity: _positiveInt(row['quantity']),
-        totalMmk: _nonNegativeInt(row['totalMmk']),
-        lineSnapshotsAvailable: available,
-        lines: List.unmodifiable(lines),
-      ));
+      orders.add(
+        ConnectedOrder(
+          id: id,
+          createdAt: _requiredInstant(row['createdAt']),
+          status: status,
+          paymentStatus: paymentStatus,
+          refundStatus: refundStatus,
+          paymentDueAt: _optionalInstant(row['paymentDueAt']),
+          promisedAt: _optionalInstant(row['promisedAt']),
+          quantity: _positiveInt(row['quantity']),
+          totalMmk: _nonNegativeInt(row['totalMmk']),
+          lineSnapshotsAvailable: available,
+          lines: List.unmodifiable(lines),
+        ),
+      );
     }
     return ConnectedOrdersSnapshot(
       workspaceId: _requiredString(source['workspaceId']),
       workspaceVersion: _nonNegativeInt(source['workspaceVersion']),
-      workspaceUpdatedAt: _optionalInstant(source['workspaceUpdatedAt'], allowEmpty: true),
+      workspaceUpdatedAt: _optionalInstant(
+        source['workspaceUpdatedAt'],
+        allowEmpty: true,
+      ),
       receivedAt: receivedAt,
       orders: List.unmodifiable(orders),
     );
@@ -170,18 +185,27 @@ class ConnectedOrdersService {
     required this.endpoint,
     required this.accessToken,
     http.Client? client,
+    ShopRuntimeScope? runtimeScope,
     DateTime Function()? clock,
-  }) : _client = client ?? http.Client(),
+  }) : _client = client ?? _connectedOrdersClient(runtimeScope),
        _ownsClient = client == null,
+       _runtimeScope = runtimeScope,
        _clock = clock ?? DateTime.now;
 
   final Uri endpoint;
   final Future<String?> Function() accessToken;
   final http.Client _client;
   final bool _ownsClient;
+  final ShopRuntimeScope? _runtimeScope;
   final DateTime Function() _clock;
 
   Future<ConnectedOrdersSnapshot> fetch() async {
+    final scope = _runtimeScope;
+    if (scope != null) {
+      if (!scope.capabilities.connectedOrders) {
+        throw StateError('shop_connected_orders_unavailable');
+      }
+    }
     if (endpoint.scheme != 'https' ||
         endpoint.port != 443 ||
         endpoint.path != connectedOrdersPath ||
@@ -202,7 +226,9 @@ class ConnectedOrdersService {
           'accept': 'application/json',
           'cache-control': 'no-store',
         });
-      final response = await _client.send(request).timeout(const Duration(seconds: 15));
+      final response = await _client
+          .send(request)
+          .timeout(const Duration(seconds: 15));
       if (response.statusCode != 200) {
         throw ConnectedOrdersException(switch (response.statusCode) {
           401 => 'sign_in_required',
@@ -213,7 +239,9 @@ class ConnectedOrdersService {
       }
       final bytes = BytesBuilder(copy: false);
       var length = 0;
-      await for (final chunk in response.stream.timeout(const Duration(seconds: 15))) {
+      await for (final chunk in response.stream.timeout(
+        const Duration(seconds: 15),
+      )) {
         length += chunk.length;
         if (length > _maxResponseBytes) {
           throw const ConnectedOrdersException('snapshot_too_large');
@@ -236,6 +264,15 @@ class ConnectedOrdersService {
   void close() {
     if (_ownsClient) _client.close();
   }
+}
+
+http.Client _connectedOrdersClient(ShopRuntimeScope? runtimeScope) {
+  final scope = runtimeScope;
+  if (scope == null) throw StateError('shop_runtime_scope_required');
+  if (!scope.capabilities.connectedOrders) {
+    throw StateError('shop_connected_orders_unavailable');
+  }
+  return http.Client();
 }
 
 String _requiredString(Object? value) {

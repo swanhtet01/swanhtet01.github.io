@@ -40,10 +40,11 @@ const _connectedOrdersEnabled = bool.fromEnvironment(
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  late final ShopRuntimeScope runtimeScope;
+  late final ShopRuntimeScope acceptedRuntimeScope;
   try {
     final runtimeProfile = ShopRuntimeProfile.resolve();
-    runtimeScope = await ShopRuntimeScope.resolve(runtimeProfile);
+    final runtimeScope = await ShopRuntimeScope.resolve(runtimeProfile);
+    acceptedRuntimeScope = runtimeScope;
   } catch (_) {
     runApp(
       const MaterialApp(
@@ -62,6 +63,7 @@ Future<void> main() async {
     );
     return;
   }
+  final runtimeScope = acceptedRuntimeScope;
   try {
     await ShopBackup.cleanupInterruptedStaging(
       runtimeScope.documentsRoot,
@@ -70,7 +72,8 @@ Future<void> main() async {
       ),
     );
   } catch (_) {
-    final myanmar = runtimeScope.preferences.instance.getBool(
+    final myanmar =
+        runtimeScope.preferences.instance.getBool(
           runtimeScope.preferences.keys.localeMyanmar,
         ) ??
         false;
@@ -105,8 +108,11 @@ Future<void> main() async {
   if (runtimeConfiguration.capabilities.managedAuth &&
       supabaseUrl.isNotEmpty &&
       publishableKey.isNotEmpty) {
-    await Supabase.initialize(url: supabaseUrl, publishableKey: publishableKey);
-    authClient = Supabase.instance.client;
+    authClient = await _initializeManagedAuth(
+      runtimeScope,
+      supabaseUrl,
+      publishableKey,
+    );
   }
   runApp(
     ShopStartup(
@@ -126,10 +132,23 @@ Future<void> main() async {
               ),
         initialMyanmar: myanmar,
         runtimeCapabilities: runtimeConfiguration.capabilities,
+        runtimeScope: runtimeScope,
         scopedPreferences: preferences,
       ),
     ),
   );
+}
+
+Future<SupabaseClient> _initializeManagedAuth(
+  ShopRuntimeScope runtimeScope,
+  String url,
+  String publishableKey,
+) async {
+  if (!runtimeScope.capabilities.managedAuth) {
+    throw StateError('shop_managed_auth_unavailable');
+  }
+  await Supabase.initialize(url: url, publishableKey: publishableKey);
+  return Supabase.instance.client;
 }
 
 class ShopApp extends StatefulWidget {
@@ -139,6 +158,7 @@ class ShopApp extends StatefulWidget {
     required this.apiBaseUrl,
     required this.initialMyanmar,
     this.runtimeCapabilities = ShopRuntimeCapabilities.production,
+    this.runtimeScope,
     this.scopedPreferences,
     this.initialCounter = false,
     super.key,
@@ -149,6 +169,7 @@ class ShopApp extends StatefulWidget {
   final String apiBaseUrl;
   final bool initialMyanmar;
   final ShopRuntimeCapabilities runtimeCapabilities;
+  final ShopRuntimeScope? runtimeScope;
   final ShopScopedPreferences? scopedPreferences;
 
   /// Opens Counter directly for a focused cashier journey or widget test.
@@ -183,6 +204,7 @@ class _ShopAppState extends State<ShopApp> {
             accessToken: () async =>
                 authClient.auth.currentSession?.accessToken,
             currentUserId: () async => authClient.auth.currentSession?.user.id,
+            runtimeScope: widget.runtimeScope,
           )
         : null;
     unawaited(_refreshCounterDraft());
@@ -303,6 +325,7 @@ class _ShopAppState extends State<ShopApp> {
               apiBaseUrl: widget.apiBaseUrl,
               myanmar: _myanmar,
               onLanguageChanged: _setLanguage,
+              runtimeScope: widget.runtimeScope,
             ),
           ),
         );
@@ -333,6 +356,36 @@ class _ShopAppState extends State<ShopApp> {
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
+      builder: (context, child) {
+        final content = child ?? const SizedBox.shrink();
+        if (!widget.runtimeCapabilities.syntheticEvidence) return content;
+        return Column(
+          children: [
+            Semantics(
+              container: true,
+              label: 'Synthetic QA data. Not a customer store.',
+              child: Container(
+                width: double.infinity,
+                color: const Color(0xfffff3cd),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                child: Text(
+                  shopCopy(
+                    _myanmar,
+                    'Synthetic QA data · not a customer store',
+                    'စမ်းသပ်ဒေတာသာ · ဖောက်သည်ဆိုင် မဟုတ်ပါ',
+                  ),
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+            ),
+            Expanded(child: content),
+          ],
+        );
+      },
       theme: ThemeData(
         useMaterial3: true,
         fontFamily: fontFamily,
@@ -501,6 +554,7 @@ class _ShopAppState extends State<ShopApp> {
               apiBaseUrl: widget.apiBaseUrl,
               correctionAuthorizer: _correctionAuthorizer,
               runtimeCapabilities: widget.runtimeCapabilities,
+              runtimeScope: widget.runtimeScope,
               scopedPreferences: widget.scopedPreferences,
               myanmar: _myanmar,
               onLanguageChanged: _setLanguage,
@@ -570,6 +624,7 @@ class _ShopAppState extends State<ShopApp> {
                                           _correctionAuthorizer,
                                       runtimeCapabilities:
                                           widget.runtimeCapabilities,
+                                      runtimeScope: widget.runtimeScope,
                                       scopedPreferences:
                                           widget.scopedPreferences,
                                       myanmar: _myanmar,
@@ -704,6 +759,7 @@ class ShopHome extends StatefulWidget {
     this.receiptPrinterSettings,
     this.receiptPrintSender,
     this.runtimeCapabilities = ShopRuntimeCapabilities.production,
+    this.runtimeScope,
     this.scopedPreferences,
     super.key,
   });
@@ -725,6 +781,7 @@ class ShopHome extends StatefulWidget {
   final ReceiptPrinterSettings? receiptPrinterSettings;
   final ReceiptPrintSender? receiptPrintSender;
   final ShopRuntimeCapabilities runtimeCapabilities;
+  final ShopRuntimeScope? runtimeScope;
   final ShopScopedPreferences? scopedPreferences;
 
   @override
@@ -810,7 +867,7 @@ class _ShopHomeState extends State<ShopHome> {
       if (recover != null) {
         photo = await recover();
       } else {
-        final lost = await ImagePicker().retrieveLostData();
+        final lost = await _retrieveLostPickerData();
         final files = lost.files;
         photo = files == null || files.isEmpty ? null : files.first;
       }
@@ -883,7 +940,7 @@ class _ShopHomeState extends State<ShopHome> {
     await scoped.instance.setString(pendingPickerKey, 'product:$productId');
     XFile? photo;
     try {
-      photo = await ImagePicker().pickImage(source: source);
+      photo = await _pickProductImage(source);
       if (photo != null) await _saveProductPhoto(productId, photo);
     } catch (_) {
       if (mounted) {
@@ -901,6 +958,24 @@ class _ShopHomeState extends State<ShopHome> {
         await discardCapturedMenuPhoto(photo, createdByCamera: true);
       }
     }
+  }
+
+  Future<LostDataResponse> _retrieveLostPickerData() async {
+    final runtimeScope = widget.runtimeScope;
+    if (runtimeScope == null) throw StateError('shop_runtime_scope_required');
+    if (!runtimeScope.capabilities.camera) {
+      throw StateError('shop_camera_unavailable');
+    }
+    return ImagePicker().retrieveLostData();
+  }
+
+  Future<XFile?> _pickProductImage(ImageSource source) async {
+    final runtimeScope = widget.runtimeScope;
+    if (runtimeScope == null) throw StateError('shop_runtime_scope_required');
+    if (!runtimeScope.capabilities.camera) {
+      throw StateError('shop_image_picker_unavailable');
+    }
+    return ImagePicker().pickImage(source: source);
   }
 
   Future<void> _saveProductPhoto(String productId, XFile photo) async {
@@ -1764,6 +1839,7 @@ class _ShopHomeState extends State<ShopHome> {
         builder: (_) => CameraBarcodeScanner(
           myanmar: widget.myanmar,
           cameraViewBuilder: widget.cameraViewBuilder,
+          runtimeScope: widget.runtimeScope,
         ),
       ),
     );
@@ -3676,19 +3752,21 @@ class _ShopHomeState extends State<ShopHome> {
       var printed = false;
       var printFailed = false;
       var printerNeedsTest = false;
-      try {
-        final printerSettings = _printerSettings();
-        final host = await printerSettings.readHost();
-        if (host != null) {
-          await _sendReceipt(host, receipt);
-          printed = true;
-        } else {
-          printerNeedsTest = await printerSettings.readSavedHost() != null;
+      if (widget.runtimeCapabilities.networkPrinter) {
+        try {
+          final printerSettings = _printerSettings();
+          final host = await printerSettings.readHost();
+          if (host != null) {
+            await _sendReceipt(host, receipt);
+            printed = true;
+          } else {
+            printerNeedsTest = await printerSettings.readSavedHost() != null;
+          }
+        } catch (_) {
+          // The local sale is committed before printing; printer errors never
+          // turn a completed sale into a failed checkout.
+          printFailed = true;
         }
-      } catch (_) {
-        // The local sale is committed before printing; printer errors never
-        // turn a completed sale into a failed checkout.
-        printFailed = true;
       }
       if (!mounted) return;
       _message(
@@ -3787,6 +3865,7 @@ class _ShopHomeState extends State<ShopHome> {
   }
 
   Future<void> _printReceipt(ShopSaleReceipt receipt) async {
+    if (!widget.runtimeCapabilities.networkPrinter) return;
     try {
       final host = await _printerSettings().readHost();
       if (host == null) {
@@ -3821,6 +3900,7 @@ class _ShopHomeState extends State<ShopHome> {
   }
 
   Future<void> _testPrinterThenPrint(ShopSaleReceipt receipt) async {
+    if (!widget.runtimeCapabilities.networkPrinter) return;
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         builder: (_) => PrinterSetupScreen(myanmar: widget.myanmar),
@@ -3950,6 +4030,7 @@ class _ShopHomeState extends State<ShopHome> {
           apiBaseUrl: widget.apiBaseUrl,
           myanmar: widget.myanmar,
           recoveredCameraPhoto: recoveredPhoto,
+          runtimeScope: widget.runtimeScope,
         ),
       ),
     );
@@ -3971,11 +4052,14 @@ class _ShopHomeState extends State<ShopHome> {
     );
   }
 
-  void _openPrinter() => Navigator.of(context).push<void>(
-    MaterialPageRoute<void>(
-      builder: (_) => PrinterSetupScreen(myanmar: widget.myanmar),
-    ),
-  );
+  void _openPrinter() {
+    if (!widget.runtimeCapabilities.networkPrinter) return;
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => PrinterSetupScreen(myanmar: widget.myanmar),
+      ),
+    );
+  }
 
   void _openRecentSales() {
     if (widget.onSales != null) {
@@ -4543,6 +4627,7 @@ class ShopSettingsScreen extends StatefulWidget {
     required this.onLanguageChanged,
     this.authClient,
     this.apiBaseUrl = 'https://app.supermega.dev',
+    this.runtimeScope,
     super.key,
   });
 
@@ -4551,6 +4636,7 @@ class ShopSettingsScreen extends StatefulWidget {
   final String apiBaseUrl;
   final bool myanmar;
   final ValueChanged<bool> onLanguageChanged;
+  final ShopRuntimeScope? runtimeScope;
 
   @override
   State<ShopSettingsScreen> createState() => _ShopSettingsScreenState();
@@ -4558,6 +4644,9 @@ class ShopSettingsScreen extends StatefulWidget {
 
 class _ShopSettingsScreenState extends State<ShopSettingsScreen> {
   late bool _myanmar = widget.myanmar;
+
+  ShopRuntimeCapabilities get _runtimeCapabilities =>
+      widget.runtimeScope?.capabilities ?? ShopRuntimeCapabilities.production;
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -4593,7 +4682,8 @@ class _ShopSettingsScreenState extends State<ShopSettingsScreen> {
             Card(
               child: Column(
                 children: [
-                  if (_connectedOrdersEnabled) ...[
+                  if (_connectedOrdersEnabled &&
+                      _runtimeCapabilities.connectedOrders) ...[
                     _SetupTile(
                       icon: Icons.inventory_2_outlined,
                       title: shopCopy(
@@ -4612,27 +4702,34 @@ class _ShopSettingsScreenState extends State<ShopSettingsScreen> {
                             myanmar: _myanmar,
                             authClient: widget.authClient,
                             apiBaseUrl: widget.apiBaseUrl,
+                            runtimeScope: widget.runtimeScope,
                           ),
                         ),
                       ),
                     ),
                     const Divider(height: 1),
                   ],
-                  _SetupTile(
-                    icon: Icons.print_outlined,
-                    title: shopCopy(_myanmar, 'Receipt printer', 'ပြေစာပရင်တာ'),
-                    subtitle: shopCopy(
-                      _myanmar,
-                      'Find and test a printer.',
-                      'ပရင်တာကို ရှာပြီး စမ်းသပ်ပါ။',
-                    ),
-                    onTap: () => Navigator.of(context).push<void>(
-                      MaterialPageRoute<void>(
-                        builder: (_) => PrinterSetupScreen(myanmar: _myanmar),
+                  if (_runtimeCapabilities.networkPrinter) ...[
+                    _SetupTile(
+                      icon: Icons.print_outlined,
+                      title: shopCopy(
+                        _myanmar,
+                        'Receipt printer',
+                        'ပြေစာပရင်တာ',
+                      ),
+                      subtitle: shopCopy(
+                        _myanmar,
+                        'Find and test a printer.',
+                        'ပရင်တာကို ရှာပြီး စမ်းသပ်ပါ။',
+                      ),
+                      onTap: () => Navigator.of(context).push<void>(
+                        MaterialPageRoute<void>(
+                          builder: (_) => PrinterSetupScreen(myanmar: _myanmar),
+                        ),
                       ),
                     ),
-                  ),
-                  const Divider(height: 1),
+                    const Divider(height: 1),
+                  ],
                   _SetupTile(
                     icon: Icons.account_balance_wallet_outlined,
                     title: shopCopy(
@@ -4673,27 +4770,28 @@ class _ShopSettingsScreenState extends State<ShopSettingsScreen> {
                     ),
                   ),
                   const Divider(height: 1),
-                  _SetupTile(
-                    icon: Icons.file_download_outlined,
-                    title: shopCopy(
-                      _myanmar,
-                      'Export backup file',
-                      'အရန်ကူးဖိုင် ထုတ်ရန်',
-                    ),
-                    subtitle: shopCopy(
-                      _myanmar,
-                      'Save an encrypted file.',
-                      'စကားဝှက်ဖြင့်ကာကွယ်ထားသောဖိုင်ကို သိမ်းပါ။',
-                    ),
-                    onTap: () => Navigator.of(context).push<void>(
-                      MaterialPageRoute<void>(
-                        builder: (_) => ShopBackupExportScreen(
-                          database: widget.database,
-                          myanmar: _myanmar,
+                  if (_runtimeCapabilities.externalFileSaving)
+                    _SetupTile(
+                      icon: Icons.file_download_outlined,
+                      title: shopCopy(
+                        _myanmar,
+                        'Export backup file',
+                        'အရန်ကူးဖိုင် ထုတ်ရန်',
+                      ),
+                      subtitle: shopCopy(
+                        _myanmar,
+                        'Save an encrypted file.',
+                        'စကားဝှက်ဖြင့်ကာကွယ်ထားသောဖိုင်ကို သိမ်းပါ။',
+                      ),
+                      onTap: () => Navigator.of(context).push<void>(
+                        MaterialPageRoute<void>(
+                          builder: (_) => ShopBackupExportScreen(
+                            database: widget.database,
+                            myanmar: _myanmar,
+                          ),
                         ),
                       ),
                     ),
-                  ),
                 ],
               ),
             ),
