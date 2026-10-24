@@ -9,8 +9,9 @@ store; record only non-secret references here.
 ## Exact candidate
 
 - PR: #734
-- Source commit: `ed8b9463920791ac31ca8193420fd34b40a42b51`
-- Source tree: `061630f02870d35d06f953d0eca3be2759dfc1f2`
+- Source commit: `f2af43bf12724d06f74645847a23765118be63ea`
+- Source tree: `363c42768b639b7059da4b1ea54554053e2ee3eb`
+- Native Shop tree: `05b7304d16219129d3ca8534dfddab7a606828ea`
 - Signed build filename / SHA-256: `BLOCKED — owner-supplied`
 - Signing identity / distribution channel: `BLOCKED — owner-supplied`
 - Device / OS / installation date: `NOT RUN`

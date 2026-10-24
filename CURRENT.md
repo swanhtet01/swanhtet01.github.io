@@ -1,6 +1,6 @@
 # SuperMega current release truth
 
-- Last verified: 2026-10-23
+- Last verified: 2026-10-24
 - Active objective: [`supergoal.md`](supergoal.md)
 - Scope: native Shop candidate and its public evidence
 
@@ -34,43 +34,42 @@ owner-approved product outcome and gate require it.
 | Item | Current fact |
 | --- | --- |
 | Integration PR | [#734 — Unify Shop app first-use and public launch candidate](https://github.com/swanhtet01/swanhtet01.github.io/pull/734) |
-| State | Open draft at verified release-code anchor `f168528b`; App/native/security/Kernel CI pass. Independent eligible human review, exact protected preview, signing, installed/physical-device evidence, and merchant acceptance remain open |
+| State | Open draft; `f2af43bf` has native/security/Kernel PASS. App CI is BLOCKED only by stale PostgreSQL-17 evidence. Review, preview, signing, installed/hardware, and merchant gates remain open |
 | Integration branch | `codex/shop-public-main-port-20261022` |
-| Verified release-code anchor | `f168528bcbb45ca082f4f8c8086dfe0ae0330c6d` / tree `0a081edd9c8d07cb8ac31e10243993802f136dbe` |
-| Native capture source | `97144217c309ac072fd63e5b4923ecc1f48bc171` / native tree `fb8771b1d733ae4e435b7defcdd697ed1f361d7c` |
-| Gallery evidence successor | `f43f4cb620066b4fe58aec0a71542978d43132a0`; the release-code anchor preserves the same native tree |
+| Verified product-code anchor | `f2af43bf12724d06f74645847a23765118be63ea` / tree `363c42768b639b7059da4b1ea54554053e2ee3eb` / native tree `05b7304d16219129d3ca8534dfddab7a606828ea` |
+| Native capture source | `f2af43bf` / native tree `05b7304d` |
+| Gallery evidence successor | `4ec74ee8`; native tree matches the capture source |
 | PostgreSQL evidence checkpoint | `b1ee4cc2884dda1ab753e8d2e4ecc6c6216a36ef` / tree `6996864df311db4748fcca3ec75c030dd0fcab3e` |
 | Inactive promotion envelope | PR #730; use only after #734 passes and is explicitly promoted |
 | Paused source set | PR #751 at `945ce70f792fd856c767f64e6b3e45e4d8f4ee3e`; review and port bounded changes, never merge wholesale |
 | UI lane | #749 integrated and frozen for acceptance |
 | Parked lanes | #750 low-stock focus; Connected Orders server/sync work |
 
-The active candidate preserves the verified PostgreSQL-17 receipt, Shop-first
-presentation, signed correction boundary, gallery provenance, and fail-closed
-release contracts. Empty production correction pins keep that action
-unavailable; normal selling remains offline.
+The candidate preserves Shop-first presentation, signed correction, gallery
+provenance, and fail-closed release contracts. Correction stays unavailable;
+normal selling remains offline.
 
 ## Exact evidence
 
-- [Required App CI 40038437270](https://github.com/swanhtet01/swanhtet01.github.io/actions/runs/40038437270)
-  passed at exact head `f168528b`: PostgreSQL/API and migration/RLS guards,
-  dependencies, lint, canonical build, HQ verification, release workflow
-  contracts, and desktop/390 px journeys.
-- [Native run 40038442780](https://github.com/swanhtet01/swanhtet01.github.io/actions/runs/40038442780)
-  used PR merge `d89456b3`, source `f168528b`, and tree `0a081edd`, then passed
-  formatting, analysis, isolated first-sale
-  and restore, all Flutter tests, bundled-font renders, Android debug,
+- [Required App CI 40060904116](https://github.com/swanhtet01/swanhtet01.github.io/actions/runs/40060904116)
+  reached step 638/668 at exact product head `f2af43bf`: API, migration/RLS,
+  dependencies, lint, and the canonical build passed; `hq:verify` then failed
+  closed only on `database_rehearsal_evidence_stale`. A fresh exact-head
+  Windows PostgreSQL-17 receipt is required before the remaining journeys run.
+- [Native run 40060907293](https://github.com/swanhtet01/swanhtet01.github.io/actions/runs/40060907293)
+  used PR merge `967e3590`, source `f2af43bf`, and native tree `05b7304d`;
+  formatting, analysis, isolated first-sale/restore, all Flutter tests, renders, Android debug,
   unsigned iPad/iOS, and Windows restore/no-replace plus unsigned packaging.
-- Candidate-tree QA artifacts: Android debug `12538154076`
-  (`sha256:1459885c369a64a1ee7a0db0b885162f4adbe6eb5813ae722ed350c2c8e89526`),
-  Flutter renders `12537984003`
-  (`sha256:b90da314ceca6270669349bc1d8d221560cc1a6c1751baa987957e4b9219cfed`),
-  and unsigned Windows `12538508876`
-  (`sha256:3c46448d573f5dc10c1e17c838a66c0f423141eb15475dcf691f86031957a187`).
+- Candidate-tree QA artifacts: Android debug `12547945565`
+  (`sha256:85ddd49c58618d81f806b3a80bb13ac008ce0296c4a4549f3428857583f1b323`),
+  Flutter renders `12547049363`
+  (`sha256:65b22680106f89666c12e68e336c55d4abe80d2c22864930a979f67be6691ff8`),
+  and unsigned Windows `12547816766`
+  (`sha256:5480f44fbaf100f5ff4914bb3a9371c04c325cdcc2975e9cb88a02ab79645289`).
   iOS passed `--no-codesign`; no signed iOS artifact is retained.
-- Gallery provenance pins source `97144217`, CI merge `e7f8615884adb8934ff0bfc4630abfc285e3bd23`, native run
-  `40033201150`, artifact `12536196538`, and original archive
-  `sha256:b10224f8913f21be05d9d9394f7b9d50216e28f7bbdf2523c08bd7ab522b7a71`.
+- Gallery provenance pins source `f2af43bf`, CI merge `967e3590c751e5212e9cbba06b0cc144fdf2ca18`, native run
+  `40060907293`, artifact `12547049363`, and original archive
+  `sha256:65b22680106f89666c12e68e336c55d4abe80d2c22864930a979f67be6691ff8`.
   Strict local public build/gallery/responsive checks passed for EN/MY at
   390/768/1440 px. Release checkout now retains capture-source history.
 - The Windows PostgreSQL 17.10 rehearsal remains bound to implementation tree
@@ -79,7 +78,7 @@ unavailable; normal selling remains offline.
   receipt digest
   `sha256:8c3ece4d69c0dd815a14e762fb01602229ab14214acb9147774617bce0d18c72`,
   and `hostedActivationProven=false`.
-- Dependency security `40038442898` and Kernel `40038442882` pass against the
+- Dependency security `40060907241` and Kernel `40060907238` pass against the
   same head. Python CI is frozen and hashed; vulnerable `anyio`, `idna`, and
   `starlette` transitives were repaired before the exact-head pass. Kernel release remains
   intentionally owner-gated.
@@ -102,13 +101,14 @@ v14 and hosted PostgreSQL/Supabase schema profile v13 are separate contracts.
   and wallet follow-up never implies money moved without external evidence.
 - Sale details now exposes one restrained full-sale `Correct sale` path only
   when immutable workspace/actor binding and the authorization service are
-  available. The server-signed command is rechecked at mutation time, retries
-  are once-only, and EN/MY small-phone flows pass. Production public pins and
-  the issuer signing secret are absent, so the action remains default-dark.
+  available. The command is rechecked at mutation time, retries are once-only,
+  and EN/MY small-phone flows pass. Production pins and the issuer secret are
+  absent; a hard-false global-consumption gate also keeps issuance default-dark.
   Normal selling remains offline; pilot correction is online-authorized only.
 - Backup and restore validate migrations, receipt/proof integrity, immutable
   linked records, workspace binding, wallet uncertainty, and corruption
-  failure paths.
+  failure paths. Historical four-key evidence round-trips only as
+  `legacy_unverified_v1`; signed-v2 remains six-key.
 - English/Burmese native layout, catalog, barcode, cashier, receipt, printer
   discovery, offline recovery, and actionable operating surfaces remain in the
   single #734 candidate.
@@ -138,7 +138,7 @@ v14 and hosted PostgreSQL/Supabase schema profile v13 are separate contracts.
   mutation has occurred.
 - Live `supermega.dev` and `app.supermega.dev` still report predecessor
   `5479c5d1`; the existing paired protected previews report `f944f66b`, and no
-  immutable protected preview has been accepted for `f168528b`.
+  immutable protected preview has been accepted for `f2af43bf`.
   Direct previews stay disabled, and the production workflow is not preview
   evidence. Live retired product routes also need an owner-approved release of
   the already-verified Shop-first route policy.
@@ -197,7 +197,7 @@ backup, and restore review; no blind merge or cherry-pick is allowed.
 
 ## Next action
 
-1. Keep verified release-code anchor `f168528b` stable, correction default-dark,
+1. Keep verified product-code anchor `f2af43bf` stable, correction default-dark,
    and PR #734 draft pending the owner-gated release decision.
 2. The owner must approve fixed provider team/project identities and a separate
    protected non-production preview lane before EN/MY 390/768/1440 hosted

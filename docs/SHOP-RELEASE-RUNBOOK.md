@@ -484,10 +484,13 @@ Correction acceptance within Gate 5 remains open for two exact reasons:
    journey. This decision does not close authorization, signed-install, or
    merchant-acceptance evidence.
 
-Pre-hardening schema-v11 wallet-reconciliation rows using the earlier four-key
-fingerprint intentionally fail current replay and restore. Before launch, prove
-that no retained candidate data needs compatibility or add an explicit,
-versioned migration.
+Authentic historical schema-v11 wallet-reconciliation rows using the earlier
+four-key fingerprint retain their original digest and migrate only as
+`legacy_unverified_v1` audit evidence. Focused upgrade, export, encrypted
+restore, and no-replay tests pass. A four-key record labelled `signed_v2`
+still fails closed even when its test signature and proof metadata are
+self-consistent; this compatibility path never promotes legacy evidence into
+current authorization.
 
 Source tests and CI are not merchant acceptance. Vivian still runs the journey,
 and installed restart/restore plus operator-authority evidence remain required.

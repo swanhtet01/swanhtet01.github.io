@@ -59,7 +59,7 @@ Flutter Shop targets Android tablets, iPad, and Windows PC. CI produces Android 
   bundled Inter and Noto Sans Myanmar UI fonts at 390 px and at 320 px with
   1.5× text scale, then review Myanmar-script receipt output on supported
   hardware.
-- Export an encrypted local backup that includes reversal, restock, wallet-reconciliation, cash-close, workspace-binding, and retry audit records. Restore remains empty-target-only; a local archive is not cloud backup or cross-device sync. Pre-hardening schema-v11 wallet reconciliation rows with the earlier four-key fingerprint intentionally fail current replay and restore; prove no retained launch data needs compatibility or add an explicit versioned migration.
+- Export an encrypted local backup that includes reversal, restock, wallet-reconciliation, cash-close, workspace-binding, and retry audit records. Restore remains empty-target-only; a local archive is not cloud backup or cross-device sync. Authentic historical schema-v11 wallet reconciliation rows with the earlier four-key fingerprint retain their original digest and migrate only as `legacy_unverified_v1` audit evidence; they can export and restore, but cannot become signed-v2 authority. A four-key record labelled `signed_v2` still fails closed.
 
 ## AI and privacy boundary
 
