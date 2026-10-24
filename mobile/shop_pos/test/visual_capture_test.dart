@@ -20,6 +20,41 @@ final _capture = Platform.environment['SHOP_VISUAL_CAPTURE'] == '1';
 const _captureKey = ValueKey('native-shop-visual-capture');
 const _photoFixtureDir = 'test/assets/grocery_photos';
 
+Widget _syntheticCaptureFrame({required bool myanmar, required Widget child}) =>
+    Column(
+      children: [
+        SizedBox(
+          height: 26,
+          child: ColoredBox(
+            color: const Color(0xffe8eef8),
+            child: Center(
+              child: Text(
+                myanmar ? 'သရုပ်ပြ နမူနာဒေတာသာ' : 'ILLUSTRATIVE · SAMPLE DATA',
+                textDirection: TextDirection.ltr,
+                style: TextStyle(
+                  color: const Color(0xff31445f),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  fontFamily: myanmar ? 'NotoSansMyanmarUI' : 'Inter',
+                  fontFamilyFallback: const ['Inter'],
+                  letterSpacing: myanmar ? 0 : .4,
+                ),
+              ),
+            ),
+          ),
+        ),
+        Expanded(child: child),
+      ],
+    );
+
+Widget _syntheticCaptureBoundary({
+  required bool myanmar,
+  required Widget child,
+}) => RepaintBoundary(
+  key: _captureKey,
+  child: _syntheticCaptureFrame(myanmar: myanmar, child: child),
+);
+
 List<Map<String, dynamic>> _groceryFixture() {
   final ledger = jsonDecode(
     File('$_photoFixtureDir/ledger.json').readAsStringSync(),
@@ -355,8 +390,8 @@ void main() {
       final database = ShopDatabase(NativeDatabase.memory());
       try {
         await tester.pumpWidget(
-          RepaintBoundary(
-            key: _captureKey,
+          _syntheticCaptureBoundary(
+            myanmar: language == 'my',
             child: ShopApp(
               testOnlyAllowMissingRuntimeScope: true,
               initialCounter: true,
@@ -476,8 +511,8 @@ void main() {
         final database = await _sampleShop(myanmar: language == 'my');
         try {
           await tester.pumpWidget(
-            RepaintBoundary(
-              key: _captureKey,
+            _syntheticCaptureBoundary(
+              myanmar: language == 'my',
               child: ShopApp(
                 testOnlyAllowMissingRuntimeScope: true,
                 initialCounter: true,
@@ -611,8 +646,8 @@ void main() {
         checkpoint('fixture ready');
         try {
           await tester.pumpWidget(
-            RepaintBoundary(
-              key: _captureKey,
+            _syntheticCaptureBoundary(
+              myanmar: language == 'my',
               child: ShopApp(
                 testOnlyAllowMissingRuntimeScope: true,
                 database: database,
@@ -843,8 +878,8 @@ void main() {
             lines: const [ShopSaleLineInput(productId: 'apple', quantity: 2)],
           );
           await tester.pumpWidget(
-            RepaintBoundary(
-              key: _captureKey,
+            _syntheticCaptureBoundary(
+              myanmar: language == 'my',
               child: ShopApp(
                 testOnlyAllowMissingRuntimeScope: true,
                 database: database,
@@ -867,7 +902,7 @@ void main() {
           await _resolveVisibleProductPhotos(tester);
           await tester.tap(find.byKey(const ValueKey('shop-held-sales-open')));
           await tester.pumpAndSettle();
-          expect(find.text('Customer A'), findsOneWidget);
+          expect(find.textContaining('Customer A'), findsOneWidget);
           expect(tester.takeException(), isNull);
           await expectLater(
             find.byKey(_captureKey),
@@ -935,8 +970,8 @@ void main() {
         addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
         try {
           await tester.pumpWidget(
-            RepaintBoundary(
-              key: _captureKey,
+            _syntheticCaptureBoundary(
+              myanmar: language == 'my',
               child: MaterialApp(
                 debugShowCheckedModeBanner: false,
                 theme: ThemeData(
@@ -947,12 +982,14 @@ void main() {
                   myanmar: language == 'my',
                   testOnlyAllowMissingRuntimeScope: true,
                   cameraViewBuilder: (context, onScanned, onError) =>
-                      const ColoredBox(
-                        color: Color(0xff20252a),
+                      ColoredBox(
+                        color: const Color(0xff20252a),
                         child: Center(
                           child: Text(
-                            'Synthetic camera preview',
-                            style: TextStyle(color: Colors.white70),
+                            language == 'my'
+                                ? 'ကင်မရာ သရုပ်ပြမြင်ကွင်း'
+                                : 'Synthetic camera preview',
+                            style: const TextStyle(color: Colors.white70),
                           ),
                         ),
                       ),
@@ -998,8 +1035,8 @@ void main() {
         final database = await _sampleShop(myanmar: language == 'my');
         try {
           await tester.pumpWidget(
-            RepaintBoundary(
-              key: _captureKey,
+            _syntheticCaptureBoundary(
+              myanmar: language == 'my',
               child: ShopApp(
                 testOnlyAllowMissingRuntimeScope: true,
                 database: database,

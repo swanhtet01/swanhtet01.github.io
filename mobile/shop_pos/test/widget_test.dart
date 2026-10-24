@@ -192,7 +192,7 @@ void main() {
 
           await tester.tap(find.byKey(const ValueKey('shop-held-sales-open')));
           await tester.pumpAndSettle();
-          expect(find.text('Customer A'), findsOneWidget);
+          expect(find.textContaining('Customer A'), findsOneWidget);
           final ticket = (await database.readHeldSaleTickets()).single;
           await tester.tap(
             find.byKey(ValueKey('shop-held-reopen:${ticket.id}')),
@@ -257,6 +257,19 @@ void main() {
       expect(
         find.byKey(const ValueKey('shop-held-reopen:compact-ticket')),
         findsOneWidget,
+      );
+      final resumeLabel = find.byKey(
+        const ValueKey('shop-held-resume-label:compact-ticket'),
+      );
+      expect(resumeLabel, findsOneWidget);
+      expect(find.textContaining('ပြန်ဖွင့်'), findsOneWidget);
+      expect(
+        tester
+            .getSize(
+              find.byKey(const ValueKey('shop-held-reopen:compact-ticket')),
+            )
+            .height,
+        greaterThanOrEqualTo(48),
       );
       expect(tester.takeException(), isNull);
       await tester.tap(
@@ -332,6 +345,21 @@ void main() {
       expect(
         find.text(
           'Stock changed. Match this sale to available quantities before payment.',
+        ),
+        findsOneWidget,
+      );
+      final matchStock = find.byKey(
+        const ValueKey('shop-match-available-stock'),
+      );
+      expect(matchStock, findsOneWidget);
+      final primaryFocus = FocusManager.instance.primaryFocus;
+      expect(primaryFocus?.context, isNotNull);
+      expect(
+        find.ancestor(
+          of: find.byElementPredicate(
+            (element) => element == primaryFocus!.context,
+          ),
+          matching: matchStock,
         ),
         findsOneWidget,
       );

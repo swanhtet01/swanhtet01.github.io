@@ -2479,6 +2479,8 @@ class _ShopHomeState extends State<ShopHome> {
           Align(
             alignment: Alignment.centerLeft,
             child: TextButton(
+              key: const ValueKey('shop-match-available-stock'),
+              autofocus: true,
               onPressed:
                   _checkoutReady &&
                       !_saving &&
@@ -2901,7 +2903,18 @@ class _ShopHomeState extends State<ShopHome> {
                             left: 20,
                             right: 8,
                           ),
-                          title: Text(ticket.name),
+                          title: Text(
+                            canReopen
+                                ? shopCopy(
+                                    widget.myanmar,
+                                    'Resume · ${ticket.name}',
+                                    'ပြန်ဖွင့် · ${ticket.name}',
+                                  )
+                                : ticket.name,
+                            key: ValueKey(
+                              'shop-held-resume-label:${ticket.id}',
+                            ),
+                          ),
                           subtitle: Text(
                             shopCopy(
                               widget.myanmar,
