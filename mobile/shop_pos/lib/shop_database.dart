@@ -1590,6 +1590,99 @@ const shopCorrectionLineageStateV17Sql = '''
   )
 ''';
 
+const shopCorrectionLineageStateGuardUpdateV17Sql = '''
+  CREATE TRIGGER IF NOT EXISTS shop_correction_lineage_state_guard_update
+  BEFORE UPDATE ON shop_correction_lineage_state
+  WHEN NOT (
+    (
+      OLD.lifecycle_state = 'active'
+      AND NEW.lifecycle_state = 'restore_pending'
+      AND NEW.singleton IS OLD.singleton
+      AND NEW.activation_request_id IS OLD.activation_request_id
+      AND NEW.workspace_id IS OLD.workspace_id
+      AND NEW.actor_id IS OLD.actor_id
+      AND NEW.lineage_id IS OLD.lineage_id
+      AND NEW.lineage_epoch IS OLD.lineage_epoch
+      AND NEW.previous_lineage_id IS OLD.previous_lineage_id
+      AND NEW.previous_lineage_epoch IS OLD.previous_lineage_epoch
+      AND NEW.consumption_ordinal IS OLD.consumption_ordinal
+      AND NEW.consumption_digest IS OLD.consumption_digest
+      AND NEW.activated_at_millis IS OLD.activated_at_millis
+    )
+    OR (
+      OLD.lifecycle_state IN ('active', 'restore_pending')
+      AND NEW.lifecycle_state = 'reconciliation_required'
+      AND NEW.singleton IS OLD.singleton
+      AND NEW.activation_request_id IS OLD.activation_request_id
+      AND NEW.workspace_id IS OLD.workspace_id
+      AND NEW.actor_id IS OLD.actor_id
+      AND NEW.lineage_id IS OLD.lineage_id
+      AND NEW.lineage_epoch IS OLD.lineage_epoch
+      AND NEW.previous_lineage_id IS OLD.previous_lineage_id
+      AND NEW.previous_lineage_epoch IS OLD.previous_lineage_epoch
+      AND NEW.consumption_ordinal IS OLD.consumption_ordinal
+      AND NEW.consumption_digest IS OLD.consumption_digest
+      AND NEW.activated_at_millis IS OLD.activated_at_millis
+    )
+    OR (
+      OLD.lifecycle_state = 'reconciliation_required'
+      AND NEW.lifecycle_state = 'reconciliation_required'
+      AND NEW.singleton IS OLD.singleton
+      AND NEW.activation_request_id IS OLD.activation_request_id
+      AND NEW.workspace_id IS OLD.workspace_id
+      AND NEW.actor_id IS OLD.actor_id
+      AND NEW.lineage_id IS OLD.lineage_id
+      AND NEW.lineage_epoch IS OLD.lineage_epoch
+      AND NEW.previous_lineage_id IS OLD.previous_lineage_id
+      AND NEW.previous_lineage_epoch IS OLD.previous_lineage_epoch
+      AND NEW.consumption_ordinal IS OLD.consumption_ordinal
+      AND NEW.consumption_digest IS OLD.consumption_digest
+      AND NEW.activated_at_millis IS OLD.activated_at_millis
+    )
+    OR (
+      OLD.lifecycle_state = 'restore_pending'
+      AND NEW.lifecycle_state = 'active'
+      AND NEW.singleton IS OLD.singleton
+      AND NEW.activation_request_id IS NOT OLD.activation_request_id
+      AND NEW.workspace_id IS OLD.workspace_id
+      AND NEW.actor_id IS OLD.actor_id
+      AND NEW.lineage_id IS NOT OLD.lineage_id
+      AND NEW.lineage_epoch = OLD.lineage_epoch + 1
+      AND NEW.previous_lineage_id IS OLD.lineage_id
+      AND NEW.previous_lineage_epoch IS OLD.lineage_epoch
+      AND NEW.consumption_ordinal IS OLD.consumption_ordinal
+      AND NEW.consumption_digest IS OLD.consumption_digest
+      AND NEW.activated_at_millis >= OLD.activated_at_millis
+    )
+    OR (
+      OLD.lifecycle_state = 'active'
+      AND NEW.lifecycle_state = 'active'
+      AND NEW.singleton IS OLD.singleton
+      AND NEW.activation_request_id IS OLD.activation_request_id
+      AND NEW.workspace_id IS OLD.workspace_id
+      AND NEW.actor_id IS OLD.actor_id
+      AND NEW.lineage_id IS OLD.lineage_id
+      AND NEW.lineage_epoch IS OLD.lineage_epoch
+      AND NEW.previous_lineage_id IS OLD.previous_lineage_id
+      AND NEW.previous_lineage_epoch IS OLD.previous_lineage_epoch
+      AND NEW.consumption_ordinal = OLD.consumption_ordinal + 1
+      AND NEW.consumption_digest IS NOT NULL
+      AND NEW.activated_at_millis IS OLD.activated_at_millis
+      AND EXISTS (
+        SELECT 1 FROM shop_correction_consumptions
+        WHERE lineage_id = OLD.lineage_id
+          AND lineage_epoch = OLD.lineage_epoch
+          AND consumption_ordinal = NEW.consumption_ordinal
+          AND history_digest = NEW.consumption_digest
+          AND previous_consumption_digest IS OLD.consumption_digest
+      )
+    )
+  )
+  BEGIN
+    SELECT RAISE(ABORT, 'Shop correction lineage transition is invalid');
+  END
+''';
+
 const shopCorrectionConsumptionIntentsV17Sql = '''
   CREATE TABLE IF NOT EXISTS shop_correction_consumption_intents (
     consumption_request_id TEXT PRIMARY KEY NOT NULL CHECK (length(consumption_request_id) = 36),
@@ -1676,6 +1769,13 @@ const shopWalletReconciliationsRequireConsumptionV17Sql = '''
 Map<String, String>
 shopCorrectionConsumptionSchemaDefinitionsV17() => <String, String>{
   'shop_correction_lineage_state': shopCorrectionLineageStateV17Sql,
+  'shop_correction_lineage_state_guard_update':
+      shopCorrectionLineageStateGuardUpdateV17Sql,
+  'shop_correction_lineage_state_no_delete': shopImmutableTriggerV11Sql(
+    table: 'shop_correction_lineage_state',
+    operation: 'delete',
+    message: 'Shop correction lineage history cannot be deleted',
+  ),
   'shop_correction_consumption_intents': shopCorrectionConsumptionIntentsV17Sql,
   'shop_correction_consumptions': shopCorrectionConsumptionsV17Sql,
   'shop_correction_consumption_intents_no_update': shopImmutableTriggerV11Sql(

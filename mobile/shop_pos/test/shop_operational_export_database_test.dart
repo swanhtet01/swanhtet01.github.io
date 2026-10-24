@@ -135,6 +135,8 @@ void main() {
         for (final trigger in const [
           'shop_sale_reversals_require_consumption',
           'shop_wallet_reconciliations_require_consumption',
+          'shop_correction_lineage_state_guard_update',
+          'shop_correction_lineage_state_no_delete',
           'shop_correction_consumption_intents_no_update',
           'shop_correction_consumption_intents_no_delete',
           'shop_correction_consumptions_no_update',

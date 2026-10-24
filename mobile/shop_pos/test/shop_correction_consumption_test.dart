@@ -367,6 +367,102 @@ void main() {
     expect(await database.countSales(), 2);
   });
 
+  test('lineage state permits only reviewed lifecycle transitions', () async {
+    await expectLater(
+      database.customStatement(
+        'DELETE FROM shop_correction_lineage_state WHERE singleton = 1',
+      ),
+      throwsA(isA<SqliteException>()),
+    );
+    await expectLater(
+      database.customStatement(
+        "UPDATE shop_correction_lineage_state SET actor_id = 'other-owner' "
+        'WHERE singleton = 1',
+      ),
+      throwsA(isA<SqliteException>()),
+    );
+    await expectLater(
+      database.customStatement(
+        "UPDATE shop_correction_lineage_state SET lineage_id = "
+        "'20000000-0000-4000-8000-000000000099' WHERE singleton = 1",
+      ),
+      throwsA(isA<SqliteException>()),
+    );
+    await expectLater(
+      database.customStatement(
+        'UPDATE shop_correction_lineage_state SET consumption_ordinal = 1, '
+        "consumption_digest = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' "
+        'WHERE singleton = 1',
+      ),
+      throwsA(isA<SqliteException>()),
+    );
+    await expectLater(
+      database.customStatement(
+        'UPDATE shop_correction_lineage_state SET consumption_ordinal = 2, '
+        "consumption_digest = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' "
+        'WHERE singleton = 1',
+      ),
+      throwsA(isA<SqliteException>()),
+    );
+
+    await database.markCorrectionRestorePending();
+    await expectLater(
+      database.customStatement(
+        "UPDATE shop_correction_lineage_state SET lifecycle_state = 'active', "
+        "activation_request_id = '10000000-0000-4000-8000-000000000098', "
+        "actor_id = 'other-owner', "
+        "lineage_id = '20000000-0000-4000-8000-000000000098', "
+        'lineage_epoch = 2, '
+        "previous_lineage_id = '20000000-0000-4000-8000-000000000001', "
+        'previous_lineage_epoch = 1, activated_at_millis = 2000 '
+        'WHERE singleton = 1',
+      ),
+      throwsA(isA<SqliteException>()),
+    );
+    await database.acceptCorrectionLineage(
+      const ShopCorrectionLineage(
+        activationRequestId: '10000000-0000-4000-8000-000000000008',
+        workspaceId: _workspaceId,
+        actorId: _actorId,
+        lineageId: '20000000-0000-4000-8000-000000000008',
+        lineageEpoch: 2,
+        previousLineageId: '20000000-0000-4000-8000-000000000001',
+        previousLineageEpoch: 1,
+        consumptionOrdinal: 0,
+        consumptionDigest: null,
+        activatedAtMillis: 2000,
+      ),
+    );
+    expect((await database.readCorrectionLineageState())?.canConsume, isTrue);
+
+    await database.applyCorrectionReconciliationStatus(
+      const ShopCorrectionReconciliationStatus(
+        workspaceId: _workspaceId,
+        requestedLineageId: '20000000-0000-4000-8000-000000000008',
+        requestedLineageEpoch: 2,
+        activeLineageId: '20000000-0000-4000-8000-000000000008',
+        activeLineageEpoch: 2,
+        serverConsumptionOrdinal: 1,
+        serverConsumptionDigest:
+            'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+        localConsumptionOrdinal: 0,
+        localConsumptionDigest: null,
+        state: 'reconciliation_required',
+      ),
+    );
+    expect(
+      (await database.readCorrectionLineageState())?.lifecycleState,
+      'reconciliation_required',
+    );
+    await expectLater(
+      database.customStatement(
+        "UPDATE shop_correction_lineage_state SET lifecycle_state = 'active' "
+        'WHERE singleton = 1',
+      ),
+      throwsA(isA<SqliteException>()),
+    );
+  });
+
   test(
     'validly signed actor mismatch quarantines without sale effects',
     () async {
