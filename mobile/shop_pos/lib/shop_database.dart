@@ -863,7 +863,8 @@ String shopCorrectionRequiresFinalizedProofV15Sql({
   required String trigger,
   required String table,
   required String message,
-}) => '''
+}) =>
+    '''
   CREATE TRIGGER IF NOT EXISTS $trigger
   BEFORE INSERT ON $table
   WHEN NOT EXISTS (
@@ -2815,8 +2816,7 @@ class ShopDatabase extends _$ShopDatabase {
           (!v15 || proofKind != shopCorrectionAuthorizationProofKindSignedV3)) {
         return false;
       }
-      final isV3 =
-          proofKind == shopCorrectionAuthorizationProofKindSignedV3;
+      final isV3 = proofKind == shopCorrectionAuthorizationProofKindSignedV3;
       if (isV3
           ? (source != 'managed_membership_receipt_v1' ||
                 finalizationRequestId == null ||

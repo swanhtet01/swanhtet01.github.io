@@ -905,17 +905,17 @@ void main() {
               .toString();
           final receiptDigest =
               shopHistoricalCorrectionAuthorizationReceiptDigestV2(
-            source: row['authorization_source'] as String,
-            receiptId: row['authorization_receipt_id'] as String,
-            workspaceId: row['authorization_workspace_id'] as String,
-            actorId: row['authorized_actor_id'] as String,
-            actorLabel: row['authorized_actor_label'] as String,
-            actorRole: row['authorized_actor_role'] as String,
-            capability: row['authorization_capability'] as String,
-            commandDigest: commandDigest,
-            issuedAtMillis: row['authorization_issued_at_millis'] as int,
-            expiresAtMillis: row['authorization_expires_at_millis'] as int,
-          );
+                source: row['authorization_source'] as String,
+                receiptId: row['authorization_receipt_id'] as String,
+                workspaceId: row['authorization_workspace_id'] as String,
+                actorId: row['authorized_actor_id'] as String,
+                actorLabel: row['authorized_actor_label'] as String,
+                actorRole: row['authorized_actor_role'] as String,
+                capability: row['authorization_capability'] as String,
+                commandDigest: commandDigest,
+                issuedAtMillis: row['authorization_issued_at_millis'] as int,
+                expiresAtMillis: row['authorization_expires_at_millis'] as int,
+              );
           _mutateImmutableAuditRow(
             connection,
             table: 'shop_wallet_reversal_reconciliations',
@@ -1343,9 +1343,7 @@ void main() {
     await _writeWalletReversalSnapshot(old);
     final raw = sqlite3.open(old.path);
     try {
-      final reversal = raw
-          .select('SELECT * FROM shop_sale_reversals')
-          .single;
+      final reversal = raw.select('SELECT * FROM shop_sale_reversals').single;
       final receiptDigest =
           shopHistoricalCorrectionAuthorizationReceiptDigestV2(
             source: reversal['authorization_source'] as String,
@@ -1355,12 +1353,9 @@ void main() {
             actorLabel: reversal['authorized_actor_label'] as String,
             actorRole: reversal['authorized_actor_role'] as String,
             capability: reversal['authorization_capability'] as String,
-            commandDigest:
-                reversal['authorization_command_digest'] as String,
-            issuedAtMillis:
-                reversal['authorization_issued_at_millis'] as int,
-            expiresAtMillis:
-                reversal['authorization_expires_at_millis'] as int,
+            commandDigest: reversal['authorization_command_digest'] as String,
+            issuedAtMillis: reversal['authorization_issued_at_millis'] as int,
+            expiresAtMillis: reversal['authorization_expires_at_millis'] as int,
           );
       final signature = await Ed25519().sign(
         utf8.encode(
@@ -1482,10 +1477,7 @@ void main() {
       final sale = await migrated.recordCashSale(
         operationId: 'v2-history-new-sale',
         lines: const [
-          ShopSaleLineInput(
-            productId: 'v2-history-new-product',
-            quantity: 1,
-          ),
+          ShopSaleLineInput(productId: 'v2-history-new-product', quantity: 1),
         ],
       );
       final command = await migrated.previewFullSaleReversal(
@@ -4066,8 +4058,7 @@ Future<void> _rewriteWalletReconciliationAsSignedV2FourKey(File target) async {
     final commandDigest = crypto.sha256
         .convert(utf8.encode(fingerprint))
         .toString();
-    final receiptDigest =
-        shopHistoricalCorrectionAuthorizationReceiptDigestV2(
+    final receiptDigest = shopHistoricalCorrectionAuthorizationReceiptDigestV2(
       source: row['authorization_source'] as String,
       receiptId: row['authorization_receipt_id'] as String,
       workspaceId: row['authorization_workspace_id'] as String,

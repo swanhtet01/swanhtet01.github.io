@@ -300,8 +300,7 @@ class ShopCorrectionReceiptVerifier {
                   actorRole: authorization.actorRole,
                   capability: authorization.capability,
                   commandDigest: authorization.commandDigest,
-                  finalizationRequestId:
-                      authorization.finalizationRequestId!,
+                  finalizationRequestId: authorization.finalizationRequestId!,
                   finalizedAtMillis: authorization.finalizedAtMillis!,
                   issuedAtMillis: authorization.issuedAtMillis,
                   expiresAtMillis: authorization.expiresAtMillis,

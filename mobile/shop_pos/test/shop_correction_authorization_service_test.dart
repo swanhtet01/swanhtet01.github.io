@@ -229,30 +229,33 @@ void main() {
     }
   });
 
-  test('v3 digest and Ed25519 proof match the cross-runtime contract', () async {
-    final publicKey = await _testKeyPair.extractPublicKey();
-    final receipt = await _receipt();
+  test(
+    'v3 digest and Ed25519 proof match the cross-runtime contract',
+    () async {
+      final publicKey = await _testKeyPair.extractPublicKey();
+      final receipt = await _receipt();
 
-    expect(_base64UrlNoPadding(publicKey.bytes), _goldenPublicKey);
-    expect(
-      shopCorrectionAuthorizationReceiptDigest(
-        source: 'managed_membership_receipt_v1',
-        receiptId: '11111111-1111-4111-8111-111111111111',
-        finalizationRequestId: '22222222-2222-4222-8222-222222222222',
-        workspaceId: 'workspace-1',
-        actorId: 'actor-1',
-        actorLabel: 'Workspace owner',
-        actorRole: 'owner',
-        capability: 'shop.sale.reverse',
-        commandDigest: _repeat('0', 64),
-        finalizedAtMillis: 1000,
-        issuedAtMillis: 1000,
-        expiresAtMillis: 301000,
-      ),
-      '5bd47b28aba9fda0f821113cad67d159c0ad94c38f052ff1a3efb42a6ce54c7a',
-    );
-    expect(receipt['signature'], hasLength(86));
-  });
+      expect(_base64UrlNoPadding(publicKey.bytes), _goldenPublicKey);
+      expect(
+        shopCorrectionAuthorizationReceiptDigest(
+          source: 'managed_membership_receipt_v1',
+          receiptId: '11111111-1111-4111-8111-111111111111',
+          finalizationRequestId: '22222222-2222-4222-8222-222222222222',
+          workspaceId: 'workspace-1',
+          actorId: 'actor-1',
+          actorLabel: 'Workspace owner',
+          actorRole: 'owner',
+          capability: 'shop.sale.reverse',
+          commandDigest: _repeat('0', 64),
+          finalizedAtMillis: 1000,
+          issuedAtMillis: 1000,
+          expiresAtMillis: 301000,
+        ),
+        '5bd47b28aba9fda0f821113cad67d159c0ad94c38f052ff1a3efb42a6ce54c7a',
+      );
+      expect(receipt['signature'], hasLength(86));
+    },
+  );
 
   test(
     'a directly supplied insecure endpoint fails before network use',

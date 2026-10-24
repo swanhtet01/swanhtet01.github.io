@@ -1687,17 +1687,18 @@ abstract final class ShopBackup {
           finalizedAtMillis == null &&
           source == 'managed_membership_receipt_v1' &&
           shopHistoricalCorrectionAuthorizationReceiptDigestV2(
-            source: source,
-            receiptId: receiptId,
-            workspaceId: workspaceId,
-            actorId: actorId,
-            actorLabel: actorLabel,
-            actorRole: actorRole,
-            capability: capability,
-            commandDigest: commandDigest,
-            issuedAtMillis: issuedAtMillis,
-            expiresAtMillis: expiresAtMillis,
-          ) == receiptDigest;
+                source: source,
+                receiptId: receiptId,
+                workspaceId: workspaceId,
+                actorId: actorId,
+                actorLabel: actorLabel,
+                actorRole: actorRole,
+                capability: capability,
+                commandDigest: commandDigest,
+                issuedAtMillis: issuedAtMillis,
+                expiresAtMillis: expiresAtMillis,
+              ) ==
+              receiptDigest;
     }
     if (proofKind == 'signed_v3') {
       return keyId is String &&
