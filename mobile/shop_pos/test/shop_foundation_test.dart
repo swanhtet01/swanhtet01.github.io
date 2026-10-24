@@ -480,87 +480,78 @@ void main() {
       );
     });
 
-    test(
-      'cloned pre-correction databases expose why global consumption stays closed',
-      () async {
-        final directory = await Directory.systemTemp.createTemp(
-          'shop-correction-clone-',
+    test('cloned pre-correction databases expose why global consumption stays closed', () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'shop-correction-clone-',
+      );
+      final sourceFile = File('${directory.path}/source.sqlite');
+      final firstCloneFile = File('${directory.path}/first.sqlite');
+      final secondCloneFile = File('${directory.path}/second.sqlite');
+      final source = ShopDatabase.withCorrectionReceiptVerifier(
+        executor: NativeDatabase(sourceFile),
+        correctionReceiptVerifier: _testCorrectionReceiptVerifier,
+      );
+      try {
+        await _attachTestWorkspace(source);
+        await source.addProduct(
+          id: 'clone-replay-product',
+          name: 'Clone replay item',
+          priceMmk: 2500,
+          openingStock: 3,
         );
-        final sourceFile = File('${directory.path}/source.sqlite');
-        final firstCloneFile = File('${directory.path}/first.sqlite');
-        final secondCloneFile = File('${directory.path}/second.sqlite');
-        final source = ShopDatabase.withCorrectionReceiptVerifier(
-          executor: NativeDatabase(sourceFile),
-          correctionReceiptVerifier: _testCorrectionReceiptVerifier,
+        await source.openCashShift(
+          operationId: 'clone-replay-shift',
+          operatorLabel: 'May',
+          openingFloatMmk: 10000,
         );
-        try {
-          await _attachTestWorkspace(source);
-          await source.addProduct(
-            id: 'clone-replay-product',
-            name: 'Clone replay item',
-            priceMmk: 2500,
-            openingStock: 3,
-          );
-          await source.openCashShift(
-            operationId: 'clone-replay-shift',
-            operatorLabel: 'May',
-            openingFloatMmk: 10000,
-          );
-          final sale = await source.recordCashSale(
-            operationId: 'clone-replay-sale',
-            lines: const [
-              ShopSaleLineInput(
-                productId: 'clone-replay-product',
-                quantity: 2,
-              ),
-            ],
-          );
-          final command = await source.previewFullSaleReversal(
-            operationId: 'clone-replay-reversal',
-            saleId: sale.id,
-            restockItems: true,
-            reason: 'Document the blocked cross-database replay boundary',
-            confirmCashReturned: true,
-          );
-          final authorization = await _correctionAuthorization(
-            command.commandDigest,
-            capability: 'shop.sale.reverse',
-            receiptId: 'clone-replay-receipt',
-          );
-          await source.close();
-          await sourceFile.copy(firstCloneFile.path);
-          await sourceFile.copy(secondCloneFile.path);
+        final sale = await source.recordCashSale(
+          operationId: 'clone-replay-sale',
+          lines: const [
+            ShopSaleLineInput(productId: 'clone-replay-product', quantity: 2),
+          ],
+        );
+        final command = await source.previewFullSaleReversal(
+          operationId: 'clone-replay-reversal',
+          saleId: sale.id,
+          restockItems: true,
+          reason: 'Document the blocked cross-database replay boundary',
+          confirmCashReturned: true,
+        );
+        final authorization = await _correctionAuthorization(
+          command.commandDigest,
+          capability: 'shop.sale.reverse',
+          receiptId: 'clone-replay-receipt',
+        );
+        await source.close();
+        await sourceFile.copy(firstCloneFile.path);
+        await sourceFile.copy(secondCloneFile.path);
 
-          for (final cloneFile in [firstCloneFile, secondCloneFile]) {
-            final clone = ShopDatabase.withCorrectionReceiptVerifier(
-              executor: NativeDatabase(cloneFile),
-              correctionReceiptVerifier: _testCorrectionReceiptVerifier,
-            );
-            try {
-              final reversal = await clone.recordAuthorizedFullSaleReversal(
-                command: command,
-                authorization: authorization,
-              );
-              expect(reversal.authorizationReceiptId, authorization.receiptId);
-              expect(
-                (await clone.readActiveProducts()).single.onHand,
-                3,
-              );
-              expect(await clone.countSales(), 1);
-            } finally {
-              await clone.close();
-            }
-          }
-        } finally {
+        for (final cloneFile in [firstCloneFile, secondCloneFile]) {
+          final clone = ShopDatabase.withCorrectionReceiptVerifier(
+            executor: NativeDatabase(cloneFile),
+            correctionReceiptVerifier: _testCorrectionReceiptVerifier,
+          );
           try {
-            await source.close();
-          } on Object {
-            // The source is deliberately closed before its file is cloned.
+            final reversal = await clone.recordAuthorizedFullSaleReversal(
+              command: command,
+              authorization: authorization,
+            );
+            expect(reversal.authorizationReceiptId, authorization.receiptId);
+            expect((await clone.readActiveProducts()).single.onHand, 3);
+            expect(await clone.countSales(), 1);
+          } finally {
+            await clone.close();
           }
-          await directory.delete(recursive: true);
         }
-      },
-    );
+      } finally {
+        try {
+          await source.close();
+        } on Object {
+          // The source is deliberately closed before its file is cloned.
+        }
+        await directory.delete(recursive: true);
+      }
+    });
 
     test(
       'sale receipt keeps immutable item lines for print and reprint',
