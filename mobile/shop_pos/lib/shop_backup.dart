@@ -1941,8 +1941,7 @@ abstract final class ShopBackup {
             authorizationCommandDigest == _sha256Hex(requestFingerprint);
         var legacyFingerprintValid =
             storedRequestFingerprint == legacyRequestFingerprint &&
-            authorizationCommandDigest ==
-                _sha256Hex(legacyRequestFingerprint);
+            authorizationCommandDigest == _sha256Hex(legacyRequestFingerprint);
         if (legacyFingerprintValid && hasAuthorizationProofs) {
           final proofs = connection.select(
             'SELECT proof_kind FROM shop_correction_authorization_proofs '
