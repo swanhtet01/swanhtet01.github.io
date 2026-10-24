@@ -17,6 +17,21 @@ let origin
 let server
 let userDataDir
 
+async function waitForBrowserExit(child, timeoutMs) {
+  if (!child || child.exitCode !== null || child.signalCode !== null) return true
+  return new Promise((resolveExited) => {
+    const timer = setTimeout(() => {
+      child.off('exit', onExit)
+      resolveExited(false)
+    }, timeoutMs)
+    const onExit = () => {
+      clearTimeout(timer)
+      resolveExited(true)
+    }
+    child.once('exit', onExit)
+  })
+}
+
 const contentTypes = new Map([
   ['.css', 'text/css; charset=utf-8'],
   ['.html', 'text/html; charset=utf-8'],
@@ -105,9 +120,15 @@ after(async () => {
     await cdp.send('Browser.close', {}, '', 2_000).catch(() => {})
     await cdp.close().catch(() => {})
   }
-  browser?.kill()
+  if (browser && !await waitForBrowserExit(browser, 2_000)) {
+    browser.kill()
+    if (!await waitForBrowserExit(browser, 2_000)) {
+      browser.kill('SIGKILL')
+      await waitForBrowserExit(browser, 2_000)
+    }
+  }
   await new Promise((resolveClosed, reject) => server?.close((error) => error ? reject(error) : resolveClosed()))
-  if (userDataDir) await rm(userDataDir, { recursive: true, force: true })
+  if (userDataDir) await rm(userDataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 })
 })
 
 for (const viewport of [
