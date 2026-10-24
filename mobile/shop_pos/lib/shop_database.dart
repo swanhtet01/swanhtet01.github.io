@@ -9,9 +9,11 @@ import 'package:drift/native.dart';
 import 'package:drift_flutter/drift_flutter.dart';
 
 import 'shop_models.dart';
+import 'shop_correction_consumption.dart';
 import 'shop_correction_receipt.dart';
 import 'shop_operational_export.dart';
 
+export 'shop_correction_consumption.dart';
 export 'shop_correction_receipt.dart';
 
 part 'shop_database.g.dart';
@@ -300,6 +302,108 @@ class ShopFullSaleReversalCommand {
   final bool cashReturnConfirmed;
   final String? expectedCashShiftId;
   final String paymentResolution;
+}
+
+const _shopFullSaleCorrectionRecoveryContract =
+    'supermega.shop.full-sale-correction-recovery.v1';
+
+class _RecoveredFullSaleCorrection {
+  const _RecoveredFullSaleCorrection(this.command, this.authorization);
+
+  final ShopFullSaleReversalCommand command;
+  final ShopCorrectionAuthorization authorization;
+}
+
+String _fullSaleCorrectionRecoveryEnvelope({
+  required ShopFullSaleReversalCommand command,
+  required ShopCorrectionAuthorization authorization,
+}) => jsonEncode({
+  'contract': _shopFullSaleCorrectionRecoveryContract,
+  'command': {
+    'operationId': command.operationId,
+    'saleId': command.saleId,
+    'saleSnapshotDigest': command.saleSnapshotDigest,
+    'requestFingerprint': command.requestFingerprint,
+    'commandDigest': command.commandDigest,
+    'originalTotalMmk': command.originalTotalMmk,
+    'originalPaymentMethod': command.originalPaymentMethod,
+    'restockItems': command.restockItems,
+    'reason': command.reason,
+    'cashReturnConfirmed': command.cashReturnConfirmed,
+    'expectedCashShiftId': command.expectedCashShiftId,
+    'paymentResolution': command.paymentResolution,
+  },
+  'authorization': {
+    'contract': authorization.contract,
+    'receiptId': authorization.receiptId,
+    'receiptDigest': authorization.receiptDigest,
+    'workspaceId': authorization.workspaceId,
+    'actorId': authorization.actorId,
+    'actorLabel': authorization.actorLabel,
+    'actorRole': authorization.actorRole,
+    'capability': authorization.capability,
+    'source': authorization.source,
+    'commandDigest': authorization.commandDigest,
+    'finalizationRequestId': authorization.finalizationRequestId,
+    'finalizedAtMillis': authorization.finalizedAtMillis,
+    'issuedAtMillis': authorization.issuedAtMillis,
+    'expiresAtMillis': authorization.expiresAtMillis,
+    'keyId': authorization.keyId,
+    'signature': authorization.signature,
+  },
+});
+
+_RecoveredFullSaleCorrection _decodeFullSaleCorrectionRecoveryEnvelope(
+  String encoded,
+) {
+  try {
+    final decoded = jsonDecode(encoded);
+    if (decoded is! Map<String, dynamic> ||
+        decoded['contract'] != _shopFullSaleCorrectionRecoveryContract ||
+        decoded['command'] is! Map<String, dynamic> ||
+        decoded['authorization'] is! Map<String, dynamic>) {
+      throw const FormatException();
+    }
+    final command = decoded['command'] as Map<String, dynamic>;
+    final authorization = decoded['authorization'] as Map<String, dynamic>;
+    return _RecoveredFullSaleCorrection(
+      ShopFullSaleReversalCommand(
+        operationId: command['operationId'] as String,
+        saleId: command['saleId'] as String,
+        saleSnapshotDigest: command['saleSnapshotDigest'] as String,
+        requestFingerprint: command['requestFingerprint'] as String,
+        commandDigest: command['commandDigest'] as String,
+        originalTotalMmk: command['originalTotalMmk'] as int,
+        originalPaymentMethod: command['originalPaymentMethod'] as String,
+        restockItems: command['restockItems'] as bool,
+        reason: command['reason'] as String,
+        cashReturnConfirmed: command['cashReturnConfirmed'] as bool,
+        expectedCashShiftId: command['expectedCashShiftId'] as String?,
+        paymentResolution: command['paymentResolution'] as String,
+      ),
+      ShopCorrectionAuthorization(
+        contract: authorization['contract'] as String,
+        receiptId: authorization['receiptId'] as String,
+        receiptDigest: authorization['receiptDigest'] as String,
+        workspaceId: authorization['workspaceId'] as String,
+        actorId: authorization['actorId'] as String,
+        actorLabel: authorization['actorLabel'] as String,
+        actorRole: authorization['actorRole'] as String,
+        capability: authorization['capability'] as String,
+        source: authorization['source'] as String,
+        commandDigest: authorization['commandDigest'] as String,
+        finalizationRequestId:
+            authorization['finalizationRequestId'] as String?,
+        finalizedAtMillis: authorization['finalizedAtMillis'] as int?,
+        issuedAtMillis: authorization['issuedAtMillis'] as int,
+        expiresAtMillis: authorization['expiresAtMillis'] as int,
+        keyId: authorization['keyId'] as String,
+        signature: authorization['signature'] as String,
+      ),
+    );
+  } on Object {
+    throw StateError('The persisted correction recovery request is invalid.');
+  }
 }
 
 class ShopWalletReconciliationCommand {
@@ -1250,7 +1354,7 @@ const shopHeldSaleColumnsV10 = {
 };
 
 Map<String, Set<String>> shopBaseTableColumnsForVersion(int schemaVersion) {
-  if (schemaVersion < 6 || schemaVersion > 16) return const {};
+  if (schemaVersion < 6 || schemaVersion > 17) return const {};
   return <String, Set<String>>{
     for (final entry in shopBaseTableColumnsV6.entries)
       entry.key: <String>{
@@ -1465,6 +1569,141 @@ Map<String, String> shopMemberSchemaDefinitionsV16() => <String, String>{
   ),
 };
 
+const shopCorrectionLineageStateV17Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_correction_lineage_state (
+    singleton INTEGER PRIMARY KEY NOT NULL CHECK (singleton = 1),
+    activation_request_id TEXT NOT NULL UNIQUE CHECK (length(activation_request_id) = 36),
+    workspace_id TEXT NOT NULL CHECK (length(workspace_id) BETWEEN 1 AND 128),
+    actor_id TEXT NOT NULL CHECK (length(actor_id) BETWEEN 1 AND 128),
+    lineage_id TEXT NOT NULL UNIQUE CHECK (length(lineage_id) = 36),
+    lineage_epoch INTEGER NOT NULL CHECK (lineage_epoch >= 1),
+    previous_lineage_id TEXT CHECK (previous_lineage_id IS NULL OR length(previous_lineage_id) = 36),
+    previous_lineage_epoch INTEGER,
+    consumption_ordinal INTEGER NOT NULL CHECK (consumption_ordinal >= 0),
+    consumption_digest TEXT CHECK (consumption_digest IS NULL OR length(consumption_digest) = 64),
+    lifecycle_state TEXT NOT NULL CHECK (lifecycle_state IN ('active', 'restore_pending', 'reconciliation_required')),
+    activated_at_millis INTEGER NOT NULL CHECK (activated_at_millis > 0),
+    CHECK ((lineage_epoch = 1 AND previous_lineage_id IS NULL AND previous_lineage_epoch IS NULL)
+      OR (lineage_epoch > 1 AND previous_lineage_id IS NOT NULL AND previous_lineage_epoch = lineage_epoch - 1)),
+    CHECK ((consumption_ordinal = 0 AND consumption_digest IS NULL)
+      OR (consumption_ordinal > 0 AND consumption_digest IS NOT NULL))
+  )
+''';
+
+const shopCorrectionConsumptionIntentsV17Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_correction_consumption_intents (
+    consumption_request_id TEXT PRIMARY KEY NOT NULL CHECK (length(consumption_request_id) = 36),
+    local_operation_id TEXT NOT NULL UNIQUE CHECK (length(local_operation_id) BETWEEN 1 AND 120),
+    authorization_receipt_id TEXT NOT NULL UNIQUE CHECK (length(authorization_receipt_id) = 36),
+    authorization_receipt_digest TEXT NOT NULL CHECK (length(authorization_receipt_digest) = 64),
+    workspace_id TEXT NOT NULL CHECK (length(workspace_id) BETWEEN 1 AND 128),
+    actor_id TEXT NOT NULL CHECK (length(actor_id) BETWEEN 1 AND 128),
+    capability TEXT NOT NULL CHECK (capability IN ('shop.sale.reverse', 'shop.sale.reconcile_wallet')),
+    semantic_target_id TEXT NOT NULL CHECK (length(semantic_target_id) BETWEEN 1 AND 120),
+    command_digest TEXT NOT NULL CHECK (length(command_digest) = 64),
+    lineage_id TEXT NOT NULL CHECK (length(lineage_id) = 36),
+    lineage_epoch INTEGER NOT NULL CHECK (lineage_epoch >= 1),
+    recovery_envelope_json TEXT CHECK (recovery_envelope_json IS NULL OR length(recovery_envelope_json) BETWEEN 2 AND 8192),
+    created_at_millis INTEGER NOT NULL CHECK (created_at_millis > 0)
+  )
+''';
+
+const shopCorrectionConsumptionsV17Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_correction_consumptions (
+    consumption_id TEXT PRIMARY KEY NOT NULL CHECK (length(consumption_id) = 36),
+    consumption_request_id TEXT NOT NULL UNIQUE REFERENCES shop_correction_consumption_intents(consumption_request_id),
+    local_operation_id TEXT NOT NULL UNIQUE REFERENCES shop_correction_consumption_intents(local_operation_id),
+    authorization_receipt_id TEXT NOT NULL UNIQUE CHECK (length(authorization_receipt_id) = 36),
+    authorization_receipt_digest TEXT NOT NULL CHECK (length(authorization_receipt_digest) = 64),
+    workspace_id TEXT NOT NULL CHECK (length(workspace_id) BETWEEN 1 AND 128),
+    actor_id TEXT NOT NULL CHECK (length(actor_id) BETWEEN 1 AND 128),
+    capability TEXT NOT NULL CHECK (capability IN ('shop.sale.reverse', 'shop.sale.reconcile_wallet')),
+    semantic_target_id TEXT NOT NULL CHECK (length(semantic_target_id) BETWEEN 1 AND 120),
+    command_digest TEXT NOT NULL CHECK (length(command_digest) = 64),
+    lineage_id TEXT NOT NULL CHECK (length(lineage_id) = 36),
+    lineage_epoch INTEGER NOT NULL CHECK (lineage_epoch >= 1),
+    consumption_ordinal INTEGER NOT NULL UNIQUE CHECK (consumption_ordinal >= 1),
+    previous_consumption_digest TEXT CHECK (previous_consumption_digest IS NULL OR length(previous_consumption_digest) = 64),
+    history_digest TEXT NOT NULL UNIQUE CHECK (length(history_digest) = 64),
+    consumed_at_millis INTEGER NOT NULL CHECK (consumed_at_millis > 0),
+    key_id TEXT NOT NULL CHECK (length(key_id) BETWEEN 1 AND 32),
+    signature TEXT NOT NULL CHECK (length(signature) = 86),
+    CHECK ((consumption_ordinal = 1 AND previous_consumption_digest IS NULL)
+      OR (consumption_ordinal > 1 AND previous_consumption_digest IS NOT NULL))
+  )
+''';
+
+const shopSaleReversalsRequireConsumptionV17Sql = '''
+  CREATE TRIGGER IF NOT EXISTS shop_sale_reversals_require_consumption
+  BEFORE INSERT ON shop_sale_reversals
+  WHEN EXISTS (SELECT 1 FROM shop_correction_lineage_state)
+  AND NOT EXISTS (
+    SELECT 1 FROM shop_correction_consumptions
+    WHERE local_operation_id = NEW.operation_id
+      AND authorization_receipt_id = NEW.authorization_receipt_id
+      AND authorization_receipt_digest = NEW.authorization_receipt_digest
+      AND workspace_id = NEW.authorization_workspace_id
+      AND actor_id = NEW.authorized_actor_id
+      AND capability = 'shop.sale.reverse'
+      AND semantic_target_id = NEW.sale_id
+      AND command_digest = NEW.authorization_command_digest
+  )
+  BEGIN
+    SELECT RAISE(ABORT, 'Shop reversal requires global consumption proof');
+  END
+''';
+
+const shopWalletReconciliationsRequireConsumptionV17Sql = '''
+  CREATE TRIGGER IF NOT EXISTS shop_wallet_reconciliations_require_consumption
+  BEFORE INSERT ON shop_wallet_reversal_reconciliations
+  WHEN EXISTS (SELECT 1 FROM shop_correction_lineage_state)
+  AND NOT EXISTS (
+    SELECT 1 FROM shop_correction_consumptions
+    WHERE local_operation_id = NEW.operation_id
+      AND authorization_receipt_id = NEW.authorization_receipt_id
+      AND authorization_receipt_digest = NEW.authorization_receipt_digest
+      AND workspace_id = NEW.authorization_workspace_id
+      AND actor_id = NEW.authorized_actor_id
+      AND capability = 'shop.sale.reconcile_wallet'
+      AND semantic_target_id = NEW.reversal_id
+      AND command_digest = NEW.authorization_command_digest
+  )
+  BEGIN
+    SELECT RAISE(ABORT, 'Shop reconciliation requires global consumption proof');
+  END
+''';
+
+Map<String, String>
+shopCorrectionConsumptionSchemaDefinitionsV17() => <String, String>{
+  'shop_correction_lineage_state': shopCorrectionLineageStateV17Sql,
+  'shop_correction_consumption_intents': shopCorrectionConsumptionIntentsV17Sql,
+  'shop_correction_consumptions': shopCorrectionConsumptionsV17Sql,
+  'shop_correction_consumption_intents_no_update': shopImmutableTriggerV11Sql(
+    table: 'shop_correction_consumption_intents',
+    operation: 'update',
+    message: 'Shop correction consumption intents are immutable',
+  ),
+  'shop_correction_consumption_intents_no_delete': shopImmutableTriggerV11Sql(
+    table: 'shop_correction_consumption_intents',
+    operation: 'delete',
+    message: 'Shop correction consumption intents are immutable',
+  ),
+  'shop_correction_consumptions_no_update': shopImmutableTriggerV11Sql(
+    table: 'shop_correction_consumptions',
+    operation: 'update',
+    message: 'Shop correction consumption proofs are immutable',
+  ),
+  'shop_correction_consumptions_no_delete': shopImmutableTriggerV11Sql(
+    table: 'shop_correction_consumptions',
+    operation: 'delete',
+    message: 'Shop correction consumption proofs are immutable',
+  ),
+  'shop_sale_reversals_require_consumption':
+      shopSaleReversalsRequireConsumptionV17Sql,
+  'shop_wallet_reconciliations_require_consumption':
+      shopWalletReconciliationsRequireConsumptionV17Sql,
+};
+
 String canonicalShopSchemaSql(String value) {
   final output = StringBuffer();
   final ifNotExists = RegExp(r'if\s+not\s+exists\b', caseSensitive: false);
@@ -1526,6 +1765,13 @@ enum _ShopUpgradeOrigin {
   unifiedV13,
   unifiedV14,
   unifiedV15,
+  unifiedV16,
+}
+
+class _ShopCorrectionReconciliationRequired implements Exception {
+  const _ShopCorrectionReconciliationRequired(this.message);
+
+  final String message;
 }
 
 enum _ColumnGroupState { none, partial, exact }
@@ -1554,6 +1800,10 @@ class _ShopSchemaObject {
   ],
 )
 class ShopDatabase extends _$ShopDatabase {
+  static const _testMutationBypassAvailable = !bool.fromEnvironment(
+    'dart.vm.product',
+  );
+
   static const maxProductThumbnailBytes = 192 * 1024;
   static const maxProductThumbnailsTotalBytes = 32 * 1024 * 1024;
 
@@ -1581,11 +1831,13 @@ class ShopDatabase extends _$ShopDatabase {
     );
     try {
       await database.verifyReadyForUse();
+      await database.markCorrectionRestorePending();
+      await database.verifyReadyForUse();
       final row = await database
           .customSelect('PRAGMA user_version')
           .getSingle();
       if (row.read<int>('user_version') != database.schemaVersion) {
-        throw StateError('The staged Shop restore did not reach schema v16.');
+        throw StateError('The staged Shop restore did not reach schema v17.');
       }
     } finally {
       await database.close();
@@ -1615,12 +1867,20 @@ class ShopDatabase extends _$ShopDatabase {
   ShopDatabase.withCorrectionReceiptVerifier({
     QueryExecutor? executor,
     required this.correctionReceiptVerifier,
-  }) : super(executor ?? driftDatabase(name: 'supermega_shop'));
+    bool testOnlyAllowUnconsumedAuthorization = false,
+  }) : assert(
+         !testOnlyAllowUnconsumedAuthorization || _testMutationBypassAvailable,
+         'Unconsumed correction authorization is unavailable in product builds.',
+       ),
+       testOnlyAllowUnconsumedAuthorization =
+           testOnlyAllowUnconsumedAuthorization && _testMutationBypassAvailable,
+       super(executor ?? driftDatabase(name: 'supermega_shop'));
 
   final ShopCorrectionReceiptVerifier correctionReceiptVerifier;
+  final bool testOnlyAllowUnconsumedAuthorization;
 
   @override
-  int get schemaVersion => 16;
+  int get schemaVersion => 17;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -1638,7 +1898,8 @@ class ShopDatabase extends _$ShopDatabase {
       await _createMigrationProvenanceTable();
       await _createCorrectionAuthorizationProofLedgerV15();
       await _createMemberSchemaV16();
-      await _requireUnifiedV16Schema();
+      await _createCorrectionConsumptionSchemaV17();
+      await _requireUnifiedV17Schema();
     }),
     onUpgrade: (migrator, from, to) => transaction(() async {
       // Version 11 has two historical meanings. Classify the complete reserved
@@ -1761,18 +2022,24 @@ class ShopDatabase extends _$ShopDatabase {
       if (from < 14) {
         await _recordLegacyCorrectionAuthorizationProofs();
       }
-      await _migrateCorrectionAuthorizationProofLedgerV15();
-      await _requireUnifiedV15Schema();
-      await _createMemberSchemaV16();
+      if (from < 16) {
+        await _migrateCorrectionAuthorizationProofLedgerV15();
+        await _requireUnifiedV15Schema();
+        await _createMemberSchemaV16();
+      }
       await _requireUnifiedV16Schema();
+      if (from < 17) {
+        await _createCorrectionConsumptionSchemaV17();
+      }
+      await _requireUnifiedV17Schema();
     }),
     beforeOpen: (_) async {
       await customStatement('PRAGMA foreign_keys = ON');
-      await _requireUnifiedV16Schema();
+      await _requireUnifiedV17Schema();
     },
   );
 
-  Future<void> verifyReadyForUse() => _requireUnifiedV16Schema();
+  Future<void> verifyReadyForUse() => _requireUnifiedV17Schema();
 
   Future<void> _createWalletCheckoutTable({bool includeQrSnapshot = true}) {
     final qrSnapshotColumns = includeQrSnapshot
@@ -1900,6 +2167,13 @@ class ShopDatabase extends _$ShopDatabase {
         continue;
       }
       await customStatement(entry.value);
+    }
+  }
+
+  Future<void> _createCorrectionConsumptionSchemaV17() async {
+    for (final definition
+        in shopCorrectionConsumptionSchemaDefinitionsV17().values) {
+      await customStatement(definition);
     }
   }
 
@@ -2657,8 +2931,12 @@ class ShopDatabase extends _$ShopDatabase {
   }
 
   Future<_ShopUpgradeOrigin> _classifyUpgradeOrigin(int from) async {
-    if (from < 1 || from > 15) {
-      throw StateError('This Shop database version cannot migrate to v16.');
+    if (from < 1 || from > 16) {
+      throw StateError('This Shop database version cannot migrate to v17.');
+    }
+    if (from == 16) {
+      await _requireUnifiedV16Schema();
+      return _ShopUpgradeOrigin.unifiedV16;
     }
     if (from == 15) {
       await _requireUnifiedV15Schema();
@@ -3074,6 +3352,74 @@ class ShopDatabase extends _$ShopDatabase {
     }
   }
 
+  Future<void> _requireUnifiedV17Schema() async {
+    await _requireDatabaseIntegrity();
+    final objects = await _readSchemaObjects();
+    final auditDefinitions = shopReversalSchemaDefinitionsV11();
+    final workspaceDefinitions = shopWorkspaceSchemaDefinitionsV12();
+    final proofDefinitions = shopAuthorizationProofSchemaDefinitionsV15();
+    final memberDefinitions = shopMemberSchemaDefinitionsV16();
+    final consumptionDefinitions =
+        shopCorrectionConsumptionSchemaDefinitionsV17();
+    final definitionGroups = [
+      auditDefinitions,
+      workspaceDefinitions,
+      proofDefinitions,
+      memberDefinitions,
+      consumptionDefinitions,
+    ];
+    final expectedTriggers = <String>{
+      for (final definitions in definitionGroups)
+        for (final entry in definitions.entries)
+          if (canonicalShopSchemaSql(entry.value).startsWith('create trigger'))
+            entry.key,
+    };
+    final actualTriggers = objects.entries
+        .where((entry) => entry.value.type == 'trigger')
+        .map((entry) => entry.key)
+        .toSet();
+    final expectedNames = {
+      ..._expectedSchemaObjectNames(17),
+      for (final definitions in definitionGroups) ...definitions.keys,
+      'shop_business_profile',
+      'shop_v13_migration_provenance',
+    };
+    final valid =
+        objects.values.every((object) => object.type != 'view') &&
+        await _baseSchemaExact(17, objects) &&
+        _sameSchemaObjectNames(objects, expectedNames) &&
+        await _reversalCashColumnState() == _ColumnGroupState.exact &&
+        definitionGroups.every(
+          (definitions) => _definitionGroupExact(
+            objects,
+            definitions,
+            definitions.keys.toSet(),
+          ),
+        ) &&
+        _definitionGroupExact(
+          objects,
+          const {'shop_business_profile': shopBusinessProfileV11Sql},
+          const {'shop_business_profile'},
+        ) &&
+        _definitionGroupExact(
+          objects,
+          const {
+            'shop_v13_migration_provenance': shopMigrationProvenanceV13Sql,
+          },
+          const {'shop_v13_migration_provenance'},
+        ) &&
+        await _businessProfileRowsValid() &&
+        await _v14WorkspaceBindingRowsValid() &&
+        await _v15CorrectionAuthorizationProofsValid() &&
+        await _v16MemberRowsValid() &&
+        await _v17CorrectionConsumptionRowsValid() &&
+        actualTriggers.length == expectedTriggers.length &&
+        actualTriggers.containsAll(expectedTriggers);
+    if (!valid) {
+      throw StateError('The unified Shop v17 schema failed verification.');
+    }
+  }
+
   Future<bool> _v16MemberRowsValid() async {
     final stores = await customSelect(
       'SELECT singleton, store_ref, created_at_millis FROM shop_store_identity',
@@ -3204,6 +3550,164 @@ class ShopDatabase extends _$ShopDatabase {
       'LIMIT 1',
     ).getSingleOrNull();
     return missingWalletLink == null;
+  }
+
+  Future<bool> _v17CorrectionConsumptionRowsValid() async {
+    final lineageRows = await customSelect(
+      'SELECT * FROM shop_correction_lineage_state',
+    ).get();
+    if (lineageRows.length > 1) return false;
+    final intents = await customSelect(
+      'SELECT * FROM shop_correction_consumption_intents '
+      'ORDER BY created_at_millis, consumption_request_id',
+    ).get();
+    final proofs = await customSelect(
+      'SELECT * FROM shop_correction_consumptions ORDER BY consumption_ordinal',
+    ).get();
+    if (lineageRows.isEmpty) return intents.isEmpty && proofs.isEmpty;
+    final lineage = lineageRows.single;
+    final uuid = RegExp(
+      r'^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
+    );
+    final digest = RegExp(r'^[0-9a-f]{64}$');
+    final identifier = RegExp(r'^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$');
+    final lifecycle = lineage.read<String>('lifecycle_state');
+    final lineageId = lineage.read<String>('lineage_id');
+    final lineageEpoch = lineage.read<int>('lineage_epoch');
+    final ordinal = lineage.read<int>('consumption_ordinal');
+    final watermark = lineage.readNullable<String>('consumption_digest');
+    if (lineage.read<int>('singleton') != 1 ||
+        !uuid.hasMatch(lineage.read<String>('activation_request_id')) ||
+        !identifier.hasMatch(lineage.read<String>('workspace_id')) ||
+        !identifier.hasMatch(lineage.read<String>('actor_id')) ||
+        !uuid.hasMatch(lineageId) ||
+        lineageEpoch < 1 ||
+        !const {
+          'active',
+          'restore_pending',
+          'reconciliation_required',
+        }.contains(lifecycle) ||
+        ordinal < 0 ||
+        (ordinal == 0
+            ? watermark != null
+            : !digest.hasMatch(watermark ?? ''))) {
+      return false;
+    }
+    if (proofs.length != ordinal) return false;
+    for (final intent in intents) {
+      final capability = intent.read<String>('capability');
+      if (capability == 'shop.sale.reverse') {
+        final authorization = shopFullSaleRecoveryAuthorization(
+          intent.readNullable<String>('recovery_envelope_json'),
+          localOperationId: intent.read<String>('local_operation_id'),
+          authorizationReceiptId: intent.read<String>(
+            'authorization_receipt_id',
+          ),
+          authorizationReceiptDigest: intent.read<String>(
+            'authorization_receipt_digest',
+          ),
+          workspaceId: intent.read<String>('workspace_id'),
+          actorId: intent.read<String>('actor_id'),
+          capability: capability,
+          semanticTargetId: intent.read<String>('semantic_target_id'),
+          commandDigest: intent.read<String>('command_digest'),
+        );
+        if (authorization == null ||
+            !await correctionReceiptVerifier.verify(authorization)) {
+          return false;
+        }
+      }
+    }
+    String? previous;
+    for (var index = 0; index < proofs.length; index++) {
+      final row = proofs[index];
+      final proof = ShopCorrectionConsumptionProof(
+        consumptionId: row.read<String>('consumption_id'),
+        consumptionRequestId: row.read<String>('consumption_request_id'),
+        authorizationReceiptId: row.read<String>('authorization_receipt_id'),
+        authorizationReceiptDigest: row.read<String>(
+          'authorization_receipt_digest',
+        ),
+        workspaceId: row.read<String>('workspace_id'),
+        actorId: row.read<String>('actor_id'),
+        capability: row.read<String>('capability'),
+        semanticTargetId: row.read<String>('semantic_target_id'),
+        commandDigest: row.read<String>('command_digest'),
+        lineageId: row.read<String>('lineage_id'),
+        lineageEpoch: row.read<int>('lineage_epoch'),
+        consumptionOrdinal: row.read<int>('consumption_ordinal'),
+        previousConsumptionDigest: row.readNullable<String>(
+          'previous_consumption_digest',
+        ),
+        historyDigest: row.read<String>('history_digest'),
+        consumedAtMillis: row.read<int>('consumed_at_millis'),
+        keyId: row.read<String>('key_id'),
+        signature: row.read<String>('signature'),
+      );
+      if (proof.workspaceId != lineage.read<String>('workspace_id') ||
+          proof.actorId != lineage.read<String>('actor_id') ||
+          proof.lineageEpoch > lineageEpoch ||
+          proof.consumptionOrdinal != index + 1 ||
+          proof.previousConsumptionDigest != previous ||
+          !await proof.verify(correctionReceiptVerifier)) {
+        return false;
+      }
+      final intent = intents
+          .where(
+            (candidate) =>
+                candidate.read<String>('consumption_request_id') ==
+                proof.consumptionRequestId,
+          )
+          .toList(growable: false);
+      if (intent.length != 1 ||
+          intent.single.read<String>('local_operation_id') !=
+              row.read<String>('local_operation_id') ||
+          intent.single.read<String>('authorization_receipt_id') !=
+              proof.authorizationReceiptId ||
+          intent.single.read<String>('authorization_receipt_digest') !=
+              proof.authorizationReceiptDigest ||
+          intent.single.read<String>('workspace_id') != proof.workspaceId ||
+          intent.single.read<String>('actor_id') != proof.actorId ||
+          intent.single.read<String>('capability') != proof.capability ||
+          intent.single.read<String>('semantic_target_id') !=
+              proof.semanticTargetId ||
+          intent.single.read<String>('command_digest') != proof.commandDigest ||
+          intent.single.read<String>('lineage_id') != proof.lineageId ||
+          intent.single.read<int>('lineage_epoch') != proof.lineageEpoch) {
+        return false;
+      }
+      final effectTable = proof.capability == 'shop.sale.reverse'
+          ? 'shop_sale_reversals'
+          : 'shop_wallet_reversal_reconciliations';
+      final effectTargetColumn = proof.capability == 'shop.sale.reverse'
+          ? 'sale_id'
+          : 'reversal_id';
+      final effect = await customSelect(
+        'SELECT authorization_receipt_digest, '
+        'authorization_workspace_id, authorized_actor_id, '
+        'authorization_capability, $effectTargetColumn AS semantic_target_id, '
+        'authorization_command_digest FROM $effectTable WHERE operation_id = ? '
+        'AND authorization_receipt_id = ? LIMIT 1',
+        variables: [
+          Variable<String>(intent.single.read<String>('local_operation_id')),
+          Variable<String>(proof.authorizationReceiptId),
+        ],
+      ).getSingleOrNull();
+      if (effect == null ||
+          effect.read<String>('authorization_receipt_digest') !=
+              proof.authorizationReceiptDigest ||
+          effect.read<String>('authorization_workspace_id') !=
+              proof.workspaceId ||
+          effect.read<String>('authorized_actor_id') != proof.actorId ||
+          effect.read<String>('authorization_capability') != proof.capability ||
+          effect.read<String>('semantic_target_id') != proof.semanticTargetId ||
+          effect.read<String>('authorization_command_digest') !=
+              proof.commandDigest) {
+        return false;
+      }
+      previous = proof.historyDigest;
+    }
+    return previous == watermark;
   }
 
   bool _proofMatchesCorrectionRow(QueryRow proof, QueryRow correction) =>
@@ -3711,6 +4215,12 @@ class ShopDatabase extends _$ShopDatabase {
   /// Create and read back a consistent local SQLite snapshot. This plaintext
   /// file is an internal building block, not a user-shareable backup format.
   Future<void> exportVerifiedLocalSnapshot(File target) async {
+    final lineage = await readCorrectionLineageState();
+    if (lineage != null && !lineage.canConsume) {
+      throw StateError(
+        'Resolve the pending Shop correction before creating a backup.',
+      );
+    }
     await target.parent.create(recursive: true);
     if (await target.exists()) {
       throw StateError('A snapshot already exists at this path.');
@@ -5319,6 +5829,492 @@ class ShopDatabase extends _$ShopDatabase {
     });
   }
 
+  Future<ShopLocalCorrectionLineageState?> readCorrectionLineageState() async {
+    final row = await customSelect(
+      'SELECT * FROM shop_correction_lineage_state WHERE singleton = 1',
+    ).getSingleOrNull();
+    if (row == null) return null;
+    return ShopLocalCorrectionLineageState(
+      lineage: ShopCorrectionLineage(
+        activationRequestId: row.read<String>('activation_request_id'),
+        workspaceId: row.read<String>('workspace_id'),
+        actorId: row.read<String>('actor_id'),
+        lineageId: row.read<String>('lineage_id'),
+        lineageEpoch: row.read<int>('lineage_epoch'),
+        previousLineageId: row.readNullable<String>('previous_lineage_id'),
+        previousLineageEpoch: row.readNullable<int>('previous_lineage_epoch'),
+        consumptionOrdinal: row.read<int>('consumption_ordinal'),
+        consumptionDigest: row.readNullable<String>('consumption_digest'),
+        activatedAtMillis: row.read<int>('activated_at_millis'),
+      ),
+      lifecycleState: row.read<String>('lifecycle_state'),
+    );
+  }
+
+  /// Persists an authenticated server lineage response.
+  ///
+  /// A restore must rotate from its exact old watermark. A server response
+  /// cannot silently skip an unknown correction or reactivate a stale clone.
+  Future<void> acceptCorrectionLineage(ShopCorrectionLineage lineage) async {
+    if (!lineage.isStructurallyValid) {
+      throw StateError('Shop correction lineage evidence is invalid.');
+    }
+    await _withCorrectionQuarantine(
+      () => transaction(() async {
+        final binding = await readManagedWorkspaceBinding();
+        if (binding == null ||
+            binding.workspaceId != lineage.workspaceId ||
+            binding.attachedActorId != lineage.actorId) {
+          throw StateError(
+            'Shop correction lineage does not match this store.',
+          );
+        }
+        final current = await readCorrectionLineageState();
+        if (current == null) {
+          if (lineage.lineageEpoch != 1 ||
+              lineage.previousLineageId != null ||
+              lineage.previousLineageEpoch != null ||
+              lineage.consumptionOrdinal != 0 ||
+              lineage.consumptionDigest != null) {
+            throw StateError('Initial Shop correction lineage is not empty.');
+          }
+          await customInsert(
+            'INSERT INTO shop_correction_lineage_state '
+            '(singleton, activation_request_id, workspace_id, actor_id, '
+            'lineage_id, lineage_epoch, previous_lineage_id, '
+            'previous_lineage_epoch, consumption_ordinal, consumption_digest, '
+            'lifecycle_state, activated_at_millis) '
+            "VALUES (1, ?, ?, ?, ?, ?, NULL, NULL, 0, NULL, 'active', ?)",
+            variables: [
+              Variable<String>(lineage.activationRequestId),
+              Variable<String>(lineage.workspaceId),
+              Variable<String>(lineage.actorId),
+              Variable<String>(lineage.lineageId),
+              Variable<int>(lineage.lineageEpoch),
+              Variable<int>(lineage.activatedAtMillis),
+            ],
+          );
+          return;
+        }
+        final previous = current.lineage;
+        if (current.lifecycleState != 'restore_pending' ||
+            lineage.previousLineageId != previous.lineageId ||
+            lineage.previousLineageEpoch != previous.lineageEpoch ||
+            lineage.lineageEpoch != previous.lineageEpoch + 1 ||
+            lineage.consumptionOrdinal != previous.consumptionOrdinal ||
+            lineage.consumptionDigest != previous.consumptionDigest) {
+          throw const _ShopCorrectionReconciliationRequired(
+            'Shop correction restore requires reconciliation.',
+          );
+        }
+        await customUpdate(
+          'UPDATE shop_correction_lineage_state SET activation_request_id = ?, '
+          'lineage_id = ?, lineage_epoch = ?, previous_lineage_id = ?, '
+          'previous_lineage_epoch = ?, lifecycle_state = ?, '
+          'activated_at_millis = ? WHERE singleton = 1',
+          variables: [
+            Variable<String>(lineage.activationRequestId),
+            Variable<String>(lineage.lineageId),
+            Variable<int>(lineage.lineageEpoch),
+            Variable<String>(lineage.previousLineageId!),
+            Variable<int>(lineage.previousLineageEpoch!),
+            const Variable<String>('active'),
+            Variable<int>(lineage.activatedAtMillis),
+          ],
+        );
+      }),
+    );
+  }
+
+  Future<T> _withCorrectionQuarantine<T>(Future<T> Function() action) async {
+    try {
+      return await action();
+    } on _ShopCorrectionReconciliationRequired catch (error) {
+      await customUpdate(
+        "UPDATE shop_correction_lineage_state SET lifecycle_state = 'reconciliation_required' WHERE singleton = 1",
+      );
+      throw StateError(error.message);
+    }
+  }
+
+  /// Called only on the staged database during encrypted restore.
+  Future<void> markCorrectionRestorePending() => customUpdate(
+    "UPDATE shop_correction_lineage_state SET lifecycle_state = 'restore_pending' "
+    "WHERE singleton = 1 AND lifecycle_state = 'active'",
+  );
+
+  Future<bool> applyCorrectionReconciliationStatus(
+    ShopCorrectionReconciliationStatus status,
+  ) async {
+    final current = await readCorrectionLineageState();
+    if (current == null) return false;
+    final local = current.lineage;
+    final exact =
+        status.workspaceId == local.workspaceId &&
+        status.requestedLineageId == local.lineageId &&
+        status.requestedLineageEpoch == local.lineageEpoch &&
+        status.localConsumptionOrdinal == local.consumptionOrdinal &&
+        status.localConsumptionDigest == local.consumptionDigest &&
+        status.activeLineageId == local.lineageId &&
+        status.activeLineageEpoch == local.lineageEpoch &&
+        status.serverConsumptionOrdinal == local.consumptionOrdinal &&
+        status.serverConsumptionDigest == local.consumptionDigest &&
+        status.state == 'current';
+    if (exact) return true;
+    await customUpdate(
+      "UPDATE shop_correction_lineage_state SET lifecycle_state = 'reconciliation_required' WHERE singleton = 1",
+    );
+    return false;
+  }
+
+  Future<ShopCorrectionConsumptionIntent> prepareFullSaleCorrectionConsumption({
+    required String consumptionRequestId,
+    required ShopFullSaleReversalCommand command,
+    required ShopCorrectionAuthorization authorization,
+  }) async {
+    await _validateCorrectionAuthorization(
+      authorization: authorization,
+      commandDigest: command.commandDigest,
+      capability: 'shop.sale.reverse',
+    );
+    return _prepareCorrectionConsumption(
+      consumptionRequestId: consumptionRequestId,
+      localOperationId: command.operationId,
+      semanticTargetId: command.saleId,
+      authorization: authorization,
+      recoveryEnvelopeJson: _fullSaleCorrectionRecoveryEnvelope(
+        command: command,
+        authorization: authorization,
+      ),
+    );
+  }
+
+  Future<ShopCorrectionConsumptionIntent> _prepareCorrectionConsumption({
+    required String consumptionRequestId,
+    required String localOperationId,
+    required String semanticTargetId,
+    required ShopCorrectionAuthorization authorization,
+    String? recoveryEnvelopeJson,
+  }) async {
+    final uuid = RegExp(
+      r'^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
+    );
+    if (!uuid.hasMatch(consumptionRequestId) ||
+        localOperationId.trim().isEmpty ||
+        localOperationId.length > 120 ||
+        semanticTargetId.trim().isEmpty ||
+        semanticTargetId.length > 120) {
+      throw ArgumentError('Shop correction consumption request is invalid.');
+    }
+    await _validateCorrectionAuthorization(
+      authorization: authorization,
+      commandDigest: authorization.commandDigest,
+      capability: authorization.capability,
+    );
+    return transaction(() async {
+      final lineageState = await readCorrectionLineageState();
+      if (lineageState == null || !lineageState.canConsume) {
+        throw StateError('Shop correction consumption is unavailable.');
+      }
+      final lineage = lineageState.lineage;
+      if (lineage.workspaceId != authorization.workspaceId ||
+          lineage.actorId != authorization.actorId) {
+        throw StateError('Shop correction authority changed.');
+      }
+      final existing = await customSelect(
+        'SELECT * FROM shop_correction_consumption_intents '
+        'WHERE local_operation_id = ? OR consumption_request_id = ?',
+        variables: [
+          Variable<String>(localOperationId),
+          Variable<String>(consumptionRequestId),
+        ],
+      ).get();
+      if (existing.isNotEmpty) {
+        if (existing.length != 1) {
+          throw StateError('Shop correction consumption intent conflicts.');
+        }
+        final intent = _correctionIntentFromRow(existing.single);
+        if (intent.consumptionRequestId != consumptionRequestId ||
+            intent.localOperationId != localOperationId ||
+            intent.authorizationReceiptId != authorization.receiptId ||
+            intent.authorizationReceiptDigest != authorization.receiptDigest ||
+            intent.workspaceId != authorization.workspaceId ||
+            intent.actorId != authorization.actorId ||
+            intent.capability != authorization.capability ||
+            intent.semanticTargetId != semanticTargetId ||
+            intent.commandDigest != authorization.commandDigest ||
+            intent.lineageId != lineage.lineageId ||
+            intent.lineageEpoch != lineage.lineageEpoch ||
+            intent.recoveryEnvelopeJson != recoveryEnvelopeJson) {
+          throw StateError('Shop correction consumption intent was reused.');
+        }
+        return intent;
+      }
+      final now = DateTime.now().millisecondsSinceEpoch;
+      await customInsert(
+        'INSERT INTO shop_correction_consumption_intents '
+        '(consumption_request_id, local_operation_id, '
+        'authorization_receipt_id, authorization_receipt_digest, '
+        'workspace_id, actor_id, capability, semantic_target_id, '
+        'command_digest, lineage_id, lineage_epoch, recovery_envelope_json, '
+        'created_at_millis) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        variables: [
+          Variable<String>(consumptionRequestId),
+          Variable<String>(localOperationId),
+          Variable<String>(authorization.receiptId),
+          Variable<String>(authorization.receiptDigest),
+          Variable<String>(authorization.workspaceId),
+          Variable<String>(authorization.actorId),
+          Variable<String>(authorization.capability),
+          Variable<String>(semanticTargetId),
+          Variable<String>(authorization.commandDigest),
+          Variable<String>(lineage.lineageId),
+          Variable<int>(lineage.lineageEpoch),
+          Variable<String>(recoveryEnvelopeJson),
+          Variable<int>(now),
+        ],
+      );
+      return ShopCorrectionConsumptionIntent(
+        consumptionRequestId: consumptionRequestId,
+        localOperationId: localOperationId,
+        authorizationReceiptId: authorization.receiptId,
+        authorizationReceiptDigest: authorization.receiptDigest,
+        workspaceId: authorization.workspaceId,
+        actorId: authorization.actorId,
+        capability: authorization.capability,
+        semanticTargetId: semanticTargetId,
+        commandDigest: authorization.commandDigest,
+        lineageId: lineage.lineageId,
+        lineageEpoch: lineage.lineageEpoch,
+        createdAtMillis: now,
+        recoveryEnvelopeJson: recoveryEnvelopeJson,
+      );
+    });
+  }
+
+  ShopCorrectionConsumptionIntent _correctionIntentFromRow(QueryRow row) =>
+      ShopCorrectionConsumptionIntent(
+        consumptionRequestId: row.read<String>('consumption_request_id'),
+        localOperationId: row.read<String>('local_operation_id'),
+        authorizationReceiptId: row.read<String>('authorization_receipt_id'),
+        authorizationReceiptDigest: row.read<String>(
+          'authorization_receipt_digest',
+        ),
+        workspaceId: row.read<String>('workspace_id'),
+        actorId: row.read<String>('actor_id'),
+        capability: row.read<String>('capability'),
+        semanticTargetId: row.read<String>('semantic_target_id'),
+        commandDigest: row.read<String>('command_digest'),
+        lineageId: row.read<String>('lineage_id'),
+        lineageEpoch: row.read<int>('lineage_epoch'),
+        createdAtMillis: row.read<int>('created_at_millis'),
+        recoveryEnvelopeJson: row.readNullable<String>(
+          'recovery_envelope_json',
+        ),
+      );
+
+  Future<void> _preflightCorrectionConsumptionProof({
+    required ShopCorrectionConsumptionProof proof,
+    required String localOperationId,
+    required ShopCorrectionAuthorization authorization,
+    required String semanticTargetId,
+  }) async {
+    if (!await proof.verify(correctionReceiptVerifier)) {
+      throw StateError('Shop correction consumption proof is invalid.');
+    }
+    final existing = await customSelect(
+      'SELECT * FROM shop_correction_consumptions '
+      'WHERE consumption_request_id = ? OR local_operation_id = ?',
+      variables: [
+        Variable<String>(proof.consumptionRequestId),
+        Variable<String>(localOperationId),
+      ],
+    ).get();
+    if (existing.isNotEmpty) {
+      if (existing.length != 1 ||
+          existing.single.read<String>('consumption_id') !=
+              proof.consumptionId ||
+          existing.single.read<String>('history_digest') !=
+              proof.historyDigest ||
+          existing.single.read<String>('local_operation_id') !=
+              localOperationId) {
+        throw StateError('Shop correction consumption proof conflicts.');
+      }
+      return;
+    }
+    final intent = await customSelect(
+      'SELECT * FROM shop_correction_consumption_intents '
+      'WHERE consumption_request_id = ? AND local_operation_id = ?',
+      variables: [
+        Variable<String>(proof.consumptionRequestId),
+        Variable<String>(localOperationId),
+      ],
+    ).getSingleOrNull();
+    final lineageState = await readCorrectionLineageState();
+    if (intent == null || lineageState == null || !lineageState.canConsume) {
+      throw StateError('Shop correction consumption intent is unavailable.');
+    }
+    final lineage = lineageState.lineage;
+    if (proof.authorizationReceiptId != authorization.receiptId ||
+        proof.authorizationReceiptDigest != authorization.receiptDigest ||
+        proof.workspaceId != authorization.workspaceId ||
+        proof.actorId != authorization.actorId ||
+        proof.capability != authorization.capability ||
+        proof.semanticTargetId != semanticTargetId ||
+        proof.commandDigest != authorization.commandDigest ||
+        proof.lineageId != lineage.lineageId ||
+        proof.lineageEpoch != lineage.lineageEpoch ||
+        proof.consumptionOrdinal != lineage.consumptionOrdinal + 1 ||
+        proof.previousConsumptionDigest != lineage.consumptionDigest ||
+        intent.read<String>('authorization_receipt_id') !=
+            proof.authorizationReceiptId ||
+        intent.read<String>('authorization_receipt_digest') !=
+            proof.authorizationReceiptDigest ||
+        intent.read<String>('workspace_id') != proof.workspaceId ||
+        intent.read<String>('actor_id') != proof.actorId ||
+        intent.read<String>('capability') != proof.capability ||
+        intent.read<String>('semantic_target_id') != proof.semanticTargetId ||
+        intent.read<String>('command_digest') != proof.commandDigest ||
+        intent.read<String>('lineage_id') != proof.lineageId ||
+        intent.read<int>('lineage_epoch') != proof.lineageEpoch) {
+      await customUpdate(
+        "UPDATE shop_correction_lineage_state SET lifecycle_state = 'reconciliation_required' WHERE singleton = 1",
+      );
+      throw StateError('Shop correction consumption requires reconciliation.');
+    }
+  }
+
+  Future<void> _recordCorrectionConsumptionProof({
+    required ShopCorrectionConsumptionProof proof,
+    required String localOperationId,
+    required ShopCorrectionAuthorization authorization,
+    required String semanticTargetId,
+  }) async {
+    if (!await proof.verify(correctionReceiptVerifier)) {
+      throw StateError('Shop correction consumption proof is invalid.');
+    }
+    final existing = await customSelect(
+      'SELECT * FROM shop_correction_consumptions '
+      'WHERE consumption_request_id = ? OR local_operation_id = ?',
+      variables: [
+        Variable<String>(proof.consumptionRequestId),
+        Variable<String>(localOperationId),
+      ],
+    ).get();
+    if (existing.isNotEmpty) {
+      if (existing.length != 1 ||
+          existing.single.read<String>('consumption_id') !=
+              proof.consumptionId ||
+          existing.single.read<String>('history_digest') !=
+              proof.historyDigest ||
+          existing.single.read<String>('local_operation_id') !=
+              localOperationId) {
+        throw StateError('Shop correction consumption proof conflicts.');
+      }
+      return;
+    }
+    final intent = await customSelect(
+      'SELECT * FROM shop_correction_consumption_intents '
+      'WHERE consumption_request_id = ? AND local_operation_id = ?',
+      variables: [
+        Variable<String>(proof.consumptionRequestId),
+        Variable<String>(localOperationId),
+      ],
+    ).getSingleOrNull();
+    final lineageState = await readCorrectionLineageState();
+    if (intent == null || lineageState == null || !lineageState.canConsume) {
+      throw StateError('Shop correction consumption intent is unavailable.');
+    }
+    final lineage = lineageState.lineage;
+    if (proof.authorizationReceiptId != authorization.receiptId ||
+        proof.authorizationReceiptDigest != authorization.receiptDigest ||
+        proof.workspaceId != authorization.workspaceId ||
+        proof.actorId != authorization.actorId ||
+        proof.capability != authorization.capability ||
+        proof.semanticTargetId != semanticTargetId ||
+        proof.commandDigest != authorization.commandDigest ||
+        proof.lineageId != lineage.lineageId ||
+        proof.lineageEpoch != lineage.lineageEpoch ||
+        proof.consumptionOrdinal != lineage.consumptionOrdinal + 1 ||
+        proof.previousConsumptionDigest != lineage.consumptionDigest ||
+        intent.read<String>('authorization_receipt_id') !=
+            proof.authorizationReceiptId ||
+        intent.read<String>('authorization_receipt_digest') !=
+            proof.authorizationReceiptDigest ||
+        intent.read<String>('workspace_id') != proof.workspaceId ||
+        intent.read<String>('actor_id') != proof.actorId ||
+        intent.read<String>('capability') != proof.capability ||
+        intent.read<String>('semantic_target_id') != proof.semanticTargetId ||
+        intent.read<String>('command_digest') != proof.commandDigest ||
+        intent.read<String>('lineage_id') != proof.lineageId ||
+        intent.read<int>('lineage_epoch') != proof.lineageEpoch) {
+      throw StateError('Shop correction consumption requires reconciliation.');
+    }
+    await customInsert(
+      'INSERT INTO shop_correction_consumptions '
+      '(consumption_id, consumption_request_id, local_operation_id, '
+      'authorization_receipt_id, authorization_receipt_digest, workspace_id, '
+      'actor_id, capability, semantic_target_id, command_digest, lineage_id, '
+      'lineage_epoch, consumption_ordinal, previous_consumption_digest, '
+      'history_digest, consumed_at_millis, key_id, signature) '
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      variables: [
+        Variable<String>(proof.consumptionId),
+        Variable<String>(proof.consumptionRequestId),
+        Variable<String>(localOperationId),
+        Variable<String>(proof.authorizationReceiptId),
+        Variable<String>(proof.authorizationReceiptDigest),
+        Variable<String>(proof.workspaceId),
+        Variable<String>(proof.actorId),
+        Variable<String>(proof.capability),
+        Variable<String>(proof.semanticTargetId),
+        Variable<String>(proof.commandDigest),
+        Variable<String>(proof.lineageId),
+        Variable<int>(proof.lineageEpoch),
+        Variable<int>(proof.consumptionOrdinal),
+        Variable<String>(proof.previousConsumptionDigest),
+        Variable<String>(proof.historyDigest),
+        Variable<int>(proof.consumedAtMillis),
+        Variable<String>(proof.keyId),
+        Variable<String>(proof.signature),
+      ],
+    );
+    final previousDigest = proof.previousConsumptionDigest;
+    final changed = await customUpdate(
+      'UPDATE shop_correction_lineage_state SET consumption_ordinal = ?, '
+      'consumption_digest = ? WHERE singleton = 1 AND lineage_id = ? '
+      'AND lineage_epoch = ? AND consumption_ordinal = ? AND '
+      '${previousDigest == null ? 'consumption_digest IS NULL' : 'consumption_digest = ?'}',
+      variables: [
+        Variable<int>(proof.consumptionOrdinal),
+        Variable<String>(proof.historyDigest),
+        Variable<String>(proof.lineageId),
+        Variable<int>(proof.lineageEpoch),
+        Variable<int>(proof.consumptionOrdinal - 1),
+        if (previousDigest != null) Variable<String>(previousDigest),
+      ],
+    );
+    if (changed != 1) {
+      throw StateError('Shop correction consumption watermark changed.');
+    }
+  }
+
+  Future<void> _requireRecordedCorrectionConsumption({
+    required String localOperationId,
+    required ShopCorrectionConsumptionProof proof,
+  }) async {
+    final row = await customSelect(
+      'SELECT consumption_id, history_digest FROM '
+      'shop_correction_consumptions WHERE local_operation_id = ?',
+      variables: [Variable<String>(localOperationId)],
+    ).getSingleOrNull();
+    if (row == null ||
+        row.read<String>('consumption_id') != proof.consumptionId ||
+        row.read<String>('history_digest') != proof.historyDigest) {
+      throw StateError('Recorded Shop correction consumption is missing.');
+    }
+  }
+
   Future<String> _sha256Hex(String value) async {
     final digest = await Sha256().hash(utf8.encode(value));
     return digest.bytes
@@ -5719,10 +6715,92 @@ class ShopDatabase extends _$ShopDatabase {
     return row == null ? null : _saleReversalFromRow(row);
   }
 
+  /// Persists the stable local intent before asking the server to consume the
+  /// authorization. A caller can repeat this method with the same request and
+  /// operation IDs after an ambiguous transport failure: the server contract
+  /// returns the original signed proof and the local commit remains
+  /// idempotent. This method is not wired to a production transport while the
+  /// global consumption gate and production verification keys remain closed.
+  Future<ShopSaleReversal> consumeAndRecordAuthorizedFullSaleReversal({
+    required ShopFullSaleReversalCommand command,
+    required ShopCorrectionAuthorization authorization,
+    required String consumptionRequestId,
+    required ShopCorrectionConsumptionGateway gateway,
+  }) async {
+    final intent = await prepareFullSaleCorrectionConsumption(
+      consumptionRequestId: consumptionRequestId,
+      command: command,
+      authorization: authorization,
+    );
+    final proof = await gateway.consume(
+      consumptionRequestId: intent.consumptionRequestId,
+      authorization: authorization,
+      lineageId: intent.lineageId,
+      lineageEpoch: intent.lineageEpoch,
+      semanticTargetId: intent.semanticTargetId,
+    );
+    return recordAuthorizedFullSaleReversal(
+      command: command,
+      authorization: authorization,
+      consumptionProof: proof,
+    );
+  }
+
+  /// Resumes a persisted consume request after process loss. The immutable
+  /// envelope is revalidated by the same preview, receipt, gateway-proof and
+  /// atomic-recording boundaries used by the initial attempt.
+  Future<ShopSaleReversal> resumePendingFullSaleReversal({
+    required String consumptionRequestId,
+    required ShopCorrectionConsumptionGateway gateway,
+  }) async {
+    final row = await customSelect(
+      'SELECT recovery_envelope_json FROM shop_correction_consumption_intents '
+      'WHERE consumption_request_id = ?',
+      variables: [Variable<String>(consumptionRequestId)],
+    ).getSingleOrNull();
+    final encoded = row?.readNullable<String>('recovery_envelope_json');
+    if (encoded == null) {
+      throw StateError('No resumable Shop correction request was found.');
+    }
+    final recovered = _decodeFullSaleCorrectionRecoveryEnvelope(encoded);
+    final command = await previewFullSaleReversal(
+      operationId: recovered.command.operationId,
+      saleId: recovered.command.saleId,
+      restockItems: recovered.command.restockItems,
+      reason: recovered.command.reason,
+      confirmCashReturned: recovered.command.cashReturnConfirmed,
+    );
+    if (command.requestFingerprint != recovered.command.requestFingerprint ||
+        command.commandDigest != recovered.command.commandDigest ||
+        command.saleSnapshotDigest != recovered.command.saleSnapshotDigest ||
+        command.originalTotalMmk != recovered.command.originalTotalMmk ||
+        command.originalPaymentMethod !=
+            recovered.command.originalPaymentMethod ||
+        command.expectedCashShiftId != recovered.command.expectedCashShiftId ||
+        command.paymentResolution != recovered.command.paymentResolution) {
+      throw StateError('The pending correction no longer matches the sale.');
+    }
+    return consumeAndRecordAuthorizedFullSaleReversal(
+      command: command,
+      authorization: recovered.authorization,
+      consumptionRequestId: consumptionRequestId,
+      gateway: gateway,
+    );
+  }
+
   Future<ShopSaleReversal> recordAuthorizedFullSaleReversal({
     required ShopFullSaleReversalCommand command,
     required ShopCorrectionAuthorization authorization,
-  }) {
+    ShopCorrectionConsumptionProof? consumptionProof,
+  }) async {
+    if (consumptionProof != null) {
+      await _preflightCorrectionConsumptionProof(
+        proof: consumptionProof,
+        localOperationId: command.operationId,
+        authorization: authorization,
+        semanticTargetId: command.saleId,
+      );
+    }
     return transaction(() async {
       await _validateCorrectionAuthorization(
         authorization: authorization,
@@ -5762,6 +6840,15 @@ class ShopDatabase extends _$ShopDatabase {
           );
         }
         await _requireRecordedSignedCorrectionProof(prior, authorization);
+        if (consumptionProof != null) {
+          await _requireRecordedCorrectionConsumption(
+            localOperationId: command.operationId,
+            proof: consumptionProof,
+          );
+        } else if (!testOnlyAllowUnconsumedAuthorization ||
+            await readCorrectionLineageState() != null) {
+          throw StateError('Global correction consumption proof is required.');
+        }
         return _saleReversalFromRow(prior);
       }
 
@@ -5818,7 +6905,21 @@ class ShopDatabase extends _$ShopDatabase {
           ? -command.originalTotalMmk
           : 0;
       final now = DateTime.now().millisecondsSinceEpoch;
-      _requireFreshCorrectionAuthorization(authorization, now);
+      _requireFreshCorrectionAuthorization(
+        authorization,
+        consumptionProof?.consumedAtMillis ?? now,
+      );
+      if (consumptionProof != null) {
+        await _recordCorrectionConsumptionProof(
+          proof: consumptionProof,
+          localOperationId: command.operationId,
+          authorization: authorization,
+          semanticTargetId: command.saleId,
+        );
+      } else if (!testOnlyAllowUnconsumedAuthorization ||
+          await readCorrectionLineageState() != null) {
+        throw StateError('Global correction consumption proof is required.');
+      }
       await _insertSignedCorrectionAuthorizationProof(
         authorization: authorization,
         operationId: command.operationId,
@@ -6027,7 +7128,16 @@ class ShopDatabase extends _$ShopDatabase {
   Future<ShopSaleReversal> recordAuthorizedWalletReconciliation({
     required ShopWalletReconciliationCommand command,
     required ShopCorrectionAuthorization authorization,
-  }) {
+    ShopCorrectionConsumptionProof? consumptionProof,
+  }) async {
+    if (consumptionProof != null) {
+      await _preflightCorrectionConsumptionProof(
+        proof: consumptionProof,
+        localOperationId: command.operationId,
+        authorization: authorization,
+        semanticTargetId: command.reversalId,
+      );
+    }
     return transaction(() async {
       await _validateCorrectionAuthorization(
         authorization: authorization,
@@ -6079,6 +7189,15 @@ class ShopDatabase extends _$ShopDatabase {
           );
         }
         await _requireRecordedSignedCorrectionProof(prior, authorization);
+        if (consumptionProof != null) {
+          await _requireRecordedCorrectionConsumption(
+            localOperationId: command.operationId,
+            proof: consumptionProof,
+          );
+        } else if (!testOnlyAllowUnconsumedAuthorization ||
+            await readCorrectionLineageState() != null) {
+          throw StateError('Global correction consumption proof is required.');
+        }
         return _saleReversalFromRow(reversal);
       }
       final verifiedCommand = await previewWalletReconciliation(
@@ -6104,7 +7223,21 @@ class ShopDatabase extends _$ShopDatabase {
       }
       await _requireUnusedCorrectionReceipt(authorization.receiptId);
       final now = DateTime.now().millisecondsSinceEpoch;
-      _requireFreshCorrectionAuthorization(authorization, now);
+      _requireFreshCorrectionAuthorization(
+        authorization,
+        consumptionProof?.consumedAtMillis ?? now,
+      );
+      if (consumptionProof != null) {
+        await _recordCorrectionConsumptionProof(
+          proof: consumptionProof,
+          localOperationId: command.operationId,
+          authorization: authorization,
+          semanticTargetId: command.reversalId,
+        );
+      } else if (!testOnlyAllowUnconsumedAuthorization ||
+          await readCorrectionLineageState() != null) {
+        throw StateError('Global correction consumption proof is required.');
+      }
       await _insertSignedCorrectionAuthorizationProof(
         authorization: authorization,
         operationId: command.operationId,

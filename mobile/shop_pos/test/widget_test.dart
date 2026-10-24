@@ -2148,6 +2148,7 @@ void main() {
     final database = ShopDatabase.withCorrectionReceiptVerifier(
       executor: NativeDatabase.memory(),
       correctionReceiptVerifier: _widgetCorrectionReceiptVerifier,
+      testOnlyAllowUnconsumedAuthorization: true,
     );
     final authorizer = _WidgetCorrectionAuthorizer(
       available: true,
@@ -2705,6 +2706,7 @@ void main() {
       final database = ShopDatabase.withCorrectionReceiptVerifier(
         executor: NativeDatabase.memory(),
         correctionReceiptVerifier: _widgetCorrectionReceiptVerifier,
+        testOnlyAllowUnconsumedAuthorization: true,
       );
       try {
         await _attachWidgetWorkspace(database);
@@ -2794,6 +2796,7 @@ void main() {
       final database = ShopDatabase.withCorrectionReceiptVerifier(
         executor: NativeDatabase.memory(),
         correctionReceiptVerifier: _widgetCorrectionReceiptVerifier,
+        testOnlyAllowUnconsumedAuthorization: true,
       );
       try {
         await _attachWidgetWorkspace(database);
@@ -2874,6 +2877,7 @@ void main() {
       final database = ShopDatabase.withCorrectionReceiptVerifier(
         executor: NativeDatabase.memory(),
         correctionReceiptVerifier: _widgetCorrectionReceiptVerifier,
+        testOnlyAllowUnconsumedAuthorization: true,
       );
       try {
         await _attachWidgetWorkspace(database);

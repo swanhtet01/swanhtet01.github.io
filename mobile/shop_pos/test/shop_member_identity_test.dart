@@ -16,7 +16,7 @@ void main() {
       final database = ShopDatabase(NativeDatabase.memory());
       try {
         await database.verifyReadyForUse();
-        expect(database.schemaVersion, 16);
+        expect(database.schemaVersion, 17);
         final storeRef = await database.readStoreRef();
         expect(storeRef, matches(RegExp(r'^[0-9a-f]{64}$')));
         await expectLater(
@@ -440,7 +440,7 @@ void main() {
           target: target,
           password: 'member backup test password',
         );
-        ShopBackup.verifySnapshot(target, expectedSchemaVersion: 16);
+        ShopBackup.verifySnapshot(target, expectedSchemaVersion: 17);
         final restored = ShopDatabase(NativeDatabase(target));
         try {
           expect(await restored.readStoreRef(), storeRef);
@@ -497,6 +497,7 @@ void main() {
           await source.exportVerifiedLocalSnapshot(snapshot);
           final raw = sqlite3.open(snapshot.path);
           try {
+            _removeV17CorrectionConsumptionObjects(raw);
             for (final table in const [
               'shop_wallet_checkout_member_links',
               'shop_sale_member_links',
@@ -514,7 +515,7 @@ void main() {
           final upgraded = ShopDatabase(NativeDatabase(snapshot));
           try {
             await upgraded.verifyReadyForUse();
-            expect(upgraded.schemaVersion, 16);
+            expect(upgraded.schemaVersion, 17);
             expect(await upgraded.countSales(), 1);
             expect(await upgraded.countStockMovements(), 2);
             expect(await upgraded.countOutboxOperations(), 2);
@@ -566,6 +567,7 @@ void main() {
         await source.exportVerifiedLocalSnapshot(snapshot);
         final raw = sqlite3.open(snapshot.path);
         try {
+          _removeV17CorrectionConsumptionObjects(raw);
           raw.execute(
             "UPDATE shop_products SET sku = 'smc1.legacy-merchant-code' "
             "WHERE id = 'legacy-collision'",
@@ -671,6 +673,7 @@ void main() {
           await source.exportVerifiedLocalSnapshot(snapshot);
           final raw = sqlite3.open(snapshot.path);
           try {
+            _removeV17CorrectionConsumptionObjects(raw);
             for (final table in const [
               'shop_wallet_checkout_member_links',
               'shop_sale_member_links',
@@ -943,7 +946,7 @@ void main() {
           }
           expect(
             () =>
-                ShopBackup.verifySnapshot(snapshot, expectedSchemaVersion: 16),
+                ShopBackup.verifySnapshot(snapshot, expectedSchemaVersion: 17),
             throwsFormatException,
           );
         } finally {
@@ -1062,7 +1065,7 @@ void main() {
         expect(
           () => ShopBackup.verifySnapshot(
             tamperedSnapshot,
-            expectedSchemaVersion: 16,
+            expectedSchemaVersion: 17,
           ),
           throwsFormatException,
         );
@@ -1154,7 +1157,7 @@ void main() {
         expect(
           () => ShopBackup.verifySnapshot(
             tamperedSnapshot,
-            expectedSchemaVersion: 16,
+            expectedSchemaVersion: 17,
           ),
           throwsFormatException,
         );
@@ -1324,6 +1327,26 @@ String _syntheticStaticMmqr() {
     '6304',
   ].join();
   return '$body${_crc16(utf8.encode(body))}';
+}
+
+void _removeV17CorrectionConsumptionObjects(Database connection) {
+  for (final trigger in const [
+    'shop_sale_reversals_require_consumption',
+    'shop_wallet_reconciliations_require_consumption',
+    'shop_correction_consumption_intents_no_update',
+    'shop_correction_consumption_intents_no_delete',
+    'shop_correction_consumptions_no_update',
+    'shop_correction_consumptions_no_delete',
+  ]) {
+    connection.execute('DROP TRIGGER IF EXISTS $trigger');
+  }
+  for (final table in const [
+    'shop_correction_consumptions',
+    'shop_correction_consumption_intents',
+    'shop_correction_lineage_state',
+  ]) {
+    connection.execute('DROP TABLE IF EXISTS $table');
+  }
 }
 
 String _crc16(List<int> bytes) {

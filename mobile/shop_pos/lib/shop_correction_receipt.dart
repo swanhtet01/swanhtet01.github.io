@@ -352,6 +352,46 @@ class ShopCorrectionReceiptVerifier {
       return false;
     }
   }
+
+  /// Verifies another correction proof signed with the same reviewed key ring.
+  ///
+  /// The caller must independently recompute and validate [digest]. This
+  /// helper proves only that the server signed that exact digest; it does not
+  /// turn a checksum or a locally constructed object into authorization.
+  Future<bool> verifySignedDigest({
+    required String keyId,
+    required String digest,
+    required String signature,
+  }) async {
+    if (!_keyIdPattern.hasMatch(keyId) ||
+        !_digestPattern.hasMatch(digest) ||
+        !_signaturePattern.hasMatch(signature)) {
+      return false;
+    }
+    final encodedPublicKey = _publicKeys[keyId];
+    if (encodedPublicKey == null) return false;
+    try {
+      final publicKeyBytes = _decodeBase64Url(
+        encodedPublicKey,
+        expectedLength: 32,
+      );
+      final signatureBytes = _decodeBase64Url(signature, expectedLength: 64);
+      return await _algorithm.verify(
+        utf8.encode(
+          shopCorrectionAuthorizationSignatureMessage(
+            keyId: keyId,
+            receiptDigest: digest,
+          ),
+        ),
+        signature: Signature(
+          signatureBytes,
+          publicKey: SimplePublicKey(publicKeyBytes, type: KeyPairType.ed25519),
+        ),
+      );
+    } catch (_) {
+      return false;
+    }
+  }
 }
 
 List<int> _decodeBase64Url(String value, {required int expectedLength}) {

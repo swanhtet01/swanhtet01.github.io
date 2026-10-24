@@ -132,6 +132,23 @@ void main() {
 
       final raw = sqlite3.open(snapshotFile.path);
       try {
+        for (final trigger in const [
+          'shop_sale_reversals_require_consumption',
+          'shop_wallet_reconciliations_require_consumption',
+          'shop_correction_consumption_intents_no_update',
+          'shop_correction_consumption_intents_no_delete',
+          'shop_correction_consumptions_no_update',
+          'shop_correction_consumptions_no_delete',
+        ]) {
+          raw.execute('DROP TRIGGER IF EXISTS $trigger');
+        }
+        for (final table in const [
+          'shop_correction_consumptions',
+          'shop_correction_consumption_intents',
+          'shop_correction_lineage_state',
+        ]) {
+          raw.execute('DROP TABLE IF EXISTS $table');
+        }
         for (final table in const [
           'shop_wallet_checkout_member_links',
           'shop_sale_member_links',
@@ -152,7 +169,7 @@ void main() {
       final memberToken = _memberToken(17);
       try {
         await database.verifyReadyForUse();
-        expect(database.schemaVersion, 16);
+        expect(database.schemaVersion, 17);
         final storeRef = await database.readStoreRef();
         await _seedPseudonymousMember(
           database,
@@ -245,6 +262,7 @@ void main() {
       correctionReceiptVerifier: ShopCorrectionReceiptVerifier({
         _testKeyId: _testPublicKey,
       }),
+      testOnlyAllowUnconsumedAuthorization: true,
     );
     try {
       await database.attachAuthenticatedManagedWorkspace(

@@ -23,6 +23,7 @@ enum _ShopSnapshotSchemaKind {
   unifiedV14,
   unifiedV15,
   unifiedV16,
+  unifiedV17,
 }
 
 enum _SnapshotColumnGroupState { none, partial, exact }
@@ -47,7 +48,7 @@ class _SnapshotSchemaObject {
 /// the database so an interrupted export or restore cannot retain plaintext.
 abstract final class ShopBackup {
   static const formatVersion = 1;
-  static const supportedSchemaVersion = 16;
+  static const supportedSchemaVersion = 17;
   static const oldestSupportedSchemaVersion = 6;
   static const maxSnapshotBytes = 64 * 1024 * 1024;
 
@@ -651,26 +652,34 @@ abstract final class ShopBackup {
           schemaKind == _ShopSnapshotSchemaKind.unifiedV13 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV14 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV15 ||
-          schemaKind == _ShopSnapshotSchemaKind.unifiedV16;
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV16 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV17;
       final hasWorkspaceSchema =
           schemaKind == _ShopSnapshotSchemaKind.correctionWorkspaceV12 ||
           schemaKind == _ShopSnapshotSchemaKind.profileWorkspaceCollisionV12 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV13 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV14 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV15 ||
-          schemaKind == _ShopSnapshotSchemaKind.unifiedV16;
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV16 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV17;
       final hasProfileSchema =
           schemaKind == _ShopSnapshotSchemaKind.profileV11 ||
           schemaKind == _ShopSnapshotSchemaKind.profileWorkspaceCollisionV12 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV13 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV14 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV15 ||
-          schemaKind == _ShopSnapshotSchemaKind.unifiedV16;
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV16 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV17;
       final hasAuthorizationProofSchema =
           schemaKind == _ShopSnapshotSchemaKind.unifiedV14 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV15 ||
-          schemaKind == _ShopSnapshotSchemaKind.unifiedV16;
-      final hasMemberSchema = schemaKind == _ShopSnapshotSchemaKind.unifiedV16;
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV16 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV17;
+      final hasMemberSchema =
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV16 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV17;
+      final hasConsumptionSchema =
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV17;
       final objects = _readSnapshotSchemaObjects(connection);
       final baseSchemaValid =
           objects != null &&
@@ -736,7 +745,8 @@ abstract final class ShopBackup {
                         ? _v15AuthorizationProofColumns
                         : _v14AuthorizationProofColumns,
                   ))) &&
-          (!hasMemberSchema || _v16MemberRowsValid(connection));
+          (!hasMemberSchema || _v16MemberRowsValid(connection)) &&
+          (!hasConsumptionSchema || _v17CorrectionRowsValid(connection));
       final walletIntents = schemaValid
           ? connection.select(
               'SELECT operation_id, payment_method, request_fingerprint, '
@@ -963,6 +973,9 @@ abstract final class ShopBackup {
   static Map<String, String> get _v16MemberDefinitions =>
       shopMemberSchemaDefinitionsV16();
 
+  static Map<String, String> get _v17CorrectionDefinitions =>
+      shopCorrectionConsumptionSchemaDefinitionsV17();
+
   static _ShopSnapshotSchemaKind? _classifySnapshotSchema(
     Database connection,
     int schemaVersion, {
@@ -986,11 +999,13 @@ abstract final class ShopBackup {
         ? _v15AuthorizationProofDefinitions
         : _v14AuthorizationProofDefinitions;
     final memberDefinitions = _v16MemberDefinitions;
+    final consumptionDefinitions = _v17CorrectionDefinitions;
     final collisionDefinitions = shopWorkspaceCollisionPrefixDefinitionsV12();
     final auditNames = auditDefinitions.keys.toSet();
     final workspaceNames = workspaceDefinitions.keys.toSet();
     final proofNames = proofDefinitions.keys.toSet();
     final memberNames = memberDefinitions.keys.toSet();
+    final consumptionNames = consumptionDefinitions.keys.toSet();
     const profileNames = {'shop_business_profile'};
     final presentNames = objects.keys.toSet();
     final cashState = _reversalCashColumnState(connection);
@@ -1024,6 +1039,11 @@ abstract final class ShopBackup {
       objects,
       memberDefinitions,
       memberNames,
+    );
+    final consumptionExact = _snapshotDefinitionGroupExact(
+      objects,
+      consumptionDefinitions,
+      consumptionNames,
     );
     final profileExact =
         _snapshotDefinitionGroupExact(objects, const {
@@ -1238,6 +1258,47 @@ abstract final class ShopBackup {
           'shop_v13_migration_provenance',
         })) {
       return _ShopSnapshotSchemaKind.unifiedV16;
+    }
+    if (schemaVersion == 17 &&
+        auditExact &&
+        workspaceExact &&
+        profileExact &&
+        proofExact &&
+        memberExact &&
+        consumptionExact &&
+        _v16MemberRowsValid(connection) &&
+        _v17CorrectionRowsValid(connection) &&
+        _snapshotDefinitionGroupExact(
+          objects,
+          const {
+            'shop_v13_migration_provenance': shopMigrationProvenanceV13Sql,
+          },
+          const {'shop_v13_migration_provenance'},
+        ) &&
+        _migrationProvenanceValid(
+          connection,
+          allowRuntimeUnboundCorrectionHistory:
+              allowRuntimeUnboundCorrectionHistory,
+          hasAuthorizationProofs: true,
+        ) &&
+        triggersMatch([
+          auditDefinitions,
+          workspaceDefinitions,
+          proofDefinitions,
+          memberDefinitions,
+          consumptionDefinitions,
+        ]) &&
+        _snapshotObjectNamesExact(objects, {
+          ..._snapshotExpectedBaseObjectNames(schemaVersion),
+          ...auditDefinitions.keys,
+          ...workspaceDefinitions.keys,
+          ...proofDefinitions.keys,
+          ...memberDefinitions.keys,
+          ...consumptionDefinitions.keys,
+          'shop_business_profile',
+          'shop_v13_migration_provenance',
+        })) {
+      return _ShopSnapshotSchemaKind.unifiedV17;
     }
     return null;
   }
@@ -1571,6 +1632,140 @@ abstract final class ShopBackup {
           )
           .isEmpty;
     } on SqliteException {
+      return false;
+    }
+  }
+
+  static bool _v17CorrectionRowsValid(Database connection) {
+    try {
+      final lineages = connection.select(
+        'SELECT * FROM shop_correction_lineage_state',
+      );
+      final intentCount = connection
+          .select(
+            'SELECT COUNT(*) AS total FROM shop_correction_consumption_intents',
+          )
+          .single['total'];
+      final proofs = connection.select(
+        'SELECT * FROM shop_correction_consumptions ORDER BY consumption_ordinal',
+      );
+      if (lineages.isEmpty) return intentCount == 0 && proofs.isEmpty;
+      if (lineages.length != 1) return false;
+      final lineage = lineages.single;
+      final ordinal = lineage['consumption_ordinal'];
+      final digest = lineage['consumption_digest'];
+      if (lineage['singleton'] != 1 ||
+          ordinal is! int ||
+          ordinal < 0 ||
+          proofs.length != ordinal ||
+          !const {
+            'active',
+            'restore_pending',
+            'reconciliation_required',
+          }.contains(lineage['lifecycle_state']) ||
+          (ordinal == 0
+              ? digest != null
+              : digest is! String ||
+                    !RegExp(r'^[0-9a-f]{64}$').hasMatch(digest))) {
+        return false;
+      }
+      final allIntents = connection.select(
+        'SELECT * FROM shop_correction_consumption_intents',
+      );
+      for (final intent in allIntents) {
+        final capability = intent['capability'];
+        if (capability == 'shop.sale.reverse' &&
+            shopFullSaleRecoveryAuthorization(
+                  intent['recovery_envelope_json'] as String?,
+                  localOperationId: intent['local_operation_id'] as String,
+                  authorizationReceiptId:
+                      intent['authorization_receipt_id'] as String,
+                  authorizationReceiptDigest:
+                      intent['authorization_receipt_digest'] as String,
+                  workspaceId: intent['workspace_id'] as String,
+                  actorId: intent['actor_id'] as String,
+                  capability: capability as String,
+                  semanticTargetId: intent['semantic_target_id'] as String,
+                  commandDigest: intent['command_digest'] as String,
+                ) ==
+                null) {
+          return false;
+        }
+      }
+      String? previous;
+      for (var index = 0; index < proofs.length; index++) {
+        final proof = proofs[index];
+        final history = proof['history_digest'];
+        if (proof['consumption_ordinal'] != index + 1 ||
+            proof['previous_consumption_digest'] != previous ||
+            proof['workspace_id'] != lineage['workspace_id'] ||
+            proof['actor_id'] != lineage['actor_id'] ||
+            proof['lineage_epoch'] is! int ||
+            (proof['lineage_epoch'] as int) > lineage['lineage_epoch'] ||
+            history is! String ||
+            !RegExp(r'^[0-9a-f]{64}$').hasMatch(history)) {
+          return false;
+        }
+        final intents = connection.select(
+          'SELECT local_operation_id FROM shop_correction_consumption_intents '
+          'WHERE consumption_request_id = ? '
+          'AND authorization_receipt_id = ? '
+          'AND authorization_receipt_digest = ? '
+          'AND workspace_id = ? AND actor_id = ? AND capability = ? '
+          'AND semantic_target_id = ? AND command_digest = ? '
+          'AND lineage_id = ? AND lineage_epoch = ?',
+          [
+            proof['consumption_request_id'],
+            proof['authorization_receipt_id'],
+            proof['authorization_receipt_digest'],
+            proof['workspace_id'],
+            proof['actor_id'],
+            proof['capability'],
+            proof['semantic_target_id'],
+            proof['command_digest'],
+            proof['lineage_id'],
+            proof['lineage_epoch'],
+          ],
+        );
+        if (intents.length != 1 ||
+            intents.single['local_operation_id'] !=
+                proof['local_operation_id']) {
+          return false;
+        }
+        final table = proof['capability'] == 'shop.sale.reverse'
+            ? 'shop_sale_reversals'
+            : proof['capability'] == 'shop.sale.reconcile_wallet'
+            ? 'shop_wallet_reversal_reconciliations'
+            : null;
+        if (table == null) return false;
+        final targetColumn = proof['capability'] == 'shop.sale.reverse'
+            ? 'sale_id'
+            : 'reversal_id';
+        final effects = connection.select(
+          'SELECT authorization_receipt_digest, '
+          'authorization_workspace_id, authorized_actor_id, '
+          'authorization_capability, $targetColumn AS semantic_target_id, '
+          'authorization_command_digest FROM $table WHERE operation_id = ? '
+          'AND authorization_receipt_id = ? LIMIT 1',
+          [proof['local_operation_id'], proof['authorization_receipt_id']],
+        );
+        if (effects.length != 1 ||
+            effects.single['authorization_receipt_digest'] !=
+                proof['authorization_receipt_digest'] ||
+            effects.single['authorization_workspace_id'] !=
+                proof['workspace_id'] ||
+            effects.single['authorized_actor_id'] != proof['actor_id'] ||
+            effects.single['authorization_capability'] != proof['capability'] ||
+            effects.single['semantic_target_id'] !=
+                proof['semantic_target_id'] ||
+            effects.single['authorization_command_digest'] !=
+                proof['command_digest']) {
+          return false;
+        }
+        previous = history;
+      }
+      return previous == digest;
+    } on Object {
       return false;
     }
   }

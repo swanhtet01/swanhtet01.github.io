@@ -386,6 +386,7 @@ void main() {
       database = ShopDatabase.withCorrectionReceiptVerifier(
         executor: NativeDatabase.memory(),
         correctionReceiptVerifier: _testCorrectionReceiptVerifier,
+        testOnlyAllowUnconsumedAuthorization: true,
       );
     });
 
@@ -505,6 +506,7 @@ void main() {
       final source = ShopDatabase.withCorrectionReceiptVerifier(
         executor: NativeDatabase(sourceFile),
         correctionReceiptVerifier: _testCorrectionReceiptVerifier,
+        testOnlyAllowUnconsumedAuthorization: true,
       );
       try {
         await _attachTestWorkspace(source);
@@ -545,6 +547,7 @@ void main() {
           final clone = ShopDatabase.withCorrectionReceiptVerifier(
             executor: NativeDatabase(cloneFile),
             correctionReceiptVerifier: _testCorrectionReceiptVerifier,
+            testOnlyAllowUnconsumedAuthorization: true,
           );
           try {
             final reversal = await clone.recordAuthorizedFullSaleReversal(
@@ -3628,6 +3631,23 @@ void main() {
 }
 
 Future<void> _dropV16MemberSchema(ShopDatabase database) async {
+  for (final trigger in const [
+    'shop_sale_reversals_require_consumption',
+    'shop_wallet_reconciliations_require_consumption',
+    'shop_correction_consumption_intents_no_update',
+    'shop_correction_consumption_intents_no_delete',
+    'shop_correction_consumptions_no_update',
+    'shop_correction_consumptions_no_delete',
+  ]) {
+    await database.customStatement('DROP TRIGGER IF EXISTS $trigger');
+  }
+  for (final table in const [
+    'shop_correction_consumptions',
+    'shop_correction_consumption_intents',
+    'shop_correction_lineage_state',
+  ]) {
+    await database.customStatement('DROP TABLE IF EXISTS $table');
+  }
   for (final table in const [
     'shop_wallet_checkout_member_links',
     'shop_sale_member_links',
