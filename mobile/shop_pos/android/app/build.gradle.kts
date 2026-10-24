@@ -52,6 +52,17 @@ android {
         versionName = flutter.versionName
     }
 
+    flavorDimensions += "runtimeProfile"
+    productFlavors {
+        create("production") {
+            dimension = "runtimeProfile"
+        }
+        create("qa") {
+            dimension = "runtimeProfile"
+            applicationIdSuffix = ".qa"
+        }
+    }
+
     signingConfigs {
         if (shopReleaseSigningAvailable) {
             create("release") {

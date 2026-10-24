@@ -25,7 +25,7 @@ export function verifyShopNativeCiContract(source, gradleWrapperSource = '') {
   const failures = []
 
   const flutterVersionPins = source.match(new RegExp(`flutter-version: '${FLUTTER_VERSION.replaceAll('.', '\\.')}'`, 'g')) ?? []
-  if (flutterVersionPins.length !== 3) failures.push('flutter_sdk_not_exactly_pinned_for_all_native_jobs')
+  if (flutterVersionPins.length !== 6) failures.push('flutter_sdk_not_exactly_pinned_for_all_native_jobs')
   if (/^\s*channel:\s*stable\s*$/m.test(source)) failures.push('flutter_sdk_uses_mutable_stable_channel')
   requireToken(
     source,
@@ -54,14 +54,14 @@ export function verifyShopNativeCiContract(source, gradleWrapperSource = '') {
   )
 
   for (const [token, failure] of [
-    ['name: supermega-shop-android-debug-${{ github.sha }}', 'android_artifact_not_explicitly_debug'],
-    ['sha256sum app-debug.apk > app-debug.apk.sha256', 'android_inner_checksum_not_recorded'],
-    ['sha256sum --check app-debug.apk.sha256', 'android_inner_checksum_not_verified'],
-    ['mobile/shop_pos/build/app/outputs/flutter-apk/app-debug.apk.sha256', 'android_checksum_not_retained'],
+    ['name: supermega-shop-android-production-debug-${{ github.sha }}', 'android_artifact_not_explicitly_debug'],
+    ['sha256sum app-production-debug.apk > app-production-debug.apk.sha256', 'android_inner_checksum_not_recorded'],
+    ['sha256sum --check app-production-debug.apk.sha256', 'android_inner_checksum_not_verified'],
+    ['mobile/shop_pos/build/app/outputs/flutter-apk/app-production-debug.apk.sha256', 'android_checksum_not_retained'],
     ['name: Reject unsigned Android release packaging', 'android_release_negative_gate_missing'],
     ["grep -F 'shop_android_release_signing_unavailable'", 'android_release_failure_marker_not_verified'],
-    ["./gradlew build --console=plain", 'android_aggregate_release_gate_not_tested'],
-    ["find build/app/outputs/flutter-apk -maxdepth 1 -name 'app-release*.apk'", 'android_release_artifact_absence_not_verified'],
+    ["./gradlew assembleProductionRelease --console=plain", 'android_aggregate_release_gate_not_tested'],
+    ["find build/app/outputs/flutter-apk -maxdepth 1 -name 'app-production-release*.apk'", 'android_release_artifact_absence_not_verified'],
     ["trap 'result=$?; cleanup_release_outputs || result=1; trap - EXIT; exit \"$result\"' EXIT", 'android_release_artifact_cleanup_not_always_run'],
     ['name: supermega-shop-windows-unsigned-${{ github.sha }}', 'windows_artifact_not_explicitly_unsigned'],
     ["Get-FileHash -Algorithm SHA256 -LiteralPath $packagePath", 'windows_inner_checksum_not_recorded'],
@@ -69,6 +69,9 @@ export function verifyShopNativeCiContract(source, gradleWrapperSource = '') {
     ['supermega-shop-windows-unsigned.zip.sha256', 'windows_checksum_not_retained'],
     ['Build iOS app without signing', 'ios_no_codesign_boundary_missing'],
     ['flutter build ios --debug --no-codesign --no-pub', 'ios_no_codesign_command_missing'],
+    ['name: synthetic-qa-promotion-ineligible-${{ github.sha }}-sha-256-android', 'android_qa_artifact_not_bound_to_source_or_promotion_state'],
+    ['name: synthetic-qa-promotion-ineligible-${{ github.sha }}-sha-256-ios', 'ios_qa_artifact_not_bound_to_source_or_promotion_state'],
+    ['name: synthetic-qa-promotion-ineligible-${{ github.sha }}-sha-256-windows', 'windows_qa_artifact_not_bound_to_source_or_promotion_state'],
   ]) requireToken(source, token, failure, failures)
 
   for (const property of [
@@ -87,7 +90,7 @@ export function verifyShopNativeCiContract(source, gradleWrapperSource = '') {
 
   requirePattern(
     source,
-    /^\s+mobile\/shop_pos\/build\/app\/outputs\/flutter-apk\/app-debug\.apk\s*$/m,
+    /^\s+mobile\/shop_pos\/build\/app\/outputs\/flutter-apk\/app-production-debug\.apk\s*$/m,
     'android_binary_not_retained',
     failures,
   )
@@ -100,7 +103,7 @@ export function verifyShopNativeCiContract(source, gradleWrapperSource = '') {
 
   requireOrder(
     source,
-    'sha256sum --check app-debug.apk.sha256',
+    'sha256sum --check app-production-debug.apk.sha256',
     'name: Retain Android debug APK for device QA',
     'android_checksum_not_verified_before_retention',
     failures,
@@ -129,9 +132,11 @@ export function verifyShopNativeCiContract(source, gradleWrapperSource = '') {
 
   const retainedArtifactCount = (source.match(/actions\/upload-artifact@/g) ?? []).length
   const launchWindowRetentionCount = (source.match(/retention-days:\s*14\b/g) ?? []).length
+  const qaRetentionCount = (source.match(/retention-days:\s*7\b/g) ?? []).length
   if (
-    retainedArtifactCount !== 3 ||
-    launchWindowRetentionCount !== retainedArtifactCount
+    retainedArtifactCount !== 6 ||
+    launchWindowRetentionCount !== 3 ||
+    qaRetentionCount !== 3
   ) {
     failures.push('native_artifact_retention_below_launch_window')
   }

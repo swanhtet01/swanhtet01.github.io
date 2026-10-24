@@ -266,7 +266,7 @@ const workflowTuples = Object.freeze([
   { platform: 'android', profile: 'production', build: 'flutter build apk --debug --no-pub --flavor production' },
   { platform: 'android', profile: 'synthetic_qa_v1', build: 'flutter build apk --debug --no-pub --flavor qa --dart-define=SHOP_RUNTIME_PROFILE=synthetic_qa_v1 --dart-define=SHOP_QA_PROFILE_ID=synthetic-qa-v1', artifact: 'app-qa-debug.apk' },
   { platform: 'ios', profile: 'production', build: 'flutter build ios --debug --no-codesign --no-pub' },
-  { platform: 'ios', profile: 'synthetic_qa_v1', build: 'flutter build ios --debug --no-codesign --no-pub --flavor qa --dart-define=SHOP_RUNTIME_PROFILE=synthetic_qa_v1 --dart-define=SHOP_QA_PROFILE_ID=synthetic-qa-v1', artifact: 'Runner.app' },
+  { platform: 'ios', profile: 'synthetic_qa_v1', build: 'flutter build ios --debug --no-codesign --no-pub --flavor qa --dart-define=SHOP_RUNTIME_PROFILE=synthetic_qa_v1 --dart-define=SHOP_QA_PROFILE_ID=synthetic-qa-v1', artifact: 'Runner.app.zip' },
   { platform: 'windows', profile: 'production', build: 'flutter build windows --release --no-pub' },
   { platform: 'windows', profile: 'synthetic_qa_v1', build: 'flutter build windows --release --no-pub --dart-define=SHOP_RUNTIME_PROFILE=synthetic_qa_v1 --dart-define=SHOP_QA_PROFILE_ID=synthetic-qa-v1', artifact: 'supermega_shop_qa.exe', configure: true },
 ])
@@ -336,7 +336,7 @@ function qaWorkflowBlockers(workflow) {
         && new RegExp(`(?:cat|Get-Content)\\s+${artifact}\\.sha256`, 'i').test(command)
         && new RegExp(`(?:>\\s*|Out-File\\s+)${artifact}\\.manifest$`, 'i').test(command)
     )))
-    const upload = laterSteps.find(step => /^actions\/upload-artifact@v4(?:\.\d+\.\d+)?$/.test(step.uses)
+    const upload = laterSteps.find(step => /^actions\/upload-artifact@(?:v4(?:\.\d+\.\d+)?|[0-9a-f]{40})$/.test(step.uses)
       && requiredStepIsUnconditional(step)
       && /synthetic-qa/i.test(step.artifactName)
       && /promotion-ineligible/i.test(step.artifactName)
@@ -558,7 +558,8 @@ export function assessShopQaIsolationContract({ sources }) {
   const iosScheme = sources['mobile/shop_pos/ios/Runner.xcodeproj/xcshareddata/xcschemes/qa.xcscheme'] || ''
   const iosConfig = sources['mobile/shop_pos/ios/Flutter/QA.xcconfig'] || ''
   if (!/create\("production"\)/.test(gradle) || !/create\("qa"\)/.test(gradle) || !androidProduction.includes('Shop') || !androidQa.includes('Shop QA')) add(blockers, 'android_qa_identity_missing', 'exact production/qa flavors and manifests')
-  if (!ios.includes('dev.supermega.supermegaShop.qa') || !iosScheme.includes('QA') || !iosConfig.includes('dev.supermega.supermegaShop.qa')) add(blockers, 'ios_qa_identity_missing', 'QA scheme, config, and bundle identity')
+  const iosQaActions = iosScheme.match(/buildConfiguration="Debug-qa"/g) ?? []
+  if (!ios.includes('dev.supermega.supermegaShop.qa') || iosQaActions.length !== 5 || /buildConfiguration="(?:Debug|Profile|Release)"/.test(iosScheme) || !iosConfig.includes('dev.supermega.supermegaShop.qa')) add(blockers, 'ios_qa_identity_missing', 'QA scheme, config, and bundle identity')
   if (!generator.includes('synthetic_qa_v1') || !generator.includes('production') || !generator.includes('windows')) add(blockers, 'identity_generator_missing', 'allowlisted platform/profile generator')
   if (!windows.includes('supermega_shop_qa.exe') || !windows.includes('Shop QA')) add(blockers, 'windows_qa_identity_missing', 'QA executable and product identity')
   const workflowBlockers = qaWorkflowBlockers(workflow)

@@ -39,6 +39,10 @@ jobs:
       - name: Resolve locked dependencies
         run: flutter pub get --enforce-lockfile
 
+      - name: Generate Android production identity
+        working-directory: ${{ github.workspace }}
+        run: node tools/generate_shop_build_identity.mjs --platform android --profile production
+
       - name: Check changed Dart formatting
         run: |
           dart format lib/main.dart lib/menu_import_screen.dart lib/menu_import_service.dart lib/printer_services.dart lib/recent_sales_screen.dart lib/shop_backup.dart lib/shop_cash_shift_screen.dart lib/shop_copy.dart lib/shop_correction_authorization_service.dart lib/shop_correction_receipt.dart lib/shop_database.dart lib/shop_sale_correction_dialog.dart lib/shop_startup.dart lib/shop_today_screen.dart lib/stock_screen.dart test/shop_backup_test.dart test/shop_correction_authorization_service_test.dart test/shop_foundation_test.dart test/visual_capture_test.dart test/widget_test.dart
@@ -81,51 +85,50 @@ jobs:
           unset ORG_GRADLE_PROJECT_SHOP_ANDROID_STORE_PASSWORD
           unset ORG_GRADLE_PROJECT_SHOP_ANDROID_KEY_PASSWORD
           cleanup_release_outputs() {
-            release_files="$(find build/app/outputs/flutter-apk -maxdepth 1 -name 'app-release*.apk' -print 2>/dev/null)"
+            release_files="$(find build/app/outputs/flutter-apk -maxdepth 1 -name 'app-production-release*.apk' -print 2>/dev/null)"
             if [ -n "$release_files" ]; then
-              rm -f build/app/outputs/flutter-apk/app-release*.apk
+              rm -f build/app/outputs/flutter-apk/app-production-release*.apk
               return 1
             fi
           }
           trap 'result=$?; cleanup_release_outputs || result=1; trap - EXIT; exit "$result"' EXIT
-          rm -f build/app/outputs/flutter-apk/app-release*.apk
+          rm -f build/app/outputs/flutter-apk/app-production-release*.apk
           set +e
-          release_output="$(flutter build apk --release --no-pub 2>&1)"
+          release_output="$(flutter build apk --release --no-pub --flavor production 2>&1)"
           release_status=$?
           set -e
           test "$release_status" -ne 0
           printf '%s\n' "$release_output" | grep -F 'shop_android_release_signing_unavailable'
-          test -z "$(find build/app/outputs/flutter-apk -maxdepth 1 -name 'app-release*.apk' -print -quit 2>/dev/null)"
+          test -z "$(find build/app/outputs/flutter-apk -maxdepth 1 -name 'app-production-release*.apk' -print -quit 2>/dev/null)"
           set +e
-          aggregate_output="$(cd android && ./gradlew build --console=plain 2>&1)"
+          aggregate_output="$(cd android && ./gradlew assembleProductionRelease --console=plain 2>&1)"
           aggregate_status=$?
           set -e
           test "$aggregate_status" -ne 0
           printf '%s\n' "$aggregate_output" | grep -F 'shop_android_release_signing_unavailable'
-          test -z "$(find build/app/outputs/flutter-apk -maxdepth 1 -name 'app-release*.apk' -print -quit 2>/dev/null)"
+          test -z "$(find build/app/outputs/flutter-apk -maxdepth 1 -name 'app-production-release*.apk' -print -quit 2>/dev/null)"
 
       - name: Build Android debug APK
-        run: flutter build apk --debug --no-pub
+        run: flutter build apk --debug --no-pub --flavor production
 
       - name: Record Android debug APK checksum
         run: |
           cd build/app/outputs/flutter-apk
-          sha256sum app-debug.apk > app-debug.apk.sha256
-          sha256sum --check app-debug.apk.sha256
+          sha256sum app-production-debug.apk > app-production-debug.apk.sha256
+          sha256sum --check app-production-debug.apk.sha256
 
       - name: Retain Android debug APK for device QA
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: supermega-shop-android-debug-${{ github.sha }}
+          name: supermega-shop-android-production-debug-${{ github.sha }}
           path: |
-            mobile/shop_pos/build/app/outputs/flutter-apk/app-debug.apk
-            mobile/shop_pos/build/app/outputs/flutter-apk/app-debug.apk.sha256
+            mobile/shop_pos/build/app/outputs/flutter-apk/app-production-debug.apk
+            mobile/shop_pos/build/app/outputs/flutter-apk/app-production-debug.apk.sha256
           if-no-files-found: error
           retention-days: 14
 
   ios:
     name: Build iPad/iOS app
-    needs: android
     runs-on: macos-latest
     timeout-minutes: 30
     defaults:
@@ -144,12 +147,15 @@ jobs:
       - name: Resolve locked dependencies
         run: flutter pub get --enforce-lockfile
 
+      - name: Generate iOS production identity
+        working-directory: ${{ github.workspace }}
+        run: node tools/generate_shop_build_identity.mjs --platform ios --profile production
+
       - name: Build iOS app without signing
         run: flutter build ios --debug --no-codesign --no-pub
 
   windows:
     name: Build Windows PC app
-    needs: android
     runs-on: windows-latest
     timeout-minutes: 35
     defaults:
@@ -179,6 +185,10 @@ jobs:
 
       - name: Resolve locked dependencies
         run: flutter pub get --enforce-lockfile
+
+      - name: Generate Windows production identity
+        working-directory: ${{ github.workspace }}
+        run: node tools/generate_shop_build_identity.mjs --platform windows --profile production
 
       - name: Prove backup restore and no-replace behavior on Windows
         run: flutter test test/shop_backup_test.dart --reporter expanded --timeout 2m
@@ -210,3 +220,161 @@ jobs:
             mobile/shop_pos/build/supermega-shop-windows-unsigned.zip.sha256
           if-no-files-found: error
           retention-days: 14
+
+  android-qa:
+    name: Build isolated Android synthetic QA app
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: mobile/shop_pos
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          flutter-version: '3.47.8'
+          cache: true
+
+      - name: Resolve locked dependencies
+        run: flutter pub get --enforce-lockfile
+
+      - name: Generate Android QA identity
+        working-directory: ${{ github.workspace }}
+        run: node tools/generate_shop_build_identity.mjs --platform android --profile synthetic_qa_v1
+
+      - name: Build Android QA
+        run: flutter build apk --debug --no-pub --flavor qa --dart-define=SHOP_RUNTIME_PROFILE=synthetic_qa_v1 --dart-define=SHOP_QA_PROFILE_ID=synthetic-qa-v1
+
+      - name: Stage Android QA artifact
+        run: cp build/app/outputs/flutter-apk/app-qa-debug.apk "${{ github.workspace }}/app-qa-debug.apk"
+
+      - name: Hash Android QA artifact
+        working-directory: ${{ github.workspace }}
+        run: sha256sum app-qa-debug.apk > app-qa-debug.apk.sha256
+
+      - name: Bind Android QA artifact to source
+        working-directory: ${{ github.workspace }}
+        run: echo "source-sha=${{ github.sha }} sha-256=$(cat app-qa-debug.apk.sha256) promotion-ineligible" > app-qa-debug.apk.manifest
+
+      - name: Upload promotion-ineligible Android QA artifact
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: synthetic-qa-promotion-ineligible-${{ github.sha }}-sha-256-android
+          path: |
+            app-qa-debug.apk
+            app-qa-debug.apk.sha256
+            app-qa-debug.apk.manifest
+          if-no-files-found: error
+          retention-days: 7
+
+  ios-qa:
+    name: Build isolated iOS synthetic QA app
+    runs-on: macos-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: mobile/shop_pos
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          flutter-version: '3.47.8'
+          cache: true
+
+      - name: Resolve locked dependencies
+        run: flutter pub get --enforce-lockfile
+
+      - name: Generate iOS QA identity
+        working-directory: ${{ github.workspace }}
+        run: node tools/generate_shop_build_identity.mjs --platform ios --profile synthetic_qa_v1
+
+      - name: Build iOS QA
+        run: flutter build ios --debug --no-codesign --no-pub --flavor qa --dart-define=SHOP_RUNTIME_PROFILE=synthetic_qa_v1 --dart-define=SHOP_QA_PROFILE_ID=synthetic-qa-v1
+
+      - name: Stage iOS QA artifact
+        run: ditto -c -k --sequesterRsrc --keepParent build/ios/iphoneos/Runner.app "${{ github.workspace }}/Runner.app.zip"
+
+      - name: Hash iOS QA artifact
+        working-directory: ${{ github.workspace }}
+        run: shasum -a 256 Runner.app.zip > Runner.app.zip.sha256
+
+      - name: Bind iOS QA artifact to source
+        working-directory: ${{ github.workspace }}
+        run: echo "source-sha=${{ github.sha }} sha-256=$(cat Runner.app.zip.sha256) promotion-ineligible" > Runner.app.zip.manifest
+
+      - name: Upload promotion-ineligible iOS QA artifact
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: synthetic-qa-promotion-ineligible-${{ github.sha }}-sha-256-ios
+          path: |
+            Runner.app.zip
+            Runner.app.zip.sha256
+            Runner.app.zip.manifest
+          if-no-files-found: error
+          retention-days: 7
+
+  windows-qa:
+    name: Build isolated Windows synthetic QA app
+    runs-on: windows-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: mobile/shop_pos
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          flutter-version: '3.47.8'
+          cache: true
+
+      - name: Generate Windows runner
+        run: |
+          $runnerSource = Join-Path $env:RUNNER_TEMP 'supermega_shop_windows_qa_runner'
+          flutter create --platforms=windows --no-pub --project-name supermega_shop $runnerSource
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Copy-Item -LiteralPath (Join-Path $runnerSource 'windows') -Destination 'windows' -Recurse
+
+      - name: Resolve locked dependencies
+        run: flutter pub get --enforce-lockfile
+
+      - name: Generate Windows QA identity
+        working-directory: ${{ github.workspace }}
+        run: node tools/generate_shop_build_identity.mjs --platform windows --profile synthetic_qa_v1
+
+      - name: Configure Windows QA runner
+        run: .\scripts\configure_windows_qa_runner.ps1
+
+      - name: Build Windows QA
+        run: flutter build windows --release --no-pub --dart-define=SHOP_RUNTIME_PROFILE=synthetic_qa_v1 --dart-define=SHOP_QA_PROFILE_ID=synthetic-qa-v1
+
+      - name: Stage Windows QA executable
+        run: Copy-Item -LiteralPath 'build\windows\x64\runner\Release\supermega_shop_qa.exe' -Destination (Join-Path $env:GITHUB_WORKSPACE 'supermega_shop_qa.exe')
+
+      - name: Hash Windows QA executable
+        working-directory: ${{ github.workspace }}
+        run: Get-FileHash -Algorithm SHA256 supermega_shop_qa.exe | Out-File supermega_shop_qa.exe.sha256
+
+      - name: Bind Windows QA artifact to source
+        working-directory: ${{ github.workspace }}
+        run: Write-Output "source-sha=${{ github.sha }} sha-256=$(Get-Content supermega_shop_qa.exe.sha256) promotion-ineligible" | Out-File supermega_shop_qa.exe.manifest
+
+      - name: Upload promotion-ineligible Windows QA artifact
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: synthetic-qa-promotion-ineligible-${{ github.sha }}-sha-256-windows
+          path: |
+            supermega_shop_qa.exe
+            supermega_shop_qa.exe.sha256
+            supermega_shop_qa.exe.manifest
+          if-no-files-found: error
+          retention-days: 7

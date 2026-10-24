@@ -45,7 +45,7 @@ ${artifactSteps('app-qa-debug.apk')}
         run: node tools/generate_shop_build_identity.mjs --platform ios --profile synthetic_qa_v1
       - name: Build iOS QA
         run: flutter build ios --debug --no-codesign --no-pub --flavor qa ${qa}
-${artifactSteps('Runner.app')}
+${artifactSteps('Runner.app.zip')}
   windows-production:
     steps:
       - name: Generate Windows production identity
@@ -86,7 +86,7 @@ function fixture() {
     'mobile/shop_pos/lib/shop_build_identity.g.dart': 'synthetic_qa_v1 platform',
     'tools/generate_shop_build_identity.mjs': 'production synthetic_qa_v1 windows',
     'mobile/shop_pos/scripts/configure_windows_qa_runner.ps1': 'supermega_shop_qa.exe Shop QA',
-    'mobile/shop_pos/ios/Runner.xcodeproj/xcshareddata/xcschemes/qa.xcscheme': '<Scheme name="QA"/>',
+    'mobile/shop_pos/ios/Runner.xcodeproj/xcshareddata/xcschemes/qa.xcscheme': '<TestAction buildConfiguration="Debug-qa"/><LaunchAction buildConfiguration="Debug-qa"/><ProfileAction buildConfiguration="Debug-qa"/><AnalyzeAction buildConfiguration="Debug-qa"/><ArchiveAction buildConfiguration="Debug-qa"/>',
     'mobile/shop_pos/ios/Flutter/QA.xcconfig': 'PRODUCT_BUNDLE_IDENTIFIER=dev.supermega.supermegaShop.qa',
     '.github/workflows/shop-native-ci.yml': workflowFixture(),
   }
@@ -218,6 +218,15 @@ test('exact platform identity and artifact contracts cannot be replaced by loose
     const sources = fixture(); sources[path] = 'unrelated text'
     assert.equal(assessShopQaIsolationContract({ sources }).strictReady, false, path)
   }
+
+  const mixedIosScheme = fixture()
+  mixedIosScheme['mobile/shop_pos/ios/Runner.xcodeproj/xcshareddata/xcschemes/qa.xcscheme'] =
+    '<TestAction buildConfiguration="Debug"/><LaunchAction buildConfiguration="Debug-qa"/><ProfileAction buildConfiguration="Profile"/><AnalyzeAction buildConfiguration="Debug-qa"/><ArchiveAction buildConfiguration="Release"/>'
+  assert.equal(
+    assessShopQaIsolationContract({ sources: mixedIosScheme }).strictReady,
+    false,
+    'QA scheme must not fall back to production configurations',
+  )
 })
 
 test('wrong artifact tuple remains blocked without upgrading evidence', () => {
@@ -314,12 +323,14 @@ test('YAML environment provider values are fatal even without shell assignment s
   assert.equal(assessShopQaIsolationContract({ sources: descriptive }).ok, true)
 })
 
-test('repository CLI keeps audit nonzero-free and strict fail-closed', () => {
+test('repository CLI reports source readiness without granting launch authority', () => {
   const script = new URL('./verify_shop_qa_isolation_contract.mjs', import.meta.url)
   const audit = spawnSync(process.execPath, [script.pathname, '--audit'], { encoding: 'utf8' })
   assert.equal(audit.status, 0, audit.stderr)
-  assert.equal(JSON.parse(audit.stdout).strictReady, false)
+  assert.equal(JSON.parse(audit.stdout).strictReady, true)
   const strict = spawnSync(process.execPath, [script.pathname, '--strict'], { encoding: 'utf8' })
-  assert.equal(strict.status, 1)
+  assert.equal(strict.status, 0, strict.stderr)
   assert.equal(JSON.parse(strict.stdout).launchAuthorized, false)
+  assert.equal(JSON.parse(strict.stdout).artifactIdentityVerified, false)
+  assert.equal(JSON.parse(strict.stdout).installedIsolationVerified, false)
 })

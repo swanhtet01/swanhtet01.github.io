@@ -21,7 +21,7 @@ test('native CI retains checksums for the actual Android and Windows QA files', 
   assert.equal(result.gradleDistributionSha256, 'b266d5ff6b90eada6dc3b20cb090e3731302e553a27c5d3e4df1f0d76beaff06')
 })
 
-test('native CI pins one exact Flutter SDK across Android, iOS, and Windows', () => {
+test('native CI pins one exact Flutter SDK across production and QA native jobs', () => {
   const mutable = verifyShopNativeCiContract(
     workflow.replace("flutter-version: '3.47.8'", 'channel: stable'),
     gradleWrapper,
@@ -55,17 +55,17 @@ test('Gradle wrapper uses the checksum-pinned 9.3.1 bin distribution', () => {
 
 test('missing or unverified Android checksum fails closed', () => {
   const missing = verifyShopNativeCiContract(
-    workflow.replace('sha256sum app-debug.apk > app-debug.apk.sha256', 'true'),
+    workflow.replace('sha256sum app-production-debug.apk > app-production-debug.apk.sha256', 'true'),
   )
   assert.ok(missing.failures.includes('android_inner_checksum_not_recorded'))
 
   const unchecked = verifyShopNativeCiContract(
-    workflow.replace('sha256sum --check app-debug.apk.sha256', 'true'),
+    workflow.replace('sha256sum --check app-production-debug.apk.sha256', 'true'),
   )
   assert.ok(unchecked.failures.includes('android_inner_checksum_not_verified'))
 
   const binaryMissing = verifyShopNativeCiContract(
-    workflow.replace(/^\s+mobile\/shop_pos\/build\/app\/outputs\/flutter-apk\/app-debug\.apk\s*$/m, ''),
+    workflow.replace(/^\s+mobile\/shop_pos\/build\/app\/outputs\/flutter-apk\/app-production-debug\.apk\s*$/m, ''),
   )
   assert.ok(binaryMissing.failures.includes('android_binary_not_retained'))
 })
