@@ -3763,7 +3763,9 @@ Future<void> _expectLegacyV11WalletReconciliationProof(
   final proof = await database
       .customSelect(
         'SELECT proof_kind, command_digest '
-        'FROM shop_correction_authorization_proofs',
+        'FROM shop_correction_authorization_proofs '
+        'WHERE capability = ?',
+        variables: [const Variable<String>('shop.sale.reconcile_wallet')],
       )
       .getSingle();
   expect(proof.read<String>('proof_kind'), 'legacy_unverified_v1');
