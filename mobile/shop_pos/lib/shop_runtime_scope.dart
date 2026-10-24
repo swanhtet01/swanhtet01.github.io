@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'shop_runtime_profile.dart';
 
 typedef ShopDirectoryProvider = Future<Directory> Function();
+typedef ShopRuntimeConfigurationProvider = ShopRuntimeConfiguration Function();
 
 const shopReceiptPrinterHostKey = 'shop_receipt_printer_host_v1';
 const shopReceiptPaperWidthKey = 'shop_receipt_paper_width_v1';
@@ -29,6 +30,27 @@ Future<Directory> openProductionShopDocumentsDirectory() =>
 
 Future<Directory> openProductionShopTemporaryDirectory() =>
     getTemporaryDirectory();
+
+/// Resolves the signed/generated runtime tuple before any preference, path,
+/// database, provider, or device boundary is opened by application startup.
+Future<ShopRuntimeScope> resolveShopRuntimeScopeForStartup({
+  ShopRuntimeConfigurationProvider? configurationProvider,
+  ShopDirectoryProvider? documentsProvider,
+  ShopDirectoryProvider? supportProvider,
+  ShopDirectoryProvider? temporaryProvider,
+  Future<SharedPreferences> Function()? preferencesProvider,
+}) async {
+  final configuration =
+      (configurationProvider ?? ShopRuntimeConfiguration.fromEnvironment)();
+  return ShopRuntimeScope.resolve(
+    configuration.profile,
+    configuration: configuration,
+    documentsProvider: documentsProvider,
+    supportProvider: supportProvider,
+    temporaryProvider: temporaryProvider,
+    preferencesProvider: preferencesProvider,
+  );
+}
 
 class ShopPreferenceKeys {
   const ShopPreferenceKeys._(this._prefix);

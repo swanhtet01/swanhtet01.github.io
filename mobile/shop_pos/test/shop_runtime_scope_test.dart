@@ -12,6 +12,101 @@ void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
   test(
+    'startup accepts only exact generated production or QA tuples',
+    () async {
+      final productionDocuments = await Directory.systemTemp.createTemp(
+        'shop-startup-prod-docs-',
+      );
+      final productionTemporary = await Directory.systemTemp.createTemp(
+        'shop-startup-prod-temp-',
+      );
+      final qaSupport = await Directory.systemTemp.createTemp(
+        'shop-startup-qa-support-',
+      );
+      final qaTemporary = await Directory.systemTemp.createTemp(
+        'shop-startup-qa-temp-',
+      );
+      addTearDown(() async {
+        await productionDocuments.delete(recursive: true);
+        await productionTemporary.delete(recursive: true);
+        await qaSupport.delete(recursive: true);
+        await qaTemporary.delete(recursive: true);
+      });
+
+      final production = await resolveShopRuntimeScopeForStartup(
+        documentsProvider: () async => productionDocuments,
+        temporaryProvider: () async => productionTemporary,
+      );
+      expect(production.configuration.profile, ShopRuntimeProfile.production);
+      expect(production.documentsRoot.path, productionDocuments.path);
+
+      final qa = await resolveShopRuntimeScopeForStartup(
+        configurationProvider: _qaProfile,
+        supportProvider: () async => qaSupport,
+        temporaryProvider: () async => qaTemporary,
+      );
+      expect(qa.configuration.profile, ShopRuntimeProfile.syntheticQa);
+      expect(qa.documentsRoot.path, contains('synthetic-qa-v1'));
+    },
+  );
+
+  test(
+    'invalid startup tuples fail before preferences or paths open',
+    () async {
+      for (final invalidConfiguration in <ShopRuntimeConfiguration Function()>[
+        () => ShopRuntimeConfiguration.resolve(
+          runtimeProfile: '',
+          qaProfile: '',
+          buildIdentityProfile: '',
+          buildIdentityQaProfile: '',
+          platformIdentity: '',
+        ),
+        () => ShopRuntimeConfiguration.resolve(
+          runtimeProfile: ShopRuntimeConfiguration.qaRuntimeToken,
+          qaProfile: '',
+          buildIdentityProfile: ShopRuntimeConfiguration.qaRuntimeToken,
+          buildIdentityQaProfile: ShopRuntimeConfiguration.qaProfileId,
+          platformIdentity: 'dev.supermega.supermega_shop.qa',
+        ),
+        () => ShopRuntimeConfiguration.resolve(
+          runtimeProfile: 'production',
+          qaProfile: '',
+          buildIdentityProfile: 'production',
+          buildIdentityQaProfile: '',
+          platformIdentity: 'dev.example.unknown',
+        ),
+      ]) {
+        var pathOpened = false;
+        var preferencesOpened = false;
+        await expectLater(
+          resolveShopRuntimeScopeForStartup(
+            configurationProvider: invalidConfiguration,
+            documentsProvider: () async {
+              pathOpened = true;
+              return Directory.systemTemp;
+            },
+            supportProvider: () async {
+              pathOpened = true;
+              return Directory.systemTemp;
+            },
+            temporaryProvider: () async {
+              pathOpened = true;
+              return Directory.systemTemp;
+            },
+            preferencesProvider: () async {
+              preferencesOpened = true;
+              return SharedPreferences.getInstance();
+            },
+          ),
+          throwsStateError,
+        );
+        expect(pathOpened, isFalse);
+        expect(preferencesOpened, isFalse);
+      }
+    },
+  );
+
+  test(
     'production paths and preference keys remain byte-for-byte unchanged',
     () async {
       final documents = await Directory.systemTemp.createTemp(
@@ -267,7 +362,7 @@ void main() {
 
 ShopRuntimeConfiguration _productionProfile() =>
     ShopRuntimeConfiguration.resolve(
-      runtimeProfile: '',
+      runtimeProfile: 'production',
       qaProfile: '',
       buildIdentityProfile: 'production',
       buildIdentityQaProfile: '',

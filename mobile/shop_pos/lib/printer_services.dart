@@ -77,9 +77,7 @@ class ReceiptPrinterSettings {
        _hostKey =
            requireShopRuntimeScopeOrTestSeam(
              runtimeScope,
-             testOnlyAllowMissingRuntimeScope:
-                 testOnlyAllowMissingRuntimeScope ||
-                 (preferences != null && rangeProvider != null),
+             testOnlyAllowMissingRuntimeScope: testOnlyAllowMissingRuntimeScope,
            )?.preferences.keys.receiptPrinterHost ??
            shopReceiptPrinterHostKey,
        _paperWidthKey =
@@ -245,9 +243,7 @@ class ReceiptReprintService {
            ).printSale(host, receipt, myanmar: myanmar)),
        _runtimeScope = requireShopRuntimeScopeOrTestSeam(
          runtimeScope,
-         testOnlyAllowMissingRuntimeScope:
-             testOnlyAllowMissingRuntimeScope ||
-             (settings != null && send != null),
+         testOnlyAllowMissingRuntimeScope: testOnlyAllowMissingRuntimeScope,
        );
 
   final ShopRuntimeScope? _runtimeScope;
@@ -441,9 +437,7 @@ class PrinterDiscoveryService {
     bool testOnlyAllowMissingRuntimeScope = false,
   }) : _runtimeScope = requireShopRuntimeScopeOrTestSeam(
          runtimeScope,
-         testOnlyAllowMissingRuntimeScope:
-             testOnlyAllowMissingRuntimeScope ||
-             (probe != null && rangeProvider != null),
+         testOnlyAllowMissingRuntimeScope: testOnlyAllowMissingRuntimeScope,
        ),
        _rangeProvider =
            rangeProvider ??

@@ -190,8 +190,7 @@ class ConnectedOrdersService {
     DateTime Function()? clock,
   }) : _runtimeScope = requireShopRuntimeScopeOrTestSeam(
          runtimeScope,
-         testOnlyAllowMissingRuntimeScope:
-             testOnlyAllowMissingRuntimeScope || client != null,
+         testOnlyAllowMissingRuntimeScope: testOnlyAllowMissingRuntimeScope,
        ),
        _client = client ?? _connectedOrdersClient(runtimeScope),
        _ownsClient = client == null,

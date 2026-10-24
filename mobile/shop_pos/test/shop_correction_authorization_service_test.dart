@@ -176,6 +176,7 @@ ShopCorrectionAuthorizationService _service(
   accessToken: accessToken ?? () async => 'short-lived-session',
   currentUserId: currentUserId ?? () async => _ownerId,
   client: client,
+  testOnlyAllowMissingRuntimeScope: true,
   receiptVerifier: receiptVerifier ?? _testReceiptVerifier,
   requestTimeout: requestTimeout,
 );
@@ -219,6 +220,20 @@ void main() {
       );
     },
   );
+
+  test('injecting a client does not implicitly authorize a missing scope', () {
+    expect(
+      () => ShopCorrectionAuthorizationService(
+        endpoint: shopCorrectionAuthorizationEndpoint(
+          'https://app.supermega.dev',
+        )!,
+        accessToken: () async => 'session',
+        currentUserId: () async => _ownerId,
+        client: MockClient((_) async => http.Response('{}', 200)),
+      ),
+      throwsStateError,
+    );
+  });
 
   test('endpoint is fixed under a clean HTTPS origin', () {
     expect(

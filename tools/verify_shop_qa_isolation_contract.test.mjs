@@ -94,7 +94,7 @@ function fixture() {
     'mobile/shop_pos/android/app/src/production/AndroidManifest.xml': '<application android:label="Shop"/>',
     'mobile/shop_pos/android/app/src/qa/AndroidManifest.xml': '<application android:label="Shop QA"/>',
     'mobile/shop_pos/ios/Runner.xcodeproj/project.pbxproj': 'PRODUCT_BUNDLE_IDENTIFIER = dev.supermega.supermegaShop;\nPRODUCT_BUNDLE_IDENTIFIER = dev.supermega.supermegaShop;\nPRODUCT_BUNDLE_IDENTIFIER = dev.supermega.supermegaShop;\ndev.supermega.supermegaShop.qa\npath = Runner.app;\nVerify Shop build identity shop_ios_build_identity_missing shop_ios_build_configuration_unknown\nshopBuildIdentityProfile = \'synthetic_qa_v1\' shopBuildIdentityQaProfileId = \'synthetic-qa-v1\' shopBuildIdentityProfile = \'production\' shopBuildIdentityQaProfileId = \'\'\nPRODUCT_NAME = "$(TARGET_NAME)";\nPRODUCT_NAME = "$(TARGET_NAME)";\nPRODUCT_NAME = "$(TARGET_NAME)";\nPRODUCT_NAME = "$(TARGET_NAME)";\nPRODUCT_NAME = "$(TARGET_NAME)";\nPRODUCT_NAME = "$(TARGET_NAME)";',
-    'mobile/shop_pos/lib/main.dart': 'Future<void> main() async { final runtimeProfile = ShopRuntimeProfile.resolve(); final runtimeScope = await ShopRuntimeScope.resolve(runtimeProfile); if (!runtimeScope.capabilities.managedAuth) return; if (!runtimeScope.capabilities.camera) return; }',
+    'mobile/shop_pos/lib/main.dart': 'Future<void> main() async { final runtimeScope = await resolveShopRuntimeScopeForStartup(); if (!runtimeScope.capabilities.managedAuth) return; if (!runtimeScope.capabilities.camera) return; }',
     'mobile/shop_pos/lib/shop_database.dart': "privateDatabaseFile() => 'supermega_shop.sqlite';",
     'mobile/shop_pos/lib/shop_startup.dart': 'ShopRuntimeScope scope; void pick() { if (!scope.capabilities.externalFileSaving) return; }',
     'mobile/shop_pos/lib/shop_backup_export_screen.dart': 'ShopRuntimeScope scope; void save() { if (!scope.capabilities.externalFileSaving) return; }',
@@ -106,7 +106,7 @@ function fixture() {
     'mobile/shop_pos/lib/connected_orders_service.dart': 'ShopRuntimeScope scope; void connect() { if (!scope.capabilities.connectedOrders) return; }',
     'mobile/shop_pos/lib/shop_correction_authorization_service.dart': 'ShopRuntimeScope scope; void correct() { if (!scope.capabilities.correctionAuthorization) return; }',
     'mobile/shop_pos/lib/shop_runtime_profile.dart': "enum ShopRuntimeProfile { production, syntheticQa } class ShopRuntimeCapabilities { static const failClosed = ShopRuntimeCapabilities(); const ShopRuntimeCapabilities(); } ShopRuntimeProfile resolve() { const a=String.fromEnvironment('SHOP_RUNTIME_PROFILE', defaultValue: shopBuildIdentityProfile); const b=String.fromEnvironment('SHOP_QA_PROFILE_ID', defaultValue: shopBuildIdentityQaProfileId); const ids={'dev.supermega.supermega_shop.qa','dev.supermega.supermegaShop.qa','dev.supermega.supermega_shop.qa.windows','production-current','dev.supermega.supermega_shop','dev.supermega.supermegaShop','dev.supermega.supermega_shop.windows'}; if (a=='synthetic_qa_v1' && b=='synthetic-qa-v1') return ShopRuntimeProfile.syntheticQa; if (a.isNotEmpty || b.isNotEmpty) throw StateError('unknown partial'); return ShopRuntimeProfile.production; }",
-    'mobile/shop_pos/lib/shop_runtime_scope.dart': "ShopRuntimeScope? requireShopRuntimeScopeOrTestSeam(ShopRuntimeScope? scope) { if (scope == null) throw StateError('shop_runtime_scope_required'); return scope; } class ShopRuntimeScope { static Future<ShopRuntimeScope> resolve(p) async { SharedPreferences.getInstance(); getApplicationSupportDirectory(); getTemporaryDirectory(); return ShopRuntimeScope(); } } synthetic-evidence sentinel shop_locale_myanmar shop_pending_picker_intent shop_receipt_printer_host_v1 shop_receipt_paper_width_v1",
+    'mobile/shop_pos/lib/shop_runtime_scope.dart': "ShopRuntimeConfiguration.fromEnvironment(); Future<ShopRuntimeScope> resolveShopRuntimeScopeForStartup() async { return ShopRuntimeScope.resolve(ShopRuntimeProfile.production); } ShopRuntimeScope? requireShopRuntimeScopeOrTestSeam(ShopRuntimeScope? scope) { if (scope == null) throw StateError('shop_runtime_scope_required'); return scope; } class ShopRuntimeScope { static Future<ShopRuntimeScope> resolve(p) async { SharedPreferences.getInstance(); getApplicationSupportDirectory(); getTemporaryDirectory(); return ShopRuntimeScope(); } } synthetic-evidence sentinel shop_locale_myanmar shop_pending_picker_intent shop_receipt_printer_host_v1 shop_receipt_paper_width_v1",
     'mobile/shop_pos/lib/shop_build_identity.g.dart': 'synthetic_qa_v1 platform',
     'tools/generate_shop_build_identity.mjs': 'production synthetic_qa_v1 windows',
     'mobile/shop_pos/scripts/configure_windows_qa_runner.ps1': 'supermega_shop_qa.exe Shop QA',
@@ -127,6 +127,25 @@ test('a complete source contract remains source-only and not launch authority', 
   assert.equal(result.artifactIdentityVerified, false)
   assert.equal(result.installedIsolationVerified, false)
   assert.equal(result.launchAuthorized, false)
+})
+
+test('an injected dependency cannot implicitly authorize a missing runtime scope', () => {
+  for (const path of [
+    'mobile/shop_pos/lib/connected_orders_service.dart',
+    'mobile/shop_pos/lib/menu_import_service.dart',
+    'mobile/shop_pos/lib/shop_correction_authorization_service.dart',
+    'mobile/shop_pos/lib/printer_services.dart',
+  ]) {
+    const sources = fixture()
+    sources[path] +=
+      ' requireShopRuntimeScopeOrTestSeam(scope, testOnlyAllowMissingRuntimeScope: testOnlyAllowMissingRuntimeScope || client != null);'
+    const result = assessShopQaIsolationContract({ sources })
+    assert.equal(result.strictReady, false, path)
+    assert.ok(
+      result.blockers.some(item => item.code === 'implicit_missing_scope_test_seam'),
+      path,
+    )
+  }
 })
 
 test('missing existing sources and production identity or storage drift fail closed', () => {
@@ -165,7 +184,7 @@ test('strict rejects retained legacy direct I/O even below audit ceilings', () =
 test('partial profiles, late validation, and missing service guards stay blocked', () => {
   for (const mutate of [
     sources => { sources['mobile/shop_pos/lib/shop_runtime_profile.dart'] = 'SHOP_RUNTIME_PROFILE synthetic_qa_v1' },
-    sources => { sources['mobile/shop_pos/lib/main.dart'] = 'SharedPreferences.getInstance(); ShopRuntimeProfile.resolve();' },
+    sources => { sources['mobile/shop_pos/lib/main.dart'] = 'SharedPreferences.getInstance(); resolveShopRuntimeScopeForStartup();' },
     sources => { sources['mobile/shop_pos/lib/camera_barcode_scanner.dart'] = 'class Camera {}' },
     sources => { delete sources['mobile/shop_pos/lib/shop_runtime_scope.dart'] },
   ]) {

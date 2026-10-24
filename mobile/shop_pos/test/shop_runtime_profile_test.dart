@@ -2,11 +2,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:supermega_shop/shop_runtime_profile.dart';
 
 void main() {
-  test('empty defines preserve production defaults', () {
+  test('exact generated production tuple preserves production defaults', () {
     for (final identity
         in ShopRuntimeConfiguration.productionPlatformIdentities) {
       final profile = ShopRuntimeConfiguration.resolve(
-        runtimeProfile: '',
+        runtimeProfile: 'production',
         qaProfile: '',
         buildIdentityProfile: 'production',
         buildIdentityQaProfile: '',
@@ -22,6 +22,14 @@ void main() {
       expect(profile.capabilities.networkPrinter, isTrue);
       expect(profile.capabilities.externalFileSaving, isTrue);
     }
+  });
+
+  test('checked-in generated production identity starts without defines', () {
+    final profile = ShopRuntimeConfiguration.fromEnvironment();
+
+    expect(profile.profile, ShopRuntimeProfile.production);
+    expect(profile.profileId, isEmpty);
+    expect(profile.platformIdentity, 'production-current');
   });
 
   test('exact generated QA tuple is fail-closed and synthetic only', () {
@@ -75,7 +83,7 @@ void main() {
   test('unknown production identity is rejected', () {
     expect(
       () => ShopRuntimeConfiguration.resolve(
-        runtimeProfile: '',
+        runtimeProfile: 'production',
         qaProfile: '',
         buildIdentityProfile: 'production',
         buildIdentityQaProfile: '',

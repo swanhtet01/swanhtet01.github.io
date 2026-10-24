@@ -44,8 +44,7 @@ class MenuImportService {
     bool testOnlyAllowMissingRuntimeScope = false,
   }) : _runtimeScope = requireShopRuntimeScopeOrTestSeam(
          runtimeScope,
-         testOnlyAllowMissingRuntimeScope:
-             testOnlyAllowMissingRuntimeScope || client != null,
+         testOnlyAllowMissingRuntimeScope: testOnlyAllowMissingRuntimeScope,
        ),
        _client = client ?? _menuImportClient(runtimeScope),
        _ownsClient = client == null;

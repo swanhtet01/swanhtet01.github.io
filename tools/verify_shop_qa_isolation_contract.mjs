@@ -494,17 +494,28 @@ export function assessShopQaIsolationContract({ sources }) {
     if (!scope.includes(token)) add(blockers, 'scoped_roots_missing', token)
   }
   if (!scope.includes('requireShopRuntimeScopeOrTestSeam') || !scope.includes('shop_runtime_scope_required')) add(blockers, 'missing_scope_guard_missing', 'null runtime scopes must fail closed outside an explicit test seam')
+  for (const path of [
+    'mobile/shop_pos/lib/connected_orders_service.dart',
+    'mobile/shop_pos/lib/menu_import_service.dart',
+    'mobile/shop_pos/lib/shop_correction_authorization_service.dart',
+    'mobile/shop_pos/lib/printer_services.dart',
+  ]) {
+    const text = codeOnly(sources[path] || '')
+    if (/testOnlyAllowMissingRuntimeScope\s*:\s*[\s\S]{0,160}\|\|/.test(text)) {
+      add(blockers, 'implicit_missing_scope_test_seam', path)
+    }
+  }
   if (main.includes('runtimeCapabilities = ShopRuntimeCapabilities.production')) add(blockers, 'widget_default_inherits_production_capabilities', 'Shop widgets must require an explicit production scope')
   if (!scope.includes('synthetic-evidence') || !scope.includes('sentinel')) add(blockers, 'scoped_evidence_boundary_missing', 'synthetic evidence root and sentinel')
   if (!identity.includes('synthetic_qa_v1') || !identity.includes('platform')) add(blockers, 'build_identity_contract_missing', 'profile/platform binding')
 
-  const profileValidation = main.indexOf('final runtimeProfile = ShopRuntimeProfile.resolve()')
-  const scopeValidation = main.indexOf('final runtimeScope = await ShopRuntimeScope.resolve(runtimeProfile)')
+  const profileValidation = scope.indexOf('ShopRuntimeConfiguration.fromEnvironment')
+  const scopeValidation = main.indexOf('final runtimeScope = await resolveShopRuntimeScopeForStartup()')
   const firstIo = Math.min(...['SharedPreferences.getInstance', 'getApplicationDocumentsDirectory', 'Supabase.initialize'].map(token => {
     const index = main.indexOf(token)
     return index < 0 ? Number.MAX_SAFE_INTEGER : index
   }))
-  if (profileValidation < 0 || scopeValidation < profileValidation || scopeValidation > firstIo) add(blockers, 'profile_validation_not_first', 'profile and scope must validate before preferences, paths, providers, or I/O')
+  if (profileValidation < 0 || scopeValidation < 0 || scopeValidation > firstIo) add(blockers, 'profile_validation_not_first', 'profile and scope must validate before preferences, paths, providers, or I/O')
 
   const serviceGuards = [
     ['mobile/shop_pos/lib/connected_orders_service.dart', 'connectedOrders', '_client.send('],

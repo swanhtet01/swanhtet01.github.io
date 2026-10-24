@@ -42,8 +42,7 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   late final ShopRuntimeScope acceptedRuntimeScope;
   try {
-    final runtimeProfile = ShopRuntimeProfile.resolve();
-    final runtimeScope = await ShopRuntimeScope.resolve(runtimeProfile);
+    final runtimeScope = await resolveShopRuntimeScopeForStartup();
     acceptedRuntimeScope = runtimeScope;
   } catch (_) {
     runApp(

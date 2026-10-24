@@ -49,6 +49,17 @@ void main() {
     );
   });
 
+  test('injecting a client does not implicitly authorize a missing scope', () {
+    expect(
+      () => ConnectedOrdersService(
+        endpoint: connectedOrdersEndpoint('https://app.supermega.dev')!,
+        accessToken: () async => 'session',
+        client: MockClient((_) async => http.Response('{}', 200)),
+      ),
+      throwsStateError,
+    );
+  });
+
   test('endpoint is fixed under a secure configured origin', () {
     final endpoint = connectedOrdersEndpoint('https://app.supermega.dev');
     expect(
@@ -76,6 +87,7 @@ void main() {
         endpoint: connectedOrdersEndpoint('https://app.supermega.dev')!,
         accessToken: () async => 'short-lived-session',
         clock: () => DateTime.utc(2026, 10, 22, 2, 2),
+        testOnlyAllowMissingRuntimeScope: true,
         client: MockClient((request) async {
           calls++;
           sent = request;
@@ -117,6 +129,7 @@ void main() {
       endpoint: endpoint,
       accessToken: () async => null,
       client: client,
+      testOnlyAllowMissingRuntimeScope: true,
     );
     await expectLater(
       unsigned.fetch(),
@@ -133,6 +146,7 @@ void main() {
       endpoint: endpoint,
       accessToken: () async => 'session',
       client: client,
+      testOnlyAllowMissingRuntimeScope: true,
     );
     await expectLater(
       denied.fetch(),

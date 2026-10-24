@@ -95,6 +95,17 @@ void main() {
       );
     });
 
+    test('injecting a client does not authorize a missing import scope', () {
+      expect(
+        () => MenuImportService(
+          endpoint: Uri.https('app.supermega.dev', '/api/shop/menu-import'),
+          accessToken: () async => 'session',
+          client: MockClient((_) async => http.Response('{}', 200)),
+        ),
+        throwsStateError,
+      );
+    });
+
     test('deletes the temporary camera file after the flow', () async {
       final directory = await Directory.systemTemp.createTemp('shop-menu-');
       final file = File('${directory.path}${Platform.pathSeparator}menu.png');
@@ -134,6 +145,7 @@ void main() {
             return 'test-session';
           },
           client: client,
+          testOnlyAllowMissingRuntimeScope: true,
         );
 
         await expectLater(
@@ -178,6 +190,7 @@ void main() {
           endpoint: Uri.https('app.supermega.dev', '/api/shop/menu-import'),
           accessToken: () async => 'test-session',
           client: client,
+          testOnlyAllowMissingRuntimeScope: true,
         );
         final items = await service.parsePhoto(
           XFile.fromData(_pngBytes(), name: 'menu.png'),
@@ -222,6 +235,7 @@ void main() {
         endpoint: Uri.https('app.supermega.dev', '/api/shop/menu-import'),
         accessToken: () async => 'test-session',
         client: client,
+        testOnlyAllowMissingRuntimeScope: true,
       );
       addTearDown(service.close);
 
@@ -278,6 +292,7 @@ void main() {
             requestMade = true;
             return http.Response('{}', 200);
           }),
+          testOnlyAllowMissingRuntimeScope: true,
         );
         await expectLater(
           service.parsePhoto(
@@ -301,6 +316,7 @@ void main() {
         endpoint: Uri.http('localhost:4177', '/api/shop/menu-import'),
         accessToken: () async => 'test-session',
         client: MockClient((_) async => http.Response('{}', 200)),
+        testOnlyAllowMissingRuntimeScope: true,
       );
       await expectLater(
         service.parsePhoto(
@@ -323,6 +339,7 @@ void main() {
             return 'test-session';
           },
           client: MockClient((_) async => http.Response('{}', 200)),
+          testOnlyAllowMissingRuntimeScope: true,
         );
         await expectLater(
           service.parsePhoto(
@@ -347,6 +364,7 @@ void main() {
             return 'test-session';
           },
           client: MockClient((_) async => http.Response('{}', 200)),
+          testOnlyAllowMissingRuntimeScope: true,
         );
         await expectLater(
           service.parsePhoto(
@@ -3045,6 +3063,23 @@ void main() {
       expect(ReceiptReprintService.new, throwsStateError);
     });
 
+    test('injected printer callbacks still require an explicit test seam', () {
+      expect(
+        () => ReceiptPrinterSettings(
+          preferences: SharedPreferences.getInstance,
+          rangeProvider: () async => (ip: '192.168.1.2', mask: '255.255.255.0'),
+        ),
+        throwsStateError,
+      );
+      expect(
+        () => PrinterDiscoveryService(
+          probe: (_, _) async => true,
+          rangeProvider: () async => (ip: '192.168.1.2', mask: '255.255.255.0'),
+        ),
+        throwsStateError,
+      );
+    });
+
     test('receipt raster profiles emit aligned bounded ESC POS rows', () async {
       final receipt = ShopSaleReceipt(
         id: 'profile-sale',
@@ -3363,6 +3398,7 @@ void main() {
         final printer = (await PrinterDiscoveryService(
           rangeProvider: () async => range,
           probe: (host, port) async => host == '192.168.20.9',
+          testOnlyAllowMissingRuntimeScope: true,
         ).scan()).printers.single;
         await settings.saveAfterTest(
           printer,
@@ -3415,6 +3451,7 @@ void main() {
         send: (host, receipt, myanmar) async {
           sent.add('$host:${receipt.id}:$myanmar');
         },
+        testOnlyAllowMissingRuntimeScope: true,
       );
       final receipt = ShopSaleReceipt(
         id: 'sale-for-reprint',
@@ -3429,6 +3466,7 @@ void main() {
       final candidate = (await PrinterDiscoveryService(
         rangeProvider: () async => range,
         probe: (host, port) async => host == '192.168.20.9',
+        testOnlyAllowMissingRuntimeScope: true,
       ).scan()).printers.single;
       await settings.saveAfterTest(candidate);
       expect(await reprint.printIfTrusted(receipt, myanmar: true), isTrue);
@@ -3443,6 +3481,7 @@ void main() {
         send: (host, receipt, myanmar) async {
           sent.add('unexpected');
         },
+        testOnlyAllowMissingRuntimeScope: true,
       );
       expect(
         await afterRestart.printIfTrusted(receipt, myanmar: true),
@@ -3468,6 +3507,7 @@ void main() {
       final discovery = PrinterDiscoveryService(
         rangeProvider: () async => range,
         probe: (host, port) async => host == '192.168.20.9',
+        testOnlyAllowMissingRuntimeScope: true,
       );
       final printer = (await discovery.scan()).printers.single;
       await settings.saveAfterTest(printer);
@@ -3513,6 +3553,7 @@ void main() {
           seen.add('$host:$port');
           return host == '192.168.10.11';
         },
+        testOnlyAllowMissingRuntimeScope: true,
       );
       final result = await service.scan();
       expect(result.localIp, '192.168.10.10');
@@ -3537,6 +3578,7 @@ void main() {
           seen.add('$host:$port');
           return false;
         },
+        testOnlyAllowMissingRuntimeScope: true,
       );
 
       await expectLater(
@@ -3553,6 +3595,7 @@ void main() {
         rangeProvider: () async =>
             (ip: '192.168.20.10', mask: '255.255.255.248'),
         probe: (host, port) async => respond && host == '192.168.20.9',
+        testOnlyAllowMissingRuntimeScope: true,
       );
       final firstScan = await service.scan();
       expect(firstScan.printers, hasLength(1));
@@ -3570,6 +3613,7 @@ void main() {
       final service = PrinterDiscoveryService(
         rangeProvider: () async => range,
         probe: (host, port) async => host == '192.168.20.9',
+        testOnlyAllowMissingRuntimeScope: true,
       );
       final result = await service.scan();
       final candidate = result.printers.single;

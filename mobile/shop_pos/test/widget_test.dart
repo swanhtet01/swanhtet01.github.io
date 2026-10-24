@@ -2782,6 +2782,7 @@ void main() {
     final candidate = (await PrinterDiscoveryService(
       rangeProvider: () async => range,
       probe: (host, port) async => host == '192.168.20.9',
+      testOnlyAllowMissingRuntimeScope: true,
     ).scan()).printers.single;
     await settings.saveAfterTest(candidate);
 
@@ -2809,6 +2810,7 @@ void main() {
               expect(myanmar, isFalse);
               sent.add(receipt);
             },
+            testOnlyAllowMissingRuntimeScope: true,
           ),
         ),
       ),
@@ -2844,6 +2846,7 @@ void main() {
       final candidate = (await PrinterDiscoveryService(
         rangeProvider: () async => range,
         probe: (host, port) async => host == '192.168.20.9',
+        testOnlyAllowMissingRuntimeScope: true,
       ).scan()).printers.single;
       await settings.saveAfterTest(candidate);
 
@@ -2955,6 +2958,7 @@ void main() {
             send: (host, receipt, myanmar) async {
               sends++;
             },
+            testOnlyAllowMissingRuntimeScope: true,
           ),
         ),
       ),

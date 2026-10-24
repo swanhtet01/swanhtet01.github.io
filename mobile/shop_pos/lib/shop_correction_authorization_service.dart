@@ -139,8 +139,7 @@ class ShopCorrectionAuthorizationService implements ShopCorrectionAuthorizer {
     this.requestTimeout = const Duration(seconds: 15),
   }) : _runtimeScope = requireShopRuntimeScopeOrTestSeam(
          runtimeScope,
-         testOnlyAllowMissingRuntimeScope:
-             testOnlyAllowMissingRuntimeScope || client != null,
+         testOnlyAllowMissingRuntimeScope: testOnlyAllowMissingRuntimeScope,
        ),
        _client = client ?? _correctionAuthorizationClient(runtimeScope),
        _ownsClient = client == null,

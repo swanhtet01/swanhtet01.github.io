@@ -141,13 +141,13 @@ class ShopRuntimeConfiguration {
     final buildProfile = buildIdentityProfile.trim();
     final buildQaProfile = buildIdentityQaProfile.trim();
     final identity = platformIdentity.trim();
-    final anyQaSignal =
-        runtime.isNotEmpty ||
-        profileId.isNotEmpty ||
-        buildProfile != 'production' ||
-        buildQaProfile.isNotEmpty;
+    final exactProductionTuple =
+        runtime == 'production' &&
+        profileId.isEmpty &&
+        buildProfile == 'production' &&
+        buildQaProfile.isEmpty;
 
-    if (!anyQaSignal) {
+    if (exactProductionTuple) {
       if (!productionPlatformIdentities.contains(identity)) {
         throw StateError('shop_build_identity_unknown');
       }
