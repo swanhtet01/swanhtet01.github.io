@@ -1,8 +1,11 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:cryptography/cryptography.dart';
+import 'package:drift/drift.dart' show Variable;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sqlite3/sqlite3.dart';
 import 'package:supermega_shop/shop_database.dart';
 import 'package:supermega_shop/shop_models.dart';
 import 'package:supermega_shop/shop_operational_export.dart';
@@ -106,6 +109,135 @@ void main() {
       await database.close();
     }
   });
+
+  test(
+    'v15 upgrade member-linked CSV omits member card and linkage internals',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'shop-member-export-v15-',
+      );
+      final source = ShopDatabase(NativeDatabase.memory());
+      final snapshotFile = File('${directory.path}/legacy-v15.sqlite');
+      try {
+        await source.addProduct(
+          id: 'member-export-product',
+          name: 'Member export product',
+          priceMmk: 3000,
+          openingStock: 2,
+        );
+        await source.exportVerifiedLocalSnapshot(snapshotFile);
+      } finally {
+        await source.close();
+      }
+
+      final raw = sqlite3.open(snapshotFile.path);
+      try {
+        for (final table in const [
+          'shop_wallet_checkout_member_links',
+          'shop_sale_member_links',
+          'shop_member_cards',
+          'shop_members',
+          'shop_store_identity',
+        ]) {
+          raw.execute('DROP TABLE $table');
+        }
+        raw.execute('PRAGMA user_version = 15');
+      } finally {
+        raw.close();
+      }
+
+      final database = ShopDatabase(NativeDatabase(snapshotFile));
+      const memberId = 'mem_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+      const displayCode = '00004567';
+      final memberToken = _memberToken(17);
+      try {
+        await database.verifyReadyForUse();
+        expect(database.schemaVersion, 16);
+        final storeRef = await database.readStoreRef();
+        await _seedPseudonymousMember(
+          database,
+          memberId: memberId,
+          displayCode: displayCode,
+          token: memberToken,
+        );
+        final tokenDigest = await _memberDigest(memberToken);
+        final shift = await database.openCashShift(
+          operationId: 'member-export-open',
+          operatorLabel: 'May',
+          openingFloatMmk: 5000,
+        );
+        final sale = await database.recordSale(
+          operationId: 'member-export-sale',
+          lines: const [
+            ShopSaleLineInput(productId: 'member-export-product', quantity: 1),
+          ],
+          paymentMethod: 'cash',
+          memberCardToken: memberToken,
+        );
+        expect((await database.readSaleMember(sale.id))?.memberId, memberId);
+        final review = await database.readCashShiftReview(shift.id);
+        await database.closeCashShift(
+          shiftId: shift.id,
+          operationId: 'member-export-close',
+          seenSaleCount: review.saleCount,
+          seenCashTotalMmk: review.cashSalesTotalMmk,
+          countedCashMmk: review.expectedCashMmk,
+        );
+        final salesBefore = await database.countSales();
+        final stockBefore = await database.countStockMovements();
+        final outboxBefore = await database.countOutboxOperations();
+        final linksBefore =
+            (await database
+                    .customSelect(
+                      'SELECT COUNT(*) AS count FROM shop_sale_member_links',
+                    )
+                    .getSingle())
+                .read<int>('count');
+
+        final encoded = const ShopOperationalExporter().encode(
+          await database.readClosedCashShiftOperationalExport(shift.id),
+        );
+        final csv = utf8.decode(encoded.bytes.sublist(3));
+        expect(csv, contains(sale.id));
+        expect(csv, contains('Member export product'));
+        expect(csv, contains('3000'));
+        for (final privateValue in [
+          memberId,
+          displayCode,
+          memberToken,
+          tokenDigest,
+          storeRef,
+        ]) {
+          expect(csv, isNot(contains(privateValue)));
+        }
+        for (final header in shopOperationalExportHeaders) {
+          expect(
+            header,
+            isNot(
+              matches(
+                RegExp(r'member|card|token|digest|revision|linkage|store_ref'),
+              ),
+            ),
+          );
+        }
+        expect(await database.countSales(), salesBefore);
+        expect(await database.countStockMovements(), stockBefore);
+        expect(await database.countOutboxOperations(), outboxBefore);
+        expect(
+          (await database
+                  .customSelect(
+                    'SELECT COUNT(*) AS count FROM shop_sale_member_links',
+                  )
+                  .getSingle())
+              .read<int>('count'),
+          linksBefore,
+        );
+      } finally {
+        await database.close();
+        await directory.delete(recursive: true);
+      }
+    },
+  );
 
   test('closed-shift snapshot projects signed wallet correction without private proof fields', () async {
     final database = ShopDatabase.withCorrectionReceiptVerifier(
@@ -253,6 +385,54 @@ void main() {
       await database.close();
     }
   });
+}
+
+String _memberToken(int seed) {
+  final bytes = List<int>.generate(32, (index) => (seed + index) & 0xff);
+  return 'SMC1.${base64Url.encode(bytes).replaceAll('=', '')}';
+}
+
+Future<String> _memberDigest(String token) async {
+  final digest = await Sha256().hash(
+    utf8.encode('supermega.shop.member-card.lookup.v1\u0000$token'),
+  );
+  return digest.bytes
+      .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
+      .join();
+}
+
+Future<void> _seedPseudonymousMember(
+  ShopDatabase database, {
+  required String memberId,
+  required String displayCode,
+  required String token,
+}) async {
+  final storeRef = await database.readStoreRef();
+  const now = 1_800_000_000_000;
+  await database.customInsert(
+    'INSERT INTO shop_members '
+    '(id, store_ref, display_code, status, created_at_millis, updated_at_millis) '
+    'VALUES (?, ?, ?, ?, ?, ?)',
+    variables: [
+      Variable<String>(memberId),
+      Variable<String>(storeRef),
+      Variable<String>(displayCode),
+      const Variable<String>('active'),
+      const Variable<int>(now),
+      const Variable<int>(now),
+    ],
+  );
+  await database.customInsert(
+    'INSERT INTO shop_member_cards '
+    '(token_digest, member_id, revision, state, issued_at_millis, '
+    'retired_at_millis) VALUES (?, ?, 1, ?, ?, NULL)',
+    variables: [
+      Variable<String>(await _memberDigest(token)),
+      Variable<String>(memberId),
+      const Variable<String>('active'),
+      const Variable<int>(now),
+    ],
+  );
 }
 
 Future<ShopCorrectionAuthorization> _authorization({
