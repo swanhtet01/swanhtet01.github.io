@@ -78,6 +78,26 @@ export function recorderOutcomeReconciled(result, raw) {
     && raw.vercel_mutated === false && raw.secret_values_exposed === false
 }
 
+export function recorderChildFailureCode(result) {
+  if (result?.error || result?.signal || !Number.isInteger(result?.status) || result.status <= 0) return ''
+  const launcherErrors = new Set([
+    'configured_python_unusable',
+    'python_with_psycopg_missing',
+    'rehearsal_process_failed',
+  ])
+  for (const output of [result?.stderr, result?.stdout]) {
+    if (typeof output !== 'string' || !output.trim()) continue
+    let report
+    try { report = JSON.parse(output.trim()) } catch { continue }
+    if (!report || typeof report !== 'object' || Array.isArray(report)
+      || report.contract !== 'supermega_postgres17_rehearsal_launcher_v1'
+      || report.ok !== false || report.secret_values_exposed !== false
+      || !launcherErrors.has(report.error)) continue
+    return `database_rehearsal_child_${report.error}`
+  }
+  return ''
+}
+
 export async function withRecorderLease(lockPaths, operation) {
   const owned = []
   let launched = false, reconciled = false
@@ -127,7 +147,9 @@ async function record(destination) {
     lease.markLaunched()
     const result = spawnSync(process.execPath, [rehearsalRunner, '--expected-head', source.implementationCommit, '--evidence-file', rawPath], { cwd: root, encoding: 'utf8', timeout: 300_000, windowsHide: true })
     let raw
-    try { raw = JSON.parse(await readFile(rawPath, 'utf8')) } catch { fail('database_rehearsal_termination_unreconciled') }
+    try { raw = JSON.parse(await readFile(rawPath, 'utf8')) } catch {
+      fail(recorderChildFailureCode(result) || 'database_rehearsal_termination_unreconciled')
+    }
     if (!lease.reconcile(result, raw)) fail('database_rehearsal_termination_unreconciled')
     if (result.status !== 0) fail('database_rehearsal_execution_failed')
     if (!same(cleanSource(), source) || !same(await implementationEvidence(), implementation)) fail('database_rehearsal_source_changed')

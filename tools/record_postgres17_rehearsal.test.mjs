@@ -12,10 +12,61 @@ import {
   implementationEvidence,
   catalogCheckNames,
   proofDigest,
+  recorderChildFailureCode,
   recorderOutcomeReconciled,
   withRecorderLease,
   recordCompletionSummary,
 } from './record_postgres17_rehearsal.mjs'
+
+test('missing raw evidence retains only an allowlisted sanitized child failure code', () => {
+  const launcher = JSON.stringify({
+    ok: false,
+    contract: 'supermega_postgres17_rehearsal_launcher_v1',
+    error: 'configured_python_unusable',
+    secret_values_exposed: false,
+  })
+  assert.equal(
+    recorderChildFailureCode({ status: 2, stderr: launcher, stdout: '' }),
+    'database_rehearsal_child_configured_python_unusable',
+  )
+  for (const unsafe of [
+    'Traceback: private path',
+    JSON.stringify({
+      ok: false,
+      contract: 'supermega_postgres17_rehearsal_launcher_v1',
+      error: 'configured_python_unusable',
+      secret_values_exposed: true,
+    }),
+    JSON.stringify({
+      ok: false,
+      contract: 'supermega_postgres17_rehearsal_launcher_v1',
+      error: 'secret_material_1234',
+      secret_values_exposed: false,
+    }),
+    JSON.stringify({
+      ok: false,
+      contract: 'untrusted',
+      error: 'workspace_initialization_failed',
+      secret_values_exposed: false,
+    }),
+  ]) assert.equal(recorderChildFailureCode({ status: 1, stderr: unsafe }), '')
+  for (const ambiguous of [
+    { status: null, error: { code: 'ETIMEDOUT' }, stderr: launcher },
+    { status: 1, signal: 'SIGTERM', stderr: launcher },
+    { status: 0, stderr: launcher },
+  ]) assert.equal(recorderChildFailureCode(ambiguous), '')
+  const incompleteRehearsal = JSON.stringify({
+    ok: false,
+    contract: 'supermega_postgres17_rehearsal_v2',
+    error: 'workspace_initialization_failed',
+    cleanup_complete: false,
+    secret_values_exposed: false,
+  })
+  assert.equal(
+    recorderChildFailureCode({ status: 1, stderr: incompleteRehearsal }),
+    '',
+  )
+})
 
 test('core security catalog changes invalidate implementation evidence', async () => {
   const baseline = await implementationEvidence()
