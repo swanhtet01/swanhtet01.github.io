@@ -41,9 +41,14 @@ class MenuImportService {
     required this.accessToken,
     http.Client? client,
     ShopRuntimeScope? runtimeScope,
-  }) : _client = client ?? _menuImportClient(runtimeScope),
-       _ownsClient = client == null,
-       _runtimeScope = runtimeScope;
+    bool testOnlyAllowMissingRuntimeScope = false,
+  }) : _runtimeScope = requireShopRuntimeScopeOrTestSeam(
+         runtimeScope,
+         testOnlyAllowMissingRuntimeScope:
+             testOnlyAllowMissingRuntimeScope || client != null,
+       ),
+       _client = client ?? _menuImportClient(runtimeScope),
+       _ownsClient = client == null;
 
   final Uri endpoint;
   final Future<String?> Function() accessToken;

@@ -3,22 +3,25 @@ import 'package:supermega_shop/shop_runtime_profile.dart';
 
 void main() {
   test('empty defines preserve production defaults', () {
-    final profile = ShopRuntimeConfiguration.resolve(
-      runtimeProfile: '',
-      qaProfile: '',
-      buildIdentityProfile: 'production',
-      buildIdentityQaProfile: '',
-      platformIdentity: 'production-current',
-      supabaseUrl: 'https://project.supabase.co',
-      supabaseKey: 'public-test-value',
-      apiBaseUrl: 'https://app.supermega.dev',
-      connectedOrders: true,
-    );
+    for (final identity
+        in ShopRuntimeConfiguration.productionPlatformIdentities) {
+      final profile = ShopRuntimeConfiguration.resolve(
+        runtimeProfile: '',
+        qaProfile: '',
+        buildIdentityProfile: 'production',
+        buildIdentityQaProfile: '',
+        platformIdentity: identity,
+        supabaseUrl: 'https://project.supabase.co',
+        supabaseKey: 'public-test-value',
+        apiBaseUrl: 'https://app.supermega.dev',
+        connectedOrders: true,
+      );
 
-    expect(profile.profile, ShopRuntimeProfile.production);
-    expect(profile.profileId, isEmpty);
-    expect(profile.capabilities.networkPrinter, isTrue);
-    expect(profile.capabilities.externalFileSaving, isTrue);
+      expect(profile.profile, ShopRuntimeProfile.production);
+      expect(profile.profileId, isEmpty);
+      expect(profile.capabilities.networkPrinter, isTrue);
+      expect(profile.capabilities.externalFileSaving, isTrue);
+    }
   });
 
   test('exact generated QA tuple is fail-closed and synthetic only', () {
@@ -68,6 +71,19 @@ void main() {
       expect(mutation.value, throwsStateError);
     });
   }
+
+  test('unknown production identity is rejected', () {
+    expect(
+      () => ShopRuntimeConfiguration.resolve(
+        runtimeProfile: '',
+        qaProfile: '',
+        buildIdentityProfile: 'production',
+        buildIdentityQaProfile: '',
+        platformIdentity: 'dev.example.unreviewed.production',
+      ),
+      throwsStateError,
+    );
+  });
 }
 
 ShopRuntimeConfiguration _qaProfile({

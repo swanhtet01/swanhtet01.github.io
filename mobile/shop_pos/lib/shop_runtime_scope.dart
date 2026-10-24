@@ -11,6 +11,16 @@ typedef ShopDirectoryProvider = Future<Directory> Function();
 const shopReceiptPrinterHostKey = 'shop_receipt_printer_host_v1';
 const shopReceiptPaperWidthKey = 'shop_receipt_paper_width_v1';
 
+ShopRuntimeScope? requireShopRuntimeScopeOrTestSeam(
+  ShopRuntimeScope? runtimeScope, {
+  required bool testOnlyAllowMissingRuntimeScope,
+}) {
+  if (runtimeScope == null && !testOnlyAllowMissingRuntimeScope) {
+    throw StateError('shop_runtime_scope_required');
+  }
+  return runtimeScope;
+}
+
 Future<SharedPreferences> _openShopPreferences() =>
     SharedPreferences.getInstance();
 

@@ -475,12 +475,17 @@ export function assessShopQaIsolationContract({ sources }) {
   const workflow = sources['.github/workflows/shop-native-ci.yml']
   const identity = sources['mobile/shop_pos/lib/shop_build_identity.g.dart'] || ''
 
-  for (const token of ['enum ShopRuntimeProfile', 'ShopRuntimeProfile resolve', "String.fromEnvironment('SHOP_RUNTIME_PROFILE')", "String.fromEnvironment('SHOP_QA_PROFILE_ID')", 'synthetic_qa_v1', 'synthetic-qa-v1', 'throw StateError']) {
+  for (const token of ['enum ShopRuntimeProfile', 'ShopRuntimeProfile resolve', 'String.fromEnvironment', "'SHOP_RUNTIME_PROFILE'", "'SHOP_QA_PROFILE_ID'", 'synthetic_qa_v1', 'synthetic-qa-v1', 'throw StateError']) {
     if (!profile.includes(token)) add(blockers, 'runtime_profile_contract_missing', token)
   }
   for (const identity of ['dev.supermega.supermega_shop.qa', 'dev.supermega.supermegaShop.qa', 'dev.supermega.supermega_shop.qa.windows']) {
     if (!profile.includes(identity)) add(blockers, 'runtime_qa_platform_identity_missing', identity)
   }
+  for (const identity of ['production-current', 'dev.supermega.supermega_shop', 'dev.supermega.supermegaShop', 'dev.supermega.supermega_shop.windows']) {
+    if (!profile.includes(identity)) add(blockers, 'runtime_production_platform_identity_missing', identity)
+  }
+  if (!profile.includes('static const failClosed = ShopRuntimeCapabilities(')) add(blockers, 'runtime_fail_closed_capabilities_missing', 'fixture routes must not inherit production capabilities')
+  if (!profile.includes('defaultValue: shopBuildIdentityProfile') || !profile.includes('defaultValue: shopBuildIdentityQaProfileId')) add(blockers, 'generated_runtime_tuple_default_missing', 'generated profile and QA id must bind runtime defaults')
   for (const forbidden of ['externalIoOverride', 'ALLOW_EXTERNAL_IO', 'allowExternalIo']) {
     if (profile.includes(forbidden)) add(fatal, 'qa_external_io_override_forbidden', forbidden)
   }
@@ -488,6 +493,8 @@ export function assessShopQaIsolationContract({ sources }) {
   for (const token of ['class ShopRuntimeScope', 'Future<ShopRuntimeScope> resolve', 'getApplicationSupportDirectory', 'getTemporaryDirectory', 'SharedPreferences.getInstance']) {
     if (!scope.includes(token)) add(blockers, 'scoped_roots_missing', token)
   }
+  if (!scope.includes('requireShopRuntimeScopeOrTestSeam') || !scope.includes('shop_runtime_scope_required')) add(blockers, 'missing_scope_guard_missing', 'null runtime scopes must fail closed outside an explicit test seam')
+  if (main.includes('runtimeCapabilities = ShopRuntimeCapabilities.production')) add(blockers, 'widget_default_inherits_production_capabilities', 'Shop widgets must require an explicit production scope')
   if (!scope.includes('synthetic-evidence') || !scope.includes('sentinel')) add(blockers, 'scoped_evidence_boundary_missing', 'synthetic evidence root and sentinel')
   if (!identity.includes('synthetic_qa_v1') || !identity.includes('platform')) add(blockers, 'build_identity_contract_missing', 'profile/platform binding')
 
@@ -581,10 +588,10 @@ export function assessShopQaIsolationContract({ sources }) {
   const iosInfo = sources['mobile/shop_pos/ios/Runner/Info.plist'] || ''
   const iosDebug = sources['mobile/shop_pos/ios/Flutter/Debug.xcconfig'] || ''
   const iosRelease = sources['mobile/shop_pos/ios/Flutter/Release.xcconfig'] || ''
-  if (!/create\("production"\)/.test(gradle) || !/create\("qa"\)/.test(gradle) || !androidProduction.includes('Shop') || !androidQa.includes('Shop QA')) add(blockers, 'android_qa_identity_missing', 'exact production/qa flavors and manifests')
+  if (!/create\("production"\)/.test(gradle) || !/create\("qa"\)/.test(gradle) || !gradle.includes('verifyShopAndroidProductionIdentity') || !gradle.includes('verifyShopAndroidQaIdentity') || !gradle.includes('preProduction') || !gradle.includes('preQa') || !gradle.includes("shopBuildIdentityProfile = '\$profile'") || !gradle.includes("shopBuildIdentityQaProfileId = '\$qaProfile'") || !gradle.includes("shopBuildIdentityPlatformIdentity = '\$identity'") || !gradle.includes('shop_android_build_identity_mismatch') || !androidProduction.includes('Shop') || !androidQa.includes('Shop QA')) add(blockers, 'android_qa_identity_missing', 'exact production/qa flavors, native generated-identity guard, and manifests')
   const iosQaActions = iosScheme.match(/buildConfiguration="Debug-qa"/g) ?? []
   const iosRunnerProductNames = ios.match(/PRODUCT_NAME = "\$\(TARGET_NAME\)";/g) ?? []
-  if (!ios.includes('dev.supermega.supermegaShop.qa') || iosQaActions.length !== 5 || /buildConfiguration="(?:Debug|Profile|Release)"/.test(iosScheme) || iosRunnerProductNames.length < 6 || !ios.includes('path = Runner.app;') || !iosConfig.includes('dev.supermega.supermegaShop.qa') || iosConfig.includes('PRODUCT_NAME=') || !iosConfig.includes('SHOP_DISPLAY_NAME=Shop QA') || !iosConfig.includes('SHOP_BUNDLE_NAME=Shop QA') || !iosInfo.includes('$(SHOP_DISPLAY_NAME)') || !iosInfo.includes('$(SHOP_BUNDLE_NAME)') || !iosDebug.includes('SHOP_DISPLAY_NAME=Shop') || !iosDebug.includes('SHOP_BUNDLE_NAME=supermega_shop') || !iosRelease.includes('SHOP_DISPLAY_NAME=Shop') || !iosRelease.includes('SHOP_BUNDLE_NAME=supermega_shop')) add(blockers, 'ios_qa_identity_missing', 'Runner.app product, QA bundle identity, and unchanged production display/bundle names')
+  if (!ios.includes('dev.supermega.supermegaShop.qa') || !ios.includes('Verify Shop build identity') || !ios.includes('shop_ios_build_identity_missing') || !ios.includes("shopBuildIdentityProfile = 'synthetic_qa_v1'") || !ios.includes("shopBuildIdentityQaProfileId = 'synthetic-qa-v1'") || !ios.includes("shopBuildIdentityProfile = 'production'") || !ios.includes("shopBuildIdentityQaProfileId = ''") || !ios.includes('shop_ios_build_configuration_unknown') || iosQaActions.length !== 5 || /buildConfiguration="(?:Debug|Profile|Release)"/.test(iosScheme) || iosRunnerProductNames.length < 6 || !ios.includes('path = Runner.app;') || !iosConfig.includes('dev.supermega.supermegaShop.qa') || iosConfig.includes('PRODUCT_NAME=') || !iosConfig.includes('SHOP_DISPLAY_NAME=Shop QA') || !iosConfig.includes('SHOP_BUNDLE_NAME=Shop QA') || !iosInfo.includes('$(SHOP_DISPLAY_NAME)') || !iosInfo.includes('$(SHOP_BUNDLE_NAME)') || !iosDebug.includes('SHOP_DISPLAY_NAME=Shop') || !iosDebug.includes('SHOP_BUNDLE_NAME=supermega_shop') || !iosRelease.includes('SHOP_DISPLAY_NAME=Shop') || !iosRelease.includes('SHOP_BUNDLE_NAME=supermega_shop')) add(blockers, 'ios_qa_identity_missing', 'Runner.app product, native generated-identity guard, QA bundle identity, and unchanged production display/bundle names')
   if (!generator.includes('synthetic_qa_v1') || !generator.includes('production') || !generator.includes('windows')) add(blockers, 'identity_generator_missing', 'allowlisted platform/profile generator')
   if (!windows.includes('supermega_shop_qa.exe') || !windows.includes('Shop QA')) add(blockers, 'windows_qa_identity_missing', 'QA executable and product identity')
   const workflowBlockers = qaWorkflowBlockers(workflow)

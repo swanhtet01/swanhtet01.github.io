@@ -70,11 +70,17 @@ class ReceiptPrinterSettings {
     WifiRangeProvider? rangeProvider,
     VerifiedPrinterSession? session,
     ShopRuntimeScope? runtimeScope,
+    bool testOnlyAllowMissingRuntimeScope = false,
   }) : _preferences =
            preferences ??
            (() async => (await openProductionShopPreferences()).instance),
        _hostKey =
-           runtimeScope?.preferences.keys.receiptPrinterHost ??
+           requireShopRuntimeScopeOrTestSeam(
+             runtimeScope,
+             testOnlyAllowMissingRuntimeScope:
+                 testOnlyAllowMissingRuntimeScope ||
+                 (preferences != null && rangeProvider != null),
+           )?.preferences.keys.receiptPrinterHost ??
            shopReceiptPrinterHostKey,
        _paperWidthKey =
            runtimeScope?.preferences.keys.receiptPaperWidth ??
@@ -159,7 +165,11 @@ class ShopReceiptPrinter {
     WifiRangeProvider? rangeProvider,
     ReceiptPrinterSettings? settings,
     ShopRuntimeScope? runtimeScope,
-  }) : _runtimeScope = runtimeScope,
+    bool testOnlyAllowMissingRuntimeScope = false,
+  }) : _runtimeScope = requireShopRuntimeScopeOrTestSeam(
+         runtimeScope,
+         testOnlyAllowMissingRuntimeScope: testOnlyAllowMissingRuntimeScope,
+       ),
        _rangeProvider =
            rangeProvider ??
            _networkRangeProvider(_requireNetworkDetails(runtimeScope)),
@@ -223,6 +233,7 @@ class ReceiptReprintService {
     ReceiptPrinterSettings? settings,
     ReceiptPrintSender? send,
     ShopRuntimeScope? runtimeScope,
+    bool testOnlyAllowMissingRuntimeScope = false,
   }) : _settings =
            settings ?? ReceiptPrinterSettings(runtimeScope: runtimeScope),
        _send =
@@ -231,8 +242,15 @@ class ReceiptReprintService {
              runtimeScope: runtimeScope,
              settings:
                  settings ?? ReceiptPrinterSettings(runtimeScope: runtimeScope),
-           ).printSale(host, receipt, myanmar: myanmar));
+           ).printSale(host, receipt, myanmar: myanmar)),
+       _runtimeScope = requireShopRuntimeScopeOrTestSeam(
+         runtimeScope,
+         testOnlyAllowMissingRuntimeScope:
+             testOnlyAllowMissingRuntimeScope ||
+             (settings != null && send != null),
+       );
 
+  final ShopRuntimeScope? _runtimeScope;
   final ReceiptPrinterSettings _settings;
   final ReceiptPrintSender _send;
 
@@ -243,6 +261,10 @@ class ReceiptReprintService {
     ShopSaleReceipt receipt, {
     required bool myanmar,
   }) async {
+    final scope = _runtimeScope;
+    if (scope != null && !scope.capabilities.networkPrinter) {
+      throw StateError('shop_network_printer_unavailable');
+    }
     final host = await _settings.readHost();
     if (host == null) return false;
     await _send(host, receipt, myanmar);
@@ -416,7 +438,13 @@ class PrinterDiscoveryService {
     PrinterPortProbe? probe,
     WifiRangeProvider? rangeProvider,
     ShopRuntimeScope? runtimeScope,
-  }) : _runtimeScope = runtimeScope,
+    bool testOnlyAllowMissingRuntimeScope = false,
+  }) : _runtimeScope = requireShopRuntimeScopeOrTestSeam(
+         runtimeScope,
+         testOnlyAllowMissingRuntimeScope:
+             testOnlyAllowMissingRuntimeScope ||
+             (probe != null && rangeProvider != null),
+       ),
        _rangeProvider =
            rangeProvider ??
            _networkRangeProvider(

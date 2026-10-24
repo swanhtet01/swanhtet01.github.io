@@ -154,6 +154,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 97C147051CF9000F007C117D /* Build configuration list for PBXNativeTarget "Runner" */;
 			buildPhases = (
+				A11A7E042026102400000004 /* Verify Shop build identity */,
 				9740EEB61CF901F6004384FC /* Run Script */,
 				97C146EA1CF9000F007C117D /* Sources */,
 				97C146EB1CF9000F007C117D /* Frameworks */,
@@ -237,6 +238,22 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
+		A11A7E042026102400000004 /* Verify Shop build identity */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"${SRCROOT}/../lib/shop_build_identity.g.dart",
+			);
+			name = "Verify Shop build identity";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -eu\nidentity=\"$SRCROOT/../lib/shop_build_identity.g.dart\"\ntest -f \"$identity\" || { echo shop_ios_build_identity_missing >&2; exit 1; }\ncase \"$CONFIGURATION\" in\n  Debug-qa)\n    grep -F \"shopBuildIdentityProfile = 'synthetic_qa_v1'\" \"$identity\" >/dev/null\n    grep -F \"shopBuildIdentityQaProfileId = 'synthetic-qa-v1'\" \"$identity\" >/dev/null\n    grep -F \"shopBuildIdentityPlatformIdentity = 'dev.supermega.supermegaShop.qa'\" \"$identity\" >/dev/null\n    ;;\n  Debug|Profile|Release)\n    grep -F \"shopBuildIdentityProfile = 'production'\" \"$identity\" >/dev/null\n    grep -F \"shopBuildIdentityQaProfileId = ''\" \"$identity\" >/dev/null\n    grep -F \"shopBuildIdentityPlatformIdentity = 'dev.supermega.supermegaShop'\" \"$identity\" >/dev/null\n    ;;\n  *) echo shop_ios_build_configuration_unknown >&2; exit 1 ;;\nesac\n";
+		};
 		3B06AD1E1E4923F5004D2608 /* Thin Binary */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;

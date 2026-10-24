@@ -398,6 +398,7 @@ void main() {
             apiBaseUrl: 'https://example.invalid',
             myanmar: false,
             onLanguageChanged: (_) {},
+            runtimeCapabilities: ShopRuntimeCapabilities.production,
             cameraViewBuilder: (context, onScanned, onError) => Center(
               child: FilledButton(
                 key: const ValueKey('fake-camera-detect'),
@@ -443,6 +444,7 @@ void main() {
             apiBaseUrl: 'https://example.invalid',
             myanmar: false,
             onLanguageChanged: (_) {},
+            runtimeCapabilities: ShopRuntimeCapabilities.production,
             cameraViewBuilder: (context, onScanned, onError) => Center(
               child: FilledButton(
                 key: const ValueKey('fake-camera-detect'),
@@ -498,6 +500,7 @@ void main() {
             apiBaseUrl: 'https://example.invalid',
             myanmar: false,
             onLanguageChanged: (_) {},
+            runtimeCapabilities: ShopRuntimeCapabilities.production,
             cameraViewBuilder: (context, onScanned, onError) => Center(
               child: FilledButton(
                 key: const ValueKey('fake-camera-deny'),
@@ -2420,6 +2423,7 @@ void main() {
             authClient: null,
             apiBaseUrl: 'https://example.invalid',
             initialMyanmar: false,
+            runtimeCapabilities: ShopRuntimeCapabilities.production,
           ),
         );
         await tester.pumpAndSettle();
@@ -2771,6 +2775,7 @@ void main() {
     });
     const range = (ip: '192.168.20.10', mask: '255.255.255.248');
     final settings = ReceiptPrinterSettings(
+      testOnlyAllowMissingRuntimeScope: true,
       rangeProvider: () async => range,
       session: VerifiedPrinterSession(),
     );
@@ -2832,6 +2837,7 @@ void main() {
       _usePhoneViewport(tester);
       const range = (ip: '192.168.20.10', mask: '255.255.255.248');
       final settings = ReceiptPrinterSettings(
+        testOnlyAllowMissingRuntimeScope: true,
         rangeProvider: () async => range,
         session: VerifiedPrinterSession(),
       );
@@ -2860,6 +2866,7 @@ void main() {
               apiBaseUrl: 'https://example.invalid',
               myanmar: false,
               onLanguageChanged: (_) {},
+              runtimeCapabilities: ShopRuntimeCapabilities.production,
               receiptPrinterSettings: settings,
               receiptPrintSender: (host, receipt, myanmar) async {
                 expect(host, '192.168.20.9');
@@ -2940,6 +2947,7 @@ void main() {
           myanmar: false,
           reprintService: ReceiptReprintService(
             settings: ReceiptPrinterSettings(
+              testOnlyAllowMissingRuntimeScope: true,
               rangeProvider: () async =>
                   (ip: '192.168.20.10', mask: '255.255.255.248'),
               session: VerifiedPrinterSession(),
@@ -2990,6 +2998,7 @@ void main() {
           apiBaseUrl: 'https://app.supermega.dev',
           myanmar: false,
           onLanguageChanged: (_) {},
+          runtimeCapabilities: ShopRuntimeCapabilities.production,
           recoverMenuPhoto: () async => photo,
         ),
       ),
@@ -3103,6 +3112,7 @@ void main() {
           apiBaseUrl: 'https://app.supermega.dev',
           myanmar: false,
           onLanguageChanged: (_) {},
+          runtimeCapabilities: ShopRuntimeCapabilities.production,
         ),
       ),
     );
@@ -3268,6 +3278,7 @@ void main() {
           apiBaseUrl: 'https://app.supermega.dev',
           myanmar: false,
           onLanguageChanged: (_) {},
+          runtimeCapabilities: ShopRuntimeCapabilities.production,
           recoverMenuPhoto: () async => image,
         ),
       ),
@@ -5402,6 +5413,7 @@ void main() {
           authClient: null,
           apiBaseUrl: 'https://example.invalid',
           initialMyanmar: myanmar,
+          runtimeCapabilities: ShopRuntimeCapabilities.production,
         ),
       );
       await tester.pumpAndSettle();

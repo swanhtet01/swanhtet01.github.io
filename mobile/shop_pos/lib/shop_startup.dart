@@ -22,11 +22,14 @@ typedef VerifyOpenedShopDatabase = Future<void> Function(ShopDatabase database);
 Future<XFile?> pickShopBackupForRuntime({
   required ShopRuntimeScope? runtimeScope,
   required PickShopBackup pickBackup,
+  bool allowTestPickerWithoutScope = false,
 }) async {
-  if (runtimeScope != null) {
-    if (!runtimeScope.capabilities.externalFileSaving) {
-      throw StateError('shop_external_file_access_unavailable');
+  if (runtimeScope == null) {
+    if (!allowTestPickerWithoutScope) {
+      throw StateError('shop_runtime_scope_required');
     }
+  } else if (!runtimeScope.capabilities.externalFileSaving) {
+    throw StateError('shop_external_file_access_unavailable');
   }
   return pickBackup();
 }
@@ -46,6 +49,7 @@ class ShopStartup extends StatefulWidget {
     this.verifyOpenedDatabase,
     this.runtimeScope,
     this.scopedPreferences,
+    this.allowTestFileAccessWithoutScope = false,
     super.key,
   });
 
@@ -72,6 +76,7 @@ class ShopStartup extends StatefulWidget {
   final VerifyOpenedShopDatabase? verifyOpenedDatabase;
   final ShopRuntimeScope? runtimeScope;
   final ShopScopedPreferences? scopedPreferences;
+  final bool allowTestFileAccessWithoutScope;
 
   @override
   State<ShopStartup> createState() => _ShopStartupState();
@@ -92,7 +97,8 @@ class _ShopStartupState extends State<ShopStartup> {
 
   File get _databaseFile => ShopDatabase.privateDatabaseFile(widget.documents);
   bool get _externalFileSavingAllowed =>
-      widget.runtimeScope?.capabilities.externalFileSaving ?? true;
+      widget.runtimeScope?.capabilities.externalFileSaving ??
+      widget.allowTestFileAccessWithoutScope;
 
   Future<bool> _hasRestoreMarker() async =>
       await FileSystemEntity.type(
@@ -238,10 +244,9 @@ class _ShopStartupState extends State<ShopStartup> {
 
   Future<XFile?> _pickNativeBackup() {
     final runtimeScope = widget.runtimeScope;
-    if (runtimeScope != null) {
-      if (!runtimeScope.capabilities.externalFileSaving) {
-        throw StateError('shop_external_file_access_unavailable');
-      }
+    if (runtimeScope == null) throw StateError('shop_runtime_scope_required');
+    if (!runtimeScope.capabilities.externalFileSaving) {
+      throw StateError('shop_external_file_access_unavailable');
     }
     return openFile(
       acceptedTypeGroups: [
@@ -276,12 +281,14 @@ class _ShopStartupState extends State<ShopStartup> {
       final chosen = await pickShopBackupForRuntime(
         runtimeScope: widget.runtimeScope,
         pickBackup: widget.pickBackup ?? _pickNativeBackup,
+        allowTestPickerWithoutScope:
+            widget.allowTestFileAccessWithoutScope && widget.pickBackup != null,
       );
       if (chosen == null) return;
       final cache =
           widget.importScratchRoot ??
           widget.runtimeScope?.temporaryRoot ??
-          await openProductionShopTemporaryDirectory();
+          (throw StateError('shop_runtime_scope_required'));
       staged = File(
         '${cache.path}${Platform.pathSeparator}'
         'supermega-shop-import-${const Uuid().v4()}.smbak',

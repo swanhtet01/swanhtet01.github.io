@@ -135,10 +135,15 @@ class ShopCorrectionAuthorizationService implements ShopCorrectionAuthorizer {
     http.Client? client,
     ShopCorrectionReceiptVerifier? receiptVerifier,
     ShopRuntimeScope? runtimeScope,
+    bool testOnlyAllowMissingRuntimeScope = false,
     this.requestTimeout = const Duration(seconds: 15),
-  }) : _client = client ?? _correctionAuthorizationClient(runtimeScope),
+  }) : _runtimeScope = requireShopRuntimeScopeOrTestSeam(
+         runtimeScope,
+         testOnlyAllowMissingRuntimeScope:
+             testOnlyAllowMissingRuntimeScope || client != null,
+       ),
+       _client = client ?? _correctionAuthorizationClient(runtimeScope),
        _ownsClient = client == null,
-       _runtimeScope = runtimeScope,
        _receiptVerifier =
            receiptVerifier ?? ShopCorrectionReceiptVerifier.production();
 

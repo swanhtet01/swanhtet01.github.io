@@ -259,6 +259,38 @@ void main() {
     );
   });
 
+  test(
+    'missing scope cannot reach external backup picker or exporter',
+    () async {
+      var pickerCalled = false;
+      await expectLater(
+        pickShopBackupForRuntime(
+          runtimeScope: null,
+          pickBackup: () async {
+            pickerCalled = true;
+            return null;
+          },
+        ),
+        throwsStateError,
+      );
+      expect(pickerCalled, isFalse);
+
+      var saverCalled = false;
+      await expectLater(
+        ShopBackupExporter.export(
+          database: database,
+          password: _password,
+          saveArchive: (archive, name) async {
+            saverCalled = true;
+            return null;
+          },
+        ),
+        throwsStateError,
+      );
+      expect(saverCalled, isFalse);
+    },
+  );
+
   tearDownAll(() async {
     await database.close();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -1231,6 +1263,7 @@ void main() {
     final result = await ShopBackupExporter.export(
       database: database,
       password: _password,
+      allowTestFileAccessWithoutScope: true,
       scratchRoot: directory,
       encryptedRoot: directory,
       now: DateTime(2026, 10, 22, 14, 5, 9),
@@ -1257,6 +1290,7 @@ void main() {
     final result = await ShopBackupExporter.export(
       database: database,
       password: _password,
+      allowTestFileAccessWithoutScope: true,
       scratchRoot: directory,
       encryptedRoot: directory,
       saveArchive: (encrypted, _) async {
@@ -1275,6 +1309,7 @@ void main() {
       ShopBackupExporter.export(
         database: database,
         password: _password,
+        allowTestFileAccessWithoutScope: true,
         scratchRoot: directory,
         encryptedRoot: directory,
         saveArchive: (encrypted, _) async {
@@ -1387,6 +1422,7 @@ void main() {
         home: ShopBackupExportScreen(
           database: database,
           myanmar: false,
+          allowTestFileAccessWithoutScope: true,
           scratchRoot: directory,
           encryptedRoot: directory,
           saveArchive: (_, _) async {
@@ -1414,6 +1450,7 @@ void main() {
           home: ShopBackupExportScreen(
             database: database,
             myanmar: myanmar,
+            allowTestFileAccessWithoutScope: true,
             exportAction: (_) async => ShopBackupExportResult.cancelled,
           ),
         ),
@@ -1440,6 +1477,7 @@ void main() {
         home: ShopBackupExportScreen(
           database: database,
           myanmar: false,
+          allowTestFileAccessWithoutScope: true,
           exportAction: (_) async => ShopBackupExportResult.cancelled,
         ),
       ),
@@ -3233,6 +3271,7 @@ void main() {
           documents: documents,
           importScratchRoot: documents,
           initialMyanmar: false,
+          allowTestFileAccessWithoutScope: true,
           pickBackup: () async => XFile(archive.path),
           buildShop: (_, _) =>
               const MaterialApp(home: Scaffold(body: Text('Opened Shop'))),
@@ -3299,6 +3338,7 @@ void main() {
             documents: documents,
             importScratchRoot: documents,
             initialMyanmar: true,
+            allowTestFileAccessWithoutScope: true,
             buildShop: (_, _) =>
                 const MaterialApp(home: Scaffold(body: Text('Opened Shop'))),
             closeDatabase: closeRecorder.call,
@@ -3424,6 +3464,7 @@ void main() {
           documents: documents,
           importScratchRoot: documents,
           initialMyanmar: false,
+          allowTestFileAccessWithoutScope: true,
           pickBackup: () async => XFile(archive.path),
           buildShop: (_, _) =>
               const MaterialApp(home: Scaffold(body: Text('Opened Shop'))),
@@ -3471,6 +3512,7 @@ void main() {
           documents: documents,
           importScratchRoot: documents,
           initialMyanmar: true,
+          allowTestFileAccessWithoutScope: true,
           pickBackup: () async => null,
           buildShop: (_, _) => const SizedBox.shrink(),
         ),

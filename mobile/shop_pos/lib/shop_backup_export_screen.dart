@@ -28,12 +28,17 @@ abstract final class ShopBackupExporter {
     Directory? scratchRoot,
     Directory? encryptedRoot,
     ShopRuntimeScope? runtimeScope,
+    bool allowTestFileAccessWithoutScope = false,
     DateTime? now,
   }) async {
-    if (runtimeScope != null) {
-      if (!runtimeScope.capabilities.externalFileSaving) {
-        throw StateError('shop_external_file_access_unavailable');
+    if (runtimeScope == null) {
+      if (!allowTestFileAccessWithoutScope ||
+          scratchRoot == null ||
+          encryptedRoot == null) {
+        throw StateError('shop_runtime_scope_required');
       }
+    } else if (!runtimeScope.capabilities.externalFileSaving) {
+      throw StateError('shop_external_file_access_unavailable');
     }
     if (_active) {
       throw StateError('A Shop backup export is already in progress.');
@@ -44,11 +49,11 @@ abstract final class ShopBackupExporter {
       final privateRoot =
           scratchRoot ??
           runtimeScope?.documentsRoot ??
-          await openProductionShopDocumentsDirectory();
+          (throw StateError('shop_runtime_scope_required'));
       final cacheRoot =
           encryptedRoot ??
           runtimeScope?.temporaryRoot ??
-          await openProductionShopTemporaryDirectory();
+          (throw StateError('shop_runtime_scope_required'));
       await cacheRoot.create(recursive: true);
       encryptedArchive = File(
         '${cacheRoot.path}${Platform.pathSeparator}'
@@ -95,6 +100,7 @@ class ShopBackupExportScreen extends StatefulWidget {
     this.scratchRoot,
     this.encryptedRoot,
     this.runtimeScope,
+    this.allowTestFileAccessWithoutScope = false,
     super.key,
   });
 
@@ -108,9 +114,15 @@ class ShopBackupExportScreen extends StatefulWidget {
   final Directory? scratchRoot;
   final Directory? encryptedRoot;
   final ShopRuntimeScope? runtimeScope;
+  final bool allowTestFileAccessWithoutScope;
 
   bool get externalFileSavingAllowed =>
-      runtimeScope?.capabilities.externalFileSaving ?? true;
+      runtimeScope?.capabilities.externalFileSaving ??
+      (allowTestFileAccessWithoutScope &&
+          (exportAction != null ||
+              (saveArchive != null &&
+                  scratchRoot != null &&
+                  encryptedRoot != null)));
 
   @override
   State<ShopBackupExportScreen> createState() => _ShopBackupExportScreenState();
@@ -124,10 +136,9 @@ class _ShopBackupExportScreenState extends State<ShopBackupExportScreen> {
 
   Future<String?> _saveAs(File archive, String suggestedName) {
     final runtimeScope = widget.runtimeScope;
-    if (runtimeScope != null) {
-      if (!runtimeScope.capabilities.externalFileSaving) {
-        throw StateError('shop_external_file_access_unavailable');
-      }
+    if (runtimeScope == null) throw StateError('shop_runtime_scope_required');
+    if (!runtimeScope.capabilities.externalFileSaving) {
+      throw StateError('shop_external_file_access_unavailable');
     }
     if (!Platform.isAndroid && !Platform.isIOS && !Platform.isWindows) {
       throw UnsupportedError('Shop backup export is unavailable here.');
@@ -189,6 +200,8 @@ class _ShopBackupExportScreenState extends State<ShopBackupExportScreen> {
               scratchRoot: widget.scratchRoot,
               encryptedRoot: widget.encryptedRoot,
               runtimeScope: widget.runtimeScope,
+              allowTestFileAccessWithoutScope:
+                  widget.allowTestFileAccessWithoutScope,
             ));
       if (!mounted) return;
       _password.clear();

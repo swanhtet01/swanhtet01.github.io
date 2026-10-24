@@ -39,56 +39,72 @@ Map<String, Object?> _snapshot({String workspace = 'shop-a'}) => {
 };
 
 void main() {
+  test('missing runtime scope cannot open the production orders client', () {
+    expect(
+      () => ConnectedOrdersService(
+        endpoint: connectedOrdersEndpoint('https://app.supermega.dev')!,
+        accessToken: () async => 'session',
+      ),
+      throwsStateError,
+    );
+  });
+
   test('endpoint is fixed under a secure configured origin', () {
     final endpoint = connectedOrdersEndpoint('https://app.supermega.dev');
-    expect(endpoint.toString(), 'https://app.supermega.dev$connectedOrdersPath');
+    expect(
+      endpoint.toString(),
+      'https://app.supermega.dev$connectedOrdersPath',
+    );
     expect(endpoint?.query, isEmpty);
     expect(connectedOrdersEndpoint('http://app.supermega.dev'), isNull);
     expect(connectedOrdersEndpoint('https://app.supermega.dev/other'), isNull);
     expect(connectedOrdersEndpoint('https://name@app.supermega.dev'), isNull);
   });
 
-  test('signed-in GET sends no workspace selector and reads allowlisted fields', () async {
-    final fixture = jsonEncode(_snapshot());
-    final parsed = ConnectedOrdersSnapshot.parse(
-      jsonDecode(fixture),
-      DateTime.utc(2026, 10, 22),
-    );
-    expect(parsed.orders.single.id, 'ORD-1042');
-    var calls = 0;
-    http.Request? sent;
-    final service = ConnectedOrdersService(
-      endpoint: connectedOrdersEndpoint('https://app.supermega.dev')!,
-      accessToken: () async => 'short-lived-session',
-      clock: () => DateTime.utc(2026, 10, 22, 2, 2),
-      client: MockClient((request) async {
-        calls++;
-        sent = request;
-        return http.Response.bytes(
-          utf8.encode(fixture),
-          200,
-          headers: {'content-type': 'application/json; charset=utf-8'},
-        );
-      }),
-    );
-    final result = await service.fetch();
-    expect(calls, 1);
-    expect(sent, isNotNull);
-    expect(sent!.method, 'GET');
-    expect(sent!.url.path, connectedOrdersPath);
-    expect(sent!.url.queryParameters, isEmpty);
-    expect(sent!.followRedirects, isFalse);
-    expect(sent!.headers['authorization'], 'Bearer short-lived-session');
-    expect(sent!.headers['cache-control'], 'no-store');
-    expect(result.workspaceId, 'shop-a');
-    expect(result.workspaceVersion, 7);
-    expect(result.receivedAt, DateTime.utc(2026, 10, 22, 2, 2));
-    expect(result.orders.single.id, 'ORD-1042');
-    expect(result.orders.single.lines.single.nameMy, 'ဆန်');
-    expect(result.orders.single.paymentDueAt, isNull);
-    expect(result.orders.single.totalMmk, 24000);
-    service.close();
-  });
+  test(
+    'signed-in GET sends no workspace selector and reads allowlisted fields',
+    () async {
+      final fixture = jsonEncode(_snapshot());
+      final parsed = ConnectedOrdersSnapshot.parse(
+        jsonDecode(fixture),
+        DateTime.utc(2026, 10, 22),
+      );
+      expect(parsed.orders.single.id, 'ORD-1042');
+      var calls = 0;
+      http.Request? sent;
+      final service = ConnectedOrdersService(
+        endpoint: connectedOrdersEndpoint('https://app.supermega.dev')!,
+        accessToken: () async => 'short-lived-session',
+        clock: () => DateTime.utc(2026, 10, 22, 2, 2),
+        client: MockClient((request) async {
+          calls++;
+          sent = request;
+          return http.Response.bytes(
+            utf8.encode(fixture),
+            200,
+            headers: {'content-type': 'application/json; charset=utf-8'},
+          );
+        }),
+      );
+      final result = await service.fetch();
+      expect(calls, 1);
+      expect(sent, isNotNull);
+      expect(sent!.method, 'GET');
+      expect(sent!.url.path, connectedOrdersPath);
+      expect(sent!.url.queryParameters, isEmpty);
+      expect(sent!.followRedirects, isFalse);
+      expect(sent!.headers['authorization'], 'Bearer short-lived-session');
+      expect(sent!.headers['cache-control'], 'no-store');
+      expect(result.workspaceId, 'shop-a');
+      expect(result.workspaceVersion, 7);
+      expect(result.receivedAt, DateTime.utc(2026, 10, 22, 2, 2));
+      expect(result.orders.single.id, 'ORD-1042');
+      expect(result.orders.single.lines.single.nameMy, 'ဆန်');
+      expect(result.orders.single.paymentDueAt, isNull);
+      expect(result.orders.single.totalMmk, 24000);
+      service.close();
+    },
+  );
 
   test('no session and denied entitlement cannot yield orders', () async {
     var calls = 0;
@@ -104,7 +120,13 @@ void main() {
     );
     await expectLater(
       unsigned.fetch(),
-      throwsA(isA<ConnectedOrdersException>().having((e) => e.code, 'code', 'sign_in_required')),
+      throwsA(
+        isA<ConnectedOrdersException>().having(
+          (e) => e.code,
+          'code',
+          'sign_in_required',
+        ),
+      ),
     );
     expect(calls, 0);
     final denied = ConnectedOrdersService(
@@ -114,7 +136,13 @@ void main() {
     );
     await expectLater(
       denied.fetch(),
-      throwsA(isA<ConnectedOrdersException>().having((e) => e.code, 'code', 'access_denied')),
+      throwsA(
+        isA<ConnectedOrdersException>().having(
+          (e) => e.code,
+          'code',
+          'access_denied',
+        ),
+      ),
     );
     expect(calls, 1);
   });
@@ -141,10 +169,14 @@ void main() {
   });
 
   test('first-run empty server snapshot is distinct from local sales', () {
-    final empty = _snapshot()..['workspaceVersion'] = 0
+    final empty = _snapshot()
+      ..['workspaceVersion'] = 0
       ..['workspaceUpdatedAt'] = ''
       ..['orders'] = [];
-    final result = ConnectedOrdersSnapshot.parse(empty, DateTime.utc(2026, 10, 22));
+    final result = ConnectedOrdersSnapshot.parse(
+      empty,
+      DateTime.utc(2026, 10, 22),
+    );
     expect(result.orders, isEmpty);
     expect(result.workspaceUpdatedAt, isNull);
   });

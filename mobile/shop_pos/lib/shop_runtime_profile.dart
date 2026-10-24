@@ -58,6 +58,21 @@ class ShopRuntimeCapabilities {
     syntheticEvidence: true,
     loopbackPrinter: true,
   );
+
+  /// Safe default for fixture-only widget construction. Real application
+  /// routes receive capabilities from an already validated runtime scope.
+  static const failClosed = ShopRuntimeCapabilities(
+    managedAuth: false,
+    correctionAuthorization: false,
+    connectedOrders: false,
+    networkPrinter: false,
+    camera: false,
+    gallery: false,
+    remoteImport: false,
+    externalFileSaving: false,
+    syntheticEvidence: false,
+    loopbackPrinter: false,
+  );
 }
 
 class ShopRuntimeConfiguration {
@@ -75,6 +90,12 @@ class ShopRuntimeConfiguration {
     'dev.supermega.supermegaShop.qa',
     'dev.supermega.supermega_shop.qa.windows',
   };
+  static const productionPlatformIdentities = <String>{
+    'production-current',
+    'dev.supermega.supermega_shop',
+    'dev.supermega.supermegaShop',
+    'dev.supermega.supermega_shop.windows',
+  };
 
   final ShopRuntimeProfile profile;
   final String profileId;
@@ -85,8 +106,14 @@ class ShopRuntimeConfiguration {
 
   factory ShopRuntimeConfiguration.fromEnvironment() =>
       ShopRuntimeConfiguration.resolve(
-        runtimeProfile: const String.fromEnvironment('SHOP_RUNTIME_PROFILE'),
-        qaProfile: const String.fromEnvironment('SHOP_QA_PROFILE_ID'),
+        runtimeProfile: const String.fromEnvironment(
+          'SHOP_RUNTIME_PROFILE',
+          defaultValue: shopBuildIdentityProfile,
+        ),
+        qaProfile: const String.fromEnvironment(
+          'SHOP_QA_PROFILE_ID',
+          defaultValue: shopBuildIdentityQaProfileId,
+        ),
         buildIdentityProfile: shopBuildIdentityProfile,
         buildIdentityQaProfile: shopBuildIdentityQaProfileId,
         platformIdentity: shopBuildIdentityPlatformIdentity,
@@ -121,8 +148,8 @@ class ShopRuntimeConfiguration {
         buildQaProfile.isNotEmpty;
 
     if (!anyQaSignal) {
-      if (identity.isEmpty) {
-        throw StateError('shop_build_identity_missing');
+      if (!productionPlatformIdentities.contains(identity)) {
+        throw StateError('shop_build_identity_unknown');
       }
       return ShopRuntimeConfiguration._(
         profile: ShopRuntimeProfile.production,

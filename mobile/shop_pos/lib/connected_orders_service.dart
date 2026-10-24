@@ -186,10 +186,15 @@ class ConnectedOrdersService {
     required this.accessToken,
     http.Client? client,
     ShopRuntimeScope? runtimeScope,
+    bool testOnlyAllowMissingRuntimeScope = false,
     DateTime Function()? clock,
-  }) : _client = client ?? _connectedOrdersClient(runtimeScope),
+  }) : _runtimeScope = requireShopRuntimeScopeOrTestSeam(
+         runtimeScope,
+         testOnlyAllowMissingRuntimeScope:
+             testOnlyAllowMissingRuntimeScope || client != null,
+       ),
+       _client = client ?? _connectedOrdersClient(runtimeScope),
        _ownsClient = client == null,
-       _runtimeScope = runtimeScope,
        _clock = clock ?? DateTime.now;
 
   final Uri endpoint;

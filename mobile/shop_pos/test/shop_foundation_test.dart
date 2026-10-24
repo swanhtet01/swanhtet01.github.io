@@ -85,6 +85,16 @@ void main() {
   });
 
   group('menu photo service', () {
+    test('missing runtime scope cannot open the production import client', () {
+      expect(
+        () => MenuImportService(
+          endpoint: Uri.https('app.supermega.dev', '/api/shop/menu-import'),
+          accessToken: () async => 'session',
+        ),
+        throwsStateError,
+      );
+    });
+
     test('deletes the temporary camera file after the flow', () async {
       final directory = await Directory.systemTemp.createTemp('shop-menu-');
       final file = File('${directory.path}${Platform.pathSeparator}menu.png');
@@ -3028,6 +3038,13 @@ void main() {
   );
 
   group('bounded printer discovery', () {
+    test('missing scope cannot open production printer boundaries', () {
+      expect(ReceiptPrinterSettings.new, throwsStateError);
+      expect(PrinterDiscoveryService.new, throwsStateError);
+      expect(ShopReceiptPrinter.new, throwsStateError);
+      expect(ReceiptReprintService.new, throwsStateError);
+    });
+
     test('receipt raster profiles emit aligned bounded ESC POS rows', () async {
       final receipt = ShopSaleReceipt(
         id: 'profile-sale',
@@ -3335,6 +3352,7 @@ void main() {
         final settings = ReceiptPrinterSettings(
           rangeProvider: () async => range,
           session: VerifiedPrinterSession(),
+          testOnlyAllowMissingRuntimeScope: true,
         );
         expect(await settings.readPaperWidth(), ReceiptPaperWidth.mm80);
         expect(ReceiptPaperWidth.mm58.paperSize.widthPixels, 384);
@@ -3358,6 +3376,7 @@ void main() {
           await ReceiptPrinterSettings(
             rangeProvider: () async => range,
             session: VerifiedPrinterSession(),
+            testOnlyAllowMissingRuntimeScope: true,
           ).readPaperWidth(),
           ReceiptPaperWidth.mm58,
         );
@@ -3388,6 +3407,7 @@ void main() {
       final settings = ReceiptPrinterSettings(
         rangeProvider: () async => range,
         session: session,
+        testOnlyAllowMissingRuntimeScope: true,
       );
       final sent = <String>[];
       final reprint = ReceiptReprintService(
@@ -3418,6 +3438,7 @@ void main() {
         settings: ReceiptPrinterSettings(
           rangeProvider: () async => range,
           session: VerifiedPrinterSession(),
+          testOnlyAllowMissingRuntimeScope: true,
         ),
         send: (host, receipt, myanmar) async {
           sent.add('unexpected');
@@ -3439,6 +3460,7 @@ void main() {
       final settings = ReceiptPrinterSettings(
         rangeProvider: () async => range,
         session: session,
+        testOnlyAllowMissingRuntimeScope: true,
       );
       expect(await settings.readSavedHost(), '192.168.20.9');
       expect(await settings.readHost(), isNull);
@@ -3459,6 +3481,7 @@ void main() {
         await ReceiptPrinterSettings(
           rangeProvider: () async => range,
           session: VerifiedPrinterSession(),
+          testOnlyAllowMissingRuntimeScope: true,
         ).readHost(),
         isNull,
       );

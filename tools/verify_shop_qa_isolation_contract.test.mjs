@@ -90,10 +90,10 @@ ${artifactSteps('supermega-shop-windows-qa.zip', `$artifact = 'supermega-shop-wi
 
 function fixture() {
   return {
-    'mobile/shop_pos/android/app/build.gradle.kts': 'applicationId = "dev.supermega.supermega_shop"\ncreate("production") create("qa") synthetic_qa_v1 dev.supermega.supermega_shop.qa',
+    'mobile/shop_pos/android/app/build.gradle.kts': 'applicationId = "dev.supermega.supermega_shop"\ncreate("production") create("qa") synthetic_qa_v1 dev.supermega.supermega_shop.qa verifyShopAndroidProductionIdentity verifyShopAndroidQaIdentity preProduction preQa shopBuildIdentityProfile = \'$profile\' shopBuildIdentityQaProfileId = \'$qaProfile\' shopBuildIdentityPlatformIdentity = \'$identity\' shop_android_build_identity_mismatch',
     'mobile/shop_pos/android/app/src/production/AndroidManifest.xml': '<application android:label="Shop"/>',
     'mobile/shop_pos/android/app/src/qa/AndroidManifest.xml': '<application android:label="Shop QA"/>',
-    'mobile/shop_pos/ios/Runner.xcodeproj/project.pbxproj': 'PRODUCT_BUNDLE_IDENTIFIER = dev.supermega.supermegaShop;\nPRODUCT_BUNDLE_IDENTIFIER = dev.supermega.supermegaShop;\nPRODUCT_BUNDLE_IDENTIFIER = dev.supermega.supermegaShop;\ndev.supermega.supermegaShop.qa\npath = Runner.app;\nPRODUCT_NAME = "$(TARGET_NAME)";\nPRODUCT_NAME = "$(TARGET_NAME)";\nPRODUCT_NAME = "$(TARGET_NAME)";\nPRODUCT_NAME = "$(TARGET_NAME)";\nPRODUCT_NAME = "$(TARGET_NAME)";\nPRODUCT_NAME = "$(TARGET_NAME)";',
+    'mobile/shop_pos/ios/Runner.xcodeproj/project.pbxproj': 'PRODUCT_BUNDLE_IDENTIFIER = dev.supermega.supermegaShop;\nPRODUCT_BUNDLE_IDENTIFIER = dev.supermega.supermegaShop;\nPRODUCT_BUNDLE_IDENTIFIER = dev.supermega.supermegaShop;\ndev.supermega.supermegaShop.qa\npath = Runner.app;\nVerify Shop build identity shop_ios_build_identity_missing shop_ios_build_configuration_unknown\nshopBuildIdentityProfile = \'synthetic_qa_v1\' shopBuildIdentityQaProfileId = \'synthetic-qa-v1\' shopBuildIdentityProfile = \'production\' shopBuildIdentityQaProfileId = \'\'\nPRODUCT_NAME = "$(TARGET_NAME)";\nPRODUCT_NAME = "$(TARGET_NAME)";\nPRODUCT_NAME = "$(TARGET_NAME)";\nPRODUCT_NAME = "$(TARGET_NAME)";\nPRODUCT_NAME = "$(TARGET_NAME)";\nPRODUCT_NAME = "$(TARGET_NAME)";',
     'mobile/shop_pos/lib/main.dart': 'Future<void> main() async { final runtimeProfile = ShopRuntimeProfile.resolve(); final runtimeScope = await ShopRuntimeScope.resolve(runtimeProfile); if (!runtimeScope.capabilities.managedAuth) return; if (!runtimeScope.capabilities.camera) return; }',
     'mobile/shop_pos/lib/shop_database.dart': "privateDatabaseFile() => 'supermega_shop.sqlite';",
     'mobile/shop_pos/lib/shop_startup.dart': 'ShopRuntimeScope scope; void pick() { if (!scope.capabilities.externalFileSaving) return; }',
@@ -105,8 +105,8 @@ function fixture() {
     'mobile/shop_pos/lib/camera_barcode_scanner.dart': 'ShopRuntimeScope scope; void scan() { if (!scope.capabilities.camera) return; }',
     'mobile/shop_pos/lib/connected_orders_service.dart': 'ShopRuntimeScope scope; void connect() { if (!scope.capabilities.connectedOrders) return; }',
     'mobile/shop_pos/lib/shop_correction_authorization_service.dart': 'ShopRuntimeScope scope; void correct() { if (!scope.capabilities.correctionAuthorization) return; }',
-    'mobile/shop_pos/lib/shop_runtime_profile.dart': "enum ShopRuntimeProfile { production, syntheticQa } ShopRuntimeProfile resolve() { const a=String.fromEnvironment('SHOP_RUNTIME_PROFILE'); const b=String.fromEnvironment('SHOP_QA_PROFILE_ID'); const ids={'dev.supermega.supermega_shop.qa','dev.supermega.supermegaShop.qa','dev.supermega.supermega_shop.qa.windows'}; if (a=='synthetic_qa_v1' && b=='synthetic-qa-v1') return ShopRuntimeProfile.syntheticQa; if (a.isNotEmpty || b.isNotEmpty) throw StateError('unknown partial'); return ShopRuntimeProfile.production; }",
-    'mobile/shop_pos/lib/shop_runtime_scope.dart': "class ShopRuntimeScope { static Future<ShopRuntimeScope> resolve(p) async { SharedPreferences.getInstance(); getApplicationSupportDirectory(); getTemporaryDirectory(); return ShopRuntimeScope(); } } synthetic-evidence sentinel shop_locale_myanmar shop_pending_picker_intent shop_receipt_printer_host_v1 shop_receipt_paper_width_v1",
+    'mobile/shop_pos/lib/shop_runtime_profile.dart': "enum ShopRuntimeProfile { production, syntheticQa } class ShopRuntimeCapabilities { static const failClosed = ShopRuntimeCapabilities(); const ShopRuntimeCapabilities(); } ShopRuntimeProfile resolve() { const a=String.fromEnvironment('SHOP_RUNTIME_PROFILE', defaultValue: shopBuildIdentityProfile); const b=String.fromEnvironment('SHOP_QA_PROFILE_ID', defaultValue: shopBuildIdentityQaProfileId); const ids={'dev.supermega.supermega_shop.qa','dev.supermega.supermegaShop.qa','dev.supermega.supermega_shop.qa.windows','production-current','dev.supermega.supermega_shop','dev.supermega.supermegaShop','dev.supermega.supermega_shop.windows'}; if (a=='synthetic_qa_v1' && b=='synthetic-qa-v1') return ShopRuntimeProfile.syntheticQa; if (a.isNotEmpty || b.isNotEmpty) throw StateError('unknown partial'); return ShopRuntimeProfile.production; }",
+    'mobile/shop_pos/lib/shop_runtime_scope.dart': "ShopRuntimeScope? requireShopRuntimeScopeOrTestSeam(ShopRuntimeScope? scope) { if (scope == null) throw StateError('shop_runtime_scope_required'); return scope; } class ShopRuntimeScope { static Future<ShopRuntimeScope> resolve(p) async { SharedPreferences.getInstance(); getApplicationSupportDirectory(); getTemporaryDirectory(); return ShopRuntimeScope(); } } synthetic-evidence sentinel shop_locale_myanmar shop_pending_picker_intent shop_receipt_printer_host_v1 shop_receipt_paper_width_v1",
     'mobile/shop_pos/lib/shop_build_identity.g.dart': 'synthetic_qa_v1 platform',
     'tools/generate_shop_build_identity.mjs': 'production synthetic_qa_v1 windows',
     'mobile/shop_pos/scripts/configure_windows_qa_runner.ps1': 'supermega_shop_qa.exe Shop QA',
@@ -236,7 +236,9 @@ test('unknown build defines and comment-only production identities fail closed',
 
 test('exact platform identity and artifact contracts cannot be replaced by loose labels', () => {
   for (const path of [
+    'mobile/shop_pos/android/app/build.gradle.kts',
     'mobile/shop_pos/android/app/src/qa/AndroidManifest.xml',
+    'mobile/shop_pos/ios/Runner.xcodeproj/project.pbxproj',
     'mobile/shop_pos/ios/Runner.xcodeproj/xcshareddata/xcschemes/qa.xcscheme',
     'mobile/shop_pos/ios/Runner/Info.plist',
     'mobile/shop_pos/ios/Flutter/Debug.xcconfig',
@@ -256,6 +258,27 @@ test('exact platform identity and artifact contracts cannot be replaced by loose
     assessShopQaIsolationContract({ sources: mixedIosScheme }).strictReady,
     false,
     'QA scheme must not fall back to production configurations',
+  )
+
+  const productionWidgetDefault = fixture()
+  productionWidgetDefault['mobile/shop_pos/lib/main.dart'] +=
+    ' ShopRuntimeCapabilities runtimeCapabilities = ShopRuntimeCapabilities.production;'
+  assert.equal(
+    assessShopQaIsolationContract({ sources: productionWidgetDefault }).strictReady,
+    false,
+    'missing runtime scope must not silently inherit production capabilities',
+  )
+
+  const missingScopeGuard = fixture()
+  missingScopeGuard['mobile/shop_pos/lib/shop_runtime_scope.dart'] =
+    missingScopeGuard['mobile/shop_pos/lib/shop_runtime_scope.dart'].replace(
+      'requireShopRuntimeScopeOrTestSeam',
+      'unguardedOptionalScope',
+    )
+  assert.equal(
+    assessShopQaIsolationContract({ sources: missingScopeGuard }).strictReady,
+    false,
+    'missing runtime scope must have a fail-closed guard or explicit test seam',
   )
 
   for (const token of [
@@ -309,6 +332,9 @@ test('wrong workflow job, command order, flavor, or QA define fails closed', () 
     ),
     workflow => workflow.replace('--flavor qa --dart-define=SHOP_RUNTIME_PROFILE', '--flavor production --dart-define=SHOP_RUNTIME_PROFILE'),
     workflow => workflow.replace('--dart-define=SHOP_QA_PROFILE_ID=synthetic-qa-v1', '--dart-define=SHOP_QA_PROFILE_ID=wrong'),
+    workflow => workflow
+      .replace('run: node tools/generate_shop_build_identity.mjs --platform android --profile synthetic_qa_v1', 'run: true')
+      .replace(' --dart-define=SHOP_RUNTIME_PROFILE=synthetic_qa_v1 --dart-define=SHOP_QA_PROFILE_ID=synthetic-qa-v1', ''),
     workflow => workflow.replace('echo "source-sha=${{ github.sha }} sha-256=$(cat app-qa-debug.apk.sha256) promotion-ineligible"', 'echo "source-sha=${{ github.sha }} sha-256 promotion-ineligible"'),
     workflow => workflow.replace(
       'path: |\n            app-qa-debug.apk\n            app-qa-debug.apk.sha256\n            app-qa-debug.apk.manifest',

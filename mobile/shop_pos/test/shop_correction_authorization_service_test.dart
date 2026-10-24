@@ -204,6 +204,22 @@ void main() {
     });
   });
 
+  test(
+    'missing runtime scope cannot open the production correction client',
+    () {
+      expect(
+        () => ShopCorrectionAuthorizationService(
+          endpoint: shopCorrectionAuthorizationEndpoint(
+            'https://app.supermega.dev',
+          )!,
+          accessToken: () async => 'session',
+          currentUserId: () async => _ownerId,
+        ),
+        throwsStateError,
+      );
+    },
+  );
+
   test('endpoint is fixed under a clean HTTPS origin', () {
     expect(
       shopCorrectionAuthorizationEndpoint('https://app.supermega.dev')

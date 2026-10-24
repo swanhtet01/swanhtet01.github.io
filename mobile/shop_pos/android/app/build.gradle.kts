@@ -14,6 +14,46 @@ val shopReleaseSigningAvailable = listOf(
     shopReleaseStorePassword,
     shopReleaseKeyPassword,
 ).all { !it.isNullOrBlank() }
+val shopGeneratedIdentity = rootProject.file("../lib/shop_build_identity.g.dart")
+
+fun verifyShopGeneratedIdentity(profile: String, qaProfile: String, identity: String) {
+    if (!shopGeneratedIdentity.isFile) {
+        throw GradleException("shop_android_build_identity_missing")
+    }
+    val source = shopGeneratedIdentity.readText()
+    val required = listOf(
+        "shopBuildIdentityProfile = '$profile'",
+        "shopBuildIdentityQaProfileId = '$qaProfile'",
+        "shopBuildIdentityPlatformIdentity = '$identity'",
+    )
+    if (!required.all(source::contains)) {
+        throw GradleException("shop_android_build_identity_mismatch")
+    }
+}
+
+val verifyShopAndroidProductionIdentity by tasks.registering {
+    doLast {
+        verifyShopGeneratedIdentity("production", "", "dev.supermega.supermega_shop")
+    }
+}
+val verifyShopAndroidQaIdentity by tasks.registering {
+    doLast {
+        verifyShopGeneratedIdentity(
+            "synthetic_qa_v1",
+            "synthetic-qa-v1",
+            "dev.supermega.supermega_shop.qa",
+        )
+    }
+}
+
+tasks.configureEach {
+    when {
+        name.startsWith("preProduction") && name.endsWith("Build") ->
+            dependsOn(verifyShopAndroidProductionIdentity)
+        name.startsWith("preQa") && name.endsWith("Build") ->
+            dependsOn(verifyShopAndroidQaIdentity)
+    }
+}
 
 gradle.taskGraph.whenReady {
     val shopReleaseTaskPresent = allTasks.any {
