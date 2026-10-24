@@ -189,8 +189,11 @@ def _source_identity(expected_head: str | None) -> dict[str, str]:
     if not isinstance(expected_head, str) or not re.fullmatch(r"[0-9a-f]{40}", expected_head):
         raise RehearsalFailure("expected_head_required")
     def git(*args: str) -> str:
-        result = subprocess.run(["git", "--no-optional-locks", *args], cwd=ROOT,
-            capture_output=True, text=True, timeout=10, check=False)
+        try:
+            result = subprocess.run(["git", "--no-optional-locks", *args], cwd=ROOT,
+                capture_output=True, text=True, timeout=10, check=False)
+        except (OSError, subprocess.SubprocessError) as exc:
+            raise RehearsalFailure("source_identity_unavailable") from exc
         if result.returncode != 0:
             raise RehearsalFailure("source_identity_unavailable")
         return result.stdout.strip()
@@ -198,12 +201,17 @@ def _source_identity(expected_head: str | None) -> dict[str, str]:
         raise RehearsalFailure("source_dirty")
     if git("rev-parse", "HEAD") != expected_head:
         raise RehearsalFailure("source_head_mismatch")
-    observed = tuple(sorted(path.name for path in MIGRATION_DIRECTORY.glob("*.sql")
-        if path.name != "20260711081300_public_legacy_baseline.sql"))
-    if observed != CURRENT_MIGRATIONS:
-        raise RehearsalFailure("private_migration_inventory_mismatch")
-    return {"head": expected_head, "tree": git("rev-parse", "HEAD^{tree}"),
-            "implementation_digest": _implementation_digest()}
+    try:
+        observed = tuple(sorted(path.name for path in MIGRATION_DIRECTORY.glob("*.sql")
+            if path.name != "20260711081300_public_legacy_baseline.sql"))
+        if observed != CURRENT_MIGRATIONS:
+            raise RehearsalFailure("private_migration_inventory_mismatch")
+        return {"head": expected_head, "tree": git("rev-parse", "HEAD^{tree}"),
+                "implementation_digest": _implementation_digest()}
+    except RehearsalFailure:
+        raise
+    except (OSError, RuntimeError) as exc:
+        raise RehearsalFailure("source_identity_unavailable") from exc
 
 
 def _default_postgres_bin() -> Path:
@@ -259,30 +267,45 @@ def _safe_report(error: str, *, cleanup_complete: bool) -> dict[str, Any]:
     }
 
 
-def _emit(report: dict[str, Any], evidence_file: Path | None) -> None:
+def _emit(report: dict[str, Any], evidence_file: Path | None) -> bool:
     serialized = json.dumps(report, indent=2, sort_keys=True)
+    persisted = True
     if evidence_file is not None:
-        evidence_file.parent.mkdir(parents=True, exist_ok=True)
-        with evidence_file.open("x", encoding="utf-8") as output:
-            output.write(serialized + "\n")
+        try:
+            evidence_file.parent.mkdir(parents=True, exist_ok=True)
+            with evidence_file.open("x", encoding="utf-8") as output:
+                output.write(serialized + "\n")
+        except (OSError, RuntimeError):
+            serialized = json.dumps(
+                _safe_report(
+                    "evidence_write_failed",
+                    cleanup_complete=report.get("cleanup_complete") is True,
+                ),
+                indent=2,
+                sort_keys=True,
+            )
+            persisted = False
     print(serialized)
+    return persisted
 
 
 @contextmanager
 def _disposable_workspace():
-    configured_parent = str(os.getenv(REHEARSAL_TEMP_DIRECTORY_ENV, "")).strip()
-    parent = (
-        Path(configured_parent).expanduser().resolve()
-        if configured_parent
-        else Path(tempfile.gettempdir()).resolve()
-    )
-    if not parent.is_dir() or parent.is_symlink():
-        raise RehearsalFailure("workspace_initialization_failed")
     try:
+        configured_parent = str(os.getenv(REHEARSAL_TEMP_DIRECTORY_ENV, "")).strip()
+        parent = (
+            Path(configured_parent).expanduser().resolve()
+            if configured_parent
+            else Path(tempfile.gettempdir()).resolve()
+        )
+        if not parent.is_dir() or parent.is_symlink():
+            raise RehearsalFailure("workspace_initialization_failed")
         workspace = Path(
             tempfile.mkdtemp(prefix="supermega-pg17-", dir=parent)
         ).resolve()
-    except OSError as exc:
+    except RehearsalFailure:
+        raise
+    except (OSError, RuntimeError) as exc:
         raise RehearsalFailure("workspace_initialization_failed") from exc
     cleanup = {"stopped": False}
     try:
@@ -4040,8 +4063,8 @@ def _run_rehearsal(
     assert report is not None
     if not cleanup_complete and report.get("ok") is True:
         report = _safe_report("cluster_cleanup_failed", cleanup_complete=False)
-    _emit(report, evidence_file)
-    return 0 if report.get("ok") is True else 1
+    evidence_persisted = _emit(report, evidence_file)
+    return 0 if evidence_persisted and report.get("ok") is True else 1
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -4084,8 +4107,8 @@ def main(argv: list[str] | None = None) -> int:
     openssl = _resolve_executable(args.openssl)
     if args.preflight:
         report = _preflight(postgres_bin, openssl)
-        _emit(report, args.evidence_file)
-        return 0 if report.get("ok") is True else 1
+        evidence_persisted = _emit(report, args.evidence_file)
+        return 0 if evidence_persisted and report.get("ok") is True else 1
     try:
         source = _source_identity(args.expected_head)
     except RehearsalFailure as exc:

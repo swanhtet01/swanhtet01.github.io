@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
 import { readFile, mkdtemp, rm, writeFile, access, mkdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
@@ -15,10 +16,147 @@ import {
   buildRecorderFailureDiagnostic,
   recorderChildFailureCode,
   recorderOutcomeReconciled,
+  recorderDiagnosticPersistenceCode,
+  record,
   withRecorderLease,
   recordCompletionSummary,
   writeRecorderFailureDiagnostic,
 } from './record_postgres17_rehearsal.mjs'
+
+test('record refuses a stale diagnostic before launching a child', async () => {
+  const folder = await mkdtemp(join(tmpdir(), 'supermega-recorder-collision-'))
+  const destination = join(folder, 'receipt.json')
+  let launches = 0
+  try {
+    await writeFile(`${destination}.diagnostic.json`, '{"retained":true}\n')
+    await assert.rejects(
+      record(destination, { spawnSync() { launches += 1 } }),
+      /database_rehearsal_output_exists/,
+    )
+    assert.equal(launches, 0)
+    assert.equal(await readFile(`${destination}.diagnostic.json`, 'utf8'), '{"retained":true}\n')
+  } finally { await rm(folder, { recursive: true, force: true }) }
+})
+
+test('record keeps both leases and surfaces only allowlisted diagnostic persistence failure', async () => {
+  const folder = await mkdtemp(join(tmpdir(), 'supermega-recorder-orchestration-'))
+  const destination = join(folder, 'receipt.json')
+  const commonDirectory = join(folder, 'common-git-directory')
+  const commonDigest = createHash('sha256').update(commonDirectory).digest('hex')
+  const repositoryLock = join(folder, `supermega-postgres17-${commonDigest}.lock`)
+  let launches = 0
+  try {
+    await assert.rejects(
+      record(destination, {
+        cleanSource: () => ({ implementationCommit: 'a'.repeat(40), implementationTree: 'b'.repeat(40) }),
+        gitOutput: () => commonDirectory,
+        implementationEvidence: async () => ({ digest: `sha256:${'c'.repeat(64)}`, fileCount: 1, paths: ['synthetic'] }),
+        readFile: async () => { const error = new Error('private path and credential'); error.code = 'ENOENT'; throw error },
+        spawnSync: () => { launches += 1; return { status: null, signal: 'SIGTERM', stdout: 'password=private', stderr: 'C:\\private' } },
+        tmpdir: () => folder,
+        writeRecorderFailureDiagnostic: async () => { const error = new Error('private path and credential'); error.code = 'EACCES'; throw error },
+      }),
+      /database_rehearsal_diagnostic_persistence_eacces/,
+    )
+    assert.equal(launches, 1)
+    await access(repositoryLock)
+    await access(`${destination}.lock`)
+  } finally { await rm(folder, { recursive: true, force: true }) }
+
+  for (const [error, code] of [
+    [{ code: 'EEXIST', message: 'private' }, 'database_rehearsal_diagnostic_persistence_eexist'],
+    [{ code: 'UNKNOWN', message: 'password=private' }, 'database_rehearsal_diagnostic_persistence_failed'],
+  ]) assert.equal(recorderDiagnosticPersistenceCode(error), code)
+})
+
+test('record writes sanitized missing-raw diagnostics and a retained repository lease blocks another output', async () => {
+  const folder = await mkdtemp(join(tmpdir(), 'supermega-recorder-retained-'))
+  const destination = join(folder, 'first.json')
+  const secondDestination = join(folder, 'second.json')
+  const commonDirectory = join(folder, 'common-git-directory')
+  let launches = 0
+  const runtime = {
+    cleanSource: () => ({ implementationCommit: 'a'.repeat(40), implementationTree: 'b'.repeat(40) }),
+    gitOutput: () => commonDirectory,
+    implementationEvidence: async () => ({ digest: `sha256:${'c'.repeat(64)}`, fileCount: 1, paths: ['synthetic'] }),
+    readFile: async () => { const error = new Error('private path'); error.code = 'ENOENT'; throw error },
+    spawnSync: () => { launches += 1; return { status: null, signal: 'SIGTERM', stdout: 'password=private', stderr: 'C:\\private' } },
+    tmpdir: () => folder,
+  }
+  try {
+    await assert.rejects(record(destination, runtime), /database_rehearsal_termination_unreconciled/)
+    assert.equal(launches, 1)
+    const diagnostic = JSON.parse(await readFile(`${destination}.diagnostic.json`, 'utf8'))
+    assert.equal(diagnostic.rawStatus, 'missing')
+    assert.equal(diagnostic.streams.contentsRetained, false)
+    assert.equal(JSON.stringify(diagnostic).includes('private'), false)
+    assert.equal(JSON.stringify(diagnostic).includes('password'), false)
+    await access(`${destination}.lock`)
+    await assert.rejects(record(secondDestination, runtime), /database_rehearsal_active_or_unreconciled/)
+    assert.equal(launches, 1)
+  } finally { await rm(folder, { recursive: true, force: true }) }
+})
+
+test('record classifies malformed and parsed-unreconciled raw evidence without releasing leases', async () => {
+  for (const [name, rawText, expectedStatus] of [
+    ['malformed', '{not-json', 'malformed'],
+    ['cleanup-false', JSON.stringify({
+      contract: 'supermega_postgres17_rehearsal_v2',
+      cleanup_complete: false,
+      production_mutated: false,
+      supabase_mutated: false,
+      vercel_mutated: false,
+      secret_values_exposed: false,
+    }), 'parsed_unreconciled'],
+  ]) {
+    const folder = await mkdtemp(join(tmpdir(), `supermega-recorder-${name}-`))
+    const destination = join(folder, 'receipt.json')
+    try {
+      await assert.rejects(record(destination, {
+        cleanSource: () => ({ implementationCommit: 'a'.repeat(40), implementationTree: 'b'.repeat(40) }),
+        gitOutput: () => join(folder, 'common-git-directory'),
+        implementationEvidence: async () => ({ digest: `sha256:${'c'.repeat(64)}`, fileCount: 1, paths: ['synthetic'] }),
+        readFile: async () => rawText,
+        spawnSync: () => ({ status: 1, stdout: '', stderr: '' }),
+        tmpdir: () => folder,
+      }), /database_rehearsal_termination_unreconciled/)
+      assert.equal(JSON.parse(await readFile(`${destination}.diagnostic.json`, 'utf8')).rawStatus, expectedStatus)
+      await access(`${destination}.lock`)
+    } finally { await rm(folder, { recursive: true, force: true }) }
+  }
+})
+
+test('record retains only a fixed code when the child cannot persist sanitized evidence', async () => {
+  const folder = await mkdtemp(join(tmpdir(), 'supermega-recorder-child-write-'))
+  const destination = join(folder, 'receipt.json')
+  const safeChildReport = JSON.stringify({
+    ok: false,
+    ready: false,
+    status: 'attention',
+    contract: 'supermega_postgres17_rehearsal_v2',
+    error: 'evidence_write_failed',
+    cleanup_complete: true,
+    secret_values_exposed: false,
+    production_mutated: false,
+    supabase_mutated: false,
+    vercel_mutated: false,
+  })
+  try {
+    await assert.rejects(record(destination, {
+      cleanSource: () => ({ implementationCommit: 'a'.repeat(40), implementationTree: 'b'.repeat(40) }),
+      gitOutput: () => join(folder, 'common-git-directory'),
+      implementationEvidence: async () => ({ digest: `sha256:${'c'.repeat(64)}`, fileCount: 1, paths: ['synthetic'] }),
+      readFile: async () => { const error = new Error('private raw path'); error.code = 'ENOENT'; throw error },
+      spawnSync: () => ({ status: 1, stdout: safeChildReport, stderr: 'password=private C:\\secret' }),
+      tmpdir: () => folder,
+    }), /database_rehearsal_child_evidence_write_failed/)
+    const diagnostic = JSON.parse(await readFile(`${destination}.diagnostic.json`, 'utf8'))
+    assert.equal(diagnostic.childFailureCode, 'database_rehearsal_child_evidence_write_failed')
+    assert.equal(JSON.stringify(diagnostic).includes('private'), false)
+    assert.equal(JSON.stringify(diagnostic).includes('password'), false)
+    await access(`${destination}.lock`)
+  } finally { await rm(folder, { recursive: true, force: true }) }
+})
 
 test('missing raw evidence retains only an allowlisted sanitized child failure code', () => {
   const launcher = JSON.stringify({
@@ -30,6 +168,26 @@ test('missing raw evidence retains only an allowlisted sanitized child failure c
   assert.equal(
     recorderChildFailureCode({ status: 2, stderr: launcher, stdout: '' }),
     'database_rehearsal_child_configured_python_unusable',
+  )
+  const evidenceWriteFailure = JSON.stringify({
+    ok: false,
+    contract: 'supermega_postgres17_rehearsal_v2',
+    error: 'evidence_write_failed',
+    cleanup_complete: false,
+    secret_values_exposed: false,
+    production_mutated: false,
+    supabase_mutated: false,
+    vercel_mutated: false,
+  })
+  assert.equal(
+    recorderChildFailureCode({ status: 1, stdout: evidenceWriteFailure, stderr: '' }),
+    'database_rehearsal_child_evidence_write_failed',
+  )
+  assert.equal(
+    recorderChildFailureCode({ status: 1, stdout: JSON.stringify({
+      ...JSON.parse(evidenceWriteFailure), production_mutated: true,
+    }), stderr: '' }),
+    '',
   )
   for (const unsafe of [
     'Traceback: private path',
