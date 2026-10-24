@@ -132,12 +132,12 @@ The QA archive wraps the unchanged encrypted production payload in a QA-only aut
 
 ### Dependency-free checks runnable in the current cloud toolchain
 
-After implementation, add `tools/verify_shop_qa_isolation_contract.mjs` and its Node test to verify:
+Add `tools/verify_shop_qa_isolation_contract.mjs` and its Node test before native implementation. Audit mode must report the current blockers without claiming isolation; strict mode remains nonzero until the implementation is complete. The contract verifies:
 
 - exact Android/iOS/Windows QA identities and artifact names;
 - production IDs and default storage/key tokens remain unchanged;
 - QA defines are all-or-none and unknown profiles are rejected;
-- direct `SharedPreferences.getInstance`, `getApplicationDocumentsDirectory`, `getTemporaryDirectory` and production path construction are limited to the runtime-scope adapter or explicitly approved test seams;
+- direct `SharedPreferences.getInstance`, `getApplicationDocumentsDirectory`, `getApplicationSupportDirectory`, `getTemporaryDirectory` and production path construction are limited to the runtime-scope adapter or explicitly approved test seams; `ShopDatabase.privateDatabaseFile` remains the sole fixed-filename seam and receives only a scope-validated root;
 - `connected_orders_service.dart`, `menu_import_service.dart`, `shop_correction_authorization_service.dart`, direct `CameraBarcodeScanner`/`MobileScanner` construction, and `Socket.connect` in `printer_services.dart` are guarded at the service/transport boundary, not merely hidden in UI;
 - QA build commands contain no provider values and cannot be treated as release artifacts;
 - native CI retains truthful debug/unsigned/no-codesign labels.
