@@ -41,8 +41,9 @@ test('record refuses a stale diagnostic before launching a child', async () => {
 test('record keeps both leases and surfaces only allowlisted diagnostic persistence failure', async () => {
   const folder = await mkdtemp(join(tmpdir(), 'supermega-recorder-orchestration-'))
   const destination = join(folder, 'receipt.json')
-  const commonDirectory = join(folder, 'common-git-directory')
-  const commonDigest = createHash('sha256').update(commonDirectory).digest('hex')
+  const commonDirectory = join(folder, 'Common-Git-Directory')
+  const commonKey = process.platform === 'win32' ? commonDirectory.toLowerCase() : commonDirectory
+  const commonDigest = createHash('sha256').update(commonKey).digest('hex')
   const repositoryLock = join(folder, `supermega-postgres17-${commonDigest}.lock`)
   let launches = 0
   try {
