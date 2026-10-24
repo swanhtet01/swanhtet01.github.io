@@ -82,6 +82,43 @@ function sha256(payload) {
   return `sha256:${createHash('sha256').update(payload).digest('hex')}`
 }
 
+async function waitForBrowserExit(child, timeoutMs) {
+  if (!child || child.exitCode !== null || child.signalCode !== null) return true
+  return new Promise((resolveExited) => {
+    const timer = setTimeout(() => {
+      child.off('exit', onExit)
+      resolveExited(false)
+    }, timeoutMs)
+    const onExit = () => {
+      clearTimeout(timer)
+      resolveExited(true)
+    }
+    child.once('exit', onExit)
+  })
+}
+
+async function stopOwnedBrowser() {
+  let closeFailure = null
+  if (cdp) {
+    try {
+      await cdp.send('Browser.close', {}, '', 5_000)
+    } catch (error) {
+      closeFailure = error
+    }
+    await cdp.close().catch(() => {})
+  }
+  if (browser && !await waitForBrowserExit(browser, 2_000)) {
+    browser.kill()
+    if (!await waitForBrowserExit(browser, 2_000)) {
+      browser.kill('SIGKILL')
+      if (!await waitForBrowserExit(browser, 2_000)) throw new Error('cash_tender_browser_exit_timeout')
+    }
+  }
+  if (closeFailure && browser?.exitCode === null && browser?.signalCode === null) {
+    throw new Error(`cash_tender_browser_close_failed:${closeFailure.code || closeFailure.name || 'unknown'}`)
+  }
+}
+
 let browser
 let cdp
 try {
@@ -167,9 +204,20 @@ try {
   }
   console.log(JSON.stringify({ ok: true, ...evidence }))
 } finally {
-  if (cdp) await cdp.send('Browser.close', {}, '', 5_000).catch(() => {})
-  else if (browser) browser.kill()
+  let cleanupFailure = null
+  try {
+    await stopOwnedBrowser()
+  } catch (error) {
+    cleanupFailure = error
+  }
   server.closeAllConnections()
-  await new Promise((resolveClose) => server.close(resolveClose))
-  await rm(scratch, { recursive: true, force: true })
+  await new Promise((resolveClose, rejectClose) => server.close((error) => error ? rejectClose(error) : resolveClose())).catch((error) => {
+    cleanupFailure ??= new Error(`cash_tender_server_close_failed:${error.code || error.name || 'unknown'}`)
+  })
+  try {
+    await rm(scratch, { recursive: true, force: true })
+  } catch (error) {
+    cleanupFailure ??= new Error(`cash_tender_browser_profile_cleanup_failed:${error.code || error.name || 'unknown'}`)
+  }
+  if (cleanupFailure) throw cleanupFailure
 }
