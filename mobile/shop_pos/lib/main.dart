@@ -40,11 +40,10 @@ const _connectedOrdersEnabled = bool.fromEnvironment(
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  ShopRuntimeScope? acceptedRuntimeScope;
+  late final ShopRuntimeScope runtimeScope;
   try {
     final runtimeProfile = ShopRuntimeProfile.resolve();
-    final runtimeScope = await ShopRuntimeScope.resolve(runtimeProfile);
-    acceptedRuntimeScope = runtimeScope;
+    runtimeScope = await ShopRuntimeScope.resolve(runtimeProfile);
   } catch (_) {
     runApp(
       const MaterialApp(
@@ -63,8 +62,6 @@ Future<void> main() async {
     );
     return;
   }
-  final runtimeScope = acceptedRuntimeScope;
-  if (runtimeScope == null) return;
   try {
     await ShopBackup.cleanupInterruptedStaging(
       runtimeScope.documentsRoot,

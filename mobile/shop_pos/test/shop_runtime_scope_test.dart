@@ -3,46 +3,52 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:shop_pos/shop_runtime_profile.dart';
-import 'package:shop_pos/shop_runtime_scope.dart';
+import 'package:supermega_shop/shop_runtime_profile.dart';
+import 'package:supermega_shop/shop_runtime_scope.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
-  test('production paths and preference keys remain byte-for-byte unchanged',
-      () async {
-    final documents = await Directory.systemTemp.createTemp('shop-prod-docs-');
-    final temporary = await Directory.systemTemp.createTemp('shop-prod-temp-');
-    addTearDown(() async {
-      await documents.delete(recursive: true);
-      await temporary.delete(recursive: true);
-    });
-    final scope = await ShopRuntimeScope.resolve(
-      ShopRuntimeProfile.production,
-      configuration: _productionProfile(),
-      documentsProvider: () async => documents,
-      temporaryProvider: () async => temporary,
-    );
+  test(
+    'production paths and preference keys remain byte-for-byte unchanged',
+    () async {
+      final documents = await Directory.systemTemp.createTemp(
+        'shop-prod-docs-',
+      );
+      final temporary = await Directory.systemTemp.createTemp(
+        'shop-prod-temp-',
+      );
+      addTearDown(() async {
+        await documents.delete(recursive: true);
+        await temporary.delete(recursive: true);
+      });
+      final scope = await ShopRuntimeScope.resolve(
+        ShopRuntimeProfile.production,
+        configuration: _productionProfile(),
+        documentsProvider: () async => documents,
+        temporaryProvider: () async => temporary,
+      );
 
-    expect(scope.documentsRoot.path, documents.path);
-    expect(scope.temporaryRoot.path, temporary.path);
-    expect(scope.syntheticEvidenceRoot, isNull);
-    expect(scope.preferences.keys.localeMyanmar, 'shop_locale_myanmar');
-    expect(
-      scope.preferences.keys.pendingPickerIntent,
-      'shop_pending_picker_intent',
-    );
-    expect(
-      scope.preferences.keys.receiptPrinterHost,
-      'shop_receipt_printer_host_v1',
-    );
-    expect(
-      scope.preferences.keys.receiptPaperWidth,
-      'shop_receipt_paper_width_v1',
-    );
-  });
+      expect(scope.documentsRoot.path, documents.path);
+      expect(scope.temporaryRoot.path, temporary.path);
+      expect(scope.syntheticEvidenceRoot, isNull);
+      expect(scope.preferences.keys.localeMyanmar, 'shop_locale_myanmar');
+      expect(
+        scope.preferences.keys.pendingPickerIntent,
+        'shop_pending_picker_intent',
+      );
+      expect(
+        scope.preferences.keys.receiptPrinterHost,
+        'shop_receipt_printer_host_v1',
+      );
+      expect(
+        scope.preferences.keys.receiptPaperWidth,
+        'shop_receipt_paper_width_v1',
+      );
+    },
+  );
 
   test('QA creates disjoint roots and exact scoped preference keys', () async {
     final support = await Directory.systemTemp.createTemp('shop-qa-support-');
@@ -88,9 +94,8 @@ void main() {
       await support.delete(recursive: true);
       await temporary.delete(recursive: true);
     });
-    await Directory(
-      '${support.path}${Platform.pathSeparator}synthetic-qa-v1',
-    ).create();
+    await Directory('${support.path}${Platform.pathSeparator}synthetic-qa-v1')
+        .create();
 
     await expectLater(
       ShopRuntimeScope.resolve(
@@ -114,9 +119,10 @@ void main() {
       '${support.path}${Platform.pathSeparator}synthetic-qa-v1',
     );
     await qaRoot.create();
-    await File('${qaRoot.path}${Platform.pathSeparator}'
-            '.supermega-shop-runtime-scope.json')
-        .writeAsString(jsonEncode({'profileId': 'wrong'}));
+    await File(
+      '${qaRoot.path}${Platform.pathSeparator}'
+      '.supermega-shop-runtime-scope.json',
+    ).writeAsString(jsonEncode({'profileId': 'wrong'}));
     var preferencesOpened = false;
 
     await expectLater(

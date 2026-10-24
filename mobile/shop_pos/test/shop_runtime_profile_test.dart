@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shop_pos/shop_runtime_profile.dart';
+import 'package:supermega_shop/shop_runtime_profile.dart';
 
 void main() {
   test('empty defines preserve production defaults', () {
