@@ -4,6 +4,66 @@ import test from 'node:test'
 
 import { assessShopQaIsolationContract } from './verify_shop_qa_isolation_contract.mjs'
 
+function workflowFixture() {
+  const qa = '--dart-define=SHOP_RUNTIME_PROFILE=synthetic_qa_v1 --dart-define=SHOP_QA_PROFILE_ID=synthetic-qa-v1'
+  const artifactSteps = (artifact, checksum = `sha256sum ${artifact} > ${artifact}.sha256`) => `
+      - name: Verify QA artifact
+        run: |
+          ${checksum}
+          echo "source-sha=\${{ github.sha }} sha-256=$(cat ${artifact}.sha256) promotion-ineligible" > ${artifact}.manifest
+      - name: Upload synthetic QA evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: synthetic-qa-promotion-ineligible-\${{ github.sha }}-sha-256
+          path: |
+            ${artifact}
+            ${artifact}.sha256
+            ${artifact}.manifest`
+  return `jobs:
+  android-production:
+    steps:
+      - name: Generate Android production identity
+        run: node tools/generate_shop_build_identity.mjs --platform android --profile production
+      - name: Build Android production comparison
+        run: flutter build apk --debug --no-pub --flavor production
+  android-qa:
+    steps:
+      - name: Generate Android QA identity
+        run: node tools/generate_shop_build_identity.mjs --platform android --profile synthetic_qa_v1
+      - name: Build Android QA
+        run: flutter build apk --debug --no-pub --flavor qa ${qa}
+${artifactSteps('app-qa-debug.apk')}
+  ios-production:
+    steps:
+      - name: Generate iOS production identity
+        run: node tools/generate_shop_build_identity.mjs --platform ios --profile production
+      - name: Build iOS production comparison
+        run: flutter build ios --debug --no-codesign --no-pub
+  ios-qa:
+    steps:
+      - name: Generate iOS QA identity
+        run: node tools/generate_shop_build_identity.mjs --platform ios --profile synthetic_qa_v1
+      - name: Build iOS QA
+        run: flutter build ios --debug --no-codesign --no-pub --flavor qa ${qa}
+${artifactSteps('Runner.app')}
+  windows-production:
+    steps:
+      - name: Generate Windows production identity
+        run: node tools/generate_shop_build_identity.mjs --platform windows --profile production
+      - name: Build Windows production comparison
+        run: flutter build windows --release --no-pub
+  windows-qa:
+    steps:
+      - name: Generate Windows QA identity
+        run: node tools/generate_shop_build_identity.mjs --platform windows --profile synthetic_qa_v1
+      - name: Configure Windows QA runner
+        run: ./mobile/shop_pos/scripts/configure_windows_qa_runner.ps1
+      - name: Build Windows QA
+        run: flutter build windows --release --no-pub ${qa}
+${artifactSteps('supermega_shop_qa.exe', 'Get-FileHash -Algorithm SHA256 supermega_shop_qa.exe | Out-File supermega_shop_qa.exe.sha256')}
+`
+}
+
 function fixture() {
   return {
     'mobile/shop_pos/android/app/build.gradle.kts': 'applicationId = "dev.supermega.supermega_shop"\ncreate("production") create("qa") synthetic_qa_v1 dev.supermega.supermega_shop.qa',
@@ -28,7 +88,7 @@ function fixture() {
     'mobile/shop_pos/scripts/configure_windows_qa_runner.ps1': 'supermega_shop_qa.exe Shop QA',
     'mobile/shop_pos/ios/Runner.xcodeproj/xcshareddata/xcschemes/qa.xcscheme': '<Scheme name="QA"/>',
     'mobile/shop_pos/ios/Flutter/QA.xcconfig': 'PRODUCT_BUNDLE_IDENTIFIER=dev.supermega.supermegaShop.qa',
-    '.github/workflows/shop-native-ci.yml': 'synthetic-qa SHOP_RUNTIME_PROFILE=synthetic_qa_v1 SHOP_QA_PROFILE_ID=synthetic-qa-v1 source-sha sha-256 promotion-ineligible app-production-debug.apk app-qa-debug.apk',
+    '.github/workflows/shop-native-ci.yml': workflowFixture(),
   }
 }
 
@@ -130,7 +190,11 @@ test('printer setup construction and every environment value type are guarded', 
 test('external-I/O overrides and provider values in QA commands are fatal', () => {
   const override = fixture(); override['mobile/shop_pos/lib/shop_runtime_profile.dart'] += ' ALLOW_EXTERNAL_IO'
   assert.equal(assessShopQaIsolationContract({ sources: override }).ok, false)
-  const provider = fixture(); provider['.github/workflows/shop-native-ci.yml'] += '\nSUPABASE_URL=https://provider.invalid'
+  const provider = fixture()
+  provider['.github/workflows/shop-native-ci.yml'] = workflowFixture().replace(
+    'run: node tools/generate_shop_build_identity.mjs --platform android --profile production',
+    'run: SUPABASE_URL=https://provider.invalid node tools/generate_shop_build_identity.mjs --platform android --profile production',
+  )
   assert.equal(assessShopQaIsolationContract({ sources: provider }).ok, false)
 })
 
@@ -164,6 +228,90 @@ test('wrong artifact tuple remains blocked without upgrading evidence', () => {
   assert.equal(result.strictReady, false)
   assert.equal(result.artifactIdentityVerified, false)
   assert.equal(result.launchAuthorized, false)
+})
+
+test('workflow tokens outside executable jobs and run blocks cannot make strict pass', () => {
+  for (const workflow of [
+    '# synthetic-qa SHOP_RUNTIME_PROFILE=synthetic_qa_v1 SHOP_QA_PROFILE_ID=synthetic-qa-v1\n# flutter build apk --debug --no-pub --flavor qa\n# source-sha sha-256 promotion-ineligible',
+    'name: token-only\nenv:\n  NOTE: "synthetic-qa flutter build source-sha sha-256 promotion-ineligible"',
+    workflowFixture().replace('run: flutter build apk --debug --no-pub --flavor qa', 'name: flutter build apk --debug --no-pub --flavor qa'),
+  ]) {
+    const sources = fixture(); sources['.github/workflows/shop-native-ci.yml'] = workflow
+    const result = assessShopQaIsolationContract({ sources })
+    assert.equal(result.strictReady, false, JSON.stringify(result))
+    assert.ok(result.blockers.some(item => item.code === 'qa_build_contract_missing'))
+  }
+})
+
+test('wrong workflow job, command order, flavor, or QA define fails closed', () => {
+  for (const mutate of [
+    workflow => workflow.replace('android-qa:', 'mobile-qa:'),
+    workflow => workflow.replace(
+      'run: node tools/generate_shop_build_identity.mjs --platform android --profile synthetic_qa_v1\n      - name: Build Android QA',
+      'run: echo generated-too-late\n      - name: Build Android QA',
+    ),
+    workflow => workflow.replace('--flavor qa --dart-define=SHOP_RUNTIME_PROFILE', '--flavor production --dart-define=SHOP_RUNTIME_PROFILE'),
+    workflow => workflow.replace('--dart-define=SHOP_QA_PROFILE_ID=synthetic-qa-v1', '--dart-define=SHOP_QA_PROFILE_ID=wrong'),
+    workflow => workflow.replace('echo "source-sha=${{ github.sha }} sha-256=$(cat app-qa-debug.apk.sha256) promotion-ineligible"', 'echo "source-sha=${{ github.sha }} sha-256 promotion-ineligible"'),
+    workflow => workflow.replace(
+      'path: |\n            app-qa-debug.apk\n            app-qa-debug.apk.sha256\n            app-qa-debug.apk.manifest',
+      'path: |\n            unrelated.apk\n            unrelated.apk.sha256\n            unrelated.apk.manifest',
+    ),
+    workflow => workflow.replace(/^  android-production:/m, '  android:').replace(/^  android-qa:\n    steps:\n/m, ''),
+  ]) {
+    const sources = fixture(); sources['.github/workflows/shop-native-ci.yml'] = mutate(workflowFixture())
+    const result = assessShopQaIsolationContract({ sources })
+    assert.equal(result.strictReady, false, JSON.stringify(result))
+    assert.ok(result.blockers.some(item => item.code === 'qa_build_contract_missing'))
+  }
+})
+
+test('disabled, error-tolerant, or non-executing required jobs and steps fail closed', () => {
+  for (const mutate of [
+    workflow => workflow.replace('  android-qa:\n    steps:', '  android-qa:\n    if: ${{ false }}\n    steps:'),
+    workflow => `jobs:\n  gate:\n    if: \${{ false }}\n    steps:\n      - run: echo skipped\n${workflow.replace(/^jobs:\n/, '').replace('  android-production:\n    steps:', '  android-production:\n    needs: gate\n    steps:')}`,
+    workflow => workflow.replace('      - name: Build Android QA\n        run:', '      - name: Build Android QA\n        if: ${{ false }}\n        run:'),
+    workflow => workflow.replace('      - name: Build Android QA\n        run:', '      - name: Build Android QA\n        continue-on-error: true\n        run:'),
+    workflow => workflow.replace('      - name: Build Android QA\n        run:', '      - name: Build Android QA\n        continue-on-error: ${{ true }}\n        run:'),
+    workflow => workflow.replace('      - name: Build Android QA\n        run:', '      - name: Build Android QA\n        shell: echo {0}\n        run:'),
+    workflow => `defaults:\n  run:\n    shell: echo {0}\n${workflow}`,
+  ]) {
+    const sources = fixture(); sources['.github/workflows/shop-native-ci.yml'] = mutate(workflowFixture())
+    assert.equal(assessShopQaIsolationContract({ sources }).strictReady, false)
+  }
+})
+
+test('foreign upload action and artifact-name substrings do not bind evidence', () => {
+  for (const mutate of [
+    workflow => workflow.replace('uses: actions/upload-artifact@v4', 'uses: attacker/actions/upload-artifact@v4'),
+    workflow => workflow.replace('            app-qa-debug.apk\n', '            prefix-app-qa-debug.apk-suffix\n'),
+  ]) {
+    const sources = fixture(); sources['.github/workflows/shop-native-ci.yml'] = mutate(workflowFixture())
+    assert.equal(assessShopQaIsolationContract({ sources }).strictReady, false)
+  }
+})
+
+test('YAML environment provider values are fatal even without shell assignment syntax', () => {
+  for (const entry of [
+    'SUPABASE_URL: https://provider.invalid',
+    '"SUPABASE_URL": https://provider.invalid',
+    "'SUPABASE_URL': https://provider.invalid",
+    'SUPABASE_PUBLISHABLE_KEY: injected',
+    'SHOP_API_BASE_URL: https://api.invalid',
+  ]) {
+    const sources = fixture()
+    sources['.github/workflows/shop-native-ci.yml'] = `env:\n  ${entry}\n${workflowFixture()}`
+    const result = assessShopQaIsolationContract({ sources })
+    assert.equal(result.ok, false, entry)
+    assert.ok(result.fatal.some(item => item.code === 'qa_build_provider_value_forbidden'))
+  }
+  const inline = fixture()
+  inline['.github/workflows/shop-native-ci.yml'] = `env: { SUPABASE_URL: https://provider.invalid }\n${workflowFixture()}`
+  assert.equal(assessShopQaIsolationContract({ sources: inline }).ok, false)
+
+  const descriptive = fixture()
+  descriptive['.github/workflows/shop-native-ci.yml'] = `${workflowFixture()}\n# SUPABASE_URL: comments are not values\n`
+  assert.equal(assessShopQaIsolationContract({ sources: descriptive }).ok, true)
 })
 
 test('repository CLI keeps audit nonzero-free and strict fail-closed', () => {
