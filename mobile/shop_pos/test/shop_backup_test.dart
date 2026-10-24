@@ -1575,7 +1575,7 @@ void main() {
         final recent = (await migrated.readRecentSales()).single;
         expect(recent.reversal?.walletReconciliationOutcome, 'money_returned');
         final salesBefore = await migrated.countSales();
-        final stockBefore = (await migrated.readActiveProducts()).single.stock;
+        final stockBefore = (await migrated.readActiveProducts()).single.onHand;
         final outboxBefore = await migrated.countOutboxOperations();
         final archive = File(
           '${directory.path}/legacy-v11-four-key-direct.smbak',
@@ -1590,7 +1590,10 @@ void main() {
 
         expect(await archive.exists(), isTrue);
         expect(await migrated.countSales(), salesBefore);
-        expect((await migrated.readActiveProducts()).single.stock, stockBefore);
+        expect(
+          (await migrated.readActiveProducts()).single.onHand,
+          stockBefore,
+        );
         expect(await migrated.countOutboxOperations(), outboxBefore);
       } finally {
         await migrated.close();
@@ -1632,7 +1635,7 @@ void main() {
         final recent = (await restored.readRecentSales()).single;
         expect(recent.reversal?.walletReconciliationOutcome, 'money_returned');
         expect(await restored.countSales(), 1);
-        expect((await restored.readActiveProducts()).single.stock, 3);
+        expect((await restored.readActiveProducts()).single.onHand, 3);
         expect(await restored.countOutboxOperations(), 4);
       } finally {
         await restored.close();
