@@ -1,7 +1,7 @@
 # SuperMega current release truth
 
 - Last verified: 2026-10-24
-- Active objective: [`supergoal.md`](supergoal.md)
+- Active objective: verified Shop + account portal delivery; see [`supergoal.md`](supergoal.md)
 - Scope: Shop, supporting web/infrastructure, accountable operations, and
   entitlement-gated optional packages
 
@@ -192,20 +192,15 @@ backup, and restore review; no blind merge or cherry-pick is allowed.
 
 ## Next action
 
-1. Preserve `b44d1435` as the immutable source checkpoint and review this
-   documentation-only successor independently.
-2. Before publishing, establish the effective Git-deployment behavior of both
-   Vercel projects linked to this repository. Repository configuration alone is
-   not provider proof. Then fast-forward the sole PR #734 lane and run exact-head
-   App/Native/security checks without force-push or a parallel product branch.
-3. Regenerate exact-native-source gallery evidence. After the product head is
-   stable, obtain a new one-run Windows PostgreSQL-17 approval, retain the
-   matching reviewed pair, and run the required evidence-successor checks.
-4. Create app-first then source-bound public protected previews on the existing
-   `megaos` and `supermega-public` projects only; no production alias,
-   promotion, environment mutation, or unverified backend claim.
-5. Provision a separately approved synthetic non-production user, tenant,
-   membership and Shop entitlement; then run login → setup → sale → restart →
-   recovery → account-hub evidence. Signing, installed devices, physical
-   hardware, Vivian acceptance and joint go/no-go remain subsequent gates in
-   [`docs/SHOP-RELEASE-RUNBOOK.md`](docs/SHOP-RELEASE-RUNBOOK.md).
+Active item: establish the effective Git-deployment behavior of both Vercel
+projects linked to this repository. Acceptance requires provider evidence or an
+explicit disposition; `vercel.json` alone is insufficient. Preserve
+`b44d1435` and do not push meanwhile.
+
+Next eligible sequence: exact PR #734 App/Native/security CI → exact-source
+gallery → newly approved exact-head PostgreSQL rehearsal/evidence successor →
+app-first protected pair → separately approved synthetic user/tenant/Shop
+binding → login/setup/sale/restart/recovery/account walkthrough → signed
+distribution and installed recovery → applicable hardware and Vivian merchant
+acceptance → independent review and joint go/no-go. No mock closes a higher
+evidence gate; see [`docs/SHOP-RELEASE-RUNBOOK.md`](docs/SHOP-RELEASE-RUNBOOK.md).

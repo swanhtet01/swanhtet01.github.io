@@ -22,6 +22,29 @@ screens. It is a real merchant completing this loop with trustworthy records:
 AI and automation may reduce work inside that loop. A named person remains
 accountable for every consequential decision and customer promise.
 
+## Standing delivery objective
+
+Deliver a verified SuperMega Shop release and customer account portal on the
+existing infrastructure, with a protected test deployment, isolated synthetic
+login/store, demonstrated core journeys, safe app distribution, and minimum
+secure company operations. Completion requires exact evidence, not only local
+test counts.
+
+The near-term milestone is one protected URL where Swan can sign in with an
+authorized synthetic account, onboard a fictional store, complete a fictional
+sale, inspect account/settings/billing states, and verify recovery boundaries.
+The final release additionally requires signed installed recovery evidence,
+applicable physical-hardware evidence, independent security/human review,
+merchant acceptance, and controlled domain promotion. Mocks and software
+fixtures never satisfy installed, physical, merchant, or production gates.
+
+Keep one active critical-path item with explicit acceptance criteria and one
+next eligible item. When an item is blocked, record the exact missing approval
+or evidence, preserve state, and continue an independent in-scope item. The
+active sequence is deployment-effect verification → exact candidate CI →
+protected paired preview → synthetic account/backend binding → complete
+walkthrough → distribution/recovery → minimum secure staff console.
+
 ## Security and quality workstream
 
 Security readiness is evidence-based, not a marketing label. SuperMega uses
