@@ -7,9 +7,9 @@ Who this is for: counter-first businesses that sell and track stock — the mani
 Current public page:
 
 - `Shop | Sales and stock | SuperMega`
-- `Keep sales, orders and stock together. See product availability, track orders and manage replenishment with SuperMega Shop.`
+- `Shop helps Myanmar retailers keep sales clear and stock accurate.`
 
-The public website shows interface screenshots and one Login. Contact is in the footer. It has no sample, trial, setup or product-launch buttons.
+The public website shows one composed view of three native Shop workflows using synthetic sample data. Contact SuperMega about Shop through the single primary action; existing merchants have a secondary Sign in route. These captures do not prove a preloaded catalog or physical-device acceptance.
 
 Historical internal positioning: POS-independent Shop Profit Control was the acquisition and diagnostic wedge; it is no longer the public website pitch. Its first job selects and prioritizes one accountable money leak or operating risk, with the accountable role, due point, next action, and objective closure made explicit. It does not replace a POS and it does not turn a local projection into customer, pilot, or commercial proof.
 
@@ -57,7 +57,7 @@ For a recorded founder rehearsal, run the local `shop:android-smoke:packet` scri
 
 ## 5. The close
 
-- Historical support route: `Request assisted setup` used `/contact/?product=shop`, pre-selecting Shop in `What do you need?`. The form asks `What would you like us to prepare?` and submits with `Send message` only with authorization to send the brief. The confirmation starts with `Request received: ` and an ID to keep. Agree the catalog, counter workflow and training scope before preparing the customer's workspace.
+- Current public route: `Contact SuperMega` opens `/contact/?product=shop`. The plain form asks for Name, Email, optional Company, and Message; it submits with `Send message` only with authorization to send the brief. Agree the catalog, counter workflow and training scope before preparing the customer's workspace.
 - Internal rehearsal setup only (`https://app.supermega.dev/settings/?product=shop`). Do not require this before a customer can ask SuperMega to prepare Shop; never overwrite saved work for a demo.
 - From inside the app: the setup page's "Ask SuperMega to set up Shop" link carries the workflow template, for example `https://supermega.dev/contact/?product=shop&template=social-commerce&utm_source=app&utm_medium=guided_trial`.
-- Help choosing services: `/contact/?product=guide&source=assisted-setup` — submit with `Request setup` only after authorization. Multi-product setup and managed activation require separate scope and acceptance; submitting a brief does not activate a workspace.
+- Help choosing services: `/contact/?product=guide&source=assisted-setup` — submit with `Send message` only after authorization. Managed activation requires separate scope and acceptance; submitting a brief does not activate a workspace.

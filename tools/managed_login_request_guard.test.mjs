@@ -25,7 +25,7 @@ function fixture() {
     setBusy: value => busyStates.push(value), setPassword: value => passwords.push(value), setNoticeTone: noop, setNotice: noop,
     setActivating: noop, setDirectory: noop, setWorkspaceId: noop, setExistingIdentity: noop, setEmail: noop,
     setClaimCodeFieldError: noop, window: { localStorage: {} }, readTrialSignup: () => null, savedTrial: () => null,
-    trialSignupProductChoice: () => ({ id: 'shop' }), productIntent: 'shop', claimCode: 'synthetic', businessName: 'Synthetic',
+    trialSignupProductChoice: () => ({ id: 'shop' }), productIntent: 'shop', accountProductIntent: 'shop', claimCode: 'synthetic', businessName: 'Synthetic',
     managedPortalEntryPath: value => value === 'commerce' ? '/shop/' : `/${value}/`,
     openWorkspace: async () => {}, alternateManagedWorkspaceId: () => null,
   } }
@@ -452,6 +452,7 @@ test('activation uses saved product only for the entered saved claim', async () 
     context.openWorkspace = handler('openWorkspace', context)
     context.claimCode = enteredClaim
     context.productIntent = 'ecommerce'
+    context.accountProductIntent = 'ecommerce'
     context.savedTrial = () => saved
     context.trialSignupProductChoice = value => ({ id: value })
     context.createSelfServeWorkspace = async (...args) => { calls.push(args); return { created: true, label: 'Synthetic', workspaceId: 'new' } }

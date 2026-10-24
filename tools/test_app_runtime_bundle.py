@@ -50,7 +50,9 @@ modules = [m for name, m in sys.modules.items() if name == 'supermega_runtime' o
 for module in modules:
     assert pathlib.Path(module.__file__).resolve().is_relative_to(bundle)
 print(json.dumps({'ok': True, 'evidence': 'isolated_source_cold_import', 'runtimeModules': len(modules),
-                  'requiredRoutes': len(required), 'dependencyPins': len(pins), 'hostedAcceptance': False, 'providerPackage': False}))
+                  'requiredRoutes': len(required), 'dependencyPins': len(pins),
+                  'correctionReceiptModule': 'supermega_runtime.shop_correction_receipts' in sys.modules,
+                  'hostedAcceptance': False, 'providerPackage': False}))
 """
 
 def main():

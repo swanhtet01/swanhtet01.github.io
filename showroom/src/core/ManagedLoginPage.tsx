@@ -38,7 +38,9 @@ export function ManagedLoginPage() {
   const navigate = useNavigate()
   const productIntent = new URLSearchParams(location.search).get('product')
   const reviewReturnPath = managedLoginReviewPath(location.search)
-  const portalEntryPath = reviewReturnPath ?? managedPortalEntryPath(productIntent)
+  const accountProductIntent = productIntent ?? (reviewReturnPath?.split('/')[1] ?? 'shop')
+  const shopAccessIntent = ['shop', 'commerce'].includes(accountProductIntent.trim().toLowerCase())
+  const portalEntryPath = reviewReturnPath ?? managedPortalEntryPath(accountProductIntent)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [workspaceId, setWorkspaceId] = useState('')
@@ -211,7 +213,7 @@ export function ManagedLoginPage() {
       const localTrial = savedTrial()
       const selectedProduct = localTrial?.claimCode === claimCode.trim()
         ? localTrial.product
-        : trialSignupProductChoice(productIntent).id
+        : trialSignupProductChoice(accountProductIntent).id
       const workspace = await createSelfServeWorkspace(claimCode, businessName, selectedProduct)
       setNotice(workspace.created
         ? `${workspace.label} is ready. Opening your company...`
@@ -287,7 +289,7 @@ export function ManagedLoginPage() {
 
   return (
     <div className={`workspace-screen managed-login-screen${creatingAccount ? ' signup-entry-screen' : ''}`}>
-      <PageHeading eyebrow={reviewReturnPath ? 'Private customer review' : 'Account'} title={reviewReturnPath ? 'Open your prepared review.' : creatingAccount ? 'Create your account.' : 'Login'} copy={reviewReturnPath ? 'Sign in with the account assigned to this review.' : creatingAccount ? 'Confirm your email first. Company access is a separate step.' : managedReady ? 'Sign in to your workspace.' : ''} />
+      <PageHeading eyebrow={reviewReturnPath ? 'Private customer review' : 'Account'} title={reviewReturnPath ? 'Open your prepared review.' : creatingAccount ? 'Create your account.' : 'Login'} copy={reviewReturnPath ? 'Sign in with the account assigned to this review.' : creatingAccount ? 'Confirm your email first. Company access is a separate step.' : managedReady ? publicApp && shopAccessIntent ? 'For existing assigned pilot accounts. Native Shop is installed separately during assisted setup.' : 'Sign in to your workspace.' : ''} />
       {existingIdentity ? <section className="managed-login-panel" aria-label="Current managed account">
         <div><span className="core-eyebrow">Connected</span><h2>{existingIdentity.email}</h2><p>Your company account is ready.</p></div>
         <div className="managed-login-actions">
@@ -312,12 +314,12 @@ export function ManagedLoginPage() {
         {notice ? <p className="form-notice" data-tone={noticeTone} id="managed-registration-notice" role="status">{notice}</p> : null}
         <button className="account-inline-link account-link-button" disabled={busy} onClick={() => chooseAccountMode(false)} type="button">Back to sign in</button>
         {sentRequest ? <button className="account-inline-link account-link-button" disabled={busy} onClick={() => chooseAccountMode(true)} type="button">Use another email</button> : null}
-        <Link className="account-inline-link" to={managedAccountPath('/account/recovery', productIntent, location.search)}>Reset an existing password</Link>
+        <Link className="account-inline-link" to={managedAccountPath('/account/recovery', accountProductIntent, location.search)}>Reset an existing password</Link>
       </form> : managedReady && activating && publicApp && !reviewReturnPath ? <section className="managed-login-panel" aria-label="Workspace access">
         <h2>No workspace assigned</h2>
         <p className="form-notice" data-tone={noticeTone} role="status">{notice}</p>
         <div className="managed-login-actions">
-          <a className="core-button primary" href={managedAccountRequestUrl(productIntent)}>Contact support</a>
+          <a className="core-button primary" href={managedAccountRequestUrl(accountProductIntent)}>Contact support</a>
           <button className="account-inline-link account-link-button" disabled={busy} onClick={() => void signOut()} type="button">Sign out</button>
         </div>
       </section> : managedReady && activating && !reviewReturnPath ? <form aria-busy={busy} className="managed-login-panel core-form" onSubmit={(event) => void activate(event)}>
@@ -325,7 +327,7 @@ export function ManagedLoginPage() {
         <label>Claim code<input aria-describedby={claimCodeFieldError ? 'managed-login-notice' : undefined} aria-invalid={claimCodeFieldError} autoComplete="off" maxLength={12} onChange={(event) => setClaimCode(event.target.value)} placeholder="SM-XXXX-XXXX" required value={claimCode} /></label>
         <label>Business name<input maxLength={120} onChange={(event) => setBusinessName(event.target.value)} placeholder="Your business name" required value={businessName} /></label>
         <button className="core-button primary" disabled={busy} type="submit">{busy ? 'Activating...' : 'Activate my company'}</button>
-        <a className="account-inline-link" href={managedAccountRequestUrl(productIntent)}>Contact support</a>
+        <a className="account-inline-link" href={managedAccountRequestUrl(accountProductIntent)}>Contact support</a>
         <button className="account-inline-link account-link-button" disabled={busy} onClick={() => { if (accountRequestPending.current) return; setActivating(false); setNotice(''); setNoticeTone('quiet'); setClaimCodeFieldError(false) }} type="button">{bi('Back to sign in')}</button>
         <p className="form-notice" data-tone={noticeTone} id="managed-login-notice" role="status">{notice}</p>
       </form> : managedReady ? <form aria-label="Login" aria-busy={busy} className="managed-login-panel core-form" onSubmit={(event) => void submit(event)}>
@@ -337,15 +339,15 @@ export function ManagedLoginPage() {
               notice rather than leaving it disconnected from either input. */}
           <label>Email<input aria-describedby={noticeTone === 'error' ? 'managed-login-notice' : undefined} aria-invalid={noticeTone === 'error'} autoComplete="username" maxLength={160} onChange={(event) => setEmail(event.target.value)} required type="email" value={email} /></label>
           <label>Password<input aria-describedby={noticeTone === 'error' ? 'managed-login-notice' : undefined} aria-invalid={noticeTone === 'error'} autoComplete="current-password" onChange={(event) => setPassword(event.target.value)} required type="password" value={password} /></label>
-          <Link className="account-inline-link" to={managedAccountPath('/account/recovery', productIntent, location.search)}>Forgot password?</Link>
-          {reviewReturnPath ? <p>Need access? Ask SuperMega in your existing setup conversation. Use your existing account.</p> : signupPolicy ? <button className="account-inline-link account-link-button" onClick={() => chooseAccountMode(true)} type="button">Create an account</button> : <a className="account-inline-link" href={managedAccountRequestUrl(productIntent)}>Contact support</a>}
+          <Link className="account-inline-link" to={managedAccountPath('/account/recovery', accountProductIntent, location.search)}>Forgot password?</Link>
+          {reviewReturnPath ? <p>Need access? Ask SuperMega in your existing setup conversation. Use your existing account.</p> : signupPolicy ? <button className="account-inline-link account-link-button" onClick={() => chooseAccountMode(true)} type="button">Create an account</button> : <a className="account-inline-link" href={managedAccountRequestUrl(accountProductIntent)}>{shopAccessIntent ? 'Contact us about Shop' : 'Contact support'}</a>}
         </>}
         <button className="core-button primary" disabled={busy} type="submit">{busy ? 'Checking...' : reviewReturnPath ? 'Continue to review' : directory ? bi('Open company') : bi('Login')}</button>
         <p className="form-notice" data-tone={noticeTone} id="managed-login-notice" role="status">{notice}</p>
       </form> : <section className="managed-login-panel" aria-label="Login unavailable">
         {reviewReturnPath ? <div><h2>Review sign-in is unavailable here.</h2><p>Keep your original review link and ask SuperMega in your existing setup conversation to restore access. Use the account associated with this review.</p></div> : <>
-          <div><h2>Login is currently unavailable.</h2><p>{publicApp ? 'Contact support for account access.' : 'Contact support for account access. Your saved work is still available on this device.'}</p></div>
-          <div className="managed-login-actions"><a className="core-button primary" href={managedAccountRequestUrl(productIntent)}>Contact support</a>{!publicApp ? <Link className="account-inline-link" to="/?choose=1">Saved work on this device</Link> : null}{signupPolicy ? <button className="core-button" onClick={() => chooseAccountMode(true)} type="button">Create an account</button> : null}</div>
+          <div><h2>Login is currently unavailable.</h2><p>{shopAccessIntent ? publicApp ? 'Shop pilot access is issued during assisted setup. Native Shop can make its first local sale without this managed account.' : 'Shop pilot access is issued during assisted setup. Native Shop can make its first local sale without this managed account. Your saved work is still available on this device.' : publicApp ? 'Contact support for account access.' : 'Contact support for account access. Your saved work is still available on this device.'}</p></div>
+          <div className="managed-login-actions"><a className="core-button primary" href={managedAccountRequestUrl(accountProductIntent)}>{shopAccessIntent ? 'Contact us about Shop' : 'Contact support'}</a>{!publicApp ? <Link className="account-inline-link" to="/?choose=1">Saved work on this device</Link> : null}{signupPolicy ? <button className="core-button" onClick={() => chooseAccountMode(true)} type="button">Create an account</button> : null}</div>
         </>}
       </section>}
     </div>

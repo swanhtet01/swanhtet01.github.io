@@ -54,7 +54,8 @@ for (const token of ["policy.profile === 'production-contract'", 'contact.accept
 }
 if (!previewVerifier.includes('deployment_function_surface_wrong')) failures.push('preview_function_inventory_not_verified')
 if (!previewVerifier.includes('const maxAttempts = 6') || !previewVerifier.includes('protected_preview_retry:')) failures.push('preview_propagation_retry_missing')
-for (const token of ['validatePreviewLinks(homepage, policy, manifest.customerProducts, linkOptions)',
+if (!previewVerifier.includes('public_preview_project_link_wrong') || !previewVerifier.includes('projectLink.projectId !== expectedProjectId')) failures.push('preview_project_link_guard_missing')
+for (const token of ["validatePreviewLinks(get('/shop/'), policy, manifest.customerProducts, linkOptions)",
   'validatePreviewLinks(html, policy, manifest.customerProducts,']) {
   requireToken(previewVerifier, token, 'preview_navigation_consumer_missing')
 }
@@ -63,9 +64,9 @@ for (const token of ['public_preview_action_missing', 'public_preview_app_route_
   "const appPaths = new Set(['/login'])"]) {
   requireToken(previewProfile, token, 'preview_navigation_policy_missing')
 }
-for (const token of ['guided_product_route_missing', 'guided_product_label_wrong',
-  'homepage_shop_action_missing', 'retired_shop_action_present', 'landing_contact_route_missing',
-  'retired_product_marketed', 'retired_product_boundary_missing',
+for (const token of ['root_redirect_destination_wrong', 'shop_manifest_action_missing',
+  'shop_contact_action_missing', 'landing_contact_route_missing',
+  'page_shop_sign_in_drift', 'retired_product_route_not_found', 'retired_product_content_served',
   'interface_image_reference_missing', 'interface_image_http_error',
   'interface_image_content_type_wrong', 'interface_image_invalid', 'interface_image_release_mismatch']) {
   requireToken(liveVerifier, token, 'live_navigation_contract_missing')
@@ -90,7 +91,7 @@ for (const [name, expected] of Object.entries({
   'vercel:deploy': 'node tools/deny_stale_public_deploy.mjs',
   'vercel:deploy:prod': 'node tools/deny_stale_public_deploy.mjs',
   'public:build': 'node tools/create_public_vercel_output.mjs',
-  'public:verify': 'node tools/verify_public_vercel_artifact_budget.mjs && node tools/verify_public_vercel_output.mjs && node --test tools/product_visibility.test.mjs && node --test --test-concurrency=1 tools/verify_public_release_live.test.mjs && node --test --test-concurrency=1 tools/public_preview_profile.test.mjs && node tools/test_public_contact_function.mjs && node --test tools/test_public_contact_receipt.mjs && node tools/test_public_retired_api_function.mjs && node tools/test_public_landing_pages.mjs && npm run vercel:contracts:test && npm run hq:verify',
+  'public:verify': 'node tools/verify_public_vercel_artifact_budget.mjs && node tools/verify_public_vercel_output.mjs && node tools/verify_public_shop_responsive.mjs && node --test tools/public_native_shop_gallery.test.mjs && node --test tools/product_visibility.test.mjs && node --test --test-concurrency=1 tools/verify_public_release_live.test.mjs && node --test --test-concurrency=1 tools/public_preview_profile.test.mjs && node --test --test-concurrency=1 tools/public_preview_navigation.test.mjs && node tools/test_public_contact_function.mjs && node --test tools/test_public_contact_receipt.mjs && node tools/test_public_retired_api_function.mjs && node tools/test_public_landing_pages.mjs && npm run vercel:contracts:test && npm run hq:verify',
   'public:prebuilt': 'npm run public:build && npm run public:verify',
   'public:verify:live': 'node tools/verify_public_release_live.mjs',
   'deploy:public:prod': 'node tools/deny_stale_public_deploy.mjs',

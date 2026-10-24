@@ -5,9 +5,8 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-# Keep native launchers in step with the existing square-free SuperMega mark.
-# The path below is the two-stroke terminal glyph in kernel/public/favicon.svg.
-$source = Join-Path $ProjectRoot 'kernel\public\favicon.svg'
+# Keep native launchers in step with the unboxed public SuperMega mark.
+$source = Join-Path $ProjectRoot 'mobile\shop_pos\assets\supermega-mark.svg'
 $svg = Get-Content -LiteralPath $source -Raw
 if ($svg -notmatch 'viewBox="0 0 72 44"' -or
     $svg -notmatch 'M10 9 26 22 10 35M35 35h27' -or

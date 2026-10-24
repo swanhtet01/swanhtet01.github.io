@@ -2,6 +2,7 @@
 // screenshots and must not be published as hardware acceptance evidence.
 import 'dart:convert';
 import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:cryptography/cryptography.dart';
 import 'package:drift/native.dart';
@@ -11,7 +12,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:supermega_shop/camera_barcode_scanner.dart';
 import 'package:supermega_shop/main.dart';
+import 'package:supermega_shop/printer_services.dart';
 import 'package:supermega_shop/shop_database.dart';
+import 'package:unified_esc_pos_printer/unified_esc_pos_printer.dart';
 
 final _capture = Platform.environment['SHOP_VISUAL_CAPTURE'] == '1';
 const _captureKey = ValueKey('native-shop-visual-capture');
@@ -77,6 +80,104 @@ Future<void> _resolveVisibleProductPhotos(WidgetTester tester) async {
   final rendered = tester.widgetList<RawImage>(find.byType(RawImage)).toList();
   expect(rendered, isNotEmpty);
   expect(rendered.every((image) => image.image != null), isTrue);
+}
+
+Future<({Uint8List png, int blocks, int maxRasterDots})> _decodeGsV0Receipt(
+  List<int> bytes, {
+  required int paperDots,
+}) async {
+  final rasters = <({int widthBytes, int height, Uint8List data})>[];
+  var maxRasterDots = 0;
+  for (var index = 0; index + 8 <= bytes.length;) {
+    if (bytes[index] != 29 ||
+        bytes[index + 1] != 118 ||
+        bytes[index + 2] != 48) {
+      index++;
+      continue;
+    }
+    if (bytes[index + 3] != 0) {
+      throw StateError('Receipt raster has an unexpected density mode.');
+    }
+    final widthBytes = bytes[index + 4] | (bytes[index + 5] << 8);
+    final height = bytes[index + 6] | (bytes[index + 7] << 8);
+    final dataLength = widthBytes * height;
+    if (index + 8 + dataLength > bytes.length) {
+      throw StateError('Truncated GS v 0 receipt image.');
+    }
+    if (widthBytes > (paperDots + 7) ~/ 8) {
+      throw StateError('Receipt raster exceeds the selected printable width.');
+    }
+    final logicalRasterDots = widthBytes * 8 > paperDots
+        ? paperDots
+        : widthBytes * 8;
+    maxRasterDots = logicalRasterDots > maxRasterDots
+        ? logicalRasterDots
+        : maxRasterDots;
+    final unusedBits = widthBytes * 8 - paperDots;
+    if (unusedBits > 0) {
+      final unusedMask = (1 << unusedBits) - 1;
+      for (var y = 0; y < height; y++) {
+        final lastByte = bytes[index + 8 + (y + 1) * widthBytes - 1];
+        if ((lastByte & unusedMask) != 0) {
+          throw StateError('Receipt raster uses padding beyond paper width.');
+        }
+      }
+    }
+    rasters.add((
+      widthBytes: widthBytes,
+      height: height,
+      data: Uint8List.fromList(
+        bytes.sublist(index + 8, index + 8 + dataLength),
+      ),
+    ));
+    index += 8 + dataLength;
+  }
+  if (rasters.isEmpty) throw StateError('Receipt has no GS v 0 raster rows.');
+  final height = rasters.fold<int>(0, (total, raster) => total + raster.height);
+  final rgba = Uint8List(paperDots * height * 4);
+  rgba.fillRange(0, rgba.length, 255);
+  var yOffset = 0;
+  for (final raster in rasters) {
+    for (var y = 0; y < raster.height; y++) {
+      for (var byteIndex = 0; byteIndex < raster.widthBytes; byteIndex++) {
+        final packed = raster.data[y * raster.widthBytes + byteIndex];
+        for (var bit = 0; bit < 8; bit++) {
+          if ((packed & (0x80 >> bit)) == 0) continue;
+          final x = byteIndex * 8 + bit;
+          if (x >= paperDots) continue;
+          final pixel = ((yOffset + y) * paperDots + x) * 4;
+          rgba[pixel] = 0;
+          rgba[pixel + 1] = 0;
+          rgba[pixel + 2] = 0;
+        }
+      }
+    }
+    yOffset += raster.height;
+  }
+  final buffer = await ui.ImmutableBuffer.fromUint8List(rgba);
+  final descriptor = ui.ImageDescriptor.raw(
+    buffer,
+    width: paperDots,
+    height: height,
+    rowBytes: paperDots * 4,
+    pixelFormat: ui.PixelFormat.rgba8888,
+  );
+  final codec = await descriptor.instantiateCodec();
+  final image = (await codec.getNextFrame()).image;
+  try {
+    final png = await image.toByteData(format: ui.ImageByteFormat.png);
+    if (png == null) throw StateError('Receipt PNG encoding failed.');
+    return (
+      png: png.buffer.asUint8List(png.offsetInBytes, png.lengthInBytes),
+      blocks: rasters.length,
+      maxRasterDots: maxRasterDots,
+    );
+  } finally {
+    image.dispose();
+    codec.dispose();
+    descriptor.dispose();
+    buffer.dispose();
+  }
 }
 
 void main() {
@@ -185,6 +286,293 @@ void main() {
     ]);
   });
 
+  testWidgets(
+    'decode actual EN and MY ESC POS receipt bytes for 384 420 and 576 dots',
+    skip: !_capture,
+    (tester) async {
+      await tester.runAsync(() async {
+        const receipt = ShopSaleReceipt(
+          id: 'synthetic-receipt',
+          operationId: 'synthetic-receipt',
+          totalMmk: 125000,
+          createdAtMillis: 1792722600000,
+          paymentMethod: 'cash',
+          lines: [
+            ShopSaleReceiptLine(
+              productName: 'လက်ဖက်ရည် နို့ဆီ ချိုချို',
+              unitPriceMmk: 2500,
+              quantity: 50,
+              lineTotalMmk: 125000,
+            ),
+          ],
+        );
+        final profiles = <(String, PaperSize, ReceiptPaperWidth)>[
+          ('58-generic-384', PaperSize.mm58, ReceiptPaperWidth.mm58),
+          ('58-contract-420', PaperSize.mm58Wide420, ReceiptPaperWidth.mm58),
+          ('80-576', PaperSize.mm80, ReceiptPaperWidth.mm80),
+        ];
+        for (final myanmar in [false, true]) {
+          for (final (name, paperSize, paperWidth) in profiles) {
+            final ticket = await buildShopReceiptTicket(
+              receipt,
+              myanmar: myanmar,
+              paperWidth: paperWidth,
+              rasterPaperSize: paperSize,
+            );
+            final decoded = await _decodeGsV0Receipt(
+              ticket.bytes,
+              paperDots: paperSize.widthPixels,
+            );
+            expect(decoded.blocks, greaterThan(5), reason: '$name/$myanmar');
+            expect(
+              decoded.maxRasterDots,
+              lessThanOrEqualTo(paperSize.widthPixels),
+              reason: '$name/$myanmar',
+            );
+            final locale = myanmar ? 'my' : 'en';
+            await File('test/goldens/shop_receipt_${name}_$locale.png')
+                .writeAsBytes(decoded.png);
+          }
+        }
+      });
+    },
+  );
+
+  testWidgets('first product keeps required fields first and a scan visible', (
+    tester,
+  ) async {
+    for (final (width, language) in [
+      (320.0, 'en'),
+      (320.0, 'my'),
+      (820.0, 'en'),
+      (820.0, 'my'),
+    ]) {
+      tester.view.physicalSize = Size(width, width == 320 ? 800 : 1000);
+      tester.view.devicePixelRatio = 1;
+      tester.platformDispatcher.textScaleFactorTestValue = width == 320
+          ? 1.5
+          : 1.0;
+      final database = ShopDatabase(NativeDatabase.memory());
+      try {
+        await tester.pumpWidget(
+          RepaintBoundary(
+            key: _captureKey,
+            child: ShopApp(
+              initialCounter: true,
+              database: database,
+              authClient: null,
+              apiBaseUrl: 'https://example.invalid',
+              initialMyanmar: language == 'my',
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final firstProduct = find.text(
+          language == 'my' ? 'ပထမကုန်ပစ္စည်းထည့်ရန်' : 'Add first product',
+        );
+        await tester.ensureVisible(firstProduct);
+        await tester.tap(firstProduct);
+        await tester.pumpAndSettle();
+
+        final name = find.byKey(const ValueKey('shop-product-name'));
+        final price = find.byKey(const ValueKey('shop-product-price'));
+        final stock = find.byKey(const ValueKey('shop-product-stock'));
+        final barcode = find.byKey(const ValueKey('shop-product-barcode'));
+        expect(name, findsOneWidget);
+        expect(price, findsOneWidget);
+        expect(stock, findsOneWidget);
+        expect(tester.widget<TextFormField>(stock).controller!.text, isEmpty);
+        expect(barcode, findsNothing);
+        final addBarcode = find.byKey(
+          const ValueKey('shop-product-add-barcode'),
+        );
+        expect(addBarcode, findsOneWidget);
+        expect(tester.getSize(addBarcode).height, greaterThanOrEqualTo(48));
+        expect(
+          tester.getTopLeft(name).dy,
+          lessThan(tester.getTopLeft(price).dy),
+        );
+        expect(
+          tester.getTopLeft(price).dy,
+          lessThan(tester.getTopLeft(stock).dy),
+        );
+        if (width == 320) {
+          final save = find.widgetWithText(
+            FilledButton,
+            language == 'my' ? 'သိမ်းရန်' : 'Save product',
+          );
+          final cancel = find.widgetWithText(
+            TextButton,
+            language == 'my' ? 'မလုပ်တော့ပါ' : 'Cancel',
+          );
+          expect(tester.getSize(save).width, greaterThanOrEqualTo(230));
+          expect(
+            tester.getTopLeft(save).dy,
+            lessThan(tester.getTopLeft(cancel).dy),
+          );
+        }
+        expect(tester.takeException(), isNull);
+        if (_capture) {
+          await expectLater(
+            find.byKey(_captureKey),
+            matchesGoldenFile(
+              'goldens/shop_first_product_${width.toInt()}_$language.png',
+            ),
+          );
+        }
+
+        await tester.tap(
+          find.text(language == 'my' ? 'မလုပ်တော့ပါ' : 'Cancel'),
+        );
+        await tester.pumpAndSettle();
+        final scanInput = find.byType(TextField).first;
+        await tester.enterText(scanInput, '0012345678905');
+        await tester.testTextInput.receiveAction(TextInputAction.done);
+        await tester.pumpAndSettle();
+        expect(find.byType(AlertDialog), findsOneWidget);
+        expect(
+          tester.widget<TextFormField>(barcode).controller!.text,
+          '0012345678905',
+        );
+        expect(
+          tester.getTopLeft(name).dy,
+          lessThan(tester.getTopLeft(barcode).dy),
+        );
+        expect(
+          tester.getTopLeft(barcode).dy,
+          lessThan(tester.getTopLeft(price).dy),
+        );
+        expect(await database.countSales(), 0);
+        expect(tester.takeException(), isNull);
+      } finally {
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump(const Duration(milliseconds: 1));
+        await database.close();
+      }
+    }
+    tester.view.resetPhysicalSize();
+    tester.view.resetDevicePixelRatio();
+    tester.platformDispatcher.clearTextScaleFactorTestValue();
+  });
+
+  for (final (language, textScale) in [
+    ('en', 1.0),
+    ('my', 1.0),
+    ('en', 1.3),
+    ('my', 1.3),
+  ]) {
+    testWidgets(
+      '768px portrait tablet keeps catalog and basket at $language ${textScale}x',
+      (tester) async {
+        const width = 768.0;
+        const height = 1024.0;
+        tester.view.physicalSize = const Size(width, height);
+        tester.view.devicePixelRatio = 1;
+        tester.platformDispatcher.textScaleFactorTestValue = textScale;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+        final database = await _sampleShop(myanmar: language == 'my');
+        try {
+          await tester.pumpWidget(
+            RepaintBoundary(
+              key: _captureKey,
+              child: ShopApp(
+                initialCounter: true,
+                database: database,
+                authClient: null,
+                apiBaseUrl: 'https://example.invalid',
+                initialMyanmar: language == 'my',
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          final catalog = find.byKey(const ValueKey('shop-split-catalog'));
+          final basket = find.byKey(const ValueKey('shop-split-basket'));
+          expect(catalog, findsOneWidget);
+          expect(basket, findsOneWidget);
+          final catalogBounds = tester.getRect(catalog);
+          final basketBounds = tester.getRect(basket);
+          expect(catalogBounds.width, greaterThanOrEqualTo(390));
+          expect(basketBounds.width, 300);
+          expect(catalogBounds.right, lessThan(basketBounds.left));
+          expect(basketBounds.right, lessThanOrEqualTo(width));
+          final newProduct = find.byKey(
+            const ValueKey('shop-new-product-compact'),
+          );
+          final camera = find.byKey(const ValueKey('shop-camera-scan'));
+          final productActions = find.byKey(
+            const ValueKey('shop-product-actions'),
+          );
+          expect(newProduct, findsOneWidget);
+          expect(find.text(language == 'my' ? 'အသစ်' : 'New'), findsOneWidget);
+          expect(camera, findsOneWidget);
+          expect(productActions, findsOneWidget);
+          expect(tester.getSize(newProduct).height, greaterThanOrEqualTo(48));
+          expect(tester.getSize(camera).height, greaterThanOrEqualTo(48));
+          expect(
+            tester.getRect(newProduct).left,
+            greaterThanOrEqualTo(tester.getRect(camera).right),
+          );
+          expect(
+            tester.getRect(newProduct).right,
+            lessThanOrEqualTo(tester.getRect(productActions).left),
+          );
+          expect(
+            (tester.getRect(newProduct).center.dy -
+                    tester.getRect(camera).center.dy)
+                .abs(),
+            lessThan(2),
+          );
+          expect(tester.takeException(), isNull);
+          if (_capture) {
+            await _resolveVisibleProductPhotos(tester);
+            await expectLater(
+              find.byKey(_captureKey),
+              matchesGoldenFile(
+                'goldens/shop_tablet_sell_768_${language}_${textScale == 1.0 ? 'normal' : 'large'}.png',
+              ),
+            );
+          }
+
+          await tester.tap(
+            find
+                .byTooltip(
+                  language == 'my' ? 'အရောင်းထဲထည့်ရန်' : 'Add to sale',
+                )
+                .first,
+          );
+          await tester.pumpAndSettle();
+          expect(basket, findsOneWidget);
+          expect(
+            tester.getRect(basket).top,
+            lessThanOrEqualTo(catalogBounds.top + 12),
+          );
+          final cash = find.widgetWithText(
+            FilledButton,
+            language == 'my' ? 'ငွေသား' : 'Cash sale',
+          );
+          expect(cash, findsOneWidget);
+          expect(tester.getRect(cash).height, greaterThanOrEqualTo(48));
+          expect(tester.getRect(cash).bottom, lessThanOrEqualTo(height));
+          expect(tester.takeException(), isNull);
+          if (_capture) {
+            await expectLater(
+              find.byKey(_captureKey),
+              matchesGoldenFile(
+                'goldens/shop_tablet_checkout_768_${language}_${textScale == 1.0 ? 'normal' : 'large'}.png',
+              ),
+            );
+          }
+        } finally {
+          await tester.pumpWidget(const SizedBox.shrink());
+          await tester.pump(const Duration(milliseconds: 1));
+          await database.close();
+        }
+      },
+    );
+  }
+
   for (final (width, height, language) in [
     (320.0, 800.0, 'en'),
     (390.0, 844.0, 'en'),
@@ -192,6 +580,7 @@ void main() {
     (1200.0, 900.0, 'en'),
     (390.0, 844.0, 'my'),
     (820.0, 1000.0, 'my'),
+    (1200.0, 900.0, 'my'),
     (320.0, 800.0, 'my'),
   ]) {
     testWidgets(
@@ -234,6 +623,15 @@ void main() {
           await tester.pumpAndSettle();
           checkpoint('today settled');
           expect(tester.takeException(), isNull);
+          expect(
+            find.descendant(
+              of: find.byType(AppBar),
+              matching: find.text('Shop'),
+            ),
+            findsOneWidget,
+          );
+          expect(find.text('SuperMega Shop'), findsNothing);
+          expect(find.text('SuperMega ဆိုင်'), findsNothing);
           checkpoint('today golden start');
           await expectLater(
             find.byKey(_captureKey),
@@ -310,6 +708,17 @@ void main() {
           );
           await _resolveVisibleProductPhotos(tester);
           checkpoint('sell photos decoded');
+          if (width == 820 && language == 'my') {
+            final catalog = find.byKey(const ValueKey('shop-split-catalog'));
+            final lastProduct = find.byKey(
+              const ValueKey('shop-catalog-row:mango'),
+            );
+            expect(lastProduct, findsOneWidget);
+            expect(
+              tester.getBottomLeft(lastProduct).dy,
+              lessThan(tester.getBottomLeft(catalog).dy - 8),
+            );
+          }
           if (width == 320 || width == 820) {
             final camera = find.byKey(const ValueKey('shop-camera-scan'));
             expect(camera, findsOneWidget);

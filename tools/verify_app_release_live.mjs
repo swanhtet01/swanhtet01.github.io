@@ -45,7 +45,7 @@ export function verifyCurrentReleaseAssets({
     ['website', websiteChunk, ['Your website', 'Download site', 'Website starter brief generated', 'Not online yet', 'Edit page', 'Mingalar Fresh Mart', 'Fresh everyday groceries without the extra trip.', 'Stock the week in one simple order.', 'Tell us what you need today.']],
     ['ecommerce', ecommerceProductCorpus, ['Extra order tools', 'We could not verify your store changes.', 'Review an order batch', 'Upload CSV or paste channel orders only when needed.', 'Payment and customer messages stay locked.', 'Shop review', 'supermega.ecommerce.order_import_review_packet.v1']],
     ['data_onboarding', clientDataOnboardingChunk, ['Choose your CSV, check the matched columns, and review any corrections.', 'No customer message, payment, website publish, or automation runs from this check.']],
-    ['company_login', managedLoginChunk, ['Sign in to your workspace.', 'Login is currently unavailable.', 'Saved work on this device', 'Contact support', 'Contact support for account access. Your saved work is still available on this device.']],
+    ['company_login', managedLoginChunk, ['Sign in to your workspace.', 'For existing assigned pilot accounts. Native Shop is installed separately during assisted setup.', 'Login is currently unavailable.', 'Saved work on this device', 'Contact us about Shop', 'Shop pilot access is issued during assisted setup. Native Shop can make its first local sale without this managed account. Your saved work is still available on this device.']],
     ['account_recovery', managedAccountChunk, ['Recover your account.', 'Secure your account.', 'Save password and continue']],
     ['company_backup', companyBackupCorpus, ['supermega.company_backup.v1', 'Customer-owned and encrypted', 'Download encrypted backup', 'Auth sessions, company account IDs, and credentials are excluded.']],
     ['activation', activationRunbookChunk, ['Evidence to go live', 'proof gates ready']],
@@ -183,7 +183,7 @@ if (artifactSelfTest) {
     }
     if (!rejected) throw new Error(`launcher_mutation_not_rejected:${expected}`)
   }
-  const loginRequirements = ['Sign in to your workspace.', 'Login is currently unavailable.', 'Saved work on this device', 'Contact support']
+  const loginRequirements = ['Sign in to your workspace.', 'For existing assigned pilot accounts. Native Shop is installed separately during assisted setup.', 'Login is currently unavailable.', 'Saved work on this device', 'Contact us about Shop']
   for (const text of loginRequirements) {
     const expected = `missing_current_release_asset:company_login:${text}`
     let rejected = false

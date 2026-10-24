@@ -48,16 +48,21 @@ test('actual generator maps every production app anchor, preserves default contr
   build({})
   const pages = new Map(manifest.pages.map(page => [page.file, read(page.file)]))
   let mapped = 0
+  let headerPages = 0
   try {
     build({ SUPERMEGA_PUBLIC_PREVIEW_APP_BINDING: JSON.stringify(binding) })
     for (const [name, original] of pages) {
+      const loginLinks = (original.match(/<a\b[^>]*href="https:\/\/app\.supermega\.dev\//g) || []).length
+      const hasHeader = /<header\b[^>]*class="[^"]*site-header[^"]*"/.test(original)
+      assert.equal(loginLinks, hasHeader ? 1 : 0, `${name} header sign-in contract`)
+      headerPages += hasHeader ? 1 : 0
       const expected = bindPreviewNavigation(original, binding)
       const actual = read(name)
       assert.equal(actual, expected, name)
       assert.equal(/<a\b[^>]*href="https:\/\/app\.supermega\.dev(?:\/|")/.test(actual), false, name)
       mapped += (original.match(/<a\b[^>]*href="https:\/\/app\.supermega\.dev\//g) || []).length
     }
-    assert.equal(mapped, manifest.pages.length, `expected one Login per public page, got ${mapped}`)
+    assert.equal(mapped, headerPages, `expected one Login per header-bearing page, got ${mapped}`)
     assert.deepEqual(JSON.parse(read('__release.json')).previewNavigation, binding)
     assert.equal(read('robots.txt'), 'User-agent: *\nDisallow: /\n')
     const config = JSON.parse(readFileSync(resolve(root, '.vercel/output/config.json'), 'utf8'))

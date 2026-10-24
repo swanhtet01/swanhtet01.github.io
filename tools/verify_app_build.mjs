@@ -565,6 +565,7 @@ else {
 }
 if (!indexSource.includes('<link rel="apple-touch-icon" href="/apple-touch-icon.png" />')
   || !await exists(resolve(dist, 'apple-touch-icon.png'))) fail('missing_apple_touch_icon')
+if (/\b(?:Sites|Commerce|online presence)\b/i.test(APP_DESCRIPTION)) fail('app_metadata_internal_product_claim')
 if (!indexSource.includes('<title>SuperMega</title>')
   || !indexSource.includes(APP_DESCRIPTION)
   || indexSource.includes('SuperMega Company OS')
@@ -3060,14 +3061,16 @@ if (!appSource.includes("lazy(() => import('./core/ManagedLoginPage')")
   || !managedLoginPageSource.includes('Only active companies assigned to this account are shown.')
   || !managedLoginPageSource.includes('>Contact support</a>')
   || !managedLoginPageSource.includes('Login is currently unavailable.')
-  || !managedLoginPageSource.includes('Contact support for account access. Your saved work is still available on this device.')
+  || !managedLoginPageSource.includes('Shop pilot access is issued during assisted setup. Native Shop can make its first local sale without this managed account. Your saved work is still available on this device.')
   || managedLoginPageSource.includes('Request managed activation')
   || managedLoginPageSource.includes('Premium activation')
   || managedLoginPageSource.includes('Managed access is not active in this release.')
   || !managedLoginPageSource.includes('to="/?choose=1">Saved work on this device')
   || !managedLoginPageSource.includes("new URLSearchParams(location.search).get('product')")
-  || !managedLoginPageSource.includes("managedAccountPath('/account/recovery', productIntent, location.search)")
-  || !managedLoginPageSource.includes('managedAccountRequestUrl(productIntent)')
+  || !managedLoginPageSource.includes("const accountProductIntent = productIntent ?? (reviewReturnPath?.split('/')[1] ?? 'shop')")
+  || !managedLoginPageSource.includes('managedPortalEntryPath(accountProductIntent)')
+  || !managedLoginPageSource.includes("managedAccountPath('/account/recovery', accountProductIntent, location.search)")
+  || !managedLoginPageSource.includes('managedAccountRequestUrl(accountProductIntent)')
   || !managedLoginPageSource.includes("from './CoreShell'")
   || !managedLoginPageSource.includes("from './account-routes'")
   || managedLoginPageSource.includes("from './CoreApp'")
@@ -7399,11 +7402,13 @@ if (shopPackIds.join(',') !== 'retail,cafe,restaurant,spa,gym,school'
   || shopProductContract?.internalTemplatePacks?.some((pack) => pack.status !== 'core-compatible' || !pack.availableNow?.some((capability) => /schedule|reservation|appointment/i.test(capability)))
   || shopProductContract?.internalTemplatePacks?.some((pack) => !shopProductContract.templates?.some((template) => template.id === pack.workflowTemplateId && template.entryPoints?.includes(pack.entryPoint)))
   || shopProductContract?.internalTemplatePacks?.some((pack) => pack.plannedNext?.includes('Appointments') || pack.plannedNext?.includes('Classes'))) fail('shop_industry_pack_manifest_not_operationally_aligned')
-if (websiteProductContract?.status !== 'available-in-app'
+if (websiteProductContract?.status !== 'release-candidate-local'
+  || manifest.productVisibility?.activeProductIds?.includes('website')
+  || !manifest.productVisibility?.retainedOnlyProductIds?.includes('website')
   || websiteProductContract?.views?.join(',') !== 'Start,Edit,Preview,Download'
   || websiteProductContract?.templates?.some((template) => template.workflow?.at(-1) !== 'Download website')
   || manifestText.includes('Approve site file')
-  || manifestText.includes('content approval time')) fail('website_trial_catalog_not_aligned_with_download_outcome')
+  || manifestText.includes('content approval time')) fail('internal_website_catalog_not_aligned_with_download_outcome')
 for (const product of solutionProducts) {
   if (product.templates?.length !== 3) fail(`wrong_template_count:${product.id}`)
   for (const template of product.templates || []) {

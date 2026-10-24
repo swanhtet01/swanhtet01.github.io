@@ -1,14 +1,21 @@
 # >_ SuperMega managed-trial database activation
 
+This document's schema-v13 procedures concern hosted PostgreSQL/Supabase. They
+do not verify or migrate native Shop's separate committed green-anchor SQLite
+`user_version = 13` or the current uncommitted native schema-v14 security
+increment.
+
 `app.supermega.dev` is an isolated, browser-local product demo until every managed-trial gate below passes. It does not use SQLite and it must not be represented as a customer system of record. The canonical managed backend is the private `app_private` schema in Supabase Postgres; browser code never receives its connection string or a service-role key.
 
 The validator is intentionally read-only. It does not apply migrations, create users, provision workspaces, or enable writes.
 
 ## Current full-candidate rehearsal packet (v3)
 
-The rehearsal packet now binds all 23 committed migrations: the legacy public baseline,
-the 14 private-core migrations through schema v13, and eight later migrations for durable
-signup attempts, Website and Ecommerce review storage, entitlement proof and customer decisions.
+The rehearsal packet now binds all 24 committed migrations: one public legacy baseline
+plus 23 private migrations—the 14 private-core migrations through
+schema v13 and nine later migrations for durable signup attempts, Website and
+Ecommerce review storage, entitlement proof, customer decisions, and RLS
+optimization.
 Core schema version 13 alone does not prove those later features exist. Historical local
 rehearsal descriptions below retain their original scope; they are not full-candidate proof.
 
@@ -29,18 +36,45 @@ requires verified cleanup; the packet does not automatically expire or delete a 
 
 ## Local PostgreSQL 17 release gate
 
-Run this first on a development machine with PostgreSQL 17 binaries, matching `psql`, `pg_dump`, and `pg_restore`, Psycopg 3, and OpenSSL:
+Until engine provenance is hardened, run this only on the reviewed Windows
+PostgreSQL 17.10-2 toolchain with matching `psql`, `pg_dump`, and `pg_restore`,
+Psycopg 3, and OpenSSL. The recorder expects the archive at
+`~/.cache/supermega-postgresql/postgresql-17.10-2-windows-x64-binaries.zip`;
+verify 333,927,270 bytes and SHA-256
+`ef9b1e5e23d2e8a83914ba13d9dc536a72210fba53fd1808ff1f7e06bb22b106`
+before the approved rehearsal:
 
 ```powershell
 npm run database:postgres17:preflight
-npm run database:postgres17:rehearse
-npm run database:postgres17:record
-npm run database:postgres17:record:verify
+node tools/record_postgres17_rehearsal.mjs --output <NEW_EXTERNAL_RECEIPT_PATH>
+node tools/record_postgres17_rehearsal.mjs --verify --input <NEW_EXTERNAL_RECEIPT_PATH> --expected-head <EXACT_CLEAN_COMMIT>
 ```
 
 The runner accepts only executable paths, never database credentials. It creates disposable PostgreSQL 17 clusters with generated in-memory secrets, TLS, and a loopback listener. The current profile is `v13-self-serve`; inspect the runner and its resulting receipt for the exact migration inventory and checks. It verifies runtime-role restrictions, tenant isolation, session revocation, immutable events, rollback, backup/restore and cleanup. This local rehearsal is distinct from the full hosted packet, whose inventory also includes the public baseline and later feature extensions. Neither receipt substitutes for the other. Do not use historical v10 or eleven-migration instructions to initialize the current candidate.
 
-The current sanitized proof is `hq/research/postgres17-rehearsal.json`. `database:postgres17:record` requires a clean worktree, reruns the complete disposable rehearsal, hashes the exact migrations, validator, runner, and managed Python runtime files, verifies the observed PostgreSQL archive, and atomically replaces the proof only after every check and cleanup gate passes. `hq:verify` fails when the recorded implementation digest becomes stale. The receipt records PostgreSQL 17.10, all passing checks, complete cleanup, and zero Supabase, Vercel, or production mutation without storing a URL or credential. This remains a repeatable local release gate, not hosted activation. It explicitly retains the isolated Supabase, Security Advisor, private Storage, transaction-mode pooler, and provider backup/recovery gates. PostgreSQL documents the [Windows binary distribution](https://www.postgresql.org/download/windows/), and Supabase documents its separate [local-development boundary](https://supabase.com/docs/guides/local-development/overview).
+The current sanitized proof is `hq/research/postgres17-rehearsal.json`.
+Recording requires a clean worktree and a new external destination; it reruns
+the complete disposable rehearsal, hashes the exact migrations, validator,
+runner, and managed Python runtime files, and publishes the external receipt
+only after every check and cleanup gate passes. Existing output is never
+overwritten. `hq:verify` fails when the tracked proof's implementation digest
+becomes stale. After the external receipt and adjacent raw report pass exact-head
+verification, a reviewed repository change must replace the tracked pair and
+regenerate its dependent readiness records. The repository does not yet provide
+an atomic promotion command, so do not claim that verification alone refreshed
+the canonical proof. The builder currently labels the fixed Windows 17.10
+distribution while its semantic validator checks only PostgreSQL major 17 and
+a nonempty archive/hash. Its displayed command is also a static label, not proof
+of the exact invocation. Do not promote evidence from another engine, archive,
+or platform until the tooling pins or truthfully parameterizes that provenance.
+Within that boundary, the receipt records all passing checks, complete cleanup,
+and zero Supabase, Vercel, or production mutation without storing a URL or
+credential. This remains a repeatable local release gate, not hosted activation.
+It explicitly retains the isolated Supabase, Security Advisor, private Storage,
+transaction-mode pooler, and provider backup/recovery gates.
+PostgreSQL documents the [Windows binary distribution](https://www.postgresql.org/download/windows/),
+and Supabase documents its separate
+[local-development boundary](https://supabase.com/docs/guides/local-development/overview).
 
 ## One-time non-production proof
 

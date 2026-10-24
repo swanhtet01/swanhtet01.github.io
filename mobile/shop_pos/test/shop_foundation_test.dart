@@ -1,7 +1,10 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
+import 'package:cryptography/cryptography.dart';
 import 'package:drift/drift.dart' show Variable;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
@@ -16,8 +19,35 @@ import 'package:supermega_shop/shop_cash_shift_screen.dart';
 import 'package:supermega_shop/shop_copy.dart';
 import 'package:supermega_shop/shop_database.dart';
 import 'package:supermega_shop/shop_models.dart';
+import 'package:unified_esc_pos_printer/unified_esc_pos_printer.dart';
+
+const _testCorrectionKeyId = 'shop-test-2026';
+const _testCorrectionPublicKey = 'A6EHv_POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg';
+final _testCorrectionReceiptVerifier = ShopCorrectionReceiptVerifier({
+  _testCorrectionKeyId: _testCorrectionPublicKey,
+});
 
 void main() {
+  test('correction authorization receipt v3 digest is stable', () {
+    expect(
+      shopCorrectionAuthorizationReceiptDigest(
+        source: 'managed_membership_receipt_v1',
+        receiptId: '11111111-1111-4111-8111-111111111111',
+        finalizationRequestId: '22222222-2222-4222-8222-222222222222',
+        workspaceId: 'workspace-1',
+        actorId: 'actor-1',
+        actorLabel: 'Workspace owner',
+        actorRole: 'owner',
+        capability: 'shop.sale.reverse',
+        commandDigest: List<String>.filled(64, '0').join(),
+        finalizedAtMillis: 1000,
+        issuedAtMillis: 1000,
+        expiresAtMillis: 301000,
+      ),
+      '5bd47b28aba9fda0f821113cad67d159c0ad94c38f052ff1a3efb42a6ce54c7a',
+    );
+  });
+
   group('menu candidate contract', () {
     test('accepts a nullable price and preserves Burmese text', () {
       final item = MenuCandidate.fromJson({
@@ -325,11 +355,189 @@ void main() {
     late ShopDatabase database;
 
     setUp(() {
-      database = ShopDatabase(NativeDatabase.memory());
+      database = ShopDatabase.withCorrectionReceiptVerifier(
+        executor: NativeDatabase.memory(),
+        correctionReceiptVerifier: _testCorrectionReceiptVerifier,
+      );
     });
 
     tearDown(() async {
       await database.close();
+    });
+
+    test('managed workspace attachment is explicit and immutable', () async {
+      expect(await database.readManagedWorkspaceBinding(), isNull);
+      await expectLater(
+        database.customStatement(
+          "INSERT INTO shop_sale_reversals (authorization_workspace_id) VALUES ('workspace-shop-test')",
+        ),
+        throwsA(
+          predicate(
+            (error) => error.toString().contains(
+              'Shop correction requires a finalized authorization proof',
+            ),
+          ),
+        ),
+      );
+      await expectLater(
+        database.attachAuthenticatedManagedWorkspace(
+          const ShopAuthenticatedWorkspaceSelection(
+            workspaceId: 'workspace-shop-test',
+            actorId: 'owner-test',
+            directoryContract: 'untrusted.workspace_directory.v1',
+          ),
+        ),
+        throwsArgumentError,
+      );
+      expect(await database.readManagedWorkspaceBinding(), isNull);
+
+      final attached = await _attachTestWorkspace(database);
+      await expectLater(
+        database.customStatement(
+          "INSERT INTO shop_sale_reversals (authorization_workspace_id) VALUES ('workspace-other')",
+        ),
+        throwsA(
+          predicate(
+            (error) => error.toString().contains(
+              'Shop correction requires a finalized authorization proof',
+            ),
+          ),
+        ),
+      );
+      await expectLater(
+        database.customStatement(
+          'INSERT INTO shop_wallet_reversal_reconciliations '
+          '(reversal_id, authorization_workspace_id) '
+          "VALUES ('missing-reversal', 'workspace-shop-test')",
+        ),
+        throwsA(
+          predicate(
+            (error) => error.toString().contains(
+              'Shop reconciliation requires a finalized authorization proof',
+            ),
+          ),
+        ),
+      );
+      final replay = await database.attachAuthenticatedManagedWorkspace(
+        const ShopAuthenticatedWorkspaceSelection(
+          workspaceId: 'workspace-shop-test',
+          actorId: 'owner-test',
+        ),
+      );
+      expect(replay.workspaceId, attached.workspaceId);
+      expect(replay.attachedActorId, 'owner-test');
+      expect(replay.attachedAtMillis, attached.attachedAtMillis);
+
+      await expectLater(
+        database.attachAuthenticatedManagedWorkspace(
+          const ShopAuthenticatedWorkspaceSelection(
+            workspaceId: 'workspace-shop-test',
+            actorId: 'successor-owner',
+          ),
+        ),
+        throwsA(isA<StateError>()),
+      );
+
+      await expectLater(
+        database.attachAuthenticatedManagedWorkspace(
+          const ShopAuthenticatedWorkspaceSelection(
+            workspaceId: 'workspace-other',
+            actorId: 'owner-other',
+          ),
+        ),
+        throwsA(isA<StateError>()),
+      );
+      for (final statement in [
+        "UPDATE shop_managed_workspace_binding SET workspace_id = 'workspace-other'",
+        'DELETE FROM shop_managed_workspace_binding',
+        "INSERT OR REPLACE INTO shop_managed_workspace_binding "
+            '(singleton, workspace_id, discovery_contract, '
+            'attached_actor_id, attached_at_millis) VALUES '
+            "(1, 'workspace-other', '$shopManagedWorkspaceDirectoryContract', "
+            "'owner-other', 1)",
+      ]) {
+        await expectLater(
+          database.customStatement(statement),
+          throwsA(anything),
+        );
+      }
+      expect(
+        (await database.readManagedWorkspaceBinding())?.workspaceId,
+        'workspace-shop-test',
+      );
+    });
+
+    test('cloned pre-correction databases expose why global consumption stays closed', () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'shop-correction-clone-',
+      );
+      final sourceFile = File('${directory.path}/source.sqlite');
+      final firstCloneFile = File('${directory.path}/first.sqlite');
+      final secondCloneFile = File('${directory.path}/second.sqlite');
+      final source = ShopDatabase.withCorrectionReceiptVerifier(
+        executor: NativeDatabase(sourceFile),
+        correctionReceiptVerifier: _testCorrectionReceiptVerifier,
+      );
+      try {
+        await _attachTestWorkspace(source);
+        await source.addProduct(
+          id: 'clone-replay-product',
+          name: 'Clone replay item',
+          priceMmk: 2500,
+          openingStock: 3,
+        );
+        await source.openCashShift(
+          operationId: 'clone-replay-shift',
+          operatorLabel: 'May',
+          openingFloatMmk: 10000,
+        );
+        final sale = await source.recordCashSale(
+          operationId: 'clone-replay-sale',
+          lines: const [
+            ShopSaleLineInput(productId: 'clone-replay-product', quantity: 2),
+          ],
+        );
+        final command = await source.previewFullSaleReversal(
+          operationId: 'clone-replay-reversal',
+          saleId: sale.id,
+          restockItems: true,
+          reason: 'Document the blocked cross-database replay boundary',
+          confirmCashReturned: true,
+        );
+        final authorization = await _correctionAuthorization(
+          command.commandDigest,
+          capability: 'shop.sale.reverse',
+          receiptId: 'clone-replay-receipt',
+        );
+        await source.close();
+        await sourceFile.copy(firstCloneFile.path);
+        await sourceFile.copy(secondCloneFile.path);
+
+        for (final cloneFile in [firstCloneFile, secondCloneFile]) {
+          final clone = ShopDatabase.withCorrectionReceiptVerifier(
+            executor: NativeDatabase(cloneFile),
+            correctionReceiptVerifier: _testCorrectionReceiptVerifier,
+          );
+          try {
+            final reversal = await clone.recordAuthorizedFullSaleReversal(
+              command: command,
+              authorization: authorization,
+            );
+            expect(reversal.authorizationReceiptId, authorization.receiptId);
+            expect((await clone.readActiveProducts()).single.onHand, 3);
+            expect(await clone.countSales(), 1);
+          } finally {
+            await clone.close();
+          }
+        }
+      } finally {
+        try {
+          await source.close();
+        } on Object {
+          // The source is deliberately closed before its file is cloned.
+        }
+        await directory.delete(recursive: true);
+      }
     });
 
     test(
@@ -365,11 +573,873 @@ void main() {
         expect(history.single.lines.single.lineTotalMmk, 5000);
 
         final printLines = shopReceiptTextLines(receipt, myanmar: true);
+        expect(printLines.first, 'SHOP');
+        expect(printLines, isNot(contains('SUPERMEGA SHOP')));
+        expect(shopPrinterTestTextLines.first, 'Shop');
+        expect(shopPrinterTestTextLines, isNot(contains('SuperMega Shop')));
         expect(printLines, contains('လက်ဖက်ရည် x2'));
         expect(printLines, contains('စုစုပေါင်း: 5,000 MMK'));
-        expect(printLines, contains('ငွေပေးချေမှု: CASH'));
+        expect(printLines, contains('အရောင်းအမှတ် ${receipt.id}'));
+        expect(printLines, contains('ငွေပေးချေမှု: ငွေသား'));
+        expect(printLines, isNot(contains('Sale ${receipt.id}')));
+        expect(printLines.join('\n'), isNot(contains('CASH')));
+
+        final englishPrintLines = shopReceiptTextLines(receipt, myanmar: false);
+        expect(englishPrintLines, contains('Sale ${receipt.id}'));
+        expect(englishPrintLines, contains('Payment: Cash'));
       },
     );
+
+    test('authorized cash reversal preserves snapshots, restocks once, and closes honestly', () async {
+      await database.addProduct(
+        id: 'tea-reversal',
+        name: 'Original Tea',
+        priceMmk: 2500,
+        openingStock: 5,
+      );
+      final shift = await database.openCashShift(
+        operationId: 'cash-reversal-shift',
+        operatorLabel: 'May',
+        openingFloatMmk: 10000,
+      );
+      final sale = await database.recordCashSale(
+        operationId: 'cash-reversal-sale',
+        lines: const [
+          ShopSaleLineInput(productId: 'tea-reversal', quantity: 2),
+        ],
+      );
+      final reviewedBeforeReversal = await database.readCashShiftReview(
+        shift.id,
+      );
+      await database.customStatement(
+        'UPDATE shop_products SET name = ?, price_mmk = ?, archived = 1 '
+        'WHERE id = ?',
+        ['Renamed Tea', 9000, 'tea-reversal'],
+      );
+
+      await expectLater(
+        database.previewFullSaleReversal(
+          operationId: 'cash-reversal-without-return-confirmation',
+          saleId: sale.id,
+          restockItems: true,
+          reason: 'Customer returned the complete sale',
+          confirmCashReturned: false,
+        ),
+        throwsArgumentError,
+      );
+
+      final command = await database.previewFullSaleReversal(
+        operationId: 'cash-reversal-1',
+        saleId: sale.id,
+        restockItems: true,
+        reason: 'Customer returned the complete sale',
+        confirmCashReturned: true,
+      );
+      final authorization = await _correctionAuthorization(
+        command.commandDigest,
+        capability: 'shop.sale.reverse',
+        receiptId: 'cash-reversal-receipt',
+      );
+      await expectLater(
+        database.recordAuthorizedFullSaleReversal(
+          command: command,
+          authorization: authorization,
+        ),
+        throwsA(isA<StateError>()),
+      );
+      expect(await database.readManagedWorkspaceBinding(), isNull);
+      expect(await database.readSaleReversalForSale(sale.id), isNull);
+      await _attachTestWorkspace(database);
+      await expectLater(
+        database.recordAuthorizedFullSaleReversal(
+          command: command,
+          authorization: await _correctionAuthorization(
+            command.commandDigest,
+            capability: 'shop.sale.reverse',
+            receiptId: 'foreign-workspace-receipt',
+            workspaceId: 'workspace-other',
+          ),
+        ),
+        throwsA(isA<StateError>()),
+      );
+      await expectLater(
+        database.recordAuthorizedFullSaleReversal(
+          command: command,
+          authorization: await _correctionAuthorization(
+            command.commandDigest,
+            capability: 'shop.sale.reverse',
+            receiptId: 'foreign-actor-receipt',
+            actorId: 'owner-other',
+          ),
+        ),
+        throwsA(isA<StateError>()),
+      );
+      expect(await database.readSaleReversalForSale(sale.id), isNull);
+      for (final tamperedAuthorization in [
+        await _correctionAuthorization(
+          command.commandDigest,
+          capability: 'shop.sale.reverse',
+          receiptId: 'historical-v2-new-action',
+          historicalV2: true,
+        ),
+        ShopCorrectionAuthorization(
+          contract: authorization.contract,
+          receiptId: authorization.receiptId,
+          receiptDigest: List<String>.filled(64, '0').join(),
+          workspaceId: authorization.workspaceId,
+          actorId: authorization.actorId,
+          actorLabel: authorization.actorLabel,
+          actorRole: authorization.actorRole,
+          capability: authorization.capability,
+          source: authorization.source,
+          commandDigest: authorization.commandDigest,
+          finalizationRequestId: authorization.finalizationRequestId,
+          finalizedAtMillis: authorization.finalizedAtMillis,
+          issuedAtMillis: authorization.issuedAtMillis,
+          expiresAtMillis: authorization.expiresAtMillis,
+          keyId: authorization.keyId,
+          signature: authorization.signature,
+        ),
+        ShopCorrectionAuthorization(
+          contract: authorization.contract,
+          receiptId: authorization.receiptId,
+          receiptDigest: authorization.receiptDigest,
+          workspaceId: authorization.workspaceId,
+          actorId: authorization.actorId,
+          actorLabel: 'Different owner',
+          actorRole: authorization.actorRole,
+          capability: authorization.capability,
+          source: authorization.source,
+          commandDigest: authorization.commandDigest,
+          finalizationRequestId: authorization.finalizationRequestId,
+          finalizedAtMillis: authorization.finalizedAtMillis,
+          issuedAtMillis: authorization.issuedAtMillis,
+          expiresAtMillis: authorization.expiresAtMillis,
+          keyId: authorization.keyId,
+          signature: authorization.signature,
+        ),
+        ShopCorrectionAuthorization(
+          contract: authorization.contract,
+          receiptId: authorization.receiptId,
+          receiptDigest: authorization.receiptDigest,
+          workspaceId: authorization.workspaceId,
+          actorId: authorization.actorId,
+          actorLabel: authorization.actorLabel,
+          actorRole: authorization.actorRole,
+          capability: authorization.capability,
+          source: authorization.source,
+          commandDigest: authorization.commandDigest,
+          finalizationRequestId: authorization.finalizationRequestId,
+          finalizedAtMillis: authorization.finalizedAtMillis,
+          issuedAtMillis: authorization.issuedAtMillis,
+          expiresAtMillis: authorization.expiresAtMillis,
+          keyId: authorization.keyId,
+          signature: base64Url
+              .encode(List<int>.filled(64, 0))
+              .replaceAll('=', ''),
+        ),
+      ]) {
+        await expectLater(
+          database.recordAuthorizedFullSaleReversal(
+            command: command,
+            authorization: tamperedAuthorization,
+          ),
+          throwsA(isA<StateError>()),
+        );
+      }
+      expect(await database.readSaleReversalForSale(sale.id), isNull);
+      expect(
+        (await database
+                .customSelect(
+                  'SELECT on_hand FROM shop_products WHERE id = ?',
+                  variables: [const Variable<String>('tea-reversal')],
+                )
+                .getSingle())
+            .read<int>('on_hand'),
+        3,
+      );
+      final alteredAmount = ShopFullSaleReversalCommand(
+        operationId: command.operationId,
+        saleId: command.saleId,
+        saleSnapshotDigest: command.saleSnapshotDigest,
+        requestFingerprint: command.requestFingerprint,
+        commandDigest: command.commandDigest,
+        originalTotalMmk: command.originalTotalMmk + 1,
+        originalPaymentMethod: command.originalPaymentMethod,
+        restockItems: command.restockItems,
+        reason: command.reason,
+        cashReturnConfirmed: command.cashReturnConfirmed,
+        expectedCashShiftId: command.expectedCashShiftId,
+        paymentResolution: command.paymentResolution,
+      );
+      await expectLater(
+        database.recordAuthorizedFullSaleReversal(
+          command: alteredAmount,
+          authorization: authorization,
+        ),
+        throwsA(isA<StateError>()),
+      );
+      final concurrentResults = await Future.wait([
+        database.recordAuthorizedFullSaleReversal(
+          command: command,
+          authorization: authorization,
+        ),
+        database.recordAuthorizedFullSaleReversal(
+          command: command,
+          authorization: authorization,
+        ),
+      ]);
+      final reversal = concurrentResults.first;
+      final replay = concurrentResults.last;
+      await expectLater(
+        database.recordAuthorizedFullSaleReversal(
+          command: command,
+          authorization: await _correctionAuthorization(
+            command.commandDigest,
+            capability: 'shop.sale.reverse',
+            receiptId: authorization.receiptId,
+            workspaceId: 'workspace-other',
+          ),
+        ),
+        throwsA(isA<StateError>()),
+      );
+      await expectLater(
+        database.recordAuthorizedFullSaleReversal(
+          command: command,
+          authorization: await _correctionAuthorization(
+            command.commandDigest,
+            capability: 'shop.sale.reverse',
+            receiptId: 'different-replay-receipt',
+          ),
+        ),
+        throwsA(isA<StateError>()),
+      );
+
+      expect(reversal.id, replay.id);
+      expect(
+        (await database
+                .customSelect(
+                  'SELECT COUNT(*) AS total '
+                  'FROM shop_correction_authorization_proofs',
+                )
+                .getSingle())
+            .read<int>('total'),
+        1,
+      );
+      expect(reversal.originalTotalMmk, 5000);
+      expect(reversal.originalPaymentMethod, 'cash');
+      expect(reversal.cashDrawerDeltaMmk, -5000);
+      expect(reversal.lines.single.productName, 'Original Tea');
+      expect(reversal.lines.single.unitPriceMmk, 2500);
+      expect(reversal.lines.single.restockQuantity, 2);
+      final product = await database
+          .customSelect(
+            'SELECT on_hand, name, price_mmk FROM shop_products WHERE id = ?',
+            variables: [const Variable<String>('tea-reversal')],
+          )
+          .getSingle();
+      expect(
+        (await database
+                .customSelect(
+                  'SELECT on_hand FROM shop_products WHERE id = ?',
+                  variables: [const Variable<String>('tea-reversal')],
+                )
+                .getSingle())
+            .read<int>('on_hand'),
+        5,
+      );
+      expect(product.read<String>('name'), 'Renamed Tea');
+      expect(product.read<int>('price_mmk'), 9000);
+      expect(await database.countStockMovements(), 3);
+      await expectLater(
+        database.customStatement(
+          'UPDATE shop_stock_movements SET quantity_delta = 99 WHERE id = ?',
+          ['cash-reversal-1:reversal:0'],
+        ),
+        throwsA(anything),
+      );
+      await expectLater(
+        database.customStatement(
+          'DELETE FROM shop_stock_movements WHERE id = ?',
+          ['cash-reversal-1:reversal:0'],
+        ),
+        throwsA(anything),
+      );
+      final recent = (await database.readRecentSales()).single;
+      expect(recent.reversal?.id, reversal.id);
+      expect(recent.lines.single.productName, 'Original Tea');
+
+      final movementCount = await database.countStockMovements();
+      final outboxCount = await database.countOutboxOperations();
+      final changedCommand = await database.previewFullSaleReversal(
+        operationId: command.operationId,
+        saleId: sale.id,
+        restockItems: false,
+        reason: 'Changed retry',
+        confirmCashReturned: true,
+      );
+      await expectLater(
+        database.recordAuthorizedFullSaleReversal(
+          command: changedCommand,
+          authorization: await _correctionAuthorization(
+            changedCommand.commandDigest,
+            capability: 'shop.sale.reverse',
+            receiptId: 'changed-retry-receipt',
+          ),
+        ),
+        throwsA(isA<StateError>()),
+      );
+      expect(
+        (await database
+                .customSelect(
+                  'SELECT on_hand FROM shop_products WHERE id = ?',
+                  variables: [const Variable<String>('tea-reversal')],
+                )
+                .getSingle())
+            .read<int>('on_hand'),
+        5,
+      );
+      expect(await database.countStockMovements(), movementCount);
+      expect(await database.countOutboxOperations(), outboxCount);
+
+      final review = await database.readCashShiftReview(shift.id);
+      expect(review.cashSalesTotalMmk, 5000);
+      expect(review.cashReversalCount, 1);
+      expect(review.cashReversalTotalMmk, 5000);
+      expect(review.cashDrawerOutflowMmk, 5000);
+      expect(review.expectedCashMmk, 10000);
+      await expectLater(
+        database.closeCashShift(
+          shiftId: shift.id,
+          operationId: 'cash-reversal-stale-close',
+          seenSaleCount: reviewedBeforeReversal.saleCount,
+          seenCashTotalMmk: reviewedBeforeReversal.cashSalesTotalMmk,
+          countedCashMmk: 10000,
+        ),
+        throwsA(isA<StateError>()),
+      );
+      final closed = await database.closeCashShift(
+        shiftId: shift.id,
+        operationId: 'cash-reversal-close',
+        seenSaleCount: review.saleCount,
+        seenCashTotalMmk: review.cashSalesTotalMmk,
+        seenCashReversalCount: review.cashReversalCount,
+        seenCashDrawerOutflowMmk: review.cashDrawerOutflowMmk,
+        countedCashMmk: 10000,
+      );
+      expect(closed.cashReversalCount, 1);
+      expect(closed.cashDrawerOutflowMmk, 5000);
+      expect(closed.differenceMmk, 0);
+    });
+
+    test('database rejects a self-consistent non-five-minute authorization without writes', () async {
+      await _attachTestWorkspace(database);
+      await database.addProduct(
+        id: 'receipt-ttl-product',
+        name: 'Receipt TTL item',
+        priceMmk: 2000,
+        openingStock: 3,
+      );
+      final shift = await database.openCashShift(
+        operationId: 'receipt-ttl-shift',
+        operatorLabel: 'May',
+        openingFloatMmk: 10000,
+      );
+      final sale = await database.recordCashSale(
+        operationId: 'receipt-ttl-sale',
+        lines: const [
+          ShopSaleLineInput(productId: 'receipt-ttl-product', quantity: 1),
+        ],
+      );
+      final command = await database.previewFullSaleReversal(
+        operationId: 'receipt-ttl-reversal',
+        saleId: sale.id,
+        restockItems: true,
+        reason: 'Customer returned the complete sale',
+        confirmCashReturned: true,
+      );
+      final issuedAtMillis = DateTime.now().millisecondsSinceEpoch - 1000;
+      final expiresAtMillis =
+          issuedAtMillis + const Duration(minutes: 6).inMilliseconds;
+      const receiptId = 'receipt-with-six-minute-ttl';
+      const capability = 'shop.sale.reverse';
+      final authorization = await _correctionAuthorization(
+        command.commandDigest,
+        capability: capability,
+        receiptId: receiptId,
+        issuedAtMillis: issuedAtMillis,
+        expiresAtMillis: expiresAtMillis,
+      );
+      final movementCount = await database.countStockMovements();
+      final outboxCount = await database.countOutboxOperations();
+      final reviewBefore = await database.readCashShiftReview(shift.id);
+
+      await expectLater(
+        database.recordAuthorizedFullSaleReversal(
+          command: command,
+          authorization: authorization,
+        ),
+        throwsA(isA<StateError>()),
+      );
+
+      expect(await database.readSaleReversalForSale(sale.id), isNull);
+      expect(await database.countStockMovements(), movementCount);
+      expect(await database.countOutboxOperations(), outboxCount);
+      expect(
+        (await database
+                .customSelect(
+                  'SELECT on_hand FROM shop_products WHERE id = ?',
+                  variables: const [Variable<String>('receipt-ttl-product')],
+                )
+                .getSingle())
+            .read<int>('on_hand'),
+        2,
+      );
+      final reviewAfter = await database.readCashShiftReview(shift.id);
+      expect(reviewAfter.cashReversalCount, reviewBefore.cashReversalCount);
+      expect(
+        reviewAfter.cashDrawerOutflowMmk,
+        reviewBefore.cashDrawerOutflowMmk,
+      );
+      expect(reviewAfter.expectedCashMmk, reviewBefore.expectedCashMmk);
+    });
+
+    test(
+      'expired signed correction authorization cannot mutate records',
+      () async {
+        await _attachTestWorkspace(database);
+        await database.addProduct(
+          id: 'expired-proof-product',
+          name: 'Expired proof item',
+          priceMmk: 1500,
+          openingStock: 2,
+        );
+        await database.openCashShift(
+          operationId: 'expired-proof-shift',
+          operatorLabel: 'May',
+          openingFloatMmk: 5000,
+        );
+        final sale = await database.recordCashSale(
+          operationId: 'expired-proof-sale',
+          lines: const [
+            ShopSaleLineInput(productId: 'expired-proof-product', quantity: 1),
+          ],
+        );
+        final command = await database.previewFullSaleReversal(
+          operationId: 'expired-proof-reversal',
+          saleId: sale.id,
+          restockItems: true,
+          reason: 'Expired authorization must remain read only',
+          confirmCashReturned: true,
+        );
+        final now = DateTime.now().millisecondsSinceEpoch;
+        final authorization = await _correctionAuthorization(
+          command.commandDigest,
+          capability: 'shop.sale.reverse',
+          receiptId: 'expired-proof-receipt',
+          issuedAtMillis: now - const Duration(minutes: 10).inMilliseconds,
+          expiresAtMillis: now - const Duration(minutes: 5).inMilliseconds,
+        );
+        final movementCount = await database.countStockMovements();
+        final outboxCount = await database.countOutboxOperations();
+
+        await expectLater(
+          database.recordAuthorizedFullSaleReversal(
+            command: command,
+            authorization: authorization,
+          ),
+          throwsA(isA<StateError>()),
+        );
+
+        expect(await database.readSaleReversalForSale(sale.id), isNull);
+        expect(await database.countStockMovements(), movementCount);
+        expect(await database.countOutboxOperations(), outboxCount);
+        expect(
+          (await database
+                  .customSelect(
+                    'SELECT COUNT(*) AS total '
+                    'FROM shop_correction_authorization_proofs',
+                  )
+                  .getSingle())
+              .read<int>('total'),
+          0,
+        );
+        expect((await database.readActiveProducts()).single.onHand, 1);
+      },
+    );
+
+    test(
+      'cash reversal cannot reopen exhausted gross shift capacity',
+      () async {
+        await _attachTestWorkspace(database);
+        const maximumShiftCashMmk = 200000000000000;
+        await database.addProduct(
+          id: 'gross-cap-product',
+          name: 'Gross cap item',
+          priceMmk: 1000,
+          openingStock: 3,
+        );
+        final shift = await database.openCashShift(
+          operationId: 'gross-cap-shift',
+          operatorLabel: 'May',
+          openingFloatMmk: maximumShiftCashMmk - 1000,
+        );
+        final sale = await database.recordCashSale(
+          operationId: 'gross-cap-sale-1',
+          lines: const [
+            ShopSaleLineInput(productId: 'gross-cap-product', quantity: 1),
+          ],
+        );
+        final command = await database.previewFullSaleReversal(
+          operationId: 'gross-cap-reversal',
+          saleId: sale.id,
+          restockItems: true,
+          reason: 'Full sale returned at the gross cash boundary',
+          confirmCashReturned: true,
+        );
+        await database.recordAuthorizedFullSaleReversal(
+          command: command,
+          authorization: await _correctionAuthorization(
+            command.commandDigest,
+            capability: 'shop.sale.reverse',
+            receiptId: 'gross-cap-reversal-receipt',
+          ),
+        );
+
+        final reviewed = await database.readCashShiftReview(shift.id);
+        expect(reviewed.cashSalesTotalMmk, 1000);
+        expect(reviewed.cashDrawerOutflowMmk, 1000);
+        expect(reviewed.expectedCashMmk, maximumShiftCashMmk - 1000);
+        await expectLater(
+          database.recordCashSale(
+            operationId: 'gross-cap-sale-2',
+            lines: const [
+              ShopSaleLineInput(productId: 'gross-cap-product', quantity: 1),
+            ],
+          ),
+          throwsA(isA<StateError>()),
+        );
+        expect(await database.countSales(), 1);
+        expect((await database.readActiveProducts()).single.onHand, 3);
+
+        final unchanged = await database.readCashShiftReview(shift.id);
+        final closed = await database.closeCashShift(
+          shiftId: shift.id,
+          operationId: 'gross-cap-close',
+          seenSaleCount: unchanged.saleCount,
+          seenCashTotalMmk: unchanged.cashSalesTotalMmk,
+          seenCashReversalCount: unchanged.cashReversalCount,
+          seenCashDrawerOutflowMmk: unchanged.cashDrawerOutflowMmk,
+          countedCashMmk: unchanged.expectedCashMmk,
+        );
+        expect(closed.differenceMmk, 0);
+      },
+    );
+
+    test(
+      'cash reversal authorization stays bound to the reviewed shift',
+      () async {
+        await _attachTestWorkspace(database);
+        await database.addProduct(
+          id: 'shift-bound-return-product',
+          name: 'Shift-bound item',
+          priceMmk: 1000,
+          openingStock: 2,
+        );
+        final firstShift = await database.openCashShift(
+          operationId: 'shift-bound-first-open',
+          operatorLabel: 'May',
+          openingFloatMmk: 5000,
+        );
+        final sale = await database.recordCashSale(
+          operationId: 'shift-bound-sale',
+          lines: const [
+            ShopSaleLineInput(
+              productId: 'shift-bound-return-product',
+              quantity: 1,
+            ),
+          ],
+        );
+        final command = await database.previewFullSaleReversal(
+          operationId: 'shift-bound-reversal',
+          saleId: sale.id,
+          restockItems: true,
+          reason: 'Cash return was reviewed for the first shift',
+          confirmCashReturned: true,
+        );
+        expect(command.expectedCashShiftId, firstShift.id);
+        final firstReview = await database.readCashShiftReview(firstShift.id);
+        await database.closeCashShift(
+          shiftId: firstShift.id,
+          operationId: 'shift-bound-first-close',
+          seenSaleCount: firstReview.saleCount,
+          seenCashTotalMmk: firstReview.cashSalesTotalMmk,
+          countedCashMmk: firstReview.expectedCashMmk,
+        );
+        final secondShift = await database.openCashShift(
+          operationId: 'shift-bound-second-open',
+          operatorLabel: 'May',
+          openingFloatMmk: 5000,
+        );
+
+        await expectLater(
+          database.recordAuthorizedFullSaleReversal(
+            command: command,
+            authorization: await _correctionAuthorization(
+              command.commandDigest,
+              capability: 'shop.sale.reverse',
+              receiptId: 'shift-bound-reversal-receipt',
+            ),
+          ),
+          throwsA(isA<StateError>()),
+        );
+        expect(await database.readSaleReversalForSale(sale.id), isNull);
+        expect((await database.readActiveProducts()).single.onHand, 1);
+        expect(
+          (await database.readCashShiftReview(secondShift.id))
+              .cashDrawerOutflowMmk,
+          0,
+        );
+      },
+    );
+
+    test('wallet reversal stays externally pending until separate reconciliation', () async {
+      await _attachTestWorkspace(database);
+      await database.addProduct(
+        id: 'wallet-reversal-product',
+        name: 'Water',
+        priceMmk: 1000,
+        openingStock: 4,
+      );
+      const lines = [
+        ShopSaleLineInput(productId: 'wallet-reversal-product', quantity: 1),
+      ];
+      await database.createWalletCheckoutIntent(
+        operationId: 'wallet-reversal-sale',
+        merchant: MerchantWalletSetup(
+          provider: 'KBZPay',
+          merchantPhone: null,
+          officialQrPayload: _syntheticStaticMmqr(),
+          issuerConfirmed: true,
+        ),
+        lines: lines,
+      );
+      final sale = await database.recordSale(
+        operationId: 'wallet-reversal-sale',
+        lines: lines,
+        paymentMethod: 'kbzpay',
+        walletCheckoutOperationId: 'wallet-reversal-sale',
+      );
+      final command = await database.previewFullSaleReversal(
+        operationId: 'wallet-local-reversal',
+        saleId: sale.id,
+        restockItems: false,
+        reason: 'Duplicate wallet charge recorded locally',
+        confirmCashReturned: false,
+      );
+      var reversal = await database.recordAuthorizedFullSaleReversal(
+        command: command,
+        authorization: await _correctionAuthorization(
+          command.commandDigest,
+          capability: 'shop.sale.reverse',
+          receiptId: 'wallet-reversal-receipt',
+        ),
+      );
+      expect(reversal.paymentResolution, 'external_pending');
+      expect(reversal.walletReconciliationPending, isTrue);
+      expect(reversal.cashDrawerDeltaMmk, 0);
+      expect((await database.readActiveProducts()).single.onHand, 3);
+      final intent = await database
+          .customSelect(
+            'SELECT state FROM shop_wallet_checkout_intents '
+            'WHERE operation_id = ?',
+            variables: [const Variable<String>('wallet-reversal-sale')],
+          )
+          .getSingle();
+      expect(intent.read<String>('state'), 'completed');
+      final reversalEvent = await database
+          .customSelect(
+            'SELECT payload_json FROM shop_sync_outbox WHERE operation_id = ?',
+            variables: [const Variable<String>('wallet-local-reversal')],
+          )
+          .getSingle();
+      expect(
+        (jsonDecode(reversalEvent.read<String>('payload_json'))
+            as Map<String, dynamic>)['moneyReturned'],
+        isFalse,
+      );
+
+      await database.recordCashSale(
+        operationId: 'sale-after-pending-wallet-return',
+        lines: lines,
+      );
+      final shift = await database.openCashShift(
+        operationId: 'shift-after-pending-wallet-return',
+        operatorLabel: 'May',
+        openingFloatMmk: 0,
+      );
+      final review = await database.readCashShiftReview(shift.id);
+      expect(review.expectedCashMmk, 0);
+      await database.closeCashShift(
+        shiftId: shift.id,
+        operationId: 'close-after-pending-wallet-return',
+        seenSaleCount: review.saleCount,
+        seenCashTotalMmk: review.cashSalesTotalMmk,
+        countedCashMmk: 0,
+      );
+
+      final pendingSummary = await database.readSalesSummary(
+        startAtMillis: 0,
+        endAtMillis: DateTime.now()
+            .add(const Duration(days: 1))
+            .millisecondsSinceEpoch,
+      );
+      expect(pendingSummary.grossSaleCount, 2);
+      expect(pendingSummary.grossSalesMmk, 2000);
+      expect(pendingSummary.reversalCount, 1);
+      expect(pendingSummary.reversalMmk, 1000);
+      expect(pendingSummary.netSalesMmk, 1000);
+      expect(pendingSummary.pendingWalletReversalCount, 1);
+
+      final reconciliation = await database.previewWalletReconciliation(
+        operationId: 'wallet-return-confirmation',
+        reversalId: reversal.id,
+        outcome: 'money_returned',
+        evidenceReference: 'KBZPay merchant history reference 42',
+      );
+      expect(reconciliation.originalPaymentMethod, 'kbzpay');
+      expect(reconciliation.originalTotalMmk, 1000);
+      expect(
+        reconciliation.requestFingerprint,
+        jsonEncode(<String, Object>{
+          'operationId': 'wallet-return-confirmation',
+          'reversalId': reversal.id,
+          'originalPaymentMethod': 'kbzpay',
+          'originalTotalMmk': 1000,
+          'outcome': 'money_returned',
+          'evidenceReference': 'KBZPay merchant history reference 42',
+        }),
+      );
+      final reconciliationAuthorization = await _correctionAuthorization(
+        reconciliation.commandDigest,
+        capability: 'shop.sale.reconcile_wallet',
+        receiptId: 'wallet-confirmation-receipt',
+      );
+      await expectLater(
+        database.recordAuthorizedWalletReconciliation(
+          command: reconciliation,
+          authorization: await _correctionAuthorization(
+            reconciliation.commandDigest,
+            capability: 'shop.sale.reconcile_wallet',
+            receiptId: 'foreign-wallet-confirmation-receipt',
+            workspaceId: 'workspace-other',
+          ),
+        ),
+        throwsA(isA<StateError>()),
+      );
+      expect(
+        (await database.readSaleReversalForSale(sale.id))
+            ?.walletReconciliationPending,
+        isTrue,
+      );
+      await expectLater(
+        database.recordAuthorizedWalletReconciliation(
+          command: ShopWalletReconciliationCommand(
+            operationId: reconciliation.operationId,
+            reversalId: reconciliation.reversalId,
+            originalPaymentMethod: reconciliation.originalPaymentMethod,
+            originalTotalMmk: reconciliation.originalTotalMmk + 1,
+            requestFingerprint: reconciliation.requestFingerprint,
+            commandDigest: reconciliation.commandDigest,
+            outcome: reconciliation.outcome,
+            evidenceReference: reconciliation.evidenceReference,
+          ),
+          authorization: reconciliationAuthorization,
+        ),
+        throwsA(isA<StateError>()),
+      );
+      expect(
+        (await database.readSaleReversalForSale(sale.id))
+            ?.walletReconciliationPending,
+        isTrue,
+      );
+      await expectLater(
+        database.recordAuthorizedWalletReconciliation(
+          command: reconciliation,
+          authorization: await _correctionAuthorization(
+            reconciliation.commandDigest,
+            capability: 'shop.sale.reconcile_wallet',
+            receiptId: 'wallet-reversal-receipt',
+          ),
+        ),
+        throwsA(isA<StateError>()),
+      );
+      expect(
+        (await database.readSaleReversalForSale(sale.id))
+            ?.walletReconciliationPending,
+        isTrue,
+      );
+      reversal = await database.recordAuthorizedWalletReconciliation(
+        command: reconciliation,
+        authorization: reconciliationAuthorization,
+      );
+      final reconciliationReplay = await database
+          .recordAuthorizedWalletReconciliation(
+            command: reconciliation,
+            authorization: reconciliationAuthorization,
+          );
+      await expectLater(
+        database.recordAuthorizedWalletReconciliation(
+          command: ShopWalletReconciliationCommand(
+            operationId: reconciliation.operationId,
+            reversalId: reconciliation.reversalId,
+            originalPaymentMethod: 'wavepay',
+            originalTotalMmk: reconciliation.originalTotalMmk,
+            requestFingerprint: reconciliation.requestFingerprint,
+            commandDigest: reconciliation.commandDigest,
+            outcome: reconciliation.outcome,
+            evidenceReference: reconciliation.evidenceReference,
+          ),
+          authorization: reconciliationAuthorization,
+        ),
+        throwsA(isA<StateError>()),
+      );
+      expect(
+        (await database
+                .customSelect(
+                  'SELECT COUNT(*) AS count '
+                  'FROM shop_wallet_reversal_reconciliations',
+                )
+                .getSingle())
+            .read<int>('count'),
+        1,
+      );
+      expect(reversal.walletReconciliationOutcome, 'money_returned');
+      expect(
+        reconciliationReplay.walletReconciliationOutcome,
+        'money_returned',
+      );
+      expect((await database.readActiveProducts()).single.onHand, 2);
+      final confirmedSummary = await database.readSalesSummary(
+        startAtMillis: 0,
+        endAtMillis: DateTime.now()
+            .add(const Duration(days: 1))
+            .millisecondsSinceEpoch,
+      );
+      expect(confirmedSummary.netSalesMmk, 1000);
+      expect(confirmedSummary.pendingWalletReversalCount, 0);
+      final confirmationEvent = await database
+          .customSelect(
+            'SELECT payload_json FROM shop_sync_outbox WHERE operation_id = ?',
+            variables: [const Variable<String>('wallet-return-confirmation')],
+          )
+          .getSingle();
+      expect(
+        (jsonDecode(confirmationEvent.read<String>('payload_json'))
+            as Map<String, dynamic>)['moneyReturned'],
+        isTrue,
+      );
+    });
 
     test('sale history searches saved items and pages beyond 30', () async {
       await database.addProduct(
@@ -1553,6 +2623,45 @@ void main() {
           operationId: 'old-sale',
           lines: const [ShopSaleLineInput(productId: 'tea', quantity: 1)],
         );
+        for (final trigger in const [
+          'shop_managed_workspace_binding_no_update',
+          'shop_managed_workspace_binding_no_delete',
+          'shop_managed_workspace_binding_insert_guard',
+          'shop_sale_reversals_require_workspace_binding',
+          'shop_wallet_reversal_reconciliations_require_workspace_binding',
+        ]) {
+          await database.customStatement('DROP TRIGGER $trigger');
+        }
+        await database.customStatement(
+          'DROP TABLE shop_managed_workspace_binding',
+        );
+        await database.customStatement(
+          'DROP TABLE shop_v13_migration_provenance',
+        );
+        await database.customStatement('DROP TABLE shop_business_profile');
+        for (final table in const [
+          'shop_sale_reversals',
+          'shop_sale_reversal_lines',
+          'shop_wallet_reversal_reconciliations',
+          'shop_sales',
+          'shop_sale_lines',
+          'shop_stock_movements',
+        ]) {
+          await database.customStatement(
+            'DROP TRIGGER IF EXISTS ${table}_no_update',
+          );
+          await database.customStatement(
+            'DROP TRIGGER IF EXISTS ${table}_no_delete',
+          );
+        }
+        await database.customStatement(
+          'DROP TABLE shop_wallet_reversal_reconciliations',
+        );
+        await database.customStatement('DROP TABLE shop_sale_reversal_lines');
+        await database.customStatement('DROP TABLE shop_sale_reversals');
+        await database.customStatement(
+          'DROP TABLE shop_correction_authorization_proofs',
+        );
         await database.customStatement('DROP TABLE shop_cash_shift_sales');
         await database.customStatement('DROP TABLE shop_cash_shifts');
         await database.customStatement('PRAGMA user_version = 5');
@@ -1621,14 +2730,20 @@ void main() {
         await tester.enterText(find.byType(TextField).last, '10000');
         await tester.tap(find.text('Start shift'));
         await tester.pumpAndSettle();
-        expect(find.text('Expected from recorded sales'), findsOneWidget);
+        expect(
+          find.text('Expected after recorded cash activity'),
+          findsOneWidget,
+        );
         await tester.enterText(find.byType(TextField).last, '10000');
         await tester.tap(find.text('Close shift'));
         await tester.pumpAndSettle();
         await tester.drag(find.byType(ListView), const Offset(0, -400));
         await tester.pumpAndSettle();
         expect(find.text('Last closed shift'), findsOneWidget);
-        expect(find.text('Expected from recorded sales'), findsOneWidget);
+        expect(
+          find.text('Expected after recorded cash activity'),
+          findsOneWidget,
+        );
         await tester.pumpWidget(const SizedBox());
         await tester.pumpWidget(
           MaterialApp(
@@ -1913,6 +3028,305 @@ void main() {
   );
 
   group('bounded printer discovery', () {
+    test('receipt raster profiles emit aligned bounded ESC POS rows', () async {
+      final receipt = ShopSaleReceipt(
+        id: 'profile-sale',
+        operationId: 'profile-sale',
+        totalMmk: 125000,
+        createdAtMillis: DateTime(2026, 10, 23, 9, 30).millisecondsSinceEpoch,
+        paymentMethod: 'cash',
+        lines: const [
+          ShopSaleReceiptLine(
+            productId: 'tea',
+            productName: 'လက်ဖက်ရည် နို့ဆီ ချိုချို',
+            unitPriceMmk: 2500,
+            quantity: 50,
+            lineTotalMmk: 125000,
+          ),
+        ],
+      );
+      final profiles = <(PaperSize, ReceiptPaperWidth)>[
+        (PaperSize.mm58, ReceiptPaperWidth.mm58),
+        (PaperSize.mm58Wide420, ReceiptPaperWidth.mm58),
+        (PaperSize.mm80, ReceiptPaperWidth.mm80),
+      ];
+
+      for (final myanmar in [false, true]) {
+        for (final (paperSize, paperWidth) in profiles) {
+          final ticket = await buildShopReceiptTicket(
+            receipt,
+            myanmar: myanmar,
+            paperWidth: paperWidth,
+            rasterPaperSize: paperSize,
+          );
+          final blocks = _rasterBlocks(ticket.bytes);
+          expect(blocks, isNotEmpty, reason: '${paperSize.name}/$myanmar');
+          expect(
+            blocks.every(
+              (block) =>
+                  block.widthBytes <= (paperSize.widthPixels + 7) ~/ 8 &&
+                  block.data.length == block.widthBytes * block.height &&
+                  block.hasInk,
+            ),
+            isTrue,
+            reason: '${paperSize.name}/$myanmar',
+          );
+          expect(
+            ticket.bytes.sublist(ticket.bytes.length - 3),
+            paperWidth.sendCutCommand ? [29, 86, 48] : [27, 100, 3],
+            reason: '${paperSize.name}/$myanmar',
+          );
+        }
+      }
+
+      final padded = await Ticket.create(PaperSize.mm58Wide420);
+      await padded.textRaster(
+        '420 dot padding proof',
+        textDirection: ui.TextDirection.rtl,
+      );
+      final paddedBlocks = _rasterBlocks(padded.bytes)
+          .where((block) => block.widthBytes == 53);
+      expect(paddedBlocks, isNotEmpty);
+      expect(
+        paddedBlocks.every(
+          (block) =>
+              block.hasInk &&
+              _unusedRasterBitsAreClear(block, logicalWidthDots: 420),
+        ),
+        isTrue,
+      );
+    });
+
+    test(
+      'actual network connector sends exact receipt bytes to loopback',
+      () async {
+        final receipt = ShopSaleReceipt(
+          id: 'loopback-sale',
+          operationId: 'loopback-sale',
+          totalMmk: 2500,
+          createdAtMillis: 0,
+          paymentMethod: 'cash',
+        );
+        final ticket = await buildShopReceiptTicket(
+          receipt,
+          myanmar: true,
+          paperWidth: ReceiptPaperWidth.mm80,
+        );
+        final server = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+        final received = BytesBuilder(copy: false);
+        final receivedDone = Completer<void>();
+        server.listen((client) {
+          client.listen(
+            received.add,
+            onDone: () {
+              if (!receivedDone.isCompleted) receivedDone.complete();
+            },
+          );
+        });
+        final manager = PrinterManager();
+        try {
+          await manager.connect(
+            NetworkPrinterDevice(
+              name: 'loopback receipt sink',
+              host: InternetAddress.loopbackIPv4.address,
+              port: server.port,
+            ),
+          );
+          await manager.printTicket(ticket);
+          await manager.disconnect();
+          await receivedDone.future.timeout(const Duration(seconds: 2));
+          final bytes = received.takeBytes();
+          expect(bytes.take(2).toList(), [27, 64]);
+          expect(bytes.skip(2).toList(), ticket.bytes);
+        } finally {
+          await manager.dispose();
+          await server.close();
+        }
+      },
+    );
+
+    test(
+      'network connector reports connection refusal without retrying',
+      () async {
+        final reservation = await ServerSocket.bind(
+          InternetAddress.loopbackIPv4,
+          0,
+        );
+        final refusedPort = reservation.port;
+        await reservation.close();
+        final manager = PrinterManager();
+        try {
+          await expectLater(
+            manager.connect(
+              NetworkPrinterDevice(
+                name: 'closed loopback receipt sink',
+                host: InternetAddress.loopbackIPv4.address,
+                port: refusedPort,
+              ),
+              timeout: const Duration(milliseconds: 250),
+            ),
+            throwsA(isA<PrinterConnectionException>()),
+          );
+        } finally {
+          await manager.dispose();
+        }
+      },
+    );
+
+    test(
+      'network reset after a partial write requires an explicit retry',
+      () async {
+        final server = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+        final clients = <Socket>[];
+        final firstPrefix = BytesBuilder(copy: false);
+        final firstReset = Completer<void>();
+        final retryReceived = BytesBuilder(copy: false);
+        final retryDone = Completer<void>();
+        var connections = 0;
+        final subscription = server.listen((client) {
+          clients.add(client);
+          connections++;
+          if (connections == 1) {
+            client.listen(
+              (bytes) {
+                firstPrefix.add(bytes);
+                if (firstPrefix.length > 2 && !firstReset.isCompleted) {
+                  client.destroy();
+                  firstReset.complete();
+                }
+              },
+              onError: (_) {
+                if (!firstReset.isCompleted) firstReset.complete();
+              },
+              onDone: () {
+                if (!firstReset.isCompleted) firstReset.complete();
+              },
+              cancelOnError: true,
+            );
+            return;
+          }
+          client.listen(
+            retryReceived.add,
+            onDone: () {
+              if (!retryDone.isCompleted) retryDone.complete();
+            },
+          );
+        });
+        final manager = PrinterManager(
+          networkConnector: NetworkConnector(
+            writeTimeout: const Duration(seconds: 2),
+          ),
+        );
+        final device = NetworkPrinterDevice(
+          name: 'partial loopback receipt sink',
+          host: InternetAddress.loopbackIPv4.address,
+          port: server.port,
+        );
+        final firstAttempt = List<int>.filled(
+          16 * 1024 * 1024,
+          0x55,
+          growable: false,
+        );
+        const retry = [1, 2, 3, 4];
+        try {
+          await manager.connect(device);
+          await expectLater(
+            manager.printBytes(firstAttempt),
+            throwsA(isA<PrinterWriteException>()),
+          );
+          await firstReset.future.timeout(const Duration(seconds: 2));
+          final prefix = firstPrefix.takeBytes();
+          expect(prefix.take(2).toList(), [27, 64]);
+          expect(prefix.length, greaterThan(2));
+          expect(prefix.length, lessThan(firstAttempt.length + 2));
+          expect(manager.state, PrinterConnectionState.disconnected);
+          expect(connections, 1);
+
+          await expectLater(
+            manager.printBytes(retry),
+            throwsA(isA<PrinterStateException>()),
+          );
+          expect(connections, 1);
+
+          await manager.connect(device);
+          await manager.printBytes(retry);
+          await manager.disconnect();
+          await retryDone.future.timeout(const Duration(seconds: 2));
+          expect(connections, 2);
+          expect(retryReceived.takeBytes(), [27, 64, ...retry]);
+        } finally {
+          await manager.dispose();
+          for (final client in clients) {
+            client.destroy();
+          }
+          await subscription.cancel();
+          await server.close();
+        }
+      },
+    );
+
+    test(
+      'network write timeout destroys the socket without an automatic retry',
+      () async {
+        final server = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+        final clientClosed = Completer<void>();
+        server.listen((client) {
+          client.listen(
+            (_) {},
+            onDone: () {
+              if (!clientClosed.isCompleted) clientClosed.complete();
+            },
+            onError: (_) {
+              if (!clientClosed.isCompleted) clientClosed.complete();
+            },
+            cancelOnError: true,
+          );
+        });
+        var flushCalls = 0;
+        final stalledFlush = Completer<void>();
+        final connector = NetworkConnector(
+          writeTimeout: const Duration(milliseconds: 25),
+          flushOperation: () {
+            flushCalls++;
+            if (flushCalls == 1) return Future<void>.value();
+            return stalledFlush.future;
+          },
+        );
+        final manager = PrinterManager(networkConnector: connector);
+        try {
+          await manager.connect(
+            NetworkPrinterDevice(
+              name: 'stalled loopback receipt sink',
+              host: InternetAddress.loopbackIPv4.address,
+              port: server.port,
+            ),
+          );
+          await expectLater(
+            manager.printBytes([1, 2, 3]),
+            throwsA(
+              isA<PrinterWriteException>().having(
+                (error) => error.cause,
+                'cause',
+                isA<TimeoutException>(),
+              ),
+            ),
+          );
+          expect(manager.state, PrinterConnectionState.disconnected);
+          expect(flushCalls, 2);
+          await expectLater(
+            manager.printBytes([4, 5, 6]),
+            throwsA(isA<PrinterStateException>()),
+          );
+          expect(flushCalls, 2);
+          await clientClosed.future.timeout(const Duration(seconds: 2));
+        } finally {
+          if (!stalledFlush.isCompleted) stalledFlush.complete();
+          await manager.dispose();
+          await server.close();
+        }
+      },
+    );
+
     test(
       'paper width persists and a changed profile requires retesting',
       () async {
@@ -2144,6 +3558,142 @@ void main() {
     });
   });
 }
+
+List<({int widthBytes, int height, List<int> data, bool hasInk})> _rasterBlocks(
+  List<int> bytes,
+) {
+  final blocks =
+      <({int widthBytes, int height, List<int> data, bool hasInk})>[];
+  for (var index = 0; index + 8 <= bytes.length;) {
+    if (bytes[index] != 29 ||
+        bytes[index + 1] != 118 ||
+        bytes[index + 2] != 48) {
+      index++;
+      continue;
+    }
+    if (bytes[index + 3] != 0) {
+      throw StateError('Unexpected GS v 0 density mode.');
+    }
+    final widthBytes = bytes[index + 4] | (bytes[index + 5] << 8);
+    final height = bytes[index + 6] | (bytes[index + 7] << 8);
+    final dataLength = widthBytes * height;
+    if (index + 8 + dataLength > bytes.length) {
+      throw StateError('Truncated GS v 0 raster block.');
+    }
+    final data = bytes.sublist(index + 8, index + 8 + dataLength);
+    blocks.add((
+      widthBytes: widthBytes,
+      height: height,
+      data: data,
+      hasInk: data.any((byte) => byte != 0),
+    ));
+    index += 8 + dataLength;
+  }
+  return blocks;
+}
+
+bool _unusedRasterBitsAreClear(
+  ({int widthBytes, int height, List<int> data, bool hasInk}) block, {
+  required int logicalWidthDots,
+}) {
+  final unusedBits = block.widthBytes * 8 - logicalWidthDots;
+  if (unusedBits <= 0) return true;
+  final unusedMask = (1 << unusedBits) - 1;
+  for (var row = 0; row < block.height; row++) {
+    if ((block.data[(row + 1) * block.widthBytes - 1] & unusedMask) != 0) {
+      return false;
+    }
+  }
+  return true;
+}
+
+Future<ShopCorrectionAuthorization> _correctionAuthorization(
+  String commandDigest, {
+  required String capability,
+  required String receiptId,
+  String workspaceId = 'workspace-shop-test',
+  String actorId = 'owner-test',
+  String actorLabel = 'Test owner',
+  int? issuedAtMillis,
+  int? expiresAtMillis,
+  bool historicalV2 = false,
+}) async {
+  final now = DateTime.now().millisecondsSinceEpoch;
+  final issued = issuedAtMillis ?? now - 1000;
+  final expires =
+      expiresAtMillis ?? issued + const Duration(minutes: 5).inMilliseconds;
+  const actorRole = 'owner';
+  const source = 'managed_membership_receipt_v1';
+  const finalizationRequestId = '22222222-2222-4222-8222-222222222222';
+  final receiptDigest = historicalV2
+      ? shopHistoricalCorrectionAuthorizationReceiptDigestV2(
+          source: source,
+          receiptId: receiptId,
+          workspaceId: workspaceId,
+          actorId: actorId,
+          actorLabel: actorLabel,
+          actorRole: actorRole,
+          capability: capability,
+          commandDigest: commandDigest,
+          issuedAtMillis: issued,
+          expiresAtMillis: expires,
+        )
+      : shopCorrectionAuthorizationReceiptDigest(
+          source: source,
+          receiptId: receiptId,
+          workspaceId: workspaceId,
+          actorId: actorId,
+          actorLabel: actorLabel,
+          actorRole: actorRole,
+          capability: capability,
+          commandDigest: commandDigest,
+          finalizationRequestId: finalizationRequestId,
+          finalizedAtMillis: issued,
+          issuedAtMillis: issued,
+          expiresAtMillis: expires,
+        );
+  final keyPair = await Ed25519().newKeyPairFromSeed(
+    List<int>.generate(32, (index) => index),
+  );
+  final signed = await Ed25519().sign(
+    utf8.encode(
+      shopCorrectionAuthorizationSignatureMessage(
+        keyId: _testCorrectionKeyId,
+        receiptDigest: receiptDigest,
+      ),
+    ),
+    keyPair: keyPair,
+  );
+  return ShopCorrectionAuthorization(
+    contract: historicalV2
+        ? shopHistoricalCorrectionAuthorizationReceiptContractV2
+        : shopCorrectionAuthorizationReceiptContract,
+    receiptId: receiptId,
+    receiptDigest: receiptDigest,
+    workspaceId: workspaceId,
+    actorId: actorId,
+    actorLabel: actorLabel,
+    actorRole: actorRole,
+    capability: capability,
+    source: source,
+    commandDigest: commandDigest,
+    finalizationRequestId: historicalV2 ? null : finalizationRequestId,
+    finalizedAtMillis: historicalV2 ? null : issued,
+    issuedAtMillis: issued,
+    expiresAtMillis: expires,
+    keyId: _testCorrectionKeyId,
+    signature: base64Url.encode(signed.bytes).replaceAll('=', ''),
+  );
+}
+
+Future<ShopManagedWorkspaceBinding> _attachTestWorkspace(
+  ShopDatabase database,
+) => database.attachAuthenticatedManagedWorkspace(
+  const ShopAuthenticatedWorkspaceSelection(
+    workspaceId: 'workspace-shop-test',
+    actorId: 'owner-test',
+  ),
+);
 
 Uint8List _pngBytes() {
   return Uint8List.fromList([

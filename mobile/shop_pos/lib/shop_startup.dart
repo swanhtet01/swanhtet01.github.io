@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
@@ -14,6 +15,10 @@ import 'shop_database.dart';
 
 typedef PickShopBackup = Future<XFile?> Function();
 typedef BuildOpenedShop = Widget Function(ShopDatabase database, bool myanmar);
+typedef CloseOpenedShopDatabase = Future<void> Function(ShopDatabase database);
+typedef VerifyShopDatabaseFile = Future<void> Function(File file);
+typedef OpenShopDatabase = ShopDatabase Function(Directory documents);
+typedef VerifyOpenedShopDatabase = Future<void> Function(ShopDatabase database);
 
 /// Selects a new local Shop or restores an archive before Drift opens a file.
 /// An existing database never enters the restore path.
@@ -24,6 +29,10 @@ class ShopStartup extends StatefulWidget {
     required this.buildShop,
     this.pickBackup,
     this.importScratchRoot,
+    this.closeDatabase,
+    this.verifyDatabaseFile,
+    this.databaseFactory,
+    this.verifyOpenedDatabase,
     super.key,
   });
 
@@ -32,6 +41,22 @@ class ShopStartup extends StatefulWidget {
   final BuildOpenedShop buildShop;
   final PickShopBackup? pickBackup;
   final Directory? importScratchRoot;
+
+  /// Application callers use [ShopDatabase.close]. Tests may inject a wrapper
+  /// so platform file-handle release can be awaited deterministically.
+  final CloseOpenedShopDatabase? closeDatabase;
+
+  /// Defaults to the isolated, fail-closed snapshot preflight. Tests may use a
+  /// same-isolate verifier so Flutter's fake-async widget zone cannot stall it.
+  final VerifyShopDatabaseFile? verifyDatabaseFile;
+
+  /// Defaults to the platform Drift opener. Tests may use a same-isolate
+  /// native executor while retaining the same eager semantic verification.
+  final OpenShopDatabase? databaseFactory;
+
+  /// Defaults to the database's eager semantic verifier. Widget tests may run
+  /// that same verifier in Flutter's real-async zone.
+  final VerifyOpenedShopDatabase? verifyOpenedDatabase;
 
   @override
   State<ShopStartup> createState() => _ShopStartupState();
@@ -43,7 +68,9 @@ class _ShopStartupState extends State<ShopStartup> {
   bool _checking = true;
   bool _busy = false;
   bool _blocked = false;
+  bool _opening = false;
   Widget? _openedShop;
+  ShopDatabase? _openedDatabase;
   File? _selectedArchive;
   String? _selectedName;
   String? _message;
@@ -64,7 +91,7 @@ class _ShopStartupState extends State<ShopStartup> {
   }
 
   Future<bool> _hasSidecar() async {
-    for (final suffix in const ['-wal', '-shm']) {
+    for (final suffix in const ['-journal', '-wal', '-shm']) {
       if (await FileSystemEntity.type(
             '${_databaseFile.path}$suffix',
             followLinks: false,
@@ -81,7 +108,7 @@ class _ShopStartupState extends State<ShopStartup> {
       final presence = await ShopBackup.inspectStore(_databaseFile);
       if (!mounted) return;
       if (presence == ShopStorePresence.existing) {
-        _openShop();
+        await _openShop();
       } else {
         setState(() {
           _blocked = presence != ShopStorePresence.empty;
@@ -105,13 +132,75 @@ class _ShopStartupState extends State<ShopStartup> {
     }
   }
 
-  void _openShop() {
-    final database = ShopDatabase.inPrivateDocuments(widget.documents);
-    setState(() {
-      _openedShop = widget.buildShop(database, _myanmar);
-      _checking = false;
-      _busy = false;
-    });
+  Future<void> _closeDatabase(ShopDatabase database) =>
+      (widget.closeDatabase ?? (database) => database.close())(database);
+
+  Future<void> _openShop() async {
+    if (_opening || _openedDatabase != null) return;
+    _opening = true;
+    ShopDatabase? pendingDatabase;
+    try {
+      if (await _databaseFile.length() > 0) {
+        final verifier = widget.verifyDatabaseFile;
+        if (verifier == null) {
+          final databasePath = _databaseFile.path;
+          await Isolate.run(
+            () => ShopBackup.verifySnapshot(
+              File(databasePath),
+              allowRuntimeUnboundCorrectionHistory: true,
+            ),
+          );
+        } else {
+          await verifier(_databaseFile);
+        }
+      }
+      pendingDatabase =
+          widget.databaseFactory?.call(widget.documents) ??
+          ShopDatabase.inPrivateDocuments(widget.documents);
+
+      // Opening Drift is deliberately eager here. The verified database stays
+      // local until migrations, structure, and semantic audit checks pass, so
+      // no application widget can observe an unsafe existing or restored file.
+      final openedVerifier = widget.verifyOpenedDatabase;
+      if (openedVerifier == null) {
+        await pendingDatabase.verifyReadyForUse();
+      } else {
+        await openedVerifier(pendingDatabase);
+      }
+      if (!mounted) return;
+
+      final openedShop = widget.buildShop(pendingDatabase, _myanmar);
+      if (!mounted) return;
+
+      final acceptedDatabase = pendingDatabase;
+      setState(() {
+        _openedDatabase = acceptedDatabase;
+        _openedShop = openedShop;
+        _checking = false;
+        _busy = false;
+        _message = null;
+      });
+      pendingDatabase = null;
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _blocked = true;
+          _checking = false;
+          _busy = false;
+          _message = shopCopy(
+            _myanmar,
+            'Shop found local data it cannot safely open. Your records were not changed. Close the app and contact support.',
+            'Shop တွင် လုံခြုံစွာ မဖွင့်နိုင်သော စက်တွင်းဒေတာ တွေ့ရှိသည်။ မှတ်တမ်းများ မပြောင်းလဲပါ။ အက်ပ်ကို ပိတ်ပြီး အကူအညီတောင်းပါ။',
+          );
+        });
+      }
+    } finally {
+      _opening = false;
+      final rejectedDatabase = pendingDatabase;
+      if (rejectedDatabase != null) {
+        await _closeDatabase(rejectedDatabase);
+      }
+    }
   }
 
   Future<void> _startNew() async {
@@ -119,7 +208,7 @@ class _ShopStartupState extends State<ShopStartup> {
     setState(() => _busy = true);
     try {
       await ShopBackup.reserveNewStore(_databaseFile);
-      if (mounted) _openShop();
+      if (mounted) await _openShop();
     } catch (_) {
       if (mounted) {
         setState(() {
@@ -261,7 +350,7 @@ class _ShopStartupState extends State<ShopStartup> {
       );
       _password.clear();
       removeArchive = true;
-      if (mounted) _openShop();
+      if (mounted) await _openShop();
     } catch (_) {
       _password.clear();
       final targetType = await FileSystemEntity.type(
@@ -317,6 +406,9 @@ class _ShopStartupState extends State<ShopStartup> {
   @override
   void dispose() {
     _password.dispose();
+    final database = _openedDatabase;
+    _openedDatabase = null;
+    if (database != null) unawaited(_closeDatabase(database));
     final archive = _selectedArchive;
     if (archive != null) {
       unawaited(() async {
@@ -335,7 +427,7 @@ class _ShopStartupState extends State<ShopStartup> {
     final openedShop = _openedShop;
     if (openedShop != null) return openedShop;
     return MaterialApp(
-      title: 'SuperMega Shop',
+      title: 'Shop',
       debugShowCheckedModeBanner: false,
       locale: Locale(_myanmar ? 'my' : 'en'),
       supportedLocales: const [Locale('en'), Locale('my')],
@@ -355,6 +447,30 @@ class _ShopStartupState extends State<ShopStartup> {
           surface: Colors.white,
         ),
         scaffoldBackgroundColor: const Color(0xfff5f7fb),
+        textTheme: TextTheme(
+          headlineMedium: TextStyle(
+            fontSize: _myanmar ? 24 : 30,
+            fontWeight: _myanmar ? FontWeight.w600 : FontWeight.w700,
+            height: _myanmar ? 1.4 : 1.15,
+            letterSpacing: _myanmar ? 0 : -0.4,
+          ),
+        ),
+        filledButtonTheme: FilledButtonThemeData(
+          style: FilledButton.styleFrom(
+            minimumSize: const Size(0, 48),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(11),
+            ),
+          ),
+        ),
+        outlinedButtonTheme: OutlinedButtonThemeData(
+          style: OutlinedButton.styleFrom(
+            minimumSize: const Size(0, 48),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(11),
+            ),
+          ),
+        ),
       ),
       home: Scaffold(
         body: Center(
@@ -367,9 +483,11 @@ class _ShopStartupState extends State<ShopStartup> {
                 children: [
                   const Icon(Icons.storefront_outlined, size: 40),
                   const SizedBox(height: 24),
-                  Text(
-                    shopCopy(_myanmar, 'Start Shop', 'Shop စတင်ရန်'),
-                    style: Theme.of(context).textTheme.headlineMedium,
+                  Builder(
+                    builder: (startupContext) => Text(
+                      shopCopy(_myanmar, 'Start Shop', 'Shop စတင်ရန်'),
+                      style: Theme.of(startupContext).textTheme.headlineMedium,
+                    ),
                   ),
                   const SizedBox(height: 16),
                   if (_checking) ...[

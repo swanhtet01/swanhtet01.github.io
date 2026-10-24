@@ -87,11 +87,11 @@ class _ShopCashShiftScreenState extends State<ShopCashShiftScreen> {
               'Finish or cancel the pending wallet checkout first.',
               'ဆိုင်းငံ့ထားသော ဖုန်းငွေပေးချေမှုအရောင်းကို အရင်ပြီးစီးစေပါ သို့မဟုတ် ပယ်ဖျက်ပါ။',
             )
-          : detail.contains('Sales changed')
+          : detail.contains('Shift activity changed')
           ? shopCopy(
               widget.myanmar,
-              'A sale changed the total. Review the shift again.',
-              'အရောင်းပြောင်းလဲသွားပါသည်။ တာဝန်ချိန်စာရင်းကို ပြန်စစ်ပါ။',
+              'Recorded cash activity changed. Review the shift again.',
+              'မှတ်တမ်းရှိ ငွေသားအဝင်အထွက် ပြောင်းလဲသွားသောကြောင့် တာဝန်ချိန်ကို ပြန်စစ်ပါ။',
             )
           : shopCopy(widget.myanmar, english, burmese);
     });
@@ -160,7 +160,7 @@ class _ShopCashShiftScreenState extends State<ShopCashShiftScreen> {
             shopCopy(widget.myanmar, 'Cash difference', 'ငွေသားကွာခြားချက်'),
           ),
           content: Text(
-            '${shopCopy(widget.myanmar, 'Expected from recorded sales', 'မှတ်တမ်းရှိ အရောင်းအရ မျှော်မှန်းငွေ')}: '
+            '${shopCopy(widget.myanmar, 'Expected after recorded cash activity', 'မှတ်တမ်းရှိ ငွေသားအဝင်အထွက်ပြီးနောက် မျှော်မှန်းငွေ')}: '
             '${shopMmk(review.expectedCashMmk, myanmar: widget.myanmar)}\n'
             '${shopCopy(widget.myanmar, 'Counted', 'ရေတွက်ငွေ')}: '
             '${shopMmk(counted, myanmar: widget.myanmar)}\n'
@@ -197,6 +197,8 @@ class _ShopCashShiftScreenState extends State<ShopCashShiftScreen> {
         operationId: _closeOperationId ??= const Uuid().v4(),
         seenSaleCount: review.saleCount,
         seenCashTotalMmk: review.cashSalesTotalMmk,
+        seenCashReversalCount: review.cashReversalCount,
+        seenCashDrawerOutflowMmk: review.cashDrawerOutflowMmk,
         countedCashMmk: counted,
       );
       _closeOperationId = null;
@@ -354,11 +356,20 @@ class _ShopCashShiftScreenState extends State<ShopCashShiftScreen> {
                               '${MaterialLocalizations.of(context).formatShortDate(DateTime.fromMillisecondsSinceEpoch(closedAt))} '
                               '${MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(DateTime.fromMillisecondsSinceEpoch(closedAt)))}',
                             ),
+                          if ((last.cashReversalCount ?? 0) > 0)
+                            _amountRow(
+                              shopCopy(
+                                widget.myanmar,
+                                'Cash returned (${last.cashReversalCount})',
+                                'ငွေသားပြန်ပေးမှု (${shopNumber(last.cashReversalCount ?? 0, myanmar: true)})',
+                              ),
+                              -(last.cashDrawerOutflowMmk ?? 0),
+                            ),
                           _amountRow(
                             shopCopy(
                               widget.myanmar,
-                              'Expected from recorded sales',
-                              'မှတ်တမ်းရှိ အရောင်းအရ မျှော်မှန်းငွေသား',
+                              'Expected after recorded cash activity',
+                              'မှတ်တမ်းရှိ ငွေသားအဝင်အထွက်ပြီးနောက် မျှော်မှန်းငွေသား',
                             ),
                             last.expectedCashMmk ?? 0,
                           ),
@@ -409,12 +420,21 @@ class _ShopCashShiftScreenState extends State<ShopCashShiftScreen> {
                           ),
                           review.cashSalesTotalMmk,
                         ),
+                        if (review.cashReversalCount > 0)
+                          _amountRow(
+                            shopCopy(
+                              widget.myanmar,
+                              'Cash returned (${review.cashReversalCount})',
+                              'ငွေသားပြန်ပေးမှု (${shopNumber(review.cashReversalCount, myanmar: true)})',
+                            ),
+                            -review.cashDrawerOutflowMmk,
+                          ),
                         const Divider(),
                         _amountRow(
                           shopCopy(
                             widget.myanmar,
-                            'Expected from recorded sales',
-                            'မှတ်တမ်းရှိ အရောင်းအရ မျှော်မှန်းငွေသား',
+                            'Expected after recorded cash activity',
+                            'မှတ်တမ်းရှိ ငွေသားအဝင်အထွက်ပြီးနောက် မျှော်မှန်းငွေသား',
                           ),
                           review.expectedCashMmk,
                           strong: true,

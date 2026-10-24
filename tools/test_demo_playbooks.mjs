@@ -1,7 +1,7 @@
 // Drift guard for docs/demo-playbooks/ and docs/pilot-kit/. Every backticked
 // token in a playbook or pilot-kit document is a verbatim contract: it must
-// exist in the app source (showroom/src), the public-site generator
-// (tools/create_public_vercel_output.mjs), the site manifest, or package.json —
+// exist in the app source (showroom/src), the public-site generator and its
+// shared Shop design, the site manifest, or package.json —
 // or be derivable from a pattern that is itself pinned here (product-
 // parameterised links the generator or app builds at runtime). Pilot-kit
 // documents additionally ground against the managed-pilot readiness kernel and
@@ -33,6 +33,8 @@ function collectSourceFiles(relativeDir, out) {
 
 const corpusPaths = [
   'tools/create_public_vercel_output.mjs',
+  'tools/public_company_shop_design.mjs',
+  'tools/public-assets/company-shop/shop-page.html',
   'site-manifest.json',
   'package.json',
   ...collectSourceFiles('showroom/src', []),
@@ -40,6 +42,7 @@ const corpusPaths = [
 const corpus = corpusPaths.map(read).join('\n')
 const manifest = JSON.parse(read('site-manifest.json'))
 const generator = read('tools/create_public_vercel_output.mjs')
+const publicDesign = read('tools/public_company_shop_design.mjs')
 const productSetup = read('showroom/src/core/product-setup.ts')
 const accountRoutes = read('showroom/src/core/account-routes.ts')
 const packageManifest = JSON.parse(read('package.json'))
@@ -49,13 +52,17 @@ const packageManifest = JSON.parse(read('package.json'))
 const derived = new Set()
 
 check(manifest.release?.productionDomain === 'https://supermega.dev', 'manifest_production_domain')
-// The public surface presents products through screenshots and one Login.
-// Historical contact links below remain valid app/support routes, not public CTAs.
-check(generator.includes('href="https://app.supermega.dev/login">Login</a>'), 'generator_single_login_route')
-check(generator.includes('class="platform-image"'), 'generator_product_screenshots')
+// Shop is the only customer-facing product. Existing merchants retain one
+// secondary sign-in route; the gallery is pinned to native Shop captures.
+check(publicDesign.includes('class="nav-sign-in" href="https://app.supermega.dev/login"')
+  && !publicDesign.includes('>Login</a>'), 'public_shop_secondary_sign_in_route')
+check(generator.includes('class="native-shop-shot native-shop-shot-${placement}"')
+  && generator.includes('verifyNativeShopGallery(root)')
+  && generator.includes('class="native-shop-disclosure"'), 'generator_native_shop_screenshots')
 check(!generator.includes('function assistedSetupAction('), 'generator_setup_funnel_removed')
 check(!generator.includes('Open Shop Profit Control'), 'generator_profit_control_action_removed')
-check(generator.includes('href="/contact/">Contact</a>'), 'generator_contact_footer')
+check(publicDesign.includes("'/my/contact/' : '/contact/'")
+  && publicDesign.includes("'ဆက်သွယ်ရန်' : 'Contact'"), 'public_shop_contact_footer_locales')
 derived.add('/contact/?product=guide&source=assisted-setup')
 // Historical deep links stay supported, but are not the current acquisition CTA.
 check(generator.includes('source.value=location.href')
@@ -70,7 +77,7 @@ check(accountRoutes.includes("template: 'managed-account'"), 'account_contact_te
 for (const product of manifest.customerProducts) {
   check(product.appRoute === `https://app.supermega.dev/${product.id}/`, `manifest_app_route:${product.id}`)
   const expectedAssistedSetupHref = `/contact/?product=${encodeURIComponent(product.id)}`
-  check(product.secondaryCta?.label === 'Request assisted setup', `manifest_assisted_setup_label:${product.id}`)
+  check(product.secondaryCta?.label === (product.id === 'shop' ? 'Contact SuperMega' : 'Request assisted setup'), `manifest_assisted_setup_label:${product.id}`)
   check(product.secondaryCta?.url === expectedAssistedSetupHref, `manifest_assisted_setup_route:${product.id}`)
   derived.add(product.secondaryCta.label)
   derived.add(product.secondaryCta.url)
@@ -124,7 +131,9 @@ for (const file of files) {
     check(text.includes(`eyebrow \`${product.eyebrow}\``), `${file}:eyebrow_drift`)
   } else {
     check(text.includes(`\`${page.title}\``), `${file}:public_title_drift`)
-    check(text.includes('one Login'), `${file}:single_login_navigation_missing`)
+    check(text.includes('secondary Sign in'), `${file}:secondary_sign_in_navigation_missing`)
+    if (productId === 'shop') check(text.includes('Current public page:'), `${file}:shop_public_page_missing`)
+    else check(text.includes('Retained internal manifest record:') && text.includes('returns 404'), `${file}:internal_product_boundary_missing`)
   }
   check(text.includes(`- \`${renderedDescription}\``), `${file}:description_drift`)
   check(text.includes(`\`${product.secondaryCta.label}\``), `${file}:assisted_setup_label_missing`)

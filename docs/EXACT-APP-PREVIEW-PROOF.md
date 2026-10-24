@@ -86,8 +86,8 @@ Earlier 26-case reports remain historical evidence. The current validator requir
 
 | Surface | Desktop | Mobile | Required technical boundary |
 | --- | --- | --- | --- |
-| Public | 1280 x 900 | 390 x 844 | Product entry is visible |
-| Public to paired app | 1280 x 900 | 390 x 844 | Activate the unique visible primary Shop link; exact paired app `/shop/?tab=today` remains stable before/after capture; only the declared pair receives read-only requests |
+| Public Shop | 1280 x 900 | 390 x 844 | Approved Shop story, assisted-access contact action, private sign-in, and illustrative-data disclosure are visible |
+| Public to paired app | 1280 x 900 | 390 x 844 | Activate the unique visible private sign-in link; exact paired app `/login` remains stable before/after capture; only the declared pair receives read-only requests |
 | Shop Counter | 1280 x 900 | 390 x 844 | Exact `/shop/?template=mini-mart` checkout, payment, total, open-order choice, and review action are above fold |
 | Shop Profit Control | 1280 x 900 | 390 x 844 | Exact `/shop/?tab=today` renders the untouched source-owned fresh Shop seed as `attention` / `3 open`, led by `payment_pending` (`Reconcile pending payments`) with its exact payment-review action and target, objective closure, and read-only boundary |
 | Retired Plant entries (seven routes) | 1280 x 900 | 390 x 844 | Direct, legacy, demo and settings aliases redirect to the exact active chooser; no Plant tool/action is visible; four retained storage keys remain unchanged before and after capture |

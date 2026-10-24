@@ -262,6 +262,17 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
             with self.assertRaisesRegex(module.RehearsalFailure, "expected_head_required"):
                 module._source_identity(None)
             git.assert_not_called()
+        with patch.object(
+            module.subprocess,
+            "run",
+            return_value=SimpleNamespace(
+                returncode=1,
+                stdout="private source error",
+            ),
+        ):
+            with self.assertRaisesRegex(module.RehearsalFailure, "source_identity_unavailable") as caught:
+                module._source_identity("a" * 40)
+            self.assertNotIn("private source error", str(caught.exception))
         result = lambda text: SimpleNamespace(returncode=0, stdout=text)
         with patch.object(module.subprocess, "run", return_value=result(" M source.py")):
             with self.assertRaisesRegex(module.RehearsalFailure, "source_dirty"):
@@ -277,6 +288,43 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
             identity = module._source_identity("a" * 40)
         self.assertEqual(identity, {"head": "a" * 40, "tree": "b" * 40,
                                    "implementation_digest": module._implementation_digest()})
+
+    def test_source_identity_launch_and_timeout_failures_are_sanitized_before_database_work(self):
+        module = _load_rehearsal()
+        for failure in (
+            FileNotFoundError("private source path"),
+            module.subprocess.TimeoutExpired(["git", "status"], 10, stderr="password=private"),
+        ):
+            with self.subTest(failure=type(failure).__name__), \
+                    patch.object(module.subprocess, "run", side_effect=failure), \
+                    patch.object(module, "_run_rehearsal") as run, \
+                    contextlib.redirect_stdout(io.StringIO()) as stdout:
+                code = module.main(["--expected-head", "a" * 40])
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(code, 2)
+            self.assertEqual(payload["error"], "source_identity_unavailable")
+            self.assertNotIn("private", json.dumps(payload))
+            self.assertNotIn("password", json.dumps(payload))
+            run.assert_not_called()
+
+    def test_source_identity_implementation_read_failure_is_sanitized(self):
+        module = _load_rehearsal()
+        result = lambda text: SimpleNamespace(returncode=0, stdout=text)
+        with tempfile.TemporaryDirectory() as folder:
+            migrations = Path(folder)
+            for name in module.CURRENT_MIGRATIONS:
+                (migrations / name).write_text("-- synthetic\n", encoding="utf-8")
+            with patch.object(module, "MIGRATION_DIRECTORY", migrations), \
+                    patch.object(module.subprocess, "run", side_effect=[
+                        result(""), result("a" * 40), result("b" * 40),
+                    ]), patch.object(
+                        module,
+                        "_implementation_digest",
+                        side_effect=OSError("private implementation path"),
+                    ):
+                with self.assertRaisesRegex(module.RehearsalFailure, "source_identity_unavailable") as caught:
+                    module._source_identity("a" * 40)
+        self.assertNotIn("private", str(caught.exception))
 
     def test_existing_raw_output_stops_before_any_source_or_database_work(self):
         module = _load_rehearsal()
@@ -341,6 +389,102 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
                 with module._disposable_workspace() as (_, state):
                     state["stopped"] = True
                 delete.assert_called_once_with(target.resolve())
+
+    def test_disposable_workspace_uses_an_explicit_writable_parent(self):
+        module = _load_rehearsal()
+        with tempfile.TemporaryDirectory() as parent:
+            target = Path(parent) / "supermega-pg17-explicit"
+            target.mkdir()
+            with patch.dict(
+                module.os.environ,
+                {module.REHEARSAL_TEMP_DIRECTORY_ENV: parent},
+            ), patch.object(
+                module.tempfile,
+                "mkdtemp",
+                return_value=str(target),
+            ) as create, patch.object(module.shutil, "rmtree") as delete:
+                with module._disposable_workspace() as (workspace, state):
+                    self.assertEqual(workspace, target.resolve())
+                    state["stopped"] = True
+                self.assertEqual(create.call_args.kwargs["dir"], Path(parent).resolve())
+                delete.assert_called_once_with(target.resolve())
+
+    def test_unwritable_workspace_root_emits_terminal_sanitized_evidence(self):
+        module = _load_rehearsal()
+        source = {
+            "head": "a" * 40,
+            "tree": "b" * 40,
+            "implementation_digest": "sha256:" + "c" * 64,
+        }
+        with tempfile.TemporaryDirectory() as parent:
+            evidence = Path(parent) / "rehearsal.json"
+            with patch.object(module, "_source_identity", return_value=source), \
+                    patch.object(module, "_preflight", return_value={"ok": True}), \
+                    patch.object(
+                        module.tempfile,
+                        "mkdtemp",
+                        side_effect=PermissionError("synthetic denied path"),
+                    ), contextlib.redirect_stdout(io.StringIO()) as stdout:
+                code = module.main([
+                    "--expected-head",
+                    source["head"],
+                    "--evidence-file",
+                    str(evidence),
+                ])
+            payload = json.loads(evidence.read_text(encoding="utf-8"))
+        self.assertEqual(code, 2)
+        self.assertEqual(json.loads(stdout.getvalue()), payload)
+        self.assertEqual(payload["error"], "workspace_initialization_failed")
+        self.assertTrue(payload["cleanup_complete"])
+        self.assertFalse(payload["secret_values_exposed"])
+        self.assertFalse(payload["production_mutated"])
+
+    def test_temp_directory_discovery_failure_stops_before_cluster_initialization(self):
+        module = _load_rehearsal()
+        with patch.dict(module.os.environ, {module.REHEARSAL_TEMP_DIRECTORY_ENV: ""}), \
+                patch.object(module.tempfile, "gettempdir", side_effect=OSError("private temp path")), \
+                patch.object(module, "_initialize_cluster") as initialize:
+            with self.assertRaisesRegex(module.RehearsalFailure, "workspace_initialization_failed") as caught:
+                with module._disposable_workspace():
+                    pass
+        self.assertNotIn("private", str(caught.exception))
+        initialize.assert_not_called()
+
+    def test_configured_temp_directory_resolution_failure_stops_before_cluster_initialization(self):
+        module = _load_rehearsal()
+        with patch.dict(module.os.environ, {module.REHEARSAL_TEMP_DIRECTORY_ENV: "synthetic"}), \
+                patch.object(module.Path, "expanduser", side_effect=RuntimeError("private path loop")), \
+                patch.object(module, "_initialize_cluster") as initialize:
+            with self.assertRaisesRegex(module.RehearsalFailure, "workspace_initialization_failed") as caught:
+                with module._disposable_workspace():
+                    pass
+        self.assertNotIn("private", str(caught.exception))
+        initialize.assert_not_called()
+
+    def test_evidence_write_failure_is_sanitized_and_cannot_report_success(self):
+        module = _load_rehearsal()
+        with tempfile.TemporaryDirectory() as folder:
+            evidence = Path(folder) / "rehearsal.json"
+            with patch.object(module, "_preflight", return_value={
+                "ok": True,
+                "ready": False,
+                "contract": module.CONTRACT,
+                "cleanup_complete": True,
+            }), patch.object(
+                module.Path,
+                "open",
+                side_effect=PermissionError("private evidence path password=secret"),
+            ), patch.object(module, "_run_rehearsal") as run, \
+                    contextlib.redirect_stdout(io.StringIO()) as stdout:
+                code = module.main(["--preflight", "--evidence-file", str(evidence)])
+            payload = json.loads(stdout.getvalue())
+        self.assertEqual(code, 1)
+        self.assertEqual(payload["error"], "evidence_write_failed")
+        self.assertTrue(payload["cleanup_complete"])
+        self.assertFalse(payload["secret_values_exposed"])
+        self.assertNotIn("private", json.dumps(payload))
+        self.assertNotIn("password", json.dumps(payload))
+        run.assert_not_called()
 
     def test_policy_rejections_require_an_explicit_database_sqlstate(self) -> None:
         module = _load_rehearsal()

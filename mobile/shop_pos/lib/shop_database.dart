@@ -2,11 +2,15 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:cryptography/cryptography.dart';
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:drift_flutter/drift_flutter.dart';
 
 import 'shop_models.dart';
+import 'shop_correction_receipt.dart';
+
+export 'shop_correction_receipt.dart';
 
 part 'shop_database.g.dart';
 
@@ -159,6 +163,7 @@ class ShopSaleReceipt {
     required this.createdAtMillis,
     required this.paymentMethod,
     this.lines = const [],
+    this.reversal,
   });
 
   final String id;
@@ -167,6 +172,7 @@ class ShopSaleReceipt {
   final int createdAtMillis;
   final String paymentMethod;
   final List<ShopSaleReceiptLine> lines;
+  final ShopSaleReversal? reversal;
 }
 
 class ShopSaleReceiptLine {
@@ -175,12 +181,214 @@ class ShopSaleReceiptLine {
     required this.unitPriceMmk,
     required this.quantity,
     required this.lineTotalMmk,
+    this.id,
+    this.productId,
   });
 
   final String productName;
   final int unitPriceMmk;
   final int quantity;
   final int lineTotalMmk;
+  final String? id;
+  final String? productId;
+}
+
+const shopManagedWorkspaceDirectoryContract =
+    'supermega.managed_workspace_directory.v1';
+
+/// A workspace chosen from a freshly authenticated managed-workspace listing.
+///
+/// This value is deliberately narrower than a raw workspace ID. A future
+/// connected client must create it only after authenticated discovery; it is
+/// not a correction authorization and must never be inferred from one.
+class ShopAuthenticatedWorkspaceSelection {
+  const ShopAuthenticatedWorkspaceSelection({
+    required this.workspaceId,
+    required this.actorId,
+    this.directoryContract = shopManagedWorkspaceDirectoryContract,
+  });
+
+  final String workspaceId;
+  final String actorId;
+  final String directoryContract;
+}
+
+class ShopManagedWorkspaceBinding {
+  const ShopManagedWorkspaceBinding({
+    required this.workspaceId,
+    required this.attachedActorId,
+    required this.discoveryContract,
+    required this.attachedAtMillis,
+  });
+
+  final String workspaceId;
+  final String attachedActorId;
+  final String discoveryContract;
+  final int attachedAtMillis;
+}
+
+class ShopFullSaleReversalCommand {
+  const ShopFullSaleReversalCommand({
+    required this.operationId,
+    required this.saleId,
+    required this.saleSnapshotDigest,
+    required this.requestFingerprint,
+    required this.commandDigest,
+    required this.originalTotalMmk,
+    required this.originalPaymentMethod,
+    required this.restockItems,
+    required this.reason,
+    required this.cashReturnConfirmed,
+    required this.expectedCashShiftId,
+    required this.paymentResolution,
+  });
+
+  final String operationId;
+  final String saleId;
+  final String saleSnapshotDigest;
+  final String requestFingerprint;
+  final String commandDigest;
+  final int originalTotalMmk;
+  final String originalPaymentMethod;
+  final bool restockItems;
+  final String reason;
+  final bool cashReturnConfirmed;
+  final String? expectedCashShiftId;
+  final String paymentResolution;
+}
+
+class ShopWalletReconciliationCommand {
+  const ShopWalletReconciliationCommand({
+    required this.operationId,
+    required this.reversalId,
+    required this.originalPaymentMethod,
+    required this.originalTotalMmk,
+    required this.requestFingerprint,
+    required this.commandDigest,
+    required this.outcome,
+    required this.evidenceReference,
+  });
+
+  final String operationId;
+  final String reversalId;
+  final String originalPaymentMethod;
+  final int originalTotalMmk;
+  final String requestFingerprint;
+  final String commandDigest;
+  final String outcome;
+  final String evidenceReference;
+}
+
+// Key order is part of the cross-runtime authorization command contract.
+String _walletReconciliationRequestFingerprint({
+  required String operationId,
+  required String reversalId,
+  required String originalPaymentMethod,
+  required int originalTotalMmk,
+  required String outcome,
+  required String evidenceReference,
+}) {
+  return jsonEncode(<String, Object>{
+    'operationId': operationId,
+    'reversalId': reversalId,
+    'originalPaymentMethod': originalPaymentMethod,
+    'originalTotalMmk': originalTotalMmk,
+    'outcome': outcome,
+    'evidenceReference': evidenceReference,
+  });
+}
+
+class ShopSaleReversalLine {
+  const ShopSaleReversalLine({
+    required this.saleLineId,
+    required this.productId,
+    required this.productName,
+    required this.unitPriceMmk,
+    required this.quantity,
+    required this.lineTotalMmk,
+    required this.restockQuantity,
+  });
+
+  final String saleLineId;
+  final String productId;
+  final String productName;
+  final int unitPriceMmk;
+  final int quantity;
+  final int lineTotalMmk;
+  final int restockQuantity;
+}
+
+class ShopSaleReversal {
+  const ShopSaleReversal({
+    required this.id,
+    required this.operationId,
+    required this.saleId,
+    required this.originalTotalMmk,
+    required this.originalPaymentMethod,
+    required this.originalCreatedAtMillis,
+    required this.restockItems,
+    required this.reason,
+    required this.paymentResolution,
+    required this.cashDrawerDeltaMmk,
+    required this.authorizedActorId,
+    required this.authorizedActorLabel,
+    required this.authorizationReceiptId,
+    required this.authorizationProofKind,
+    required this.createdAtMillis,
+    required this.lines,
+    this.shiftId,
+    this.walletReconciliationOutcome,
+    this.walletEvidenceReference,
+    this.walletReconciledActorLabel,
+    this.walletReconciledAtMillis,
+    this.walletReconciliationProofKind,
+  });
+
+  final String id;
+  final String operationId;
+  final String saleId;
+  final int originalTotalMmk;
+  final String originalPaymentMethod;
+  final int originalCreatedAtMillis;
+  final bool restockItems;
+  final String reason;
+  final String paymentResolution;
+  final int cashDrawerDeltaMmk;
+  final String authorizedActorId;
+  final String authorizedActorLabel;
+  final String authorizationReceiptId;
+  final String authorizationProofKind;
+  final int createdAtMillis;
+  final String? shiftId;
+  final String? walletReconciliationOutcome;
+  final String? walletEvidenceReference;
+  final String? walletReconciledActorLabel;
+  final int? walletReconciledAtMillis;
+  final String? walletReconciliationProofKind;
+  final List<ShopSaleReversalLine> lines;
+
+  bool get walletReconciliationPending =>
+      originalPaymentMethod != 'cash' && walletReconciliationOutcome == null;
+}
+
+class ShopSalesSummary {
+  const ShopSalesSummary({
+    required this.grossSaleCount,
+    required this.grossSalesMmk,
+    required this.reversalCount,
+    required this.reversalMmk,
+    required this.pendingWalletReversalCount,
+    required this.pendingWalletReversalMmk,
+  });
+
+  final int grossSaleCount;
+  final int grossSalesMmk;
+  final int reversalCount;
+  final int reversalMmk;
+  final int pendingWalletReversalCount;
+  final int pendingWalletReversalMmk;
+
+  int get netSalesMmk => grossSalesMmk - reversalMmk;
 }
 
 class ShopCashShift {
@@ -198,6 +406,9 @@ class ShopCashShift {
     this.expectedCashMmk,
     this.countedCashMmk,
     this.differenceMmk,
+    this.cashReversalCount,
+    this.cashReversalTotalMmk,
+    this.cashDrawerOutflowMmk,
   });
 
   final String id;
@@ -213,6 +424,9 @@ class ShopCashShift {
   final int? expectedCashMmk;
   final int? countedCashMmk;
   final int? differenceMmk;
+  final int? cashReversalCount;
+  final int? cashReversalTotalMmk;
+  final int? cashDrawerOutflowMmk;
 }
 
 class ShopCashShiftReview {
@@ -223,6 +437,9 @@ class ShopCashShiftReview {
     required this.walletSalesCount,
     required this.walletSalesTotalMmk,
     required this.expectedCashMmk,
+    required this.cashReversalCount,
+    required this.cashReversalTotalMmk,
+    required this.cashDrawerOutflowMmk,
   });
 
   final ShopCashShift shift;
@@ -231,8 +448,12 @@ class ShopCashShiftReview {
   final int walletSalesCount;
   final int walletSalesTotalMmk;
   final int expectedCashMmk;
+  final int cashReversalCount;
+  final int cashReversalTotalMmk;
+  final int cashDrawerOutflowMmk;
 
   int get saleCount => cashSalesCount + walletSalesCount;
+  int get activityCount => saleCount + cashReversalCount;
 }
 
 class WalletCheckoutLineSnapshot {
@@ -310,6 +531,748 @@ class PendingWalletCheckout {
   final int createdAtMillis;
 }
 
+const shopSaleReversalsV11Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_sale_reversals (
+    id TEXT PRIMARY KEY NOT NULL CHECK (length(id) BETWEEN 1 AND 120),
+    operation_id TEXT NOT NULL UNIQUE CHECK (length(operation_id) BETWEEN 1 AND 120),
+    request_fingerprint TEXT NOT NULL,
+    sale_snapshot_digest TEXT NOT NULL CHECK (length(sale_snapshot_digest) = 64),
+    sale_id TEXT NOT NULL UNIQUE REFERENCES shop_sales(id),
+    original_total_mmk INTEGER NOT NULL CHECK (original_total_mmk BETWEEN 0 AND 200000000000000),
+    original_payment_method TEXT NOT NULL CHECK (original_payment_method IN ('cash', 'kbzpay', 'wavepay')),
+    original_created_at_millis INTEGER NOT NULL,
+    original_line_count INTEGER NOT NULL CHECK (original_line_count BETWEEN 1 AND 100),
+    restock_items INTEGER NOT NULL CHECK (restock_items IN (0, 1)),
+    reason TEXT NOT NULL CHECK (length(reason) BETWEEN 1 AND 240),
+    payment_resolution TEXT NOT NULL CHECK (payment_resolution IN ('cash_returned_now', 'external_pending')),
+    cash_drawer_delta_mmk INTEGER NOT NULL CHECK (cash_drawer_delta_mmk <= 0),
+    shift_id TEXT REFERENCES shop_cash_shifts(id),
+    authorization_receipt_id TEXT NOT NULL UNIQUE CHECK (length(authorization_receipt_id) BETWEEN 1 AND 160),
+    authorization_receipt_digest TEXT NOT NULL CHECK (length(authorization_receipt_digest) = 64),
+    authorization_command_digest TEXT NOT NULL CHECK (length(authorization_command_digest) = 64),
+    authorization_workspace_id TEXT NOT NULL CHECK (length(authorization_workspace_id) BETWEEN 1 AND 128),
+    authorized_actor_id TEXT NOT NULL CHECK (length(authorized_actor_id) BETWEEN 1 AND 128),
+    authorized_actor_label TEXT NOT NULL CHECK (length(authorized_actor_label) BETWEEN 1 AND 120),
+    authorized_actor_role TEXT NOT NULL CHECK (authorized_actor_role = 'owner'),
+    authorization_capability TEXT NOT NULL CHECK (authorization_capability = 'shop.sale.reverse'),
+    authorization_source TEXT NOT NULL CHECK (authorization_source = 'managed_membership_receipt_v1'),
+    authorization_issued_at_millis INTEGER NOT NULL,
+    authorization_verified_at_millis INTEGER NOT NULL,
+    authorization_expires_at_millis INTEGER NOT NULL,
+    created_at_millis INTEGER NOT NULL,
+    CHECK ((original_payment_method = 'cash' AND payment_resolution = 'cash_returned_now' AND shift_id IS NOT NULL AND cash_drawer_delta_mmk = -original_total_mmk)
+      OR (original_payment_method IN ('kbzpay', 'wavepay') AND payment_resolution = 'external_pending' AND shift_id IS NULL AND cash_drawer_delta_mmk = 0))
+  )
+''';
+
+const shopSaleReversalLinesV11Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_sale_reversal_lines (
+    id TEXT PRIMARY KEY NOT NULL,
+    reversal_id TEXT NOT NULL REFERENCES shop_sale_reversals(id),
+    sale_line_id TEXT NOT NULL REFERENCES shop_sale_lines(id),
+    product_id TEXT NOT NULL REFERENCES shop_products(id),
+    product_name TEXT NOT NULL,
+    unit_price_mmk INTEGER NOT NULL CHECK (unit_price_mmk BETWEEN 0 AND 2000000000),
+    quantity INTEGER NOT NULL CHECK (quantity BETWEEN 1 AND 1000),
+    line_total_mmk INTEGER NOT NULL CHECK (line_total_mmk = unit_price_mmk * quantity),
+    restock_quantity INTEGER NOT NULL CHECK (restock_quantity IN (0, quantity)),
+    stock_movement_id TEXT UNIQUE REFERENCES shop_stock_movements(id),
+    UNIQUE(reversal_id, sale_line_id),
+    CHECK ((restock_quantity = 0 AND stock_movement_id IS NULL)
+      OR (restock_quantity = quantity AND stock_movement_id IS NOT NULL))
+  )
+''';
+
+const shopWalletReversalReconciliationsV11Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_wallet_reversal_reconciliations (
+    id TEXT PRIMARY KEY NOT NULL CHECK (length(id) BETWEEN 1 AND 120),
+    operation_id TEXT NOT NULL UNIQUE CHECK (length(operation_id) BETWEEN 1 AND 120),
+    request_fingerprint TEXT NOT NULL,
+    reversal_id TEXT NOT NULL UNIQUE REFERENCES shop_sale_reversals(id),
+    outcome TEXT NOT NULL CHECK (outcome IN ('money_returned', 'payment_not_received')),
+    evidence_reference TEXT NOT NULL CHECK (length(evidence_reference) BETWEEN 1 AND 160),
+    authorization_receipt_id TEXT NOT NULL UNIQUE CHECK (length(authorization_receipt_id) BETWEEN 1 AND 160),
+    authorization_receipt_digest TEXT NOT NULL CHECK (length(authorization_receipt_digest) = 64),
+    authorization_command_digest TEXT NOT NULL CHECK (length(authorization_command_digest) = 64),
+    authorization_workspace_id TEXT NOT NULL CHECK (length(authorization_workspace_id) BETWEEN 1 AND 128),
+    authorized_actor_id TEXT NOT NULL CHECK (length(authorized_actor_id) BETWEEN 1 AND 128),
+    authorized_actor_label TEXT NOT NULL CHECK (length(authorized_actor_label) BETWEEN 1 AND 120),
+    authorized_actor_role TEXT NOT NULL CHECK (authorized_actor_role = 'owner'),
+    authorization_capability TEXT NOT NULL CHECK (authorization_capability = 'shop.sale.reconcile_wallet'),
+    authorization_source TEXT NOT NULL CHECK (authorization_source = 'managed_membership_receipt_v1'),
+    authorization_issued_at_millis INTEGER NOT NULL,
+    authorization_verified_at_millis INTEGER NOT NULL,
+    authorization_expires_at_millis INTEGER NOT NULL,
+    created_at_millis INTEGER NOT NULL
+  )
+''';
+
+const shopManagedWorkspaceBindingV12Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_managed_workspace_binding (
+    singleton INTEGER PRIMARY KEY NOT NULL CHECK (singleton = 1),
+    workspace_id TEXT NOT NULL UNIQUE CHECK (
+      typeof(workspace_id) = 'text'
+      AND length(workspace_id) BETWEEN 1 AND 128
+      AND workspace_id = trim(workspace_id)
+      AND substr(workspace_id, 1, 1) GLOB '[A-Za-z0-9]'
+      AND workspace_id NOT GLOB '*[^A-Za-z0-9._:-]*'
+    ),
+    discovery_contract TEXT NOT NULL CHECK (
+      discovery_contract = 'supermega.managed_workspace_directory.v1'
+    ),
+    attached_actor_id TEXT NOT NULL CHECK (
+      typeof(attached_actor_id) = 'text'
+      AND length(attached_actor_id) BETWEEN 1 AND 128
+      AND attached_actor_id = trim(attached_actor_id)
+      AND substr(attached_actor_id, 1, 1) GLOB '[A-Za-z0-9]'
+      AND attached_actor_id NOT GLOB '*[^A-Za-z0-9._:-]*'
+    ),
+    attached_at_millis INTEGER NOT NULL CHECK (
+      typeof(attached_at_millis) = 'integer' AND attached_at_millis > 0
+    )
+  )
+''';
+
+const shopManagedWorkspaceBindingInsertGuardV12Sql = '''
+  CREATE TRIGGER IF NOT EXISTS shop_managed_workspace_binding_insert_guard
+  BEFORE INSERT ON shop_managed_workspace_binding
+  WHEN EXISTS (SELECT 1 FROM shop_managed_workspace_binding)
+    OR EXISTS (
+      SELECT 1 FROM shop_sale_reversals
+      WHERE authorization_workspace_id != NEW.workspace_id
+    )
+    OR EXISTS (
+      SELECT 1 FROM shop_wallet_reversal_reconciliations
+      WHERE authorization_workspace_id != NEW.workspace_id
+    )
+  BEGIN
+    SELECT RAISE(
+      ABORT,
+      'Managed Shop workspace binding is immutable or conflicts with correction history'
+    );
+  END
+''';
+
+const shopSaleReversalsRequireWorkspaceBindingV12Sql = '''
+  CREATE TRIGGER IF NOT EXISTS shop_sale_reversals_require_workspace_binding
+  BEFORE INSERT ON shop_sale_reversals
+  WHEN NOT EXISTS (
+    SELECT 1 FROM shop_managed_workspace_binding
+    WHERE singleton = 1
+      AND workspace_id = NEW.authorization_workspace_id
+  )
+  BEGIN
+    SELECT RAISE(ABORT, 'Shop correction requires the bound workspace');
+  END
+''';
+
+const shopWalletReversalReconciliationsRequireWorkspaceBindingV12Sql = '''
+  CREATE TRIGGER IF NOT EXISTS shop_wallet_reversal_reconciliations_require_workspace_binding
+  BEFORE INSERT ON shop_wallet_reversal_reconciliations
+  WHEN NOT EXISTS (
+    SELECT 1 FROM shop_managed_workspace_binding
+    WHERE singleton = 1
+      AND workspace_id = NEW.authorization_workspace_id
+  )
+    OR NOT EXISTS (
+      SELECT 1 FROM shop_sale_reversals
+      WHERE id = NEW.reversal_id
+        AND authorization_workspace_id = NEW.authorization_workspace_id
+    )
+  BEGIN
+    SELECT RAISE(ABORT, 'Shop reconciliation requires the bound workspace');
+  END
+''';
+
+/// The exact singleton table shipped by PR #751 when that branch called
+/// itself schema 11. The historical identifiers are data compatibility
+/// values; later UI labels must not rewrite them during migration.
+const shopBusinessProfileV11Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_business_profile (
+    singleton_key INTEGER PRIMARY KEY NOT NULL CHECK (singleton_key = 1),
+    schema_id TEXT NOT NULL
+      CHECK (schema_id = 'supermega.shop.business_profile.v1'),
+    template_id TEXT NOT NULL
+      CHECK (template_id IN (
+        'mini-mart', 'cafe-takeaway', 'fashion-accessories',
+        'beauty-household', 'custom'
+      )),
+    template_version INTEGER NOT NULL CHECK (template_version = 1),
+    updated_at_millis INTEGER NOT NULL CHECK (updated_at_millis >= 0)
+  )
+''';
+
+/// Distinguishes a legitimate correction-v11/v12 migration that had audit
+/// history before authenticated workspace attachment. It grants no identity,
+/// role, capability, or workspace authority and is removed on real attach.
+const shopMigrationProvenanceV13Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_v13_migration_provenance (
+    singleton INTEGER PRIMARY KEY NOT NULL CHECK (singleton = 1),
+    reason TEXT NOT NULL CHECK (
+      reason = 'legacy_unbound_correction_history'
+    )
+  )
+''';
+
+const shopCorrectionAuthorizationProofKindSignedV2 = 'signed_v2';
+const shopCorrectionAuthorizationProofKindSignedV3 = 'signed_v3';
+const shopCorrectionAuthorizationProofKindLegacyV1 = 'legacy_unverified_v1';
+
+const shopCorrectionAuthorizationProofsV14Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_correction_authorization_proofs (
+    receipt_id TEXT PRIMARY KEY NOT NULL CHECK (length(receipt_id) BETWEEN 1 AND 160),
+    proof_kind TEXT NOT NULL CHECK (proof_kind IN ('signed_v2', 'legacy_unverified_v1')),
+    local_operation_id TEXT NOT NULL CHECK (length(local_operation_id) BETWEEN 1 AND 120),
+    receipt_digest TEXT NOT NULL CHECK (length(receipt_digest) = 64),
+    key_id TEXT,
+    signature TEXT,
+    workspace_id TEXT NOT NULL CHECK (length(workspace_id) BETWEEN 1 AND 128),
+    actor_id TEXT NOT NULL CHECK (length(actor_id) BETWEEN 1 AND 128),
+    actor_label TEXT NOT NULL CHECK (length(actor_label) BETWEEN 1 AND 120),
+    actor_role TEXT NOT NULL CHECK (actor_role = 'owner'),
+    capability TEXT NOT NULL CHECK (capability IN ('shop.sale.reverse', 'shop.sale.reconcile_wallet')),
+    source TEXT NOT NULL CHECK (source = 'managed_membership_receipt_v1'),
+    command_digest TEXT NOT NULL CHECK (length(command_digest) = 64),
+    issued_at_millis INTEGER NOT NULL CHECK (issued_at_millis > 0),
+    expires_at_millis INTEGER NOT NULL CHECK (expires_at_millis > issued_at_millis),
+    verified_at_millis INTEGER NOT NULL CHECK (
+      verified_at_millis >= issued_at_millis
+      AND verified_at_millis <= expires_at_millis
+    ),
+    CHECK (
+      (proof_kind = 'signed_v2'
+        AND key_id IS NOT NULL
+        AND length(key_id) BETWEEN 1 AND 32
+        AND signature IS NOT NULL
+        AND length(signature) = 86)
+      OR
+      (proof_kind = 'legacy_unverified_v1'
+        AND key_id IS NULL
+        AND signature IS NULL)
+    )
+  )
+''';
+
+const shopCorrectionAuthorizationProofsV15Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_correction_authorization_proofs (
+    receipt_id TEXT PRIMARY KEY NOT NULL CHECK (length(receipt_id) BETWEEN 1 AND 160),
+    proof_kind TEXT NOT NULL CHECK (proof_kind IN ('signed_v3', 'signed_v2', 'legacy_unverified_v1')),
+    local_operation_id TEXT NOT NULL CHECK (length(local_operation_id) BETWEEN 1 AND 120),
+    receipt_digest TEXT NOT NULL CHECK (length(receipt_digest) = 64),
+    key_id TEXT,
+    signature TEXT,
+    finalization_request_id TEXT,
+    finalized_at_millis INTEGER,
+    workspace_id TEXT NOT NULL CHECK (length(workspace_id) BETWEEN 1 AND 128),
+    actor_id TEXT NOT NULL CHECK (length(actor_id) BETWEEN 1 AND 128),
+    actor_label TEXT NOT NULL CHECK (length(actor_label) BETWEEN 1 AND 120),
+    actor_role TEXT NOT NULL CHECK (actor_role = 'owner'),
+    capability TEXT NOT NULL CHECK (capability IN ('shop.sale.reverse', 'shop.sale.reconcile_wallet')),
+    source TEXT NOT NULL CHECK (source = 'managed_membership_receipt_v1'),
+    command_digest TEXT NOT NULL CHECK (length(command_digest) = 64),
+    issued_at_millis INTEGER NOT NULL CHECK (issued_at_millis > 0),
+    expires_at_millis INTEGER NOT NULL CHECK (expires_at_millis > issued_at_millis),
+    verified_at_millis INTEGER NOT NULL CHECK (
+      verified_at_millis >= issued_at_millis
+      AND verified_at_millis <= expires_at_millis
+    ),
+    CHECK (
+      (proof_kind = 'signed_v3'
+        AND key_id IS NOT NULL
+        AND length(key_id) BETWEEN 1 AND 32
+        AND signature IS NOT NULL
+        AND length(signature) = 86
+        AND finalization_request_id IS NOT NULL
+        AND length(finalization_request_id) = 36
+        AND finalized_at_millis IS NOT NULL
+        AND finalized_at_millis = issued_at_millis
+        AND finalized_at_millis <= expires_at_millis
+        AND verified_at_millis = finalized_at_millis
+        AND source = 'managed_membership_receipt_v1')
+      OR
+      (proof_kind = 'signed_v2'
+        AND key_id IS NOT NULL
+        AND length(key_id) BETWEEN 1 AND 32
+        AND signature IS NOT NULL
+        AND length(signature) = 86
+        AND finalization_request_id IS NULL
+        AND finalized_at_millis IS NULL
+        AND source = 'managed_membership_receipt_v1')
+      OR
+      (proof_kind = 'legacy_unverified_v1'
+        AND key_id IS NULL
+        AND signature IS NULL
+        AND finalization_request_id IS NULL
+        AND finalized_at_millis IS NULL
+        AND source = 'managed_membership_receipt_v1')
+    )
+  )
+''';
+
+const shopSaleReversalsRequireSignedProofV14Sql = '''
+  CREATE TRIGGER IF NOT EXISTS shop_sale_reversals_require_signed_proof
+  BEFORE INSERT ON shop_sale_reversals
+  WHEN NOT EXISTS (
+    SELECT 1 FROM shop_correction_authorization_proofs
+    WHERE receipt_id = NEW.authorization_receipt_id
+      AND proof_kind = 'signed_v2'
+      AND local_operation_id = NEW.operation_id
+      AND receipt_digest = NEW.authorization_receipt_digest
+      AND workspace_id = NEW.authorization_workspace_id
+      AND actor_id = NEW.authorized_actor_id
+      AND actor_label = NEW.authorized_actor_label
+      AND actor_role = NEW.authorized_actor_role
+      AND capability = NEW.authorization_capability
+      AND source = NEW.authorization_source
+      AND command_digest = NEW.authorization_command_digest
+      AND issued_at_millis = NEW.authorization_issued_at_millis
+      AND expires_at_millis = NEW.authorization_expires_at_millis
+      AND verified_at_millis = NEW.authorization_verified_at_millis
+  )
+  BEGIN
+    SELECT RAISE(ABORT, 'Shop correction requires a signed authorization proof');
+  END
+''';
+
+const shopWalletReconciliationsRequireSignedProofV14Sql = '''
+  CREATE TRIGGER IF NOT EXISTS shop_wallet_reconciliations_require_signed_proof
+  BEFORE INSERT ON shop_wallet_reversal_reconciliations
+  WHEN NOT EXISTS (
+    SELECT 1 FROM shop_correction_authorization_proofs
+    WHERE receipt_id = NEW.authorization_receipt_id
+      AND proof_kind = 'signed_v2'
+      AND local_operation_id = NEW.operation_id
+      AND receipt_digest = NEW.authorization_receipt_digest
+      AND workspace_id = NEW.authorization_workspace_id
+      AND actor_id = NEW.authorized_actor_id
+      AND actor_label = NEW.authorized_actor_label
+      AND actor_role = NEW.authorized_actor_role
+      AND capability = NEW.authorization_capability
+      AND source = NEW.authorization_source
+      AND command_digest = NEW.authorization_command_digest
+      AND issued_at_millis = NEW.authorization_issued_at_millis
+      AND expires_at_millis = NEW.authorization_expires_at_millis
+      AND verified_at_millis = NEW.authorization_verified_at_millis
+  )
+  BEGIN
+    SELECT RAISE(ABORT, 'Shop reconciliation requires a signed authorization proof');
+  END
+''';
+
+String shopCorrectionRequiresFinalizedProofV15Sql({
+  required String trigger,
+  required String table,
+  required String message,
+}) =>
+    '''
+  CREATE TRIGGER IF NOT EXISTS $trigger
+  BEFORE INSERT ON $table
+  WHEN NOT EXISTS (
+    SELECT 1 FROM shop_correction_authorization_proofs
+    WHERE receipt_id = NEW.authorization_receipt_id
+      AND proof_kind = 'signed_v3'
+      AND local_operation_id = NEW.operation_id
+      AND receipt_digest = NEW.authorization_receipt_digest
+      AND workspace_id = NEW.authorization_workspace_id
+      AND actor_id = NEW.authorized_actor_id
+      AND actor_label = NEW.authorized_actor_label
+      AND actor_role = NEW.authorized_actor_role
+      AND capability = NEW.authorization_capability
+      AND source = NEW.authorization_source
+      AND command_digest = NEW.authorization_command_digest
+      AND issued_at_millis = NEW.authorization_issued_at_millis
+      AND expires_at_millis = NEW.authorization_expires_at_millis
+      AND finalized_at_millis = NEW.authorization_verified_at_millis
+      AND verified_at_millis = NEW.authorization_verified_at_millis
+  )
+  BEGIN
+    SELECT RAISE(ABORT, '$message');
+  END
+''';
+
+const shopCashShiftsOneOpenV6Sql = '''
+  CREATE UNIQUE INDEX IF NOT EXISTS shop_cash_shifts_one_open
+  ON shop_cash_shifts(state) WHERE state = 'open'
+''';
+
+const shopCashShiftSalesShiftIdV6Sql = '''
+  CREATE INDEX IF NOT EXISTS shop_cash_shift_sales_shift_id
+  ON shop_cash_shift_sales(shift_id)
+''';
+
+const shopHeldSalesUpdatedV10Sql = '''
+  CREATE INDEX IF NOT EXISTS shop_held_sales_updated
+  ON shop_held_sales(updated_at_millis DESC)
+''';
+
+const shopKnownBaseObjectNames = <String>{
+  'menu_import_drafts',
+  'merchant_wallet_profiles',
+  'shop_products',
+  'shop_sales',
+  'shop_sale_lines',
+  'shop_stock_movements',
+  'shop_sync_outbox',
+  'shop_wallet_checkout_intents',
+  'shop_cash_shifts',
+  'shop_cash_shifts_one_open',
+  'shop_cash_shift_sales',
+  'shop_cash_shift_sales_shift_id',
+  'shop_product_images',
+  'shop_counter_drafts',
+  'shop_held_sales',
+  'shop_held_sales_updated',
+};
+
+const shopBaseTableColumnsV6 = <String, Set<String>>{
+  'menu_import_drafts': {
+    'id',
+    'batch_id',
+    'category',
+    'name',
+    'description',
+    'price_mmk',
+    'sku',
+    'barcode',
+    'opening_stock',
+    'review_state',
+    'created_at_millis',
+  },
+  'merchant_wallet_profiles': {
+    'provider',
+    'merchant_phone',
+    'official_qr_payload',
+    'issuer_confirmed',
+    'updated_at_millis',
+  },
+  'shop_products': {
+    'id',
+    'name',
+    'category',
+    'description',
+    'sku',
+    'barcode',
+    'price_mmk',
+    'on_hand',
+    'updated_at_millis',
+    'archived',
+  },
+  'shop_sales': {
+    'id',
+    'operation_id',
+    'request_fingerprint',
+    'total_mmk',
+    'payment_method',
+    'created_at_millis',
+  },
+  'shop_sale_lines': {
+    'id',
+    'sale_id',
+    'product_id',
+    'product_name',
+    'unit_price_mmk',
+    'quantity',
+    'line_total_mmk',
+  },
+  'shop_stock_movements': {
+    'id',
+    'sale_id',
+    'product_id',
+    'quantity_delta',
+    'reason',
+    'created_at_millis',
+  },
+  'shop_sync_outbox': {
+    'operation_id',
+    'event_type',
+    'payload_json',
+    'state',
+    'created_at_millis',
+  },
+  'shop_wallet_checkout_intents': {
+    'operation_id',
+    'payment_method',
+    'request_fingerprint',
+    'total_mmk',
+    'merchant_phone',
+    'merchant_qr_payload',
+    'basket_json',
+    'state',
+    'created_at_millis',
+  },
+  'shop_cash_shifts': {
+    'id',
+    'open_operation_id',
+    'operator_label',
+    'opening_float_mmk',
+    'opened_at_millis',
+    'state',
+    'close_operation_id',
+    'closed_at_millis',
+    'cash_sales_count',
+    'cash_sales_total_mmk',
+    'wallet_sales_count',
+    'wallet_sales_total_mmk',
+    'expected_cash_mmk',
+    'counted_cash_mmk',
+    'difference_mmk',
+    'review_sale_count',
+    'review_cash_total_mmk',
+  },
+  'shop_cash_shift_sales': {'sale_id', 'shift_id'},
+};
+
+const shopProductImageColumnsV7 = {
+  'product_id',
+  'image_png',
+  'updated_at_millis',
+};
+
+const shopCounterDraftColumnsV8 = {
+  'slot',
+  'operation_id',
+  'basket_json',
+  'updated_at_millis',
+};
+
+const shopHeldSaleColumnsV10 = {
+  'id',
+  'name',
+  'operation_id',
+  'basket_json',
+  'created_at_millis',
+  'updated_at_millis',
+};
+
+Map<String, Set<String>> shopBaseTableColumnsForVersion(int schemaVersion) {
+  if (schemaVersion < 6 || schemaVersion > 15) return const {};
+  return <String, Set<String>>{
+    for (final entry in shopBaseTableColumnsV6.entries)
+      entry.key: <String>{
+        ...entry.value,
+        if (entry.key == 'shop_products' && schemaVersion >= 9) 'reorder_level',
+      },
+    if (schemaVersion >= 7) 'shop_product_images': shopProductImageColumnsV7,
+    if (schemaVersion >= 8) 'shop_counter_drafts': shopCounterDraftColumnsV8,
+    if (schemaVersion >= 10) 'shop_held_sales': shopHeldSaleColumnsV10,
+  };
+}
+
+Map<String, String> shopCriticalIndexDefinitions(int schemaVersion) => {
+  if (schemaVersion >= 6)
+    'shop_cash_shifts_one_open': shopCashShiftsOneOpenV6Sql,
+  if (schemaVersion >= 6)
+    'shop_cash_shift_sales_shift_id': shopCashShiftSalesShiftIdV6Sql,
+  if (schemaVersion >= 10)
+    'shop_held_sales_updated': shopHeldSalesUpdatedV10Sql,
+};
+
+String shopSchemaObjectTypeForDefinition(String definition) {
+  final sql = canonicalShopSchemaSql(definition);
+  if (sql.startsWith('create table')) return 'table';
+  if (sql.startsWith('create index') || sql.startsWith('create unique index')) {
+    return 'index';
+  }
+  if (sql.startsWith('create trigger')) return 'trigger';
+  throw ArgumentError.value(definition, 'definition', 'Unknown schema object');
+}
+
+String shopImmutableTriggerV11Sql({
+  required String table,
+  required String operation,
+  required String message,
+}) =>
+    '''
+  CREATE TRIGGER IF NOT EXISTS ${table}_no_$operation
+  BEFORE ${operation.toUpperCase()} ON $table BEGIN
+    SELECT RAISE(ABORT, '$message');
+  END
+''';
+
+Map<String, String> shopReversalSchemaDefinitionsV11() {
+  final definitions = <String, String>{
+    'shop_sale_reversals': shopSaleReversalsV11Sql,
+    'shop_sale_reversal_lines': shopSaleReversalLinesV11Sql,
+    'shop_wallet_reversal_reconciliations':
+        shopWalletReversalReconciliationsV11Sql,
+  };
+  for (final table in const [
+    'shop_sale_reversals',
+    'shop_sale_reversal_lines',
+    'shop_wallet_reversal_reconciliations',
+    'shop_sales',
+    'shop_sale_lines',
+    'shop_stock_movements',
+  ]) {
+    final message = table == 'shop_stock_movements'
+        ? 'Completed Shop stock movements are immutable'
+        : table == 'shop_sales' || table == 'shop_sale_lines'
+        ? 'Completed Shop sales are immutable'
+        : 'Shop reversal audit records are immutable';
+    for (final operation in const ['update', 'delete']) {
+      definitions['${table}_no_$operation'] = shopImmutableTriggerV11Sql(
+        table: table,
+        operation: operation,
+        message: message,
+      );
+    }
+  }
+  return definitions;
+}
+
+Map<String, String> shopWorkspaceSchemaDefinitionsV12() => <String, String>{
+  'shop_managed_workspace_binding': shopManagedWorkspaceBindingV12Sql,
+  'shop_managed_workspace_binding_no_update': shopImmutableTriggerV11Sql(
+    table: 'shop_managed_workspace_binding',
+    operation: 'update',
+    message: 'Managed Shop workspace binding is immutable',
+  ),
+  'shop_managed_workspace_binding_no_delete': shopImmutableTriggerV11Sql(
+    table: 'shop_managed_workspace_binding',
+    operation: 'delete',
+    message: 'Managed Shop workspace binding is immutable',
+  ),
+  'shop_managed_workspace_binding_insert_guard':
+      shopManagedWorkspaceBindingInsertGuardV12Sql,
+  'shop_sale_reversals_require_workspace_binding':
+      shopSaleReversalsRequireWorkspaceBindingV12Sql,
+  'shop_wallet_reversal_reconciliations_require_workspace_binding':
+      shopWalletReversalReconciliationsRequireWorkspaceBindingV12Sql,
+};
+
+Map<String, String> shopWorkspaceCollisionPrefixDefinitionsV12() {
+  final definitions = shopWorkspaceSchemaDefinitionsV12();
+  definitions.remove('shop_sale_reversals_require_workspace_binding');
+  definitions.remove(
+    'shop_wallet_reversal_reconciliations_require_workspace_binding',
+  );
+  return definitions;
+}
+
+Map<String, String>
+shopAuthorizationProofSchemaDefinitionsV14() => <String, String>{
+  'shop_correction_authorization_proofs':
+      shopCorrectionAuthorizationProofsV14Sql,
+  'shop_correction_authorization_proofs_no_update': shopImmutableTriggerV11Sql(
+    table: 'shop_correction_authorization_proofs',
+    operation: 'update',
+    message: 'Shop correction authorization proofs are immutable',
+  ),
+  'shop_correction_authorization_proofs_no_delete': shopImmutableTriggerV11Sql(
+    table: 'shop_correction_authorization_proofs',
+    operation: 'delete',
+    message: 'Shop correction authorization proofs are immutable',
+  ),
+  'shop_sale_reversals_require_signed_proof':
+      shopSaleReversalsRequireSignedProofV14Sql,
+  'shop_wallet_reconciliations_require_signed_proof':
+      shopWalletReconciliationsRequireSignedProofV14Sql,
+};
+
+Map<String, String>
+shopAuthorizationProofSchemaDefinitionsV15() => <String, String>{
+  'shop_correction_authorization_proofs':
+      shopCorrectionAuthorizationProofsV15Sql,
+  'shop_correction_authorization_proofs_no_update': shopImmutableTriggerV11Sql(
+    table: 'shop_correction_authorization_proofs',
+    operation: 'update',
+    message: 'Shop correction authorization proofs are immutable',
+  ),
+  'shop_correction_authorization_proofs_no_delete': shopImmutableTriggerV11Sql(
+    table: 'shop_correction_authorization_proofs',
+    operation: 'delete',
+    message: 'Shop correction authorization proofs are immutable',
+  ),
+  'shop_sale_reversals_require_signed_proof':
+      shopCorrectionRequiresFinalizedProofV15Sql(
+        trigger: 'shop_sale_reversals_require_signed_proof',
+        table: 'shop_sale_reversals',
+        message: 'Shop correction requires a finalized authorization proof',
+      ),
+  'shop_wallet_reconciliations_require_signed_proof':
+      shopCorrectionRequiresFinalizedProofV15Sql(
+        trigger: 'shop_wallet_reconciliations_require_signed_proof',
+        table: 'shop_wallet_reversal_reconciliations',
+        message: 'Shop reconciliation requires a finalized authorization proof',
+      ),
+};
+
+String canonicalShopSchemaSql(String value) {
+  final output = StringBuffer();
+  final ifNotExists = RegExp(r'if\s+not\s+exists\b', caseSensitive: false);
+  var index = 0;
+  var pendingSpace = false;
+  while (index < value.length) {
+    final character = value[index];
+    if (character == "'" ||
+        character == '"' ||
+        character == '`' ||
+        character == '[') {
+      if (pendingSpace && output.length > 0) output.write(' ');
+      pendingSpace = false;
+      final closing = character == '[' ? ']' : character;
+      output.write(character);
+      index++;
+      while (index < value.length) {
+        final quoted = value[index];
+        output.write(quoted);
+        index++;
+        if (quoted != closing) continue;
+        if (closing != ']' && index < value.length && value[index] == closing) {
+          output.write(value[index]);
+          index++;
+          continue;
+        }
+        break;
+      }
+      continue;
+    }
+
+    final optionalClause = ifNotExists.matchAsPrefix(value, index);
+    final hasWordBefore =
+        index > 0 && RegExp(r'[A-Za-z0-9_]').hasMatch(value[index - 1]);
+    if (!hasWordBefore && optionalClause != null) {
+      index = optionalClause.end;
+      pendingSpace = true;
+      continue;
+    }
+    if (RegExp(r'\s').hasMatch(character)) {
+      pendingSpace = true;
+      index++;
+      continue;
+    }
+    if (pendingSpace && output.length > 0) output.write(' ');
+    pendingSpace = false;
+    output.write(character.toLowerCase());
+    index++;
+  }
+  return output.toString().trim();
+}
+
+enum _ShopUpgradeOrigin {
+  legacy,
+  correctionV11,
+  profileV11,
+  correctionWorkspaceV12,
+  profileWorkspaceCollisionV12,
+  unifiedV13,
+  unifiedV14,
+}
+
+enum _ColumnGroupState { none, partial, exact }
+
+class _ShopSchemaObject {
+  const _ShopSchemaObject({
+    required this.type,
+    required this.table,
+    required this.sql,
+  });
+
+  final String type;
+  final String table;
+  final String sql;
+}
+
 @DriftDatabase(
   tables: [
     MenuImportDrafts,
@@ -329,32 +1292,89 @@ class ShopDatabase extends _$ShopDatabase {
   static File privateDatabaseFile(Directory documents) =>
       File('${documents.path}${Platform.pathSeparator}supermega_shop.sqlite');
 
-  factory ShopDatabase.inPrivateDocuments(Directory documents) => ShopDatabase(
-    driftDatabase(
+  /// Migrates and fully opens a restore candidate before it is published.
+  ///
+  /// DELETE journaling keeps all transient state beside the staged file and
+  /// guarantees that closing the database leaves one self-contained SQLite
+  /// file for the restore layer to verify and hard-link without replacement.
+  static Future<void> migrateAndVerifyRestoreFile(
+    File file, {
+    ShopCorrectionReceiptVerifier? correctionReceiptVerifier,
+  }) async {
+    final database = ShopDatabase.withCorrectionReceiptVerifier(
+      executor: NativeDatabase(
+        file,
+        setup: (raw) => raw.execute('PRAGMA journal_mode = DELETE'),
+      ),
+      correctionReceiptVerifier:
+          correctionReceiptVerifier ??
+          ShopCorrectionReceiptVerifier.production(),
+    );
+    try {
+      await database.verifyReadyForUse();
+      final row = await database
+          .customSelect('PRAGMA user_version')
+          .getSingle();
+      if (row.read<int>('user_version') != database.schemaVersion) {
+        throw StateError('The staged Shop restore did not reach schema v15.');
+      }
+    } finally {
+      await database.close();
+    }
+  }
+
+  factory ShopDatabase.inPrivateDocuments(
+    Directory documents, {
+    ShopCorrectionReceiptVerifier? correctionReceiptVerifier,
+  }) => ShopDatabase.withCorrectionReceiptVerifier(
+    executor: driftDatabase(
       name: 'supermega_shop',
       native: DriftNativeOptions(
         databasePath: () async => privateDatabaseFile(documents).path,
       ),
     ),
+    correctionReceiptVerifier:
+        correctionReceiptVerifier ?? ShopCorrectionReceiptVerifier.production(),
   );
 
   ShopDatabase([QueryExecutor? executor])
-    : super(executor ?? driftDatabase(name: 'supermega_shop'));
+    : this.withCorrectionReceiptVerifier(
+        executor: executor,
+        correctionReceiptVerifier: ShopCorrectionReceiptVerifier.production(),
+      );
+
+  ShopDatabase.withCorrectionReceiptVerifier({
+    QueryExecutor? executor,
+    required this.correctionReceiptVerifier,
+  }) : super(executor ?? driftDatabase(name: 'supermega_shop'));
+
+  final ShopCorrectionReceiptVerifier correctionReceiptVerifier;
 
   @override
-  int get schemaVersion => 10;
+  int get schemaVersion => 15;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
-    onCreate: (migrator) async {
+    onCreate: (migrator) => transaction(() async {
+      await _requireEmptyCreateOrigin();
       await migrator.createAll();
       await _createWalletCheckoutTable();
       await _createCashShiftTables();
       await _createProductImageTable();
       await _createCounterDraftTable();
       await _createHeldSaleTable();
-    },
-    onUpgrade: (migrator, from, to) async {
+      await _createSaleReversalTables();
+      await _createManagedWorkspaceBinding();
+      await _createBusinessProfileTable();
+      await _createMigrationProvenanceTable();
+      await _createCorrectionAuthorizationProofLedgerV15();
+      await _requireUnifiedV15Schema();
+    }),
+    onUpgrade: (migrator, from, to) => transaction(() async {
+      // Version 11 has two historical meanings. Classify the complete reserved
+      // schema before the first DDL statement so a branch-hop database cannot
+      // be silently relabelled or partially repaired.
+      final origin = await _classifyUpgradeOrigin(from);
       if (from < 2) {
         await migrator.createTable(shopProducts);
         await migrator.createTable(shopSales);
@@ -409,9 +1429,78 @@ class ShopDatabase extends _$ShopDatabase {
       if (from < 10) {
         await _createHeldSaleTable();
       }
+      final needsCorrectionSchema =
+          from < 11 ||
+          origin == _ShopUpgradeOrigin.profileV11 ||
+          origin == _ShopUpgradeOrigin.profileWorkspaceCollisionV12;
+      if (needsCorrectionSchema) {
+        // The historical profile/workspace collision can retain a binding
+        // guard that references the correction tables it never received.
+        // Remove it before DDL reparses every trigger; the workspace repair
+        // below recreates the exact guard after the correction tables exist.
+        if (origin == _ShopUpgradeOrigin.profileWorkspaceCollisionV12) {
+          await customStatement(
+            'DROP TRIGGER shop_managed_workspace_binding_insert_guard',
+          );
+        }
+        await _createSaleReversalTables();
+        await _ensureColumn(
+          'shop_cash_shifts',
+          'cash_reversal_count',
+          'INTEGER',
+        );
+        await _ensureColumn(
+          'shop_cash_shifts',
+          'cash_reversal_total_mmk',
+          'INTEGER',
+        );
+        await _ensureColumn(
+          'shop_cash_shifts',
+          'cash_drawer_outflow_mmk',
+          'INTEGER',
+        );
+        await _ensureColumn(
+          'shop_cash_shifts',
+          'review_cash_reversal_count',
+          'INTEGER',
+        );
+        await _ensureColumn(
+          'shop_cash_shifts',
+          'review_cash_drawer_outflow_mmk',
+          'INTEGER',
+        );
+      }
+      final needsWorkspaceSchema =
+          from < 12 ||
+          origin == _ShopUpgradeOrigin.profileWorkspaceCollisionV12;
+      if (needsWorkspaceSchema) {
+        // A legacy correction receipt is audit evidence, not workspace attach
+        // authority. Leave the migrated database unbound until an explicit
+        // authenticated selection is attached.
+        await _createManagedWorkspaceBinding();
+      }
+      final profileAlreadyPresent =
+          origin == _ShopUpgradeOrigin.profileV11 ||
+          origin == _ShopUpgradeOrigin.profileWorkspaceCollisionV12;
+      if (!profileAlreadyPresent) {
+        await _createBusinessProfileTable();
+      }
+      await _createMigrationProvenanceTable();
+      await _recordLegacyUnboundCorrectionHistory();
+      await _createCorrectionAuthorizationProofLedger();
+      if (from < 14) {
+        await _recordLegacyCorrectionAuthorizationProofs();
+      }
+      await _migrateCorrectionAuthorizationProofLedgerV15();
+      await _requireUnifiedV15Schema();
+    }),
+    beforeOpen: (_) async {
+      await customStatement('PRAGMA foreign_keys = ON');
+      await _requireUnifiedV15Schema();
     },
-    beforeOpen: (_) => customStatement('PRAGMA foreign_keys = ON'),
   );
+
+  Future<void> verifyReadyForUse() => _requireUnifiedV15Schema();
 
   Future<void> _createWalletCheckoutTable({bool includeQrSnapshot = true}) {
     final qrSnapshotColumns = includeQrSnapshot
@@ -451,23 +1540,22 @@ class ShopDatabase extends _$ShopDatabase {
         counted_cash_mmk INTEGER,
         difference_mmk INTEGER,
         review_sale_count INTEGER,
-        review_cash_total_mmk INTEGER
+        review_cash_total_mmk INTEGER,
+        cash_reversal_count INTEGER,
+        cash_reversal_total_mmk INTEGER,
+        cash_drawer_outflow_mmk INTEGER,
+        review_cash_reversal_count INTEGER,
+        review_cash_drawer_outflow_mmk INTEGER
       )
     ''');
-    await customStatement('''
-      CREATE UNIQUE INDEX IF NOT EXISTS shop_cash_shifts_one_open
-      ON shop_cash_shifts(state) WHERE state = 'open'
-    ''');
+    await customStatement(shopCashShiftsOneOpenV6Sql);
     await customStatement('''
       CREATE TABLE IF NOT EXISTS shop_cash_shift_sales (
         sale_id TEXT PRIMARY KEY NOT NULL REFERENCES shop_sales(id),
         shift_id TEXT NOT NULL REFERENCES shop_cash_shifts(id)
       )
     ''');
-    await customStatement('''
-      CREATE INDEX IF NOT EXISTS shop_cash_shift_sales_shift_id
-      ON shop_cash_shift_sales(shift_id)
-    ''');
+    await customStatement(shopCashShiftSalesShiftIdV6Sql);
   }
 
   Future<void> _createProductImageTable() => customStatement('''
@@ -498,10 +1586,319 @@ class ShopDatabase extends _$ShopDatabase {
         updated_at_millis INTEGER NOT NULL
       )
     ''');
-    await customStatement('''
-      CREATE INDEX IF NOT EXISTS shop_held_sales_updated
-      ON shop_held_sales(updated_at_millis DESC)
-    ''');
+    await customStatement(shopHeldSalesUpdatedV10Sql);
+  }
+
+  Future<void> _createBusinessProfileTable() =>
+      customStatement(shopBusinessProfileV11Sql);
+
+  Future<void> _createMigrationProvenanceTable() =>
+      customStatement(shopMigrationProvenanceV13Sql);
+
+  Future<void> _createCorrectionAuthorizationProofLedger() async {
+    for (final definition
+        in shopAuthorizationProofSchemaDefinitionsV14().values) {
+      await customStatement(definition);
+    }
+  }
+
+  Future<void> _createCorrectionAuthorizationProofLedgerV15() async {
+    for (final definition
+        in shopAuthorizationProofSchemaDefinitionsV15().values) {
+      await customStatement(definition);
+    }
+  }
+
+  Future<void> _migrateCorrectionAuthorizationProofLedgerV15() async {
+    final columns = await customSelect(
+      'PRAGMA table_info(shop_correction_authorization_proofs)',
+    ).get();
+    if (columns.any(
+      (row) => row.read<String>('name') == 'finalization_request_id',
+    )) {
+      return;
+    }
+    for (final trigger in const [
+      'shop_correction_authorization_proofs_no_update',
+      'shop_correction_authorization_proofs_no_delete',
+      'shop_sale_reversals_require_signed_proof',
+      'shop_wallet_reconciliations_require_signed_proof',
+    ]) {
+      await customStatement('DROP TRIGGER IF EXISTS $trigger');
+    }
+    await customStatement(
+      'ALTER TABLE shop_correction_authorization_proofs '
+      'RENAME TO shop_correction_authorization_proofs_v14',
+    );
+    await customStatement(shopCorrectionAuthorizationProofsV15Sql);
+    await customStatement(
+      'INSERT INTO shop_correction_authorization_proofs '
+      '(receipt_id, proof_kind, local_operation_id, receipt_digest, key_id, '
+      'signature, finalization_request_id, finalized_at_millis, workspace_id, '
+      'actor_id, actor_label, actor_role, capability, source, command_digest, '
+      'issued_at_millis, expires_at_millis, verified_at_millis) '
+      'SELECT receipt_id, proof_kind, local_operation_id, receipt_digest, '
+      'key_id, signature, NULL, NULL, workspace_id, actor_id, actor_label, '
+      'actor_role, capability, source, command_digest, issued_at_millis, '
+      'expires_at_millis, verified_at_millis '
+      'FROM shop_correction_authorization_proofs_v14',
+    );
+    await customStatement(
+      'DROP TABLE shop_correction_authorization_proofs_v14',
+    );
+    await _createCorrectionAuthorizationProofLedgerV15();
+  }
+
+  Future<void> _recordLegacyCorrectionAuthorizationProofs() async {
+    for (final source in const [
+      (table: 'shop_sale_reversals', capability: 'shop.sale.reverse'),
+      (
+        table: 'shop_wallet_reversal_reconciliations',
+        capability: 'shop.sale.reconcile_wallet',
+      ),
+    ]) {
+      final rows = await customSelect('SELECT * FROM ${source.table}').get();
+      for (final row in rows) {
+        final receiptId = row.read<String>('authorization_receipt_id');
+        final receiptDigest = row.read<String>('authorization_receipt_digest');
+        final workspaceId = row.read<String>('authorization_workspace_id');
+        final actorId = row.read<String>('authorized_actor_id');
+        final actorLabel = row.read<String>('authorized_actor_label');
+        final actorRole = row.read<String>('authorized_actor_role');
+        final capability = row.read<String>('authorization_capability');
+        final receiptSource = row.read<String>('authorization_source');
+        final commandDigest = row.read<String>('authorization_command_digest');
+        final issuedAtMillis = row.read<int>('authorization_issued_at_millis');
+        final verifiedAtMillis = row.read<int>(
+          'authorization_verified_at_millis',
+        );
+        final expiresAtMillis = row.read<int>(
+          'authorization_expires_at_millis',
+        );
+        if (capability != source.capability ||
+            actorRole != 'owner' ||
+            receiptSource != 'managed_membership_receipt_v1' ||
+            issuedAtMillis <= 0 ||
+            expiresAtMillis - issuedAtMillis !=
+                const Duration(minutes: 5).inMilliseconds ||
+            verifiedAtMillis < issuedAtMillis ||
+            verifiedAtMillis > expiresAtMillis ||
+            !shopLegacyCorrectionAuthorizationReceiptDigestMatchesV1(
+              receiptDigest: receiptDigest,
+              source: receiptSource,
+              receiptId: receiptId,
+              workspaceId: workspaceId,
+              actorId: actorId,
+              actorLabel: actorLabel,
+              actorRole: actorRole,
+              capability: capability,
+              commandDigest: commandDigest,
+              issuedAtMillis: issuedAtMillis,
+              expiresAtMillis: expiresAtMillis,
+            )) {
+          throw StateError(
+            'Legacy correction authorization evidence is invalid.',
+          );
+        }
+        await customInsert(
+          'INSERT INTO shop_correction_authorization_proofs '
+          '(receipt_id, proof_kind, local_operation_id, receipt_digest, '
+          'key_id, signature, workspace_id, actor_id, actor_label, actor_role, '
+          'capability, source, command_digest, issued_at_millis, '
+          'expires_at_millis, verified_at_millis) '
+          'VALUES (?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          variables: [
+            Variable<String>(receiptId),
+            Variable<String>(shopCorrectionAuthorizationProofKindLegacyV1),
+            Variable<String>(row.read<String>('operation_id')),
+            Variable<String>(receiptDigest),
+            Variable<String>(workspaceId),
+            Variable<String>(actorId),
+            Variable<String>(actorLabel),
+            Variable<String>(actorRole),
+            Variable<String>(capability),
+            Variable<String>(receiptSource),
+            Variable<String>(commandDigest),
+            Variable<int>(issuedAtMillis),
+            Variable<int>(expiresAtMillis),
+            Variable<int>(verifiedAtMillis),
+          ],
+        );
+      }
+    }
+  }
+
+  Future<void> _recordLegacyUnboundCorrectionHistory() async {
+    final hasBinding = await customSelect(
+      'SELECT 1 FROM shop_managed_workspace_binding LIMIT 1',
+    ).getSingleOrNull();
+    final hasCorrectionHistory = await customSelect(
+      'SELECT 1 FROM shop_sale_reversals LIMIT 1',
+    ).getSingleOrNull();
+    final existing = await customSelect(
+      'SELECT reason FROM shop_v13_migration_provenance WHERE singleton = 1',
+    ).getSingleOrNull();
+    if (hasBinding == null && hasCorrectionHistory != null) {
+      if (existing != null &&
+          existing.read<String>('reason') ==
+              'legacy_unbound_correction_history') {
+        return;
+      }
+      await customStatement(
+        'INSERT INTO shop_v13_migration_provenance (singleton, reason) '
+        "VALUES (1, 'legacy_unbound_correction_history')",
+      );
+    } else if (existing != null) {
+      throw StateError('Shop migration provenance is inconsistent.');
+    }
+  }
+
+  Future<void> _createSaleReversalTables() async {
+    await customStatement(shopSaleReversalsV11Sql);
+    await customStatement(shopSaleReversalLinesV11Sql);
+    await customStatement(shopWalletReversalReconciliationsV11Sql);
+    for (final table in const [
+      'shop_sale_reversals',
+      'shop_sale_reversal_lines',
+      'shop_wallet_reversal_reconciliations',
+    ]) {
+      for (final operation in const ['update', 'delete']) {
+        await customStatement(
+          shopImmutableTriggerV11Sql(
+            table: table,
+            operation: operation,
+            message: 'Shop reversal audit records are immutable',
+          ),
+        );
+      }
+    }
+    for (final table in const [
+      'shop_sales',
+      'shop_sale_lines',
+      'shop_stock_movements',
+    ]) {
+      for (final operation in const ['update', 'delete']) {
+        await customStatement(
+          shopImmutableTriggerV11Sql(
+            table: table,
+            operation: operation,
+            message: table == 'shop_stock_movements'
+                ? 'Completed Shop stock movements are immutable'
+                : 'Completed Shop sales are immutable',
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _createManagedWorkspaceBinding() async {
+    await customStatement(shopManagedWorkspaceBindingV12Sql);
+    for (final operation in const ['update', 'delete']) {
+      await customStatement(
+        shopImmutableTriggerV11Sql(
+          table: 'shop_managed_workspace_binding',
+          operation: operation,
+          message: 'Managed Shop workspace binding is immutable',
+        ),
+      );
+    }
+    await customStatement(shopManagedWorkspaceBindingInsertGuardV12Sql);
+    await customStatement(shopSaleReversalsRequireWorkspaceBindingV12Sql);
+    await customStatement(
+      shopWalletReversalReconciliationsRequireWorkspaceBindingV12Sql,
+    );
+  }
+
+  ShopManagedWorkspaceBinding _managedWorkspaceBindingFromRow(QueryRow row) =>
+      ShopManagedWorkspaceBinding(
+        workspaceId: row.read<String>('workspace_id'),
+        attachedActorId: row.read<String>('attached_actor_id'),
+        discoveryContract: row.read<String>('discovery_contract'),
+        attachedAtMillis: row.read<int>('attached_at_millis'),
+      );
+
+  Future<ShopManagedWorkspaceBinding?> readManagedWorkspaceBinding() async {
+    final row = await customSelect(
+      'SELECT workspace_id, attached_actor_id, discovery_contract, '
+      'attached_at_millis FROM shop_managed_workspace_binding '
+      'WHERE singleton = 1',
+    ).getSingleOrNull();
+    return row == null ? null : _managedWorkspaceBindingFromRow(row);
+  }
+
+  /// Irreversibly attaches this database to an authenticated discovery choice.
+  ///
+  /// Correction receipts are intentionally not accepted here. The caller must
+  /// supply a workspace selection produced by authenticated workspace
+  /// discovery. Reattaching the same workspace is idempotent; switching a
+  /// database to another workspace is never allowed.
+  Future<ShopManagedWorkspaceBinding> attachAuthenticatedManagedWorkspace(
+    ShopAuthenticatedWorkspaceSelection authenticatedSelection,
+  ) {
+    return transaction(() async {
+      final id = RegExp(r'^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$');
+      if (!id.hasMatch(authenticatedSelection.workspaceId) ||
+          !id.hasMatch(authenticatedSelection.actorId) ||
+          authenticatedSelection.directoryContract !=
+              shopManagedWorkspaceDirectoryContract) {
+        throw ArgumentError(
+          'The authenticated managed-workspace selection is invalid.',
+        );
+      }
+
+      final existing = await readManagedWorkspaceBinding();
+      if (existing != null) {
+        if (existing.workspaceId != authenticatedSelection.workspaceId) {
+          throw StateError(
+            'This Shop database is already attached to another workspace.',
+          );
+        }
+        if (existing.attachedActorId != authenticatedSelection.actorId) {
+          throw StateError(
+            'This Shop database is attached to another authenticated actor.',
+          );
+        }
+        return existing;
+      }
+
+      final conflictingHistory = await customSelect(
+        'SELECT 1 FROM ('
+        'SELECT authorization_workspace_id AS workspace_id, '
+        'authorized_actor_id AS actor_id '
+        'FROM shop_sale_reversals UNION ALL '
+        'SELECT authorization_workspace_id AS workspace_id, '
+        'authorized_actor_id AS actor_id '
+        'FROM shop_wallet_reversal_reconciliations'
+        ') WHERE workspace_id != ? OR actor_id != ? LIMIT 1',
+        variables: [
+          Variable<String>(authenticatedSelection.workspaceId),
+          Variable<String>(authenticatedSelection.actorId),
+        ],
+      ).getSingleOrNull();
+      if (conflictingHistory != null) {
+        throw StateError(
+          'Existing correction history belongs to another workspace.',
+        );
+      }
+
+      final now = DateTime.now().millisecondsSinceEpoch;
+      await customInsert(
+        'INSERT INTO shop_managed_workspace_binding '
+        '(singleton, workspace_id, discovery_contract, attached_actor_id, '
+        'attached_at_millis) VALUES (1, ?, ?, ?, ?)',
+        variables: [
+          Variable<String>(authenticatedSelection.workspaceId),
+          Variable<String>(authenticatedSelection.directoryContract),
+          Variable<String>(authenticatedSelection.actorId),
+          Variable<int>(now),
+        ],
+      );
+      await customStatement(
+        'DELETE FROM shop_v13_migration_provenance '
+        "WHERE singleton = 1 AND reason = 'legacy_unbound_correction_history'",
+      );
+      return (await readManagedWorkspaceBinding())!;
+    });
   }
 
   /// Persist the next basket before showing it to the operator. No stock or
@@ -937,6 +2334,854 @@ class ShopDatabase extends _$ShopDatabase {
     await customStatement('ALTER TABLE $table ADD COLUMN $column $declaration');
   }
 
+  Future<void> _requireEmptyCreateOrigin() async {
+    final objects = await customSelect(
+      "SELECT 1 FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' LIMIT 1",
+    ).get();
+    if (objects.isNotEmpty) {
+      throw StateError(
+        'A schema-zero Shop database must be empty before creation.',
+      );
+    }
+  }
+
+  Future<_ShopUpgradeOrigin> _classifyUpgradeOrigin(int from) async {
+    if (from < 1 || from > 14) {
+      throw StateError('This Shop database version cannot migrate to v15.');
+    }
+    if (from == 14) {
+      await _requireUnifiedV14Schema();
+      return _ShopUpgradeOrigin.unifiedV14;
+    }
+    if (from == 13) {
+      await _requireUnifiedV13Schema();
+      return _ShopUpgradeOrigin.unifiedV13;
+    }
+    await _requireDatabaseIntegrity();
+    final objects = await _readSchemaObjects();
+    if (objects.values.any((object) => object.type == 'view')) {
+      throw StateError('This Shop database contains an unknown schema view.');
+    }
+
+    final auditDefinitions = shopReversalSchemaDefinitionsV11();
+    final workspaceDefinitions = shopWorkspaceSchemaDefinitionsV12();
+    final collisionDefinitions = shopWorkspaceCollisionPrefixDefinitionsV12();
+    final auditNames = auditDefinitions.keys.toSet();
+    final workspaceNames = workspaceDefinitions.keys.toSet();
+    const profileNames = {'shop_business_profile'};
+    final presentNames = objects.keys.toSet();
+    final cashState = await _reversalCashColumnState();
+    if (from >= 6 && !await _baseSchemaExact(from, objects)) {
+      throw StateError('This Shop database has an unknown base schema.');
+    }
+    final hasAnyAuditObject = presentNames.intersection(auditNames).isNotEmpty;
+    final hasAnyWorkspaceObject = presentNames
+        .intersection(workspaceNames)
+        .isNotEmpty;
+    final hasProfileObject = presentNames.intersection(profileNames).isNotEmpty;
+    final hasAnyAudit =
+        hasAnyAuditObject || cashState != _ColumnGroupState.none;
+    final auditExact =
+        cashState == _ColumnGroupState.exact &&
+        _definitionGroupExact(objects, auditDefinitions, auditNames);
+    final workspaceExact = _definitionGroupExact(
+      objects,
+      workspaceDefinitions,
+      workspaceNames,
+    );
+    final collisionWorkspaceExact = _definitionGroupExact(
+      objects,
+      collisionDefinitions,
+      workspaceNames,
+    );
+    final profileExact =
+        _definitionGroupExact(objects, const {
+          'shop_business_profile': shopBusinessProfileV11Sql,
+        }, profileNames) &&
+        await _businessProfileRowsValid();
+
+    bool triggersMatch(Iterable<Map<String, String>> groups) {
+      final expected = <String>{
+        for (final group in groups)
+          for (final entry in group.entries)
+            if (!canonicalShopSchemaSql(entry.value).startsWith('create table'))
+              entry.key,
+      };
+      final actual = objects.entries
+          .where((entry) => entry.value.type == 'trigger')
+          .map((entry) => entry.key)
+          .toSet();
+      return actual.length == expected.length && actual.containsAll(expected);
+    }
+
+    _ShopUpgradeOrigin? origin;
+    Set<String>? expectedNames;
+    if (from < 11) {
+      if (!hasAnyAudit &&
+          !hasAnyWorkspaceObject &&
+          !hasProfileObject &&
+          triggersMatch(const [])) {
+        origin = _ShopUpgradeOrigin.legacy;
+        expectedNames = _expectedSchemaObjectNames(from);
+      }
+    } else if (from == 11) {
+      if (auditExact &&
+          !hasProfileObject &&
+          !hasAnyWorkspaceObject &&
+          triggersMatch([auditDefinitions])) {
+        origin = _ShopUpgradeOrigin.correctionV11;
+        expectedNames = {
+          ..._expectedSchemaObjectNames(from),
+          ...auditDefinitions.keys,
+        };
+      }
+      if (profileExact &&
+          !hasAnyAudit &&
+          !hasAnyWorkspaceObject &&
+          triggersMatch(const [])) {
+        origin = _ShopUpgradeOrigin.profileV11;
+        expectedNames = {
+          ..._expectedSchemaObjectNames(from),
+          'shop_business_profile',
+        };
+      }
+    } else if (from == 12) {
+      if (auditExact &&
+          workspaceExact &&
+          !hasProfileObject &&
+          await _workspaceBindingRowsValid(allowUnboundHistory: true) &&
+          triggersMatch([auditDefinitions, workspaceDefinitions])) {
+        origin = _ShopUpgradeOrigin.correctionWorkspaceV12;
+        expectedNames = {
+          ..._expectedSchemaObjectNames(from),
+          ...auditDefinitions.keys,
+          ...workspaceDefinitions.keys,
+        };
+      }
+      if (profileExact &&
+          !hasAnyAudit &&
+          collisionWorkspaceExact &&
+          await _workspaceBindingIsEmpty() &&
+          triggersMatch([collisionDefinitions])) {
+        origin = _ShopUpgradeOrigin.profileWorkspaceCollisionV12;
+        expectedNames = {
+          ..._expectedSchemaObjectNames(from),
+          ...collisionDefinitions.keys,
+          'shop_business_profile',
+        };
+      }
+    }
+
+    if (origin != null &&
+        (from < 6 || _sameSchemaObjectNames(objects, expectedNames!))) {
+      return origin;
+    }
+
+    throw StateError(
+      'This Shop database has an unknown or partial v11/v12 schema.',
+    );
+  }
+
+  Future<void> _requireUnifiedV13Schema() async {
+    await _requireDatabaseIntegrity();
+    final objects = await _readSchemaObjects();
+    final auditDefinitions = shopReversalSchemaDefinitionsV11();
+    final workspaceDefinitions = shopWorkspaceSchemaDefinitionsV12();
+    final expectedTriggers = <String>{
+      for (final definitions in [auditDefinitions, workspaceDefinitions])
+        for (final entry in definitions.entries)
+          if (!canonicalShopSchemaSql(entry.value).startsWith('create table'))
+            entry.key,
+    };
+    final actualTriggers = objects.entries
+        .where((entry) => entry.value.type == 'trigger')
+        .map((entry) => entry.key)
+        .toSet();
+    final expectedNames = {
+      ..._expectedSchemaObjectNames(13),
+      ...auditDefinitions.keys,
+      ...workspaceDefinitions.keys,
+      'shop_business_profile',
+      'shop_v13_migration_provenance',
+    };
+    final valid =
+        objects.values.every((object) => object.type != 'view') &&
+        await _baseSchemaExact(13, objects) &&
+        _sameSchemaObjectNames(objects, expectedNames) &&
+        await _reversalCashColumnState() == _ColumnGroupState.exact &&
+        _definitionGroupExact(
+          objects,
+          auditDefinitions,
+          auditDefinitions.keys.toSet(),
+        ) &&
+        _definitionGroupExact(
+          objects,
+          workspaceDefinitions,
+          workspaceDefinitions.keys.toSet(),
+        ) &&
+        _definitionGroupExact(
+          objects,
+          const {'shop_business_profile': shopBusinessProfileV11Sql},
+          const {'shop_business_profile'},
+        ) &&
+        _definitionGroupExact(
+          objects,
+          const {
+            'shop_v13_migration_provenance': shopMigrationProvenanceV13Sql,
+          },
+          const {'shop_v13_migration_provenance'},
+        ) &&
+        await _businessProfileRowsValid() &&
+        await _v13WorkspaceBindingRowsValid() &&
+        actualTriggers.length == expectedTriggers.length &&
+        actualTriggers.containsAll(expectedTriggers);
+    if (!valid) {
+      throw StateError('The unified Shop v13 schema failed verification.');
+    }
+  }
+
+  Future<void> _requireUnifiedV14Schema() async {
+    await _requireDatabaseIntegrity();
+    final objects = await _readSchemaObjects();
+    final auditDefinitions = shopReversalSchemaDefinitionsV11();
+    final workspaceDefinitions = shopWorkspaceSchemaDefinitionsV12();
+    final proofDefinitions = shopAuthorizationProofSchemaDefinitionsV14();
+    final expectedTriggers = <String>{
+      for (final definitions in [
+        auditDefinitions,
+        workspaceDefinitions,
+        proofDefinitions,
+      ])
+        for (final entry in definitions.entries)
+          if (!canonicalShopSchemaSql(entry.value).startsWith('create table'))
+            entry.key,
+    };
+    final actualTriggers = objects.entries
+        .where((entry) => entry.value.type == 'trigger')
+        .map((entry) => entry.key)
+        .toSet();
+    final expectedNames = {
+      ..._expectedSchemaObjectNames(14),
+      ...auditDefinitions.keys,
+      ...workspaceDefinitions.keys,
+      ...proofDefinitions.keys,
+      'shop_business_profile',
+      'shop_v13_migration_provenance',
+    };
+    final valid =
+        objects.values.every((object) => object.type != 'view') &&
+        await _baseSchemaExact(14, objects) &&
+        _sameSchemaObjectNames(objects, expectedNames) &&
+        await _reversalCashColumnState() == _ColumnGroupState.exact &&
+        _definitionGroupExact(
+          objects,
+          auditDefinitions,
+          auditDefinitions.keys.toSet(),
+        ) &&
+        _definitionGroupExact(
+          objects,
+          workspaceDefinitions,
+          workspaceDefinitions.keys.toSet(),
+        ) &&
+        _definitionGroupExact(
+          objects,
+          proofDefinitions,
+          proofDefinitions.keys.toSet(),
+        ) &&
+        _definitionGroupExact(
+          objects,
+          const {'shop_business_profile': shopBusinessProfileV11Sql},
+          const {'shop_business_profile'},
+        ) &&
+        _definitionGroupExact(
+          objects,
+          const {
+            'shop_v13_migration_provenance': shopMigrationProvenanceV13Sql,
+          },
+          const {'shop_v13_migration_provenance'},
+        ) &&
+        await _businessProfileRowsValid() &&
+        await _v14WorkspaceBindingRowsValid() &&
+        await _v15CorrectionAuthorizationProofsValid(v15: false) &&
+        actualTriggers.length == expectedTriggers.length &&
+        actualTriggers.containsAll(expectedTriggers);
+    if (!valid) {
+      throw StateError('The unified Shop v14 schema failed verification.');
+    }
+  }
+
+  Future<void> _requireUnifiedV15Schema() async {
+    await _requireDatabaseIntegrity();
+    final objects = await _readSchemaObjects();
+    final auditDefinitions = shopReversalSchemaDefinitionsV11();
+    final workspaceDefinitions = shopWorkspaceSchemaDefinitionsV12();
+    final proofDefinitions = shopAuthorizationProofSchemaDefinitionsV15();
+    final expectedTriggers = <String>{
+      for (final definitions in [
+        auditDefinitions,
+        workspaceDefinitions,
+        proofDefinitions,
+      ])
+        for (final entry in definitions.entries)
+          if (!canonicalShopSchemaSql(entry.value).startsWith('create table'))
+            entry.key,
+    };
+    final actualTriggers = objects.entries
+        .where((entry) => entry.value.type == 'trigger')
+        .map((entry) => entry.key)
+        .toSet();
+    final expectedNames = {
+      ..._expectedSchemaObjectNames(15),
+      ...auditDefinitions.keys,
+      ...workspaceDefinitions.keys,
+      ...proofDefinitions.keys,
+      'shop_business_profile',
+      'shop_v13_migration_provenance',
+    };
+    final valid =
+        objects.values.every((object) => object.type != 'view') &&
+        await _baseSchemaExact(15, objects) &&
+        _sameSchemaObjectNames(objects, expectedNames) &&
+        await _reversalCashColumnState() == _ColumnGroupState.exact &&
+        _definitionGroupExact(
+          objects,
+          auditDefinitions,
+          auditDefinitions.keys.toSet(),
+        ) &&
+        _definitionGroupExact(
+          objects,
+          workspaceDefinitions,
+          workspaceDefinitions.keys.toSet(),
+        ) &&
+        _definitionGroupExact(
+          objects,
+          proofDefinitions,
+          proofDefinitions.keys.toSet(),
+        ) &&
+        _definitionGroupExact(
+          objects,
+          const {'shop_business_profile': shopBusinessProfileV11Sql},
+          const {'shop_business_profile'},
+        ) &&
+        _definitionGroupExact(
+          objects,
+          const {
+            'shop_v13_migration_provenance': shopMigrationProvenanceV13Sql,
+          },
+          const {'shop_v13_migration_provenance'},
+        ) &&
+        await _businessProfileRowsValid() &&
+        await _v14WorkspaceBindingRowsValid() &&
+        await _v15CorrectionAuthorizationProofsValid() &&
+        actualTriggers.length == expectedTriggers.length &&
+        actualTriggers.containsAll(expectedTriggers);
+    if (!valid) {
+      throw StateError('The unified Shop v15 schema failed verification.');
+    }
+  }
+
+  bool _proofMatchesCorrectionRow(QueryRow proof, QueryRow correction) =>
+      proof.read<String>('receipt_id') ==
+          correction.read<String>('authorization_receipt_id') &&
+      proof.read<String>('local_operation_id') ==
+          correction.read<String>('operation_id') &&
+      proof.read<String>('receipt_digest') ==
+          correction.read<String>('authorization_receipt_digest') &&
+      proof.read<String>('workspace_id') ==
+          correction.read<String>('authorization_workspace_id') &&
+      proof.read<String>('actor_id') ==
+          correction.read<String>('authorized_actor_id') &&
+      proof.read<String>('actor_label') ==
+          correction.read<String>('authorized_actor_label') &&
+      proof.read<String>('actor_role') ==
+          correction.read<String>('authorized_actor_role') &&
+      proof.read<String>('capability') ==
+          correction.read<String>('authorization_capability') &&
+      proof.read<String>('source') ==
+          correction.read<String>('authorization_source') &&
+      proof.read<String>('command_digest') ==
+          correction.read<String>('authorization_command_digest') &&
+      proof.read<int>('issued_at_millis') ==
+          correction.read<int>('authorization_issued_at_millis') &&
+      proof.read<int>('expires_at_millis') ==
+          correction.read<int>('authorization_expires_at_millis') &&
+      proof.read<int>('verified_at_millis') ==
+          correction.read<int>('authorization_verified_at_millis');
+
+  Future<bool> _v15CorrectionAuthorizationProofsValid({bool v15 = true}) async {
+    final proofs = await customSelect(
+      'SELECT * FROM shop_correction_authorization_proofs '
+      'ORDER BY receipt_id',
+    ).get();
+    final reversalCount = (await customSelect(
+      'SELECT COUNT(*) AS total FROM shop_sale_reversals',
+    ).getSingle()).read<int>('total');
+    final reconciliationCount = (await customSelect(
+      'SELECT COUNT(*) AS total FROM shop_wallet_reversal_reconciliations',
+    ).getSingle()).read<int>('total');
+    if (proofs.length != reversalCount + reconciliationCount) return false;
+    final id = RegExp(r'^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$');
+    final digest = RegExp(r'^[0-9a-f]{64}$');
+    final boundedText = RegExp(r'^[^\x00-\x1f\x7f]{1,160}$');
+    final keyIdPattern = RegExp(r'^[a-z0-9][a-z0-9._-]{0,31}$');
+    final signaturePattern = RegExp(r'^[A-Za-z0-9_-]{86}$');
+    final uuid = RegExp(
+      r'^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
+    );
+
+    for (final proof in proofs) {
+      final proofKind = proof.read<String>('proof_kind');
+      final capability = proof.read<String>('capability');
+      final table = switch (capability) {
+        'shop.sale.reverse' => 'shop_sale_reversals',
+        'shop.sale.reconcile_wallet' => 'shop_wallet_reversal_reconciliations',
+        _ => null,
+      };
+      if (table == null) return false;
+      final correction = await customSelect(
+        'SELECT * FROM $table WHERE authorization_receipt_id = ? '
+        'AND operation_id = ? LIMIT 1',
+        variables: [
+          Variable<String>(proof.read<String>('receipt_id')),
+          Variable<String>(proof.read<String>('local_operation_id')),
+        ],
+      ).getSingleOrNull();
+      if (correction == null ||
+          !_proofMatchesCorrectionRow(proof, correction)) {
+        return false;
+      }
+
+      final receiptDigest = proof.read<String>('receipt_digest');
+      final source = proof.read<String>('source');
+      final receiptId = proof.read<String>('receipt_id');
+      final localOperationId = proof.read<String>('local_operation_id');
+      final workspaceId = proof.read<String>('workspace_id');
+      final actorId = proof.read<String>('actor_id');
+      final actorLabel = proof.read<String>('actor_label');
+      final actorRole = proof.read<String>('actor_role');
+      final commandDigest = proof.read<String>('command_digest');
+      final issuedAtMillis = proof.read<int>('issued_at_millis');
+      final expiresAtMillis = proof.read<int>('expires_at_millis');
+      final verifiedAtMillis = proof.read<int>('verified_at_millis');
+      final keyId = proof.readNullable<String>('key_id');
+      final signature = proof.readNullable<String>('signature');
+      final finalizationRequestId = v15
+          ? proof.readNullable<String>('finalization_request_id')
+          : null;
+      final finalizedAtMillis = v15
+          ? proof.readNullable<int>('finalized_at_millis')
+          : null;
+      if (!boundedText.hasMatch(receiptId) ||
+          receiptId != receiptId.trim() ||
+          !boundedText.hasMatch(localOperationId) ||
+          localOperationId != localOperationId.trim() ||
+          !digest.hasMatch(receiptDigest) ||
+          !id.hasMatch(workspaceId) ||
+          !id.hasMatch(actorId) ||
+          !boundedText.hasMatch(actorLabel) ||
+          actorLabel != actorLabel.trim() ||
+          actorRole != 'owner' ||
+          !digest.hasMatch(commandDigest) ||
+          issuedAtMillis <= 0 ||
+          expiresAtMillis - issuedAtMillis !=
+              const Duration(minutes: 5).inMilliseconds ||
+          verifiedAtMillis < issuedAtMillis ||
+          verifiedAtMillis > expiresAtMillis) {
+        return false;
+      }
+      if (proofKind == shopCorrectionAuthorizationProofKindLegacyV1) {
+        if (keyId != null ||
+            signature != null ||
+            finalizationRequestId != null ||
+            finalizedAtMillis != null ||
+            source != 'managed_membership_receipt_v1' ||
+            !shopLegacyCorrectionAuthorizationReceiptDigestMatchesV1(
+              receiptDigest: receiptDigest,
+              source: source,
+              receiptId: receiptId,
+              workspaceId: workspaceId,
+              actorId: actorId,
+              actorLabel: actorLabel,
+              actorRole: actorRole,
+              capability: capability,
+              commandDigest: commandDigest,
+              issuedAtMillis: issuedAtMillis,
+              expiresAtMillis: expiresAtMillis,
+            )) {
+          return false;
+        }
+        continue;
+      }
+      if (proofKind != shopCorrectionAuthorizationProofKindSignedV2 &&
+          (!v15 || proofKind != shopCorrectionAuthorizationProofKindSignedV3)) {
+        return false;
+      }
+      final isV3 = proofKind == shopCorrectionAuthorizationProofKindSignedV3;
+      if (isV3
+          ? (source != 'managed_membership_receipt_v1' ||
+                finalizationRequestId == null ||
+                !uuid.hasMatch(finalizationRequestId) ||
+                finalizedAtMillis == null ||
+                finalizedAtMillis != verifiedAtMillis)
+          : (source != 'managed_membership_receipt_v1' ||
+                finalizationRequestId != null ||
+                finalizedAtMillis != null)) {
+        return false;
+      }
+      if (keyId == null ||
+          signature == null ||
+          !keyIdPattern.hasMatch(keyId) ||
+          !signaturePattern.hasMatch(signature) ||
+          !await correctionReceiptVerifier.verify(
+            ShopCorrectionAuthorization(
+              contract: isV3
+                  ? shopCorrectionAuthorizationReceiptContract
+                  : shopHistoricalCorrectionAuthorizationReceiptContractV2,
+              receiptId: receiptId,
+              receiptDigest: receiptDigest,
+              workspaceId: workspaceId,
+              actorId: actorId,
+              actorLabel: actorLabel,
+              actorRole: actorRole,
+              capability: capability,
+              source: source,
+              commandDigest: commandDigest,
+              finalizationRequestId: finalizationRequestId,
+              finalizedAtMillis: finalizedAtMillis,
+              issuedAtMillis: issuedAtMillis,
+              expiresAtMillis: expiresAtMillis,
+              keyId: keyId,
+              signature: signature,
+            ),
+          )) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  Future<void> _requireDatabaseIntegrity() async {
+    final integrity = await customSelect('PRAGMA integrity_check').get();
+    final brokenReferences = await customSelect('PRAGMA foreign_key_check')
+        .get();
+    if (integrity.length != 1 ||
+        integrity.single.read<String>('integrity_check') != 'ok' ||
+        brokenReferences.isNotEmpty) {
+      throw StateError('The Shop database failed integrity checks.');
+    }
+  }
+
+  Future<Map<String, _ShopSchemaObject>> _readSchemaObjects() async {
+    final rows = await customSelect(
+      "SELECT type, name, tbl_name, sql FROM sqlite_master "
+      "WHERE name NOT LIKE 'sqlite_%' "
+      "AND type IN ('table', 'trigger', 'view', 'index')",
+    ).get();
+    final objects = <String, _ShopSchemaObject>{};
+    for (final row in rows) {
+      final name = row.read<String>('name').toLowerCase();
+      if (objects.containsKey(name)) {
+        throw StateError('The Shop database has duplicate schema names.');
+      }
+      objects[name] = _ShopSchemaObject(
+        type: row.read<String>('type').toLowerCase(),
+        table: row.read<String>('tbl_name').toLowerCase(),
+        sql: row.read<String>('sql'),
+      );
+    }
+    return objects;
+  }
+
+  Set<String> _expectedSchemaObjectNames(int version) => {
+    ...shopBaseTableColumnsForVersion(version).keys,
+    ...shopCriticalIndexDefinitions(version).keys,
+  };
+
+  bool _sameSchemaObjectNames(
+    Map<String, _ShopSchemaObject> objects,
+    Set<String> expected,
+  ) =>
+      objects.length == expected.length &&
+      objects.keys.toSet().containsAll(expected);
+
+  Future<bool> _baseSchemaExact(
+    int version,
+    Map<String, _ShopSchemaObject> objects,
+  ) async {
+    final columns = shopBaseTableColumnsForVersion(version);
+    if (columns.isEmpty) return false;
+    for (final entry in columns.entries) {
+      if (objects[entry.key]?.type != 'table' ||
+          !await _tableColumnsExact(entry.key, entry.value)) {
+        return false;
+      }
+    }
+    final indexes = shopCriticalIndexDefinitions(version);
+    return _definitionGroupExact(objects, indexes, indexes.keys.toSet());
+  }
+
+  Future<bool> _tableColumnsExact(String table, Set<String> expected) async {
+    final rows = await customSelect('PRAGMA table_info($table)').get();
+    final actual = rows
+        .map((row) => row.read<String>('name').toLowerCase())
+        .toSet();
+    if (table == 'shop_cash_shifts') {
+      actual.removeAll(const {
+        'cash_reversal_count',
+        'cash_reversal_total_mmk',
+        'cash_drawer_outflow_mmk',
+        'review_cash_reversal_count',
+        'review_cash_drawer_outflow_mmk',
+      });
+    }
+    return actual.length == expected.length && actual.containsAll(expected);
+  }
+
+  bool _definitionGroupExact(
+    Map<String, _ShopSchemaObject> objects,
+    Map<String, String> expected,
+    Set<String> reservedNames,
+  ) {
+    final present = objects.keys.toSet().intersection(reservedNames);
+    if (present.length != expected.length ||
+        !present.containsAll(expected.keys)) {
+      return false;
+    }
+    for (final entry in expected.entries) {
+      final object = objects[entry.key];
+      final expectedType = shopSchemaObjectTypeForDefinition(entry.value);
+      if (object == null ||
+          object.type != expectedType ||
+          canonicalShopSchemaSql(object.sql) !=
+              canonicalShopSchemaSql(entry.value)) {
+        return false;
+      }
+      if (expectedType == 'trigger' || expectedType == 'index') {
+        final target = RegExp(r'\bon\s+([a-z0-9_]+)')
+            .firstMatch(canonicalShopSchemaSql(entry.value));
+        if (target == null || object.table != target.group(1)) return false;
+      }
+    }
+    return true;
+  }
+
+  Future<_ColumnGroupState> _reversalCashColumnState() async {
+    const names = [
+      'cash_reversal_count',
+      'cash_reversal_total_mmk',
+      'cash_drawer_outflow_mmk',
+      'review_cash_reversal_count',
+      'review_cash_drawer_outflow_mmk',
+    ];
+    final rows = await customSelect('PRAGMA table_info(shop_cash_shifts)')
+        .get();
+    final byName = <String, QueryRow>{
+      for (final row in rows) row.read<String>('name').toLowerCase(): row,
+    };
+    final present = names.where(byName.containsKey).toList(growable: false);
+    if (present.isEmpty) return _ColumnGroupState.none;
+    if (present.length != names.length) return _ColumnGroupState.partial;
+    final orderedNames = rows
+        .map((row) => row.read<String>('name').toLowerCase())
+        .toList(growable: false);
+    if (orderedNames.length < names.length ||
+        !_sameStrings(
+          orderedNames.sublist(orderedNames.length - names.length),
+          names,
+        )) {
+      return _ColumnGroupState.partial;
+    }
+    for (final name in names) {
+      final row = byName[name]!;
+      if (row.read<String>('type').toUpperCase() != 'INTEGER' ||
+          row.read<int>('notnull') != 0 ||
+          row.data['dflt_value'] != null ||
+          row.read<int>('pk') != 0) {
+        return _ColumnGroupState.partial;
+      }
+    }
+    return _ColumnGroupState.exact;
+  }
+
+  bool _sameStrings(List<String> actual, List<String> expected) {
+    if (actual.length != expected.length) return false;
+    for (var index = 0; index < actual.length; index++) {
+      if (actual[index] != expected[index]) return false;
+    }
+    return true;
+  }
+
+  Future<bool> _businessProfileRowsValid() async {
+    try {
+      final rows = await customSelect(
+        'SELECT singleton_key, schema_id, template_id, template_version, '
+        'updated_at_millis FROM shop_business_profile',
+      ).get();
+      if (rows.length > 1) return false;
+      if (rows.isEmpty) return true;
+      const templates = {
+        'mini-mart',
+        'cafe-takeaway',
+        'fashion-accessories',
+        'beauty-household',
+        'custom',
+      };
+      final row = rows.single;
+      final updatedAt = row.data['updated_at_millis'];
+      return row.data['singleton_key'] == 1 &&
+          row.data['schema_id'] == 'supermega.shop.business_profile.v1' &&
+          templates.contains(row.data['template_id']) &&
+          row.data['template_version'] == 1 &&
+          updatedAt is int &&
+          updatedAt >= 0;
+    } on Object {
+      return false;
+    }
+  }
+
+  Future<bool> _workspaceBindingIsEmpty() async {
+    try {
+      final rows = await customSelect(
+        'SELECT 1 FROM shop_managed_workspace_binding LIMIT 1',
+      ).get();
+      return rows.isEmpty;
+    } on Object {
+      return false;
+    }
+  }
+
+  Future<bool> _workspaceBindingRowsValid({
+    required bool allowUnboundHistory,
+  }) async {
+    try {
+      final bindings = await customSelect(
+        'SELECT singleton, workspace_id, discovery_contract, '
+        'attached_actor_id, attached_at_millis '
+        'FROM shop_managed_workspace_binding',
+      ).get();
+      if (bindings.length > 1) return false;
+      final correctionRows = await customSelect(
+        'SELECT authorization_workspace_id AS workspace_id, '
+        'authorized_actor_id AS actor_id '
+        'FROM shop_sale_reversals UNION ALL '
+        'SELECT authorization_workspace_id AS workspace_id, '
+        'authorized_actor_id AS actor_id '
+        'FROM shop_wallet_reversal_reconciliations',
+      ).get();
+      final workspaces = correctionRows
+          .map((row) => row.data['workspace_id'])
+          .toList(growable: false);
+      final actors = correctionRows
+          .map((row) => row.data['actor_id'])
+          .toList(growable: false);
+      final id = RegExp(r'^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$');
+      if (workspaces.any((value) => value is! String || !id.hasMatch(value)) ||
+          actors.any((value) => value is! String || !id.hasMatch(value))) {
+        return false;
+      }
+      if (bindings.isEmpty) return allowUnboundHistory || workspaces.isEmpty;
+      final binding = bindings.single;
+      final workspaceId = binding.data['workspace_id'];
+      final actorId = binding.data['attached_actor_id'];
+      final attachedAt = binding.data['attached_at_millis'];
+      return binding.data['singleton'] == 1 &&
+          workspaceId is String &&
+          id.hasMatch(workspaceId) &&
+          binding.data['discovery_contract'] ==
+              shopManagedWorkspaceDirectoryContract &&
+          actorId is String &&
+          id.hasMatch(actorId) &&
+          attachedAt is int &&
+          attachedAt > 0 &&
+          workspaces.every((value) => value == workspaceId) &&
+          actors.every((value) => value == actorId);
+    } on Object {
+      return false;
+    }
+  }
+
+  Future<bool> _v13WorkspaceBindingRowsValid() async {
+    try {
+      final provenance = await customSelect(
+        'SELECT singleton, reason FROM shop_v13_migration_provenance',
+      ).get();
+      if (provenance.length > 1 ||
+          provenance.any(
+            (row) =>
+                row.data['singleton'] != 1 ||
+                row.data['reason'] != 'legacy_unbound_correction_history',
+          )) {
+        return false;
+      }
+      final bindings = await customSelect(
+        'SELECT singleton, workspace_id, discovery_contract, '
+        'attached_actor_id, attached_at_millis '
+        'FROM shop_managed_workspace_binding',
+      ).get();
+      if (bindings.length > 1) return false;
+      final correctionRows = await customSelect(
+        'SELECT authorization_workspace_id AS workspace_id, '
+        'authorized_actor_id AS actor_id '
+        'FROM shop_sale_reversals UNION ALL '
+        'SELECT authorization_workspace_id AS workspace_id, '
+        'authorized_actor_id AS actor_id '
+        'FROM shop_wallet_reversal_reconciliations',
+      ).get();
+      final workspaces = correctionRows
+          .map((row) => row.data['workspace_id'])
+          .toList(growable: false);
+      final actors = correctionRows
+          .map((row) => row.data['actor_id'])
+          .toList(growable: false);
+      final id = RegExp(r'^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$');
+      if (workspaces.any((value) => value is! String || !id.hasMatch(value)) ||
+          actors.any((value) => value is! String || !id.hasMatch(value))) {
+        return false;
+      }
+      if (bindings.isEmpty) {
+        return workspaces.isEmpty ? provenance.isEmpty : provenance.length == 1;
+      }
+      if (provenance.isNotEmpty) return false;
+      final binding = bindings.single;
+      final workspaceId = binding.data['workspace_id'];
+      final actorId = binding.data['attached_actor_id'];
+      final attachedAt = binding.data['attached_at_millis'];
+      return binding.data['singleton'] == 1 &&
+          workspaceId is String &&
+          id.hasMatch(workspaceId) &&
+          binding.data['discovery_contract'] ==
+              shopManagedWorkspaceDirectoryContract &&
+          actorId is String &&
+          id.hasMatch(actorId) &&
+          attachedAt is int &&
+          attachedAt > 0 &&
+          workspaces.every((value) => value == workspaceId) &&
+          actors.every((value) => value == actorId);
+    } on Object {
+      return false;
+    }
+  }
+
+  Future<bool> _v14WorkspaceBindingRowsValid() async {
+    if (!await _v13WorkspaceBindingRowsValid()) return false;
+    try {
+      final binding = await customSelect(
+        'SELECT 1 FROM shop_managed_workspace_binding LIMIT 1',
+      ).getSingleOrNull();
+      if (binding != null) return true;
+      final signedProof = await customSelect(
+        'SELECT 1 FROM shop_correction_authorization_proofs '
+        'WHERE proof_kind != ? LIMIT 1',
+        variables: [
+          Variable<String>(shopCorrectionAuthorizationProofKindLegacyV1),
+        ],
+      ).getSingleOrNull();
+      return signedProof == null;
+    } on Object {
+      return false;
+    }
+  }
+
   /// Create and read back a consistent local SQLite snapshot. This plaintext
   /// file is an internal building block, not a user-shareable backup format.
   Future<void> exportVerifiedLocalSnapshot(File target) async {
@@ -951,8 +3196,12 @@ class ShopDatabase extends _$ShopDatabase {
       // SQLite includes all tables, including the raw wallet-intent table and
       // pending outbox events, in one consistent point-in-time snapshot.
       await customStatement('VACUUM INTO ?', [target.path]);
-      final snapshot = ShopDatabase(NativeDatabase(target));
+      final snapshot = ShopDatabase.withCorrectionReceiptVerifier(
+        executor: NativeDatabase(target),
+        correctionReceiptVerifier: correctionReceiptVerifier,
+      );
       try {
+        await snapshot.verifyReadyForUse();
         final version = await snapshot
             .customSelect('PRAGMA user_version')
             .get();
@@ -1819,6 +4068,9 @@ class ShopDatabase extends _$ShopDatabase {
     expectedCashMmk: row.readNullable<int>('expected_cash_mmk'),
     countedCashMmk: row.readNullable<int>('counted_cash_mmk'),
     differenceMmk: row.readNullable<int>('difference_mmk'),
+    cashReversalCount: row.readNullable<int>('cash_reversal_count'),
+    cashReversalTotalMmk: row.readNullable<int>('cash_reversal_total_mmk'),
+    cashDrawerOutflowMmk: row.readNullable<int>('cash_drawer_outflow_mmk'),
   );
 
   Future<ShopCashShift?> readOpenCashShift() async {
@@ -1917,7 +4169,7 @@ class ShopDatabase extends _$ShopDatabase {
     if (shift.state != 'open') {
       throw StateError('This cash shift is already closed.');
     }
-    final totals = await customSelect(
+    final salesTotals = await customSelect(
       '''
       SELECT
         COALESCE(SUM(CASE WHEN s.payment_method = 'cash' THEN 1 ELSE 0 END), 0) AS cash_count,
@@ -1931,20 +4183,41 @@ class ShopDatabase extends _$ShopDatabase {
     ''',
       variables: [Variable<String>(shiftId)],
     ).getSingle();
-    if (totals.read<int>('unknown_count') != 0) {
+    if (salesTotals.read<int>('unknown_count') != 0) {
       throw StateError('The shift contains an unsupported payment method.');
     }
-    final cashTotal = totals.read<int>('cash_total');
+    final reversalTotals = await customSelect(
+      '''
+      SELECT
+        COUNT(*) AS reversal_count,
+        COALESCE(SUM(original_total_mmk), 0) AS reversal_total,
+        COALESCE(SUM(-cash_drawer_delta_mmk), 0) AS drawer_outflow
+      FROM shop_sale_reversals
+      WHERE shift_id = ? AND original_payment_method = 'cash'
+    ''',
+      variables: [Variable<String>(shiftId)],
+    ).getSingle();
+    final cashTotal = salesTotals.read<int>('cash_total');
+    final drawerOutflow = reversalTotals.read<int>('drawer_outflow');
     if (cashTotal > 200000000000000 - shift.openingFloatMmk) {
       throw StateError('Cash shift total exceeds the supported limit.');
     }
+    final cashBeforeReturns = shift.openingFloatMmk + cashTotal;
+    if (drawerOutflow > cashBeforeReturns) {
+      throw StateError(
+        'Cash returns exceed this shift\'s recorded drawer cash.',
+      );
+    }
     return ShopCashShiftReview(
       shift: shift,
-      cashSalesCount: totals.read<int>('cash_count'),
+      cashSalesCount: salesTotals.read<int>('cash_count'),
       cashSalesTotalMmk: cashTotal,
-      walletSalesCount: totals.read<int>('wallet_count'),
-      walletSalesTotalMmk: totals.read<int>('wallet_total'),
-      expectedCashMmk: shift.openingFloatMmk + cashTotal,
+      walletSalesCount: salesTotals.read<int>('wallet_count'),
+      walletSalesTotalMmk: salesTotals.read<int>('wallet_total'),
+      cashReversalCount: reversalTotals.read<int>('reversal_count'),
+      cashReversalTotalMmk: reversalTotals.read<int>('reversal_total'),
+      cashDrawerOutflowMmk: drawerOutflow,
+      expectedCashMmk: cashBeforeReturns - drawerOutflow,
     );
   }
 
@@ -1954,6 +4227,8 @@ class ShopDatabase extends _$ShopDatabase {
     required int seenSaleCount,
     required int seenCashTotalMmk,
     required int countedCashMmk,
+    int seenCashReversalCount = 0,
+    int seenCashDrawerOutflowMmk = 0,
   }) async {
     final cleanOperationId = operationId.trim();
     if (shiftId.trim().isEmpty ||
@@ -1961,6 +4236,8 @@ class ShopDatabase extends _$ShopDatabase {
         cleanOperationId.length > 120 ||
         seenSaleCount < 0 ||
         seenCashTotalMmk < 0 ||
+        seenCashReversalCount < 0 ||
+        seenCashDrawerOutflowMmk < 0 ||
         countedCashMmk < 0 ||
         countedCashMmk > 200000000000000) {
       throw ArgumentError('Cash shift close details are invalid.');
@@ -1976,7 +4253,12 @@ class ShopDatabase extends _$ShopDatabase {
             priorShift.countedCashMmk != countedCashMmk ||
             previous.readNullable<int>('review_sale_count') != seenSaleCount ||
             previous.readNullable<int>('review_cash_total_mmk') !=
-                seenCashTotalMmk) {
+                seenCashTotalMmk ||
+            (previous.readNullable<int>('review_cash_reversal_count') ?? 0) !=
+                seenCashReversalCount ||
+            (previous.readNullable<int>('review_cash_drawer_outflow_mmk') ??
+                    0) !=
+                seenCashDrawerOutflowMmk) {
           throw StateError('A shift operation ID was reused with new details.');
         }
         return priorShift;
@@ -1989,8 +4271,12 @@ class ShopDatabase extends _$ShopDatabase {
       }
       final review = await readCashShiftReview(shiftId);
       if (review.saleCount != seenSaleCount ||
-          review.cashSalesTotalMmk != seenCashTotalMmk) {
-        throw StateError('Sales changed. Review the cash shift again.');
+          review.cashSalesTotalMmk != seenCashTotalMmk ||
+          review.cashReversalCount != seenCashReversalCount ||
+          review.cashDrawerOutflowMmk != seenCashDrawerOutflowMmk) {
+        throw StateError(
+          'Shift activity changed. Review the cash shift again.',
+        );
       }
       final now = DateTime.now().millisecondsSinceEpoch;
       final difference = countedCashMmk - review.expectedCashMmk;
@@ -1999,7 +4285,10 @@ class ShopDatabase extends _$ShopDatabase {
         'closed_at_millis = ?, cash_sales_count = ?, cash_sales_total_mmk = ?, '
         'wallet_sales_count = ?, wallet_sales_total_mmk = ?, '
         'expected_cash_mmk = ?, counted_cash_mmk = ?, difference_mmk = ?, '
-        'review_sale_count = ?, review_cash_total_mmk = ? '
+        'review_sale_count = ?, review_cash_total_mmk = ?, '
+        'cash_reversal_count = ?, cash_reversal_total_mmk = ?, '
+        'cash_drawer_outflow_mmk = ?, review_cash_reversal_count = ?, '
+        'review_cash_drawer_outflow_mmk = ? '
         "WHERE id = ? AND state = 'open'",
         variables: [
           const Variable<String>('closed'),
@@ -2014,6 +4303,11 @@ class ShopDatabase extends _$ShopDatabase {
           Variable<int>(difference),
           Variable<int>(seenSaleCount),
           Variable<int>(seenCashTotalMmk),
+          Variable<int>(review.cashReversalCount),
+          Variable<int>(review.cashReversalTotalMmk),
+          Variable<int>(review.cashDrawerOutflowMmk),
+          Variable<int>(seenCashReversalCount),
+          Variable<int>(seenCashDrawerOutflowMmk),
           Variable<String>(shiftId),
         ],
       );
@@ -2028,6 +4322,9 @@ class ShopDatabase extends _$ShopDatabase {
             'cashSalesTotalMmk': review.cashSalesTotalMmk,
             'walletSalesCount': review.walletSalesCount,
             'walletSalesTotalMmk': review.walletSalesTotalMmk,
+            'cashReversalCount': review.cashReversalCount,
+            'cashReversalTotalMmk': review.cashReversalTotalMmk,
+            'cashDrawerOutflowMmk': review.cashDrawerOutflowMmk,
             'expectedCashMmk': review.expectedCashMmk,
             'countedCashMmk': countedCashMmk,
             'differenceMmk': difference,
@@ -2042,6 +4339,893 @@ class ShopDatabase extends _$ShopDatabase {
       ).getSingle();
       return _cashShiftFromRow(closed);
     });
+  }
+
+  Future<String> _sha256Hex(String value) async {
+    final digest = await Sha256().hash(utf8.encode(value));
+    return digest.bytes
+        .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
+        .join();
+  }
+
+  String _boundedCorrectionText(
+    String value, {
+    required String field,
+    required int maximum,
+  }) {
+    final clean = value.trim();
+    if (clean.isEmpty ||
+        clean.runes.length > maximum ||
+        RegExp(r'[\x00-\x1f\x7f]').hasMatch(clean)) {
+      throw ArgumentError('$field is invalid.');
+    }
+    return clean;
+  }
+
+  Future<ShopFullSaleReversalCommand> previewFullSaleReversal({
+    required String operationId,
+    required String saleId,
+    required bool restockItems,
+    required String reason,
+    required bool confirmCashReturned,
+  }) async {
+    final cleanOperationId = operationId.trim();
+    final cleanSaleId = saleId.trim();
+    final cleanReason = _boundedCorrectionText(
+      reason,
+      field: 'Correction reason',
+      maximum: 240,
+    );
+    if (cleanOperationId.isEmpty ||
+        cleanOperationId.length > 120 ||
+        cleanSaleId.isEmpty ||
+        cleanSaleId.length > 120) {
+      throw ArgumentError('Correction identifiers are invalid.');
+    }
+    final sale = await (select(
+      shopSales,
+    )..where((row) => row.id.equals(cleanSaleId))).getSingleOrNull();
+    if (sale == null) throw StateError('The original sale was not found.');
+    if (!const {'cash', 'kbzpay', 'wavepay'}.contains(sale.paymentMethod)) {
+      throw StateError('The original payment method is unsupported.');
+    }
+    final lines =
+        await (select(shopSaleLines)
+              ..where((row) => row.saleId.equals(cleanSaleId))
+              ..orderBy([(row) => OrderingTerm.asc(row.id)]))
+            .get();
+    if (lines.isEmpty || lines.length > 100) {
+      throw StateError('The original sale lines are incomplete.');
+    }
+    var calculatedTotal = 0;
+    for (final line in lines) {
+      if (line.quantity < 1 ||
+          line.quantity > 1000 ||
+          line.unitPriceMmk < 0 ||
+          line.unitPriceMmk > 2000000000 ||
+          line.lineTotalMmk != line.unitPriceMmk * line.quantity ||
+          calculatedTotal > 200000000000000 - line.lineTotalMmk) {
+        throw StateError('The original sale snapshot is invalid.');
+      }
+      calculatedTotal += line.lineTotalMmk;
+    }
+    if (calculatedTotal != sale.totalMmk) {
+      throw StateError('The original sale total does not match its lines.');
+    }
+    final snapshot = jsonEncode({
+      'saleId': sale.id,
+      'totalMmk': sale.totalMmk,
+      'paymentMethod': sale.paymentMethod,
+      'createdAtMillis': sale.createdAtMillis,
+      'lines': [
+        for (final line in lines)
+          {
+            'id': line.id,
+            'productId': line.productId,
+            'productName': line.productName,
+            'unitPriceMmk': line.unitPriceMmk,
+            'quantity': line.quantity,
+            'lineTotalMmk': line.lineTotalMmk,
+          },
+      ],
+    });
+    final snapshotDigest = await _sha256Hex(snapshot);
+    final isCash = sale.paymentMethod == 'cash';
+    if (isCash != confirmCashReturned) {
+      throw ArgumentError(
+        isCash
+            ? 'Confirm that the full cash amount was returned.'
+            : 'Wallet reversals require separate provider reconciliation.',
+      );
+    }
+    final activeShift = isCash ? await readOpenCashShift() : null;
+    if (isCash && activeShift == null) {
+      throw StateError('Start a cash shift before returning cash.');
+    }
+    final paymentResolution = isCash ? 'cash_returned_now' : 'external_pending';
+    final requestFingerprint = jsonEncode({
+      'operationId': cleanOperationId,
+      'saleId': sale.id,
+      'saleSnapshotDigest': snapshotDigest,
+      'restockItems': restockItems,
+      'reason': cleanReason,
+      'cashReturnConfirmed': confirmCashReturned,
+      'expectedCashShiftId': activeShift?.id,
+      'paymentResolution': paymentResolution,
+    });
+    return ShopFullSaleReversalCommand(
+      operationId: cleanOperationId,
+      saleId: sale.id,
+      saleSnapshotDigest: snapshotDigest,
+      requestFingerprint: requestFingerprint,
+      commandDigest: await _sha256Hex(requestFingerprint),
+      originalTotalMmk: sale.totalMmk,
+      originalPaymentMethod: sale.paymentMethod,
+      restockItems: restockItems,
+      reason: cleanReason,
+      cashReturnConfirmed: confirmCashReturned,
+      expectedCashShiftId: activeShift?.id,
+      paymentResolution: paymentResolution,
+    );
+  }
+
+  Future<void> _validateCorrectionAuthorization({
+    required ShopCorrectionAuthorization authorization,
+    required String commandDigest,
+    required String capability,
+  }) async {
+    final hex = RegExp(r'^[0-9a-f]{64}$');
+    final uuid = RegExp(
+      r'^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
+    );
+    if (authorization.receiptId.trim().isEmpty ||
+        authorization.receiptId.length > 160 ||
+        !hex.hasMatch(authorization.receiptDigest) ||
+        authorization.workspaceId.trim().isEmpty ||
+        authorization.workspaceId.length > 128 ||
+        authorization.actorId.trim().isEmpty ||
+        authorization.actorId.length > 128 ||
+        authorization.actorLabel.trim().isEmpty ||
+        authorization.actorLabel.runes.length > 120 ||
+        authorization.actorRole != 'owner' ||
+        authorization.contract != shopCorrectionAuthorizationReceiptContract ||
+        authorization.capability != capability ||
+        authorization.source != 'managed_membership_receipt_v1' ||
+        authorization.commandDigest != commandDigest ||
+        authorization.finalizationRequestId == null ||
+        !uuid.hasMatch(authorization.finalizationRequestId!) ||
+        authorization.finalizedAtMillis == null ||
+        !shopCorrectionAuthorizationReceiptDigestMatches(
+          receiptDigest: authorization.receiptDigest,
+          source: authorization.source,
+          receiptId: authorization.receiptId,
+          workspaceId: authorization.workspaceId,
+          actorId: authorization.actorId,
+          actorLabel: authorization.actorLabel,
+          actorRole: authorization.actorRole,
+          capability: authorization.capability,
+          commandDigest: authorization.commandDigest,
+          finalizationRequestId: authorization.finalizationRequestId!,
+          finalizedAtMillis: authorization.finalizedAtMillis!,
+          issuedAtMillis: authorization.issuedAtMillis,
+          expiresAtMillis: authorization.expiresAtMillis,
+        ) ||
+        authorization.issuedAtMillis <= 0 ||
+        authorization.issuedAtMillis != authorization.finalizedAtMillis! ||
+        authorization.finalizedAtMillis! > authorization.expiresAtMillis ||
+        authorization.expiresAtMillis <= authorization.issuedAtMillis ||
+        authorization.expiresAtMillis - authorization.issuedAtMillis !=
+            const Duration(minutes: 5).inMilliseconds ||
+        !await correctionReceiptVerifier.verify(authorization)) {
+      throw StateError('Correction authorization is missing or invalid.');
+    }
+  }
+
+  void _requireFreshCorrectionAuthorization(
+    ShopCorrectionAuthorization authorization,
+    int now,
+  ) {
+    if (authorization.finalizedAtMillis == null ||
+        authorization.issuedAtMillis != authorization.finalizedAtMillis! ||
+        authorization.finalizedAtMillis! > authorization.expiresAtMillis ||
+        authorization.issuedAtMillis > now ||
+        authorization.expiresAtMillis < now) {
+      throw StateError('Correction authorization finalization is invalid.');
+    }
+  }
+
+  bool _matchesRecordedCorrectionAuthorization(
+    QueryRow row,
+    ShopCorrectionAuthorization authorization,
+  ) =>
+      row.read<String>('authorization_receipt_id') == authorization.receiptId &&
+      row.read<String>('authorization_receipt_digest') ==
+          authorization.receiptDigest &&
+      row.read<String>('authorization_workspace_id') ==
+          authorization.workspaceId &&
+      row.read<String>('authorized_actor_id') == authorization.actorId &&
+      row.read<String>('authorized_actor_label') == authorization.actorLabel &&
+      row.read<String>('authorized_actor_role') == authorization.actorRole &&
+      row.read<String>('authorization_capability') ==
+          authorization.capability &&
+      row.read<String>('authorization_source') == authorization.source &&
+      row.read<String>('authorization_command_digest') ==
+          authorization.commandDigest &&
+      row.read<int>('authorization_issued_at_millis') ==
+          authorization.issuedAtMillis &&
+      row.read<int>('authorization_expires_at_millis') ==
+          authorization.expiresAtMillis;
+
+  Future<void> _requireUnusedCorrectionReceipt(String receiptId) async {
+    final used = await customSelect(
+      'SELECT 1 FROM shop_correction_authorization_proofs '
+      'WHERE receipt_id = ? LIMIT 1',
+      variables: [Variable<String>(receiptId)],
+    ).getSingleOrNull();
+    if (used != null) {
+      throw StateError(
+        'This correction authorization receipt was already used.',
+      );
+    }
+  }
+
+  Future<void> _insertSignedCorrectionAuthorizationProof({
+    required ShopCorrectionAuthorization authorization,
+    required String operationId,
+    required int verifiedAtMillis,
+  }) async {
+    await customInsert(
+      'INSERT INTO shop_correction_authorization_proofs '
+      '(receipt_id, proof_kind, local_operation_id, receipt_digest, key_id, '
+      'signature, workspace_id, actor_id, actor_label, actor_role, capability, '
+      'finalization_request_id, finalized_at_millis, source, command_digest, '
+      'issued_at_millis, expires_at_millis, verified_at_millis) '
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      variables: [
+        Variable<String>(authorization.receiptId),
+        Variable<String>(shopCorrectionAuthorizationProofKindSignedV3),
+        Variable<String>(operationId),
+        Variable<String>(authorization.receiptDigest),
+        Variable<String>(authorization.keyId),
+        Variable<String>(authorization.signature),
+        Variable<String>(authorization.workspaceId),
+        Variable<String>(authorization.actorId),
+        Variable<String>(authorization.actorLabel),
+        Variable<String>(authorization.actorRole),
+        Variable<String>(authorization.capability),
+        Variable<String>(authorization.finalizationRequestId!),
+        Variable<int>(authorization.finalizedAtMillis!),
+        Variable<String>(authorization.source),
+        Variable<String>(authorization.commandDigest),
+        Variable<int>(authorization.issuedAtMillis),
+        Variable<int>(authorization.expiresAtMillis),
+        Variable<int>(verifiedAtMillis),
+      ],
+    );
+  }
+
+  Future<void> _requireRecordedSignedCorrectionProof(
+    QueryRow correction,
+    ShopCorrectionAuthorization authorization,
+  ) async {
+    final proof = await customSelect(
+      'SELECT * FROM shop_correction_authorization_proofs '
+      'WHERE receipt_id = ? LIMIT 1',
+      variables: [Variable<String>(authorization.receiptId)],
+    ).getSingleOrNull();
+    if (proof == null ||
+        proof.read<String>('proof_kind') !=
+            shopCorrectionAuthorizationProofKindSignedV3 ||
+        proof.readNullable<String>('finalization_request_id') !=
+            authorization.finalizationRequestId ||
+        proof.readNullable<int>('finalized_at_millis') !=
+            authorization.finalizedAtMillis ||
+        proof.readNullable<String>('key_id') != authorization.keyId ||
+        proof.readNullable<String>('signature') != authorization.signature ||
+        !_proofMatchesCorrectionRow(proof, correction) ||
+        !_matchesRecordedCorrectionAuthorization(correction, authorization)) {
+      throw StateError(
+        'The recorded correction authorization proof does not match.',
+      );
+    }
+  }
+
+  Future<void> _requireBoundCorrectionWorkspace(
+    String authorizationWorkspaceId,
+    String authorizationActorId, {
+    String? reversalId,
+  }) async {
+    final binding = await readManagedWorkspaceBinding();
+    if (binding == null ||
+        binding.workspaceId != authorizationWorkspaceId ||
+        binding.attachedActorId != authorizationActorId) {
+      throw StateError(
+        'Correction authorization does not match this Shop workspace and actor.',
+      );
+    }
+    if (reversalId == null) return;
+    final reversal = await customSelect(
+      'SELECT authorization_workspace_id FROM shop_sale_reversals '
+      'WHERE id = ? LIMIT 1',
+      variables: [Variable<String>(reversalId)],
+    ).getSingleOrNull();
+    if (reversal == null ||
+        reversal.read<String>('authorization_workspace_id') !=
+            binding.workspaceId) {
+      throw StateError(
+        'Wallet reconciliation does not match this Shop workspace.',
+      );
+    }
+  }
+
+  Future<ShopSaleReversal> _saleReversalFromRow(QueryRow row) async {
+    final reversalId = row.read<String>('id');
+    final authorizationProof = await customSelect(
+      'SELECT proof_kind FROM shop_correction_authorization_proofs '
+      'WHERE receipt_id = ? LIMIT 1',
+      variables: [
+        Variable<String>(row.read<String>('authorization_receipt_id')),
+      ],
+    ).getSingle();
+    final lineRows = await customSelect(
+      'SELECT * FROM shop_sale_reversal_lines '
+      'WHERE reversal_id = ? ORDER BY sale_line_id',
+      variables: [Variable<String>(reversalId)],
+    ).get();
+    final reconciliation = await customSelect(
+      'SELECT * FROM shop_wallet_reversal_reconciliations '
+      'WHERE reversal_id = ? LIMIT 1',
+      variables: [Variable<String>(reversalId)],
+    ).getSingleOrNull();
+    final reconciliationProof = reconciliation == null
+        ? null
+        : await customSelect(
+            'SELECT proof_kind FROM shop_correction_authorization_proofs '
+            'WHERE receipt_id = ? LIMIT 1',
+            variables: [
+              Variable<String>(
+                reconciliation.read<String>('authorization_receipt_id'),
+              ),
+            ],
+          ).getSingle();
+    return ShopSaleReversal(
+      id: reversalId,
+      operationId: row.read<String>('operation_id'),
+      saleId: row.read<String>('sale_id'),
+      originalTotalMmk: row.read<int>('original_total_mmk'),
+      originalPaymentMethod: row.read<String>('original_payment_method'),
+      originalCreatedAtMillis: row.read<int>('original_created_at_millis'),
+      restockItems: row.read<int>('restock_items') == 1,
+      reason: row.read<String>('reason'),
+      paymentResolution: row.read<String>('payment_resolution'),
+      cashDrawerDeltaMmk: row.read<int>('cash_drawer_delta_mmk'),
+      shiftId: row.readNullable<String>('shift_id'),
+      authorizedActorId: row.read<String>('authorized_actor_id'),
+      authorizedActorLabel: row.read<String>('authorized_actor_label'),
+      authorizationReceiptId: row.read<String>('authorization_receipt_id'),
+      authorizationProofKind: authorizationProof.read<String>('proof_kind'),
+      createdAtMillis: row.read<int>('created_at_millis'),
+      walletReconciliationOutcome: reconciliation?.read<String>('outcome'),
+      walletEvidenceReference: reconciliation?.read<String>(
+        'evidence_reference',
+      ),
+      walletReconciledActorLabel: reconciliation?.read<String>(
+        'authorized_actor_label',
+      ),
+      walletReconciledAtMillis: reconciliation?.read<int>('created_at_millis'),
+      walletReconciliationProofKind: reconciliationProof?.read<String>(
+        'proof_kind',
+      ),
+      lines: [
+        for (final line in lineRows)
+          ShopSaleReversalLine(
+            saleLineId: line.read<String>('sale_line_id'),
+            productId: line.read<String>('product_id'),
+            productName: line.read<String>('product_name'),
+            unitPriceMmk: line.read<int>('unit_price_mmk'),
+            quantity: line.read<int>('quantity'),
+            lineTotalMmk: line.read<int>('line_total_mmk'),
+            restockQuantity: line.read<int>('restock_quantity'),
+          ),
+      ],
+    );
+  }
+
+  Future<ShopSaleReversal?> readSaleReversalForSale(String saleId) async {
+    final cleanSaleId = saleId.trim();
+    if (cleanSaleId.isEmpty) return null;
+    final row = await customSelect(
+      'SELECT * FROM shop_sale_reversals WHERE sale_id = ? LIMIT 1',
+      variables: [Variable<String>(cleanSaleId)],
+    ).getSingleOrNull();
+    return row == null ? null : _saleReversalFromRow(row);
+  }
+
+  Future<ShopSaleReversal> recordAuthorizedFullSaleReversal({
+    required ShopFullSaleReversalCommand command,
+    required ShopCorrectionAuthorization authorization,
+  }) {
+    return transaction(() async {
+      await _validateCorrectionAuthorization(
+        authorization: authorization,
+        commandDigest: command.commandDigest,
+        capability: 'shop.sale.reverse',
+      );
+      await _requireBoundCorrectionWorkspace(
+        authorization.workspaceId,
+        authorization.actorId,
+      );
+      final prior = await customSelect(
+        'SELECT * FROM shop_sale_reversals WHERE operation_id = ? LIMIT 1',
+        variables: [Variable<String>(command.operationId)],
+      ).getSingleOrNull();
+      if (prior != null) {
+        if (prior.read<String>('request_fingerprint') !=
+                command.requestFingerprint ||
+            prior.read<String>('sale_snapshot_digest') !=
+                command.saleSnapshotDigest ||
+            prior.read<String>('sale_id') != command.saleId ||
+            prior.read<int>('original_total_mmk') != command.originalTotalMmk ||
+            prior.read<String>('original_payment_method') !=
+                command.originalPaymentMethod ||
+            (prior.read<int>('restock_items') == 1) != command.restockItems ||
+            prior.read<String>('reason') != command.reason ||
+            (command.originalPaymentMethod == 'cash') !=
+                command.cashReturnConfirmed ||
+            prior.readNullable<String>('shift_id') !=
+                command.expectedCashShiftId ||
+            prior.read<String>('payment_resolution') !=
+                command.paymentResolution ||
+            await _sha256Hex(command.requestFingerprint) !=
+                command.commandDigest ||
+            !_matchesRecordedCorrectionAuthorization(prior, authorization)) {
+          throw StateError(
+            'A correction operation ID was reused with different details.',
+          );
+        }
+        await _requireRecordedSignedCorrectionProof(prior, authorization);
+        return _saleReversalFromRow(prior);
+      }
+
+      final verifiedCommand = await previewFullSaleReversal(
+        operationId: command.operationId,
+        saleId: command.saleId,
+        restockItems: command.restockItems,
+        reason: command.reason,
+        confirmCashReturned: command.cashReturnConfirmed,
+      );
+      if (verifiedCommand.requestFingerprint != command.requestFingerprint ||
+          verifiedCommand.commandDigest != command.commandDigest ||
+          verifiedCommand.saleSnapshotDigest != command.saleSnapshotDigest ||
+          verifiedCommand.originalTotalMmk != command.originalTotalMmk ||
+          verifiedCommand.originalPaymentMethod !=
+              command.originalPaymentMethod ||
+          verifiedCommand.cashReturnConfirmed != command.cashReturnConfirmed ||
+          verifiedCommand.expectedCashShiftId != command.expectedCashShiftId ||
+          verifiedCommand.paymentResolution != command.paymentResolution) {
+        throw StateError('The original sale changed. Review it again.');
+      }
+      final existing = await customSelect(
+        'SELECT operation_id FROM shop_sale_reversals '
+        'WHERE sale_id = ? LIMIT 1',
+        variables: [Variable<String>(command.saleId)],
+      ).getSingleOrNull();
+      if (existing != null) {
+        throw StateError('This sale was already reversed.');
+      }
+      await _requireUnusedCorrectionReceipt(authorization.receiptId);
+
+      ShopCashShift? activeShift;
+      if (command.originalPaymentMethod == 'cash') {
+        activeShift = await readOpenCashShift();
+        if (activeShift == null ||
+            activeShift.id != command.expectedCashShiftId) {
+          throw StateError(
+            'The cash shift changed. Review and authorize this return again.',
+          );
+        }
+        final review = await readCashShiftReview(activeShift.id);
+        if (review.expectedCashMmk < command.originalTotalMmk) {
+          throw StateError(
+            'The open shift does not contain enough recorded cash for this return.',
+          );
+        }
+      }
+      final originalLines =
+          await (select(shopSaleLines)
+                ..where((line) => line.saleId.equals(command.saleId))
+                ..orderBy([(line) => OrderingTerm.asc(line.id)]))
+              .get();
+      final drawerDelta = command.originalPaymentMethod == 'cash'
+          ? -command.originalTotalMmk
+          : 0;
+      final now = DateTime.now().millisecondsSinceEpoch;
+      _requireFreshCorrectionAuthorization(authorization, now);
+      await _insertSignedCorrectionAuthorizationProof(
+        authorization: authorization,
+        operationId: command.operationId,
+        verifiedAtMillis: authorization.finalizedAtMillis!,
+      );
+      await customInsert(
+        'INSERT INTO shop_sale_reversals '
+        '(id, operation_id, request_fingerprint, sale_snapshot_digest, sale_id, '
+        'original_total_mmk, original_payment_method, original_created_at_millis, '
+        'original_line_count, restock_items, reason, payment_resolution, '
+        'cash_drawer_delta_mmk, shift_id, authorization_receipt_id, '
+        'authorization_receipt_digest, authorization_command_digest, '
+        'authorization_workspace_id, '
+        'authorized_actor_id, authorized_actor_label, authorized_actor_role, '
+        'authorization_capability, authorization_source, '
+        'authorization_issued_at_millis, authorization_verified_at_millis, '
+        'authorization_expires_at_millis, created_at_millis) '
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        variables: [
+          Variable<String>(command.operationId),
+          Variable<String>(command.operationId),
+          Variable<String>(command.requestFingerprint),
+          Variable<String>(command.saleSnapshotDigest),
+          Variable<String>(command.saleId),
+          Variable<int>(command.originalTotalMmk),
+          Variable<String>(command.originalPaymentMethod),
+          Variable<int>(
+            (await (select(
+                  shopSales,
+                )..where((sale) => sale.id.equals(command.saleId))).getSingle())
+                .createdAtMillis,
+          ),
+          Variable<int>(originalLines.length),
+          Variable<int>(command.restockItems ? 1 : 0),
+          Variable<String>(command.reason),
+          Variable<String>(command.paymentResolution),
+          Variable<int>(drawerDelta),
+          Variable<String>(activeShift?.id),
+          Variable<String>(authorization.receiptId),
+          Variable<String>(authorization.receiptDigest),
+          Variable<String>(authorization.commandDigest),
+          Variable<String>(authorization.workspaceId),
+          Variable<String>(authorization.actorId),
+          Variable<String>(authorization.actorLabel),
+          Variable<String>(authorization.actorRole),
+          Variable<String>(authorization.capability),
+          Variable<String>(authorization.source),
+          Variable<int>(authorization.issuedAtMillis),
+          Variable<int>(authorization.finalizedAtMillis!),
+          Variable<int>(authorization.expiresAtMillis),
+          Variable<int>(now),
+        ],
+      );
+
+      final eventLines = <Map<String, Object?>>[];
+      for (var index = 0; index < originalLines.length; index++) {
+        final line = originalLines[index];
+        String? movementId;
+        if (command.restockItems) {
+          final changed = await customUpdate(
+            'UPDATE shop_products SET on_hand = on_hand + ?, '
+            'updated_at_millis = ? WHERE id = ? AND on_hand <= ?',
+            variables: [
+              Variable<int>(line.quantity),
+              Variable<int>(now),
+              Variable<String>(line.productId),
+              Variable<int>(2000000000 - line.quantity),
+            ],
+          );
+          if (changed != 1) {
+            throw StateError(
+              'Restoring stock would exceed the supported limit.',
+            );
+          }
+          movementId = '${command.operationId}:reversal:$index';
+          await into(shopStockMovements).insert(
+            ShopStockMovementsCompanion.insert(
+              id: movementId,
+              saleId: Value(command.saleId),
+              productId: line.productId,
+              quantityDelta: line.quantity,
+              reason: 'sale_reversal_restock',
+              createdAtMillis: now,
+            ),
+          );
+        }
+        await customInsert(
+          'INSERT INTO shop_sale_reversal_lines '
+          '(id, reversal_id, sale_line_id, product_id, product_name, '
+          'unit_price_mmk, quantity, line_total_mmk, restock_quantity, '
+          'stock_movement_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          variables: [
+            Variable<String>('${command.operationId}:$index'),
+            Variable<String>(command.operationId),
+            Variable<String>(line.id),
+            Variable<String>(line.productId),
+            Variable<String>(line.productName),
+            Variable<int>(line.unitPriceMmk),
+            Variable<int>(line.quantity),
+            Variable<int>(line.lineTotalMmk),
+            Variable<int>(command.restockItems ? line.quantity : 0),
+            Variable<String>(movementId),
+          ],
+        );
+        eventLines.add({
+          'saleLineId': line.id,
+          'productId': line.productId,
+          'productName': line.productName,
+          'unitPriceMmk': line.unitPriceMmk,
+          'quantity': line.quantity,
+          'lineTotalMmk': line.lineTotalMmk,
+          'restockQuantity': command.restockItems ? line.quantity : 0,
+        });
+      }
+      await into(shopSyncOutbox).insert(
+        ShopSyncOutboxCompanion.insert(
+          operationId: command.operationId,
+          eventType: 'shop.sale.reversal_recorded.v1',
+          payloadJson: jsonEncode({
+            'reversalId': command.operationId,
+            'saleId': command.saleId,
+            'originalTotalMmk': command.originalTotalMmk,
+            'originalPaymentMethod': command.originalPaymentMethod,
+            'restockItems': command.restockItems,
+            'reason': command.reason,
+            'paymentResolution': command.paymentResolution,
+            'cashReturnConfirmed': command.cashReturnConfirmed,
+            'cashDrawerDeltaMmk': drawerDelta,
+            if (activeShift != null) 'shiftId': activeShift.id,
+            'externalReconciliationState':
+                command.originalPaymentMethod == 'cash'
+                ? 'not_applicable'
+                : 'pending',
+            'moneyReturned':
+                command.originalPaymentMethod == 'cash' &&
+                command.cashReturnConfirmed,
+            'authorizationReceiptId': authorization.receiptId,
+            'authorizedActorId': authorization.actorId,
+            'createdAtMillis': now,
+            'lines': eventLines,
+          }),
+          createdAtMillis: now,
+        ),
+      );
+      final row = await customSelect(
+        'SELECT * FROM shop_sale_reversals WHERE id = ?',
+        variables: [Variable<String>(command.operationId)],
+      ).getSingle();
+      return _saleReversalFromRow(row);
+    });
+  }
+
+  Future<ShopWalletReconciliationCommand> previewWalletReconciliation({
+    required String operationId,
+    required String reversalId,
+    required String outcome,
+    required String evidenceReference,
+  }) async {
+    final cleanOperationId = operationId.trim();
+    final cleanReversalId = reversalId.trim();
+    final cleanEvidence = _boundedCorrectionText(
+      evidenceReference,
+      field: 'Wallet evidence reference',
+      maximum: 160,
+    );
+    if (cleanOperationId.isEmpty ||
+        cleanOperationId.length > 120 ||
+        cleanReversalId.isEmpty ||
+        cleanReversalId.length > 120 ||
+        !const {'money_returned', 'payment_not_received'}.contains(outcome)) {
+      throw ArgumentError('Wallet reconciliation details are invalid.');
+    }
+    final reversal = await customSelect(
+      'SELECT original_payment_method, original_total_mmk '
+      'FROM shop_sale_reversals WHERE id = ?',
+      variables: [Variable<String>(cleanReversalId)],
+    ).getSingleOrNull();
+    if (reversal == null) throw StateError('The sale reversal was not found.');
+    final originalPaymentMethod = reversal.read<String>(
+      'original_payment_method',
+    );
+    final originalTotalMmk = reversal.read<int>('original_total_mmk');
+    if (originalPaymentMethod == 'cash') {
+      throw StateError('Cash returns do not have wallet reconciliation.');
+    }
+    final fingerprint = _walletReconciliationRequestFingerprint(
+      operationId: cleanOperationId,
+      reversalId: cleanReversalId,
+      originalPaymentMethod: originalPaymentMethod,
+      originalTotalMmk: originalTotalMmk,
+      outcome: outcome,
+      evidenceReference: cleanEvidence,
+    );
+    return ShopWalletReconciliationCommand(
+      operationId: cleanOperationId,
+      reversalId: cleanReversalId,
+      originalPaymentMethod: originalPaymentMethod,
+      originalTotalMmk: originalTotalMmk,
+      requestFingerprint: fingerprint,
+      commandDigest: await _sha256Hex(fingerprint),
+      outcome: outcome,
+      evidenceReference: cleanEvidence,
+    );
+  }
+
+  Future<ShopSaleReversal> recordAuthorizedWalletReconciliation({
+    required ShopWalletReconciliationCommand command,
+    required ShopCorrectionAuthorization authorization,
+  }) {
+    return transaction(() async {
+      await _validateCorrectionAuthorization(
+        authorization: authorization,
+        commandDigest: command.commandDigest,
+        capability: 'shop.sale.reconcile_wallet',
+      );
+      await _requireBoundCorrectionWorkspace(
+        authorization.workspaceId,
+        authorization.actorId,
+        reversalId: command.reversalId,
+      );
+      final prior = await customSelect(
+        'SELECT * FROM shop_wallet_reversal_reconciliations '
+        'WHERE operation_id = ? LIMIT 1',
+        variables: [Variable<String>(command.operationId)],
+      ).getSingleOrNull();
+      if (prior != null) {
+        final recordedReversalId = prior.read<String>('reversal_id');
+        final recordedOutcome = prior.read<String>('outcome');
+        final recordedEvidence = prior.read<String>('evidence_reference');
+        final reversal = await customSelect(
+          'SELECT * FROM shop_sale_reversals WHERE id = ?',
+          variables: [Variable<String>(recordedReversalId)],
+        ).getSingle();
+        final originalPaymentMethod = reversal.read<String>(
+          'original_payment_method',
+        );
+        final originalTotalMmk = reversal.read<int>('original_total_mmk');
+        final expectedFingerprint = _walletReconciliationRequestFingerprint(
+          operationId: prior.read<String>('operation_id'),
+          reversalId: recordedReversalId,
+          originalPaymentMethod: originalPaymentMethod,
+          originalTotalMmk: originalTotalMmk,
+          outcome: recordedOutcome,
+          evidenceReference: recordedEvidence,
+        );
+        if (prior.read<String>('request_fingerprint') != expectedFingerprint ||
+            command.requestFingerprint != expectedFingerprint ||
+            command.reversalId != recordedReversalId ||
+            command.originalPaymentMethod != originalPaymentMethod ||
+            command.originalTotalMmk != originalTotalMmk ||
+            command.outcome != recordedOutcome ||
+            command.evidenceReference != recordedEvidence ||
+            await _sha256Hex(expectedFingerprint) != command.commandDigest ||
+            authorization.commandDigest != command.commandDigest ||
+            !_matchesRecordedCorrectionAuthorization(prior, authorization)) {
+          throw StateError(
+            'A wallet reconciliation ID was reused with different details.',
+          );
+        }
+        await _requireRecordedSignedCorrectionProof(prior, authorization);
+        return _saleReversalFromRow(reversal);
+      }
+      final verifiedCommand = await previewWalletReconciliation(
+        operationId: command.operationId,
+        reversalId: command.reversalId,
+        outcome: command.outcome,
+        evidenceReference: command.evidenceReference,
+      );
+      if (verifiedCommand.requestFingerprint != command.requestFingerprint ||
+          verifiedCommand.commandDigest != command.commandDigest ||
+          verifiedCommand.originalPaymentMethod !=
+              command.originalPaymentMethod ||
+          verifiedCommand.originalTotalMmk != command.originalTotalMmk) {
+        throw StateError('Wallet reconciliation changed. Review it again.');
+      }
+      final existing = await customSelect(
+        'SELECT operation_id FROM shop_wallet_reversal_reconciliations '
+        'WHERE reversal_id = ? LIMIT 1',
+        variables: [Variable<String>(command.reversalId)],
+      ).getSingleOrNull();
+      if (existing != null) {
+        throw StateError('This wallet reversal was already reconciled.');
+      }
+      await _requireUnusedCorrectionReceipt(authorization.receiptId);
+      final now = DateTime.now().millisecondsSinceEpoch;
+      _requireFreshCorrectionAuthorization(authorization, now);
+      await _insertSignedCorrectionAuthorizationProof(
+        authorization: authorization,
+        operationId: command.operationId,
+        verifiedAtMillis: authorization.finalizedAtMillis!,
+      );
+      await customInsert(
+        'INSERT INTO shop_wallet_reversal_reconciliations '
+        '(id, operation_id, request_fingerprint, reversal_id, outcome, '
+        'evidence_reference, authorization_receipt_id, '
+        'authorization_receipt_digest, authorization_command_digest, '
+        'authorization_workspace_id, '
+        'authorized_actor_id, authorized_actor_label, authorized_actor_role, '
+        'authorization_capability, authorization_source, '
+        'authorization_issued_at_millis, authorization_verified_at_millis, '
+        'authorization_expires_at_millis, created_at_millis) '
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        variables: [
+          Variable<String>(command.operationId),
+          Variable<String>(command.operationId),
+          Variable<String>(command.requestFingerprint),
+          Variable<String>(command.reversalId),
+          Variable<String>(command.outcome),
+          Variable<String>(command.evidenceReference),
+          Variable<String>(authorization.receiptId),
+          Variable<String>(authorization.receiptDigest),
+          Variable<String>(authorization.commandDigest),
+          Variable<String>(authorization.workspaceId),
+          Variable<String>(authorization.actorId),
+          Variable<String>(authorization.actorLabel),
+          Variable<String>(authorization.actorRole),
+          Variable<String>(authorization.capability),
+          Variable<String>(authorization.source),
+          Variable<int>(authorization.issuedAtMillis),
+          Variable<int>(authorization.finalizedAtMillis!),
+          Variable<int>(authorization.expiresAtMillis),
+          Variable<int>(now),
+        ],
+      );
+      await into(shopSyncOutbox).insert(
+        ShopSyncOutboxCompanion.insert(
+          operationId: command.operationId,
+          eventType: 'shop.mobile_money.reversal_reconciled.v1',
+          payloadJson: jsonEncode({
+            'reversalId': command.reversalId,
+            'outcome': command.outcome,
+            'evidenceReference': command.evidenceReference,
+            'externalReconciliationState': 'confirmed',
+            'moneyReturned': command.outcome == 'money_returned',
+            'authorizationReceiptId': authorization.receiptId,
+            'authorizedActorId': authorization.actorId,
+            'createdAtMillis': now,
+          }),
+          createdAtMillis: now,
+        ),
+      );
+      final reversal = await customSelect(
+        'SELECT * FROM shop_sale_reversals WHERE id = ?',
+        variables: [Variable<String>(command.reversalId)],
+      ).getSingle();
+      return _saleReversalFromRow(reversal);
+    });
+  }
+
+  Future<ShopSalesSummary> readSalesSummary({
+    required int startAtMillis,
+    required int endAtMillis,
+  }) async {
+    if (startAtMillis < 0 || endAtMillis <= startAtMillis) {
+      throw ArgumentError('Sales summary range is invalid.');
+    }
+    final gross = await customSelect(
+      'SELECT COUNT(*) AS sale_count, COALESCE(SUM(total_mmk), 0) AS total_mmk '
+      'FROM shop_sales WHERE created_at_millis >= ? AND created_at_millis < ?',
+      variables: [Variable<int>(startAtMillis), Variable<int>(endAtMillis)],
+    ).getSingle();
+    final reversed = await customSelect(
+      'SELECT COUNT(*) AS reversal_count, '
+      'COALESCE(SUM(original_total_mmk), 0) AS total_mmk '
+      'FROM shop_sale_reversals '
+      'WHERE created_at_millis >= ? AND created_at_millis < ?',
+      variables: [Variable<int>(startAtMillis), Variable<int>(endAtMillis)],
+    ).getSingle();
+    final pendingWallet = await customSelect(
+      'SELECT COUNT(*) AS reversal_count, '
+      'COALESCE(SUM(r.original_total_mmk), 0) AS total_mmk '
+      'FROM shop_sale_reversals r '
+      'LEFT JOIN shop_wallet_reversal_reconciliations w '
+      'ON w.reversal_id = r.id '
+      "WHERE r.original_payment_method IN ('kbzpay', 'wavepay') "
+      'AND w.id IS NULL',
+    ).getSingle();
+    return ShopSalesSummary(
+      grossSaleCount: gross.read<int>('sale_count'),
+      grossSalesMmk: gross.read<int>('total_mmk'),
+      reversalCount: reversed.read<int>('reversal_count'),
+      reversalMmk: reversed.read<int>('total_mmk'),
+      pendingWalletReversalCount: pendingWallet.read<int>('reversal_count'),
+      pendingWalletReversalMmk: pendingWallet.read<int>('total_mmk'),
+    );
   }
 
   Future<ShopSaleReceipt> recordCashSale({
@@ -2165,6 +5349,8 @@ class ShopDatabase extends _$ShopDatabase {
           lines: [
             for (final line in priorLines)
               ShopSaleReceiptLine(
+                id: line.id,
+                productId: line.productId,
                 productName: line.productName,
                 unitPriceMmk: line.unitPriceMmk,
                 quantity: line.quantity,
@@ -2276,7 +5462,9 @@ class ShopDatabase extends _$ShopDatabase {
       final activeShift = await readOpenCashShift();
       if (activeShift != null && paymentMethod == 'cash') {
         final review = await readCashShiftReview(activeShift.id);
-        if (totalMmk > 200000000000000 - review.expectedCashMmk) {
+        final grossCashBeforeSale =
+            activeShift.openingFloatMmk + review.cashSalesTotalMmk;
+        if (totalMmk > 200000000000000 - grossCashBeforeSale) {
           throw StateError(
             'This cash shift reached its supported limit. Close the shift '
             'before recording another cash sale.',
@@ -2400,6 +5588,8 @@ class ShopDatabase extends _$ShopDatabase {
         lines: [
           for (final line in eventLines)
             ShopSaleReceiptLine(
+              id: '$saleId:${line['productId']! as String}',
+              productId: line['productId']! as String,
               productName: line['productName']! as String,
               unitPriceMmk: line['unitPriceMmk']! as int,
               quantity: line['quantity']! as int,
@@ -2410,8 +5600,9 @@ class ShopDatabase extends _$ShopDatabase {
     });
   }
 
-  /// A bounded page of device-local committed sales. Search uses saved item
-  /// names, so later catalog edits cannot make an old receipt disappear.
+  /// A bounded page of device-local committed sales, ordered by the latest
+  /// sale or reversal activity. Search uses saved item names, so later catalog
+  /// edits cannot make an old receipt disappear.
   Future<List<ShopSaleReceipt>> readRecentSales({
     int limit = 30,
     int offset = 0,
@@ -2424,41 +5615,30 @@ class ShopDatabase extends _$ShopDatabase {
       throw ArgumentError.value(offset, 'offset', 'Use a non-negative offset.');
     }
     final search = query.trim();
-    late final List<ShopSale> sales;
-    if (search.isEmpty) {
-      sales =
-          await (select(shopSales)
-                ..orderBy([
-                  (sale) => OrderingTerm.desc(sale.createdAtMillis),
-                  (sale) => OrderingTerm.desc(sale.id),
-                ])
-                ..limit(limit, offset: offset))
-              .get();
-    } else {
-      final matchingIds = await customSelect(
-        'SELECT sale.id FROM shop_sales AS sale '
-        'WHERE instr(lower(sale.id), lower(?)) > 0 '
-        'OR EXISTS (SELECT 1 FROM shop_sale_lines AS line '
-        'WHERE line.sale_id = sale.id '
-        'AND instr(lower(line.product_name), lower(?)) > 0) '
-        'ORDER BY sale.created_at_millis DESC, sale.id DESC '
-        'LIMIT ? OFFSET ?',
-        variables: [
+    final matchingIds = await customSelect(
+      'SELECT sale.id FROM shop_sales AS sale '
+      'LEFT JOIN shop_sale_reversals AS reversal '
+      'ON reversal.sale_id = sale.id '
+      '${search.isEmpty ? '' : 'WHERE instr(lower(sale.id), lower(?)) > 0 OR EXISTS (SELECT 1 FROM shop_sale_lines AS line WHERE line.sale_id = sale.id AND instr(lower(line.product_name), lower(?)) > 0) '} '
+      'ORDER BY COALESCE(reversal.created_at_millis, sale.created_at_millis) DESC, '
+      'sale.id DESC LIMIT ? OFFSET ?',
+      variables: [
+        if (search.isNotEmpty) ...[
           Variable.withString(search),
           Variable.withString(search),
-          Variable.withInt(limit),
-          Variable.withInt(offset),
         ],
-        readsFrom: {shopSales, shopSaleLines},
-      ).get();
-      if (matchingIds.isEmpty) return const [];
-      final ids = matchingIds.map((row) => row.read<String>('id')).toList();
-      final rows = await (select(
-        shopSales,
-      )..where((sale) => sale.id.isIn(ids))).get();
-      final byId = {for (final row in rows) row.id: row};
-      sales = [for (final id in ids) byId[id]!];
-    }
+        Variable.withInt(limit),
+        Variable.withInt(offset),
+      ],
+      readsFrom: {shopSales, shopSaleLines},
+    ).get();
+    if (matchingIds.isEmpty) return const [];
+    final ids = matchingIds.map((row) => row.read<String>('id')).toList();
+    final rows = await (select(
+      shopSales,
+    )..where((sale) => sale.id.isIn(ids))).get();
+    final byId = {for (final row in rows) row.id: row};
+    final sales = [for (final id in ids) byId[id]!];
     if (sales.isEmpty) return const [];
 
     final saleIds = sales.map((sale) => sale.id).toList(growable: false);
@@ -2471,12 +5651,19 @@ class ShopDatabase extends _$ShopDatabase {
     for (final line in savedLines) {
       (linesBySale[line.saleId] ??= []).add(
         ShopSaleReceiptLine(
+          id: line.id,
+          productId: line.productId,
           productName: line.productName,
           unitPriceMmk: line.unitPriceMmk,
           quantity: line.quantity,
           lineTotalMmk: line.lineTotalMmk,
         ),
       );
+    }
+    final reversalsBySale = <String, ShopSaleReversal>{};
+    for (final saleId in saleIds) {
+      final reversal = await readSaleReversalForSale(saleId);
+      if (reversal != null) reversalsBySale[saleId] = reversal;
     }
     return [
       for (final sale in sales)
@@ -2487,6 +5674,7 @@ class ShopDatabase extends _$ShopDatabase {
           createdAtMillis: sale.createdAtMillis,
           paymentMethod: sale.paymentMethod,
           lines: linesBySale[sale.id] ?? const [],
+          reversal: reversalsBySale[sale.id],
         ),
     ];
   }

@@ -26,10 +26,14 @@ jobs:
       - name: Check out source
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
+      - name: Verify pinned native toolchain contract
+        working-directory: ${{ github.workspace }}
+        run: npm run shop:native:ci-contract:verify
+
       - name: Set up Flutter
         uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
-          channel: stable
+          flutter-version: '3.47.8'
           cache: true
 
       - name: Resolve locked dependencies
@@ -37,14 +41,17 @@ jobs:
 
       - name: Check changed Dart formatting
         run: |
-          dart format lib/main.dart lib/menu_import_screen.dart lib/menu_import_service.dart lib/printer_services.dart lib/recent_sales_screen.dart lib/shop_backup.dart lib/shop_cash_shift_screen.dart lib/shop_copy.dart lib/shop_database.dart lib/shop_startup.dart lib/shop_today_screen.dart lib/stock_screen.dart test/shop_backup_test.dart test/shop_foundation_test.dart test/visual_capture_test.dart test/widget_test.dart
-          git diff --exit-code -- lib/main.dart lib/menu_import_screen.dart lib/menu_import_service.dart lib/printer_services.dart lib/recent_sales_screen.dart lib/shop_backup.dart lib/shop_cash_shift_screen.dart lib/shop_copy.dart lib/shop_database.dart lib/shop_startup.dart lib/shop_today_screen.dart lib/stock_screen.dart test/shop_backup_test.dart test/shop_foundation_test.dart test/visual_capture_test.dart test/widget_test.dart
+          dart format lib/main.dart lib/menu_import_screen.dart lib/menu_import_service.dart lib/printer_services.dart lib/recent_sales_screen.dart lib/shop_backup.dart lib/shop_cash_shift_screen.dart lib/shop_copy.dart lib/shop_correction_authorization_service.dart lib/shop_correction_receipt.dart lib/shop_database.dart lib/shop_sale_correction_dialog.dart lib/shop_startup.dart lib/shop_today_screen.dart lib/stock_screen.dart test/shop_backup_test.dart test/shop_correction_authorization_service_test.dart test/shop_foundation_test.dart test/visual_capture_test.dart test/widget_test.dart
+          git diff --exit-code -- lib/main.dart lib/menu_import_screen.dart lib/menu_import_service.dart lib/printer_services.dart lib/recent_sales_screen.dart lib/shop_backup.dart lib/shop_cash_shift_screen.dart lib/shop_copy.dart lib/shop_correction_authorization_service.dart lib/shop_correction_receipt.dart lib/shop_database.dart lib/shop_sale_correction_dialog.dart lib/shop_startup.dart lib/shop_today_screen.dart lib/stock_screen.dart test/shop_backup_test.dart test/shop_correction_authorization_service_test.dart test/shop_foundation_test.dart test/visual_capture_test.dart test/widget_test.dart
 
       - name: Analyze Flutter source
         run: flutter analyze
 
       - name: Check first-sale widget in isolation
         run: timeout --signal=TERM --kill-after=10s 90s flutter test test/widget_test.dart --plain-name 'empty catalog can make a durable cash sale' --reporter expanded --timeout 60s
+
+      - name: Check first-run restore in isolation
+        run: timeout --signal=TERM --kill-after=10s 60s flutter test test/shop_backup_test.dart --plain-name 'fresh install restores before Shop opens' --reporter expanded --timeout 45s
 
       - name: Run Flutter tests
         run: timeout --signal=TERM --kill-after=10s 180s flutter test --concurrency=1 --reporter expanded --timeout 2m
@@ -65,18 +72,56 @@ jobs:
           name: supermega-shop-flutter-renders-${{ github.sha }}
           path: mobile/shop_pos/test/goldens/shop_*.png
           if-no-files-found: warn
-          retention-days: 7
+          retention-days: 14
+
+      - name: Reject unsigned Android release packaging
+        run: |
+          unset ORG_GRADLE_PROJECT_SHOP_ANDROID_KEYSTORE_PATH
+          unset ORG_GRADLE_PROJECT_SHOP_ANDROID_KEY_ALIAS
+          unset ORG_GRADLE_PROJECT_SHOP_ANDROID_STORE_PASSWORD
+          unset ORG_GRADLE_PROJECT_SHOP_ANDROID_KEY_PASSWORD
+          cleanup_release_outputs() {
+            release_files="$(find build/app/outputs/flutter-apk -maxdepth 1 -name 'app-release*.apk' -print 2>/dev/null)"
+            if [ -n "$release_files" ]; then
+              rm -f build/app/outputs/flutter-apk/app-release*.apk
+              return 1
+            fi
+          }
+          trap 'result=$?; cleanup_release_outputs || result=1; trap - EXIT; exit "$result"' EXIT
+          rm -f build/app/outputs/flutter-apk/app-release*.apk
+          set +e
+          release_output="$(flutter build apk --release --no-pub 2>&1)"
+          release_status=$?
+          set -e
+          test "$release_status" -ne 0
+          printf '%s\n' "$release_output" | grep -F 'shop_android_release_signing_unavailable'
+          test -z "$(find build/app/outputs/flutter-apk -maxdepth 1 -name 'app-release*.apk' -print -quit 2>/dev/null)"
+          set +e
+          aggregate_output="$(cd android && ./gradlew build --console=plain 2>&1)"
+          aggregate_status=$?
+          set -e
+          test "$aggregate_status" -ne 0
+          printf '%s\n' "$aggregate_output" | grep -F 'shop_android_release_signing_unavailable'
+          test -z "$(find build/app/outputs/flutter-apk -maxdepth 1 -name 'app-release*.apk' -print -quit 2>/dev/null)"
 
       - name: Build Android debug APK
         run: flutter build apk --debug --no-pub
+
+      - name: Record Android debug APK checksum
+        run: |
+          cd build/app/outputs/flutter-apk
+          sha256sum app-debug.apk > app-debug.apk.sha256
+          sha256sum --check app-debug.apk.sha256
 
       - name: Retain Android debug APK for device QA
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: supermega-shop-android-debug-${{ github.sha }}
-          path: mobile/shop_pos/build/app/outputs/flutter-apk/app-debug.apk
+          path: |
+            mobile/shop_pos/build/app/outputs/flutter-apk/app-debug.apk
+            mobile/shop_pos/build/app/outputs/flutter-apk/app-debug.apk.sha256
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 14
 
   ios:
     name: Build iPad/iOS app
@@ -93,7 +138,7 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
-          channel: stable
+          flutter-version: '3.47.8'
           cache: true
 
       - name: Resolve locked dependencies
@@ -117,7 +162,7 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
-          channel: stable
+          flutter-version: '3.47.8'
           cache: true
 
       - name: Generate Windows runner without touching the app lockfile
@@ -146,12 +191,22 @@ jobs:
         run: |
           $releaseDir = 'build/windows/x64/runner/Release'
           if (-not (Test-Path -LiteralPath $releaseDir)) { throw 'Windows release directory is missing.' }
-          Compress-Archive -Path (Join-Path $releaseDir '*') -DestinationPath 'build/supermega-shop-windows-unsigned.zip'
+          $packagePath = 'build/supermega-shop-windows-unsigned.zip'
+          $checksumPath = "$packagePath.sha256"
+          Compress-Archive -Path (Join-Path $releaseDir '*') -DestinationPath $packagePath
+          $checksum = (Get-FileHash -Algorithm SHA256 -LiteralPath $packagePath).Hash.ToLowerInvariant()
+          Set-Content -LiteralPath $checksumPath -Value "$checksum  supermega-shop-windows-unsigned.zip" -Encoding ascii
+          if (-not (Test-Path -LiteralPath $checksumPath)) { throw 'Windows package checksum is missing.' }
+          $recordedChecksum = (Get-Content -LiteralPath $checksumPath -Raw).Trim()
+          $expectedChecksum = "$checksum  supermega-shop-windows-unsigned.zip"
+          if ($recordedChecksum -cne $expectedChecksum) { throw 'Windows package checksum verification failed.' }
 
       - name: Retain Windows QA package
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: supermega-shop-windows-unsigned-${{ github.sha }}
-          path: mobile/shop_pos/build/supermega-shop-windows-unsigned.zip
+          path: |
+            mobile/shop_pos/build/supermega-shop-windows-unsigned.zip
+            mobile/shop_pos/build/supermega-shop-windows-unsigned.zip.sha256
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 14

@@ -1,24 +1,32 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { bindPreviewNavigation } from './public_preview_navigation.mjs'
 import { previewProfile, validatePreviewContact, validatePreviewLinks, validatePreviewDeployment } from './public_preview_profile.mjs'
+const root = resolve(import.meta.dirname, '..')
+const isolatedOutputId = process.env.SUPERMEGA_PUBLIC_OUTPUT_ID || ''
+if (isolatedOutputId && !/^[a-z0-9][a-z0-9-]{0,63}$/.test(isolatedOutputId)) throw new Error('public_output_id_invalid')
+const staticDir = isolatedOutputId
+  ? resolve(root, '.tmp', `supermega-public-output-${isolatedOutputId}`, 'static')
+  : resolve(root, '.vercel/output/static')
+const currentRelease = JSON.parse(readFileSync(resolve(staticDir, '__release.json'), 'utf8'))
 const commit = 'a'.repeat(40)
 const app = { origin: 'https://megaos-123456789-swanhtet01s-projects.vercel.app',
   projectId: 'prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG', deploymentId: 'dpl_12345678', commit }
 const policy = previewProfile({ profile: 'isolated-pair', expectedCommit: commit, appBinding: JSON.stringify(app) })
 const products = ['shop', 'website', 'ecommerce', 'plant'].map(id => ({ id }))
-const html = `<a href="${app.origin}/login">Login</a>`
+const html = `<a class="button button-primary" href="/contact/?product=shop">Contact us about Shop</a><a class="nav-sign-in" href="${app.origin}/login">Sign in</a>`
 test('requires explicit profile, exact SHA and app binding', () => {
   for (const input of [{}, { profile: 'isolated-pair', expectedCommit: commit },
     { profile: 'isolated-pair', expectedCommit: 'main' }, { profile: 'unknown', expectedCommit: commit }]) assert.throws(() => previewProfile(input))
   assert.throws(() => previewProfile({ profile: 'isolated-pair', expectedCommit: commit, appBinding: JSON.stringify({ ...app, commit: 'b'.repeat(40) }) }))
 })
-test('paired active actions exclude Plant and production escapes', () => {
-  assert.equal(validatePreviewLinks(html, policy, products).activeProducts.length, 3)
-  for (const wrong of [html.replace('/login', '/shop/?tab=counter'), html.replace(app.origin, 'https://app.supermega.dev'),
+test('paired Shop action permits only scoped merchant sign-in and excludes internal products', () => {
+  assert.deepEqual(validatePreviewLinks(html, policy, products).activeProducts, ['shop'])
+  for (const wrong of [html + `<a href="${app.origin}/shop/?tab=counter">Open app</a>`, html + '<a href="https://app.supermega.dev/login?product=shop">Login</a>',
     html + '<a href="/plant/">Plant</a>', html + '<a href="/settings/?product=production">Setup</a>',
-    html.replace(app.origin, 'https://other.vercel.app')]) assert.throws(() => validatePreviewLinks(wrong, policy, products))
+    html + '<a href="https://other.vercel.app">External</a>']) assert.throws(() => validatePreviewLinks(wrong, policy, products))
 })
 test('isolated contact cannot accept while production contract still requires acceptance', () => {
   const contact = { service: 'supermega-contact', status: 'attention', accepting: false,
@@ -47,26 +55,64 @@ test('rejects extra escape links even when all good actions remain', () => {
       { publicOrigin: 'https://public-preview.example' }), undefined, href)
   }
 })
+test('rejects all external retail-price links from the public preview', () => {
+  const options = { publicOrigin: 'https://public-preview.example' }
+  for (const href of ['https://www.makropro.com.mm/en', 'https://www.makropro.com.mm/en?next=/',
+    'https://www.makropro.com.mm/products', 'https://makropro.com.mm/en', 'https://evil.example/en']) {
+    assert.throws(() => validatePreviewLinks(html + `<a href="${href}">External</a>`, policy, products, options), undefined, href)
+  }
+})
 test('all-page mode permits informational tombstone but not a retired tool action', () => {
   const options = { requireActions: false, publicOrigin: 'https://public-preview.example' }
-  validatePreviewLinks('<h1>Plant retained records</h1><a href="/#products">View current products</a>', policy, products, options)
+  validatePreviewLinks('<h1>Plant retained records</h1><a href="/shop/">View current products</a>', policy, products, options)
   assert.throws(() => validatePreviewLinks(`<a href="${app.origin}/plant/">Open retained workspace</a>`, policy, products, options))
   validatePreviewLinks('<a href="mailto:swanhtet@supermega.dev">Contact</a>', policy, products, options)
 })
 
+test('native gallery is read-only and no image is a preview navigation action', () => {
+  const options = { publicOrigin: 'https://public-preview.example' }
+  for (const path of ['/images/native-shop/shop_checkout_1200_en.png',
+    '/images/native-shop/shop_stock_390_my.png', '/images/unreviewed.png']) {
+    assert.throws(() => validatePreviewLinks(html + `<a href="${path}">View full size</a>`, policy, products, options), undefined, path)
+  }
+})
 
-test('public site rejects product pickers, setup routes and duplicate Login actions', () => {
-  for (const suffix of ['/?choose=1', '/shop/?tab=today', '/settings/?product=website', '/login?product=shop', '/login']) {
+
+test('public site keeps one Shop contact action and a single safe sign-in link', () => {
+  validatePreviewLinks(html, policy, products)
+  for (const suffix of ['/login?product=shop', '/?choose=1', '/shop/?tab=today', '/settings/?product=website', '/login?product=website', '/login?product=shop&next=/shop/']) {
     assert.throws(() => validatePreviewLinks(html + `<a href="${app.origin}${suffix}">Open</a>`, policy, products))
   }
+  assert.throws(() => validatePreviewLinks(html + `<a href="${app.origin}/login">Login</a>`, policy, products), /action_missing:single_login/)
   assert.throws(() => validatePreviewLinks('<h1>Products</h1>', policy, products), /action_missing/)
 })
 
-test('current generated pages bind to one isolated Login without production escapes', () => {
-  for (const path of ['index.html', 'shop/index.html', 'website/index.html', 'ecommerce/index.html', 'contact/index.html', 'privacy/index.html']) {
-    const source = readFileSync(new URL(`../.vercel/output/static/${path}`, import.meta.url), 'utf8')
-    const bound = bindPreviewNavigation(source, app)
-    assert.equal(validatePreviewLinks(bound, policy, products, { publicOrigin: 'https://public-preview.example' }).pairedOrigin, app.origin)
+test('public preview rejects extra or unbound sign-in actions', () => {
+  for (const href of [`${app.origin}/login`, `${app.origin}/login?product=shop`, 'https://app.supermega.dev/login?product=shop']) {
+    assert.throws(() => validatePreviewLinks(html + `<a href="${href}">Login</a>`, policy, products))
+  }
+})
+
+test('Burmese routes stay within the preview boundary', () => {
+  const options = { publicOrigin: 'https://public-preview.example' }
+  for (const href of ['/my/shop/', '/my/contact/?product=shop', '/my/privacy/']) {
+    validatePreviewLinks(html + `<a href="${href}">Continue</a>`, policy, products, options)
+  }
+  for (const href of ['/my/plant/', '/my/website/', '/my/ecommerce/',
+    'https://commons.wikimedia.org/wiki/File:Unreviewed_photo.jpg']) {
+    assert.throws(() => validatePreviewLinks(html + `<a href="${href}">Continue</a>`, policy, products, options))
+  }
+})
+
+test('current generated Shop, Contact and Privacy pages bind one sign-in without production escapes', () => {
+  for (const path of ['shop/index.html', 'contact/index.html', 'privacy/index.html', 'my/shop/index.html', 'my/contact/index.html', 'my/privacy/index.html']) {
+    const source = readFileSync(resolve(staticDir, path), 'utf8')
+    const canonicalSource = currentRelease.previewNavigation
+      ? source.replaceAll(`href="${currentRelease.previewNavigation.origin}/`, 'href="https://app.supermega.dev/')
+      : source
+    const bound = bindPreviewNavigation(canonicalSource, app)
+    assert.equal(validatePreviewLinks(bound, policy, products, { publicOrigin: 'https://public-preview.example', requireActions: path === 'shop/index.html' }).pairedOrigin, app.origin)
     assert.ok(!bound.includes('href="https://app.supermega.dev/'))
+    assert.equal((bound.match(new RegExp(`href="${app.origin}/login"`, 'g')) ?? []).length, 1)
   }
 })

@@ -325,13 +325,13 @@ function rawCase(spec, index) {
     origin: spec.surface === 'public' ? previewOrigins.public : previewOrigins.app,
     hash: '',
     viewport: `${spec.width}x${spec.height}${spec.mobile ? ' mobile' : ''}`,
-    path: spec.surface === 'transition' ? '/shop/?tab=today' : spec.surface === 'shop' ? '/shop/?tab=counter&template=mini-mart' : spec.expectedPath || spec.route,
+    path: spec.surface === 'transition' ? '/login' : spec.surface === 'shop' ? '/shop/?tab=counter&template=mini-mart' : spec.expectedPath || spec.route,
     rendered: { retirement: spec.surface === 'retired_plant' ? {
       policy: 'supermega.retired-product-preview.v1', caseId: spec.id, redirectVerified: true,
       target: spec.target, targetVerified: true, retiredUiAbsent: true, retainedDataUnchanged: true,
     } : null, pairedTransition: spec.surface === 'transition' ? {
       contract: 'supermega.paired-preview-transition.v1', publicOrigin: previewOrigins.public, appOrigin: previewOrigins.app,
-      targetPath: '/shop/?tab=today', visibleActionActivated: true, destinationStable: true, pairOnlyRequests: true, noMutatingRequests: true,
+      targetPath: '/login', visibleActionActivated: true, destinationStable: true, pairOnlyRequests: true, noMutatingRequests: true,
     } : null },
     bodyLength: 2048 + index,
     layout: spec.surface === 'shop' ? { ok: true, aboveFold: true, accessibility: { ok: true } } : null,
@@ -528,10 +528,11 @@ test('builds and validates the exact twenty-eight-case technical preview proof',
   ]) assert.equal(paymentPrioritySource.split(sourceBinding).length - 1, 1)
   const publicExpectedText = await loadPublicHomepageExpectedText()
   assert.deepEqual(publicExpectedText, [
-    'Your business.',
-    'Working together.',
-    'Shop. Sites. Commerce. One SuperMega account.',
-    'Login',
+    'Shop for Myanmar retailers',
+    'Sell clearly. Keep stock accurate.',
+    'Contact us about Shop',
+    'Pilot sign in',
+    'Illustrative Shop preview with synthetic sample data.',
   ])
   assert.deepEqual(
     derivePublicHomepageExpectedText({ manifest, generatorSource }),
@@ -541,12 +542,13 @@ test('builds and validates the exact twenty-eight-case technical preview proof',
   changedManifest.company.headline = 'Current source-owned homepage claim.'
   assert.equal(
     derivePublicHomepageExpectedText({ manifest: changedManifest, generatorSource })[0],
-    'Your business.',
+    'Shop for Myanmar retailers',
   )
   for (const binding of [
-    '<h1>Your business.<br>Working together.</h1>',
-    '<p class="lede">Manage sales and stock. Publish your website. Take orders online.</p>',
-    'href="https://app.supermega.dev/login">Login</a>',
+    "replaceOnce(heroWithPreview, 'Shop for Myanmar retailers'",
+    "replaceOnce(heroWithPreview, 'Sell clearly. Keep stock accurate.'",
+    "replaceOnce(heroWithPreview, 'href=\"/contact/?product=shop\">Contact us about Shop'",
+    "'Illustrative Shop preview with synthetic sample data.'",
   ]) {
     assert.throws(
       () => derivePublicHomepageExpectedText({
