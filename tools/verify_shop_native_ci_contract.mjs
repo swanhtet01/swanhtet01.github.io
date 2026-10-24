@@ -113,6 +113,8 @@ export function verifyShopNativeCiContract(source, gradleWrapperSource = '') {
     ['name: synthetic-qa-promotion-ineligible-${{ github.sha }}-sha-256-windows', 'windows_qa_artifact_not_bound_to_source_or_promotion_state'],
     ["manifest application-id app-qa-debug.apk)\" = 'dev.supermega.supermega_shop.qa'", 'android_qa_postbuild_identity_not_inspected'],
     ["Print :CFBundleIdentifier' \"$info\")\" = 'dev.supermega.supermegaShop.qa'", 'ios_qa_postbuild_identity_not_inspected'],
+    ['build/ios/iphoneos/Runner.app "${{ github.workspace }}/Runner.app.zip"', 'ios_qa_runner_bundle_not_staged'],
+    ["info='build/ios/iphoneos/Runner.app/Info.plist'", 'ios_qa_runner_bundle_not_inspected'],
     ["$identity.ProductName -cne 'Shop QA'", 'windows_qa_postbuild_identity_not_inspected'],
     ["Compress-Archive -Path $releaseDirectory -DestinationPath $packagePath", 'windows_qa_full_runtime_not_packaged'],
     ['"$digest  $artifact" | Set-Content -LiteralPath $checksumPath -Encoding ascii -NoNewline', 'windows_qa_canonical_checksum_not_recorded'],

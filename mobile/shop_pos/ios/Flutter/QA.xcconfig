@@ -1,4 +1,4 @@
 #include "Debug.xcconfig"
 PRODUCT_BUNDLE_IDENTIFIER=dev.supermega.supermegaShop.qa
-PRODUCT_NAME=Shop QA
 SHOP_DISPLAY_NAME=Shop QA
+SHOP_BUNDLE_NAME=Shop QA

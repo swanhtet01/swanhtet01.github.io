@@ -28,6 +28,7 @@ function workflowFixture() {
     ios: `
       - name: Inspect iOS QA identity
         run: |
+          info='build/ios/iphoneos/Runner.app/Info.plist'
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$info")" = 'dev.supermega.supermegaShop.qa'
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$info")" = 'Shop QA'
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleName' "$info")" = 'Shop QA'`,
@@ -92,7 +93,7 @@ function fixture() {
     'mobile/shop_pos/android/app/build.gradle.kts': 'applicationId = "dev.supermega.supermega_shop"\ncreate("production") create("qa") synthetic_qa_v1 dev.supermega.supermega_shop.qa',
     'mobile/shop_pos/android/app/src/production/AndroidManifest.xml': '<application android:label="Shop"/>',
     'mobile/shop_pos/android/app/src/qa/AndroidManifest.xml': '<application android:label="Shop QA"/>',
-    'mobile/shop_pos/ios/Runner.xcodeproj/project.pbxproj': 'PRODUCT_BUNDLE_IDENTIFIER = dev.supermega.supermegaShop;\nPRODUCT_BUNDLE_IDENTIFIER = dev.supermega.supermegaShop;\nPRODUCT_BUNDLE_IDENTIFIER = dev.supermega.supermegaShop;\ndev.supermega.supermegaShop.qa',
+    'mobile/shop_pos/ios/Runner.xcodeproj/project.pbxproj': 'PRODUCT_BUNDLE_IDENTIFIER = dev.supermega.supermegaShop;\nPRODUCT_BUNDLE_IDENTIFIER = dev.supermega.supermegaShop;\nPRODUCT_BUNDLE_IDENTIFIER = dev.supermega.supermegaShop;\ndev.supermega.supermegaShop.qa\npath = Runner.app;\nPRODUCT_NAME = "$(TARGET_NAME)";\nPRODUCT_NAME = "$(TARGET_NAME)";\nPRODUCT_NAME = "$(TARGET_NAME)";\nPRODUCT_NAME = "$(TARGET_NAME)";\nPRODUCT_NAME = "$(TARGET_NAME)";\nPRODUCT_NAME = "$(TARGET_NAME)";',
     'mobile/shop_pos/lib/main.dart': 'Future<void> main() async { final runtimeProfile = ShopRuntimeProfile.resolve(); final runtimeScope = await ShopRuntimeScope.resolve(runtimeProfile); if (!runtimeScope.capabilities.managedAuth) return; if (!runtimeScope.capabilities.camera) return; }',
     'mobile/shop_pos/lib/shop_database.dart': "privateDatabaseFile() => 'supermega_shop.sqlite';",
     'mobile/shop_pos/lib/shop_startup.dart': 'ShopRuntimeScope scope; void pick() { if (!scope.capabilities.externalFileSaving) return; }',
@@ -110,10 +111,10 @@ function fixture() {
     'tools/generate_shop_build_identity.mjs': 'production synthetic_qa_v1 windows',
     'mobile/shop_pos/scripts/configure_windows_qa_runner.ps1': 'supermega_shop_qa.exe Shop QA',
     'mobile/shop_pos/ios/Runner.xcodeproj/xcshareddata/xcschemes/qa.xcscheme': '<TestAction buildConfiguration="Debug-qa"/><LaunchAction buildConfiguration="Debug-qa"/><ProfileAction buildConfiguration="Debug-qa"/><AnalyzeAction buildConfiguration="Debug-qa"/><ArchiveAction buildConfiguration="Debug-qa"/>',
-    'mobile/shop_pos/ios/Runner/Info.plist': '<string>$(SHOP_DISPLAY_NAME)</string><string>$(PRODUCT_NAME)</string>',
-    'mobile/shop_pos/ios/Flutter/Debug.xcconfig': 'SHOP_DISPLAY_NAME=Shop',
-    'mobile/shop_pos/ios/Flutter/Release.xcconfig': 'SHOP_DISPLAY_NAME=Shop',
-    'mobile/shop_pos/ios/Flutter/QA.xcconfig': 'PRODUCT_BUNDLE_IDENTIFIER=dev.supermega.supermegaShop.qa\nSHOP_DISPLAY_NAME=Shop QA',
+    'mobile/shop_pos/ios/Runner/Info.plist': '<string>$(SHOP_DISPLAY_NAME)</string><string>$(SHOP_BUNDLE_NAME)</string>',
+    'mobile/shop_pos/ios/Flutter/Debug.xcconfig': 'SHOP_DISPLAY_NAME=Shop\nSHOP_BUNDLE_NAME=supermega_shop',
+    'mobile/shop_pos/ios/Flutter/Release.xcconfig': 'SHOP_DISPLAY_NAME=Shop\nSHOP_BUNDLE_NAME=supermega_shop',
+    'mobile/shop_pos/ios/Flutter/QA.xcconfig': 'PRODUCT_BUNDLE_IDENTIFIER=dev.supermega.supermegaShop.qa\nSHOP_DISPLAY_NAME=Shop QA\nSHOP_BUNDLE_NAME=Shop QA',
     '.github/workflows/shop-native-ci.yml': workflowFixture(),
   }
 }
@@ -237,6 +238,9 @@ test('exact platform identity and artifact contracts cannot be replaced by loose
   for (const path of [
     'mobile/shop_pos/android/app/src/qa/AndroidManifest.xml',
     'mobile/shop_pos/ios/Runner.xcodeproj/xcshareddata/xcschemes/qa.xcscheme',
+    'mobile/shop_pos/ios/Runner/Info.plist',
+    'mobile/shop_pos/ios/Flutter/Debug.xcconfig',
+    'mobile/shop_pos/ios/Flutter/Release.xcconfig',
     'mobile/shop_pos/ios/Flutter/QA.xcconfig',
     'mobile/shop_pos/scripts/configure_windows_qa_runner.ps1',
     'tools/generate_shop_build_identity.mjs',
@@ -256,6 +260,7 @@ test('exact platform identity and artifact contracts cannot be replaced by loose
 
   for (const token of [
     'manifest application-id app-qa-debug.apk',
+    "info='build/ios/iphoneos/Runner.app/Info.plist'",
     'Print :CFBundleIdentifier',
     "$identity.ProductName -cne 'Shop QA'",
     'Compress-Archive -Path $releaseDirectory -DestinationPath $packagePath',

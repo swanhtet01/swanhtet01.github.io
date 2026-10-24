@@ -40,6 +40,13 @@ test('native CI pins one exact Flutter SDK across production and QA native jobs'
     gradleWrapper,
   )
   assert.ok(missingQaFormat.failures.includes('qa_dart_format_gate_missing:lib/shop_runtime_scope.dart'))
+
+  const wrongIosProduct = verifyShopNativeCiContract(
+    workflow.replaceAll('build/ios/iphoneos/Runner.app', 'build/ios/iphoneos/Shop QA.app'),
+    gradleWrapper,
+  )
+  assert.ok(wrongIosProduct.failures.includes('ios_qa_runner_bundle_not_staged'))
+  assert.ok(wrongIosProduct.failures.includes('ios_qa_runner_bundle_not_inspected'))
 })
 
 test('Gradle wrapper uses the checksum-pinned 9.3.1 bin distribution', () => {
