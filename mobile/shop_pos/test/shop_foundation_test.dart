@@ -374,7 +374,7 @@ void main() {
         throwsA(
           predicate(
             (error) => error.toString().contains(
-              'Shop correction requires a signed authorization proof',
+              'Shop correction requires a finalized authorization proof',
             ),
           ),
         ),
@@ -399,7 +399,7 @@ void main() {
         throwsA(
           predicate(
             (error) => error.toString().contains(
-              'Shop correction requires a signed authorization proof',
+              'Shop correction requires a finalized authorization proof',
             ),
           ),
         ),
@@ -413,7 +413,7 @@ void main() {
         throwsA(
           predicate(
             (error) => error.toString().contains(
-              'Shop reconciliation requires a signed authorization proof',
+              'Shop reconciliation requires a finalized authorization proof',
             ),
           ),
         ),

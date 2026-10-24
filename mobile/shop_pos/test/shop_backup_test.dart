@@ -685,8 +685,10 @@ void main() {
             connection,
             mutate: () => connection.execute(
               'UPDATE shop_correction_authorization_proofs '
-              'SET finalized_at_millis = finalized_at_millis + 1, '
-              'verified_at_millis = verified_at_millis + 1',
+              'SET issued_at_millis = issued_at_millis + 1, '
+              'finalized_at_millis = finalized_at_millis + 1, '
+              'verified_at_millis = verified_at_millis + 1, '
+              'expires_at_millis = expires_at_millis + 1',
             ),
           ),
         ),
@@ -4093,7 +4095,9 @@ Future<void> _rewriteWalletReconciliationAsSignedV2FourKey(File target) async {
       connection,
       mutate: () => connection.execute(
         'UPDATE shop_correction_authorization_proofs '
-        'SET command_digest = ?, receipt_digest = ?, signature = ? '
+        "SET proof_kind = 'signed_v2', command_digest = ?, "
+        'receipt_digest = ?, signature = ?, finalization_request_id = NULL, '
+        'finalized_at_millis = NULL '
         'WHERE capability = ?',
         [
           commandDigest,
