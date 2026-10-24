@@ -46,7 +46,7 @@ export function ManagedLoginPage() {
   const accountHubReturnPath = managedAccountHubEntryPath(location.search)
   const publicPortalEntry = publicApp || pairedPublicEntry || Boolean(accountHubReturnPath)
   const reviewReturnPath = managedLoginReviewPath(location.search)
-  const accountProductIntent = productIntent ?? (reviewReturnPath?.split('/')[1] ?? 'shop')
+  const accountProductIntent = accountHubReturnPath ? 'guide' : productIntent ?? (reviewReturnPath?.split('/')[1] ?? 'shop')
   const shopAccessIntent = ['shop', 'commerce'].includes(accountProductIntent.trim().toLowerCase())
   const portalEntryPath = reviewReturnPath ?? accountHubReturnPath ?? managedPortalEntryPath(accountProductIntent)
   const [email, setEmail] = useState('')

@@ -6,9 +6,10 @@ import unittest
 from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 
+from supermega_runtime.billing_contracts import BILLING_READ_CAPABILITY
 from supermega_runtime.billing_rail import MERCHANT_BILLING_SUMMARY_CONTRACT
 from supermega_runtime.trial_runtime import create_trial_router
-from supermega_runtime.trial_store import BILLING_READ_CAPABILITY, InMemoryTrialStore, TrialPrincipal
+from supermega_runtime.trial_store import InMemoryTrialStore, TrialPrincipal
 
 
 def merchant_summary(workspace_id: str = "workspace-a") -> dict[str, object]:

@@ -202,20 +202,21 @@ function managedLoginPath(product: string | null) {
 }
 
 export type ManagedPortalAccess =
-  | { status: 'local'; products: readonly ClientSolutionId[]; workspaceId: '' }
-  | { status: 'checking'; products: readonly ClientSolutionId[]; workspaceId: string }
-  | { status: 'reauthenticate'; products: readonly ClientSolutionId[]; workspaceId: string }
+  | { status: 'local'; products: readonly ClientSolutionId[]; capabilities: readonly string[]; workspaceId: '' }
+  | { status: 'checking'; products: readonly ClientSolutionId[]; capabilities: readonly string[]; workspaceId: string }
+  | { status: 'reauthenticate'; products: readonly ClientSolutionId[]; capabilities: readonly string[]; workspaceId: string }
   | {
       status: 'ready'
       products: readonly ClientSolutionId[]
+      capabilities: readonly string[]
       workspaceId: string
       companyName: string
       companyRole: 'owner' | 'operator' | 'viewer'
       accountEmail: string
     }
-  | { status: 'error'; products: readonly ClientSolutionId[]; workspaceId: string; message: string }
+  | { status: 'error'; products: readonly ClientSolutionId[]; capabilities: readonly string[]; workspaceId: string; message: string }
 
-const localPortalAccess: ManagedPortalAccess = { status: 'local', products: [], workspaceId: '' }
+const localPortalAccess: ManagedPortalAccess = { status: 'local', products: [], capabilities: [], workspaceId: '' }
 const ManagedPortalAccessContext = createContext<ManagedPortalAccess>(localPortalAccess)
 
 export function useCurrentManagedPortalAccess() {
@@ -230,11 +231,11 @@ function useManagedPortalAccess(enabled: boolean, selectedWorkspace: string, ref
     if (!enabled || !selectedWorkspace) return undefined
     let active = true
     void import('./managed-portal-client')
-      .then(async ({ currentManagedIdentity, discoverManagedWorkspacesForCurrentSession, loadManagedBootstrap, managedProductsFromBootstrap }) => {
+      .then(async ({ currentManagedIdentity, discoverManagedWorkspacesForCurrentSession, loadManagedBootstrap, managedCapabilitiesFromBootstrap, managedProductsFromBootstrap }) => {
         const identity = await currentManagedIdentity()
         if (!active) return
         if (!identity || identity.workspaceId !== selectedWorkspace) {
-          setResolved({ key: accessKey, access: { status: 'reauthenticate', products: [], workspaceId: selectedWorkspace } })
+          setResolved({ key: accessKey, access: { status: 'reauthenticate', products: [], capabilities: [], workspaceId: selectedWorkspace } })
           return
         }
         const [bootstrap, directory] = await Promise.all([
@@ -251,6 +252,7 @@ function useManagedPortalAccess(enabled: boolean, selectedWorkspace: string, ref
           access: {
             status: 'ready',
             products: managedProductsFromBootstrap(bootstrap, identity),
+            capabilities: managedCapabilitiesFromBootstrap(bootstrap, identity),
             workspaceId: selectedWorkspace,
             companyName: company.label,
             companyRole: company.access,
@@ -265,6 +267,7 @@ function useManagedPortalAccess(enabled: boolean, selectedWorkspace: string, ref
           access: {
             status: 'error',
             products: [],
+            capabilities: [],
             workspaceId: '',
             message: error instanceof Error ? error.message : 'Company product access could not be verified.',
           },
@@ -274,8 +277,8 @@ function useManagedPortalAccess(enabled: boolean, selectedWorkspace: string, ref
   }, [accessKey, enabled, selectedWorkspace])
 
   if (!selectedWorkspace) return localPortalAccess
-  if (!enabled) return { status: 'checking', products: [], workspaceId: '' }
-  if (resolved.key !== accessKey) return { status: 'checking', products: [], workspaceId: '' }
+  if (!enabled) return { status: 'checking', products: [], capabilities: [], workspaceId: '' }
+  if (resolved.key !== accessKey) return { status: 'checking', products: [], capabilities: [], workspaceId: '' }
   return resolved.access
 }
 

@@ -9,6 +9,7 @@ import { currentManagedIdentity, loadManagedAccountBilling } from './managed-tri
 
 type BillingLoad =
   | { status: 'loading' }
+  | { status: 'unavailable' }
   | { status: 'ready'; value: ManagedAccountBilling }
   | { status: 'error'; message: string }
 
@@ -42,9 +43,14 @@ export function ManagedAccountHubPage() {
   const [billing, setBilling] = useState<BillingLoad>({ status: 'loading' })
   const errorRef = useRef<HTMLParagraphElement>(null)
   const workspaceId = portal.status === 'ready' ? portal.workspaceId : ''
+  const canReadBilling = portal.status === 'ready' && portal.capabilities.includes('billing.read')
 
   useEffect(() => {
     if (portal.status !== 'ready') return
+    if (!canReadBilling) {
+      setBilling({ status: 'unavailable' })
+      return
+    }
     let active = true
     setBilling({ status: 'loading' })
     void currentManagedIdentity()
@@ -63,7 +69,7 @@ export function ManagedAccountHubPage() {
         })
       })
     return () => { active = false }
-  }, [attempt, portal.status, workspaceId])
+  }, [attempt, canReadBilling, portal.status, workspaceId])
 
   useEffect(() => {
     if (billing.status !== 'error') return
@@ -103,6 +109,7 @@ export function ManagedAccountHubPage() {
         <span className="core-eyebrow">Plan &amp; billing</span>
         <h2>{summary?.package.packageCode ?? 'No package assigned'}</h2>
         {billing.status === 'loading' ? <p role="status">Loading billing records…</p> : null}
+        {billing.status === 'unavailable' ? <p role="status">Plan and billing access is not assigned to this company role.</p> : null}
         {billing.status === 'error' ? <div className="account-hub-error">
           <p ref={errorRef} role="alert" tabIndex={-1}>{billing.message}</p>
           <button className="core-button" onClick={() => setAttempt((value) => value + 1)} type="button">Try again</button>

@@ -50,7 +50,10 @@ await build({
               return <header className="page-heading"><div><span className="core-eyebrow">{eyebrow}</span><h1>{title}</h1><p>{copy}</p></div><div className="heading-actions">{actions}</div></header>
             }
             export function useCurrentManagedPortalAccess() {
-              return { status: 'ready', products: ['commerce'], workspaceId: 'workspace-a', companyName: 'Mingalar Mini Mart', companyRole: 'owner', accountEmail: 'owner@example.test' }
+              const query = new URLSearchParams(location.search)
+              const viewer = query.get('access') === 'viewer'
+              const noShop = query.get('product') === 'none'
+              return { status: 'ready', products: noShop ? [] : ['commerce'], capabilities: viewer ? [] : ['billing.read'], workspaceId: 'workspace-a', companyName: 'Mingalar Mini Mart', companyRole: viewer ? 'viewer' : 'owner', accountEmail: 'owner@example.test' }
             }
           `,
         }
@@ -70,6 +73,7 @@ await build({
             }
             export async function currentManagedIdentity() { return { userId: 'actor-owner', email: 'owner@example.test', workspaceId: 'workspace-a' } }
             export async function loadManagedAccountBilling() {
+              window.__supermegaSyntheticBillingCalls = (window.__supermegaSyntheticBillingCalls || 0) + 1
               const variant = new URLSearchParams(location.search).get('variant')
               await new Promise(resolve => setTimeout(resolve, variant === 'loading' ? 60000 : 25))
               if (variant === 'error') throw new Error('Plan and billing are temporarily unavailable.')

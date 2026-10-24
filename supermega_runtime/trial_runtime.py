@@ -60,6 +60,7 @@ from supermega_runtime.plant_equipment_import import (
     validate_plant_equipment_import,
 )
 from supermega_runtime.telemetry import schema as telemetry_schema
+from supermega_runtime.billing_contracts import BILLING_READ_CAPABILITY
 from supermega_runtime.telemetry.tracing import domain_span
 from supermega_runtime.production_material_handoff import (
     production_material_requests,
@@ -69,7 +70,6 @@ from supermega_runtime.production_material_handoff import (
 from supermega_runtime.trial_store import (
     APPROVAL_DECIDE_CAPABILITY,
     APPROVAL_REQUEST_CAPABILITY,
-    BILLING_READ_CAPABILITY,
     PRODUCT_ACCEPTANCE_SURFACES,
     SURFACE_WRITE_CAPABILITIES,
     ApprovalRecord,

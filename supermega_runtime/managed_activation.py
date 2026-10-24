@@ -18,7 +18,6 @@ from urllib.parse import parse_qs, urlsplit
 from urllib.request import Request, urlopen
 from uuid import NAMESPACE_URL, UUID, uuid5
 
-from supermega_runtime.billing_contracts import BILLING_READ_CAPABILITY
 from supermega_runtime.managed_context import validate_managed_ai_context_export
 from supermega_runtime.trial_store import TrialValidationError
 
@@ -66,7 +65,6 @@ _BASE_OWNER_CAPABILITIES = frozenset(
         "approvals.decide",
         "approvals.read",
         "approvals.request",
-        BILLING_READ_CAPABILITY,
         "company.baseline.approve",
         "company.control.approve",
         "company.read",

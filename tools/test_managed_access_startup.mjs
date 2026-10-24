@@ -13,7 +13,7 @@ assert.ok(start >= 0 && end > start)
 const code = transformSync(source.slice(start, end), { loader: 'ts', format: 'cjs' }).code
 
 function render(enabled, workspace, resolved) {
-  const local = { status: 'local', products: [], workspaceId: '' }
+  const local = { status: 'local', products: [], capabilities: [], workspaceId: '' }
   return runInNewContext(`${code}\nuseManagedPortalAccess(enabled, workspace, '/')`, {
     enabled, workspace, localPortalAccess: local,
     useState: initial => [resolved ?? initial, () => { throw Error('Unexpected state write during render') }],
@@ -29,7 +29,7 @@ test('selected managed company stays checking before runtime health resolves', (
 })
 
 test('only a matching resolved company can expose assigned products', () => {
-  const access = { status: 'ready', products: ['commerce'], workspaceId: 'synthetic-company' }
+  const access = { status: 'ready', products: ['commerce'], capabilities: [], workspaceId: 'synthetic-company' }
   assert.equal(render(true, 'synthetic-company').status, 'checking')
   assert.equal(render(true, 'synthetic-company', { key: 'other:/', access }).status, 'checking')
   assert.equal(render(true, 'synthetic-company', { key: 'synthetic-company:/', access }), access)
@@ -59,11 +59,12 @@ function startEffect(overrides = {}) {
     currentManagedIdentity: async () => ({ workspaceId: 'company-a', userId: 'user-a' }),
     loadManagedBootstrap: async () => ({}),
     discoverManagedWorkspacesForCurrentSession: async () => ({ userId: 'user-a', email: 'synthetic@example.invalid', workspaces: [{ workspaceId: 'company-a', label: 'Synthetic A', access: 'owner' }] }),
+    managedCapabilitiesFromBootstrap: () => [],
     managedProductsFromBootstrap: () => ['commerce'],
     ...overrides,
   }
   runInNewContext(`${effectCode}\nuseManagedPortalAccess(true, 'company-a', '/')`, {
-    client, localPortalAccess: { status: 'local', products: [], workspaceId: '' },
+    client, localPortalAccess: { status: 'local', products: [], capabilities: [], workspaceId: '' },
     useState: initial => [initial, next => writes.push(next)],
     useEffect: effect => { cleanup = effect() },
   })
@@ -115,5 +116,6 @@ test('matching current company resolves normally', async () => {
   assert.equal(run.writes.length, 1)
   assert.equal(run.writes[0].access.status, 'ready')
   assert.equal(run.writes[0].access.workspaceId, 'company-a')
+  assert.deepEqual(run.writes[0].access.capabilities, [])
   run.cancel()
 })

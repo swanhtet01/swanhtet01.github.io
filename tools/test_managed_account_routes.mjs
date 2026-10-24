@@ -1176,7 +1176,7 @@ test('public login with no assigned workspace offers support and sign-out withou
 })
 
 test('canonical queryless login defaults the Shop-labelled account flow to Shop', () => {
-  assert.ok(managedLoginSource.includes("const accountProductIntent = productIntent ?? (reviewReturnPath?.split('/')[1] ?? 'shop')"))
+  assert.ok(managedLoginSource.includes("const accountProductIntent = accountHubReturnPath ? 'guide' : productIntent ?? (reviewReturnPath?.split('/')[1] ?? 'shop')"))
   assert.ok(managedLoginSource.includes('managedPortalEntryPath(accountProductIntent)'))
   assert.ok(managedLoginSource.includes("managedAccountPath('/account/recovery', accountProductIntent, location.search)"))
   assert.ok(managedLoginSource.includes('managedAccountRequestUrl(accountProductIntent)'))
@@ -1193,6 +1193,11 @@ test('queryless and invalid login intents execute their bounded destinations', a
       search: '?product=unrecognized',
       expectedDestination: '/?choose=1',
       expectedRecovery: '/account/recovery',
+    },
+    {
+      search: '?entry=account-hub-v1',
+      expectedDestination: '/account',
+      expectedRecovery: '/account/recovery?entry=account-hub-v1',
     },
   ]) {
     await withAuth(async (mod, state) => {

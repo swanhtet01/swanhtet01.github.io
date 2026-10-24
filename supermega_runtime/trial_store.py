@@ -15,7 +15,6 @@ from threading import RLock
 from typing import Any, Callable, Iterator, Mapping, Protocol, Sequence
 from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
-from supermega_runtime.billing_contracts import BILLING_READ_CAPABILITY
 from supermega_runtime.shop_inventory_runtime import (
     ShopInventoryValidationError,
     restamp_latest_shop_inventory_command,
@@ -283,7 +282,6 @@ _SELF_SERVE_BASE_OWNER_CAPABILITIES = frozenset(
         "approvals.decide",
         "approvals.read",
         "approvals.request",
-        BILLING_READ_CAPABILITY,
         "company.baseline.approve",
         "company.control.approve",
         "company.read",

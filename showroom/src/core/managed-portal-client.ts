@@ -5,5 +5,6 @@ export {
   currentManagedIdentity,
   discoverManagedWorkspacesForCurrentSession,
   loadManagedBootstrap,
+  managedCapabilitiesFromBootstrap,
   managedProductsFromBootstrap,
 } from './managed-trial.ts'

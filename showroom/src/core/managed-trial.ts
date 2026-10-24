@@ -2310,24 +2310,40 @@ export function assertManagedBootstrapIdentity(
 }
 
 const MANAGED_CAPABILITY_PATTERN = /^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$/
+const MANAGED_CAPABILITIES = new Set([
+  'approvals.decide', 'approvals.read', 'approvals.request', 'billing.read',
+  'commerce.read', 'commerce.write', 'company.baseline.approve',
+  'company.control.approve', 'company.read', 'company.write',
+  'ecommerce.review', 'production.read', 'production.write', 'setup.read',
+  'setup.write', 'website.read', 'website.review', 'website.write',
+])
 
-export function managedBootstrapHasCapability(
+export function managedCapabilitiesFromBootstrap(
   bootstrap: unknown,
   expectedIdentity: ManagedIdentity,
-  capability: 'commerce.write' | 'production.write' | 'website.write' | 'company.write' | 'approvals.decide',
-): boolean {
+): string[] {
   const verified = assertManagedBootstrapIdentity(bootstrap, expectedIdentity)
   const capabilities = verified.readiness.capabilities
-  // Older or incomplete paired deployments remain readable but never gain
-  // optimistic browser write controls without an explicit server grant.
-  if (capabilities === undefined) return false
+  // Older or incomplete paired deployments remain readable but gain no
+  // optimistic browser controls without an explicit, recognized server grant.
+  if (capabilities === undefined) return []
   if (!Array.isArray(capabilities)
-    || capabilities.some((value) => typeof value !== 'string' || !MANAGED_CAPABILITY_PATTERN.test(value))
+    || capabilities.some((value) => typeof value !== 'string'
+      || !MANAGED_CAPABILITY_PATTERN.test(value)
+      || !MANAGED_CAPABILITIES.has(value))
     || new Set(capabilities).size !== capabilities.length
     || JSON.stringify(capabilities) !== JSON.stringify([...capabilities].sort())) {
     throw new ManagedTrialError('The company account returned invalid staff capabilities.', { code: 'managed_bootstrap_invalid' })
   }
-  return capabilities.includes(capability)
+  return [...capabilities]
+}
+
+export function managedBootstrapHasCapability(
+  bootstrap: unknown,
+  expectedIdentity: ManagedIdentity,
+  capability: 'billing.read' | 'commerce.write' | 'production.write' | 'website.write' | 'company.write' | 'approvals.decide',
+): boolean {
+  return managedCapabilitiesFromBootstrap(bootstrap, expectedIdentity).includes(capability)
 }
 
 export function managedProductsFromBootstrap(
