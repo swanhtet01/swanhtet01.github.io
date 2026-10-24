@@ -679,6 +679,7 @@
     "security:dependencies": "npm audit --audit-level=low && npm --prefix showroom audit --audit-level=low && npm --prefix kernel audit --audit-level=low",
     "security:legacy-credential-paths:verify": "node tools/verify_legacy_credential_path_quarantine.mjs",
     "security:legacy-smoke-paths:verify": "node tools/verify_legacy_smoke_path_quarantine.mjs",
+    "security:incident-response:verify": "node --test tools/verify_security_incident_response.test.mjs && node tools/verify_security_incident_response.mjs",
     "vercel:deploy": "node tools/deny_stale_public_deploy.mjs",
     "vercel:deploy:prod": "node tools/deny_stale_public_deploy.mjs",
     "vercel:contracts:test": "node --test tools/scheduler_authority_contract.test.mjs tools/write_app_vercel_config.test.mjs tools/verify_public_runtime_environment_values.test.mjs && node tools/test_vercel_environment_state.mjs && node tools/verify_managed_runtime_environment_values.mjs --self-test && node tools/test_vercel_project_state.mjs && node tools/test_vercel_domain_state.mjs",
