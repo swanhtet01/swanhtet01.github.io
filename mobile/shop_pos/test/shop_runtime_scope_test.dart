@@ -167,6 +167,102 @@ void main() {
     );
     expect(await outside.list().toList(), isEmpty);
   });
+
+  test('database path with an unexpected directory fails closed', () async {
+    final support = await Directory.systemTemp.createTemp('shop-qa-support-');
+    final temporary = await Directory.systemTemp.createTemp('shop-qa-temp-');
+    addTearDown(() async {
+      await support.delete(recursive: true);
+      await temporary.delete(recursive: true);
+    });
+    final first = await ShopRuntimeScope.resolve(
+      ShopRuntimeProfile.syntheticQa,
+      configuration: _qaProfile(),
+      supportProvider: () async => support,
+      temporaryProvider: () async => temporary,
+    );
+    final databaseName = const ['supermega', 'shop.sqlite'].join('_');
+    await Directory(
+      '${first.documentsRoot.path}${Platform.pathSeparator}$databaseName',
+    ).create();
+
+    await expectLater(
+      ShopRuntimeScope.resolve(
+        ShopRuntimeProfile.syntheticQa,
+        configuration: _qaProfile(),
+        supportProvider: () async => support,
+        temporaryProvider: () async => temporary,
+      ),
+      throwsStateError,
+    );
+  });
+
+  test('symlinked database and sidecar paths fail closed on reopen', () async {
+    if (Platform.isWindows) return;
+    final support = await Directory.systemTemp.createTemp('shop-qa-support-');
+    final temporary = await Directory.systemTemp.createTemp('shop-qa-temp-');
+    final outside = await Directory.systemTemp.createTemp('shop-qa-outside-');
+    addTearDown(() async {
+      await support.delete(recursive: true);
+      await temporary.delete(recursive: true);
+      await outside.delete(recursive: true);
+    });
+    final first = await ShopRuntimeScope.resolve(
+      ShopRuntimeProfile.syntheticQa,
+      configuration: _qaProfile(),
+      supportProvider: () async => support,
+      temporaryProvider: () async => temporary,
+    );
+    final databaseName = const ['supermega', 'shop.sqlite'].join('_');
+    for (final name in [databaseName, '$databaseName-wal']) {
+      final link = Link(
+        '${first.documentsRoot.path}${Platform.pathSeparator}$name',
+      );
+      await link.create('${outside.path}${Platform.pathSeparator}$name');
+      await expectLater(
+        ShopRuntimeScope.resolve(
+          ShopRuntimeProfile.syntheticQa,
+          configuration: _qaProfile(),
+          supportProvider: () async => support,
+          temporaryProvider: () async => temporary,
+        ),
+        throwsStateError,
+      );
+      await link.delete();
+    }
+    expect(await outside.list().toList(), isEmpty);
+  });
+
+  test('symlinked synthetic evidence path fails closed on reopen', () async {
+    if (Platform.isWindows) return;
+    final support = await Directory.systemTemp.createTemp('shop-qa-support-');
+    final temporary = await Directory.systemTemp.createTemp('shop-qa-temp-');
+    final outside = await Directory.systemTemp.createTemp('shop-qa-outside-');
+    addTearDown(() async {
+      await support.delete(recursive: true);
+      await temporary.delete(recursive: true);
+      await outside.delete(recursive: true);
+    });
+    final first = await ShopRuntimeScope.resolve(
+      ShopRuntimeProfile.syntheticQa,
+      configuration: _qaProfile(),
+      supportProvider: () async => support,
+      temporaryProvider: () async => temporary,
+    );
+    await first.syntheticEvidenceRoot!.delete();
+    await Link(first.syntheticEvidenceRoot!.path).create(outside.path);
+
+    await expectLater(
+      ShopRuntimeScope.resolve(
+        ShopRuntimeProfile.syntheticQa,
+        configuration: _qaProfile(),
+        supportProvider: () async => support,
+        temporaryProvider: () async => temporary,
+      ),
+      throwsStateError,
+    );
+    expect(await outside.list().toList(), isEmpty);
+  });
 }
 
 ShopRuntimeConfiguration _productionProfile() =>

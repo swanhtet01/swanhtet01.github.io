@@ -78,12 +78,11 @@ class ShopRuntimeScope {
       throw StateError('shop_runtime_profile_changed');
     }
     if (!resolvedConfiguration.isSyntheticQa) {
-      final documents = await (documentsProvider ??
-          getApplicationDocumentsDirectory)();
-      final temporary = await (temporaryProvider ??
-          _openShopTemporaryDirectory)();
-      final preferences = await (preferencesProvider ??
-          _openShopPreferences)();
+      final documents =
+          await (documentsProvider ?? getApplicationDocumentsDirectory)();
+      final temporary =
+          await (temporaryProvider ?? _openShopTemporaryDirectory)();
+      final preferences = await (preferencesProvider ?? _openShopPreferences)();
       return ShopRuntimeScope._(
         configuration: resolvedConfiguration,
         documentsRoot: documents,
@@ -96,10 +95,9 @@ class ShopRuntimeScope {
       );
     }
 
-    final support = await (supportProvider ??
-        getApplicationSupportDirectory)();
-    final temporaryParent = await (temporaryProvider ??
-        _openShopTemporaryDirectory)();
+    final support = await (supportProvider ?? getApplicationSupportDirectory)();
+    final temporaryParent =
+        await (temporaryProvider ?? _openShopTemporaryDirectory)();
     await _requireRealDirectory(support, 'shop_qa_support_root_invalid');
     await _requireRealDirectory(
       temporaryParent,
@@ -119,9 +117,15 @@ class ShopRuntimeScope {
       '${documents.path}${Platform.pathSeparator}synthetic-evidence',
     );
     await _ensureConfinedChild(documents, evidence);
-    await evidence.create();
-    final preferences = await (preferencesProvider ??
-        _openShopPreferences)();
+    final evidenceType = await FileSystemEntity.type(
+      evidence.path,
+      followLinks: false,
+    );
+    if (evidenceType == FileSystemEntityType.notFound) {
+      await evidence.create();
+    }
+    await _validateQaPersistentEntries(documents, evidence);
+    final preferences = await (preferencesProvider ?? _openShopPreferences)();
     return ShopRuntimeScope._(
       configuration: resolvedConfiguration,
       documentsRoot: documents,
@@ -176,10 +180,7 @@ class ShopRuntimeScope {
       await sentinel.writeAsString(expected, flush: true);
       return;
     }
-    if (await FileSystemEntity.type(
-          sentinel.path,
-          followLinks: false,
-        ) !=
+    if (await FileSystemEntity.type(sentinel.path, followLinks: false) !=
         FileSystemEntityType.file) {
       throw StateError('shop_qa_scope_sentinel_missing');
     }
@@ -197,13 +198,57 @@ class ShopRuntimeScope {
     if (!childPath.startsWith('$rootPath${Platform.pathSeparator}')) {
       throw StateError('shop_qa_scope_path_escape');
     }
-    final type = await FileSystemEntity.type(
-      child.path,
-      followLinks: false,
-    );
+    final type = await FileSystemEntity.type(child.path, followLinks: false);
     if (type != FileSystemEntityType.notFound &&
         type != FileSystemEntityType.directory) {
       throw StateError('shop_qa_scope_child_invalid');
+    }
+  }
+
+  static Future<void> _validateQaPersistentEntries(
+    Directory root,
+    Directory evidence,
+  ) async {
+    await _requireConfinedEntry(root, evidence, FileSystemEntityType.directory);
+    final databaseName = const ['supermega', 'shop.sqlite'].join('_');
+    for (final name in [
+      databaseName,
+      '$databaseName-journal',
+      '$databaseName-wal',
+      '$databaseName-shm',
+      '$databaseName.restore-in-progress',
+      '.supermega-shop-backup.lock',
+    ]) {
+      await _requireConfinedEntry(
+        root,
+        File('${root.path}${Platform.pathSeparator}$name'),
+        FileSystemEntityType.file,
+        allowMissing: true,
+      );
+    }
+  }
+
+  static Future<void> _requireConfinedEntry(
+    Directory root,
+    FileSystemEntity entry,
+    FileSystemEntityType expectedType, {
+    bool allowMissing = false,
+  }) async {
+    final type = await FileSystemEntity.type(entry.path, followLinks: false);
+    if (allowMissing && type == FileSystemEntityType.notFound) return;
+    if (type != expectedType) {
+      throw StateError('shop_qa_scope_persistent_entry_invalid');
+    }
+    final resolvedRoot = await root.resolveSymbolicLinks();
+    final resolvedEntry = await entry.resolveSymbolicLinks();
+    final prefix = '$resolvedRoot${Platform.pathSeparator}';
+    final caseSensitive = !Platform.isWindows;
+    final normalizedRoot = caseSensitive ? prefix : prefix.toLowerCase();
+    final normalizedEntry = caseSensitive
+        ? resolvedEntry
+        : resolvedEntry.toLowerCase();
+    if (!normalizedEntry.startsWith(normalizedRoot)) {
+      throw StateError('shop_qa_scope_persistent_entry_escape');
     }
   }
 }
