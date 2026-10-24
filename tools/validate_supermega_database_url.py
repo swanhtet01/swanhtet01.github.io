@@ -1200,21 +1200,45 @@ def _execute_rows(cursor: Any, query: str, params: tuple[Any, ...] = ()) -> list
     return [_mapping(row) for row in cursor.fetchall()]
 
 
+def _schema_extension_module(profile: str) -> Any | None:
+    """Resolve only a source-pinned profile; never infer one from a target."""
+
+    if profile == "legacy-v11":
+        return None
+    if profile == "v13-self-serve":
+        if __package__:
+            from . import private_trial_v13_contract as contract
+        else:
+            import private_trial_v13_contract as contract
+        return contract
+    if profile == "v14-shop-correction":
+        if __package__:
+            from . import private_trial_v14_contract as contract
+        else:
+            import private_trial_v14_contract as contract
+        return contract
+    raise AuditConfigurationError("schema_profile_invalid")
+
+
+def _schema_profile_contract(profile: str) -> str:
+    """Return the selected contract label without claiming catalog readiness."""
+
+    extension = _schema_extension_module(profile)
+    if extension is None:
+        return CONTRACT
+    return str(extension.CONTRACT)
+
+
 def schema_contract(profile: str) -> dict[str, Any]:
     """Fresh per-call contracts; never alter legacy globals or trust target version."""
     from copy import deepcopy
     values = deepcopy({name: value for name, value in globals().items()
                        if name.startswith("EXPECTED_") or name in {
                            "CONTRACT", "SCHEMA_VERSION", "TENANT_TABLES"}})
-    if profile == "legacy-v11":
+    extension = _schema_extension_module(profile)
+    if extension is None:
         return values
-    if profile != "v13-self-serve":
-        raise AuditConfigurationError("schema_profile_invalid")
-    if __package__:
-        from .private_trial_v13_contract import extend_contract
-    else:
-        from private_trial_v13_contract import extend_contract
-    return extend_contract(values)
+    return extension.extend_contract(values)
 
 
 def collect_snapshot(connection: Any, *, schema_profile: str = "legacy-v11") -> dict[str, Any]:
@@ -1695,7 +1719,7 @@ def collect_snapshot(connection: Any, *, schema_profile: str = "legacy-v11") -> 
         )
 
         extension_snapshot = {}
-        if schema_profile == "v13-self-serve":
+        if "collect_extensions" in profile:
             extension_snapshot = profile["collect_extensions"](cursor, _execute_rows)
 
     return {
@@ -2151,17 +2175,16 @@ def evaluate_snapshot(snapshot: Mapping[str, Any], *, schema_profile: str = "leg
         "storage_public_buckets_absent": storage_public_buckets_absent,
         "storage_policy_surface_empty_until_allowlisted": storage_policy_surface_empty,
     }
-    if schema_profile == "v13-self-serve":
+    if "extension_checks" in profile:
         checks.update(profile["extension_checks"](snapshot))
     failed = [name for name, passed in checks.items() if not passed]
     diagnostics: dict[str, Any] = {}
-    if failed and schema_profile == "v13-self-serve":
-        if __package__:
-            from .private_trial_v13_contract import observed_extension_digests
-        else:
-            from private_trial_v13_contract import observed_extension_digests
+    if failed and "extension_checks" in profile:
+        extension = _schema_extension_module(schema_profile)
+        if extension is None:
+            raise AuditConfigurationError("schema_profile_invalid")
         diagnostics = {
-            "extension_digests": observed_extension_digests(snapshot),
+            "extension_digests": extension.observed_extension_digests(snapshot),
             "policy_fingerprints": {
                 str(row.get("policy_name")): {
                     "qual": _catalog_expression_fingerprint(row.get("qual")),
@@ -2399,9 +2422,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="Require the complete selected schema contract; this flag never applies migrations.",
     )
     parser.add_argument("--require-ready", action="store_true")
-    parser.add_argument("--schema-profile", choices=("legacy-v11", "v13-self-serve"),
-                        default="legacy-v11",
-                        help="Exact catalog contract; v13 includes the durable-admission capability.")
+    parser.add_argument(
+        "--schema-profile",
+        choices=("legacy-v11", "v13-self-serve", "v14-shop-correction"),
+        default="legacy-v11",
+        help=(
+            "Exact catalog contract; v13 retains the durable-admission baseline "
+            "and v14 adds fail-closed Shop correction consumption storage."
+        ),
+    )
     parser.add_argument(
         "--self-test",
         action="store_true",
@@ -2436,7 +2465,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    if args.schema_profile == "v13-self-serve" and (args.self_test or args.rehearsal_preflight):
+    if args.schema_profile != "legacy-v11" and (
+        args.self_test or args.rehearsal_preflight
+    ):
         print(json.dumps(_safe_failure("schema_profile_mode_conflict"), sort_keys=True))
         return 2
 
@@ -2450,8 +2481,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.rehearsal_preflight
         else ACTIVATION_TARGET_CONTRACT
         if args.activation_target
-        else (CONTRACT if args.schema_profile == "legacy-v11"
-              else "supermega_private_trial_database_v13_self_serve_v1")
+        else _schema_profile_contract(args.schema_profile)
     )
 
     environment_keys = [args.env_key]

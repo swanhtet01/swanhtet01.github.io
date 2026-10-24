@@ -39,11 +39,15 @@ const expectedMigrations = [
   '20260924231714_ecommerce_customer_decisions.sql',
   '20260929171000_ecommerce_decision_review_fk_index.sql',
   '20260930010000_app_rls_initplan_optimization.sql',
+  '20261024090000_private_trial_backend_v14_shop_correction_consumption.sql',
 ]
 // Verify the original private catalog before all Website-review extensions, then
 // verify the complete extended catalog. Adding an extension must not shift the
 // baseline boundary and accidentally skip an earlier policy check.
 const websiteReviewStart = expectedMigrations.indexOf('20260915184728_website_customer_review_storage.sql')
+const correctionV14Start = expectedMigrations.indexOf(
+  '20261024090000_private_trial_backend_v14_shop_correction_consumption.sql',
+)
 const expectedPolicyFingerprints = {
   approval_requests_access_gate: {
     command: 'ALL',
@@ -427,6 +431,204 @@ const rejection = async (operation) => {
     return ''
   } catch (error) {
     return String(error?.message || error).split('\n')[0]
+  }
+}
+
+const verifyCorrectionV14Catalog = async (database) => {
+  const version = await database.query(
+    "select schema_version from app_private.trial_schema_meta where component = 'private_trial_backend'",
+  )
+  requireCheck('schema version fourteen', version.rows[0]?.schema_version === 14)
+
+  const relationRows = await database.query(`
+    select relation.relname as relation_name,
+           relation.relrowsecurity as rls_enabled,
+           relation.relforcerowsecurity as rls_forced,
+           owner_role.rolname as owner_name
+    from pg_class relation
+    join pg_namespace schema_record on schema_record.oid = relation.relnamespace
+    join pg_roles owner_role on owner_role.oid = relation.relowner
+    where schema_record.nspname = 'app_private'
+      and relation.relname in ('shop_correction_lineages', 'shop_correction_consumptions')
+      and relation.relkind in ('r', 'p')
+    order by relation.relname
+  `)
+  requireCheck(
+    'v14 correction relations are exact, postgres-owned, and force RLS',
+    JSON.stringify(relationRows.rows) === JSON.stringify([
+      {
+        relation_name: 'shop_correction_consumptions',
+        rls_enabled: true,
+        rls_forced: true,
+        owner_name: 'postgres',
+      },
+      {
+        relation_name: 'shop_correction_lineages',
+        rls_enabled: true,
+        rls_forced: true,
+        owner_name: 'postgres',
+      },
+    ]),
+  )
+
+  const policyRows = await database.query(`
+    select policyname, roles, cmd, permissive, qual, with_check
+    from pg_policies
+    where schemaname = 'app_private'
+      and tablename in ('shop_correction_lineages', 'shop_correction_consumptions')
+    order by policyname
+  `)
+  const expectedPolicies = {
+    shop_correction_consumptions_owner_insert: ['INSERT', false, true],
+    shop_correction_consumptions_owner_read: ['SELECT', true, false],
+    shop_correction_lineages_owner_insert: ['INSERT', false, true],
+    shop_correction_lineages_owner_read: ['SELECT', true, false],
+    shop_correction_lineages_owner_update: ['UPDATE', true, true],
+  }
+  requireCheck(
+    'v14 correction policies expose only the five owner operations',
+    policyRows.rows.length === Object.keys(expectedPolicies).length &&
+      policyRows.rows.every((row) => {
+        const expected = expectedPolicies[row.policyname]
+        if (!expected) return false
+        const expression = `${row.qual || ''} ${row.with_check || ''}`
+          .toLowerCase()
+          .replace(/\s+/g, ' ')
+        const requestContextCalls = expression.match(/current_setting\(/g)?.length ?? 0
+        const initplanCalls = expression.match(/\(\s*select\s+current_setting\(/g)?.length ?? 0
+        return (
+          row.cmd === expected[0] &&
+          row.permissive === 'PERMISSIVE' &&
+          JSON.stringify(row.roles) === JSON.stringify(['supermega_trial_backend']) &&
+          Boolean(row.qual) === expected[1] &&
+          Boolean(row.with_check) === expected[2] &&
+          expression.includes("'human'") &&
+          expression.includes("'active'") &&
+          expression.includes("'commerce.write'") &&
+          expression.includes('workspace_access_controls') &&
+          requestContextCalls > 0 &&
+          requestContextCalls === initplanCalls
+        )
+      }),
+  )
+
+  const triggerRows = await database.query(`
+    select trigger_record.tgname as trigger_name,
+           trigger_record.tgtype::integer as event_mask,
+           table_record.relname as table_name,
+           function_record.proname as function_name,
+           function_record.prosrc as function_source,
+           function_record.prosecdef as security_definer,
+           function_record.proconfig as function_config
+    from pg_trigger trigger_record
+    join pg_class table_record on table_record.oid = trigger_record.tgrelid
+    join pg_namespace schema_record on schema_record.oid = table_record.relnamespace
+    join pg_proc function_record on function_record.oid = trigger_record.tgfoid
+    where schema_record.nspname = 'app_private'
+      and not trigger_record.tgisinternal
+      and trigger_record.tgname in (
+        'shop_correction_lineage_guard',
+        'shop_correction_consumption_guard'
+      )
+    order by trigger_record.tgname
+  `)
+  const expectedTriggers = {
+    shop_correction_consumption_guard: [
+      'shop_correction_consumptions',
+      31,
+      'guard_shop_correction_consumption',
+      '7c1aab78882d32dd51357379fae8f8a4560c5f45e3ba7dec1d7ede4793f141e4',
+    ],
+    shop_correction_lineage_guard: [
+      'shop_correction_lineages',
+      31,
+      'guard_shop_correction_lineage',
+      '0922225c2b62933f15f89a4669a281eb9e8540a4e9520ec6dbc3e77d533e1fb2',
+    ],
+  }
+  requireCheck(
+    'v14 correction trigger implementations are exact',
+    triggerRows.rows.length === 2 &&
+      triggerRows.rows.every((row) => {
+        const expected = expectedTriggers[row.trigger_name]
+        return (
+          expected &&
+          row.table_name === expected[0] &&
+          row.event_mask === expected[1] &&
+          row.function_name === expected[2] &&
+          normalizedSourceHash(row.function_source) === expected[3] &&
+          row.security_definer === false &&
+          JSON.stringify(row.function_config) ===
+            JSON.stringify(['search_path=pg_catalog, app_private'])
+        )
+      }),
+  )
+
+  const privilegeRows = await database.query(`
+    select
+      has_table_privilege('supermega_trial_backend', 'app_private.shop_correction_lineages', 'SELECT') as lineage_select,
+      has_table_privilege('supermega_trial_backend', 'app_private.shop_correction_lineages', 'INSERT') as lineage_insert,
+      has_table_privilege('supermega_trial_backend', 'app_private.shop_correction_lineages', 'UPDATE') as lineage_update,
+      has_table_privilege('supermega_trial_backend', 'app_private.shop_correction_lineages', 'DELETE') as lineage_delete,
+      has_table_privilege('supermega_trial_backend', 'app_private.shop_correction_consumptions', 'SELECT') as consumption_select,
+      has_table_privilege('supermega_trial_backend', 'app_private.shop_correction_consumptions', 'INSERT') as consumption_insert,
+      has_table_privilege('supermega_trial_backend', 'app_private.shop_correction_consumptions', 'UPDATE') as consumption_update,
+      has_table_privilege('supermega_trial_backend', 'app_private.shop_correction_consumptions', 'DELETE') as consumption_delete,
+      exists (
+        select 1
+        from unnest(array['anon', 'authenticated', 'service_role']) role_name,
+             unnest(array['shop_correction_lineages', 'shop_correction_consumptions']) table_name,
+             unnest(array['SELECT', 'INSERT', 'UPDATE', 'DELETE']) privilege_name
+        where has_table_privilege(
+          role_name, format('app_private.%I', table_name), privilege_name
+        )
+      ) as api_role_has_privilege
+  `)
+  requireCheck(
+    'v14 correction ACL is least privilege and API-dark',
+    JSON.stringify(privilegeRows.rows[0]) === JSON.stringify({
+      lineage_select: true,
+      lineage_insert: true,
+      lineage_update: true,
+      lineage_delete: false,
+      consumption_select: true,
+      consumption_insert: true,
+      consumption_update: false,
+      consumption_delete: false,
+      api_role_has_privilege: false,
+    }),
+  )
+
+  const constraintRows = await database.query(`
+    select table_record.relname as table_name,
+           constraint_record.contype::text as constraint_type,
+           pg_get_constraintdef(constraint_record.oid, true) as definition
+    from pg_constraint constraint_record
+    join pg_class table_record on table_record.oid = constraint_record.conrelid
+    join pg_namespace schema_record on schema_record.oid = table_record.relnamespace
+    where schema_record.nspname = 'app_private'
+      and table_record.relname in ('shop_correction_lineages', 'shop_correction_consumptions')
+      and constraint_record.contype in ('p', 'u', 'f')
+    order by table_record.relname, constraint_record.contype, definition
+  `)
+  const definitions = constraintRows.rows.map(
+    (row) => `${row.table_name}:${row.constraint_type}:${row.definition}`,
+  )
+  for (const required of [
+    'shop_correction_lineages:p:PRIMARY KEY (workspace_id, lineage_id)',
+    'shop_correction_lineages:u:UNIQUE (workspace_id, activation_request_id)',
+    'shop_correction_lineages:u:UNIQUE (workspace_id, lineage_epoch)',
+    'shop_correction_lineages:u:UNIQUE (workspace_id, lineage_id, lineage_epoch)',
+    'shop_correction_lineages:f:FOREIGN KEY (workspace_id, previous_lineage_id, previous_lineage_epoch)',
+    'shop_correction_consumptions:p:PRIMARY KEY (workspace_id, consumption_id)',
+    'shop_correction_consumptions:u:UNIQUE (workspace_id, consumption_request_id)',
+    'shop_correction_consumptions:u:UNIQUE (workspace_id, authorization_receipt_id)',
+    'shop_correction_consumptions:u:UNIQUE (workspace_id, command_id)',
+    'shop_correction_consumptions:u:UNIQUE (workspace_id, lineage_id, consumption_ordinal)',
+    'shop_correction_consumptions:u:UNIQUE (workspace_id, history_digest)',
+    'shop_correction_consumptions:f:FOREIGN KEY (workspace_id, lineage_id, lineage_epoch)',
+  ]) {
+    requireCheck(`v14 correction constraint ${required}`, definitions.some((value) => value.startsWith(required)))
   }
 }
 
@@ -885,10 +1087,15 @@ requireCheck(
 )
 
 await verifySelfServeAttemptBudget(database, requireCheck)
-await applyMigrations(database, expectedMigrations.slice(websiteReviewStart))
+await applyMigrations(
+  database,
+  expectedMigrations.slice(websiteReviewStart, correctionV14Start),
+)
 await verifyWebsiteReviewMigrationCatalog(database, requireCheck)
 await verifyCatalogEntitlementMutations(database, requireCheck)
 await verifyCatalogStorageMutations(database, requireCheck)
+await applyMigrations(database, expectedMigrations.slice(correctionV14Start))
+await verifyCorrectionV14Catalog(database)
 
 const unsafeRoleDatabase = new PGlite()
 await unsafeRoleDatabase.waitReady
@@ -936,7 +1143,7 @@ const hostedVersion = await hostedDatabase.query(
 )
 requireCheck(
   'exact Supabase hosted administrative membership accepted',
-  hostedVersion.rows[0]?.schema_version === 13,
+  hostedVersion.rows[0]?.schema_version === 14,
 )
 
 const memberDatabase = new PGlite()
@@ -970,6 +1177,7 @@ console.log(
       contract: 'supermega_private_trial_migrations',
       engine: 'PGlite PostgreSQL 18.3 compatibility runtime',
       migrations: expectedMigrations.length,
+      schema_version: 14,
       checks: checks.length,
       hosted_postgres_17_proof_required: true,
     },

@@ -320,6 +320,11 @@ const checkNames = [
   'billing_payment_confirmation_not_entitlement', 'billing_separate_entitlement_grant_visible', 'billing_runtime_write_denied',
   'billing_entitlement_preserved_after_restore', 'self_serve_budget_preserved_after_restore',
   'private_rows_exact_after_restore', 'current_catalog_checked_before_and_after_restore',
+  'shop_correction_tables_and_forced_rls_validated',
+  'shop_correction_constraints_and_indexes_validated',
+  'shop_correction_triggers_and_functions_validated',
+  'shop_correction_policies_and_acl_validated',
+  'shop_correction_catalog_preserved_after_restore',
 ]
 
 const implementation = await implementationEvidence()
@@ -335,7 +340,9 @@ test('receipt inventory matches the actual PostgreSQL runner including Website a
   assert.deepEqual(migrationNames, runner.migrations)
   assert.ok(runner.paths.includes('supermega_runtime/website_acceptance_schema.py'))
   assert.ok(runner.paths.includes('supermega_runtime/ecommerce_decision_schema.py'))
-  assert.equal(runner.migrations.at(-1), '20260930010000_app_rls_initplan_optimization.sql')
+  assert.equal(runner.migrations.at(-1), '20261024090000_private_trial_backend_v14_shop_correction_consumption.sql')
+  assert.ok(runner.paths.includes('tools/private_trial_v14_contract.py'))
+  assert.ok(runner.paths.includes('tests/test_shop_correction_postgres_v14_contract.py'))
 })
 const context = {
   recordedAt: '2026-07-31T10:00:00.000Z',
@@ -347,15 +354,15 @@ const context = {
 const raw = {
   contract: 'supermega_postgres17_rehearsal_v2', ok: true, ready: true, status: 'rehearsed',
   engine: { major: 17, version: '17.10', tls_active: true, loopback_only: true, start_mode: 'pg_ctl_restricted_token' },
-  migrations: { count: migrationNames.length, schema_version: 13, names: migrationNames, schema_profile: 'v13-self-serve',
-    catalog_contract: 'supermega_private_trial_database_v13_self_serve_v1', production_validator_ready: true },
+  migrations: { count: migrationNames.length, schema_version: 14, names: migrationNames, schema_profile: 'v14-shop-correction',
+    catalog_contract: 'supermega_private_trial_database_v14_shop_correction_v1', production_validator_ready: true },
   source: { head: context.implementationCommit, tree: context.implementationTree, implementation_digest: implementation.digest },
   authority: { actor_identity_source: 'trusted_backend_transaction_context', database_authenticates_individual_actors: false, runtime_credentials_must_remain_server_only: true },
   implementation: { digest: implementation.digest, paths: implementation.paths },
   checks: Object.fromEntries(checkNames.map((name) => [name, true])),
   catalog: { before: Object.fromEntries(catalogCheckNames.map((name) => [name, true])),
     after: Object.fromEntries(catalogCheckNames.map((name) => [name, true])) },
-  recovery: { backup_nonempty: true, format: 'pg_dump_custom', restored_schema_version: 13,
+  recovery: { backup_nonempty: true, format: 'pg_dump_custom', restored_schema_version: 14,
     private_snapshot_before: `sha256:${'f'.repeat(64)}`, private_snapshot_after: `sha256:${'f'.repeat(64)}` },
   storage: { catalog_mode: 'local_private_fixture', hosted_storage_privacy_proof_required: true, policy_count: 0, public_bucket_count: 0 },
   cleanup_complete: true, secret_values_exposed: false, production_mutated: false, supabase_mutated: false, vercel_mutated: false,
@@ -371,7 +378,7 @@ test('builds a sanitized digest-bound local PostgreSQL 17 proof without hosted c
   assert.deepEqual(validateSanitizedProof(proof, implementation), {
     ok: true,
     contract: DATABASE_REHEARSAL_EVIDENCE_SCHEMA,
-    checks: 74,
+    checks: 79,
     implementationFiles: implementation.fileCount,
     hostedActivationProven: false,
   })
@@ -396,7 +403,7 @@ test('record completion is derived from validated shared proof before publishing
   const proof = buildSanitizedProof(raw, context)
   const summary = recordCompletionSummary(proof, implementation)
   assert.equal(summary.ok, true)
-  assert.equal(summary.checks, 74)
+  assert.equal(summary.checks, 79)
   assert.equal(summary.implementationCommit, context.implementationCommit)
   assert.equal(summary.implementationTree, context.implementationTree)
   assert.equal(summary.receiptDigest, proof.receiptDigest)
@@ -444,7 +451,7 @@ test('exact catalog checks cannot be omitted, renamed, failed or replaced by a c
 })
 
 test('restored rows must match and every legacy plus new behavior must pass', () => {
-  assert.equal(checkNames.length, 74)
+  assert.equal(checkNames.length, 79)
   for (const name of checkNames) {
     const invalid = structuredClone(raw)
     invalid.checks[name] = false
@@ -502,7 +509,7 @@ test('read-only CLI consumer recomputes exact raw receipt pair and rejects chang
     assert.match(duplicate.stderr, /database_rehearsal_output_exists/)
     const pass = invoke()
     assert.equal(pass.status, 0, pass.stderr)
-    assert.equal(JSON.parse(pass.stdout).checks, 74)
+    assert.equal(JSON.parse(pass.stdout).checks, 79)
     const changed = structuredClone(raw)
     changed.checks.billing_runtime_write_denied = false
     await writeFile(`${input}.raw.json`, JSON.stringify(changed))

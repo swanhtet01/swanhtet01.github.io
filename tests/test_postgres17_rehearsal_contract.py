@@ -69,8 +69,13 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
 
     def test_release_rehearsal_requires_current_complete_chain(self) -> None:
         module = _load_rehearsal()
-        self.assertEqual(getattr(module, "CURRENT_SCHEMA_VERSION", None), 13)
-        self.assertEqual(module.CURRENT_PROFILE, "v13-self-serve")
+        source = REHEARSAL.read_text(encoding="utf-8")
+        self.assertEqual(getattr(module, "CURRENT_SCHEMA_VERSION", None), 14)
+        self.assertEqual(module.CURRENT_PROFILE, "v14-shop-correction")
+        self.assertIn('os.environ["SUPERMEGA_TRIAL_SCHEMA_VERSION"] = "14"', source)
+        self.assertIn('os.environ["SUPERMEGA_BILLING_SCHEMA_VERSION"] = "14"', source)
+        self.assertNotIn('os.environ["SUPERMEGA_TRIAL_SCHEMA_VERSION"] = "13"', source)
+        self.assertNotIn('os.environ["SUPERMEGA_BILLING_SCHEMA_VERSION"] = "13"', source)
         self.assertEqual(module.CURRENT_MIGRATIONS, (*module.MIGRATIONS,
             "20260817090000_private_trial_backend_v12_billing_rail.sql",
             "20260818090000_private_trial_backend_v13_billing_entitlement_read.sql",
@@ -82,7 +87,8 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
             "20260924194557_ecommerce_customer_review_storage.sql",
             "20260924231714_ecommerce_customer_decisions.sql",
             "20260929171000_ecommerce_decision_review_fk_index.sql",
-            "20260930010000_app_rls_initplan_optimization.sql"))
+            "20260930010000_app_rls_initplan_optimization.sql",
+            "20261024090000_private_trial_backend_v14_shop_correction_consumption.sql"))
         observed = tuple(sorted(path.name for path in (ROOT / "supabase/migrations").glob("*.sql")
                                 if path.name != "20260711081300_public_legacy_baseline.sql"))
         self.assertEqual(module.CURRENT_MIGRATIONS, observed)
@@ -90,7 +96,8 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
     def test_account_restore_inventory_includes_website_review_history(self) -> None:
         from tools import rehearse_self_serve_v13 as account
         module = _load_rehearsal()
-        self.assertEqual(account.MIGRATIONS, module.CURRENT_MIGRATIONS)
+        self.assertEqual(account.MIGRATIONS, module.V13_MIGRATIONS)
+        self.assertEqual(module.CURRENT_MIGRATIONS[:-1], module.V13_MIGRATIONS)
         self.assertEqual(account.TABLES, tuple(sorted(set(account.TABLES))))
         self.assertIn("ecommerce_customer_decisions", account.TABLES)
         self.assertIn("ecommerce_customer_reviews", account.TABLES)
@@ -99,6 +106,8 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
         self.assertIn("website_customer_acceptances", account.TABLES)
         self.assertIn("supermega_runtime/website_acceptance_schema.py", module.IMPLEMENTATION_PATHS)
         self.assertIn("supermega_runtime/ecommerce_decision_schema.py", module.IMPLEMENTATION_PATHS)
+        self.assertIn("tools/private_trial_v14_contract.py", module.IMPLEMENTATION_PATHS)
+        self.assertIn("tests/test_shop_correction_postgres_v14_contract.py", module.IMPLEMENTATION_PATHS)
 
     def test_rehearsal_declares_the_complete_fail_closed_boundary(self) -> None:
         source = REHEARSAL.read_text(encoding="utf-8")
@@ -348,12 +357,41 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
         def run(payload):
             with patch.object(module, "_run", return_value=SimpleNamespace(returncode=0, stdout=json.dumps(payload))) as called:
                 result = module._run_validator("synthetic-runtime", "synthetic-storage", {}, schema_profile=module.CURRENT_PROFILE)
-                self.assertEqual(called.call_args.args[0][-2:], ["--schema-profile", "v13-self-serve"])
+                self.assertEqual(called.call_args.args[0][-2:], ["--schema-profile", "v14-shop-correction"])
                 return result
         self.assertEqual(run(good), good)
         for delta in ({"contract": "old"}, {"checks": {}}, {"checks": {"x": False}}):
             with self.subTest(delta=delta), self.assertRaisesRegex(module.RehearsalFailure, "current_catalog_contract_mismatch"):
                 run({**good, **delta})
+
+    def test_named_shop_correction_checks_require_exact_v14_catalog_proof(self):
+        module = _load_rehearsal()
+        required = {
+            "schema_version_current",
+            "expected_private_tables_only",
+            "tenant_tables_force_rls",
+            "extension_constraints_exact",
+            "private_indexes_exact",
+            "extension_functions_exact",
+            "immutable_and_version_triggers_exact",
+            "extension_policies_exact",
+            "private_acl_exact",
+            "backend_acl_scope_exact",
+            "private_column_acl_exact",
+        }
+        validation = {"checks": dict.fromkeys(required, True)}
+        self.assertEqual(
+            module._named_shop_correction_catalog_checks(validation),
+            dict.fromkeys(module.CURRENT_CORRECTION_CHECKS, True),
+        )
+        for name in sorted(required):
+            with self.subTest(name=name), self.assertRaisesRegex(
+                module.RehearsalFailure,
+                "shop_correction_catalog_check_failed",
+            ):
+                module._named_shop_correction_catalog_checks(
+                    {"checks": {**validation["checks"], name: False}}
+                )
 
     def test_release_runner_wires_current_migrations_catalog_and_recovery(self):
         source = REHEARSAL.read_text(encoding="utf-8")

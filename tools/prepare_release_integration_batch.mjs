@@ -296,7 +296,8 @@ export const ECOMMERCE_REQUIREMENTS = [
 export const RELEASE_SECURITY_HQ_REQUIREMENTS = [
   {
     id: 'upstream-managed-activation-runbook', authority: 'upstream', file: 'docs/supermega-enterprise-activation.md', tokens: [
-      'all 24 committed migrations', 'Validate core schema v13 and every post-v13 extension', 'Owner approved this exact plan and release.',
+      'all 25 committed migrations', 'plus 24 private migrations', 'final schema-v14 Shop correction-consumption migration',
+      '`v14-shop-correction`', '`supermega_private_trial_database_v14_shop_correction_v1`', 'Owner approved this exact plan and release.',
       'Activation compensation after a downstream release gate failure.', '`SUPERMEGA_TRIAL_WRITES_ENABLED=true` is written last',
     ],
   },

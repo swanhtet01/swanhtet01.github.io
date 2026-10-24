@@ -1,9 +1,13 @@
 # >_ SuperMega managed-trial database activation
 
-This document's schema-v13 procedures concern hosted PostgreSQL/Supabase. They
-do not verify or migrate native Shop's separate committed green-anchor SQLite
-`user_version = 13` or the current uncommitted native schema-v14 security
-increment.
+This document's current schema-v14 procedures concern hosted PostgreSQL/Supabase. They
+do not verify or migrate native Shop's separate SQLite `user_version = 16`.
+Hosted schema-v14 source or rehearsal evidence cannot substitute for native
+migration, backup/restore, or installed-app evidence.
+
+Historical schema-v13 receipts and instructions remain evidence of their exact
+older source only. They do not prove that the final v14 correction-consumption
+migration was applied, rehearsed, or activated on any hosted target.
 
 `app.supermega.dev` is an isolated, browser-local product demo until every managed-trial gate below passes. It does not use SQLite and it must not be represented as a customer system of record. The canonical managed backend is the private `app_private` schema in Supabase Postgres; browser code never receives its connection string or a service-role key.
 
@@ -11,12 +15,13 @@ The validator is intentionally read-only. It does not apply migrations, create u
 
 ## Current full-candidate rehearsal packet (v3)
 
-The rehearsal packet now binds all 24 committed migrations: one public legacy baseline
-plus 23 private migrations—the 14 private-core migrations through
-schema v13 and nine later migrations for durable signup attempts, Website and
+The rehearsal packet now binds all 25 committed migrations: one public legacy baseline
+plus 24 private migrations—the 14 historical private-core migrations through
+schema v13, nine later migrations for durable signup attempts, Website and
 Ecommerce review storage, entitlement proof, customer decisions, and RLS
-optimization.
-Core schema version 13 alone does not prove those later features exist. Historical local
+optimization, and the final schema-v14 Shop correction-consumption migration.
+Schema version 13 alone does not prove those later features or the v14 correction
+contract exist. Historical local
 rehearsal descriptions below retain their original scope; they are not full-candidate proof.
 
 Before any schema apply, inspect the exact non-production target, health, verified TLS,
@@ -50,9 +55,11 @@ node tools/record_postgres17_rehearsal.mjs --output <NEW_EXTERNAL_RECEIPT_PATH>
 node tools/record_postgres17_rehearsal.mjs --verify --input <NEW_EXTERNAL_RECEIPT_PATH> --expected-head <EXACT_CLEAN_COMMIT>
 ```
 
-The runner accepts only executable paths, never database credentials. It creates disposable PostgreSQL 17 clusters with generated in-memory secrets, TLS, and a loopback listener. The current profile is `v13-self-serve`; inspect the runner and its resulting receipt for the exact migration inventory and checks. It verifies runtime-role restrictions, tenant isolation, session revocation, immutable events, rollback, backup/restore and cleanup. This local rehearsal is distinct from the full hosted packet, whose inventory also includes the public baseline and later feature extensions. Neither receipt substitutes for the other. Do not use historical v10 or eleven-migration instructions to initialize the current candidate.
+The runner accepts only executable paths, never database credentials. It creates disposable PostgreSQL 17 clusters with generated in-memory secrets, TLS, and a loopback listener. The current source profile is `v14-shop-correction`, with database contract `supermega_private_trial_database_v14_shop_correction_v1`; inspect the runner and a newly generated exact-head receipt for the exact migration inventory and checks. Existing `v13-self-serve` receipts remain historical evidence and do not prove this profile. The runner verifies runtime-role restrictions, tenant isolation, session revocation, immutable events, rollback, backup/restore and cleanup. This local rehearsal is distinct from the full hosted packet, whose inventory also includes the public baseline and later feature extensions. Neither receipt substitutes for the other. Do not use historical v10, eleven-migration, or v13-only instructions to initialize the current candidate.
 
-The current sanitized proof is `hq/research/postgres17-rehearsal.json`.
+The tracked `hq/research/postgres17-rehearsal.json` is historical schema-v13
+proof until a new exact-head schema-v14 summary/raw pair is generated, reviewed,
+and committed through the evidence workflow.
 Recording requires a clean worktree and a new external destination; it reruns
 the complete disposable rehearsal, hashes the exact migrations, validator,
 runner, and managed Python runtime files, and publishes the external receipt
@@ -96,7 +103,7 @@ npm run database:supabase:packet -- --target-project-ref <NON_PRODUCTION_PROJECT
 npm run database:supabase:packet:verify -- .tmp\supermega-supabase-rehearsal-packet.json --release-handoff <SUPERMEGA-RELEASE-HANDOFF.json>
 ```
 
-The packet rejects the protected production ref. It binds either the exact reviewed `origin/main` checkout or the explicitly verified candidate handoff shown above to core schema v13 plus the listed post-v13 extensions, all ordered migration hashes, public browser quarantine and source-audit hashes, backup/restore evidence, and the read-only preflight command. `tools/prepare_supabase_rehearsal_packet.mjs` enforces the complete ordered inventory; use the generated packet rather than a copied filename list. The packet contains no credential, enables no write, and cannot apply a migration. Regenerate it after any migration, public-catalog audit, or release change.
+The packet rejects the protected production ref. It binds either the exact reviewed `origin/main` checkout or the explicitly verified candidate handoff shown above to the shared schema-v14 trial/billing profile, including the historical core schema-v13 chain, the listed post-v13 extensions, and the final v14 correction-consumption migration, plus all ordered migration hashes, public browser quarantine and source-audit hashes, backup/restore evidence, and the read-only preflight command. `tools/prepare_supabase_rehearsal_packet.mjs` enforces the complete ordered inventory; use the generated packet rather than a copied filename list. The packet contains no credential, enables no write, and cannot apply a migration. Regenerate it after any migration, public-catalog audit, or release change.
 
 Supabase currently documents daily backups for Pro, Team, and Enterprise projects. Before the hosted rehearsal, confirm an actual backup exists for the source, record its non-secret identifier and time, and prove restoration to an isolated target. Physical backups do not preserve custom-role passwords, and database backups do not restore Storage objects; role-password recovery and private-object recovery therefore remain separate checks.
 
@@ -108,7 +115,7 @@ npm run database:supabase:preflight -- -DatabaseUrlFile .tmp\supermega-rehearsal
 ```
 
 The preflight is read-only and fail-closed. It requires PostgreSQL 17, hostname-verified TLS, a stable administrative session with permission to create the private schema and runtime role, the `postgres` database, and a target where both `app_private` and `supermega_trial_backend` are absent. It rejects the reviewed production ref, a mismatched Supabase URL, a non-Supabase host, unreviewed production-target configuration, and a transaction-pooler migration URL. Its sanitized JSON includes the non-secret target project ref so the evidence can be matched to the next migration step. It does not apply a migration, alter Supabase, publish a secret, or touch Vercel.
-5. With explicit schema-apply authority, follow the verified packet's target-specific baseline and quarantine prerequisites, then its complete ordered migration chain. Use the same reviewed administrative target and match its project ref to the packet and preflight before proceeding. Stop at the first error; reconcile existing migration history rather than replaying historical SQL. Never use the application runtime login for migrations. Validate core schema v13 and every post-v13 extension in the packet; core version alone does not establish feature readiness. Historical workspaces remain suspended until explicitly re-authorized.
+5. With explicit schema-apply authority, follow the verified packet's target-specific baseline and quarantine prerequisites, then its complete ordered migration chain. Use the same reviewed administrative target and match its project ref to the packet and preflight before proceeding. Stop at the first error; reconcile existing migration history rather than replaying historical SQL. Never use the application runtime login for migrations. Validate the historical schema-v13 chain, every post-v13 extension, and the final v14 correction-consumption migration in the packet; the older core version alone does not establish current feature readiness. Historical workspaces remain suspended until explicitly re-authorized.
 6. Only after all migrations pass, create the distinct `supermega_trial_login` login role with a password-manager-generated secret and `LOGIN INHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS`. Grant `supermega_trial_backend` to it with `INHERIT TRUE`, `SET FALSE`, and no admin option. The backend group must have exactly that one runtime member, and the runtime login must have exactly that one parent and no members of its own. Give the login no direct grants, default grants, role settings, or object ownership. Production Vercel must use the shared transaction-pooler username `supermega_trial_login.<project-ref>`; privileged `postgres.<project-ref>` credentials are rejected.
 7. Use a TLS connection URL for that login. For Vercel serverless traffic, use the Supabase transaction-mode pooler and append `sslmode=require` (or a stronger provider-supported verification mode). The runtime explicitly disables autocommit, wraps each identity-bearing operation in one transaction, uses transaction-local workspace and actor settings, and disables Psycopg prepared statements for transaction-pool compatibility.
 8. Configure Supabase Auth for named, non-anonymous users. Create the trial owner's account through the approved Auth administration flow and record its UUID; this exact UUID becomes `ownerActorId` in the activation plan and must match `auth/v1/user` at sign-in. Retrieve an enabled modern `sb_publishable_...` key and save it in an ignored file such as `.tmp/supermega-nonproduction-publishable-key.txt`. The publishable key is intentionally browser-visible and is not an authorization grant; private workspace membership and forced RLS remain the authority. Do not use a service-role key, legacy anon key, user metadata, or a client-asserted role. `SUPERMEGA_TRIAL_IDENTITY_SECRET` is optional and is allowed only when an actual trusted server gateway signs the complete v2 identity envelope.

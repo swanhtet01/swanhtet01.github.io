@@ -197,7 +197,7 @@ jobs:
                 python tools/validate_supermega_database_url.py \
                   --env-key SUPERMEGA_DATABASE_URL \
                   --storage-audit-env-key SUPERMEGA_STORAGE_AUDIT_DATABASE_URL \
-                  --schema-profile v13-self-serve \
+                  --schema-profile v14-shop-correction \
                   --ensure-schema \
                   --require-ready
               ;;

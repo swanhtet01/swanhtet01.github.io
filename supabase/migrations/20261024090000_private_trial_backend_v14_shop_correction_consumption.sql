@@ -34,10 +34,14 @@ create table app_private.shop_correction_lineages (
   activated_at timestamptz not null default transaction_timestamp(),
   superseded_at timestamptz,
   primary key (workspace_id, lineage_id),
-  unique (workspace_id, lineage_id, lineage_epoch),
-  unique (workspace_id, lineage_epoch),
-  unique (workspace_id, activation_request_id),
-  foreign key (workspace_id, previous_lineage_id, previous_lineage_epoch)
+  constraint shop_correction_lineage_identity_epoch_key
+    unique (workspace_id, lineage_id, lineage_epoch),
+  constraint shop_correction_lineage_epoch_key
+    unique (workspace_id, lineage_epoch),
+  constraint shop_correction_lineage_activation_key
+    unique (workspace_id, activation_request_id),
+  constraint shop_correction_lineage_previous_fkey
+    foreign key (workspace_id, previous_lineage_id, previous_lineage_epoch)
     references app_private.shop_correction_lineages
       (workspace_id, lineage_id, lineage_epoch),
   check (workspace_id = btrim(workspace_id) and workspace_id <> ''),
@@ -77,14 +81,21 @@ create table app_private.shop_correction_consumptions (
   key_id text not null,
   signature text not null,
   primary key (workspace_id, consumption_id),
-  unique (workspace_id, consumption_request_id),
-  unique (workspace_id, authorization_receipt_id),
-  unique (workspace_id, command_id),
-  unique (workspace_id, lineage_id, consumption_ordinal),
-  unique (workspace_id, history_digest),
-  foreign key (workspace_id, lineage_id)
+  constraint shop_correction_consumption_request_key
+    unique (workspace_id, consumption_request_id),
+  constraint shop_correction_consumption_receipt_key
+    unique (workspace_id, authorization_receipt_id),
+  constraint shop_correction_consumption_command_key
+    unique (workspace_id, command_id),
+  constraint shop_correction_consumption_ordinal_key
+    unique (workspace_id, lineage_id, consumption_ordinal),
+  constraint shop_correction_consumption_history_key
+    unique (workspace_id, history_digest),
+  constraint shop_correction_consumption_lineage_fkey
+    foreign key (workspace_id, lineage_id)
     references app_private.shop_correction_lineages (workspace_id, lineage_id),
-  foreign key (workspace_id, lineage_id, lineage_epoch)
+  constraint shop_correction_consumption_lineage_epoch_fkey
+    foreign key (workspace_id, lineage_id, lineage_epoch)
     references app_private.shop_correction_lineages
       (workspace_id, lineage_id, lineage_epoch),
   check (workspace_id = btrim(workspace_id) and workspace_id <> ''),

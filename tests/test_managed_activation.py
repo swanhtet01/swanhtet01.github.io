@@ -17,6 +17,7 @@ from supermega_runtime.managed_context import (
     MANAGED_CONTEXT_FORBIDDEN_ACTIONS,
     managed_ai_context_export_digest,
 )
+import supermega_runtime.managed_activation as managed_activation_module
 from supermega_runtime.managed_activation import (
     ACTIVATION_PLAN_CONTRACT,
     ACTIVATION_REQUERY_EVIDENCE_CONTRACT,
@@ -504,19 +505,19 @@ class FakeCursor:
 
 
 class ManagedActivationPlanTests(unittest.TestCase):
-    def test_current_plan_binds_v13_catalog_profile_not_only_version(self) -> None:
-        from tools.private_trial_v13_contract import CONTRACT, PROFILE
+    def test_current_plan_binds_v14_catalog_profile_not_only_version(self) -> None:
+        from tools.private_trial_v14_contract import CONTRACT, PROFILE
 
         plan = activation_plan()
-        self.assertEqual(plan["target"]["schemaVersion"], 13)
+        self.assertEqual(plan["target"]["schemaVersion"], 14)
         self.assertEqual(plan["target"].get("schemaProfile"), PROFILE)
         self.assertEqual(plan["target"].get("databaseContract"), CONTRACT)
-        self.assertEqual(plan["operations"][0], "verify_postgres17_schema_v13_self_serve")
+        self.assertEqual(plan["operations"][0], "verify_postgres17_schema_v14_shop_correction")
 
     def test_recomputed_old_or_forged_profile_plan_is_denied_before_connection(self) -> None:
         for key, value in (
-            ("schemaVersion", 11), ("schemaVersion", 12), ("schemaVersion", "13"),
-            ("schemaVersion", 13.0), ("schemaProfile", "legacy-v11"),
+            ("schemaVersion", 11), ("schemaVersion", 13), ("schemaVersion", "14"),
+            ("schemaVersion", 14.0), ("schemaProfile", "v13-self-serve"),
             ("schemaProfile", None), ("databaseContract", "unreviewed"),
             ("databaseContract", None),
         ):
@@ -1223,6 +1224,18 @@ class ManagedActivationCliTests(unittest.TestCase):
 
 
 class ManagedV13LocalDatabaseTests(unittest.TestCase):
+    @mock.patch.object(managed_activation_module, "TRIAL_SCHEMA_VERSION", 13)
+    @mock.patch.object(managed_activation_module, "TRIAL_SCHEMA_PROFILE", "v13-self-serve")
+    @mock.patch.object(
+        managed_activation_module,
+        "TRIAL_DATABASE_CONTRACT",
+        "supermega_private_trial_database_v13_self_serve_v1",
+    )
+    @mock.patch.object(
+        managed_activation_module,
+        "TRIAL_SCHEMA_VERIFICATION_OPERATION",
+        "verify_postgres17_schema_v13_self_serve",
+    )
     def test_real_v13_authorization_apply_replay_requery_and_legacy_denial(self) -> None:
         """Synthetic loopback only; never imports provider credentials or calls the wrapper."""
         from tools import rehearse_self_serve_v13 as proof

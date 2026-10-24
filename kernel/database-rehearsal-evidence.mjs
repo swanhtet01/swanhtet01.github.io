@@ -1,8 +1,8 @@
 import { createHash } from 'node:crypto'
 
 export const DATABASE_REHEARSAL_EVIDENCE_SCHEMA = 'supermega.hq.database-rehearsal.v3'
-const schemaProfile = 'v13-self-serve'
-const catalogContract = 'supermega_private_trial_database_v13_self_serve_v1'
+const schemaProfile = 'v14-shop-correction'
+const catalogContract = 'supermega_private_trial_database_v14_shop_correction_v1'
 
 const migrations = [
   '20260722004500_private_trial_backend_role_preflight.sql',
@@ -28,6 +28,7 @@ const migrations = [
   '20260924231714_ecommerce_customer_decisions.sql',
   '20260929171000_ecommerce_decision_review_fk_index.sql',
   '20260930010000_app_rls_initplan_optimization.sql',
+  '20261024090000_private_trial_backend_v14_shop_correction_consumption.sql',
 ]
 
 const implementationPaths = [...new Set([
@@ -50,6 +51,7 @@ const implementationPaths = [...new Set([
   'tools/validate_supermega_database_url.py',
   'tools/verify_public_browser_quarantine.mjs',
   'tools/verify_managed_runtime_environment_values.mjs',
+  'tools/verify_private_trial_migrations.mjs',
   ...migrations.map((name) => `supabase/migrations/${name}`),
   'kernel/database-rehearsal-evidence.mjs',
   'supermega_runtime/billing_rail.py',
@@ -62,6 +64,16 @@ const implementationPaths = [...new Set([
   'tests/test_website_runtime.py',
   'tools/rehearse_self_serve_v13.py',
   'tools/private_trial_v13_contract.py',
+  'tools/private_trial_v14_contract.py',
+  'tests/test_database_v14_contract.py',
+  'tests/test_core_security_catalog_contract.py',
+  'tests/test_database_activation_contract.py',
+  'tests/test_database_profile_routing.py',
+  'tests/test_managed_activation.py',
+  'supermega_runtime/shop_correction_receipts.py',
+  'tests/test_shop_correction_authorization.py',
+  'tests/test_shop_correction_postgres_store_mock.py',
+  'tests/test_shop_correction_postgres_v14_contract.py',
   'tools/run_postgres17_rehearsal.mjs',
   'tools/record_postgres17_rehearsal.mjs',
   'tools/record_postgres17_rehearsal.test.mjs',
@@ -156,6 +168,11 @@ const rawCheckNames = [
   'self_serve_budget_preserved_after_restore',
   'private_rows_exact_after_restore',
   'current_catalog_checked_before_and_after_restore',
+  'shop_correction_tables_and_forced_rls_validated',
+  'shop_correction_constraints_and_indexes_validated',
+  'shop_correction_triggers_and_functions_validated',
+  'shop_correction_policies_and_acl_validated',
+  'shop_correction_catalog_preserved_after_restore',
 ]
 
 function fail(code) {
@@ -200,13 +217,13 @@ export function buildSanitizedProof(raw, context) {
     || raw.engine?.tls_active !== true
     || raw.engine?.loopback_only !== true
     || !['pg_ctl_restricted_token', 'windows_direct_sandbox'].includes(raw.engine?.start_mode)) fail('database_rehearsal_engine_invalid')
-  if (raw.migrations?.count !== migrations.length || raw.migrations?.schema_version !== 13
+  if (raw.migrations?.count !== migrations.length || raw.migrations?.schema_version !== 14
     || !same(raw.migrations?.names, migrations) || raw.migrations?.schema_profile !== schemaProfile
     || raw.migrations?.catalog_contract !== catalogContract
     || raw.migrations?.production_validator_ready !== true) fail('database_rehearsal_migrations_invalid')
   if (raw.cleanup_complete !== true || raw.secret_values_exposed !== false || raw.production_mutated !== false || raw.supabase_mutated !== false || raw.vercel_mutated !== false) fail('database_rehearsal_safety_invalid')
   if (raw.storage?.catalog_mode !== 'local_private_fixture' || raw.storage?.hosted_storage_privacy_proof_required !== true) fail('database_rehearsal_storage_boundary_invalid')
-  if (raw.recovery?.backup_nonempty !== true || raw.recovery?.restored_schema_version !== 13
+  if (raw.recovery?.backup_nonempty !== true || raw.recovery?.restored_schema_version !== 14
     || raw.recovery?.format !== 'pg_dump_custom'
     || !validDigest(raw.recovery?.private_snapshot_before)
     || raw.recovery.private_snapshot_before !== raw.recovery.private_snapshot_after) fail('database_rehearsal_recovery_invalid')
@@ -327,10 +344,10 @@ export function validateSanitizedProof(proof, currentImplementation) {
     || proof.engine?.loopbackOnly !== true
     || !['pg_ctl_restricted_token', 'windows_direct_sandbox'].includes(proof.engine?.startMode)
     || !/^[0-9a-f]{64}$/.test(proof.engine?.observedArchiveSha256 || '')) fail('database_rehearsal_evidence_engine_invalid')
-  if (proof.migration?.count !== migrations.length || proof.migration?.schemaVersion !== 13
+  if (proof.migration?.count !== migrations.length || proof.migration?.schemaVersion !== 14
     || !same(proof.migration?.names, migrations) || proof.migration?.schemaProfile !== schemaProfile
     || proof.migration?.catalogContract !== catalogContract
-    || proof.migration?.productionValidatorReady !== true || proof.recovery?.restoredSchemaVersion !== 13) fail('database_rehearsal_evidence_migrations_invalid')
+    || proof.migration?.productionValidatorReady !== true || proof.recovery?.restoredSchemaVersion !== 14) fail('database_rehearsal_evidence_migrations_invalid')
   requireExactChecks(proof.checks, rawCheckNames.map(camelCheckName), 'database_rehearsal_evidence_checks_invalid')
   requireCatalog(proof.catalog)
   if (proof.recovery?.backupNonempty !== true || proof.recovery?.format !== 'pg_dump_custom'
