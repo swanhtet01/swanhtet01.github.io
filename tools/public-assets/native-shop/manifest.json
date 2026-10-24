@@ -3,13 +3,13 @@
   "classification": "synthetic_flutter_widget_capture",
   "records": "synthetic_sample_data",
   "productionDeviceProof": false,
-  "sourceHead": "97144217c309ac072fd63e5b4923ecc1f48bc171",
-  "ciMergeCommit": "e7f8615884adb8934ff0bfc4630abfc285e3bd23",
-  "nativeTree": "fb8771b1d733ae4e435b7defcdd697ed1f361d7c",
-  "workflowRun": 40033201150,
-  "artifactId": 12536196538,
-  "artifactName": "supermega-shop-flutter-renders-e7f8615884adb8934ff0bfc4630abfc285e3bd23",
-  "artifactArchiveSha256": "b10224f8913f21be05d9d9394f7b9d50216e28f7bbdf2523c08bd7ab522b7a71",
+  "sourceHead": "7bacbd4891b2b4281b20fa75bb465bdd327b0a23",
+  "ciMergeCommit": "55426bb09344614f56d1c42505d6e7e9b6b75410",
+  "nativeTree": "3126b589fa366aae16f95b34afc38706d0576699",
+  "workflowRun": 40056320068,
+  "artifactId": 12545696721,
+  "artifactName": "supermega-shop-flutter-renders-55426bb09344614f56d1c42505d6e7e9b6b75410",
+  "artifactArchiveSha256": "a731f94b811226d1dc307acf9db38edf21c225e2a274af74340b97e63131c132",
   "photoLedgerPath": "mobile/shop_pos/test/assets/grocery_photos/ledger.json",
   "photoLedgerSha256": "458e0accc738a144b7356185aae67190ac77c968ad98086c265a82c06625ee65",
   "assets": [
@@ -108,35 +108,35 @@
       "file": "shop_today_1200_en.png",
       "width": 1200,
       "height": 900,
-      "sha256": "229c31a06cdde417496aad326a729fd3d4578d3b76300917423491742cd45c4d",
+      "sha256": "2e58ddf7ae7a756d3a0ac96ac8476443471830d42105aed1c040d4befd5c2674",
       "sourceFile": "mobile/shop_pos/test/goldens/shop_today_1200_en.png"
     },
     {
       "file": "shop_today_390_en.png",
       "width": 390,
       "height": 844,
-      "sha256": "7d82a091c1ebc4877b9e473fba0f74d0afe69468acbf7fcd5f1e98f93b16137d",
+      "sha256": "9fd641e55ba656d5f065ba84877759e861bf51f15159c6bca8fcfca698cd1dd3",
       "sourceFile": "mobile/shop_pos/test/goldens/shop_today_390_en.png"
     },
     {
       "file": "shop_today_390_my.png",
       "width": 390,
       "height": 844,
-      "sha256": "385b27b7854d1002160107ae129e1f62eb4393aa5757e40e512353ad2df43a6a",
+      "sha256": "1759d0a59d5981d0214682fe05a7ceda876fa020c7ea72128b89ac2d8ec49e41",
       "sourceFile": "mobile/shop_pos/test/goldens/shop_today_390_my.png"
     },
     {
       "file": "shop_today_820_en.png",
       "width": 820,
       "height": 1000,
-      "sha256": "2c010205f0f2f54b6c9237695c907b43ebfd1983f4006e58dcbad2c0b2dc3ef1",
+      "sha256": "d3de8286c2959b820e57ed55763986ecf77a95237a2c686a9934fbf70a1b7f4e",
       "sourceFile": "mobile/shop_pos/test/goldens/shop_today_820_en.png"
     },
     {
       "file": "shop_today_820_my.png",
       "width": 820,
       "height": 1000,
-      "sha256": "bbe0930d18faefea45b8604ef659533aea042de702fc4be14692fe078c4c1e78",
+      "sha256": "10ff7e0c7a93630f6e7887584a5c1ea2e53747b061df4c399dac03bdf52243f7",
       "sourceFile": "mobile/shop_pos/test/goldens/shop_today_820_my.png"
     }
   ]
