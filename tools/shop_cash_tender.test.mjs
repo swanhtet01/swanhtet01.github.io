@@ -34,13 +34,19 @@ test('blank means exact cash and Arabic or Myanmar digits calculate the same cha
     status: 'exact', cashGivenMmk: 2_500, changeMmk: 0,
   })
   assert.equal(shopCashTenderMmk(125_000), '125,000 MMK')
+  assert.deepEqual(reviewShopCashTender(Number.MAX_SAFE_INTEGER, ''), {
+    status: 'exact', cashGivenMmk: Number.MAX_SAFE_INTEGER, changeMmk: 0,
+  })
+  assert.deepEqual(reviewShopCashTender(Number.MAX_SAFE_INTEGER, String(Number.MAX_SAFE_INTEGER)), {
+    status: 'exact', cashGivenMmk: Number.MAX_SAFE_INTEGER, changeMmk: 0,
+  })
 })
 
 test('short, unsafe, signed, decimal and non-digit tender fail closed', () => {
   assert.deepEqual(reviewShopCashTender(2_500, '2499'), {
     status: 'short', cashGivenMmk: 2_499, changeMmk: null,
   })
-  for (const value of ['2,500', '2500.00', '-2500', '+2500', '25 00', 'cash', '၂၅၀၀ MMK', '99999999999999999999', '200000000000001']) {
+  for (const value of ['2,500', '2500.00', '-2500', '+2500', '25 00', 'cash', '၂၅၀၀ MMK', '99999999999999999999', '9007199254740992']) {
     assert.equal(reviewShopCashTender(2_500, value).status, 'invalid', value)
   }
   assert.throws(() => reviewShopCashTender(-1, ''), /amount_due_invalid/)

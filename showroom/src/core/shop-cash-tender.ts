@@ -16,7 +16,10 @@ export type ShopCashTenderGateEvent =
   | { type: 'submit'; amountDueMmk: number }
   | { type: 'reset' }
 
-export const SHOP_CASH_TENDER_MAX_MMK = 200_000_000_000_000
+// Counter totals are already validated as non-negative safe integers before this
+// review gate is queued. Accept that complete domain here as well so a valid sale
+// can never turn into a render-time exception at the payment handoff.
+export const SHOP_CASH_TENDER_MAX_MMK = Number.MAX_SAFE_INTEGER
 export const SHOP_CASH_TENDER_MAX_DIGITS = String(SHOP_CASH_TENDER_MAX_MMK).length
 
 const myanmarDigits = '၀၁၂၃၄၅၆၇၈၉'
