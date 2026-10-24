@@ -1647,6 +1647,63 @@ void main() {
     },
   );
 
+  test('signed v2 four-key wallet reconciliation still fails closed', () async {
+    final snapshot = File(
+      '${directory.path}/signed-v2-four-key-reconciliation.sqlite',
+    );
+    await _writeWalletReversalSnapshot(snapshot, reconciled: true);
+    await _rewriteWalletReconciliationAsSignedV2FourKey(snapshot);
+    final connection = sqlite3.open(snapshot.path, mode: OpenMode.readOnly);
+    try {
+      final reconciliation = connection
+          .select('SELECT * FROM shop_wallet_reversal_reconciliations')
+          .single;
+      final proof = connection
+          .select(
+            'SELECT * FROM shop_correction_authorization_proofs '
+            'WHERE capability = ?',
+            ['shop.sale.reconcile_wallet'],
+          )
+          .single;
+      expect(proof['proof_kind'], 'signed_v2');
+      expect(
+        proof['command_digest'],
+        reconciliation['authorization_command_digest'],
+      );
+      expect(
+        proof['receipt_digest'],
+        reconciliation['authorization_receipt_digest'],
+      );
+      expect(
+        await _backupCorrectionVerifier.verify(
+          ShopCorrectionAuthorization(
+            receiptId: proof['receipt_id'] as String,
+            receiptDigest: proof['receipt_digest'] as String,
+            workspaceId: proof['workspace_id'] as String,
+            actorId: proof['actor_id'] as String,
+            actorLabel: proof['actor_label'] as String,
+            actorRole: proof['actor_role'] as String,
+            capability: proof['capability'] as String,
+            source: proof['source'] as String,
+            commandDigest: proof['command_digest'] as String,
+            issuedAtMillis: proof['issued_at_millis'] as int,
+            expiresAtMillis: proof['expires_at_millis'] as int,
+            keyId: proof['key_id'] as String,
+            signature: proof['signature'] as String,
+          ),
+        ),
+        isTrue,
+      );
+    } finally {
+      connection.close();
+    }
+
+    expect(
+      () => ShopBackup.verifySnapshot(snapshot, expectedSchemaVersion: 14),
+      throwsFormatException,
+    );
+  });
+
   test(
     'authenticated profile-v11 backup migrates to v14 without rewriting data',
     () async {
@@ -3775,6 +3832,71 @@ Future<void> _expectLegacyV11WalletReconciliationProof(
     proof.read<String>('command_digest'),
     reconciliation.read<String>('authorization_command_digest'),
   );
+}
+
+Future<void> _rewriteWalletReconciliationAsSignedV2FourKey(File target) async {
+  final connection = sqlite3.open(target.path);
+  try {
+    final row = connection
+        .select('SELECT * FROM shop_wallet_reversal_reconciliations')
+        .single;
+    final fingerprint = jsonEncode(<String, Object>{
+      'operationId': row['operation_id'] as String,
+      'reversalId': row['reversal_id'] as String,
+      'outcome': row['outcome'] as String,
+      'evidenceReference': row['evidence_reference'] as String,
+    });
+    final commandDigest = crypto.sha256
+        .convert(utf8.encode(fingerprint))
+        .toString();
+    final receiptDigest = shopCorrectionAuthorizationReceiptDigest(
+      source: row['authorization_source'] as String,
+      receiptId: row['authorization_receipt_id'] as String,
+      workspaceId: row['authorization_workspace_id'] as String,
+      actorId: row['authorized_actor_id'] as String,
+      actorLabel: row['authorized_actor_label'] as String,
+      actorRole: row['authorized_actor_role'] as String,
+      capability: row['authorization_capability'] as String,
+      commandDigest: commandDigest,
+      issuedAtMillis: row['authorization_issued_at_millis'] as int,
+      expiresAtMillis: row['authorization_expires_at_millis'] as int,
+    );
+    final signature = await Ed25519().sign(
+      utf8.encode(
+        shopCorrectionAuthorizationSignatureMessage(
+          keyId: _backupCorrectionKeyId,
+          receiptDigest: receiptDigest,
+        ),
+      ),
+      keyPair: _backupCorrectionKeyPair,
+    );
+    _mutateImmutableAuditRow(
+      connection,
+      table: 'shop_wallet_reversal_reconciliations',
+      mutate: () => connection.execute(
+        'UPDATE shop_wallet_reversal_reconciliations '
+        'SET request_fingerprint = ?, authorization_command_digest = ?, '
+        'authorization_receipt_digest = ?',
+        [fingerprint, commandDigest, receiptDigest],
+      ),
+    );
+    _mutateImmutableProofRow(
+      connection,
+      mutate: () => connection.execute(
+        'UPDATE shop_correction_authorization_proofs '
+        'SET command_digest = ?, receipt_digest = ?, signature = ? '
+        'WHERE capability = ?',
+        [
+          commandDigest,
+          receiptDigest,
+          _base64UrlNoPadding(signature.bytes),
+          'shop.sale.reconcile_wallet',
+        ],
+      ),
+    );
+  } finally {
+    connection.close();
+  }
 }
 
 Future<ShopDatabase> _closedCashReversalDatabase() async {
