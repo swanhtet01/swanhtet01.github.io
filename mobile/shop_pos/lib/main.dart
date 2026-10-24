@@ -325,6 +325,7 @@ class _ShopAppState extends State<ShopApp> {
               apiBaseUrl: widget.apiBaseUrl,
               myanmar: _myanmar,
               onLanguageChanged: _setLanguage,
+              runtimeCapabilities: widget.runtimeCapabilities,
               runtimeScope: widget.runtimeScope,
             ),
           ),
@@ -4102,6 +4103,8 @@ class _ShopHomeState extends State<ShopHome> {
         apiBaseUrl: widget.apiBaseUrl,
         myanmar: widget.myanmar,
         onLanguageChanged: widget.onLanguageChanged,
+        runtimeCapabilities: widget.runtimeCapabilities,
+        runtimeScope: widget.runtimeScope,
       ),
     ),
   );
@@ -4644,6 +4647,7 @@ class ShopSettingsScreen extends StatefulWidget {
     required this.onLanguageChanged,
     this.authClient,
     this.apiBaseUrl = 'https://app.supermega.dev',
+    this.runtimeCapabilities = ShopRuntimeCapabilities.production,
     this.runtimeScope,
     super.key,
   });
@@ -4653,6 +4657,7 @@ class ShopSettingsScreen extends StatefulWidget {
   final String apiBaseUrl;
   final bool myanmar;
   final ValueChanged<bool> onLanguageChanged;
+  final ShopRuntimeCapabilities runtimeCapabilities;
   final ShopRuntimeScope? runtimeScope;
 
   @override
@@ -4663,7 +4668,7 @@ class _ShopSettingsScreenState extends State<ShopSettingsScreen> {
   late bool _myanmar = widget.myanmar;
 
   ShopRuntimeCapabilities get _runtimeCapabilities =>
-      widget.runtimeScope?.capabilities ?? ShopRuntimeCapabilities.production;
+      widget.runtimeScope?.capabilities ?? widget.runtimeCapabilities;
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -4726,8 +4731,7 @@ class _ShopSettingsScreenState extends State<ShopSettingsScreen> {
                     ),
                     const Divider(height: 1),
                   ],
-                  if (_runtimeCapabilities.networkPrinter &&
-                      widget.runtimeScope != null) ...[
+                  if (_runtimeCapabilities.networkPrinter) ...[
                     _SetupTile(
                       icon: Icons.print_outlined,
                       title: shopCopy(
@@ -4744,7 +4748,7 @@ class _ShopSettingsScreenState extends State<ShopSettingsScreen> {
                         MaterialPageRoute<void>(
                           builder: (_) => PrinterSetupScreen(
                             myanmar: _myanmar,
-                            runtimeScope: widget.runtimeScope!,
+                            runtimeScope: widget.runtimeScope,
                           ),
                         ),
                       ),

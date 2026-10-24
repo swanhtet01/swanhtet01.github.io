@@ -20,6 +20,7 @@ import 'package:supermega_shop/shop_copy.dart';
 import 'package:supermega_shop/shop_correction_authorization_service.dart';
 import 'package:supermega_shop/shop_database.dart';
 import 'package:supermega_shop/shop_models.dart';
+import 'package:supermega_shop/shop_runtime_profile.dart';
 import 'package:supermega_shop/shop_today_screen.dart';
 import 'package:supermega_shop/stock_screen.dart';
 import 'package:supermega_shop/wallet_setup_screen.dart';
@@ -2407,6 +2408,80 @@ void main() {
       }
     });
   }
+
+  testWidgets(
+    'production-null test seam shows printer without creating transport',
+    (tester) async {
+      final database = ShopDatabase(NativeDatabase.memory());
+      try {
+        await tester.pumpWidget(
+          ShopApp(
+            database: database,
+            authClient: null,
+            apiBaseUrl: 'https://example.invalid',
+            initialMyanmar: false,
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find
+              .descendant(
+                of: find.byType(AppBar),
+                matching: find.byIcon(Icons.settings_outlined),
+              )
+              .first,
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Receipt printer'));
+        await tester.pumpAndSettle();
+        expect(find.text('Find printers'), findsOneWidget);
+        await tester.tap(find.text('Find printers'));
+        await tester.pumpAndSettle();
+        expect(
+          find.text('Printer access is unavailable in this preview.'),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+      } finally {
+        await tester.pumpWidget(const SizedBox.shrink());
+        await database.close();
+      }
+    },
+  );
+
+  testWidgets('synthetic QA hides external printer settings', (tester) async {
+    final database = ShopDatabase(NativeDatabase.memory());
+    try {
+      await tester.pumpWidget(
+        ShopApp(
+          database: database,
+          authClient: null,
+          apiBaseUrl: '',
+          initialMyanmar: false,
+          runtimeCapabilities: ShopRuntimeCapabilities.syntheticQa,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Synthetic QA data · not a customer store'),
+        findsOneWidget,
+      );
+      await tester.tap(
+        find
+            .descendant(
+              of: find.byType(AppBar),
+              matching: find.byIcon(Icons.settings_outlined),
+            )
+            .first,
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Receipt printer'), findsNothing);
+      expect(tester.takeException(), isNull);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await database.close();
+    }
+  });
 
   testWidgets(
     'cash reversal reports net and audit detail without ordinary reprint',

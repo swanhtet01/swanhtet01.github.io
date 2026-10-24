@@ -818,7 +818,7 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
           MaterialPageRoute<void>(
             builder: (_) => PrinterSetupScreen(
               myanmar: widget.myanmar,
-              runtimeScope: widget.runtimeScope!,
+              runtimeScope: widget.runtimeScope,
             ),
           ),
         );

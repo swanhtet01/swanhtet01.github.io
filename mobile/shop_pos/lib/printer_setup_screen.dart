@@ -7,21 +7,23 @@ import 'shop_runtime_scope.dart';
 class PrinterSetupScreen extends StatefulWidget {
   const PrinterSetupScreen({
     required this.myanmar,
-    required this.runtimeScope,
+    this.runtimeScope,
     super.key,
   });
   final bool myanmar;
-  final ShopRuntimeScope runtimeScope;
+  final ShopRuntimeScope? runtimeScope;
 
   @override
   State<PrinterSetupScreen> createState() => _PrinterSetupScreenState();
 }
 
 class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
-  late final _service = _openPrinterDiscovery(widget.runtimeScope);
-  late final _settings = ReceiptPrinterSettings(
-    runtimeScope: widget.runtimeScope,
-  );
+  late final PrinterDiscoveryService? _service = widget.runtimeScope == null
+      ? null
+      : _openPrinterDiscovery(widget.runtimeScope!);
+  late final ReceiptPrinterSettings? _settings = widget.runtimeScope == null
+      ? null
+      : ReceiptPrinterSettings(runtimeScope: widget.runtimeScope);
   bool _loadingSettings = true;
   bool _busy = false;
   bool _cancelled = false;
@@ -42,10 +44,15 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
   }
 
   Future<void> _loadSavedPrinter() async {
+    final settings = _settings;
+    if (settings == null) {
+      if (mounted) setState(() => _loadingSettings = false);
+      return;
+    }
     try {
-      final previous = await _settings.readSavedHost();
-      final active = await _settings.readHost();
-      final paperWidth = await _settings.readPaperWidth();
+      final previous = await settings.readSavedHost();
+      final active = await settings.readHost();
+      final paperWidth = await settings.readPaperWidth();
       if (mounted) {
         setState(() {
           _previousHost = previous;
@@ -62,6 +69,17 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
 
   Future<void> _findPrinters() async {
     if (_busy || _loadingSettings) return;
+    final service = _service;
+    if (service == null) {
+      setState(
+        () => _message = shopCopy(
+          widget.myanmar,
+          'Printer access is unavailable in this preview.',
+          'ဤစမ်းသပ်မြင်ကွင်းတွင် ပရင်တာ အသုံးပြု၍မရပါ။',
+        ),
+      );
+      return;
+    }
     setState(() {
       _busy = true;
       _cancelled = false;
@@ -71,8 +89,8 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
       _printers = [];
     });
     try {
-      final active = await _settings.readHost();
-      final result = await _service.scan(cancelled: () => _cancelled);
+      final active = await _settings!.readHost();
+      final result = await service.scan(cancelled: () => _cancelled);
       if (!mounted) return;
       setState(() {
         _savedHost = active;
@@ -134,13 +152,15 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
 
   Future<void> _sendTest(NetworkPrinterCandidate printer) async {
     if (_busy || _loadingSettings) return;
+    final service = _service;
+    if (service == null) return;
     final paperWidth = _paperWidth;
     setState(() {
       _busy = true;
       _message = null;
     });
     try {
-      await _service.sendTestReceipt(printer, paperWidth: paperWidth);
+      await service.sendTestReceipt(printer, paperWidth: paperWidth);
       if (mounted) {
         setState(() {
           _testedHost = printer.host;
@@ -174,19 +194,22 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
         _testedWidth != _paperWidth) {
       return;
     }
+    final service = _service;
+    final settings = _settings;
+    if (service == null || settings == null) return;
     setState(() {
       _busy = true;
       _message = null;
     });
     try {
-      final range = await _service.currentWifiRange();
+      final range = await service.currentWifiRange();
       if (!Ipv4Subnet.fromAddress(
         range.ip,
         range.mask,
       ).hosts.contains(printer.host)) {
         throw const PrinterNetworkChanged();
       }
-      await _settings.saveAfterTest(printer, paperWidth: _paperWidth);
+      await settings.saveAfterTest(printer, paperWidth: _paperWidth);
       if (mounted) {
         setState(() {
           _savedHost = printer.host;
@@ -269,7 +292,8 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
                       ),
                     ],
                     selected: {_paperWidth},
-                    onSelectionChanged: _busy || _loadingSettings
+                    onSelectionChanged:
+                        _settings == null || _busy || _loadingSettings
                         ? null
                         : (selected) {
                             if (selected.first == _paperWidth) return;
