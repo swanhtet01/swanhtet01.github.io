@@ -22,6 +22,7 @@ enum _ShopSnapshotSchemaKind {
   unifiedV13,
   unifiedV14,
   unifiedV15,
+  unifiedV16,
 }
 
 enum _SnapshotColumnGroupState { none, partial, exact }
@@ -46,7 +47,7 @@ class _SnapshotSchemaObject {
 /// the database so an interrupted export or restore cannot retain plaintext.
 abstract final class ShopBackup {
   static const formatVersion = 1;
-  static const supportedSchemaVersion = 15;
+  static const supportedSchemaVersion = 16;
   static const oldestSupportedSchemaVersion = 6;
   static const maxSnapshotBytes = 64 * 1024 * 1024;
 
@@ -649,22 +650,27 @@ abstract final class ShopBackup {
           schemaKind == _ShopSnapshotSchemaKind.correctionWorkspaceV12 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV13 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV14 ||
-          schemaKind == _ShopSnapshotSchemaKind.unifiedV15;
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV15 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV16;
       final hasWorkspaceSchema =
           schemaKind == _ShopSnapshotSchemaKind.correctionWorkspaceV12 ||
           schemaKind == _ShopSnapshotSchemaKind.profileWorkspaceCollisionV12 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV13 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV14 ||
-          schemaKind == _ShopSnapshotSchemaKind.unifiedV15;
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV15 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV16;
       final hasProfileSchema =
           schemaKind == _ShopSnapshotSchemaKind.profileV11 ||
           schemaKind == _ShopSnapshotSchemaKind.profileWorkspaceCollisionV12 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV13 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV14 ||
-          schemaKind == _ShopSnapshotSchemaKind.unifiedV15;
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV15 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV16;
       final hasAuthorizationProofSchema =
           schemaKind == _ShopSnapshotSchemaKind.unifiedV14 ||
-          schemaKind == _ShopSnapshotSchemaKind.unifiedV15;
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV15 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV16;
+      final hasMemberSchema = schemaKind == _ShopSnapshotSchemaKind.unifiedV16;
       final objects = _readSnapshotSchemaObjects(connection);
       final baseSchemaValid =
           objects != null &&
@@ -729,7 +735,8 @@ abstract final class ShopBackup {
                     schemaVersion >= 15
                         ? _v15AuthorizationProofColumns
                         : _v14AuthorizationProofColumns,
-                  )));
+                  ))) &&
+          (!hasMemberSchema || _v16MemberRowsValid(connection));
       final walletIntents = schemaValid
           ? connection.select(
               'SELECT operation_id, payment_method, request_fingerprint, '
@@ -953,6 +960,9 @@ abstract final class ShopBackup {
   static Map<String, String> get _v15AuthorizationProofDefinitions =>
       shopAuthorizationProofSchemaDefinitionsV15();
 
+  static Map<String, String> get _v16MemberDefinitions =>
+      shopMemberSchemaDefinitionsV16();
+
   static _ShopSnapshotSchemaKind? _classifySnapshotSchema(
     Database connection,
     int schemaVersion, {
@@ -975,10 +985,12 @@ abstract final class ShopBackup {
     final proofDefinitions = schemaVersion >= 15
         ? _v15AuthorizationProofDefinitions
         : _v14AuthorizationProofDefinitions;
+    final memberDefinitions = _v16MemberDefinitions;
     final collisionDefinitions = shopWorkspaceCollisionPrefixDefinitionsV12();
     final auditNames = auditDefinitions.keys.toSet();
     final workspaceNames = workspaceDefinitions.keys.toSet();
     final proofNames = proofDefinitions.keys.toSet();
+    final memberNames = memberDefinitions.keys.toSet();
     const profileNames = {'shop_business_profile'};
     final presentNames = objects.keys.toSet();
     final cashState = _reversalCashColumnState(connection);
@@ -1007,6 +1019,11 @@ abstract final class ShopBackup {
       objects,
       proofDefinitions,
       proofNames,
+    );
+    final memberExact = _snapshotDefinitionGroupExact(
+      objects,
+      memberDefinitions,
+      memberNames,
     );
     final profileExact =
         _snapshotDefinitionGroupExact(objects, const {
@@ -1185,6 +1202,43 @@ abstract final class ShopBackup {
         })) {
       return _ShopSnapshotSchemaKind.unifiedV15;
     }
+    if (schemaVersion == 16 &&
+        auditExact &&
+        workspaceExact &&
+        profileExact &&
+        proofExact &&
+        memberExact &&
+        _v16MemberRowsValid(connection) &&
+        _snapshotDefinitionGroupExact(
+          objects,
+          const {
+            'shop_v13_migration_provenance': shopMigrationProvenanceV13Sql,
+          },
+          const {'shop_v13_migration_provenance'},
+        ) &&
+        _migrationProvenanceValid(
+          connection,
+          allowRuntimeUnboundCorrectionHistory:
+              allowRuntimeUnboundCorrectionHistory,
+          hasAuthorizationProofs: true,
+        ) &&
+        triggersMatch([
+          auditDefinitions,
+          workspaceDefinitions,
+          proofDefinitions,
+          memberDefinitions,
+        ]) &&
+        _snapshotObjectNamesExact(objects, {
+          ..._snapshotExpectedBaseObjectNames(schemaVersion),
+          ...auditDefinitions.keys,
+          ...workspaceDefinitions.keys,
+          ...proofDefinitions.keys,
+          ...memberDefinitions.keys,
+          'shop_business_profile',
+          'shop_v13_migration_provenance',
+        })) {
+      return _ShopSnapshotSchemaKind.unifiedV16;
+    }
     return null;
   }
 
@@ -1354,6 +1408,169 @@ abstract final class ShopBackup {
           updatedAt is int &&
           updatedAt >= 0;
     } on Object {
+      return false;
+    }
+  }
+
+  static bool _v16MemberRowsValid(Database connection) {
+    try {
+      final stores = connection.select(
+        'SELECT singleton, store_ref, created_at_millis '
+        'FROM shop_store_identity',
+      );
+      if (stores.length != 1) return false;
+      final storeRef = stores.single['store_ref'];
+      if (stores.single['singleton'] != 1 ||
+          storeRef is! String ||
+          !RegExp(r'^[0-9a-f]{64}$').hasMatch(storeRef) ||
+          stores.single['created_at_millis'] is! int ||
+          (stores.single['created_at_millis'] as int) <= 0) {
+        return false;
+      }
+      if (connection.select(
+        'SELECT 1 FROM shop_members WHERE store_ref != ? '
+        "OR id NOT GLOB 'mem_[0-9a-f]*' OR length(id) != 36 "
+        "OR display_code GLOB '*[^0-9]*' "
+        'OR length(display_code) < 6 OR length(display_code) > 20 '
+        "OR status NOT IN ('active', 'revoked') "
+        'OR created_at_millis <= 0 OR updated_at_millis < created_at_millis '
+        'LIMIT 1',
+        [storeRef],
+      ).isNotEmpty) {
+        return false;
+      }
+      if (connection
+          .select(
+            'SELECT 1 FROM shop_member_cards AS card '
+            'LEFT JOIN shop_members AS member ON member.id = card.member_id '
+            'WHERE member.id IS NULL OR length(card.token_digest) != 64 '
+            "OR card.token_digest GLOB '*[^0-9a-f]*' "
+            'OR card.revision < 1 OR card.issued_at_millis <= 0 '
+            "OR card.state NOT IN ('active', 'retired', 'revoked') "
+            "OR (card.state = 'active' AND card.retired_at_millis IS NOT NULL) "
+            "OR (card.state != 'active' AND card.retired_at_millis IS NULL) "
+            "OR (card.state = 'active' AND member.status != 'active') "
+            "OR (card.state = 'active' AND card.revision != (SELECT MAX(latest.revision) "
+            'FROM shop_member_cards AS latest '
+            'WHERE latest.member_id = card.member_id) '
+            ') '
+            'LIMIT 1',
+          )
+          .isNotEmpty) {
+        return false;
+      }
+      if (connection
+          .select(
+            "SELECT 1 FROM shop_products WHERE upper(COALESCE(barcode, '')) LIKE 'SMC1.%' "
+            "OR upper(COALESCE(sku, '')) LIKE 'SMC1.%' LIMIT 1",
+          )
+          .isNotEmpty) {
+        return false;
+      }
+      if (connection
+          .select(
+            "SELECT 1 FROM shop_member_cards WHERE state = 'active' "
+            'GROUP BY member_id HAVING COUNT(*) > 1 LIMIT 1',
+          )
+          .isNotEmpty) {
+        return false;
+      }
+      if (connection
+          .select(
+            'SELECT 1 FROM shop_member_cards AS card '
+            'WHERE card.revision != (SELECT COUNT(*) '
+            'FROM shop_member_cards AS prior '
+            'WHERE prior.member_id = card.member_id '
+            'AND prior.revision <= card.revision) '
+            'OR EXISTS (SELECT 1 FROM shop_member_cards AS earlier '
+            'WHERE earlier.member_id = card.member_id '
+            'AND earlier.revision < card.revision '
+            'AND earlier.issued_at_millis >= card.issued_at_millis) '
+            'LIMIT 1',
+          )
+          .isNotEmpty) {
+        return false;
+      }
+      if (connection
+          .select(
+            'SELECT 1 FROM shop_sale_member_links AS link '
+            'LEFT JOIN shop_sales AS sale ON sale.id = link.sale_id '
+            'LEFT JOIN shop_sync_outbox AS event '
+            'ON event.operation_id = sale.operation_id '
+            'LEFT JOIN shop_members AS member ON member.id = link.member_id '
+            'LEFT JOIN shop_member_cards AS card '
+            'ON card.member_id = link.member_id '
+            'AND card.revision = link.card_revision '
+            'WHERE sale.id IS NULL OR member.id IS NULL OR card.member_id IS NULL '
+            'OR member.display_code != link.display_code '
+            'OR link.associated_at_millis != sale.created_at_millis '
+            "OR json_extract(sale.request_fingerprint, '\$.memberId') IS NOT link.member_id "
+            "OR json_extract(sale.request_fingerprint, '\$.memberCardRevision') IS NOT link.card_revision "
+            'OR event.operation_id IS NULL '
+            "OR json_extract(event.payload_json, '\$.memberId') IS NOT link.member_id "
+            "OR json_extract(event.payload_json, '\$.memberCardRevision') IS NOT link.card_revision "
+            "OR (sale.payment_method != 'cash' AND NOT EXISTS ("
+            'SELECT 1 FROM shop_wallet_checkout_member_links AS wallet_link '
+            'WHERE wallet_link.operation_id = sale.operation_id '
+            'AND wallet_link.member_id = link.member_id '
+            'AND wallet_link.card_revision = link.card_revision '
+            'AND wallet_link.display_code = link.display_code)) '
+            'LIMIT 1',
+          )
+          .isNotEmpty) {
+        return false;
+      }
+      if (connection
+          .select(
+            'SELECT 1 FROM shop_sales AS sale '
+            'LEFT JOIN shop_sync_outbox AS event '
+            'ON event.operation_id = sale.operation_id '
+            'LEFT JOIN shop_sale_member_links AS link ON link.sale_id = sale.id '
+            'WHERE link.sale_id IS NULL AND ('
+            "(json_valid(sale.request_fingerprint) AND ("
+            "json_type(sale.request_fingerprint, '\$.memberId') IS NOT NULL "
+            "OR json_type(sale.request_fingerprint, '\$.memberCardRevision') IS NOT NULL)) "
+            "OR (json_valid(event.payload_json) AND ("
+            "json_type(event.payload_json, '\$.memberId') IS NOT NULL "
+            "OR json_type(event.payload_json, '\$.memberCardRevision') IS NOT NULL))) "
+            'LIMIT 1',
+          )
+          .isNotEmpty) {
+        return false;
+      }
+      if (connection
+          .select(
+            'SELECT 1 FROM shop_wallet_checkout_member_links AS link '
+            'LEFT JOIN shop_wallet_checkout_intents AS intent '
+            'ON intent.operation_id = link.operation_id '
+            'LEFT JOIN shop_members AS member ON member.id = link.member_id '
+            'LEFT JOIN shop_member_cards AS card '
+            'ON card.member_id = link.member_id '
+            'AND card.revision = link.card_revision '
+            'WHERE intent.operation_id IS NULL OR member.id IS NULL '
+            'OR card.member_id IS NULL '
+            'OR member.display_code != link.display_code '
+            'OR link.associated_at_millis != intent.created_at_millis '
+            "OR json_extract(intent.request_fingerprint, '\$.memberId') IS NOT link.member_id "
+            "OR json_extract(intent.request_fingerprint, '\$.memberCardRevision') IS NOT link.card_revision "
+            'LIMIT 1',
+          )
+          .isNotEmpty) {
+        return false;
+      }
+      return connection
+          .select(
+            'SELECT 1 FROM shop_wallet_checkout_intents AS intent '
+            'LEFT JOIN shop_wallet_checkout_member_links AS link '
+            'ON link.operation_id = intent.operation_id '
+            'WHERE link.operation_id IS NULL '
+            'AND json_valid(intent.request_fingerprint) AND ('
+            "json_type(intent.request_fingerprint, '\$.memberId') IS NOT NULL "
+            "OR json_type(intent.request_fingerprint, '\$.memberCardRevision') IS NOT NULL) "
+            'LIMIT 1',
+          )
+          .isEmpty;
+    } on SqliteException {
       return false;
     }
   }

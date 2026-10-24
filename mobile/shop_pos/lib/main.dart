@@ -818,6 +818,13 @@ class ShopHome extends StatefulWidget {
   State<ShopHome> createState() => _ShopHomeState();
 }
 
+class _SelectedMemberCard {
+  const _SelectedMemberCard({required this.token, required this.match});
+
+  final String token;
+  final ShopMemberCardMatch match;
+}
+
 class _ShopHomeState extends State<ShopHome> {
   static const _minSplitContentWidth = 740.0;
 
@@ -851,6 +858,7 @@ class _ShopHomeState extends State<ShopHome> {
   bool _recoveredDraftNeedsReview = false;
   Future<void> _draftWrites = Future<void>.value();
   PendingWalletCheckout? _pendingWalletCheckout;
+  _SelectedMemberCard? _selectedMemberCard;
   List<HeldSaleTicket> _heldTickets = const [];
   XFile? _recoveredMenuPhoto;
   final _thumbnailFutures = <String, Future<Uint8List?>>{};
@@ -1099,6 +1107,9 @@ class _ShopHomeState extends State<ShopHome> {
       setState(() {
         _pendingWalletCheckout = pending;
         _heldTickets = heldTickets;
+        // A member belongs only to the basket in which it was selected. Any
+        // recovered, held, or replacement checkout must start unselected.
+        _selectedMemberCard = null;
         _cart.clear();
         if (draft != null) _cart.addAll(draft.quantities);
         _operationId = draft?.operationId;
@@ -1521,6 +1532,18 @@ class _ShopHomeState extends State<ShopHome> {
             ),
             const SizedBox(height: 4),
             Text('$provider · ${_mmk(checkout.totalMmk)}'),
+            if (checkout.member case final member?) ...[
+              const SizedBox(height: 4),
+              Text(
+                shopCopy(
+                  widget.myanmar,
+                  'Member ${member.displayCode} · identification only',
+                  'အသင်းဝင် ${member.displayCode} · မှတ်တမ်းခွဲခြားရန်သာ',
+                ),
+                key: const ValueKey('shop-pending-wallet-member'),
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
             const SizedBox(height: 8),
             _savedWalletLines(
               context,
@@ -1903,6 +1926,16 @@ class _ShopHomeState extends State<ShopHome> {
     if (!_canAcceptScan) return;
     final code = value.trim();
     if (code.isEmpty) return;
+    if (code.toUpperCase().startsWith('SMC1.')) {
+      _message(
+        shopCopy(
+          widget.myanmar,
+          'Use Add member in checkout for member cards.',
+          'အဖွဲ့ဝင်ကတ်ကို ငွေရှင်းရာရှိ အဖွဲ့ဝင်ထည့်ရန် ခလုတ်မှ သုံးပါ။',
+        ),
+      );
+      return;
+    }
     final matches = products
         .where((item) => item.barcode == code || item.sku == code)
         .toList();
@@ -2519,14 +2552,51 @@ class _ShopHomeState extends State<ShopHome> {
                 style: _shopMoneyStyle(context, total: true),
                 textAlign: TextAlign.right,
               );
+              if (_pendingWalletCheckout == null &&
+                  _selectedMemberCard != null) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (constraints.maxWidth < 420) ...[
+                      label,
+                      const SizedBox(height: 4),
+                      Align(alignment: Alignment.centerRight, child: amount),
+                    ] else
+                      Row(
+                        children: [
+                          Expanded(child: label),
+                          amount,
+                        ],
+                      ),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: _memberCardSelector(refresh: refresh),
+                    ),
+                  ],
+                );
+              }
               if (constraints.maxWidth < 320) {
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [label, const SizedBox(height: 4), amount],
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(child: label),
+                        if (_pendingWalletCheckout == null)
+                          _memberCardSelector(refresh: refresh),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    amount,
+                  ],
                 );
               }
               return Row(
                 children: [
+                  if (_pendingWalletCheckout == null) ...[
+                    _memberCardSelector(refresh: refresh),
+                    const SizedBox(width: 4),
+                  ],
                   Expanded(child: label),
                   amount,
                 ],
@@ -2744,6 +2814,7 @@ class _ShopHomeState extends State<ShopHome> {
     if (next.isEmpty) {
       _recoveredDraft = false;
       _recoveredDraftNeedsReview = false;
+      _selectedMemberCard = null;
     }
     if (mounted) setState(() {});
     refresh?.call(() {});
@@ -2815,6 +2886,7 @@ class _ShopHomeState extends State<ShopHome> {
       );
       await _loadCheckoutState();
       if (!mounted) return;
+      refresh?.call(() {});
       if (refresh != null && _checkoutReady) Navigator.of(context).pop();
       _message(
         shopCopy(
@@ -3195,8 +3267,155 @@ class _ShopHomeState extends State<ShopHome> {
   void _clearCart() {
     _cart.clear();
     _operationId = null;
+    _selectedMemberCard = null;
     _recoveredDraft = false;
     _recoveredDraftNeedsReview = false;
+  }
+
+  Future<void> _selectMemberCard({StateSetter? refresh}) async {
+    var enteredToken = '';
+    var checking = false;
+    String? error;
+    final selected = await showDialog<_SelectedMemberCard>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, update) {
+          Future<void> submit() async {
+            if (checking) return;
+            final token = enteredToken.trim();
+            update(() {
+              checking = true;
+              error = null;
+            });
+            try {
+              final match = await widget.database.lookupActiveMemberCard(token);
+              if (!dialogContext.mounted) return;
+              if (match == null) {
+                error = shopCopy(
+                  widget.myanmar,
+                  'This member card is unknown, replaced or revoked.',
+                  'ဤအသင်းဝင်ကတ်ကို မသိပါ၊ အစားထိုးထားပါသည် သို့မဟုတ် ပိတ်ထားပါသည်။',
+                );
+                return;
+              }
+              Navigator.of(dialogContext)
+                  .pop(_SelectedMemberCard(token: token, match: match));
+            } catch (_) {
+              if (dialogContext.mounted) {
+                error = shopCopy(
+                  widget.myanmar,
+                  'Could not check this member card. Try again.',
+                  'ဤအသင်းဝင်ကတ်ကို မစစ်နိုင်ပါ။ ထပ်ကြိုးစားပါ။',
+                );
+              }
+            } finally {
+              if (dialogContext.mounted) {
+                update(() => checking = false);
+              }
+            }
+          }
+
+          return AlertDialog(
+            title: Text(
+              shopCopy(
+                widget.myanmar,
+                'Add member to this sale',
+                'ဤအရောင်းတွင် အသင်းဝင်ထည့်ရန်',
+              ),
+            ),
+            content: Focus(
+              skipTraversal: true,
+              canRequestFocus: false,
+              onKeyEvent: (_, event) {
+                final token = enteredToken.trim();
+                if (event is KeyDownEvent &&
+                    event.logicalKey == LogicalKeyboardKey.tab &&
+                    RegExp(r'^SMC1\.[A-Za-z0-9_-]{43}$').hasMatch(token)) {
+                  unawaited(submit());
+                  return KeyEventResult.handled;
+                }
+                return KeyEventResult.ignored;
+              },
+              child: TextField(
+                key: const ValueKey('shop-member-card-input'),
+                autofocus: true,
+                enabled: !checking,
+                autocorrect: false,
+                enableSuggestions: false,
+                textInputAction: TextInputAction.done,
+                onChanged: (value) => enteredToken = value,
+                onSubmitted: (_) => submit(),
+                decoration: InputDecoration(
+                  labelText: shopCopy(
+                    widget.myanmar,
+                    'Scan member card',
+                    'အသင်းဝင်ကတ်ကို စကင်ဖတ်ပါ',
+                  ),
+                  helperText: shopCopy(
+                    widget.myanmar,
+                    'Member cards identify a record only. They cannot take payment.',
+                    'အသင်းဝင်ကတ်သည် မှတ်တမ်းကိုသာ ခွဲခြားသည်။ ငွေပေးချေမှု မလုပ်နိုင်ပါ။',
+                  ),
+                  errorText: error,
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: checking
+                    ? null
+                    : () => Navigator.of(dialogContext).pop(),
+                child: Text(shopCopy(widget.myanmar, 'Cancel', 'မလုပ်တော့ပါ')),
+              ),
+              FilledButton(
+                key: const ValueKey('shop-member-card-apply'),
+                onPressed: checking ? null : submit,
+                child: checking
+                    ? const SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Text(shopCopy(widget.myanmar, 'Use card', 'ကတ်သုံးရန်')),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    if (!mounted || selected == null) return;
+    setState(() => _selectedMemberCard = selected);
+    refresh?.call(() {});
+  }
+
+  Widget _memberCardSelector({StateSetter? refresh}) {
+    final selected = _selectedMemberCard;
+    if (selected == null) {
+      return IconButton(
+        key: const ValueKey('shop-select-member-card'),
+        tooltip: shopCopy(widget.myanmar, 'Add member', 'အသင်းဝင်ထည့်ရန်'),
+        onPressed: _saving || _walletStarting || _cashConfirming
+            ? null
+            : () => _selectMemberCard(refresh: refresh),
+        icon: const Icon(Icons.badge_outlined),
+      );
+    }
+    return InputChip(
+      key: const ValueKey('shop-selected-member-card'),
+      avatar: const Icon(Icons.badge_outlined, size: 18),
+      label: Text(selected.match.member.displayCode),
+      tooltip: shopCopy(widget.myanmar, 'Member', 'အသင်းဝင်'),
+      onDeleted: _saving || _walletStarting || _cashConfirming
+          ? null
+          : () {
+              setState(() => _selectedMemberCard = null);
+              refresh?.call(() {});
+            },
+      deleteButtonTooltipMessage: shopCopy(
+        widget.myanmar,
+        'Remove member',
+        'အသင်းဝင်ဖယ်ရန်',
+      ),
+    );
   }
 
   Future<void> _confirmCashSale({
@@ -3379,6 +3598,7 @@ class _ShopHomeState extends State<ShopHome> {
       }
       await _completeSale(
         closeSheet: closeSheet,
+        memberCardToken: _selectedMemberCard?.token,
         expectedTotalMmk: totalMmk,
         expectedUnitPricesMmk: {
           for (final id in selected.keys) id: currentById[id]!.priceMmk,
@@ -3487,9 +3707,15 @@ class _ShopHomeState extends State<ShopHome> {
           for (final entry in _cart.entries)
             ShopSaleLineInput(productId: entry.key, quantity: entry.value),
         ],
+        memberCardToken: _selectedMemberCard?.token,
       );
       if (!mounted) return;
-      setState(() => _pendingWalletCheckout = intent);
+      setState(() {
+        _pendingWalletCheckout = intent;
+        // The durable intent now owns the association. Do not retain a raw
+        // card token in widget state after it has been persisted by digest.
+        _selectedMemberCard = null;
+      });
       refresh?.call(() {});
       await _showWalletCheckout(intent, selected, closeSheet: closeSheet);
     } catch (error) {
@@ -3724,6 +3950,7 @@ class _ShopHomeState extends State<ShopHome> {
       if (!mounted || !cancelled) return;
       setState(() {
         _pendingWalletCheckout = null;
+        _selectedMemberCard = null;
         _cart
           ..clear()
           ..addEntries(
@@ -3757,6 +3984,7 @@ class _ShopHomeState extends State<ShopHome> {
     required bool closeSheet,
     String paymentMethod = 'cash',
     String? walletCheckoutOperationId,
+    String? memberCardToken,
     int? expectedTotalMmk,
     Map<String, int>? expectedUnitPricesMmk,
     Map<String, String>? expectedProductNames,
@@ -3782,6 +4010,7 @@ class _ShopHomeState extends State<ShopHome> {
         operationId: operationId,
         paymentMethod: paymentMethod,
         walletCheckoutOperationId: walletCheckoutOperationId,
+        memberCardToken: memberCardToken,
         expectedTotalMmk: expectedTotalMmk,
         expectedUnitPricesMmk: expectedUnitPricesMmk,
         expectedProductNames: expectedProductNames,
@@ -4014,7 +4243,10 @@ class _ShopHomeState extends State<ShopHome> {
                         )
                         ? 80
                         : 0) +
-                    (_pendingWalletCheckout == null ? 0 : 160)) *
+                    // The optional member control shares the totals row but
+                    // retains a 48px touch target. Budget that real control so
+                    // checkout actions stay reachable on a short phone.
+                    (_pendingWalletCheckout == null ? 48 : 160)) *
                 textScale;
             final height = phone
                 ? contentHeight.clamp(320.0, maxHeight).toDouble()

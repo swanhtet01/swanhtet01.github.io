@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
@@ -164,6 +165,7 @@ class ShopSaleReceipt {
     required this.paymentMethod,
     this.lines = const [],
     this.reversal,
+    this.member,
   });
 
   final String id;
@@ -173,6 +175,48 @@ class ShopSaleReceipt {
   final String paymentMethod;
   final List<ShopSaleReceiptLine> lines;
   final ShopSaleReversal? reversal;
+  final ShopSaleMember? member;
+}
+
+/// A PII-free Shop member identity associated with a completed sale.
+///
+/// The display code is for recognition only. It is never payment, redemption,
+/// account, or management authority.
+class ShopMember {
+  const ShopMember({
+    required this.id,
+    required this.displayCode,
+    required this.status,
+    required this.createdAtMillis,
+    required this.updatedAtMillis,
+  });
+
+  final String id;
+  final String displayCode;
+  final String status;
+  final int createdAtMillis;
+  final int updatedAtMillis;
+}
+
+class ShopMemberCardMatch {
+  const ShopMemberCardMatch({required this.member, required this.cardRevision});
+
+  final ShopMember member;
+  final int cardRevision;
+}
+
+class ShopSaleMember {
+  const ShopSaleMember({
+    required this.memberId,
+    required this.displayCode,
+    required this.cardRevision,
+    required this.associatedAtMillis,
+  });
+
+  final String memberId;
+  final String displayCode;
+  final int cardRevision;
+  final int associatedAtMillis;
 }
 
 class ShopSaleReceiptLine {
@@ -518,6 +562,7 @@ class PendingWalletCheckout {
     required this.lines,
     required this.state,
     required this.createdAtMillis,
+    this.member,
   });
 
   final String operationId;
@@ -529,6 +574,7 @@ class PendingWalletCheckout {
   final List<WalletCheckoutLineSnapshot> lines;
   final String state;
   final int createdAtMillis;
+  final ShopSaleMember? member;
 }
 
 const shopSaleReversalsV11Sql = '''
@@ -712,6 +758,164 @@ const shopMigrationProvenanceV13Sql = '''
       reason = 'legacy_unbound_correction_history'
     )
   )
+''';
+
+const shopStoreIdentityV16Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_store_identity (
+    singleton INTEGER PRIMARY KEY NOT NULL CHECK (singleton = 1),
+    store_ref TEXT NOT NULL UNIQUE CHECK (
+      typeof(store_ref) = 'text'
+      AND length(store_ref) = 64
+      AND store_ref NOT GLOB '*[^0-9a-f]*'
+    ),
+    created_at_millis INTEGER NOT NULL CHECK (
+      typeof(created_at_millis) = 'integer' AND created_at_millis > 0
+    )
+  )
+''';
+
+const shopMembersV16Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_members (
+    id TEXT PRIMARY KEY NOT NULL CHECK (
+      typeof(id) = 'text'
+      AND length(id) = 36
+      AND substr(id, 1, 4) = 'mem_'
+      AND substr(id, 5) NOT GLOB '*[^0-9a-f]*'
+    ),
+    store_ref TEXT NOT NULL REFERENCES shop_store_identity(store_ref),
+    display_code TEXT NOT NULL UNIQUE CHECK (
+      typeof(display_code) = 'text'
+      AND length(display_code) BETWEEN 6 AND 20
+      AND display_code NOT GLOB '*[^0-9]*'
+    ),
+    status TEXT NOT NULL CHECK (status IN ('active', 'revoked')),
+    created_at_millis INTEGER NOT NULL CHECK (
+      typeof(created_at_millis) = 'integer' AND created_at_millis > 0
+    ),
+    updated_at_millis INTEGER NOT NULL CHECK (
+      typeof(updated_at_millis) = 'integer'
+      AND updated_at_millis >= created_at_millis
+    )
+  )
+''';
+
+const shopMemberCardsV16Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_member_cards (
+    token_digest TEXT PRIMARY KEY NOT NULL CHECK (
+      typeof(token_digest) = 'text'
+      AND length(token_digest) = 64
+      AND token_digest NOT GLOB '*[^0-9a-f]*'
+    ),
+    member_id TEXT NOT NULL REFERENCES shop_members(id),
+    revision INTEGER NOT NULL CHECK (
+      typeof(revision) = 'integer' AND revision >= 1
+    ),
+    state TEXT NOT NULL CHECK (state IN ('active', 'retired', 'revoked')),
+    issued_at_millis INTEGER NOT NULL CHECK (
+      typeof(issued_at_millis) = 'integer' AND issued_at_millis > 0
+    ),
+    retired_at_millis INTEGER CHECK (
+      retired_at_millis IS NULL OR (
+        typeof(retired_at_millis) = 'integer'
+        AND retired_at_millis >= issued_at_millis
+      )
+    ),
+    UNIQUE(member_id, revision),
+    CHECK (
+      (state = 'active' AND retired_at_millis IS NULL)
+      OR (state IN ('retired', 'revoked') AND retired_at_millis IS NOT NULL)
+    )
+  )
+''';
+
+const shopSaleMemberLinksV16Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_sale_member_links (
+    sale_id TEXT PRIMARY KEY NOT NULL REFERENCES shop_sales(id),
+    member_id TEXT NOT NULL REFERENCES shop_members(id),
+    card_revision INTEGER NOT NULL CHECK (
+      typeof(card_revision) = 'integer' AND card_revision >= 1
+    ),
+    display_code TEXT NOT NULL CHECK (
+      typeof(display_code) = 'text'
+      AND length(display_code) BETWEEN 6 AND 20
+      AND display_code NOT GLOB '*[^0-9]*'
+    ),
+    associated_at_millis INTEGER NOT NULL CHECK (
+      typeof(associated_at_millis) = 'integer' AND associated_at_millis > 0
+    )
+  )
+''';
+
+const shopWalletCheckoutMemberLinksV16Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_wallet_checkout_member_links (
+    operation_id TEXT PRIMARY KEY NOT NULL
+      REFERENCES shop_wallet_checkout_intents(operation_id),
+    member_id TEXT NOT NULL REFERENCES shop_members(id),
+    card_revision INTEGER NOT NULL CHECK (
+      typeof(card_revision) = 'integer' AND card_revision >= 1
+    ),
+    display_code TEXT NOT NULL CHECK (
+      typeof(display_code) = 'text'
+      AND length(display_code) BETWEEN 6 AND 20
+      AND display_code NOT GLOB '*[^0-9]*'
+    ),
+    associated_at_millis INTEGER NOT NULL CHECK (
+      typeof(associated_at_millis) = 'integer' AND associated_at_millis > 0
+    )
+  )
+''';
+
+const shopStoreIdentitySingleRowV16Sql = '''
+  CREATE TRIGGER IF NOT EXISTS shop_store_identity_single_row
+  BEFORE INSERT ON shop_store_identity
+  WHEN EXISTS (SELECT 1 FROM shop_store_identity)
+  BEGIN
+    SELECT RAISE(ABORT, 'Shop store identity is a singleton');
+  END
+''';
+
+const shopSaleMemberLinksRequireActiveCardV16Sql = '''
+  CREATE TRIGGER IF NOT EXISTS shop_sale_member_links_require_active_card
+  BEFORE INSERT ON shop_sale_member_links
+  WHEN NOT EXISTS (
+    SELECT 1
+    FROM shop_members AS member
+    JOIN shop_member_cards AS card ON card.member_id = member.id
+    WHERE member.id = NEW.member_id
+      AND member.status = 'active'
+      AND member.display_code = NEW.display_code
+      AND card.revision = NEW.card_revision
+      AND card.state = 'active'
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM shop_wallet_checkout_member_links AS wallet_link
+    WHERE wallet_link.operation_id = NEW.sale_id
+      AND wallet_link.member_id = NEW.member_id
+      AND wallet_link.card_revision = NEW.card_revision
+      AND wallet_link.display_code = NEW.display_code
+  )
+  BEGIN
+    SELECT RAISE(ABORT, 'Shop sale member card is not active');
+  END
+''';
+
+const shopWalletMemberLinksRequireActiveCardV16Sql = '''
+  CREATE TRIGGER IF NOT EXISTS shop_wallet_member_links_require_active_card
+  BEFORE INSERT ON shop_wallet_checkout_member_links
+  WHEN NOT EXISTS (
+    SELECT 1
+    FROM shop_members AS member
+    JOIN shop_member_cards AS card ON card.member_id = member.id
+    WHERE member.id = NEW.member_id
+      AND member.status = 'active'
+      AND member.display_code = NEW.display_code
+      AND card.revision = NEW.card_revision
+      AND card.state = 'active'
+  )
+  BEGIN
+    SELECT RAISE(ABORT, 'Shop wallet member card is not active');
+  END
 ''';
 
 const shopCorrectionAuthorizationProofKindSignedV2 = 'signed_v2';
@@ -1045,7 +1249,7 @@ const shopHeldSaleColumnsV10 = {
 };
 
 Map<String, Set<String>> shopBaseTableColumnsForVersion(int schemaVersion) {
-  if (schemaVersion < 6 || schemaVersion > 15) return const {};
+  if (schemaVersion < 6 || schemaVersion > 16) return const {};
   return <String, Set<String>>{
     for (final entry in shopBaseTableColumnsV6.entries)
       entry.key: <String>{
@@ -1197,6 +1401,69 @@ shopAuthorizationProofSchemaDefinitionsV15() => <String, String>{
       ),
 };
 
+Map<String, String> shopMemberSchemaDefinitionsV16() => <String, String>{
+  'shop_store_identity': shopStoreIdentityV16Sql,
+  'shop_members': shopMembersV16Sql,
+  'shop_member_cards': shopMemberCardsV16Sql,
+  'shop_sale_member_links': shopSaleMemberLinksV16Sql,
+  'shop_wallet_checkout_member_links': shopWalletCheckoutMemberLinksV16Sql,
+  'shop_store_identity_single_row': shopStoreIdentitySingleRowV16Sql,
+  'shop_store_identity_no_update': shopImmutableTriggerV11Sql(
+    table: 'shop_store_identity',
+    operation: 'update',
+    message: 'Shop store identity is immutable',
+  ),
+  'shop_store_identity_no_delete': shopImmutableTriggerV11Sql(
+    table: 'shop_store_identity',
+    operation: 'delete',
+    message: 'Shop store identity is immutable',
+  ),
+  'shop_members_no_update': shopImmutableTriggerV11Sql(
+    table: 'shop_members',
+    operation: 'update',
+    message: 'Shop member identities are immutable in schema v16',
+  ),
+  'shop_members_no_delete': shopImmutableTriggerV11Sql(
+    table: 'shop_members',
+    operation: 'delete',
+    message: 'Shop member identities are immutable',
+  ),
+  'shop_member_cards_no_update': shopImmutableTriggerV11Sql(
+    table: 'shop_member_cards',
+    operation: 'update',
+    message: 'Shop member card history is immutable',
+  ),
+  'shop_member_cards_no_delete': shopImmutableTriggerV11Sql(
+    table: 'shop_member_cards',
+    operation: 'delete',
+    message: 'Shop member card history is immutable',
+  ),
+  'shop_sale_member_links_require_active_card':
+      shopSaleMemberLinksRequireActiveCardV16Sql,
+  'shop_sale_member_links_no_update': shopImmutableTriggerV11Sql(
+    table: 'shop_sale_member_links',
+    operation: 'update',
+    message: 'Completed Shop sale member links are immutable',
+  ),
+  'shop_sale_member_links_no_delete': shopImmutableTriggerV11Sql(
+    table: 'shop_sale_member_links',
+    operation: 'delete',
+    message: 'Completed Shop sale member links are immutable',
+  ),
+  'shop_wallet_member_links_require_active_card':
+      shopWalletMemberLinksRequireActiveCardV16Sql,
+  'shop_wallet_checkout_member_links_no_update': shopImmutableTriggerV11Sql(
+    table: 'shop_wallet_checkout_member_links',
+    operation: 'update',
+    message: 'Shop wallet member links are immutable',
+  ),
+  'shop_wallet_checkout_member_links_no_delete': shopImmutableTriggerV11Sql(
+    table: 'shop_wallet_checkout_member_links',
+    operation: 'delete',
+    message: 'Shop wallet member links are immutable',
+  ),
+};
+
 String canonicalShopSchemaSql(String value) {
   final output = StringBuffer();
   final ifNotExists = RegExp(r'if\s+not\s+exists\b', caseSensitive: false);
@@ -1257,6 +1524,7 @@ enum _ShopUpgradeOrigin {
   profileWorkspaceCollisionV12,
   unifiedV13,
   unifiedV14,
+  unifiedV15,
 }
 
 enum _ColumnGroupState { none, partial, exact }
@@ -1316,7 +1584,7 @@ class ShopDatabase extends _$ShopDatabase {
           .customSelect('PRAGMA user_version')
           .getSingle();
       if (row.read<int>('user_version') != database.schemaVersion) {
-        throw StateError('The staged Shop restore did not reach schema v15.');
+        throw StateError('The staged Shop restore did not reach schema v16.');
       }
     } finally {
       await database.close();
@@ -1351,7 +1619,7 @@ class ShopDatabase extends _$ShopDatabase {
   final ShopCorrectionReceiptVerifier correctionReceiptVerifier;
 
   @override
-  int get schemaVersion => 15;
+  int get schemaVersion => 16;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -1368,7 +1636,8 @@ class ShopDatabase extends _$ShopDatabase {
       await _createBusinessProfileTable();
       await _createMigrationProvenanceTable();
       await _createCorrectionAuthorizationProofLedgerV15();
-      await _requireUnifiedV15Schema();
+      await _createMemberSchemaV16();
+      await _requireUnifiedV16Schema();
     }),
     onUpgrade: (migrator, from, to) => transaction(() async {
       // Version 11 has two historical meanings. Classify the complete reserved
@@ -1493,14 +1762,16 @@ class ShopDatabase extends _$ShopDatabase {
       }
       await _migrateCorrectionAuthorizationProofLedgerV15();
       await _requireUnifiedV15Schema();
+      await _createMemberSchemaV16();
+      await _requireUnifiedV16Schema();
     }),
     beforeOpen: (_) async {
       await customStatement('PRAGMA foreign_keys = ON');
-      await _requireUnifiedV15Schema();
+      await _requireUnifiedV16Schema();
     },
   );
 
-  Future<void> verifyReadyForUse() => _requireUnifiedV15Schema();
+  Future<void> verifyReadyForUse() => _requireUnifiedV16Schema();
 
   Future<void> _createWalletCheckoutTable({bool includeQrSnapshot = true}) {
     final qrSnapshotColumns = includeQrSnapshot
@@ -1591,6 +1862,45 @@ class ShopDatabase extends _$ShopDatabase {
 
   Future<void> _createBusinessProfileTable() =>
       customStatement(shopBusinessProfileV11Sql);
+
+  static String _newStoreRef() {
+    final random = Random.secure();
+    return List<int>.generate(
+      32,
+      (_) => random.nextInt(256),
+    ).map((value) => value.toRadixString(16).padLeft(2, '0')).join();
+  }
+
+  Future<void> _createMemberSchemaV16() async {
+    await customStatement(shopStoreIdentityV16Sql);
+    await customStatement(shopMembersV16Sql);
+    await customStatement(shopMemberCardsV16Sql);
+    await customStatement(shopSaleMemberLinksV16Sql);
+    await customStatement(shopWalletCheckoutMemberLinksV16Sql);
+    final rows = await customSelect('SELECT singleton FROM shop_store_identity')
+        .get();
+    if (rows.isEmpty) {
+      await customInsert(
+        'INSERT INTO shop_store_identity '
+        '(singleton, store_ref, created_at_millis) VALUES (1, ?, ?)',
+        variables: [
+          Variable<String>(_newStoreRef()),
+          Variable<int>(DateTime.now().millisecondsSinceEpoch),
+        ],
+      );
+    }
+    final definitions = shopMemberSchemaDefinitionsV16();
+    for (final entry in definitions.entries) {
+      if (entry.key == 'shop_store_identity' ||
+          entry.key == 'shop_members' ||
+          entry.key == 'shop_member_cards' ||
+          entry.key == 'shop_sale_member_links' ||
+          entry.key == 'shop_wallet_checkout_member_links') {
+        continue;
+      }
+      await customStatement(entry.value);
+    }
+  }
 
   Future<void> _createMigrationProvenanceTable() =>
       customStatement(shopMigrationProvenanceV13Sql);
@@ -2346,8 +2656,12 @@ class ShopDatabase extends _$ShopDatabase {
   }
 
   Future<_ShopUpgradeOrigin> _classifyUpgradeOrigin(int from) async {
-    if (from < 1 || from > 14) {
-      throw StateError('This Shop database version cannot migrate to v15.');
+    if (from < 1 || from > 15) {
+      throw StateError('This Shop database version cannot migrate to v16.');
+    }
+    if (from == 15) {
+      await _requireUnifiedV15Schema();
+      return _ShopUpgradeOrigin.unifiedV15;
     }
     if (from == 14) {
       await _requireUnifiedV14Schema();
@@ -2678,6 +2992,217 @@ class ShopDatabase extends _$ShopDatabase {
     if (!valid) {
       throw StateError('The unified Shop v15 schema failed verification.');
     }
+  }
+
+  Future<void> _requireUnifiedV16Schema() async {
+    await _requireDatabaseIntegrity();
+    final objects = await _readSchemaObjects();
+    final auditDefinitions = shopReversalSchemaDefinitionsV11();
+    final workspaceDefinitions = shopWorkspaceSchemaDefinitionsV12();
+    final proofDefinitions = shopAuthorizationProofSchemaDefinitionsV15();
+    final memberDefinitions = shopMemberSchemaDefinitionsV16();
+    final expectedTriggers = <String>{
+      for (final definitions in [
+        auditDefinitions,
+        workspaceDefinitions,
+        proofDefinitions,
+        memberDefinitions,
+      ])
+        for (final entry in definitions.entries)
+          if (canonicalShopSchemaSql(entry.value).startsWith('create trigger'))
+            entry.key,
+    };
+    final actualTriggers = objects.entries
+        .where((entry) => entry.value.type == 'trigger')
+        .map((entry) => entry.key)
+        .toSet();
+    final expectedNames = {
+      ..._expectedSchemaObjectNames(16),
+      ...auditDefinitions.keys,
+      ...workspaceDefinitions.keys,
+      ...proofDefinitions.keys,
+      ...memberDefinitions.keys,
+      'shop_business_profile',
+      'shop_v13_migration_provenance',
+    };
+    final valid =
+        objects.values.every((object) => object.type != 'view') &&
+        await _baseSchemaExact(16, objects) &&
+        _sameSchemaObjectNames(objects, expectedNames) &&
+        await _reversalCashColumnState() == _ColumnGroupState.exact &&
+        _definitionGroupExact(
+          objects,
+          auditDefinitions,
+          auditDefinitions.keys.toSet(),
+        ) &&
+        _definitionGroupExact(
+          objects,
+          workspaceDefinitions,
+          workspaceDefinitions.keys.toSet(),
+        ) &&
+        _definitionGroupExact(
+          objects,
+          proofDefinitions,
+          proofDefinitions.keys.toSet(),
+        ) &&
+        _definitionGroupExact(
+          objects,
+          memberDefinitions,
+          memberDefinitions.keys.toSet(),
+        ) &&
+        _definitionGroupExact(
+          objects,
+          const {'shop_business_profile': shopBusinessProfileV11Sql},
+          const {'shop_business_profile'},
+        ) &&
+        _definitionGroupExact(
+          objects,
+          const {
+            'shop_v13_migration_provenance': shopMigrationProvenanceV13Sql,
+          },
+          const {'shop_v13_migration_provenance'},
+        ) &&
+        await _businessProfileRowsValid() &&
+        await _v14WorkspaceBindingRowsValid() &&
+        await _v15CorrectionAuthorizationProofsValid() &&
+        await _v16MemberRowsValid() &&
+        actualTriggers.length == expectedTriggers.length &&
+        actualTriggers.containsAll(expectedTriggers);
+    if (!valid) {
+      throw StateError('The unified Shop v16 schema failed verification.');
+    }
+  }
+
+  Future<bool> _v16MemberRowsValid() async {
+    final stores = await customSelect(
+      'SELECT singleton, store_ref, created_at_millis FROM shop_store_identity',
+    ).get();
+    if (stores.length != 1) return false;
+    final storeRef = stores.single.read<String>('store_ref');
+    final hex = RegExp(r'^[0-9a-f]{64}$');
+    if (stores.single.read<int>('singleton') != 1 ||
+        !hex.hasMatch(storeRef) ||
+        stores.single.read<int>('created_at_millis') <= 0) {
+      return false;
+    }
+    final badMember = await customSelect(
+      'SELECT 1 FROM shop_members WHERE store_ref != ? '
+      "OR id NOT GLOB 'mem_[0-9a-f]*' OR length(id) != 36 "
+      "OR display_code GLOB '*[^0-9]*' "
+      'OR length(display_code) < 6 OR length(display_code) > 20 '
+      "OR status NOT IN ('active', 'revoked') "
+      'OR created_at_millis <= 0 OR updated_at_millis < created_at_millis '
+      'LIMIT 1',
+      variables: [Variable<String>(storeRef)],
+    ).getSingleOrNull();
+    if (badMember != null) return false;
+    final badCard = await customSelect(
+      'SELECT 1 FROM shop_member_cards AS card '
+      'LEFT JOIN shop_members AS member ON member.id = card.member_id '
+      'WHERE member.id IS NULL OR length(card.token_digest) != 64 '
+      "OR card.token_digest GLOB '*[^0-9a-f]*' "
+      'OR card.revision < 1 OR card.issued_at_millis <= 0 '
+      "OR card.state NOT IN ('active', 'retired', 'revoked') "
+      "OR (card.state = 'active' AND card.retired_at_millis IS NOT NULL) "
+      "OR (card.state != 'active' AND card.retired_at_millis IS NULL) "
+      "OR (card.state = 'active' AND member.status != 'active') "
+      "OR (card.state = 'active' AND card.revision != (SELECT MAX(latest.revision) "
+      'FROM shop_member_cards AS latest WHERE latest.member_id = card.member_id) '
+      ') '
+      'LIMIT 1',
+    ).getSingleOrNull();
+    if (badCard != null) return false;
+    final duplicateActive = await customSelect(
+      "SELECT 1 FROM shop_member_cards WHERE state = 'active' "
+      'GROUP BY member_id HAVING COUNT(*) > 1 LIMIT 1',
+    ).getSingleOrNull();
+    if (duplicateActive != null) return false;
+    final badRevisionHistory = await customSelect(
+      'SELECT 1 FROM shop_member_cards AS card '
+      'WHERE card.revision != (SELECT COUNT(*) FROM shop_member_cards AS prior '
+      'WHERE prior.member_id = card.member_id '
+      'AND prior.revision <= card.revision) '
+      'OR EXISTS (SELECT 1 FROM shop_member_cards AS earlier '
+      'WHERE earlier.member_id = card.member_id '
+      'AND earlier.revision < card.revision '
+      'AND earlier.issued_at_millis >= card.issued_at_millis) '
+      'LIMIT 1',
+    ).getSingleOrNull();
+    if (badRevisionHistory != null) return false;
+    final reservedCatalogCode = await customSelect(
+      "SELECT 1 FROM shop_products WHERE upper(COALESCE(barcode, '')) LIKE 'SMC1.%' "
+      "OR upper(COALESCE(sku, '')) LIKE 'SMC1.%' LIMIT 1",
+    ).getSingleOrNull();
+    if (reservedCatalogCode != null) return false;
+    final badLink = await customSelect(
+      'SELECT 1 FROM shop_sale_member_links AS link '
+      'LEFT JOIN shop_sales AS sale ON sale.id = link.sale_id '
+      'LEFT JOIN shop_sync_outbox AS event '
+      'ON event.operation_id = sale.operation_id '
+      'LEFT JOIN shop_members AS member ON member.id = link.member_id '
+      'LEFT JOIN shop_member_cards AS card '
+      'ON card.member_id = link.member_id '
+      'AND card.revision = link.card_revision '
+      'WHERE sale.id IS NULL OR member.id IS NULL OR card.member_id IS NULL '
+      'OR member.display_code != link.display_code '
+      'OR link.associated_at_millis != sale.created_at_millis '
+      "OR json_extract(sale.request_fingerprint, '\$.memberId') IS NOT link.member_id "
+      "OR json_extract(sale.request_fingerprint, '\$.memberCardRevision') IS NOT link.card_revision "
+      'OR event.operation_id IS NULL '
+      "OR json_extract(event.payload_json, '\$.memberId') IS NOT link.member_id "
+      "OR json_extract(event.payload_json, '\$.memberCardRevision') IS NOT link.card_revision "
+      "OR (sale.payment_method != 'cash' AND NOT EXISTS ("
+      'SELECT 1 FROM shop_wallet_checkout_member_links AS wallet_link '
+      'WHERE wallet_link.operation_id = sale.operation_id '
+      'AND wallet_link.member_id = link.member_id '
+      'AND wallet_link.card_revision = link.card_revision '
+      'AND wallet_link.display_code = link.display_code)) '
+      'LIMIT 1',
+    ).getSingleOrNull();
+    if (badLink != null) return false;
+    final missingSaleLink = await customSelect(
+      'SELECT 1 FROM shop_sales AS sale '
+      'LEFT JOIN shop_sync_outbox AS event '
+      'ON event.operation_id = sale.operation_id '
+      'LEFT JOIN shop_sale_member_links AS link ON link.sale_id = sale.id '
+      'WHERE link.sale_id IS NULL AND ('
+      "(json_valid(sale.request_fingerprint) AND ("
+      "json_type(sale.request_fingerprint, '\$.memberId') IS NOT NULL "
+      "OR json_type(sale.request_fingerprint, '\$.memberCardRevision') IS NOT NULL)) "
+      "OR (json_valid(event.payload_json) AND ("
+      "json_type(event.payload_json, '\$.memberId') IS NOT NULL "
+      "OR json_type(event.payload_json, '\$.memberCardRevision') IS NOT NULL))) "
+      'LIMIT 1',
+    ).getSingleOrNull();
+    if (missingSaleLink != null) return false;
+    final badWalletLink = await customSelect(
+      'SELECT 1 FROM shop_wallet_checkout_member_links AS link '
+      'LEFT JOIN shop_wallet_checkout_intents AS intent '
+      'ON intent.operation_id = link.operation_id '
+      'LEFT JOIN shop_members AS member ON member.id = link.member_id '
+      'LEFT JOIN shop_member_cards AS card '
+      'ON card.member_id = link.member_id '
+      'AND card.revision = link.card_revision '
+      'WHERE intent.operation_id IS NULL OR member.id IS NULL '
+      'OR card.member_id IS NULL '
+      'OR member.display_code != link.display_code '
+      'OR link.associated_at_millis != intent.created_at_millis '
+      "OR json_extract(intent.request_fingerprint, '\$.memberId') IS NOT link.member_id "
+      "OR json_extract(intent.request_fingerprint, '\$.memberCardRevision') IS NOT link.card_revision "
+      'LIMIT 1',
+    ).getSingleOrNull();
+    if (badWalletLink != null) return false;
+    final missingWalletLink = await customSelect(
+      'SELECT 1 FROM shop_wallet_checkout_intents AS intent '
+      'LEFT JOIN shop_wallet_checkout_member_links AS link '
+      'ON link.operation_id = intent.operation_id '
+      'WHERE link.operation_id IS NULL '
+      'AND json_valid(intent.request_fingerprint) AND ('
+      "json_type(intent.request_fingerprint, '\$.memberId') IS NOT NULL "
+      "OR json_type(intent.request_fingerprint, '\$.memberCardRevision') IS NOT NULL) "
+      'LIMIT 1',
+    ).getSingleOrNull();
+    return missingWalletLink == null;
   }
 
   bool _proofMatchesCorrectionRow(QueryRow proof, QueryRow correction) =>
@@ -3253,7 +3778,9 @@ class ShopDatabase extends _$ShopDatabase {
         openingStock < 0 ||
         openingStock > 2000000000 ||
         (cleanBarcode != null && cleanBarcode.length > 64) ||
-        (cleanSku != null && cleanSku.length > 80)) {
+        (cleanSku != null && cleanSku.length > 80) ||
+        _usesReservedMemberCardNamespace(cleanBarcode) ||
+        _usesReservedMemberCardNamespace(cleanSku)) {
       throw ArgumentError('Product values are invalid.');
     }
 
@@ -3359,7 +3886,8 @@ class ShopDatabase extends _$ShopDatabase {
         cleanName.length > 160 ||
         priceMmk < 0 ||
         priceMmk > 2000000000 ||
-        (cleanBarcode != null && cleanBarcode.length > 64)) {
+        (cleanBarcode != null && cleanBarcode.length > 64) ||
+        _usesReservedMemberCardNamespace(cleanBarcode)) {
       throw ArgumentError('Product values are invalid.');
     }
     await transaction(() async {
@@ -3523,7 +4051,7 @@ class ShopDatabase extends _$ShopDatabase {
         }
         final pendingWallet = pendingRows.isEmpty
             ? null
-            : _walletCheckoutFromRow(pendingRows.single);
+            : await _walletCheckoutFromRow(pendingRows.single);
         if (pendingWallet != null) {
           final pendingQuantity = pendingWallet.lines
               .where((line) => line.productId == cleanProductId)
@@ -3623,8 +4151,10 @@ class ShopDatabase extends _$ShopDatabase {
           openingStock < 0 ||
           openingStock > 2000000000 ||
           (sku != null && (sku.length > 80 || !seenSkus.add(sku))) ||
+          _usesReservedMemberCardNamespace(sku) ||
           (barcode != null &&
-              (barcode.length > 64 || !seenBarcodes.add(barcode)))) {
+              (barcode.length > 64 || !seenBarcodes.add(barcode))) ||
+          _usesReservedMemberCardNamespace(barcode)) {
         throw ArgumentError(
           'Every reviewed product needs a name, price and confirmed stock.',
         );
@@ -3740,6 +4270,159 @@ class ShopDatabase extends _$ShopDatabase {
         .watch();
   }
 
+  static final RegExp _memberCardTokenPattern = RegExp(
+    r'^SMC1\.[A-Za-z0-9_-]{43}$',
+  );
+
+  static bool _usesReservedMemberCardNamespace(String? value) =>
+      value != null && value.toUpperCase().startsWith('SMC1.');
+
+  Future<String> _memberCardDigest(String token) =>
+      _sha256Hex('supermega.shop.member-card.lookup.v1\u0000$token');
+
+  bool _memberCardTokenIsCanonical(String token) {
+    if (!_memberCardTokenPattern.hasMatch(token)) return false;
+    try {
+      final encoded = token.substring(5);
+      final bytes = base64Url.decode('$encoded=');
+      return bytes.length == 32 &&
+          base64Url.encode(bytes).replaceAll('=', '') == encoded;
+    } on FormatException {
+      return false;
+    }
+  }
+
+  Future<ShopMemberCardMatch?> _lookupKnownMemberCard(String token) async {
+    final clean = token.trim();
+    if (!_memberCardTokenIsCanonical(clean)) return null;
+    final digest = await _memberCardDigest(clean);
+    final row = await customSelect(
+      'SELECT member.id, member.display_code, member.status, '
+      'member.created_at_millis, member.updated_at_millis, card.revision '
+      'FROM shop_member_cards AS card '
+      'JOIN shop_members AS member ON member.id = card.member_id '
+      'JOIN shop_store_identity AS store '
+      'ON store.store_ref = member.store_ref AND store.singleton = 1 '
+      'WHERE card.token_digest = ? LIMIT 1',
+      variables: [Variable<String>(digest)],
+    ).getSingleOrNull();
+    return row == null
+        ? null
+        : ShopMemberCardMatch(
+            member: _memberFromRow(row),
+            cardRevision: row.read<int>('revision'),
+          );
+  }
+
+  Future<String> readStoreRef() async {
+    final row = await customSelect(
+      'SELECT store_ref FROM shop_store_identity WHERE singleton = 1',
+    ).getSingle();
+    return row.read<String>('store_ref');
+  }
+
+  ShopMember _memberFromRow(QueryRow row) => ShopMember(
+    id: row.read<String>('id'),
+    displayCode: row.read<String>('display_code'),
+    status: row.read<String>('status'),
+    createdAtMillis: row.read<int>('created_at_millis'),
+    updatedAtMillis: row.read<int>('updated_at_millis'),
+  );
+
+  /// Looks up an identification-only card. The raw token is never persisted.
+  ///
+  /// Invalid, unknown, stale, retired, revoked, and foreign-store cards all
+  /// return null so this boundary does not enumerate member state.
+  Future<ShopMemberCardMatch?> lookupActiveMemberCard(String token) async {
+    final clean = token.trim();
+    if (!_memberCardTokenIsCanonical(clean)) return null;
+    final digest = await _memberCardDigest(clean);
+    final row = await customSelect(
+      'SELECT member.id, member.display_code, member.status, '
+      'member.created_at_millis, member.updated_at_millis, card.revision '
+      'FROM shop_member_cards AS card '
+      'JOIN shop_members AS member ON member.id = card.member_id '
+      'JOIN shop_store_identity AS store '
+      'ON store.store_ref = member.store_ref AND store.singleton = 1 '
+      'WHERE card.token_digest = ? AND card.state = ? '
+      'AND member.status = ? '
+      'AND card.revision = (SELECT MAX(latest.revision) '
+      'FROM shop_member_cards AS latest WHERE latest.member_id = member.id) '
+      'LIMIT 1',
+      variables: [
+        Variable<String>(digest),
+        const Variable<String>('active'),
+        const Variable<String>('active'),
+      ],
+    ).getSingleOrNull();
+    return row == null
+        ? null
+        : ShopMemberCardMatch(
+            member: _memberFromRow(row),
+            cardRevision: row.read<int>('revision'),
+          );
+  }
+
+  /// Presentation-only lookup used inside the dedicated member selector.
+  Future<ShopMemberCardMatch?> lookupActiveMemberDisplayCode(
+    String displayCode,
+  ) async {
+    final clean = displayCode.trim();
+    if (!RegExp(r'^\d{6,20}$').hasMatch(clean)) return null;
+    final rows = await customSelect(
+      'SELECT member.id, member.display_code, member.status, '
+      'member.created_at_millis, member.updated_at_millis, card.revision '
+      'FROM shop_members AS member '
+      'JOIN shop_store_identity AS store '
+      'ON store.store_ref = member.store_ref AND store.singleton = 1 '
+      'JOIN shop_member_cards AS card ON card.member_id = member.id '
+      'WHERE member.display_code = ? AND member.status = ? '
+      'AND card.state = ? ORDER BY card.revision DESC LIMIT 2',
+      variables: [
+        Variable<String>(clean),
+        const Variable<String>('active'),
+        const Variable<String>('active'),
+      ],
+    ).get();
+    if (rows.length != 1) return null;
+    return ShopMemberCardMatch(
+      member: _memberFromRow(rows.single),
+      cardRevision: rows.single.read<int>('revision'),
+    );
+  }
+
+  Future<ShopSaleMember?> readSaleMember(String saleId) async {
+    final row = await customSelect(
+      'SELECT member_id, display_code, card_revision, associated_at_millis '
+      'FROM shop_sale_member_links WHERE sale_id = ?',
+      variables: [Variable<String>(saleId)],
+    ).getSingleOrNull();
+    return row == null
+        ? null
+        : ShopSaleMember(
+            memberId: row.read<String>('member_id'),
+            displayCode: row.read<String>('display_code'),
+            cardRevision: row.read<int>('card_revision'),
+            associatedAtMillis: row.read<int>('associated_at_millis'),
+          );
+  }
+
+  Future<ShopSaleMember?> _readWalletCheckoutMember(String operationId) async {
+    final row = await customSelect(
+      'SELECT member_id, display_code, card_revision, associated_at_millis '
+      'FROM shop_wallet_checkout_member_links WHERE operation_id = ?',
+      variables: [Variable<String>(operationId)],
+    ).getSingleOrNull();
+    return row == null
+        ? null
+        : ShopSaleMember(
+            memberId: row.read<String>('member_id'),
+            displayCode: row.read<String>('display_code'),
+            cardRevision: row.read<int>('card_revision'),
+            associatedAtMillis: row.read<int>('associated_at_millis'),
+          );
+  }
+
   Future<PendingWalletCheckout?> readPendingWalletCheckout() async {
     final row = await customSelect(
       'SELECT operation_id, payment_method, request_fingerprint, total_mmk, '
@@ -3748,10 +4431,10 @@ class ShopDatabase extends _$ShopDatabase {
       'WHERE state = ? ORDER BY created_at_millis LIMIT 1',
       variables: [const Variable<String>('pending')],
     ).getSingleOrNull();
-    return row == null ? null : _walletCheckoutFromRow(row);
+    return row == null ? null : await _walletCheckoutFromRow(row);
   }
 
-  PendingWalletCheckout _walletCheckoutFromRow(QueryRow row) {
+  Future<PendingWalletCheckout> _walletCheckoutFromRow(QueryRow row) async {
     final rawLines = jsonDecode(row.read<String>('basket_json'));
     if (rawLines is! List || rawLines.isEmpty || rawLines.length > 100) {
       throw const FormatException('Wallet checkout snapshot is invalid.');
@@ -3777,6 +4460,11 @@ class ShopDatabase extends _$ShopDatabase {
     if (calculatedTotalMmk != savedTotalMmk) {
       throw const FormatException('Wallet checkout snapshot is invalid.');
     }
+    final memberRow = await customSelect(
+      'SELECT member_id, display_code, card_revision, associated_at_millis '
+      'FROM shop_wallet_checkout_member_links WHERE operation_id = ?',
+      variables: [Variable<String>(row.read<String>('operation_id'))],
+    ).getSingleOrNull();
     return PendingWalletCheckout(
       operationId: row.read<String>('operation_id'),
       paymentMethod: row.read<String>('payment_method'),
@@ -3789,6 +4477,14 @@ class ShopDatabase extends _$ShopDatabase {
       lines: List.unmodifiable(lines),
       state: row.read<String>('state'),
       createdAtMillis: row.read<int>('created_at_millis'),
+      member: memberRow == null
+          ? null
+          : ShopSaleMember(
+              memberId: memberRow.read<String>('member_id'),
+              displayCode: memberRow.read<String>('display_code'),
+              cardRevision: memberRow.read<int>('card_revision'),
+              associatedAtMillis: memberRow.read<int>('associated_at_millis'),
+            ),
     );
   }
 
@@ -3796,6 +4492,7 @@ class ShopDatabase extends _$ShopDatabase {
     required String operationId,
     required MerchantWalletSetup merchant,
     required List<ShopSaleLineInput> lines,
+    String? memberCardToken,
   }) async {
     final cleanOperationId = operationId.trim();
     final paymentMethod = merchant.provider == 'KBZPay' ? 'kbzpay' : 'wavepay';
@@ -3825,14 +4522,6 @@ class ShopDatabase extends _$ShopDatabase {
     }
     final canonicalLines = quantities.entries.toList()
       ..sort((a, b) => a.key.compareTo(b.key));
-    final fingerprint = jsonEncode({
-      'paymentMethod': paymentMethod,
-      'lines': [
-        for (final line in canonicalLines)
-          {'productId': line.key, 'quantity': line.value},
-      ],
-    });
-
     return transaction(() async {
       await _rejectHeldSaleOperation(cleanOperationId);
       final existingIntent = await customSelect(
@@ -3843,14 +4532,53 @@ class ShopDatabase extends _$ShopDatabase {
         variables: [Variable<String>(cleanOperationId)],
       ).getSingleOrNull();
       if (existingIntent != null) {
-        final prior = _walletCheckoutFromRow(existingIntent);
+        final prior = await _walletCheckoutFromRow(existingIntent);
+        ShopMemberCardMatch? retryMember;
+        if (memberCardToken != null) {
+          retryMember = await _lookupKnownMemberCard(memberCardToken);
+          if (retryMember == null ||
+              prior.member?.memberId != retryMember.member.id ||
+              prior.member?.cardRevision != retryMember.cardRevision) {
+            throw StateError('This wallet checkout ID was already used.');
+          }
+        } else if (prior.member != null) {
+          throw StateError('This wallet checkout ID was already used.');
+        }
+        final retryFingerprint = jsonEncode({
+          'paymentMethod': paymentMethod,
+          if (retryMember != null) ...{
+            'memberId': retryMember.member.id,
+            'memberCardRevision': retryMember.cardRevision,
+          },
+          'lines': [
+            for (final line in canonicalLines)
+              {'productId': line.key, 'quantity': line.value},
+          ],
+        });
         if (prior.state == 'pending' &&
             prior.paymentMethod == paymentMethod &&
-            prior.requestFingerprint == fingerprint) {
+            prior.requestFingerprint == retryFingerprint) {
           return prior;
         }
         throw StateError('This wallet checkout ID was already used.');
       }
+      final member = memberCardToken == null
+          ? null
+          : await lookupActiveMemberCard(memberCardToken);
+      if (memberCardToken != null && member == null) {
+        throw StateError('The member card is unavailable.');
+      }
+      final fingerprint = jsonEncode({
+        'paymentMethod': paymentMethod,
+        if (member != null) ...{
+          'memberId': member.member.id,
+          'memberCardRevision': member.cardRevision,
+        },
+        'lines': [
+          for (final line in canonicalLines)
+            {'productId': line.key, 'quantity': line.value},
+        ],
+      });
       final openIntent = await customSelect(
         'SELECT operation_id FROM shop_wallet_checkout_intents WHERE state = ? LIMIT 1',
         variables: [const Variable<String>('pending')],
@@ -3919,6 +4647,28 @@ class ShopDatabase extends _$ShopDatabase {
           Variable<int>(createdAt),
         ],
       );
+      final saleMember = member == null
+          ? null
+          : ShopSaleMember(
+              memberId: member.member.id,
+              displayCode: member.member.displayCode,
+              cardRevision: member.cardRevision,
+              associatedAtMillis: createdAt,
+            );
+      if (saleMember != null) {
+        await customInsert(
+          'INSERT INTO shop_wallet_checkout_member_links '
+          '(operation_id, member_id, card_revision, display_code, '
+          'associated_at_millis) VALUES (?, ?, ?, ?, ?)',
+          variables: [
+            Variable<String>(cleanOperationId),
+            Variable<String>(saleMember.memberId),
+            Variable<int>(saleMember.cardRevision),
+            Variable<String>(saleMember.displayCode),
+            Variable<int>(saleMember.associatedAtMillis),
+          ],
+        );
+      }
       await clearCounterSaleDraft(cleanOperationId);
       return PendingWalletCheckout(
         operationId: cleanOperationId,
@@ -3930,6 +4680,7 @@ class ShopDatabase extends _$ShopDatabase {
         lines: List.unmodifiable(snapshots),
         state: 'pending',
         createdAtMillis: createdAt,
+        member: saleMember,
       );
     });
   }
@@ -3953,7 +4704,7 @@ class ShopDatabase extends _$ShopDatabase {
         variables: [Variable<String>(operationId)],
       ).getSingleOrNull();
       if (row == null) return false;
-      final intent = _walletCheckoutFromRow(row);
+      final intent = await _walletCheckoutFromRow(row);
       if (resumeOperationId != null) {
         final priorSale =
             await (select(shopSales)
@@ -5242,6 +5993,7 @@ class ShopDatabase extends _$ShopDatabase {
     int? expectedTotalMmk,
     Map<String, int>? expectedUnitPricesMmk,
     Map<String, String>? expectedProductNames,
+    String? memberCardToken,
   }) async {
     final cleanOperationId = operationId.trim();
     final cleanWalletCheckoutId = walletCheckoutOperationId?.trim();
@@ -5256,6 +6008,7 @@ class ShopDatabase extends _$ShopDatabase {
         (expectedUnitPricesMmk != null && paymentMethod != 'cash') ||
         (expectedProductNames != null && paymentMethod != 'cash') ||
         (paymentMethod == 'cash' && cleanWalletCheckoutId != null) ||
+        (paymentMethod != 'cash' && memberCardToken != null) ||
         (paymentMethod != 'cash' &&
             cleanWalletCheckoutId != cleanOperationId)) {
       throw ArgumentError('A sale must contain between 1 and 100 items.');
@@ -5297,10 +6050,49 @@ class ShopDatabase extends _$ShopDatabase {
       for (final line in canonicalLines)
         {'productId': line.key, 'quantity': line.value},
     ];
+    ShopSaleMember? selectedMember;
+    if (paymentMethod == 'cash' && memberCardToken != null) {
+      var match = await lookupActiveMemberCard(memberCardToken);
+      if (match == null) {
+        final priorSale =
+            await (select(shopSales)
+                  ..where((sale) => sale.operationId.equals(cleanOperationId)))
+                .getSingleOrNull();
+        final priorMember = priorSale == null
+            ? null
+            : await readSaleMember(priorSale.id);
+        final known = await _lookupKnownMemberCard(memberCardToken);
+        if (priorMember == null ||
+            known == null ||
+            priorMember.memberId != known.member.id ||
+            priorMember.cardRevision != known.cardRevision) {
+          throw StateError('The member card is unavailable.');
+        }
+        match = known;
+      }
+      selectedMember = ShopSaleMember(
+        memberId: match.member.id,
+        displayCode: match.member.displayCode,
+        cardRevision: match.cardRevision,
+        associatedAtMillis: 0,
+      );
+    } else if (cleanWalletCheckoutId != null) {
+      selectedMember = await _readWalletCheckoutMember(cleanWalletCheckoutId);
+    }
     final fingerprint = paymentMethod == 'cash'
-        ? jsonEncode(fingerprintLines)
+        ? selectedMember == null
+              ? jsonEncode(fingerprintLines)
+              : jsonEncode({
+                  'memberId': selectedMember.memberId,
+                  'memberCardRevision': selectedMember.cardRevision,
+                  'lines': fingerprintLines,
+                })
         : jsonEncode({
             'paymentMethod': paymentMethod,
+            if (selectedMember != null) ...{
+              'memberId': selectedMember.memberId,
+              'memberCardRevision': selectedMember.cardRevision,
+            },
             'lines': fingerprintLines,
           });
 
@@ -5325,6 +6117,13 @@ class ShopDatabase extends _$ShopDatabase {
                   ..where((line) => line.saleId.equals(priorSale.id))
                   ..orderBy([(line) => OrderingTerm.asc(line.productName)]))
                 .get();
+        final priorMember = await readSaleMember(priorSale.id);
+        if (priorMember?.memberId != selectedMember?.memberId ||
+            priorMember?.cardRevision != selectedMember?.cardRevision) {
+          throw StateError(
+            'A sale operation ID was reused with a different member.',
+          );
+        }
         if (expectedUnitPricesMmk != null &&
             priorLines.any(
               (line) =>
@@ -5357,6 +6156,7 @@ class ShopDatabase extends _$ShopDatabase {
                 lineTotalMmk: line.lineTotalMmk,
               ),
           ],
+          member: priorMember,
         );
       }
 
@@ -5394,7 +6194,7 @@ class ShopDatabase extends _$ShopDatabase {
         if (intentRow == null) {
           throw StateError('The wallet checkout is no longer pending.');
         }
-        final intent = _walletCheckoutFromRow(intentRow);
+        final intent = await _walletCheckoutFromRow(intentRow);
         if (intent.paymentMethod != paymentMethod ||
             intent.requestFingerprint != fingerprint) {
           throw StateError('The pending checkout does not match this sale.');
@@ -5492,6 +6292,28 @@ class ShopDatabase extends _$ShopDatabase {
           ],
         );
       }
+      final reviewedMember = selectedMember;
+      if (reviewedMember != null) {
+        selectedMember = ShopSaleMember(
+          memberId: reviewedMember.memberId,
+          displayCode: reviewedMember.displayCode,
+          cardRevision: reviewedMember.cardRevision,
+          associatedAtMillis: now,
+        );
+        final committedMember = selectedMember!;
+        await customInsert(
+          'INSERT INTO shop_sale_member_links '
+          '(sale_id, member_id, card_revision, display_code, '
+          'associated_at_millis) VALUES (?, ?, ?, ?, ?)',
+          variables: [
+            Variable<String>(saleId),
+            Variable<String>(committedMember.memberId),
+            Variable<int>(committedMember.cardRevision),
+            Variable<String>(committedMember.displayCode),
+            Variable<int>(now),
+          ],
+        );
+      }
 
       final eventLines = <Map<String, Object>>[];
       for (var index = 0; index < canonicalLines.length; index++) {
@@ -5559,6 +6381,10 @@ class ShopDatabase extends _$ShopDatabase {
             'paymentMethod': paymentMethod,
             'createdAtMillis': now,
             if (activeShift != null) 'shiftId': activeShift.id,
+            if (selectedMember != null) ...{
+              'memberId': selectedMember!.memberId,
+              'memberCardRevision': selectedMember!.cardRevision,
+            },
             'lines': eventLines,
           }),
           createdAtMillis: now,
@@ -5596,6 +6422,7 @@ class ShopDatabase extends _$ShopDatabase {
               lineTotalMmk: line['lineTotalMmk']! as int,
             ),
         ],
+        member: selectedMember,
       );
     });
   }
@@ -5661,9 +6488,12 @@ class ShopDatabase extends _$ShopDatabase {
       );
     }
     final reversalsBySale = <String, ShopSaleReversal>{};
+    final membersBySale = <String, ShopSaleMember>{};
     for (final saleId in saleIds) {
       final reversal = await readSaleReversalForSale(saleId);
       if (reversal != null) reversalsBySale[saleId] = reversal;
+      final member = await readSaleMember(saleId);
+      if (member != null) membersBySale[saleId] = member;
     }
     return [
       for (final sale in sales)
@@ -5675,6 +6505,7 @@ class ShopDatabase extends _$ShopDatabase {
           paymentMethod: sale.paymentMethod,
           lines: linesBySale[sale.id] ?? const [],
           reversal: reversalsBySale[sale.id],
+          member: membersBySale[sale.id],
         ),
     ];
   }
@@ -5706,6 +6537,8 @@ class ShopDatabase extends _$ShopDatabase {
     }
     final ids = <String>{};
     for (final draft in drafts) {
+      final sku = _optionalText(draft.sku);
+      final barcode = _optionalText(draft.barcode);
       if (draft.batchId != batchId ||
           draft.id.trim().isEmpty ||
           !ids.add(draft.id) ||
@@ -5716,7 +6549,9 @@ class ShopDatabase extends _$ShopDatabase {
           draft.description.length > 800 ||
           (draft.priceMmk != null &&
               (draft.priceMmk! < 0 || draft.priceMmk! > 2000000000)) ||
-          (draft.openingStock != null && draft.openingStock! < 0)) {
+          (draft.openingStock != null && draft.openingStock! < 0) ||
+          _usesReservedMemberCardNamespace(sku) ||
+          _usesReservedMemberCardNamespace(barcode)) {
         throw ArgumentError('Menu draft values are invalid.');
       }
     }

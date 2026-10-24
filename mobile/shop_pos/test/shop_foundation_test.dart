@@ -2690,6 +2690,7 @@ void main() {
         await database.customStatement(
           'DROP TABLE shop_correction_authorization_proofs',
         );
+        await _dropV16MemberSchema(database);
         await database.customStatement('DROP TABLE shop_cash_shift_sales');
         await database.customStatement('DROP TABLE shop_cash_shifts');
         await database.customStatement('PRAGMA user_version = 5');
@@ -3624,6 +3625,18 @@ void main() {
       );
     });
   });
+}
+
+Future<void> _dropV16MemberSchema(ShopDatabase database) async {
+  for (final table in const [
+    'shop_wallet_checkout_member_links',
+    'shop_sale_member_links',
+    'shop_member_cards',
+    'shop_members',
+    'shop_store_identity',
+  ]) {
+    await database.customStatement('DROP TABLE IF EXISTS $table');
+  }
 }
 
 List<({int widthBytes, int height, List<int> data, bool hasInk})> _rasterBlocks(

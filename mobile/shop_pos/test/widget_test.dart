@@ -594,6 +594,57 @@ void main() {
     }
   });
 
+  testWidgets('camera member card scan stays out of product creation', (
+    tester,
+  ) async {
+    _usePhoneViewport(tester);
+    final previousPlatform = debugDefaultTargetPlatformOverride;
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    final database = ShopDatabase(NativeDatabase.memory());
+    try {
+      const memberToken = 'SMC1.AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8';
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ShopHome(
+            testOnlyAllowMissingRuntimeScope: true,
+            database: database,
+            authClient: null,
+            apiBaseUrl: 'https://example.invalid',
+            myanmar: false,
+            onLanguageChanged: (_) {},
+            runtimeCapabilities: ShopRuntimeCapabilities.production,
+            cameraViewBuilder: (context, onScanned, onError) => Center(
+              child: FilledButton(
+                key: const ValueKey('fake-camera-member-detect'),
+                onPressed: () => onScanned(memberToken),
+                child: const Text('Detect member'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('shop-camera-scan')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('fake-camera-member-detect')));
+      await tester.pumpAndSettle();
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(
+        find.text('Use Add member in checkout for member cards.'),
+        findsOneWidget,
+      );
+      expect(await database.readActiveProducts(), isEmpty);
+      expect(await database.readCounterSaleDraft(), isNull);
+      expect(await database.countSales(), 0);
+      expect(tester.takeException(), isNull);
+    } finally {
+      debugDefaultTargetPlatformOverride = previousPlatform;
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+      await database.close();
+    }
+  });
+
   testWidgets('cancel and camera denial return to Sell without a sale write', (
     tester,
   ) async {
@@ -4604,6 +4655,417 @@ void main() {
     },
   );
 
+  for (final myanmar in [false, true]) {
+    testWidgets(
+      'dedicated member card selection links one cash sale in ${myanmar ? 'MY' : 'EN'}',
+      (tester) async {
+        _usePhoneViewport(tester);
+        final database = ShopDatabase(NativeDatabase.memory());
+        const memberId = 'mem_11111111111111111111111111111111';
+        final memberToken = _widgetMemberToken(1);
+        await _seedWidgetMember(
+          database,
+          memberId: memberId,
+          displayCode: '00001234',
+          token: memberToken,
+        );
+        await database.addProduct(
+          id: 'rice-member',
+          name: 'Rice',
+          priceMmk: 2500,
+          openingStock: 2,
+        );
+        await tester.pumpWidget(
+          ShopApp(
+            testOnlyAllowMissingRuntimeScope: true,
+            initialCounter: true,
+            database: database,
+            authClient: null,
+            apiBaseUrl: 'https://app.supermega.dev',
+            initialMyanmar: myanmar,
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.byTooltip(myanmar ? 'အရောင်းထဲထည့်ရန်' : 'Add to sale'),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.textContaining(myanmar ? 'အရောင်းစစ်ရန်' : 'Review sale'),
+        );
+        await tester.pumpAndSettle();
+
+        final selector = find.byKey(const ValueKey('shop-select-member-card'));
+        await tester.ensureVisible(selector);
+        await tester.tap(selector);
+        await tester.pumpAndSettle();
+        await tester.enterText(
+          find.byKey(const ValueKey('shop-member-card-input')),
+          _widgetMemberToken(9),
+        );
+        await tester.tap(find.byKey(const ValueKey('shop-member-card-apply')));
+        await tester.pumpAndSettle();
+        expect(
+          find.text(
+            myanmar
+                ? 'ဤအသင်းဝင်ကတ်ကို မသိပါ၊ အစားထိုးထားပါသည် သို့မဟုတ် ပိတ်ထားပါသည်။'
+                : 'This member card is unknown, replaced or revoked.',
+          ),
+          findsOneWidget,
+        );
+        expect(await database.countSales(), 0);
+
+        await tester.enterText(
+          find.byKey(const ValueKey('shop-member-card-input')),
+          memberToken,
+        );
+        await tester.tap(find.byKey(const ValueKey('shop-member-card-apply')));
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('shop-selected-member-card')),
+          findsOneWidget,
+        );
+        expect(find.text('00001234'), findsOneWidget);
+
+        await tester.tap(find.text(myanmar ? 'ငွေသား' : 'Cash sale'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text(myanmar ? 'အတည်ပြုရန်' : 'Complete sale'));
+        await tester.pumpAndSettle();
+        final sale = (await database.readRecentSales()).single;
+        expect(sale.member?.memberId, memberId);
+        expect(await database.countSales(), 1);
+        expect((await database.readActiveProducts()).single.onHand, 1);
+        await database.close();
+      },
+    );
+  }
+
+  testWidgets(
+    'member selection is cleared when a sale is held before the next walk-in checkout',
+    (tester) async {
+      _usePhoneViewport(tester);
+      final database = ShopDatabase(NativeDatabase.memory());
+      final memberToken = _widgetMemberToken(21);
+      try {
+        await _seedWidgetMember(
+          database,
+          memberId: 'mem_21212121212121212121212121212121',
+          displayCode: '00000021',
+          token: memberToken,
+        );
+        await database.addProduct(
+          id: 'held-member-rice',
+          name: 'Rice',
+          priceMmk: 1000,
+          openingStock: 3,
+        );
+        await tester.pumpWidget(
+          ShopApp(
+            testOnlyAllowMissingRuntimeScope: true,
+            initialCounter: true,
+            database: database,
+            authClient: null,
+            apiBaseUrl: 'https://app.supermega.dev',
+            initialMyanmar: false,
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.byTooltip('Add to sale'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.textContaining('Review sale'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey('shop-select-member-card')));
+        await tester.pumpAndSettle();
+        await tester.enterText(
+          find.byKey(const ValueKey('shop-member-card-input')),
+          memberToken,
+        );
+        await tester.tap(find.byKey(const ValueKey('shop-member-card-apply')));
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('shop-selected-member-card')),
+          findsOneWidget,
+        );
+        await tester.ensureVisible(
+          find.byKey(const ValueKey('shop-hold-sale')),
+        );
+        await tester.tap(find.byKey(const ValueKey('shop-hold-sale')));
+        await tester.pumpAndSettle();
+        await tester.enterText(
+          find.byKey(const ValueKey('shop-held-sale-name')),
+          'Member A',
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey('shop-held-sale-confirm')));
+        await tester.pumpAndSettle();
+        if (find
+            .byKey(const ValueKey('shop-hold-sale'))
+            .evaluate()
+            .isNotEmpty) {
+          await tester.binding.handlePopRoute();
+          await tester.pumpAndSettle();
+        }
+        await tester.ensureVisible(
+          find.byKey(const ValueKey('shop-held-sales-open')),
+        );
+        await tester.tap(find.byKey(const ValueKey('shop-held-sales-open')));
+        await tester.pumpAndSettle();
+        final heldId = (await database.readHeldSaleTickets()).single.id;
+        await tester.tap(find.byKey(ValueKey('shop-held-reopen:$heldId')));
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(find.textContaining('Review sale'));
+        await tester.tap(find.textContaining('Review sale'));
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('shop-selected-member-card')),
+          findsNothing,
+        );
+        await tester.tap(find.text('Cash sale'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Complete sale'));
+        await tester.pumpAndSettle();
+        final sale = (await database.readRecentSales()).single;
+        expect(sale.member, isNull);
+        expect(await database.readHeldSaleTickets(), isEmpty);
+        expect((await database.readActiveProducts()).single.onHand, 2);
+      } finally {
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump(const Duration(milliseconds: 1));
+        await database.close();
+      }
+    },
+  );
+
+  testWidgets('cancelling a member wallet intent restores a walk-in basket', (
+    tester,
+  ) async {
+    _usePhoneViewport(tester);
+    final database = ShopDatabase(NativeDatabase.memory());
+    final memberToken = _widgetMemberToken(24);
+    try {
+      await _seedWidgetMember(
+        database,
+        memberId: 'mem_24242424242424242424242424242424',
+        displayCode: '00000024',
+        token: memberToken,
+      );
+      await database.addProduct(
+        id: 'wallet-member-tea',
+        name: 'Tea',
+        priceMmk: 2500,
+        openingStock: 2,
+      );
+      await database.saveWalletSetup(
+        MerchantWalletSetup(
+          provider: 'KBZPay',
+          merchantPhone: null,
+          officialQrPayload: _testStaticMmqr(),
+          issuerConfirmed: true,
+        ),
+      );
+      await tester.pumpWidget(
+        ShopApp(
+          testOnlyAllowMissingRuntimeScope: true,
+          initialCounter: true,
+          database: database,
+          authClient: null,
+          apiBaseUrl: 'https://app.supermega.dev',
+          initialMyanmar: false,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Add to sale'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('Review sale'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('shop-select-member-card')));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('shop-member-card-input')),
+        memberToken,
+      );
+      await tester.tap(find.byKey(const ValueKey('shop-member-card-apply')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Mobile money'));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('shop-pending-wallet-member')),
+        findsWidgets,
+      );
+      expect(
+        (await database.readPendingWalletCheckout())?.member?.displayCode,
+        '00000024',
+      );
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('I checked: no payment arrived').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Cancel checkout'));
+      await tester.pumpAndSettle();
+      expect(await database.readPendingWalletCheckout(), isNull);
+      expect(
+        find.byKey(const ValueKey('shop-selected-member-card')),
+        findsNothing,
+      );
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('Review sale'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Cash sale'));
+      await tester.pumpAndSettle();
+      if (find.text('Complete sale').evaluate().isEmpty) {
+        await tester.tap(find.text('Cash sale'));
+        await tester.pumpAndSettle();
+      }
+      await tester.tap(find.text('Complete sale'));
+      await tester.pumpAndSettle();
+      final sale = (await database.readRecentSales()).single;
+      expect(sale.member, isNull);
+      expect(await database.countSales(), 1);
+      expect((await database.readActiveProducts()).single.onHand, 1);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+      await database.close();
+    }
+  });
+
+  for (final myanmar in [false, true]) {
+    testWidgets(
+      'member selector fits 320px at 1.5x and accepts a Tab scan in ${myanmar ? 'MY' : 'EN'}',
+      (tester) async {
+        tester.view.physicalSize = const Size(320, 900);
+        tester.view.devicePixelRatio = 1;
+        tester.platformDispatcher.textScaleFactorTestValue = 1.5;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+        final database = ShopDatabase(NativeDatabase.memory());
+        final token = _widgetMemberToken(myanmar ? 23 : 22);
+        try {
+          await _seedWidgetMember(
+            database,
+            memberId: myanmar
+                ? 'mem_23232323232323232323232323232323'
+                : 'mem_22222222222222222222222222222222',
+            displayCode: myanmar ? '00000023' : '00000022',
+            token: token,
+          );
+          await database.addProduct(
+            id: 'compact-member-rice',
+            name: 'Rice',
+            priceMmk: 1000,
+            openingStock: 2,
+          );
+          await tester.pumpWidget(
+            ShopApp(
+              testOnlyAllowMissingRuntimeScope: true,
+              initialCounter: true,
+              database: database,
+              authClient: null,
+              apiBaseUrl: 'https://app.supermega.dev',
+              initialMyanmar: myanmar,
+            ),
+          );
+          await tester.pumpAndSettle();
+          await tester.tap(
+            find.byTooltip(myanmar ? 'အရောင်းထဲထည့်ရန်' : 'Add to sale'),
+          );
+          await tester.pumpAndSettle();
+          await tester.tap(
+            find.textContaining(myanmar ? 'အရောင်းစစ်ရန်' : 'Review sale'),
+          );
+          await tester.pumpAndSettle();
+          final selector = find.byKey(
+            const ValueKey('shop-select-member-card'),
+          );
+          await tester.ensureVisible(selector);
+          expect(tester.getSize(selector).height, greaterThanOrEqualTo(48));
+          await tester.tap(selector);
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+          await tester.enterText(
+            find.byKey(const ValueKey('shop-member-card-input')),
+            token,
+          );
+          await tester.sendKeyDownEvent(LogicalKeyboardKey.tab);
+          await tester.sendKeyUpEvent(LogicalKeyboardKey.tab);
+          await tester.pumpAndSettle();
+          final layoutError = tester.takeException();
+          expect(layoutError, isNull);
+          expect(
+            find.byKey(const ValueKey('shop-selected-member-card')),
+            findsOneWidget,
+          );
+          final cash = find.widgetWithText(
+            FilledButton,
+            myanmar ? 'ငွေသား' : 'Cash sale',
+          );
+          final wallet = find.widgetWithText(
+            OutlinedButton,
+            myanmar ? 'မိုဘိုင်းငွေပေးချေမှု' : 'Mobile money',
+          );
+          await tester.ensureVisible(wallet);
+          expect(tester.getSize(cash).height, greaterThanOrEqualTo(48));
+          expect(tester.getSize(wallet).height, greaterThanOrEqualTo(48));
+          await tester.tap(
+            find.byTooltip(myanmar ? 'အသင်းဝင်ဖယ်ရန်' : 'Remove member'),
+          );
+          await tester.pumpAndSettle();
+          expect(
+            find.byKey(const ValueKey('shop-selected-member-card')),
+            findsNothing,
+          );
+          expect(await database.countSales(), 0);
+        } finally {
+          await tester.pumpWidget(const SizedBox.shrink());
+          await tester.pump(const Duration(milliseconds: 1));
+          await database.close();
+        }
+      },
+    );
+  }
+
+  testWidgets('member-card token in product search cannot become a product', (
+    tester,
+  ) async {
+    _usePhoneViewport(tester);
+    final database = ShopDatabase(NativeDatabase.memory());
+    try {
+      await database.addProduct(
+        id: 'member-namespace-control',
+        name: 'Control',
+        priceMmk: 100,
+        openingStock: 1,
+      );
+      await tester.pumpWidget(
+        ShopApp(
+          testOnlyAllowMissingRuntimeScope: true,
+          initialCounter: true,
+          database: database,
+          authClient: null,
+          apiBaseUrl: 'https://app.supermega.dev',
+          initialMyanmar: false,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('shop-sale-search-field')),
+        _widgetMemberToken(24),
+      );
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(find.byType(AlertDialog), findsNothing);
+      expect((await database.readActiveProducts()).length, 1);
+      expect(await database.readCounterSaleDraft(), isNull);
+      expect(await database.countSales(), 0);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+      await database.close();
+    }
+  });
+
   testWidgets(
     'Burmese cash confirmation labels the optional tender and change',
     (tester) async {
@@ -6916,6 +7378,51 @@ Future<ShopCorrectionAuthorization> _widgetCorrectionAuthorization(
     expiresAtMillis: expiresAtMillis,
     keyId: _widgetCorrectionKeyId,
     signature: base64Url.encode(signed.bytes).replaceAll('=', ''),
+  );
+}
+
+String _widgetMemberToken(int seed) {
+  final bytes = List<int>.generate(32, (index) => (seed + index) & 0xff);
+  return 'SMC1.${base64Url.encode(bytes).replaceAll('=', '')}';
+}
+
+Future<void> _seedWidgetMember(
+  ShopDatabase database, {
+  required String memberId,
+  required String displayCode,
+  required String token,
+}) async {
+  final digest = await Sha256().hash(
+    utf8.encode('supermega.shop.member-card.lookup.v1\u0000$token'),
+  );
+  final tokenDigest = digest.bytes
+      .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
+      .join();
+  final storeRef = await database.readStoreRef();
+  const now = 1_800_000_000_000;
+  await database.customInsert(
+    'INSERT INTO shop_members '
+    '(id, store_ref, display_code, status, created_at_millis, updated_at_millis) '
+    'VALUES (?, ?, ?, ?, ?, ?)',
+    variables: [
+      Variable<String>(memberId),
+      Variable<String>(storeRef),
+      Variable<String>(displayCode),
+      const Variable<String>('active'),
+      const Variable<int>(now),
+      const Variable<int>(now),
+    ],
+  );
+  await database.customInsert(
+    'INSERT INTO shop_member_cards '
+    '(token_digest, member_id, revision, state, issued_at_millis, retired_at_millis) '
+    'VALUES (?, ?, 1, ?, ?, NULL)',
+    variables: [
+      Variable<String>(tokenDigest),
+      Variable<String>(memberId),
+      const Variable<String>('active'),
+      const Variable<int>(now),
+    ],
   );
 }
 
