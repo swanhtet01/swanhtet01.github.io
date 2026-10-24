@@ -525,7 +525,7 @@ test('Website review recovery retains only the canonical review ID and scrubs th
   const open = account.slice(account.indexOf('async function openWorkspace'), account.indexOf('async function requestRecovery'))
   assert.ok(open.indexOf('await completeManagedWorkspaceSignIn') < open.indexOf('await loadManagedBootstrap'))
   assert.ok(open.indexOf('await loadManagedBootstrap') < open.indexOf('navigate(portalEntryPath)'))
-  assert.ok(managedLoginSource.includes("managedAccountPath('/account/recovery', productIntent, location.search)"))
+  assert.ok(managedLoginSource.includes("managedAccountPath('/account/recovery', accountProductIntent, location.search)"))
 })
 
 test('Ecommerce recovery retains product and review without granting catalog access', async () => {
@@ -1146,11 +1146,21 @@ test('public login with no assigned workspace offers support and sign-out withou
     assert.match(content(tree), /No workspace assigned/)
     assert.doesNotMatch(content(tree), /claim code|Activate my company|Claim your company/i)
     assert.equal(elements(tree).some(node => node.type === 'form'), false)
-    assert.ok(elements(tree).some(node => node.type === 'a' && content(node) === 'Contact support'))
+    const support = elements(tree).find(node => node.type === 'a' && content(node) === 'Contact support')
+    assert.ok(support)
+    const supportUrl = new URL(support.props.href)
+    assert.equal(supportUrl.searchParams.get('product'), 'shop')
     await button(tree, 'Sign out').props.onClick()
     await finishRequest()
     assert.equal(state.session, null)
     assert.ok(elements(login(mod, state)).some(node => node.type === 'form' && node.props['aria-label'] === 'Login'))
     assert.equal(state.calls.some(([name, , init]) => name === 'fetch' && init.method === 'POST'), false)
   })
+})
+
+test('canonical queryless login defaults the Shop-labelled account flow to Shop', () => {
+  assert.ok(managedLoginSource.includes("const accountProductIntent = productIntent ?? (reviewReturnPath?.split('/')[1] ?? 'shop')"))
+  assert.ok(managedLoginSource.includes('managedPortalEntryPath(accountProductIntent)'))
+  assert.ok(managedLoginSource.includes("managedAccountPath('/account/recovery', accountProductIntent, location.search)"))
+  assert.ok(managedLoginSource.includes('managedAccountRequestUrl(accountProductIntent)'))
 })

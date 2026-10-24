@@ -45,7 +45,7 @@ test('unavailable sign-in offers saved work and assisted setup without demo entr
 test('configured public login separates assigned portal access from native installation', async () => {
   const source = await readFile(resolve(root, 'showroom/src/core/ManagedLoginPage.tsx'), 'utf8')
   assert.match(source, /publicApp && shopAccessIntent \? 'For existing assigned pilot accounts\. Native Shop is installed separately during assisted setup\.'/)
-  assert.match(source, /signupPolicy \? <button[\s\S]*?managedAccountRequestUrl\(productIntent\)[\s\S]*?shopAccessIntent \? 'Contact us about Shop' : 'Contact support'/)
+  assert.match(source, /signupPolicy \? <button[\s\S]*?managedAccountRequestUrl\(accountProductIntent\)[\s\S]*?shopAccessIntent \? 'Contact us about Shop' : 'Contact support'/)
   assert.doesNotMatch(source, /publicApp && shopAccessIntent[\s\S]*?public download/i)
 })
 
