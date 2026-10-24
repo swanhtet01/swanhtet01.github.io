@@ -6,12 +6,12 @@ import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
 import 'shop_backup.dart';
 import 'shop_copy.dart';
 import 'shop_database.dart';
+import 'shop_runtime_scope.dart';
 
 typedef PickShopBackup = Future<XFile?> Function();
 typedef BuildOpenedShop = Widget Function(ShopDatabase database, bool myanmar);
@@ -33,6 +33,7 @@ class ShopStartup extends StatefulWidget {
     this.verifyDatabaseFile,
     this.databaseFactory,
     this.verifyOpenedDatabase,
+    this.scopedPreferences,
     super.key,
   });
 
@@ -57,6 +58,7 @@ class ShopStartup extends StatefulWidget {
   /// Defaults to the database's eager semantic verifier. Widget tests may run
   /// that same verifier in Flutter's real-async zone.
   final VerifyOpenedShopDatabase? verifyOpenedDatabase;
+  final ShopScopedPreferences? scopedPreferences;
 
   @override
   State<ShopStartup> createState() => _ShopStartupState();
@@ -399,8 +401,9 @@ class _ShopStartupState extends State<ShopStartup> {
 
   Future<void> _setLanguage(bool myanmar) async {
     setState(() => _myanmar = myanmar);
-    final preferences = await SharedPreferences.getInstance();
-    await preferences.setBool('shop_locale_myanmar', myanmar);
+    final scoped =
+        widget.scopedPreferences ?? await openProductionShopPreferences();
+    await scoped.instance.setBool(scoped.keys.localeMyanmar, myanmar);
   }
 
   @override

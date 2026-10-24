@@ -7,9 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 
@@ -27,12 +25,13 @@ import 'shop_copy.dart';
 import 'shop_correction_authorization_service.dart';
 import 'shop_database.dart';
 import 'shop_models.dart';
+import 'shop_runtime_profile.dart';
+import 'shop_runtime_scope.dart';
 import 'shop_startup.dart';
 import 'shop_today_screen.dart';
 import 'stock_screen.dart';
 import 'wallet_setup_screen.dart';
 
-const _pendingPickerIntentKey = 'shop_pending_picker_intent';
 // Enable only after the scoped server route passes hosted two-tenant acceptance.
 const _connectedOrdersEnabled = bool.fromEnvironment(
   'SHOP_CONNECTED_ORDERS_ENABLED',
@@ -41,16 +40,43 @@ const _connectedOrdersEnabled = bool.fromEnvironment(
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  final preferences = await SharedPreferences.getInstance();
-  late final Directory documents;
+  ShopRuntimeScope? acceptedRuntimeScope;
   try {
-    documents = await getApplicationDocumentsDirectory();
+    final runtimeProfile = ShopRuntimeProfile.resolve();
+    final runtimeScope = await ShopRuntimeScope.resolve(runtimeProfile);
+    acceptedRuntimeScope = runtimeScope;
+  } catch (_) {
+    runApp(
+      const MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: Padding(
+              padding: EdgeInsets.all(24),
+              child: Text(
+                'Shop could not safely check its runtime profile or local storage. Your records were not opened.',
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    return;
+  }
+  final runtimeScope = acceptedRuntimeScope;
+  if (runtimeScope == null) return;
+  try {
     await ShopBackup.cleanupInterruptedStaging(
-      documents,
-      restoreTarget: ShopDatabase.privateDatabaseFile(documents),
+      runtimeScope.documentsRoot,
+      restoreTarget: ShopDatabase.privateDatabaseFile(
+        runtimeScope.documentsRoot,
+      ),
     );
   } catch (_) {
-    final myanmar = preferences.getBool('shop_locale_myanmar') ?? false;
+    final myanmar = runtimeScope.preferences.instance.getBool(
+          runtimeScope.preferences.keys.localeMyanmar,
+        ) ??
+        false;
     runApp(
       MaterialApp(
         home: Scaffold(
@@ -72,27 +98,38 @@ Future<void> main() async {
     );
     return;
   }
+  final runtimeConfiguration = runtimeScope.configuration;
+  final preferences = runtimeScope.preferences;
   final supabaseUrl = const String.fromEnvironment('SUPABASE_URL');
   final publishableKey = const String.fromEnvironment(
     'SUPABASE_PUBLISHABLE_KEY',
   );
   SupabaseClient? authClient;
-  if (supabaseUrl.isNotEmpty && publishableKey.isNotEmpty) {
+  if (runtimeConfiguration.capabilities.managedAuth &&
+      supabaseUrl.isNotEmpty &&
+      publishableKey.isNotEmpty) {
     await Supabase.initialize(url: supabaseUrl, publishableKey: publishableKey);
     authClient = Supabase.instance.client;
   }
   runApp(
     ShopStartup(
-      documents: documents,
-      initialMyanmar: preferences.getBool('shop_locale_myanmar') ?? false,
+      documents: runtimeScope.documentsRoot,
+      importScratchRoot: runtimeScope.temporaryRoot,
+      scopedPreferences: preferences,
+      initialMyanmar:
+          preferences.instance.getBool(preferences.keys.localeMyanmar) ?? false,
       buildShop: (database, myanmar) => ShopApp(
         database: database,
         authClient: authClient,
-        apiBaseUrl: const String.fromEnvironment(
-          'SHOP_API_BASE_URL',
-          defaultValue: 'https://app.supermega.dev',
-        ),
+        apiBaseUrl: runtimeConfiguration.isSyntheticQa
+            ? ''
+            : const String.fromEnvironment(
+                'SHOP_API_BASE_URL',
+                defaultValue: 'https://app.supermega.dev',
+              ),
         initialMyanmar: myanmar,
+        runtimeCapabilities: runtimeConfiguration.capabilities,
+        scopedPreferences: preferences,
       ),
     ),
   );
@@ -104,6 +141,8 @@ class ShopApp extends StatefulWidget {
     required this.authClient,
     required this.apiBaseUrl,
     required this.initialMyanmar,
+    this.runtimeCapabilities = ShopRuntimeCapabilities.production,
+    this.scopedPreferences,
     this.initialCounter = false,
     super.key,
   });
@@ -112,6 +151,8 @@ class ShopApp extends StatefulWidget {
   final SupabaseClient? authClient;
   final String apiBaseUrl;
   final bool initialMyanmar;
+  final ShopRuntimeCapabilities runtimeCapabilities;
+  final ShopScopedPreferences? scopedPreferences;
 
   /// Opens Counter directly for a focused cashier journey or widget test.
   final bool initialCounter;
@@ -170,8 +211,9 @@ class _ShopAppState extends State<ShopApp> {
 
   Future<void> _setLanguage(bool myanmar) async {
     setState(() => _myanmar = myanmar);
-    final preferences = await SharedPreferences.getInstance();
-    await preferences.setBool('shop_locale_myanmar', myanmar);
+    final scoped =
+        widget.scopedPreferences ?? await openProductionShopPreferences();
+    await scoped.instance.setBool(scoped.keys.localeMyanmar, myanmar);
   }
 
   Future<void> _openCounter(BuildContext context) async {
@@ -461,6 +503,8 @@ class _ShopAppState extends State<ShopApp> {
               authClient: widget.authClient,
               apiBaseUrl: widget.apiBaseUrl,
               correctionAuthorizer: _correctionAuthorizer,
+              runtimeCapabilities: widget.runtimeCapabilities,
+              scopedPreferences: widget.scopedPreferences,
               myanmar: _myanmar,
               onLanguageChanged: _setLanguage,
             )
@@ -527,6 +571,10 @@ class _ShopAppState extends State<ShopApp> {
                                       apiBaseUrl: widget.apiBaseUrl,
                                       correctionAuthorizer:
                                           _correctionAuthorizer,
+                                      runtimeCapabilities:
+                                          widget.runtimeCapabilities,
+                                      scopedPreferences:
+                                          widget.scopedPreferences,
                                       myanmar: _myanmar,
                                       onLanguageChanged: _setLanguage,
                                       onToday: _showToday,
@@ -658,6 +706,8 @@ class ShopHome extends StatefulWidget {
     this.cameraViewBuilder,
     this.receiptPrinterSettings,
     this.receiptPrintSender,
+    this.runtimeCapabilities = ShopRuntimeCapabilities.production,
+    this.scopedPreferences,
     super.key,
   });
 
@@ -677,6 +727,8 @@ class ShopHome extends StatefulWidget {
   final ShopCameraViewBuilder? cameraViewBuilder;
   final ReceiptPrinterSettings? receiptPrinterSettings;
   final ReceiptPrintSender? receiptPrintSender;
+  final ShopRuntimeCapabilities runtimeCapabilities;
+  final ShopScopedPreferences? scopedPreferences;
 
   @override
   State<ShopHome> createState() => _ShopHomeState();
@@ -742,13 +794,20 @@ class _ShopHomeState extends State<ShopHome> {
   }
 
   Future<void> _recoverMenuPhoto() async {
+    if (!widget.runtimeCapabilities.camera &&
+        !widget.runtimeCapabilities.gallery) {
+      return;
+    }
     if (defaultTargetPlatform != TargetPlatform.android &&
         widget.recoverMenuPhoto == null) {
       return;
     }
     try {
-      final preferences = await SharedPreferences.getInstance();
-      final pickerIntent = preferences.getString(_pendingPickerIntentKey);
+      final scoped =
+          widget.scopedPreferences ?? await openProductionShopPreferences();
+      final pickerIntent = scoped.instance.getString(
+        scoped.keys.pendingPickerIntent,
+      );
       final XFile? photo;
       final recover = widget.recoverMenuPhoto;
       if (recover != null) {
@@ -759,7 +818,7 @@ class _ShopHomeState extends State<ShopHome> {
         photo = files == null || files.isEmpty ? null : files.first;
       }
       if (pickerIntent != null) {
-        await preferences.remove(_pendingPickerIntentKey);
+        await scoped.instance.remove(scoped.keys.pendingPickerIntent);
       }
       if (photo == null) return;
       if (pickerIntent != null && pickerIntent.startsWith('product:')) {
@@ -791,6 +850,10 @@ class _ShopHomeState extends State<ShopHome> {
   }
 
   Future<void> _chooseProductPhoto(String productId) async {
+    if (!widget.runtimeCapabilities.camera &&
+        !widget.runtimeCapabilities.gallery) {
+      return;
+    }
     final source = await showModalBottomSheet<ImageSource>(
       context: context,
       builder: (sheetContext) => SafeArea(
@@ -817,8 +880,10 @@ class _ShopHomeState extends State<ShopHome> {
       ),
     );
     if (source == null || !mounted) return;
-    final preferences = await SharedPreferences.getInstance();
-    await preferences.setString(_pendingPickerIntentKey, 'product:$productId');
+    final scoped =
+        widget.scopedPreferences ?? await openProductionShopPreferences();
+    final pendingPickerKey = scoped.keys.pendingPickerIntent;
+    await scoped.instance.setString(pendingPickerKey, 'product:$productId');
     XFile? photo;
     try {
       photo = await ImagePicker().pickImage(source: source);
@@ -834,7 +899,7 @@ class _ShopHomeState extends State<ShopHome> {
         );
       }
     } finally {
-      await preferences.remove(_pendingPickerIntentKey);
+      await scoped.instance.remove(pendingPickerKey);
       if (source == ImageSource.camera) {
         await discardCapturedMenuPhoto(photo, createdByCamera: true);
       }
@@ -1692,7 +1757,11 @@ class _ShopHomeState extends State<ShopHome> {
   }
 
   Future<void> _openCameraScanner() async {
-    if (!shopCameraScanningSupported || !_canAcceptScan) return;
+    if (!widget.runtimeCapabilities.camera ||
+        !shopCameraScanningSupported ||
+        !_canAcceptScan) {
+      return;
+    }
     final code = await Navigator.of(context).push<String>(
       MaterialPageRoute<String>(
         builder: (_) => CameraBarcodeScanner(
