@@ -1901,6 +1901,8 @@ def create_trial_router(
             )
         if principal.actor_kind != "human":
             raise _error(403, "trial_human_approval_required")
+        if not readiness.premium_unlocked:
+            raise _error(403, "trial_premium_entitlement_required")
         if order_intake_provider is None:
             raise _error(503, "order_intake_provider_not_configured")
         raw_body = await _bounded_json_body(
