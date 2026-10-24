@@ -50,7 +50,7 @@ check(myShop.includes('မြန်မာ လက်လီဆိုင်မျ�
 check(shop.includes('class="native-shop-gallery"') && myShop.includes('class="native-shop-gallery"'), 'native_gallery_visible')
 check(shop.includes('Illustrative Shop preview with synthetic sample data.'), 'native_gallery_disclosure_en')
 check(myShop.includes('နမူနာဒေတာဖြင့် ဖော်ပြထားသော Shop အက်ပ်မြင်ကွင်း။'), 'native_gallery_disclosure_my')
-for (const token of ['How it works at the counter', 'Search or scan', 'Review the total and take payment', 'Check stock and Today', 'Editable starting points', 'Mini-mart', 'Tea and coffee', 'Fashion', 'Beauty and spa', 'How to get Shop', 'assisted Local Pilot', 'Public downloads and self-service signup are not open yet', 'Native Shop installation is assisted.', 'Private portal access is assigned separately when needed.', 'Android tablet', 'iPad', 'Windows PC', 'Signed distribution is still pending', 'A signed installer is still pending']) {
+for (const token of ['How it works at the counter', 'Search or scan', 'Review the total and take payment', 'Check stock and Today', 'Assisted setup choices', 'These shop types help us qualify assisted setup.', 'They do not configure the app, unlock features or change your plan.', 'Mini-mart', 'Tea and coffee', 'Fashion', 'Beauty and spa', 'How to get Shop', 'assisted Local Pilot', 'Public downloads and self-service signup are not open yet', 'Native Shop installation is assisted.', 'Private portal access is assigned separately when needed.', 'Android tablet', 'iPad', 'Windows PC', 'Signed distribution is still pending', 'A signed installer is still pending']) {
   check(shop.includes(token), 'shop_access_and_workflow:' + token)
 }
 for (const token of ['Pilot sign in', 'Before you start', 'Where do I sign in?', 'Can I download Shop now?', 'Does selling require internet?', 'Sending the contact form does not create an account.']) check(shop.includes(token), 'shop_access_faq:' + token)
@@ -58,13 +58,13 @@ for (const token of ['private browser portal', 'It is not the Shop installer or 
 for (const token of ['စမ်းသပ်အသုံးပြုသူ ဝင်ရန်', 'မစတင်မီ', 'ဘယ်နေရာမှ ဝင်ရမည်နည်း။', 'Shop ကို ယခု ဒေါင်းလုဒ်ရနိုင်ပါသလား။', 'ဆက်သွယ်ရေးဖောင်ပို့ခြင်းတစ်ခုတည်းဖြင့် အကောင့် မဖန်တီးပါ။']) check(myShop.includes(token), 'my_shop_access_faq:' + token)
 for (const token of ['သီးသန့်ဘရောက်ဇာပေါ်တယ်', 'အများပြည်သူအကောင့်ဖွင့်ရာ မဟုတ်ပါ', 'သီးခြားတပ်ဆင်ပေးပါမည်']) check(myShop.includes(token), 'my_shop_login_boundary:' + token)
 check((shop.match(/<details>/g) || []).length === 5 && (myShop.match(/<details>/g) || []).length === 5, 'five_access_faqs_en_my')
-for (const token of ['ကောင်တာတွင် အလုပ်လုပ်ပုံ', 'ရှာပါ သို့မဟုတ် စကင်ဖတ်ပါ', 'ပြင်ဆင်နိုင်သော အစပျိုးပုံစံများ', 'မီနီမတ်', 'လက်ဖက်ရည်နှင့် ကော်ဖီ', 'ဖက်ရှင်', 'အလှအပနှင့် စပါ', 'Shop ရယူရန်', 'Android တက်ဘလက်', 'iPad', 'Windows ကွန်ပျူတာ']) {
+for (const token of ['ကောင်တာတွင် အလုပ်လုပ်ပုံ', 'ရှာပါ သို့မဟုတ် စကင်ဖတ်ပါ', 'အကူအညီဖြင့် စတင်ရန် ဆိုင်အမျိုးအစားများ', 'အက်ပ်ကို အလိုအလျောက် သတ်မှတ်ခြင်း', 'လုပ်ဆောင်ချက်များ ဖွင့်ပေးခြင်း', 'သင့်အစီအစဉ်ကို ပြောင်းလဲခြင်း မဟုတ်ပါ', 'မီနီမတ်', 'လက်ဖက်ရည်နှင့် ကော်ဖီ', 'ဖက်ရှင်', 'အလှအပနှင့် စပါ', 'Shop ရယူရန်', 'Android တက်ဘလက်', 'iPad', 'Windows ကွန်ပျူတာ']) {
   check(myShop.includes(token), 'my_shop_access_and_workflow:' + token)
 }
 for (const token of ['Native Shop အက်ပ်ကို အကူအညီဖြင့် တပ်ဆင်ပေးပြီး', 'သီးသန့်ဘရောက်ဇာပေါ်တယ် အသုံးပြုခွင့်ကို လိုအပ်သည့်အခါ သီးခြားသတ်မှတ်ပေးပါသည်။']) check(myShop.includes(token), 'my_shop_install_and_portal_boundary:' + token)
 check(!/Local Pilot|Pilot target|Signed distribution|installer|Web app|customer Shop|manager correction|online authorization/.test(myShop), 'my_shop_has_no_untranslated_operational_copy')
 check(shop.includes('The web app, macOS and iPhone are not current customer Shop products.'), 'unsupported_platforms_stated_honestly')
-check((shop.match(/class="shop-template-card"/g) || []).length === 4 && (myShop.match(/class="shop-template-card"/g) || []).length === 4, 'four_editable_templates_en_my')
+check((shop.match(/class="shop-template-card"/g) || []).length === 4 && (myShop.match(/class="shop-template-card"/g) || []).length === 4, 'four_assisted_shop_types_en_my')
 check((shop.match(/class="shop-platform-card"/g) || []).length === 3 && (myShop.match(/class="shop-platform-card"/g) || []).length === 3, 'three_pilot_platform_targets_en_my')
 check((shop.match(/class="shop-proof-card"/g) || []).length === 3 && (myShop.match(/class="shop-proof-card"/g) || []).length === 3, 'three_compact_proof_cards_en_my')
 check(shop.includes('shop_checkout_1200_en.png') && shop.includes('shop_stock_820_en.png') && shop.includes('shop_today_820_en.png'), 'en_three_workflows')

@@ -9,9 +9,10 @@ store; record only non-secret references here.
 ## Exact candidate
 
 - PR: #734
-- Source commit: `f2af43bf12724d06f74645847a23765118be63ea`
-- Source tree: `363c42768b639b7059da4b1ea54554053e2ee3eb`
-- Native Shop tree: `05b7304d16219129d3ca8534dfddab7a606828ea`
+- Source commit: `de648ecda569c639f1b5da8fcf8cd874c1f712d4`
+- Source tree: `198c188372bb4a33777168f49e6260b63c330751`
+- Native Shop tree: `5417a23dd9e5e3f99832e921c29ff55a620e642b`
+- Public gallery evidence successor: `fd90cff3dbefe65d734f0a2c88f6df7958b2cd52`
 - Signed build filename / SHA-256: `BLOCKED — owner-supplied`
 - Signing identity / distribution channel: `BLOCKED — owner-supplied`
 - Device / OS / installation date: `NOT RUN`
@@ -37,7 +38,7 @@ Record every row as `PASS`, `FAIL`, `BLOCKED`, or `NOT RUN`.
 
 | Step | Expected result | Observed result | Status | Private evidence reference |
 | --- | --- | --- | --- | --- |
-| Catalog | Add/import reviewed real-looking products; uncertain fields require confirmation |  |  |  |
+| Catalog | Add one product or review a menu-photo draft; uncertain fields require confirmation |  |  |  |
 | Cash sale | Correct items, quantities, price, payment, immutable receipt |  |  |  |
 | Wallet sale | Local payment state is truthful; no provider settlement is implied |  |  |  |
 | Stock | Once-only sale movement matches expected on-hand quantity |  |  |  |

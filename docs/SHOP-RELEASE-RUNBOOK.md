@@ -199,7 +199,7 @@ expand the current release:
 - `P0`: expose correction only through actual operator authorization while
   preserving the original sale, reason/actor evidence, and once-only stock and
   shift effects;
-- `P1`: make clean install → preset → catalog path → guided first sale complete
+- `P1` target: make clean install → preset → catalog path → guided first sale complete
   in English or Burmese with at most five setup decisions;
 - `P1`: treat cross-device continuity as optional until conflicts and
   cross-tenant denial are visible and proven;
@@ -207,8 +207,9 @@ expand the current release:
   create product forks;
 - preserve the five native starting profiles: `mini-mart`, `cafe-takeaway`,
   `fashion-accessories`, `beauty-household`, and `custom`;
-- first run is seller type → catalog path (photo, CSV, or add one) → guided
-  first sale;
+- target first run is seller type → catalog path (photo, CSV, or add one) →
+  guided first sale; native preset effects and CSV acceptance are not yet
+  implemented;
 - keep one calm sell → payment → receipt model, hide modules until enabled, and
   keep continuity/backup guidance in Settings unless the operator must act;
 - consider wholesale/distribution and service-seller presets only after the
@@ -442,21 +443,22 @@ consume that authorization. Wallet money-return status stays external-pending
 until separately reconciled, and the records are validated through encrypted
 backup/restore.
 
-The committed security increment advances native SQLite to schema v14. It
-verifies a v2 receipt's Ed25519 signature against a reviewed public key
-pinned in source, persists one immutable `signed_v2` proof bound to workspace,
-actor, capability, exact command, expiry, and local operation, and preserves
-migrated v1 digest rows only as `legacy_unverified_v1` audit evidence. It also
-extends semantic validation across migration, direct open, backup, and staged
-restore. Focused regressions, exact source-head App CI, and matching PR
-merge-ref native CI pass; installed-device, hosted authorization, global
-replay/time, and merchant-acceptance gates remain open.
+The committed security increment advances native SQLite to schema v15. It
+persists an immutable `signed_v3` proof for new mutations while preserving
+historical `signed_v2` and `legacy_unverified_v1` audit evidence. The server
+issuer atomically reserves workspace + capability + stable sale/reversal
+target, returns the same proof only for the same request, and rejects a fresh
+request for that target. The Ed25519 proof still binds the exact command,
+actor, receipt, server finalization, and expiry. Migration, direct open,
+backup, and staged restore remain fail-closed. Installed-device and hosted
+authority evidence, post-proof clone disposition, recovery, and merchant
+acceptance remain open.
 
 Correction acceptance within Gate 5 remains open for two exact reasons:
 
 1. Source contains a default-dark authorization issuer at
    `POST /api/trial/v1/shop/correction-authorizations`, a strict native client,
-   and an immutable workspace anchor. The working v2 path signs the exact
+   and an immutable workspace anchor. The working v3 path signs the exact
    receipt digest with Ed25519 and the native verifier accepts only a known key
    pinned in source. The production public-key ring is empty, no production
    issuer signing secret is configured in this environment, authenticated
@@ -470,9 +472,11 @@ Correction acceptance within Gate 5 remains open for two exact reasons:
    workspace-owner action; normal selling remains offline. Do not imply
    offline correction parity. Defer device-bound offline manager
    credentials/passkeys until a reviewed threat model and demonstrated
-   merchant need exist. Global receipt consumption across cloned databases and
-   trusted time/device-clock rollback remain blockers even after local
-   signature verification, and real PostgreSQL/RLS tenant isolation,
+   merchant need exist. Stable-target reservation blocks normal independent-
+   clone authorization, but deliberate reuse of one already-issued proof
+   across post-proof clones remains outside the pilot threat model. Expired
+   finalized targets need a reviewed recovery procedure. Trusted device-clock
+   rollback also remains unresolved. Real PostgreSQL/RLS tenant isolation,
    revoked-session, replay, owner-transfer, and expiry behavior remain
    unproven. A typed name, shift label, shared PIN, locally constructed receipt,
    raw Supabase session, or broad write role is insufficient authority.
@@ -514,8 +518,9 @@ proof.
 Until those decisions change through the joint owner gate, Local Pilot is the
 only current offer. Assisted Launch is a separate optional one-time service.
 Managed Cloud and Multi-site remain planned/internal, not purchasable plans.
-Business templates configure editable starting workflows; they do not grant
-entitlements or create separate product forks.
+Public inquiry templates classify assisted setup; they do not configure the
+native app, grant entitlements, or create product forks. Native profile and CSV
+onboarding remain future acceptance work.
 
 ## Gate 7 — independent last-push review
 

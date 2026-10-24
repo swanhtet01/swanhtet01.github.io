@@ -372,7 +372,7 @@ if (!shopBody.includes('class="shop-access-link" href="/contact/?product=shop">C
 for (const token of ['Shop for Myanmar retailers', 'Sell clearly. Keep stock accurate.', 'Find an item, take payment and see what needs attention—even when the connection is unreliable.']) {
   if (!shopBody.includes(token)) fail('shop_approved_copy_missing', { token })
 }
-for (const token of ['How it works at the counter', 'Search or scan', 'Editable starting points', 'How to get Shop', 'Public downloads and self-service signup are not open yet', 'The web app, macOS and iPhone are not current customer Shop products.', 'Before you start', 'Where do I sign in?', 'Sending the contact form does not create an account.']) {
+for (const token of ['How it works at the counter', 'Search or scan', 'Assisted setup choices', 'These shop types help us qualify assisted setup.', 'They do not configure the app, unlock features or change your plan.', 'How to get Shop', 'Public downloads and self-service signup are not open yet', 'The web app, macOS and iPhone are not current customer Shop products.', 'Before you start', 'Where do I sign in?', 'Sending the contact form does not create an account.']) {
   if (!shopBody.includes(token)) fail('shop_access_story_missing:' + token)
 }
 for (const token of ['private browser portal', 'It is not the Shop installer or public signup.', 'supplied separately during assisted setup']) {
