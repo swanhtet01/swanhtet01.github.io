@@ -25,7 +25,7 @@ online checkout system.
 | Boundary | Verified state | Evidence |
 | --- | --- | --- |
 | Merchant pays SuperMega | Founder-operated immutable invoice/payment/refund/void and premium grant/revoke rail; payment is recorded only after out-of-band verification | `supermega_runtime/billing_rail.py`, billing migrations v12/v13, `tools/prepare_managed_invoice.mjs`; 65 billing/entitlement tests and 20 invoice self-checks pass |
-| Logged-in billing history | Missing | Runtime can read its own premium boolean only. No merchant-safe invoice, payment, receipt, renewal, or outstanding-balance screen/API exists. |
+| Logged-in billing history | Partial source projection | `BillingLedger.get_billing_state()` now emits an allowlisted `merchantSummary`: workspace-bound invoice status, sealed amount, due date, refunded/outstanding totals, and pending-manual versus confirmed-out-of-band payment state. It exposes no founder actions, customer contact, channel reference, evidence or provider claim. No authenticated merchant endpoint or screen exists yet; receipt, package term and renewal remain explicitly unavailable. |
 | Package enforcement | Partial | Product activation grants and capability intersection are server enforced. Billing has only a generic `premium` grant; invoice lines do not bind a package, add-on, term, or capability matrix. |
 | Paid AI order intake | Guarded locally | `supermega_runtime/trial_runtime.py` now requires the exact authenticated workspace's active premium grant before the provider call. Absent, wrong-workspace, and revoked grants fail 403 with zero provider calls; 4 focused tests pass. |
 | Merchant receives customer payment | Separate local record | Native cash/KBZPay/WavePay records and wallet recovery are merchant-recorded tender state, never SuperMega subscription billing or provider-confirmed settlement. |
@@ -90,9 +90,10 @@ approved:
 
 ## Next bounded work
 
-1. Design a merchant-safe read model for package, renewal, invoices, manually
-   recorded/pending versus verified payments, receipts, and outstanding amount.
-   It must expose no founder-only billing commands.
+1. Expose the reviewed merchant-safe billing projection only through an
+   authenticated exact-workspace account endpoint and read-only hub screen.
+   Enforce merchant role/capability checks; loading, empty, denial and failure
+   states must not reveal founder commands or cross-tenant existence.
 2. Bind approved package/version/term and invoice lines to server-enforced
    capabilities before any Starter/Growth/Custom UI becomes authoritative.
 3. Land and review the member identity/card contract before native loyalty
