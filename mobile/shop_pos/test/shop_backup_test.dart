@@ -1286,6 +1286,33 @@ void main() {
     expect(pickerOpened, isFalse);
   });
 
+  testWidgets('export copy points to the real empty-device restore path', (
+    tester,
+  ) async {
+    for (final myanmar in [false, true]) {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ShopBackupExportScreen(
+            database: database,
+            myanmar: myanmar,
+            exportAction: (_) async => ShopBackupExportResult.cancelled,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.text(
+          myanmar
+              ? 'ရောင်းအား၊ ပစ္စည်းပုံနှင့် ငွေပေးချေမှုဆက်တင်များ ပါဝင်သည်။ ဖိုင်နှင့် စကားဝှက်ကို လုံခြုံစွာ သိမ်းပါ။ အွန်လိုင်းအရန်ကူး မရနိုင်သေးပါ။ ဤစက်တွင် ဒေသတွင်း Shop မရှိသေးချိန် စတင်မျက်နှာပြင်မှ ဤကုဒ်ဝှက်ထားသည့်ဖိုင်ကို ပြန်လည်ရယူပါ။'
+              : 'Includes sales, photos and payment settings. Keep the file and password safe. Online backup is not available. Restore this encrypted file from the start screen when this device has no local Shop yet.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.textContaining('in-app restore'), findsNothing);
+      expect(find.textContaining('အက်ပ်အတွင်း ပြန်လည်ရယူခြင်း'), findsNothing);
+    }
+  });
+
   testWidgets('cancelled export never reports that a backup was saved', (
     tester,
   ) async {
@@ -3129,6 +3156,41 @@ void main() {
       } finally {
         restored.close();
       }
+    } finally {
+      await _disposeOpenedStartup(
+        tester,
+        closeRecorder,
+        closeExpected: databaseVerifier.wasServiced,
+      );
+      documents.deleteSync(recursive: true);
+    }
+  });
+
+  testWidgets('empty Myanmar startup exposes the restore path named by export', (
+    tester,
+  ) async {
+    final documents = Directory.systemTemp.createTempSync(
+      'shop-myanmar-restore-path-',
+    );
+    final closeRecorder = _DatabaseCloseRecorder();
+    final databaseVerifier = _OpenedDatabaseVerifier();
+    try {
+      await tester.pumpWidget(
+        ShopStartup(
+          documents: documents,
+          importScratchRoot: documents,
+          initialMyanmar: true,
+          buildShop: (_, _) =>
+              const MaterialApp(home: Scaffold(body: Text('Opened Shop'))),
+          closeDatabase: closeRecorder.call,
+          databaseFactory: _openStartupDatabase,
+          verifyOpenedDatabase: databaseVerifier.call,
+        ),
+      );
+      await _pumpUntil(tester, find.text('Shop အသစ် စတင်ရန်'));
+      expect(find.text('အရန်ကူးဖိုင် ပြန်ယူရန်'), findsOneWidget);
+      expect(find.text('ပြန်ယူပြီး Shop ဖွင့်ရန်'), findsNothing);
+      expect(tester.takeException(), isNull);
     } finally {
       await _disposeOpenedStartup(
         tester,

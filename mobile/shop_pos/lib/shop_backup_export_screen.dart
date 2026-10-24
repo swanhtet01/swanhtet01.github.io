@@ -217,8 +217,8 @@ class _ShopBackupExportScreenState extends State<ShopBackupExportScreen> {
               Text(
                 shopCopy(
                   widget.myanmar,
-                  'Includes sales, photos and payment settings. Keep the file and password safe. Online backup and in-app restore are not available yet.',
-                  'ရောင်းအား၊ ပစ္စည်းပုံနှင့် ငွေပေးချေမှုဆက်တင်များ ပါဝင်သည်။ ဖိုင်နှင့် စကားဝှက်ကို လုံခြုံစွာ သိမ်းပါ။ အွန်လိုင်းအရန်ကူးနှင့် အက်ပ်အတွင်း ပြန်လည်ရယူခြင်း မရနိုင်သေးပါ။',
+                  'Includes sales, photos and payment settings. Keep the file and password safe. Online backup is not available. Restore this encrypted file from the start screen when this device has no local Shop yet.',
+                  'ရောင်းအား၊ ပစ္စည်းပုံနှင့် ငွေပေးချေမှုဆက်တင်များ ပါဝင်သည်။ ဖိုင်နှင့် စကားဝှက်ကို လုံခြုံစွာ သိမ်းပါ။ အွန်လိုင်းအရန်ကူး မရနိုင်သေးပါ။ ဤစက်တွင် ဒေသတွင်း Shop မရှိသေးချိန် စတင်မျက်နှာပြင်မှ ဤကုဒ်ဝှက်ထားသည့်ဖိုင်ကို ပြန်လည်ရယူပါ။',
                 ),
               ),
               const SizedBox(height: 24),
