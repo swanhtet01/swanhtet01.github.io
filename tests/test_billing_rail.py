@@ -33,6 +33,7 @@ from supermega_runtime.billing_rail import (
     CONFIRM_BILLING_ACTION_PHRASE,
     INVOICE_PACKET_CONTRACT,
     MANAGED_BILLING_CONTRACT,
+    MERCHANT_BILLING_SUMMARY_CONTRACT,
     PREMIUM_TIER,
     STATUS_LIFECYCLE,
     BillingLedger,
@@ -601,6 +602,101 @@ class BillingLedgerTests(unittest.TestCase):
             evidence=founder_evidence("grant-0001", f"invoice:{INVOICE_ID}:paid"),
         )
 
+    def test_merchant_summary_empty_and_workspace_scoped(self) -> None:
+        empty = self.ledger.get_billing_state(WORKSPACE_ID)["merchantSummary"]
+        self.assertEqual(empty["invoices"], [])
+        self.assertEqual(empty["totalOutstandingMinorByCurrency"], {})
+        self.assertEqual(empty["package"]["entitlementStatus"], "none")
+
+        self.issue()
+        other = self.ledger.get_billing_state("other-test-workspace")["merchantSummary"]
+        self.assertEqual(other["workspaceId"], "other-test-workspace")
+        self.assertEqual(other["invoices"], [])
+        self.assertNotIn(INVOICE_ID, json.dumps(other))
+
+    def test_merchant_summary_distinguishes_pending_from_out_of_band_verified(self) -> None:
+        self.issue()
+        pending = self.ledger.get_billing_state(WORKSPACE_ID)["merchantSummary"]
+        self.assertEqual(pending["invoices"][0]["paymentState"], "pending_manual_verification")
+        self.assertEqual(pending["invoices"][0]["outstandingMinor"], 125000)
+        self.assertEqual(pending["totalOutstandingMinorByCurrency"], {"MMK": 125000})
+        self.assertFalse(pending["invoices"][0]["providerSettlementVerified"])
+
+        self.confirm()
+        verified = self.ledger.get_billing_state(WORKSPACE_ID)["merchantSummary"]
+        self.assertEqual(verified["invoices"][0]["paymentState"], "confirmed_out_of_band")
+        self.assertEqual(verified["invoices"][0]["outstandingMinor"], 0)
+        self.assertEqual(verified["totalOutstandingMinorByCurrency"], {})
+        self.assertFalse(verified["providerSettlementVerified"])
+
+    def test_merchant_summary_excludes_malformed_stored_invoice_without_guessing(self) -> None:
+        self.issue()
+        row = self.database.invoices[(WORKSPACE_ID, INVOICE_ID)]
+        payload = json.loads(str(row["payload_json"]))
+        payload["invoice"]["issuedToPayBy"]["dueDate"] = "not-a-date"
+        row["payload_json"] = json.dumps(payload)
+        summary = self.ledger.get_billing_state(WORKSPACE_ID)["merchantSummary"]
+        self.assertEqual(summary["invoices"], [])
+        self.assertEqual(summary["excluded"], [{
+            "invoiceId": INVOICE_ID,
+            "reason": "stored_invoice_summary_unavailable",
+        }])
+        self.assertFalse(summary["externalWritesPerformed"])
+
+    def test_merchant_summary_revalidates_invoice_seal_and_row_binding(self) -> None:
+        self.issue()
+        row = self.database.invoices[(WORKSPACE_ID, INVOICE_ID)]
+        payload = json.loads(str(row["payload_json"]))
+        payload["invoice"]["amount"]["totalMinor"] = 1
+        row["payload_json"] = json.dumps(payload)
+        summary = self.ledger.get_billing_state(WORKSPACE_ID)["merchantSummary"]
+        self.assertEqual(summary["invoices"], [])
+        self.assertEqual(summary["excluded"], [{
+            "invoiceId": INVOICE_ID,
+            "reason": "stored_invoice_summary_unavailable",
+        }])
+
+    def test_merchant_summary_rejects_malformed_and_over_total_refund_history(self) -> None:
+        cases = (
+            ("negative", {"digest": self.digest, "amount_minor": -1}, "stored_refund_history_invalid"),
+            ("boolean", {"digest": self.digest, "amount_minor": True}, "stored_refund_history_invalid"),
+            ("malformed", {"payload_json": json.dumps(["not", "a", "record"])}, "stored_refund_history_invalid"),
+            ("over-total", {"digest": self.digest, "amount_minor": 125001}, "stored_refund_total_invalid"),
+        )
+        for label, refund, reason in cases:
+            with self.subTest(label=label):
+                database = FakeBillingDatabase()
+                ledger = BillingLedger(DATABASE_URL, connection_factory=database.connect)
+                ledger.issue_invoice(
+                    sample_packet(),
+                    workspace_id=WORKSPACE_ID,
+                    evidence=founder_evidence("issue-0001", "viber:handover:2026-08-17"),
+                )
+                seed_refund_event(database, reference=f"REF-{label}", **refund)
+                summary = ledger.get_billing_state(WORKSPACE_ID)["merchantSummary"]
+                self.assertEqual(summary["invoices"], [])
+                self.assertEqual(summary["excluded"], [{
+                    "invoiceId": INVOICE_ID,
+                    "reason": reason,
+                }])
+
+    def test_billing_state_loads_workspace_refunds_once(self) -> None:
+        self.issue()
+        self.ledger.issue_invoice(
+            packet_variant("INV-TEST-0002", "2026-08-31"),
+            workspace_id=WORKSPACE_ID,
+            evidence=founder_evidence("issue-0002", "viber:handover:2026-08-17"),
+        )
+        before = len(self.database.statements)
+        self.ledger.get_billing_state(WORKSPACE_ID)
+        refund_reads = [
+            (sql, values)
+            for sql, values in self.database.statements[before:]
+            if sql.startswith("select") and "billing.refund.recorded" in sql
+        ]
+        self.assertEqual(len(refund_reads), 1)
+        self.assertEqual(refund_reads[0][1], (WORKSPACE_ID,))
+
     def test_lifecycle_happy_path_issue_confirm_grant(self) -> None:
         issued = self.issue()
         self.assertEqual(issued["contract"], BILLING_EVENT_RESULT_CONTRACT)
@@ -637,6 +733,34 @@ class BillingLedgerTests(unittest.TestCase):
         ])
         self.assertEqual(state["eventCount"], 3)
         self.assertFalse(state["externalWritesPerformed"])
+        summary = state["merchantSummary"]
+        self.assertEqual(summary["contract"], MERCHANT_BILLING_SUMMARY_CONTRACT)
+        self.assertEqual(summary["workspaceId"], WORKSPACE_ID)
+        self.assertEqual(summary["package"], {
+            "bindingStatus": "legacy_entitlement_only",
+            "packageCode": None,
+            "term": None,
+            "renewalAt": None,
+            "entitlementKey": PREMIUM_TIER,
+            "entitlementStatus": "granted",
+        })
+        self.assertEqual(summary["invoices"], [{
+            "invoiceId": INVOICE_ID,
+            "status": "paid",
+            "issuedAt": "2026-08-01T03:30:00.000Z",
+            "dueDate": "2026-08-15",
+            "currency": "MMK",
+            "exponent": 0,
+            "totalMinor": 125000,
+            "refundedMinor": 0,
+            "outstandingMinor": 0,
+            "paymentState": "confirmed_out_of_band",
+            "providerSettlementVerified": False,
+            "receiptAvailable": False,
+        }])
+        self.assertFalse(summary["recurringBillingConfigured"])
+        self.assertFalse(summary["administrativeActionsExposed"])
+        self.assertNotRegex(json.dumps(summary), r"owner@example|ACCT-000|09-0000|paymentReference|evidence")
 
     def test_exact_replay_is_idempotent_and_divergent_replay_conflicts(self) -> None:
         first = self.issue()
