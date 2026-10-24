@@ -21,6 +21,7 @@ from supermega_runtime.shop_inventory_runtime import (
 )
 from supermega_runtime.shop_correction_receipts import (
     SHOP_CORRECTION_AUTHORIZATION_CONTRACT,
+    SHOP_CORRECTION_AUTHORIZATION_V2_CONTRACT,
     ShopCorrectionReceiptSigner,
     ShopCorrectionSigningError,
     load_shop_correction_receipt_signer,
@@ -148,9 +149,12 @@ PRODUCT_ACCEPTANCE_SURFACES = {
 PRODUCT_ACCEPTANCE_CONTRACT = "supermega.hosted_product_acceptance.v1"
 PRODUCT_ACCEPTANCE_EVENT_TYPE = "client.product_acceptance.recorded"
 SHOP_CORRECTION_AUTHORIZATION_EVENT_TYPE = (
-    "commerce.shop_correction_authorization.issued"
+    "commerce.shop_correction_authorization.finalized"
 )
 SHOP_CORRECTION_AUTHORIZATION_SOURCE = "managed_membership_receipt_v1"
+SHOP_CORRECTION_AUTHORIZATION_COMMAND_NAMESPACE = (
+    "https://supermega.dev/contracts/shop-correction-finalization/v1"
+)
 SHOP_CORRECTION_AUTHORIZATION_TTL_MILLIS = 5 * 60 * 1000
 SHOP_CORRECTION_AUTHORIZATION_CAPABILITIES = frozenset(
     {"shop.sale.reverse", "shop.sale.reconcile_wallet"}
@@ -672,7 +676,7 @@ class TrialAuthorizationExpired(TrialStoreError):
     def __init__(self, authorization_request_id: str):
         self.authorization_request_id = authorization_request_id
         super().__init__(
-            "Shop correction authorization expired; use a fresh authorization_request_id."
+            "Shop correction authorization expired; the finalized command cannot be reauthorized."
         )
 
 
@@ -908,6 +912,7 @@ class ProductAcceptanceRecord:
 class ShopCorrectionAuthorizationReceipt:
     receipt_id: str
     receipt_digest: str
+    finalization_request_id: str
     workspace_id: str
     actor_id: str
     actor_label: str
@@ -915,6 +920,7 @@ class ShopCorrectionAuthorizationReceipt:
     capability: str
     source: str
     command_digest: str
+    finalized_at_millis: int
     issued_at_millis: int
     expires_at_millis: int
     key_id: str
@@ -926,6 +932,7 @@ class ShopCorrectionAuthorizationReceipt:
             "contract": SHOP_CORRECTION_AUTHORIZATION_CONTRACT,
             "receiptId": self.receipt_id,
             "receiptDigest": self.receipt_digest,
+            "finalizationRequestId": self.finalization_request_id,
             "workspaceId": self.workspace_id,
             "actorId": self.actor_id,
             "actorLabel": self.actor_label,
@@ -933,6 +940,7 @@ class ShopCorrectionAuthorizationReceipt:
             "capability": self.capability,
             "source": self.source,
             "commandDigest": self.command_digest,
+            "finalizedAtMillis": self.finalized_at_millis,
             "issuedAtMillis": self.issued_at_millis,
             "expiresAtMillis": self.expires_at_millis,
             "keyId": self.key_id,
@@ -3316,6 +3324,50 @@ def shop_correction_authorization_receipt_digest(
         "expiresAtMillis": expires_at_millis,
     }
     encoded = (
+        SHOP_CORRECTION_AUTHORIZATION_V2_CONTRACT
+        + "\n"
+        + json.dumps(
+            projection,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            allow_nan=False,
+        )
+    ).encode("utf-8")
+    return sha256(encoded).hexdigest()
+
+
+def shop_correction_authorization_receipt_v3_digest(
+    *,
+    source: str,
+    receipt_id: str,
+    finalization_request_id: str,
+    workspace_id: str,
+    actor_id: str,
+    actor_label: str,
+    actor_role: str,
+    capability: str,
+    command_digest: str,
+    finalized_at_millis: int,
+    issued_at_millis: int,
+    expires_at_millis: int,
+) -> str:
+    """Digest the ordered, server-finalized cross-runtime v3 projection."""
+
+    projection = {
+        "source": source,
+        "receiptId": receipt_id,
+        "finalizationRequestId": finalization_request_id,
+        "workspaceId": workspace_id,
+        "actorId": actor_id,
+        "actorLabel": actor_label,
+        "actorRole": actor_role,
+        "capability": capability,
+        "commandDigest": command_digest,
+        "finalizedAtMillis": finalized_at_millis,
+        "issuedAtMillis": issued_at_millis,
+        "expiresAtMillis": expires_at_millis,
+    }
+    encoded = (
         SHOP_CORRECTION_AUTHORIZATION_CONTRACT
         + "\n"
         + json.dumps(
@@ -3538,7 +3590,7 @@ def _shop_correction_authorization_request(
     command_digest: object,
     request_fingerprint: object,
     confirmation: object,
-) -> tuple[str, str, str, str, JsonObject, str]:
+) -> tuple[str, str, str, str, JsonObject]:
     request_id = _normalize_uuid(
         authorization_request_id,
         field_name="authorization_request_id",
@@ -3553,24 +3605,43 @@ def _shop_correction_authorization_request(
     expected_confirmation = SHOP_CORRECTION_AUTHORIZATION_CONFIRMATIONS[capability_value]
     if not isinstance(confirmation, str) or confirmation != expected_confirmation:
         raise TrialValidationError("Shop correction confirmation is invalid.")
-    event_fingerprint = _canonical_fingerprint(
-        "shop_correction_authorization",
-        {
-            "contract": SHOP_CORRECTION_AUTHORIZATION_CONTRACT,
-            "authorization_request_id": request_id,
-            "capability": capability_value,
-            "command_digest": digest_value,
-            "request_fingerprint": fingerprint_value,
-            "confirmation": confirmation,
-        },
-    )
     return (
         request_id,
         capability_value,
         digest_value,
         confirmation,
         facts,
-        event_fingerprint,
+    )
+
+
+def _shop_correction_finalization_identity(
+    *, workspace_id: str, capability: str, semantic_target_id: str
+) -> tuple[str, str]:
+    """Return the global semantic-correction key and fingerprint.
+
+    The caller's request id is deliberately absent. It identifies an ambiguous
+    retry claimant, not a new authorization for the same sale or reversal.
+    The exact command digest remains bound in the signed receipt and stored
+    payload, while this key prevents a clone from changing its operation id to
+    obtain another authorization for the same business target.
+    """
+
+    binding = {
+        "contract": SHOP_CORRECTION_AUTHORIZATION_CONTRACT,
+        "workspace_id": workspace_id,
+        "capability": capability,
+        "semantic_target_id": semantic_target_id,
+    }
+    command_id = str(
+        uuid5(
+            NAMESPACE_URL,
+            SHOP_CORRECTION_AUTHORIZATION_COMMAND_NAMESPACE
+            + "\n"
+            + json.dumps(binding, sort_keys=True, separators=(",", ":")),
+        )
+    )
+    return command_id, _canonical_fingerprint(
+        "shop_correction_authorization_finalization", binding
     )
 
 
@@ -3580,6 +3651,7 @@ def _shop_correction_receipt_from_mapping(
     signer: ShopCorrectionReceiptSigner,
     workspace_id: str,
     actor_id: str,
+    finalization_request_id: str,
     capability: str,
     command_digest: str,
     idempotent_replay: bool,
@@ -3590,6 +3662,7 @@ def _shop_correction_receipt_from_mapping(
         "contract",
         "receiptId",
         "receiptDigest",
+        "finalizationRequestId",
         "workspaceId",
         "actorId",
         "actorLabel",
@@ -3597,6 +3670,7 @@ def _shop_correction_receipt_from_mapping(
         "capability",
         "source",
         "commandDigest",
+        "finalizedAtMillis",
         "issuedAtMillis",
         "expiresAtMillis",
         "keyId",
@@ -3609,12 +3683,18 @@ def _shop_correction_receipt_from_mapping(
     except (TypeError, ValueError, AttributeError) as exc:
         raise TrialStoreError("Shop correction authorization evidence is invalid.") from exc
     issued_at_millis = value.get("issuedAtMillis")
+    finalized_at_millis = value.get("finalizedAtMillis")
     expires_at_millis = value.get("expiresAtMillis")
-    if type(issued_at_millis) is not int or type(expires_at_millis) is not int:
+    if (
+        type(finalized_at_millis) is not int
+        or type(issued_at_millis) is not int
+        or type(expires_at_millis) is not int
+    ):
         raise TrialStoreError("Shop correction authorization evidence is invalid.")
     receipt = ShopCorrectionAuthorizationReceipt(
         receipt_id=receipt_id,
         receipt_digest=str(value.get("receiptDigest") or ""),
+        finalization_request_id=str(value.get("finalizationRequestId") or ""),
         workspace_id=str(value.get("workspaceId") or ""),
         actor_id=str(value.get("actorId") or ""),
         actor_label=str(value.get("actorLabel") or ""),
@@ -3622,26 +3702,30 @@ def _shop_correction_receipt_from_mapping(
         capability=str(value.get("capability") or ""),
         source=str(value.get("source") or ""),
         command_digest=str(value.get("commandDigest") or ""),
+        finalized_at_millis=finalized_at_millis,
         issued_at_millis=issued_at_millis,
         expires_at_millis=expires_at_millis,
         key_id=str(value.get("keyId") or ""),
         signature=str(value.get("signature") or ""),
         idempotent_replay=idempotent_replay,
     )
-    expected_digest = shop_correction_authorization_receipt_digest(
+    expected_digest = shop_correction_authorization_receipt_v3_digest(
         source=receipt.source,
         receipt_id=receipt.receipt_id,
+        finalization_request_id=receipt.finalization_request_id,
         workspace_id=receipt.workspace_id,
         actor_id=receipt.actor_id,
         actor_label=receipt.actor_label,
         actor_role=receipt.actor_role,
         capability=receipt.capability,
         command_digest=receipt.command_digest,
+        finalized_at_millis=receipt.finalized_at_millis,
         issued_at_millis=receipt.issued_at_millis,
         expires_at_millis=receipt.expires_at_millis,
     )
     if (
         value.get("contract") != SHOP_CORRECTION_AUTHORIZATION_CONTRACT
+        or receipt.finalization_request_id != finalization_request_id
         or receipt.workspace_id != workspace_id
         or receipt.actor_id != actor_id
         or receipt.actor_label != "Workspace owner"
@@ -3651,7 +3735,13 @@ def _shop_correction_receipt_from_mapping(
         or receipt.command_digest != command_digest
         or not re.fullmatch(r"[0-9a-f]{64}", receipt.receipt_digest)
         or receipt.receipt_digest != expected_digest
+        or receipt.finalized_at_millis <= 0
         or receipt.issued_at_millis <= 0
+        or not (
+            receipt.issued_at_millis
+            <= receipt.finalized_at_millis
+            <= receipt.expires_at_millis
+        )
         or receipt.expires_at_millis - receipt.issued_at_millis
         != SHOP_CORRECTION_AUTHORIZATION_TTL_MILLIS
         or receipt.key_id != signer.key_id
@@ -3669,27 +3759,32 @@ def _new_shop_correction_authorization_receipt(
     signer: ShopCorrectionReceiptSigner,
     workspace_id: str,
     actor_id: str,
+    finalization_request_id: str,
     capability: str,
     command_digest: str,
-    issued_at_millis: int,
+    finalized_at_millis: int,
 ) -> ShopCorrectionAuthorizationReceipt:
+    issued_at_millis = finalized_at_millis
     expires_at_millis = issued_at_millis + SHOP_CORRECTION_AUTHORIZATION_TTL_MILLIS
     receipt_id = str(uuid4())
-    receipt_digest = shop_correction_authorization_receipt_digest(
+    receipt_digest = shop_correction_authorization_receipt_v3_digest(
         source=SHOP_CORRECTION_AUTHORIZATION_SOURCE,
         receipt_id=receipt_id,
+        finalization_request_id=finalization_request_id,
         workspace_id=workspace_id,
         actor_id=actor_id,
         actor_label="Workspace owner",
         actor_role="owner",
         capability=capability,
         command_digest=command_digest,
+        finalized_at_millis=finalized_at_millis,
         issued_at_millis=issued_at_millis,
         expires_at_millis=expires_at_millis,
     )
     return ShopCorrectionAuthorizationReceipt(
         receipt_id=receipt_id,
         receipt_digest=receipt_digest,
+        finalization_request_id=finalization_request_id,
         workspace_id=workspace_id,
         actor_id=actor_id,
         actor_label="Workspace owner",
@@ -3697,6 +3792,7 @@ def _new_shop_correction_authorization_receipt(
         capability=capability,
         source=SHOP_CORRECTION_AUTHORIZATION_SOURCE,
         command_digest=command_digest,
+        finalized_at_millis=finalized_at_millis,
         issued_at_millis=issued_at_millis,
         expires_at_millis=expires_at_millis,
         key_id=signer.key_id,
@@ -5265,6 +5361,7 @@ class PostgresTrialStore:
         cursor: Any,
         *,
         principal: TrialPrincipal,
+        command_id: str,
         authorization_request_id: str,
         fingerprint: str,
         capability: str,
@@ -5272,11 +5369,12 @@ class PostgresTrialStore:
     ) -> ShopCorrectionAuthorizationReceipt | None:
         cursor.execute(
             """
-            select event_type, actor_id, actor_kind, command_fingerprint, result_json
+            select event_type, actor_id, actor_kind, command_fingerprint,
+                   payload_json, result_json
             from app_private.workspace_events
             where workspace_id = %s and command_id = %s
             """,
-            (principal.workspace_id, authorization_request_id),
+            (principal.workspace_id, command_id),
         )
         row = cursor.fetchone()
         if not row:
@@ -5288,7 +5386,22 @@ class PostgresTrialStore:
             or str(row.get("actor_kind") or "") != principal.actor_kind
             or str(row.get("command_fingerprint") or "") != fingerprint
         ):
-            raise TrialIdempotencyConflict(authorization_request_id)
+            raise TrialIdempotencyConflict(command_id)
+        payload = row.get("payload_json") or {}
+        if isinstance(payload, str):
+            try:
+                payload = json.loads(payload)
+            except json.JSONDecodeError as exc:
+                raise TrialStoreError(
+                    "Shop correction authorization evidence is invalid."
+                ) from exc
+        if (
+            not isinstance(payload, Mapping)
+            or payload.get("authorizationRequestId") != authorization_request_id
+            or payload.get("capability") != capability
+            or payload.get("commandDigest") != command_digest
+        ):
+            raise TrialIdempotencyConflict(command_id)
         result = row.get("result_json") or {}
         if isinstance(result, str):
             try:
@@ -5305,6 +5418,7 @@ class PostgresTrialStore:
             signer=signer,
             workspace_id=principal.workspace_id,
             actor_id=principal.actor_id,
+            finalization_request_id=authorization_request_id,
             capability=capability,
             command_digest=command_digest,
             idempotent_replay=True,
@@ -5329,7 +5443,6 @@ class PostgresTrialStore:
             command_digest_value,
             confirmation_value,
             command_facts,
-            fingerprint,
         ) = _shop_correction_authorization_request(
             authorization_request_id=authorization_request_id,
             capability=capability,
@@ -5338,6 +5451,17 @@ class PostgresTrialStore:
             confirmation=confirmation,
         )
         normalized = _require_shop_correction_principal(principal)
+        command_id, fingerprint = _shop_correction_finalization_identity(
+            workspace_id=normalized.workspace_id,
+            capability=capability_value,
+            semantic_target_id=str(
+                command_facts[
+                    "saleId"
+                    if capability_value == "shop.sale.reverse"
+                    else "reversalId"
+                ]
+            ),
+        )
         with self._guarded_cursor(
             normalized,
             write=True,
@@ -5351,8 +5475,29 @@ class PostgresTrialStore:
             self._require_active_workspace_owner(cursor, normalized)
             self._lock(
                 cursor,
-                f"{normalized.workspace_id}:shop-correction-authorization:{request_id}",
+                f"{normalized.workspace_id}:shop-correction-finalization:{command_id}",
             )
+            self._lock(
+                cursor,
+                f"{normalized.workspace_id}:shop-correction-request:{request_id}",
+            )
+            cursor.execute(
+                """
+                select command_id
+                from app_private.workspace_events
+                where workspace_id = %s
+                  and event_type = %s
+                  and payload_json ->> 'authorizationRequestId' = %s
+                """,
+                (
+                    normalized.workspace_id,
+                    SHOP_CORRECTION_AUTHORIZATION_EVENT_TYPE,
+                    request_id,
+                ),
+            )
+            request_claim = cursor.fetchone()
+            if request_claim and str(request_claim.get("command_id") or "") != command_id:
+                raise TrialIdempotencyConflict(request_id)
             cursor.execute(
                 """
                 select floor(extract(epoch from clock_timestamp()) * 1000)::bigint
@@ -5369,6 +5514,7 @@ class PostgresTrialStore:
             replay = self._load_shop_correction_authorization_replay(
                 cursor,
                 principal=normalized,
+                command_id=command_id,
                 authorization_request_id=request_id,
                 fingerprint=fingerprint,
                 capability=capability_value,
@@ -5382,9 +5528,10 @@ class PostgresTrialStore:
                 signer=signer,
                 workspace_id=normalized.workspace_id,
                 actor_id=normalized.actor_id,
+                finalization_request_id=request_id,
                 capability=capability_value,
                 command_digest=command_digest_value,
-                issued_at_millis=issued_at_millis,
+                finalized_at_millis=issued_at_millis,
             )
             payload: JsonObject = {
                 "contract": SHOP_CORRECTION_AUTHORIZATION_CONTRACT,
@@ -5406,7 +5553,7 @@ class PostgresTrialStore:
                 (
                     receipt.receipt_id,
                     normalized.workspace_id,
-                    request_id,
+                    command_id,
                     fingerprint,
                     SHOP_CORRECTION_AUTHORIZATION_EVENT_TYPE,
                     normalized.actor_id,
@@ -5418,6 +5565,7 @@ class PostgresTrialStore:
             readback = self._load_shop_correction_authorization_replay(
                 cursor,
                 principal=normalized,
+                command_id=command_id,
                 authorization_request_id=request_id,
                 fingerprint=fingerprint,
                 capability=capability_value,
@@ -6369,7 +6517,6 @@ class InMemoryTrialStore:
             command_digest_value,
             confirmation_value,
             command_facts,
-            fingerprint,
         ) = _shop_correction_authorization_request(
             authorization_request_id=authorization_request_id,
             capability=capability,
@@ -6378,6 +6525,17 @@ class InMemoryTrialStore:
             confirmation=confirmation,
         )
         normalized = _require_shop_correction_principal(principal)
+        command_id, fingerprint = _shop_correction_finalization_identity(
+            workspace_id=normalized.workspace_id,
+            capability=capability_value,
+            semantic_target_id=str(
+                command_facts[
+                    "saleId"
+                    if capability_value == "shop.sale.reverse"
+                    else "reversalId"
+                ]
+            ),
+        )
         with self._lock:
             normalized, readiness = self._guard(
                 normalized,
@@ -6394,27 +6552,48 @@ class InMemoryTrialStore:
                 != normalized.actor_id
             ):
                 raise TrialPermissionDenied("shop.owner")
-            event_key = (normalized.workspace_id, request_id)
+            event_key = (normalized.workspace_id, command_id)
+            claimed_command = next(
+                (
+                    existing_command
+                    for (workspace_id, existing_command), payload
+                    in self._shop_correction_payloads.items()
+                    if workspace_id == normalized.workspace_id
+                    and payload.get("authorizationRequestId") == request_id
+                ),
+                None,
+            )
+            if claimed_command is not None and claimed_command != command_id:
+                raise TrialIdempotencyConflict(request_id)
             if (
                 event_key in self._events
                 and self._event_types.get(event_key)
                 != SHOP_CORRECTION_AUTHORIZATION_EVENT_TYPE
             ):
-                raise TrialIdempotencyConflict(request_id)
+                raise TrialIdempotencyConflict(command_id)
             issued_at_millis = int(datetime.now(timezone.utc).timestamp() * 1000)
             replay = self._replay(
                 normalized.workspace_id,
                 normalized.actor_id,
                 normalized.actor_kind,
-                request_id,
+                command_id,
                 fingerprint,
             )
             if replay is not None:
+                payload = self._shop_correction_payloads.get(event_key)
+                if (
+                    not isinstance(payload, Mapping)
+                    or payload.get("authorizationRequestId") != request_id
+                    or payload.get("capability") != capability_value
+                    or payload.get("commandDigest") != command_digest_value
+                ):
+                    raise TrialIdempotencyConflict(command_id)
                 receipt = _shop_correction_receipt_from_mapping(
                     replay,
                     signer=signer,
                     workspace_id=normalized.workspace_id,
                     actor_id=normalized.actor_id,
+                    finalization_request_id=request_id,
                     capability=capability_value,
                     command_digest=command_digest_value,
                     idempotent_replay=True,
@@ -6426,9 +6605,10 @@ class InMemoryTrialStore:
                 signer=signer,
                 workspace_id=normalized.workspace_id,
                 actor_id=normalized.actor_id,
+                finalization_request_id=request_id,
                 capability=capability_value,
                 command_digest=command_digest_value,
-                issued_at_millis=issued_at_millis,
+                finalized_at_millis=issued_at_millis,
             )
             self._events[event_key] = (
                 fingerprint,
@@ -6449,7 +6629,7 @@ class InMemoryTrialStore:
                 normalized.workspace_id,
                 normalized.actor_id,
                 normalized.actor_kind,
-                request_id,
+                command_id,
                 fingerprint,
             )
             record = _shop_correction_receipt_from_mapping(
@@ -6457,6 +6637,7 @@ class InMemoryTrialStore:
                 signer=signer,
                 workspace_id=normalized.workspace_id,
                 actor_id=normalized.actor_id,
+                finalization_request_id=request_id,
                 capability=capability_value,
                 command_digest=command_digest_value,
                 idempotent_replay=False,

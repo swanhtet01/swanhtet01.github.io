@@ -21,6 +21,7 @@ enum _ShopSnapshotSchemaKind {
   profileWorkspaceCollisionV12,
   unifiedV13,
   unifiedV14,
+  unifiedV15,
 }
 
 enum _SnapshotColumnGroupState { none, partial, exact }
@@ -45,7 +46,7 @@ class _SnapshotSchemaObject {
 /// the database so an interrupted export or restore cannot retain plaintext.
 abstract final class ShopBackup {
   static const formatVersion = 1;
-  static const supportedSchemaVersion = 14;
+  static const supportedSchemaVersion = 15;
   static const oldestSupportedSchemaVersion = 6;
   static const maxSnapshotBytes = 64 * 1024 * 1024;
 
@@ -158,6 +159,11 @@ abstract final class ShopBackup {
     'issued_at_millis',
     'expires_at_millis',
     'verified_at_millis',
+  };
+  static const _v15AuthorizationProofColumns = <String>{
+    ..._v14AuthorizationProofColumns,
+    'finalization_request_id',
+    'finalized_at_millis',
   };
 
   static final _cipher = AesGcm.with256bits();
@@ -642,19 +648,23 @@ abstract final class ShopBackup {
           schemaKind == _ShopSnapshotSchemaKind.correctionV11 ||
           schemaKind == _ShopSnapshotSchemaKind.correctionWorkspaceV12 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV13 ||
-          schemaKind == _ShopSnapshotSchemaKind.unifiedV14;
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV14 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV15;
       final hasWorkspaceSchema =
           schemaKind == _ShopSnapshotSchemaKind.correctionWorkspaceV12 ||
           schemaKind == _ShopSnapshotSchemaKind.profileWorkspaceCollisionV12 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV13 ||
-          schemaKind == _ShopSnapshotSchemaKind.unifiedV14;
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV14 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV15;
       final hasProfileSchema =
           schemaKind == _ShopSnapshotSchemaKind.profileV11 ||
           schemaKind == _ShopSnapshotSchemaKind.profileWorkspaceCollisionV12 ||
           schemaKind == _ShopSnapshotSchemaKind.unifiedV13 ||
-          schemaKind == _ShopSnapshotSchemaKind.unifiedV14;
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV14 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV15;
       final hasAuthorizationProofSchema =
-          schemaKind == _ShopSnapshotSchemaKind.unifiedV14;
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV14 ||
+          schemaKind == _ShopSnapshotSchemaKind.unifiedV15;
       final objects = _readSnapshotSchemaObjects(connection);
       final baseSchemaValid =
           objects != null &&
@@ -716,7 +726,9 @@ abstract final class ShopBackup {
                   _tableHasColumns(
                     connection,
                     'shop_correction_authorization_proofs',
-                    _v14AuthorizationProofColumns,
+                    schemaVersion >= 15
+                        ? _v15AuthorizationProofColumns
+                        : _v14AuthorizationProofColumns,
                   )));
       final walletIntents = schemaValid
           ? connection.select(
@@ -938,6 +950,9 @@ abstract final class ShopBackup {
   static Map<String, String> get _v14AuthorizationProofDefinitions =>
       shopAuthorizationProofSchemaDefinitionsV14();
 
+  static Map<String, String> get _v15AuthorizationProofDefinitions =>
+      shopAuthorizationProofSchemaDefinitionsV15();
+
   static _ShopSnapshotSchemaKind? _classifySnapshotSchema(
     Database connection,
     int schemaVersion, {
@@ -957,7 +972,9 @@ abstract final class ShopBackup {
     }
     final auditDefinitions = _v11SchemaDefinitions;
     final workspaceDefinitions = _v12SchemaDefinitions;
-    final proofDefinitions = _v14AuthorizationProofDefinitions;
+    final proofDefinitions = schemaVersion >= 15
+        ? _v15AuthorizationProofDefinitions
+        : _v14AuthorizationProofDefinitions;
     final collisionDefinitions = shopWorkspaceCollisionPrefixDefinitionsV12();
     final auditNames = auditDefinitions.keys.toSet();
     final workspaceNames = workspaceDefinitions.keys.toSet();
@@ -1134,6 +1151,39 @@ abstract final class ShopBackup {
           'shop_v13_migration_provenance',
         })) {
       return _ShopSnapshotSchemaKind.unifiedV14;
+    }
+    if (schemaVersion == 15 &&
+        auditExact &&
+        workspaceExact &&
+        profileExact &&
+        proofExact &&
+        _snapshotDefinitionGroupExact(
+          objects,
+          const {
+            'shop_v13_migration_provenance': shopMigrationProvenanceV13Sql,
+          },
+          const {'shop_v13_migration_provenance'},
+        ) &&
+        _migrationProvenanceValid(
+          connection,
+          allowRuntimeUnboundCorrectionHistory:
+              allowRuntimeUnboundCorrectionHistory,
+          hasAuthorizationProofs: true,
+        ) &&
+        triggersMatch([
+          auditDefinitions,
+          workspaceDefinitions,
+          proofDefinitions,
+        ]) &&
+        _snapshotObjectNamesExact(objects, {
+          ..._snapshotExpectedBaseObjectNames(schemaVersion),
+          ...auditDefinitions.keys,
+          ...workspaceDefinitions.keys,
+          ...proofDefinitions.keys,
+          'shop_business_profile',
+          'shop_v13_migration_provenance',
+        })) {
+      return _ShopSnapshotSchemaKind.unifiedV15;
     }
     return null;
   }
@@ -1574,6 +1624,13 @@ abstract final class ShopBackup {
     final receiptDigest = proof['receipt_digest'];
     final keyId = proof['key_id'];
     final signature = proof['signature'];
+    final hasFinalization = proof.keys.contains('finalization_request_id');
+    final finalizationRequestId = hasFinalization
+        ? proof['finalization_request_id']
+        : null;
+    final finalizedAtMillis = hasFinalization
+        ? proof['finalized_at_millis']
+        : null;
     final workspaceId = proof['workspace_id'];
     final actorId = proof['actor_id'];
     final actorLabel = proof['actor_label'];
@@ -1610,7 +1667,6 @@ abstract final class ShopBackup {
           'shop.sale.reconcile_wallet',
         }.contains(capability) ||
         source is! String ||
-        source != 'managed_membership_receipt_v1' ||
         commandDigest is! String ||
         !digest.hasMatch(commandDigest) ||
         issuedAtMillis is! int ||
@@ -1627,8 +1683,10 @@ abstract final class ShopBackup {
           RegExp(r'^[a-z0-9][a-z0-9._-]{0,31}$').hasMatch(keyId) &&
           signature is String &&
           RegExp(r'^[A-Za-z0-9_-]{86}$').hasMatch(signature) &&
-          shopCorrectionAuthorizationReceiptDigestMatches(
-            receiptDigest: receiptDigest,
+          finalizationRequestId == null &&
+          finalizedAtMillis == null &&
+          source == 'managed_membership_receipt_v1' &&
+          shopHistoricalCorrectionAuthorizationReceiptDigestV2(
             source: source,
             receiptId: receiptId,
             workspaceId: workspaceId,
@@ -1639,11 +1697,44 @@ abstract final class ShopBackup {
             commandDigest: commandDigest,
             issuedAtMillis: issuedAtMillis,
             expiresAtMillis: expiresAtMillis,
+          ) == receiptDigest;
+    }
+    if (proofKind == 'signed_v3') {
+      return keyId is String &&
+          RegExp(r'^[a-z0-9][a-z0-9._-]{0,31}$').hasMatch(keyId) &&
+          signature is String &&
+          RegExp(r'^[A-Za-z0-9_-]{86}$').hasMatch(signature) &&
+          finalizationRequestId is String &&
+          RegExp(
+            r'^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
+          ).hasMatch(finalizationRequestId) &&
+          finalizedAtMillis is int &&
+          finalizedAtMillis == verifiedAtMillis &&
+          issuedAtMillis == finalizedAtMillis &&
+          finalizedAtMillis <= expiresAtMillis &&
+          source == 'managed_membership_receipt_v1' &&
+          shopCorrectionAuthorizationReceiptDigestMatches(
+            receiptDigest: receiptDigest,
+            source: source,
+            receiptId: receiptId,
+            workspaceId: workspaceId,
+            actorId: actorId,
+            actorLabel: actorLabel,
+            actorRole: actorRole,
+            capability: capability,
+            commandDigest: commandDigest,
+            finalizationRequestId: finalizationRequestId,
+            finalizedAtMillis: finalizedAtMillis,
+            issuedAtMillis: issuedAtMillis,
+            expiresAtMillis: expiresAtMillis,
           );
     }
     if (proofKind == 'legacy_unverified_v1') {
       return keyId == null &&
           signature == null &&
+          finalizationRequestId == null &&
+          finalizedAtMillis == null &&
+          source == 'managed_membership_receipt_v1' &&
           shopLegacyCorrectionAuthorizationReceiptDigestMatchesV1(
             receiptDigest: receiptDigest,
             source: source,

@@ -16,11 +16,6 @@ const _ownerId = '2f8d24d8-308c-4dc8-a352-7b61df756728';
 const _capability = 'shop.sale.reverse';
 const _testKeyId = 'test-2026-10-23';
 const _goldenPublicKey = 'A6EHv_POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg';
-const _goldenReceiptDigest =
-    '056d98f0748d216b8a9f100e842d36911195089c445ef16621550ff7579c73e7';
-const _goldenSignature =
-    'TY1bqpcyRA2XVcIyzMxdRLnixlsQ5QkFcfiBwjZtbrfARwBagw6gMI209eTwF_hE'
-    'ubP5TjHlRueZM4q2xJzbBA';
 const _testSeed = <int>[
   0,
   1,
@@ -81,12 +76,15 @@ Future<Map<String, Object?>> _receipt({
   String actorLabel = 'Workspace owner',
   String capability = _capability,
   String? commandDigest,
+  String finalizationRequestId = _requestId,
+  int? finalizedAtMillis,
   int? issuedAtMillis,
   int? expiresAtMillis,
   String keyId = _testKeyId,
   String? signature,
 }) async {
   final issued = issuedAtMillis ?? _now.millisecondsSinceEpoch - 1000;
+  final finalized = finalizedAtMillis ?? issued;
   final expires = expiresAtMillis ?? issued + 300000;
   final digest = commandDigest ?? _commandDigest;
   const source = 'managed_membership_receipt_v1';
@@ -100,6 +98,8 @@ Future<Map<String, Object?>> _receipt({
     actorRole: role,
     capability: capability,
     commandDigest: digest,
+    finalizationRequestId: finalizationRequestId,
+    finalizedAtMillis: finalized,
     issuedAtMillis: issued,
     expiresAtMillis: expires,
   );
@@ -116,6 +116,7 @@ Future<Map<String, Object?>> _receipt({
     'contract': contract,
     'receiptId': receiptId,
     'receiptDigest': receiptDigest,
+    'finalizationRequestId': finalizationRequestId,
     'keyId': keyId,
     'signature': signature ?? _base64UrlNoPadding(signed.bytes),
     'workspaceId': workspaceId,
@@ -125,6 +126,7 @@ Future<Map<String, Object?>> _receipt({
     'capability': capability,
     'source': source,
     'commandDigest': digest,
+    'finalizedAtMillis': finalized,
     'issuedAtMillis': issued,
     'expiresAtMillis': expires,
   };
@@ -164,7 +166,6 @@ ShopCorrectionAuthorizationService _service(
   http.Client client, {
   Future<String?> Function()? accessToken,
   Future<String?> Function()? currentUserId,
-  DateTime Function()? clock,
   Uri? endpoint,
   ShopCorrectionReceiptVerifier? receiptVerifier,
   Duration requestTimeout = const Duration(seconds: 15),
@@ -174,7 +175,6 @@ ShopCorrectionAuthorizationService _service(
       shopCorrectionAuthorizationEndpoint('https://app.supermega.dev')!,
   accessToken: accessToken ?? () async => 'short-lived-session',
   currentUserId: currentUserId ?? () async => _ownerId,
-  clock: clock ?? () => _now,
   client: client,
   receiptVerifier: receiptVerifier ?? _testReceiptVerifier,
   requestTimeout: requestTimeout,
@@ -229,13 +229,29 @@ void main() {
     }
   });
 
-  test('v2 digest and Ed25519 proof match the cross-runtime vector', () async {
+  test('v3 digest and Ed25519 proof match the cross-runtime contract', () async {
     final publicKey = await _testKeyPair.extractPublicKey();
     final receipt = await _receipt();
 
     expect(_base64UrlNoPadding(publicKey.bytes), _goldenPublicKey);
-    expect(receipt['receiptDigest'], _goldenReceiptDigest);
-    expect(receipt['signature'], _goldenSignature);
+    expect(
+      shopCorrectionAuthorizationReceiptDigest(
+        source: 'managed_membership_receipt_v1',
+        receiptId: '11111111-1111-4111-8111-111111111111',
+        finalizationRequestId: '22222222-2222-4222-8222-222222222222',
+        workspaceId: 'workspace-1',
+        actorId: 'actor-1',
+        actorLabel: 'Workspace owner',
+        actorRole: 'owner',
+        capability: 'shop.sale.reverse',
+        commandDigest: _repeat('0', 64),
+        finalizedAtMillis: 1000,
+        issuedAtMillis: 1000,
+        expiresAtMillis: 301000,
+      ),
+      '5bd47b28aba9fda0f821113cad67d159c0ad94c38f052ff1a3efb42a6ce54c7a',
+    );
+    expect(receipt['signature'], hasLength(86));
   });
 
   test(
@@ -338,6 +354,11 @@ void main() {
     expect(result.authorization.workspaceId, _workspaceId);
     expect(result.authorization.actorId, _ownerId);
     expect(result.authorization.commandDigest, _commandDigest);
+    expect(result.authorization.finalizationRequestId, _requestId);
+    expect(
+      result.authorization.finalizedAtMillis,
+      result.authorization.issuedAtMillis,
+    );
     expect(result.authorization.keyId, _testKeyId);
     expect(result.authorization.signature, hasLength(86));
   });
@@ -639,6 +660,9 @@ void main() {
         'contract': await _receipt(contract: 'wrong.contract'),
         'digest': {...(await _receipt()), 'receiptDigest': _repeat('0', 64)},
         'command': await _receipt(commandDigest: _repeat('0', 64)),
+        'finalization request': await _receipt(
+          finalizationRequestId: '55555555-5555-4555-8555-555555555555',
+        ),
         'ttl': await _receipt(
           issuedAtMillis: _now.millisecondsSinceEpoch - 1000,
           expiresAtMillis: _now.millisecondsSinceEpoch + 300001,
@@ -666,39 +690,44 @@ void main() {
     },
   );
 
-  test('future and expired receipts fail with bounded clock errors', () async {
-    final futureIssued = _now.millisecondsSinceEpoch + 1;
+  test('invalid server finalization times fail closed', () async {
+    final issued = _now.millisecondsSinceEpoch - 1000;
     await expectLater(
       _authorize(
         _service(
           MockClient(
             (_) async => _jsonResponse(
               await _envelope(
-                receipt: await _receipt(issuedAtMillis: futureIssued),
+                receipt: await _receipt(
+                  issuedAtMillis: issued,
+                  finalizedAtMillis: issued - 1,
+                ),
               ),
               200,
             ),
           ),
         ),
       ),
-      _throwsCode('device_clock_invalid'),
+      _throwsCode('invalid_response'),
     );
 
-    final expiredIssued = _now.millisecondsSinceEpoch - 300001;
     await expectLater(
       _authorize(
         _service(
           MockClient(
             (_) async => _jsonResponse(
               await _envelope(
-                receipt: await _receipt(issuedAtMillis: expiredIssued),
+                receipt: await _receipt(
+                  issuedAtMillis: issued,
+                  finalizedAtMillis: issued + 300001,
+                ),
               ),
               200,
             ),
           ),
         ),
       ),
-      _throwsCode('authorization_expired'),
+      _throwsCode('invalid_response'),
     );
   });
 

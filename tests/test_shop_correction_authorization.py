@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from hashlib import sha256
@@ -32,6 +33,7 @@ from supermega_runtime.trial_store import (
     TrialStoreError,
     TrialPrincipal,
     shop_correction_authorization_receipt_digest,
+    shop_correction_authorization_receipt_v3_digest,
 )
 
 
@@ -182,8 +184,15 @@ class _CorrectionCursor:
         self.next_row = None
         if "select owner_actor_id" in sql:
             self.next_row = {"owner_actor_id": OWNER_ID}
+        elif "payload_json ->> 'authorizationrequestid'" in sql:
+            if (
+                self.event is not None
+                and self.event["payload_json"].get("authorizationRequestId") == params[2]
+            ):
+                self.next_row = {"command_id": self.event["command_id"]}
         elif "from app_private.workspace_events" in sql:
-            self.next_row = self.event
+            if self.event is not None and self.event["command_id"] == params[1]:
+                self.next_row = self.event
         elif "clock_timestamp()" in sql:
             self.next_row = {"issued_at_millis": self.clock_millis}
         elif "insert into app_private.workspace_events" in sql:
@@ -193,6 +202,8 @@ class _CorrectionCursor:
                 "actor_id": params[5],
                 "actor_kind": params[6],
                 "command_fingerprint": params[3],
+                "command_id": params[2],
+                "payload_json": json.loads(params[7]),
                 "result_json": json.loads(params[8]),
             }
 
@@ -312,6 +323,25 @@ class ShopCorrectionAuthorizationTests(unittest.TestCase):
             "14b1604b664f7a4761d52336383683756f400b04d5951c843afedaad9a88443d",
         )
 
+    def test_v3_finalization_digest_matches_native_fixed_vector(self) -> None:
+        self.assertEqual(
+            shop_correction_authorization_receipt_v3_digest(
+                source="managed_membership_receipt_v1",
+                receipt_id="11111111-1111-4111-8111-111111111111",
+                finalization_request_id="22222222-2222-4222-8222-222222222222",
+                workspace_id="workspace-1",
+                actor_id="actor-1",
+                actor_label="Workspace owner",
+                actor_role="owner",
+                capability="shop.sale.reverse",
+                command_digest="0" * 64,
+                finalized_at_millis=1000,
+                issued_at_millis=1000,
+                expires_at_millis=301000,
+            ),
+            "5bd47b28aba9fda0f821113cad67d159c0ad94c38f052ff1a3efb42a6ce54c7a",
+        )
+
     def test_gate_is_exact_and_checked_before_auth_or_body(self) -> None:
         calls = 0
 
@@ -395,7 +425,10 @@ class ShopCorrectionAuthorizationTests(unittest.TestCase):
         receipt = payload["authorization"]
         self.assertEqual(
             receipt["contract"],
-            "supermega.shop.correction-authorization-receipt.v2",
+            "supermega.shop.correction-authorization-receipt.v3",
+        )
+        self.assertEqual(
+            receipt["finalizationRequestId"], body["authorization_request_id"]
         )
         self.assertEqual(receipt["workspaceId"], WORKSPACE_ID)
         self.assertEqual(receipt["actorId"], OWNER_ID)
@@ -410,19 +443,22 @@ class ShopCorrectionAuthorizationTests(unittest.TestCase):
         )
         self.assertEqual(
             receipt["receiptDigest"],
-            shop_correction_authorization_receipt_digest(
+            shop_correction_authorization_receipt_v3_digest(
                 source=receipt["source"],
                 receipt_id=receipt["receiptId"],
+                finalization_request_id=receipt["finalizationRequestId"],
                 workspace_id=receipt["workspaceId"],
                 actor_id=receipt["actorId"],
                 actor_label=receipt["actorLabel"],
                 actor_role=receipt["actorRole"],
                 capability=receipt["capability"],
                 command_digest=receipt["commandDigest"],
+                finalized_at_millis=receipt["finalizedAtMillis"],
                 issued_at_millis=receipt["issuedAtMillis"],
                 expires_at_millis=receipt["expiresAtMillis"],
             ),
         )
+        self.assertEqual(receipt["finalizedAtMillis"], receipt["issuedAtMillis"])
         self.assertEqual(receipt["keyId"], TEST_KEY_ID)
         self.assertTrue(
             verify_shop_correction_signature(
@@ -487,6 +523,19 @@ class ShopCorrectionAuthorizationTests(unittest.TestCase):
                     fingerprint=_reversal_fingerprint(reason="Different reason"),
                 ),
             )
+            fresh_request_same_command = client.post(
+                "/api/trial/v1/shop/correction-authorizations",
+                json={**body, "authorization_request_id": str(uuid4())},
+            )
+            clone_request_same_sale = client.post(
+                "/api/trial/v1/shop/correction-authorizations",
+                json=_request_body(
+                    request_id=str(uuid4()),
+                    fingerprint=_reversal_fingerprint(
+                        operation_id="clone-reversal-operation"
+                    ),
+                ),
+            )
         self.assertEqual(first.status_code, 200, first.text)
         self.assertEqual(replay.status_code, 200, replay.text)
         self.assertEqual(
@@ -498,20 +547,69 @@ class ShopCorrectionAuthorizationTests(unittest.TestCase):
         self.assertEqual(
             changed.json()["detail"]["code"], "trial_idempotency_conflict"
         )
+        self.assertEqual(
+            fresh_request_same_command.status_code,
+            409,
+            fresh_request_same_command.text,
+        )
+        self.assertEqual(
+            fresh_request_same_command.json()["detail"]["code"],
+            "trial_idempotency_conflict",
+        )
+        self.assertEqual(clone_request_same_sale.status_code, 409)
+        self.assertEqual(
+            clone_request_same_sale.json()["detail"]["code"],
+            "trial_idempotency_conflict",
+        )
+
+    def test_concurrent_request_ids_finalize_exact_command_once(self) -> None:
+        store = _store()
+        bodies = (
+            _request_body(request_id=str(uuid4())),
+            _request_body(
+                request_id=str(uuid4()),
+                fingerprint=_reversal_fingerprint(
+                    operation_id="concurrent-clone-operation"
+                ),
+            ),
+        )
+
+        def finalize(body):
+            try:
+                return store.issue_shop_correction_authorization(
+                    _principal(), **body
+                )
+            except TrialIdempotencyConflict as exc:
+                return exc
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            outcomes = list(executor.map(finalize, bodies))
+
+        self.assertEqual(
+            sum(isinstance(value, TrialIdempotencyConflict) for value in outcomes),
+            1,
+        )
+        self.assertEqual(
+            sum(not isinstance(value, TrialIdempotencyConflict) for value in outcomes),
+            1,
+        )
+        self.assertEqual(len(store._events), 1)
 
     def test_tampered_persisted_receipt_is_never_replayed(self) -> None:
         def mutate_and_resign_digest(field: str, value: object):
             def mutation(receipt: dict[str, object]) -> None:
                 receipt[field] = value
-                receipt["receiptDigest"] = shop_correction_authorization_receipt_digest(
+                receipt["receiptDigest"] = shop_correction_authorization_receipt_v3_digest(
                     source=str(receipt["source"]),
                     receipt_id=str(receipt["receiptId"]),
+                    finalization_request_id=str(receipt["finalizationRequestId"]),
                     workspace_id=str(receipt["workspaceId"]),
                     actor_id=str(receipt["actorId"]),
                     actor_label=str(receipt["actorLabel"]),
                     actor_role=str(receipt["actorRole"]),
                     capability=str(receipt["capability"]),
                     command_digest=str(receipt["commandDigest"]),
+                    finalized_at_millis=int(receipt["finalizedAtMillis"]),
                     issued_at_millis=int(receipt["issuedAtMillis"]),
                     expires_at_millis=int(receipt["expiresAtMillis"]),
                 )
@@ -538,6 +636,12 @@ class ShopCorrectionAuthorizationTests(unittest.TestCase):
                 "commandDigest", "f" * 64
             ),
             "receiptId": mutate_and_resign_digest("receiptId", str(uuid4())),
+            "finalizationRequestId": mutate_and_resign_digest(
+                "finalizationRequestId", str(uuid4())
+            ),
+            "finalizedAtMillis": mutate_and_resign_digest(
+                "finalizedAtMillis", 1_700_000_000_000
+            ),
             "issuedAtMillis": mutate_and_resign_digest(
                 "issuedAtMillis", 1_700_000_000_000
             ),
@@ -552,7 +656,7 @@ class ShopCorrectionAuthorizationTests(unittest.TestCase):
                 first = store.issue_shop_correction_authorization(
                     _principal(), **body
                 )
-                event_key = (WORKSPACE_ID, body["authorization_request_id"])
+                event_key = next(iter(store._events))
                 fingerprint, actor_id, actor_kind, receipt = store._events[
                     event_key
                 ]
@@ -605,8 +709,9 @@ class ShopCorrectionAuthorizationTests(unittest.TestCase):
         )
         self.assertIn("for share", owner_sql)
         self.assertEqual(
-            insert_params[4], "commerce.shop_correction_authorization.issued"
+            insert_params[4], "commerce.shop_correction_authorization.finalized"
         )
+        self.assertNotEqual(insert_params[2], body["authorization_request_id"])
         payload = json.loads(insert_params[7])
         self.assertEqual(payload["command"]["operationId"], "reversal-operation-1")
         self.assertNotIn("requestFingerprint", payload)
@@ -634,7 +739,7 @@ class ShopCorrectionAuthorizationTests(unittest.TestCase):
                 store.issue_shop_correction_authorization(_principal(), **body)
         self.assertEqual(len(store._events), 1)
         self.assertEqual(
-            store._events[(WORKSPACE_ID, body["authorization_request_id"])][3],
+            store._events[next(iter(store._events))][3],
             first.to_dict(),
         )
 
@@ -794,7 +899,7 @@ class ShopCorrectionAuthorizationTests(unittest.TestCase):
             "shop.sale.reconcile_wallet",
         )
         self.assertFalse(response.json()["money_returned"])
-        event_key = (WORKSPACE_ID, body["authorization_request_id"])
+        event_key = next(iter(store._shop_correction_payloads))
         self.assertEqual(
             store._shop_correction_payloads[event_key]["command"]["outcome"],
             "money_returned",

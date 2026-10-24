@@ -14,8 +14,11 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
 )
 
 
-SHOP_CORRECTION_AUTHORIZATION_CONTRACT = (
+SHOP_CORRECTION_AUTHORIZATION_V2_CONTRACT = (
     "supermega.shop.correction-authorization-receipt.v2"
+)
+SHOP_CORRECTION_AUTHORIZATION_CONTRACT = (
+    "supermega.shop.correction-authorization-receipt.v3"
 )
 SHOP_CORRECTION_SIGNATURE_CONTRACT = (
     "supermega.shop.correction-authorization-signature.v1"

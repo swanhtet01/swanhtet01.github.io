@@ -6569,6 +6569,7 @@ Future<ShopCorrectionAuthorization> _widgetCorrectionAuthorization(
   const actorLabel = 'Widget test owner';
   const actorRole = 'owner';
   const source = 'managed_membership_receipt_v1';
+  const finalizationRequestId = '44444444-4444-4444-8444-444444444444';
   final receiptDigest = shopCorrectionAuthorizationReceiptDigest(
     source: source,
     receiptId: receiptId,
@@ -6578,6 +6579,8 @@ Future<ShopCorrectionAuthorization> _widgetCorrectionAuthorization(
     actorRole: actorRole,
     capability: capability,
     commandDigest: commandDigest,
+    finalizationRequestId: finalizationRequestId,
+    finalizedAtMillis: issuedAtMillis,
     issuedAtMillis: issuedAtMillis,
     expiresAtMillis: expiresAtMillis,
   );
@@ -6594,6 +6597,7 @@ Future<ShopCorrectionAuthorization> _widgetCorrectionAuthorization(
     keyPair: keyPair,
   );
   return ShopCorrectionAuthorization(
+    contract: shopCorrectionAuthorizationReceiptContract,
     receiptId: receiptId,
     receiptDigest: receiptDigest,
     workspaceId: workspaceId,
@@ -6603,6 +6607,8 @@ Future<ShopCorrectionAuthorization> _widgetCorrectionAuthorization(
     capability: capability,
     source: source,
     commandDigest: commandDigest,
+    finalizationRequestId: finalizationRequestId,
+    finalizedAtMillis: issuedAtMillis,
     issuedAtMillis: issuedAtMillis,
     expiresAtMillis: expiresAtMillis,
     keyId: _widgetCorrectionKeyId,

@@ -4,6 +4,8 @@ import 'package:crypto/crypto.dart' as crypto;
 import 'package:cryptography/cryptography.dart';
 
 const shopCorrectionAuthorizationReceiptContract =
+    'supermega.shop.correction-authorization-receipt.v3';
+const shopHistoricalCorrectionAuthorizationReceiptContractV2 =
     'supermega.shop.correction-authorization-receipt.v2';
 const shopLegacyCorrectionAuthorizationReceiptContract =
     'supermega.shop.correction-authorization-receipt.v1';
@@ -48,9 +50,44 @@ String _receiptDigest({
       .toString();
 }
 
-/// Digest of the v2 receipt fields. This is signed by the server; by itself it
+/// Digest of the v3 receipt fields. This is signed by the server; by itself it
 /// remains an integrity checksum and is never authorization.
 String shopCorrectionAuthorizationReceiptDigest({
+  required String source,
+  required String receiptId,
+  required String workspaceId,
+  required String actorId,
+  required String actorLabel,
+  required String actorRole,
+  required String capability,
+  required String commandDigest,
+  required String finalizationRequestId,
+  required int finalizedAtMillis,
+  required int issuedAtMillis,
+  required int expiresAtMillis,
+}) {
+  final projection = jsonEncode(<String, Object>{
+    'source': source,
+    'receiptId': receiptId,
+    'finalizationRequestId': finalizationRequestId,
+    'workspaceId': workspaceId,
+    'actorId': actorId,
+    'actorLabel': actorLabel,
+    'actorRole': actorRole,
+    'capability': capability,
+    'commandDigest': commandDigest,
+    'finalizedAtMillis': finalizedAtMillis,
+    'issuedAtMillis': issuedAtMillis,
+    'expiresAtMillis': expiresAtMillis,
+  });
+  return crypto.sha256
+      .convert(
+        utf8.encode('$shopCorrectionAuthorizationReceiptContract\n$projection'),
+      )
+      .toString();
+}
+
+String shopHistoricalCorrectionAuthorizationReceiptDigestV2({
   required String source,
   required String receiptId,
   required String workspaceId,
@@ -62,7 +99,7 @@ String shopCorrectionAuthorizationReceiptDigest({
   required int issuedAtMillis,
   required int expiresAtMillis,
 }) => _receiptDigest(
-  contract: shopCorrectionAuthorizationReceiptContract,
+  contract: shopHistoricalCorrectionAuthorizationReceiptContractV2,
   source: source,
   receiptId: receiptId,
   workspaceId: workspaceId,
@@ -110,6 +147,8 @@ bool shopCorrectionAuthorizationReceiptDigestMatches({
   required String actorRole,
   required String capability,
   required String commandDigest,
+  required String finalizationRequestId,
+  required int finalizedAtMillis,
   required int issuedAtMillis,
   required int expiresAtMillis,
 }) => _constantTimeTextEquals(
@@ -123,6 +162,8 @@ bool shopCorrectionAuthorizationReceiptDigestMatches({
     actorRole: actorRole,
     capability: capability,
     commandDigest: commandDigest,
+    finalizationRequestId: finalizationRequestId,
+    finalizedAtMillis: finalizedAtMillis,
     issuedAtMillis: issuedAtMillis,
     expiresAtMillis: expiresAtMillis,
   ),
@@ -172,6 +213,7 @@ String shopCorrectionAuthorizationSignatureMessage({
 
 class ShopCorrectionAuthorization {
   const ShopCorrectionAuthorization({
+    this.contract = shopHistoricalCorrectionAuthorizationReceiptContractV2,
     required this.receiptId,
     required this.receiptDigest,
     required this.workspaceId,
@@ -181,12 +223,15 @@ class ShopCorrectionAuthorization {
     required this.capability,
     required this.source,
     required this.commandDigest,
+    this.finalizationRequestId,
+    this.finalizedAtMillis,
     required this.issuedAtMillis,
     required this.expiresAtMillis,
     required this.keyId,
     required this.signature,
   });
 
+  final String contract;
   final String receiptId;
   final String receiptDigest;
   final String workspaceId;
@@ -196,6 +241,8 @@ class ShopCorrectionAuthorization {
   final String capability;
   final String source;
   final String commandDigest;
+  final String? finalizationRequestId;
+  final int? finalizedAtMillis;
   final int issuedAtMillis;
   final int expiresAtMillis;
   final String keyId;
@@ -226,22 +273,57 @@ class ShopCorrectionReceiptVerifier {
   }
 
   Future<bool> verify(ShopCorrectionAuthorization authorization) async {
+    final v3 =
+        authorization.contract == shopCorrectionAuthorizationReceiptContract;
+    final v2 =
+        authorization.contract ==
+        shopHistoricalCorrectionAuthorizationReceiptContractV2;
     if (!_keyIdPattern.hasMatch(authorization.keyId) ||
         !_digestPattern.hasMatch(authorization.receiptDigest) ||
         !_signaturePattern.hasMatch(authorization.signature) ||
-        !shopCorrectionAuthorizationReceiptDigestMatches(
-          receiptDigest: authorization.receiptDigest,
-          source: authorization.source,
-          receiptId: authorization.receiptId,
-          workspaceId: authorization.workspaceId,
-          actorId: authorization.actorId,
-          actorLabel: authorization.actorLabel,
-          actorRole: authorization.actorRole,
-          capability: authorization.capability,
-          commandDigest: authorization.commandDigest,
-          issuedAtMillis: authorization.issuedAtMillis,
-          expiresAtMillis: authorization.expiresAtMillis,
-        )) {
+        (!v3 && !v2) ||
+        (v3 &&
+            (authorization.finalizationRequestId == null ||
+                authorization.finalizedAtMillis == null ||
+                authorization.issuedAtMillis <= 0 ||
+                authorization.issuedAtMillis !=
+                    authorization.finalizedAtMillis ||
+                authorization.expiresAtMillis - authorization.issuedAtMillis !=
+                    300000 ||
+                !shopCorrectionAuthorizationReceiptDigestMatches(
+                  receiptDigest: authorization.receiptDigest,
+                  source: authorization.source,
+                  receiptId: authorization.receiptId,
+                  workspaceId: authorization.workspaceId,
+                  actorId: authorization.actorId,
+                  actorLabel: authorization.actorLabel,
+                  actorRole: authorization.actorRole,
+                  capability: authorization.capability,
+                  commandDigest: authorization.commandDigest,
+                  finalizationRequestId:
+                      authorization.finalizationRequestId!,
+                  finalizedAtMillis: authorization.finalizedAtMillis!,
+                  issuedAtMillis: authorization.issuedAtMillis,
+                  expiresAtMillis: authorization.expiresAtMillis,
+                ))) ||
+        (v2 &&
+            (authorization.finalizationRequestId != null ||
+                authorization.finalizedAtMillis != null ||
+                !_constantTimeTextEquals(
+                  authorization.receiptDigest,
+                  shopHistoricalCorrectionAuthorizationReceiptDigestV2(
+                    source: authorization.source,
+                    receiptId: authorization.receiptId,
+                    workspaceId: authorization.workspaceId,
+                    actorId: authorization.actorId,
+                    actorLabel: authorization.actorLabel,
+                    actorRole: authorization.actorRole,
+                    capability: authorization.capability,
+                    commandDigest: authorization.commandDigest,
+                    issuedAtMillis: authorization.issuedAtMillis,
+                    expiresAtMillis: authorization.expiresAtMillis,
+                  ),
+                )))) {
       return false;
     }
     final encodedPublicKey = _publicKeys[authorization.keyId];

@@ -43,6 +43,7 @@ const _receiptKeys = <String>{
   'contract',
   'receiptId',
   'receiptDigest',
+  'finalizationRequestId',
   'keyId',
   'signature',
   'workspaceId',
@@ -52,6 +53,7 @@ const _receiptKeys = <String>{
   'capability',
   'source',
   'commandDigest',
+  'finalizedAtMillis',
   'issuedAtMillis',
   'expiresAtMillis',
 };
@@ -130,12 +132,10 @@ class ShopCorrectionAuthorizationService implements ShopCorrectionAuthorizer {
     required this.accessToken,
     required this.currentUserId,
     http.Client? client,
-    DateTime Function()? clock,
     ShopCorrectionReceiptVerifier? receiptVerifier,
     this.requestTimeout = const Duration(seconds: 15),
   }) : _client = client ?? http.Client(),
        _ownsClient = client == null,
-       _clock = clock ?? DateTime.now,
        _receiptVerifier =
            receiptVerifier ?? ShopCorrectionReceiptVerifier.production();
 
@@ -145,7 +145,6 @@ class ShopCorrectionAuthorizationService implements ShopCorrectionAuthorizer {
   final Duration requestTimeout;
   final http.Client _client;
   final bool _ownsClient;
-  final DateTime Function() _clock;
   final ShopCorrectionReceiptVerifier _receiptVerifier;
 
   @override
@@ -289,6 +288,7 @@ class ShopCorrectionAuthorizationService implements ShopCorrectionAuthorizer {
         workspaceId: workspaceId,
         capability: capability,
         commandDigest: commandDigest,
+        authorizationRequestId: authorizationRequestId,
         currentUserId: initialUserId,
       );
     } on ShopCorrectionAuthorizationException {
@@ -322,6 +322,7 @@ class ShopCorrectionAuthorizationService implements ShopCorrectionAuthorizer {
     required String workspaceId,
     required String capability,
     required String commandDigest,
+    required String authorizationRequestId,
     required String currentUserId,
   }) async {
     Object? decoded;
@@ -356,6 +357,8 @@ class ShopCorrectionAuthorizationService implements ShopCorrectionAuthorizer {
     final signature = receipt['signature'];
     final actorId = receipt['actorId'];
     final actorLabel = receipt['actorLabel'];
+    final finalizationRequestId = receipt['finalizationRequestId'];
+    final finalizedAtMillis = receipt['finalizedAtMillis'];
     final issuedAtMillis = receipt['issuedAtMillis'];
     final expiresAtMillis = receipt['expiresAtMillis'];
     if (receipt['contract'] != shopCorrectionAuthorizationReceiptContract ||
@@ -374,18 +377,15 @@ class ShopCorrectionAuthorizationService implements ShopCorrectionAuthorizer {
         receipt['capability'] != capability ||
         receipt['source'] != _authorizationSource ||
         receipt['commandDigest'] != commandDigest ||
+        finalizationRequestId != authorizationRequestId ||
+        finalizedAtMillis is! int ||
         issuedAtMillis is! int ||
         expiresAtMillis is! int ||
         issuedAtMillis <= 0 ||
+        issuedAtMillis != finalizedAtMillis ||
+        finalizedAtMillis > expiresAtMillis ||
         expiresAtMillis - issuedAtMillis != _authorizationTtlMillis) {
       throw const ShopCorrectionAuthorizationException('invalid_response');
-    }
-    final now = _clock().millisecondsSinceEpoch;
-    if (issuedAtMillis > now) {
-      throw const ShopCorrectionAuthorizationException('device_clock_invalid');
-    }
-    if (expiresAtMillis < now) {
-      throw const ShopCorrectionAuthorizationException('authorization_expired');
     }
     if (!shopCorrectionAuthorizationReceiptDigestMatches(
       receiptDigest: receiptDigest,
@@ -397,6 +397,8 @@ class ShopCorrectionAuthorizationService implements ShopCorrectionAuthorizer {
       actorRole: 'owner',
       capability: capability,
       commandDigest: commandDigest,
+      finalizationRequestId: finalizationRequestId,
+      finalizedAtMillis: finalizedAtMillis,
       issuedAtMillis: issuedAtMillis,
       expiresAtMillis: expiresAtMillis,
     )) {
@@ -404,6 +406,7 @@ class ShopCorrectionAuthorizationService implements ShopCorrectionAuthorizer {
     }
 
     final authorization = ShopCorrectionAuthorization(
+      contract: shopCorrectionAuthorizationReceiptContract,
       receiptId: receiptId,
       receiptDigest: receiptDigest,
       workspaceId: workspaceId,
@@ -413,6 +416,8 @@ class ShopCorrectionAuthorizationService implements ShopCorrectionAuthorizer {
       capability: capability,
       source: _authorizationSource,
       commandDigest: commandDigest,
+      finalizationRequestId: finalizationRequestId,
+      finalizedAtMillis: finalizedAtMillis,
       issuedAtMillis: issuedAtMillis,
       expiresAtMillis: expiresAtMillis,
       keyId: keyId,

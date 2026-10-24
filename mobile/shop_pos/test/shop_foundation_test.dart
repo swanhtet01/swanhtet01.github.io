@@ -28,36 +28,23 @@ final _testCorrectionReceiptVerifier = ShopCorrectionReceiptVerifier({
 });
 
 void main() {
-  test('correction authorization receipt v2 digest is stable', () {
+  test('correction authorization receipt v3 digest is stable', () {
     expect(
       shopCorrectionAuthorizationReceiptDigest(
         source: 'managed_membership_receipt_v1',
-        receiptId: 'receipt-1',
+        receiptId: '11111111-1111-4111-8111-111111111111',
+        finalizationRequestId: '22222222-2222-4222-8222-222222222222',
         workspaceId: 'workspace-1',
         actorId: 'actor-1',
-        actorLabel: 'Owner',
+        actorLabel: 'Workspace owner',
         actorRole: 'owner',
         capability: 'shop.sale.reverse',
         commandDigest: List<String>.filled(64, '0').join(),
+        finalizedAtMillis: 1000,
         issuedAtMillis: 1000,
         expiresAtMillis: 301000,
       ),
-      '5a5f97683a99e72307cf42b5bdbd682fad42fc221d426d811c9a8d631e42aae3',
-    );
-    expect(
-      shopCorrectionAuthorizationReceiptDigest(
-        source: 'managed_membership_receipt_v1',
-        receiptId: 'receipt-2',
-        workspaceId: 'workspace-1',
-        actorId: 'actor-1',
-        actorLabel: 'Owner',
-        actorRole: 'owner',
-        capability: 'shop.sale.reconcile_wallet',
-        commandDigest: List<String>.filled(64, 'f').join(),
-        issuedAtMillis: 2000,
-        expiresAtMillis: 302000,
-      ),
-      '14b1604b664f7a4761d52336383683756f400b04d5951c843afedaad9a88443d',
+      '5bd47b28aba9fda0f821113cad67d159c0ad94c38f052ff1a3efb42a6ce54c7a',
     );
   });
 
@@ -689,7 +676,14 @@ void main() {
       );
       expect(await database.readSaleReversalForSale(sale.id), isNull);
       for (final tamperedAuthorization in [
+        await _correctionAuthorization(
+          command.commandDigest,
+          capability: 'shop.sale.reverse',
+          receiptId: 'historical-v2-new-action',
+          historicalV2: true,
+        ),
         ShopCorrectionAuthorization(
+          contract: authorization.contract,
           receiptId: authorization.receiptId,
           receiptDigest: List<String>.filled(64, '0').join(),
           workspaceId: authorization.workspaceId,
@@ -699,12 +693,15 @@ void main() {
           capability: authorization.capability,
           source: authorization.source,
           commandDigest: authorization.commandDigest,
+          finalizationRequestId: authorization.finalizationRequestId,
+          finalizedAtMillis: authorization.finalizedAtMillis,
           issuedAtMillis: authorization.issuedAtMillis,
           expiresAtMillis: authorization.expiresAtMillis,
           keyId: authorization.keyId,
           signature: authorization.signature,
         ),
         ShopCorrectionAuthorization(
+          contract: authorization.contract,
           receiptId: authorization.receiptId,
           receiptDigest: authorization.receiptDigest,
           workspaceId: authorization.workspaceId,
@@ -714,12 +711,15 @@ void main() {
           capability: authorization.capability,
           source: authorization.source,
           commandDigest: authorization.commandDigest,
+          finalizationRequestId: authorization.finalizationRequestId,
+          finalizedAtMillis: authorization.finalizedAtMillis,
           issuedAtMillis: authorization.issuedAtMillis,
           expiresAtMillis: authorization.expiresAtMillis,
           keyId: authorization.keyId,
           signature: authorization.signature,
         ),
         ShopCorrectionAuthorization(
+          contract: authorization.contract,
           receiptId: authorization.receiptId,
           receiptDigest: authorization.receiptDigest,
           workspaceId: authorization.workspaceId,
@@ -729,6 +729,8 @@ void main() {
           capability: authorization.capability,
           source: authorization.source,
           commandDigest: authorization.commandDigest,
+          finalizationRequestId: authorization.finalizationRequestId,
+          finalizedAtMillis: authorization.finalizedAtMillis,
           issuedAtMillis: authorization.issuedAtMillis,
           expiresAtMillis: authorization.expiresAtMillis,
           keyId: authorization.keyId,
@@ -3614,6 +3616,7 @@ Future<ShopCorrectionAuthorization> _correctionAuthorization(
   String actorLabel = 'Test owner',
   int? issuedAtMillis,
   int? expiresAtMillis,
+  bool historicalV2 = false,
 }) async {
   final now = DateTime.now().millisecondsSinceEpoch;
   final issued = issuedAtMillis ?? now - 1000;
@@ -3621,18 +3624,34 @@ Future<ShopCorrectionAuthorization> _correctionAuthorization(
       expiresAtMillis ?? issued + const Duration(minutes: 5).inMilliseconds;
   const actorRole = 'owner';
   const source = 'managed_membership_receipt_v1';
-  final receiptDigest = shopCorrectionAuthorizationReceiptDigest(
-    source: source,
-    receiptId: receiptId,
-    workspaceId: workspaceId,
-    actorId: actorId,
-    actorLabel: actorLabel,
-    actorRole: actorRole,
-    capability: capability,
-    commandDigest: commandDigest,
-    issuedAtMillis: issued,
-    expiresAtMillis: expires,
-  );
+  const finalizationRequestId = '22222222-2222-4222-8222-222222222222';
+  final receiptDigest = historicalV2
+      ? shopHistoricalCorrectionAuthorizationReceiptDigestV2(
+          source: source,
+          receiptId: receiptId,
+          workspaceId: workspaceId,
+          actorId: actorId,
+          actorLabel: actorLabel,
+          actorRole: actorRole,
+          capability: capability,
+          commandDigest: commandDigest,
+          issuedAtMillis: issued,
+          expiresAtMillis: expires,
+        )
+      : shopCorrectionAuthorizationReceiptDigest(
+          source: source,
+          receiptId: receiptId,
+          workspaceId: workspaceId,
+          actorId: actorId,
+          actorLabel: actorLabel,
+          actorRole: actorRole,
+          capability: capability,
+          commandDigest: commandDigest,
+          finalizationRequestId: finalizationRequestId,
+          finalizedAtMillis: issued,
+          issuedAtMillis: issued,
+          expiresAtMillis: expires,
+        );
   final keyPair = await Ed25519().newKeyPairFromSeed(
     List<int>.generate(32, (index) => index),
   );
@@ -3646,6 +3665,9 @@ Future<ShopCorrectionAuthorization> _correctionAuthorization(
     keyPair: keyPair,
   );
   return ShopCorrectionAuthorization(
+    contract: historicalV2
+        ? shopHistoricalCorrectionAuthorizationReceiptContractV2
+        : shopCorrectionAuthorizationReceiptContract,
     receiptId: receiptId,
     receiptDigest: receiptDigest,
     workspaceId: workspaceId,
@@ -3655,6 +3677,8 @@ Future<ShopCorrectionAuthorization> _correctionAuthorization(
     capability: capability,
     source: source,
     commandDigest: commandDigest,
+    finalizationRequestId: historicalV2 ? null : finalizationRequestId,
+    finalizedAtMillis: historicalV2 ? null : issued,
     issuedAtMillis: issued,
     expiresAtMillis: expires,
     keyId: _testCorrectionKeyId,
