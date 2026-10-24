@@ -54,12 +54,20 @@ function exactKeys(value: Record<string, unknown>, expected: readonly string[]) 
   return actual.length === sorted.length && actual.every((key, index) => key === sorted[index])
 }
 
+function hasControlCharacter(value: string) {
+  for (const character of value) {
+    const codePoint = character.codePointAt(0)
+    if (codePoint !== undefined && (codePoint <= 0x1f || codePoint === 0x7f)) return true
+  }
+  return false
+}
+
 function safeText(value: unknown, maximum: number) {
   return typeof value === 'string'
     && value === value.trim()
     && value.length > 0
     && value.length <= maximum
-    && !/[\u0000-\u001f\u007f]/u.test(value)
+    && !hasControlCharacter(value)
 }
 
 function safeInteger(value: unknown) {

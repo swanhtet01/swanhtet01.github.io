@@ -48,6 +48,9 @@ await build({
       plugin.onResolve({ filter: /^\.\/CoreShell$/ }, (args) => args.importer.endsWith('ManagedAccountHubPage.tsx')
         ? { path: 'account-hub-shell', namespace: 'account-hub-fixture' }
         : undefined)
+      plugin.onResolve({ filter: /^\.\/managed-portal-access-context$/ }, (args) => args.importer.endsWith('ManagedAccountHubPage.tsx')
+        ? { path: 'account-hub-access', namespace: 'account-hub-fixture' }
+        : undefined)
       plugin.onResolve({ filter: /^\.\/managed-trial$/ }, (args) => args.importer.endsWith('ManagedAccountHubPage.tsx')
         ? { path: 'account-hub-transport', namespace: 'account-hub-fixture' }
         : undefined)
@@ -59,6 +62,12 @@ await build({
             export function PageHeading({ eyebrow, title, copy, actions }) {
               return <header className="page-heading"><div><span className="core-eyebrow">{eyebrow}</span><h1>{title}</h1><p>{copy}</p></div><div className="heading-actions">{actions}</div></header>
             }
+          `,
+        }
+        if (args.path === 'account-hub-access') return {
+          loader: 'js',
+          resolveDir: resolve('.'),
+          contents: `
             export function useCurrentManagedPortalAccess() {
               const query = new URLSearchParams(location.search)
               const access = query.get('access')

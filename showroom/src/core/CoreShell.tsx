@@ -1,4 +1,4 @@
-import { createContext, lazy, Suspense, type ReactNode, useContext, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, type ReactNode, useContext, useEffect, useRef, useState } from 'react'
 import { Link, Navigate, NavLink, Outlet, useLocation, useOutletContext } from 'react-router'
 import { productionEntryDecision } from './production-entry'
 import { superMegaBrandIdentity, superMegaBrandMark } from './brand-mark'
@@ -17,6 +17,11 @@ import {
   resolveManagedProductRoute,
 } from './managed-product-access'
 import { currentManagedWorkspace } from './managed-workspace-selection'
+import {
+  localPortalAccess,
+  ManagedPortalAccessContext,
+  type ManagedPortalAccess,
+} from './managed-portal-access-context'
 import { watchManagedSessionStorage } from './managed-session-invalidation'
 import { readManagedSignupPolicy, type ManagedSignupPolicy } from './managed-signup-policy'
 import type { SetupProductId } from './product-setup'
@@ -199,28 +204,6 @@ function setupProductFromQuery(value: string | null) {
 function managedLoginPath(product: string | null) {
   const slug = product === 'commerce' ? 'shop' : product === 'production' ? 'plant' : product === 'website' || product === 'ecommerce' ? product : null
   return slug ? `/login?product=${slug}` : '/login'
-}
-
-export type ManagedPortalAccess =
-  | { status: 'local'; products: readonly ClientSolutionId[]; capabilities: readonly string[]; workspaceId: '' }
-  | { status: 'checking'; products: readonly ClientSolutionId[]; capabilities: readonly string[]; workspaceId: string }
-  | { status: 'reauthenticate'; products: readonly ClientSolutionId[]; capabilities: readonly string[]; workspaceId: string }
-  | {
-      status: 'ready'
-      products: readonly ClientSolutionId[]
-      capabilities: readonly string[]
-      workspaceId: string
-      companyName: string
-      companyRole: 'owner' | 'operator' | 'viewer'
-      accountEmail: string
-    }
-  | { status: 'error'; products: readonly ClientSolutionId[]; capabilities: readonly string[]; workspaceId: string; message: string }
-
-const localPortalAccess: ManagedPortalAccess = { status: 'local', products: [], capabilities: [], workspaceId: '' }
-const ManagedPortalAccessContext = createContext<ManagedPortalAccess>(localPortalAccess)
-
-export function useCurrentManagedPortalAccess() {
-  return useContext(ManagedPortalAccessContext)
 }
 
 function useManagedPortalAccess(enabled: boolean, selectedWorkspace: string, refreshKey: string): ManagedPortalAccess {

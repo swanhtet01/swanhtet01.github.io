@@ -3,8 +3,9 @@ import { Link, Navigate } from 'react-router'
 
 import { approvedAppDownloads } from './approved-app-downloads'
 import { managedAccountHubLoginPath } from './account-routes'
-import { PageHeading, useCurrentManagedPortalAccess } from './CoreShell'
+import { PageHeading } from './CoreShell'
 import type { ManagedAccountBilling, ManagedBillingInvoice } from './managed-account-billing'
+import { useCurrentManagedPortalAccess } from './managed-portal-access-context'
 import { currentManagedIdentity, loadManagedAccountBilling } from './managed-trial'
 
 type BillingLoad =
@@ -40,36 +41,43 @@ function paymentCopy(invoice: ManagedBillingInvoice) {
 export function ManagedAccountHubPage() {
   const portal = useCurrentManagedPortalAccess()
   const [attempt, setAttempt] = useState(0)
-  const [billing, setBilling] = useState<BillingLoad>({ status: 'loading' })
+  const [resolvedBilling, setResolvedBilling] = useState<{ key: string; value: BillingLoad }>({
+    key: '',
+    value: { status: 'loading' },
+  })
   const errorRef = useRef<HTMLParagraphElement>(null)
   const workspaceId = portal.status === 'ready' ? portal.workspaceId : ''
   const canReadBilling = portal.status === 'ready' && portal.capabilities.includes('billing.read')
+  const billingRequestKey = canReadBilling ? `${workspaceId}:${attempt}` : ''
+  const billing: BillingLoad = !canReadBilling
+    ? { status: 'unavailable' }
+    : resolvedBilling.key === billingRequestKey
+      ? resolvedBilling.value
+      : { status: 'loading' }
 
   useEffect(() => {
-    if (portal.status !== 'ready') return
-    if (!canReadBilling) {
-      setBilling({ status: 'unavailable' })
-      return
-    }
+    if (portal.status !== 'ready' || !canReadBilling) return
     let active = true
-    setBilling({ status: 'loading' })
     void currentManagedIdentity()
       .then(async (identity) => {
-        if (!identity || identity.workspaceId !== portal.workspaceId) {
+        if (!identity || identity.workspaceId !== workspaceId) {
           throw new Error('The company account changed. Sign in again.')
         }
         const value = await loadManagedAccountBilling(identity)
-        if (active) setBilling({ status: 'ready', value })
+        if (active) setResolvedBilling({ key: billingRequestKey, value: { status: 'ready', value } })
       })
       .catch((error) => {
         if (!active) return
-        setBilling({
-          status: 'error',
-          message: error instanceof Error ? error.message : 'Plan and billing could not be loaded.',
+        setResolvedBilling({
+          key: billingRequestKey,
+          value: {
+            status: 'error',
+            message: error instanceof Error ? error.message : 'Plan and billing could not be loaded.',
+          },
         })
       })
     return () => { active = false }
-  }, [attempt, canReadBilling, portal.status, workspaceId])
+  }, [billingRequestKey, canReadBilling, portal.status, workspaceId])
 
   useEffect(() => {
     if (billing.status !== 'error') return
