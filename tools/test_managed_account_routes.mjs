@@ -645,10 +645,10 @@ test('actual page effect waits during startup but scrubs terminal-disabled callb
   }, configured)
 })
 
-test('portal lazy entry exposes exactly its four existing reads, never the whole Auth namespace', async () => {
+test('portal lazy entry exposes exactly its five account reads, never the whole Auth namespace', async () => {
   const source = readFileSync('showroom/src/core/managed-portal-client.ts', 'utf8')
   assert.equal(source.replace(/\/\/[^\n]*/g, '').replace(/\s+/g, ''),
-    "export{currentManagedIdentity,discoverManagedWorkspacesForCurrentSession,loadManagedBootstrap,managedProductsFromBootstrap,}from'./managed-trial.ts'")
+    "export{currentManagedIdentity,discoverManagedWorkspacesForCurrentSession,loadManagedBootstrap,managedCapabilitiesFromBootstrap,managedProductsFromBootstrap,}from'./managed-trial.ts'")
   assert.ok(coreShellSource.includes("void import('./managed-portal-client')"))
   assert.ok(!coreShellSource.includes("import('./managed-trial')"))
   const vite = readFileSync('showroom/vite.config.ts', 'utf8')
@@ -657,7 +657,8 @@ test('portal lazy entry exposes exactly its four existing reads, never the whole
   const portal = await import('../showroom/src/core/managed-portal-client.ts')
   const managed = await import('../showroom/src/core/managed-trial.ts')
   assert.deepEqual(Object.keys(portal).sort(), [
-    'currentManagedIdentity', 'discoverManagedWorkspacesForCurrentSession', 'loadManagedBootstrap', 'managedProductsFromBootstrap',
+    'currentManagedIdentity', 'discoverManagedWorkspacesForCurrentSession', 'loadManagedBootstrap',
+    'managedCapabilitiesFromBootstrap', 'managedProductsFromBootstrap',
   ])
   for (const key of Object.keys(portal)) assert.equal(portal[key], managed[key])
 })
