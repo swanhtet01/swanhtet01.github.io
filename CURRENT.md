@@ -38,10 +38,10 @@ owner-approved product outcome and gate require it.
 | Item | Current fact |
 | --- | --- |
 | Integration PR | [#734 — Unify Shop app first-use and public launch candidate](https://github.com/swanhtet01/swanhtet01.github.io/pull/734) |
-| State | Open draft. Remote head remains `526f3616`; reviewed Cloud source checkpoint `b44d1435` is local-only and has no exact-head CI or preview. Review, preview, signing, installed/hardware, and merchant gates remain open |
+| State | Open draft. Remote head remains `526f3616`; reviewed Cloud source checkpoint `03df1838` is local-only and has no exact-head CI or preview. Review, preview, signing, installed/hardware, and merchant gates remain open |
 | Integration branch | `codex/shop-public-main-port-20261022` |
-| Immutable reviewed source checkpoint | `b44d14359cd0419af8aaec5a320218770c1d938e` / tree `490461c02af20049966842ad0c720dad397df33c`; clean, unpushed, based on `526f3616` |
-| Documentation successor | This `CURRENT.md` update follows `b44d1435`; it records evidence only and does not make the source checkpoint CI- or release-ready |
+| Immutable reviewed source checkpoint | `03df1838b7dcc96d06a0b8aec5f07c736c80a6a1` / tree `47f34172529fae384ecafcdf0d0d8c1e96cf8b3c`; clean, unpushed, based on `526f3616` |
+| Documentation successor | This `CURRENT.md` update follows `03df1838`; it records evidence only and does not make the source checkpoint CI- or release-ready |
 | Native capture state | Current native tree `f8b146d0…` differs from gallery manifest tree `5417a23d…`; strict provenance fails closed until exact-source captures are regenerated and reviewed |
 | PostgreSQL evidence checkpoint | `b1ee4cc2884dda1ab753e8d2e4ecc6c6216a36ef` / tree `6996864df311db4748fcca3ec75c030dd0fcab3e` |
 | Inactive promotion envelope | PR #730; use only after #734 passes and is explicitly promoted |
@@ -60,10 +60,11 @@ not default launch products.
 
 ## Exact evidence
 
-- At `b44d1435`, 65 focused dependency-free tests pass. The app security
-  contract passes 105 checks; account routes pass 84/84, login returns 6/6,
-  rendered account-hub checks 6/6 at 390/768/1440 px, and Ecommerce contact
-  isolation passes 24/24. `git diff --check` passes.
+- At `03df1838`, the app security contract passes 105 checks; account routes
+  pass 84/84, login returns 6/6, rendered synthetic account-hub checks pass
+  10/10 at 390/768/1440 px, billing boundaries pass 4/4, and Ecommerce contact
+  isolation passes 24/24. The walkthrough denies viewer, staff, service and
+  other-tenant reads and exposes no unsigned customer download.
 - Private-trial migration verification previously passed 23 migrations and 136
   checks in the prepared environment. An independent rerun in the current
   checkout was blocked by missing `@electric-sql/pglite`; this is a toolchain
@@ -72,7 +73,7 @@ not default launch products.
   `native_shop_gallery_source_tree_drift`. Exact-source native CI, captures,
   hashes, and manifest review are required before public verification can pass.
 - PR #734 remote head remains `526f3616`. No GitHub App, Native, security, or
-  Kernel run exists for `b44d1435`; older green runs are baseline evidence only.
+  Kernel run exists for `03df1838`; older green runs are baseline evidence only.
 - The prior one-run PostgreSQL-17 approval at `e217e035` was consumed and failed
   before producing a canonical pair. No evidence was integrated and no retry is
   authorized. A later exact product head needs a new one-run decision.
@@ -140,7 +141,7 @@ v15 and hosted PostgreSQL/Supabase schema profile v13 are separate contracts.
   mutation has occurred.
 - Live `supermega.dev` and `app.supermega.dev` still report predecessor
   `5479c5d1`; the existing paired protected previews report `f944f66b`, and no
-  immutable protected preview has been accepted for `b44d1435`.
+  immutable protected preview has been accepted for `03df1838`.
   Direct previews stay disabled, and the production workflow is not preview
   evidence. Live retired product routes also need an owner-approved release of
   the already-verified Shop-first route policy.
@@ -195,7 +196,7 @@ backup, and restore review; no blind merge or cherry-pick is allowed.
 Active item: establish the effective Git-deployment behavior of both Vercel
 projects linked to this repository. Acceptance requires provider evidence or an
 explicit disposition; `vercel.json` alone is insufficient. Preserve
-`b44d1435` and do not push meanwhile.
+`03df1838` and do not push meanwhile.
 
 Next eligible sequence: exact PR #734 App/Native/security CI → exact-source
 gallery → newly approved exact-head PostgreSQL rehearsal/evidence successor →

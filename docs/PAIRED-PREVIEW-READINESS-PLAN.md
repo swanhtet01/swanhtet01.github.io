@@ -16,8 +16,8 @@ Remaining implementation: read-only provider evidence collector, exact preview b
 
 ## Current exact handoff — 24 October 2026
 
-- Immutable source checkpoint: `b44d14359cd0419af8aaec5a320218770c1d938e`
-  / tree `490461c02af20049966842ad0c720dad397df33c`.
+- Immutable source checkpoint: `03df1838b7dcc96d06a0b8aec5f07c736c80a6a1`
+  / tree `47f34172529fae384ecafcdf0d0d8c1e96cf8b3c`.
 - `CURRENT.md` has a later documentation-only successor; it must not be used as
   the app/public build source unless the build is deliberately rebound and all
   exact-source checks are rerun.
