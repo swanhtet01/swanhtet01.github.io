@@ -419,12 +419,26 @@ class _ShopCashShiftScreenState extends State<ShopCashShiftScreen> {
 
   Widget _exportPreviewRow(String label, int amount) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 4),
-    child: Row(
-      children: [
-        Expanded(child: Text(label)),
-        const SizedBox(width: 12),
-        Text(shopMmk(amount, myanmar: widget.myanmar)),
-      ],
+    child: Builder(
+      builder: (context) {
+        final value = Text(
+          shopMmk(amount, myanmar: widget.myanmar),
+          textAlign: TextAlign.end,
+        );
+        if (MediaQuery.sizeOf(context).width < 600) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [Text(label), const SizedBox(height: 2), value],
+          );
+        }
+        return Row(
+          children: [
+            Expanded(child: Text(label)),
+            const SizedBox(width: 12),
+            Flexible(child: value),
+          ],
+        );
+      },
     ),
   );
 

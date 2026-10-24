@@ -22,7 +22,8 @@ final class ShopOperationalExportDeliveryUncertain implements Exception {
 
 /// Saves a merchant-readable closed-shift CSV without weakening the runtime
 /// profile boundary. Production delegates to the platform Save As dialog;
-/// synthetic QA writes only to its confined evidence directory.
+/// synthetic QA deliberately disables CSV file writing because Dart's
+/// path-based file API cannot provide the required no-follow write boundary.
 abstract final class ShopOperationalExportSaver {
   static bool _active = false;
 

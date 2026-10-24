@@ -13,12 +13,52 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:supermega_shop/camera_barcode_scanner.dart';
 import 'package:supermega_shop/main.dart';
 import 'package:supermega_shop/printer_services.dart';
+import 'package:supermega_shop/shop_cash_shift_screen.dart';
 import 'package:supermega_shop/shop_database.dart';
+import 'package:supermega_shop/shop_operational_export_saver.dart';
 import 'package:unified_esc_pos_printer/unified_esc_pos_printer.dart';
 
 final _capture = Platform.environment['SHOP_VISUAL_CAPTURE'] == '1';
 const _captureKey = ValueKey('native-shop-visual-capture');
 const _photoFixtureDir = 'test/assets/grocery_photos';
+const _visualMemberId = 'mem_56565656565656565656565656565656';
+const _visualMemberDisplayCode = '00005656';
+
+String _visualMemberToken() {
+  final bytes = List<int>.generate(32, (index) => (56 + index) & 0xff);
+  return 'SMC1.${base64Url.encode(bytes).replaceAll('=', '')}';
+}
+
+Future<void> _seedVisualMember(ShopDatabase database) async {
+  const createdAtMillis = 1_800_000_000_000;
+  final token = _visualMemberToken();
+  final digest = await Sha256().hash(
+    utf8.encode('supermega.shop.member-card.lookup.v1\u0000$token'),
+  );
+  final digestHex = digest.bytes
+      .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
+      .join();
+  final storeRef = await database.readStoreRef();
+  await database.customStatement(
+    'INSERT INTO shop_members '
+    '(id, store_ref, display_code, status, created_at_millis, updated_at_millis) '
+    'VALUES (?, ?, ?, ?, ?, ?)',
+    [
+      _visualMemberId,
+      storeRef,
+      _visualMemberDisplayCode,
+      'active',
+      createdAtMillis,
+      createdAtMillis,
+    ],
+  );
+  await database.customStatement(
+    'INSERT INTO shop_member_cards '
+    '(token_digest, member_id, revision, state, issued_at_millis, '
+    'retired_at_millis) VALUES (?, ?, 1, ?, ?, NULL)',
+    [digestHex, _visualMemberId, 'active', createdAtMillis],
+  );
+}
 
 Widget _syntheticCaptureFrame({required bool myanmar, required Widget child}) =>
     Column(
@@ -64,6 +104,7 @@ List<Map<String, dynamic>> _groceryFixture() {
 
 Future<ShopDatabase> _sampleShop({required bool myanmar}) async {
   final database = ShopDatabase(NativeDatabase.memory());
+  await _seedVisualMember(database);
   // Fixture-only names, prices, stock, and rights-checked photos. The ledger
   // explicitly marks price and stock as illustrative, not live market data.
   for (final item in _groceryFixture()) {
@@ -816,6 +857,40 @@ void main() {
           );
           checkpoint('checkout golden complete');
 
+          if (width == 320 || width == 820) {
+            final memberSelector = find.byKey(
+              const ValueKey('shop-select-member-card'),
+            );
+            await tester.ensureVisible(memberSelector);
+            await tester.tap(memberSelector);
+            await tester.pumpAndSettle();
+            expect(tester.takeException(), isNull);
+            await expectLater(
+              find.byKey(_captureKey),
+              matchesGoldenFile(
+                'goldens/shop_member_dialog_${width.toInt()}_$language.png',
+              ),
+            );
+            await tester.enterText(
+              find.byKey(const ValueKey('shop-member-card-input')),
+              _visualMemberToken(),
+            );
+            await tester.tap(
+              find.byKey(const ValueKey('shop-member-card-apply')),
+            );
+            await tester.pumpAndSettle();
+            expect(
+              find.byKey(const ValueKey('shop-selected-member-card')),
+              findsOneWidget,
+            );
+            await expectLater(
+              find.byKey(_captureKey),
+              matchesGoldenFile(
+                'goldens/shop_member_selected_${width.toInt()}_$language.png',
+              ),
+            );
+          }
+
           await tester.ensureVisible(cashButton);
           await tester.tap(cashButton);
           await tester.pumpAndSettle();
@@ -838,6 +913,69 @@ void main() {
           await tester.pump(const Duration(milliseconds: 1));
           await database.close();
           checkpoint('cleanup complete');
+        }
+      },
+    );
+  }
+
+  for (final (width, height, language) in [
+    (320.0, 900.0, 'en'),
+    (820.0, 1000.0, 'en'),
+    (320.0, 900.0, 'my'),
+    (820.0, 1000.0, 'my'),
+  ]) {
+    testWidgets(
+      'capture closed-shift CSV preview at ${width.toInt()}px $language',
+      skip: !_capture,
+      (tester) async {
+        tester.view.physicalSize = Size(width, height);
+        tester.view.devicePixelRatio = 1;
+        if (width == 320) {
+          tester.platformDispatcher.textScaleFactorTestValue = 1.5;
+        }
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+        final database = await _closedShiftCaptureDatabase(
+          myanmar: language == 'my',
+        );
+        try {
+          await tester.pumpWidget(
+            _syntheticCaptureBoundary(
+              myanmar: language == 'my',
+              child: MaterialApp(
+                home: ShopCashShiftScreen(
+                  database: database,
+                  myanmar: language == 'my',
+                  exportAction: (_) async =>
+                      ShopOperationalExportSaveResult.cancelled,
+                  testOnlyAllowMissingRuntimeScope: true,
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          final label = language == 'my'
+              ? 'ပိတ်ပြီးတာဝန်ချိန် CSV ထုတ်မည်'
+              : 'Export closed shift (CSV)';
+          await tester.scrollUntilVisible(
+            find.text(label),
+            300,
+            scrollable: find.byType(Scrollable).first,
+          );
+          await tester.tap(find.widgetWithText(OutlinedButton, label));
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+          await expectLater(
+            find.byKey(_captureKey),
+            matchesGoldenFile(
+              'goldens/shop_shift_export_${width.toInt()}_$language.png',
+            ),
+          );
+        } finally {
+          await tester.pumpWidget(const SizedBox.shrink());
+          await tester.pump(const Duration(milliseconds: 1));
+          await database.close();
         }
       },
     );
@@ -1089,4 +1227,36 @@ void main() {
       },
     );
   }
+}
+
+Future<ShopDatabase> _closedShiftCaptureDatabase({
+  required bool myanmar,
+}) async {
+  final database = ShopDatabase(NativeDatabase.memory());
+  await database.addProduct(
+    id: 'tea-export-visual',
+    name: myanmar ? 'လက်ဖက်ရည်' : 'Tea',
+    priceMmk: 2500,
+    openingStock: 4,
+  );
+  final shift = await database.openCashShift(
+    operationId: 'visual-export-open',
+    operatorLabel: myanmar ? 'မေ' : 'May',
+    openingFloatMmk: 10000,
+  );
+  await database.recordCashSale(
+    operationId: 'visual-export-sale',
+    lines: const [
+      ShopSaleLineInput(productId: 'tea-export-visual', quantity: 2),
+    ],
+  );
+  final review = await database.readCashShiftReview(shift.id);
+  await database.closeCashShift(
+    shiftId: shift.id,
+    operationId: 'visual-export-close',
+    seenSaleCount: review.saleCount,
+    seenCashTotalMmk: review.cashSalesTotalMmk,
+    countedCashMmk: review.expectedCashMmk,
+  );
+  return database;
 }
