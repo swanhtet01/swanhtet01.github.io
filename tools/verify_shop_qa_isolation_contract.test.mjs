@@ -98,6 +98,7 @@ function fixture() {
     'mobile/shop_pos/lib/shop_database.dart': "privateDatabaseFile() => 'supermega_shop.sqlite';",
     'mobile/shop_pos/lib/shop_startup.dart': 'ShopRuntimeScope scope; void pick() { if (!scope.capabilities.externalFileSaving) return; }',
     'mobile/shop_pos/lib/shop_backup_export_screen.dart': 'ShopRuntimeScope scope; void save() { if (!scope.capabilities.externalFileSaving) return; }',
+    'mobile/shop_pos/lib/shop_operational_export_saver.dart': 'ShopRuntimeScope scope; void save() { if (!scope.capabilities.externalFileSaving) return; }',
     'mobile/shop_pos/lib/printer_services.dart': 'ShopRuntimeScope scope; void connect() { if (!scope.capabilities.networkPrinter) return; }',
     'mobile/shop_pos/lib/printer_setup_screen.dart': 'ShopRuntimeScope scope; bool testOnlyAllowMissingRuntimeScope = false; void discover() { requireShopRuntimeScopeOrTestSeam(scope, testOnlyAllowMissingRuntimeScope: testOnlyAllowMissingRuntimeScope); if (!scope.capabilities.networkPrinter) return; }',
     'mobile/shop_pos/lib/menu_import_screen.dart': 'ShopRuntimeScope scope; bool testOnlyAllowMissingRuntimeScope = false; void pick() { requireShopRuntimeScopeOrTestSeam(scope, testOnlyAllowMissingRuntimeScope: testOnlyAllowMissingRuntimeScope); if (!scope.capabilities.gallery) return; }',

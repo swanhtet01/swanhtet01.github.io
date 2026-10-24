@@ -4,17 +4,40 @@ import 'package:uuid/uuid.dart';
 
 import 'shop_copy.dart';
 import 'shop_database.dart';
+import 'shop_operational_export.dart';
+import 'shop_operational_export_saver.dart';
+import 'shop_runtime_scope.dart';
 import 'stock_screen.dart' show parseStockQuantity;
+
+@visibleForTesting
+bool shopOperationalExportActionAvailable({
+  required bool hasRuntimeScope,
+  required bool hasTestAction,
+  required bool allowTestSeam,
+}) => hasRuntimeScope ? !hasTestAction : allowTestSeam && hasTestAction;
+
+@visibleForTesting
+bool shopOperationalExportSaveAvailable({
+  required bool isSyntheticQa,
+  required bool hasTestAction,
+}) => hasTestAction || !isSyntheticQa;
 
 class ShopCashShiftScreen extends StatefulWidget {
   const ShopCashShiftScreen({
     required this.database,
     required this.myanmar,
+    this.runtimeScope,
+    this.exportAction,
+    this.testOnlyAllowMissingRuntimeScope = false,
     super.key,
   });
 
   final ShopDatabase database;
   final bool myanmar;
+  final ShopRuntimeScope? runtimeScope;
+  final Future<ShopOperationalExportSaveResult> Function(String shiftId)?
+  exportAction;
+  final bool testOnlyAllowMissingRuntimeScope;
 
   @override
   State<ShopCashShiftScreen> createState() => _ShopCashShiftScreenState();
@@ -24,14 +47,22 @@ class _ShopCashShiftScreenState extends State<ShopCashShiftScreen> {
   final _operator = TextEditingController();
   final _openingFloat = TextEditingController(text: '0');
   final _countedCash = TextEditingController();
+  final _statusFocus = FocusNode();
   String _openOperationId = const Uuid().v4();
   String? _closeOperationId;
   ShopCashShiftReview? _review;
   ShopCashShift? _latest;
   String? _error;
+  String? _notice;
   bool _loading = true;
   bool _loadFailed = false;
   bool _busy = false;
+
+  bool get _exportAvailable => shopOperationalExportActionAvailable(
+    hasRuntimeScope: widget.runtimeScope != null,
+    hasTestAction: widget.exportAction != null,
+    allowTestSeam: widget.testOnlyAllowMissingRuntimeScope,
+  );
 
   @override
   void initState() {
@@ -44,6 +75,7 @@ class _ShopCashShiftScreenState extends State<ShopCashShiftScreen> {
     _operator.dispose();
     _openingFloat.dispose();
     _countedCash.dispose();
+    _statusFocus.dispose();
     super.dispose();
   }
 
@@ -81,6 +113,7 @@ class _ShopCashShiftScreenState extends State<ShopCashShiftScreen> {
     if (!mounted) return;
     final detail = error.toString();
     setState(() {
+      _notice = null;
       _error = detail.contains('pending wallet')
           ? shopCopy(
               widget.myanmar,
@@ -95,7 +128,12 @@ class _ShopCashShiftScreenState extends State<ShopCashShiftScreen> {
             )
           : shopCopy(widget.myanmar, english, burmese);
     });
+    _focusStatus();
   }
+
+  void _focusStatus() => WidgetsBinding.instance.addPostFrameCallback((_) {
+    if (mounted) _statusFocus.requestFocus();
+  });
 
   Future<void> _openShift() async {
     if (_busy) return;
@@ -116,6 +154,7 @@ class _ShopCashShiftScreenState extends State<ShopCashShiftScreen> {
     setState(() {
       _busy = true;
       _error = null;
+      _notice = null;
     });
     try {
       await widget.database.openCashShift(
@@ -190,6 +229,7 @@ class _ShopCashShiftScreenState extends State<ShopCashShiftScreen> {
     setState(() {
       _busy = true;
       _error = null;
+      _notice = null;
     });
     try {
       await widget.database.closeCashShift(
@@ -217,6 +257,176 @@ class _ShopCashShiftScreenState extends State<ShopCashShiftScreen> {
       if (mounted) setState(() => _busy = false);
     }
   }
+
+  Future<void> _exportClosedShift(ShopCashShift shift) async {
+    if (_busy) return;
+    final scope = requireShopRuntimeScopeOrTestSeam(
+      widget.runtimeScope,
+      testOnlyAllowMissingRuntimeScope:
+          widget.testOnlyAllowMissingRuntimeScope &&
+          widget.exportAction != null,
+    );
+    if (widget.exportAction != null &&
+        (scope != null || !widget.testOnlyAllowMissingRuntimeScope)) {
+      throw StateError('shop_operational_export_test_seam_invalid');
+    }
+    setState(() {
+      _busy = true;
+      _error = null;
+      _notice = null;
+    });
+    var saveAttempted = false;
+    try {
+      final snapshot = await widget.database
+          .readClosedCashShiftOperationalExport(shift.id);
+      const exporter = ShopOperationalExporter();
+      final preview = exporter.preview(
+        snapshot,
+        widget.myanmar
+            ? ShopOperationalPreviewLocale.my
+            : ShopOperationalPreviewLocale.en,
+      );
+      final saveAvailable = shopOperationalExportSaveAvailable(
+        isSyntheticQa: scope?.configuration.isSyntheticQa ?? false,
+        hasTestAction: widget.exportAction != null,
+      );
+      if (!mounted) return;
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(preview.labels.title),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _exportPreviewRow(
+                  preview.labels.gross,
+                  preview.values.grossMmk,
+                ),
+                _exportPreviewRow(
+                  preview.labels.reversals,
+                  -preview.values.reversalMmk,
+                ),
+                _exportPreviewRow(preview.labels.net, preview.values.netMmk),
+                const Divider(),
+                _exportPreviewRow(
+                  preview.labels.expected,
+                  preview.values.expectedCashMmk,
+                ),
+                _exportPreviewRow(
+                  preview.labels.counted,
+                  preview.values.countedCashMmk,
+                ),
+                _exportPreviewRow(
+                  preview.labels.difference,
+                  preview.values.differenceMmk,
+                ),
+                if (preview.values.pendingWalletCount > 0)
+                  _exportPreviewRow(
+                    '${preview.labels.pendingWallet} '
+                    '(${shopNumber(preview.values.pendingWalletCount, myanmar: widget.myanmar)})',
+                    preview.values.pendingWalletMmk,
+                  ),
+                const SizedBox(height: 12),
+                Text(
+                  preview.labels.warning,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  shopCopy(
+                    widget.myanmar,
+                    'Use encrypted Backup & restore for recovery.',
+                    'ပြန်လည်ရယူရန် စာဝှက်ထားသော အရန်ကူးနှင့် ပြန်လည်ရယူမှုကို သုံးပါ။',
+                  ),
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                if (!saveAvailable) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    shopCopy(
+                      widget.myanmar,
+                      'Saving is unavailable in the synthetic QA app. Preview only.',
+                      'စမ်းသပ် QA အက်ပ်တွင် ဖိုင်သိမ်း၍ မရပါ။ အစမ်းကြည့်ရန်သာ ဖြစ်သည်။',
+                    ),
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: Text(shopCopy(widget.myanmar, 'Cancel', 'မလုပ်တော့ပါ')),
+            ),
+            FilledButton(
+              onPressed: saveAvailable
+                  ? () => Navigator.of(context).pop(true)
+                  : null,
+              child: Text(
+                shopCopy(widget.myanmar, 'Save CSV', 'CSV ဖိုင် သိမ်းမည်'),
+              ),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+      saveAttempted = true;
+      final result = await (widget.exportAction != null
+          ? widget.exportAction!(shift.id)
+          : ShopOperationalExportSaver.save(
+              runtimeScope: scope!,
+              bytes: exporter.encode(snapshot).bytes,
+              shiftId: shift.id,
+            ));
+      if (!mounted) return;
+      setState(() {
+        _notice = result == ShopOperationalExportSaveResult.saved
+            ? shopCopy(
+                widget.myanmar,
+                'Closed-shift CSV saved. It is readable and not encrypted.',
+                'ပိတ်ပြီးတာဝန်ချိန် CSV ဖိုင် သိမ်းပြီးပါပြီ။ ဖတ်ရှုနိုင်ပြီး စာဝှက်မထားပါ။',
+              )
+            : shopCopy(
+                widget.myanmar,
+                'Save cancelled. Shop records were not changed.',
+                'သိမ်းဆည်းမှု ပယ်ဖျက်လိုက်သည်။ Shop မှတ်တမ်းများ မပြောင်းလဲပါ။',
+              );
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _notice = null;
+        _error = saveAttempted
+            ? shopCopy(
+                widget.myanmar,
+                'Could not confirm whether the CSV was saved. Check your files before retrying. Shop records were not changed.',
+                'CSV ဖိုင် သိမ်းပြီးမပြီး အတည်မပြုနိုင်ပါ။ ထပ်မကြိုးစားမီ ဖိုင်များကို စစ်ဆေးပါ။ Shop မှတ်တမ်းများ မပြောင်းလဲပါ။',
+              )
+            : shopCopy(
+                widget.myanmar,
+                'Could not prepare this closed shift. Shop records were not changed.',
+                'ပိတ်ပြီးတာဝန်ချိန် ဖိုင်ကို မပြင်ဆင်နိုင်ပါ။ Shop မှတ်တမ်းများ မပြောင်းလဲပါ။',
+              );
+      });
+      _focusStatus();
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Widget _exportPreviewRow(String label, int amount) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 4),
+    child: Row(
+      children: [
+        Expanded(child: Text(label)),
+        const SizedBox(width: 12),
+        Text(shopMmk(amount, myanmar: widget.myanmar)),
+      ],
+    ),
+  );
 
   Widget _amountRow(String label, int amount, {bool strong = false}) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 8),
@@ -272,16 +482,35 @@ class _ShopCashShiftScreenState extends State<ShopCashShiftScreen> {
                     padding: const EdgeInsets.all(20),
                     children: [
                       if (_error != null) ...[
-                        Text(
-                          _error!,
-                          style: TextStyle(
-                            color: Theme.of(context).colorScheme.error,
+                        Semantics(
+                          container: true,
+                          liveRegion: true,
+                          child: Focus(
+                            focusNode: _statusFocus,
+                            child: Text(
+                              _error!,
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.error,
+                              ),
+                            ),
                           ),
                         ),
                         TextButton(
                           onPressed: _refresh,
                           child: Text(
                             shopCopy(widget.myanmar, 'Refresh', 'ပြန်ဖွင့်ရန်'),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+                      if (_notice != null) ...[
+                        Semantics(
+                          liveRegion: true,
+                          child: Text(
+                            _notice!,
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
                           ),
                         ),
                         const SizedBox(height: 12),
@@ -388,6 +617,29 @@ class _ShopCashShiftScreenState extends State<ShopCashShiftScreen> {
                               'ကွာခြားချက်',
                             ),
                             last.differenceMmk ?? 0,
+                          ),
+                          const SizedBox(height: 12),
+                          OutlinedButton.icon(
+                            onPressed: _busy || !_exportAvailable
+                                ? null
+                                : () => _exportClosedShift(last),
+                            icon: const Icon(Icons.table_view_outlined),
+                            label: Text(
+                              shopCopy(
+                                widget.myanmar,
+                                'Export closed shift (CSV)',
+                                'ပိတ်ပြီးတာဝန်ချိန် CSV ထုတ်မည်',
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            shopCopy(
+                              widget.myanmar,
+                              'Readable local record — not an encrypted recovery backup.',
+                              'ဖတ်ရှုနိုင်သော စက်တွင်းမှတ်တမ်း — စာဝှက်ထားသော ပြန်လည်ရယူရေးအရန်ကူး မဟုတ်ပါ။',
+                            ),
+                            style: Theme.of(context).textTheme.bodySmall,
                           ),
                         ],
                       ] else ...[

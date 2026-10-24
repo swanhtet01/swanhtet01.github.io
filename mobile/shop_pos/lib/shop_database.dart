@@ -10,6 +10,7 @@ import 'package:drift_flutter/drift_flutter.dart';
 
 import 'shop_models.dart';
 import 'shop_correction_receipt.dart';
+import 'shop_operational_export.dart';
 
 export 'shop_correction_receipt.dart';
 
@@ -4837,6 +4838,232 @@ class ShopDatabase extends _$ShopDatabase {
       'ORDER BY opened_at_millis DESC, id DESC LIMIT 1',
     ).getSingleOrNull();
     return row == null ? null : _cashShiftFromRow(row);
+  }
+
+  /// Reads one immutable, closed-shift operational snapshot for the
+  /// merchant-readable CSV. This transaction never writes and intentionally
+  /// excludes authorization proofs, request fingerprints, workspace IDs,
+  /// outbox payloads, wallet profile details, and session/key material.
+  Future<ShopOperationalSnapshot> readClosedCashShiftOperationalExport(
+    String shiftId,
+  ) {
+    final cleanShiftId = shiftId.trim();
+    if (cleanShiftId.isEmpty || cleanShiftId.length > 120) {
+      throw ArgumentError.value(shiftId, 'shiftId', 'Invalid shift ID.');
+    }
+    return transaction(() async {
+      final shiftRow = await customSelect(
+        'SELECT * FROM shop_cash_shifts WHERE id = ? LIMIT 1',
+        variables: [Variable<String>(cleanShiftId)],
+      ).getSingleOrNull();
+      if (shiftRow == null) throw StateError('shop_closed_shift_not_found');
+      final shift = _cashShiftFromRow(shiftRow);
+      final closedAt = shift.closedAtMillis;
+      if (shift.state != 'closed' ||
+          closedAt == null ||
+          shift.cashSalesCount == null ||
+          shift.cashSalesTotalMmk == null ||
+          shift.walletSalesCount == null ||
+          shift.walletSalesTotalMmk == null ||
+          shift.expectedCashMmk == null ||
+          shift.countedCashMmk == null ||
+          shift.differenceMmk == null ||
+          shift.cashReversalCount == null ||
+          shift.cashReversalTotalMmk == null ||
+          shift.cashDrawerOutflowMmk == null) {
+        throw StateError('shop_closed_shift_snapshot_incomplete');
+      }
+
+      ShopOperationalPaymentMethod paymentMethod(String value) =>
+          switch (value) {
+            'cash' => ShopOperationalPaymentMethod.cash,
+            'kbzpay' => ShopOperationalPaymentMethod.kbzpay,
+            'wavepay' => ShopOperationalPaymentMethod.wavepay,
+            _ => throw StateError('shop_operational_payment_method_invalid'),
+          };
+
+      final saleRows = await customSelect(
+        '''
+        SELECT s.id, s.total_mmk, s.payment_method, s.created_at_millis
+        FROM shop_cash_shift_sales link
+        JOIN shop_sales s ON s.id = link.sale_id
+        WHERE link.shift_id = ?
+        ORDER BY s.created_at_millis, s.id
+        ''',
+        variables: [Variable<String>(cleanShiftId)],
+      ).get();
+      final sales = <ShopOperationalSale>[];
+      for (final saleRow in saleRows) {
+        final saleId = saleRow.read<String>('id');
+        final lineRows = await customSelect(
+          'SELECT id, product_id, product_name, quantity, unit_price_mmk, '
+          'line_total_mmk FROM shop_sale_lines WHERE sale_id = ? '
+          'ORDER BY id',
+          variables: [Variable<String>(saleId)],
+        ).get();
+        sales.add(
+          ShopOperationalSale(
+            id: saleId,
+            paymentMethod: paymentMethod(
+              saleRow.read<String>('payment_method'),
+            ),
+            totalMmk: saleRow.read<int>('total_mmk'),
+            createdAtMillis: saleRow.read<int>('created_at_millis'),
+            lines: [
+              for (final line in lineRows)
+                ShopOperationalSaleLine(
+                  id: line.read<String>('id'),
+                  productId: line.read<String>('product_id'),
+                  productName: line.read<String>('product_name'),
+                  quantity: line.read<int>('quantity'),
+                  unitPriceMmk: line.read<int>('unit_price_mmk'),
+                  lineTotalMmk: line.read<int>('line_total_mmk'),
+                ),
+            ],
+          ),
+        );
+      }
+
+      final reversalRows = await customSelect(
+        '''
+        SELECT r.id, r.sale_id, r.original_payment_method,
+          r.original_total_mmk, r.cash_drawer_delta_mmk, r.reason,
+          r.authorized_actor_label, r.created_at_millis
+        FROM shop_sale_reversals r
+        WHERE (r.created_at_millis BETWEEN ? AND ?)
+          OR EXISTS (
+            SELECT 1 FROM shop_wallet_reversal_reconciliations w
+            WHERE w.reversal_id = r.id
+              AND w.created_at_millis BETWEEN ? AND ?
+          )
+        ORDER BY r.created_at_millis, r.id
+        ''',
+        variables: [
+          Variable<int>(shift.openedAtMillis),
+          Variable<int>(closedAt),
+          Variable<int>(shift.openedAtMillis),
+          Variable<int>(closedAt),
+        ],
+      ).get();
+      final reversals = <ShopOperationalReversal>[];
+      for (final reversalRow in reversalRows) {
+        final reversalId = reversalRow.read<String>('id');
+        final lineRows = await customSelect(
+          'SELECT id, product_id, product_name, quantity, unit_price_mmk, '
+          'line_total_mmk, restock_quantity '
+          'FROM shop_sale_reversal_lines WHERE reversal_id = ? ORDER BY id',
+          variables: [Variable<String>(reversalId)],
+        ).get();
+        reversals.add(
+          ShopOperationalReversal(
+            id: reversalId,
+            saleId: reversalRow.read<String>('sale_id'),
+            originalPaymentMethod: paymentMethod(
+              reversalRow.read<String>('original_payment_method'),
+            ),
+            originalTotalMmk: reversalRow.read<int>('original_total_mmk'),
+            cashDrawerDeltaMmk: reversalRow.read<int>('cash_drawer_delta_mmk'),
+            reason: reversalRow.read<String>('reason'),
+            authorizedActorLabel: reversalRow.read<String>(
+              'authorized_actor_label',
+            ),
+            createdAtMillis: reversalRow.read<int>('created_at_millis'),
+            lines: [
+              for (final line in lineRows)
+                ShopOperationalReversalLine(
+                  id: line.read<String>('id'),
+                  productId: line.read<String>('product_id'),
+                  productName: line.read<String>('product_name'),
+                  quantity: line.read<int>('quantity'),
+                  unitPriceMmk: line.read<int>('unit_price_mmk'),
+                  lineTotalMmk: line.read<int>('line_total_mmk'),
+                  restockQuantity: line.read<int>('restock_quantity'),
+                ),
+            ],
+          ),
+        );
+      }
+
+      final walletRows = await customSelect(
+        '''
+        SELECT w.id, w.reversal_id, w.outcome, w.evidence_reference,
+          w.authorized_actor_label, w.created_at_millis
+        FROM shop_wallet_reversal_reconciliations w
+        JOIN shop_sale_reversals r ON r.id = w.reversal_id
+        WHERE w.created_at_millis <= ?
+          AND ((r.created_at_millis BETWEEN ? AND ?)
+            OR (w.created_at_millis BETWEEN ? AND ?))
+        ORDER BY w.created_at_millis, w.id
+        ''',
+        variables: [
+          Variable<int>(closedAt),
+          Variable<int>(shift.openedAtMillis),
+          Variable<int>(closedAt),
+          Variable<int>(shift.openedAtMillis),
+          Variable<int>(closedAt),
+        ],
+      ).get();
+      final walletReconciliations = [
+        for (final wallet in walletRows)
+          ShopOperationalWalletReconciliation(
+            id: wallet.read<String>('id'),
+            reversalId: wallet.read<String>('reversal_id'),
+            outcome: switch (wallet.read<String>('outcome')) {
+              'money_returned' => ShopOperationalWalletOutcome.moneyReturned,
+              'payment_not_received' =>
+                ShopOperationalWalletOutcome.paymentNotReceived,
+              _ => throw StateError('shop_operational_wallet_outcome_invalid'),
+            },
+            evidenceReference: wallet.read<String>('evidence_reference'),
+            actorLabel: wallet.read<String>('authorized_actor_label'),
+            createdAtMillis: wallet.read<int>('created_at_millis'),
+          ),
+      ];
+
+      final movementRows = await customSelect(
+        'SELECT id, sale_id, product_id, quantity_delta, reason, '
+        'created_at_millis FROM shop_stock_movements '
+        'WHERE created_at_millis BETWEEN ? AND ? '
+        'ORDER BY created_at_millis, id',
+        variables: [
+          Variable<int>(shift.openedAtMillis),
+          Variable<int>(closedAt),
+        ],
+      ).get();
+      return ShopOperationalSnapshot(
+        shift: ShopOperationalShift(
+          id: shift.id,
+          operatorLabel: shift.operatorLabel,
+          openingFloatMmk: shift.openingFloatMmk,
+          openedAtMillis: shift.openedAtMillis,
+          closedAtMillis: closedAt,
+          cashSalesCount: shift.cashSalesCount!,
+          cashSalesTotalMmk: shift.cashSalesTotalMmk!,
+          walletSalesCount: shift.walletSalesCount!,
+          walletSalesTotalMmk: shift.walletSalesTotalMmk!,
+          cashReversalCount: shift.cashReversalCount!,
+          cashReversalTotalMmk: shift.cashReversalTotalMmk!,
+          expectedCashMmk: shift.expectedCashMmk!,
+          countedCashMmk: shift.countedCashMmk!,
+          differenceMmk: shift.differenceMmk!,
+          cashDrawerOutflowMmk: shift.cashDrawerOutflowMmk!,
+        ),
+        sales: sales,
+        reversals: reversals,
+        walletReconciliations: walletReconciliations,
+        stockMovements: [
+          for (final movement in movementRows)
+            ShopOperationalStockMovement(
+              id: movement.read<String>('id'),
+              saleId: movement.readNullable<String>('sale_id'),
+              productId: movement.read<String>('product_id'),
+              quantityDelta: movement.read<int>('quantity_delta'),
+              reason: movement.read<String>('reason'),
+              createdAtMillis: movement.read<int>('created_at_millis'),
+            ),
+        ],
+      );
+    });
   }
 
   Future<ShopCashShift> openCashShift({

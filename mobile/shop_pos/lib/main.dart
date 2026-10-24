@@ -5089,6 +5089,7 @@ class _ShopSettingsScreenState extends State<ShopSettingsScreen> {
                         builder: (_) => ShopCashShiftScreen(
                           database: widget.database,
                           myanmar: _myanmar,
+                          runtimeScope: widget.runtimeScope,
                         ),
                       ),
                     ),

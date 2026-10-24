@@ -14,6 +14,7 @@ const requiredExisting = [
   'mobile/shop_pos/lib/shop_database.dart',
   'mobile/shop_pos/lib/shop_startup.dart',
   'mobile/shop_pos/lib/shop_backup_export_screen.dart',
+  'mobile/shop_pos/lib/shop_operational_export_saver.dart',
   'mobile/shop_pos/lib/printer_services.dart',
   'mobile/shop_pos/lib/printer_setup_screen.dart',
   'mobile/shop_pos/lib/menu_import_screen.dart',
@@ -49,7 +50,7 @@ const currentUnsafeCeilings = new Map([
   ['Supabase.initialize', new Map([['mobile/shop_pos/lib/main.dart', 1]])],
   ['ImagePicker(', new Map([['mobile/shop_pos/lib/main.dart', 2], ['mobile/shop_pos/lib/menu_import_screen.dart', 1]])],
   ['MobileScanner(', new Map([['mobile/shop_pos/lib/camera_barcode_scanner.dart', 1]])],
-  ['FileSaver.instance.saveAs', new Map([['mobile/shop_pos/lib/shop_backup_export_screen.dart', 1]])],
+  ['FileSaver.instance.saveAs', new Map([['mobile/shop_pos/lib/shop_backup_export_screen.dart', 1], ['mobile/shop_pos/lib/shop_operational_export_saver.dart', 1]])],
   ['openFile(', new Map([['mobile/shop_pos/lib/shop_startup.dart', 1]])],
   ['.post(', new Map([['mobile/shop_pos/lib/menu_import_service.dart', 1]])],
   ['_client.send(', new Map([['mobile/shop_pos/lib/connected_orders_service.dart', 1], ['mobile/shop_pos/lib/shop_correction_authorization_service.dart', 1]])],
@@ -549,6 +550,7 @@ export function assessShopQaIsolationContract({ sources }) {
     ['mobile/shop_pos/lib/printer_services.dart', 'networkPrinter', 'Socket.connect'],
     ['mobile/shop_pos/lib/shop_startup.dart', 'externalFileSaving', 'openFile('],
     ['mobile/shop_pos/lib/shop_backup_export_screen.dart', 'externalFileSaving', 'FileSaver.instance.saveAs'],
+    ['mobile/shop_pos/lib/shop_operational_export_saver.dart', 'externalFileSaving', 'FileSaver.instance.saveAs'],
   ]
   for (const [path, capability, ioToken] of serviceGuards) {
     const text = codeOnly(sources[path] || '')
@@ -571,7 +573,7 @@ export function assessShopQaIsolationContract({ sources }) {
     ['NetworkInfo(', new Map([['mobile/shop_pos/lib/printer_services.dart', 'networkPrinter']])],
     ['Socket.connect', new Map([['mobile/shop_pos/lib/printer_services.dart', 'networkPrinter']])],
     ['openFile(', new Map([['mobile/shop_pos/lib/shop_startup.dart', 'externalFileSaving']])],
-    ['FileSaver.instance.saveAs', new Map([['mobile/shop_pos/lib/shop_backup_export_screen.dart', 'externalFileSaving']])],
+    ['FileSaver.instance.saveAs', new Map([['mobile/shop_pos/lib/shop_backup_export_screen.dart', 'externalFileSaving'], ['mobile/shop_pos/lib/shop_operational_export_saver.dart', 'externalFileSaving']])],
   ]
   for (const [token, allowed] of guardedPrimitives) {
     for (const path of dartPaths) {
