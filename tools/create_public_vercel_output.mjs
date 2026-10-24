@@ -1505,11 +1505,16 @@ function localRateLimit(req, now) {
   return { allowed: true, retryAfter: 0 }
 }
 
-function sourceAttribution(sourceUrl) {
+function sourceAttribution(sourceUrl, req) {
   const fallback = { page_path: '/contact/', utm_source: '', utm_medium: '', utm_campaign: '', utm_content: '', utm_term: '' }
   try {
     const source = new URL(sourceUrl)
-    if (source.protocol !== 'https:' && source.protocol !== 'http:') return fallback
+    const requestHost = text(req.headers?.['x-forwarded-host'] || req.headers?.host, 300).toLowerCase()
+    const sourceHost = source.host.toLowerCase()
+    const trustedHost = sourceHost === 'supermega.dev' || sourceHost === 'www.supermega.dev'
+      || (requestHost && sourceHost === requestHost)
+    const trustedPath = new Set(['/', '/shop/', '/contact/', '/privacy/', '/my/shop/', '/my/contact/', '/my/privacy/']).has(source.pathname)
+    if (source.protocol !== 'https:' || source.username || source.password || !trustedHost || !trustedPath) return fallback
     const campaign = (name) => text(source.searchParams.get(name), 160)
     return {
     page_path: text(source.pathname, 700) || '/contact/',
@@ -1538,7 +1543,7 @@ function recordFrom(safe, req, idempotencyKey, fingerprint, submittedSourceUrl) 
   const taskId = 'TASK-' + keyedDigest('task:' + idempotencyKey).slice(0, 16).toUpperCase()
   // Derive the five bounded campaign fields before privacyUrl removes the
   // query. The retained source URL stays credential-, query-, and fragment-free.
-  const attribution = sourceAttribution(submittedSourceUrl)
+  const attribution = sourceAttribution(submittedSourceUrl, req)
   const { trial_proof: trialProof, ...contactSafe } = safe
   return {
     lead_id: leadId,

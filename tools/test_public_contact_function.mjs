@@ -245,12 +245,55 @@ try {
   assert.equal(attributedEvent.record.page_path, '/contact/')
   assert.deepEqual(
     Object.fromEntries(['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term'].map((field) => [field, attributedEvent.record[field]])),
-    { utm_source: 'facebook', utm_medium: 'social', utm_campaign: longCampaign.slice(0, 160), utm_content: 'hero', utm_term: 'pos' },
+    { utm_source: '', utm_medium: '', utm_campaign: '', utm_content: '', utm_term: '' },
   )
   assert.doesNotMatch(
     JSON.stringify(attributedEvent.record),
     /url-user|url-password|private-query|private-contact|private-password|private-fragment/,
   )
+
+  const trustedAttribution = await invoke({
+    body: {
+      ...validSubmission,
+      source_url: `https://supermega.dev/shop/?utm_source=facebook&utm_medium=social&utm_campaign=${longCampaign}&utm_content=hero&utm_term=pos`,
+    },
+    headers: withKey(205, { 'x-forwarded-for': '203.0.113.205' }),
+  })
+  assert.equal(trustedAttribution.status, 202)
+  const trustedEvent = JSON.parse(delivered.options.body)
+  assert.equal(trustedEvent.record.page_path, '/shop/')
+  assert.deepEqual(
+    Object.fromEntries(['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term'].map((field) => [field, trustedEvent.record[field]])),
+    { utm_source: 'facebook', utm_medium: 'social', utm_campaign: longCampaign.slice(0, 160), utm_content: 'hero', utm_term: 'pos' },
+  )
+
+  for (const [index, source_url] of [
+    'https://outside.example/contact/?utm_source=forged',
+    'http://supermega.dev/contact/?utm_source=insecure',
+    'https://supermega.dev/private/admin/?utm_source=wrong-route',
+  ].entries()) {
+    const rejectedAttribution = await invoke({
+      body: { ...validSubmission, source_url },
+      headers: withKey(206 + index, { 'x-forwarded-for': `203.0.113.${206 + index}` }),
+    })
+    assert.equal(rejectedAttribution.status, 202)
+    const rejectedEvent = JSON.parse(delivered.options.body)
+    assert.equal(rejectedEvent.record.page_path, '/contact/')
+    assert.equal(rejectedEvent.record.utm_source, '')
+  }
+
+  const previewAttribution = await invoke({
+    body: { ...validSubmission, source_url: 'https://preview.example.vercel.app/contact/?utm_source=preview' },
+    headers: withKey(209, {
+      host: 'preview.example.vercel.app',
+      origin: 'https://preview.example.vercel.app',
+      'x-forwarded-for': '203.0.113.209',
+    }),
+  })
+  assert.equal(previewAttribution.status, 202)
+  const previewEvent = JSON.parse(delivered.options.body)
+  assert.equal(previewEvent.record.page_path, '/contact/')
+  assert.equal(previewEvent.record.utm_source, 'preview')
 
   for (const [index, product] of ['production', 'plant', 'website', 'ecommerce', 'commerce'].entries()) {
     const retired = await invoke({ body: { ...validSubmission, product }, headers: withKey(4 + index, { 'x-forwarded-for': `203.0.113.${11 + index}` }) })
