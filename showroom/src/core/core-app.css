@@ -1823,6 +1823,10 @@ label.checkbox-row input { width: 1.25rem; min-width: 1.25rem; min-height: 1.25r
 .counter-confirm-proof span { min-width: 0; display: grid; gap: 4px; border: 1px solid var(--core-line); border-radius: 10px; padding: 10px; background: var(--core-surface-soft); }
 .counter-confirm-proof small { color: var(--core-green); font-family: var(--core-mono); font-size: 0.5rem; text-transform: uppercase; }
 .counter-confirm-proof strong { overflow: hidden; color: var(--core-muted); font-size: 0.625rem; text-overflow: ellipsis; white-space: nowrap; }
+.counter-cash-tender { display: grid; gap: 8px; min-width: 0; margin: 0; border: 1px solid var(--core-line); border-radius: 10px; padding: 12px; background: var(--core-surface-soft); }
+.counter-cash-tender legend { padding: 0 5px; color: var(--core-green); font-family: var(--core-mono); font-size: 0.625rem; font-weight: var(--font-weight-bold); text-transform: uppercase; }
+.counter-cash-tender p { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 0; }
+.counter-cash-tender input { min-height: 44px; }
 .counter-local-boundary { margin: 0; border-left: 3px solid var(--core-green); padding: 9px 10px; color: var(--core-ink); background: var(--core-green-soft); }
 
 :focus-visible { outline: 3px solid rgba(36,84,230,.32); outline-offset: 2px; }

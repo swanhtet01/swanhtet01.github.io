@@ -2,6 +2,8 @@ import { spaCounterFields } from './shop-spa-counter-fields'
 import { lazy, Suspense, type ChangeEvent, type FormEvent, type KeyboardEvent, type MouseEvent, type ReactNode, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { shopCounterDraftContext } from './shop-counter-draft-context'
 import { installShopSaleFocus } from './shop-sale-focus'
+import { reviewShopCashTender } from './shop-cash-tender'
+import { ShopCashTenderFields } from './ShopCashTenderFields'
 import { createCounterTicketSession, emptyCounterBasket, type CounterBasket } from './shop-parked-tickets'
 import {
   shopBusinessTemplate,
@@ -999,6 +1001,8 @@ function AccountableActionGate({ action, authenticatedActor, onCancel, onConfirm
   const [evidenceReference, setEvidenceReference] = useState(action?.evidenceReferenceSuggestion ?? '')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [cashGiven, setCashGiven] = useState('')
+  const [frozenCashGiven, setFrozenCashGiven] = useState<string | null>(null)
   const dialogRef = useRef<HTMLDialogElement>(null)
   const headingRef = useRef<HTMLHeadingElement>(null)
   const previousFocusRef = useRef<HTMLElement | null>(null)
@@ -1023,6 +1027,13 @@ function AccountableActionGate({ action, authenticatedActor, onCancel, onConfirm
   if (!action) return null
   const isCounterConfirmation = action.presentation === 'counter'
   const isCounterSettlement = isCounterConfirmation && action.kind === 'order_settle'
+  const cashTender = isCounterSettlement ? action.cashTender : undefined
+  const effectiveCashGiven = frozenCashGiven ?? cashGiven
+  const cashTenderReview = cashTender
+    ? reviewShopCashTender(cashTender.amountDueMmk, effectiveCashGiven)
+    : null
+  const cashTenderBlocked = cashTenderReview?.status === 'invalid'
+    || cashTenderReview?.status === 'short'
   const isPaymentReconciliation = action.kind === 'payment_reconcile'
   // Keep the dialog locked during an unresolved submission. After an error, allow
   // recovery without trapping the operator. An error alone does not prove that a
@@ -1036,7 +1047,8 @@ function AccountableActionGate({ action, authenticatedActor, onCancel, onConfirm
     const confirmedReason = action.confirmation?.reason ?? reason.trim()
     const confirmedEvidence = action.confirmation?.evidenceReference
       ?? (action.evidenceReferenceLocked ? action.evidenceReferenceSuggestion?.trim() ?? '' : evidenceReference.trim())
-    if (!responsibleActor || !confirmedReason || !confirmedEvidence) return
+    if (!responsibleActor || !confirmedReason || !confirmedEvidence || cashTenderBlocked) return
+    if (cashTender && frozenCashGiven === null) setFrozenCashGiven(cashGiven)
     setBusy(true)
     setError('')
     try {
@@ -1063,10 +1075,17 @@ function AccountableActionGate({ action, authenticatedActor, onCancel, onConfirm
       {isCounterConfirmation
         ? <div className="counter-confirm-proof"><span><small>Reason</small><strong>{action.confirmation?.reason ?? reason}</strong></span><span><small>Reference</small><strong>{action.confirmation?.evidenceReference ?? evidenceReference}</strong></span></div>
         : <><label>Reason<input maxLength={180} readOnly={Boolean(action.confirmation)} required value={action.confirmation?.reason ?? reason} onChange={(event) => setReason(event.target.value)} placeholder="Why this change is correct now" /></label><label>{isPaymentReconciliation ? 'Payment evidence reference' : 'Reference'}<input maxLength={180} readOnly={Boolean(action.confirmation) || action.evidenceReferenceLocked} required value={action.confirmation?.evidenceReference ?? (action.evidenceReferenceLocked ? action.evidenceReferenceSuggestion ?? '' : evidenceReference)} onChange={(event) => setEvidenceReference(event.target.value)} placeholder={isPaymentReconciliation ? 'Internal slip file ID or counter reference' : 'Message ID, receipt, count sheet, or observation'} /></label>{isPaymentReconciliation ? <p className="form-notice">For QR payments, record an internal slip file ID or counter reference only. Do not enter a customer phone number, wallet ID, account number, or payment credentials. This records your review; it does not verify or charge a payment.</p> : null}</>}
+      {cashTender && cashTenderReview ? <ShopCashTenderFields
+        amountDueMmk={cashTender.amountDueMmk}
+        onChange={(event) => setCashGiven(event.target.value)}
+        readOnly={frozenCashGiven !== null || Boolean(action.confirmation)}
+        review={cashTenderReview}
+        value={effectiveCashGiven}
+      /> : null}
       {isCounterConfirmation && !authenticatedActor ? <p className="form-notice counter-local-boundary">{isCounterSettlement
         ? 'Browser-local sample only. Confirming records the cashier’s reviewed payment and handoff, completes the sale, and updates sample stock in this browser. It does not charge a wallet or card, contact a customer, write to a server or company account, or move real stock.'
         : 'Browser-local sample only. Confirming creates an open sample order and reserves sample stock in this browser. Payment and fulfilment stay pending for review in Orders. No payment is captured, no customer is contacted, no server or company account is written, and no real stock is moved.'}</p> : null}
-      <div className="form-actions"><button className="core-button" data-action-gate="cancel" disabled={busy || confirmationLocked} onClick={onCancel} type="button">{bi('Cancel')}</button><button className="core-button primary" disabled={busy} type="submit">{busy ? 'Applying…' : action.confirmation ? bi('Retry same confirmation') : isCounterSettlement ? 'Complete sale' : bi(isCounterConfirmation ? 'Create order' : 'Confirm change')}</button></div>
+      <div className="form-actions"><button className="core-button" data-action-gate="cancel" disabled={busy || confirmationLocked} onClick={onCancel} type="button">{bi('Cancel')}</button><button className="core-button primary" disabled={busy || cashTenderBlocked} type="submit">{busy ? 'Applying…' : action.confirmation ? bi('Retry same confirmation') : isCounterSettlement ? 'Complete sale' : bi(isCounterConfirmation ? 'Create order' : 'Confirm change')}</button></div>
       {error
         ? <div className="form-notice" data-action-gate="error" data-tone="error" role="alert">
           <p>{ownerFacingActionError(error)}</p>
@@ -3997,6 +4016,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         ? `Order ${displayReference} completed · ${review.payment} reconciled · Stock ${stockReview}`
         : `Order ${displayReference} confirmed · Reserved stock ${stockReview}`,
       presentation: 'counter',
+      ...(completesSale && review.payment === 'Cash' ? { cashTender: { amountDueMmk: order.total } } : {}),
       actorSuggestion: managedIdentity ? undefined : 'Sample cashier',
       evidenceReferenceSuggestion: `Counter order ${displayReference}`,
       evidenceReferenceLocked: true,
