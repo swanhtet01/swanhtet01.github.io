@@ -67,9 +67,13 @@ export function ManagedLoginPage() {
   const [cooldownUntil, setCooldownUntil] = useState(0)
   const [cooldownSeconds, setCooldownSeconds] = useState(0)
   const accountRequestPending = useRef(false)
+  const emailInputRef = useRef<HTMLInputElement>(null)
+  const loginNoticeRef = useRef<HTMLParagraphElement>(null)
+  const [credentialFieldError, setCredentialFieldError] = useState(false)
 
   function clearCredentialError() {
-    if (noticeTone !== 'error') return
+    if (!credentialFieldError) return
+    setCredentialFieldError(false)
     setNotice('')
     setNoticeTone('quiet')
   }
@@ -188,6 +192,8 @@ export function ManagedLoginPage() {
     accountRequestPending.current = true
     setBusy(true)
     setNoticeTone('quiet')
+    setCredentialFieldError(false)
+    let credentialsAccepted = directory !== null
     try {
       if (directory) {
         setNotice('Opening your company...')
@@ -196,6 +202,7 @@ export function ManagedLoginPage() {
       }
       setNotice('Finding companies assigned to this account...')
       const signIn = await signInAndDiscoverManagedWorkspaces(email, password)
+      credentialsAccepted = true
       setPassword('')
       if (signIn.workspaces.length === 1) {
         await openWorkspace(signIn, signIn.workspaces[0].workspaceId)
@@ -218,6 +225,11 @@ export function ManagedLoginPage() {
       }
       setNoticeTone('error')
       setNotice(error instanceof Error ? error.message : 'Managed sign-in failed.')
+      if (credentialsAccepted) loginNoticeRef.current?.focus({ preventScroll: true })
+      else {
+        setCredentialFieldError(true)
+        emailInputRef.current?.focus({ preventScroll: true })
+      }
     } finally {
       setPassword('')
       accountRequestPending.current = false
@@ -361,13 +373,13 @@ export function ManagedLoginPage() {
               combination was rejected" -- there is no way to attribute it to just one of the
               two fields without leaking which one was wrong, so both point at the shared
               notice rather than leaving it disconnected from either input. */}
-          <label>Email<input aria-describedby={noticeTone === 'error' ? 'managed-login-notice' : undefined} aria-invalid={noticeTone === 'error'} autoComplete="username" maxLength={160} onChange={(event) => editEmail(event.target.value)} required type="email" value={email} /></label>
-          <label>Password<input aria-describedby={noticeTone === 'error' ? 'managed-login-notice' : undefined} aria-invalid={noticeTone === 'error'} autoComplete="current-password" onChange={(event) => editPassword(event.target.value)} required type="password" value={password} /></label>
+          <label>Email<input aria-describedby={credentialFieldError ? 'managed-login-notice' : undefined} aria-invalid={credentialFieldError} autoComplete="username" maxLength={160} onChange={(event) => editEmail(event.target.value)} ref={emailInputRef} required type="email" value={email} /></label>
+          <label>Password<input aria-describedby={credentialFieldError ? 'managed-login-notice' : undefined} aria-invalid={credentialFieldError} autoComplete="current-password" onChange={(event) => editPassword(event.target.value)} required type="password" value={password} /></label>
           <Link className="account-inline-link" to={managedAccountPath('/account/recovery', accountProductIntent, location.search)}>Forgot password?</Link>
           {reviewReturnPath ? <p>Need access? Ask SuperMega in your existing setup conversation. Use your existing account.</p> : signupPolicy ? <button className="account-inline-link account-link-button" onClick={() => chooseAccountMode(true)} type="button">Create an account</button> : <a className="account-inline-link" href={managedAccountRequestUrl(accountProductIntent)}>{shopAccessIntent ? 'Contact us about Shop' : 'Contact support'}</a>}
         </>}
         <button className="core-button primary" disabled={busy} type="submit">{busy ? 'Checking...' : reviewReturnPath ? 'Continue to review' : directory ? bi('Open company') : bi('Login')}</button>
-        <p className="form-notice" data-tone={noticeTone} id="managed-login-notice" role="status">{notice}</p>
+        <p className="form-notice" data-tone={noticeTone} id="managed-login-notice" ref={loginNoticeRef} role="status" tabIndex={-1}>{notice}</p>
       </form> : <section className="managed-login-panel" aria-label="Login unavailable">
         {reviewReturnPath ? <div><h2>Review sign-in is unavailable here.</h2><p>Keep your original review link and ask SuperMega in your existing setup conversation to restore access. Use the account associated with this review.</p></div> : <>
           <div><h2>Login is currently unavailable.</h2><p>{shopAccessIntent ? publicApp ? 'Shop pilot access is issued during assisted setup. Native Shop can make its first local sale without this managed account.' : 'Shop pilot access is issued during assisted setup. Native Shop can make its first local sale without this managed account. Your saved work is still available on this device.' : publicApp ? 'Contact support for account access.' : 'Contact support for account access. Your saved work is still available on this device.'}</p></div>

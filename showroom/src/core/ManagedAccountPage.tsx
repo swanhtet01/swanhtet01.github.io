@@ -41,6 +41,25 @@ export function ManagedAccountPage() {
   const [sent, setSent] = useState(false)
   const [busy, setBusy] = useState(false)
   const accountRequestPending = useRef(false)
+  const confirmationInputRef = useRef<HTMLInputElement>(null)
+  const noticeRef = useRef<HTMLParagraphElement>(null)
+  const [passwordMismatch, setPasswordMismatch] = useState(false)
+
+  function clearPasswordMismatch() {
+    if (!passwordMismatch) return
+    setPasswordMismatch(false)
+    if (notice === 'The passwords do not match.') setNotice('')
+  }
+
+  function editNewPassword(value: string) {
+    setPassword(value)
+    clearPasswordMismatch()
+  }
+
+  function editConfirmation(value: string) {
+    setConfirmation(value)
+    clearPasswordMismatch()
+  }
 
   useEffect(() => {
     if (recoveryRequest || runtime.status === 'checking') return
@@ -89,6 +108,7 @@ export function ManagedAccountPage() {
       setNotice('Recovery requested. If this address is eligible, check your inbox and spam folder for the latest link. This screen cannot confirm email delivery.')
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'A recovery link could not be sent. Try again.')
+      noticeRef.current?.focus({ preventScroll: true })
     } finally {
       accountRequestPending.current = false
       setBusy(false)
@@ -100,11 +120,14 @@ export function ManagedAccountPage() {
     if (!managedReady || busy || accountRequestPending.current) return
     if (!setup || setup.purpose === 'signup') return
     if (password !== confirmation) {
+      setPasswordMismatch(true)
       setNotice('The passwords do not match.')
+      confirmationInputRef.current?.focus({ preventScroll: true })
       return
     }
     accountRequestPending.current = true
     setBusy(true)
+    setPasswordMismatch(false)
     setNotice('Securing your managed account...')
     try {
       const signIn = await completeManagedAccountPassword(password)
@@ -126,7 +149,9 @@ export function ManagedAccountPage() {
     } catch (error) {
       setPassword('')
       setConfirmation('')
+      setPasswordMismatch(false)
       setNotice(error instanceof Error ? error.message : 'The password could not be saved.')
+      noticeRef.current?.focus({ preventScroll: true })
     } finally {
       accountRequestPending.current = false
       setBusy(false)
@@ -159,12 +184,12 @@ export function ManagedAccountPage() {
       {!managedReady ? <ManagedUnavailable productIntent={productIntent} search={location.search} /> : sent ? <section className="managed-login-panel" aria-label="Recovery link requested">
         <div><span className="core-eyebrow">Check your inbox</span><h2>Recovery requested.</h2><p>{notice}</p></div>
         <div className="managed-login-actions"><Link className="core-button primary" to={managedAccountPath('/login', productIntent, location.search)}>Back to sign in</Link><button className="core-button account-link-button" onClick={() => { setSent(false); setNotice('') }} type="button">Try another email</button></div>
-      </section> : <form aria-label="Account recovery" className="managed-login-panel core-form" onSubmit={(event) => void requestRecovery(event)}>
+      </section> : <form aria-busy={busy} aria-label="Account recovery" className="managed-login-panel core-form" onSubmit={(event) => void requestRecovery(event)}>
         <p>For privacy, the result is the same whether or not the address has an account.</p>
         <label>Work email<input autoComplete="email" maxLength={160} onChange={(event) => setEmail(event.target.value)} required type="email" value={email} /></label>
         <button className="core-button primary" disabled={busy} type="submit">{busy ? 'Sending...' : 'Send recovery link'}</button>
         <Link className="account-inline-link" to={managedAccountPath('/login', productIntent, location.search)}>Back to sign in</Link>
-        {notice ? <p className="form-notice" role="status">{notice}</p> : null}
+        <p className="form-notice" id="managed-recovery-notice" ref={noticeRef} role="status" tabIndex={-1}>{notice}</p>
       </form>}
     </div>
   }
@@ -179,12 +204,12 @@ export function ManagedAccountPage() {
     </form> : setup?.purpose === 'signup' ? <section className="managed-login-panel" aria-label="Email confirmed without company access">
       <div><h2>Email confirmed.</h2><p>Your email is verified. A business workspace still needs to be connected to your account.</p></div>
       <div className="managed-login-actions"><Link className="core-button primary" to={managedAccountPath('/login', productIntent, location.search)}>Continue to sign in</Link><a className="core-button" href={managedAccountRequestUrl(productIntent)}>Request company access</a></div>
-    </section> : setup ? <form className="managed-login-panel core-form" onSubmit={(event) => void savePassword(event)}>
+    </section> : setup ? <form aria-busy={busy} className="managed-login-panel core-form" onSubmit={(event) => void savePassword(event)}>
       <div><span className="core-eyebrow">Secure link confirmed</span><h2>Set your password.</h2><p>{setup.email}. Use at least 12 characters. This link can be used only for account setup.</p></div>
-      <label>New password<input autoComplete="new-password" maxLength={128} minLength={12} onChange={(event) => setPassword(event.target.value)} required type="password" value={password} /></label>
-      <label>Confirm password<input autoComplete="new-password" maxLength={128} minLength={12} onChange={(event) => setConfirmation(event.target.value)} required type="password" value={confirmation} /></label>
+      <label>New password<input autoComplete="new-password" maxLength={128} minLength={12} onChange={(event) => editNewPassword(event.target.value)} required type="password" value={password} /></label>
+      <label>Confirm password<input aria-describedby={passwordMismatch ? 'managed-password-notice' : undefined} aria-invalid={passwordMismatch} autoComplete="new-password" maxLength={128} minLength={12} onChange={(event) => editConfirmation(event.target.value)} ref={confirmationInputRef} required type="password" value={confirmation} /></label>
       <button className="core-button primary" disabled={busy} type="submit">{busy ? 'Securing...' : 'Save password and continue'}</button>
-      {notice ? <p className="form-notice" role="status">{notice}</p> : null}
+      <p className="form-notice" id="managed-password-notice" ref={noticeRef} role="status" tabIndex={-1}>{notice}</p>
     </form> : <section className="managed-login-panel" aria-label="Checking managed account link">
       <div><span className="core-eyebrow">Secure link</span><h2>{notice.startsWith('This account link') ? 'Link unavailable.' : 'Checking your link.'}</h2><p>{notice || 'Checking your secure account link...'}</p></div>
       {notice.startsWith('This account link') ? <div className="managed-login-actions"><Link className="core-button primary" to={managedAccountPath('/account/recovery', productIntent, location.search)}>Request a new link</Link><Link className="core-button" to={managedAccountPath('/login', productIntent, location.search)}>Back to sign in</Link></div> : null}
