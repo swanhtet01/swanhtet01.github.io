@@ -588,7 +588,7 @@ export function assessShopQaIsolationContract({ sources }) {
       }
     }
   }
-  const allowedDefines = new Set(['SHOP_CONNECTED_ORDERS_ENABLED', 'SUPABASE_URL', 'SUPABASE_PUBLISHABLE_KEY', 'SHOP_API_BASE_URL', 'SHOP_RUNTIME_PROFILE', 'SHOP_QA_PROFILE_ID'])
+  const allowedDefines = new Set(['dart.vm.product', 'SHOP_CONNECTED_ORDERS_ENABLED', 'SUPABASE_URL', 'SUPABASE_PUBLISHABLE_KEY', 'SHOP_API_BASE_URL', 'SHOP_RUNTIME_PROFILE', 'SHOP_QA_PROFILE_ID'])
   for (const path of dartPaths) {
     for (const match of sources[path].matchAll(/(?:(?:String|bool|int)\.fromEnvironment|bool\.hasEnvironment)\(\s*['"]([^'"]+)['"]/g)) {
       if (!allowedDefines.has(match[1])) add(fatal, 'unknown_build_define', `${path}:${match[1]}`)

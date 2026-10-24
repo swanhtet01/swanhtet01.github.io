@@ -95,7 +95,7 @@ function fixture() {
     'mobile/shop_pos/android/app/src/qa/AndroidManifest.xml': '<application android:label="Shop QA"/>',
     'mobile/shop_pos/ios/Runner.xcodeproj/project.pbxproj': 'PRODUCT_BUNDLE_IDENTIFIER = dev.supermega.supermegaShop;\nPRODUCT_BUNDLE_IDENTIFIER = dev.supermega.supermegaShop;\nPRODUCT_BUNDLE_IDENTIFIER = dev.supermega.supermegaShop;\ndev.supermega.supermegaShop.qa\npath = Runner.app;\nVerify Shop build identity shop_ios_build_identity_missing shop_ios_build_configuration_unknown\nshopBuildIdentityProfile = \'synthetic_qa_v1\' shopBuildIdentityQaProfileId = \'synthetic-qa-v1\' shopBuildIdentityProfile = \'production\' shopBuildIdentityQaProfileId = \'\'\nPRODUCT_NAME = "$(TARGET_NAME)";\nPRODUCT_NAME = "$(TARGET_NAME)";\nPRODUCT_NAME = "$(TARGET_NAME)";\nPRODUCT_NAME = "$(TARGET_NAME)";\nPRODUCT_NAME = "$(TARGET_NAME)";\nPRODUCT_NAME = "$(TARGET_NAME)";',
     'mobile/shop_pos/lib/main.dart': 'Future<void> main() async { final runtimeScope = await resolveShopRuntimeScopeForStartup(); if (!runtimeScope.capabilities.managedAuth) return; if (!runtimeScope.capabilities.camera) return; } class ShopHome { ShopHome({ShopRuntimeScope? scope, bool testOnlyAllowMissingRuntimeScope = false}) { requireShopRuntimeScopeOrTestSeam(scope, testOnlyAllowMissingRuntimeScope: testOnlyAllowMissingRuntimeScope); } }',
-    'mobile/shop_pos/lib/shop_database.dart': "privateDatabaseFile() => 'supermega_shop.sqlite';",
+    'mobile/shop_pos/lib/shop_database.dart': "const productMode = bool.fromEnvironment('dart.vm.product'); privateDatabaseFile() => 'supermega_shop.sqlite';",
     'mobile/shop_pos/lib/shop_startup.dart': 'ShopRuntimeScope scope; void pick() { if (!scope.capabilities.externalFileSaving) return; }',
     'mobile/shop_pos/lib/shop_backup_export_screen.dart': 'ShopRuntimeScope scope; void save() { if (!scope.capabilities.externalFileSaving) return; }',
     'mobile/shop_pos/lib/shop_operational_export_saver.dart': 'ShopRuntimeScope scope; void save() { if (!scope.capabilities.externalFileSaving) return; }',
@@ -294,6 +294,11 @@ test('external-I/O overrides and provider values in QA commands are fatal', () =
 })
 
 test('unknown build defines and comment-only production identities fail closed', () => {
+  assert.equal(
+    assessShopQaIsolationContract({ sources: fixture() }).ok,
+    true,
+    'the SDK-owned product-mode define is reviewed and allowed',
+  )
   const unknown = fixture()
   unknown['mobile/shop_pos/lib/main.dart'] += " const bad=String.fromEnvironment('UNREVIEWED_FLAG');"
   assert.equal(assessShopQaIsolationContract({ sources: unknown }).ok, false)
