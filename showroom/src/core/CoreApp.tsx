@@ -1198,6 +1198,15 @@ function ShopProductArtwork({ kind }: { kind: number }) {
   return <svg aria-hidden="true" className="shop-product-art" focusable="false" viewBox="0 0 100 100"><rect className="art-soft" height="88" rx="18" width="88" x="6" y="6" /><path className="art-highlight" d="M30 41c2-18 38-18 40 0" /><path className="art-main" d="M18 42h64l-8 39H26z" /><rect className="art-detail" height="21" rx="4" width="15" x="31" y="50" /><circle className="art-detail" cx="59" cy="60" r="10" /></svg>
 }
 
+function shopProductArtworkKind(item: Pick<CommerceItem, 'sku' | 'name'>) {
+  const identity = `${item.sku} ${item.name}`.toLocaleLowerCase()
+  if (/\b(rice|sugar|salt|detergent|coffee)\b/.test(identity)) return 2
+  if (/\b(water|oil|milk|shampoo)\b/.test(identity)) return 1
+  if (/\b(toothpaste|soap)\b/.test(identity)) return 3
+  if (/\b(beauty|cosmetic|medicine)\b/.test(identity)) return 4
+  return 0
+}
+
 function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, industryPack, initialCustomer, initialQuery, items, localDemoStatus, lowStockCount, loyaltyPoints, onReview, openOrderCount, paymentQrScope, persistLocalDraft, productImageScope, recordedOrderIds, sampleCatalogActive }: {
   businessTemplate: ShopBusinessTemplate | null
   canCompleteInOneReview: boolean
@@ -1363,7 +1372,7 @@ function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, indus
               {lowStockCount > 0 ? <Link to="/shop/?tab=inventory">{lowStockCount} low stock</Link> : null}
               {localDemoStatus === 'records-at-risk' ? <Link className="shop-counter-local-link" data-risk="true" to="/settings/#workspace-recovery">Back up records</Link> : null}
             </nav> : null}
-            {persistLocalDraft ? <span className="shop-counter-device-boundary">This device only</span> : null}
+            {persistLocalDraft ? <span className="shop-counter-device-boundary">{sampleCatalogActive ? 'Browser demo · fictional records stay on this device' : 'Local records · this device only'}</span> : null}
           </div>
           <div className="shop-item-search-row"><label className="shop-item-search"><span className="sr-only">Find or scan an item</span><input ref={saleSearchRef} autoComplete="off" onChange={(event) => setQuery(event.target.value)} onKeyDown={addSearchMatch} placeholder="Search or scan SKU" type="search" value={query} /></label><BarcodeScanButton label="Scan a barcode with the camera" onDetected={addCameraScan} /></div>
         </header>
@@ -1398,7 +1407,7 @@ function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, indus
         {visibleItems.length ? <div className="shop-item-grid">
           {visibleItems.map((item, tileIndex) => {
             const quantity = cart[item.sku] ?? 0
-            const artKind = items.indexOf(item) % 5
+            const artKind = shopProductArtworkKind(item)
             // Ids are keyed by render position, not by SKU: aria-labelledby takes a
             // SPACE-separated id list and a SKU is operator-typed, so a SKU with a
             // space in it would silently split into two broken references.
