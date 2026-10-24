@@ -62,7 +62,8 @@ Sites/Website and Ecommerce capabilities may later be sold as optional custom
 or enterprise packages. They are not default launch products. No package name,
 price, availability, or access promise is valid until tenant entitlements are
 server-enforced and the package has an owner-approved support and acceptance
-contract.
+contract. Current source truth and the proposal boundary are recorded in
+[`docs/SUPERMEGA-PACKAGE-BILLING-LOYALTY-INVENTORY.md`](docs/SUPERMEGA-PACKAGE-BILLING-LOYALTY-INVENTORY.md).
 
 Outside the current launch lane:
 
