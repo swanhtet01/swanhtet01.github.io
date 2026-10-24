@@ -53,6 +53,20 @@ round-trip. The later points ledger must append auditable earn/redeem/clawback
 events, bind each sale/reversal exactly once, forbid double redemption, and
 state an explicit safe offline conflict rule. Mutable names cannot be authority.
 
+`tools/shop_member_loyalty_reference.mjs` now makes that boundary executable as
+a **reference contract only**. It uses a versioned, non-PII, workspace-bound
+member token and an append-only earn/redeem/full-sale-clawback projection. It
+rejects stale cards, replay, double earning, double clawback, overspend, foreign
+workspaces, sequence gaps, and multi-writer redemption without coordination.
+The synthetic HMAC test key is not production key management, the token is an
+identifier rather than redemption authority, and no native table, UI, backup
+integration, package entitlement, or production signing key exists yet.
+`single_writer_offline` is a caller assertion in this reference, not a proven
+device lease or register epoch; production redemption must not rely on it until
+the native storage boundary can establish exclusive authorship. Exact command
+retry behavior is defined by the reference append helper, but durable atomic
+storage remains unimplemented.
+
 ## AI-agent operations inventory
 
 Existing controls are sufficient for the current lane; no new framework is
