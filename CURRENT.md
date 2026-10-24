@@ -40,7 +40,7 @@ owner-approved product outcome and gate require it.
 | Integration PR | [#734 — Unify Shop app first-use and public launch candidate](https://github.com/swanhtet01/swanhtet01.github.io/pull/734) |
 | State | Open draft; product `de648ecd` and gallery checkpoint `fd90cff3` have full native/security/Kernel PASS. App CI failed only on stale PostgreSQL evidence. Review, preview, signing, installed/hardware, and merchant gates remain open |
 | Integration branch | `codex/shop-public-main-port-20261022` |
-| Local scoped source anchor | `350832eb` from `526f3616`; Shop/shared work only; unpushed, native CI NOT RUN |
+| Local scoped source anchor | `141b7268` from `526f3616`; Shop/shared, unpushed, native CI NOT RUN |
 | Verified product-code anchor | `de648ecda569c639f1b5da8fcf8cd874c1f712d4` / tree `198c188372bb4a33777168f49e6260b63c330751` / native tree `5417a23dd9e5e3f99832e921c29ff55a620e642b` |
 | Native capture source | `de648ecd` / native tree `5417a23d` |
 | Gallery evidence successor | `fd90cff3dbefe65d734f0a2c88f6df7958b2cd52`; strict local provenance and public checks pass |
