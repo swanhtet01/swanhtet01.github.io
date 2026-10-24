@@ -38,59 +38,52 @@ owner-approved product outcome and gate require it.
 | Item | Current fact |
 | --- | --- |
 | Integration PR | [#734 — Unify Shop app first-use and public launch candidate](https://github.com/swanhtet01/swanhtet01.github.io/pull/734) |
-| State | Open draft; product `de648ecd` and gallery checkpoint `fd90cff3` have full native/security/Kernel PASS. App CI failed only on stale PostgreSQL evidence. Review, preview, signing, installed/hardware, and merchant gates remain open |
+| State | Open draft. Remote head remains `526f3616`; reviewed Cloud source checkpoint `b44d1435` is local-only and has no exact-head CI or preview. Review, preview, signing, installed/hardware, and merchant gates remain open |
 | Integration branch | `codex/shop-public-main-port-20261022` |
-| Local scoped source anchor | `2d8c758a` from `526f3616`; Shop/shared, unpushed, native CI NOT RUN |
-| Verified product-code anchor | `de648ecda569c639f1b5da8fcf8cd874c1f712d4` / tree `198c188372bb4a33777168f49e6260b63c330751` / native tree `5417a23dd9e5e3f99832e921c29ff55a620e642b` |
-| Native capture source | `de648ecd` / native tree `5417a23d` |
-| Gallery evidence successor | `fd90cff3dbefe65d734f0a2c88f6df7958b2cd52`; strict local provenance and public checks pass |
+| Immutable reviewed source checkpoint | `b44d14359cd0419af8aaec5a320218770c1d938e` / tree `490461c02af20049966842ad0c720dad397df33c`; clean, unpushed, based on `526f3616` |
+| Documentation successor | This `CURRENT.md` update follows `b44d1435`; it records evidence only and does not make the source checkpoint CI- or release-ready |
+| Native capture state | Current native tree `f8b146d0…` differs from gallery manifest tree `5417a23d…`; strict provenance fails closed until exact-source captures are regenerated and reviewed |
 | PostgreSQL evidence checkpoint | `b1ee4cc2884dda1ab753e8d2e4ecc6c6216a36ef` / tree `6996864df311db4748fcca3ec75c030dd0fcab3e` |
 | Inactive promotion envelope | PR #730; use only after #734 passes and is explicitly promoted |
 | Paused source set | PR #751 at `945ce70f792fd856c767f64e6b3e45e4d8f4ee3e`; review and port bounded changes, never merge wholesale |
 | UI lane | #749 integrated and frozen for acceptance |
 | Parked lanes | #750 low-stock focus; Connected Orders server/sync work |
 
-The candidate preserves Shop-first presentation, signed correction, gallery
-provenance, and fail-closed release contracts. Correction stays unavailable;
-normal selling remains offline.
+The source checkpoint preserves Shop-first presentation, signed correction,
+and fail-closed release contracts. Correction stays unavailable and normal
+selling remains offline. Gallery provenance is presently blocked, not passed.
 
-Included: Shop QA/export/backup and shared login/auth. Excluded: Plant,
-standalone Website/Ecommerce changes, and new agent frameworks.
+Included: Shop QA/export/backup, account hub and shared login/auth. Excluded:
+Plant, blocked billing-projection WIP, provider activation, and new agent
+frameworks. Website/Ecommerce remain entitlement-gated optional capabilities,
+not default launch products.
 
 ## Exact evidence
 
-- [Required App CI 40064185750](https://github.com/swanhtet01/swanhtet01.github.io/actions/runs/40064185750)
-  reached step 638/668 at gallery checkpoint `fd90cff3`: API, migration/RLS,
-  dependencies, lint, and the canonical build passed; `hq:verify` then failed
-  closed only on `database_rehearsal_evidence_stale`. A fresh exact-head
-  Windows PostgreSQL-17 receipt is required before the remaining journeys run.
-- [Native run 40064188764](https://github.com/swanhtet01/swanhtet01.github.io/actions/runs/40064188764)
-  used PR merge `646555fa`, source `fd90cff3`, and native tree `5417a23d`.
-  Formatting, analysis, isolated first-sale/restore, all Flutter tests, renders,
-  Android debug, unsigned iPad/iOS, Windows restore/no-replace, and unsigned
-  Windows packaging pass.
-- Gallery-checkpoint QA artifacts: Android debug `12549030966`
-  (`sha256:5aec870140e73a842111378fefa5822c8314b9759961f4177fd8006885964001`),
-  Flutter renders `12548143520`
-  (`sha256:8ac93120af177f1baac7a848a8f2adcadc6834837c1ca92c0af0823197f2be92`),
-  and unsigned Windows `12548408756`
-  (`sha256:5c9fe9837ad09ea1fd9f33afea1b7b0a8ecb7ff40081e139410461b00246fcf9`).
-  iOS passed `--no-codesign`; no signed iOS artifact is retained.
-- Gallery provenance pins source `de648ecd`, CI merge `69d59c8e295964c4274f0cac5a540ef991fbf335`, native run
-  `40063376047`, artifact `12548162372`, and original archive
-  `sha256:336eca1c28d1b0257eff618b88bcd4c3649407f8fc793b7c4c879453adfb5d2f`.
-  Strict local public build/gallery/responsive checks passed for EN/MY at
-  390/768/1440 px. Release checkout now retains capture-source history.
+- At `b44d1435`, 65 focused dependency-free tests pass. The app security
+  contract passes 105 checks; account routes pass 84/84, login returns 6/6,
+  rendered account-hub checks 6/6 at 390/768/1440 px, and Ecommerce contact
+  isolation passes 24/24. `git diff --check` passes.
+- Private-trial migration verification previously passed 23 migrations and 136
+  checks in the prepared environment. An independent rerun in the current
+  checkout was blocked by missing `@electric-sql/pglite`; this is a toolchain
+  limitation, not fresh migration evidence or a migration failure.
+- Strict native gallery verification currently fails with
+  `native_shop_gallery_source_tree_drift`. Exact-source native CI, captures,
+  hashes, and manifest review are required before public verification can pass.
+- PR #734 remote head remains `526f3616`. No GitHub App, Native, security, or
+  Kernel run exists for `b44d1435`; older green runs are baseline evidence only.
+- The prior one-run PostgreSQL-17 approval at `e217e035` was consumed and failed
+  before producing a canonical pair. No evidence was integrated and no retry is
+  authorized. A later exact product head needs a new one-run decision.
 - The Windows PostgreSQL 17.10 rehearsal remains bound to implementation tree
   `fad006a…`: 74 checks, 51 files, implementation digest
   `sha256:0ee244297bb021a71d16c84869b24c412585be2d9a013265ae5055977255dd0f`,
   receipt digest
   `sha256:8c3ece4d69c0dd815a14e762fb01602229ab14214acb9147774617bce0d18c72`,
   and `hostedActivationProven=false`.
-- Dependency security `40064188861` and Kernel `40064188769` pass against the
-  same head. Python CI is frozen and hashed; vulnerable `anyio`, `idna`, and
-  `starlette` transitives were repaired before the exact-head pass. Kernel release remains
-  intentionally owner-gated.
+- Older unsigned Android/iPad/Windows artifacts remain engineering evidence,
+  not distributable builds. No signed artifact exists for this source checkpoint.
 
 These are source, local, and CI evidence only. Unsigned CI packages are QA
 artifacts, not supported installers or a public release. Native SQLite schema
@@ -129,9 +122,9 @@ v15 and hosted PostgreSQL/Supabase schema profile v13 are separate contracts.
   illustrative-data disclosure, and uses a non-overlapping responsive product
   tableau. It now explains the counter loop, four assisted-setup shop types,
   assisted Local Pilot access, and the truthful Android/iPad/Windows signing
-  boundary without exposing QA archives as downloads. Exact-source EN/MY checks
-  pass at 390 px, 768 px, and 1440 px; this remains source and CI evidence, not
-  a protected deployed preview.
+  boundary without exposing QA archives as downloads. Earlier EN/MY capture
+  checks are baseline evidence only; the current native source requires a new
+  exact-source gallery before protected-preview acceptance.
 - Public release now verifies effective contact-delivery destinations before
   building: Supabase must match the source-bound project origin, and an optional
   webhook must match an explicit approved HTTPS origin. The audit is redacted
@@ -147,7 +140,7 @@ v15 and hosted PostgreSQL/Supabase schema profile v13 are separate contracts.
   mutation has occurred.
 - Live `supermega.dev` and `app.supermega.dev` still report predecessor
   `5479c5d1`; the existing paired protected previews report `f944f66b`, and no
-  immutable protected preview has been accepted for `de648ecd`.
+  immutable protected preview has been accepted for `b44d1435`.
   Direct previews stay disabled, and the production workflow is not preview
   evidence. Live retired product routes also need an owner-approved release of
   the already-verified Shop-first route policy.
@@ -199,18 +192,20 @@ backup, and restore review; no blind merge or cherry-pick is allowed.
 
 ## Next action
 
-1. Keep verified product-code anchor `de648ecd` stable, correction default-dark,
-   and PR #734 draft pending the owner-gated release decision.
-2. The owner must approve fixed provider team/project identities and a separate
-   protected non-production preview lane before EN/MY 390/768/1440 hosted
-   evidence can be produced. Do not reuse the production workflow.
-3. Complete installed signed restart/update, encrypted restore, physical
-   scanner, and Burmese receipt acceptance. Hardware evidence remains local and
-   device-specific.
-4. Validate the online owner correction entry on the signed installed build
-   and complete the clean install → preset → catalog path → guided first sale in
-   English and Burmese.
-5. Finish Vivian's merchant journey, commercial/support decisions, current
-   hosted tenant/storage rehearsal, and the Swan/Vivian joint go/no-go.
-   The proposed 1 November date remains conditional on every applicable gate in
+1. Preserve `b44d1435` as the immutable source checkpoint and review this
+   documentation-only successor independently.
+2. Before publishing, establish the effective Git-deployment behavior of both
+   Vercel projects linked to this repository. Repository configuration alone is
+   not provider proof. Then fast-forward the sole PR #734 lane and run exact-head
+   App/Native/security checks without force-push or a parallel product branch.
+3. Regenerate exact-native-source gallery evidence. After the product head is
+   stable, obtain a new one-run Windows PostgreSQL-17 approval, retain the
+   matching reviewed pair, and run the required evidence-successor checks.
+4. Create app-first then source-bound public protected previews on the existing
+   `megaos` and `supermega-public` projects only; no production alias,
+   promotion, environment mutation, or unverified backend claim.
+5. Provision a separately approved synthetic non-production user, tenant,
+   membership and Shop entitlement; then run login → setup → sale → restart →
+   recovery → account-hub evidence. Signing, installed devices, physical
+   hardware, Vivian acceptance and joint go/no-go remain subsequent gates in
    [`docs/SHOP-RELEASE-RUNBOOK.md`](docs/SHOP-RELEASE-RUNBOOK.md).
