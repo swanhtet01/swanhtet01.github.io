@@ -74,6 +74,7 @@ DATABASE_NAME = "supermega_rehearsal"
 RESTORE_DATABASE_NAME = "supermega_rehearsal_restore"
 EXPECTED_POSTGRES_MAJOR = 17
 WINDOWS_DIRECT_START_MODE = "codex-sandbox-direct"
+REHEARSAL_TEMP_DIRECTORY_ENV = "SUPERMEGA_REHEARSAL_TEMP_DIR"
 PUBLIC_BROWSER_TABLES = (
     "assets",
     "enterprise_agent_runs",
@@ -269,14 +270,27 @@ def _emit(report: dict[str, Any], evidence_file: Path | None) -> None:
 
 @contextmanager
 def _disposable_workspace():
-    workspace = Path(tempfile.mkdtemp(prefix="supermega-pg17-")).resolve()
+    configured_parent = str(os.getenv(REHEARSAL_TEMP_DIRECTORY_ENV, "")).strip()
+    parent = (
+        Path(configured_parent).expanduser().resolve()
+        if configured_parent
+        else Path(tempfile.gettempdir()).resolve()
+    )
+    if not parent.is_dir() or parent.is_symlink():
+        raise RehearsalFailure("workspace_initialization_failed")
+    try:
+        workspace = Path(
+            tempfile.mkdtemp(prefix="supermega-pg17-", dir=parent)
+        ).resolve()
+    except OSError as exc:
+        raise RehearsalFailure("workspace_initialization_failed") from exc
     cleanup = {"stopped": False}
     try:
         yield workspace, cleanup
     finally:
         # A failed/unknown shutdown must not delete a possibly live cluster.
         if cleanup["stopped"]:
-            if (workspace.parent != Path(tempfile.gettempdir()).resolve()
+            if (workspace.parent != parent
                     or not workspace.name.startswith("supermega-pg17-")
                     or workspace.is_symlink()):
                 raise RehearsalFailure("cleanup_path_invalid")
@@ -4077,7 +4091,21 @@ def main(argv: list[str] | None = None) -> int:
     except RehearsalFailure as exc:
         _emit(_safe_report(str(exc), cleanup_complete=True), args.evidence_file)
         return 2
-    return _run_rehearsal(postgres_bin, openssl, args.evidence_file, source_identity=source)
+    try:
+        return _run_rehearsal(
+            postgres_bin,
+            openssl,
+            args.evidence_file,
+            source_identity=source,
+        )
+    except RehearsalFailure as exc:
+        if str(exc) != "workspace_initialization_failed":
+            raise
+        _emit(
+            _safe_report("workspace_initialization_failed", cleanup_complete=True),
+            args.evidence_file,
+        )
+        return 2
 
 
 if __name__ == "__main__":

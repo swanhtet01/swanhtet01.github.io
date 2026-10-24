@@ -342,6 +342,55 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
                     state["stopped"] = True
                 delete.assert_called_once_with(target.resolve())
 
+    def test_disposable_workspace_uses_an_explicit_writable_parent(self):
+        module = _load_rehearsal()
+        with tempfile.TemporaryDirectory() as parent:
+            target = Path(parent) / "supermega-pg17-explicit"
+            target.mkdir()
+            with patch.dict(
+                module.os.environ,
+                {module.REHEARSAL_TEMP_DIRECTORY_ENV: parent},
+            ), patch.object(
+                module.tempfile,
+                "mkdtemp",
+                return_value=str(target),
+            ) as create, patch.object(module.shutil, "rmtree") as delete:
+                with module._disposable_workspace() as (workspace, state):
+                    self.assertEqual(workspace, target.resolve())
+                    state["stopped"] = True
+                self.assertEqual(create.call_args.kwargs["dir"], Path(parent).resolve())
+                delete.assert_called_once_with(target.resolve())
+
+    def test_unwritable_workspace_root_emits_terminal_sanitized_evidence(self):
+        module = _load_rehearsal()
+        source = {
+            "head": "a" * 40,
+            "tree": "b" * 40,
+            "implementation_digest": "sha256:" + "c" * 64,
+        }
+        with tempfile.TemporaryDirectory() as parent:
+            evidence = Path(parent) / "rehearsal.json"
+            with patch.object(module, "_source_identity", return_value=source), \
+                    patch.object(module, "_preflight", return_value={"ok": True}), \
+                    patch.object(
+                        module.tempfile,
+                        "mkdtemp",
+                        side_effect=PermissionError("synthetic denied path"),
+                    ), contextlib.redirect_stdout(io.StringIO()) as stdout:
+                code = module.main([
+                    "--expected-head",
+                    source["head"],
+                    "--evidence-file",
+                    str(evidence),
+                ])
+            payload = json.loads(evidence.read_text(encoding="utf-8"))
+        self.assertEqual(code, 2)
+        self.assertEqual(json.loads(stdout.getvalue()), payload)
+        self.assertEqual(payload["error"], "workspace_initialization_failed")
+        self.assertTrue(payload["cleanup_complete"])
+        self.assertFalse(payload["secret_values_exposed"])
+        self.assertFalse(payload["production_mutated"])
+
     def test_policy_rejections_require_an_explicit_database_sqlstate(self) -> None:
         module = _load_rehearsal()
 
