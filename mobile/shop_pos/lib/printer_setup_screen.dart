@@ -2,18 +2,26 @@ import 'package:flutter/material.dart';
 
 import 'printer_services.dart';
 import 'shop_copy.dart';
+import 'shop_runtime_scope.dart';
 
 class PrinterSetupScreen extends StatefulWidget {
-  const PrinterSetupScreen({required this.myanmar, super.key});
+  const PrinterSetupScreen({
+    required this.myanmar,
+    required this.runtimeScope,
+    super.key,
+  });
   final bool myanmar;
+  final ShopRuntimeScope runtimeScope;
 
   @override
   State<PrinterSetupScreen> createState() => _PrinterSetupScreenState();
 }
 
 class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
-  final _service = PrinterDiscoveryService();
-  final _settings = ReceiptPrinterSettings();
+  late final _service = _openPrinterDiscovery(widget.runtimeScope);
+  late final _settings = ReceiptPrinterSettings(
+    runtimeScope: widget.runtimeScope,
+  );
   bool _loadingSettings = true;
   bool _busy = false;
   bool _cancelled = false;
@@ -411,4 +419,11 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
       ),
     );
   }
+}
+
+PrinterDiscoveryService _openPrinterDiscovery(ShopRuntimeScope runtimeScope) {
+  if (!runtimeScope.capabilities.networkPrinter) {
+    throw StateError('shop_network_printer_unavailable');
+  }
+  return PrinterDiscoveryService(runtimeScope: runtimeScope);
 }

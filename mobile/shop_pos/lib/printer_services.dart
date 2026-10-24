@@ -7,9 +7,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:unified_esc_pos_printer/unified_esc_pos_printer.dart';
 
 import 'shop_database.dart';
+import 'shop_runtime_scope.dart';
 
-const shopReceiptPrinterHostKey = 'shop_receipt_printer_host_v1';
-const shopReceiptPaperWidthKey = 'shop_receipt_paper_width_v1';
+export 'shop_runtime_scope.dart'
+    show shopReceiptPaperWidthKey, shopReceiptPrinterHostKey;
 
 enum ReceiptPaperWidth {
   mm58(PaperSize.mm58),
@@ -68,23 +69,36 @@ class ReceiptPrinterSettings {
     Future<SharedPreferences> Function()? preferences,
     WifiRangeProvider? rangeProvider,
     VerifiedPrinterSession? session,
-  }) : _preferences = preferences ?? SharedPreferences.getInstance,
-       _rangeProvider = rangeProvider ?? _networkRangeProvider(NetworkInfo()),
+    ShopRuntimeScope? runtimeScope,
+  }) : _preferences =
+           preferences ??
+           (() async => (await openProductionShopPreferences()).instance),
+       _hostKey =
+           runtimeScope?.preferences.keys.receiptPrinterHost ??
+           shopReceiptPrinterHostKey,
+       _paperWidthKey =
+           runtimeScope?.preferences.keys.receiptPaperWidth ??
+           shopReceiptPaperWidthKey,
+       _rangeProvider =
+           rangeProvider ??
+           _networkRangeProvider(_requireNetworkDetails(runtimeScope)),
        _session = session ?? _printerSession;
 
   final Future<SharedPreferences> Function() _preferences;
+  final String _hostKey;
+  final String _paperWidthKey;
   final WifiRangeProvider _rangeProvider;
   final VerifiedPrinterSession _session;
 
   Future<String?> readSavedHost() async {
-    final host = (await _preferences()).getString(shopReceiptPrinterHostKey);
+    final host = (await _preferences()).getString(_hostKey);
     if (host == null || !Ipv4Subnet.isPrivateAddress(host)) return null;
     return host;
   }
 
   Future<ReceiptPaperWidth> readPaperWidth() async =>
       ReceiptPaperWidth.fromSavedValue(
-        (await _preferences()).getString(shopReceiptPaperWidthKey),
+        (await _preferences()).getString(_paperWidthKey),
       );
 
   void requireRetest() => _session.clear();
@@ -130,14 +144,11 @@ class ReceiptPrinterSettings {
     }
     final preferences = await _preferences();
     final savedWidth = await preferences.setString(
-      shopReceiptPaperWidthKey,
+      _paperWidthKey,
       paperWidth.name,
     );
     if (!savedWidth) throw StateError('Printer paper size could not be saved.');
-    final saved = await preferences.setString(
-      shopReceiptPrinterHostKey,
-      candidate.host,
-    );
+    final saved = await preferences.setString(_hostKey, candidate.host);
     if (!saved) throw StateError('Printer setup could not be saved.');
     _session.trust(candidate.host, range, paperWidth);
   }
@@ -147,9 +158,15 @@ class ShopReceiptPrinter {
   ShopReceiptPrinter({
     WifiRangeProvider? rangeProvider,
     ReceiptPrinterSettings? settings,
-  }) : _rangeProvider = rangeProvider ?? _networkRangeProvider(NetworkInfo()),
-       _settings = settings ?? ReceiptPrinterSettings();
+    ShopRuntimeScope? runtimeScope,
+  }) : _runtimeScope = runtimeScope,
+       _rangeProvider =
+           rangeProvider ??
+           _networkRangeProvider(_requireNetworkDetails(runtimeScope)),
+       _settings =
+           settings ?? ReceiptPrinterSettings(runtimeScope: runtimeScope);
 
+  final ShopRuntimeScope? _runtimeScope;
   final WifiRangeProvider _rangeProvider;
   final ReceiptPrinterSettings _settings;
 
@@ -171,7 +188,7 @@ class ShopReceiptPrinter {
       throw const PrinterNetworkChanged();
     }
 
-    final manager = PrinterManager();
+    final manager = _requirePrinterTransport(_runtimeScope);
     try {
       await manager.connect(
         NetworkPrinterDevice(
@@ -205,11 +222,15 @@ class ReceiptReprintService {
   ReceiptReprintService({
     ReceiptPrinterSettings? settings,
     ReceiptPrintSender? send,
-  }) : _settings = settings ?? ReceiptPrinterSettings(),
+    ShopRuntimeScope? runtimeScope,
+  }) : _settings =
+           settings ?? ReceiptPrinterSettings(runtimeScope: runtimeScope),
        _send =
            send ??
            ((host, receipt, myanmar) => ShopReceiptPrinter(
-             settings: settings ?? ReceiptPrinterSettings(),
+             runtimeScope: runtimeScope,
+             settings:
+                 settings ?? ReceiptPrinterSettings(runtimeScope: runtimeScope),
            ).printSale(host, receipt, myanmar: myanmar));
 
   final ReceiptPrinterSettings _settings;
@@ -394,10 +415,16 @@ class PrinterDiscoveryService {
     NetworkInfo? networkInfo,
     PrinterPortProbe? probe,
     WifiRangeProvider? rangeProvider,
-  }) : _rangeProvider =
-           rangeProvider ?? _networkRangeProvider(networkInfo ?? NetworkInfo()),
-       _probe = probe ?? _tcpProbe;
+    ShopRuntimeScope? runtimeScope,
+  }) : _runtimeScope = runtimeScope,
+       _rangeProvider =
+           rangeProvider ??
+           _networkRangeProvider(
+             networkInfo ?? _requireNetworkDetails(runtimeScope),
+           ),
+       _probe = probe ?? ((host, port) => _tcpProbe(runtimeScope, host, port));
 
+  final ShopRuntimeScope? _runtimeScope;
   final WifiRangeProvider _rangeProvider;
   final PrinterPortProbe _probe;
   Object? _activeScanToken;
@@ -495,7 +522,7 @@ class PrinterDiscoveryService {
         'Printer is no longer on the current Wi-Fi network.',
       );
     }
-    final manager = PrinterManager();
+    final manager = _requirePrinterTransport(_runtimeScope);
     try {
       await manager.connect(
         NetworkPrinterDevice(
@@ -547,7 +574,34 @@ WifiRangeProvider _networkRangeProvider(NetworkInfo networkInfo) {
   };
 }
 
-Future<bool> _tcpProbe(String host, int port) async {
+NetworkInfo _requireNetworkDetails(ShopRuntimeScope? runtimeScope) {
+  final scope = runtimeScope;
+  if (scope == null) throw StateError('shop_runtime_scope_required');
+  if (!scope.capabilities.networkPrinter) {
+    throw StateError('shop_network_printer_unavailable');
+  }
+  return NetworkInfo();
+}
+
+PrinterManager _requirePrinterTransport(ShopRuntimeScope? runtimeScope) {
+  final scope = runtimeScope;
+  if (scope == null) throw StateError('shop_runtime_scope_required');
+  if (!scope.capabilities.networkPrinter) {
+    throw StateError('shop_network_printer_unavailable');
+  }
+  return PrinterManager();
+}
+
+Future<bool> _tcpProbe(
+  ShopRuntimeScope? runtimeScope,
+  String host,
+  int port,
+) async {
+  final scope = runtimeScope;
+  if (scope == null) throw StateError('shop_runtime_scope_required');
+  if (!scope.capabilities.networkPrinter) {
+    throw StateError('shop_network_printer_unavailable');
+  }
   Socket? socket;
   try {
     socket = await Socket.connect(

@@ -8,6 +8,9 @@ import 'shop_runtime_profile.dart';
 
 typedef ShopDirectoryProvider = Future<Directory> Function();
 
+const shopReceiptPrinterHostKey = 'shop_receipt_printer_host_v1';
+const shopReceiptPaperWidthKey = 'shop_receipt_paper_width_v1';
+
 Future<SharedPreferences> _openShopPreferences() =>
     SharedPreferences.getInstance();
 
@@ -22,12 +25,11 @@ class ShopPreferenceKeys {
 
   String get localeMyanmar => _key('shop_locale_myanmar');
   String get pendingPickerIntent => _key('shop_pending_picker_intent');
-  String get receiptPrinterHost => _key('shop_receipt_printer_host_v1');
-  String get receiptPaperWidth => _key('shop_receipt_paper_width_v1');
+  String get receiptPrinterHost => _key(shopReceiptPrinterHostKey);
+  String get receiptPaperWidth => _key(shopReceiptPaperWidthKey);
 
   static const production = ShopPreferenceKeys._('');
-  static const syntheticQa =
-      ShopPreferenceKeys._('qa.synthetic-qa-v1.');
+  static const syntheticQa = ShopPreferenceKeys._('qa.synthetic-qa-v1.');
 }
 
 class ShopScopedPreferences {

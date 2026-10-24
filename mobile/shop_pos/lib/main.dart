@@ -643,6 +643,7 @@ class _ShopAppState extends State<ShopApp> {
                                     RecentSalesScreen(
                                       database: widget.database,
                                       myanmar: _myanmar,
+                                      runtimeScope: widget.runtimeScope,
                                       correctionAuthorizer:
                                           _correctionAuthorizer,
                                       embeddedTaskShell: true,
@@ -1816,7 +1817,8 @@ class _ShopHomeState extends State<ShopHome> {
       _pendingWalletCheckout == null;
 
   ReceiptPrinterSettings _printerSettings() =>
-      widget.receiptPrinterSettings ?? ReceiptPrinterSettings();
+      widget.receiptPrinterSettings ??
+      ReceiptPrinterSettings(runtimeScope: widget.runtimeScope);
 
   Future<void> _sendReceipt(String host, ShopSaleReceipt receipt) async {
     final sender = widget.receiptPrintSender;
@@ -1824,8 +1826,10 @@ class _ShopHomeState extends State<ShopHome> {
       await sender(host, receipt, widget.myanmar);
       return;
     }
-    await ShopReceiptPrinter(settings: widget.receiptPrinterSettings)
-        .printSale(host, receipt, myanmar: widget.myanmar);
+    await ShopReceiptPrinter(
+      settings: widget.receiptPrinterSettings,
+      runtimeScope: widget.runtimeScope,
+    ).printSale(host, receipt, myanmar: widget.myanmar);
   }
 
   Future<void> _openCameraScanner() async {
@@ -3900,10 +3904,16 @@ class _ShopHomeState extends State<ShopHome> {
   }
 
   Future<void> _testPrinterThenPrint(ShopSaleReceipt receipt) async {
-    if (!widget.runtimeCapabilities.networkPrinter) return;
+    final runtimeScope = widget.runtimeScope;
+    if (!widget.runtimeCapabilities.networkPrinter || runtimeScope == null) {
+      return;
+    }
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
-        builder: (_) => PrinterSetupScreen(myanmar: widget.myanmar),
+        builder: (_) => PrinterSetupScreen(
+          myanmar: widget.myanmar,
+          runtimeScope: runtimeScope,
+        ),
       ),
     );
     if (!mounted) return;
@@ -4053,10 +4063,16 @@ class _ShopHomeState extends State<ShopHome> {
   }
 
   void _openPrinter() {
-    if (!widget.runtimeCapabilities.networkPrinter) return;
+    final runtimeScope = widget.runtimeScope;
+    if (!widget.runtimeCapabilities.networkPrinter || runtimeScope == null) {
+      return;
+    }
     Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
-        builder: (_) => PrinterSetupScreen(myanmar: widget.myanmar),
+        builder: (_) => PrinterSetupScreen(
+          myanmar: widget.myanmar,
+          runtimeScope: runtimeScope,
+        ),
       ),
     );
   }
@@ -4071,6 +4087,7 @@ class _ShopHomeState extends State<ShopHome> {
         builder: (_) => RecentSalesScreen(
           database: widget.database,
           myanmar: widget.myanmar,
+          runtimeScope: widget.runtimeScope,
           correctionAuthorizer: widget.correctionAuthorizer,
         ),
       ),
@@ -4709,7 +4726,8 @@ class _ShopSettingsScreenState extends State<ShopSettingsScreen> {
                     ),
                     const Divider(height: 1),
                   ],
-                  if (_runtimeCapabilities.networkPrinter) ...[
+                  if (_runtimeCapabilities.networkPrinter &&
+                      widget.runtimeScope != null) ...[
                     _SetupTile(
                       icon: Icons.print_outlined,
                       title: shopCopy(
@@ -4724,7 +4742,10 @@ class _ShopSettingsScreenState extends State<ShopSettingsScreen> {
                       ),
                       onTap: () => Navigator.of(context).push<void>(
                         MaterialPageRoute<void>(
-                          builder: (_) => PrinterSetupScreen(myanmar: _myanmar),
+                          builder: (_) => PrinterSetupScreen(
+                            myanmar: _myanmar,
+                            runtimeScope: widget.runtimeScope!,
+                          ),
                         ),
                       ),
                     ),

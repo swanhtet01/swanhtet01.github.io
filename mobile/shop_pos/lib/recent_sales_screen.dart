@@ -8,6 +8,7 @@ import 'shop_copy.dart';
 import 'shop_correction_authorization_service.dart';
 import 'shop_database.dart';
 import 'shop_sale_correction_dialog.dart';
+import 'shop_runtime_scope.dart';
 import 'shop_today_screen.dart';
 
 enum _SaleDetailsAction { correct }
@@ -18,6 +19,7 @@ class RecentSalesScreen extends StatefulWidget {
     required this.myanmar,
     this.reprintService,
     this.correctionAuthorizer,
+    this.runtimeScope,
     this.embeddedTaskShell = false,
     this.refreshToken = 0,
     super.key,
@@ -27,6 +29,7 @@ class RecentSalesScreen extends StatefulWidget {
   final bool myanmar;
   final ReceiptReprintService? reprintService;
   final ShopCorrectionAuthorizer? correctionAuthorizer;
+  final ShopRuntimeScope? runtimeScope;
   final bool embeddedTaskShell;
   final int refreshToken;
 
@@ -42,7 +45,8 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
   String _query = '';
   late Future<List<ShopSaleReceipt>> _sales = _readPage();
   late final ReceiptReprintService _reprinter =
-      widget.reprintService ?? ReceiptReprintService();
+      widget.reprintService ??
+      ReceiptReprintService(runtimeScope: widget.runtimeScope);
   bool _reprinting = false;
   bool _openingCorrection = false;
 
@@ -812,7 +816,10 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
         if (!mounted) return;
         await Navigator.of(context).push<void>(
           MaterialPageRoute<void>(
-            builder: (_) => PrinterSetupScreen(myanmar: widget.myanmar),
+            builder: (_) => PrinterSetupScreen(
+              myanmar: widget.myanmar,
+              runtimeScope: widget.runtimeScope!,
+            ),
           ),
         );
         if (!mounted) return;
