@@ -78,6 +78,63 @@ test('unavailable managed runtime never starts sign-in or activation', async () 
   assert.deepEqual(busyStates, [])
 })
 
+for (const [name, setter] of [['editEmail', 'setEmail'], ['editPassword', 'setPassword']]) {
+  test(`${name} clears stale shared credential errors after correction`, () => {
+    const values = [], notices = [], tones = []
+    const context = {
+      noticeTone: 'error',
+      setNotice: value => notices.push(value),
+      setNoticeTone: value => tones.push(value),
+      [setter]: value => values.push(value),
+    }
+    context.clearCredentialError = handler('clearCredentialError', context)
+    handler(name, context)('corrected')
+    assert.deepEqual(values, ['corrected'])
+    assert.deepEqual(notices, [''])
+    assert.deepEqual(tones, ['quiet'])
+
+    context.noticeTone = 'quiet'
+    handler(name, context)('again')
+    assert.deepEqual(values, ['corrected', 'again'])
+    assert.deepEqual(notices, [''])
+    assert.deepEqual(tones, ['quiet'])
+  })
+}
+
+test('claim-code correction clears only claim-attributed errors', () => {
+  for (const attributed of [true, false]) {
+    const codes = [], fieldErrors = [], notices = [], tones = []
+    const context = {
+      claimCodeFieldError: attributed,
+      setClaimCode: value => codes.push(value),
+      setClaimCodeFieldError: value => fieldErrors.push(value),
+      setNotice: value => notices.push(value),
+      setNoticeTone: value => tones.push(value),
+    }
+    handler('editClaimCode', context)('SM-CORRECTED')
+    assert.deepEqual(codes, ['SM-CORRECTED'])
+    assert.deepEqual(fieldErrors, attributed ? [false] : [])
+    assert.deepEqual(notices, attributed ? [''] : [])
+    assert.deepEqual(tones, attributed ? ['quiet'] : [])
+  }
+  assert.match(source, /onChange=\{\(event\) => editClaimCode\(event\.target\.value\)\}/)
+})
+
+test('credential-error clearing is limited to sign-in fields, not account creation', () => {
+  const signupStart = source.indexOf('creatingAccount && !reviewReturnPath ? <form')
+  const signupEnd = source.indexOf('managedReady && activating && publicApp', signupStart)
+  const signup = source.slice(signupStart, signupEnd)
+  assert.match(signup, /autoComplete="username"[^>]+onChange=\{\(event\) => setEmail\(event\.target\.value\)\}/)
+  assert.match(signup, /autoComplete="new-password"[^>]+onChange=\{\(event\) => setPassword\(event\.target\.value\)\}/)
+  assert.doesNotMatch(signup, /editEmail|editPassword/)
+
+  const loginStart = source.indexOf('managedReady ? <form aria-label="Login"')
+  const loginEnd = source.indexOf(': <section className="managed-login-panel" aria-label="Login unavailable">', loginStart)
+  const login = source.slice(loginStart, loginEnd)
+  assert.match(login, /autoComplete="username"[^>]+onChange=\{\(event\) => editEmail\(event\.target\.value\)\}/)
+  assert.match(login, /autoComplete="current-password"[^>]+onChange=\{\(event\) => editPassword\(event\.target\.value\)\}/)
+})
+
 test('unassigned Website reviewers never enter company activation; normal signup still does', async () => {
   for (const reviewing of [true, false]) {
     const { context } = fixture(); const activation = [], notices = []

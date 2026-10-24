@@ -68,6 +68,30 @@ export function ManagedLoginPage() {
   const [cooldownSeconds, setCooldownSeconds] = useState(0)
   const accountRequestPending = useRef(false)
 
+  function clearCredentialError() {
+    if (noticeTone !== 'error') return
+    setNotice('')
+    setNoticeTone('quiet')
+  }
+
+  function editEmail(value: string) {
+    setEmail(value)
+    clearCredentialError()
+  }
+
+  function editPassword(value: string) {
+    setPassword(value)
+    clearCredentialError()
+  }
+
+  function editClaimCode(value: string) {
+    setClaimCode(value)
+    if (!claimCodeFieldError) return
+    setClaimCodeFieldError(false)
+    setNotice('')
+    setNoticeTone('quiet')
+  }
+
   useEffect(() => {
     if (!cooldownUntil) return
     const update = () => {
@@ -324,7 +348,7 @@ export function ManagedLoginPage() {
         </div>
       </section> : managedReady && activating && !reviewReturnPath ? <form aria-busy={busy} className="managed-login-panel core-form" onSubmit={(event) => void activate(event)}>
         <div><span className="core-eyebrow">Activate your company</span><h2>Claim your company.</h2><p>Enter your claim code to connect your company to this account.</p></div>
-        <label>Claim code<input aria-describedby={claimCodeFieldError ? 'managed-login-notice' : undefined} aria-invalid={claimCodeFieldError} autoComplete="off" maxLength={12} onChange={(event) => setClaimCode(event.target.value)} placeholder="SM-XXXX-XXXX" required value={claimCode} /></label>
+        <label>Claim code<input aria-describedby={claimCodeFieldError ? 'managed-login-notice' : undefined} aria-invalid={claimCodeFieldError} autoComplete="off" maxLength={12} onChange={(event) => editClaimCode(event.target.value)} placeholder="SM-XXXX-XXXX" required value={claimCode} /></label>
         <label>Business name<input maxLength={120} onChange={(event) => setBusinessName(event.target.value)} placeholder="Your business name" required value={businessName} /></label>
         <button className="core-button primary" disabled={busy} type="submit">{busy ? 'Activating...' : 'Activate my company'}</button>
         <a className="account-inline-link" href={managedAccountRequestUrl(accountProductIntent)}>Contact support</a>
@@ -337,8 +361,8 @@ export function ManagedLoginPage() {
               combination was rejected" -- there is no way to attribute it to just one of the
               two fields without leaking which one was wrong, so both point at the shared
               notice rather than leaving it disconnected from either input. */}
-          <label>Email<input aria-describedby={noticeTone === 'error' ? 'managed-login-notice' : undefined} aria-invalid={noticeTone === 'error'} autoComplete="username" maxLength={160} onChange={(event) => setEmail(event.target.value)} required type="email" value={email} /></label>
-          <label>Password<input aria-describedby={noticeTone === 'error' ? 'managed-login-notice' : undefined} aria-invalid={noticeTone === 'error'} autoComplete="current-password" onChange={(event) => setPassword(event.target.value)} required type="password" value={password} /></label>
+          <label>Email<input aria-describedby={noticeTone === 'error' ? 'managed-login-notice' : undefined} aria-invalid={noticeTone === 'error'} autoComplete="username" maxLength={160} onChange={(event) => editEmail(event.target.value)} required type="email" value={email} /></label>
+          <label>Password<input aria-describedby={noticeTone === 'error' ? 'managed-login-notice' : undefined} aria-invalid={noticeTone === 'error'} autoComplete="current-password" onChange={(event) => editPassword(event.target.value)} required type="password" value={password} /></label>
           <Link className="account-inline-link" to={managedAccountPath('/account/recovery', accountProductIntent, location.search)}>Forgot password?</Link>
           {reviewReturnPath ? <p>Need access? Ask SuperMega in your existing setup conversation. Use your existing account.</p> : signupPolicy ? <button className="account-inline-link account-link-button" onClick={() => chooseAccountMode(true)} type="button">Create an account</button> : <a className="account-inline-link" href={managedAccountRequestUrl(accountProductIntent)}>{shopAccessIntent ? 'Contact us about Shop' : 'Contact support'}</a>}
         </>}
