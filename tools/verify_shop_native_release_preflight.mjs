@@ -17,6 +17,14 @@ function sourceValue(source, pattern) {
   return source.match(pattern)?.[1] ?? null
 }
 
+function iosProductionBundleId(iosProject) {
+  const bundleIds = [...iosProject.matchAll(/PRODUCT_BUNDLE_IDENTIFIER\s*=\s*([^;\s]+);/g)]
+    .map((match) => match[1])
+    .filter((bundleId) => !bundleId.endsWith('.qa') && !bundleId.endsWith('.RunnerTests'))
+  const uniqueBundleIds = [...new Set(bundleIds)]
+  return uniqueBundleIds.length === 1 ? uniqueBundleIds[0] : null
+}
+
 function meaningful(value) {
   return typeof value === 'string'
     && value.trim().length > 2
@@ -26,7 +34,7 @@ function meaningful(value) {
 export function assessShopNativeReleasePreflight({ androidGradle, pubspec, iosProject, metadata, windowsContract = null }) {
   const blockers = []
   const androidApplicationId = sourceValue(androidGradle, /applicationId\s*=\s*"([^"]+)"/)
-  const iosBundleId = sourceValue(iosProject, /PRODUCT_BUNDLE_IDENTIFIER\s*=\s*([^;\s]+);/)
+  const iosBundleId = iosProductionBundleId(iosProject)
   const version = sourceValue(pubspec, /^version:\s*([^\s#]+)\s*$/m)
 
   add(blockers, /signingConfig\s*=\s*signingConfigs\.getByName\("debug"\)/.test(androidGradle), 'android_release_uses_debug_signing')

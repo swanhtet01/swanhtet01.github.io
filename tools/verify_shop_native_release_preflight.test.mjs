@@ -144,3 +144,70 @@ test('complete approved metadata can satisfy the source-only preflight without e
   assert.doesNotMatch(JSON.stringify(result), /password|keystore/i)
 })
 
+test('QA and test bundle identifiers cannot displace or ambiguate the production iOS identity', () => {
+  const productionId = 'dev.supermega.shop'
+  const approved = {
+    approved: true,
+    androidApplicationId: productionId,
+    iosBundleId: productionId,
+    iosDevelopmentTeam: 'owner-approved-team',
+    iosDistributionMethod: 'app-store',
+    version: '1.2.0+42',
+    windowsInstallerFormat: 'msix',
+    windowsPublisherIdentityRef: 'owner-approved-publisher',
+    windowsUpdateStrategy: 'signed channel with monotonic versions',
+    windowsRollbackStrategy: 'retain prior signed installer',
+  }
+  const androidGradle = actual.androidGradle.replaceAll(DEFAULT_ANDROID_ID_FOR_TEST, productionId)
+  const pubspec = actual.pubspec.replace('version: 1.0.0+1', 'version: 1.2.0+42')
+  const iosProject = actual.iosProject
+    .replaceAll('dev.supermega.supermegaShop', productionId)
+    .replace(
+      `PRODUCT_BUNDLE_IDENTIFIER = ${productionId};`,
+      `PRODUCT_BUNDLE_IDENTIFIER = ${productionId};\n\t\t\t\tDEVELOPMENT_TEAM = owner-approved-team;`,
+    )
+  const windowsContract = {
+    approved: true,
+    installerFormat: approved.windowsInstallerFormat,
+    publisherIdentityRef: approved.windowsPublisherIdentityRef,
+    updateStrategy: approved.windowsUpdateStrategy,
+    rollbackStrategy: approved.windowsRollbackStrategy,
+  }
+
+  const result = assessShopNativeReleasePreflight({
+    androidGradle,
+    pubspec,
+    iosProject,
+    metadata: approved,
+    windowsContract,
+  })
+  assert.equal(result.ready, true)
+
+  const ambiguous = assessShopNativeReleasePreflight({
+    androidGradle,
+    pubspec,
+    iosProject: iosProject.replace(
+      `PRODUCT_BUNDLE_IDENTIFIER = ${productionId};`,
+      `PRODUCT_BUNDLE_IDENTIFIER = dev.supermega.second-production-id;`,
+    ),
+    metadata: approved,
+    windowsContract,
+  })
+  assert.equal(ambiguous.ready, false)
+  assert.ok(ambiguous.blockers.includes('ios_bundle_id_source_mismatch'))
+
+  const missing = assessShopNativeReleasePreflight({
+    androidGradle,
+    pubspec,
+    iosProject: [
+      `PRODUCT_BUNDLE_IDENTIFIER = ${productionId}.qa;`,
+      `PRODUCT_BUNDLE_IDENTIFIER = ${productionId}.RunnerTests;`,
+      'DEVELOPMENT_TEAM = owner-approved-team;',
+    ].join('\n'),
+    metadata: approved,
+    windowsContract,
+  })
+  assert.equal(missing.ready, false)
+  assert.ok(missing.blockers.includes('ios_bundle_id_source_mismatch'))
+})
+
