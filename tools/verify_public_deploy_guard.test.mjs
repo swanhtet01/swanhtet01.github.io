@@ -71,6 +71,7 @@ for (const [path, token, failure] of [
   ['tools/public_preview_profile.mjs', 'public_preview_retired_entry', 'preview_navigation_policy_missing'],
   ['tools/public_preview_profile.mjs', 'public_preview_app_route_invalid', 'preview_navigation_policy_missing'],
   ['tools/public_preview_profile.mjs', 'public_preview_action_missing', 'preview_navigation_policy_missing'],
+  ['tools/public_preview_profile.mjs', "const appPaths = new Set([policy.app ? PUBLIC_PREVIEW_LOGIN_PATH : '/login'])", 'preview_navigation_policy_missing'],
   ...['root_redirect_destination_wrong', 'shop_manifest_action_missing',
     'shop_contact_action_missing', 'page_shop_sign_in_drift',
     'retired_product_route_not_found', 'retired_product_content_served',

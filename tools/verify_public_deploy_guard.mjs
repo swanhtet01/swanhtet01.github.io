@@ -61,7 +61,7 @@ for (const token of ["validatePreviewLinks(get('/shop/'), policy, manifest.custo
 }
 for (const token of ['public_preview_action_missing', 'public_preview_app_route_invalid',
   'public_preview_production_escape', 'public_preview_retired_entry',
-  "const appPaths = new Set(['/login'])"]) {
+  "const appPaths = new Set([policy.app ? PUBLIC_PREVIEW_LOGIN_PATH : '/login'])"]) {
   requireToken(previewProfile, token, 'preview_navigation_policy_missing')
 }
 for (const token of ['root_redirect_destination_wrong', 'shop_manifest_action_missing',
