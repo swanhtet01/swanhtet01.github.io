@@ -24,7 +24,12 @@ function workflowFixture() {
       - name: Inspect Android QA identity
         run: |
           test "$(apkanalyzer manifest application-id app-qa-debug.apk)" = 'dev.supermega.supermega_shop.qa'
-          apkanalyzer manifest print app-qa-debug.apk | grep -F 'android:label="Shop QA"'`,
+          manifest_xml="$(mktemp)"
+          trap 'rm -f "$manifest_xml"' EXIT
+          apkanalyzer manifest print app-qa-debug.apk > "$manifest_xml"
+          python3 -c 'import sys, xml.etree.ElementTree as ET; apps = ET.parse(sys.argv[1]).getroot().findall("application"); valid = len(apps) == 1 and apps[0].get("{http://schemas.android.com/apk/res/android}label") == "Shop QA"; sys.exit(None if valid else "shop_android_qa_label_mismatch")' "$manifest_xml"
+          rm -f "$manifest_xml"
+          trap - EXIT`,
     ios: `
       - name: Inspect iOS QA identity
         run: |
@@ -365,6 +370,8 @@ test('exact platform identity and artifact contracts cannot be replaced by loose
 
   for (const token of [
     'manifest application-id app-qa-debug.apk',
+    'xml.etree.ElementTree',
+    'sys.exit(None if valid else "shop_android_qa_label_mismatch")',
     "info='build/ios/iphoneos/Runner.app/Info.plist'",
     'Print :CFBundleIdentifier',
     "$identity.ProductName -cne 'Shop QA'",

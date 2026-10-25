@@ -1,4 +1,8 @@
 import assert from 'node:assert/strict'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { spawnSync } from 'node:child_process'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 
@@ -19,6 +23,47 @@ test('native CI retains checksums for the actual Android and Windows QA files', 
   assert.equal(result.flutterVersion, '3.47.8')
   assert.equal(result.gradleDistribution, 'gradle-9.3.1-bin.zip')
   assert.equal(result.gradleDistributionSha256, 'b266d5ff6b90eada6dc3b20cb090e3731302e553a27c5d3e4df1f0d76beaff06')
+})
+
+test('Android QA label is parsed structurally from the built manifest', () => {
+  for (const token of [
+    'xml.etree.ElementTree',
+    'findall("application")',
+    '{http://schemas.android.com/apk/res/android}label',
+    'sys.exit(None if valid else "shop_android_qa_label_mismatch")',
+  ]) {
+    const missing = verifyShopNativeCiContract(
+      workflow.replace(token, 'label-inspection-omitted'),
+      gradleWrapper,
+    )
+    assert.ok(missing.failures.includes('android_qa_postbuild_label_not_structurally_inspected'))
+  }
+})
+
+test('Android QA label parser fails closed for wrong, missing, duplicate, and malformed manifests', async () => {
+  const parser = workflow.match(/python3 -c '([^'\n]+)' "\$manifest_xml"/)?.[1]
+  assert.ok(parser, 'workflow must retain an executable Android manifest parser')
+  const directory = await mkdtemp(join(tmpdir(), 'shop-android-qa-manifest-'))
+  try {
+    const fixtures = [
+      { name: 'valid.xml', source: '<manifest xmlns:android="http://schemas.android.com/apk/res/android"><application android:label="Shop QA"/></manifest>', status: 0 },
+      { name: 'wrong.xml', source: '<manifest xmlns:android="http://schemas.android.com/apk/res/android"><application android:label="Shop"/></manifest>', status: 1 },
+      { name: 'missing.xml', source: '<manifest xmlns:android="http://schemas.android.com/apk/res/android"/>', status: 1 },
+      { name: 'duplicate.xml', source: '<manifest xmlns:android="http://schemas.android.com/apk/res/android"><application android:label="Shop QA"/><application android:label="Shop QA"/></manifest>', status: 1 },
+      { name: 'malformed.xml', source: '<manifest><application>', status: 1 },
+    ]
+    for (const fixture of fixtures) {
+      const path = join(directory, fixture.name)
+      await writeFile(path, fixture.source, 'utf8')
+      const result = spawnSync('python3', ['-c', parser, path], {
+        encoding: 'utf8',
+        env: { ...process.env, PYTHONOPTIMIZE: '1' },
+      })
+      assert.equal(result.status, fixture.status, fixture.name)
+    }
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
 })
 
 test('native CI pins one exact Flutter SDK across production and QA native jobs', () => {
