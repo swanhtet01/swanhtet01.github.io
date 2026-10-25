@@ -1,7 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { implementationPaths, proofDigest } from './database-rehearsal-evidence.mjs'
+import { proofDigest } from './database-rehearsal-evidence.mjs'
+import { unitV14DatabaseFixture } from './managed-pilot-v14-fixture.mjs'
 
 import { buildManagedPilotReadiness, readinessDigest, validateManagedPilotReadiness } from './managed-pilot-readiness.mjs'
 
@@ -20,31 +21,7 @@ const products = ['shop', 'plant', 'website', 'ecommerce'].map((id) => ({
 }))
 const sourceReceipts = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'].map((path) => ({ path, digest: readinessDigest(path) }))
 const historicalV13DatabaseFixture = JSON.parse(readFileSync(new URL('../hq/research/postgres17-rehearsal.json', import.meta.url), 'utf8'))
-const databaseFixture = structuredClone(historicalV13DatabaseFixture)
-// Unit-only v14 fixture; never written as operational evidence and never a
-// substitute for the required exact-source PostgreSQL 17 rehearsal.
-databaseFixture.migration = {
-  ...databaseFixture.migration,
-  count: databaseFixture.migration.names.length + 1,
-  schemaVersion: 14,
-  names: [...databaseFixture.migration.names, '20261024090000_private_trial_backend_v14_shop_correction_consumption.sql'],
-  schemaProfile: 'v14-shop-correction',
-  catalogContract: 'supermega_private_trial_database_v14_shop_correction_v1',
-}
-databaseFixture.recovery.restoredSchemaVersion = 14
-for (const name of [
-  'shopCorrectionTablesAndForcedRlsValidated',
-  'shopCorrectionConstraintsAndIndexesValidated',
-  'shopCorrectionTriggersAndFunctionsValidated',
-  'shopCorrectionPoliciesAndAclValidated',
-  'shopCorrectionCatalogPreservedAfterRestore',
-]) databaseFixture.checks[name] = true
-const unitImplementationDigest = `sha256:${'a'.repeat(64)}`
-databaseFixture.implementation = { digest: unitImplementationDigest, paths: [...implementationPaths] }
-databaseFixture.implementationDigest = unitImplementationDigest
-databaseFixture.implementationFileCount = implementationPaths.length
-databaseFixture.recordedAt = '2026-07-31T10:00:00.000Z'
-databaseFixture.receiptDigest = proofDigest(databaseFixture)
+const databaseFixture = unitV14DatabaseFixture(historicalV13DatabaseFixture)
 const selfServePilotProof = {
   contract: 'supermega.self-serve-pilot-proof.v1',
   approvalId: 'self-serve-proof-v11c-20260816',

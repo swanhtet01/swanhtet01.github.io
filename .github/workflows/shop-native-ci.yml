@@ -44,21 +44,61 @@ jobs:
           dart format lib/camera_barcode_scanner.dart lib/connected_orders_screen.dart lib/connected_orders_service.dart lib/main.dart lib/menu_import_screen.dart lib/menu_import_service.dart lib/printer_services.dart lib/printer_setup_screen.dart lib/recent_sales_screen.dart lib/shop_backup.dart lib/shop_backup_export_screen.dart lib/shop_build_identity.g.dart lib/shop_cash_shift_screen.dart lib/shop_copy.dart lib/shop_correction_authorization_service.dart lib/shop_correction_receipt.dart lib/shop_database.dart lib/shop_operational_export.dart lib/shop_operational_export_saver.dart lib/shop_runtime_profile.dart lib/shop_runtime_scope.dart lib/shop_sale_correction_dialog.dart lib/shop_startup.dart lib/shop_today_screen.dart lib/stock_screen.dart test/shop_backup_test.dart test/shop_correction_authorization_service_test.dart test/shop_foundation_test.dart test/shop_member_identity_test.dart test/shop_operational_export_database_test.dart test/shop_operational_export_saver_test.dart test/shop_operational_export_test.dart test/shop_operational_export_widget_test.dart test/shop_runtime_profile_test.dart test/shop_runtime_scope_test.dart test/visual_capture_test.dart test/widget_test.dart
           git diff --exit-code -- lib/camera_barcode_scanner.dart lib/connected_orders_screen.dart lib/connected_orders_service.dart lib/main.dart lib/menu_import_screen.dart lib/menu_import_service.dart lib/printer_services.dart lib/printer_setup_screen.dart lib/recent_sales_screen.dart lib/shop_backup.dart lib/shop_backup_export_screen.dart lib/shop_build_identity.g.dart lib/shop_cash_shift_screen.dart lib/shop_copy.dart lib/shop_correction_authorization_service.dart lib/shop_correction_receipt.dart lib/shop_database.dart lib/shop_operational_export.dart lib/shop_operational_export_saver.dart lib/shop_runtime_profile.dart lib/shop_runtime_scope.dart lib/shop_sale_correction_dialog.dart lib/shop_startup.dart lib/shop_today_screen.dart lib/stock_screen.dart test/shop_backup_test.dart test/shop_correction_authorization_service_test.dart test/shop_foundation_test.dart test/shop_member_identity_test.dart test/shop_operational_export_database_test.dart test/shop_operational_export_saver_test.dart test/shop_operational_export_test.dart test/shop_operational_export_widget_test.dart test/shop_runtime_profile_test.dart test/shop_runtime_scope_test.dart test/visual_capture_test.dart test/widget_test.dart
 
-      - name: Generate Android production identity
-        working-directory: ${{ github.workspace }}
-        run: node tools/generate_shop_build_identity.mjs --platform android --profile production
-
-      - name: Analyze Flutter source
-        run: flutter analyze
-
       - name: Check first-sale widget in isolation
         run: timeout --signal=TERM --kill-after=10s 90s flutter test test/widget_test.dart --plain-name 'empty catalog can make a durable cash sale' --reporter expanded --timeout 60s
 
       - name: Check first-run restore in isolation
         run: timeout --signal=TERM --kill-after=10s 60s flutter test test/shop_backup_test.dart --plain-name 'fresh install restores before Shop opens' --reporter expanded --timeout 45s
 
-      - name: Run Flutter tests
-        run: timeout --signal=TERM --kill-after=10s 180s flutter test --concurrency=1 --reporter expanded --timeout 2m
+      - name: Verify Flutter test shard inventory
+        run: |
+          find test -maxdepth 1 -type f -name '*_test.dart' -printf '%p\n' | sort > /tmp/shop-test-files.actual
+          cat > /tmp/shop-test-files.expected <<'EOF'
+          test/connected_orders_test.dart
+          test/shop_backup_test.dart
+          test/shop_correction_authorization_service_test.dart
+          test/shop_correction_consumption_test.dart
+          test/shop_foundation_test.dart
+          test/shop_member_identity_test.dart
+          test/shop_operational_export_database_test.dart
+          test/shop_operational_export_saver_test.dart
+          test/shop_operational_export_test.dart
+          test/shop_operational_export_widget_test.dart
+          test/shop_runtime_profile_test.dart
+          test/shop_runtime_scope_test.dart
+          test/visual_capture_test.dart
+          test/widget_test.dart
+          EOF
+          diff -u /tmp/shop-test-files.expected /tmp/shop-test-files.actual
+
+      - name: Run Flutter behavior tests
+        run: |
+          timeout --signal=TERM --kill-after=10s 180s flutter test --concurrency=1 --reporter expanded --timeout 2m \
+            test/connected_orders_test.dart \
+            test/shop_correction_authorization_service_test.dart \
+            test/shop_foundation_test.dart \
+            test/shop_operational_export_saver_test.dart \
+            test/shop_operational_export_test.dart \
+            test/shop_operational_export_widget_test.dart \
+            test/shop_runtime_profile_test.dart \
+            test/shop_runtime_scope_test.dart \
+            test/widget_test.dart
+
+      - name: Run Flutter persistence tests
+        run: |
+          timeout --signal=TERM --kill-after=10s 180s flutter test --concurrency=1 --reporter expanded --timeout 2m \
+            test/shop_backup_test.dart \
+            test/shop_correction_consumption_test.dart \
+            test/shop_member_identity_test.dart \
+            test/shop_operational_export_database_test.dart \
+            test/visual_capture_test.dart
+
+      - name: Generate Android production identity
+        working-directory: ${{ github.workspace }}
+        run: node tools/generate_shop_build_identity.mjs --platform android --profile production
+
+      - name: Analyze Flutter source
+        run: flutter analyze
 
       - name: Capture synthetic Flutter screens with bundled fonts
         env:

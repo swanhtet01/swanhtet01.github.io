@@ -78,6 +78,60 @@ export function verifyShopNativeCiContract(source, gradleWrapperSource = '') {
     'native_toolchain_contract_command_missing',
     failures,
   )
+  requireOrder(
+    source,
+    'name: Verify Flutter test shard inventory',
+    'name: Run Flutter behavior tests',
+    'native_test_inventory_not_verified_before_shards',
+    failures,
+  )
+  requireToken(
+    source,
+    "find test -maxdepth 1 -type f -name '*_test.dart'",
+    'native_test_inventory_discovery_missing',
+    failures,
+  )
+  requireToken(
+    source,
+    'diff -u /tmp/shop-test-files.expected /tmp/shop-test-files.actual',
+    'native_test_inventory_equality_gate_missing',
+    failures,
+  )
+  requireOrder(
+    source,
+    'name: Run Flutter persistence tests',
+    'name: Generate Android production identity',
+    'android_production_identity_generated_before_default_profile_tests',
+    failures,
+  )
+  requireOrder(
+    source,
+    'name: Generate Android production identity',
+    'name: Reject unsigned Android release packaging',
+    'android_production_identity_not_generated_before_packaging',
+    failures,
+  )
+  const testShardLines = source.split(/\r?\n/).map(line => line.trim())
+  for (const testPath of [
+    'test/connected_orders_test.dart',
+    'test/shop_backup_test.dart',
+    'test/shop_correction_authorization_service_test.dart',
+    'test/shop_correction_consumption_test.dart',
+    'test/shop_foundation_test.dart',
+    'test/shop_member_identity_test.dart',
+    'test/shop_operational_export_database_test.dart',
+    'test/shop_operational_export_saver_test.dart',
+    'test/shop_operational_export_test.dart',
+    'test/shop_operational_export_widget_test.dart',
+    'test/shop_runtime_profile_test.dart',
+    'test/shop_runtime_scope_test.dart',
+    'test/visual_capture_test.dart',
+    'test/widget_test.dart',
+  ]) {
+    if (!testShardLines.some(line => line === testPath || line === `${testPath} \\`)) {
+      failures.push(`native_test_shard_missing:${testPath}`)
+    }
+  }
 
   requireToken(
     gradleWrapperSource,

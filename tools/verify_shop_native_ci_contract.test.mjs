@@ -49,6 +49,29 @@ test('native CI pins one exact Flutter SDK across production and QA native jobs'
   assert.ok(wrongIosProduct.failures.includes('ios_qa_runner_bundle_not_inspected'))
 })
 
+test('production identity is generated only after every default-profile test shard', () => {
+  const generatedTooEarly = verifyShopNativeCiContract(
+    workflow.replace(
+      '      - name: Check first-sale widget in isolation',
+      '      - name: Generate Android production identity\n        run: node tools/generate_shop_build_identity.mjs --platform android --profile production\n\n      - name: Check first-sale widget in isolation',
+    ),
+    gradleWrapper,
+  )
+  assert.ok(generatedTooEarly.failures.includes('android_production_identity_generated_before_default_profile_tests'))
+
+  const omittedShard = verifyShopNativeCiContract(
+    workflow.replaceAll('test/shop_member_identity_test.dart', 'test/omitted_member_identity_test.dart'),
+    gradleWrapper,
+  )
+  assert.ok(omittedShard.failures.includes('native_test_shard_missing:test/shop_member_identity_test.dart'))
+
+  const missingInventoryGate = verifyShopNativeCiContract(
+    workflow.replace('diff -u /tmp/shop-test-files.expected /tmp/shop-test-files.actual', 'true'),
+    gradleWrapper,
+  )
+  assert.ok(missingInventoryGate.failures.includes('native_test_inventory_equality_gate_missing'))
+})
+
 test('Gradle wrapper uses the checksum-pinned 9.3.1 bin distribution', () => {
   const mutableArchive = verifyShopNativeCiContract(
     workflow,

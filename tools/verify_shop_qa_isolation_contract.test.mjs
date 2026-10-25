@@ -92,7 +92,7 @@ function fixture() {
   return {
     'mobile/shop_pos/android/app/build.gradle.kts': 'applicationId = "dev.supermega.supermega_shop"\ncreate("production") create("qa") synthetic_qa_v1 dev.supermega.supermega_shop.qa verifyShopAndroidProductionIdentity verifyShopAndroidQaIdentity preProduction preQa shopBuildIdentityProfile = \'$profile\' shopBuildIdentityQaProfileId = \'$qaProfile\' shopBuildIdentityPlatformIdentity = \'$identity\' shop_android_build_identity_mismatch',
     'mobile/shop_pos/android/app/src/production/AndroidManifest.xml': '<application android:label="Shop"/>',
-    'mobile/shop_pos/android/app/src/qa/AndroidManifest.xml': '<application android:label="Shop QA"/>',
+    'mobile/shop_pos/android/app/src/qa/AndroidManifest.xml': '<application android:label="Shop QA" tools:replace="android:label"/>',
     'mobile/shop_pos/ios/Runner.xcodeproj/project.pbxproj': 'PRODUCT_BUNDLE_IDENTIFIER = dev.supermega.supermegaShop;\nPRODUCT_BUNDLE_IDENTIFIER = dev.supermega.supermegaShop;\nPRODUCT_BUNDLE_IDENTIFIER = dev.supermega.supermegaShop;\ndev.supermega.supermegaShop.qa\npath = Runner.app;\nVerify Shop build identity shop_ios_build_identity_missing shop_ios_build_configuration_unknown\nshopBuildIdentityProfile = \'synthetic_qa_v1\' shopBuildIdentityQaProfileId = \'synthetic-qa-v1\' shopBuildIdentityProfile = \'production\' shopBuildIdentityQaProfileId = \'\'\nPRODUCT_NAME = "$(TARGET_NAME)";\nPRODUCT_NAME = "$(TARGET_NAME)";\nPRODUCT_NAME = "$(TARGET_NAME)";\nPRODUCT_NAME = "$(TARGET_NAME)";\nPRODUCT_NAME = "$(TARGET_NAME)";\nPRODUCT_NAME = "$(TARGET_NAME)";',
     'mobile/shop_pos/lib/main.dart': 'Future<void> main() async { final runtimeScope = await resolveShopRuntimeScopeForStartup(); if (!runtimeScope.capabilities.managedAuth) return; if (!runtimeScope.capabilities.camera) return; } class ShopHome { ShopHome({ShopRuntimeScope? scope, bool testOnlyAllowMissingRuntimeScope = false}) { requireShopRuntimeScopeOrTestSeam(scope, testOnlyAllowMissingRuntimeScope: testOnlyAllowMissingRuntimeScope); } }',
     'mobile/shop_pos/lib/shop_database.dart': "const productMode = bool.fromEnvironment('dart.vm.product'); privateDatabaseFile() => 'supermega_shop.sqlite';",
@@ -323,6 +323,15 @@ test('exact platform identity and artifact contracts cannot be replaced by loose
     const sources = fixture(); sources[path] = 'unrelated text'
     assert.equal(assessShopQaIsolationContract({ sources }).strictReady, false, path)
   }
+
+  const androidWithoutLabelOverride = fixture()
+  androidWithoutLabelOverride['mobile/shop_pos/android/app/src/qa/AndroidManifest.xml'] =
+    '<application android:label="Shop QA"/>'
+  assert.equal(
+    assessShopQaIsolationContract({ sources: androidWithoutLabelOverride }).strictReady,
+    false,
+    'QA label must explicitly override the debug/main manifest label',
+  )
 
   const mixedIosScheme = fixture()
   mixedIosScheme['mobile/shop_pos/ios/Runner.xcodeproj/xcshareddata/xcschemes/qa.xcscheme'] =

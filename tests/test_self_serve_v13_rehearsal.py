@@ -25,7 +25,8 @@ class FullChainProofContractTests(unittest.TestCase):
     def test_exact_current_private_migration_chain(self):
         actual = sorted(p.name for p in (proof.ROOT / "supabase/migrations").glob("*.sql")
                         if p.name != "20260711081300_public_legacy_baseline.sql")
-        self.assertEqual(list(proof.MIGRATIONS), actual)
+        self.assertEqual(proof.MIGRATIONS, proof.pg.V13_MIGRATIONS)
+        self.assertEqual(list(proof.pg.CURRENT_MIGRATIONS), actual)
         self.assertEqual(len(proof.MIGRATIONS), 23)
         self.assertEqual(proof.MIGRATIONS[-8:], (
             "20260915184728_website_customer_review_storage.sql",
@@ -37,6 +38,10 @@ class FullChainProofContractTests(unittest.TestCase):
             "20260929171000_ecommerce_decision_review_fk_index.sql",
             "20260930010000_app_rls_initplan_optimization.sql",
         ))
+        self.assertEqual(
+            proof.pg.CURRENT_MIGRATIONS[-1],
+            "20261024090000_private_trial_backend_v14_shop_correction_consumption.sql",
+        )
 
     def test_matrix_has_exact_unique_behavior_checks(self):
         self.assertEqual(len(proof.CHECKS), 18)
