@@ -27,7 +27,7 @@ export function managedAccountPath(path: '/login' | '/account/recovery', value: 
     const [, product, , review] = reviewPath.split('/')
     return `${path}?product=${product}&review=${review}`
   }
-  if (managedAccountHubEntryPath(search)) return `${path}?entry=${ACCOUNT_HUB_ENTRY}`
+  if (managedAccountHubEntryPath(search) || managedAccountHubRecoveryEntryPath(search)) return `${path}?entry=${ACCOUNT_HUB_ENTRY}`
   const product = accountProductSlug(value)
   if (!product) return path
   return product === 'shop' && isPairedPublicShopEntry(search)

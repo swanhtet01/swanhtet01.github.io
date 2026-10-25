@@ -8,7 +8,7 @@ import { RouteErrorBoundary } from './RouteErrorBoundary'
 import { bi } from './i18n-actions'
 import { recordBehaviorSignal } from './behavior-trail'
 import { activeCommerceTab, commerceTabs } from './commerce-tabs'
-import { managedAccountHubLoginPath } from './account-routes'
+import { managedAccountRouteLoginPath } from './account-login-route'
 import type { ClientSolutionId } from './client-onboarding'
 import {
   managedProductIsVisible,
@@ -414,12 +414,14 @@ export function CoreLayout() {
   const storedSettingsSetup = customerSettingsRoute || internalBuilderRoute ? readLocalSetupReadiness() : null
   const accountRecoveryRoute = location.pathname.startsWith('/account/recovery') || location.pathname.startsWith('/account/setup')
   const accountHubRoute = location.pathname === '/account' || location.pathname === '/account/'
-  const sensitiveAccountRoute = location.pathname.startsWith('/account/') || accountHubRoute
+  const sensitiveAccountRoute = accountRecoveryRoute || accountHubRoute
   const loginRoute = location.pathname === '/login' || location.pathname === '/login/'
   const accountEntryRoute = loginRoute || sensitiveAccountRoute
   const protectedPortalRoute = Boolean(requestedProduct) || accountHubRoute
   const companyLoginPath = managedLoginPath(routeProduct ?? settingsProduct ?? (storedSettingsSetup?.workspace && storedSettingsSetup.hasCanonicalProduct ? storedSettingsSetup.product : null))
-  const protectedLoginPath = accountHubRoute ? managedAccountHubLoginPath() : companyLoginPath
+  const protectedLoginPath = sensitiveAccountRoute
+    ? managedAccountRouteLoginPath(location.pathname, location.search)
+    : companyLoginPath
   const setupRoute = customerSettingsRoute || internalBuilderRoute
   const setupNavigation: NavigationItem = internalBuilderRoute
     ? { to: '/internal/client-builder/', label: 'Client builder' }
@@ -549,9 +551,9 @@ export function CoreLayout() {
                 {protectedPortalRoute && portalAccess.status === 'checking'
                   ? <PortalAccessPanel copy="Verifying this company and its assigned products." title="Opening company portal…" />
                   : protectedPortalRoute && portalAccess.status === 'reauthenticate'
-                    ? <Navigate replace to={companyLoginPath} />
+                    ? <Navigate replace to={protectedLoginPath} />
                     : protectedPortalRoute && portalAccess.status === 'error'
-                      ? <PortalAccessPanel action={<Link className="button" to={companyLoginPath}>Sign in again</Link>} copy={portalAccess.message} title="Access issue" />
+                      ? <PortalAccessPanel action={<Link className="button" to={protectedLoginPath}>Sign in again</Link>} copy={portalAccess.message} title="Access issue" />
                       : requestedProduct && !managedProductAllowed
                         ? managedRouteDecision.kind === 'redirect'
                           ? <Navigate replace to={managedRouteDecision.path} />

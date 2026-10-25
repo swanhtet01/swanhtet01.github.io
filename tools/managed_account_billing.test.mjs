@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
 import { assertManagedAccountBilling } from '../showroom/src/core/managed-account-billing.ts'
+import { managedAccountRouteLoginPath } from '../showroom/src/core/account-login-route.ts'
 import { managedAccountHubEntryPath, managedAccountHubLoginPath, managedAccountHubRecoveryEntryPath, managedAccountPath } from '../showroom/src/core/account-routes.ts'
 
 const identity = { userId: 'actor-owner', workspaceId: 'workspace-a' }
@@ -108,6 +109,8 @@ test('account hub uses authenticated billing loader and never links unsigned bui
   assert.match(app, /path="account"/)
   assert.match(shell, /protectedPortalRoute = Boolean\(requestedProduct\) \|\| accountHubRoute/)
   assert.match(shell, /protectedPortalRoute && portalAccess\.status === 'reauthenticate'/)
+  assert.match(shell, /Navigate replace to=\{protectedLoginPath\}/)
+  assert.match(shell, /to=\{protectedLoginPath\}>Sign in again/)
   assert.match(page, /loadManagedAccountBilling\(identity\)/)
   assert.match(page, /portal\.capabilities\.includes\('billing\.read'\)/)
   assert.match(login, /accountHubReturnPath \? 'guide'/)
@@ -119,6 +122,14 @@ test('account hub uses authenticated billing loader and never links unsigned bui
   assert.equal(managedAccountHubEntryPath('?entry=account-hub-v1'), '/account')
   assert.equal(managedAccountPath('/account/recovery', null, '?entry=account-hub-v1'), '/account/recovery?entry=account-hub-v1')
   assert.equal(managedAccountHubRecoveryEntryPath('?mode=recovery&entry=account-hub-v1&code=abcdefghijklmnop'), '/account')
+  assert.equal(managedAccountRouteLoginPath('/account', ''), '/login?entry=account-hub-v1')
+  assert.equal(managedAccountRouteLoginPath('/account/', '?next=https://example.com'), '/login?entry=account-hub-v1')
+  assert.equal(managedAccountRouteLoginPath('/account/recovery', '?entry=account-hub-v1&mode=recovery&code=abcdefghijklmnop'), '/login?entry=account-hub-v1')
+  assert.equal(managedAccountRouteLoginPath('/account/setup', '?product=shop&code=abcdefghijklmnop'), '/login?product=shop')
+  assert.equal(managedAccountRouteLoginPath('/account/recovery', '?product=website&review=12345678-1234-1234-1234-123456789abc'), '/login?product=website&review=12345678-1234-1234-1234-123456789abc')
+  assert.equal(managedAccountRouteLoginPath('/account/setup', '?product=shop&product=website'), '/login')
+  assert.equal(managedAccountRouteLoginPath('/account/recovery', '?entry=account-hub-v1&next=https://example.com'), '/login')
+  assert.equal(managedAccountRouteLoginPath('/account/unknown', '?entry=account-hub-v1'), '/login')
   for (const unsafe of [
     '',
     '?entry=wrong',

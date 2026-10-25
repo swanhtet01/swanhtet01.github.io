@@ -3131,7 +3131,7 @@ const managedAccountInitialization = managedTrialSource.slice(
 )
 if (!managedAccountInitialization.includes('} else {\n    throw accountLinkError()')
   || managedAccountInitialization.includes('supabase.auth.getSession()')) fail('managed_account_setup_accepts_existing_session_without_callback')
-if (!coreShellSource.includes("const sensitiveAccountRoute = location.pathname.startsWith('/account/')")
+if (!coreShellSource.includes('const sensitiveAccountRoute = accountRecoveryRoute || accountHubRoute')
   || !coreShellSource.includes('const route = sensitiveAccountRoute ? location.pathname')
   || !coreShellSource.includes('detail: sensitiveAccountRoute')
   || !coreShellSource.includes("? 'Company account access viewed.'")) fail('managed_account_callback_can_enter_behavior_memory')

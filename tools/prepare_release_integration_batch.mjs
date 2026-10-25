@@ -129,7 +129,7 @@ export const APP_SHELL_REQUIREMENTS = [
     id: 'upstream-managed-account-entry', authority: 'upstream', file: 'showroom/src/core/CoreShell.tsx', tokens: [
       'function isStoredSetupProduct',
       'function managedLoginPath(product: string | null)',
-      "const sensitiveAccountRoute = location.pathname.startsWith('/account/')",
+      'const sensitiveAccountRoute = accountRecoveryRoute || accountHubRoute',
       'const accountEntryRoute = loginRoute || sensitiveAccountRoute',
       'Login',
       'aria-label="Login"',
