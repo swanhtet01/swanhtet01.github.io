@@ -97,6 +97,36 @@ export function verifyShopNativeCiContract(source, gradleWrapperSource = '') {
     'native_test_inventory_equality_gate_missing',
     failures,
   )
+  requireToken(
+    source,
+    'SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS: "300"',
+    'native_test_aggregate_budget_not_bounded_to_300_seconds',
+    failures,
+  )
+  requireToken(
+    source,
+    'date +%s > /tmp/shop-flutter-tests.started-at',
+    'native_test_aggregate_budget_start_missing',
+    failures,
+  )
+  requireToken(
+    source,
+    'remaining="$(( SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS - elapsed ))"',
+    'native_test_aggregate_budget_remaining_not_computed',
+    failures,
+  )
+  requireToken(
+    source,
+    'shop_flutter_test_aggregate_budget_exhausted',
+    'native_test_aggregate_budget_exhaustion_not_fail_closed',
+    failures,
+  )
+  requireToken(
+    source,
+    '"${remaining}s" flutter test',
+    'native_test_persistence_shard_not_using_aggregate_remaining_budget',
+    failures,
+  )
   requireOrder(
     source,
     'name: Run Flutter persistence tests',

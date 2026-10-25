@@ -72,6 +72,42 @@ test('production identity is generated only after every default-profile test sha
   assert.ok(missingInventoryGate.failures.includes('native_test_inventory_equality_gate_missing'))
 })
 
+test('default-profile test shards share one evidence-backed aggregate budget', () => {
+  const widened = verifyShopNativeCiContract(
+    workflow.replace(
+      'SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS: "300"',
+      'SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS: "360"',
+    ),
+    gradleWrapper,
+  )
+  assert.ok(
+    widened.failures.includes(
+      'native_test_aggregate_budget_not_bounded_to_300_seconds',
+    ),
+  )
+
+  const missingStart = verifyShopNativeCiContract(
+    workflow.replace(
+      'date +%s > /tmp/shop-flutter-tests.started-at',
+      'true',
+    ),
+    gradleWrapper,
+  )
+  assert.ok(
+    missingStart.failures.includes('native_test_aggregate_budget_start_missing'),
+  )
+
+  const unboundedPersistence = verifyShopNativeCiContract(
+    workflow.replace('"${remaining}s" flutter test', '300s flutter test'),
+    gradleWrapper,
+  )
+  assert.ok(
+    unboundedPersistence.failures.includes(
+      'native_test_persistence_shard_not_using_aggregate_remaining_budget',
+    ),
+  )
+})
+
 test('Gradle wrapper uses the checksum-pinned 9.3.1 bin distribution', () => {
   const mutableArchive = verifyShopNativeCiContract(
     workflow,

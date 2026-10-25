@@ -19,6 +19,8 @@ jobs:
     name: Analyze, test, and build Android
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS: "300"
     defaults:
       run:
         working-directory: mobile/shop_pos
@@ -73,7 +75,8 @@ jobs:
 
       - name: Run Flutter behavior tests
         run: |
-          timeout --signal=TERM --kill-after=10s 180s flutter test --concurrency=1 --reporter expanded --timeout 2m \
+          date +%s > /tmp/shop-flutter-tests.started-at
+          timeout --signal=TERM --kill-after=10s "${SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS}s" flutter test --concurrency=1 --reporter expanded --timeout 2m \
             test/connected_orders_test.dart \
             test/shop_correction_authorization_service_test.dart \
             test/shop_foundation_test.dart \
@@ -86,7 +89,14 @@ jobs:
 
       - name: Run Flutter persistence tests
         run: |
-          timeout --signal=TERM --kill-after=10s 180s flutter test --concurrency=1 --reporter expanded --timeout 2m \
+          started_at="$(cat /tmp/shop-flutter-tests.started-at)"
+          elapsed="$(( $(date +%s) - started_at ))"
+          remaining="$(( SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS - elapsed ))"
+          if [ "$remaining" -le 0 ]; then
+            echo "shop_flutter_test_aggregate_budget_exhausted" >&2
+            exit 124
+          fi
+          timeout --signal=TERM --kill-after=10s "${remaining}s" flutter test --concurrency=1 --reporter expanded --timeout 2m \
             test/shop_backup_test.dart \
             test/shop_correction_consumption_test.dart \
             test/shop_member_identity_test.dart \
