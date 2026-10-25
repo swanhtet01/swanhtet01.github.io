@@ -72,7 +72,7 @@ check(generator.includes('source.value=location.href')
 check(productSetup.includes("utm_medium: 'guided_trial'")
   && productSetup.includes('return `https://supermega.dev/contact/?${query.toString()}`'), 'app_contact_url_builder_pattern')
 check(productSetup.includes('/settings/?product=${encodeURIComponent(productContracts[product].slug)}'), 'app_guided_setup_path_pattern')
-check(accountRoutes.includes("template: 'managed-account'"), 'account_contact_template_pattern')
+check(accountRoutes.includes('&template=managed-account&utm_source=app&utm_medium=business_setup'), 'account_contact_template_pattern')
 
 for (const product of manifest.customerProducts) {
   check(product.appRoute === `https://app.supermega.dev/${product.id}/`, `manifest_app_route:${product.id}`)
@@ -86,9 +86,9 @@ for (const product of manifest.customerProducts) {
   for (const template of product.templates ?? []) {
     derived.add(`https://supermega.dev/contact/?product=${product.id}&template=${template.id}&utm_source=app&utm_medium=guided_trial`)
   }
-  derived.add(`https://supermega.dev/contact/?product=${product.id}&template=managed-account&utm_source=app&utm_medium=guided_trial`)
+  derived.add(`https://supermega.dev/contact/?product=${product.id}&template=managed-account&utm_source=app&utm_medium=business_setup`)
 }
-derived.add('https://supermega.dev/contact/?product=guide&template=managed-account&utm_source=app&utm_medium=guided_trial')
+derived.add('https://supermega.dev/contact/?product=guide&template=managed-account&utm_source=app&utm_medium=business_setup')
 
 const origins = ['https://app.supermega.dev', 'https://supermega.dev']
 
