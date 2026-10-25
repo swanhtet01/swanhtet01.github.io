@@ -40,6 +40,31 @@ test('Android QA label is parsed structurally from the built manifest', () => {
   }
 })
 
+test('Android QA analyzer is resolved from one consistent runner SDK root', () => {
+  for (const token of [
+    'android_sdk_root="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"',
+    'test "$(readlink -f "$ANDROID_SDK_ROOT")" = "$(readlink -f "$ANDROID_HOME")"',
+    'android_sdk_root="$(readlink -f "$android_sdk_root")"',
+    'analyzer="$android_sdk_root/cmdline-tools/latest/bin/apkanalyzer"',
+    'test -x "$analyzer"',
+  ]) {
+    const missing = verifyShopNativeCiContract(
+      workflow.replace(token, 'sdk-analyzer-discovery-omitted'),
+      gradleWrapper,
+    )
+    assert.ok(missing.failures.includes('android_qa_postbuild_analyzer_not_pinned_to_sdk'))
+  }
+  const pathLookup = verifyShopNativeCiContract(
+    workflow.replace(
+      'analyzer="$android_sdk_root/cmdline-tools/latest/bin/apkanalyzer"',
+      'analyzer="$(command -v apkanalyzer)"',
+    ),
+    gradleWrapper,
+  )
+  assert.ok(pathLookup.failures.includes('android_qa_postbuild_analyzer_not_pinned_to_sdk'))
+  assert.ok(pathLookup.failures.includes('android_qa_analyzer_path_lookup_forbidden'))
+})
+
 test('Android QA label parser fails closed for wrong, missing, duplicate, and malformed manifests', async () => {
   const parser = workflow.match(/python3 -c '([^'\n]+)' "\$manifest_xml"/)?.[1]
   assert.ok(parser, 'workflow must retain an executable Android manifest parser')

@@ -23,10 +23,18 @@ function workflowFixture() {
     android: `
       - name: Inspect Android QA identity
         run: |
-          test "$(apkanalyzer manifest application-id app-qa-debug.apk)" = 'dev.supermega.supermega_shop.qa'
+          android_sdk_root="\${ANDROID_SDK_ROOT:-\${ANDROID_HOME:-}}"
+          test -n "$android_sdk_root"
+          if [ -n "\${ANDROID_SDK_ROOT:-}" ] && [ -n "\${ANDROID_HOME:-}" ]; then
+            test "$(readlink -f "$ANDROID_SDK_ROOT")" = "$(readlink -f "$ANDROID_HOME")"
+          fi
+          android_sdk_root="$(readlink -f "$android_sdk_root")"
+          analyzer="$android_sdk_root/cmdline-tools/latest/bin/apkanalyzer"
+          test -x "$analyzer"
+          test "$("$analyzer" manifest application-id app-qa-debug.apk)" = 'dev.supermega.supermega_shop.qa'
           manifest_xml="$(mktemp)"
           trap 'rm -f "$manifest_xml"' EXIT
-          apkanalyzer manifest print app-qa-debug.apk > "$manifest_xml"
+          "$analyzer" manifest print app-qa-debug.apk > "$manifest_xml"
           python3 -c 'import sys, xml.etree.ElementTree as ET; apps = ET.parse(sys.argv[1]).getroot().findall("application"); valid = len(apps) == 1 and apps[0].get("{http://schemas.android.com/apk/res/android}label") == "Shop QA"; sys.exit(None if valid else "shop_android_qa_label_mismatch")' "$manifest_xml"
           rm -f "$manifest_xml"
           trap - EXIT`,
@@ -369,6 +377,10 @@ test('exact platform identity and artifact contracts cannot be replaced by loose
   )
 
   for (const token of [
+    'android_sdk_root="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"',
+    'test "$(readlink -f "$ANDROID_SDK_ROOT")" = "$(readlink -f "$ANDROID_HOME")"',
+    'analyzer="$android_sdk_root/cmdline-tools/latest/bin/apkanalyzer"',
+    'test -x "$analyzer"',
     'manifest application-id app-qa-debug.apk',
     'xml.etree.ElementTree',
     'sys.exit(None if valid else "shop_android_qa_label_mismatch")',

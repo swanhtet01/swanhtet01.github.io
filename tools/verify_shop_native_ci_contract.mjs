@@ -195,6 +195,11 @@ export function verifyShopNativeCiContract(source, gradleWrapperSource = '') {
     ['name: synthetic-qa-promotion-ineligible-${{ github.sha }}-sha-256-android', 'android_qa_artifact_not_bound_to_source_or_promotion_state'],
     ['name: synthetic-qa-promotion-ineligible-${{ github.sha }}-sha-256-ios', 'ios_qa_artifact_not_bound_to_source_or_promotion_state'],
     ['name: synthetic-qa-promotion-ineligible-${{ github.sha }}-sha-256-windows', 'windows_qa_artifact_not_bound_to_source_or_promotion_state'],
+    ['android_sdk_root="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"', 'android_qa_postbuild_analyzer_not_pinned_to_sdk'],
+    ['test "$(readlink -f "$ANDROID_SDK_ROOT")" = "$(readlink -f "$ANDROID_HOME")"', 'android_qa_postbuild_analyzer_not_pinned_to_sdk'],
+    ['android_sdk_root="$(readlink -f "$android_sdk_root")"', 'android_qa_postbuild_analyzer_not_pinned_to_sdk'],
+    ['analyzer="$android_sdk_root/cmdline-tools/latest/bin/apkanalyzer"', 'android_qa_postbuild_analyzer_not_pinned_to_sdk'],
+    ['test -x "$analyzer"', 'android_qa_postbuild_analyzer_not_pinned_to_sdk'],
     ["manifest application-id app-qa-debug.apk)\" = 'dev.supermega.supermega_shop.qa'", 'android_qa_postbuild_identity_not_inspected'],
     ['xml.etree.ElementTree', 'android_qa_postbuild_label_not_structurally_inspected'],
     ['findall("application")', 'android_qa_postbuild_label_not_structurally_inspected'],
@@ -208,6 +213,10 @@ export function verifyShopNativeCiContract(source, gradleWrapperSource = '') {
     ['"$digest  $artifact" | Set-Content -LiteralPath $checksumPath -Encoding ascii -NoNewline', 'windows_qa_canonical_checksum_not_recorded'],
     ["if ($recorded -cne $expected)", 'windows_qa_canonical_checksum_not_verified'],
   ]) requireToken(source, token, failure, failures)
+
+  if (source.includes('command -v apkanalyzer')) {
+    failures.push('android_qa_analyzer_path_lookup_forbidden')
+  }
 
   for (const property of [
     'SHOP_ANDROID_KEYSTORE_PATH',

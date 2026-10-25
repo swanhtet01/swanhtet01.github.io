@@ -304,8 +304,14 @@ jobs:
       - name: Inspect Android QA identity
         working-directory: ${{ github.workspace }}
         run: |
-          analyzer="$(command -v apkanalyzer)"
-          test -n "$analyzer"
+          android_sdk_root="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+          test -n "$android_sdk_root"
+          if [ -n "${ANDROID_SDK_ROOT:-}" ] && [ -n "${ANDROID_HOME:-}" ]; then
+            test "$(readlink -f "$ANDROID_SDK_ROOT")" = "$(readlink -f "$ANDROID_HOME")"
+          fi
+          android_sdk_root="$(readlink -f "$android_sdk_root")"
+          analyzer="$android_sdk_root/cmdline-tools/latest/bin/apkanalyzer"
+          test -x "$analyzer"
           test "$("$analyzer" manifest application-id app-qa-debug.apk)" = 'dev.supermega.supermega_shop.qa'
           manifest_xml="$(mktemp)"
           trap 'rm -f "$manifest_xml"' EXIT
