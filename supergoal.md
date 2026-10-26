@@ -70,12 +70,14 @@ not evidence of current authority.
 
 The offline remote-host preflight additionally binds the exact retained
 source/run/artifact/archive/APK identities and fails closed on missing native
-capabilities. Its current retained-artifact result proves that provider access
+capabilities. It labels host/provider input as reported rather than verified
+and never grants run authority. The retained handoff shows that provider access
 alone is insufficient: encrypted restore and the scoped synthetic-evidence
 export path are unavailable in that APK. The next eligible source outcome is a
 reviewed exact-head QA successor implementing those existing isolation-plan
-contracts without enabling general external file access. Only then may a
-verified remote host proceed to the complete acceptance run.
+contracts without enabling general external file access, plus a new reviewed
+capability-aware handoff contract. Only separately verified provider/host
+evidence may then permit the complete acceptance run.
 
 This is digital internal verification only. It does not prove physical
 scanner/printer compatibility, production signing, hosted account, live

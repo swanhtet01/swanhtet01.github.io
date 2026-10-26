@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
 import { createHash } from 'node:crypto'
-import { readFile } from 'node:fs/promises'
-import { resolve } from 'node:path'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { validateShopAndroidQaHandoff } from './prepare_shop_android_qa_handoff.mjs'
@@ -83,13 +83,15 @@ function hasBlockedCapability(packet, id) {
     && packet.blockedCapabilities.some((entry) => entry?.id === id && entry.status === 'BLOCKED')
 }
 
-export function assessRemoteAndroidQaPreflight(input = {}, artifactPacket = {}) {
+export function assessRemoteAndroidQaPreflight(
+  input = {},
+  artifactPacket = {},
+  { nowMillis = Date.now() } = {},
+) {
   const failures = []
   let verifiedPacket = null
   try {
-    verifiedPacket = validateShopAndroidQaHandoff(artifactPacket, {
-      nowMillis: Date.parse(input.observedAt || '') || Date.now(),
-    })
+    verifiedPacket = validateShopAndroidQaHandoff(artifactPacket, { nowMillis })
   } catch {
     addFailure(failures, 'artifact_handoff_invalid')
   }
@@ -118,8 +120,19 @@ export function assessRemoteAndroidQaPreflight(input = {}, artifactPacket = {}) 
   if (!Number.isInteger(host.freeDiskMiB) || host.freeDiskMiB < MIN_FREE_DISK_MIB) {
     addFailure(failures, 'host_disk_insufficient')
   }
-  if (host.observationSource !== 'read_only_remote_host_preflight') {
-    addFailure(failures, 'host_observation_untrusted')
+  if (host.observationSource !== 'planned_fixture'
+    && host.observationSource !== 'reported_remote_host_preflight') {
+    addFailure(failures, 'host_observation_source_invalid')
+  }
+
+  const provider = input.provider || {}
+  if (provider.accountAccessVerified !== true
+    || provider.projectVerified !== true
+    || provider.billingVerified !== true
+    || provider.quotaVerified !== true
+    || provider.orgPolicyVerified !== true
+    || provider.provisioningAuthorized !== true) {
+    addFailure(failures, 'provider_prerequisites_unverified')
   }
 
   const network = input.network || {}
@@ -212,13 +225,19 @@ export function assessRemoteAndroidQaPreflight(input = {}, artifactPacket = {}) 
   const observedAtMillis = Date.parse(input.observedAt || '')
   if (!Number.isFinite(observedAtMillis)) addFailure(failures, 'observed_at_invalid')
 
+  // A dependency-free packet can validate reported planning input, but cannot
+  // authenticate provider access or host observations. This v1 contract never
+  // authorizes or labels a remote run READY.
+  addFailure(failures, 'external_remote_observation_required')
+
   const body = {
     contract: REMOTE_ANDROID_QA_PREFLIGHT_CONTRACT,
     digestScope: 'utf8_compact_json_without_digest',
     observedAt: input.observedAt || null,
     mode: 'dry_run',
-    ok: failures.length === 0,
-    status: failures.length ? 'BLOCKED' : 'READY_FOR_SEPARATELY_AUTHORIZED_REMOTE_RUN',
+    evidenceLevel: 'caller_reported_offline_plan',
+    ok: false,
+    status: 'BLOCKED_OFFLINE_PLAN',
     failures,
     artifact: verifiedPacket ? {
       handoffDigest: verifiedPacket.digest,
@@ -239,20 +258,29 @@ export function assessRemoteAndroidQaPreflight(input = {}, artifactPacket = {}) 
       provider: host.provider || null,
       machineType: host.machineType || null,
       architecture: host.architecture || null,
-      kvmVerified: host.nestedVirtualization === true && host.vmxCount > 0
+      reportedKvmEligible: host.nestedVirtualization === true && host.vmxCount > 0
         && host.devKvmPresent === true && host.devKvmUsable === true,
       cpuCount: host.cpuCount ?? null,
       totalMemoryMiB: host.totalMemoryMiB ?? null,
       freeDiskMiB: host.freeDiskMiB ?? null,
     },
     network: {
-      privateLoopbackOnly: !failures.includes('network_not_private_loopback')
+      reportedPrivateLoopbackOnly: !failures.includes('network_not_private_loopback')
         && !failures.includes('adb_remote_mode_forbidden'),
       serviceAccountAttached: network.serviceAccountAttached ?? null,
       cloudApiScopeCount: Array.isArray(network.cloudApiScopes)
         ? network.cloudApiScopes.length : null,
       credentialsPresent: network.credentialFilesPresent ?? null,
       productionSecretsPresent: network.productionSecretsPresent ?? null,
+    },
+    provider: {
+      reportedPrerequisitesComplete: provider.accountAccessVerified === true
+        && provider.projectVerified === true
+        && provider.billingVerified === true
+        && provider.quotaVerified === true
+        && provider.orgPolicyVerified === true
+        && provider.provisioningAuthorized === true,
+      authenticatedByThisPacket: false,
     },
     session: {
       maxRunSeconds: session.maxRunSeconds ?? null,
@@ -294,6 +322,7 @@ export function validateRemoteAndroidQaPreflight(packet) {
   if (packetDigest !== digest(body)) throw new Error('remote_android_qa_preflight_digest_invalid')
   if (packet.contract !== REMOTE_ANDROID_QA_PREFLIGHT_CONTRACT
     || packet.mode !== 'dry_run'
+    || packet.evidenceLevel !== 'caller_reported_offline_plan'
     || !Array.isArray(packet.failures)
     || !Array.isArray(packet.steps)
     || packet.steps.length !== REQUIRED_STEPS.length
@@ -312,11 +341,11 @@ export function validateRemoteAndroidQaPreflight(packet) {
     || packet.claimBoundary?.productionReady !== false) {
     throw new Error('remote_android_qa_preflight_contract_invalid')
   }
-  if (packet.ok === true && (packet.status !== 'READY_FOR_SEPARATELY_AUTHORIZED_REMOTE_RUN'
-    || packet.failures.length !== 0)) {
-    throw new Error('remote_android_qa_preflight_ready_state_invalid')
-  }
-  if (packet.ok === false && (packet.status !== 'BLOCKED' || packet.failures.length === 0)) {
+  if (packet.ok !== false
+    || packet.status !== 'BLOCKED_OFFLINE_PLAN'
+    || packet.failures.length === 0
+    || !packet.failures.includes('external_remote_observation_required')
+    || packet.provider?.authenticatedByThisPacket !== false) {
     throw new Error('remote_android_qa_preflight_blocked_state_invalid')
   }
   return packet
@@ -348,7 +377,15 @@ export function sampleRemoteAndroidQaPreflightInput(artifactPacket, overrides = 
       cpuCount: 4,
       totalMemoryMiB: 16384,
       freeDiskMiB: 40960,
-      observationSource: 'read_only_remote_host_preflight',
+      observationSource: 'planned_fixture',
+    },
+    provider: {
+      accountAccessVerified: true,
+      projectVerified: true,
+      billingVerified: true,
+      quotaVerified: true,
+      orgPolicyVerified: true,
+      provisioningAuthorized: true,
     },
     network: {
       adbHost: '127.0.0.1',
@@ -405,6 +442,7 @@ export function sampleRemoteAndroidQaPreflightInput(artifactPacket, overrides = 
     ...overrides,
     expectedArtifact: { ...base.expectedArtifact, ...(overrides.expectedArtifact || {}) },
     host: { ...base.host, ...(overrides.host || {}) },
+    provider: { ...base.provider, ...(overrides.provider || {}) },
     network: { ...base.network, ...(overrides.network || {}) },
     testData: { ...base.testData, ...(overrides.testData || {}) },
     session: { ...base.session, ...(overrides.session || {}) },
@@ -413,11 +451,18 @@ export function sampleRemoteAndroidQaPreflightInput(artifactPacket, overrides = 
 }
 
 function parseArgs(argv) {
-  const args = { input: null, artifactPacket: null, selfTest: false, dryRun: false }
+  const args = {
+    input: null,
+    artifactPacket: null,
+    output: null,
+    selfTest: false,
+    dryRun: false,
+  }
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index]
     if (arg === '--input') args.input = argv[++index]
     else if (arg === '--artifact-packet') args.artifactPacket = argv[++index]
+    else if (arg === '--output') args.output = argv[++index]
     else if (arg === '--dry-run') args.dryRun = true
     else if (arg === '--self-test') args.selfTest = true
     else throw new Error(`remote_android_qa_preflight_unknown_arg:${arg}`)
@@ -446,6 +491,14 @@ async function main() {
   const packet = validateRemoteAndroidQaPreflight(
     assessRemoteAndroidQaPreflight(input, artifactPacket),
   )
+  if (args.output) {
+    const output = resolve(args.output)
+    await mkdir(dirname(output), { recursive: true })
+    await writeFile(output, `${JSON.stringify(packet, null, 2)}\n`, {
+      encoding: 'utf8',
+      flag: 'wx',
+    })
+  }
   console.log(JSON.stringify(packet, null, 2))
   if (!packet.ok) process.exitCode = 1
 }

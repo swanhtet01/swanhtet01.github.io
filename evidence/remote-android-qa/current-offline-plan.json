@@ -1,0 +1,100 @@
+{
+  "mode": "dry_run",
+  "observedAt": "2026-10-26T18:00:00.000Z",
+  "expectedArtifact": {
+    "headSha": "6bf59b49c6607f411953a19aa90d64ca89eb522e",
+    "sourceSha": "0a7fb8e4c01741a1195b6f2a586d43a1f0e3af6a",
+    "mergeSha": "0a7fb8e4c01741a1195b6f2a586d43a1f0e3af6a",
+    "nativeTree": "3cbfc2038bef56d889fa0ccdef1d266783e0fcb8",
+    "runId": "40221959431",
+    "artifactId": "12609717130",
+    "archiveSha256": "5dcc1a74167c13431550d2963b9b5a4b00b67a2ba8c07d4e41d573d864e6c611",
+    "apkSha256": "d61170603382e96fda064fa68f4ec4db59b251795c26e1dc2ed3d835ffe5755b"
+  },
+  "host": {
+    "provider": "gcp",
+    "machineType": "n2-standard-4",
+    "architecture": "x86_64",
+    "nestedVirtualization": true,
+    "vmxCount": 4,
+    "devKvmPresent": true,
+    "devKvmUsable": true,
+    "cpuCount": 4,
+    "totalMemoryMiB": 16384,
+    "freeDiskMiB": 40960,
+    "observationSource": "planned_fixture"
+  },
+  "provider": {
+    "accountAccessVerified": false,
+    "projectVerified": false,
+    "billingVerified": false,
+    "quotaVerified": false,
+    "orgPolicyVerified": false,
+    "provisioningAuthorized": false
+  },
+  "network": {
+    "adbHost": "127.0.0.1",
+    "emulatorConsoleHost": "127.0.0.1",
+    "grpcHost": "127.0.0.1",
+    "iapSshOnly": true,
+    "publicInboundPorts": [],
+    "adbTcpipEnabled": false,
+    "adbListenAll": false,
+    "serviceAccountAttached": false,
+    "cloudApiScopes": [],
+    "productionSecretsPresent": false,
+    "credentialFilesPresent": false,
+    "providerAccessFromApp": false
+  },
+  "testData": {
+    "classification": "synthetic",
+    "fictionalStoreOnly": true,
+    "containsPersonalData": false,
+    "containsProductionIdentifiers": false,
+    "containsWalletOrProviderIdentifiers": false,
+    "networkProviderCallsEnabled": false
+  },
+  "session": {
+    "maxRunSeconds": 21600,
+    "terminationAction": "STOP",
+    "automaticRestart": false,
+    "automaticDelete": false,
+    "deletionAuthorized": false,
+    "budgetUsd": 15,
+    "estimatedComputeUsd": 4.15,
+    "estimatedRetainedDailyUsd": 0.25,
+    "retentionReviewHours": 24
+  },
+  "evidence": {
+    "exportBeforeStop": true,
+    "redacted": true,
+    "containsCredentialValues": false,
+    "containsCustomerData": false,
+    "privateDestinationConfirmed": true,
+    "hashManifestRequired": true,
+    "retainOriginalArtifactUnchanged": true,
+    "required": [
+      "artifact_identity",
+      "host_kvm_resources",
+      "network_loopback_boundary",
+      "scanner_key_input",
+      "sale_and_stock_effects",
+      "receipt_capture_and_reprint",
+      "restart_reopen",
+      "encrypted_restore",
+      "evidence_hash_manifest",
+      "runtime_stop_and_retained_costs"
+    ]
+  },
+  "steps": [
+    { "id": "artifact_identity", "instruction": "Verify the retained archive, APK, source, run, tree, package and debug-signing boundary before launch.", "required": true, "status": "PLANNED" },
+    { "id": "host_preflight", "instruction": "Verify x86_64, nested KVM, CPU, memory, disk, provider stop and private-loopback boundaries.", "required": true, "status": "PLANNED" },
+    { "id": "scanner_key_input", "instruction": "Enter a leading-zero synthetic barcode as keyboard input and record intentional repeated-scan behavior.", "required": true, "status": "PLANNED" },
+    { "id": "sale_commit", "instruction": "Reject short cash, commit exactly one fictional cash sale and record tender, change, stock and immutable receipt identity.", "required": true, "status": "PLANNED" },
+    { "id": "receipt_capture", "instruction": "Capture simulated 58/80 mm output and reprint the same receipt without another sale, payment or stock effect.", "required": true, "status": "PLANNED" },
+    { "id": "restart_reopen", "instruction": "Force-stop and reopen the QA package, then verify the same sale, stock, shift and receipt state.", "required": true, "status": "PLANNED" },
+    { "id": "encrypted_restore", "instruction": "Export through the scoped synthetic-evidence path, restore into a fresh matching QA profile and verify no duplicate effect.", "required": true, "status": "PLANNED" },
+    { "id": "evidence_export", "instruction": "Export only redacted hashes, manifests, screenshots, simulated receipts and logs before stopping the VM.", "required": true, "status": "PLANNED" },
+    { "id": "stop_runtime", "instruction": "Stop the VM within six hours and inventory retained disk, IP and network cost pending a separate disposition decision.", "required": true, "status": "PLANNED" }
+  ]
+}

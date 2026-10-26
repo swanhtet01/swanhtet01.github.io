@@ -118,18 +118,23 @@ encrypted restore, evidence export and provider stop are distinct immutable
 steps.
 
 The harness imports and validates the reviewed native artifact handoff instead
-of trusting caller strings. It contains no command-execution, networking or
-provider SDK import and cannot provision, connect, download an SDK, start an
-emulator or run a database. Missing prerequisites produce `BLOCKED` and a
-nonzero exit.
+of trusting caller artifact strings. It contains no command-execution,
+networking or provider SDK import and cannot provision, connect, download an
+SDK, start an emulator or run a database. Host and provider fields remain
+explicitly labelled caller-reported planning input; an unkeyed packet digest is
+integrity metadata, not authentication or authority. Version 1 always produces
+`BLOCKED_OFFLINE_PLAN` and requires separately verified provider/host evidence.
 
-Current retained-artifact result: every non-artifact boundary passes the dry
-run, but artifact `12609717130` remains blocked for
+The exact retained packet committed under
+`evidence/remote-android-qa/retained-artifact-handoff.json` remains blocked for
 `artifact_encrypted_restore_unavailable` and
 `artifact_scoped_evidence_export_unavailable`. Provider access alone cannot
-close these product-source gaps. A reviewed successor artifact must implement
-the scoped synthetic-evidence saver/loader and encrypted restore contract before
-this full acceptance run can become eligible.
+close these product-source gaps. The current handoff contract deliberately
+requires both capabilities to remain blocked, so a future artifact cannot be
+relabeled as ready under version 1. A reviewed successor must implement the
+scoped synthetic-evidence saver/loader and encrypted restore behavior **and**
+introduce a new capability-aware handoff contract before the complete remote
+acceptance run can become eligible.
 
 ### 1. Controller preflight
 

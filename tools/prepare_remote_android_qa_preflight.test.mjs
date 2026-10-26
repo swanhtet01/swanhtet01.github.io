@@ -38,9 +38,12 @@ test('validates every non-artifact remote preflight boundary and stays blocked o
   assert.deepEqual(result.failures, [
     'artifact_encrypted_restore_unavailable',
     'artifact_scoped_evidence_export_unavailable',
+    'external_remote_observation_required',
   ])
-  assert.equal(result.host.kvmVerified, true)
-  assert.equal(result.network.privateLoopbackOnly, true)
+  assert.equal(result.host.reportedKvmEligible, true)
+  assert.equal(result.network.reportedPrivateLoopbackOnly, true)
+  assert.equal(result.provider.reportedPrerequisitesComplete, true)
+  assert.equal(result.provider.authenticatedByThisPacket, false)
   assert.equal(result.claimBoundary.cloudCommandsExecuted, false)
   assert.equal(result.claimBoundary.emulatorExecuted, false)
   assert.equal(result.claimBoundary.sdkDownloaded, false)
@@ -86,7 +89,7 @@ test('rejects missing KVM and insufficient CPU memory or disk independently', ()
     [{ cpuCount: 3 }, 'host_cpu_insufficient'],
     [{ totalMemoryMiB: 8191 }, 'host_memory_insufficient'],
     [{ freeDiskMiB: 20479 }, 'host_disk_insufficient'],
-    [{ observationSource: 'caller_claim' }, 'host_observation_untrusted'],
+    [{ observationSource: 'caller_claim' }, 'host_observation_source_invalid'],
   ]) {
     const result = assessRemoteAndroidQaPreflight(
       sampleRemoteAndroidQaPreflightInput(handoff, { host }), handoff,
@@ -247,6 +250,36 @@ test('requires explicit dry-run mode and a valid observation timestamp', () => {
   ).failures.includes('observed_at_invalid'))
 })
 
+test('records but never authenticates reported provider prerequisites', () => {
+  const handoff = artifactPacket()
+  for (const provider of [
+    { accountAccessVerified: false },
+    { projectVerified: false },
+    { billingVerified: false },
+    { quotaVerified: false },
+    { orgPolicyVerified: false },
+    { provisioningAuthorized: false },
+  ]) {
+    const result = assessRemoteAndroidQaPreflight(
+      sampleRemoteAndroidQaPreflightInput(handoff, { provider }), handoff,
+    )
+    assert.ok(result.failures.includes('provider_prerequisites_unverified'))
+    assert.equal(result.provider.reportedPrerequisitesComplete, false)
+    assert.equal(result.provider.authenticatedByThisPacket, false)
+  }
+})
+
+test('artifact expiry uses the process clock rather than caller observedAt', () => {
+  const handoff = artifactPacket()
+  const input = sampleRemoteAndroidQaPreflightInput(handoff, {
+    observedAt: '2000-01-01T00:00:00.000Z',
+  })
+  const result = assessRemoteAndroidQaPreflight(input, handoff, {
+    nowMillis: Date.parse('2100-01-01T00:00:00.000Z'),
+  })
+  assert.ok(result.failures.includes('artifact_handoff_invalid'))
+})
+
 test('packet validation rejects post-hoc side-effect or readiness claims', () => {
   const handoff = artifactPacket()
   const packet = assessRemoteAndroidQaPreflight(
@@ -263,7 +296,7 @@ test('packet validation rejects post-hoc side-effect or readiness claims', () =>
   const fakeReady = resign({ ...packet, ok: true, status: 'READY_FOR_SEPARATELY_AUTHORIZED_REMOTE_RUN' })
   assert.throws(
     () => validateRemoteAndroidQaPreflight(fakeReady),
-    /remote_android_qa_preflight_ready_state_invalid/,
+    /remote_android_qa_preflight_blocked_state_invalid/,
   )
 })
 
