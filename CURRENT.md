@@ -29,8 +29,9 @@ No local demo, passing test, healthy provider, or generated artifact is proof of
 - On that exact local UX tree, Flutter analysis reports no issues and the full
   native suite passes 407 tests with 25 suite-defined skips and zero failures.
   Focused confirmation, cash, startup, slow-printer, and ambiguous-reprint
-  checks pass 5/5. Clear confirmation drains queued draft edits and refuses to
-  clear if the basket changes while its dialog is open. Cash change is shown as
+  checks pass 5/5. Clear confirmation drains queued draft edits, blocks new
+  draft enqueues through confirmed deletion, and refuses to clear if its
+  operation identity changes. Cash change is shown as
   soon as the sale commits, before awaiting printer delivery, then retained in
   the final print-status message. Burmese copy and live-region behavior remain
   source-reviewed rather than device/screen-reader proven; change is transient

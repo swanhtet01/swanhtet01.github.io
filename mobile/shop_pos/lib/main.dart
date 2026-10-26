@@ -835,6 +835,7 @@ class _ShopHomeState extends State<ShopHome> {
         !_checkoutReady ||
         _saving ||
         _cashConfirming ||
+        _clearingDraft ||
         _walletStarting ||
         _pendingWalletCheckout != null ||
         ModalRoute.of(context)?.isCurrent != true) {
@@ -851,6 +852,7 @@ class _ShopHomeState extends State<ShopHome> {
   String? _operationId;
   bool _saving = false;
   bool _cashConfirming = false;
+  bool _clearingDraft = false;
   bool _walletStarting = false;
   bool _checkoutReady = false;
   bool _checkoutLoadFailed = false;
@@ -1144,6 +1146,7 @@ class _ShopHomeState extends State<ShopHome> {
   }
 
   void _queueDraftEdit(Future<void> Function() edit) {
+    if (_clearingDraft) return;
     _draftWrites = _draftWrites.then((_) => edit()).catchError((Object _) {
       if (mounted) {
         _message(
@@ -1865,6 +1868,7 @@ class _ShopHomeState extends State<ShopHome> {
       _checkoutReady &&
       !_saving &&
       !_cashConfirming &&
+      !_clearingDraft &&
       !_walletStarting &&
       _pendingWalletCheckout == null;
 
@@ -2458,6 +2462,7 @@ class _ShopHomeState extends State<ShopHome> {
                           !_checkoutReady ||
                               _walletStarting ||
                               _cashConfirming ||
+                              _clearingDraft ||
                               _saving
                           ? null
                           : () => _holdCurrentSale(refresh: refresh),
@@ -2470,6 +2475,7 @@ class _ShopHomeState extends State<ShopHome> {
                         !_checkoutReady ||
                             _walletStarting ||
                             _cashConfirming ||
+                            _clearingDraft ||
                             _saving ||
                             _pendingWalletCheckout != null
                         ? null
@@ -2760,6 +2766,7 @@ class _ShopHomeState extends State<ShopHome> {
               !_checkoutReady ||
                   _saving ||
                   _cashConfirming ||
+                  _clearingDraft ||
                   _walletStarting ||
                   _pendingWalletCheckout != null
               ? null
@@ -2773,6 +2780,7 @@ class _ShopHomeState extends State<ShopHome> {
               !_checkoutReady ||
                   _saving ||
                   _cashConfirming ||
+                  _clearingDraft ||
                   _walletStarting ||
                   _pendingWalletCheckout != null ||
                   quantity >= item.onHand
@@ -3199,72 +3207,63 @@ class _ShopHomeState extends State<ShopHome> {
     });
   }
 
-  void _discardCounterDraft({StateSetter? refresh}) {
+  Future<void> _confirmDiscardCounterDraft({StateSetter? refresh}) async {
     if (!_checkoutReady ||
         _saving ||
         _walletStarting ||
         _cashConfirming ||
+        _clearingDraft ||
         _pendingWalletCheckout != null) {
       return;
     }
-    _queueDraftEdit(() async {
-      if (_operationId != null) {
-        await widget.database.clearCounterSaleDraft(_operationId!);
-      }
-      _applySavedCart(const {}, null, refresh: refresh);
-    });
-  }
-
-  Future<void> _confirmDiscardCounterDraft({StateSetter? refresh}) async {
-    await _draftWrites;
-    if (!mounted) return;
-    if (_cart.isEmpty ||
-        !_checkoutReady ||
-        _saving ||
-        _walletStarting ||
-        _cashConfirming ||
-        _pendingWalletCheckout != null) {
-      return;
-    }
-    final operationId = _operationId;
-    final cartSnapshot = Map<String, int>.from(_cart);
-    final itemCount = _cart.values.fold<int>(0, (sum, count) => sum + count);
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(
-          shopCopy(
-            widget.myanmar,
-            'Clear current sale?',
-            'လက်ရှိအရောင်းကို ဖျက်မလား။',
-          ),
-        ),
-        content: Text(
-          shopCopy(
-            widget.myanmar,
-            '$itemCount ${itemCount == 1 ? 'item' : 'items'} will be removed from this unfinished sale. Saved sales and stock will not change.',
-            'မပြီးသေးသော ဤအရောင်းမှ ပစ္စည်း ${shopNumber(itemCount, myanmar: true)} ခုကို ဖယ်ရှားပါမည်။ သိမ်းပြီးသောအရောင်းနှင့် လက်ကျန် မပြောင်းပါ။',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: Text(shopCopy(widget.myanmar, 'Keep sale', 'အရောင်းထားရန်')),
-          ),
-          FilledButton(
-            key: const ValueKey('shop-clear-sale-confirm'),
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: Text(
-              shopCopy(widget.myanmar, 'Clear sale', 'အရောင်းဖျက်ရန်'),
+    setState(() => _clearingDraft = true);
+    refresh?.call(() {});
+    try {
+      final settledWrites = _draftWrites;
+      await settledWrites;
+      if (!mounted || !identical(_draftWrites, settledWrites)) return;
+      if (_cart.isEmpty || _operationId == null) return;
+      final operationId = _operationId!;
+      final cartSnapshot = Map<String, int>.from(_cart);
+      final itemCount = _cart.values.fold<int>(0, (sum, count) => sum + count);
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text(
+            shopCopy(
+              widget.myanmar,
+              'Clear current sale?',
+              'လက်ရှိအရောင်းကို ဖျက်မလား။',
             ),
           ),
-        ],
-      ),
-    );
-    if (confirmed == true && mounted) {
-      await _draftWrites;
-      if (!mounted) return;
-      if (_operationId != operationId || !mapEquals(_cart, cartSnapshot)) {
+          content: Text(
+            shopCopy(
+              widget.myanmar,
+              '$itemCount ${itemCount == 1 ? 'item' : 'items'} will be removed from this unfinished sale. Saved sales and stock will not change.',
+              'မပြီးသေးသော ဤအရောင်းမှ ပစ္စည်း ${shopNumber(itemCount, myanmar: true)} ခုကို ဖယ်ရှားပါမည်။ သိမ်းပြီးသောအရောင်းနှင့် လက်ကျန် မပြောင်းပါ။',
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: Text(
+                shopCopy(widget.myanmar, 'Keep sale', 'အရောင်းထားရန်'),
+              ),
+            ),
+            FilledButton(
+              key: const ValueKey('shop-clear-sale-confirm'),
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: Text(
+                shopCopy(widget.myanmar, 'Clear sale', 'အရောင်းဖျက်ရန်'),
+              ),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+      if (!identical(_draftWrites, settledWrites) ||
+          _operationId != operationId ||
+          !mapEquals(_cart, cartSnapshot)) {
         _message(
           shopCopy(
             widget.myanmar,
@@ -3274,8 +3273,24 @@ class _ShopHomeState extends State<ShopHome> {
         );
         return;
       }
-      _discardCounterDraft(refresh: refresh);
-    } else {
+      await widget.database.clearCounterSaleDraft(operationId);
+      if (!mounted) return;
+      _applySavedCart(const {}, null, refresh: refresh);
+    } catch (_) {
+      if (mounted) {
+        _message(
+          shopCopy(
+            widget.myanmar,
+            'Could not clear this sale. The basket is unchanged; try again.',
+            'ဤအရောင်းကို မဖျက်နိုင်ပါ။ အရောင်းစာရင်း မပြောင်းပါ။ ထပ်စမ်းပါ။',
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _clearingDraft = false);
+        refresh?.call(() {});
+      }
       _focusScannerIfReady();
     }
   }

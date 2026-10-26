@@ -4775,6 +4775,11 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Clear current sale?'), findsOneWidget);
       expect(find.textContaining('2 items will be removed'), findsOneWidget);
+      final addOneButton = find.ancestor(
+        of: find.byTooltip('Add one'),
+        matching: find.byType(IconButton),
+      );
+      expect(tester.widget<IconButton>(addOneButton).onPressed, isNull);
       expect(
         find.textContaining('Saved sales and stock will not change.'),
         findsOneWidget,
