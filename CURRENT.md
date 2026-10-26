@@ -1,356 +1,185 @@
 # SuperMega current release truth
 
 - Last verified: 2026-10-26
-- Active objective: verified Shop + account portal delivery; see [`supergoal.md`](supergoal.md)
+- Active objective: verified Shop and account-portal delivery; see
+  [`supergoal.md`](supergoal.md)
 - Scope: Shop, supporting web/infrastructure, accountable operations, and
   entitlement-gated optional packages
 
-This file records volatile facts; it cannot widen scope or authorize release.
-No local demo, passing test, healthy provider, or generated artifact is proof of a live customer system, revenue, production persistence, or autonomous operation.
+This file records volatile facts. It does not authorize publication, provider
+writes, spending, credentials, signing, merge, deployment or production use.
+Historical implementation detail remains in Git history and its source packets;
+it must not override the current facts below.
 
-## 2026-10-26 product-first checkpoint
+## Release and branch identity
 
-- PR #734 remains open and draft at exact remote head
-  `6bf59b49c6607f411953a19aa90d64ca89eb522e`. This local work does not move,
-  merge, or publish that branch.
-- Separate local branch `codex/shop-core-internal-acceptance-20261026` starts
-  from exact `6bf59b49` and adds only a composed native acceptance test at
-  `1c4614ed05388076ac4b53f590526d271cd3f738` / tree
-  `e0129536d978fcfe574747d2b2df51fad963a136`. The reviewed assertion successor
-  is `4f8758ded8e664e9be838dde641d5b456f3d6392` / tree
-  `c8f35ba2c73897e613b5d94df0fd07e4c3631c67`.
-- Separate unpushed branch `codex/shop-core-ux-polish-20261026` builds on the
-  reviewed acceptance work. Its bounded cashier/startup change requires
-  confirmation before clearing an unfinished sale or creating a new local
-  store, focuses cash entry, supports keyboard completion, preserves calculated
-  change in the post-sale status, and treats uncertain reprints as possibly
-  printed so a cashier checks paper before retrying. It changes no sale, stock,
-  payment, backup, or authorization boundary.
-- The latest test/evidence-only successor is
+- PR [#734](https://github.com/swanhtet01/swanhtet01.github.io/pull/734)
+  remains open and draft at remote head
+  `6bf59b49c6607f411953a19aa90d64ca89eb522e`. Nothing in this local branch
+  moves, merges or publishes that PR.
+- The active unpushed source/evidence lane is
+  `codex/shop-core-ux-polish-20261026`. Reviewed product test checkpoint
   `b1e45c7567c751c767c3f7784a028e266b4fab04` / tree
-  `495e5a53d29ea43843cd2b0bc08d0ee39c3f7040`. It adds real Flutter captures
-  for startup, confirmation, blocked recovery, checkout, cash/change,
-  completed sale, and receipts in EN/MY phone/tablet states. It also proves an
-  injected clear-draft database failure leaves basket, sale, stock, payment
-  effects, and outbox unchanged, and that a store pathname appearing during
-  new-Shop confirmation is preserved and blocks opening. Analyzer passes; the
-  full native suite passes 409 tests with 33 suite-defined capture skips and
-  zero failures; the opt-in capture run passes 39/39 and produces 130 non-empty
-  PNGs. Technical Hub Sequence 131 holds the exact sources and representative
-  images. These are synthetic Flutter renders, not installed-device or hardware
-  acceptance.
-- On that exact local UX tree, Flutter analysis reports no issues and the full
-  native suite passes 407 tests with 25 suite-defined skips and zero failures.
-  Focused confirmation, cash, startup, slow-printer, and ambiguous-reprint
-  checks pass 5/5. Clear confirmation drains queued draft edits, blocks new
-  draft enqueues through confirmed deletion, and refuses to clear if its
-  operation identity changes. Cash change is shown as
-  soon as the sale commits, before awaiting printer delivery, then retained in
-  the final print-status message. Burmese copy and live-region behavior remain
-  source-reviewed rather than device/screen-reader proven; change is transient
-  cashier feedback, not durable tender history.
-- The composed file-backed flow passes locally: fictional product and barcode,
-  13,500 MMK cash sale, 6,500 MMK change calculation, immutable receipt,
-  retry without duplicate sale/stock/outbox effects, shift close, SQLite
-  close/reopen, receipt re-render, encrypted backup, restore into a new
-  database, and another no-duplicate retry.
-- A focused ten-test cashier/recovery selection passes, including empty-catalog
-  sale, barcode/search, short-cash rejection, reprint without another sale,
-  shift close, database reopen, encrypted restore, and fresh-install restore.
-  Flutter analysis reports no issues. The exact `4f8758de` source checkpoint's
-  full native suite passes 404 tests with 25 suite-defined skips; those skips
-  do not prove installed-device or physical-hardware acceptance. Independent
-  source review passes after requiring the restored retry to reread stock and
-  recheck sale, stock-movement, and outbox counts.
-- Five direct Flutter widget checks also pass together: insufficient-cash
-  prevention, rapid duplicate cash taps, leading-zero barcode entry,
-  mutation-free saved-sale reprint, and scan cancellation/return navigation.
-  These assertions cover durable sale and stock state where applicable.
-- This is local source/test evidence, not a founder-installable release. The
-  retained Android QA artifact is engineering evidence and is not
-  production-signed; installed restart/restore and physical printer/scanner
-  acceptance remain open.
-- Swan selected digital testing instead of buying or supplying a spare device,
-  and subsequently required hosting, emulator, and agent execution to be
-  remote-only. Ally task `01a178b6-2987-7163-ad15-8e1cec912018` is stopped at
-  its explicit restart boundary: no restart, emulator boot, APK install, or app
-  run is permitted there. V and every other user-local computer are excluded.
-  Simulated scanner input and virtual receipt capture may prove native workflow
-  behavior on a future verified remote emulator, but cannot prove physical
-  hardware.
-- The emulator handoff artifact is GitHub Actions artifact `12609717130`, file
-  `app-qa-debug.apk`, 195,800,696 bytes, SHA-256
-  `d61170603382e96fda064fa68f4ec4db59b251795c26e1dc2ed3d835ffe5755b`.
-  It is debug-signed, contains `x86_64`, `arm64-v8a`, and `armeabi-v7a`, and
-  identifies as `dev.supermega.supermega_shop.qa`. Its CI merge/source is
-  `0a7fb8e4c01741a1195b6f2a586d43a1f0e3af6a` and native tree is
-  `3cbfc2038bef56d889fa0ccdef1d266783e0fcb8`. It does not contain this local
-  acceptance test or any newer unpushed source.
-- Read-only host discovery found no immediately usable alternative emulator
-  host. This Cloud environment has 5 vCPUs, about 10 GiB available memory and
-  no display, but `/dev/kvm` is absent, only about 5 GiB disk is free, and no
-  Android SDK, emulator or `adb` is installed. Headless operation could avoid a
-  GUI, but missing KVM and disk make this host unsuitable for a responsible
-  official x86_64 AVD setup. The environment exposes no configured cloud/VPS
-  identity. Historical AWS/Bangkok/Tailscale documents do not prove current
-  authorization, reachability, nested virtualization or spare capacity; V is
-  explicitly unauthorized and must not be used.
-- Smallest suitable remote host requirement: Linux x86_64 with accessible
-  `/dev/kvm`, at least 4 vCPUs, 8 GiB RAM and 20 GiB free disk, plus permission
-  to accept the official Android SDK license and install only command-line
-  tools, platform-tools, emulator and one fresh x86_64 system image. No host is
-  approved merely because an old config, secret, or hostname mentions it; no
-  capacity may be purchased or provisioned without a bounded decision.
-- Read-only remote-host research identified one practical short-lived option:
-  GCP `n2-standard-4` on Intel, 4 vCPU, 16 GiB RAM, nested KVM, and a 60 GiB
-  balanced disk. The current estimate for a 20-hour internal test is about
-  US$4.15 if resources are removed afterward, or about US$9.98 with the disk
-  retained for a month; tax, egress, and API-related charges can vary. A
-  maximum US$15 remote pilot budget is owner-approved. The authorized Google
-  identity, project, billing relationship, roles, quota and organization policy
-  are not yet verified, so provisioning remains blocked. No project, VM, disk,
-  credential, billing link, IAM grant or billable resource was created. The
-  prepared, non-executed bootstrap and acceptance checklist is
-  [`docs/REMOTE-ANDROID-QA-PILOT.md`](docs/REMOTE-ANDROID-QA-PILOT.md); it uses
-  a six-hour automatic STOP, no VM service account, private ADB and synthetic-
-  only data. STOP bounds compute runtime but retains billable resources, so it
-  is not a hard dollar cap. The checklist requires a 24-hour cost review and a
-  separate exact deletion or bounded-retention decision after evidence export;
-  the pilot budget is not deletion authority. Hetzner Cloud does not allow
-  nested virtualization; its
-  dedicated AX41-class bare-metal option (about EUR59/month including IPv4,
-  before VAT) is a possible longer-term route but is not selected.
-- The dependency-free remote preflight at
-  `tools/prepare_remote_android_qa_preflight.mjs` now validates exact retained
-  source/run/artifact/archive/APK identity, KVM and capacity observations,
-  private loopback ADB, absence of VM credentials/provider scopes, synthetic
-  data, six-hour STOP, budget/retention and redacted evidence boundaries. Its
-  14 tests plus the 16 reviewed artifact-handoff tests pass. The actual retained
-  handoff dry run fails closed only on two truthful artifact capabilities:
-  encrypted restore and scoped synthetic-evidence export are unavailable. No
-  cloud command, emulator, database, SDK download or provider write ran. A new
-  reviewed exact-head QA artifact containing those two capabilities is required
-  before the full remote acceptance journey, independent of provider access.
-- App CI at `6bf59b49` still fails first on stale PostgreSQL evidence; later App
-  checks did not run. GitGuardian also remains failed on two historical
-  synthetic fixture findings. Native, Dependency Security, and Kernel checks
-  passed. Local fixture hygiene is reviewed but has not resolved the provider
-  check.
-- The exact-source synthetic PostgreSQL-17 rehearsal was approved for the Local
-  task and handed back, but its task remained technically inaccessible. The
-  later remote-only requirement now pauses that local execution as well. Its
-  approval does not transfer to a remote host or another source build; do not
-  reroute or repeat it elsewhere.
-- Sanitized account inspection confirms an existing company Google Workspace
-  collaboration capability, but no verified Google Cloud project, billing
-  relationship, credits, Compute Engine quota or provider IAM access. Generic
-  repository and credential inventories are not installed capabilities. The
-  active stack remains Flutter/Drift, GitHub Actions, Vercel, Supabase and
-  company Workspace; named Coolify/PostHog/design/operations/automation/AI
-  tools remain deferred behind the adoption contract in `supergoal.md`.
+  `495e5a53d29ea43843cd2b0bc08d0ee39c3f7040` adds no production behavior.
+- Remote-QA source preparation is retained locally through
+  `9e20a088c223a9edada6c7a16ebf32866f9ca11f` / tree
+  `ba48bd1020045d35fb73cba17163d7f09585ad18`. It integrates the reviewed
+  Android artifact handoff verifier and an advisory offline remote-host
+  preflight. It remains unpushed and is not run authority.
+- Separate reviewed member/owner, correction/recovery, hosted-collector,
+  download, account and CSV checkpoints are preserved on their own branches.
+  They are not in PR #734 or this Shop-core candidate unless Git ancestry says
+  otherwise. Never add their test counts together or merge them blindly.
 
-This section supersedes older candidate-head statements below where they
-conflict. Historical checkpoints remain evidence and are not silently relabeled
-as the current PR head.
+## What a shop user can do in tested source
 
-## Retained browser compatibility invariants
+The composed file-backed native test proves one fictional product and
+leading-zero barcode, cash tender and change, exactly one durable sale and stock
+movement, immutable receipt render/reprint, shift close, SQLite close/reopen,
+encrypted backup, restore into a new database and retry without duplicate sale,
+stock or outbox effects.
 
-These statements protect data, routes, and safety boundaries in the parked
-browser platform. They do not add those products to the active native Shop
-launch scope or make the older portfolio a current release plan.
+Direct Flutter widget tests cover short-cash rejection, rapid duplicate cash
+taps, barcode/search, scan cancellation, reprint without a second sale,
+clear-sale confirmation and database failure, startup path collision, keyboard
+focus and return navigation. The latest test/evidence checkpoint reports:
 
-Portfolio metadata snapshot — Last confirmed: 2026-08-21
+- Flutter analyzer: PASS;
+- full native suite: 409 passed, 33 suite-defined capture skips, 0 failed;
+- focused new regressions: 2/2 passed;
+- opt-in render capture: 39/39 passed, 130 non-empty PNGs;
+- independent source/image review: PASS for the bounded checkpoint.
 
-The historical four-product browser registry is compatibility evidence, not
-current scope. Shop is core; Plant is outside SuperMega.dev; Website/Sites and
-Ecommerce are optional packages gated by server entitlements and acceptance.
-AI assistance is internal shared capability, not another product.
+Technical Hub Sequence 131 contains representative EN/MY Flutter renders for
+startup, confirmation, blocked recovery, checkout, cash/change, completed sale
+and synthetic receipts. They are rendered-widget evidence, not installed-device
+or physical-hardware screenshots.
 
-The retained compatibility routes are `/shop/`, `/plant/`, `/website/`, and `/ecommerce/`. `/agents/` — compatibility-only path to HQ; it is not a product route or separate workspace. `commerce` and `production` remain stable internal runtime identifiers while the retained browser records exist. Ecommerce is not a second Shop back office.
+## Retained Android QA artifact
 
-The default app remains an isolated browser-local trial. Managed mode remains locked behind authenticated tenant identity and the existing security/readiness gates. External sends, payments, publishing, access changes, deployment, and production writes remain owner-approved.
+GitHub Actions artifact `12609717130` contains `app-qa-debug.apk`:
 
-Add provider-backed AI, payment, shipping, tax, publishing, and broader marketing only after their product gate has measured pilot evidence.
+- bytes: `195800696`;
+- APK SHA-256:
+  `d61170603382e96fda064fa68f4ec4db59b251795c26e1dc2ed3d835ffe5755b`;
+- original archive SHA-256:
+  `5dcc1a74167c13431550d2963b9b5a4b00b67a2ba8c07d4e41d573d864e6c611`;
+- package: `dev.supermega.supermega_shop.qa`;
+- CI source/merge: `0a7fb8e4c01741a1195b6f2a586d43a1f0e3af6a`;
+- native tree: `3cbfc2038bef56d889fa0ccdef1d266783e0fcb8`;
+- signing: Android debug, not production-signed;
+- ABIs: x86_64, arm64-v8a and armeabi-v7a;
+- promotion eligibility: false.
 
-## Internal company system and R&D
+The artifact predates all newer unpushed local source. It cannot be described as
+containing the later acceptance, UX, correction, member or account work.
 
-`hq/portfolio.json` remains the machine-readable compatibility registry for the
-parked browser platform. Resource intelligence stays inside HQ until an active,
-owner-approved product outcome and gate require it.
+The exact retained handoff packet is
+[`evidence/remote-android-qa/retained-artifact-handoff.json`](evidence/remote-android-qa/retained-artifact-handoff.json).
+Its unkeyed digest provides integrity checking, not provider or human authority.
 
-## Candidate
+## Remote-only Android pilot
 
-| Item | Current fact |
-| --- | --- |
-| Integration PR | [#734 — Unify Shop app first-use and public launch candidate](https://github.com/swanhtet01/swanhtet01.github.io/pull/734) |
-| State | Open draft. Remote head remains `526f3616`; reviewed Cloud source checkpoint `03df1838` is local-only and has no exact-head CI or preview. Review, preview, signing, installed/hardware, and merchant gates remain open |
-| Integration branch | `codex/shop-public-main-port-20261022` |
-| Immutable reviewed source checkpoint | `03df1838b7dcc96d06a0b8aec5f07c736c80a6a1` / tree `47f34172529fae384ecafcdf0d0d8c1e96cf8b3c`; clean, unpushed, based on `526f3616` |
-| Documentation successor | This `CURRENT.md` update follows `03df1838`; it records evidence only and does not make the source checkpoint CI- or release-ready |
-| Native capture state | Current native tree `f8b146d0…` differs from gallery manifest tree `5417a23d…`; strict provenance fails closed until exact-source captures are regenerated and reviewed |
-| PostgreSQL evidence checkpoint | `b1ee4cc2884dda1ab753e8d2e4ecc6c6216a36ef` / tree `6996864df311db4748fcca3ec75c030dd0fcab3e` |
-| Inactive promotion envelope | PR #730; use only after #734 passes and is explicitly promoted |
-| Paused source set | PR #751 at `945ce70f792fd856c767f64e6b3e45e4d8f4ee3e`; review and port bounded changes, never merge wholesale |
-| UI lane | #749 integrated and frozen for acceptance |
-| Parked lanes | #750 low-stock focus; Connected Orders server/sync work |
+The user requires emulator, hosting and agent execution to remain remote-only.
+Ally, V and other user-local computers must not run this app, emulator,
+PostgreSQL rehearsal or agent workload. The earlier Ally emulator setup remains
+stopped before restart; it is not an eligible host.
 
-The source checkpoint preserves Shop-first presentation, signed correction,
-and fail-closed release contracts. Correction stays unavailable and normal
-selling remains offline. Gallery provenance is presently blocked, not passed.
+The bounded remote plan is one Intel GCP `n2-standard-4` VM, 4 vCPU, 16 GiB,
+60 GiB balanced disk, nested KVM, one AOSP API 35 x86_64 AVD, no Play/account,
+private-loopback ADB and a six-hour provider STOP. The owner approved up to
+US$15 usage, but Google Cloud account/project, billing relationship, quota,
+organization policy and IAM access remain unverified. No project, VM, disk,
+IP, network, API, credential, IAM grant or billable resource was created.
 
-Included: Shop QA/export/backup, account hub and shared login/auth. Excluded:
-Plant, blocked billing-projection WIP, provider activation, and new agent
-frameworks. Website/Ecommerce remain entitlement-gated optional capabilities,
-not default launch products.
+STOP bounds compute runtime but can leave disk/IP/network charges. It is not a
+hard dollar cap and does not authorize deletion. The runbook requires evidence
+export before stop, a 24-hour retained-cost review, and a separate exact
+deletion or bounded-retention decision. See
+[`docs/REMOTE-ANDROID-QA-PILOT.md`](docs/REMOTE-ANDROID-QA-PILOT.md).
 
-## Exact evidence
+The dependency-free preflight at
+`tools/prepare_remote_android_qa_preflight.mjs` validates exact artifact
+identity, reported KVM/resources, private-ADB configuration, absence of VM
+credentials/scopes/secrets, synthetic data, runtime/budget and evidence
+inventory. It imports the reviewed artifact handoff and uses the process clock
+for expiry. Version 1 is deliberately advisory:
 
-- At `03df1838`, the app security contract passes 105 checks; account routes
-  pass 84/84, login returns 6/6, rendered synthetic account-hub checks pass
-  10/10 at 390/768/1440 px, billing boundaries pass 4/4, and Ecommerce contact
-  isolation passes 24/24. The walkthrough denies viewer, staff, service and
-  other-tenant reads and exposes no unsigned customer download.
-- Private-trial migration verification previously passed 23 migrations and 136
-  checks in the prepared environment. An independent rerun in the current
-  checkout was blocked by missing `@electric-sql/pglite`; this is a toolchain
-  limitation, not fresh migration evidence or a migration failure.
-- Strict native gallery verification currently fails with
-  `native_shop_gallery_source_tree_drift`. Exact-source native CI, captures,
-  hashes, and manifest review are required before public verification can pass.
-- PR #734 remote head remains `526f3616`. No GitHub App, Native, security, or
-  Kernel run exists for `03df1838`; older green runs are baseline evidence only.
-- The prior one-run PostgreSQL-17 approval at `e217e035` was consumed and failed
-  before producing a canonical pair. No evidence was integrated and no retry is
-  authorized. A later exact product head needs a new one-run decision.
-- The Windows PostgreSQL 17.10 rehearsal remains bound to implementation tree
-  `fad006a…`: 74 checks, 51 files, implementation digest
-  `sha256:0ee244297bb021a71d16c84869b24c412585be2d9a013265ae5055977255dd0f`,
-  receipt digest
-  `sha256:8c3ece4d69c0dd815a14e762fb01602229ab14214acb9147774617bce0d18c72`,
-  and `hostedActivationProven=false`.
-- Older unsigned Android/iPad/Windows artifacts remain engineering evidence,
-  not distributable builds. No signed artifact exists for this source checkpoint.
+- host/provider fields are caller-reported, never authenticated by the packet;
+- status is always `BLOCKED_OFFLINE_PLAN`, never READY;
+- no command-execution, networking or provider SDK is imported;
+- no cloud command, emulator, database, SDK download, credential use or
+  provider write occurred;
+- 16 preflight tests and 16 artifact-handoff tests pass.
 
-These are source, local, and CI evidence only. Unsigned CI packages are QA
-artifacts, not supported installers or a public release. Native SQLite schema
-v15 and hosted PostgreSQL/Supabase schema profile v13 are separate contracts.
+The reproducible current input/result are
+[`current-offline-plan.json`](evidence/remote-android-qa/current-offline-plan.json)
+and
+[`current-offline-result.json`](evidence/remote-android-qa/current-offline-result.json).
+The exact result is blocked on:
 
-## Included candidate work
+1. provider/project/billing/quota/policy/access not verified;
+2. no externally authenticated remote-host observation;
+3. retained artifact encrypted restore unavailable;
+4. retained artifact scoped synthetic-evidence export unavailable.
 
-- Native SQLite schema v13 reconciles the historical profile/correction version
-  collision. Schema v14 adds the immutable proof ledger; v15 records signed-v3
-  server finalization while preserving historical v2 and legacy evidence.
-- Correction authorization v3 uses an atomic server-issuer reservation keyed to the
-  workspace, capability, and stable sale/reversal target. The Ed25519 proof
-  binds workspace, actor, exact command, receipt, server finalization, and
-  expiry. Same-request retries are stable; different-request, wrong-scope,
-  expired, reused, concurrent, and same-target/different-operation attempts
-  fail closed.
-- Full-sale reversal remains append-only: original sales and prices are
-  immutable, restock is explicit, stock and cash-shift effects are once-only,
-  and wallet follow-up never implies money moved without external evidence.
-- Sale details now exposes one restrained full-sale `Correct sale` path only
-  when immutable workspace/actor binding and the authorization service are
-  available. The command is rechecked at mutation time, retries are once-only,
-  and EN/MY small-phone flows pass. Production pins and the issuer secret are
-  absent; a hard-false global-consumption gate also keeps issuance default-dark.
-  Normal selling remains offline; pilot correction is online-authorized only.
-- Backup and restore validate migrations, receipt/proof integrity, immutable
-  linked records, workspace binding, wallet uncertainty, and corruption
-  failure paths. Historical four-key evidence round-trips only as
-  `legacy_unverified_v1`; historical signed-v2 remains six-key and cannot
-  authorize a new mutation.
-- English/Burmese native layout, catalog, barcode, cashier, receipt, printer
-  discovery, offline recovery, and actionable operating surfaces remain in the
-  single #734 candidate.
-- Public Shop presentation uses Shop as the product name and SuperMega as the
-  company identity, keeps one primary assisted-access action, retains the
-  illustrative-data disclosure, and uses a non-overlapping responsive product
-  tableau. It now explains the counter loop, four assisted-setup shop types,
-  assisted Local Pilot access, and the truthful Android/iPad/Windows signing
-  boundary without exposing QA archives as downloads. Earlier EN/MY capture
-  checks are baseline evidence only; the current native source requires a new
-  exact-source gallery before protected-preview acceptance.
-- Public release now verifies effective contact-delivery destinations before
-  building: Supabase must match the source-bound project origin, and an optional
-  webhook must match an explicit approved HTTPS origin. The audit is redacted
-  and fails closed on incomplete, private, loopback, or ambiguous targets.
-- Hardware-free tests cover CR/LF/Tab scanning, leading zeros, repeated scans,
-  loopback ESC/POS, 384/420/576-dot EN/MY raster output, uncertain printing,
-  reprint, and stalled delivery without automatic retry. This is protocol
-  evidence, not model certification; 420 dots remains builder-only.
+The v1 Android handoff contract intentionally requires restore/export to remain
+blocked, so it cannot be reused to call a future artifact ready. The next source
+outcome is an exact-head QA artifact implementing the already-reviewed scoped
+synthetic-evidence saver/loader and encrypted restore contract, plus a new
+capability-aware handoff contract and independent review.
 
-## Not proven
+## CI and external gates
 
-- No production deployment, alias promotion, merge, or production database
-  mutation has occurred.
-- Live `supermega.dev` and `app.supermega.dev` still report predecessor
-  `5479c5d1`; the existing paired protected previews report `f944f66b`, and no
-  immutable protected preview has been accepted for `03df1838`.
-  Direct previews stay disabled, and the production workflow is not preview
-  evidence. Live retired product routes also need an owner-approved release of
-  the already-verified Shop-first route policy.
-- No signed Android, iPad, or Windows distribution has been accepted.
-- Installed restart/update and encrypted restore are not accepted on the target
-  device set.
-- Physical USB/Bluetooth/camera scanning is not accepted. Printing implements
-  private-subnet LAN/port 9100 only; physical 58 mm/80 mm Burmese receipt proof
-  is not accepted, and USB/Bluetooth printer transports are unsupported.
-  XP-80U is therefore unsupported. True mid-write reset, stalled-write timeout,
-  and paper-status behavior remain unproven; raw TCP cannot confirm paper output.
-- Empty production pins and absent issuer signing configuration intentionally
-  disable correction. Offline manager credentials/passkeys remain deferred.
-- Stable-target reservation blocks normal independent-clone authorization.
-  Post-proof clone reuse, device-clock rollback, and expired-target recovery
-  remain unresolved. Device-bound offline authority remains deferred.
-- Founder decision recorded 2026-10-23: full-sale-only correction/refund is
-  accepted for launch; partial/item refunds and exchanges are deferred.
-  Vivian's merchant-journey/customer-promise acceptance remains open.
-- Vivian has not accepted the complete catalog → sale → stock → correction or
-  refund → close → export → restart → restore journey.
-- Local Pilot is the only current offer. Pricing, setup policy, printer promise,
-  support channel, and support hours remain open. Managed Cloud and Multi-site
-  remain planned/internal.
-- Connected Orders remains default-off and outside this launch candidate.
-- Merchant installation, customer evidence, revenue, retention, production
-  readiness, and launch are not claimed.
+- App CI at `6bf59b49` fails first on stale PostgreSQL evidence; later App checks
+  did not run.
+- GitGuardian fails on two historical synthetic fixture findings. Reviewed local
+  fixture hygiene does not resolve or dismiss the provider incidents.
+- Native, Dependency Security and Kernel checks pass at the stated remote head.
+- The exact-source PostgreSQL-17 rehearsal previously approved for Local is now
+  paused by the remote-only direction and inaccessible-task state. That approval
+  does not transfer to a remote host or different source build.
+- Production correction remains unavailable: server authority, source-pinned
+  keys and global consumption readiness stay fail closed. Normal selling remains
+  offline; partial/item refund and exchange remain deferred.
+- No protected exact-source preview, synthetic hosted account/store, production
+  signing, customer download, installed restart/restore, physical scanner or
+  printer proof, merchant acceptance or joint go/no-go exists.
 
-## Cloud, local, Operations, and Dots coordination
+## Resource and ownership truth
 
-Cloud is the sole integration writer; Remote Git is authoritative for source,
-PR evidence, and CI. The owner-designated [Operations Hub](https://chatgpt.com/space/page_e3e4e94ac5d081918325eeb103e5da9d)
-coordinates handoffs and decisions; Vivian's Operations Onboarding Plan owns
-business research, marketing, onboarding, support, pricing input, and daily
-operations, not engineering QA. Technical review and tests remain with Swan and
-the Tech Leads. Do not recreate Vivian's prepared material.
+The active stack is Flutter/Drift, GitHub Actions, Vercel, Supabase and company
+Google Workspace. Workspace is a collaboration capability, not Compute Engine
+credit or provider IAM. Generic repository/credential inventories do not prove
+installation or authority.
 
-The local lead remains preserved and unarchived for read-only context, but the
-current remote-only direction excludes it from emulator, app, PostgreSQL, or
-agent execution. Unmapped worktrees, stashes,
-screenshot provenance, and OneDrive context must not be cleaned or imported
-without bounded equivalence review. The producer-verified historical package
-hash and its deferred catalog, receivables, receiving, and daily-sales evidence
-remain recorded in the Operations handoff; Cloud has not independently
-materialized or approved its patches.
+Coolify, PostHog, Penpot, Excalidraw, NocoDB, n8n, Dify, Ollama and AppFlowy are
+deferred candidates under the adoption contract in `supergoal.md`; no install or
+integration follows merely from their names. Plant is outside SuperMega.dev.
+Sites/Ecommerce remain optional entitlement-gated custom packages, not default
+launch products. SOL, Spa and client-specific work remain excluded.
 
-PR #751 remains a source set for later bounded UX/public/native-packaging ports.
-Its schema-11 business-profile meaning conflicts with #734's historical
-schema-11 correction meaning. Any selected port requires deliberate migration,
-backup, and restore review; no blind merge or cherry-pick is allowed.
+Swan owns architecture, repository/provider decisions, security and release
+integrity. Vivian owns merchant workflow, operating offer and acceptance, not
+engineering QA. Cloud remains the sole integration writer. Git, PR checks and
+committed runbooks are technical truth; the Operations Hub coordinates handoff
+and decisions.
 
 ## Next action
 
-Active item: preserve the reviewed internal Shop candidate and identify one
-authorized remote Android execution host. Acceptance requires verified remote
-identity and access, KVM or supported nested virtualization, sufficient memory
-and disk, bounded cost, an isolated synthetic AVD, retained APK identity
-verification, and an actual sale/restart/recovery walkthrough. No local host,
-historical secret, or unverified VPS reference closes this gate.
+Active source dependency: implement and independently review the scoped
+synthetic-evidence export/loader and encrypted restore path without enabling
+general external file access, then build a new exact-head QA artifact with a
+capability-aware handoff contract.
 
-Next eligible sequence: exact PR #734 App/Native/security CI → exact-source
-gallery → separately authorized remote exact-head PostgreSQL rehearsal/evidence successor →
-app-first protected pair → separately approved synthetic user/tenant/Shop
-binding → login/setup/sale/restart/recovery/account walkthrough → signed
-distribution and installed recovery → applicable hardware and Vivian merchant
-acceptance → independent review and joint go/no-go. No mock closes a higher
-evidence gate; see [`docs/SHOP-RELEASE-RUNBOOK.md`](docs/SHOP-RELEASE-RUNBOOK.md).
+External dependency: verify one authorized Google Cloud project, billing,
+quota, nested-virtualization policy and minimum IAM path without copying raw
+credentials or changing provider state. Only after both dependencies close may
+the remote emulator run proceed.
+
+After installed evidence: exact PR App/security evidence → exact-source gallery
+→ protected preview and isolated synthetic account → account/setup/sale/restart/
+recovery walkthrough → owner-operated signing/distribution → applicable
+hardware and merchant acceptance → independent final review and joint go/no-go.
+Passing a lower evidence level never closes a higher one; see
+[`docs/SHOP-RELEASE-RUNBOOK.md`](docs/SHOP-RELEASE-RUNBOOK.md).
