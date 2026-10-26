@@ -106,9 +106,14 @@ No local demo, passing test, healthy provider, or generated artifact is proof of
   balanced disk. The current estimate for a 20-hour internal test is about
   US$4.15 if resources are removed afterward, or about US$9.98 with the disk
   retained for a month; tax, egress, and API-related charges can vary. A
-  maximum US$15 budget and an authorized account/project are pending explicit
-  confirmation. No project, VM, disk, credential, or billable resource exists
-  from this plan. Hetzner Cloud does not allow nested virtualization; its
+  maximum US$15 remote pilot budget is owner-approved. The authorized Google
+  identity, project, billing relationship, roles, quota and organization policy
+  are not yet verified, so provisioning remains blocked. No project, VM, disk,
+  credential, billing link, IAM grant or billable resource was created. The
+  prepared, non-executed bootstrap and acceptance checklist is
+  [`docs/REMOTE-ANDROID-QA-PILOT.md`](docs/REMOTE-ANDROID-QA-PILOT.md); it uses
+  a six-hour automatic-delete backstop, no VM service account, private ADB and
+  synthetic-only data. Hetzner Cloud does not allow nested virtualization; its
   dedicated AX41-class bare-metal option (about EUR59/month including IPv4,
   before VAT) is a possible longer-term route but is not selected.
 - App CI at `6bf59b49` still fails first on stale PostgreSQL evidence; later App
