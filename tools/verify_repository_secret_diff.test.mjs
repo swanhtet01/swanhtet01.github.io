@@ -1,10 +1,15 @@
 import assert from 'node:assert/strict'
-import { readFile } from 'node:fs/promises'
+import { execFileSync, spawnSync } from 'node:child_process'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import test from 'node:test'
 
 import { scanAddedLines } from './verify_repository_secret_diff.mjs'
 
 const workflow = await readFile('.github/workflows/dependency-security.yml', 'utf8')
+const verifierPath = fileURLToPath(new URL('./verify_repository_secret_diff.mjs', import.meta.url))
 
 const patch = (line) => [
   'diff --git a/example.txt b/example.txt',
@@ -30,6 +35,7 @@ test('ordinary additions pass without exposing values', () => {
 test('credential shapes fail with redacted coordinates only', () => {
   const fixtures = [
     ['private-key', ['-----BEGIN ', 'PRIVATE KEY', '-----'].join('')],
+    ['private-key', ['-----BEGIN ', 'ENCRYPTED PRIVATE KEY', '-----'].join('')],
     ['github-token', ['ghp_', 'a'.repeat(36)].join('')],
     ['openai-key', ['sk-', 'a'.repeat(24)].join('')],
     ['google-api-key', ['AIza', 'a'.repeat(35)].join('')],
@@ -49,6 +55,40 @@ test('credential shapes fail with redacted coordinates only', () => {
     assert.deepEqual(result.findings, [{ rule, file: 'example.txt', line: 1 }], rule)
     assert.equal(JSON.stringify(result).includes(value), false, rule)
     assert.equal(result.valuesExposed, false, rule)
+  }
+})
+
+test('added content beginning with plus characters is not mistaken for a file header', () => {
+  const value = ['ghp_', 'a'.repeat(36)].join('')
+  const result = scanAddedLines(patch(`++${value}`))
+  assert.deepEqual(result.findings, [{ rule: 'github-token', file: 'example.txt', line: 1 }])
+})
+
+test('the CLI forces text scanning for files that contain NUL bytes', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'shop-secret-diff-'))
+  try {
+    execFileSync('git', ['init', '-q'], { cwd: directory })
+    execFileSync('git', ['config', 'user.name', 'Synthetic Test'], { cwd: directory })
+    execFileSync('git', ['config', 'user.email', 'synthetic@example.invalid'], { cwd: directory })
+    await writeFile(join(directory, 'baseline.txt'), 'baseline\n')
+    execFileSync('git', ['add', 'baseline.txt'], { cwd: directory })
+    execFileSync('git', ['commit', '-qm', 'baseline'], { cwd: directory })
+    const base = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: directory, encoding: 'utf8' }).trim()
+    const value = ['ghp_', 'a'.repeat(36)].join('')
+    await writeFile(join(directory, 'binary.dat'), Buffer.from(`${value}\u0000suffix`))
+    execFileSync('git', ['add', 'binary.dat'], { cwd: directory })
+    execFileSync('git', ['commit', '-qm', 'binary fixture'], { cwd: directory })
+    const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: directory, encoding: 'utf8' }).trim()
+    const result = spawnSync(process.execPath, [verifierPath, '--base', base, '--head', head], {
+      cwd: directory,
+      encoding: 'utf8',
+    })
+    assert.equal(result.status, 1)
+    const report = JSON.parse(result.stdout)
+    assert.deepEqual(report.findings, [{ rule: 'github-token', file: 'binary.dat', line: 1 }])
+    assert.equal(result.stdout.includes(value), false)
+  } finally {
+    await rm(directory, { recursive: true, force: true })
   }
 })
 

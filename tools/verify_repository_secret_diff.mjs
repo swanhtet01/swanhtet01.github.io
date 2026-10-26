@@ -7,7 +7,7 @@ import { resolve } from 'node:path'
 const MAX_DIFF_BYTES = 256 * 1024 * 1024
 
 const RULES = Object.freeze([
-  ['private-key', /-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----/],
+  ['private-key', /-----BEGIN (?:(?:RSA|EC|OPENSSH|DSA|ENCRYPTED) )?PRIVATE KEY-----/],
   ['github-token', /\b(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{40,})\b/],
   ['openai-key', /\bsk-(?:proj-)?[A-Za-z0-9_-]{20,}\b/],
   ['google-api-key', /\bAIza[0-9A-Za-z_-]{30,}\b/],
@@ -26,18 +26,24 @@ export function scanAddedLines(diffSource) {
   let file = null
   let newLine = 0
   let addedLines = 0
+  let inHunk = false
 
   for (const line of String(diffSource).split(/\r?\n/)) {
-    if (line.startsWith('+++ b/')) {
+    if (line.startsWith('diff --git ')) {
+      inHunk = false
+      continue
+    }
+    if (!inHunk && line.startsWith('+++ b/')) {
       file = line.slice(6)
       continue
     }
     const hunk = line.match(/^@@ -[^ ]+ \+(\d+)/)
     if (hunk) {
+      inHunk = true
       newLine = Number(hunk[1])
       continue
     }
-    if (line.startsWith('+') && !line.startsWith('+++')) {
+    if (inHunk && line.startsWith('+')) {
       addedLines += 1
       const content = line.slice(1)
       for (const [rule, pattern] of RULES) {
@@ -78,7 +84,7 @@ function gitDiff(base, head) {
   }
   return execFileSync(
     'git',
-    ['diff', '--no-ext-diff', '--unified=0', '--no-renames', base, head, '--'],
+    ['diff', '--no-ext-diff', '--text', '--unified=0', '--no-renames', base, head, '--'],
     { encoding: 'utf8', maxBuffer: MAX_DIFF_BYTES },
   )
 }
