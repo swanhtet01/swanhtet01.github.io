@@ -3450,7 +3450,22 @@ void main() {
         ),
       );
       await _pumpUntil(tester, find.text('Start new Shop'));
+      expect(
+        find.text(
+          'Records stay on this device. Restore a backup before starting if you need earlier records.',
+        ),
+        findsOneWidget,
+      );
       await tester.tap(find.text('Start new Shop'));
+      await tester.pumpAndSettle();
+      expect(find.text('Start a new Shop?'), findsOneWidget);
+      expect(ShopDatabase.privateDatabaseFile(documents).existsSync(), isFalse);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(ShopDatabase.privateDatabaseFile(documents).existsSync(), isFalse);
+      await tester.tap(find.text('Start new Shop'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('shop-start-new-confirm')));
       await _pumpUntil(
         tester,
         find.text('Opened Shop'),
@@ -3496,12 +3511,15 @@ void main() {
         );
         await _pumpUntil(tester, find.text('Start new Shop'));
         await tester.tap(find.text('Start new Shop'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey('shop-start-new-confirm')));
         await _pumpUntil(
           tester,
           find.textContaining('cannot safely open'),
           databaseVerifier: databaseVerifier,
         );
         await closeRecorder.service(tester);
+        await tester.pumpAndSettle();
 
         expect(buildCalls, 1);
         expect(find.text('Start new Shop'), findsNothing);

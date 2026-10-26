@@ -2465,6 +2465,7 @@ class _ShopHomeState extends State<ShopHome> {
                       label: Text(shopCopy(widget.myanmar, 'Hold', 'ခဏသိမ်း')),
                     ),
                   TextButton(
+                    key: const ValueKey('shop-clear-sale'),
                     onPressed:
                         !_checkoutReady ||
                             _walletStarting ||
@@ -2472,7 +2473,7 @@ class _ShopHomeState extends State<ShopHome> {
                             _saving ||
                             _pendingWalletCheckout != null
                         ? null
-                        : () => _discardCounterDraft(refresh: refresh),
+                        : () => _confirmDiscardCounterDraft(refresh: refresh),
                     child: Text(shopCopy(widget.myanmar, 'Clear', 'ဖျက်ရန်')),
                   ),
                 ],
@@ -3214,6 +3215,55 @@ class _ShopHomeState extends State<ShopHome> {
     });
   }
 
+  Future<void> _confirmDiscardCounterDraft({StateSetter? refresh}) async {
+    if (_cart.isEmpty ||
+        !_checkoutReady ||
+        _saving ||
+        _walletStarting ||
+        _cashConfirming ||
+        _pendingWalletCheckout != null) {
+      return;
+    }
+    final itemCount = _cart.values.fold<int>(0, (sum, count) => sum + count);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(
+          shopCopy(
+            widget.myanmar,
+            'Clear current sale?',
+            'လက်ရှိအရောင်းကို ဖျက်မလား။',
+          ),
+        ),
+        content: Text(
+          shopCopy(
+            widget.myanmar,
+            '$itemCount ${itemCount == 1 ? 'item' : 'items'} will be removed from this unfinished sale. Saved sales and stock will not change.',
+            'မပြီးသေးသော ဤအရောင်းမှ ပစ္စည်း ${shopNumber(itemCount, myanmar: true)} ခုကို ဖယ်ရှားပါမည်။ သိမ်းပြီးသောအရောင်းနှင့် လက်ကျန် မပြောင်းပါ။',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text(shopCopy(widget.myanmar, 'Keep sale', 'အရောင်းထားရန်')),
+          ),
+          FilledButton(
+            key: const ValueKey('shop-clear-sale-confirm'),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text(
+              shopCopy(widget.myanmar, 'Clear sale', 'အရောင်းဖျက်ရန်'),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && mounted) {
+      _discardCounterDraft(refresh: refresh);
+    } else {
+      _focusScannerIfReady();
+    }
+  }
+
   bool _cartHasUnavailableProducts(List<ShopProduct> products) {
     final byId = {for (final item in products) item.id: item};
     return _cart.entries.any(
@@ -3528,12 +3578,19 @@ class _ShopHomeState extends State<ShopHome> {
                   const SizedBox(height: 12),
                   TextField(
                     key: const ValueKey('shop-cash-given'),
+                    autofocus: true,
                     keyboardType: TextInputType.number,
+                    textInputAction: TextInputAction.done,
                     inputFormatters: [
                       FilteringTextInputFormatter.allow(RegExp(r'[0-9၀-၉]')),
                     ],
                     onChanged: (value) =>
                         setDialogState(() => cashGiven = value),
+                    onSubmitted: (_) {
+                      if (!isShort && !invalid) {
+                        Navigator.of(dialogContext).pop(true);
+                      }
+                    },
                     decoration: InputDecoration(
                       labelText: shopCopy(
                         widget.myanmar,
@@ -3546,26 +3603,37 @@ class _ShopHomeState extends State<ShopHome> {
                   if (tenderedMmk != null && !isShort) ...[
                     const SizedBox(height: 12),
                     Text(shopCopy(widget.myanmar, 'Change', 'ပြန်အမ်းငွေ')),
-                    Text(
-                      _mmk(tenderedMmk - totalMmk),
-                      key: const ValueKey('shop-cash-change'),
-                      style: Theme.of(context).textTheme.titleLarge,
+                    Semantics(
+                      liveRegion: true,
+                      label: shopCopy(
+                        widget.myanmar,
+                        'Change ${_mmk(tenderedMmk - totalMmk)}',
+                        'ပြန်အမ်းငွေ ${_mmk(tenderedMmk - totalMmk)}',
+                      ),
+                      child: Text(
+                        _mmk(tenderedMmk - totalMmk),
+                        key: const ValueKey('shop-cash-change'),
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
                     ),
                   ],
                   if (isShort || invalid) ...[
                     const SizedBox(height: 8),
-                    Text(
-                      shopCopy(
-                        widget.myanmar,
-                        isShort
-                            ? 'Cash given is less than the amount due.'
-                            : 'Enter a valid amount.',
-                        isShort
-                            ? 'ပေးထားသော ငွေသားမှာ ကျသင့်ငွေထက် နည်းပါသည်။'
-                            : 'မှန်ကန်သော ငွေပမာဏကို ထည့်ပါ။',
-                      ),
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.error,
+                    Semantics(
+                      liveRegion: true,
+                      child: Text(
+                        shopCopy(
+                          widget.myanmar,
+                          isShort
+                              ? 'Cash given is less than the amount due.'
+                              : 'Enter a valid amount.',
+                          isShort
+                              ? 'ပေးထားသော ငွေသားမှာ ကျသင့်ငွေထက် နည်းပါသည်။'
+                              : 'မှန်ကန်သော ငွေပမာဏကို ထည့်ပါ။',
+                        ),
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                        ),
                       ),
                     ),
                   ],
@@ -3601,6 +3669,15 @@ class _ShopHomeState extends State<ShopHome> {
         closeSheet: closeSheet,
         memberCardToken: _selectedMemberCard?.token,
         expectedTotalMmk: totalMmk,
+        cashChangeMmk: cashGiven.trim().isEmpty
+            ? null
+            : int.parse(
+                    cashGiven.trim().replaceAllMapped(
+                      RegExp(r'[၀-၉]'),
+                      (match) => '${'၀၁၂၃၄၅၆၇၈၉'.indexOf(match.group(0)!)}',
+                    ),
+                  ) -
+                  totalMmk,
         expectedUnitPricesMmk: {
           for (final id in selected.keys) id: currentById[id]!.priceMmk,
         },
@@ -3987,6 +4064,7 @@ class _ShopHomeState extends State<ShopHome> {
     String? walletCheckoutOperationId,
     String? memberCardToken,
     int? expectedTotalMmk,
+    int? cashChangeMmk,
     Map<String, int>? expectedUnitPricesMmk,
     Map<String, String>? expectedProductNames,
   }) async {
@@ -4047,29 +4125,35 @@ class _ShopHomeState extends State<ShopHome> {
         }
       }
       if (!mounted) return;
+      final changeEnglish = cashChangeMmk == null
+          ? ''
+          : ' · change ${_mmk(cashChangeMmk)}';
+      final changeMyanmar = cashChangeMmk == null
+          ? ''
+          : ' · ပြန်အမ်းငွေ ${_mmk(cashChangeMmk)}';
       _message(
         printed
             ? shopCopy(
                 widget.myanmar,
-                'Sale saved · ${_mmk(receipt.totalMmk)} · receipt sent',
-                'အရောင်းသိမ်းပြီး · ${_mmk(receipt.totalMmk)} · ပြေစာပို့ပြီး',
+                'Sale saved · ${_mmk(receipt.totalMmk)}$changeEnglish · receipt sent',
+                'အရောင်းသိမ်းပြီး · ${_mmk(receipt.totalMmk)}$changeMyanmar · ပြေစာပို့ပြီး',
               )
             : printFailed
             ? shopCopy(
                 widget.myanmar,
-                'Sale saved · ${_mmk(receipt.totalMmk)} · printing unconfirmed · receipt may have printed · check paper before retry',
-                'အရောင်းသိမ်းပြီး · ${_mmk(receipt.totalMmk)} · ပုံနှိပ်မှု မသေချာပါ · ပြေစာ ပုံနှိပ်ပြီး ဖြစ်နိုင်သည် · ထပ်မစမ်းမီ စာရွက်ကို စစ်ပါ',
+                'Sale saved · ${_mmk(receipt.totalMmk)}$changeEnglish · printing unconfirmed · receipt may have printed · check paper before retry',
+                'အရောင်းသိမ်းပြီး · ${_mmk(receipt.totalMmk)}$changeMyanmar · ပုံနှိပ်မှု မသေချာပါ · ပြေစာ ပုံနှိပ်ပြီး ဖြစ်နိုင်သည် · ထပ်မစမ်းမီ စာရွက်ကို စစ်ပါ',
               )
             : printerNeedsTest
             ? shopCopy(
                 widget.myanmar,
-                'Sale saved · ${_mmk(receipt.totalMmk)} · test printer to print',
-                'အရောင်းသိမ်းပြီး · ${_mmk(receipt.totalMmk)} · ပရင်တာစမ်းသပ်ပြီးမှ ပုံနှိပ်ပါ',
+                'Sale saved · ${_mmk(receipt.totalMmk)}$changeEnglish · test printer to print',
+                'အရောင်းသိမ်းပြီး · ${_mmk(receipt.totalMmk)}$changeMyanmar · ပရင်တာစမ်းသပ်ပြီးမှ ပုံနှိပ်ပါ',
               )
             : shopCopy(
                 widget.myanmar,
-                'Sale saved · ${_mmk(receipt.totalMmk)} · this device',
-                'အရောင်းသိမ်းပြီး · ${_mmk(receipt.totalMmk)} · ဤစက်တွင်',
+                'Sale saved · ${_mmk(receipt.totalMmk)}$changeEnglish · this device',
+                'အရောင်းသိမ်းပြီး · ${_mmk(receipt.totalMmk)}$changeMyanmar · ဤစက်တွင်',
               ),
         action: (printed || printFailed || printerNeedsTest)
             ? SnackBarAction(

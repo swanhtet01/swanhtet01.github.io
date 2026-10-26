@@ -19,6 +19,20 @@ No local demo, passing test, healthy provider, or generated artifact is proof of
   `e0129536d978fcfe574747d2b2df51fad963a136`. The reviewed assertion successor
   is `4f8758ded8e664e9be838dde641d5b456f3d6392` / tree
   `c8f35ba2c73897e613b5d94df0fd07e4c3631c67`.
+- Separate unpushed branch `codex/shop-core-ux-polish-20261026` builds on the
+  reviewed acceptance work. Its bounded cashier/startup change requires
+  confirmation before clearing an unfinished sale or creating a new local
+  store, focuses cash entry, supports keyboard completion, preserves calculated
+  change in the post-sale status, and treats uncertain reprints as possibly
+  printed so a cashier checks paper before retrying. It changes no sale, stock,
+  payment, backup, or authorization boundary.
+- On that exact local UX tree, Flutter analysis reports no issues and the full
+  native suite passes 406 tests with 25 suite-defined skips and zero failures.
+  Focused confirmation, cash, startup, and ambiguous-reprint checks pass 4/4.
+  Independent source review found no blocking correctness, financial-integrity,
+  security, or accessibility regression. Burmese copy and live-region behavior
+  remain source-reviewed rather than device/screen-reader proven; change is
+  transient cashier feedback, not durable tender history.
 - The composed file-backed flow passes locally: fictional product and barcode,
   13,500 MMK cash sale, 6,500 MMK change calculation, immutable receipt,
   retry without duplicate sale/stock/outbox effects, shift close, SQLite

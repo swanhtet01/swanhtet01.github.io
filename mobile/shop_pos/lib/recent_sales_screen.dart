@@ -857,8 +857,8 @@ class _RecentSalesScreenState extends State<RecentSalesScreen> {
           content: Text(
             shopCopy(
               widget.myanmar,
-              'Sale is saved. Receipt could not print; check the printer and try again.',
-              'အရောင်းသိမ်းပြီးပါပြီ။ ပြေစာမပုံနှိပ်နိုင်ပါ။ ပရင်တာကို စစ်ပြီး ထပ်စမ်းပါ။',
+              'Sale is saved. Printing is unconfirmed; the receipt may have printed. Check the paper before trying again.',
+              'အရောင်းသိမ်းပြီးပါပြီ။ ပုံနှိပ်မှု မသေချာပါ။ ပြေစာ ပုံနှိပ်ပြီး ဖြစ်နိုင်သည်။ ထပ်မစမ်းမီ စာရွက်ကို စစ်ပါ။',
             ),
           ),
         ),

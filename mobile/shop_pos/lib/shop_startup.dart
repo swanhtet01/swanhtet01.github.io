@@ -83,6 +83,7 @@ class ShopStartup extends StatefulWidget {
 }
 
 class _ShopStartupState extends State<ShopStartup> {
+  final _navigatorKey = GlobalKey<NavigatorState>();
   final _password = TextEditingController();
   late bool _myanmar = widget.initialMyanmar;
   bool _checking = true;
@@ -228,6 +229,35 @@ class _ShopStartupState extends State<ShopStartup> {
 
   Future<void> _startNew() async {
     if (_busy) return;
+    final confirmed = await showDialog<bool>(
+      context: _navigatorKey.currentContext ?? context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(
+          shopCopy(_myanmar, 'Start a new Shop?', 'Shop အသစ် စတင်မလား။'),
+        ),
+        content: Text(
+          shopCopy(
+            _myanmar,
+            'Shop will create a new local store on this device. If you need earlier records, cancel and restore your backup first.',
+            'Shop သည် ဤစက်တွင် စက်တွင်းဆိုင်အသစ် ဖန်တီးပါမည်။ ယခင်မှတ်တမ်းများ လိုအပ်ပါက မလုပ်တော့ဘဲ အရန်ကူးဖိုင်ကို အရင်ပြန်ယူပါ။',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text(shopCopy(_myanmar, 'Cancel', 'မလုပ်တော့ပါ')),
+          ),
+          FilledButton(
+            key: const ValueKey('shop-start-new-confirm'),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text(
+              shopCopy(_myanmar, 'Start new Shop', 'Shop အသစ် စတင်ရန်'),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
     setState(() => _busy = true);
     try {
       await ShopBackup.reserveNewStore(_databaseFile);
@@ -476,6 +506,7 @@ class _ShopStartupState extends State<ShopStartup> {
     final openedShop = _openedShop;
     if (openedShop != null) return openedShop;
     return MaterialApp(
+      navigatorKey: _navigatorKey,
       title: 'Shop',
       debugShowCheckedModeBanner: false,
       locale: Locale(_myanmar ? 'my' : 'en'),
@@ -551,6 +582,15 @@ class _ShopStartupState extends State<ShopStartup> {
                           ),
                     ),
                   ] else if (_selectedArchive == null) ...[
+                    Text(
+                      shopCopy(
+                        _myanmar,
+                        'Records stay on this device. Restore a backup before starting if you need earlier records.',
+                        'မှတ်တမ်းများသည် ဤစက်တွင်သာ ရှိပါမည်။ ယခင်မှတ်တမ်းများ လိုအပ်ပါက မစတင်မီ အရန်ကူးဖိုင်ကို ပြန်ယူပါ။',
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 16),
                     FilledButton(
                       onPressed: _busy ? null : _startNew,
                       child: Text(

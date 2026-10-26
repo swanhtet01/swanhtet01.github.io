@@ -73,6 +73,33 @@ account-download activation, optional Sites/Ecommerce packages, and advanced
 operations remain outside this milestone unless they become a direct
 dependency of the core cashier journey.
 
+### Competitive cashier quality gates
+
+Public product material from [KMO POS](https://kmopos.com/),
+[ZayTap](https://www.hextechsoftware.com/zaytap.php),
+[Shopify POS](https://help.shopify.com/en/manual/sell-in-person/shopify-pos/selling-offline/offline-features),
+[Square POS](https://squareup.com/help/us/en/article/7777-process-card-payments-with-offline-mode),
+and [Toast](https://dev.toasttab.com/doc/platformguide/platformOfflineModeLocalSync.html)
+is benchmark input, not proof of their operation or SuperMega parity. Offline
+storage alone is not a differentiator. Shop must close these measurable gates:
+
+1. A committed sale survives interruption exactly once across commit,
+   confirmation and print boundaries.
+2. Scan/search and an always-visible cart respond clearly; repeated scans are
+   intentional and correct. Speed claims require timings on a named device.
+3. Sale saved, payment confirmed, synchronization and print states are visibly
+   distinct. Printer uncertainty never repeats a sale, and reprint preserves
+   the original receipt identity.
+4. EN/MY switching preserves the cart. Long Burmese and mixed-script names,
+   large MMK amounts, text scaling, touch targets, and simulated 58/80 mm
+   receipts remain readable. Physical hardware evidence stays separate.
+5. Guided setup, practice sale, backup age and restore make recovery status and
+   matching totals understandable without exposing sensitive diagnostics.
+
+These are acceptance targets, not achieved claims. They do not authorize card
+processing integrations, pricing changes, table/KDS scope, loyalty expansion or
+new AI features.
+
 ## Security and quality workstream
 
 Security readiness is evidence-based, not a marketing label. SuperMega uses

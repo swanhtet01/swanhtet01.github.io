@@ -3155,6 +3155,76 @@ void main() {
     },
   );
 
+  testWidgets('ambiguous reprint tells cashier to check paper first', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({
+      shopReceiptPrinterHostKey: '192.168.20.9',
+    });
+    const range = (ip: '192.168.20.10', mask: '255.255.255.248');
+    final settings = ReceiptPrinterSettings(
+      testOnlyAllowMissingRuntimeScope: true,
+      rangeProvider: () async => range,
+      session: VerifiedPrinterSession(),
+    );
+    final candidate = (await PrinterDiscoveryService(
+      rangeProvider: () async => range,
+      probe: (host, port) async => host == '192.168.20.9',
+      testOnlyAllowMissingRuntimeScope: true,
+    ).scan()).printers.single;
+    await settings.saveAfterTest(candidate);
+    final database = ShopDatabase(NativeDatabase.memory());
+    try {
+      await database.addProduct(
+        id: 'tea-reprint-ambiguous',
+        name: 'Tea',
+        priceMmk: 2500,
+        openingStock: 2,
+      );
+      await database.recordCashSale(
+        operationId: 'sale-reprint-ambiguous',
+        lines: const [
+          ShopSaleLineInput(productId: 'tea-reprint-ambiguous', quantity: 1),
+        ],
+      );
+      var sends = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: RecentSalesScreen(
+            testOnlyAllowMissingRuntimeScope: true,
+            database: database,
+            myanmar: false,
+            reprintService: ReceiptReprintService(
+              settings: settings,
+              send: (host, receipt, myanmar) async {
+                sends++;
+                throw const SocketException(
+                  'connection closed after an ambiguous write',
+                );
+              },
+              testOnlyAllowMissingRuntimeScope: true,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('2,500 MMK'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Reprint receipt'));
+      await tester.pumpAndSettle();
+      expect(sends, 1);
+      expect(find.textContaining('Printing is unconfirmed'), findsOneWidget);
+      expect(find.textContaining('may have printed'), findsOneWidget);
+      expect(find.textContaining('Check the paper'), findsOneWidget);
+      expect(await database.countSales(), 1);
+      expect((await database.readActiveProducts()).single.onHand, 1);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+      await database.close();
+    }
+  });
+
   testWidgets('saved printer does not reprint after restart without a retest', (
     tester,
   ) async {
@@ -4589,6 +4659,63 @@ void main() {
     await database.close();
   });
 
+  testWidgets('clearing an unfinished sale requires confirmation', (
+    tester,
+  ) async {
+    _usePhoneViewport(tester);
+    final database = ShopDatabase(NativeDatabase.memory());
+    try {
+      await database.addProduct(
+        id: 'tea-clear',
+        name: 'Tea',
+        priceMmk: 2500,
+        openingStock: 2,
+      );
+      await tester.pumpWidget(
+        ShopApp(
+          testOnlyAllowMissingRuntimeScope: true,
+          initialCounter: true,
+          database: database,
+          authClient: null,
+          apiBaseUrl: 'https://app.supermega.dev',
+          initialMyanmar: false,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Add to sale'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('Review sale'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const ValueKey('shop-clear-sale')));
+      await tester.pumpAndSettle();
+      expect(find.text('Clear current sale?'), findsOneWidget);
+      expect(
+        find.textContaining('Saved sales and stock will not change.'),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Keep sale'));
+      await tester.pumpAndSettle();
+      expect((await database.readCounterSaleDraft())?.quantities, {
+        'tea-clear': 1,
+      });
+      expect(await database.countSales(), 0);
+      expect((await database.readActiveProducts()).single.onHand, 2);
+
+      await tester.tap(find.byKey(const ValueKey('shop-clear-sale')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('shop-clear-sale-confirm')));
+      await tester.pumpAndSettle();
+      expect(await database.readCounterSaleDraft(), isNull);
+      expect(await database.countSales(), 0);
+      expect((await database.readActiveProducts()).single.onHand, 2);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+      await database.close();
+    }
+  });
+
   testWidgets(
     'cash tender shows change and a short payment cannot record a sale',
     (tester) async {
@@ -4624,6 +4751,18 @@ void main() {
         '20000',
       );
       await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<EditableText>(
+              find.descendant(
+                of: find.byKey(const ValueKey('shop-cash-given')),
+                matching: find.byType(EditableText),
+              ),
+            )
+            .focusNode
+            .hasFocus,
+        isTrue,
+      );
       expect(find.text('Change'), findsOneWidget);
       expect(find.text('6,500 MMK'), findsOneWidget);
       expect(await database.countSales(), 0);
@@ -4651,8 +4790,9 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(tester.widget<FilledButton>(confirm).onPressed, isNotNull);
-      await tester.tap(find.text('Complete sale'));
+      await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pumpAndSettle();
+      expect(find.textContaining('change 6,500 MMK'), findsOneWidget);
       expect(await database.countSales(), 1);
       expect((await database.readActiveProducts()).single.onHand, 1);
       await database.close();
