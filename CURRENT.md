@@ -88,8 +88,11 @@ stopped before restart; it is not an eligible host.
 The bounded remote plan is one Intel GCP `n2-standard-4` VM, 4 vCPU, 16 GiB,
 60 GiB balanced disk, nested KVM, one AOSP API 35 x86_64 AVD, no Play/account,
 private-loopback ADB and a six-hour provider STOP. The owner approved up to
-US$15 usage, but Google Cloud account/project, billing relationship, quota,
-organization policy and IAM access remain unverified. No project, VM, disk,
+US$15 usage. Read-only browser evidence now confirms that the owner's selected
+personal Google account can open the existing `supermega-468612` project
+(project number `453184845544`) dashboard. That proves project visibility only:
+billing linkage, Compute Engine create authority, quota, organization policy,
+IAM roles and non-interactive automation access remain unverified. No VM, disk,
 IP, network, API, credential, IAM grant or billable resource was created.
 
 STOP bounds compute runtime but can leave disk/IP/network charges. It is not a
@@ -118,7 +121,8 @@ and
 [`current-offline-result.json`](evidence/remote-android-qa/current-offline-result.json).
 The exact result is blocked on:
 
-1. provider/project/billing/quota/policy/access not verified;
+1. project visibility is verified, but billing, compute authority, quota,
+   policy and automation access are not verified;
 2. no externally authenticated remote-host observation;
 3. retained artifact encrypted restore unavailable;
 4. retained artifact scoped synthetic-evidence export unavailable.

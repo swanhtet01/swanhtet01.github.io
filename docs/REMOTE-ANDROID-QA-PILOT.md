@@ -31,11 +31,13 @@ pilot must never claim those newer changes are installed.
 
 ## Required owner-supplied selectors
 
-Do not run a command below until read-only account inspection establishes all
-of these non-secret values and the owner confirms the selected project and
-billing relationship:
+Read-only browser evidence confirms that the owner's selected personal Google
+account can open the existing `supermega-468612` project dashboard (project
+number `453184845544`). This establishes project visibility only. Do not run a
+command below until read-only inspection establishes the remaining non-secret
+values and the owner confirms the billing relationship and execution authority:
 
-- `PROJECT_ID`
+- `PROJECT_ID=supermega-468612` (visible, not yet proven executable)
 - `BILLING_ACCOUNT_ID` already linked or explicitly approved for linking
 - `ZONE` where `n2-standard-4` is available on Intel
 - the authorized `gcloud` identity and its minimum project role(s)
