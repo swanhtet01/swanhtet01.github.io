@@ -572,6 +572,13 @@ export function validateShopAndroidQaHandoff(packet, { nowMillis = Date.now() } 
     }
   } else if ((artifact.capabilityInspection != null
       && artifact.capabilityInspection !== 'unavailable')
+    || (artifact.capabilityContract ?? null) !== null
+    || (artifact.evidenceContract ?? null) !== null
+    || (artifact.capabilities != null
+      && (!Array.isArray(artifact.capabilities) || artifact.capabilities.length !== 0))
+    || (artifact.scopedEncryptedRestore ?? false) !== false
+    || (artifact.scopedSyntheticExport ?? false) !== false
+    || (artifact.generalExternalFileAccess ?? false) !== false
     || (packet.artifactCapabilities != null
       && (!Array.isArray(packet.artifactCapabilities)
         || packet.artifactCapabilities.length !== 0))) {

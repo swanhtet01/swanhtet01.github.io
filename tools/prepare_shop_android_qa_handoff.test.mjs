@@ -127,6 +127,42 @@ test('old v1 artifact cannot be relabelled as recovery-capable', () => {
   )
 })
 
+test('v1 rejects every post-hoc legacy capability claim with a recomputed digest', () => {
+  const legacy = assessShopAndroidQaHandoff(sampleShopAndroidQaHandoffInput())
+  const artifactMutations = [
+    { capabilityInspection: 'reported_producer_ci_passed_not_reinspected' },
+    { capabilityContract: SHOP_ANDROID_QA_CAPABILITY_CONTRACT },
+    { evidenceContract: SHOP_ANDROID_QA_EVIDENCE_CONTRACT },
+    { capabilities: ['scoped_encrypted_backup_restore'] },
+    { scopedEncryptedRestore: true },
+    { scopedSyntheticExport: true },
+    { generalExternalFileAccess: true },
+  ]
+  for (const mutation of artifactMutations) {
+    const packet = resign({
+      ...legacy,
+      artifact: { ...legacy.artifact, ...mutation },
+    })
+    assert.throws(
+      () => validateShopAndroidQaHandoff(packet),
+      /shop_android_qa_handoff_legacy_capability_claim_invalid/,
+      JSON.stringify(mutation),
+    )
+  }
+  const packet = resign({
+    ...legacy,
+    artifactCapabilities: [{
+      id: 'scoped_encrypted_backup_restore',
+      contract: SHOP_ANDROID_QA_CAPABILITY_CONTRACT,
+      status: 'SOURCE_BOUND_NOT_INSTALLED_ACCEPTED',
+    }],
+  })
+  assert.throws(
+    () => validateShopAndroidQaHandoff(packet),
+    /shop_android_qa_handoff_legacy_capability_claim_invalid/,
+  )
+})
+
 test('v2 rejects missing, unsupported, or unsafe compiled capability evidence', () => {
   const valid = sampleShopAndroidQaHandoffInput({ capabilityAware: true })
     .metadata.capabilityInspection
