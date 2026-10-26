@@ -159,6 +159,7 @@ function readZipEntries(archiveBytes) {
     throw new Error('zip_layout_unsupported')
   }
   const entries = new Map()
+  const localRegions = []
   let cursor = centralOffset
   let totalUncompressed = 0
   for (let index = 0; index < totalEntries; index += 1) {
@@ -210,20 +211,41 @@ function readZipEntries(archiveBytes) {
     }
     const dataStart = localOffset + 30 + localNameLength + localExtraLength
     const dataEnd = dataStart + compressedSize
-    if (dataEnd > bytes.length) throw new Error('zip_entry_truncated')
+    if (dataEnd > centralOffset) throw new Error('zip_entry_truncated')
     const compressed = bytes.subarray(dataStart, dataEnd)
     const content = method === 0
       ? Buffer.from(compressed)
       : inflateRawSync(compressed, { maxOutputLength: entryLimit + 1 })
     if (content.length !== uncompressedSize) throw new Error('zip_entry_size_mismatch')
     if (crc32(content) !== expectedCrc32) throw new Error('zip_entry_crc_mismatch')
+    let regionEnd = dataEnd
+    if ((flags & 8) !== 0) {
+      if (dataEnd + 16 > centralOffset
+        || bytes.readUInt32LE(dataEnd) !== 0x08074b50
+        || bytes.readUInt32LE(dataEnd + 4) !== expectedCrc32
+        || bytes.readUInt32LE(dataEnd + 8) !== compressedSize
+        || bytes.readUInt32LE(dataEnd + 12) !== uncompressedSize) {
+        throw new Error('zip_data_descriptor_invalid')
+      }
+      regionEnd += 16
+    }
+    localRegions.push({ start: localOffset, end: regionEnd })
     entries.set(name, content)
   }
   if (cursor !== centralOffset + centralSize) throw new Error('zip_central_size_mismatch')
+  localRegions.sort((left, right) => left.start - right.start)
+  let coveredUntil = 0
+  for (const region of localRegions) {
+    if (region.start !== coveredUntil || region.end <= region.start || region.end > centralOffset) {
+      throw new Error('zip_local_region_invalid')
+    }
+    coveredUntil = region.end
+  }
+  if (coveredUntil !== centralOffset) throw new Error('zip_local_region_invalid')
   return entries
 }
 
-function storedZipFixture(entries) {
+function storedZipFixture(entries, { dataDescriptors = false } = {}) {
   const locals = []
   const centrals = []
   let localOffset = 0
@@ -234,22 +256,33 @@ function storedZipFixture(entries) {
     const local = Buffer.alloc(30)
     local.writeUInt32LE(0x04034b50, 0)
     local.writeUInt16LE(20, 4)
-    local.writeUInt32LE(contentCrc32, 14)
-    local.writeUInt32LE(content.length, 18)
-    local.writeUInt32LE(content.length, 22)
+    if (dataDescriptors) local.writeUInt16LE(8, 6)
+    else {
+      local.writeUInt32LE(contentCrc32, 14)
+      local.writeUInt32LE(content.length, 18)
+      local.writeUInt32LE(content.length, 22)
+    }
     local.writeUInt16LE(nameBytes.length, 26)
-    locals.push(local, nameBytes, content)
+    const descriptor = Buffer.alloc(dataDescriptors ? 16 : 0)
+    if (dataDescriptors) {
+      descriptor.writeUInt32LE(0x08074b50, 0)
+      descriptor.writeUInt32LE(contentCrc32, 4)
+      descriptor.writeUInt32LE(content.length, 8)
+      descriptor.writeUInt32LE(content.length, 12)
+    }
+    locals.push(local, nameBytes, content, descriptor)
     const central = Buffer.alloc(46)
     central.writeUInt32LE(0x02014b50, 0)
     central.writeUInt16LE(20, 4)
     central.writeUInt16LE(20, 6)
+    if (dataDescriptors) central.writeUInt16LE(8, 8)
     central.writeUInt32LE(contentCrc32, 16)
     central.writeUInt32LE(content.length, 20)
     central.writeUInt32LE(content.length, 24)
     central.writeUInt16LE(nameBytes.length, 28)
     central.writeUInt32LE(localOffset, 42)
     centrals.push(central, nameBytes)
-    localOffset += local.length + nameBytes.length + content.length
+    localOffset += local.length + nameBytes.length + content.length + descriptor.length
   }
   const centralBytes = Buffer.concat(centrals)
   const eocd = Buffer.alloc(22)
@@ -284,6 +317,9 @@ export function assessShopAndroidQaHandoff(input = {}) {
   const claims = metadata.claims || {}
 
   if (String(expectations.headSha || '') !== headSha
+    || String(expectations.sourceSha || '') !== sourceSha
+    || String(expectations.mergeSha || '') !== mergeSha
+    || String(expectations.nativeTree || '') !== nativeTree
     || String(expectations.runId || '') !== runId
     || String(expectations.artifactId || '') !== artifactId
     || String(expectations.archiveSha256 || '') !== String(metadata.archiveSha256 || '')) {
@@ -386,6 +422,9 @@ export function assessShopAndroidQaHandoff(input = {}) {
     },
     releaseExpectation: {
       headSha: String(expectations.headSha || ''),
+      sourceSha: String(expectations.sourceSha || ''),
+      mergeSha: String(expectations.mergeSha || ''),
+      nativeTree: String(expectations.nativeTree || ''),
       runId: String(expectations.runId || ''),
       artifactId: String(expectations.artifactId || ''),
       archiveSha256: String(expectations.archiveSha256 || ''),
@@ -428,6 +467,9 @@ export function validateShopAndroidQaHandoff(packet, { nowMillis = Date.now() } 
     || !SHA64.test(String(artifact.apkSha256 || ''))
     || artifact.archiveContentsBound !== true
     || expectation.headSha !== artifact.headSha
+    || expectation.sourceSha !== artifact.sourceSha
+    || expectation.mergeSha !== artifact.mergeSha
+    || expectation.nativeTree !== artifact.nativeTree
     || expectation.runId !== artifact.runId
     || expectation.artifactId !== artifact.artifactId
     || expectation.archiveSha256 !== artifact.archiveSha256
@@ -479,7 +521,7 @@ export function sampleShopAndroidQaHandoffInput(overrides = {}) {
     [EXPECTED_APK_NAME, apkBytes],
     [`${EXPECTED_APK_NAME}.sha256`, Buffer.from(checksumText)],
     [`${EXPECTED_APK_NAME}.manifest`, Buffer.from(manifestText)],
-  ])
+  ], { dataDescriptors: overrides.zipDataDescriptors === true })
   const metadata = {
     headSha,
     sourceSha,
@@ -517,6 +559,9 @@ export function sampleShopAndroidQaHandoffInput(overrides = {}) {
     metadata,
     expectations: {
       headSha,
+      sourceSha,
+      mergeSha: sourceSha,
+      nativeTree: metadata.nativeTree,
       runId,
       artifactId,
       archiveSha256: metadata.archiveSha256,
@@ -577,6 +622,9 @@ function parseArgs(argv) {
     checksum: null,
     manifest: null,
     expectedHeadSha: null,
+    expectedSourceSha: null,
+    expectedMergeSha: null,
+    expectedNativeTree: null,
     expectedRunId: null,
     expectedArtifactId: null,
     expectedArchiveSha256: null,
@@ -593,6 +641,9 @@ function parseArgs(argv) {
     else if (arg === '--checksum') args.checksum = argv[++index]
     else if (arg === '--manifest') args.manifest = argv[++index]
     else if (arg === '--expected-head-sha') args.expectedHeadSha = argv[++index]
+    else if (arg === '--expected-source-sha') args.expectedSourceSha = argv[++index]
+    else if (arg === '--expected-merge-sha') args.expectedMergeSha = argv[++index]
+    else if (arg === '--expected-native-tree') args.expectedNativeTree = argv[++index]
     else if (arg === '--expected-run-id') args.expectedRunId = argv[++index]
     else if (arg === '--expected-artifact-id') args.expectedArtifactId = argv[++index]
     else if (arg === '--expected-archive-sha256') args.expectedArchiveSha256 = argv[++index]
@@ -624,6 +675,9 @@ async function main() {
     checksum: args.checksum,
     manifest: args.manifest,
     expectedHeadSha: args.expectedHeadSha,
+    expectedSourceSha: args.expectedSourceSha,
+    expectedMergeSha: args.expectedMergeSha,
+    expectedNativeTree: args.expectedNativeTree,
     expectedRunId: args.expectedRunId,
     expectedArtifactId: args.expectedArtifactId,
     expectedArchiveSha256: args.expectedArchiveSha256,
@@ -634,6 +688,9 @@ async function main() {
     metadata: JSON.parse(await readFile(resolve(args.metadata), 'utf8')),
     expectations: {
       headSha: args.expectedHeadSha,
+      sourceSha: args.expectedSourceSha,
+      mergeSha: args.expectedMergeSha,
+      nativeTree: args.expectedNativeTree,
       runId: args.expectedRunId,
       artifactId: args.expectedArtifactId,
       archiveSha256: args.expectedArchiveSha256,

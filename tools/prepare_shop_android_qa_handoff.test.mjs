@@ -18,6 +18,41 @@ function resign(packet) {
   }
 }
 
+function archiveWithRebasedInsertion(archive, insertionOffset, inserted) {
+  const original = Buffer.from(archive)
+  const oldEocd = original.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]))
+  const oldCentralOffset = original.readUInt32LE(oldEocd + 16)
+  const added = Buffer.from(inserted)
+  const next = Buffer.concat([
+    original.subarray(0, insertionOffset),
+    added,
+    original.subarray(insertionOffset),
+  ])
+  const nextCentralOffset = oldCentralOffset + added.length
+  const nextEocd = oldEocd + added.length
+  next.writeUInt32LE(nextCentralOffset, nextEocd + 16)
+  let cursor = nextCentralOffset
+  const totalEntries = next.readUInt16LE(nextEocd + 10)
+  for (let index = 0; index < totalEntries; index += 1) {
+    assert.equal(next.readUInt32LE(cursor), 0x02014b50)
+    const localOffset = next.readUInt32LE(cursor + 42)
+    if (localOffset >= insertionOffset) next.writeUInt32LE(localOffset + added.length, cursor + 42)
+    cursor += 46 + next.readUInt16LE(cursor + 28)
+      + next.readUInt16LE(cursor + 30) + next.readUInt16LE(cursor + 32)
+  }
+  return next
+}
+
+function inputWithArchive(input, archiveBytes) {
+  const archiveSha256 = createHash('sha256').update(archiveBytes).digest('hex')
+  return {
+    ...input,
+    archiveBytes,
+    metadata: { ...input.metadata, archiveSha256 },
+    expectations: { ...input.expectations, archiveSha256 },
+  }
+}
+
 test('binds the original native QA evidence without claiming installation', () => {
   const packet = assessShopAndroidQaHandoff(sampleShopAndroidQaHandoffInput())
   assert.equal(packet.contract, SHOP_ANDROID_QA_HANDOFF_CONTRACT)
@@ -49,6 +84,17 @@ test('rejects a different valid-looking PR head than the retained release expect
     metadata: { headSha: '1111111111111111111111111111111111111111' },
   }))
   assert.ok(packet.failures.includes('release_expectation_mismatch'))
+})
+
+test('binds exact artifact source, merge, and native tree expectations', () => {
+  for (const metadata of [
+    { sourceSha: '1'.repeat(40) },
+    { mergeSha: '2'.repeat(40) },
+    { nativeTree: '3'.repeat(40) },
+  ]) {
+    const packet = assessShopAndroidQaHandoff(sampleShopAndroidQaHandoffInput({ metadata }))
+    assert.ok(packet.failures.includes('release_expectation_mismatch'))
+  }
 })
 
 test('rejects a wrong application ID, label, or missing producer inspection', () => {
@@ -115,6 +161,40 @@ test('rejects unparsed bytes between the central directory and EOCD', () => {
     metadata: { ...input.metadata, archiveSha256 },
     expectations: { ...input.expectations, archiveSha256 },
   })
+  assert.ok(packet.failures.includes('artifact_archive_format_invalid'))
+  assert.equal(packet.artifact.archiveContentsBound, false)
+})
+
+test('rejects every unparsed prefix, local-entry gap, or local-region tail', () => {
+  const input = sampleShopAndroidQaHandoffInput()
+  const archive = Buffer.from(input.archiveBytes)
+  const eocd = archive.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]))
+  const centralOffset = archive.readUInt32LE(eocd + 16)
+  const firstCentral = centralOffset
+  const secondCentral = firstCentral + 46 + archive.readUInt16LE(firstCentral + 28)
+    + archive.readUInt16LE(firstCentral + 30) + archive.readUInt16LE(firstCentral + 32)
+  const secondLocalOffset = archive.readUInt32LE(secondCentral + 42)
+  for (const insertionOffset of [0, secondLocalOffset, centralOffset]) {
+    const withGap = archiveWithRebasedInsertion(archive, insertionOffset, Buffer.from('HIDDEN'))
+    const packet = assessShopAndroidQaHandoff(inputWithArchive(input, withGap))
+    assert.ok(packet.failures.includes('artifact_archive_format_invalid'), String(insertionOffset))
+    assert.equal(packet.artifact.archiveContentsBound, false)
+  }
+})
+
+test('accepts exact signed data descriptors and rejects unaccounted descriptor bytes', () => {
+  const input = sampleShopAndroidQaHandoffInput({ zipDataDescriptors: true })
+  assert.equal(assessShopAndroidQaHandoff(input).ok, true)
+  const archive = Buffer.from(input.archiveBytes)
+  const eocd = archive.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]))
+  const centralOffset = archive.readUInt32LE(eocd + 16)
+  const localOffset = archive.readUInt32LE(centralOffset + 42)
+  const dataStart = localOffset + 30 + archive.readUInt16LE(localOffset + 26)
+    + archive.readUInt16LE(localOffset + 28)
+  const descriptorOffset = dataStart + archive.readUInt32LE(centralOffset + 20)
+  assert.equal(archive.readUInt32LE(descriptorOffset), 0x08074b50)
+  archive.writeUInt32LE(0, descriptorOffset)
+  const packet = assessShopAndroidQaHandoff(inputWithArchive(input, archive))
   assert.ok(packet.failures.includes('artifact_archive_format_invalid'))
   assert.equal(packet.artifact.archiveContentsBound, false)
 })

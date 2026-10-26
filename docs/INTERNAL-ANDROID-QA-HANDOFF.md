@@ -44,6 +44,9 @@ node tools/prepare_shop_android_qa_handoff.mjs \
   --checksum <app-qa-debug.apk.sha256> \
   --manifest <app-qa-debug.apk.manifest> \
   --expected-head-sha <reviewed-pr-head-sha> \
+  --expected-source-sha <retained-artifact-source-sha> \
+  --expected-merge-sha <retained-pull-request-merge-sha> \
+  --expected-native-tree <reviewed-native-source-tree> \
   --expected-run-id <retained-actions-run-id> \
   --expected-artifact-id <retained-artifact-id> \
   --expected-archive-sha256 <retained-original-archive-sha256> \
