@@ -1,8 +1,8 @@
 # SuperMega Supergoal
 
-- Version: 2.2.0
+- Version: 2.3.0
 - Owners: Swan Htet (technical) and Vivian (operations and business)
-- Updated: 2026-10-23
+- Updated: 2026-10-26
 - Status: ACTIVE — Shop is the core product; its supporting public website,
   shared infrastructure, and company operations remain release support
 
@@ -44,6 +44,25 @@ or evidence, preserve state, and continue an independent in-scope item. The
 active sequence is deployment-effect verification → exact candidate CI →
 protected paired preview → synthetic account/backend binding → complete
 walkthrough → distribution/recovery → minimum secure staff console.
+
+## Active product-first milestone
+
+The immediate milestone is a coherent internal Shop candidate that proves the
+cashier's core job before optional product work: create a fictional product,
+find it by barcode or search, take cash and show change, save one durable sale
+and stock movement, render and reprint the immutable receipt without another
+sale, close the cash shift, reopen the SQLite database, and restore an encrypted
+backup into a new database without duplicate financial, stock, or outbox
+effects.
+
+Completion requires one composed file-backed native acceptance test plus the
+focused cashier UI checks for barcode selection, short-cash rejection, change,
+and reprint. This is local verification only. It does not prove an installed
+restart, physical scanner/printer output, production signing, hosted account,
+live correction authority, merchant acceptance, or launch. Member/loyalty,
+account-download activation, optional Sites/Ecommerce packages, and advanced
+operations remain outside this milestone unless they become a direct
+dependency of the core cashier journey.
 
 ## Security and quality workstream
 

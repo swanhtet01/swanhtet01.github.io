@@ -1,12 +1,49 @@
 # SuperMega current release truth
 
-- Last verified: 2026-10-24
+- Last verified: 2026-10-26
 - Active objective: verified Shop + account portal delivery; see [`supergoal.md`](supergoal.md)
 - Scope: Shop, supporting web/infrastructure, accountable operations, and
   entitlement-gated optional packages
 
 This file records volatile facts; it cannot widen scope or authorize release.
 No local demo, passing test, healthy provider, or generated artifact is proof of a live customer system, revenue, production persistence, or autonomous operation.
+
+## 2026-10-26 product-first checkpoint
+
+- PR #734 remains open and draft at exact remote head
+  `6bf59b49c6607f411953a19aa90d64ca89eb522e`. This local work does not move,
+  merge, or publish that branch.
+- Separate local branch `codex/shop-core-internal-acceptance-20261026` starts
+  from exact `6bf59b49` and adds only a composed native acceptance test at
+  `1c4614ed05388076ac4b53f590526d271cd3f738` / tree
+  `e0129536d978fcfe574747d2b2df51fad963a136`.
+- The composed file-backed flow passes locally: fictional product and barcode,
+  13,500 MMK cash sale, 6,500 MMK change calculation, immutable receipt,
+  retry without duplicate sale/stock/outbox effects, shift close, SQLite
+  close/reopen, receipt re-render, encrypted backup, restore into a new
+  database, and another no-duplicate retry.
+- A focused ten-test cashier/recovery selection passes, including empty-catalog
+  sale, barcode/search, short-cash rejection, reprint without another sale,
+  shift close, database reopen, encrypted restore, and fresh-install restore.
+  Flutter analysis reports no issues. The exact local successor's full native
+  suite passes 404 tests with 25 suite-defined skips; those skips do not prove
+  installed-device or physical-hardware acceptance.
+- This is local source/test evidence, not a founder-installable release. The
+  retained Android QA artifact is engineering evidence and is not
+  production-signed; installed restart/restore and physical printer/scanner
+  acceptance remain open.
+- App CI at `6bf59b49` still fails first on stale PostgreSQL evidence; later App
+  checks did not run. GitGuardian also remains failed on two historical
+  synthetic fixture findings. Native, Dependency Security, and Kernel checks
+  passed. Local fixture hygiene is reviewed but has not resolved the provider
+  check.
+- The exact-source synthetic PostgreSQL-17 rehearsal is approved and handed
+  back, but its existing Local task remains technically inaccessible. Do not
+  reroute or repeat it elsewhere.
+
+This section supersedes older candidate-head statements below where they
+conflict. Historical checkpoints remain evidence and are not silently relabeled
+as the current PR head.
 
 ## Retained browser compatibility invariants
 
