@@ -158,13 +158,23 @@ void main() {
         );
         expect(await database.countOutboxOperations(), countsAfterClose.outbox);
 
+        final restoredCounts = (
+          sales: await database.countSales(),
+          stockMovements: await database.countStockMovements(),
+          outbox: await database.countOutboxOperations(),
+        );
         final restoredRetry = await database.recordCashSale(
           operationId: 'acceptance-cash-sale',
           lines: lines,
         );
         expect(restoredRetry.id, receipt.id);
-        expect(await database.countSales(), countsAfterClose.sales);
-        expect(restoredProduct.onHand, 3);
+        expect(await database.countSales(), restoredCounts.sales);
+        expect(
+          await database.countStockMovements(),
+          restoredCounts.stockMovements,
+        );
+        expect(await database.countOutboxOperations(), restoredCounts.outbox);
+        expect((await database.readActiveProducts()).single.onHand, 3);
       } finally {
         try {
           await database.close();
