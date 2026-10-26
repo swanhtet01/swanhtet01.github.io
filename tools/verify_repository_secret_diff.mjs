@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { execFileSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { resolve } from 'node:path'
 
@@ -20,6 +21,10 @@ const RULES = Object.freeze([
   ['member-card-token', /\bSMC1\.[A-Za-z0-9_-]{32,}\b/],
   ['credential-url', /\b(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?):\/\/[^\s:@/]+:[^\s@/]+@[^\s/]+/],
 ])
+
+function pathDigest(file) {
+  return `sha256:${createHash('sha256').update(String(file || '')).digest('hex')}`
+}
 
 export function scanAddedLines(diffSource) {
   const findings = []
@@ -47,7 +52,7 @@ export function scanAddedLines(diffSource) {
       addedLines += 1
       const content = line.slice(1)
       for (const [rule, pattern] of RULES) {
-        if (pattern.test(content)) findings.push({ rule, file, line: newLine })
+        if (pattern.test(content)) findings.push({ rule, pathDigest: pathDigest(file), line: newLine })
       }
       newLine += 1
     } else if (line.startsWith(' ')) {

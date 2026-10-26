@@ -52,8 +52,11 @@ test('credential shapes fail with redacted coordinates only', () => {
   for (const [rule, value] of fixtures) {
     const result = scanAddedLines(patch(value))
     assert.equal(result.ok, false, rule)
-    assert.deepEqual(result.findings, [{ rule, file: 'example.txt', line: 1 }], rule)
+    assert.equal(result.findings[0].rule, rule)
+    assert.equal(result.findings[0].line, 1)
+    assert.match(result.findings[0].pathDigest, /^sha256:[0-9a-f]{64}$/)
     assert.equal(JSON.stringify(result).includes(value), false, rule)
+    assert.equal(JSON.stringify(result).includes('example.txt'), false, rule)
     assert.equal(result.valuesExposed, false, rule)
   }
 })
@@ -61,7 +64,9 @@ test('credential shapes fail with redacted coordinates only', () => {
 test('added content beginning with plus characters is not mistaken for a file header', () => {
   const value = ['ghp_', 'a'.repeat(36)].join('')
   const result = scanAddedLines(patch(`++${value}`))
-  assert.deepEqual(result.findings, [{ rule: 'github-token', file: 'example.txt', line: 1 }])
+  assert.equal(result.findings[0].rule, 'github-token')
+  assert.equal(result.findings[0].line, 1)
+  assert.match(result.findings[0].pathDigest, /^sha256:[0-9a-f]{64}$/)
 })
 
 test('the CLI forces text scanning for files that contain NUL bytes', async () => {
@@ -85,11 +90,32 @@ test('the CLI forces text scanning for files that contain NUL bytes', async () =
     })
     assert.equal(result.status, 1)
     const report = JSON.parse(result.stdout)
-    assert.deepEqual(report.findings, [{ rule: 'github-token', file: 'binary.dat', line: 1 }])
+    assert.equal(report.findings[0].rule, 'github-token')
+    assert.equal(report.findings[0].line, 1)
+    assert.match(report.findings[0].pathDigest, /^sha256:[0-9a-f]{64}$/)
     assert.equal(result.stdout.includes(value), false)
+    assert.equal(result.stdout.includes('binary.dat'), false)
   } finally {
     await rm(directory, { recursive: true, force: true })
   }
+})
+
+test('credential-shaped filenames are represented only by a path digest', () => {
+  const pathValue = ['ghp_', 'p'.repeat(36)].join('')
+  const contentValue = ['sk-', 'c'.repeat(24)].join('')
+  const result = scanAddedLines([
+    `diff --git a/${pathValue} b/${pathValue}`,
+    `--- a/${pathValue}`,
+    `+++ b/${pathValue}`,
+    '@@ -0,0 +1 @@',
+    `+${contentValue}`,
+    '',
+  ].join('\n'))
+  assert.equal(result.ok, false)
+  assert.match(result.findings[0].pathDigest, /^sha256:[0-9a-f]{64}$/)
+  const output = JSON.stringify(result)
+  assert.equal(output.includes(pathValue), false)
+  assert.equal(output.includes(contentValue), false)
 })
 
 test('removed and context credentials are outside the added-line contract', () => {
