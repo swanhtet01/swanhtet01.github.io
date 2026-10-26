@@ -32,10 +32,20 @@ No local demo, passing test, healthy provider, or generated artifact is proof of
   do not prove installed-device or physical-hardware acceptance. Independent
   source review passes after requiring the restored retry to reread stock and
   recheck sale, stock-movement, and outbox counts.
+- Five direct Flutter widget checks also pass together: insufficient-cash
+  prevention, rapid duplicate cash taps, leading-zero barcode entry,
+  mutation-free saved-sale reprint, and scan cancellation/return navigation.
+  These assertions cover durable sale and stock state where applicable.
 - This is local source/test evidence, not a founder-installable release. The
   retained Android QA artifact is engineering evidence and is not
   production-signed; installed restart/restore and physical printer/scanner
   acceptance remain open.
+- Swan selected digital testing instead of buying or supplying a spare device.
+  Ally task `01a178b6-2987-7163-ad15-8e1cec912018` owns official Android
+  Emulator feasibility and ordinary setup. It must use a fresh synthetic AVD,
+  verify the retained `6bf59b49` QA artifact identity and isolation before any
+  run, and avoid real data. Simulated scanner input and virtual receipt capture
+  may prove native workflow behavior, but cannot prove physical hardware.
 - App CI at `6bf59b49` still fails first on stale PostgreSQL evidence; later App
   checks did not run. GitGuardian also remains failed on two historical
   synthetic fixture findings. Native, Dependency Security, and Kernel checks

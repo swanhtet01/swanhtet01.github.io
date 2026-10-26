@@ -57,9 +57,18 @@ effects.
 
 Completion requires one composed file-backed native acceptance test plus the
 focused cashier UI checks for barcode selection, short-cash rejection, change,
-and reprint. This is local verification only. It does not prove an installed
-restart, physical scanner/printer output, production signing, hosted account,
-live correction authority, merchant acceptance, or launch. Member/loyalty,
+rapid duplicate submission, reprint, and cancellation/return navigation. The
+next acceptance step is a fresh, synthetic Android Emulator profile running
+the retained QA APK, with simulated keyboard scanner input and virtual receipt
+capture through the actual native Shop paths. Emulator work is owned by Ally
+task `01a178b6-2987-7163-ad15-8e1cec912018`; it must verify isolation and
+artifact identity before any app run and must not inherit real data.
+
+This is digital internal verification only. It does not prove physical
+scanner/printer compatibility, production signing, hosted account, live
+correction authority, merchant acceptance, or launch. Emulator evidence must
+remain labelled as simulation; it cannot satisfy the physical-hardware gate.
+Member/loyalty,
 account-download activation, optional Sites/Ecommerce packages, and advanced
 operations remain outside this milestone unless they become a direct
 dependency of the core cashier journey.
