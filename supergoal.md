@@ -1,6 +1,6 @@
 # SuperMega Supergoal
 
-- Version: 2.3.1
+- Version: 2.3.2
 - Owners: Swan Htet (technical) and Vivian (operations and business)
 - Updated: 2026-10-26
 - Status: ACTIVE — Shop is the core product; its supporting public website,
@@ -230,6 +230,50 @@ does not convert missing evidence into acceptance.
 
 The detailed handoff contract is in
 [`docs/FOUNDER-OPERATING-MODEL.md`](docs/FOUNDER-OPERATING-MODEL.md).
+
+## Resource ownership and adoption boundary
+
+Use the smallest existing stack that closes a verified Shop or operations gap.
+A repository name, credential inventory, subscription, or historical host is
+not proof that a service is installed, authorized, secure, funded, or suitable.
+Never copy secrets from resource inventories into source, Hub evidence, agent
+prompts, or another provider.
+
+| Resource | Intended use | Current owner and status |
+|---|---|---|
+| Flutter, Drift/SQLite and the checked-in native toolchain | Shop cashier, local ledger, backup/restore and platform builds | Engineering integration lane; active and evidence-bound |
+| GitHub and GitHub Actions | Source review, protected CI and retained build artifacts | Swan owns repository/release decisions; exact workflow authority only |
+| Vercel | Supporting company website and protected web previews | Swan owns provider settings and promotion; existing projects only |
+| Supabase/PostgreSQL | Managed account, tenant and reviewed server-authority contracts | Swan owns provider/database actions; no live write from implementation agents |
+| Google Workspace | Company collaboration in Drive, Docs, Gmail, Chat, Calendar and Tasks | Swan/Vivian operate company content and access; no cross-tool copy or sharing expansion by implication |
+| Google Cloud Compute Engine | Candidate remote-only Android Emulator pilot | Up to US$15 usage approved; account, project, billing, quota, policy and IAM access remain unverified, so no resource exists |
+
+The sanitized resource inventory also names Coolify, PostHog, Penpot,
+Excalidraw, NocoDB, n8n, Dify, Ollama and AppFlowy. They are **deferred
+candidates**, not installed capabilities or an implementation backlog:
+
+- Coolify may be reconsidered only for a concrete self-hosting requirement that
+  existing Vercel/Supabase infrastructure cannot satisfy.
+- PostHog may be reconsidered only after a consent, privacy, retention and
+  decision-use contract for product analytics.
+- Penpot or Excalidraw may support bounded design collaboration; neither is a
+  runtime dependency or a substitute for actual Flutter renders.
+- NocoDB may support internal operations only if named staff access, tenant/data
+  boundaries, audit and backup ownership are defined; it is not the Shop
+  ledger or customer database.
+- n8n may support reviewed low-risk operations automation only after scoped
+  credentials, idempotency, audit and spend limits exist; it cannot authorize
+  money, stock, release or customer communication.
+- Dify and Ollama are optional AI evaluation/runtime candidates. They do not
+  justify a new agent framework and cannot autonomously change money, stock,
+  permissions, production or customer data.
+- AppFlowy is an optional documentation workspace, not an authoritative
+  replacement for Git, the Operations Hub or company Workspace.
+
+Adoption requires a named owner, exact user outcome, security/privacy and
+license review, bounded cost, recovery path and executable acceptance test.
+Until then, preserve the name only as evaluated/deferred context; do not install
+or integrate it merely because it appeared in a supplied list.
 
 ## One-lane coordination
 

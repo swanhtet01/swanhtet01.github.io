@@ -130,6 +130,13 @@ No local demo, passing test, healthy provider, or generated artifact is proof of
   later remote-only requirement now pauses that local execution as well. Its
   approval does not transfer to a remote host or another source build; do not
   reroute or repeat it elsewhere.
+- Sanitized account inspection confirms an existing company Google Workspace
+  collaboration capability, but no verified Google Cloud project, billing
+  relationship, credits, Compute Engine quota or provider IAM access. Generic
+  repository and credential inventories are not installed capabilities. The
+  active stack remains Flutter/Drift, GitHub Actions, Vercel, Supabase and
+  company Workspace; named Coolify/PostHog/design/operations/automation/AI
+  tools remain deferred behind the adoption contract in `supergoal.md`.
 
 This section supersedes older candidate-head statements below where they
 conflict. Historical checkpoints remain evidence and are not silently relabeled
