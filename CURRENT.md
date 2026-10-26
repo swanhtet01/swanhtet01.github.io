@@ -27,12 +27,14 @@ No local demo, passing test, healthy provider, or generated artifact is proof of
   printed so a cashier checks paper before retrying. It changes no sale, stock,
   payment, backup, or authorization boundary.
 - On that exact local UX tree, Flutter analysis reports no issues and the full
-  native suite passes 406 tests with 25 suite-defined skips and zero failures.
-  Focused confirmation, cash, startup, and ambiguous-reprint checks pass 4/4.
-  Independent source review found no blocking correctness, financial-integrity,
-  security, or accessibility regression. Burmese copy and live-region behavior
-  remain source-reviewed rather than device/screen-reader proven; change is
-  transient cashier feedback, not durable tender history.
+  native suite passes 407 tests with 25 suite-defined skips and zero failures.
+  Focused confirmation, cash, startup, slow-printer, and ambiguous-reprint
+  checks pass 5/5. Clear confirmation drains queued draft edits and refuses to
+  clear if the basket changes while its dialog is open. Cash change is shown as
+  soon as the sale commits, before awaiting printer delivery, then retained in
+  the final print-status message. Burmese copy and live-region behavior remain
+  source-reviewed rather than device/screen-reader proven; change is transient
+  cashier feedback, not durable tender history.
 - The composed file-backed flow passes locally: fictional product and barcode,
   13,500 MMK cash sale, 6,500 MMK change calculation, immutable receipt,
   retry without duplicate sale/stock/outbox effects, shift close, SQLite

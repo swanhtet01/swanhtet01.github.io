@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -3225,6 +3226,88 @@ void main() {
     }
   });
 
+  testWidgets('cash change is visible while printer delivery is pending', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    _usePhoneViewport(tester);
+    const range = (ip: '192.168.20.10', mask: '255.255.255.248');
+    final settings = ReceiptPrinterSettings(
+      testOnlyAllowMissingRuntimeScope: true,
+      rangeProvider: () async => range,
+      session: VerifiedPrinterSession(),
+    );
+    final candidate = (await PrinterDiscoveryService(
+      rangeProvider: () async => range,
+      probe: (host, port) async => host == '192.168.20.9',
+      testOnlyAllowMissingRuntimeScope: true,
+    ).scan()).printers.single;
+    await settings.saveAfterTest(candidate);
+    final printerReply = Completer<void>();
+    var sendStarted = false;
+    final database = ShopDatabase(NativeDatabase.memory());
+    try {
+      await database.addProduct(
+        id: 'rice-slow-print',
+        name: 'Rice',
+        priceMmk: 13500,
+        openingStock: 2,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ShopHome(
+            testOnlyAllowMissingRuntimeScope: true,
+            database: database,
+            authClient: null,
+            apiBaseUrl: 'https://example.invalid',
+            myanmar: false,
+            onLanguageChanged: (_) {},
+            runtimeCapabilities: ShopRuntimeCapabilities.production,
+            receiptPrinterSettings: settings,
+            receiptPrintSender: (host, receipt, myanmar) async {
+              sendStarted = true;
+              await printerReply.future;
+            },
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('shop-catalog-row:rice-slow-print')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('Review sale'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Cash sale'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('shop-cash-given')),
+        '20000',
+      );
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      for (var attempt = 0; attempt < 20 && !sendStarted; attempt++) {
+        await tester.pump(const Duration(milliseconds: 10));
+      }
+      expect(sendStarted, isTrue);
+      expect(find.textContaining('change 6,500 MMK'), findsOneWidget);
+      expect(find.textContaining('checking printer'), findsOneWidget);
+      expect(await database.countSales(), 1);
+      expect((await database.readActiveProducts()).single.onHand, 1);
+
+      printerReply.complete();
+      await tester.pumpAndSettle();
+      expect(find.textContaining('change 6,500 MMK'), findsOneWidget);
+      expect(find.textContaining('receipt sent'), findsOneWidget);
+      expect(await database.countSales(), 1);
+      expect((await database.readActiveProducts()).single.onHand, 1);
+    } finally {
+      if (!printerReply.isCompleted) printerReply.complete();
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+      await database.close();
+    }
+  });
+
   testWidgets('saved printer does not reprint after restart without a retest', (
     tester,
   ) async {
@@ -4687,9 +4770,11 @@ void main() {
       await tester.tap(find.textContaining('Review sale'));
       await tester.pumpAndSettle();
 
+      await tester.tap(find.byTooltip('Add one'));
       await tester.tap(find.byKey(const ValueKey('shop-clear-sale')));
       await tester.pumpAndSettle();
       expect(find.text('Clear current sale?'), findsOneWidget);
+      expect(find.textContaining('2 items will be removed'), findsOneWidget);
       expect(
         find.textContaining('Saved sales and stock will not change.'),
         findsOneWidget,
@@ -4697,7 +4782,7 @@ void main() {
       await tester.tap(find.text('Keep sale'));
       await tester.pumpAndSettle();
       expect((await database.readCounterSaleDraft())?.quantities, {
-        'tea-clear': 1,
+        'tea-clear': 2,
       });
       expect(await database.countSales(), 0);
       expect((await database.readActiveProducts()).single.onHand, 2);
@@ -4746,11 +4831,6 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(await database.countSales(), 0);
-      await tester.enterText(
-        find.byKey(const ValueKey('shop-cash-given')),
-        '20000',
-      );
-      await tester.pumpAndSettle();
       expect(
         tester
             .widget<EditableText>(
@@ -4763,6 +4843,11 @@ void main() {
             .hasFocus,
         isTrue,
       );
+      await tester.enterText(
+        find.byKey(const ValueKey('shop-cash-given')),
+        '20000',
+      );
+      await tester.pumpAndSettle();
       expect(find.text('Change'), findsOneWidget);
       expect(find.text('6,500 MMK'), findsOneWidget);
       expect(await database.countSales(), 0);

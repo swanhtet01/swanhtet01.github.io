@@ -3216,6 +3216,8 @@ class _ShopHomeState extends State<ShopHome> {
   }
 
   Future<void> _confirmDiscardCounterDraft({StateSetter? refresh}) async {
+    await _draftWrites;
+    if (!mounted) return;
     if (_cart.isEmpty ||
         !_checkoutReady ||
         _saving ||
@@ -3224,6 +3226,8 @@ class _ShopHomeState extends State<ShopHome> {
         _pendingWalletCheckout != null) {
       return;
     }
+    final operationId = _operationId;
+    final cartSnapshot = Map<String, int>.from(_cart);
     final itemCount = _cart.values.fold<int>(0, (sum, count) => sum + count);
     final confirmed = await showDialog<bool>(
       context: context,
@@ -3258,6 +3262,18 @@ class _ShopHomeState extends State<ShopHome> {
       ),
     );
     if (confirmed == true && mounted) {
+      await _draftWrites;
+      if (!mounted) return;
+      if (_operationId != operationId || !mapEquals(_cart, cartSnapshot)) {
+        _message(
+          shopCopy(
+            widget.myanmar,
+            'The sale changed while confirmation was open. Review it before clearing.',
+            'အတည်ပြုနေစဉ် အရောင်းစာရင်း ပြောင်းသွားပါသည်။ မဖျက်မီ ပြန်စစ်ပါ။',
+          ),
+        );
+        return;
+      }
       _discardCounterDraft(refresh: refresh);
     } else {
       _focusScannerIfReady();
@@ -3605,6 +3621,7 @@ class _ShopHomeState extends State<ShopHome> {
                     Text(shopCopy(widget.myanmar, 'Change', 'ပြန်အမ်းငွေ')),
                     Semantics(
                       liveRegion: true,
+                      excludeSemantics: true,
                       label: shopCopy(
                         widget.myanmar,
                         'Change ${_mmk(tenderedMmk - totalMmk)}',
@@ -4105,6 +4122,21 @@ class _ShopHomeState extends State<ShopHome> {
         _saving = false;
       });
       if (closeSheet) Navigator.of(context).pop();
+      final changeEnglish = cashChangeMmk == null
+          ? ''
+          : ' · change ${_mmk(cashChangeMmk)}';
+      final changeMyanmar = cashChangeMmk == null
+          ? ''
+          : ' · ပြန်အမ်းငွေ ${_mmk(cashChangeMmk)}';
+      if (cashChangeMmk != null) {
+        _message(
+          shopCopy(
+            widget.myanmar,
+            'Sale saved · ${_mmk(receipt.totalMmk)}$changeEnglish · checking printer',
+            'အရောင်းသိမ်းပြီး · ${_mmk(receipt.totalMmk)}$changeMyanmar · ပရင်တာကို စစ်နေသည်',
+          ),
+        );
+      }
       var printed = false;
       var printFailed = false;
       var printerNeedsTest = false;
@@ -4125,12 +4157,6 @@ class _ShopHomeState extends State<ShopHome> {
         }
       }
       if (!mounted) return;
-      final changeEnglish = cashChangeMmk == null
-          ? ''
-          : ' · change ${_mmk(cashChangeMmk)}';
-      final changeMyanmar = cashChangeMmk == null
-          ? ''
-          : ' · ပြန်အမ်းငွေ ${_mmk(cashChangeMmk)}';
       _message(
         printed
             ? shopCopy(
