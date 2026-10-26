@@ -1,6 +1,6 @@
 # SuperMega Supergoal
 
-- Version: 2.3.0
+- Version: 2.3.1
 - Owners: Swan Htet (technical) and Vivian (operations and business)
 - Updated: 2026-10-26
 - Status: ACTIVE — Shop is the core product; its supporting public website,
@@ -60,9 +60,13 @@ focused cashier UI checks for barcode selection, short-cash rejection, change,
 rapid duplicate submission, reprint, and cancellation/return navigation. The
 next acceptance step is a fresh, synthetic Android Emulator profile running
 the retained QA APK, with simulated keyboard scanner input and virtual receipt
-capture through the actual native Shop paths. Emulator work is owned by Ally
-task `01a178b6-2987-7163-ad15-8e1cec912018`; it must verify isolation and
-artifact identity before any app run and must not inherit real data.
+capture through the actual native Shop paths. The user now requires emulator,
+hosting, and agent execution to remain remote-only. Ally, V, and other
+user-local computers must not run the app, emulator, PostgreSQL rehearsal, or
+agent workloads. A remote host is eligible only after read-only evidence
+confirms KVM or supported nested virtualization, sufficient memory and disk,
+authorized access, cost, and isolation; an old secret, config, or hostname is
+not evidence of current authority.
 
 This is digital internal verification only. It does not prove physical
 scanner/printer compatibility, production signing, hosted account, live

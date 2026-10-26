@@ -26,6 +26,19 @@ No local demo, passing test, healthy provider, or generated artifact is proof of
   change in the post-sale status, and treats uncertain reprints as possibly
   printed so a cashier checks paper before retrying. It changes no sale, stock,
   payment, backup, or authorization boundary.
+- The latest test/evidence-only successor is
+  `b1e45c7567c751c767c3f7784a028e266b4fab04` / tree
+  `495e5a53d29ea43843cd2b0bc08d0ee39c3f7040`. It adds real Flutter captures
+  for startup, confirmation, blocked recovery, checkout, cash/change,
+  completed sale, and receipts in EN/MY phone/tablet states. It also proves an
+  injected clear-draft database failure leaves basket, sale, stock, payment
+  effects, and outbox unchanged, and that a store pathname appearing during
+  new-Shop confirmation is preserved and blocks opening. Analyzer passes; the
+  full native suite passes 409 tests with 33 suite-defined capture skips and
+  zero failures; the opt-in capture run passes 39/39 and produces 130 non-empty
+  PNGs. Technical Hub Sequence 131 holds the exact sources and representative
+  images. These are synthetic Flutter renders, not installed-device or hardware
+  acceptance.
 - On that exact local UX tree, Flutter analysis reports no issues and the full
   native suite passes 407 tests with 25 suite-defined skips and zero failures.
   Focused confirmation, cash, startup, slow-printer, and ambiguous-reprint
@@ -57,12 +70,14 @@ No local demo, passing test, healthy provider, or generated artifact is proof of
   retained Android QA artifact is engineering evidence and is not
   production-signed; installed restart/restore and physical printer/scanner
   acceptance remain open.
-- Swan selected digital testing instead of buying or supplying a spare device.
-  Ally task `01a178b6-2987-7163-ad15-8e1cec912018` owns official Android
-  Emulator feasibility and ordinary setup. It must use a fresh synthetic AVD,
-  verify the retained `6bf59b49` QA artifact identity and isolation before any
-  run, and avoid real data. Simulated scanner input and virtual receipt capture
-  may prove native workflow behavior, but cannot prove physical hardware.
+- Swan selected digital testing instead of buying or supplying a spare device,
+  and subsequently required hosting, emulator, and agent execution to be
+  remote-only. Ally task `01a178b6-2987-7163-ad15-8e1cec912018` is stopped at
+  its explicit restart boundary: no restart, emulator boot, APK install, or app
+  run is permitted there. V and every other user-local computer are excluded.
+  Simulated scanner input and virtual receipt capture may prove native workflow
+  behavior on a future verified remote emulator, but cannot prove physical
+  hardware.
 - The emulator handoff artifact is GitHub Actions artifact `12609717130`, file
   `app-qa-debug.apk`, 195,800,696 bytes, SHA-256
   `d61170603382e96fda064fa68f4ec4db59b251795c26e1dc2ed3d835ffe5755b`.
@@ -80,19 +95,21 @@ No local demo, passing test, healthy provider, or generated artifact is proof of
   identity. Historical AWS/Bangkok/Tailscale documents do not prove current
   authorization, reachability, nested virtualization or spare capacity; V is
   explicitly unauthorized and must not be used.
-- Smallest suitable existing host requirement: Linux x86_64 with accessible
+- Smallest suitable remote host requirement: Linux x86_64 with accessible
   `/dev/kvm`, at least 4 vCPUs, 8 GiB RAM and 20 GiB free disk, plus permission
   to accept the official Android SDK license and install only command-line
-  tools, platform-tools, emulator and one fresh x86_64 system image. Otherwise
-  the pending Ally Windows route requires explicit SDK-license acceptance and
-  WHPX enablement/admin reboot after memory pressure is resolved.
+  tools, platform-tools, emulator and one fresh x86_64 system image. No host is
+  approved merely because an old config, secret, or hostname mentions it; no
+  capacity may be purchased or provisioned without a bounded decision.
 - App CI at `6bf59b49` still fails first on stale PostgreSQL evidence; later App
   checks did not run. GitGuardian also remains failed on two historical
   synthetic fixture findings. Native, Dependency Security, and Kernel checks
   passed. Local fixture hygiene is reviewed but has not resolved the provider
   check.
-- The exact-source synthetic PostgreSQL-17 rehearsal is approved and handed
-  back, but its existing Local task remains technically inaccessible. Do not
+- The exact-source synthetic PostgreSQL-17 rehearsal was approved for the Local
+  task and handed back, but its task remained technically inaccessible. The
+  later remote-only requirement now pauses that local execution as well. Its
+  approval does not transfer to a remote host or another source build; do not
   reroute or repeat it elsewhere.
 
 This section supersedes older candidate-head statements below where they
@@ -270,7 +287,9 @@ business research, marketing, onboarding, support, pricing input, and daily
 operations, not engineering QA. Technical review and tests remain with Swan and
 the Tech Leads. Do not recreate Vivian's prepared material.
 
-The local lead remains preserved and unarchived. Unmapped worktrees, stashes,
+The local lead remains preserved and unarchived for read-only context, but the
+current remote-only direction excludes it from emulator, app, PostgreSQL, or
+agent execution. Unmapped worktrees, stashes,
 screenshot provenance, and OneDrive context must not be cleaned or imported
 without bounded equivalence review. The producer-verified historical package
 hash and its deferred catalog, receivables, receiving, and daily-sales evidence
@@ -284,13 +303,15 @@ backup, and restore review; no blind merge or cherry-pick is allowed.
 
 ## Next action
 
-Active item: establish the effective Git-deployment behavior of both Vercel
-projects linked to this repository. Acceptance requires provider evidence or an
-explicit disposition; `vercel.json` alone is insufficient. Preserve
-`03df1838` and do not push meanwhile.
+Active item: preserve the reviewed internal Shop candidate and identify one
+authorized remote Android execution host. Acceptance requires verified remote
+identity and access, KVM or supported nested virtualization, sufficient memory
+and disk, bounded cost, an isolated synthetic AVD, retained APK identity
+verification, and an actual sale/restart/recovery walkthrough. No local host,
+historical secret, or unverified VPS reference closes this gate.
 
 Next eligible sequence: exact PR #734 App/Native/security CI → exact-source
-gallery → newly approved exact-head PostgreSQL rehearsal/evidence successor →
+gallery → separately authorized remote exact-head PostgreSQL rehearsal/evidence successor →
 app-first protected pair → separately approved synthetic user/tenant/Shop
 binding → login/setup/sale/restart/recovery/account walkthrough → signed
 distribution and installed recovery → applicable hardware and Vivian merchant
