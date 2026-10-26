@@ -101,6 +101,16 @@ No local demo, passing test, healthy provider, or generated artifact is proof of
   tools, platform-tools, emulator and one fresh x86_64 system image. No host is
   approved merely because an old config, secret, or hostname mentions it; no
   capacity may be purchased or provisioned without a bounded decision.
+- Read-only remote-host research identified one practical short-lived option:
+  GCP `n2-standard-4` on Intel, 4 vCPU, 16 GiB RAM, nested KVM, and a 60 GiB
+  balanced disk. The current estimate for a 20-hour internal test is about
+  US$4.15 if resources are removed afterward, or about US$9.98 with the disk
+  retained for a month; tax, egress, and API-related charges can vary. A
+  maximum US$15 budget and an authorized account/project are pending explicit
+  confirmation. No project, VM, disk, credential, or billable resource exists
+  from this plan. Hetzner Cloud does not allow nested virtualization; its
+  dedicated AX41-class bare-metal option (about EUR59/month including IPv4,
+  before VAT) is a possible longer-term route but is not selected.
 - App CI at `6bf59b49` still fails first on stale PostgreSQL evidence; later App
   checks did not run. GitGuardian also remains failed on two historical
   synthetic fixture findings. Native, Dependency Security, and Kernel checks
