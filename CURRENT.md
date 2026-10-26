@@ -112,8 +112,12 @@ No local demo, passing test, healthy provider, or generated artifact is proof of
   credential, billing link, IAM grant or billable resource was created. The
   prepared, non-executed bootstrap and acceptance checklist is
   [`docs/REMOTE-ANDROID-QA-PILOT.md`](docs/REMOTE-ANDROID-QA-PILOT.md); it uses
-  a six-hour automatic-delete backstop, no VM service account, private ADB and
-  synthetic-only data. Hetzner Cloud does not allow nested virtualization; its
+  a six-hour automatic STOP, no VM service account, private ADB and synthetic-
+  only data. STOP bounds compute runtime but retains billable resources, so it
+  is not a hard dollar cap. The checklist requires a 24-hour cost review and a
+  separate exact deletion or bounded-retention decision after evidence export;
+  the pilot budget is not deletion authority. Hetzner Cloud does not allow
+  nested virtualization; its
   dedicated AX41-class bare-metal option (about EUR59/month including IPv4,
   before VAT) is a possible longer-term route but is not selected.
 - App CI at `6bf59b49` still fails first on stale PostgreSQL evidence; later App

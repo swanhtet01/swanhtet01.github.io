@@ -49,22 +49,27 @@ visible does not prove billing or create permission.
 
 - one `n2-standard-4` VM: 4 vCPU, 16 GiB RAM
 - Intel Haswell or later; nested virtualization explicitly enabled
-- one 60 GiB balanced persistent boot disk with auto-delete
+- one 60 GiB balanced persistent boot disk retained while the VM is stopped;
+  deleting the VM or disk remains a separate specifically authorized action
 - Debian 12 or another owner-approved supported Linux x86_64 image
 - no GPU, Local SSD, reserved IP, snapshot, image, database, or managed service
 - maximum VM runtime: **6 hours**
-- termination action: **DELETE**, not STOP
+- termination action: **STOP** after six hours
 - labels: `purpose=supermega-shop-qa`, `data=synthetic`, `ttl=6h`
 - one fresh AOSP API 35 x86_64 AVD: 2 vCPU, 2048 MiB RAM, no Play Store,
   account, camera, microphone, SD card, or snapshot
 
 The prior estimate is about US$4.15 for 20 hours if resources are removed, so
-six hours fits the US$15 ceiling with margin. Recalculate in the chosen project
-and zone immediately before creation. Google Cloud budget alerts are delayed
-and do not automatically cap ordinary usage; the VM's automatic six-hour
-deletion is the primary technical stop. A project-specific budget/spend cap is
-an additional owner-controlled safeguard where the billing account supports
-it.
+six hours of compute should fit the US$15 ceiling with margin. Recalculate in
+the chosen project and zone immediately before creation. Google Cloud budget
+alerts are delayed and do not automatically cap ordinary usage. The provider's
+six-hour STOP bounds compute runtime, but a stopped VM can continue to incur
+persistent-disk, IP or other retained-resource costs. Therefore this is not a
+hard dollar cap. Before creation, record the hourly compute estimate, daily
+retained-resource estimate, a review deadline no later than 24 hours after the
+automatic stop, and the person responsible for the later deletion decision. A
+project-specific budget/spend cap is an additional owner-controlled safeguard
+where the billing account supports it.
 
 ## Network and identity boundary
 
@@ -106,9 +111,10 @@ selectors; keep the resource and safety flags unchanged.
    ```
 
 4. Create a new evidence directory whose manifest records project, zone, VM,
-   start time, six-hour deletion deadline, artifact/run/source/native-tree
-   identities, and every tool version. Do not include account email, tokens,
-   project secrets, or environment dumps.
+   start time, six-hour stop deadline, 24-hour retention-review deadline,
+   estimated compute and retained-resource costs, artifact/run/source/native-
+   tree identities, and every tool version. Do not include account email,
+   tokens, project secrets, or environment dumps.
 
 Stop if the artifact hash, source tuple, signing classification, project,
 billing state, quota, organization policy, or estimate differs.
@@ -132,16 +138,17 @@ gcloud compute instances create supermega-shop-qa-YYYYMMDD \
   --no-service-account \
   --no-scopes \
   --max-run-duration=6h \
-  --instance-termination-action=DELETE \
+  --instance-termination-action=STOP \
   --labels=purpose=supermega-shop-qa,data=synthetic,ttl=6h \
   --network-interface="subnet=$PILOT_SUBNET"
 ```
 
 Immediately read back and record `machineType`, CPU platform, nested
-virtualization, boot-disk auto-delete, service-account absence,
+virtualization, boot-disk retention behavior, service-account absence,
 `terminationTimestamp`, termination action, IP/firewall exposure, and labels.
-Delete the VM immediately if any value differs. Do not proceed merely because
-creation succeeded.
+Stop the VM immediately if any value differs. Do not delete it without the
+required specific authorization, and do not proceed merely because creation
+succeeded.
 
 ### 3. Host and KVM preflight
 
@@ -156,8 +163,9 @@ free -h
 ```
 
 Require a nonzero VMX count, usable `/dev/kvm`, at least 20 GiB free disk after
-OS packages, and at least 8 GiB total RAM. Stop and delete the VM if hardware
-acceleration is unavailable; do not fall back to unaccelerated emulation.
+OS packages, and at least 8 GiB total RAM. Stop the VM if hardware acceleration
+is unavailable; do not delete it without specific authorization and do not
+fall back to unaccelerated emulation.
 
 ### 4. Install only the pinned emulator toolchain
 
@@ -248,35 +256,45 @@ survives. Confirm again that the production package ID is absent. This proves a
 same-artifact QA update boundary only; it is not an upgrade from newer source
 and not production migration evidence.
 
-### 9. Export evidence and destroy everything
+### 9. Export evidence and stop the provider resources
 
 Copy out only the redacted manifest, hashes, screenshots, simulated receipts,
-test log, and failure summary. Verify their hashes on the controller. Then:
+test log, and failure summary. Verify their hashes on the controller before
+changing resource state. Then:
 
 1. stop emulator/ADB;
-2. delete the VM if automatic deletion has not already occurred;
-3. verify its boot disk and ephemeral external IP are gone;
-4. delete the dedicated firewall/subnet/network only if they were created for
-   this pilot and are empty;
-5. list remaining resources with the pilot label and require an empty result;
-6. record actual elapsed time and billing estimate without claiming final
-   invoiced cost.
+2. stop the VM explicitly if the six-hour provider stop has not already run;
+3. verify the VM is `TERMINATED` and cannot be restarted by an automatic-
+   restart policy;
+4. enumerate the stopped VM, boot disk, external IP, firewall, subnet and
+   network, recording which resources still incur charges;
+5. record actual elapsed time, estimated compute cost, estimated retained-
+   resource cost per day, and the 24-hour deletion-review deadline without
+   claiming final invoiced cost;
+6. request the specific deletion decision for the exact VM, disk, IP and
+   dedicated network resources. Do not treat the pilot budget as deletion
+   authority.
 
-Do not retain a disk, snapshot, image, stopped VM, static IP, SDK cache, AVD, or
-APK on the provider. Automatic six-hour deletion is a backstop, not a reason to
-skip explicit cleanup.
+Until that decision, do not create a snapshot or image, restart the VM, reserve
+an ephemeral IP, or copy new data onto the disk. If deletion is specifically
+authorized, first confirm the exported evidence hashes, then delete only the
+listed pilot resources and read back an empty label-scoped resource inventory.
+If retention is chosen, record its owner, purpose, daily estimated cost and new
+expiry/review time. A stopped VM is not a completed cleanup state.
 
 ## Completion and stop conditions
 
-The pilot is complete only when the retained artifact identity, VM identity,
+The test run is complete only when the retained artifact identity, VM identity,
 KVM acceleration, private ADB boundary, installed package, synthetic journey,
-restart, same-artifact update, encrypted export/restore, evidence hashes, and
-resource deletion are all recorded.
+restart, same-artifact update, encrypted export/restore, evidence hashes, VM
+stop and remaining-resource cost inventory are recorded. Resource lifecycle is
+closed only after a separately authorized deletion or an explicit bounded
+retention decision is recorded.
 
 Stop without retrying or widening access when any of these occurs:
 
 - account/project/billing ownership or permission is ambiguous;
-- estimated or observed usage can exceed US$15;
+- estimated or observed compute plus retained-resource usage can exceed US$15;
 - nested KVM, quota, required official package, or disk/RAM minimum is absent;
 - a command requires a new IAM grant, service account, credential, billing
   link, API purchase, legal acceptance, public ADB/UI, or production data;
