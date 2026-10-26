@@ -97,6 +97,40 @@ opening inbound access or adding an unapproved paid service, stop.
 The commands are templates, not executed instructions. Replace only the named
 selectors; keep the resource and safety flags unchanged.
 
+### Offline preflight harness
+
+Before any provider command, run the dependency-free source preflight:
+
+```text
+node tools/prepare_remote_android_qa_preflight.mjs \
+  --dry-run \
+  --input <read-only-host-and-session-observations.json> \
+  --artifact-packet <verified-android-qa-handoff.json>
+```
+
+The input must explicitly bind the PR head, artifact source/merge SHA, native
+tree, Actions run ID, artifact ID, original archive hash and APK hash. It also
+requires read-only observations for nested KVM, CPU/RAM/disk, loopback-only
+ADB/emulator/gRPC, no VM service account/scopes/credentials/production secrets,
+synthetic-only data, six-hour STOP, the US$15 budget and 24-hour retained-cost
+review. Scanner key input, sale, receipt capture/reprint, restart/reopen,
+encrypted restore, evidence export and provider stop are distinct immutable
+steps.
+
+The harness imports and validates the reviewed native artifact handoff instead
+of trusting caller strings. It contains no command-execution, networking or
+provider SDK import and cannot provision, connect, download an SDK, start an
+emulator or run a database. Missing prerequisites produce `BLOCKED` and a
+nonzero exit.
+
+Current retained-artifact result: every non-artifact boundary passes the dry
+run, but artifact `12609717130` remains blocked for
+`artifact_encrypted_restore_unavailable` and
+`artifact_scoped_evidence_export_unavailable`. Provider access alone cannot
+close these product-source gaps. A reviewed successor artifact must implement
+the scoped synthetic-evidence saver/loader and encrypted restore contract before
+this full acceptance run can become eligible.
+
 ### 1. Controller preflight
 
 1. Confirm the selected account, project, billing state, required roles, zone,

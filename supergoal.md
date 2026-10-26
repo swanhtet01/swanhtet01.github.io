@@ -68,6 +68,15 @@ confirms KVM or supported nested virtualization, sufficient memory and disk,
 authorized access, cost, and isolation; an old secret, config, or hostname is
 not evidence of current authority.
 
+The offline remote-host preflight additionally binds the exact retained
+source/run/artifact/archive/APK identities and fails closed on missing native
+capabilities. Its current retained-artifact result proves that provider access
+alone is insufficient: encrypted restore and the scoped synthetic-evidence
+export path are unavailable in that APK. The next eligible source outcome is a
+reviewed exact-head QA successor implementing those existing isolation-plan
+contracts without enabling general external file access. Only then may a
+verified remote host proceed to the complete acceptance run.
+
 This is digital internal verification only. It does not prove physical
 scanner/printer compatibility, production signing, hosted account, live
 correction authority, merchant acceptance, or launch. Emulator evidence must

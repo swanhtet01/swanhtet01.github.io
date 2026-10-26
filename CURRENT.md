@@ -120,6 +120,17 @@ No local demo, passing test, healthy provider, or generated artifact is proof of
   nested virtualization; its
   dedicated AX41-class bare-metal option (about EUR59/month including IPv4,
   before VAT) is a possible longer-term route but is not selected.
+- The dependency-free remote preflight at
+  `tools/prepare_remote_android_qa_preflight.mjs` now validates exact retained
+  source/run/artifact/archive/APK identity, KVM and capacity observations,
+  private loopback ADB, absence of VM credentials/provider scopes, synthetic
+  data, six-hour STOP, budget/retention and redacted evidence boundaries. Its
+  14 tests plus the 16 reviewed artifact-handoff tests pass. The actual retained
+  handoff dry run fails closed only on two truthful artifact capabilities:
+  encrypted restore and scoped synthetic-evidence export are unavailable. No
+  cloud command, emulator, database, SDK download or provider write ran. A new
+  reviewed exact-head QA artifact containing those two capabilities is required
+  before the full remote acceptance journey, independent of provider access.
 - App CI at `6bf59b49` still fails first on stale PostgreSQL evidence; later App
   checks did not run. GitGuardian also remains failed on two historical
   synthetic fixture findings. Native, Dependency Security, and Kernel checks
