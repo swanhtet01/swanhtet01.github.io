@@ -106,7 +106,8 @@ class _ShopStartupState extends State<ShopStartup> {
   bool get _qaEvidenceAvailable =>
       widget.runtimeScope?.configuration.isSyntheticQa == true &&
       widget.runtimeScope?.capabilities.syntheticEvidence == true &&
-      (widget.qaEvidenceStore != null || Platform.isAndroid);
+      ((widget.qaEvidenceStore?.isBoundTo(widget.runtimeScope!) ?? false) ||
+          (widget.qaEvidenceStore == null && Platform.isAndroid));
   bool get _backupRestoreAvailable =>
       _externalFileSavingAllowed || _qaEvidenceAvailable;
 
@@ -327,6 +328,7 @@ class _ShopStartupState extends State<ShopStartup> {
         final store =
             widget.qaEvidenceStore ??
             ShopQaEvidenceStore.forRuntime(runtimeScope!);
+        store.requireBoundTo(runtimeScope!);
         staged = await store.stageLatestEncryptedBackup();
         if (staged == null) {
           if (mounted) {

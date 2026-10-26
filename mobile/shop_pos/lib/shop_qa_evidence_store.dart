@@ -54,6 +54,27 @@ final class ShopQaEvidenceStore {
 
   Directory get _root => runtimeScope.syntheticEvidenceRoot!;
 
+  bool isBoundTo(ShopRuntimeScope candidate) =>
+      identical(runtimeScope, candidate) &&
+      runtimeScope.configuration.profileId ==
+          candidate.configuration.profileId &&
+      runtimeScope.configuration.platformIdentity ==
+          candidate.configuration.platformIdentity &&
+      _samePath(
+        runtimeScope.documentsRoot.absolute.path,
+        candidate.documentsRoot.absolute.path,
+      ) &&
+      _samePath(
+        _root.absolute.path,
+        candidate.syntheticEvidenceRoot!.absolute.path,
+      );
+
+  void requireBoundTo(ShopRuntimeScope candidate) {
+    if (!isBoundTo(candidate)) {
+      throw StateError('shop_qa_evidence_scope_mismatch');
+    }
+  }
+
   Future<File> exportEncryptedBackup({
     required ShopDatabase database,
     required String password,
@@ -76,7 +97,7 @@ final class ShopQaEvidenceStore {
       final instant = (now ?? DateTime.now()).toUtc();
       final fileName = _fileName(instant);
       final target = File('${_root.path}${Platform.pathSeparator}$fileName');
-      final bytes = _encode(payload, instant);
+      final bytes = _encode(payload, instant, fileName);
       await _writeNewFile(target, bytes);
       return target;
     } finally {
@@ -104,15 +125,20 @@ final class ShopQaEvidenceStore {
       }
       candidates.add(entity);
     }
-    candidates.sort((a, b) => b.path.compareTo(a.path));
     if (candidates.isEmpty) return null;
+    if (candidates.length != 1) {
+      throw StateError('shop_qa_evidence_multiple_files');
+    }
 
     final candidate = candidates.first;
     if (await candidate.length() >
         ShopBackup.maxSnapshotBytes + _maxHeaderBytes + 8 + 256) {
       throw const FormatException('The QA evidence envelope is too large.');
     }
-    final payload = await _decode(await candidate.readAsBytes());
+    final payload = await _decode(
+      await candidate.readAsBytes(),
+      _basename(candidate.path),
+    );
     final staged = File(
       '${runtimeScope.temporaryRoot.path}${Platform.pathSeparator}'
       'supermega-shop-qa-restore-${const Uuid().v4()}.smbak',
@@ -146,7 +172,11 @@ final class ShopQaEvidenceStore {
     }
   }
 
-  Uint8List _encode(Uint8List payload, DateTime generatedAt) {
+  Uint8List _encode(
+    Uint8List payload,
+    DateTime generatedAt,
+    String evidenceFileName,
+  ) {
     if (payload.length > ShopBackup.maxSnapshotBytes + 256) {
       throw const FormatException('The QA backup is too large.');
     }
@@ -158,6 +188,7 @@ final class ShopQaEvidenceStore {
       'platformIdentity': runtimeScope.configuration.platformIdentity,
       'isolationContractVersion': ShopRuntimeScope.isolationContractVersion,
       'generatedAtUtc': generatedAt.toIso8601String(),
+      'evidenceFileName': evidenceFileName,
       'payloadLength': payload.length,
       'payloadSha256': payloadDigest,
     };
@@ -178,7 +209,7 @@ final class ShopQaEvidenceStore {
     return result.takeBytes();
   }
 
-  Future<Uint8List> _decode(Uint8List encoded) async {
+  Future<Uint8List> _decode(Uint8List encoded, String expectedFileName) async {
     if (encoded.length < 8 || !_startsWith(encoded, _magic)) {
       throw const FormatException('The QA evidence envelope is invalid.');
     }
@@ -204,6 +235,7 @@ final class ShopQaEvidenceStore {
       'platformIdentity',
       'isolationContractVersion',
       'generatedAtUtc',
+      'evidenceFileName',
       'payloadLength',
       'payloadSha256',
       'testIntegrityHmacSha256',
@@ -216,7 +248,8 @@ final class ShopQaEvidenceStore {
         decoded['platformIdentity'] !=
             runtimeScope.configuration.platformIdentity ||
         decoded['isolationContractVersion'] !=
-            ShopRuntimeScope.isolationContractVersion) {
+            ShopRuntimeScope.isolationContractVersion ||
+        decoded['evidenceFileName'] != expectedFileName) {
       throw const FormatException('The QA evidence identity does not match.');
     }
     final payload = Uint8List.fromList(encoded.sublist(8 + headerLength));

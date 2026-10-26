@@ -3,7 +3,6 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:drift/native.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supermega_shop/shop_backup.dart';
@@ -148,6 +147,51 @@ void main() {
     );
   });
 
+  test('renamed or multiple valid envelopes fail closed', () async {
+    final first = await store.exportEncryptedBackup(
+      database: database,
+      password: _password,
+      now: DateTime.utc(2026, 10, 26, 1, 2, 3),
+    );
+    final renamed = File(
+      '${first.parent.path}${Platform.pathSeparator}'
+      'SuperMega-Shop-SYNTHETIC-QA-20261026-010204-abcdef012345.smqa',
+    );
+    await first.rename(renamed.path);
+    await expectLater(
+      store.stageLatestEncryptedBackup(),
+      throwsA(
+        isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          'The QA evidence identity does not match.',
+        ),
+      ),
+    );
+    await renamed.delete();
+
+    await store.exportEncryptedBackup(
+      database: database,
+      password: _password,
+      now: DateTime.utc(2026, 10, 26, 1, 2, 3),
+    );
+    await store.exportEncryptedBackup(
+      database: database,
+      password: _password,
+      now: DateTime.utc(2026, 10, 26, 1, 2, 4),
+    );
+    await expectLater(
+      store.stageLatestEncryptedBackup(),
+      throwsA(
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          'shop_qa_evidence_multiple_files',
+        ),
+      ),
+    );
+  });
+
   test(
     'missing, symlinked, and production evidence roots fail closed',
     () async {
@@ -219,46 +263,46 @@ void main() {
     },
   );
 
-  testWidgets('QA export screen requires the scoped evidence store', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        home: ShopBackupExportScreen(
-          database: database,
-          myanmar: false,
-          runtimeScope: scope,
-          qaEvidenceStore: store,
-        ),
-      ),
-    );
-    await tester.enterText(find.byType(TextField).at(0), _password);
-    await tester.enterText(find.byType(TextField).at(1), _password);
+  test('QA export availability requires the scoped evidence store', () async {
     expect(
-      tester
-          .widget<FilledButton>(
-            find.widgetWithText(FilledButton, 'Save synthetic QA evidence'),
-          )
-          .onPressed,
-      isNotNull,
+      ShopBackupExportScreen(
+        database: database,
+        myanmar: false,
+        runtimeScope: scope,
+        qaEvidenceStore: store,
+      ).backupSavingAllowed,
+      isTrue,
+    );
+    expect(
+      ShopBackupExportScreen(
+        database: database,
+        myanmar: false,
+        runtimeScope: scope,
+      ).backupSavingAllowed,
+      isFalse,
     );
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: ShopBackupExportScreen(
-          database: database,
-          myanmar: false,
-          runtimeScope: scope,
-        ),
-      ),
+    final foreignSupport = await Directory.systemTemp.createTemp(
+      'shop-qa-evidence-foreign-support-',
     );
+    final foreignTemporary = await Directory.systemTemp.createTemp(
+      'shop-qa-evidence-foreign-temp-',
+    );
+    addTearDown(() async {
+      await foreignSupport.delete(recursive: true);
+      await foreignTemporary.delete(recursive: true);
+    });
+    final foreignScope = await _qaScope(foreignSupport, foreignTemporary);
+    final foreignStore = ShopQaEvidenceStore.forTest(foreignScope);
+    expect(() => foreignStore.requireBoundTo(scope), throwsStateError);
     expect(
-      tester
-          .widget<FilledButton>(
-            find.widgetWithText(FilledButton, 'Save synthetic QA evidence'),
-          )
-          .onPressed,
-      isNull,
+      ShopBackupExportScreen(
+        database: database,
+        myanmar: false,
+        runtimeScope: scope,
+        qaEvidenceStore: foreignStore,
+      ).backupSavingAllowed,
+      isFalse,
     );
   });
 }

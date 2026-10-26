@@ -128,7 +128,8 @@ class ShopBackupExportScreen extends StatefulWidget {
                       encryptedRoot != null)))) ||
       (runtimeScope?.configuration.isSyntheticQa == true &&
           runtimeScope?.capabilities.syntheticEvidence == true &&
-          (qaEvidenceStore != null || Platform.isAndroid));
+          ((qaEvidenceStore?.isBoundTo(runtimeScope!) ?? false) ||
+              (qaEvidenceStore == null && Platform.isAndroid)));
 
   @override
   State<ShopBackupExportScreen> createState() => _ShopBackupExportScreenState();
@@ -203,6 +204,7 @@ class _ShopBackupExportScreenState extends State<ShopBackupExportScreen> {
         final store =
             widget.qaEvidenceStore ??
             ShopQaEvidenceStore.forRuntime(runtimeScope!);
+        store.requireBoundTo(runtimeScope!);
         await store.exportEncryptedBackup(
           database: widget.database,
           password: password,

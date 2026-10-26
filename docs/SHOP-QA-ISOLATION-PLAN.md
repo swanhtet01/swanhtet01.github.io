@@ -137,9 +137,12 @@ file-picker capability. Its `.smqa` envelope binds the exact profile, platform
 identity, isolation-contract version, payload length and SHA-256. The public
 synthetic-test HMAC detects accidental evidence/profile mixing; it is not a
 production signature or a defense against a rooted device. The loader rejects
-symlinks, oversized/truncated envelopes, header/payload tampering and foreign
-identities before staging the still-encrypted `SMBK` payload. `ShopBackup` then
-retains its empty-target, password, schema, semantic and no-replace checks.
+symlinks, unexpected entries, multiple envelopes, renamed envelopes,
+oversized/truncated envelopes, header/payload tampering and foreign identities
+before staging the still-encrypted `SMBK` payload. A widget-injected store must
+be the identical runtime-scope instance; a foreign QA root cannot be used as a
+test seam. `ShopBackup` then retains its empty-target, password, schema,
+semantic and no-replace checks.
 
 Remote Android collection remains a two-sided acceptance step: export inside
 the QA app, copy the `.smqa` bytes through the debug-only package sandbox,
