@@ -72,6 +72,31 @@ function checkoutSteps(source) {
   return steps
 }
 
+function checkoutDisablesCredentialPersistence(step) {
+  const lines = step.split(/\r?\n/)
+  const useIndent = lines[0].match(/^\s*/)?.[0].length ?? -1
+  const withLines = lines
+    .map((line, index) => ({ line, index }))
+    .filter(({ line }) => line.trim() === 'with:' && (line.match(/^\s*/)?.[0].length ?? -1) === useIndent)
+  const persistenceLines = lines
+    .map((line, index) => ({ line, index }))
+    .filter(({ line }) => /^\s*persist-credentials\s*:/.test(line))
+  if (withLines.length !== 1 || persistenceLines.length !== 1) return false
+
+  const withIndex = withLines[0].index
+  const nextSiblingIndex = lines.findIndex((line, index) => (
+    index > withIndex
+      && line.trim() !== ''
+      && (line.match(/^\s*/)?.[0].length ?? -1) <= useIndent
+  ))
+  const withEnd = nextSiblingIndex < 0 ? lines.length : nextSiblingIndex
+  const persistence = persistenceLines[0]
+  return persistence.index > withIndex
+    && persistence.index < withEnd
+    && (persistence.line.match(/^\s*/)?.[0].length ?? -1) === useIndent + 2
+    && persistence.line.trim() === 'persist-credentials: false'
+}
+
 export function verifyShopNativeCiContract(source, gradleWrapperSource = '') {
   const failures = []
 
@@ -80,7 +105,7 @@ export function verifyShopNativeCiContract(source, gradleWrapperSource = '') {
   if (/^\s*channel:\s*stable\s*$/m.test(source)) failures.push('flutter_sdk_uses_mutable_stable_channel')
   const checkoutBlocks = checkoutSteps(source)
   if (checkoutBlocks.length !== 6) failures.push('native_checkout_step_count_not_exactly_six')
-  if (checkoutBlocks.some(block => !/^\s*persist-credentials:\s*false\s*$/m.test(block))) {
+  if (checkoutBlocks.some(block => !checkoutDisablesCredentialPersistence(block))) {
     failures.push('native_checkout_credentials_persisted_or_unspecified')
   }
   const formatLine = source.split(/\r?\n/).find(line => line.trim().startsWith('dart format ')) ?? ''

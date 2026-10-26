@@ -171,6 +171,39 @@ test('native CI checkouts never persist the workflow credential', () => {
   assert.ok(
     missing.failures.includes('native_checkout_credentials_persisted_or_unspecified'),
   )
+
+  const underEnvironment = verifyShopNativeCiContract(
+    workflow.replace(
+      '        with:\n          persist-credentials: false',
+      '        env:\n          persist-credentials: false',
+    ),
+    gradleWrapper,
+  )
+  assert.ok(
+    underEnvironment.failures.includes('native_checkout_credentials_persisted_or_unspecified'),
+  )
+
+  const afterRun = verifyShopNativeCiContract(
+    workflow.replace(
+      '        with:\n          persist-credentials: false',
+      '        run: true\n        persist-credentials: false',
+    ),
+    gradleWrapper,
+  )
+  assert.ok(
+    afterRun.failures.includes('native_checkout_credentials_persisted_or_unspecified'),
+  )
+
+  const conflicting = verifyShopNativeCiContract(
+    workflow.replace(
+      '          persist-credentials: false',
+      '          persist-credentials: false\n          persist-credentials: true',
+    ),
+    gradleWrapper,
+  )
+  assert.ok(
+    conflicting.failures.includes('native_checkout_credentials_persisted_or_unspecified'),
+  )
 })
 
 test('production identity is generated only after every default-profile test shard', () => {
