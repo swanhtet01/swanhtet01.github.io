@@ -43,8 +43,8 @@ jobs:
 
       - name: Check changed Dart formatting
         run: |
-          dart format lib/camera_barcode_scanner.dart lib/connected_orders_screen.dart lib/connected_orders_service.dart lib/main.dart lib/menu_import_screen.dart lib/menu_import_service.dart lib/printer_services.dart lib/printer_setup_screen.dart lib/recent_sales_screen.dart lib/shop_backup.dart lib/shop_backup_export_screen.dart lib/shop_build_identity.g.dart lib/shop_cash_shift_screen.dart lib/shop_copy.dart lib/shop_correction_authorization_service.dart lib/shop_correction_receipt.dart lib/shop_database.dart lib/shop_operational_export.dart lib/shop_operational_export_saver.dart lib/shop_runtime_profile.dart lib/shop_runtime_scope.dart lib/shop_sale_correction_dialog.dart lib/shop_startup.dart lib/shop_today_screen.dart lib/stock_screen.dart test/shop_backup_test.dart test/shop_correction_authorization_service_test.dart test/shop_foundation_test.dart test/shop_member_identity_test.dart test/shop_operational_export_database_test.dart test/shop_operational_export_saver_test.dart test/shop_operational_export_test.dart test/shop_operational_export_widget_test.dart test/shop_runtime_profile_test.dart test/shop_runtime_scope_test.dart test/visual_capture_test.dart test/widget_test.dart
-          git diff --exit-code -- lib/camera_barcode_scanner.dart lib/connected_orders_screen.dart lib/connected_orders_service.dart lib/main.dart lib/menu_import_screen.dart lib/menu_import_service.dart lib/printer_services.dart lib/printer_setup_screen.dart lib/recent_sales_screen.dart lib/shop_backup.dart lib/shop_backup_export_screen.dart lib/shop_build_identity.g.dart lib/shop_cash_shift_screen.dart lib/shop_copy.dart lib/shop_correction_authorization_service.dart lib/shop_correction_receipt.dart lib/shop_database.dart lib/shop_operational_export.dart lib/shop_operational_export_saver.dart lib/shop_runtime_profile.dart lib/shop_runtime_scope.dart lib/shop_sale_correction_dialog.dart lib/shop_startup.dart lib/shop_today_screen.dart lib/stock_screen.dart test/shop_backup_test.dart test/shop_correction_authorization_service_test.dart test/shop_foundation_test.dart test/shop_member_identity_test.dart test/shop_operational_export_database_test.dart test/shop_operational_export_saver_test.dart test/shop_operational_export_test.dart test/shop_operational_export_widget_test.dart test/shop_runtime_profile_test.dart test/shop_runtime_scope_test.dart test/visual_capture_test.dart test/widget_test.dart
+          dart format lib/camera_barcode_scanner.dart lib/connected_orders_screen.dart lib/connected_orders_service.dart lib/main.dart lib/menu_import_screen.dart lib/menu_import_service.dart lib/printer_services.dart lib/printer_setup_screen.dart lib/recent_sales_screen.dart lib/shop_backup.dart lib/shop_backup_export_screen.dart lib/shop_build_identity.g.dart lib/shop_cash_shift_screen.dart lib/shop_copy.dart lib/shop_correction_authorization_service.dart lib/shop_correction_receipt.dart lib/shop_database.dart lib/shop_operational_export.dart lib/shop_operational_export_saver.dart lib/shop_qa_evidence_store.dart lib/shop_runtime_profile.dart lib/shop_runtime_scope.dart lib/shop_sale_correction_dialog.dart lib/shop_startup.dart lib/shop_today_screen.dart lib/stock_screen.dart test/shop_backup_test.dart test/shop_correction_authorization_service_test.dart test/shop_foundation_test.dart test/shop_member_identity_test.dart test/shop_operational_export_database_test.dart test/shop_operational_export_saver_test.dart test/shop_operational_export_test.dart test/shop_operational_export_widget_test.dart test/shop_qa_evidence_store_test.dart test/shop_runtime_profile_test.dart test/shop_runtime_scope_test.dart test/visual_capture_test.dart test/widget_test.dart
+          git diff --exit-code -- lib/camera_barcode_scanner.dart lib/connected_orders_screen.dart lib/connected_orders_service.dart lib/main.dart lib/menu_import_screen.dart lib/menu_import_service.dart lib/printer_services.dart lib/printer_setup_screen.dart lib/recent_sales_screen.dart lib/shop_backup.dart lib/shop_backup_export_screen.dart lib/shop_build_identity.g.dart lib/shop_cash_shift_screen.dart lib/shop_copy.dart lib/shop_correction_authorization_service.dart lib/shop_correction_receipt.dart lib/shop_database.dart lib/shop_operational_export.dart lib/shop_operational_export_saver.dart lib/shop_qa_evidence_store.dart lib/shop_runtime_profile.dart lib/shop_runtime_scope.dart lib/shop_sale_correction_dialog.dart lib/shop_startup.dart lib/shop_today_screen.dart lib/stock_screen.dart test/shop_backup_test.dart test/shop_correction_authorization_service_test.dart test/shop_foundation_test.dart test/shop_member_identity_test.dart test/shop_operational_export_database_test.dart test/shop_operational_export_saver_test.dart test/shop_operational_export_test.dart test/shop_operational_export_widget_test.dart test/shop_qa_evidence_store_test.dart test/shop_runtime_profile_test.dart test/shop_runtime_scope_test.dart test/visual_capture_test.dart test/widget_test.dart
 
       - name: Check first-sale widget in isolation
         run: timeout --signal=TERM --kill-after=10s 90s flutter test test/widget_test.dart --plain-name 'empty catalog can make a durable cash sale' --reporter expanded --timeout 60s
@@ -66,6 +66,7 @@ jobs:
           test/shop_operational_export_saver_test.dart
           test/shop_operational_export_test.dart
           test/shop_operational_export_widget_test.dart
+          test/shop_qa_evidence_store_test.dart
           test/shop_runtime_profile_test.dart
           test/shop_runtime_scope_test.dart
           test/visual_capture_test.dart
@@ -101,6 +102,7 @@ jobs:
             test/shop_correction_consumption_test.dart \
             test/shop_member_identity_test.dart \
             test/shop_operational_export_database_test.dart \
+            test/shop_qa_evidence_store_test.dart \
             test/visual_capture_test.dart
 
       - name: Generate Android production identity
@@ -316,7 +318,7 @@ jobs:
           manifest_xml="$(mktemp)"
           trap 'rm -f "$manifest_xml"' EXIT
           "$analyzer" manifest print app-qa-debug.apk > "$manifest_xml"
-          python3 -c 'import sys, xml.etree.ElementTree as ET; apps = ET.parse(sys.argv[1]).getroot().findall("application"); valid = len(apps) == 1 and apps[0].get("{http://schemas.android.com/apk/res/android}label") == "Shop QA"; sys.exit(None if valid else "shop_android_qa_label_mismatch")' "$manifest_xml"
+          python3 -c 'import sys, xml.etree.ElementTree as ET; android = "{http://schemas.android.com/apk/res/android}"; apps = ET.parse(sys.argv[1]).getroot().findall("application"); items = apps[0].findall("meta-data") if len(apps) == 1 else []; metadata = {item.get(android + "name"): item.get(android + "value") for item in items}; expected = {"dev.supermega.shop.qa.capabilityContract": "supermega.shop.android-qa-capabilities.v1", "dev.supermega.shop.qa.evidenceContract": "supermega.shop.synthetic-qa-evidence.v1", "dev.supermega.shop.qa.scopedEncryptedRestore": "true", "dev.supermega.shop.qa.scopedSyntheticExport": "true", "dev.supermega.shop.qa.generalExternalFileAccess": "false"}; valid = len(apps) == 1 and len(metadata) == len(items) and apps[0].get(android + "label") == "Shop QA" and all(metadata.get(key) == value for key, value in expected.items()); sys.exit(None if valid else "shop_android_qa_identity_or_capability_mismatch")' "$manifest_xml"
           rm -f "$manifest_xml"
           trap - EXIT
 
@@ -326,7 +328,7 @@ jobs:
 
       - name: Bind Android QA artifact to source
         working-directory: ${{ github.workspace }}
-        run: echo "source-sha=${{ github.sha }} sha-256=$(cat app-qa-debug.apk.sha256) promotion-ineligible" > app-qa-debug.apk.manifest
+        run: echo "source-sha=${{ github.sha }} sha-256=$(cat app-qa-debug.apk.sha256) promotion-ineligible qa-capability-contract=supermega.shop.android-qa-capabilities.v1 qa-evidence-contract=supermega.shop.synthetic-qa-evidence.v1 qa-scoped-encrypted-restore=true qa-scoped-synthetic-export=true qa-general-external-file-access=false" > app-qa-debug.apk.manifest
 
       - name: Upload promotion-ineligible Android QA artifact
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

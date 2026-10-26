@@ -2,5 +2,21 @@
     xmlns:tools="http://schemas.android.com/tools">
     <application
         android:label="Shop QA"
-        tools:replace="android:label" />
+        tools:replace="android:label">
+        <meta-data
+            android:name="dev.supermega.shop.qa.capabilityContract"
+            android:value="supermega.shop.android-qa-capabilities.v1" />
+        <meta-data
+            android:name="dev.supermega.shop.qa.evidenceContract"
+            android:value="supermega.shop.synthetic-qa-evidence.v1" />
+        <meta-data
+            android:name="dev.supermega.shop.qa.scopedEncryptedRestore"
+            android:value="true" />
+        <meta-data
+            android:name="dev.supermega.shop.qa.scopedSyntheticExport"
+            android:value="true" />
+        <meta-data
+            android:name="dev.supermega.shop.qa.generalExternalFileAccess"
+            android:value="false" />
+    </application>
 </manifest>

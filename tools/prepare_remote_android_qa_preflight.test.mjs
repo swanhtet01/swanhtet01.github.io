@@ -50,6 +50,20 @@ test('validates every non-artifact remote preflight boundary and stays blocked o
   assert.equal(validateRemoteAndroidQaPreflight(result), result)
 })
 
+test('capability-aware successor removes only source capability blockers', () => {
+  const handoff = assessShopAndroidQaHandoff(
+    sampleShopAndroidQaHandoffInput({ capabilityAware: true }),
+  )
+  const result = assessRemoteAndroidQaPreflight(
+    sampleRemoteAndroidQaPreflightInput(handoff),
+    handoff,
+  )
+  assert.deepEqual(result.failures, ['external_remote_observation_required'])
+  assert.equal(result.ok, false)
+  assert.equal(result.status, 'BLOCKED_OFFLINE_PLAN')
+  assert.equal(result.claimBoundary.emulatorExecuted, false)
+})
+
 test('binds exact source run artifact archive APK and native tree identities', () => {
   const handoff = artifactPacket()
   const keys = [

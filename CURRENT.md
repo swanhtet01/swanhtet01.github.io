@@ -141,6 +141,14 @@ findings. It has not been pushed or built, and it is not present in retained
 artifact `12609717130`. Installed export, transfer, restart and restore remain
 NOT RUN.
 
+The separate capability-handoff lane now defines a versioned v2 contract for a
+future successor build. Android QA embeds exact manifest metadata for scoped
+export/restore and explicitly denies general external-file access; CI must
+inspect those compiled values and bind them into the source/APK sidecar before
+v2 can be issued. The retained `6bf59b49` APK remains v1, keeps both
+capabilities blocked and cannot be relabelled v2. No v2 APK or installed
+evidence exists yet.
+
 ## CI and external gates
 
 - App CI at `6bf59b49` fails first on stale PostgreSQL evidence; later App checks

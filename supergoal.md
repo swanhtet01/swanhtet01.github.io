@@ -78,9 +78,12 @@ export path are unavailable in that APK. A separate unpushed source checkpoint,
 passes review for those isolation-plan contracts without enabling general
 external file access; its full Flutter suite passes 415 with 33 declared skips.
 It is source-ready only, not part of the retained APK. The next eligible build
-outcome is an exact-head QA successor artifact plus a new reviewed
-capability-aware handoff contract. Only separately verified provider/host
-evidence may then permit the complete acceptance run.
+outcome is an exact-head QA successor artifact using the versioned v2
+capability-aware handoff. That source contract requires compiled Android
+metadata for scoped encrypted restore and synthetic evidence export, explicit
+denial of general external-file access, and exact source/APK/sidecar binding.
+The old v1 retained artifact cannot be relabelled capable. Only separately
+verified provider/host evidence may then permit the complete acceptance run.
 
 This is digital internal verification only. It does not prove physical
 scanner/printer compatibility, production signing, hosted account, live

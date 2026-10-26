@@ -3,6 +3,10 @@ import { createHash } from 'node:crypto'
 import test from 'node:test'
 
 import {
+  SHOP_ANDROID_QA_CAPABILITIES,
+  SHOP_ANDROID_QA_CAPABILITY_CONTRACT,
+  SHOP_ANDROID_QA_CAPABILITY_HANDOFF_CONTRACT,
+  SHOP_ANDROID_QA_EVIDENCE_CONTRACT,
   SHOP_ANDROID_QA_HANDOFF_CONTRACT,
   assessShopAndroidQaHandoff,
   sampleShopAndroidQaHandoffInput,
@@ -63,8 +67,102 @@ test('binds the original native QA evidence without claiming installation', () =
   assert.equal(packet.artifact.archiveContentsBound, true)
   assert.equal(packet.claimBoundary.installedAcceptanceProven, false)
   assert.equal(packet.claimBoundary.backupRestoreAcceptanceProven, false)
+  assert.deepEqual(packet.artifactCapabilities, [])
+  assert.equal(packet.artifact.capabilityInspection, 'unavailable')
   assert.ok(packet.blockedCapabilities.some((entry) => entry.id === 'encrypted_backup_restore'))
   assert.equal(validateShopAndroidQaHandoff(packet), packet)
+})
+
+test('v2 binds scoped recovery capabilities without claiming installed acceptance', () => {
+  const packet = assessShopAndroidQaHandoff(
+    sampleShopAndroidQaHandoffInput({ capabilityAware: true }),
+  )
+  assert.equal(packet.contract, SHOP_ANDROID_QA_CAPABILITY_HANDOFF_CONTRACT)
+  assert.equal(packet.artifact.capabilityInspection, 'reported_producer_ci_passed_not_reinspected')
+  assert.equal(packet.artifact.capabilityContract, SHOP_ANDROID_QA_CAPABILITY_CONTRACT)
+  assert.equal(packet.artifact.evidenceContract, SHOP_ANDROID_QA_EVIDENCE_CONTRACT)
+  assert.deepEqual(packet.artifact.capabilities, SHOP_ANDROID_QA_CAPABILITIES)
+  assert.equal(packet.artifact.scopedEncryptedRestore, true)
+  assert.equal(packet.artifact.scopedSyntheticExport, true)
+  assert.equal(packet.artifact.generalExternalFileAccess, false)
+  assert.deepEqual(
+    packet.artifactCapabilities.map((entry) => entry.id),
+    SHOP_ANDROID_QA_CAPABILITIES,
+  )
+  assert.equal(packet.claimBoundary.backupRestoreAcceptanceProven, false)
+  assert.ok(packet.blockedCapabilities.some((entry) =>
+    entry.id === 'installed_backup_restore_acceptance'))
+  assert.ok(packet.blockedCapabilities.some((entry) =>
+    entry.id === 'general_external_file_export'))
+  assert.equal(validateShopAndroidQaHandoff(packet), packet)
+})
+
+test('old v1 artifact cannot be relabelled as recovery-capable', () => {
+  const capabilityInspection = sampleShopAndroidQaHandoffInput({
+    capabilityAware: true,
+  }).metadata.capabilityInspection
+  const reassessed = assessShopAndroidQaHandoff(sampleShopAndroidQaHandoffInput({
+    metadata: { capabilityInspection },
+  }))
+  assert.equal(reassessed.contract, SHOP_ANDROID_QA_CAPABILITY_HANDOFF_CONTRACT)
+  assert.ok(reassessed.failures.includes('artifact_manifest_mismatch'))
+
+  const legacy = assessShopAndroidQaHandoff(sampleShopAndroidQaHandoffInput())
+  const relabelled = resign({
+    ...legacy,
+    contract: SHOP_ANDROID_QA_CAPABILITY_HANDOFF_CONTRACT,
+    artifact: {
+      ...legacy.artifact,
+      capabilityInspection: 'reported_producer_ci_passed_not_reinspected',
+    },
+    artifactCapabilities: SHOP_ANDROID_QA_CAPABILITIES.map((id) => ({
+      id,
+      contract: SHOP_ANDROID_QA_CAPABILITY_CONTRACT,
+      status: 'SOURCE_BOUND_NOT_INSTALLED_ACCEPTED',
+    })),
+  })
+  assert.throws(
+    () => validateShopAndroidQaHandoff(relabelled),
+    /shop_android_qa_handoff_capability_identity_invalid/,
+  )
+})
+
+test('v2 rejects missing, unsupported, or unsafe compiled capability evidence', () => {
+  const valid = sampleShopAndroidQaHandoffInput({ capabilityAware: true })
+    .metadata.capabilityInspection
+  for (const capabilityInspection of [
+    { ...valid, contract: 'supermega.shop.android-qa-capabilities.v999' },
+    { ...valid, evidenceContract: 'supermega.shop.synthetic-qa-evidence.v999' },
+    { ...valid, capabilities: [SHOP_ANDROID_QA_CAPABILITIES[0]] },
+    { ...valid, capabilities: [...SHOP_ANDROID_QA_CAPABILITIES].reverse() },
+    { ...valid, scopedEncryptedRestore: false },
+    { ...valid, scopedSyntheticExport: false },
+    { ...valid, generalExternalFileAccess: true },
+    { ...valid, status: 'not_run' },
+    { ...valid, runId: '999' },
+    { ...valid, sourceSha: '1'.repeat(40) },
+    { ...valid, jobName: 'Another job' },
+    { ...valid, applicationId: 'dev.supermega.supermega_shop' },
+  ]) {
+    const packet = assessShopAndroidQaHandoff(sampleShopAndroidQaHandoffInput({
+      capabilityAware: true,
+      metadata: { capabilityInspection },
+    }))
+    assert.ok(packet.failures.includes('android_qa_capability_evidence_invalid'))
+  }
+})
+
+test('v2 rejects missing or tampered capability sidecar metadata', () => {
+  const input = sampleShopAndroidQaHandoffInput({ capabilityAware: true })
+  for (const manifestText of [
+    input.manifestText.replace(` qa-evidence-contract=${SHOP_ANDROID_QA_EVIDENCE_CONTRACT}`, ''),
+    input.manifestText.replace('qa-scoped-encrypted-restore=true', 'qa-scoped-encrypted-restore=false'),
+    input.manifestText.replace('qa-general-external-file-access=false', 'qa-general-external-file-access=true'),
+  ]) {
+    const packet = assessShopAndroidQaHandoff({ ...input, manifestText })
+    assert.ok(packet.failures.includes('artifact_manifest_mismatch'))
+    assert.ok(packet.failures.includes('artifact_archive_extraction_mismatch'))
+  }
 })
 
 test('rejects stale source or a different artifact URL', () => {

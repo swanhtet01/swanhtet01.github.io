@@ -10,6 +10,23 @@ import { verifyShopNativeCiContract } from './verify_shop_native_ci_contract.mjs
 
 const workflow = await readFile('.github/workflows/shop-native-ci.yml', 'utf8')
 const gradleWrapper = await readFile('mobile/shop_pos/android/gradle/wrapper/gradle-wrapper.properties', 'utf8')
+const qaManifest = await readFile('mobile/shop_pos/android/app/src/qa/AndroidManifest.xml', 'utf8')
+
+test('Android QA source declares the exact fail-closed recovery capability tuple', () => {
+  for (const token of [
+    'android:name="dev.supermega.shop.qa.capabilityContract"',
+    'android:value="supermega.shop.android-qa-capabilities.v1"',
+    'android:name="dev.supermega.shop.qa.evidenceContract"',
+    'android:value="supermega.shop.synthetic-qa-evidence.v1"',
+    'android:name="dev.supermega.shop.qa.scopedEncryptedRestore"',
+    'android:name="dev.supermega.shop.qa.scopedSyntheticExport"',
+    'android:name="dev.supermega.shop.qa.generalExternalFileAccess"',
+    'android:value="false"',
+  ]) {
+    assert.equal(qaManifest.split(token).length - 1, 1, token)
+  }
+  assert.equal(qaManifest.split('android:value="true"').length - 1, 2)
+})
 
 test('native CI retains checksums for the actual Android and Windows QA files', () => {
   const result = verifyShopNativeCiContract(workflow, gradleWrapper)
@@ -29,8 +46,8 @@ test('Android QA label is parsed structurally from the built manifest', () => {
   for (const token of [
     'xml.etree.ElementTree',
     'findall("application")',
-    '{http://schemas.android.com/apk/res/android}label',
-    'sys.exit(None if valid else "shop_android_qa_label_mismatch")',
+    'apps[0].get(android + "label")',
+    'sys.exit(None if valid else "shop_android_qa_identity_or_capability_mismatch")',
   ]) {
     const missing = verifyShopNativeCiContract(
       workflow.replace(token, 'label-inspection-omitted'),
@@ -71,8 +88,11 @@ test('Android QA label parser fails closed for wrong, missing, duplicate, and ma
   const directory = await mkdtemp(join(tmpdir(), 'shop-android-qa-manifest-'))
   try {
     const fixtures = [
-      { name: 'valid.xml', source: '<manifest xmlns:android="http://schemas.android.com/apk/res/android"><application android:label="Shop QA"/></manifest>', status: 0 },
+      { name: 'valid.xml', source: '<manifest xmlns:android="http://schemas.android.com/apk/res/android"><application android:label="Shop QA"><meta-data android:name="dev.supermega.shop.qa.capabilityContract" android:value="supermega.shop.android-qa-capabilities.v1"/><meta-data android:name="dev.supermega.shop.qa.evidenceContract" android:value="supermega.shop.synthetic-qa-evidence.v1"/><meta-data android:name="dev.supermega.shop.qa.scopedEncryptedRestore" android:value="true"/><meta-data android:name="dev.supermega.shop.qa.scopedSyntheticExport" android:value="true"/><meta-data android:name="dev.supermega.shop.qa.generalExternalFileAccess" android:value="false"/></application></manifest>', status: 0 },
       { name: 'wrong.xml', source: '<manifest xmlns:android="http://schemas.android.com/apk/res/android"><application android:label="Shop"/></manifest>', status: 1 },
+      { name: 'wrong-capability.xml', source: '<manifest xmlns:android="http://schemas.android.com/apk/res/android"><application android:label="Shop QA"><meta-data android:name="dev.supermega.shop.qa.capabilityContract" android:value="supermega.shop.android-qa-capabilities.v999"/></application></manifest>', status: 1 },
+      { name: 'unsafe-external.xml', source: '<manifest xmlns:android="http://schemas.android.com/apk/res/android"><application android:label="Shop QA"><meta-data android:name="dev.supermega.shop.qa.generalExternalFileAccess" android:value="true"/></application></manifest>', status: 1 },
+      { name: 'duplicate-metadata.xml', source: '<manifest xmlns:android="http://schemas.android.com/apk/res/android"><application android:label="Shop QA"><meta-data android:name="dev.supermega.shop.qa.capabilityContract" android:value="supermega.shop.android-qa-capabilities.v1"/><meta-data android:name="dev.supermega.shop.qa.capabilityContract" android:value="supermega.shop.android-qa-capabilities.v1"/></application></manifest>', status: 1 },
       { name: 'missing.xml', source: '<manifest xmlns:android="http://schemas.android.com/apk/res/android"/>', status: 1 },
       { name: 'duplicate.xml', source: '<manifest xmlns:android="http://schemas.android.com/apk/res/android"><application android:label="Shop QA"/><application android:label="Shop QA"/></manifest>', status: 1 },
       { name: 'malformed.xml', source: '<manifest><application>', status: 1 },

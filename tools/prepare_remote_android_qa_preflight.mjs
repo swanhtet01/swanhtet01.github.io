@@ -5,7 +5,10 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { validateShopAndroidQaHandoff } from './prepare_shop_android_qa_handoff.mjs'
+import {
+  SHOP_ANDROID_QA_CAPABILITY_HANDOFF_CONTRACT,
+  validateShopAndroidQaHandoff,
+} from './prepare_shop_android_qa_handoff.mjs'
 
 export const REMOTE_ANDROID_QA_PREFLIGHT_CONTRACT =
   'supermega.shop.remote-android-qa-preflight.v1'
@@ -211,10 +214,12 @@ export function assessRemoteAndroidQaPreflight(
     addFailure(failures, 'acceptance_steps_invalid')
   }
 
-  if (verifiedPacket && hasBlockedCapability(verifiedPacket, 'encrypted_backup_restore')) {
+  if (verifiedPacket && (verifiedPacket.contract !== SHOP_ANDROID_QA_CAPABILITY_HANDOFF_CONTRACT
+    || hasBlockedCapability(verifiedPacket, 'encrypted_backup_restore'))) {
     addFailure(failures, 'artifact_encrypted_restore_unavailable')
   }
-  if (verifiedPacket && hasBlockedCapability(verifiedPacket, 'external_file_export')) {
+  if (verifiedPacket && (verifiedPacket.contract !== SHOP_ANDROID_QA_CAPABILITY_HANDOFF_CONTRACT
+    || hasBlockedCapability(verifiedPacket, 'external_file_export'))) {
     addFailure(failures, 'artifact_scoped_evidence_export_unavailable')
   }
   if (verifiedPacket?.artifact?.productionSigned !== false

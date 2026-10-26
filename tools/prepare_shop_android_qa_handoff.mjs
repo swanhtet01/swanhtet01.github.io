@@ -8,6 +8,17 @@ import { inflateRawSync } from 'node:zlib'
 
 export const SHOP_ANDROID_QA_HANDOFF_CONTRACT =
   'supermega.shop.android-qa-internal-handoff.v1'
+export const SHOP_ANDROID_QA_CAPABILITY_HANDOFF_CONTRACT =
+  'supermega.shop.android-qa-internal-handoff.v2'
+
+export const SHOP_ANDROID_QA_CAPABILITY_CONTRACT =
+  'supermega.shop.android-qa-capabilities.v1'
+export const SHOP_ANDROID_QA_EVIDENCE_CONTRACT =
+  'supermega.shop.synthetic-qa-evidence.v1'
+export const SHOP_ANDROID_QA_CAPABILITIES = [
+  'scoped_encrypted_backup_restore',
+  'scoped_synthetic_evidence_export',
+]
 
 const EXPECTED_APPLICATION_ID = 'dev.supermega.supermega_shop.qa'
 const EXPECTED_APPLICATION_LABEL = 'Shop QA'
@@ -40,6 +51,23 @@ const REQUIRED_BLOCKED_CAPABILITIES = [
   'correction_authorization',
   'production_or_merchant_use',
 ]
+
+const CAPABILITY_AWARE_BLOCKED_CAPABILITIES = [
+  'cross_build_update',
+  'installed_backup_restore_acceptance',
+  'general_external_file_export',
+  'camera_or_gallery',
+  'physical_scanner_or_printer',
+  'managed_auth_or_provider_access',
+  'correction_authorization',
+  'production_or_merchant_use',
+]
+
+const DECLARED_QA_CAPABILITIES = SHOP_ANDROID_QA_CAPABILITIES.map((id) => ({
+  id,
+  contract: SHOP_ANDROID_QA_CAPABILITY_CONTRACT,
+  status: 'SOURCE_BOUND_NOT_INSTALLED_ACCEPTED',
+}))
 
 const RUN_STEPS = [
   ['clean_target', 'Use a separately approved disposable Android device or emulator containing no SuperMega Shop data.'],
@@ -315,6 +343,11 @@ export function assessShopAndroidQaHandoff(input = {}) {
   const identity = metadata.identityInspection || {}
   const signing = metadata.signing || {}
   const claims = metadata.claims || {}
+  const capabilityInspection = metadata.capabilityInspection || null
+  const capabilityAware = capabilityInspection != null
+  const capabilityContract = capabilityInspection?.contract
+  const evidenceContract = capabilityInspection?.evidenceContract
+  const capabilities = capabilityInspection?.capabilities
 
   if (String(expectations.headSha || '') !== headSha
     || String(expectations.sourceSha || '') !== sourceSha
@@ -357,7 +390,10 @@ export function assessShopAndroidQaHandoff(input = {}) {
   if (checksumText !== `${apkSha256}  ${EXPECTED_APK_NAME}`) {
     addFailure(failures, 'apk_checksum_file_mismatch')
   }
-  if (manifestText !== `source-sha=${sourceSha} sha-256=${checksumText} promotion-ineligible`) {
+  const expectedManifest = capabilityAware
+    ? `source-sha=${sourceSha} sha-256=${checksumText} promotion-ineligible qa-capability-contract=${SHOP_ANDROID_QA_CAPABILITY_CONTRACT} qa-evidence-contract=${SHOP_ANDROID_QA_EVIDENCE_CONTRACT} qa-scoped-encrypted-restore=true qa-scoped-synthetic-export=true qa-general-external-file-access=false`
+    : `source-sha=${sourceSha} sha-256=${checksumText} promotion-ineligible`
+  if (manifestText !== expectedManifest) {
     addFailure(failures, 'artifact_manifest_mismatch')
   }
   if (identity.status !== 'passed'
@@ -368,6 +404,22 @@ export function assessShopAndroidQaHandoff(input = {}) {
     || identity.applicationId !== EXPECTED_APPLICATION_ID
     || identity.applicationLabel !== EXPECTED_APPLICATION_LABEL) {
     addFailure(failures, 'android_qa_identity_evidence_invalid')
+  }
+  if (capabilityAware && (capabilityContract !== SHOP_ANDROID_QA_CAPABILITY_CONTRACT
+    || evidenceContract !== SHOP_ANDROID_QA_EVIDENCE_CONTRACT
+    || !Array.isArray(capabilities)
+    || capabilities.length !== SHOP_ANDROID_QA_CAPABILITIES.length
+    || capabilities.some((capability, index) => capability !== SHOP_ANDROID_QA_CAPABILITIES[index])
+    || capabilityInspection.status !== 'passed'
+    || capabilityInspection.tool !== 'apkanalyzer'
+    || String(capabilityInspection.runId || '') !== runId
+    || String(capabilityInspection.sourceSha || '') !== sourceSha
+    || capabilityInspection.jobName !== 'Build isolated Android synthetic QA app'
+    || capabilityInspection.applicationId !== EXPECTED_APPLICATION_ID
+    || capabilityInspection.scopedEncryptedRestore !== true
+    || capabilityInspection.scopedSyntheticExport !== true
+    || capabilityInspection.generalExternalFileAccess !== false)) {
+    addFailure(failures, 'android_qa_capability_evidence_invalid')
   }
   if (signing.class !== 'android_debug'
     || signing.productionSigned !== false
@@ -391,7 +443,9 @@ export function assessShopAndroidQaHandoff(input = {}) {
   }
 
   const body = {
-    contract: SHOP_ANDROID_QA_HANDOFF_CONTRACT,
+    contract: capabilityAware
+      ? SHOP_ANDROID_QA_CAPABILITY_HANDOFF_CONTRACT
+      : SHOP_ANDROID_QA_HANDOFF_CONTRACT,
     digestScope: 'utf8_compact_json_without_digest',
     generatedAt,
     status: failures.length ? 'blocked' : 'ready_for_internal_install_run',
@@ -416,6 +470,21 @@ export function assessShopAndroidQaHandoff(input = {}) {
       identityInspection: identity.status === 'passed'
         ? 'reported_producer_ci_passed_not_reinspected'
         : 'unverified',
+      capabilityInspection: capabilityAware && !failures.includes('android_qa_capability_evidence_invalid')
+        ? 'reported_producer_ci_passed_not_reinspected'
+        : 'unavailable',
+      capabilityContract: capabilityAware ? capabilityContract : null,
+      evidenceContract: capabilityAware ? evidenceContract : null,
+      capabilities: capabilityAware && Array.isArray(capabilities) ? [...capabilities] : [],
+      scopedEncryptedRestore: capabilityAware
+        ? capabilityInspection?.scopedEncryptedRestore === true
+        : false,
+      scopedSyntheticExport: capabilityAware
+        ? capabilityInspection?.scopedSyntheticExport === true
+        : false,
+      generalExternalFileAccess: capabilityAware
+        ? capabilityInspection?.generalExternalFileAccess !== false
+        : false,
       signingClass: signing.class || null,
       productionSigned: false,
       promotionEligible: false,
@@ -431,7 +500,10 @@ export function assessShopAndroidQaHandoff(input = {}) {
     },
     runPlan: RUN_STEPS.map(([id, instruction]) => ({ id, instruction, required: true })),
     requiredEvidenceFields: REQUIRED_EVIDENCE_FIELDS,
-    blockedCapabilities: REQUIRED_BLOCKED_CAPABILITIES.map((id) => ({ id, status: 'BLOCKED' })),
+    artifactCapabilities: capabilityAware ? DECLARED_QA_CAPABILITIES.map((entry) => ({ ...entry })) : [],
+    blockedCapabilities: (capabilityAware
+      ? CAPABILITY_AWARE_BLOCKED_CAPABILITIES
+      : REQUIRED_BLOCKED_CAPABILITIES).map((id) => ({ id, status: 'BLOCKED' })),
     claimBoundary: { ...EXPECTED_CLAIM_BOUNDARY },
   }
   return { ...body, digest: packetDigest(body) }
@@ -442,7 +514,8 @@ export function validateShopAndroidQaHandoff(packet, { nowMillis = Date.now() } 
   const digest = body.digest
   delete body.digest
   if (digest !== packetDigest(body)) throw new Error('shop_android_qa_handoff_digest_invalid')
-  if (packet.contract !== SHOP_ANDROID_QA_HANDOFF_CONTRACT) {
+  const capabilityAware = packet.contract === SHOP_ANDROID_QA_CAPABILITY_HANDOFF_CONTRACT
+  if (packet.contract !== SHOP_ANDROID_QA_HANDOFF_CONTRACT && !capabilityAware) {
     throw new Error('shop_android_qa_handoff_contract_invalid')
   }
   if (packet.ok !== true || packet.status !== 'ready_for_internal_install_run') {
@@ -485,6 +558,25 @@ export function validateShopAndroidQaHandoff(packet, { nowMillis = Date.now() } 
     || packet.artifact?.promotionEligible !== false) {
     throw new Error('shop_android_qa_handoff_artifact_identity_invalid')
   }
+  if (capabilityAware) {
+    if (artifact.capabilityInspection !== 'reported_producer_ci_passed_not_reinspected'
+      || artifact.capabilityContract !== SHOP_ANDROID_QA_CAPABILITY_CONTRACT
+      || artifact.evidenceContract !== SHOP_ANDROID_QA_EVIDENCE_CONTRACT
+      || JSON.stringify(artifact.capabilities) !== JSON.stringify(SHOP_ANDROID_QA_CAPABILITIES)
+      || artifact.scopedEncryptedRestore !== true
+      || artifact.scopedSyntheticExport !== true
+      || artifact.generalExternalFileAccess !== false
+      || !Array.isArray(packet.artifactCapabilities)
+      || JSON.stringify(packet.artifactCapabilities) !== JSON.stringify(DECLARED_QA_CAPABILITIES)) {
+      throw new Error('shop_android_qa_handoff_capability_identity_invalid')
+    }
+  } else if ((artifact.capabilityInspection != null
+      && artifact.capabilityInspection !== 'unavailable')
+    || (packet.artifactCapabilities != null
+      && (!Array.isArray(packet.artifactCapabilities)
+        || packet.artifactCapabilities.length !== 0))) {
+    throw new Error('shop_android_qa_handoff_legacy_capability_claim_invalid')
+  }
   if (!Array.isArray(packet.runPlan)
     || packet.runPlan.length !== RUN_STEPS.length
     || packet.runPlan.some((step, index) => step?.id !== RUN_STEPS[index][0]
@@ -496,10 +588,13 @@ export function validateShopAndroidQaHandoff(packet, { nowMillis = Date.now() } 
     || REQUIRED_EVIDENCE_FIELDS.some((field, index) => packet.requiredEvidenceFields[index] !== field)) {
     throw new Error('shop_android_qa_handoff_evidence_fields_invalid')
   }
+  const expectedBlockedCapabilities = capabilityAware
+    ? CAPABILITY_AWARE_BLOCKED_CAPABILITIES
+    : REQUIRED_BLOCKED_CAPABILITIES
   if (!Array.isArray(packet.blockedCapabilities)
-    || packet.blockedCapabilities.length !== REQUIRED_BLOCKED_CAPABILITIES.length
+    || packet.blockedCapabilities.length !== expectedBlockedCapabilities.length
     || packet.blockedCapabilities.some((entry, index) =>
-      entry?.id !== REQUIRED_BLOCKED_CAPABILITIES[index] || entry.status !== 'BLOCKED')) {
+      entry?.id !== expectedBlockedCapabilities[index] || entry.status !== 'BLOCKED')) {
     throw new Error('shop_android_qa_handoff_blocked_capabilities_invalid')
   }
   if (JSON.stringify(packet.claimBoundary) !== JSON.stringify(EXPECTED_CLAIM_BOUNDARY)) {
@@ -509,6 +604,7 @@ export function validateShopAndroidQaHandoff(packet, { nowMillis = Date.now() } 
 }
 
 export function sampleShopAndroidQaHandoffInput(overrides = {}) {
+  const capabilityAware = overrides.capabilityAware === true
   const headSha = '6bf59b49c6607f411953a19aa90d64ca89eb522e'
   const sourceSha = '0a7fb8e4c01741a1195b6f2a586d43a1f0e3af6a'
   const runId = '40221959431'
@@ -516,7 +612,9 @@ export function sampleShopAndroidQaHandoffInput(overrides = {}) {
   const apkBytes = Buffer.from('synthetic android qa apk fixture')
   const apkHash = sha256(apkBytes)
   const checksumText = `${apkHash}  ${EXPECTED_APK_NAME}\n`
-  const manifestText = `source-sha=${sourceSha} sha-256=${apkHash}  ${EXPECTED_APK_NAME} promotion-ineligible\n`
+  const manifestText = capabilityAware
+    ? `source-sha=${sourceSha} sha-256=${apkHash}  ${EXPECTED_APK_NAME} promotion-ineligible qa-capability-contract=${SHOP_ANDROID_QA_CAPABILITY_CONTRACT} qa-evidence-contract=${SHOP_ANDROID_QA_EVIDENCE_CONTRACT} qa-scoped-encrypted-restore=true qa-scoped-synthetic-export=true qa-general-external-file-access=false\n`
+    : `source-sha=${sourceSha} sha-256=${apkHash}  ${EXPECTED_APK_NAME} promotion-ineligible\n`
   const archiveBytes = storedZipFixture([
     [EXPECTED_APK_NAME, apkBytes],
     [`${EXPECTED_APK_NAME}.sha256`, Buffer.from(checksumText)],
@@ -541,6 +639,22 @@ export function sampleShopAndroidQaHandoffInput(overrides = {}) {
       applicationId: EXPECTED_APPLICATION_ID,
       applicationLabel: EXPECTED_APPLICATION_LABEL,
     },
+    ...(capabilityAware ? {
+      capabilityInspection: {
+        status: 'passed',
+        tool: 'apkanalyzer',
+        runId,
+        sourceSha,
+        jobName: 'Build isolated Android synthetic QA app',
+        applicationId: EXPECTED_APPLICATION_ID,
+        contract: SHOP_ANDROID_QA_CAPABILITY_CONTRACT,
+        evidenceContract: SHOP_ANDROID_QA_EVIDENCE_CONTRACT,
+        capabilities: [...SHOP_ANDROID_QA_CAPABILITIES],
+        scopedEncryptedRestore: true,
+        scopedSyntheticExport: true,
+        generalExternalFileAccess: false,
+      },
+    } : {}),
     signing: {
       class: 'android_debug',
       productionSigned: false,
@@ -589,6 +703,7 @@ function renderMarkdown(packet) {
     `Artifact: ${packet.artifact.artifactId}`,
     `Archive SHA-256: ${packet.artifact.archiveSha256}`,
     `APK SHA-256: ${packet.artifact.apkSha256}`,
+    `Capability inspection: ${packet.artifact.capabilityInspection}`,
     '',
     'This packet prepares an internal synthetic-QA run. It is not evidence that installation, update, backup/restore, hardware, merchant acceptance, or production release passed.',
     '',
@@ -603,6 +718,12 @@ function renderMarkdown(packet) {
     '## Blocked capabilities',
     '',
     ...packet.blockedCapabilities.map((entry) => `- ${entry.id}: ${entry.status}`),
+    ...(packet.artifactCapabilities?.length ? [
+      '',
+      '## Source-bound QA capabilities (installed acceptance not yet proven)',
+      '',
+      ...packet.artifactCapabilities.map((entry) => `- ${entry.id}: ${entry.status}`),
+    ] : []),
     '',
   ].join('\n')}\n`
 }

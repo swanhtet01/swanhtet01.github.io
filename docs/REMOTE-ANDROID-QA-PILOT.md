@@ -132,12 +132,14 @@ The exact retained packet committed under
 `evidence/remote-android-qa/retained-artifact-handoff.json` remains blocked for
 `artifact_encrypted_restore_unavailable` and
 `artifact_scoped_evidence_export_unavailable`. Provider access alone cannot
-close these product-source gaps. The current handoff contract deliberately
-requires both capabilities to remain blocked, so a future artifact cannot be
-relabeled as ready under version 1. A reviewed successor must implement the
-scoped synthetic-evidence saver/loader and encrypted restore behavior **and**
-introduce a new capability-aware handoff contract before the complete remote
-acceptance run can become eligible.
+close these product-source gaps. The v1 handoff contract deliberately requires
+both capabilities to remain blocked, so a future artifact cannot be relabeled
+as ready under version 1. The source-only v2 contract requires the future APK's
+compiled QA manifest to bind `supermega.shop.android-qa-capabilities.v1`, the
+exact synthetic evidence envelope contract, scoped export/restore enabled, and
+general external-file access disabled. CI must inspect those values and bind
+the source, APK digest and sidecar before v2 is valid. No v2 artifact or
+installed acceptance exists.
 
 ### 1. Controller preflight
 
