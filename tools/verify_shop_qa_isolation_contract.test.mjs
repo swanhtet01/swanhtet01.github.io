@@ -35,7 +35,7 @@ function workflowFixture() {
           manifest_xml="$(mktemp)"
           trap 'rm -f "$manifest_xml"' EXIT
           "$analyzer" manifest print app-qa-debug.apk > "$manifest_xml"
-          python3 -c 'import sys, xml.etree.ElementTree as ET; apps = ET.parse(sys.argv[1]).getroot().findall("application"); valid = len(apps) == 1 and apps[0].get("{http://schemas.android.com/apk/res/android}label") == "Shop QA"; sys.exit(None if valid else "shop_android_qa_label_mismatch")' "$manifest_xml"
+          python3 -c 'import sys, xml.etree.ElementTree as ET; android = "{http://schemas.android.com/apk/res/android}"; apps = ET.parse(sys.argv[1]).getroot().findall("application"); items = apps[0].findall("meta-data") if len(apps) == 1 else []; metadata = {item.get(android + "name"): item.get(android + "value") for item in items}; expected = {"dev.supermega.shop.qa.capabilityContract": "supermega.shop.android-qa-capabilities.v1", "dev.supermega.shop.qa.evidenceContract": "supermega.shop.synthetic-qa-evidence.v1", "dev.supermega.shop.qa.scopedEncryptedRestore": "true", "dev.supermega.shop.qa.scopedSyntheticExport": "true", "dev.supermega.shop.qa.generalExternalFileAccess": "false"}; valid = len(apps) == 1 and len(metadata) == len(items) and apps[0].get(android + "label") == "Shop QA" and all(metadata.get(key) == value for key, value in expected.items()); sys.exit(None if valid else "shop_android_qa_identity_or_capability_mismatch")' "$manifest_xml"
           rm -f "$manifest_xml"
           trap - EXIT`,
     ios: `
@@ -383,7 +383,15 @@ test('exact platform identity and artifact contracts cannot be replaced by loose
     'test -x "$analyzer"',
     'manifest application-id app-qa-debug.apk',
     'xml.etree.ElementTree',
-    'sys.exit(None if valid else "shop_android_qa_label_mismatch")',
+    'android + "label"',
+    '"dev.supermega.shop.qa.capabilityContract": "supermega.shop.android-qa-capabilities.v1"',
+    '"dev.supermega.shop.qa.evidenceContract": "supermega.shop.synthetic-qa-evidence.v1"',
+    '"dev.supermega.shop.qa.scopedEncryptedRestore": "true"',
+    '"dev.supermega.shop.qa.scopedSyntheticExport": "true"',
+    '"dev.supermega.shop.qa.generalExternalFileAccess": "false"',
+    'len(metadata) == len(items)',
+    'all(metadata.get(key) == value for key, value in expected.items())',
+    'shop_android_qa_identity_or_capability_mismatch',
     "info='build/ios/iphoneos/Runner.app/Info.plist'",
     'Print :CFBundleIdentifier',
     "$identity.ProductName -cne 'Shop QA'",
@@ -397,6 +405,21 @@ test('exact platform identity and artifact contracts cannot be replaced by loose
       assessShopQaIsolationContract({ sources }).strictReady,
       false,
       `post-build contract must require ${token}`,
+    )
+  }
+
+  for (const [from, to] of [
+    ['"dev.supermega.shop.qa.scopedEncryptedRestore": "true"', '"dev.supermega.shop.qa.scopedEncryptedRestore": "false"'],
+    ['"dev.supermega.shop.qa.scopedSyntheticExport": "true"', '"dev.supermega.shop.qa.scopedSyntheticExport": "false"'],
+    ['"dev.supermega.shop.qa.generalExternalFileAccess": "false"', '"dev.supermega.shop.qa.generalExternalFileAccess": "true"'],
+  ]) {
+    const sources = fixture()
+    sources['.github/workflows/shop-native-ci.yml'] =
+      sources['.github/workflows/shop-native-ci.yml'].replace(from, to)
+    assert.equal(
+      assessShopQaIsolationContract({ sources }).strictReady,
+      false,
+      `post-build capability tuple must reject ${to}`,
     )
   }
 })
