@@ -131,12 +131,46 @@ test('native CI pins one exact Flutter SDK across production and QA native jobs'
   )
   assert.ok(missingQaFormat.failures.includes('qa_dart_format_gate_missing:lib/shop_runtime_scope.dart'))
 
+  const missingCorrectionFormat = verifyShopNativeCiContract(
+    workflow.replaceAll('lib/shop_correction_consumption.dart', 'lib/shop_correction_consumption_omitted.dart'),
+    gradleWrapper,
+  )
+  assert.ok(
+    missingCorrectionFormat.failures.includes(
+      'qa_dart_format_gate_missing:lib/shop_correction_consumption.dart',
+    ),
+  )
+
   const wrongIosProduct = verifyShopNativeCiContract(
     workflow.replaceAll('build/ios/iphoneos/Runner.app', 'build/ios/iphoneos/Shop QA.app'),
     gradleWrapper,
   )
   assert.ok(wrongIosProduct.failures.includes('ios_qa_runner_bundle_not_staged'))
   assert.ok(wrongIosProduct.failures.includes('ios_qa_runner_bundle_not_inspected'))
+})
+
+test('native CI checkouts never persist the workflow credential', () => {
+  const missingCheckout = verifyShopNativeCiContract(
+    workflow.replace('uses: actions/checkout@', 'uses: actions/not-checkout@'),
+    gradleWrapper,
+  )
+  assert.ok(missingCheckout.failures.includes('native_checkout_step_count_not_exactly_six'))
+
+  const persisted = verifyShopNativeCiContract(
+    workflow.replace('persist-credentials: false', 'persist-credentials: true'),
+    gradleWrapper,
+  )
+  assert.ok(
+    persisted.failures.includes('native_checkout_credentials_persisted_or_unspecified'),
+  )
+
+  const missing = verifyShopNativeCiContract(
+    workflow.replace('          persist-credentials: false\n', ''),
+    gradleWrapper,
+  )
+  assert.ok(
+    missing.failures.includes('native_checkout_credentials_persisted_or_unspecified'),
+  )
 })
 
 test('production identity is generated only after every default-profile test shard', () => {

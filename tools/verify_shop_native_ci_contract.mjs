@@ -22,6 +22,7 @@ const QA_DART_FORMAT_PATHS = Object.freeze([
   'lib/shop_cash_shift_screen.dart',
   'lib/shop_copy.dart',
   'lib/shop_correction_authorization_service.dart',
+  'lib/shop_correction_consumption.dart',
   'lib/shop_correction_receipt.dart',
   'lib/shop_database.dart',
   'lib/shop_qa_evidence_store.dart',
@@ -56,12 +57,32 @@ function requirePattern(source, pattern, failure, failures) {
   if (!pattern.test(source)) failures.push(failure)
 }
 
+function checkoutSteps(source) {
+  const lines = source.split(/\r?\n/)
+  const steps = []
+  for (let index = 0; index < lines.length; index += 1) {
+    if (!lines[index].includes('uses: actions/checkout@')) continue
+    const block = [lines[index]]
+    for (let next = index + 1; next < lines.length; next += 1) {
+      if (/^\s*-\s+name:/.test(lines[next])) break
+      block.push(lines[next])
+    }
+    steps.push(block.join('\n'))
+  }
+  return steps
+}
+
 export function verifyShopNativeCiContract(source, gradleWrapperSource = '') {
   const failures = []
 
   const flutterVersionPins = source.match(new RegExp(`flutter-version: '${FLUTTER_VERSION.replaceAll('.', '\\.')}'`, 'g')) ?? []
   if (flutterVersionPins.length !== 6) failures.push('flutter_sdk_not_exactly_pinned_for_all_native_jobs')
   if (/^\s*channel:\s*stable\s*$/m.test(source)) failures.push('flutter_sdk_uses_mutable_stable_channel')
+  const checkoutBlocks = checkoutSteps(source)
+  if (checkoutBlocks.length !== 6) failures.push('native_checkout_step_count_not_exactly_six')
+  if (checkoutBlocks.some(block => !/^\s*persist-credentials:\s*false\s*$/m.test(block))) {
+    failures.push('native_checkout_credentials_persisted_or_unspecified')
+  }
   const formatLine = source.split(/\r?\n/).find(line => line.trim().startsWith('dart format ')) ?? ''
   const diffLine = source.split(/\r?\n/).find(line => line.trim().startsWith('git diff --exit-code -- ')) ?? ''
   for (const path of QA_DART_FORMAT_PATHS) {

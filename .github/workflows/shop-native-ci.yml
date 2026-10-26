@@ -27,6 +27,8 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
 
       - name: Verify pinned native toolchain contract
         working-directory: ${{ github.workspace }}
@@ -43,8 +45,8 @@ jobs:
 
       - name: Check changed Dart formatting
         run: |
-          dart format lib/camera_barcode_scanner.dart lib/connected_orders_screen.dart lib/connected_orders_service.dart lib/main.dart lib/menu_import_screen.dart lib/menu_import_service.dart lib/printer_services.dart lib/printer_setup_screen.dart lib/recent_sales_screen.dart lib/shop_backup.dart lib/shop_backup_export_screen.dart lib/shop_build_identity.g.dart lib/shop_cash_shift_screen.dart lib/shop_copy.dart lib/shop_correction_authorization_service.dart lib/shop_correction_receipt.dart lib/shop_database.dart lib/shop_operational_export.dart lib/shop_operational_export_saver.dart lib/shop_qa_evidence_store.dart lib/shop_runtime_profile.dart lib/shop_runtime_scope.dart lib/shop_sale_correction_dialog.dart lib/shop_startup.dart lib/shop_today_screen.dart lib/stock_screen.dart test/shop_backup_test.dart test/shop_core_internal_acceptance_test.dart test/shop_correction_authorization_service_test.dart test/shop_foundation_test.dart test/shop_member_identity_test.dart test/shop_operational_export_database_test.dart test/shop_operational_export_saver_test.dart test/shop_operational_export_test.dart test/shop_operational_export_widget_test.dart test/shop_qa_evidence_store_test.dart test/shop_runtime_profile_test.dart test/shop_runtime_scope_test.dart test/visual_capture_test.dart test/widget_test.dart
-          git diff --exit-code -- lib/camera_barcode_scanner.dart lib/connected_orders_screen.dart lib/connected_orders_service.dart lib/main.dart lib/menu_import_screen.dart lib/menu_import_service.dart lib/printer_services.dart lib/printer_setup_screen.dart lib/recent_sales_screen.dart lib/shop_backup.dart lib/shop_backup_export_screen.dart lib/shop_build_identity.g.dart lib/shop_cash_shift_screen.dart lib/shop_copy.dart lib/shop_correction_authorization_service.dart lib/shop_correction_receipt.dart lib/shop_database.dart lib/shop_operational_export.dart lib/shop_operational_export_saver.dart lib/shop_qa_evidence_store.dart lib/shop_runtime_profile.dart lib/shop_runtime_scope.dart lib/shop_sale_correction_dialog.dart lib/shop_startup.dart lib/shop_today_screen.dart lib/stock_screen.dart test/shop_backup_test.dart test/shop_core_internal_acceptance_test.dart test/shop_correction_authorization_service_test.dart test/shop_foundation_test.dart test/shop_member_identity_test.dart test/shop_operational_export_database_test.dart test/shop_operational_export_saver_test.dart test/shop_operational_export_test.dart test/shop_operational_export_widget_test.dart test/shop_qa_evidence_store_test.dart test/shop_runtime_profile_test.dart test/shop_runtime_scope_test.dart test/visual_capture_test.dart test/widget_test.dart
+          dart format lib/camera_barcode_scanner.dart lib/connected_orders_screen.dart lib/connected_orders_service.dart lib/main.dart lib/menu_import_screen.dart lib/menu_import_service.dart lib/printer_services.dart lib/printer_setup_screen.dart lib/recent_sales_screen.dart lib/shop_backup.dart lib/shop_backup_export_screen.dart lib/shop_build_identity.g.dart lib/shop_cash_shift_screen.dart lib/shop_copy.dart lib/shop_correction_authorization_service.dart lib/shop_correction_consumption.dart lib/shop_correction_receipt.dart lib/shop_database.dart lib/shop_operational_export.dart lib/shop_operational_export_saver.dart lib/shop_qa_evidence_store.dart lib/shop_runtime_profile.dart lib/shop_runtime_scope.dart lib/shop_sale_correction_dialog.dart lib/shop_startup.dart lib/shop_today_screen.dart lib/stock_screen.dart test/shop_backup_test.dart test/shop_core_internal_acceptance_test.dart test/shop_correction_authorization_service_test.dart test/shop_foundation_test.dart test/shop_member_identity_test.dart test/shop_operational_export_database_test.dart test/shop_operational_export_saver_test.dart test/shop_operational_export_test.dart test/shop_operational_export_widget_test.dart test/shop_qa_evidence_store_test.dart test/shop_runtime_profile_test.dart test/shop_runtime_scope_test.dart test/visual_capture_test.dart test/widget_test.dart
+          git diff --exit-code -- lib/camera_barcode_scanner.dart lib/connected_orders_screen.dart lib/connected_orders_service.dart lib/main.dart lib/menu_import_screen.dart lib/menu_import_service.dart lib/printer_services.dart lib/printer_setup_screen.dart lib/recent_sales_screen.dart lib/shop_backup.dart lib/shop_backup_export_screen.dart lib/shop_build_identity.g.dart lib/shop_cash_shift_screen.dart lib/shop_copy.dart lib/shop_correction_authorization_service.dart lib/shop_correction_consumption.dart lib/shop_correction_receipt.dart lib/shop_database.dart lib/shop_operational_export.dart lib/shop_operational_export_saver.dart lib/shop_qa_evidence_store.dart lib/shop_runtime_profile.dart lib/shop_runtime_scope.dart lib/shop_sale_correction_dialog.dart lib/shop_startup.dart lib/shop_today_screen.dart lib/stock_screen.dart test/shop_backup_test.dart test/shop_core_internal_acceptance_test.dart test/shop_correction_authorization_service_test.dart test/shop_foundation_test.dart test/shop_member_identity_test.dart test/shop_operational_export_database_test.dart test/shop_operational_export_saver_test.dart test/shop_operational_export_test.dart test/shop_operational_export_widget_test.dart test/shop_qa_evidence_store_test.dart test/shop_runtime_profile_test.dart test/shop_runtime_scope_test.dart test/visual_capture_test.dart test/widget_test.dart
 
       - name: Check first-sale widget in isolation
         run: timeout --signal=TERM --kill-after=10s 90s flutter test test/widget_test.dart --plain-name 'empty catalog can make a durable cash sale' --reporter expanded --timeout 60s
@@ -191,6 +193,8 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
 
       - name: Set up Flutter
         uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
@@ -218,6 +222,8 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
 
       - name: Set up Flutter
         uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
@@ -285,6 +291,8 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
 
       - name: Set up Flutter
         uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
@@ -353,6 +361,8 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
 
       - name: Set up Flutter
         uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
@@ -410,6 +420,8 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
 
       - name: Set up Flutter
         uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
