@@ -166,6 +166,10 @@ evidence exists yet.
   signing, customer download, installed restart/restore, physical scanner or
   printer proof, merchant acceptance or joint go/no-go exists.
 
+No local demo, passing test, healthy provider, or generated artifact is proof of a live customer system, revenue, production persistence, or autonomous operation.
+
+Add provider-backed AI, payment, shipping, tax, publishing, and broader marketing only after their product gate has measured pilot evidence.
+
 ## Resource and ownership truth
 
 The active stack is Flutter/Drift, GitHub Actions, Vercel, Supabase and company
