@@ -54,6 +54,21 @@ No local demo, passing test, healthy provider, or generated artifact is proof of
   `0a7fb8e4c01741a1195b6f2a586d43a1f0e3af6a` and native tree is
   `3cbfc2038bef56d889fa0ccdef1d266783e0fcb8`. It does not contain this local
   acceptance test or any newer unpushed source.
+- Read-only host discovery found no immediately usable alternative emulator
+  host. This Cloud environment has 5 vCPUs, about 10 GiB available memory and
+  no display, but `/dev/kvm` is absent, only about 5 GiB disk is free, and no
+  Android SDK, emulator or `adb` is installed. Headless operation could avoid a
+  GUI, but missing KVM and disk make this host unsuitable for a responsible
+  official x86_64 AVD setup. The environment exposes no configured cloud/VPS
+  identity. Historical AWS/Bangkok/Tailscale documents do not prove current
+  authorization, reachability, nested virtualization or spare capacity; V is
+  explicitly unauthorized and must not be used.
+- Smallest suitable existing host requirement: Linux x86_64 with accessible
+  `/dev/kvm`, at least 4 vCPUs, 8 GiB RAM and 20 GiB free disk, plus permission
+  to accept the official Android SDK license and install only command-line
+  tools, platform-tools, emulator and one fresh x86_64 system image. Otherwise
+  the pending Ally Windows route requires explicit SDK-license acceptance and
+  WHPX enablement/admin reboot after memory pressure is resolved.
 - App CI at `6bf59b49` still fails first on stale PostgreSQL evidence; later App
   checks did not run. GitGuardian also remains failed on two historical
   synthetic fixture findings. Native, Dependency Security, and Kernel checks
