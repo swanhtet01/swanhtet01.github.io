@@ -32,6 +32,7 @@ const QA_DART_FORMAT_PATHS = Object.freeze([
   'lib/shop_today_screen.dart',
   'lib/stock_screen.dart',
   'test/shop_backup_test.dart',
+  'test/shop_core_internal_acceptance_test.dart',
   'test/shop_correction_authorization_service_test.dart',
   'test/shop_foundation_test.dart',
   'test/shop_qa_evidence_store_test.dart',
@@ -147,6 +148,7 @@ export function verifyShopNativeCiContract(source, gradleWrapperSource = '') {
   for (const testPath of [
     'test/connected_orders_test.dart',
     'test/shop_backup_test.dart',
+    'test/shop_core_internal_acceptance_test.dart',
     'test/shop_correction_authorization_service_test.dart',
     'test/shop_correction_consumption_test.dart',
     'test/shop_foundation_test.dart',
