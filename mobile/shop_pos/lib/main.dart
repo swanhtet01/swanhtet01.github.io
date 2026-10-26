@@ -2209,6 +2209,7 @@ class _ShopHomeState extends State<ShopHome> {
             !_saving &&
             !_walletStarting &&
             !_cashConfirming &&
+            !_clearingDraft &&
             item.onHand > 0 &&
             _pendingWalletCheckout == null;
         final addAffordance = ExcludeSemantics(
@@ -2621,6 +2622,7 @@ class _ShopHomeState extends State<ShopHome> {
                           _walletStarting ||
                           _saving ||
                           _cashConfirming ||
+                          _clearingDraft ||
                           _pendingWalletCheckout != null
                       ? null
                       : () => _confirmCashSale(
@@ -2641,7 +2643,8 @@ class _ShopHomeState extends State<ShopHome> {
                           hasUnavailableProducts ||
                           _walletStarting ||
                           _saving ||
-                          _cashConfirming
+                          _cashConfirming ||
+                          _clearingDraft
                       ? null
                       : () => _startWalletSale(
                           products: products,
@@ -2674,6 +2677,7 @@ class _ShopHomeState extends State<ShopHome> {
                                 !_checkoutReady ||
                                     _walletStarting ||
                                     _cashConfirming ||
+                                    _clearingDraft ||
                                     _saving
                                 ? null
                                 : () => _holdCurrentSale(refresh: refresh),
@@ -2836,6 +2840,7 @@ class _ShopHomeState extends State<ShopHome> {
         _saving ||
         _walletStarting ||
         _cashConfirming ||
+        _clearingDraft ||
         _pendingWalletCheckout != null) {
       return;
     }
@@ -3354,6 +3359,7 @@ class _ShopHomeState extends State<ShopHome> {
   }
 
   Future<void> _selectMemberCard({StateSetter? refresh}) async {
+    if (_clearingDraft) return;
     var enteredToken = '';
     var checking = false;
     String? error;
@@ -3475,7 +3481,8 @@ class _ShopHomeState extends State<ShopHome> {
       return IconButton(
         key: const ValueKey('shop-select-member-card'),
         tooltip: shopCopy(widget.myanmar, 'Add member', 'အသင်းဝင်ထည့်ရန်'),
-        onPressed: _saving || _walletStarting || _cashConfirming
+        onPressed:
+            _saving || _walletStarting || _cashConfirming || _clearingDraft
             ? null
             : () => _selectMemberCard(refresh: refresh),
         icon: const Icon(Icons.badge_outlined),
@@ -3486,7 +3493,8 @@ class _ShopHomeState extends State<ShopHome> {
       avatar: const Icon(Icons.badge_outlined, size: 18),
       label: Text(selected.match.member.displayCode),
       tooltip: shopCopy(widget.myanmar, 'Member', 'အသင်းဝင်'),
-      onDeleted: _saving || _walletStarting || _cashConfirming
+      onDeleted:
+          _saving || _walletStarting || _cashConfirming || _clearingDraft
           ? null
           : () {
               setState(() => _selectedMemberCard = null);
@@ -3504,7 +3512,11 @@ class _ShopHomeState extends State<ShopHome> {
     required List<ShopProduct> products,
     required bool closeSheet,
   }) async {
-    if (!_checkoutReady || _saving || _cashConfirming || _walletStarting) {
+    if (!_checkoutReady ||
+        _saving ||
+        _cashConfirming ||
+        _walletStarting ||
+        _clearingDraft) {
       return;
     }
     setState(() => _cashConfirming = true);
@@ -3729,7 +3741,7 @@ class _ShopHomeState extends State<ShopHome> {
     required bool closeSheet,
     StateSetter? refresh,
   }) async {
-    if (!_checkoutReady || _walletStarting || _saving) {
+    if (!_checkoutReady || _walletStarting || _saving || _clearingDraft) {
       return;
     }
     setState(() => _walletStarting = true);

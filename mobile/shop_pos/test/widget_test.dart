@@ -4781,6 +4781,38 @@ void main() {
       );
       expect(tester.widget<IconButton>(addOneButton).onPressed, isNull);
       expect(
+        tester
+            .widget<FilledButton>(
+              find.widgetWithText(FilledButton, 'Cash sale'),
+            )
+            .onPressed,
+        isNull,
+      );
+      expect(
+        tester
+            .widget<OutlinedButton>(
+              find.widgetWithText(OutlinedButton, 'Mobile money'),
+            )
+            .onPressed,
+        isNull,
+      );
+      expect(
+        tester
+            .widget<TextButton>(
+              find.byKey(const ValueKey('shop-hold-sale')),
+            )
+            .onPressed,
+        isNull,
+      );
+      expect(
+        tester
+            .widget<IconButton>(
+              find.byKey(const ValueKey('shop-select-member-card')),
+            )
+            .onPressed,
+        isNull,
+      );
+      expect(
         find.textContaining('Saved sales and stock will not change.'),
         findsOneWidget,
       );
