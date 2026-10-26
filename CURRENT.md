@@ -46,6 +46,14 @@ No local demo, passing test, healthy provider, or generated artifact is proof of
   verify the retained `6bf59b49` QA artifact identity and isolation before any
   run, and avoid real data. Simulated scanner input and virtual receipt capture
   may prove native workflow behavior, but cannot prove physical hardware.
+- The emulator handoff artifact is GitHub Actions artifact `12609717130`, file
+  `app-qa-debug.apk`, 195,800,696 bytes, SHA-256
+  `d61170603382e96fda064fa68f4ec4db59b251795c26e1dc2ed3d835ffe5755b`.
+  It is debug-signed, contains `x86_64`, `arm64-v8a`, and `armeabi-v7a`, and
+  identifies as `dev.supermega.supermega_shop.qa`. Its CI merge/source is
+  `0a7fb8e4c01741a1195b6f2a586d43a1f0e3af6a` and native tree is
+  `3cbfc2038bef56d889fa0ccdef1d266783e0fcb8`. It does not contain this local
+  acceptance test or any newer unpushed source.
 - App CI at `6bf59b49` still fails first on stale PostgreSQL evidence; later App
   checks did not run. GitGuardian also remains failed on two historical
   synthetic fixture findings. Native, Dependency Security, and Kernel checks
