@@ -130,9 +130,16 @@ The exact result is blocked on:
 
 The v1 Android handoff contract intentionally requires restore/export to remain
 blocked, so it cannot be reused to call a future artifact ready. The next source
-outcome is an exact-head QA artifact implementing the already-reviewed scoped
+outcome is an exact-head QA artifact containing the now-implemented scoped
 synthetic-evidence saver/loader and encrypted restore contract, plus a new
-capability-aware handoff contract and independent review.
+capability-aware handoff contract and independent review. The source capability
+is preserved separately at `d0c48586c22aa27ac7081802754392cbdb4d89b8`
+(`32a184c89d19fffd2895102e919e7e094d42050a`): analysis passes, the focused
+tests pass 6/6, the full Flutter suite passes 415 with 33 declared skips, and an
+independent local source review closed the scope-binding and ambiguous-file
+findings. It has not been pushed or built, and it is not present in retained
+artifact `12609717130`. Installed export, transfer, restart and restore remain
+NOT RUN.
 
 ## CI and external gates
 

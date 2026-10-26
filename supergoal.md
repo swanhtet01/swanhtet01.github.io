@@ -73,9 +73,12 @@ source/run/artifact/archive/APK identities and fails closed on missing native
 capabilities. It labels host/provider input as reported rather than verified
 and never grants run authority. The retained handoff shows that provider access
 alone is insufficient: encrypted restore and the scoped synthetic-evidence
-export path are unavailable in that APK. The next eligible source outcome is a
-reviewed exact-head QA successor implementing those existing isolation-plan
-contracts without enabling general external file access, plus a new reviewed
+export path are unavailable in that APK. A separate unpushed source checkpoint,
+`d0c48586c22aa27ac7081802754392cbdb4d89b8`, now implements and independently
+passes review for those isolation-plan contracts without enabling general
+external file access; its full Flutter suite passes 415 with 33 declared skips.
+It is source-ready only, not part of the retained APK. The next eligible build
+outcome is an exact-head QA successor artifact plus a new reviewed
 capability-aware handoff contract. Only separately verified provider/host
 evidence may then permit the complete acceptance run.
 
