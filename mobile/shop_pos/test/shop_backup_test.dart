@@ -3486,6 +3486,59 @@ void main() {
   });
 
   testWidgets(
+    'Start new preserves a store file that appears during confirmation',
+    (tester) async {
+      final documents = Directory.systemTemp.createTempSync(
+        'shop-new-restore-collision-',
+      );
+      final closeRecorder = _DatabaseCloseRecorder();
+      final databaseVerifier = _OpenedDatabaseVerifier();
+      var buildCalls = 0;
+      try {
+        await tester.pumpWidget(
+          ShopStartup(
+            documents: documents,
+            importScratchRoot: documents,
+            initialMyanmar: false,
+            buildShop: (_, _) {
+              buildCalls++;
+              return const MaterialApp(
+                home: Scaffold(body: Text('Opened Shop')),
+              );
+            },
+            closeDatabase: closeRecorder.call,
+            databaseFactory: _openStartupDatabase,
+            verifyOpenedDatabase: databaseVerifier.call,
+          ),
+        );
+        await _pumpUntil(tester, find.text('Start new Shop'));
+        await tester.tap(find.text('Start new Shop'));
+        await tester.pumpAndSettle();
+        expect(find.text('Start a new Shop?'), findsOneWidget);
+
+        final target = ShopDatabase.privateDatabaseFile(documents);
+        target.writeAsBytesSync(<int>[83, 104, 111, 112, 32, 114, 101, 99]);
+        final exactBytes = target.readAsBytesSync();
+
+        await tester.tap(find.byKey(const ValueKey('shop-start-new-confirm')));
+        await _pumpUntil(tester, find.textContaining('cannot safely open'));
+
+        expect(buildCalls, 0);
+        expect(find.text('Opened Shop'), findsNothing);
+        expect(find.textContaining('cannot safely open'), findsOneWidget);
+        expect(target.readAsBytesSync(), exactBytes);
+      } finally {
+        await _disposeOpenedStartup(
+          tester,
+          closeRecorder,
+          closeExpected: databaseVerifier.wasServiced,
+        );
+        documents.deleteSync(recursive: true);
+      }
+    },
+  );
+
+  testWidgets(
     'builder failure closes the verified database and blocks access',
     (tester) async {
       final documents = Directory.systemTemp.createTempSync(

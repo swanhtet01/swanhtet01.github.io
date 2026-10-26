@@ -4798,9 +4798,7 @@ void main() {
       );
       expect(
         tester
-            .widget<TextButton>(
-              find.byKey(const ValueKey('shop-hold-sale')),
-            )
+            .widget<TextButton>(find.byKey(const ValueKey('shop-hold-sale')))
             .onPressed,
         isNull,
       );
@@ -4837,6 +4835,90 @@ void main() {
       await database.close();
     }
   });
+
+  testWidgets(
+    'clear failure keeps the unfinished basket and creates no sale effects',
+    (tester) async {
+      _usePhoneViewport(tester);
+      final database = ShopDatabase(NativeDatabase.memory());
+      try {
+        await database.addProduct(
+          id: 'tea-clear-failure',
+          name: 'Tea',
+          priceMmk: 2500,
+          openingStock: 2,
+        );
+        await tester.pumpWidget(
+          ShopApp(
+            testOnlyAllowMissingRuntimeScope: true,
+            initialCounter: true,
+            database: database,
+            authClient: null,
+            apiBaseUrl: 'https://app.supermega.dev',
+            initialMyanmar: false,
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.byTooltip('Add to sale'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.textContaining('Review sale'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byTooltip('Add one'));
+        await tester.pumpAndSettle();
+
+        final draftBefore = await database.readCounterSaleDraft();
+        final stockBefore = (await database.readActiveProducts()).single.onHand;
+        final salesBefore = await database.countSales();
+        final stockEffectsBefore = await database.countStockMovements();
+        final outboxBefore = await database.countOutboxOperations();
+        await database.customStatement('''
+CREATE TRIGGER synthetic_counter_draft_delete_failure
+BEFORE DELETE ON shop_counter_drafts
+BEGIN
+  SELECT RAISE(ABORT, 'synthetic clear failure');
+END
+''');
+        try {
+          await tester.tap(find.byKey(const ValueKey('shop-clear-sale')));
+          await tester.pumpAndSettle();
+          await tester.tap(
+            find.byKey(const ValueKey('shop-clear-sale-confirm')),
+          );
+          await tester.pumpAndSettle();
+
+          expect(
+            find.text(
+              'Could not clear this sale. The basket is unchanged; try again.',
+            ),
+            findsOneWidget,
+          );
+          expect(
+            (await database.readCounterSaleDraft())?.operationId,
+            draftBefore?.operationId,
+          );
+          expect((await database.readCounterSaleDraft())?.quantities, {
+            'tea-clear-failure': 2,
+          });
+          expect(await database.countSales(), salesBefore);
+          expect(await database.countStockMovements(), stockEffectsBefore);
+          expect(await database.countOutboxOperations(), outboxBefore);
+          expect(
+            (await database.readActiveProducts()).single.onHand,
+            stockBefore,
+          );
+          expect(find.textContaining('5,000 MMK'), findsWidgets);
+        } finally {
+          await database.customStatement(
+            'DROP TRIGGER synthetic_counter_draft_delete_failure',
+          );
+        }
+      } finally {
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump(const Duration(milliseconds: 1));
+        await database.close();
+      }
+    },
+  );
 
   testWidgets(
     'cash tender shows change and a short payment cannot record a sale',

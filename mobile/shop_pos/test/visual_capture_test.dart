@@ -19,6 +19,7 @@ import 'package:supermega_shop/shop_cash_shift_screen.dart';
 import 'package:supermega_shop/shop_database.dart';
 import 'package:supermega_shop/shop_runtime_profile.dart';
 import 'package:supermega_shop/shop_runtime_scope.dart';
+import 'package:supermega_shop/shop_startup.dart';
 import 'package:unified_esc_pos_printer/unified_esc_pos_printer.dart';
 
 final _capture = Platform.environment['SHOP_VISUAL_CAPTURE'] == '1';
@@ -159,6 +160,17 @@ Future<void> _resolveVisibleProductPhotos(WidgetTester tester) async {
   final rendered = tester.widgetList<RawImage>(find.byType(RawImage)).toList();
   expect(rendered, isNotEmpty);
   expect(rendered.every((image) => image.image != null), isTrue);
+}
+
+Future<void> _pumpUntilVisible(WidgetTester tester, Finder finder) async {
+  for (var attempt = 0; attempt < 200; attempt++) {
+    await tester.pump();
+    if (finder.evaluate().isNotEmpty) return;
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 15)),
+    );
+  }
+  throw TestFailure('Expected visual state did not appear: $finder');
 }
 
 Future<({Uint8List png, int blocks, int maxRasterDots})> _decodeGsV0Receipt(
@@ -416,6 +428,117 @@ void main() {
       });
     },
   );
+
+  for (final (width, language) in [
+    (390.0, 'en'),
+    (390.0, 'my'),
+    (820.0, 'en'),
+    (820.0, 'my'),
+  ]) {
+    testWidgets(
+      'capture startup and local-store confirmation at ${width.toInt()}px $language',
+      skip: !_capture,
+      (tester) async {
+        tester.view.physicalSize = Size(width, width == 390 ? 844 : 1000);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        final documents = (await tester.runAsync(
+          () => Directory.systemTemp.createTemp('shop-visual-startup-'),
+        ))!;
+        try {
+          await tester.pumpWidget(
+            _syntheticCaptureBoundary(
+              myanmar: language == 'my',
+              child: ShopStartup(
+                documents: documents,
+                importScratchRoot: documents,
+                initialMyanmar: language == 'my',
+                allowTestFileAccessWithoutScope: true,
+                pickBackup: () async => null,
+                buildShop: (_, _) => const SizedBox.shrink(),
+              ),
+            ),
+          );
+          final startLabel = language == 'my'
+              ? 'Shop အသစ် စတင်ရန်'
+              : 'Start new Shop';
+          await _pumpUntilVisible(tester, find.text(startLabel));
+          expect(find.text(startLabel), findsOneWidget);
+          expect(tester.takeException(), isNull);
+          await expectLater(
+            find.byKey(_captureKey),
+            matchesGoldenFile(
+              'goldens/shop_startup_${width.toInt()}_$language.png',
+            ),
+          );
+          await tester.tap(find.text(startLabel));
+          await tester.pumpAndSettle();
+          expect(
+            find.text(
+              language == 'my' ? 'Shop အသစ် စတင်မလား။' : 'Start a new Shop?',
+            ),
+            findsOneWidget,
+          );
+          await expectLater(
+            find.byKey(_captureKey),
+            matchesGoldenFile(
+              'goldens/shop_startup_confirm_${width.toInt()}_$language.png',
+            ),
+          );
+        } finally {
+          await tester.pumpWidget(const SizedBox.shrink());
+          await tester.pump(const Duration(milliseconds: 1));
+          await tester.runAsync(() => documents.delete(recursive: true));
+        }
+      },
+    );
+
+    testWidgets(
+      'capture blocked startup recovery state at ${width.toInt()}px $language',
+      skip: !_capture,
+      (tester) async {
+        tester.view.physicalSize = Size(width, width == 390 ? 844 : 1000);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        final documents = (await tester.runAsync(
+          () => Directory.systemTemp.createTemp('shop-visual-blocked-'),
+        ))!;
+        ShopDatabase.privateDatabaseFile(documents)
+            .writeAsBytesSync(<int>[83, 104, 111, 112]);
+        try {
+          await tester.pumpWidget(
+            _syntheticCaptureBoundary(
+              myanmar: language == 'my',
+              child: ShopStartup(
+                documents: documents,
+                importScratchRoot: documents,
+                initialMyanmar: language == 'my',
+                buildShop: (_, _) => const SizedBox.shrink(),
+              ),
+            ),
+          );
+          final blockedCopy = language == 'my'
+              ? 'လုံခြုံစွာ မဖွင့်နိုင်သော'
+              : 'cannot safely open';
+          await _pumpUntilVisible(tester, find.textContaining(blockedCopy));
+          expect(find.textContaining(blockedCopy), findsOneWidget);
+          expect(tester.takeException(), isNull);
+          await expectLater(
+            find.byKey(_captureKey),
+            matchesGoldenFile(
+              'goldens/shop_startup_blocked_${width.toInt()}_$language.png',
+            ),
+          );
+        } finally {
+          await tester.pumpWidget(const SizedBox.shrink());
+          await tester.pump(const Duration(milliseconds: 1));
+          await tester.runAsync(() => documents.delete(recursive: true));
+        }
+      },
+    );
+  }
 
   testWidgets('first product keeps required fields first and a scan visible', (
     tester,
@@ -920,6 +1043,19 @@ void main() {
             ),
           );
           checkpoint('cash golden complete');
+          await tester.tap(
+            find.text(language == 'my' ? 'အတည်ပြုရန်' : 'Complete sale'),
+          );
+          await tester.pumpAndSettle();
+          expect(await database.countSales(), 2);
+          expect(tester.takeException(), isNull);
+          await expectLater(
+            find.byKey(_captureKey),
+            matchesGoldenFile(
+              'goldens/shop_sale_complete_${width.toInt()}_$language.png',
+            ),
+          );
+          checkpoint('sale complete golden');
         } finally {
           checkpoint('cleanup start');
           await tester.pumpWidget(const SizedBox.shrink());
