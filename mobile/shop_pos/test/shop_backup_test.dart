@@ -1416,36 +1416,35 @@ void main() {
     );
   });
 
-  testWidgets(
-    'synthetic QA export screen cannot invoke an injected export action',
-    (tester) async {
-      var exportCalled = false;
+  testWidgets('synthetic QA export screen requires a scoped evidence store', (
+    tester,
+  ) async {
+    var exportCalled = false;
 
-      await tester.pumpWidget(
-        MaterialApp(
-          home: ShopBackupExportScreen(
-            database: database,
-            myanmar: false,
-            runtimeScope: syntheticQaScope,
-            exportAction: (_) async {
-              exportCalled = true;
-              return ShopBackupExportResult.saved;
-            },
-          ),
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ShopBackupExportScreen(
+          database: database,
+          myanmar: false,
+          runtimeScope: syntheticQaScope,
+          exportAction: (_) async {
+            exportCalled = true;
+            return ShopBackupExportResult.saved;
+          },
         ),
-      );
-      await tester.enterText(find.byType(TextField).at(0), _password);
-      await tester.enterText(find.byType(TextField).at(1), _password);
+      ),
+    );
+    await tester.enterText(find.byType(TextField).at(0), _password);
+    await tester.enterText(find.byType(TextField).at(1), _password);
 
-      final saveButton = tester.widget<FilledButton>(
-        find.widgetWithText(FilledButton, 'Choose where to save'),
-      );
-      expect(saveButton.onPressed, isNull);
-      expect(exportCalled, isFalse);
-      await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pump();
-    },
-  );
+    final saveButton = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Save synthetic QA evidence'),
+    );
+    expect(saveButton.onPressed, isNull);
+    expect(exportCalled, isFalse);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+  });
 
   test(
     'synthetic QA startup rejects before invoking the external picker',

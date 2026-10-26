@@ -7,6 +7,7 @@ import 'package:uuid/uuid.dart';
 import 'shop_backup.dart';
 import 'shop_copy.dart';
 import 'shop_database.dart';
+import 'shop_qa_evidence_store.dart';
 import 'shop_runtime_scope.dart';
 
 typedef SaveEncryptedShopArchive = Future<String?> Function(
@@ -100,6 +101,7 @@ class ShopBackupExportScreen extends StatefulWidget {
     this.scratchRoot,
     this.encryptedRoot,
     this.runtimeScope,
+    this.qaEvidenceStore,
     this.allowTestFileAccessWithoutScope = false,
     super.key,
   });
@@ -114,15 +116,19 @@ class ShopBackupExportScreen extends StatefulWidget {
   final Directory? scratchRoot;
   final Directory? encryptedRoot;
   final ShopRuntimeScope? runtimeScope;
+  final ShopQaEvidenceStore? qaEvidenceStore;
   final bool allowTestFileAccessWithoutScope;
 
-  bool get externalFileSavingAllowed =>
-      runtimeScope?.capabilities.externalFileSaving ??
-      (allowTestFileAccessWithoutScope &&
-          (exportAction != null ||
-              (saveArchive != null &&
-                  scratchRoot != null &&
-                  encryptedRoot != null)));
+  bool get backupSavingAllowed =>
+      (runtimeScope?.capabilities.externalFileSaving ??
+          (allowTestFileAccessWithoutScope &&
+              (exportAction != null ||
+                  (saveArchive != null &&
+                      scratchRoot != null &&
+                      encryptedRoot != null)))) ||
+      (runtimeScope?.configuration.isSyntheticQa == true &&
+          runtimeScope?.capabilities.syntheticEvidence == true &&
+          (qaEvidenceStore != null || Platform.isAndroid));
 
   @override
   State<ShopBackupExportScreen> createState() => _ShopBackupExportScreenState();
@@ -154,7 +160,7 @@ class _ShopBackupExportScreenState extends State<ShopBackupExportScreen> {
 
   Future<void> _export() async {
     if (_busy) return;
-    if (!widget.externalFileSavingAllowed) {
+    if (!widget.backupSavingAllowed) {
       setState(() {
         _message = shopCopy(
           widget.myanmar,
@@ -191,18 +197,31 @@ class _ShopBackupExportScreenState extends State<ShopBackupExportScreen> {
       _message = null;
     });
     try {
-      final result = await (widget.exportAction != null
-          ? widget.exportAction!(password)
-          : ShopBackupExporter.export(
-              database: widget.database,
-              password: password,
-              saveArchive: widget.saveArchive ?? _saveAs,
-              scratchRoot: widget.scratchRoot,
-              encryptedRoot: widget.encryptedRoot,
-              runtimeScope: widget.runtimeScope,
-              allowTestFileAccessWithoutScope:
-                  widget.allowTestFileAccessWithoutScope,
-            ));
+      final runtimeScope = widget.runtimeScope;
+      final ShopBackupExportResult result;
+      if (runtimeScope?.configuration.isSyntheticQa == true) {
+        final store =
+            widget.qaEvidenceStore ??
+            ShopQaEvidenceStore.forRuntime(runtimeScope!);
+        await store.exportEncryptedBackup(
+          database: widget.database,
+          password: password,
+        );
+        result = ShopBackupExportResult.saved;
+      } else {
+        result = await (widget.exportAction != null
+            ? widget.exportAction!(password)
+            : ShopBackupExporter.export(
+                database: widget.database,
+                password: password,
+                saveArchive: widget.saveArchive ?? _saveAs,
+                scratchRoot: widget.scratchRoot,
+                encryptedRoot: widget.encryptedRoot,
+                runtimeScope: runtimeScope,
+                allowTestFileAccessWithoutScope:
+                    widget.allowTestFileAccessWithoutScope,
+              ));
+      }
       if (!mounted) return;
       _password.clear();
       _confirmation.clear();
@@ -210,8 +229,12 @@ class _ShopBackupExportScreenState extends State<ShopBackupExportScreen> {
         _message = result == ShopBackupExportResult.saved
             ? shopCopy(
                 widget.myanmar,
-                'Backup file saved. Keep its password separately and store the file somewhere safe.',
-                'အရန်ကူးဖိုင်ကို သိမ်းပြီးပါပြီ။ စကားဝှက်ကို သီးခြားသိမ်းပြီး ဖိုင်ကို လုံခြုံသောနေရာတွင် ထားပါ။',
+                runtimeScope?.configuration.isSyntheticQa == true
+                    ? 'Synthetic QA recovery evidence saved inside this isolated app. It is not a production backup.'
+                    : 'Backup file saved. Keep its password separately and store the file somewhere safe.',
+                runtimeScope?.configuration.isSyntheticQa == true
+                    ? 'သီးခြားစမ်းသပ်အက်ပ်အတွင်း စမ်းသပ်ပြန်လည်ရယူရေးအထောက်အထားကို သိမ်းပြီးပါပြီ။ ထုတ်လုပ်ရေးအရန်ကူးမဟုတ်ပါ။'
+                    : 'အရန်ကူးဖိုင်ကို သိမ်းပြီးပါပြီ။ စကားဝှက်ကို သီးခြားသိမ်းပြီး ဖိုင်ကို လုံခြုံသောနေရာတွင် ထားပါ။',
               )
             : shopCopy(
                 widget.myanmar,
@@ -305,7 +328,7 @@ class _ShopBackupExportScreenState extends State<ShopBackupExportScreen> {
               ),
               const SizedBox(height: 20),
               FilledButton.icon(
-                onPressed: !widget.externalFileSavingAllowed || _busy
+                onPressed: !widget.backupSavingAllowed || _busy
                     ? null
                     : _export,
                 icon: const Icon(Icons.save_alt_outlined),
@@ -318,8 +341,14 @@ class _ShopBackupExportScreenState extends State<ShopBackupExportScreen> {
                         )
                       : shopCopy(
                           widget.myanmar,
-                          'Choose where to save',
-                          'သိမ်းမည့်နေရာ ရွေးပါ',
+                          widget.runtimeScope?.configuration.isSyntheticQa ==
+                                  true
+                              ? 'Save synthetic QA evidence'
+                              : 'Choose where to save',
+                          widget.runtimeScope?.configuration.isSyntheticQa ==
+                                  true
+                              ? 'စမ်းသပ်အထောက်အထား သိမ်းရန်'
+                              : 'သိမ်းမည့်နေရာ ရွေးပါ',
                         ),
                 ),
               ),

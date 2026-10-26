@@ -257,7 +257,7 @@ prompts, or another provider.
 | Vercel | Supporting company website and protected web previews | Swan owns provider settings and promotion; existing projects only |
 | Supabase/PostgreSQL | Managed account, tenant and reviewed server-authority contracts | Swan owns provider/database actions; no live write from implementation agents |
 | Google Workspace | Company collaboration in Drive, Docs, Gmail, Chat, Calendar and Tasks | Swan/Vivian operate company content and access; no cross-tool copy or sharing expansion by implication |
-| Google Cloud Compute Engine | Candidate remote-only Android Emulator pilot | Up to US$15 usage approved; owner dashboard visibility of existing project `supermega-468612` (number `453184845544`) is verified, but billing, compute authority, quota, policy and automation access remain unverified, so no resource exists |
+| Google Cloud Compute Engine | Candidate remote-only Android Emulator pilot | Up to US$15 usage approved; owner dashboard visibility of existing project `supermega-468612` (number `453184845544`) is verified and billing is owner-confirmed, but compute authority, quota, policy and automation access remain unverified, so no resource exists |
 
 The sanitized resource inventory also names Coolify, PostHog, Penpot,
 Excalidraw, NocoDB, n8n, Dify, Ollama and AppFlowy. They are **deferred

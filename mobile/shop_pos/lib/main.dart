@@ -3493,8 +3493,7 @@ class _ShopHomeState extends State<ShopHome> {
       avatar: const Icon(Icons.badge_outlined, size: 18),
       label: Text(selected.match.member.displayCode),
       tooltip: shopCopy(widget.myanmar, 'Member', 'အသင်းဝင်'),
-      onDeleted:
-          _saving || _walletStarting || _cashConfirming || _clearingDraft
+      onDeleted: _saving || _walletStarting || _cashConfirming || _clearingDraft
           ? null
           : () {
               setState(() => _selectedMemberCard = null);
@@ -5233,7 +5232,9 @@ class _ShopSettingsScreenState extends State<ShopSettingsScreen> {
                     ),
                   ),
                   const Divider(height: 1),
-                  if (_runtimeCapabilities.externalFileSaving)
+                  if (_runtimeCapabilities.externalFileSaving ||
+                      (_runtimeCapabilities.syntheticEvidence &&
+                          Platform.isAndroid))
                     _SetupTile(
                       icon: Icons.file_download_outlined,
                       title: shopCopy(
@@ -5243,8 +5244,12 @@ class _ShopSettingsScreenState extends State<ShopSettingsScreen> {
                       ),
                       subtitle: shopCopy(
                         _myanmar,
-                        'Save an encrypted file.',
-                        'စကားဝှက်ဖြင့်ကာကွယ်ထားသောဖိုင်ကို သိမ်းပါ။',
+                        _runtimeCapabilities.syntheticEvidence
+                            ? 'Save encrypted synthetic QA recovery evidence inside this isolated app.'
+                            : 'Save an encrypted file.',
+                        _runtimeCapabilities.syntheticEvidence
+                            ? 'သီးခြားစမ်းသပ်အက်ပ်အတွင်း ကုဒ်ဝှက်ထားသော ပြန်လည်ရယူရေးအထောက်အထားကို သိမ်းပါ။'
+                            : 'စကားဝှက်ဖြင့်ကာကွယ်ထားသောဖိုင်ကို သိမ်းပါ။',
                       ),
                       onTap: () => Navigator.of(context).push<void>(
                         MaterialPageRoute<void>(

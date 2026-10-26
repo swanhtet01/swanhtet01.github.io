@@ -33,12 +33,13 @@ pilot must never claim those newer changes are installed.
 
 Read-only browser evidence confirms that the owner's selected personal Google
 account can open the existing `supermega-468612` project dashboard (project
-number `453184845544`). This establishes project visibility only. Do not run a
-command below until read-only inspection establishes the remaining non-secret
-values and the owner confirms the billing relationship and execution authority:
+number `453184845544`), and the owner separately confirms that billing is
+linked. This establishes independently observed visibility and owner-reported
+billing, not compute authority. Do not run a command below until read-only
+inspection establishes the remaining non-secret values and execution authority:
 
 - `PROJECT_ID=supermega-468612` (visible, not yet proven executable)
-- `BILLING_ACCOUNT_ID` already linked or explicitly approved for linking
+- `BILLING_ACCOUNT_ID` for the owner-confirmed existing linkage
 - `ZONE` where `n2-standard-4` is available on Intel
 - the authorized `gcloud` identity and its minimum project role(s)
 - whether the organization policy permits nested virtualization

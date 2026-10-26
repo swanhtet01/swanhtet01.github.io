@@ -10,6 +10,7 @@ import 'package:uuid/uuid.dart';
 import 'shop_backup.dart';
 import 'shop_copy.dart';
 import 'shop_database.dart';
+import 'shop_qa_evidence_store.dart';
 import 'shop_runtime_scope.dart';
 
 typedef PickShopBackup = Future<XFile?> Function();
@@ -48,6 +49,7 @@ class ShopStartup extends StatefulWidget {
     this.databaseFactory,
     this.verifyOpenedDatabase,
     this.runtimeScope,
+    this.qaEvidenceStore,
     this.scopedPreferences,
     this.allowTestFileAccessWithoutScope = false,
     super.key,
@@ -75,6 +77,7 @@ class ShopStartup extends StatefulWidget {
   /// that same verifier in Flutter's real-async zone.
   final VerifyOpenedShopDatabase? verifyOpenedDatabase;
   final ShopRuntimeScope? runtimeScope;
+  final ShopQaEvidenceStore? qaEvidenceStore;
   final ShopScopedPreferences? scopedPreferences;
   final bool allowTestFileAccessWithoutScope;
 
@@ -100,6 +103,12 @@ class _ShopStartupState extends State<ShopStartup> {
   bool get _externalFileSavingAllowed =>
       widget.runtimeScope?.capabilities.externalFileSaving ??
       widget.allowTestFileAccessWithoutScope;
+  bool get _qaEvidenceAvailable =>
+      widget.runtimeScope?.configuration.isSyntheticQa == true &&
+      widget.runtimeScope?.capabilities.syntheticEvidence == true &&
+      (widget.qaEvidenceStore != null || Platform.isAndroid);
+  bool get _backupRestoreAvailable =>
+      _externalFileSavingAllowed || _qaEvidenceAvailable;
 
   Future<bool> _hasRestoreMarker() async =>
       await FileSystemEntity.type(
@@ -292,7 +301,7 @@ class _ShopStartupState extends State<ShopStartup> {
 
   Future<void> _chooseBackup() async {
     if (_busy) return;
-    if (!_externalFileSavingAllowed) {
+    if (!_backupRestoreAvailable) {
       setState(() {
         _message = shopCopy(
           _myanmar,
@@ -307,42 +316,66 @@ class _ShopStartupState extends State<ShopStartup> {
       _message = null;
     });
     File? staged;
+    String? selectedName;
     try {
-      final chosen = await pickShopBackupForRuntime(
-        runtimeScope: widget.runtimeScope,
-        pickBackup: widget.pickBackup ?? _pickNativeBackup,
-        allowTestPickerWithoutScope:
-            widget.allowTestFileAccessWithoutScope && widget.pickBackup != null,
-      );
-      if (chosen == null) return;
       final cache =
           widget.importScratchRoot ??
           widget.runtimeScope?.temporaryRoot ??
           (throw StateError('shop_runtime_scope_required'));
-      staged = File(
-        '${cache.path}${Platform.pathSeparator}'
-        'supermega-shop-import-${const Uuid().v4()}.smbak',
-      );
-      await staged.create(exclusive: true);
-      final writer = await staged.open(mode: FileMode.write);
-      try {
-        var total = 0;
-        await for (final bytes in chosen.openRead()) {
-          total += bytes.length;
-          if (total > ShopBackup.maxSnapshotBytes + 128) {
-            throw const FormatException('The backup is too large.');
+      final runtimeScope = widget.runtimeScope;
+      if (_qaEvidenceAvailable) {
+        final store =
+            widget.qaEvidenceStore ??
+            ShopQaEvidenceStore.forRuntime(runtimeScope!);
+        staged = await store.stageLatestEncryptedBackup();
+        if (staged == null) {
+          if (mounted) {
+            setState(() {
+              _message = shopCopy(
+                _myanmar,
+                'No matching synthetic QA recovery evidence was found.',
+                'ကိုက်ညီသော စမ်းသပ်ပြန်လည်ရယူရေးအထောက်အထား မတွေ့ပါ။',
+              );
+            });
           }
-          await writer.writeFrom(bytes);
+          return;
         }
-        await writer.flush();
-      } finally {
-        await writer.close();
+        selectedName = 'Synthetic QA recovery evidence';
+      } else {
+        final chosen = await pickShopBackupForRuntime(
+          runtimeScope: runtimeScope,
+          pickBackup: widget.pickBackup ?? _pickNativeBackup,
+          allowTestPickerWithoutScope:
+              widget.allowTestFileAccessWithoutScope &&
+              widget.pickBackup != null,
+        );
+        if (chosen == null) return;
+        selectedName = chosen.name;
+        staged = File(
+          '${cache.path}${Platform.pathSeparator}'
+          'supermega-shop-import-${const Uuid().v4()}.smbak',
+        );
+        await staged.create(exclusive: true);
+        final writer = await staged.open(mode: FileMode.write);
+        try {
+          var total = 0;
+          await for (final bytes in chosen.openRead()) {
+            total += bytes.length;
+            if (total > ShopBackup.maxSnapshotBytes + 128) {
+              throw const FormatException('The backup is too large.');
+            }
+            await writer.writeFrom(bytes);
+          }
+          await writer.flush();
+        } finally {
+          await writer.close();
+        }
       }
       if (!mounted) return;
       final old = _selectedArchive;
       setState(() {
         _selectedArchive = staged;
-        _selectedName = chosen.name;
+        _selectedName = selectedName;
         _password.clear();
       });
       staged = null;
@@ -602,14 +635,18 @@ class _ShopStartupState extends State<ShopStartup> {
                       ),
                     ),
                     const SizedBox(height: 12),
-                    if (_externalFileSavingAllowed)
+                    if (_backupRestoreAvailable)
                       OutlinedButton(
                         onPressed: _busy ? null : _chooseBackup,
                         child: Text(
                           shopCopy(
                             _myanmar,
-                            'Restore backup',
-                            'အရန်ကူးဖိုင် ပြန်ယူရန်',
+                            _qaEvidenceAvailable
+                                ? 'Restore synthetic QA evidence'
+                                : 'Restore backup',
+                            _qaEvidenceAvailable
+                                ? 'စမ်းသပ်အထောက်အထား ပြန်ယူရန်'
+                                : 'အရန်ကူးဖိုင် ပြန်ယူရန်',
                           ),
                         ),
                       ),

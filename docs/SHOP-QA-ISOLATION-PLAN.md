@@ -128,7 +128,25 @@ Wrap the root material app with an always-visible banner:
 
 General OS Save As/open-file dialogs, native pickers and arbitrary external paths remain disabled in QA. Installed acceptance instead injects a QA-only evidence saver/loader whose only accessible directory is `<qa-root>/synthetic-evidence`. It rejects symlinks, traversal, files without `SYNTHETIC-QA` in the generated name and every path outside that directory.
 
-The QA archive wraps the unchanged encrypted production payload in a QA-only authenticated envelope binding `syntheticQa`, the stable profile ID, platform identity, isolation-contract format version and payload digest. Authentication uses a build-time synthetic-QA test key that is public/test-only and explicitly ineligible for production trust; it prevents accidental cross-profile acceptance, not malicious-device security. Restore verifies the envelope before decrypting, accepts only the matching identity/profile, and restores only into an empty matching QA root. Production archive bytes and production picker behavior remain unchanged.
+The QA archive wraps the unchanged encrypted production payload in a QA-only integrity-tagged envelope binding `syntheticQa`, the stable profile ID, platform identity, isolation-contract format version and payload digest. The tag uses a build-time synthetic-QA test key that is public/test-only and explicitly ineligible for production trust; it detects accidental cross-profile mixing, not malicious-device activity. Restore verifies the envelope before decrypting, accepts only the matching identity/profile, and restores only into an empty matching QA root. Production archive bytes and production picker behavior remain unchanged.
+
+The isolated Android implementation is `ShopQaEvidenceStore`. It is available
+only for the generated synthetic-QA profile on Android, writes beneath the
+private `synthetic-evidence` root, and never enables the external Save As or
+file-picker capability. Its `.smqa` envelope binds the exact profile, platform
+identity, isolation-contract version, payload length and SHA-256. The public
+synthetic-test HMAC detects accidental evidence/profile mixing; it is not a
+production signature or a defense against a rooted device. The loader rejects
+symlinks, oversized/truncated envelopes, header/payload tampering and foreign
+identities before staging the still-encrypted `SMBK` payload. `ShopBackup` then
+retains its empty-target, password, schema, semantic and no-replace checks.
+
+Remote Android collection remains a two-sided acceptance step: export inside
+the QA app, copy the `.smqa` bytes through the debug-only package sandbox,
+start a fresh empty QA profile, place the unchanged envelope back inside that
+profile's private evidence root, and restore through the in-app QA action.
+Those package-sandbox transfers and the installed restart/restore result must
+be observed on the authorized emulator; source tests do not prove them.
 
 ### Dependency-free checks runnable in the current cloud toolchain
 

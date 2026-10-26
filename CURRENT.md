@@ -90,8 +90,9 @@ The bounded remote plan is one Intel GCP `n2-standard-4` VM, 4 vCPU, 16 GiB,
 private-loopback ADB and a six-hour provider STOP. The owner approved up to
 US$15 usage. Read-only browser evidence now confirms that the owner's selected
 personal Google account can open the existing `supermega-468612` project
-(project number `453184845544`) dashboard. That proves project visibility only:
-billing linkage, Compute Engine create authority, quota, organization policy,
+(project number `453184845544`) dashboard; the owner separately confirms that
+billing is linked. Project visibility is independently observed and billing is
+owner-reported. Compute Engine create authority, quota, organization policy,
 IAM roles and non-interactive automation access remain unverified. No VM, disk,
 IP, network, API, credential, IAM grant or billable resource was created.
 
@@ -121,8 +122,8 @@ and
 [`current-offline-result.json`](evidence/remote-android-qa/current-offline-result.json).
 The exact result is blocked on:
 
-1. project visibility is verified, but billing, compute authority, quota,
-   policy and automation access are not verified;
+1. project visibility is verified and billing is owner-confirmed, but compute
+   authority, quota, policy and automation access are not verified;
 2. no externally authenticated remote-host observation;
 3. retained artifact encrypted restore unavailable;
 4. retained artifact scoped synthetic-evidence export unavailable.
