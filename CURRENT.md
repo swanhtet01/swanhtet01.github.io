@@ -16,7 +16,9 @@ No local demo, passing test, healthy provider, or generated artifact is proof of
 - Separate local branch `codex/shop-core-internal-acceptance-20261026` starts
   from exact `6bf59b49` and adds only a composed native acceptance test at
   `1c4614ed05388076ac4b53f590526d271cd3f738` / tree
-  `e0129536d978fcfe574747d2b2df51fad963a136`.
+  `e0129536d978fcfe574747d2b2df51fad963a136`. The reviewed assertion successor
+  is `4f8758ded8e664e9be838dde641d5b456f3d6392` / tree
+  `c8f35ba2c73897e613b5d94df0fd07e4c3631c67`.
 - The composed file-backed flow passes locally: fictional product and barcode,
   13,500 MMK cash sale, 6,500 MMK change calculation, immutable receipt,
   retry without duplicate sale/stock/outbox effects, shift close, SQLite
@@ -25,9 +27,11 @@ No local demo, passing test, healthy provider, or generated artifact is proof of
 - A focused ten-test cashier/recovery selection passes, including empty-catalog
   sale, barcode/search, short-cash rejection, reprint without another sale,
   shift close, database reopen, encrypted restore, and fresh-install restore.
-  Flutter analysis reports no issues. The exact local successor's full native
-  suite passes 404 tests with 25 suite-defined skips; those skips do not prove
-  installed-device or physical-hardware acceptance.
+  Flutter analysis reports no issues. The exact `4f8758de` source checkpoint's
+  full native suite passes 404 tests with 25 suite-defined skips; those skips
+  do not prove installed-device or physical-hardware acceptance. Independent
+  source review passes after requiring the restored retry to reread stock and
+  recheck sale, stock-movement, and outbox counts.
 - This is local source/test evidence, not a founder-installable release. The
   retained Android QA artifact is engineering evidence and is not
   production-signed; installed restart/restore and physical printer/scanner
