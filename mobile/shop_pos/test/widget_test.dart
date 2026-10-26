@@ -603,7 +603,7 @@ void main() {
     debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
     final database = ShopDatabase(NativeDatabase.memory());
     try {
-      const memberToken = 'SMC1.AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8';
+      final memberToken = _widgetMemberToken(0);
       await tester.pumpWidget(
         MaterialApp(
           home: ShopHome(
