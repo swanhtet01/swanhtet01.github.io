@@ -678,6 +678,7 @@
     "ai:order-intake:eval:self-test": "node tools/run_python_tool.mjs tools/run_order_intake_eval.py --self-test",
     "storage:privacy:preflight": "node tools/run_python_tool.mjs tools/verify_private_storage_privacy.py --preflight",
     "security:dependencies": "npm audit --audit-level=low && npm --prefix showroom audit --audit-level=low && npm --prefix kernel audit --audit-level=low",
+    "security:secret-diff:verify": "node --test tools/verify_repository_secret_diff.test.mjs",
     "security:legacy-credential-paths:verify": "node tools/verify_legacy_credential_path_quarantine.mjs",
     "security:legacy-smoke-paths:verify": "node tools/verify_legacy_smoke_path_quarantine.mjs",
     "security:incident-response:verify": "node --test tools/verify_security_incident_response.test.mjs && node tools/verify_security_incident_response.mjs",

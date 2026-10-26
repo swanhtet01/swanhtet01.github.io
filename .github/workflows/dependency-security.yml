@@ -70,15 +70,44 @@ jobs:
       - name: Audit locked dependencies
         run: uv run --frozen --group test --group audit pip-audit --local --skip-editable
 
+  secret-diff:
+    name: Scan added lines for credential shapes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify dependency-free scanner tests
+        run: npm run security:secret-diff:verify
+
+      - name: Scan added lines without exposing values
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ -n "$PR_BASE_SHA" ] && [ -n "$PR_HEAD_SHA" ]; then
+            base="$PR_BASE_SHA"
+            head="$PR_HEAD_SHA"
+          else
+            base="$(git rev-parse HEAD^)"
+            head="$(git rev-parse HEAD)"
+          fi
+          node tools/verify_repository_secret_diff.mjs --base "$base" --head "$head"
+
   required-audits:
     name: Dependency Security Audit
-    needs: [npm-audit, pip-audit]
+    needs: [npm-audit, pip-audit, secret-diff]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     timeout-minutes: 2
     env:
       NPM_RESULT: ${{ needs.npm-audit.result }}
       PIP_RESULT: ${{ needs.pip-audit.result }}
+      SECRET_DIFF_RESULT: ${{ needs.secret-diff.result }}
     steps:
       - name: Require every dependency audit to succeed
-        run: node -e "if (process.env.NPM_RESULT !== 'success' || process.env.PIP_RESULT !== 'success') process.exit(1)"
+        run: node -e "if (process.env.NPM_RESULT !== 'success' || process.env.PIP_RESULT !== 'success' || process.env.SECRET_DIFF_RESULT !== 'success') process.exit(1)"
