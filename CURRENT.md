@@ -9,13 +9,13 @@ credentials, signing, merge, deployment, provider mutation, live database work,
 or production use. When a remote fact below becomes stale, verify it and update
 this file; do not reinterpret the stale value as authority.
 
-## Exact candidate
+## Exact product/runtime candidate
 
 | Item | Verified fact |
 |---|---|
-| Integration PR | [#734](https://github.com/swanhtet01/swanhtet01.github.io/pull/734), open, non-draft, unmerged, `UNSTABLE` because release gates remain open |
+| Integration PR | [#734](https://github.com/swanhtet01/swanhtet01.github.io/pull/734), open, non-draft, unmerged, `UNSTABLE` because release gates remain open; verify its current documentation-only head separately |
 | Branch | `codex/shop-public-main-port-20261022` |
-| Source | `13ef5c3201b67308a8c086133fc384c907080602` |
+| Runtime source | `13ef5c3201b67308a8c086133fc384c907080602`; later instruction-only commits do not change this runtime tree |
 | Source tree | `8c4ca6503aa71ebd237c293ef3f868608af4f1e9` |
 | PR merge used by Native CI | `de9ca46626b177966482d91fbd1aa11b76126449` |
 | Merge tree | `8c4ca6503aa71ebd237c293ef3f868608af4f1e9` — identical to the source tree |
@@ -30,14 +30,14 @@ corrupt, and unknown sidecars remain fail closed and preserved.
 
 ### Instruction source pin
 
-Until this private documentation successor is intentionally published, the
-active PR instructions are `supergoal.md`, `CURRENT.md`, `AGENTS.md`,
-`SKILLS.md`, and `mobile/shop_pos/AGENTS.md` at source
-`13ef5c3201b67308a8c086133fc384c907080602`. Default branch `main` remains at
+The active PR instructions are `supergoal.md`, `CURRENT.md`, `AGENTS.md`,
+`SKILLS.md`, and `mobile/shop_pos/AGENTS.md` at the current PR head. Reviewed
+instruction predecessor `93321e2818721bb287795e7d2a6a440110a1dacb` updates
+those files without changing the runtime/native tree. Default branch `main`
+remains at
 `5479c5d1ece3d697cf5c505e7feb431dc88baf75` with obsolete SuperGoal v1.2.34 and
 an old local absolute path; it is not the current Shop release instruction
-source. This private checkpoint does not update, merge, or retarget `main` or
-PR #734.
+source. Instruction updates do not update, merge, or retarget `main`.
 
 ## Exact-head CI
 
@@ -58,6 +58,9 @@ PR #734.
   `tools/verify_repository_secret_diff.test.mjs:43` in historical commit
   `159b5f5f9fa7c6b788e660d019d746edd03d505f`; no provider incident was dismissed,
   and full-history coverage remains open.
+- Instruction-only App run `40576939509` stopped earlier at the claims guard
+  because this file omitted two required safety statements. The statements are
+  restored below; that run does not replace the terminal runtime evidence above.
 
 No unchanged workflow should be rerun to seek a different result. The next App
 run needs fresh, exact-source PostgreSQL evidence or a separate demonstrated
@@ -135,6 +138,10 @@ release work.
 BD/Ops owns pricing, onboarding content, support, outreach, and social work.
 Engineering supplies verified capability/limitation facts and must not turn
 those tasks into Shop source or CI scope.
+
+No local demo, passing test, healthy provider, or generated artifact is proof of a live customer system, revenue, production persistence, or autonomous operation.
+
+Add provider-backed AI, payment, shipping, tax, publishing, and broader marketing only after their product gate has measured pilot evidence.
 
 ## Open gates and next eligible work
 
