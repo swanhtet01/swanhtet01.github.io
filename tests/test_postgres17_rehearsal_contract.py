@@ -40,7 +40,7 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
                  patch.object(module, "_postgres_version") as version_probe, \
                  patch.object(module, "_binary") as binary_probe, \
                  patch.object(module.os, "name", "posix"):
-                report = module._preflight(root, Path("openssl"))
+                report = module._release_preflight(root, Path("openssl"))
                 self.assertEqual(report["error"], "postgres17_platform_unapproved")
                 version_probe.assert_not_called()
                 binary_probe.assert_not_called()
@@ -48,7 +48,7 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
         with patch.object(module, "_postgres_version") as version_probe, \
              patch.object(module, "_binary") as binary_probe, \
              patch.object(module.os, "name", "nt"):
-            report = module._preflight(Path(r"C:\untrusted\pgsql\bin"), Path("openssl.exe"))
+            report = module._release_preflight(Path(r"C:\untrusted\pgsql\bin"), Path("openssl.exe"))
             self.assertEqual(report["error"], "postgres17_toolchain_provenance_unapproved")
             version_probe.assert_not_called()
             binary_probe.assert_not_called()
@@ -484,7 +484,7 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as parent:
             evidence = Path(parent) / "rehearsal.json"
             with patch.object(module, "_source_identity", return_value=source), \
-                    patch.object(module, "_preflight", return_value={"ok": True}), \
+                    patch.object(module, "_release_preflight", return_value={"ok": True}), \
                     patch.object(
                         module.tempfile,
                         "mkdtemp",

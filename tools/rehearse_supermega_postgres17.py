@@ -3733,13 +3733,6 @@ def _verify_restored_data(
 
 
 def _preflight(postgres_bin: Path, openssl: Path) -> dict[str, Any]:
-    if os.name != "nt":
-        return _safe_report("postgres17_platform_unapproved", cleanup_complete=True)
-    if not TOOLCHAIN_PROVENANCE_APPROVED:
-        return _safe_report(
-            "postgres17_toolchain_provenance_unapproved",
-            cleanup_complete=True,
-        )
     environment = _clean_environment(postgres_bin)
     required = ("postgres", "initdb", "pg_ctl", "pg_isready", "psql", "pg_dump", "pg_restore")
     available = all(
@@ -3766,6 +3759,18 @@ def _preflight(postgres_bin: Path, openssl: Path) -> dict[str, Any]:
     }
 
 
+def _release_preflight(postgres_bin: Path, openssl: Path) -> dict[str, Any]:
+    """Gate receipt/rehearsal authority without disabling local contract tests."""
+    if os.name != "nt":
+        return _safe_report("postgres17_platform_unapproved", cleanup_complete=True)
+    if not TOOLCHAIN_PROVENANCE_APPROVED:
+        return _safe_report(
+            "postgres17_toolchain_provenance_unapproved",
+            cleanup_complete=True,
+        )
+    return _preflight(postgres_bin, openssl)
+
+
 def _run_rehearsal(
     postgres_bin: Path,
     openssl: Path,
@@ -3774,7 +3779,7 @@ def _run_rehearsal(
     source_identity: dict[str, str],
 ) -> int:
     environment = _clean_environment(postgres_bin)
-    preflight = _preflight(postgres_bin, openssl)
+    preflight = _release_preflight(postgres_bin, openssl)
     if preflight.get("ok") is not True:
         _emit(preflight, evidence_file)
         return 2
@@ -4191,7 +4196,7 @@ def main(argv: list[str] | None = None) -> int:
     postgres_bin = args.postgres_bin.expanduser().resolve()
     openssl = _resolve_executable(args.openssl)
     if args.preflight:
-        report = _preflight(postgres_bin, openssl)
+        report = _release_preflight(postgres_bin, openssl)
         evidence_persisted = _emit(report, args.evidence_file)
         return 0 if evidence_persisted and report.get("ok") is True else 1
     try:
