@@ -369,9 +369,11 @@ abstract final class ShopBackup {
   /// Prepares an installed runtime store for startup under the restore lock.
   ///
   /// A genuine SQLite hot rollback journal is resolved by SQLite itself before
-  /// the normal read-only and semantic verification runs. Unknown journals,
-  /// WAL/SHM state, links, restore markers, and failed recovery remain closed
-  /// and are preserved for support inspection.
+  /// the normal read-only and semantic verification runs. A structurally and
+  /// checksum-valid cold journal is preserved and accepted only when its page
+  /// metadata matches an intact database. Unknown journals, WAL/SHM state,
+  /// links, restore markers, and failed recovery remain closed and are
+  /// preserved for support inspection.
   static Future<ShopStorePresence> prepareRuntimeStore(File target) =>
       _withRootLock(
         target.parent,
@@ -416,7 +418,10 @@ abstract final class ShopBackup {
         return ShopStorePresence.unsafe;
       }
       if (!await _looksLikeHotRollbackJournal(journal)) {
-        return ShopStorePresence.unsafe;
+        if (!await _looksLikeColdRollbackJournal(journal, target)) {
+          return ShopStorePresence.unsafe;
+        }
+        return ShopStorePresence.existing;
       }
       Database? recovery;
       try {
@@ -490,6 +495,110 @@ abstract final class ShopBackup {
       if (requiredBytes > length) return false;
     }
     return true;
+  }
+
+  static Future<bool> _looksLikeColdRollbackJournal(
+    File journal,
+    File target,
+  ) async {
+    final length = await journal.length();
+    if (length <= 512) return false;
+    final handle = await journal.open(mode: FileMode.read);
+    try {
+      final header = await handle.read(28);
+      if (header.length != 28 || header.take(8).any((byte) => byte != 0)) {
+        return false;
+      }
+      final fields = ByteData.sublistView(header);
+      final recordCount = fields.getUint32(8, Endian.big);
+      final nonce = fields.getUint32(12, Endian.big);
+      final initialPageCount = fields.getUint32(16, Endian.big);
+      final sectorSize = fields.getUint32(20, Endian.big);
+      final encodedPageSize = fields.getUint32(24, Endian.big);
+      final pageSize = encodedPageSize == 1 ? 65536 : encodedPageSize;
+      final sectorValid =
+          sectorSize >= 512 &&
+          sectorSize <= 65536 &&
+          (sectorSize & (sectorSize - 1)) == 0;
+      final pageValid =
+          pageSize >= 512 &&
+          pageSize <= 65536 &&
+          (pageSize & (pageSize - 1)) == 0;
+      final recordSize = pageSize + 8;
+      if (recordCount != 0 ||
+          initialPageCount == 0 ||
+          !sectorValid ||
+          !pageValid ||
+          length < sectorSize + recordSize ||
+          length > sectorSize + initialPageCount * recordSize ||
+          (length - sectorSize) % recordSize != 0) {
+        return false;
+      }
+
+      final seenPages = <int>{};
+      final databaseHandle = await target.open(mode: FileMode.read);
+      var offset = sectorSize;
+      try {
+        while (offset < length) {
+          await handle.setPosition(offset);
+          final encodedPageNumber = await handle.read(4);
+          final page = await handle.read(pageSize);
+          final encodedChecksum = await handle.read(4);
+          if (encodedPageNumber.length != 4 ||
+              page.length != pageSize ||
+              encodedChecksum.length != 4) {
+            return false;
+          }
+          final pageNumber = ByteData.sublistView(encodedPageNumber)
+              .getUint32(0, Endian.big);
+          if (pageNumber == 0 ||
+              pageNumber > initialPageCount ||
+              !seenPages.add(pageNumber)) {
+            return false;
+          }
+          var checksum = nonce;
+          for (var index = pageSize - 200; index > 0; index -= 200) {
+            checksum = (checksum + page[index]) & 0xffffffff;
+          }
+          if (ByteData.sublistView(encodedChecksum).getUint32(0, Endian.big) !=
+              checksum) {
+            return false;
+          }
+          await databaseHandle.setPosition((pageNumber - 1) * pageSize);
+          final committedPage = await databaseHandle.read(pageSize);
+          if (committedPage.length != pageSize) return false;
+          for (var index = 0; index < pageSize; index++) {
+            if (committedPage[index] != page[index]) return false;
+          }
+          offset += recordSize;
+        }
+      } finally {
+        await databaseHandle.close();
+      }
+
+      Database? database;
+      try {
+        database = sqlite3.open(target.path, mode: OpenMode.readOnly);
+        final databasePageSize =
+            database.select('PRAGMA page_size').single.values.single as int;
+        final databasePageCount =
+            database.select('PRAGMA page_count').single.values.single as int;
+        final integrity = database
+            .select('PRAGMA integrity_check')
+            .single
+            .values
+            .single;
+        return databasePageSize == pageSize &&
+            databasePageCount == initialPageCount &&
+            integrity == 'ok';
+      } catch (_) {
+        return false;
+      } finally {
+        database?.close();
+      }
+    } finally {
+      await handle.close();
+    }
   }
 
   /// Reserve a new DB pathname under the restore lock. Drift initializes the

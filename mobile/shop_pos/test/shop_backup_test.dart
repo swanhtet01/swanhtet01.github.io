@@ -3891,6 +3891,96 @@ void main() {
   );
 
   test(
+    'runtime preparation accepts an abrupt-exit cold rollback journal',
+    () async {
+      final documents = await Directory.systemTemp.createTemp(
+        'shop-existing-cold-journal-',
+      );
+      try {
+        final target = ShopDatabase.privateDatabaseFile(documents);
+        final fixture = ShopDatabase(NativeDatabase(target));
+        await fixture.addProduct(
+          id: 'tea',
+          name: 'Tea',
+          priceMmk: 2500,
+          openingStock: 4,
+        );
+        await fixture.close();
+        final committedBytes = await target.readAsBytes();
+
+        final abruptExit = await Process.run('dart', [
+          'run',
+          'test/fixtures/leave_cold_rollback_journal.dart',
+          target.path,
+        ], workingDirectory: Directory.current.path);
+        expect(abruptExit.exitCode, 19);
+        final journal = File('${target.path}-journal');
+        expect(await journal.exists(), isTrue);
+        final journalBytes = await journal.readAsBytes();
+        expect(journalBytes.length, greaterThan(512));
+        expect(journalBytes.take(8), everyElement(0));
+        expect(await target.readAsBytes(), committedBytes);
+
+        expect(
+          await ShopBackup.prepareRuntimeStore(target),
+          ShopStorePresence.existing,
+        );
+        expect(await journal.exists(), isTrue);
+        ShopBackup.verifyRuntimeStore(target);
+        final reopened = sqlite3.open(target.path, mode: OpenMode.readOnly);
+        try {
+          expect(
+            reopened.select('SELECT on_hand FROM shop_products WHERE id = ?', [
+              'tea',
+            ]).single['on_hand'],
+            4,
+          );
+          expect(
+            reopened.select('PRAGMA integrity_check').single.values.single,
+            'ok',
+          );
+        } finally {
+          reopened.close();
+        }
+
+        final forgedJournal = Uint8List.fromList(journalBytes);
+        final forgedData = ByteData.sublistView(forgedJournal);
+        final nonce = forgedData.getUint32(12, Endian.big);
+        final sectorSize = forgedData.getUint32(20, Endian.big);
+        final pageSize = forgedData.getUint32(24, Endian.big);
+        final pageOffset = sectorSize + 4;
+        forgedJournal[pageOffset + pageSize - 200] ^= 1;
+        var forgedChecksum = nonce;
+        for (var index = pageSize - 200; index > 0; index -= 200) {
+          forgedChecksum =
+              (forgedChecksum + forgedJournal[pageOffset + index]) & 0xffffffff;
+        }
+        forgedData.setUint32(pageOffset + pageSize, forgedChecksum, Endian.big);
+        await journal.writeAsBytes(forgedJournal, flush: true);
+        final committedAfterVerification = await target.readAsBytes();
+        expect(
+          await ShopBackup.prepareRuntimeStore(target),
+          ShopStorePresence.unsafe,
+        );
+        expect(await target.readAsBytes(), committedAfterVerification);
+        expect(await journal.readAsBytes(), forgedJournal);
+
+        final corruptJournal = Uint8List.fromList(journalBytes);
+        corruptJournal[corruptJournal.length - 1] ^= 1;
+        await journal.writeAsBytes(corruptJournal, flush: true);
+        expect(
+          await ShopBackup.prepareRuntimeStore(target),
+          ShopStorePresence.unsafe,
+        );
+        expect(await target.readAsBytes(), committedAfterVerification);
+        expect(await journal.readAsBytes(), corruptJournal);
+      } finally {
+        await documents.delete(recursive: true);
+      }
+    },
+  );
+
+  test(
     'runtime preparation preserves unknown journal and WAL states',
     () async {
       final documents = await Directory.systemTemp.createTemp(
