@@ -21,6 +21,7 @@ import 'package:supermega_shop/printer_setup_screen.dart';
 import 'package:supermega_shop/printer_services.dart';
 import 'package:supermega_shop/recent_sales_screen.dart';
 import 'package:supermega_shop/shop_copy.dart';
+import 'package:supermega_shop/shop_cash_shift_screen.dart';
 import 'package:supermega_shop/shop_correction_authorization_service.dart';
 import 'package:supermega_shop/shop_database.dart';
 import 'package:supermega_shop/shop_models.dart';
@@ -896,11 +897,31 @@ void main() {
       );
       await tester.enterText(
         find.byKey(const ValueKey('shop-product-price')),
-        '3500',
+        '3,500',
       );
       await tester.enterText(
         find.byKey(const ValueKey('shop-product-stock')),
         '8',
+      );
+      await tester.tap(find.text('Save product'));
+      await tester.pumpAndSettle();
+      expect(find.text('Enter a whole MMK amount.'), findsOneWidget);
+      expect(await database.readActiveProducts(), isEmpty);
+      expect(
+        tester
+            .widget<EditableText>(
+              find.descendant(
+                of: find.byKey(const ValueKey('shop-product-price')),
+                matching: find.byType(EditableText),
+              ),
+            )
+            .controller
+            .text,
+        '3,500',
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('shop-product-price')),
+        '3500',
       );
       await tester.tap(find.text('Save product'));
       await tester.pumpAndSettle();
@@ -6180,11 +6201,38 @@ END
         );
         await tester.enterText(
           find.byKey(const ValueKey('stock-edit-price')),
-          myanmar ? '၃၂၀၀' : '3200',
+          '3.200',
         );
         await tester.enterText(
           find.byKey(const ValueKey('stock-edit-barcode')),
           '333333',
+        );
+        await tester.tap(find.byKey(const ValueKey('stock-edit-save')));
+        await _settleStock(tester);
+        expect(
+          find.text(
+            myanmar
+                ? 'ကျပ်ဈေးနှုန်းကို ဂဏန်းအပြည့်ထည့်ပါ။'
+                : 'Enter a whole MMK amount.',
+          ),
+          findsOneWidget,
+        );
+        expect((await database.readActiveProducts()).single.priceMmk, 2800);
+        expect(
+          tester
+              .widget<EditableText>(
+                find.descendant(
+                  of: find.byKey(const ValueKey('stock-edit-price')),
+                  matching: find.byType(EditableText),
+                ),
+              )
+              .controller
+              .text,
+          '3.200',
+        );
+        await tester.enterText(
+          find.byKey(const ValueKey('stock-edit-price')),
+          myanmar ? '၃၂၀၀' : '3200',
         );
         await tester.tap(find.byKey(const ValueKey('stock-edit-save')));
         await _settleStock(tester);
@@ -6201,6 +6249,75 @@ END
       }
     });
   }
+
+  testWidgets(
+    'cash shift rejects pasted separators without changing shift state',
+    (tester) async {
+      _usePhoneViewport(tester);
+      tester.view.physicalSize = const Size(390, 1000);
+      final database = ShopDatabase(NativeDatabase.memory());
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ShopCashShiftScreen(
+            database: database,
+            myanmar: false,
+            testOnlyAllowMissingRuntimeScope: true,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).first, 'May');
+      final opening = find.byKey(const ValueKey('shop-shift-opening-cash'));
+      await tester.enterText(opening, '10.000');
+      await tester.tap(find.text('Start shift'));
+      await tester.pumpAndSettle();
+      expect(await database.readOpenCashShift(), isNull);
+      expect(find.textContaining('valid opening cash'), findsOneWidget);
+      expect(
+        tester
+            .widget<EditableText>(
+              find.descendant(of: opening, matching: find.byType(EditableText)),
+            )
+            .controller
+            .text,
+        '10.000',
+      );
+
+      await tester.enterText(opening, '$shopMaximumMmk');
+      await tester.tap(find.text('Start shift'));
+      await tester.pumpAndSettle();
+      expect(
+        (await database.readOpenCashShift())?.openingFloatMmk,
+        shopMaximumMmk,
+      );
+
+      final counted = find.byKey(const ValueKey('shop-shift-counted-cash'));
+      final closeShift = find.text('Close shift');
+      await tester.enterText(counted, '200.000');
+      await tester.tap(closeShift);
+      await tester.pumpAndSettle();
+      expect((await database.readOpenCashShift())?.state, 'open');
+      expect(find.textContaining('cash you counted'), findsOneWidget);
+      expect(
+        tester
+            .widget<EditableText>(
+              find.descendant(of: counted, matching: find.byType(EditableText)),
+            )
+            .controller
+            .text,
+        '200.000',
+      );
+
+      await tester.enterText(counted, '$shopMaximumMmk');
+      await tester.tap(closeShift);
+      await tester.pumpAndSettle();
+      expect(await database.readOpenCashShift(), isNull);
+      expect((await database.readLatestCashShift())?.state, 'closed');
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+      await database.close();
+    },
+  );
 
   testWidgets('Stock refreshes a photo when returning from Sell', (
     tester,

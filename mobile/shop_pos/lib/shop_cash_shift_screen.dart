@@ -464,15 +464,19 @@ class _ShopCashShiftScreenState extends State<ShopCashShiftScreen> {
     ),
   );
 
-  Widget _moneyField(TextEditingController controller, String label) =>
-      TextField(
-        controller: controller,
-        keyboardType: TextInputType.number,
-        decoration: InputDecoration(
-          labelText: label,
-          suffixText: widget.myanmar ? 'ကျပ်' : 'MMK',
-        ),
-      );
+  Widget _moneyField(
+    TextEditingController controller,
+    String label, {
+    required Key fieldKey,
+  }) => TextField(
+    key: fieldKey,
+    controller: controller,
+    keyboardType: TextInputType.number,
+    decoration: InputDecoration(
+      labelText: label,
+      suffixText: widget.myanmar ? 'ကျပ်' : 'MMK',
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -561,6 +565,7 @@ class _ShopCashShiftScreenState extends State<ShopCashShiftScreen> {
                             'Opening cash in drawer',
                             'အံဆွဲရှိ စတင်ငွေသား',
                           ),
+                          fieldKey: const ValueKey('shop-shift-opening-cash'),
                         ),
                         const SizedBox(height: 24),
                         FilledButton(
@@ -731,6 +736,7 @@ class _ShopCashShiftScreenState extends State<ShopCashShiftScreen> {
                             'Cash you counted',
                             'ရေတွက်ထားသော ငွေသား',
                           ),
+                          fieldKey: const ValueKey('shop-shift-counted-cash'),
                         ),
                         const SizedBox(height: 24),
                         FilledButton(

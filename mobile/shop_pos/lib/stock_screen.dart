@@ -777,7 +777,7 @@ class _EditProductDialogState extends State<_EditProductDialog> {
         expectedPriceMmk: widget.product.priceMmk,
         expectedBarcode: widget.product.barcode,
         name: _name.text,
-        priceMmk: parseStockQuantity(_price.text)!,
+        priceMmk: parseShopMmkInput(_price.text, maximum: 2000000000)!,
         barcode: _barcode.text,
       );
       if (mounted) Navigator.of(context).pop(true);

@@ -112,7 +112,7 @@ void main() {
       );
       await expectLater(
         database.recordCashSale(
-          operationId: 'aggregate-over-maximum',
+          operationId: 'item-count-over-maximum',
           lines: [
             for (var index = 0; index < 101; index++)
               ShopSaleLineInput(productId: 'product-$index', quantity: 1000),
