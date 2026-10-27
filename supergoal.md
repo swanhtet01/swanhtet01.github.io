@@ -1,8 +1,8 @@
 # SuperMega Supergoal
 
-- Version: 2.3.2
+- Version: 2.3.3
 - Owners: Swan Htet (technical) and Vivian (operations and business)
-- Updated: 2026-10-26
+- Updated: 2026-10-27
 - Status: ACTIVE — Shop is the core product; its supporting public website,
   shared infrastructure, and company operations remain release support
 
@@ -68,22 +68,13 @@ confirms KVM or supported nested virtualization, sufficient memory and disk,
 authorized access, cost, and isolation; an old secret, config, or hostname is
 not evidence of current authority.
 
-The offline remote-host preflight additionally binds the exact retained
-source/run/artifact/archive/APK identities and fails closed on missing native
-capabilities. It labels host/provider input as reported rather than verified
-and never grants run authority. The retained handoff shows that provider access
-alone is insufficient: encrypted restore and the scoped synthetic-evidence
-export path are unavailable in that APK. A separate unpushed source checkpoint,
-`d0c48586c22aa27ac7081802754392cbdb4d89b8`, now implements and independently
-passes review for those isolation-plan contracts without enabling general
-external file access; its full Flutter suite passes 415 with 33 declared skips.
-It is source-ready only, not part of the retained APK. The next eligible build
-outcome is an exact-head QA successor artifact using the versioned v2
-capability-aware handoff. That source contract requires compiled Android
-metadata for scoped encrypted restore and synthetic evidence export, explicit
-denial of general external-file access, and exact source/APK/sidecar binding.
-The old v1 retained artifact cannot be relabelled capable. Only separately
-verified provider/host evidence may then permit the complete acceptance run.
+The offline remote-host preflight must bind the exact source, workflow,
+artifact archive, package, capability metadata and APK identity, and must fail
+closed when any required native capability or provider observation is missing.
+Reported host fields never grant run authority. A newer source cannot relabel an
+older APK, and a build archive cannot prove signing, installation, restart or
+restore. The dated source, run, artifact, capability and provider status lives
+only in [`CURRENT.md`](CURRENT.md).
 
 This is digital internal verification only. It does not prove physical
 scanner/printer compatibility, production signing, hosted account, live
@@ -263,7 +254,7 @@ prompts, or another provider.
 | Vercel | Supporting company website and protected web previews | Swan owns provider settings and promotion; existing projects only |
 | Supabase/PostgreSQL | Managed account, tenant and reviewed server-authority contracts | Swan owns provider/database actions; no live write from implementation agents |
 | Google Workspace | Company collaboration in Drive, Docs, Gmail, Chat, Calendar and Tasks | Swan/Vivian operate company content and access; no cross-tool copy or sharing expansion by implication |
-| Google Cloud Compute Engine | Candidate remote-only Android Emulator pilot | Up to US$15 usage approved; owner dashboard visibility of existing project `supermega-468612` (number `453184845544`) is verified and billing is owner-confirmed, but compute authority, quota, policy and automation access remain unverified, so no resource exists |
+| Google Cloud Compute Engine | Candidate remote-only Android Emulator pilot | Swan owns the provider account, spend and resource decisions; current project, budget, access, quota and resource state live in `CURRENT.md` |
 
 The sanitized resource inventory also names Coolify, PostHog, Penpot,
 Excalidraw, NocoDB, n8n, Dify, Ollama and AppFlowy. They are **deferred
