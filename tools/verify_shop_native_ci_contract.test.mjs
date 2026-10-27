@@ -222,6 +222,30 @@ test('production identity is generated only after every default-profile test sha
   )
   assert.ok(omittedShard.failures.includes('native_test_shard_missing:test/shop_member_identity_test.dart'))
 
+  const omittedMmkShard = verifyShopNativeCiContract(
+    workflow.replaceAll('test/shop_mmk_input_test.dart', 'test/omitted_mmk_input_test.dart'),
+    gradleWrapper,
+  )
+  assert.ok(omittedMmkShard.failures.includes('native_test_shard_missing:test/shop_mmk_input_test.dart'))
+
+  const duplicatedMmkShard = verifyShopNativeCiContract(
+    workflow.replace(
+      '            test/shop_mmk_input_test.dart \\',
+      '            test/shop_mmk_input_test.dart \\\n            test/shop_mmk_input_test.dart \\',
+    ),
+    gradleWrapper,
+  )
+  assert.ok(duplicatedMmkShard.failures.includes('native_test_shard_duplicate:test/shop_mmk_input_test.dart'))
+
+  const duplicatedMmkFormatGate = verifyShopNativeCiContract(
+    workflow.replace(
+      'dart format lib/camera_barcode_scanner.dart',
+      'dart format test/shop_mmk_input_test.dart lib/camera_barcode_scanner.dart',
+    ),
+    gradleWrapper,
+  )
+  assert.ok(duplicatedMmkFormatGate.failures.includes('qa_dart_format_gate_duplicate:test/shop_mmk_input_test.dart'))
+
   const missingInventoryGate = verifyShopNativeCiContract(
     workflow.replace('diff -u /tmp/shop-test-files.expected /tmp/shop-test-files.actual', 'true'),
     gradleWrapper,

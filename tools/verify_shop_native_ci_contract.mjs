@@ -36,6 +36,7 @@ const QA_DART_FORMAT_PATHS = Object.freeze([
   'test/shop_core_internal_acceptance_test.dart',
   'test/shop_correction_authorization_service_test.dart',
   'test/shop_foundation_test.dart',
+  'test/shop_mmk_input_test.dart',
   'test/shop_qa_evidence_store_test.dart',
   'test/shop_runtime_profile_test.dart',
   'test/shop_runtime_scope_test.dart',
@@ -111,8 +112,12 @@ export function verifyShopNativeCiContract(source, gradleWrapperSource = '') {
   const formatLine = source.split(/\r?\n/).find(line => line.trim().startsWith('dart format ')) ?? ''
   const diffLine = source.split(/\r?\n/).find(line => line.trim().startsWith('git diff --exit-code -- ')) ?? ''
   for (const path of QA_DART_FORMAT_PATHS) {
-    if (!formatLine.split(/\s+/).includes(path) || !diffLine.split(/\s+/).includes(path)) {
+    const formatCount = formatLine.split(/\s+/).filter(token => token === path).length
+    const diffCount = diffLine.split(/\s+/).filter(token => token === path).length
+    if (formatCount === 0 || diffCount === 0) {
       failures.push(`qa_dart_format_gate_missing:${path}`)
+    } else if (formatCount !== 1 || diffCount !== 1) {
+      failures.push(`qa_dart_format_gate_duplicate:${path}`)
     }
   }
   requireToken(
@@ -190,7 +195,11 @@ export function verifyShopNativeCiContract(source, gradleWrapperSource = '') {
     'android_production_identity_not_generated_before_packaging',
     failures,
   )
-  const testShardLines = source.split(/\r?\n/).map(line => line.trim())
+  const shardStart = source.indexOf('name: Run Flutter behavior tests')
+  const shardEnd = source.indexOf('name: Generate Android production identity')
+  const testShardLines = shardStart >= 0 && shardEnd > shardStart
+    ? source.slice(shardStart, shardEnd).split(/\r?\n/).map(line => line.trim())
+    : []
   for (const testPath of [
     'test/connected_orders_test.dart',
     'test/shop_backup_test.dart',
@@ -199,6 +208,7 @@ export function verifyShopNativeCiContract(source, gradleWrapperSource = '') {
     'test/shop_correction_consumption_test.dart',
     'test/shop_foundation_test.dart',
     'test/shop_member_identity_test.dart',
+    'test/shop_mmk_input_test.dart',
     'test/shop_operational_export_database_test.dart',
     'test/shop_operational_export_saver_test.dart',
     'test/shop_operational_export_test.dart',
@@ -209,8 +219,13 @@ export function verifyShopNativeCiContract(source, gradleWrapperSource = '') {
     'test/visual_capture_test.dart',
     'test/widget_test.dart',
   ]) {
-    if (!testShardLines.some(line => line === testPath || line === `${testPath} \\`)) {
+    const count = testShardLines.filter(
+      line => line === testPath || line === `${testPath} \\`,
+    ).length
+    if (count === 0) {
       failures.push(`native_test_shard_missing:${testPath}`)
+    } else if (count !== 1) {
+      failures.push(`native_test_shard_duplicate:${testPath}`)
     }
   }
 
