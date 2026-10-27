@@ -1618,6 +1618,410 @@ void main() {
       }
     });
 
+    test(
+      'concurrent cash finalization commits one complete sale after reopen',
+      () async {
+        final directory = await Directory.systemTemp.createTemp(
+          'supermega-shop-concurrent-cash-',
+        );
+        final file = File('${directory.path}/shop.sqlite');
+        var persisted = ShopDatabase(NativeDatabase(file));
+        try {
+          await persisted.addProduct(
+            id: 'concurrent-cash-tea',
+            name: 'Tea',
+            priceMmk: 2500,
+            openingStock: 3,
+          );
+          const lines = [
+            ShopSaleLineInput(productId: 'concurrent-cash-tea', quantity: 1),
+          ];
+          final receipts = await Future.wait([
+            persisted.recordCashSale(
+              operationId: 'concurrent-cash-sale',
+              lines: lines,
+            ),
+            persisted.recordCashSale(
+              operationId: 'concurrent-cash-sale',
+              lines: lines,
+            ),
+          ]);
+          expect(receipts.first.id, receipts.last.id);
+
+          await persisted.close();
+          persisted = ShopDatabase(NativeDatabase(file));
+          expect(
+            await _saleTransactionState(
+              persisted,
+              operationId: 'concurrent-cash-sale',
+              productId: 'concurrent-cash-tea',
+            ),
+            {
+              'sales': 1,
+              'paymentMethod': 'cash',
+              'saleTotalMmk': 2500,
+              'saleLines': 1,
+              'lineProductId': 'concurrent-cash-tea',
+              'lineProductName': 'Tea',
+              'lineUnitPriceMmk': 2500,
+              'lineQuantity': 1,
+              'lineTotalMmk': 2500,
+              'saleMovements': 1,
+              'movementProductId': 'concurrent-cash-tea',
+              'movementDelta': -1,
+              'movementReason': 'cash_sale',
+              'saleOutbox': 1,
+              'outboxEventType': 'shop.cash_sale.completed.v1',
+              'outboxState': 'pending',
+              'outboxSaleId': 'concurrent-cash-sale',
+              'outboxTotalMmk': 2500,
+              'outboxPaymentMethod': 'cash',
+              'outboxLineProductId': 'concurrent-cash-tea',
+              'outboxLineProductName': 'Tea',
+              'outboxLineUnitPriceMmk': 2500,
+              'outboxLineQuantity': 1,
+              'outboxLineTotalMmk': 2500,
+              'walletState': null,
+              'walletPaymentMethod': null,
+              'walletTotalMmk': null,
+              'walletRequestFingerprint': null,
+              'walletMerchantPhone': null,
+              'walletMerchantQrPayload': null,
+              'walletLineProductId': null,
+              'walletLineProductName': null,
+              'walletLineUnitPriceMmk': null,
+              'walletLineQuantity': null,
+              'walletLineTotalMmk': null,
+              'correctionAuthorityProofs': 0,
+              'onHand': 2,
+            },
+          );
+        } finally {
+          await persisted.close();
+          await directory.delete(recursive: true);
+        }
+      },
+    );
+
+    test(
+      'concurrent wallet finalization commits one complete sale after reopen',
+      () async {
+        final directory = await Directory.systemTemp.createTemp(
+          'supermega-shop-concurrent-wallet-',
+        );
+        final file = File('${directory.path}/shop.sqlite');
+        var persisted = ShopDatabase(NativeDatabase(file));
+        try {
+          await persisted.addProduct(
+            id: 'concurrent-wallet-tea',
+            name: 'Tea',
+            priceMmk: 2500,
+            openingStock: 3,
+          );
+          const lines = [
+            ShopSaleLineInput(productId: 'concurrent-wallet-tea', quantity: 1),
+          ];
+          final merchant = MerchantWalletSetup(
+            provider: 'KBZPay',
+            merchantPhone: null,
+            officialQrPayload: _syntheticStaticMmqr(),
+            issuerConfirmed: true,
+          );
+          final intents = await Future.wait([
+            persisted.createWalletCheckoutIntent(
+              operationId: 'concurrent-wallet-sale',
+              merchant: merchant,
+              lines: lines,
+            ),
+            persisted.createWalletCheckoutIntent(
+              operationId: 'concurrent-wallet-sale',
+              merchant: merchant,
+              lines: lines,
+            ),
+          ]);
+          expect(intents.first.operationId, intents.last.operationId);
+          expect(
+            intents.first.requestFingerprint,
+            intents.last.requestFingerprint,
+          );
+          final receipts = await Future.wait([
+            persisted.recordSale(
+              operationId: 'concurrent-wallet-sale',
+              lines: lines,
+              paymentMethod: 'kbzpay',
+              walletCheckoutOperationId: 'concurrent-wallet-sale',
+            ),
+            persisted.recordSale(
+              operationId: 'concurrent-wallet-sale',
+              lines: lines,
+              paymentMethod: 'kbzpay',
+              walletCheckoutOperationId: 'concurrent-wallet-sale',
+            ),
+          ]);
+          expect(receipts.first.id, receipts.last.id);
+
+          await persisted.close();
+          persisted = ShopDatabase(NativeDatabase(file));
+          expect(
+            await _saleTransactionState(
+              persisted,
+              operationId: 'concurrent-wallet-sale',
+              productId: 'concurrent-wallet-tea',
+            ),
+            {
+              'sales': 1,
+              'paymentMethod': 'kbzpay',
+              'saleTotalMmk': 2500,
+              'saleLines': 1,
+              'lineProductId': 'concurrent-wallet-tea',
+              'lineProductName': 'Tea',
+              'lineUnitPriceMmk': 2500,
+              'lineQuantity': 1,
+              'lineTotalMmk': 2500,
+              'saleMovements': 1,
+              'movementProductId': 'concurrent-wallet-tea',
+              'movementDelta': -1,
+              'movementReason': 'kbzpay_sale',
+              'saleOutbox': 1,
+              'outboxEventType': 'shop.mobile_money_sale.completed.v1',
+              'outboxState': 'pending',
+              'outboxSaleId': 'concurrent-wallet-sale',
+              'outboxTotalMmk': 2500,
+              'outboxPaymentMethod': 'kbzpay',
+              'outboxLineProductId': 'concurrent-wallet-tea',
+              'outboxLineProductName': 'Tea',
+              'outboxLineUnitPriceMmk': 2500,
+              'outboxLineQuantity': 1,
+              'outboxLineTotalMmk': 2500,
+              'walletState': 'completed',
+              'walletPaymentMethod': 'kbzpay',
+              'walletTotalMmk': 2500,
+              'walletRequestFingerprint': jsonEncode({
+                'paymentMethod': 'kbzpay',
+                'lines': [
+                  {'productId': 'concurrent-wallet-tea', 'quantity': 1},
+                ],
+              }),
+              'walletMerchantPhone': '',
+              'walletMerchantQrPayload': _syntheticStaticMmqr(),
+              'walletLineProductId': 'concurrent-wallet-tea',
+              'walletLineProductName': 'Tea',
+              'walletLineUnitPriceMmk': 2500,
+              'walletLineQuantity': 1,
+              'walletLineTotalMmk': 2500,
+              'correctionAuthorityProofs': 0,
+              'onHand': 2,
+            },
+          );
+        } finally {
+          await persisted.close();
+          await directory.delete(recursive: true);
+        }
+      },
+    );
+
+    test(
+      'cash outbox abort rolls back every sale effect after reopen',
+      () async {
+        final directory = await Directory.systemTemp.createTemp(
+          'supermega-shop-cash-outbox-abort-',
+        );
+        final file = File('${directory.path}/shop.sqlite');
+        var persisted = ShopDatabase(NativeDatabase(file));
+        try {
+          await persisted.addProduct(
+            id: 'cash-abort-tea',
+            name: 'Tea',
+            priceMmk: 2500,
+            openingStock: 3,
+          );
+          await _installSyntheticOutboxAbort(
+            persisted,
+            operationId: 'cash-outbox-abort-sale',
+          );
+          await expectLater(
+            persisted.recordCashSale(
+              operationId: 'cash-outbox-abort-sale',
+              lines: const [
+                ShopSaleLineInput(productId: 'cash-abort-tea', quantity: 1),
+              ],
+            ),
+            throwsA(
+              predicate<Object>(
+                (error) =>
+                    error.toString().contains('synthetic outbox failure'),
+              ),
+            ),
+          );
+          await persisted.customStatement(
+            'DROP TRIGGER synthetic_sale_outbox_abort',
+          );
+
+          await persisted.close();
+          persisted = ShopDatabase(NativeDatabase(file));
+          expect(
+            await _saleTransactionState(
+              persisted,
+              operationId: 'cash-outbox-abort-sale',
+              productId: 'cash-abort-tea',
+            ),
+            {
+              'sales': 0,
+              'paymentMethod': null,
+              'saleTotalMmk': null,
+              'saleLines': 0,
+              'lineProductId': null,
+              'lineProductName': null,
+              'lineUnitPriceMmk': null,
+              'lineQuantity': null,
+              'lineTotalMmk': null,
+              'saleMovements': 0,
+              'movementProductId': null,
+              'movementDelta': null,
+              'movementReason': null,
+              'saleOutbox': 0,
+              'outboxEventType': null,
+              'outboxState': null,
+              'outboxSaleId': null,
+              'outboxTotalMmk': null,
+              'outboxPaymentMethod': null,
+              'outboxLineProductId': null,
+              'outboxLineProductName': null,
+              'outboxLineUnitPriceMmk': null,
+              'outboxLineQuantity': null,
+              'outboxLineTotalMmk': null,
+              'walletState': null,
+              'walletPaymentMethod': null,
+              'walletTotalMmk': null,
+              'walletRequestFingerprint': null,
+              'walletMerchantPhone': null,
+              'walletMerchantQrPayload': null,
+              'walletLineProductId': null,
+              'walletLineProductName': null,
+              'walletLineUnitPriceMmk': null,
+              'walletLineQuantity': null,
+              'walletLineTotalMmk': null,
+              'correctionAuthorityProofs': 0,
+              'onHand': 3,
+            },
+          );
+        } finally {
+          await persisted.close();
+          await directory.delete(recursive: true);
+        }
+      },
+    );
+
+    test(
+      'wallet outbox abort keeps payment pending with no sale after reopen',
+      () async {
+        final directory = await Directory.systemTemp.createTemp(
+          'supermega-shop-wallet-outbox-abort-',
+        );
+        final file = File('${directory.path}/shop.sqlite');
+        var persisted = ShopDatabase(NativeDatabase(file));
+        try {
+          await persisted.addProduct(
+            id: 'wallet-abort-tea',
+            name: 'Tea',
+            priceMmk: 2500,
+            openingStock: 3,
+          );
+          const lines = [
+            ShopSaleLineInput(productId: 'wallet-abort-tea', quantity: 1),
+          ];
+          await persisted.createWalletCheckoutIntent(
+            operationId: 'wallet-outbox-abort-sale',
+            merchant: MerchantWalletSetup(
+              provider: 'KBZPay',
+              merchantPhone: null,
+              officialQrPayload: _syntheticStaticMmqr(),
+              issuerConfirmed: true,
+            ),
+            lines: lines,
+          );
+          await _installSyntheticOutboxAbort(
+            persisted,
+            operationId: 'wallet-outbox-abort-sale',
+          );
+          await expectLater(
+            persisted.recordSale(
+              operationId: 'wallet-outbox-abort-sale',
+              lines: lines,
+              paymentMethod: 'kbzpay',
+              walletCheckoutOperationId: 'wallet-outbox-abort-sale',
+            ),
+            throwsA(
+              predicate<Object>(
+                (error) =>
+                    error.toString().contains('synthetic outbox failure'),
+              ),
+            ),
+          );
+          await persisted.customStatement(
+            'DROP TRIGGER synthetic_sale_outbox_abort',
+          );
+
+          await persisted.close();
+          persisted = ShopDatabase(NativeDatabase(file));
+          expect(
+            await _saleTransactionState(
+              persisted,
+              operationId: 'wallet-outbox-abort-sale',
+              productId: 'wallet-abort-tea',
+            ),
+            {
+              'sales': 0,
+              'paymentMethod': null,
+              'saleTotalMmk': null,
+              'saleLines': 0,
+              'lineProductId': null,
+              'lineProductName': null,
+              'lineUnitPriceMmk': null,
+              'lineQuantity': null,
+              'lineTotalMmk': null,
+              'saleMovements': 0,
+              'movementProductId': null,
+              'movementDelta': null,
+              'movementReason': null,
+              'saleOutbox': 0,
+              'outboxEventType': null,
+              'outboxState': null,
+              'outboxSaleId': null,
+              'outboxTotalMmk': null,
+              'outboxPaymentMethod': null,
+              'outboxLineProductId': null,
+              'outboxLineProductName': null,
+              'outboxLineUnitPriceMmk': null,
+              'outboxLineQuantity': null,
+              'outboxLineTotalMmk': null,
+              'walletState': 'pending',
+              'walletPaymentMethod': 'kbzpay',
+              'walletTotalMmk': 2500,
+              'walletRequestFingerprint': jsonEncode({
+                'paymentMethod': 'kbzpay',
+                'lines': [
+                  {'productId': 'wallet-abort-tea', 'quantity': 1},
+                ],
+              }),
+              'walletMerchantPhone': '',
+              'walletMerchantQrPayload': _syntheticStaticMmqr(),
+              'walletLineProductId': 'wallet-abort-tea',
+              'walletLineProductName': 'Tea',
+              'walletLineUnitPriceMmk': 2500,
+              'walletLineQuantity': 1,
+              'walletLineTotalMmk': 2500,
+              'correctionAuthorityProofs': 0,
+              'onHand': 3,
+            },
+          );
+        } finally {
+          await persisted.close();
+          await directory.delete(recursive: true);
+        }
+      },
+    );
+
     test('counter draft survives restart and sale commit clears it atomically', () async {
       final directory = await Directory.systemTemp.createTemp(
         'supermega-shop-counter-draft-',
@@ -3850,4 +4254,137 @@ String _testCrc16(List<int> bytes) {
     }
   }
   return crc.toRadixString(16).toUpperCase().padLeft(4, '0');
+}
+
+Future<void> _installSyntheticOutboxAbort(
+  ShopDatabase database, {
+  required String operationId,
+}) async {
+  if (!RegExp(r'^[a-z0-9-]+$').hasMatch(operationId)) {
+    throw ArgumentError.value(operationId, 'operationId');
+  }
+  await database.customStatement(
+    'CREATE TRIGGER synthetic_sale_outbox_abort '
+    'AFTER INSERT ON shop_sync_outbox '
+    "WHEN NEW.operation_id = '$operationId' "
+    "BEGIN SELECT RAISE(ABORT, 'synthetic outbox failure'); END",
+  );
+}
+
+Future<Map<String, Object?>> _saleTransactionState(
+  ShopDatabase database, {
+  required String operationId,
+  required String productId,
+}) async {
+  final sale = await database
+      .customSelect(
+        'SELECT payment_method, total_mmk FROM shop_sales '
+        'WHERE operation_id = ?',
+        variables: [Variable<String>(operationId)],
+      )
+      .getSingleOrNull();
+  final saleRows = await database
+      .customSelect(
+        'SELECT COUNT(*) AS count FROM shop_sales WHERE operation_id = ?',
+        variables: [Variable<String>(operationId)],
+      )
+      .getSingle();
+  final saleLines = await database
+      .customSelect(
+        'SELECT COUNT(*) AS count, MIN(product_id) AS product_id, '
+        'MIN(product_name) AS product_name, '
+        'MIN(unit_price_mmk) AS unit_price_mmk, MIN(quantity) AS quantity, '
+        'MIN(line_total_mmk) AS line_total_mmk '
+        'FROM shop_sale_lines WHERE sale_id = ?',
+        variables: [Variable<String>(operationId)],
+      )
+      .getSingle();
+  final movements = await database
+      .customSelect(
+        'SELECT COUNT(*) AS count, SUM(quantity_delta) AS quantity_delta, '
+        'MIN(product_id) AS product_id, MIN(reason) AS reason '
+        'FROM shop_stock_movements WHERE sale_id = ?',
+        variables: [Variable<String>(operationId)],
+      )
+      .getSingle();
+  final outbox = await database
+      .customSelect(
+        'SELECT COUNT(*) AS count, MIN(event_type) AS event_type, '
+        'MIN(payload_json) AS payload_json, MIN(state) AS state '
+        'FROM shop_sync_outbox '
+        'WHERE operation_id = ?',
+        variables: [Variable<String>(operationId)],
+      )
+      .getSingle();
+  final wallet = await database
+      .customSelect(
+        'SELECT payment_method, request_fingerprint, total_mmk, '
+        'merchant_phone, merchant_qr_payload, basket_json, state '
+        'FROM shop_wallet_checkout_intents '
+        'WHERE operation_id = ?',
+        variables: [Variable<String>(operationId)],
+      )
+      .getSingleOrNull();
+  final proofs = await database
+      .customSelect(
+        'SELECT COUNT(*) AS count '
+        'FROM shop_correction_authorization_proofs',
+      )
+      .getSingle();
+  final product = await database
+      .customSelect(
+        'SELECT on_hand FROM shop_products WHERE id = ?',
+        variables: [Variable<String>(productId)],
+      )
+      .getSingle();
+  final outboxPayloadJson = outbox.readNullable<String>('payload_json');
+  final outboxPayload = outboxPayloadJson == null
+      ? null
+      : jsonDecode(outboxPayloadJson) as Map<String, dynamic>;
+  final outboxLines = outboxPayload?['lines'] as List<dynamic>?;
+  final outboxLine = outboxLines?.single as Map<String, dynamic>?;
+  final walletBasketJson = wallet?.read<String>('basket_json');
+  final walletBasket = walletBasketJson == null
+      ? null
+      : jsonDecode(walletBasketJson) as List<dynamic>;
+  final walletLine = walletBasket?.single as Map<String, dynamic>?;
+  return {
+    'sales': saleRows.read<int>('count'),
+    'paymentMethod': sale?.read<String>('payment_method'),
+    'saleTotalMmk': sale?.read<int>('total_mmk'),
+    'saleLines': saleLines.read<int>('count'),
+    'lineProductId': saleLines.readNullable<String>('product_id'),
+    'lineProductName': saleLines.readNullable<String>('product_name'),
+    'lineUnitPriceMmk': saleLines.readNullable<int>('unit_price_mmk'),
+    'lineQuantity': saleLines.readNullable<int>('quantity'),
+    'lineTotalMmk': saleLines.readNullable<int>('line_total_mmk'),
+    'saleMovements': movements.read<int>('count'),
+    'movementProductId': movements.readNullable<String>('product_id'),
+    'movementDelta': movements.readNullable<int>('quantity_delta'),
+    'movementReason': movements.readNullable<String>('reason'),
+    'saleOutbox': outbox.read<int>('count'),
+    'outboxEventType': outbox.readNullable<String>('event_type'),
+    'outboxState': outbox.readNullable<String>('state'),
+    'outboxSaleId': outboxPayload?['saleId'],
+    'outboxTotalMmk': outboxPayload?['totalMmk'],
+    'outboxPaymentMethod': outboxPayload?['paymentMethod'],
+    'outboxLineProductId': outboxLine?['productId'],
+    'outboxLineProductName': outboxLine?['productName'],
+    'outboxLineUnitPriceMmk': outboxLine?['unitPriceMmk'],
+    'outboxLineQuantity': outboxLine?['quantity'],
+    'outboxLineTotalMmk': outboxLine?['lineTotalMmk'],
+    'walletState': wallet?.read<String>('state'),
+    'walletPaymentMethod': wallet?.read<String>('payment_method'),
+    'walletTotalMmk': wallet?.read<int>('total_mmk'),
+    'walletRequestFingerprint': wallet?.read<String>('request_fingerprint'),
+    'walletMerchantPhone': wallet?.read<String>('merchant_phone'),
+    'walletMerchantQrPayload': wallet?.read<String>('merchant_qr_payload'),
+    'walletLineProductId': walletLine?['productId'],
+    'walletLineProductName': walletLine?['productName'],
+    'walletLineUnitPriceMmk': walletLine?['unitPriceMmk'],
+    'walletLineQuantity': walletLine?['quantity'],
+    'walletLineTotalMmk': walletLine?['lineTotalMmk'],
+    'correctionAuthorityProofs': proofs.read<int>('count'),
+    'onHand': product.read<int>('on_hand'),
+  };
 }
