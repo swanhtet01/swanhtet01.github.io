@@ -653,7 +653,17 @@ void main() {
     final previousPlatform = debugDefaultTargetPlatformOverride;
     debugDefaultTargetPlatformOverride = TargetPlatform.android;
     final database = ShopDatabase(NativeDatabase.memory());
+    ValueChanged<String>? emitScan;
     try {
+      await database.addProduct(
+        id: 'tea',
+        name: 'Tea',
+        barcode: '0012345678905',
+        priceMmk: 2500,
+        openingStock: 3,
+      );
+      final stockBefore = await database.countStockMovements();
+      final outboxBefore = await database.countOutboxOperations();
       await tester.pumpWidget(
         MaterialApp(
           home: ShopHome(
@@ -664,14 +674,17 @@ void main() {
             myanmar: false,
             onLanguageChanged: (_) {},
             runtimeCapabilities: ShopRuntimeCapabilities.production,
-            cameraViewBuilder: (context, onScanned, onError) => Center(
-              child: FilledButton(
-                key: const ValueKey('fake-camera-deny'),
-                onPressed: () =>
-                    onError(MobileScannerErrorCode.permissionDenied),
-                child: const Text('Deny camera'),
-              ),
-            ),
+            cameraViewBuilder: (context, onScanned, onError) {
+              emitScan = onScanned;
+              return Center(
+                child: FilledButton(
+                  key: const ValueKey('fake-camera-deny'),
+                  onPressed: () =>
+                      onError(MobileScannerErrorCode.permissionDenied),
+                  child: const Text('Deny camera'),
+                ),
+              );
+            },
           ),
         ),
       );
@@ -679,9 +692,24 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('shop-camera-scan')));
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('Cancel scan'));
+      emitScan!('0012345678905');
       await tester.pumpAndSettle();
       expect(find.text('Products'), findsOneWidget);
       expect(await database.readCounterSaleDraft(), isNull);
+      expect(await database.countSales(), 0);
+      expect(await database.countStockMovements(), stockBefore);
+      expect(await database.countOutboxOperations(), outboxBefore);
+
+      await tester.tap(find.byKey(const ValueKey('shop-camera-scan')));
+      await tester.pumpAndSettle();
+      await tester.binding.handlePopRoute();
+      emitScan!('0012345678905');
+      await tester.pumpAndSettle();
+      expect(find.text('Products'), findsOneWidget);
+      expect(await database.readCounterSaleDraft(), isNull);
+      expect(await database.countSales(), 0);
+      expect(await database.countStockMovements(), stockBefore);
+      expect(await database.countOutboxOperations(), outboxBefore);
 
       await tester.tap(find.byKey(const ValueKey('shop-camera-scan')));
       await tester.pumpAndSettle();

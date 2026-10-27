@@ -1354,13 +1354,17 @@ const shopHeldSaleColumnsV10 = {
 };
 
 Map<String, Set<String>> shopBaseTableColumnsForVersion(int schemaVersion) {
-  if (schemaVersion < 6 || schemaVersion > 17) return const {};
+  if (schemaVersion < 5 || schemaVersion > 17) return const {};
   return <String, Set<String>>{
     for (final entry in shopBaseTableColumnsV6.entries)
-      entry.key: <String>{
-        ...entry.value,
-        if (entry.key == 'shop_products' && schemaVersion >= 9) 'reorder_level',
-      },
+      if (schemaVersion >= 6 ||
+          (entry.key != 'shop_cash_shifts' &&
+              entry.key != 'shop_cash_shift_sales'))
+        entry.key: <String>{
+          ...entry.value,
+          if (entry.key == 'shop_products' && schemaVersion >= 9)
+            'reorder_level',
+        },
     if (schemaVersion >= 7) 'shop_product_images': shopProductImageColumnsV7,
     if (schemaVersion >= 8) 'shop_counter_drafts': shopCounterDraftColumnsV8,
     if (schemaVersion >= 10) 'shop_held_sales': shopHeldSaleColumnsV10,

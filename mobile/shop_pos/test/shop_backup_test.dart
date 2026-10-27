@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart' as crypto;
 import 'package:cryptography/cryptography.dart';
@@ -3713,6 +3714,252 @@ void main() {
     }
   });
 
+  test(
+    'existing v5 store passes runtime preflight and migrates before opening',
+    () async {
+      final documents = Directory.systemTemp.createTempSync(
+        'shop-existing-v5-',
+      );
+      try {
+        final target = ShopDatabase.privateDatabaseFile(documents);
+        final fixture = ShopDatabase(NativeDatabase(target));
+        await fixture.addProduct(
+          id: 'tea',
+          name: 'Tea',
+          priceMmk: 2500,
+          openingStock: 4,
+        );
+        await fixture.recordCashSale(
+          operationId: 'v5-sale',
+          lines: const [ShopSaleLineInput(productId: 'tea', quantity: 1)],
+        );
+        await fixture.close();
+
+        final raw = sqlite3.open(target.path);
+        try {
+          _downgradeCurrentStoreToV5(raw);
+        } finally {
+          raw.close();
+        }
+        expect(() => ShopBackup.verifySnapshot(target), throwsFormatException);
+        ShopBackup.verifyRuntimeStore(target);
+
+        final malformed = File('${documents.path}/malformed-v5.sqlite');
+        await target.copy(malformed.path);
+        final malformedConnection = sqlite3.open(malformed.path);
+        try {
+          malformedConnection.execute(
+            'ALTER TABLE shop_products '
+            'RENAME COLUMN price_mmk TO legacy_price_mmk',
+          );
+        } finally {
+          malformedConnection.close();
+        }
+        final malformedBytes = await malformed.readAsBytes();
+        expect(
+          () => ShopBackup.verifyRuntimeStore(malformed),
+          throwsFormatException,
+        );
+        expect(await malformed.readAsBytes(), malformedBytes);
+
+        final opened = ShopDatabase(NativeDatabase(target));
+        try {
+          await opened.verifyReadyForUse();
+          expect(await opened.countSales(), 1);
+          expect((await opened.readActiveProducts()).single.onHand, 3);
+        } finally {
+          await opened.close();
+        }
+        final migrated = sqlite3.open(target.path, mode: OpenMode.readOnly);
+        try {
+          expect(migrated.userVersion, ShopBackup.supportedSchemaVersion);
+        } finally {
+          migrated.close();
+        }
+      } finally {
+        documents.deleteSync(recursive: true);
+      }
+    },
+  );
+
+  testWidgets(
+    'startup recovers a validated hot rollback journal before verification',
+    (tester) async {
+      final documents = Directory.systemTemp.createTempSync(
+        'shop-existing-hot-journal-',
+      );
+      final closeRecorder = _DatabaseCloseRecorder();
+      final databaseVerifier = _OpenedDatabaseVerifier();
+      try {
+        final target = ShopDatabase.privateDatabaseFile(documents);
+        final fixture = ShopDatabase(NativeDatabase(target));
+        await fixture.addProduct(
+          id: 'tea',
+          name: 'Tea',
+          priceMmk: 2500,
+          openingStock: 4,
+        );
+        await fixture.close();
+        final bulk = sqlite3.open(target.path);
+        try {
+          bulk.execute('BEGIN IMMEDIATE');
+          final insert = bulk.prepare(
+            'INSERT INTO shop_products '
+            '(id, name, category, description, sku, barcode, price_mmk, '
+            'on_hand, updated_at_millis, archived, reorder_level) '
+            'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          );
+          try {
+            final padding = List.filled(2000, 'x').join();
+            for (var index = 0; index < 100; index++) {
+              insert.execute([
+                'bulk-$index',
+                'Bulk $index',
+                '',
+                padding,
+                '',
+                '',
+                1,
+                1,
+                index + 1,
+                0,
+                null,
+              ]);
+            }
+          } finally {
+            insert.close();
+          }
+          bulk.execute('COMMIT');
+        } finally {
+          bulk.close();
+        }
+        await tester.runAsync(() => _leaveHotRollbackJournal(target));
+        final journal = File('${target.path}-journal');
+        expect(journal.existsSync(), isTrue);
+        expect(journal.lengthSync(), greaterThan(512));
+        expect(
+          await tester.runAsync(() => ShopBackup.prepareRuntimeStore(target)),
+          ShopStorePresence.existing,
+        );
+        expect(journal.existsSync(), isFalse);
+        await tester.runAsync(() => _leaveHotRollbackJournal(target));
+        expect(journal.existsSync(), isTrue);
+
+        await tester.pumpWidget(
+          ShopStartup(
+            documents: documents,
+            importScratchRoot: documents,
+            initialMyanmar: false,
+            buildShop: (_, _) {
+              return const MaterialApp(
+                home: Scaffold(body: Text('Opened recovered Shop')),
+              );
+            },
+            closeDatabase: closeRecorder.call,
+            verifyDatabaseFile: (file) async =>
+                ShopBackup.verifyRuntimeStore(file),
+            databaseFactory: _openStartupDatabase,
+            verifyOpenedDatabase: databaseVerifier.call,
+          ),
+        );
+        await _pumpUntil(
+          tester,
+          find.text('Opened recovered Shop'),
+          databaseVerifier: databaseVerifier,
+        );
+        expect(journal.existsSync(), isFalse);
+        final recovered = sqlite3.open(target.path, mode: OpenMode.readOnly);
+        try {
+          expect(
+            recovered.select('SELECT on_hand FROM shop_products WHERE id = ?', [
+              'tea',
+            ]).single['on_hand'],
+            4,
+          );
+        } finally {
+          recovered.close();
+        }
+      } finally {
+        await _disposeOpenedStartup(
+          tester,
+          closeRecorder,
+          closeExpected: databaseVerifier.wasServiced,
+        );
+        documents.deleteSync(recursive: true);
+      }
+    },
+  );
+
+  test(
+    'runtime preparation preserves unknown journal and WAL states',
+    () async {
+      final documents = await Directory.systemTemp.createTemp(
+        'shop-unsafe-runtime-sidecars-',
+      );
+      try {
+        final target = ShopDatabase.privateDatabaseFile(documents);
+        final fixture = ShopDatabase(NativeDatabase(target));
+        await fixture.addProduct(
+          id: 'tea',
+          name: 'Tea',
+          priceMmk: 2500,
+          openingStock: 4,
+        );
+        await fixture.close();
+
+        final journal = File('${target.path}-journal');
+        await journal.writeAsString('not a SQLite rollback journal');
+        final targetBytes = await target.readAsBytes();
+        final journalBytes = await journal.readAsBytes();
+        expect(
+          await ShopBackup.prepareRuntimeStore(target),
+          ShopStorePresence.unsafe,
+        );
+        expect(await target.readAsBytes(), targetBytes);
+        expect(await journal.readAsBytes(), journalBytes);
+
+        await journal.delete();
+        final wal = File('${target.path}-wal');
+        await wal.writeAsString('unresolved WAL');
+        expect(
+          await ShopBackup.prepareRuntimeStore(target),
+          ShopStorePresence.unsafe,
+        );
+        expect(await target.readAsBytes(), targetBytes);
+        expect(await wal.readAsString(), 'unresolved WAL');
+
+        await wal.delete();
+        final shm = File('${target.path}-shm');
+        await shm.writeAsString('unresolved shared memory');
+        expect(
+          await ShopBackup.prepareRuntimeStore(target),
+          ShopStorePresence.unsafe,
+        );
+        expect(await target.readAsBytes(), targetBytes);
+        expect(await shm.readAsString(), 'unresolved shared memory');
+
+        await shm.delete();
+        if (!Platform.isWindows) {
+          final linkedJournal = File('${documents.path}/linked-journal');
+          await linkedJournal.writeAsString('preserve linked journal');
+          final journalLink = Link('${target.path}-journal');
+          await journalLink.create(linkedJournal.path);
+          expect(
+            await ShopBackup.prepareRuntimeStore(target),
+            ShopStorePresence.unsafe,
+          );
+          expect(await linkedJournal.readAsString(), 'preserve linked journal');
+          expect(
+            await FileSystemEntity.type(journalLink.path, followLinks: false),
+            FileSystemEntityType.link,
+          );
+        }
+      } finally {
+        await documents.delete(recursive: true);
+      }
+    },
+  );
+
   testWidgets(
     'semantically invalid existing Shop never reaches the application',
     (tester) async {
@@ -4040,9 +4287,64 @@ Future<void> _expectNoScratch(Directory parent) async {
   );
 }
 
+Future<void> _leaveHotRollbackJournal(File target) async {
+  final journal = File('${target.path}-journal');
+  final database = sqlite3.open(target.path, mode: OpenMode.readWrite);
+  late Uint8List journalBytes;
+  try {
+    database.execute('PRAGMA journal_mode = DELETE');
+    database.execute('PRAGMA synchronous = FULL');
+    database.execute('BEGIN IMMEDIATE');
+    database.execute(
+      "UPDATE shop_products SET description = description || 'changed'",
+    );
+    database.execute("UPDATE shop_products SET on_hand = 0 WHERE id = 'tea'");
+    journalBytes = await journal.readAsBytes();
+    database.execute('ROLLBACK');
+  } finally {
+    database.close();
+  }
+
+  // SQLite wrote complete rollback records for a real transaction. It only
+  // finalizes the header as commit begins, so finalize the captured bytes to
+  // model the exact cross-platform crash point after header sync and before
+  // journal deletion. The database itself remains at its pre-transaction state.
+  const hotHeader = <int>[0xd9, 0xd5, 0x05, 0xf9, 0x20, 0xa1, 0x63, 0xd7];
+  if (journalBytes.length < 512) {
+    throw StateError('Interrupted SQLite journal is incomplete.');
+  }
+  final data = ByteData.sublistView(journalBytes);
+  final sectorSize = data.getUint32(20, Endian.big);
+  final pageSize = data.getUint32(24, Endian.big);
+  if (sectorSize < 28 || pageSize == 0 || journalBytes.length <= sectorSize) {
+    throw StateError('Interrupted SQLite journal header is incomplete.');
+  }
+  final recordCount = (journalBytes.length - sectorSize) ~/ (pageSize + 4);
+  if (recordCount == 0) {
+    throw StateError('Interrupted SQLite journal has no rollback records.');
+  }
+  journalBytes.setRange(0, hotHeader.length, hotHeader);
+  ByteData.sublistView(journalBytes).setUint32(8, recordCount, Endian.big);
+  await journal.writeAsBytes(journalBytes, flush: true);
+}
+
 void _removeV11ObjectsForLegacyFixture(Database connection) {
   _removeV12ObjectsForLegacyFixture(connection);
   _removeCorrectionObjectsKeepingProfile(connection);
+}
+
+void _downgradeCurrentStoreToV5(Database connection) {
+  _removeV11ObjectsForLegacyFixture(connection);
+  connection.execute('DROP INDEX shop_held_sales_updated');
+  connection.execute('DROP TABLE shop_held_sales');
+  connection.execute('ALTER TABLE shop_products DROP COLUMN reorder_level');
+  connection.execute('DROP TABLE shop_counter_drafts');
+  connection.execute('DROP TABLE shop_product_images');
+  connection.execute('DROP INDEX shop_cash_shift_sales_shift_id');
+  connection.execute('DROP TABLE shop_cash_shift_sales');
+  connection.execute('DROP INDEX shop_cash_shifts_one_open');
+  connection.execute('DROP TABLE shop_cash_shifts');
+  connection.userVersion = 5;
 }
 
 void _removeCorrectionObjectsKeepingProfile(Database connection) {

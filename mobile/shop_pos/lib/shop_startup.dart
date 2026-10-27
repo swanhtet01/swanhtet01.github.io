@@ -139,7 +139,7 @@ class _ShopStartupState extends State<ShopStartup> {
 
   Future<void> _inspectExistingStore() async {
     try {
-      final presence = await ShopBackup.inspectStore(_databaseFile);
+      final presence = await ShopBackup.prepareRuntimeStore(_databaseFile);
       if (!mounted) return;
       if (presence == ShopStorePresence.existing) {
         await _openShop();
@@ -179,10 +179,7 @@ class _ShopStartupState extends State<ShopStartup> {
         if (verifier == null) {
           final databasePath = _databaseFile.path;
           await Isolate.run(
-            () => ShopBackup.verifySnapshot(
-              File(databasePath),
-              allowRuntimeUnboundCorrectionHistory: true,
-            ),
+            () => ShopBackup.verifyRuntimeStore(File(databasePath)),
           );
         } else {
           await verifier(_databaseFile);

@@ -50,6 +50,7 @@ abstract final class ShopBackup {
   static const formatVersion = 1;
   static const supportedSchemaVersion = 17;
   static const oldestSupportedSchemaVersion = 6;
+  static const oldestRuntimeStoreSchemaVersion = 5;
   static const maxSnapshotBytes = 64 * 1024 * 1024;
 
   static const _saltLength = 16;
@@ -362,24 +363,134 @@ abstract final class ShopBackup {
   /// for overwrite; sidecars without a DB and interrupted commits stay closed.
   static Future<ShopStorePresence> inspectStore(File target) => _withRootLock(
     target.parent,
-    () async {
-      if (await FileSystemEntity.type(
-            restoreMarkerFor(target).path,
-            followLinks: false,
-          ) !=
-          FileSystemEntityType.notFound) {
-        return ShopStorePresence.interrupted;
-      }
-      final type = await FileSystemEntity.type(target.path, followLinks: false);
-      if (type == FileSystemEntityType.file) {
-        return ShopStorePresence.existing;
-      }
-      if (type != FileSystemEntityType.notFound || await _hasSidecars(target)) {
+    () => _inspectStoreLocked(target, recoverHotJournal: false),
+  );
+
+  /// Prepares an installed runtime store for startup under the restore lock.
+  ///
+  /// A genuine SQLite hot rollback journal is resolved by SQLite itself before
+  /// the normal read-only and semantic verification runs. Unknown journals,
+  /// WAL/SHM state, links, restore markers, and failed recovery remain closed
+  /// and are preserved for support inspection.
+  static Future<ShopStorePresence> prepareRuntimeStore(File target) =>
+      _withRootLock(
+        target.parent,
+        () => _inspectStoreLocked(target, recoverHotJournal: true),
+      );
+
+  static Future<ShopStorePresence> _inspectStoreLocked(
+    File target, {
+    required bool recoverHotJournal,
+  }) async {
+    if (await FileSystemEntity.type(
+          restoreMarkerFor(target).path,
+          followLinks: false,
+        ) !=
+        FileSystemEntityType.notFound) {
+      return ShopStorePresence.interrupted;
+    }
+    final type = await FileSystemEntity.type(target.path, followLinks: false);
+    if (type == FileSystemEntityType.file) {
+      if (!recoverHotJournal) return ShopStorePresence.existing;
+      final walType = await FileSystemEntity.type(
+        '${target.path}-wal',
+        followLinks: false,
+      );
+      final shmType = await FileSystemEntity.type(
+        '${target.path}-shm',
+        followLinks: false,
+      );
+      if (walType != FileSystemEntityType.notFound ||
+          shmType != FileSystemEntityType.notFound) {
         return ShopStorePresence.unsafe;
       }
-      return ShopStorePresence.empty;
-    },
-  );
+      final journal = File('${target.path}-journal');
+      final journalType = await FileSystemEntity.type(
+        journal.path,
+        followLinks: false,
+      );
+      if (journalType == FileSystemEntityType.notFound) {
+        return ShopStorePresence.existing;
+      }
+      if (journalType != FileSystemEntityType.file) {
+        return ShopStorePresence.unsafe;
+      }
+      if (!await _looksLikeHotRollbackJournal(journal)) {
+        return ShopStorePresence.unsafe;
+      }
+      Database? recovery;
+      try {
+        recovery = sqlite3.open(target.path, mode: OpenMode.readWrite);
+        recovery.select('SELECT COUNT(*) FROM sqlite_master');
+      } catch (_) {
+        return ShopStorePresence.unsafe;
+      } finally {
+        recovery?.close();
+      }
+      if (await FileSystemEntity.type(target.path, followLinks: false) !=
+              FileSystemEntityType.file ||
+          await _hasSidecars(target)) {
+        return ShopStorePresence.unsafe;
+      }
+      return ShopStorePresence.existing;
+    }
+    if (type != FileSystemEntityType.notFound || await _hasSidecars(target)) {
+      return ShopStorePresence.unsafe;
+    }
+    return ShopStorePresence.empty;
+  }
+
+  static Future<bool> _looksLikeHotRollbackJournal(File journal) async {
+    const sqliteJournalMagic = <int>[
+      0xd9,
+      0xd5,
+      0x05,
+      0xf9,
+      0x20,
+      0xa1,
+      0x63,
+      0xd7,
+    ];
+    final length = await journal.length();
+    if (length <= 512) return false;
+    final handle = await journal.open(mode: FileMode.read);
+    late Uint8List header;
+    try {
+      header = await handle.read(28);
+    } finally {
+      await handle.close();
+    }
+    if (header.length != 28) return false;
+    for (var index = 0; index < sqliteJournalMagic.length; index++) {
+      if (header[index] != sqliteJournalMagic[index]) return false;
+    }
+    final fields = ByteData.sublistView(header);
+    final recordCount = fields.getUint32(8, Endian.big);
+    final initialPageCount = fields.getUint32(16, Endian.big);
+    final sectorSize = fields.getUint32(20, Endian.big);
+    final encodedPageSize = fields.getUint32(24, Endian.big);
+    final pageSize = encodedPageSize == 1 ? 65536 : encodedPageSize;
+    final sectorValid =
+        sectorSize >= 512 &&
+        sectorSize <= 65536 &&
+        (sectorSize & (sectorSize - 1)) == 0;
+    final pageValid =
+        pageSize >= 512 &&
+        pageSize <= 65536 &&
+        (pageSize & (pageSize - 1)) == 0;
+    if (recordCount == 0 ||
+        initialPageCount == 0 ||
+        !sectorValid ||
+        !pageValid ||
+        length < sectorSize + pageSize + 4) {
+      return false;
+    }
+    if (recordCount != 0xffffffff) {
+      final requiredBytes = sectorSize + recordCount * (pageSize + 4);
+      if (requiredBytes > length) return false;
+    }
+    return true;
+  }
 
   /// Reserve a new DB pathname under the restore lock. Drift initializes the
   /// empty SQLite file when Shop opens it; a concurrent restore must then fail.
@@ -627,6 +738,28 @@ abstract final class ShopBackup {
     File file, {
     int? expectedSchemaVersion,
     bool allowRuntimeUnboundCorrectionHistory = false,
+  }) => _verifySnapshot(
+    file,
+    minimumSchemaVersion: oldestSupportedSchemaVersion,
+    expectedSchemaVersion: expectedSchemaVersion,
+    allowRuntimeUnboundCorrectionHistory: allowRuntimeUnboundCorrectionHistory,
+  );
+
+  /// Verifies an already-installed Shop store before Drift may migrate it.
+  ///
+  /// Runtime stores retain one older migration origin than portable backups.
+  /// This does not relax the encrypted backup/import contract.
+  static void verifyRuntimeStore(File file) => _verifySnapshot(
+    file,
+    minimumSchemaVersion: oldestRuntimeStoreSchemaVersion,
+    allowRuntimeUnboundCorrectionHistory: true,
+  );
+
+  static void _verifySnapshot(
+    File file, {
+    required int minimumSchemaVersion,
+    int? expectedSchemaVersion,
+    required bool allowRuntimeUnboundCorrectionHistory,
   }) {
     final connection = sqlite3.open(file.path, mode: OpenMode.readOnly);
     try {
@@ -643,6 +776,7 @@ abstract final class ShopBackup {
       final schemaKind = _classifySnapshotSchema(
         connection,
         schemaVersion,
+        minimumSchemaVersion: minimumSchemaVersion,
         allowRuntimeUnboundCorrectionHistory:
             allowRuntimeUnboundCorrectionHistory,
       );
@@ -863,7 +997,7 @@ abstract final class ShopBackup {
           hasProfileSchema &&
           (!schemaValid || !_businessProfileRowsValid(connection));
       if (version.length != 1 ||
-          schemaVersion < oldestSupportedSchemaVersion ||
+          schemaVersion < minimumSchemaVersion ||
           schemaVersion > supportedSchemaVersion ||
           (expectedSchemaVersion != null &&
               schemaVersion != expectedSchemaVersion) ||
@@ -979,9 +1113,10 @@ abstract final class ShopBackup {
   static _ShopSnapshotSchemaKind? _classifySnapshotSchema(
     Database connection,
     int schemaVersion, {
+    required int minimumSchemaVersion,
     required bool allowRuntimeUnboundCorrectionHistory,
   }) {
-    if (schemaVersion < oldestSupportedSchemaVersion ||
+    if (schemaVersion < minimumSchemaVersion ||
         schemaVersion > supportedSchemaVersion) {
       return null;
     }
