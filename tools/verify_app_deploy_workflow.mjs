@@ -124,22 +124,33 @@ requireContract('all-PR guard rejects missing or duplicate trigger',
   && !allPullRequests(ciWorkflow.replace('  workflow_dispatch:', '  pull_request:\n    types: [opened, synchronize, reopened, ready_for_review]\n  workflow_dispatch:')))
 const aggregate = dependencyAuditWorkflow.split('  required-audits:\n')[1]
 const aggregateScript = aggregate?.match(/^        run: node -e "([^\n]+)"$/m)?.[1]
-requireContract('audit aggregate always requires both actual results',
+requireContract('audit aggregate always requires every actual result',
   Boolean(aggregateScript)
   && aggregate.includes('    name: Dependency Security Audit\n')
-  && aggregate.includes('    needs: [npm-audit, pip-audit]\n')
+  && aggregate.includes('    needs: [npm-audit, pip-audit, secret-diff]\n')
   && aggregate.includes('    if: ${{ always() }}\n')
   && aggregate.includes('      NPM_RESULT: ${{ needs.npm-audit.result }}\n')
   && aggregate.includes('      PIP_RESULT: ${{ needs.pip-audit.result }}\n')
+  && aggregate.includes('      SECRET_DIFF_RESULT: ${{ needs.secret-diff.result }}\n')
   && aggregate.includes('    timeout-minutes: 2\n')
   && !dependencyAuditWorkflow.includes('continue-on-error:')
   && !dependencyAuditWorkflow.includes('secrets.'))
 if (aggregateScript) {
   for (const npmResult of ['success', 'failure', 'cancelled', 'skipped', '', 'null']) {
     for (const pipResult of ['success', 'failure', 'cancelled', 'skipped', '', 'null']) {
-      const result = spawnSync(process.execPath, ['-e', aggregateScript], { env: { ...process.env, NPM_RESULT: npmResult, PIP_RESULT: pipResult }, timeout: 5000 })
-      requireContract(`audit aggregate truth table ${npmResult || 'missing'}/${pipResult || 'missing'}`,
-        result.status === (npmResult === 'success' && pipResult === 'success' ? 0 : 1))
+      for (const secretDiffResult of ['success', 'failure', 'cancelled', 'skipped', '', 'null']) {
+        const result = spawnSync(process.execPath, ['-e', aggregateScript], {
+          env: {
+            ...process.env,
+            NPM_RESULT: npmResult,
+            PIP_RESULT: pipResult,
+            SECRET_DIFF_RESULT: secretDiffResult,
+          },
+          timeout: 5000,
+        })
+        requireContract(`audit aggregate truth table ${npmResult || 'missing'}/${pipResult || 'missing'}/${secretDiffResult || 'missing'}`,
+          result.status === (npmResult === 'success' && pipResult === 'success' && secretDiffResult === 'success' ? 0 : 1))
+      }
     }
   }
 }

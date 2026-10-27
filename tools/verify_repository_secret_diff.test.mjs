@@ -9,6 +9,7 @@ import test from 'node:test'
 import { scanAddedLines } from './verify_repository_secret_diff.mjs'
 
 const workflow = await readFile('.github/workflows/dependency-security.yml', 'utf8')
+const appDeployVerifier = await readFile('tools/verify_app_deploy_workflow.mjs', 'utf8')
 const verifierPath = fileURLToPath(new URL('./verify_repository_secret_diff.mjs', import.meta.url))
 
 const patch = (line) => [
@@ -147,5 +148,14 @@ test('dependency security requires the redacted scanner result', () => {
     "process.env.SECRET_DIFF_RESULT !== 'success'",
   ]) {
     assert.equal(workflow.includes(token), true, token)
+  }
+
+  for (const token of [
+    "aggregate.includes('    needs: [npm-audit, pip-audit, secret-diff]\\n')",
+    "aggregate.includes('      SECRET_DIFF_RESULT: ${{ needs.secret-diff.result }}\\n')",
+    'SECRET_DIFF_RESULT: secretDiffResult',
+    "secretDiffResult === 'success'",
+  ]) {
+    assert.equal(appDeployVerifier.includes(token), true, token)
   }
 })
