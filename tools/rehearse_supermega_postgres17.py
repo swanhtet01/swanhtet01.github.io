@@ -77,6 +77,11 @@ RUNTIME_ROLE = "supermega_trial_login"
 DATABASE_NAME = "supermega_rehearsal"
 RESTORE_DATABASE_NAME = "supermega_rehearsal_restore"
 EXPECTED_POSTGRES_MAJOR = 17
+# No current source-controlled profile binds the reviewed Windows archive to
+# every executable/dependency that the rehearsal would load. Keep collection
+# disabled until that complete profile is reviewed; never infer approval from a
+# version string, a caller-provided path, or the mere presence of the old ZIP.
+TOOLCHAIN_PROVENANCE_APPROVED = False
 WINDOWS_DIRECT_START_MODE = "codex-sandbox-direct"
 REHEARSAL_TEMP_DIRECTORY_ENV = "SUPERMEGA_REHEARSAL_TEMP_DIR"
 PUBLIC_BROWSER_TABLES = (
@@ -3728,6 +3733,13 @@ def _verify_restored_data(
 
 
 def _preflight(postgres_bin: Path, openssl: Path) -> dict[str, Any]:
+    if os.name != "nt":
+        return _safe_report("postgres17_platform_unapproved", cleanup_complete=True)
+    if not TOOLCHAIN_PROVENANCE_APPROVED:
+        return _safe_report(
+            "postgres17_toolchain_provenance_unapproved",
+            cleanup_complete=True,
+        )
     environment = _clean_environment(postgres_bin)
     required = ("postgres", "initdb", "pg_ctl", "pg_isready", "psql", "pg_dump", "pg_restore")
     available = all(

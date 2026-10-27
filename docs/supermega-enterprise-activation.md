@@ -41,13 +41,20 @@ requires verified cleanup; the packet does not automatically expire or delete a 
 
 ## Local PostgreSQL 17 release gate
 
-Until engine provenance is hardened, run this only on the reviewed Windows
-PostgreSQL 17.10-2 toolchain with matching `psql`, `pg_dump`, and `pg_restore`,
-Psycopg 3, and OpenSSL. The recorder expects the archive at
+Engine provenance is not yet complete enough to mint a new release receipt.
+The recorder and runner therefore fail closed before starting PostgreSQL, even
+on Windows. Do not remove that gate until one reviewed profile binds the exact
+archive to every executed PostgreSQL binary and loaded dependency, plus the
+approved Python, Psycopg, and OpenSSL artifacts. Linux remains unsupported; a
+version string or caller-provided path is not equivalent provenance.
+
+The historical reviewed Windows profile expects PostgreSQL 17.10-2 with matching
+`psql`, `pg_dump`, and `pg_restore`, Psycopg 3, and OpenSSL. Its archive remains at
 `~/.cache/supermega-postgresql/postgresql-17.10-2-windows-x64-binaries.zip`;
 verify 333,927,270 bytes and SHA-256
 `ef9b1e5e23d2e8a83914ba13d9dc536a72210fba53fd1808ff1f7e06bb22b106`
-before the approved rehearsal:
+when completing the future provenance profile. These commands remain the intended
+post-approval flow, but recording is deliberately blocked today:
 
 ```powershell
 npm run database:postgres17:preflight

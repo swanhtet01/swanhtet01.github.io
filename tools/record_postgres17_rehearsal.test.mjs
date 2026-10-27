@@ -506,7 +506,7 @@ test('read-only CLI consumer recomputes exact raw receipt pair and rejects chang
     const duplicate = spawnSync(process.execPath, ['tools/record_postgres17_rehearsal.mjs', '--output', input],
       { cwd: new URL('..', import.meta.url), encoding: 'utf8', timeout: 30_000, windowsHide: true })
     assert.equal(duplicate.status, 1)
-    assert.match(duplicate.stderr, /database_rehearsal_output_exists/)
+    assert.match(duplicate.stderr, /database_rehearsal_toolchain_provenance_unapproved/)
     const pass = invoke()
     assert.equal(pass.status, 0, pass.stderr)
     assert.equal(JSON.parse(pass.stdout).checks, 79)
@@ -589,4 +589,31 @@ test('CLI reports stale evidence before rebuilding a raw runner receipt', async 
   } finally {
     await rm(folder, { recursive: true, force: true })
   }
+})
+
+test('release CLI rejects every new receipt while toolchain provenance is unapproved', async () => {
+  const folder = await mkdtemp(join(tmpdir(), 'supermega-provenance-gate-'))
+  try {
+    const output = join(folder, 'new-receipt.json')
+    const result = spawnSync(process.execPath,
+      ['tools/record_postgres17_rehearsal.mjs', '--output', output],
+      { encoding: 'utf8', windowsHide: true })
+    assert.equal(result.status, 1)
+    assert.equal(JSON.parse(result.stderr).error, 'database_rehearsal_toolchain_provenance_unapproved')
+    await assert.rejects(access(output), { code: 'ENOENT' })
+    await assert.rejects(access(`${output}.raw.json`), { code: 'ENOENT' })
+  } finally {
+    await rm(folder, { recursive: true, force: true })
+  }
+})
+
+test('launcher preflight reaches the sanitized platform gate without requiring psycopg', () => {
+  const result = spawnSync(process.execPath,
+    ['tools/run_postgres17_rehearsal.mjs', '--preflight'],
+    { encoding: 'utf8', windowsHide: true })
+  assert.equal(result.status, 1)
+  const report = JSON.parse(result.stdout)
+  assert.equal(report.error, 'postgres17_platform_unapproved')
+  assert.equal(report.cleanup_complete, true)
+  assert.equal(report.production_mutated, false)
 })

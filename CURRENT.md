@@ -145,9 +145,12 @@ Add provider-backed AI, payment, shipping, tax, publishing, and broader marketin
 
 ## Open gates and next eligible work
 
-1. **Database evidence:** establish an authorized isolated remote target, then
-   run one fresh synthetic PostgreSQL-17 rehearsal bound to source `13ef5c32`.
-   Do not use live customer or production data.
+1. **Database evidence:** first complete and independently review the
+   source-controlled Windows toolchain provenance profile. Receipt production
+   now fails closed before PostgreSQL starts, and Linux is not an approved
+   substitute. After that gate is complete, establish an authorized isolated
+   remote target and run one fresh synthetic PostgreSQL-17 rehearsal bound to
+   the exact implementation source. Do not use live customer or production data.
 2. **Artifact verification:** retrieve the retained Android QA archive in an
    authorized compatible environment, verify archive and inner APK hashes and
    the APK signature with official tooling, then run the remote emulator core

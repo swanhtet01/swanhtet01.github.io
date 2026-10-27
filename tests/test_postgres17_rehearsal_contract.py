@@ -26,6 +26,33 @@ def _load_rehearsal():
 
 
 class Postgres17RehearsalContractTests(unittest.TestCase):
+    def test_preflight_rejects_unapproved_platform_and_provenance_before_any_binary(self) -> None:
+        module = _load_rehearsal()
+        adversarial_roots = (
+            Path("/arbitrary/windows-zip"),
+            Path("/linux-masquerading-as-windows"),
+            Path("/swapped-postgres-binaries"),
+            Path("/mismatched-tool-versions"),
+            Path("/missing-provenance"),
+        )
+        for root in adversarial_roots:
+            with self.subTest(root=root), \
+                 patch.object(module, "_postgres_version") as version_probe, \
+                 patch.object(module, "_binary") as binary_probe, \
+                 patch.object(module.os, "name", "posix"):
+                report = module._preflight(root, Path("openssl"))
+                self.assertEqual(report["error"], "postgres17_platform_unapproved")
+                version_probe.assert_not_called()
+                binary_probe.assert_not_called()
+
+        with patch.object(module, "_postgres_version") as version_probe, \
+             patch.object(module, "_binary") as binary_probe, \
+             patch.object(module.os, "name", "nt"):
+            report = module._preflight(Path(r"C:\untrusted\pgsql\bin"), Path("openssl.exe"))
+            self.assertEqual(report["error"], "postgres17_toolchain_provenance_unapproved")
+            version_probe.assert_not_called()
+            binary_probe.assert_not_called()
+
     def test_disposable_cluster_uses_only_tls_tcp_not_package_socket_directory(self) -> None:
         module = _load_rehearsal()
         with tempfile.TemporaryDirectory() as temporary:
@@ -225,7 +252,7 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
         self.assertNotIn("fastapi.testclient", source.casefold())
         self.assertNotIn("httpx", source.casefold())
 
-    def test_missing_local_tooling_returns_only_sanitized_evidence(self) -> None:
+    def test_unapproved_platform_returns_only_sanitized_evidence(self) -> None:
         module = _load_rehearsal()
         with tempfile.TemporaryDirectory() as temporary:
             missing_bin = Path(temporary) / "missing-bin"
@@ -243,7 +270,7 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
                 )
         self.assertEqual(return_code, 1)
         payload = json.loads(output.getvalue())
-        self.assertEqual(payload["error"], "postgres17_tooling_missing")
+        self.assertEqual(payload["error"], "postgres17_platform_unapproved")
         self.assertFalse(payload["ok"])
         self.assertTrue(payload["cleanup_complete"])
         self.assertFalse(payload["secret_values_exposed"])

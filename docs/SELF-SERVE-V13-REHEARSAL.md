@@ -81,7 +81,13 @@ defaults remain v11 solely for baseline/adversarial tests; the release entry
 explicitly selects `CURRENT_MIGRATIONS` and `v13-self-serve` for both fresh and
 restored databases.
 
-Run once from an exact clean committed checkout, using already-installed tools:
+New receipt production is currently blocked before PostgreSQL starts because no
+reviewed provenance profile yet binds the historical archive to every loaded
+PostgreSQL/OpenSSL/Python dependency. The commands below are the intended flow
+only after that source-controlled profile is complete and independently reviewed;
+Linux and caller-supplied tool paths are not approved substitutes.
+
+Then run once from an exact clean committed checkout, using the approved tools:
 
 ```
 node tools/record_postgres17_rehearsal.mjs --output <fresh-external-receipt.json>

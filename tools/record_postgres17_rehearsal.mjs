@@ -10,6 +10,10 @@ const root = resolve(import.meta.dirname, '..')
 const outputPath = resolve(root, 'hq', 'research', 'postgres17-rehearsal.json')
 const rehearsalRunner = resolve(root, 'tools', 'run_postgres17_rehearsal.mjs')
 const archivePath = resolve(homedir(), '.cache', 'supermega-postgresql', 'postgresql-17.10-2-windows-x64-binaries.zip')
+// The historical archive is not yet cryptographically bound to every loaded
+// PostgreSQL/OpenSSL/Python dependency. Verification may read old receipts, but
+// the release CLI must not mint a new one until a complete reviewed profile exists.
+const toolchainProvenanceApproved = false
 
 import {
   DATABASE_REHEARSAL_EVIDENCE_SCHEMA, implementationPaths, fail, sha256, same,
@@ -259,6 +263,8 @@ async function verify(input, expectedHead) {
 async function main() {
   const command = process.argv.slice(2)
   let result
+  if ((command.length === 0 || (command.length === 2 && command[0] === '--output' && command[1]))
+    && !toolchainProvenanceApproved) fail('database_rehearsal_toolchain_provenance_unapproved')
   if (command.length === 2 && command[0] === '--output' && command[1]) result = await record(resolve(command[1]))
   else if (command.length === 0) result = await record(outputPath)
   else if (same(command, ['--verify'])) result = await verify(outputPath)
