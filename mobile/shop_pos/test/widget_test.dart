@@ -5031,6 +5031,87 @@ END
     },
   );
 
+  testWidgets(
+    'cash tender rejects pasted separators and enforces whole-MMK boundaries',
+    (tester) async {
+      _usePhoneViewport(tester);
+      final database = ShopDatabase(NativeDatabase.memory());
+      await database.addProduct(
+        id: 'rice-cash-boundary',
+        name: 'Rice',
+        priceMmk: 13500,
+        openingStock: 2,
+      );
+      await tester.pumpWidget(
+        ShopApp(
+          testOnlyAllowMissingRuntimeScope: true,
+          initialCounter: true,
+          database: database,
+          authClient: null,
+          apiBaseUrl: 'https://app.supermega.dev',
+          initialMyanmar: false,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Add to sale'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('Review sale'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Cash sale'));
+      await tester.pumpAndSettle();
+
+      final field = find.byKey(const ValueKey('shop-cash-given'));
+      final confirm = find.ancestor(
+        of: find.text('Complete sale'),
+        matching: find.byType(FilledButton),
+      );
+      String enteredText() => tester
+          .widget<EditableText>(
+            find.descendant(of: field, matching: find.byType(EditableText)),
+          )
+          .controller
+          .text;
+
+      for (final pasted in ['20.000', '20,000', '20,000.50']) {
+        await tester.enterText(field, pasted);
+        await tester.pumpAndSettle();
+        expect(enteredText(), pasted);
+        expect(find.text('Enter a valid amount.'), findsOneWidget);
+        expect(tester.widget<FilledButton>(confirm).onPressed, isNull);
+        expect(await database.countSales(), 0);
+      }
+
+      await tester.enterText(field, '၀');
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Cash given is less than the amount due.'),
+        findsOneWidget,
+      );
+      expect(tester.widget<FilledButton>(confirm).onPressed, isNull);
+
+      await tester.enterText(field, '200000000000000');
+      await tester.pumpAndSettle();
+      expect(find.text('199,999,999,986,500 MMK'), findsOneWidget);
+      expect(tester.widget<FilledButton>(confirm).onPressed, isNotNull);
+
+      await tester.enterText(field, '200000000000001');
+      await tester.pumpAndSettle();
+      expect(find.text('Enter a valid amount.'), findsOneWidget);
+      expect(tester.widget<FilledButton>(confirm).onPressed, isNull);
+
+      await tester.enterText(field, '13500');
+      await tester.pumpAndSettle();
+      expect(find.text('0 MMK'), findsOneWidget);
+      await tester.tap(find.text('Complete sale'));
+      await tester.pumpAndSettle();
+      expect(await database.countSales(), 1);
+      expect((await database.readActiveProducts()).single.onHand, 1);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+      await database.close();
+    },
+  );
+
   for (final myanmar in [false, true]) {
     testWidgets(
       'dedicated member card selection links one cash sale in ${myanmar ? 'MY' : 'EN'}',

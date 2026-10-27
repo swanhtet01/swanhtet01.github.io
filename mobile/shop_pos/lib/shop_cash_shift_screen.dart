@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:uuid/uuid.dart';
 
 import 'shop_copy.dart';
@@ -7,7 +6,6 @@ import 'shop_database.dart';
 import 'shop_operational_export.dart';
 import 'shop_operational_export_saver.dart';
 import 'shop_runtime_scope.dart';
-import 'stock_screen.dart' show parseStockQuantity;
 
 @visibleForTesting
 bool shopOperationalExportActionAvailable({
@@ -138,7 +136,7 @@ class _ShopCashShiftScreenState extends State<ShopCashShiftScreen> {
   Future<void> _openShift() async {
     if (_busy) return;
     final label = _operator.text.trim();
-    final openingFloat = parseStockQuantity(_openingFloat.text);
+    final openingFloat = parseShopMmkInput(_openingFloat.text);
     if (label.isEmpty ||
         label.length > 80 ||
         openingFloat == null ||
@@ -180,7 +178,7 @@ class _ShopCashShiftScreenState extends State<ShopCashShiftScreen> {
 
   Future<void> _closeShift() async {
     if (_busy || _review == null) return;
-    final counted = parseStockQuantity(_countedCash.text);
+    final counted = parseShopMmkInput(_countedCash.text);
     if (counted == null || counted < 0 || counted > 200000000000000) {
       _showError(
         ArgumentError(),
@@ -470,9 +468,6 @@ class _ShopCashShiftScreenState extends State<ShopCashShiftScreen> {
       TextField(
         controller: controller,
         keyboardType: TextInputType.number,
-        inputFormatters: [
-          FilteringTextInputFormatter.allow(RegExp(r'[0-9၀-၉]')),
-        ],
         decoration: InputDecoration(
           labelText: label,
           suffixText: widget.myanmar ? 'ကျပ်' : 'MMK',

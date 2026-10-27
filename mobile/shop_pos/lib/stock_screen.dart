@@ -846,9 +846,6 @@ class _EditProductDialogState extends State<_EditProductDialog> {
             controller: _price,
             enabled: !_saving,
             keyboardType: TextInputType.number,
-            inputFormatters: [
-              FilteringTextInputFormatter.allow(RegExp('[0-9\u1040-\u1049]')),
-            ],
             decoration: InputDecoration(
               labelText: shopCopy(
                 widget.myanmar,
@@ -857,8 +854,8 @@ class _EditProductDialogState extends State<_EditProductDialog> {
               ),
             ),
             validator: (value) {
-              final amount = parseStockQuantity(value);
-              return amount == null || amount < 0 || amount > 2000000000
+              final amount = parseShopMmkInput(value, maximum: 2000000000);
+              return amount == null
                   ? shopCopy(
                       widget.myanmar,
                       'Enter a whole MMK amount.',

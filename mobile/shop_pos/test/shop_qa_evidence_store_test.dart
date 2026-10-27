@@ -94,6 +94,82 @@ void main() {
     },
   );
 
+  test('restored workspace A cannot attach to workspace B and leaves both stores unchanged', () async {
+    const workspaceA = ShopAuthenticatedWorkspaceSelection(
+      workspaceId: 'workspace-a',
+      actorId: 'owner-a',
+    );
+    const workspaceB = ShopAuthenticatedWorkspaceSelection(
+      workspaceId: 'workspace-b',
+      actorId: 'owner-b',
+    );
+    await database.attachAuthenticatedManagedWorkspace(workspaceA);
+
+    final envelope = await store.exportEncryptedBackup(
+      database: database,
+      password: _password,
+      now: DateTime.utc(2026, 10, 27, 1, 2, 3),
+    );
+    final sourceStateBefore = await _databaseState(database);
+
+    final supportB = await Directory.systemTemp.createTemp(
+      'shop-qa-evidence-workspace-b-support-',
+    );
+    final temporaryB = await Directory.systemTemp.createTemp(
+      'shop-qa-evidence-workspace-b-temp-',
+    );
+    addTearDown(() async {
+      if (await supportB.exists()) await supportB.delete(recursive: true);
+      if (await temporaryB.exists()) {
+        await temporaryB.delete(recursive: true);
+      }
+    });
+    final scopeB = await _qaScope(supportB, temporaryB);
+    final storeB = ShopQaEvidenceStore.forTest(scopeB);
+    final copiedEnvelope = File(
+      '${scopeB.syntheticEvidenceRoot!.path}${Platform.pathSeparator}'
+      '${envelope.uri.pathSegments.last}',
+    );
+    await envelope.copy(copiedEnvelope.path);
+    final staged = await storeB.stageLatestEncryptedBackup();
+    expect(staged, isNotNull);
+
+    final restoredFile = File(
+      '${scopeB.documentsRoot.path}${Platform.pathSeparator}'
+      'workspace-b-restore.sqlite',
+    );
+    await ShopBackup.restoreIntoEmptyDatabase(
+      archive: staged!,
+      target: restoredFile,
+      password: _password,
+    );
+    final restored = ShopDatabase(NativeDatabase(restoredFile));
+    addTearDown(restored.close);
+    await restored.verifyReadyForUse();
+    expect(await _databaseState(restored), sourceStateBefore);
+
+    final sourceTreeBefore = await _treeSnapshot(scope.documentsRoot);
+    final targetTreeBefore = await _treeSnapshot(scopeB.documentsRoot);
+    await expectLater(
+      restored.attachAuthenticatedManagedWorkspace(workspaceB),
+      throwsA(
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          'This Shop database is already attached to another workspace.',
+        ),
+      ),
+    );
+
+    expect(await _databaseState(database), sourceStateBefore);
+    expect(await _databaseState(restored), sourceStateBefore);
+    expect(await _treeSnapshot(scope.documentsRoot), sourceTreeBefore);
+    expect(await _treeSnapshot(scopeB.documentsRoot), targetTreeBefore);
+    expect(await ShopBackup.restoreMarkerFor(restoredFile).exists(), isFalse);
+    expect(await File('${restoredFile.path}-wal').exists(), isFalse);
+    expect(await File('${restoredFile.path}-journal').exists(), isFalse);
+  });
+
   test(
     'payload tampering fails before an encrypted archive is staged',
     () async {
@@ -329,3 +405,48 @@ ShopRuntimeConfiguration _productionConfiguration() =>
       buildIdentityQaProfile: '',
       platformIdentity: 'production-current',
     );
+
+Future<
+  ({
+    String workspaceId,
+    String actorId,
+    String directoryContract,
+    int attachedAtMillis,
+    int sales,
+    String paymentState,
+    int stockMovements,
+    int outboxOperations,
+    int onHand,
+  })
+>
+_databaseState(ShopDatabase database) async {
+  final binding = await database.readManagedWorkspaceBinding();
+  final payments = await database
+      .customSelect(
+        "SELECT COALESCE(GROUP_CONCAT(payment_method, ','), '') AS state "
+        'FROM (SELECT payment_method FROM shop_sales ORDER BY id)',
+      )
+      .getSingle();
+  return (
+    workspaceId: binding!.workspaceId,
+    actorId: binding.attachedActorId,
+    directoryContract: binding.discoveryContract,
+    attachedAtMillis: binding.attachedAtMillis,
+    sales: await database.countSales(),
+    paymentState: payments.read<String>('state'),
+    stockMovements: await database.countStockMovements(),
+    outboxOperations: await database.countOutboxOperations(),
+    onHand: (await database.readActiveProducts()).single.onHand,
+  );
+}
+
+Future<Map<String, List<int>>> _treeSnapshot(Directory root) async {
+  final snapshot = <String, List<int>>{};
+  await for (final entity in root.list(recursive: true, followLinks: false)) {
+    if (entity is File) {
+      final relative = entity.path.substring(root.path.length);
+      snapshot[relative] = await entity.readAsBytes();
+    }
+  }
+  return snapshot;
+}

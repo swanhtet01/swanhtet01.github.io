@@ -3576,13 +3576,9 @@ class _ShopHomeState extends State<ShopHome> {
         builder: (dialogContext) => StatefulBuilder(
           builder: (context, setDialogState) {
             final entered = cashGiven.trim();
-            final asciiDigits = entered.replaceAllMapped(
-              RegExp(r'[၀-၉]'),
-              (match) => '${'၀၁၂၃၄၅၆၇၈၉'.indexOf(match.group(0)!)}',
-            );
             final tenderedMmk = entered.isEmpty
                 ? null
-                : int.tryParse(asciiDigits);
+                : parseShopMmkInput(entered);
             final isShort = tenderedMmk != null && tenderedMmk < totalMmk;
             final invalid = entered.isNotEmpty && tenderedMmk == null;
             return AlertDialog(
@@ -3623,9 +3619,6 @@ class _ShopHomeState extends State<ShopHome> {
                     autofocus: true,
                     keyboardType: TextInputType.number,
                     textInputAction: TextInputAction.done,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.allow(RegExp(r'[0-9၀-၉]')),
-                    ],
                     onChanged: (value) =>
                         setDialogState(() => cashGiven = value),
                     onSubmitted: (_) {
@@ -3714,13 +3707,7 @@ class _ShopHomeState extends State<ShopHome> {
         expectedTotalMmk: totalMmk,
         cashChangeMmk: cashGiven.trim().isEmpty
             ? null
-            : int.parse(
-                    cashGiven.trim().replaceAllMapped(
-                      RegExp(r'[၀-၉]'),
-                      (match) => '${'၀၁၂၃၄၅၆၇၈၉'.indexOf(match.group(0)!)}',
-                    ),
-                  ) -
-                  totalMmk,
+            : parseShopMmkInput(cashGiven)! - totalMmk,
         expectedUnitPricesMmk: {
           for (final id in selected.keys) id: currentById[id]!.priceMmk,
         },
@@ -4838,7 +4825,7 @@ class _NewShopProductDialogState extends State<_NewShopProductDialog> {
       _NewShopProduct(
         name: _name.text.trim(),
         barcode: _barcode.text.trim().isEmpty ? null : _barcode.text.trim(),
-        priceMmk: int.parse(_price.text.trim()),
+        priceMmk: parseShopMmkInput(_price.text, maximum: 2000000000)!,
         openingStock: int.parse(_stock.text.trim()),
       ),
     );
@@ -4903,8 +4890,11 @@ class _NewShopProductDialogState extends State<_NewShopProductDialog> {
                     ),
                   ),
                   validator: (value) {
-                    final amount = int.tryParse(value?.trim() ?? '');
-                    return amount == null || amount < 0 || amount > 2000000000
+                    final amount = parseShopMmkInput(
+                      value,
+                      maximum: 2000000000,
+                    );
+                    return amount == null
                         ? shopCopy(
                             widget.myanmar,
                             'Enter a whole MMK amount.',
