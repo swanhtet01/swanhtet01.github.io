@@ -28,6 +28,17 @@ structurally valid, its page pre-images match the current database, SQLite
 checksums and bounds pass, and database integrity is good. Forged, mismatched,
 corrupt, and unknown sidecars remain fail closed and preserved.
 
+### Instruction source pin
+
+Until this private documentation successor is intentionally published, the
+active PR instructions are `supergoal.md`, `CURRENT.md`, `AGENTS.md`,
+`SKILLS.md`, and `mobile/shop_pos/AGENTS.md` at source
+`13ef5c3201b67308a8c086133fc384c907080602`. Default branch `main` remains at
+`5479c5d1ece3d697cf5c505e7feb431dc88baf75` with obsolete SuperGoal v1.2.34 and
+an old local absolute path; it is not the current Shop release instruction
+source. This private checkpoint does not update, merge, or retarget `main` or
+PR #734.
+
 ## Exact-head CI
 
 - [Native run 40569480097](https://github.com/swanhtet01/swanhtet01.github.io/actions/runs/40569480097): **PASS**, all six Android, iPad/iOS,

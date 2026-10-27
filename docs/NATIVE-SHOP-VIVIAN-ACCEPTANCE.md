@@ -1,6 +1,6 @@
 # Native Shop — Vivian acceptance card
 
-This is the current execution card for the assisted Local Pilot. It is
+This is the current execution card for the internal Local Pilot evaluation. It is
 subordinate to Gates 3–6 of the [Shop release runbook](SHOP-RELEASE-RUNBOOK.md)
 and cannot approve signing, physical hardware, commercial terms, production, or
 go-live by itself. Keep merchant data and evidence in the approved private
@@ -69,9 +69,10 @@ turn a model, transport, paper width, or Burmese receipt into physical PASS.
 
 ## Commercial and support decisions
 
-Local Pilot is the only current offer. Assisted Launch is an optional one-time
-service, not a subscription plan. Managed Cloud and Multi-site are not for
-sale.
+Local Pilot is an internal evaluation label, not a separately priced offer.
+The current commercial direction is subscription-only with no setup fee;
+assisted setup is included help only when the owners approve the subscription
+offer and its support boundary. Managed Cloud and Multi-site are not for sale.
 
 | Decision | Recorded answer / owner / date |
 | --- | --- |

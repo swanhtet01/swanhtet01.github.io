@@ -1,6 +1,6 @@
 # SuperMega Supergoal
 
-- Version: 2.3.3
+- Version: 2.3.4
 - Owners: Swan Htet (technical) and Vivian (operations and business)
 - Updated: 2026-10-27
 - Status: ACTIVE — Shop is the core product; its supporting public website,
@@ -160,11 +160,13 @@ Included now:
 - internal AI assistance for engineering and operations, with named human
   owners for access, money, publishing, customer promises, and release.
 
-The launch offer is Local Pilot. Assisted Launch is an optional one-time
-service, not a plan or subscription. Managed Cloud and Multi-site remain
+Local Pilot is the internal evaluation label, not an approved separate setup
+fee. The current commercial direction is subscription-only with no setup fee;
+assisted setup is included help within an owner-approved subscription offer,
+not a separately priced product. Managed Cloud and Multi-site remain
 planned/internal until their tenant identity, recovery, entitlement, support,
-and billing gates pass. Do not publish a numeric price until its owners approve
-the effective offer.
+and billing gates pass. Do not publish a numeric price, plan name, or included
+support promise until its owners approve the effective offer.
 
 Sites/Website and Ecommerce capabilities may later be sold as optional custom
 or enterprise packages. They are not default launch products. No package name,

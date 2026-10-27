@@ -145,8 +145,9 @@ receipts` only after physical receipt tests pass.
 
 Public intake accepts exactly one current plan value, `shop-pilot`. Template
 values are independent presets and accept exactly `mini-mart`, `tea-coffee`,
-`fashion`, or `beauty-spa`. Assisted Launch is an optional separate service,
-never a plan. Managed Cloud and Multi-site are noninteractive roadmap labels;
+`fashion`, or `beauty-spa`. Assisted setup is included help under an
+owner-approved subscription offer, never a separate plan or setup fee. Managed
+Cloud and Multi-site are noninteractive roadmap labels;
 legacy, arbitrary, or crafted plan values fail closed. Publish no numeric price.
 English and Burmese parity tests must enumerate exactly those four public
 inquiry templates, exactly one current offer, and exactly two noninteractive
@@ -550,9 +551,11 @@ Before promising availability, decide and record:
 Unknown economics remain unknown; do not invent revenue, savings, or customer
 proof.
 
-Until those decisions change through the joint owner gate, Local Pilot is the
-only current offer. Assisted Launch is a separate optional one-time service.
-Managed Cloud and Multi-site remain planned/internal, not purchasable plans.
+Until those decisions change through the joint owner gate, Local Pilot remains
+an internal evaluation label. The commercial direction is subscription-only
+with no setup fee; assisted setup is included help whose exact scope still
+requires owner approval. Managed Cloud and Multi-site remain planned/internal,
+not purchasable plans.
 Public inquiry templates classify assisted setup; they do not configure the
 native app, grant entitlements, or create product forks. Native profile and CSV
 onboarding remain future acceptance work.

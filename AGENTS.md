@@ -73,6 +73,10 @@ authority, product scope, or infrastructure actions by implication.
   Pricing, outreach, social publishing, customer promises, and autonomous
   social-media agents stay in the named BD/Ops lane and must not be folded into
   Shop source, CI, or release scope by implication.
+- Without verified destination access and the applicable publishing or contact
+  authority, BD/Ops and social output remains a private draft. Do not claim an
+  Operations conversation, channel, page, or campaign was updated when its
+  supported write path is unavailable.
 
 ## Current product boundary
 
@@ -178,6 +182,12 @@ must use an authorized remote environment. User-local machines are read-only
 evidence sources unless a later exact owner instruction changes this boundary.
 Synthetic emulator/scanner/printer evidence remains simulation and never
 becomes physical-hardware acceptance.
+
+This remote-only workload rule does not prohibit an explicitly authorized,
+read-only website or provider administration check through a supported browser
+or connector. It does prohibit using that access to run local code, services,
+emulators, databases, agents, or installations, and it never grants a provider
+write by implication.
 
 ## Authority and safety boundaries
 
