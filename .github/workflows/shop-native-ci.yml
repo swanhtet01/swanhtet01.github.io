@@ -50,6 +50,11 @@ jobs:
           dart format lib/shop_connected_onboarding.dart lib/shop_connected_site_authority_store.dart lib/shop_connected_site_client.dart lib/shop_connected_site_contracts.dart lib/shop_connected_site_database_adapter.dart lib/shop_connected_site_enrollment_store.dart lib/shop_connected_site_reconciliation.dart lib/shop_connected_site_reconciliation_store.dart lib/shop_connected_stock_reservation.dart lib/shop_offline_staff_lease.dart lib/shop_site_coordinator.dart test/shop_connected_onboarding_test.dart test/shop_connected_site_authority_store_test.dart test/shop_connected_site_client_test.dart test/shop_connected_site_contracts_test.dart test/shop_connected_site_database_adapter_test.dart test/shop_connected_site_enrollment_store_test.dart test/shop_connected_site_persistence_test.dart test/shop_connected_site_reconciliation_test.dart test/shop_connected_site_reconciliation_store_test.dart test/shop_connected_stock_reservation_test.dart test/shop_offline_staff_lease_test.dart test/shop_site_coordinator_test.dart
           git diff --exit-code -- lib/shop_connected_onboarding.dart lib/shop_connected_site_authority_store.dart lib/shop_connected_site_client.dart lib/shop_connected_site_contracts.dart lib/shop_connected_site_database_adapter.dart lib/shop_connected_site_enrollment_store.dart lib/shop_connected_site_reconciliation.dart lib/shop_connected_site_reconciliation_store.dart lib/shop_connected_stock_reservation.dart lib/shop_offline_staff_lease.dart lib/shop_site_coordinator.dart test/shop_connected_onboarding_test.dart test/shop_connected_site_authority_store_test.dart test/shop_connected_site_client_test.dart test/shop_connected_site_contracts_test.dart test/shop_connected_site_database_adapter_test.dart test/shop_connected_site_enrollment_store_test.dart test/shop_connected_site_persistence_test.dart test/shop_connected_site_reconciliation_test.dart test/shop_connected_site_reconciliation_store_test.dart test/shop_connected_stock_reservation_test.dart test/shop_offline_staff_lease_test.dart test/shop_site_coordinator_test.dart
 
+      - name: Check connected attempt-store formatting
+        run: |
+          dart format lib/shop_connected_site_attempt_store.dart test/shop_connected_site_attempt_store_test.dart
+          git diff --exit-code -- lib/shop_connected_site_attempt_store.dart test/shop_connected_site_attempt_store_test.dart
+
       - name: Check first-sale widget in isolation
         run: timeout --signal=TERM --kill-after=10s 90s flutter test test/widget_checkout_test.dart --plain-name 'empty catalog can make a durable cash sale' --reporter expanded --timeout 60s
 
@@ -72,6 +77,7 @@ jobs:
           test/shop_cash_movement_test.dart
           test/shop_catalog_search_test.dart
           test/shop_connected_onboarding_test.dart
+          test/shop_connected_site_attempt_store_test.dart
           test/shop_connected_site_authority_store_test.dart
           test/shop_connected_site_client_test.dart
           test/shop_connected_site_contracts_test.dart
@@ -166,6 +172,7 @@ jobs:
           (
             TMPDIR="$connected_tmp" timeout --signal=TERM --kill-after=10s "${SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS}s" flutter test --concurrency=1 --reporter expanded --timeout 2m \
               test/shop_connected_onboarding_test.dart \
+              test/shop_connected_site_attempt_store_test.dart \
               test/shop_connected_site_authority_store_test.dart \
               test/shop_connected_site_client_test.dart \
               test/shop_connected_site_contracts_test.dart \

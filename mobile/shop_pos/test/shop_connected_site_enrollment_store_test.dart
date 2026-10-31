@@ -125,12 +125,22 @@ void main() {
           'DROP ${type.toUpperCase()} IF EXISTS ${entry.key}',
         );
       }
+      for (final entry
+          in shopConnectedAttemptSchemaDefinitionsV28().entries
+              .toList()
+              .reversed) {
+        final type =
+            canonicalShopSchemaSql(entry.value).startsWith('create table')
+            ? 'TABLE'
+            : 'TRIGGER';
+        await database.customStatement('DROP $type IF EXISTS ${entry.key}');
+      }
       await database.customStatement('PRAGMA user_version = 24');
       await database.close();
 
       database = ShopDatabase(NativeDatabase(file));
       await database.verifyReadyForUse();
-      expect(database.schemaVersion, 27);
+      expect(database.schemaVersion, 28);
       for (final table in const [
         'shop_site_pairing_nonces',
         'shop_site_pending_enrollments',
@@ -214,6 +224,16 @@ void main() {
         await database.customStatement(
           'DROP ${type.toUpperCase()} IF EXISTS ${entry.key}',
         );
+      }
+      for (final entry
+          in shopConnectedAttemptSchemaDefinitionsV28().entries
+              .toList()
+              .reversed) {
+        final type =
+            canonicalShopSchemaSql(entry.value).startsWith('create table')
+            ? 'TABLE'
+            : 'TRIGGER';
+        await database.customStatement('DROP $type IF EXISTS ${entry.key}');
       }
       await database.customStatement('PRAGMA user_version = 25');
       await database.close();

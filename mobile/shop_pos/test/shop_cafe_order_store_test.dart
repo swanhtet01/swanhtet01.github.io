@@ -1967,7 +1967,7 @@ void main() {
           } on Object catch (error, stack) {
             fail('v$origin migration failed: $error\n$stack');
           }
-          expect(database.schemaVersion, 27);
+          expect(database.schemaVersion, 28);
           expect(await database.countSales(), origin == 18 ? 1 : 0);
           final products = await database.readActiveProducts();
           expect(products, origin == 18 ? hasLength(1) : isEmpty);
@@ -2405,7 +2405,7 @@ void _downgradeV19(File file, int target) {
   final connection = sqlite.sqlite3.open(file.path);
   try {
     for (final definition
-        in shopConnectedSiteSchemaDefinitionsV27().entries.toList().reversed) {
+        in shopConnectedSiteSchemaDefinitionsV28().entries.toList().reversed) {
       _dropDefinition(connection, definition.key, definition.value);
     }
     connection.execute('ALTER TABLE shop_sales DROP COLUMN cash_tendered_mmk');

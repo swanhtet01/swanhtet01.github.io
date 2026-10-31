@@ -361,6 +361,16 @@ void main() {
                   )
                   .getSingle())
               .read<String>('source_digest');
+      for (final entry
+          in shopConnectedAttemptSchemaDefinitionsV28().entries
+              .toList()
+              .reversed) {
+        final type =
+            canonicalShopSchemaSql(entry.value).startsWith('create table')
+            ? 'TABLE'
+            : 'TRIGGER';
+        await database.customStatement('DROP $type IF EXISTS ${entry.key}');
+      }
       for (final name
           in shopConnectedAuthoritySchemaDefinitionsV27().keys
               .toList()

@@ -26,7 +26,7 @@ void main() {
   test('connected-site persistence is default-off and schema is v27', () async {
     final database = ShopDatabase(NativeDatabase.memory());
     try {
-      expect(database.schemaVersion, 27);
+      expect(database.schemaVersion, 28);
       final tables =
           (await database
                   .customSelect(
@@ -1391,7 +1391,7 @@ void main() {
   });
 
   test(
-    'v22 migrates to v27 and encrypted-backup snapshot remains valid',
+    'v22 migrates to v28 and encrypted-backup snapshot remains valid',
     () async {
       final root = await Directory.systemTemp.createTemp('shop-site-v23-');
       final file = File('${root.path}/shop.sqlite');
@@ -1399,7 +1399,7 @@ void main() {
       try {
         await database.verifyReadyForUse();
         for (final entry
-            in shopConnectedSiteSchemaDefinitionsV27().entries
+            in shopConnectedSiteSchemaDefinitionsV28().entries
                 .toList()
                 .reversed) {
           final type = shopSchemaObjectTypeForDefinition(entry.value);
@@ -1442,7 +1442,7 @@ void main() {
 
         database = ShopDatabase(NativeDatabase(file));
         await database.verifyReadyForUse();
-        expect(database.schemaVersion, 27);
+        expect(database.schemaVersion, 28);
         final snapshot = File('${root.path}/snapshot.sqlite');
         await database.exportVerifiedLocalSnapshot(snapshot);
         expect(
@@ -1789,6 +1789,16 @@ void main() {
         await database.customStatement(
           'DROP ${type.toUpperCase()} IF EXISTS ${entry.key}',
         );
+      }
+      for (final entry
+          in shopConnectedAttemptSchemaDefinitionsV28().entries
+              .toList()
+              .reversed) {
+        final type =
+            canonicalShopSchemaSql(entry.value).startsWith('create table')
+            ? 'TABLE'
+            : 'TRIGGER';
+        await database.customStatement('DROP $type IF EXISTS ${entry.key}');
       }
       await database.customStatement('PRAGMA user_version = 23');
       await database.close();

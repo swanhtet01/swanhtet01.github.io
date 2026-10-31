@@ -14,6 +14,7 @@ import 'shop_cafe_order_contract.dart';
 import 'shop_connected_site_contracts.dart';
 import 'shop_connected_site_reconciliation.dart';
 import 'shop_connected_stock_reservation.dart';
+import 'shop_site_coordinator.dart';
 import 'shop_correction_consumption.dart';
 import 'shop_correction_receipt.dart';
 import 'shop_operational_export.dart';
@@ -2189,6 +2190,454 @@ Map<String, String> shopConnectedSiteSchemaDefinitionsV27() => {
   ...shopConnectedAuthoritySchemaDefinitionsV27(),
 };
 
+const shopSiteCoordinatorBindingsV28Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_coordinator_bindings (
+    binding_digest TEXT PRIMARY KEY NOT NULL CHECK (length(binding_digest) = 64),
+    action TEXT NOT NULL CHECK (action = 'approve'),
+    workspace_id TEXT NOT NULL CHECK (length(workspace_id) BETWEEN 1 AND 128),
+    site_id TEXT NOT NULL CHECK (length(site_id) BETWEEN 1 AND 128),
+    coordinator_device_id TEXT NOT NULL CHECK (length(coordinator_device_id) BETWEEN 1 AND 128),
+    pairing_digest TEXT NOT NULL CHECK (length(pairing_digest) = 64),
+    enrollment_evidence_digest TEXT NOT NULL CHECK (length(enrollment_evidence_digest) = 64),
+    client_device_id TEXT NOT NULL CHECK (length(client_device_id) BETWEEN 1 AND 128),
+    client_fingerprint TEXT NOT NULL CHECK (length(client_fingerprint) = 64),
+    client_signing_key_id TEXT NOT NULL CHECK (length(client_signing_key_id) BETWEEN 1 AND 128),
+    address TEXT NOT NULL CHECK (length(address) BETWEEN 1 AND 255),
+    port INTEGER NOT NULL CHECK (port BETWEEN 1 AND 65535),
+    certificate_sha256 TEXT NOT NULL CHECK (length(certificate_sha256) = 64),
+    protocol_version INTEGER NOT NULL CHECK (protocol_version = 1),
+    approval_generation INTEGER NOT NULL CHECK (approval_generation > 0),
+    issued_at_millis INTEGER NOT NULL CHECK (issued_at_millis > 0),
+    expires_at_millis INTEGER NOT NULL CHECK (expires_at_millis > issued_at_millis),
+    authority_key_id TEXT NOT NULL CHECK (length(authority_key_id) BETWEEN 1 AND 128),
+    evidence_json TEXT NOT NULL CHECK (json_valid(evidence_json)),
+    evidence_digest TEXT NOT NULL UNIQUE CHECK (length(evidence_digest) = 64),
+    authority_signature TEXT NOT NULL CHECK (length(authority_signature) BETWEEN 32 AND 512),
+    observed_at_millis INTEGER NOT NULL CHECK (observed_at_millis > 0)
+  )
+''';
+
+const shopSiteCommandAttemptsV28Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_command_attempts (
+    command_id TEXT PRIMARY KEY NOT NULL CHECK (length(command_id) BETWEEN 1 AND 128),
+    binding_digest TEXT NOT NULL REFERENCES shop_site_coordinator_bindings(binding_digest),
+    workspace_id TEXT NOT NULL CHECK (length(workspace_id) BETWEEN 1 AND 128),
+    site_id TEXT NOT NULL CHECK (length(site_id) BETWEEN 1 AND 128),
+    device_id TEXT NOT NULL CHECK (length(device_id) BETWEEN 1 AND 128),
+    signing_key_id TEXT NOT NULL CHECK (length(signing_key_id) BETWEEN 1 AND 128),
+    command_digest TEXT NOT NULL CHECK (length(command_digest) = 64),
+    command_json TEXT NOT NULL CHECK (json_valid(command_json)),
+    body_sha256 TEXT NOT NULL CHECK (length(body_sha256) = 64),
+    prepared_at_millis INTEGER NOT NULL CHECK (prepared_at_millis > 0)
+  )
+''';
+
+const shopSiteCoordinatorBindingRevocationsV28Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_coordinator_binding_revocations (
+    evidence_digest TEXT PRIMARY KEY NOT NULL CHECK (length(evidence_digest) = 64),
+    action TEXT NOT NULL CHECK (action = 'revoke'),
+    target_binding_digest TEXT NOT NULL REFERENCES shop_site_coordinator_bindings(binding_digest),
+    workspace_id TEXT NOT NULL CHECK (length(workspace_id) BETWEEN 1 AND 128),
+    site_id TEXT NOT NULL CHECK (length(site_id) BETWEEN 1 AND 128),
+    client_device_id TEXT NOT NULL CHECK (length(client_device_id) BETWEEN 1 AND 128),
+    approval_generation INTEGER NOT NULL CHECK (approval_generation > 0),
+    issued_at_millis INTEGER NOT NULL CHECK (issued_at_millis > 0),
+    authority_key_id TEXT NOT NULL CHECK (length(authority_key_id) BETWEEN 1 AND 128),
+    evidence_json TEXT NOT NULL CHECK (json_valid(evidence_json)),
+    authority_signature TEXT NOT NULL CHECK (length(authority_signature) BETWEEN 32 AND 512),
+    observed_at_millis INTEGER NOT NULL CHECK (observed_at_millis > 0)
+  )
+''';
+
+const shopSiteCommandTransmissionsV28Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_command_transmissions (
+    command_id TEXT NOT NULL REFERENCES shop_site_command_attempts(command_id),
+    transmission_sequence INTEGER NOT NULL CHECK (transmission_sequence > 0),
+    request_nonce TEXT NOT NULL UNIQUE CHECK (length(request_nonce) BETWEEN 22 AND 128),
+    issued_at_millis INTEGER NOT NULL CHECK (issued_at_millis > 0),
+    method TEXT NOT NULL CHECK (method = 'POST'),
+    canonical_target TEXT NOT NULL CHECK (canonical_target = '/v1/commands'),
+    proof_json TEXT NOT NULL CHECK (json_valid(proof_json)),
+    proof_digest TEXT NOT NULL UNIQUE CHECK (length(proof_digest) = 64),
+    request_signature TEXT NOT NULL CHECK (length(request_signature) BETWEEN 32 AND 512),
+    body_sha256 TEXT NOT NULL CHECK (length(body_sha256) = 64),
+    started_at_millis INTEGER NOT NULL CHECK (started_at_millis > 0),
+    PRIMARY KEY (command_id, transmission_sequence)
+  )
+''';
+
+const shopSiteCommandResultsV28Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_command_results (
+    command_id TEXT PRIMARY KEY NOT NULL REFERENCES shop_site_command_attempts(command_id),
+    transmission_sequence INTEGER NOT NULL,
+    result_kind TEXT NOT NULL CHECK (result_kind IN ('acknowledged', 'rejected')),
+    ack_state TEXT NOT NULL CHECK (ack_state IN ('accepted', 'replayed', 'conflict', 'denied')),
+    ack_json TEXT NOT NULL CHECK (json_valid(ack_json)),
+    ack_digest TEXT NOT NULL UNIQUE CHECK (length(ack_digest) = 64),
+    completed_at_millis INTEGER NOT NULL CHECK (completed_at_millis > 0),
+    FOREIGN KEY (command_id, transmission_sequence)
+      REFERENCES shop_site_command_transmissions(command_id, transmission_sequence)
+  )
+''';
+
+Map<String, String> shopConnectedAttemptSchemaDefinitionsV28() => {
+  'shop_site_coordinator_bindings': shopSiteCoordinatorBindingsV28Sql,
+  'shop_site_coordinator_binding_revocations':
+      shopSiteCoordinatorBindingRevocationsV28Sql,
+  'shop_site_command_attempts': shopSiteCommandAttemptsV28Sql,
+  'shop_site_command_transmissions': shopSiteCommandTransmissionsV28Sql,
+  'shop_site_command_results': shopSiteCommandResultsV28Sql,
+  for (final table in const [
+    'shop_site_coordinator_bindings',
+    'shop_site_coordinator_binding_revocations',
+    'shop_site_command_attempts',
+    'shop_site_command_transmissions',
+    'shop_site_command_results',
+  ]) ...{
+    '${table}_no_update': shopImmutableTriggerV11Sql(
+      table: table,
+      operation: 'update',
+      message: 'Connected command-attempt evidence is immutable',
+    ),
+    '${table}_no_delete': shopImmutableTriggerV11Sql(
+      table: table,
+      operation: 'delete',
+      message: 'Connected command-attempt evidence is immutable',
+    ),
+  },
+};
+
+Map<String, String> shopConnectedSiteSchemaDefinitionsV28() => {
+  ...shopConnectedSiteSchemaDefinitionsV27(),
+  ...shopConnectedAttemptSchemaDefinitionsV28(),
+};
+
+bool shopConnectedAttemptRowsValidV28({
+  required Iterable<Map<String, Object?>> bindings,
+  required Iterable<Map<String, Object?>> revocations,
+  required Iterable<Map<String, Object?>> attempts,
+  required Iterable<Map<String, Object?>> transmissions,
+  required Iterable<Map<String, Object?>> results,
+  required Iterable<Map<String, Object?>> enrollmentEvidence,
+  required Iterable<Map<String, Object?>> devices,
+}) {
+  try {
+    final hex = RegExp(r'^[0-9a-f]{64}$');
+    bool privateAddress(Object? value) {
+      if (value is! String || value.contains('%')) return false;
+      final parsed = InternetAddress.tryParse(value);
+      if (parsed == null) return false;
+      final bytes = parsed.rawAddress;
+      if (bytes.length == 4) {
+        return bytes[0] == 10 ||
+            (bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31) ||
+            (bytes[0] == 192 && bytes[1] == 168);
+      }
+      return bytes.length == 16 && (bytes[0] & 0xfe) == 0xfc;
+    }
+
+    final enrollmentRows = enrollmentEvidence.toList(growable: false);
+    final enrollmentByDigest = <String, Map<String, Object?>>{
+      for (final row in enrollmentRows)
+        if (row['evidence_digest'] is String)
+          row['evidence_digest']! as String: row,
+    };
+    final revokedFingerprints = <String>{
+      for (final row in enrollmentRows)
+        if (row['action'] == 'revoke' && row['client_fingerprint'] is String)
+          row['client_fingerprint']! as String,
+    };
+    final deviceById = <String, Map<String, Object?>>{
+      for (final row in devices)
+        if (row['device_id'] is String) row['device_id']! as String: row,
+    };
+    final bindingsByDigest = <String, Map<String, Object?>>{};
+    for (final row in bindings) {
+      final digest = row['binding_digest'];
+      final evidenceJson = row['evidence_json'];
+      final evidenceDigest = row['evidence_digest'];
+      if (digest is! String ||
+          !hex.hasMatch(digest) ||
+          evidenceJson is! String ||
+          evidenceDigest is! String ||
+          !hex.hasMatch(evidenceDigest) ||
+          crypto.sha256.convert(utf8.encode(evidenceJson)).toString() !=
+              evidenceDigest ||
+          canonicalConnectedSiteJson(jsonDecode(evidenceJson)) !=
+              evidenceJson ||
+          row['expires_at_millis'] is! int ||
+          row['issued_at_millis'] is! int ||
+          row['observed_at_millis'] is! int ||
+          !privateAddress(row['address']) ||
+          row['port'] is! int ||
+          (row['port']! as int) < 1 ||
+          (row['port']! as int) > 65535 ||
+          (row['expires_at_millis']! as int) <=
+              (row['issued_at_millis']! as int) ||
+          (row['expires_at_millis']! as int) -
+                  (row['issued_at_millis']! as int) >
+              const Duration(days: 7).inMilliseconds ||
+          (row['observed_at_millis']! as int) <
+              (row['issued_at_millis']! as int) ||
+          (row['observed_at_millis']! as int) >
+              (row['expires_at_millis']! as int) ||
+          row['approval_generation'] is! int ||
+          (row['approval_generation']! as int) < 1 ||
+          bindingsByDigest.putIfAbsent(digest, () => row) != row) {
+        return false;
+      }
+      final decoded = jsonDecode(evidenceJson);
+      final enrollment = enrollmentByDigest[row['enrollment_evidence_digest']];
+      final device = deviceById[row['client_device_id']];
+      if (decoded is! Map ||
+          connectedSiteSha256(decoded) != digest ||
+          decoded['action'] != 'approve' ||
+          row['action'] != 'approve' ||
+          decoded['workspaceId'] != row['workspace_id'] ||
+          decoded['siteId'] != row['site_id'] ||
+          decoded['coordinatorDeviceId'] != row['coordinator_device_id'] ||
+          decoded['pairingDigest'] != row['pairing_digest'] ||
+          decoded['enrollmentEvidenceDigest'] !=
+              row['enrollment_evidence_digest'] ||
+          decoded['clientDeviceId'] != row['client_device_id'] ||
+          decoded['clientFingerprint'] != row['client_fingerprint'] ||
+          decoded['clientSigningKeyId'] != row['client_signing_key_id'] ||
+          decoded['address'] != row['address'] ||
+          decoded['port'] != row['port'] ||
+          decoded['certificateSha256'] != row['certificate_sha256'] ||
+          decoded['protocolVersion'] != row['protocol_version'] ||
+          decoded['approvalGeneration'] != row['approval_generation'] ||
+          decoded['issuedAtMillis'] != row['issued_at_millis'] ||
+          decoded['expiresAtMillis'] != row['expires_at_millis'] ||
+          decoded['authorityKeyId'] != row['authority_key_id']) {
+        return false;
+      }
+      if (enrollment == null ||
+          enrollment['action'] != 'approve' ||
+          enrollment['tenant_id'] != row['workspace_id'] ||
+          enrollment['site_id'] != row['site_id'] ||
+          enrollment['coordinator_device_id'] != row['coordinator_device_id'] ||
+          enrollment['device_id'] != row['client_device_id'] ||
+          enrollment['client_fingerprint'] != row['client_fingerprint'] ||
+          device == null ||
+          device['tenant_id'] != row['workspace_id'] ||
+          device['site_id'] != row['site_id'] ||
+          device['public_key_fingerprint'] != row['client_fingerprint'] ||
+          (device['state'] != 'active' &&
+              !(device['state'] == 'revoked' &&
+                  revokedFingerprints.contains(row['client_fingerprint'])))) {
+        return false;
+      }
+    }
+    final eventsByScope = <String, List<Map<String, Object?>>>{};
+    for (final row in bindingsByDigest.values) {
+      eventsByScope
+          .putIfAbsent(
+            '${row['workspace_id']}\u0000${row['site_id']}\u0000${row['client_device_id']}',
+            () => [],
+          )
+          .add(row);
+    }
+    for (final row in revocations) {
+      final raw = row['evidence_json'];
+      final digest = row['evidence_digest'];
+      final target = bindingsByDigest[row['target_binding_digest']];
+      if (raw is! String ||
+          digest is! String ||
+          !hex.hasMatch(digest) ||
+          canonicalConnectedSiteJson(jsonDecode(raw)) != raw ||
+          crypto.sha256.convert(utf8.encode(raw)).toString() != digest ||
+          target == null ||
+          row['action'] != 'revoke' ||
+          row['issued_at_millis'] is! int ||
+          row['observed_at_millis'] is! int ||
+          (row['issued_at_millis']! as int) <
+              (target['issued_at_millis']! as int) ||
+          (row['observed_at_millis']! as int) <
+              (row['issued_at_millis']! as int)) {
+        return false;
+      }
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map ||
+          decoded['action'] != 'revoke' ||
+          decoded['targetBindingDigest'] != row['target_binding_digest'] ||
+          decoded['workspaceId'] != row['workspace_id'] ||
+          decoded['siteId'] != row['site_id'] ||
+          decoded['clientDeviceId'] != row['client_device_id'] ||
+          decoded['approvalGeneration'] != row['approval_generation'] ||
+          decoded['issuedAtMillis'] != row['issued_at_millis'] ||
+          decoded['authorityKeyId'] != row['authority_key_id'] ||
+          target['workspace_id'] != row['workspace_id'] ||
+          target['site_id'] != row['site_id'] ||
+          target['client_device_id'] != row['client_device_id']) {
+        return false;
+      }
+      eventsByScope
+          .putIfAbsent(
+            '${row['workspace_id']}\u0000${row['site_id']}\u0000${row['client_device_id']}',
+            () => [],
+          )
+          .add(row);
+    }
+    for (final events in eventsByScope.values) {
+      events.sort(
+        (a, b) => (a['approval_generation']! as int).compareTo(
+          b['approval_generation']! as int,
+        ),
+      );
+      var active = false;
+      String? activeBinding;
+      for (var index = 0; index < events.length; index++) {
+        final event = events[index];
+        if (event['approval_generation'] != index + 1) return false;
+        if (event['action'] == 'approve') {
+          if (active) return false;
+          active = true;
+          activeBinding = event['binding_digest']! as String;
+        } else if (event['action'] == 'revoke') {
+          if (!active || event['target_binding_digest'] != activeBinding) {
+            return false;
+          }
+          active = false;
+          activeBinding = null;
+        } else {
+          return false;
+        }
+      }
+    }
+    final attemptsById = <String, Map<String, Object?>>{};
+    for (final row in attempts) {
+      final commandId = row['command_id'];
+      final commandJson = row['command_json'];
+      if (commandId is! String || commandJson is! String) return false;
+      final decoded = jsonDecode(commandJson);
+      if (decoded is! Map ||
+          canonicalConnectedSiteJson(decoded) != commandJson ||
+          crypto.sha256.convert(utf8.encode(commandJson)).toString() !=
+              row['body_sha256']) {
+        return false;
+      }
+      final command = SiteCommandV1.fromJson(decoded);
+      if (command.commandId != commandId ||
+          command.commandDigest != row['command_digest'] ||
+          command.workspaceId != row['workspace_id'] ||
+          command.siteId != row['site_id'] ||
+          command.deviceId != row['device_id'] ||
+          command.signingKeyId != row['signing_key_id']) {
+        return false;
+      }
+      final binding = bindingsByDigest[row['binding_digest']];
+      if (binding == null ||
+          binding['workspace_id'] != command.workspaceId ||
+          binding['site_id'] != command.siteId ||
+          binding['client_device_id'] != command.deviceId ||
+          binding['client_signing_key_id'] != command.signingKeyId ||
+          attemptsById.putIfAbsent(commandId, () => row) != row) {
+        return false;
+      }
+    }
+    final transmissionsByCommand = <String, List<Map<String, Object?>>>{};
+    for (final row in transmissions) {
+      final commandId = row['command_id'];
+      final proofJson = row['proof_json'];
+      if (commandId is! String ||
+          !attemptsById.containsKey(commandId) ||
+          proofJson is! String ||
+          canonicalConnectedSiteJson(jsonDecode(proofJson)) != proofJson ||
+          connectedSiteSha256(jsonDecode(proofJson)) != row['proof_digest'] ||
+          row['body_sha256'] != attemptsById[commandId]!['body_sha256']) {
+        return false;
+      }
+      final decoded = jsonDecode(proofJson);
+      if (decoded is! Map || row['request_signature'] is! String) return false;
+      final attempt = attemptsById[commandId]!;
+      final binding = bindingsByDigest[attempt['binding_digest']];
+      final issuedAtText = decoded['issuedAt'];
+      if (binding == null || issuedAtText is! String) return false;
+      final issuedAt = DateTime.tryParse(issuedAtText);
+      if (issuedAt == null || !issuedAt.isUtc) return false;
+      final proof = CoordinatorRequestProof(
+        workspaceId: decoded['workspaceId'] as String,
+        siteId: decoded['siteId'] as String,
+        coordinatorDeviceId: decoded['coordinatorDeviceId'] as String,
+        clientFingerprint: decoded['clientFingerprint'] as String,
+        claimedDeviceId: decoded['claimedDeviceId'] as String,
+        issuedAt: issuedAt,
+        nonce: decoded['nonce'] as String,
+        method: decoded['method'] as String,
+        canonicalTarget: decoded['canonicalTarget'] as String,
+        bodySha256: decoded['bodySha256'] as String,
+        signature: row['request_signature']! as String,
+      );
+      if (canonicalConnectedSiteJson(proof.signingPayload) != proofJson ||
+          proof.workspaceId != attempt['workspace_id'] ||
+          proof.siteId != attempt['site_id'] ||
+          proof.coordinatorDeviceId != binding['coordinator_device_id'] ||
+          proof.clientFingerprint != binding['client_fingerprint'] ||
+          proof.claimedDeviceId != attempt['device_id'] ||
+          proof.nonce != row['request_nonce'] ||
+          proof.issuedAt.millisecondsSinceEpoch != row['issued_at_millis'] ||
+          proof.method != row['method'] ||
+          proof.canonicalTarget != row['canonical_target'] ||
+          proof.bodySha256 != row['body_sha256']) {
+        return false;
+      }
+      transmissionsByCommand.putIfAbsent(commandId, () => []).add(row);
+    }
+    for (final rows in transmissionsByCommand.values) {
+      rows.sort(
+        (a, b) => (a['transmission_sequence']! as int).compareTo(
+          b['transmission_sequence']! as int,
+        ),
+      );
+      for (var index = 0; index < rows.length; index++) {
+        if (rows[index]['transmission_sequence'] != index + 1) return false;
+      }
+    }
+    final resultCommands = <String>{};
+    for (final row in results) {
+      final commandId = row['command_id'];
+      final ackJson = row['ack_json'];
+      if (commandId is! String ||
+          ackJson is! String ||
+          !resultCommands.add(commandId)) {
+        return false;
+      }
+      final sequence = row['transmission_sequence'];
+      final retainedTransmissions =
+          transmissionsByCommand[commandId] ?? const [];
+      if (retainedTransmissions.isEmpty ||
+          sequence != retainedTransmissions.length ||
+          !(retainedTransmissions).any(
+            (entry) => entry['transmission_sequence'] == sequence,
+          )) {
+        return false;
+      }
+      final decoded = jsonDecode(ackJson);
+      if (decoded is! Map ||
+          canonicalConnectedSiteJson(decoded) != ackJson ||
+          connectedSiteSha256(decoded) != row['ack_digest']) {
+        return false;
+      }
+      final ack = SiteCommandAckV1.fromJson(decoded);
+      final attempt = attemptsById[commandId];
+      if (attempt == null ||
+          ack.commandId != commandId ||
+          ack.commandDigest != attempt['command_digest'] ||
+          ack.state.name != row['ack_state'] ||
+          ((ack.state == SiteCommandAckState.accepted ||
+                  ack.state == SiteCommandAckState.replayed)
+              ? row['result_kind'] != 'acknowledged'
+              : row['result_kind'] != 'rejected')) {
+        return false;
+      }
+    }
+    return true;
+  } on Object {
+    return false;
+  }
+}
+
 Map<String, Object> shopConnectedAuthorityDeltaJsonV27({
   required String tenantId,
   required String siteId,
@@ -3083,7 +3532,7 @@ final shopKnownBaseObjectNames = <String>{
   'shop_pending_cash_checkouts_counter_delete_freeze',
   'shop_pending_cash_checkouts_cafe_freeze',
   'shop_pending_cash_checkouts_shift_freeze',
-  ...{for (final name in shopConnectedSiteSchemaDefinitionsV27().keys) name},
+  ...{for (final name in shopConnectedSiteSchemaDefinitionsV28().keys) name},
 };
 
 const shopBaseTableColumnsV6 = <String, Set<String>>{
@@ -3207,7 +3656,7 @@ const shopHeldSaleColumnsV10 = {
 };
 
 Map<String, Set<String>> shopBaseTableColumnsForVersion(int schemaVersion) {
-  if (schemaVersion < 5 || schemaVersion > 27) return const {};
+  if (schemaVersion < 5 || schemaVersion > 28) return const {};
   return <String, Set<String>>{
     for (final entry in shopBaseTableColumnsV6.entries)
       if (schemaVersion >= 6 ||
@@ -3979,6 +4428,7 @@ enum _ShopUpgradeOrigin {
   unifiedV24,
   unifiedV25,
   unifiedV26,
+  unifiedV27,
 }
 
 enum ShopConnectedSiteCommandStatus { accepted, replayed, conflict }
@@ -4193,7 +4643,7 @@ class ShopDatabase extends _$ShopDatabase {
           .customSelect('PRAGMA user_version')
           .getSingle();
       if (row.read<int>('user_version') != database.schemaVersion) {
-        throw StateError('The staged Shop restore did not reach schema v27.');
+        throw StateError('The staged Shop restore did not reach schema v28.');
       }
     } finally {
       await database.close();
@@ -4260,7 +4710,7 @@ class ShopDatabase extends _$ShopDatabase {
       _saleAndCashShiftClock().millisecondsSinceEpoch;
 
   @override
-  int get schemaVersion => 27;
+  int get schemaVersion => 28;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -4294,6 +4744,8 @@ class ShopDatabase extends _$ShopDatabase {
       await _requireUnifiedV26Schema();
       await _createConnectedAuthoritySchemaV27();
       await _requireUnifiedV27Schema();
+      await _createConnectedAttemptSchemaV28();
+      await _requireUnifiedV28Schema();
     }),
     onUpgrade: (migrator, from, to) => transaction(() async {
       // Version 11 has two historical meanings. Classify the complete reserved
@@ -4507,14 +4959,18 @@ class ShopDatabase extends _$ShopDatabase {
         await _createConnectedAuthoritySchemaV27();
       }
       await _requireUnifiedV27Schema();
+      if (from < 28) {
+        await _createConnectedAttemptSchemaV28();
+      }
+      await _requireUnifiedV28Schema();
     }),
     beforeOpen: (_) async {
       await customStatement('PRAGMA foreign_keys = ON');
-      await _requireUnifiedV27Schema();
+      await _requireUnifiedV28Schema();
     },
   );
 
-  Future<void> verifyReadyForUse() => _requireUnifiedV27Schema();
+  Future<void> verifyReadyForUse() => _requireUnifiedV28Schema();
 
   /// Revalidates the complete immutable cloud-disposition chain before a
   /// reconstructed upload cursor is trusted in the current process.
@@ -4527,6 +4983,14 @@ class ShopDatabase extends _$ShopDatabase {
   Future<void> verifyConnectedAuthorityEvidence() async {
     if (!await _v27ConnectedAuthorityRowsValid()) {
       throw StateError('Connected authority observation evidence is invalid.');
+    }
+  }
+
+  /// Structural integrity only. Runtime activation must separately reverify
+  /// the retained approval signature with its trusted authority verifier.
+  Future<void> verifyConnectedAttemptEvidence() async {
+    if (!await _v28ConnectedAttemptRowsValid()) {
+      throw StateError('Connected command-attempt evidence is invalid.');
     }
   }
 
@@ -4678,6 +5142,13 @@ class ShopDatabase extends _$ShopDatabase {
   Future<void> _createConnectedAuthoritySchemaV27() async {
     for (final definition
         in shopConnectedAuthoritySchemaDefinitionsV27().values) {
+      await customStatement(definition);
+    }
+  }
+
+  Future<void> _createConnectedAttemptSchemaV28() async {
+    for (final definition
+        in shopConnectedAttemptSchemaDefinitionsV28().values) {
       await customStatement(definition);
     }
   }
@@ -5638,8 +6109,12 @@ class ShopDatabase extends _$ShopDatabase {
   }
 
   Future<_ShopUpgradeOrigin> _classifyUpgradeOrigin(int from) async {
-    if (from < 1 || from > 26) {
-      throw StateError('This Shop database version cannot migrate to v27.');
+    if (from < 1 || from > 27) {
+      throw StateError('This Shop database version cannot migrate to v28.');
+    }
+    if (from == 27) {
+      await _requireUnifiedV27Schema();
+      return _ShopUpgradeOrigin.unifiedV27;
     }
     if (from == 26) {
       await _requireUnifiedV26Schema();
@@ -6177,6 +6652,7 @@ class ShopDatabase extends _$ShopDatabase {
     bool allowEnrollmentV25 = false,
     bool allowCloudV26 = false,
     bool allowAuthorityV27 = false,
+    bool allowAttemptV28 = false,
   }) async {
     await _requireDatabaseIntegrity();
     final objects = await _readSchemaObjects();
@@ -6208,7 +6684,9 @@ class ShopDatabase extends _$ShopDatabase {
             entry.key,
       if (allowConnectedV23)
         for (final entry
-            in (allowAuthorityV27
+            in (allowAttemptV28
+                    ? shopConnectedSiteSchemaDefinitionsV28()
+                    : allowAuthorityV27
                     ? shopConnectedSiteSchemaDefinitionsV27()
                     : allowCloudV26
                     ? shopConnectedSiteSchemaDefinitionsV26()
@@ -6235,7 +6713,9 @@ class ShopDatabase extends _$ShopDatabase {
       if (allowCashCheckoutV21)
         ...shopPendingCashCheckoutSchemaDefinitionsV21().keys,
       if (allowConnectedV23)
-        ...(allowAuthorityV27
+        ...(allowAttemptV28
+            ? shopConnectedSiteSchemaDefinitionsV28().keys
+            : allowAuthorityV27
             ? shopConnectedSiteSchemaDefinitionsV27().keys
             : allowCloudV26
             ? shopConnectedSiteSchemaDefinitionsV26().keys
@@ -6403,6 +6883,7 @@ class ShopDatabase extends _$ShopDatabase {
     bool allowEnrollmentV25 = false,
     bool allowCloudV26 = false,
     bool allowAuthorityV27 = false,
+    bool allowAttemptV28 = false,
   }) async {
     await _requireUnifiedV18Schema(
       allowCafeV19: true,
@@ -6414,6 +6895,7 @@ class ShopDatabase extends _$ShopDatabase {
       allowEnrollmentV25: allowEnrollmentV25,
       allowCloudV26: allowCloudV26,
       allowAuthorityV27: allowAuthorityV27,
+      allowAttemptV28: allowAttemptV28,
     );
     final objects = await _readSchemaObjects();
     final definitions = shopCafeOrderSchemaDefinitionsV19();
@@ -6435,7 +6917,9 @@ class ShopDatabase extends _$ShopDatabase {
       if (allowCashCheckoutV21)
         ...shopPendingCashCheckoutSchemaDefinitionsV21().keys,
       if (allowConnectedV23)
-        ...(allowAuthorityV27
+        ...(allowAttemptV28
+            ? shopConnectedSiteSchemaDefinitionsV28().keys
+            : allowAuthorityV27
             ? shopConnectedSiteSchemaDefinitionsV27().keys
             : allowCloudV26
             ? shopConnectedSiteSchemaDefinitionsV26().keys
@@ -6462,6 +6946,7 @@ class ShopDatabase extends _$ShopDatabase {
     bool allowEnrollmentV25 = false,
     bool allowCloudV26 = false,
     bool allowAuthorityV27 = false,
+    bool allowAttemptV28 = false,
   }) async {
     await _requireUnifiedV19Schema(
       allowCafeV20: true,
@@ -6472,6 +6957,7 @@ class ShopDatabase extends _$ShopDatabase {
       allowEnrollmentV25: allowEnrollmentV25,
       allowCloudV26: allowCloudV26,
       allowAuthorityV27: allowAuthorityV27,
+      allowAttemptV28: allowAttemptV28,
     );
     final objects = await _readSchemaObjects();
     final definitions = shopCafeCancellationSchemaDefinitionsV20();
@@ -6490,6 +6976,7 @@ class ShopDatabase extends _$ShopDatabase {
     bool allowEnrollmentV25 = false,
     bool allowCloudV26 = false,
     bool allowAuthorityV27 = false,
+    bool allowAttemptV28 = false,
   }) async {
     await _requireUnifiedV20Schema(
       allowCashCheckoutV21: true,
@@ -6499,6 +6986,7 @@ class ShopDatabase extends _$ShopDatabase {
       allowEnrollmentV25: allowEnrollmentV25,
       allowCloudV26: allowCloudV26,
       allowAuthorityV27: allowAuthorityV27,
+      allowAttemptV28: allowAttemptV28,
     );
     final objects = await _readSchemaObjects();
     final definitions = shopPendingCashCheckoutSchemaDefinitionsV21();
@@ -6599,6 +7087,7 @@ class ShopDatabase extends _$ShopDatabase {
     bool allowEnrollmentV25 = false,
     bool allowCloudV26 = false,
     bool allowAuthorityV27 = false,
+    bool allowAttemptV28 = false,
   }) async {
     await _requireUnifiedV21Schema(
       allowCashTenderV22: true,
@@ -6607,6 +7096,7 @@ class ShopDatabase extends _$ShopDatabase {
       allowEnrollmentV25: allowEnrollmentV25,
       allowCloudV26: allowCloudV26,
       allowAuthorityV27: allowAuthorityV27,
+      allowAttemptV28: allowAttemptV28,
     );
     final columns = await customSelect('PRAGMA table_info(shop_sales)').get();
     if (!columns.any(
@@ -6664,6 +7154,7 @@ class ShopDatabase extends _$ShopDatabase {
     bool allowEnrollmentV25 = false,
     bool allowCloudV26 = false,
     bool allowAuthorityV27 = false,
+    bool allowAttemptV28 = false,
   }) async {
     await _requireUnifiedV22Schema(
       allowConnectedV23: true,
@@ -6671,6 +7162,7 @@ class ShopDatabase extends _$ShopDatabase {
       allowEnrollmentV25: allowEnrollmentV25,
       allowCloudV26: allowCloudV26,
       allowAuthorityV27: allowAuthorityV27,
+      allowAttemptV28: allowAttemptV28,
     );
     final objects = await _readSchemaObjects();
     final definitions = shopConnectedSiteSchemaDefinitionsV23();
@@ -6768,12 +7260,14 @@ class ShopDatabase extends _$ShopDatabase {
     bool allowEnrollmentV25 = false,
     bool allowCloudV26 = false,
     bool allowAuthorityV27 = false,
+    bool allowAttemptV28 = false,
   }) async {
     await _requireUnifiedV23Schema(
       allowReservationV24: true,
       allowEnrollmentV25: allowEnrollmentV25,
       allowCloudV26: allowCloudV26,
       allowAuthorityV27: allowAuthorityV27,
+      allowAttemptV28: allowAttemptV28,
     );
     final objects = await _readSchemaObjects();
     final definitions = shopConnectedStockReservationSchemaDefinitionsV24();
@@ -6792,11 +7286,13 @@ class ShopDatabase extends _$ShopDatabase {
   Future<void> _requireUnifiedV25Schema({
     bool allowCloudV26 = false,
     bool allowAuthorityV27 = false,
+    bool allowAttemptV28 = false,
   }) async {
     await _requireUnifiedV24Schema(
       allowEnrollmentV25: true,
       allowCloudV26: allowCloudV26,
       allowAuthorityV27: allowAuthorityV27,
+      allowAttemptV28: allowAttemptV28,
     );
     final objects = await _readSchemaObjects();
     final definitions = shopConnectedEnrollmentSchemaDefinitionsV25();
@@ -6814,10 +7310,12 @@ class ShopDatabase extends _$ShopDatabase {
 
   Future<void> _requireUnifiedV26Schema({
     bool allowAuthorityV27 = false,
+    bool allowAttemptV28 = false,
   }) async {
     await _requireUnifiedV25Schema(
       allowCloudV26: true,
       allowAuthorityV27: allowAuthorityV27,
+      allowAttemptV28: allowAttemptV28,
     );
     final objects = await _readSchemaObjects();
     final definitions = shopConnectedCloudDispositionSchemaDefinitionsV26();
@@ -6833,8 +7331,11 @@ class ShopDatabase extends _$ShopDatabase {
     }
   }
 
-  Future<void> _requireUnifiedV27Schema() async {
-    await _requireUnifiedV26Schema(allowAuthorityV27: true);
+  Future<void> _requireUnifiedV27Schema({bool allowAttemptV28 = false}) async {
+    await _requireUnifiedV26Schema(
+      allowAuthorityV27: true,
+      allowAttemptV28: allowAttemptV28,
+    );
     final objects = await _readSchemaObjects();
     final definitions = shopConnectedAuthoritySchemaDefinitionsV27();
     if (!_definitionGroupExact(
@@ -6846,6 +7347,42 @@ class ShopDatabase extends _$ShopDatabase {
       throw StateError(
         'The unified Shop v27 authority-observation schema failed verification.',
       );
+    }
+  }
+
+  Future<void> _requireUnifiedV28Schema() async {
+    await _requireUnifiedV27Schema(allowAttemptV28: true);
+    final objects = await _readSchemaObjects();
+    final definitions = shopConnectedAttemptSchemaDefinitionsV28();
+    if (!_definitionGroupExact(
+          objects,
+          definitions,
+          definitions.keys.toSet(),
+        ) ||
+        !await _v28ConnectedAttemptRowsValid()) {
+      throw StateError(
+        'The unified Shop v28 command-attempt schema failed verification.',
+      );
+    }
+  }
+
+  Future<bool> _v28ConnectedAttemptRowsValid() async {
+    try {
+      Future<List<Map<String, Object?>>> rows(String table) async =>
+          (await customSelect('SELECT * FROM $table').get())
+              .map((row) => Map<String, Object?>.from(row.data))
+              .toList(growable: false);
+      return shopConnectedAttemptRowsValidV28(
+        bindings: await rows('shop_site_coordinator_bindings'),
+        revocations: await rows('shop_site_coordinator_binding_revocations'),
+        attempts: await rows('shop_site_command_attempts'),
+        transmissions: await rows('shop_site_command_transmissions'),
+        results: await rows('shop_site_command_results'),
+        enrollmentEvidence: await rows('shop_site_enrollment_evidence'),
+        devices: await rows('shop_site_devices'),
+      );
+    } on Object {
+      return false;
     }
   }
 
