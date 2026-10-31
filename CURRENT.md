@@ -37,10 +37,11 @@ before acting; a newer fact never widens authority.
 
 | Item | Verified fact |
 |---|---|
-| Exact private technical checkpoint | Runtime implementation `8305a207437dc79b9d4dfd57b5237c3af2648944`, repository tree `67a7a81fe56f6eefa9902f4aa40f93ca89ae7bc5`; publication remains prohibited |
-| Native identities | Current test-inclusive `mobile/shop_pos` tree `f62edf75d768deac194337fd3a33965602bf39d8`; current runtime `lib/` tree `b2b4ef901a003eec8d757522d8c82305b792d4f9`. The retained QA APK remains bound to older accepted runtime `cc0efa4f` / `lib/` tree `504d6113d88163a066371462cd26e8fa64633658` and is therefore stale for the current reservation fix |
+| Exact private technical checkpoint | Runtime implementation `11b52a597022f75f61fd61eee88b34d2dcfc1321`, repository tree `4db976717383a844ba08203f1bd5a359bfe0a121`; publication remains prohibited |
+| Native identities | Current test-inclusive `mobile/shop_pos` tree `6675771e443dd1860ee16cac897d212064747bfd`; current runtime `lib/` tree `2e3791758444b3d669de1162e1a5acb34f61b3f8`. The independently accepted QA APK remains bound to older runtime `cc0efa4f` / `lib/` tree `504d6113d88163a066371462cd26e8fa64633658`. A current-source debug APK was retained for `11b52a59`, but its post-build control failed closed and it is not accepted release provenance |
 | Runtime successor | `cc0efa4f56174c636fcd28cbdcf1e24c2db8349c`, containing cash-tender runtime `35d5b1d2`, v1 migration repair `1b2686bc`, and immutable cafe product-name snapshots |
 | Pending-cash stock-reservation successor | Private implementation `8305a207` makes a pending counter or cafe cash intent reserve its saved quantities. Intent creation rejects insufficient unreserved stock; counter, cafe and wallet sale commits atomically preserve every other pending cash reservation; only a successfully validated current pending operation excludes its own reservation. Cancellation releases the reservation. Counter EN/MY and cafe UI now report the quantity available for the specific sale/order instead of misreporting physical on-hand stock. File-backed restart and widget regressions prove both reservation directions, rejected competitors leave sale/stock/outbox/order/pending state unchanged, and cancel-then-retry remains usable |
+| Pending cash-reversal shift-close successor | Private implementation `11b52a59` prevents closing only the cash shift that owns an unresolved cash-reversal intent, preserving restart/retry and same-shift idempotency while leaving unrelated shifts and noncash work unaffected. Focused correction-consumption suite **17/17 PASS**, analyzer **PASS**, EN/MY guidance checks **PASS**, and independent final diff review **PASS**. Corrections remain production-disabled |
 | Native local verification head | `f58be5f7bcdaf8b3f83ee5d7c89712fca282a4bd`, repository tree `919a1368d86f6c87d4e875b51adcf72d8587416b`; later evidence/docs/tooling changes leave native tree `f110be98` unchanged |
 | Reviewed implementation/provenance head | `0af2750165f7d3925d4b106e7e91e44bc069350b`, repository tree `eefc0089c8ed17dead51fe5718a63aee218d807d`; includes release-truth reconciliation and source-only iOS/Windows QA provenance hardening, with native tree still `f110be98` |
 | Latest private release-integrity checkpoint | `1213fa189de3912d95e0c3e18c6bb8913a257234`, repository tree `b5d182d1a748d176c4068da60dd6059dc28af5e9`; aligns the gallery verifier/refresher with the independently reviewed current native-CI workflow bytes, while leaving the native tree `f110be98` unchanged |
@@ -49,7 +50,7 @@ before acting; a newer fact never widens authority.
 | Branch | `codex/postgres17-provenance-integration-20261031`, the single authorized replacement technical lane layered on the post-#734 merge branch |
 | Successor classification | Includes reviewed website telemetry privacy `897a207c` + `64d26887`, managed/local workspace-controls privacy `2a80479d` + `957fcd12` + `87651b97`, Settings/company-recovery privacy `40f47962`, managed-account support routing `f0030f28`, privacy-aligned app verifier `040ffbff`, managed access-entry clarity `9fa44b4a`, public signup transition guard `ec0919cd`, verifier/contact-contract repairs through `8cb51ee0`, PostgreSQL version-binding hardening `d7399679`, durable native cash-tender v22 runtime `35d5b1d2`, empty-v1 migration repair `1b2686bc`, and cafe product-name snapshot repair `cc0efa4f` |
 | Publication | Draft integration only; not merged, deployed, signed, or release-ready. Automatic CI on the replacement lane remains evidence, not production approval |
-| Worktree note | Exact-current gallery captures are absent. Accepted private QA APK for native `cc0efa4f` is retained at SHA-256 `ca5c7fa4...bf11`; installation is absent and the APK is stale for private runtime `8305a207`. A bounded handoff from Local Tech Lead task `01a0d249-2b5d-7d83-a769-79336eeb777c` now appoints this task as the single Cloud Tech Lead coordinator and reserves machine-specific evidence plus independent final review to Local. Full Local thread readback, source/worktree reconciliation and receiver acknowledgement remain **UNVERIFIED** because direct thread reads previously returned `connection closed before server request was answered`. Do not claim full synchronization, recreate the Local task or duplicate its branch |
+| Worktree note | Exact-current gallery captures are absent. Accepted private QA APK for native `cc0efa4f` remains at SHA-256 `ca5c7fa4...bf11`; installation is absent and it is stale for private runtime `11b52a59`. The source-matched debug APK at SHA-256 `cc9ad247...9be3` is private QA only and remains on build-control **HOLD** because Flutter wrote outside the preflight-bound output root. A bounded handoff from Local Tech Lead task `01a0d249-2b5d-7d83-a769-79336eeb777c` appoints this task as the single Cloud Tech Lead coordinator and reserves machine-specific evidence plus independent final review to Local. Do not claim full synchronization, recreate the Local task or duplicate its branch |
 
 The runtime successor composes the reviewed retail foundation, durable
 cash-movement records, device-local cafe orders, modifiers and remarks,
@@ -255,6 +256,79 @@ Later whole-repository evidence/docs/tooling commits through `f58be5f7` leave
 the native tree unchanged; they do not relabel the APK's accepted source
 identity. No install, emulator run, device restart/restore, scanner, printer, iOS, Windows,
 or merchant acceptance is established for the current source.
+
+### Current-source Android QA build hold
+
+One private offline debug build was completed from exact current source
+`11b52a597022f75f61fd61eee88b34d2dcfc1321`, repository tree `4db97671`,
+native tree `6675771e` and runtime tree `2e379175`. The retained APK is
+`196160064` bytes, SHA-256
+`cc9ad247d9e0bbd880874a3641fbedf048ea9dc9e146962398f3945ac7839be3`,
+package `dev.supermega.supermega_shop.qa`, min/target/compile SDK `24/36/36`,
+ABIs `armeabi-v7a`, `arm64-v8a`, `x86_64`, and Android v2 debug signer
+certificate SHA-256
+`2c8259ecbebf1fc62d202acb6792de7a10e906d937a6a24543244dcb17b137bb`.
+
+Artifact bytes, package metadata, signature, exact-source identity, durable
+retention and the 384 MiB reserve independently **PASS** for private QA. The
+post-build control **FAILS CLOSED / HOLD**: the logical build symlink was
+created at the detached repository root instead of `mobile/shop_pos/build`, so
+Flutter wrote into an uncontrolled temporary output directory. The verifier
+returned `shop_private_android_build_control:source_not_clean`; the filesystem
+was not retrofitted and no second build was run. The APK is not controlled-build,
+installed, production-signing, release or launch evidence.
+
+## Connected-site pilot Phase 1 source checkpoint
+
+The owner-approved two-merchant connected-site pilot is now represented by a
+**local, default-off source foundation** on base
+`11b52a597022f75f61fd61eee88b34d2dcfc1321`. Protocol version is `v1`; native
+SQLite schema version is `v23`. Production, synthetic QA and fallback runtime
+profiles all retain `connectedSite=false`, and no production caller enables the
+coordinator, onboarding or reconciliation seams.
+
+Implemented at source/local-verification level:
+
+- strict versioned pairing, lease, command, acknowledgement, delta, snapshot,
+  conflict and recovery contracts with canonical full-envelope digests;
+- seven-day Ed25519 offline-lease verification using an injected, default-
+  unavailable key ring;
+- private-address coordinator dispatch for the five planned routes, leaf-
+  certificate pin binding, one-time request proofs, pending enrollment, and
+  lease/capability gates for reads and commands;
+- v23 persistence for device/lease/revocation, command/event/version/cursor,
+  audit, acknowledgement, conflict, recovery and held-reservation records,
+  including atomic command/event/audit/ack application and strict replay;
+- default-off reconciliation interfaces with exact tenant/site/device/event,
+  acknowledgement, conflict, revocation and idempotency bindings;
+- resumable EN/MY onboarding source with guided mode as the default and
+  independently rebound resume evidence;
+- four isolated CI shards with exact once-only inventory and the original
+  300-second aggregate ceiling.
+
+Exact local checks for the mutable final worktree: connected integration
+**81/81 PASS**; complete isolated shards **696 PASS, 33 visual-capture skips,
+0 failures** in 247 seconds maximum wall time; affected legacy fixture files
+**83/83 PASS**; targeted analyzer **PASS**;
+full analyzer **PASS**; real process-interruption harness **14/14 PASS**;
+native CI contract **17/17 PASS**; claims guard **179 checks PASS** with every
+activation/external-write/commercial gate retained false; independent
+security/design review **PASS for default-off Phase 1 only**.
+Earlier failed runs remain evidence: one full run was manually interrupted when
+the final security review required a digest-contract fix; one two-shard run
+failed two legacy fixture emulations and timed out downstream; one preliminary
+shard launch failed before tests because its TMPDIR children did not exist.
+None is relabelled as a pass.
+
+This is **not connected operation or pilot readiness**. Real issuer keys,
+durable pairing/enrollment/nonces, Android Keystore and Windows DPAPI, a
+coordinator-to-database adapter, authenticated cloud transport and hosted RLS,
+two-tenant denial, reservation release/commit/expiry and ordinary-sale
+integration, client TLS pinning, installed Android/Windows lifecycle, hardware,
+restore, merchant and 14-day trading evidence remain **NOT RUN / BLOCKED**.
+Existing APKs and CI artifacts predate schema v23 and are stale for this source.
+Feature enablement, production signing, deployment and merchant enrollment
+remain prohibited.
 
 ## Current merged-head CI truth
 

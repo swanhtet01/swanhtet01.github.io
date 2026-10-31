@@ -4806,6 +4806,17 @@ void main() {
 }
 
 Future<void> _dropV16MemberSchema(ShopDatabase database) async {
+  for (final definition
+      in shopConnectedSiteSchemaDefinitionsV23().entries.toList().reversed) {
+    final type = shopSchemaObjectTypeForDefinition(definition.value);
+    await database.customStatement(
+      'DROP ${type == 'table'
+          ? 'TABLE'
+          : type == 'index'
+          ? 'INDEX'
+          : 'TRIGGER'} IF EXISTS ${definition.key}',
+    );
+  }
   await database.customStatement(
     'ALTER TABLE shop_sales DROP COLUMN cash_tendered_mmk',
   );

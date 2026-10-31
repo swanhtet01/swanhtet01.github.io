@@ -16,7 +16,7 @@ void main() {
       final database = ShopDatabase(NativeDatabase.memory());
       try {
         await database.verifyReadyForUse();
-        expect(database.schemaVersion, 22);
+        expect(database.schemaVersion, 23);
         final storeRef = await database.readStoreRef();
         expect(storeRef, matches(RegExp(r'^[0-9a-f]{64}$')));
         await expectLater(
@@ -544,7 +544,7 @@ void main() {
           final upgraded = ShopDatabase(NativeDatabase(snapshot));
           try {
             await upgraded.verifyReadyForUse();
-            expect(upgraded.schemaVersion, 22);
+            expect(upgraded.schemaVersion, 23);
             expect(await upgraded.countSales(), 1);
             expect(await upgraded.countStockMovements(), 2);
             expect(await upgraded.countOutboxOperations(), 2);
@@ -620,7 +620,7 @@ void main() {
           final upgraded = ShopDatabase(NativeDatabase(snapshot));
           try {
             await upgraded.verifyReadyForUse();
-            expect(upgraded.schemaVersion, 22);
+            expect(upgraded.schemaVersion, 23);
             final product = (await upgraded.readActiveProducts()).single;
             expect(product.sku, 'smc1.legacy-merchant-code');
             expect(product.onHand, 1);
@@ -717,7 +717,7 @@ void main() {
         final upgraded = ShopDatabase(NativeDatabase(snapshot));
         try {
           await upgraded.verifyReadyForUse();
-          expect(upgraded.schemaVersion, 22);
+          expect(upgraded.schemaVersion, 23);
           expect(await upgraded.memberCardIdentificationAvailable(), isFalse);
           await _seedMember(
             upgraded,
@@ -1483,6 +1483,17 @@ String _syntheticStaticMmqr() {
 }
 
 void _removeV17CorrectionConsumptionObjects(Database connection) {
+  for (final definition
+      in shopConnectedSiteSchemaDefinitionsV23().entries.toList().reversed) {
+    final type = shopSchemaObjectTypeForDefinition(definition.value);
+    connection.execute(
+      'DROP ${type == 'table'
+          ? 'TABLE'
+          : type == 'index'
+          ? 'INDEX'
+          : 'TRIGGER'} IF EXISTS ${definition.key}',
+    );
+  }
   connection.execute('ALTER TABLE shop_sales DROP COLUMN cash_tendered_mmk');
   for (final definition
       in shopPendingCashCheckoutSchemaDefinitionsV21().entries

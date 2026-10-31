@@ -12,7 +12,7 @@ import 'package:supermega_shop/shop_database.dart';
 import 'package:supermega_shop/shop_models.dart';
 
 void main() {
-  test('empty v1 store migrates through strict schemas to v22', () async {
+  test('empty v1 store migrates through strict schemas to v23', () async {
     final root = await Directory.systemTemp.createTemp('shop-cash-v1-');
     final file = File('${root.path}/shop.sqlite');
     final raw = sqlite3.open(file.path);
@@ -56,7 +56,7 @@ void main() {
     }
   });
 
-  test('v21 cash sale migrates to v22 with unknown legacy tender', () async {
+  test('v21 cash sale migrates to v23 with unknown legacy tender', () async {
     final root = await Directory.systemTemp.createTemp('shop-cash-v21-');
     final file = File('${root.path}/shop.sqlite');
     var database = ShopDatabase(NativeDatabase(file));
@@ -82,13 +82,14 @@ void main() {
         legacySaleColumns,
         shopBaseTableColumnsForVersion(21)['shop_sales'],
       );
+      await _dropConnectedSiteSchema(database);
       await database.customStatement('PRAGMA user_version = 21');
       await database.close();
 
       database = ShopDatabase(NativeDatabase(file));
       await database.verifyReadyForUse();
       final receipt = (await database.readRecentSales()).single;
-      expect(database.schemaVersion, 22);
+      expect(database.schemaVersion, 23);
       expect(receipt.cashTenderedMmk, isNull);
       expect(receipt.cashChangeMmk, isNull);
       expect((await database.readActiveProducts()).single.onHand, 1);
@@ -121,6 +122,7 @@ void main() {
               : 'TRIGGER'} IF EXISTS ${entry.key}',
         );
       }
+      await _dropConnectedSiteSchema(database);
       await database.customStatement('PRAGMA user_version = 20');
       await database.close();
       database = ShopDatabase(NativeDatabase(file));
@@ -1236,6 +1238,20 @@ void main() {
       await root.delete(recursive: true);
     }
   });
+}
+
+Future<void> _dropConnectedSiteSchema(ShopDatabase database) async {
+  for (final entry
+      in shopConnectedSiteSchemaDefinitionsV23().entries.toList().reversed) {
+    final type = shopSchemaObjectTypeForDefinition(entry.value);
+    await database.customStatement(
+      'DROP ${type == 'table'
+          ? 'TABLE'
+          : type == 'index'
+          ? 'INDEX'
+          : 'TRIGGER'} IF EXISTS ${entry.key}',
+    );
+  }
 }
 
 String _syntheticStaticMmqr() {

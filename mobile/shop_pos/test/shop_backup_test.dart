@@ -334,7 +334,7 @@ void main() {
       final upgraded = ShopDatabase(NativeDatabase(snapshot));
       try {
         await upgraded.verifyReadyForUse();
-        expect(upgraded.schemaVersion, 22);
+        expect(upgraded.schemaVersion, 23);
         expect(await upgraded.countSales(), salesBefore);
         expect(await upgraded.countStockMovements(), stockBefore);
         expect(await upgraded.countOutboxOperations(), outboxBefore);
@@ -5052,6 +5052,17 @@ void _removeV14AuthorizationProofsForLegacyFixture(Database connection) {
 }
 
 void _removeV17CorrectionConsumptionObjects(Database connection) {
+  for (final definition
+      in shopConnectedSiteSchemaDefinitionsV23().entries.toList().reversed) {
+    final type = shopSchemaObjectTypeForDefinition(definition.value);
+    connection.execute(
+      'DROP ${type == 'table'
+          ? 'TABLE'
+          : type == 'index'
+          ? 'INDEX'
+          : 'TRIGGER'} IF EXISTS ${definition.key}',
+    );
+  }
   connection.execute('ALTER TABLE shop_sales DROP COLUMN cash_tendered_mmk');
   _removeV18CashMovementObjects(connection);
   for (final trigger in const [

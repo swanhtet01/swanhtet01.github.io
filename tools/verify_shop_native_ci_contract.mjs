@@ -46,15 +46,20 @@ const QA_DART_FORMAT_PATHS = Object.freeze([
   'lib/shop_cash_movement_dialog.dart',
   'lib/shop_cash_shift_screen.dart',
   'lib/shop_catalog_search.dart',
+  'lib/shop_connected_onboarding.dart',
+  'lib/shop_connected_site_contracts.dart',
+  'lib/shop_connected_site_reconciliation.dart',
   'lib/shop_copy.dart',
   'lib/shop_correction_authorization_service.dart',
   'lib/shop_correction_consumption.dart',
   'lib/shop_correction_receipt.dart',
   'lib/shop_database.dart',
+  'lib/shop_offline_staff_lease.dart',
   'lib/shop_qa_evidence_store.dart',
   'lib/shop_runtime_profile.dart',
   'lib/shop_runtime_scope.dart',
   'lib/shop_sale_correction_dialog.dart',
+  'lib/shop_site_coordinator.dart',
   'lib/shop_staff_authorization.dart',
   'lib/shop_startup.dart',
   'lib/shop_today_screen.dart',
@@ -69,16 +74,22 @@ const QA_DART_FORMAT_PATHS = Object.freeze([
   'test/shop_cash_movement_authorized_flow_test.dart',
   'test/shop_cash_movement_test.dart',
   'test/shop_catalog_search_test.dart',
+  'test/shop_connected_onboarding_test.dart',
+  'test/shop_connected_site_contracts_test.dart',
+  'test/shop_connected_site_persistence_test.dart',
+  'test/shop_connected_site_reconciliation_test.dart',
   'test/shop_core_internal_acceptance_test.dart',
   'test/shop_correction_authorization_service_test.dart',
   'test/shop_foundation_test.dart',
   'test/shop_mmk_input_test.dart',
+  'test/shop_offline_staff_lease_test.dart',
   'test/shop_pending_cash_checkout_test.dart',
   'test/shop_process_interrupt_worker_test.dart',
   'test/shop_qa_evidence_store_test.dart',
   'test/shop_responsiveness_test.dart',
   'test/shop_runtime_profile_test.dart',
   'test/shop_runtime_scope_test.dart',
+  'test/shop_site_coordinator_test.dart',
   'test/shop_sqlite_full_recovery_test.dart',
   'test/shop_staff_authorization_test.dart',
   'test/visual_capture_test.dart',
@@ -184,8 +195,8 @@ export function verifyShopNativeCiContract(source, gradleWrapperSource = '', act
   if (checkoutBlocks.some(block => !checkoutDisablesCredentialPersistence(block))) {
     failures.push('native_checkout_credentials_persisted_or_unspecified')
   }
-  const formatLine = source.split(/\r?\n/).find(line => line.trim().startsWith('dart format ')) ?? ''
-  const diffLine = source.split(/\r?\n/).find(line => line.trim().startsWith('git diff --exit-code -- ')) ?? ''
+  const formatLine = source.split(/\r?\n/).filter(line => line.trim().startsWith('dart format ')).join(' ')
+  const diffLine = source.split(/\r?\n/).filter(line => line.trim().startsWith('git diff --exit-code -- ')).join(' ')
   for (const path of QA_DART_FORMAT_PATHS) {
     const formatCount = formatLine.split(/\s+/).filter(token => token === path).length
     const diffCount = diffLine.split(/\s+/).filter(token => token === path).length
@@ -253,8 +264,20 @@ export function verifyShopNativeCiContract(source, gradleWrapperSource = '', act
   )
   requireToken(
     source,
-    'persistence_tmp="$(mktemp -d "${RUNNER_TEMP}/shop-persistence.XXXXXX")"',
-    'native_persistence_shard_temp_isolation_missing',
+    'persistence_a_tmp="$(mktemp -d "${RUNNER_TEMP}/shop-persistence-a.XXXXXX")"',
+    'native_persistence_a_shard_temp_isolation_missing',
+    failures,
+  )
+  requireToken(
+    source,
+    'persistence_b_tmp="$(mktemp -d "${RUNNER_TEMP}/shop-persistence-b.XXXXXX")"',
+    'native_persistence_b_shard_temp_isolation_missing',
+    failures,
+  )
+  requireToken(
+    source,
+    'connected_tmp="$(mktemp -d "${RUNNER_TEMP}/shop-connected.XXXXXX")"',
+    'native_connected_shard_temp_isolation_missing',
     failures,
   )
   requireToken(
@@ -265,10 +288,37 @@ export function verifyShopNativeCiContract(source, gradleWrapperSource = '', act
   )
   requireToken(
     source,
-    'TMPDIR="$persistence_tmp" timeout --signal=TERM --kill-after=10s "${SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS}s" flutter test --concurrency=1',
-    'native_persistence_shard_not_bounded_or_sequential',
+    'TMPDIR="$persistence_a_tmp" timeout --signal=TERM --kill-after=10s "${SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS}s" flutter test --concurrency=1',
+    'native_persistence_a_shard_not_bounded_or_sequential',
     failures,
   )
+  requireToken(
+    source,
+    'TMPDIR="$persistence_b_tmp" timeout --signal=TERM --kill-after=10s "${SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS}s" flutter test --concurrency=1',
+    'native_persistence_b_shard_not_bounded_or_sequential',
+    failures,
+  )
+  requireToken(
+    source,
+    'TMPDIR="$connected_tmp" timeout --signal=TERM --kill-after=10s "${SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS}s" flutter test --concurrency=1',
+    'native_connected_shard_not_bounded_or_sequential',
+    failures,
+  )
+  requireToken(
+    source,
+    'rm -rf -- "$behavior_tmp" "$persistence_a_tmp" "$persistence_b_tmp" "$connected_tmp"',
+    'native_test_shard_cleanup_incomplete',
+    failures,
+  )
+  for (const shard of ['behavior', 'persistence_a', 'persistence_b', 'connected']) {
+    requireToken(source, `wait "$${shard}_pid"`, `native_${shard}_shard_wait_missing`, failures)
+    requireToken(
+      source,
+      `test "$${shard}_status" -eq 0`,
+      `native_${shard}_shard_status_not_fail_closed`,
+      failures,
+    )
+  }
   requireToken(
     source,
     'if [ "$elapsed" -gt "$SHOP_FLUTTER_TEST_AGGREGATE_BUDGET_SECONDS" ]; then',
@@ -319,39 +369,9 @@ export function verifyShopNativeCiContract(source, gradleWrapperSource = '', act
   const testShardLines = shardStart >= 0 && shardEnd > shardStart
     ? source.slice(shardStart, shardEnd).split(/\r?\n/).map(line => line.trim())
     : []
-  for (const testPath of [
-    'test/connected_orders_test.dart',
-    'test/shop_add_product_test.dart',
-    'test/shop_backup_test.dart',
-    'test/shop_cafe_kitchen_entitlement_test.dart',
-    'test/shop_cafe_order_contract_test.dart',
-    'test/shop_cafe_order_screen_test.dart',
-    'test/shop_cafe_order_store_test.dart',
-    'test/shop_cafe_table_kitchen_test.dart',
-    'test/shop_cash_movement_authorized_flow_test.dart',
-    'test/shop_cash_movement_test.dart',
-    'test/shop_catalog_search_test.dart',
-    'test/shop_core_internal_acceptance_test.dart',
-    'test/shop_correction_authorization_service_test.dart',
-    'test/shop_correction_consumption_test.dart',
-    'test/shop_foundation_test.dart',
-    'test/shop_member_identity_test.dart',
-    'test/shop_mmk_input_test.dart',
-    'test/shop_operational_export_database_test.dart',
-    'test/shop_operational_export_saver_test.dart',
-    'test/shop_operational_export_test.dart',
-    'test/shop_operational_export_widget_test.dart',
-    'test/shop_pending_cash_checkout_test.dart',
-    'test/shop_qa_evidence_store_test.dart',
-    'test/shop_responsiveness_test.dart',
-    'test/shop_runtime_profile_test.dart',
-    'test/shop_runtime_scope_test.dart',
-    'test/shop_sqlite_full_recovery_test.dart',
-    'test/shop_staff_authorization_test.dart',
-    'test/visual_capture_test.dart',
-    'test/widget_checkout_test.dart',
-    'test/widget_shell_test.dart',
-  ]) {
+  for (const testPath of declaredTestInventory(source).filter(
+    path => path !== 'test/shop_process_interrupt_worker_test.dart',
+  )) {
     const count = testShardLines.filter(
       line => line === testPath || line === `${testPath} \\`,
     ).length

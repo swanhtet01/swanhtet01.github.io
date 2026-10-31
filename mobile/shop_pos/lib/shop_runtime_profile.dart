@@ -14,6 +14,7 @@ class ShopRuntimeCapabilities {
     required this.correctionAuthorization,
     required this.cashMovementAuthorization,
     required this.connectedOrders,
+    required this.connectedSite,
     required this.networkPrinter,
     required this.camera,
     required this.gallery,
@@ -27,6 +28,10 @@ class ShopRuntimeCapabilities {
   final bool correctionAuthorization;
   final bool cashMovementAuthorization;
   final bool connectedOrders;
+  /// Multi-device site coordination remains unavailable until the signed
+  /// lease issuer, LAN coordinator, reconciliation service, and release gates
+  /// are independently verified for one exact candidate.
+  final bool connectedSite;
   final bool networkPrinter;
   final bool camera;
   final bool gallery;
@@ -40,6 +45,7 @@ class ShopRuntimeCapabilities {
     correctionAuthorization: true,
     cashMovementAuthorization: false,
     connectedOrders: true,
+    connectedSite: false,
     networkPrinter: true,
     camera: true,
     gallery: true,
@@ -54,6 +60,7 @@ class ShopRuntimeCapabilities {
     correctionAuthorization: false,
     cashMovementAuthorization: false,
     connectedOrders: false,
+    connectedSite: false,
     networkPrinter: false,
     camera: false,
     gallery: false,
@@ -70,6 +77,7 @@ class ShopRuntimeCapabilities {
     correctionAuthorization: false,
     cashMovementAuthorization: false,
     connectedOrders: false,
+    connectedSite: false,
     networkPrinter: false,
     camera: false,
     gallery: false,

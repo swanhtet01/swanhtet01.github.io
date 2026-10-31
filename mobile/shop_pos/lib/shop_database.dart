@@ -10,6 +10,8 @@ import 'package:drift_flutter/drift_flutter.dart';
 
 import 'shop_models.dart';
 import 'shop_cafe_order_contract.dart';
+import 'shop_connected_site_contracts.dart';
+import 'shop_connected_site_reconciliation.dart';
 import 'shop_correction_consumption.dart';
 import 'shop_correction_receipt.dart';
 import 'shop_operational_export.dart';
@@ -1488,7 +1490,335 @@ Map<String, String> shopPendingCashCheckoutSchemaDefinitionsV21() =>
           shopPendingCashCheckoutShiftFreezeV21Sql,
     };
 
-const shopKnownBaseObjectNames = <String>{
+const shopSiteDevicesV23Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_devices (
+    device_id TEXT PRIMARY KEY NOT NULL CHECK (length(device_id) BETWEEN 1 AND 128),
+    tenant_id TEXT NOT NULL CHECK (length(tenant_id) BETWEEN 1 AND 128),
+    site_id TEXT NOT NULL CHECK (length(site_id) BETWEEN 1 AND 128),
+    public_key_fingerprint TEXT NOT NULL CHECK (length(public_key_fingerprint) = 64),
+    session_generation INTEGER NOT NULL CHECK (session_generation >= 0),
+    state TEXT NOT NULL CHECK (state IN ('active', 'revoked')),
+    enrolled_at_millis INTEGER NOT NULL CHECK (enrolled_at_millis > 0),
+    revoked_at_millis INTEGER,
+    CHECK ((state = 'active' AND revoked_at_millis IS NULL) OR
+      (state = 'revoked' AND revoked_at_millis IS NOT NULL AND
+       revoked_at_millis >= enrolled_at_millis))
+  )
+''';
+
+const shopSiteDevicesUpdateGuardV23Sql = '''
+  CREATE TRIGGER IF NOT EXISTS shop_site_devices_update_guard
+  BEFORE UPDATE ON shop_site_devices
+  WHEN NEW.device_id != OLD.device_id
+    OR NEW.tenant_id != OLD.tenant_id
+    OR NEW.site_id != OLD.site_id
+    OR NEW.public_key_fingerprint != OLD.public_key_fingerprint
+    OR NEW.enrolled_at_millis != OLD.enrolled_at_millis
+    OR NEW.session_generation < OLD.session_generation
+    OR (OLD.state = 'revoked' AND NEW.state != 'revoked')
+  BEGIN
+    SELECT RAISE(ABORT, 'connected_site_device_identity_immutable');
+  END
+''';
+
+const shopSiteOfflineLeasesV23Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_offline_leases (
+    lease_id TEXT PRIMARY KEY NOT NULL CHECK (length(lease_id) BETWEEN 1 AND 128),
+    tenant_id TEXT NOT NULL CHECK (length(tenant_id) BETWEEN 1 AND 128),
+    site_id TEXT NOT NULL CHECK (length(site_id) BETWEEN 1 AND 128),
+    actor_id TEXT NOT NULL CHECK (length(actor_id) BETWEEN 1 AND 128),
+    actor_role TEXT NOT NULL CHECK (actor_role IN
+      ('owner', 'manager', 'cashierCounter', 'stockStaff',
+       'cafeWaiter', 'cafeKitchenBar')),
+    capabilities_json TEXT NOT NULL CHECK (json_valid(capabilities_json)),
+    device_id TEXT NOT NULL REFERENCES shop_site_devices(device_id),
+    session_generation INTEGER NOT NULL CHECK (session_generation >= 0),
+    revocation_generation INTEGER NOT NULL CHECK (revocation_generation >= 0),
+    issued_at_millis INTEGER NOT NULL CHECK (issued_at_millis > 0),
+    expires_at_millis INTEGER NOT NULL CHECK (
+      expires_at_millis > issued_at_millis AND
+      expires_at_millis - issued_at_millis <= 604800000),
+    key_id TEXT NOT NULL CHECK (length(key_id) BETWEEN 1 AND 128),
+    payload_digest TEXT NOT NULL UNIQUE CHECK (length(payload_digest) = 64),
+    signature TEXT NOT NULL CHECK (length(signature) BETWEEN 32 AND 4096)
+  )
+''';
+
+const shopSiteOfflineLeaseInsertGuardV23Sql = '''
+  CREATE TRIGGER IF NOT EXISTS shop_site_offline_leases_insert_guard
+  BEFORE INSERT ON shop_site_offline_leases
+  WHEN NOT EXISTS (
+    SELECT 1 FROM shop_site_devices device
+    JOIN shop_site_revocation_observations observation
+      ON observation.tenant_id = device.tenant_id
+      AND observation.site_id = device.site_id
+    WHERE device.device_id = NEW.device_id
+      AND device.tenant_id = NEW.tenant_id
+      AND device.site_id = NEW.site_id
+      AND device.state = 'active'
+      AND device.session_generation = NEW.session_generation
+      AND observation.generation = NEW.revocation_generation
+  ) BEGIN
+    SELECT RAISE(ABORT, 'connected_site_lease_authority_mismatch');
+  END
+''';
+
+const shopSiteRevocationObservationsV23Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_revocation_observations (
+    tenant_id TEXT NOT NULL CHECK (length(tenant_id) BETWEEN 1 AND 128),
+    site_id TEXT NOT NULL CHECK (length(site_id) BETWEEN 1 AND 128),
+    generation INTEGER NOT NULL CHECK (generation >= 0),
+    observed_at_millis INTEGER NOT NULL CHECK (observed_at_millis > 0),
+    source_digest TEXT NOT NULL CHECK (length(source_digest) = 64),
+    PRIMARY KEY (tenant_id, site_id)
+  )
+''';
+
+const shopSiteRevocationObservationUpdateGuardV23Sql = '''
+  CREATE TRIGGER IF NOT EXISTS shop_site_revocation_observations_update_guard
+  BEFORE UPDATE ON shop_site_revocation_observations
+  WHEN NEW.tenant_id != OLD.tenant_id
+    OR NEW.site_id != OLD.site_id
+    OR NEW.generation < OLD.generation
+    OR NEW.observed_at_millis < OLD.observed_at_millis
+  BEGIN
+    SELECT RAISE(ABORT, 'connected_site_revocation_observation_regressed');
+  END
+''';
+
+const shopSiteCommandsV23Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_commands (
+    command_id TEXT PRIMARY KEY NOT NULL CHECK (length(command_id) BETWEEN 1 AND 128),
+    tenant_id TEXT NOT NULL CHECK (length(tenant_id) BETWEEN 1 AND 128),
+    site_id TEXT NOT NULL CHECK (length(site_id) BETWEEN 1 AND 128),
+    actor_id TEXT NOT NULL CHECK (length(actor_id) BETWEEN 1 AND 128),
+    device_id TEXT NOT NULL REFERENCES shop_site_devices(device_id)
+      CHECK (length(device_id) BETWEEN 1 AND 128),
+    aggregate_type TEXT NOT NULL CHECK (length(aggregate_type) BETWEEN 1 AND 80),
+    aggregate_id TEXT NOT NULL CHECK (length(aggregate_id) BETWEEN 1 AND 160),
+    capability TEXT NOT NULL CHECK (length(capability) BETWEEN 1 AND 160),
+    expected_version INTEGER NOT NULL CHECK (expected_version >= 0),
+    payload_digest TEXT NOT NULL CHECK (length(payload_digest) = 64),
+    lease_digest TEXT NOT NULL REFERENCES shop_site_offline_leases(payload_digest)
+      CHECK (length(lease_digest) = 64),
+    command_digest TEXT NOT NULL CHECK (length(command_digest) = 64),
+    state TEXT NOT NULL CHECK (state IN ('accepted', 'conflict')),
+    received_at_millis INTEGER NOT NULL CHECK (received_at_millis > 0)
+  )
+''';
+
+const shopSiteCommandsInsertGuardV23Sql = '''
+  CREATE TRIGGER IF NOT EXISTS shop_site_commands_insert_guard
+  BEFORE INSERT ON shop_site_commands
+  WHEN NOT EXISTS (
+    SELECT 1 FROM shop_site_devices device
+    JOIN shop_site_offline_leases lease
+      ON lease.device_id = device.device_id
+    JOIN shop_site_revocation_observations observation
+      ON observation.tenant_id = lease.tenant_id
+      AND observation.site_id = lease.site_id
+    WHERE device.device_id = NEW.device_id
+      AND device.tenant_id = NEW.tenant_id
+      AND device.site_id = NEW.site_id
+      AND device.state = 'active'
+      AND lease.payload_digest = NEW.lease_digest
+      AND lease.tenant_id = NEW.tenant_id
+      AND lease.site_id = NEW.site_id
+      AND lease.actor_id = NEW.actor_id
+      AND lease.device_id = NEW.device_id
+      AND lease.session_generation = device.session_generation
+      AND lease.revocation_generation = observation.generation
+      AND NEW.received_at_millis >= lease.issued_at_millis
+      AND NEW.received_at_millis < lease.expires_at_millis
+      AND EXISTS (
+        SELECT 1 FROM json_each(lease.capabilities_json)
+        WHERE json_each.value = NEW.capability
+      )
+  ) BEGIN
+    SELECT RAISE(ABORT, 'connected_site_command_authority_mismatch');
+  END
+''';
+
+const shopSiteEventsV23Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_events (
+    event_row_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    site_sequence INTEGER NOT NULL CHECK (site_sequence > 0),
+    event_id TEXT NOT NULL UNIQUE CHECK (length(event_id) BETWEEN 1 AND 128),
+    command_id TEXT NOT NULL UNIQUE REFERENCES shop_site_commands(command_id),
+    tenant_id TEXT NOT NULL CHECK (length(tenant_id) BETWEEN 1 AND 128),
+    site_id TEXT NOT NULL CHECK (length(site_id) BETWEEN 1 AND 128),
+    aggregate_type TEXT NOT NULL CHECK (length(aggregate_type) BETWEEN 1 AND 80),
+    aggregate_id TEXT NOT NULL CHECK (length(aggregate_id) BETWEEN 1 AND 160),
+    aggregate_version INTEGER NOT NULL CHECK (aggregate_version > 0),
+    event_type TEXT NOT NULL CHECK (length(event_type) BETWEEN 1 AND 160),
+    payload_json TEXT NOT NULL CHECK (json_valid(payload_json)),
+    event_digest TEXT NOT NULL CHECK (length(event_digest) = 64),
+    created_at_millis INTEGER NOT NULL CHECK (created_at_millis > 0),
+    UNIQUE (tenant_id, site_id, site_sequence),
+    UNIQUE (tenant_id, site_id, aggregate_type, aggregate_id, aggregate_version)
+  )
+''';
+
+const shopSiteAggregateVersionsV23Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_aggregate_versions (
+    tenant_id TEXT NOT NULL CHECK (length(tenant_id) BETWEEN 1 AND 128),
+    site_id TEXT NOT NULL CHECK (length(site_id) BETWEEN 1 AND 128),
+    aggregate_type TEXT NOT NULL CHECK (length(aggregate_type) BETWEEN 1 AND 80),
+    aggregate_id TEXT NOT NULL CHECK (length(aggregate_id) BETWEEN 1 AND 160),
+    version INTEGER NOT NULL CHECK (version > 0),
+    last_event_row_id INTEGER NOT NULL REFERENCES shop_site_events(event_row_id),
+    last_site_sequence INTEGER NOT NULL CHECK (last_site_sequence > 0),
+    updated_at_millis INTEGER NOT NULL CHECK (updated_at_millis > 0),
+    PRIMARY KEY (tenant_id, site_id, aggregate_type, aggregate_id)
+  )
+''';
+
+const shopSiteCommandAcksV23Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_command_acks (
+    command_id TEXT PRIMARY KEY NOT NULL REFERENCES shop_site_commands(command_id),
+    status TEXT NOT NULL CHECK (status IN ('accepted', 'conflict')),
+    event_row_id INTEGER REFERENCES shop_site_events(event_row_id),
+    site_sequence INTEGER,
+    canonical_version INTEGER NOT NULL CHECK (canonical_version >= 0),
+    ack_digest TEXT NOT NULL CHECK (length(ack_digest) = 64),
+    created_at_millis INTEGER NOT NULL CHECK (created_at_millis > 0),
+    CHECK ((status = 'accepted' AND event_row_id IS NOT NULL AND
+      site_sequence IS NOT NULL AND canonical_version > 0) OR
+      (status = 'conflict' AND event_row_id IS NULL AND site_sequence IS NULL))
+  )
+''';
+
+const shopSiteClientCursorsV23Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_client_cursors (
+    tenant_id TEXT NOT NULL CHECK (length(tenant_id) BETWEEN 1 AND 128),
+    site_id TEXT NOT NULL CHECK (length(site_id) BETWEEN 1 AND 128),
+    device_id TEXT NOT NULL REFERENCES shop_site_devices(device_id),
+    acknowledged_sequence INTEGER NOT NULL CHECK (acknowledged_sequence >= 0),
+    delivered_sequence INTEGER NOT NULL CHECK (delivered_sequence >= acknowledged_sequence),
+    updated_at_millis INTEGER NOT NULL CHECK (updated_at_millis > 0),
+    PRIMARY KEY (tenant_id, site_id, device_id)
+  )
+''';
+
+const shopSiteCloudAcksV23Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_cloud_acks (
+    event_row_id INTEGER PRIMARY KEY NOT NULL REFERENCES shop_site_events(event_row_id),
+    cloud_event_id TEXT NOT NULL UNIQUE CHECK (length(cloud_event_id) BETWEEN 1 AND 160),
+    acknowledgement_digest TEXT NOT NULL CHECK (length(acknowledgement_digest) = 64),
+    acknowledged_at_millis INTEGER NOT NULL CHECK (acknowledged_at_millis > 0)
+  )
+''';
+
+const shopSiteConflictsV23Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_conflicts (
+    conflict_id TEXT PRIMARY KEY NOT NULL CHECK (length(conflict_id) BETWEEN 1 AND 160),
+    command_id TEXT NOT NULL UNIQUE REFERENCES shop_site_commands(command_id),
+    reason_code TEXT NOT NULL CHECK (length(reason_code) BETWEEN 1 AND 80),
+    detail_digest TEXT NOT NULL CHECK (length(detail_digest) = 64),
+    state TEXT NOT NULL CHECK (state IN ('pending', 'resolved', 'quarantined')),
+    created_at_millis INTEGER NOT NULL CHECK (created_at_millis > 0),
+    resolved_at_millis INTEGER,
+    CHECK ((state = 'pending' AND resolved_at_millis IS NULL) OR
+      (state != 'pending' AND resolved_at_millis IS NOT NULL AND
+       resolved_at_millis >= created_at_millis))
+  )
+''';
+
+const shopSiteRecoveryCheckpointsV23Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_recovery_checkpoints (
+    tenant_id TEXT NOT NULL CHECK (length(tenant_id) BETWEEN 1 AND 128),
+    site_id TEXT NOT NULL CHECK (length(site_id) BETWEEN 1 AND 128),
+    coordinator_id TEXT NOT NULL CHECK (length(coordinator_id) BETWEEN 1 AND 128),
+    event_sequence INTEGER NOT NULL CHECK (event_sequence >= 0),
+    snapshot_digest TEXT NOT NULL CHECK (length(snapshot_digest) = 64),
+    created_at_millis INTEGER NOT NULL CHECK (created_at_millis > 0),
+    PRIMARY KEY (tenant_id, site_id)
+  )
+''';
+
+const shopSiteStockReservationsV23Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_stock_reservations (
+    reservation_id TEXT PRIMARY KEY NOT NULL CHECK (length(reservation_id) BETWEEN 1 AND 160),
+    command_id TEXT NOT NULL UNIQUE REFERENCES shop_site_commands(command_id),
+    product_id TEXT NOT NULL REFERENCES shop_products(id),
+    quantity INTEGER NOT NULL CHECK (quantity > 0 AND quantity <= 2000000000),
+    state TEXT NOT NULL CHECK (state IN ('held', 'released', 'committed')),
+    expires_at_millis INTEGER NOT NULL CHECK (expires_at_millis > 0),
+    created_at_millis INTEGER NOT NULL CHECK (created_at_millis > 0),
+    resolved_at_millis INTEGER,
+    CHECK ((state = 'held' AND resolved_at_millis IS NULL AND
+      expires_at_millis > created_at_millis) OR
+      (state != 'held' AND resolved_at_millis IS NOT NULL AND
+       resolved_at_millis >= created_at_millis))
+  )
+''';
+
+const shopSiteAuditV23Sql = '''
+  CREATE TABLE IF NOT EXISTS shop_site_audit (
+    audit_id TEXT PRIMARY KEY NOT NULL CHECK (length(audit_id) BETWEEN 1 AND 160),
+    command_id TEXT NOT NULL UNIQUE REFERENCES shop_site_commands(command_id),
+    actor_id TEXT NOT NULL CHECK (length(actor_id) BETWEEN 1 AND 128),
+    action TEXT NOT NULL CHECK (length(action) BETWEEN 1 AND 160),
+    metadata_digest TEXT NOT NULL CHECK (length(metadata_digest) = 64),
+    created_at_millis INTEGER NOT NULL CHECK (created_at_millis > 0)
+  )
+''';
+
+Map<String, String> shopConnectedSiteSchemaDefinitionsV23() {
+  final definitions = <String, String>{
+    'shop_site_devices': shopSiteDevicesV23Sql,
+    'shop_site_devices_update_guard': shopSiteDevicesUpdateGuardV23Sql,
+    'shop_site_devices_no_delete': shopImmutableTriggerV11Sql(
+      table: 'shop_site_devices',
+      operation: 'delete',
+      message: 'Connected site device history is immutable',
+    ),
+    'shop_site_revocation_observations': shopSiteRevocationObservationsV23Sql,
+    'shop_site_revocation_observations_update_guard':
+        shopSiteRevocationObservationUpdateGuardV23Sql,
+    'shop_site_revocation_observations_no_delete': shopImmutableTriggerV11Sql(
+      table: 'shop_site_revocation_observations',
+      operation: 'delete',
+      message: 'Connected site revocation history is immutable',
+    ),
+    'shop_site_offline_leases': shopSiteOfflineLeasesV23Sql,
+    'shop_site_offline_leases_insert_guard':
+        shopSiteOfflineLeaseInsertGuardV23Sql,
+    'shop_site_commands': shopSiteCommandsV23Sql,
+    'shop_site_commands_insert_guard': shopSiteCommandsInsertGuardV23Sql,
+    'shop_site_events': shopSiteEventsV23Sql,
+    'shop_site_aggregate_versions': shopSiteAggregateVersionsV23Sql,
+    'shop_site_command_acks': shopSiteCommandAcksV23Sql,
+    'shop_site_client_cursors': shopSiteClientCursorsV23Sql,
+    'shop_site_cloud_acks': shopSiteCloudAcksV23Sql,
+    'shop_site_conflicts': shopSiteConflictsV23Sql,
+    'shop_site_recovery_checkpoints': shopSiteRecoveryCheckpointsV23Sql,
+    'shop_site_stock_reservations': shopSiteStockReservationsV23Sql,
+    'shop_site_audit': shopSiteAuditV23Sql,
+  };
+  for (final table in const [
+    'shop_site_offline_leases',
+    'shop_site_commands',
+    'shop_site_events',
+    'shop_site_command_acks',
+    'shop_site_cloud_acks',
+    'shop_site_audit',
+  ]) {
+    definitions['${table}_no_update'] = shopImmutableTriggerV11Sql(
+      table: table,
+      operation: 'update',
+      message: 'Connected site history is immutable',
+    );
+    definitions['${table}_no_delete'] = shopImmutableTriggerV11Sql(
+      table: table,
+      operation: 'delete',
+      message: 'Connected site history is immutable',
+    );
+  }
+  return definitions;
+}
+
+final shopKnownBaseObjectNames = <String>{
   'menu_import_drafts',
   'merchant_wallet_profiles',
   'shop_products',
@@ -1512,6 +1842,7 @@ const shopKnownBaseObjectNames = <String>{
   'shop_pending_cash_checkouts_counter_delete_freeze',
   'shop_pending_cash_checkouts_cafe_freeze',
   'shop_pending_cash_checkouts_shift_freeze',
+  ...{for (final name in shopConnectedSiteSchemaDefinitionsV23().keys) name},
 };
 
 const shopBaseTableColumnsV6 = <String, Set<String>>{
@@ -1635,7 +1966,7 @@ const shopHeldSaleColumnsV10 = {
 };
 
 Map<String, Set<String>> shopBaseTableColumnsForVersion(int schemaVersion) {
-  if (schemaVersion < 5 || schemaVersion > 22) return const {};
+  if (schemaVersion < 5 || schemaVersion > 23) return const {};
   return <String, Set<String>>{
     for (final entry in shopBaseTableColumnsV6.entries)
       if (schemaVersion >= 6 ||
@@ -2402,6 +2733,79 @@ enum _ShopUpgradeOrigin {
   unifiedV19,
   unifiedV20,
   unifiedV21,
+  unifiedV22,
+}
+
+enum ShopConnectedSiteCommandStatus { accepted, replayed, conflict }
+
+class ShopConnectedSiteCommandResult {
+  const ShopConnectedSiteCommandResult({
+    required this.status,
+    required this.commandId,
+    required this.ackDigest,
+    required this.canonicalVersion,
+    required this.eventSequence,
+  });
+
+  final ShopConnectedSiteCommandStatus status;
+  final String commandId;
+  final String ackDigest;
+  final int canonicalVersion;
+  final int? eventSequence;
+}
+
+class ShopConnectedSiteCommandInput {
+  const ShopConnectedSiteCommandInput({
+    required this.commandId,
+    required this.tenantId,
+    required this.siteId,
+    required this.actorId,
+    required this.deviceId,
+    required this.aggregateType,
+    required this.aggregateId,
+    required this.capability,
+    required this.expectedVersion,
+    required this.payloadDigest,
+    required this.leaseDigest,
+    required this.commandDigest,
+    required this.eventId,
+    required this.eventType,
+    required this.eventPayloadJson,
+    required this.eventDigest,
+    required this.ackDigest,
+    required this.auditAction,
+    required this.auditMetadataDigest,
+    required this.createdAtMillis,
+    this.reservationId,
+    this.reservationProductId,
+    this.reservationQuantity,
+    this.reservationExpiresAtMillis,
+  });
+
+  final String commandId;
+  final String tenantId;
+  final String siteId;
+  final String actorId;
+  final String deviceId;
+  final String aggregateType;
+  final String aggregateId;
+  final String capability;
+  final int expectedVersion;
+  final String payloadDigest;
+  final String leaseDigest;
+  final String commandDigest;
+  final String eventId;
+  final String eventType;
+  final String eventPayloadJson;
+  final String eventDigest;
+  final String ackDigest;
+  final String auditAction;
+  final String auditMetadataDigest;
+  final int createdAtMillis;
+  final String? reservationId;
+  final String? reservationProductId;
+  final int? reservationQuantity;
+  final int? reservationExpiresAtMillis;
 }
 
 class _ShopCorrectionReconciliationRequired implements Exception {
@@ -2473,7 +2877,7 @@ class ShopDatabase extends _$ShopDatabase {
           .customSelect('PRAGMA user_version')
           .getSingle();
       if (row.read<int>('user_version') != database.schemaVersion) {
-        throw StateError('The staged Shop restore did not reach schema v17.');
+        throw StateError('The staged Shop restore did not reach schema v23.');
       }
     } finally {
       await database.close();
@@ -2540,7 +2944,7 @@ class ShopDatabase extends _$ShopDatabase {
       _saleAndCashShiftClock().millisecondsSinceEpoch;
 
   @override
-  int get schemaVersion => 22;
+  int get schemaVersion => 23;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -2564,6 +2968,8 @@ class ShopDatabase extends _$ShopDatabase {
       await _createCafeCancellationSchemaV20();
       await _createPendingCashCheckoutSchemaV21();
       await _requireUnifiedV22Schema();
+      await _createConnectedSiteSchemaV23();
+      await _requireUnifiedV23Schema();
     }),
     onUpgrade: (migrator, from, to) => transaction(() async {
       // Version 11 has two historical meanings. Classify the complete reserved
@@ -2714,27 +3120,35 @@ class ShopDatabase extends _$ShopDatabase {
       await _requireUnifiedV19Schema(
         allowCafeV20: from >= 20,
         allowCashCheckoutV21: from >= 21,
+        allowCashTenderV22: from >= 22,
       );
       if (from < 20) {
         await _createCafeCancellationSchemaV20();
       }
-      await _requireUnifiedV20Schema(allowCashCheckoutV21: from >= 21);
+      await _requireUnifiedV20Schema(
+        allowCashCheckoutV21: from >= 21,
+        allowCashTenderV22: from >= 22,
+      );
       if (from < 21) {
         await _createPendingCashCheckoutSchemaV21();
       }
-      await _requireUnifiedV21Schema();
+      await _requireUnifiedV21Schema(allowCashTenderV22: from >= 22);
       if (from < 22) {
         await _createCashTenderSchemaV22();
       }
       await _requireUnifiedV22Schema();
+      if (from < 23) {
+        await _createConnectedSiteSchemaV23();
+      }
+      await _requireUnifiedV23Schema();
     }),
     beforeOpen: (_) async {
       await customStatement('PRAGMA foreign_keys = ON');
-      await _requireUnifiedV22Schema();
+      await _requireUnifiedV23Schema();
     },
   );
 
-  Future<void> verifyReadyForUse() => _requireUnifiedV22Schema();
+  Future<void> verifyReadyForUse() => _requireUnifiedV23Schema();
 
   Future<void> _createWalletCheckoutTable({bool includeQrSnapshot = true}) {
     final qrSnapshotColumns = includeQrSnapshot
@@ -2853,6 +3267,12 @@ class ShopDatabase extends _$ShopDatabase {
         "(payment_method = 'cash' AND cash_tendered_mmk >= total_mmk "
         'AND cash_tendered_mmk <= 200000000000000))',
   );
+
+  Future<void> _createConnectedSiteSchemaV23() async {
+    for (final definition in shopConnectedSiteSchemaDefinitionsV23().values) {
+      await customStatement(definition);
+    }
+  }
 
   Future<void> _createProductImageTable() => customStatement('''
     CREATE TABLE IF NOT EXISTS shop_product_images (
@@ -3703,8 +4123,12 @@ class ShopDatabase extends _$ShopDatabase {
   }
 
   Future<_ShopUpgradeOrigin> _classifyUpgradeOrigin(int from) async {
-    if (from < 1 || from > 21) {
-      throw StateError('This Shop database version cannot migrate to v22.');
+    if (from < 1 || from > 22) {
+      throw StateError('This Shop database version cannot migrate to v23.');
+    }
+    if (from == 22) {
+      await _requireUnifiedV22Schema();
+      return _ShopUpgradeOrigin.unifiedV22;
     }
     if (from == 21) {
       await _requireUnifiedV21Schema();
@@ -4217,6 +4641,7 @@ class ShopDatabase extends _$ShopDatabase {
     bool allowCafeV20 = false,
     bool allowCashCheckoutV21 = false,
     bool allowCashTenderV22 = false,
+    bool allowConnectedV23 = false,
   }) async {
     await _requireDatabaseIntegrity();
     final objects = await _readSchemaObjects();
@@ -4246,6 +4671,10 @@ class ShopDatabase extends _$ShopDatabase {
             in shopPendingCashCheckoutSchemaDefinitionsV21().entries)
           if (canonicalShopSchemaSql(entry.value).startsWith('create trigger'))
             entry.key,
+      if (allowConnectedV23)
+        for (final entry in shopConnectedSiteSchemaDefinitionsV23().entries)
+          if (canonicalShopSchemaSql(entry.value).startsWith('create trigger'))
+            entry.key,
     };
     final actualTriggers = objects.entries
         .where((entry) => entry.value.type == 'trigger')
@@ -4260,6 +4689,7 @@ class ShopDatabase extends _$ShopDatabase {
       if (allowCafeV20) ...shopCafeCancellationSchemaDefinitionsV20().keys,
       if (allowCashCheckoutV21)
         ...shopPendingCashCheckoutSchemaDefinitionsV21().keys,
+      if (allowConnectedV23) ...shopConnectedSiteSchemaDefinitionsV23().keys,
     };
     final valid =
         objects.values.every((object) => object.type != 'view') &&
@@ -4414,12 +4844,14 @@ class ShopDatabase extends _$ShopDatabase {
     bool allowCafeV20 = false,
     bool allowCashCheckoutV21 = false,
     bool allowCashTenderV22 = false,
+    bool allowConnectedV23 = false,
   }) async {
     await _requireUnifiedV18Schema(
       allowCafeV19: true,
       allowCafeV20: allowCafeV20,
       allowCashCheckoutV21: allowCashCheckoutV21,
       allowCashTenderV22: allowCashTenderV22,
+      allowConnectedV23: allowConnectedV23,
     );
     final objects = await _readSchemaObjects();
     final definitions = shopCafeOrderSchemaDefinitionsV19();
@@ -4440,6 +4872,7 @@ class ShopDatabase extends _$ShopDatabase {
       if (allowCafeV20) ...shopCafeCancellationSchemaDefinitionsV20().keys,
       if (allowCashCheckoutV21)
         ...shopPendingCashCheckoutSchemaDefinitionsV21().keys,
+      if (allowConnectedV23) ...shopConnectedSiteSchemaDefinitionsV23().keys,
     };
     final valid =
         _sameSchemaObjectNames(objects, expectedNames) &&
@@ -4453,11 +4886,13 @@ class ShopDatabase extends _$ShopDatabase {
   Future<void> _requireUnifiedV20Schema({
     bool allowCashCheckoutV21 = false,
     bool allowCashTenderV22 = false,
+    bool allowConnectedV23 = false,
   }) async {
     await _requireUnifiedV19Schema(
       allowCafeV20: true,
       allowCashCheckoutV21: allowCashCheckoutV21,
       allowCashTenderV22: allowCashTenderV22,
+      allowConnectedV23: allowConnectedV23,
     );
     final objects = await _readSchemaObjects();
     final definitions = shopCafeCancellationSchemaDefinitionsV20();
@@ -4471,10 +4906,12 @@ class ShopDatabase extends _$ShopDatabase {
 
   Future<void> _requireUnifiedV21Schema({
     bool allowCashTenderV22 = false,
+    bool allowConnectedV23 = false,
   }) async {
     await _requireUnifiedV20Schema(
       allowCashCheckoutV21: true,
       allowCashTenderV22: allowCashTenderV22,
+      allowConnectedV23: allowConnectedV23,
     );
     final objects = await _readSchemaObjects();
     final definitions = shopPendingCashCheckoutSchemaDefinitionsV21();
@@ -4569,8 +5006,13 @@ class ShopDatabase extends _$ShopDatabase {
     }
   }
 
-  Future<void> _requireUnifiedV22Schema() async {
-    await _requireUnifiedV21Schema(allowCashTenderV22: true);
+  Future<void> _requireUnifiedV22Schema({
+    bool allowConnectedV23 = false,
+  }) async {
+    await _requireUnifiedV21Schema(
+      allowCashTenderV22: true,
+      allowConnectedV23: allowConnectedV23,
+    );
     final columns = await customSelect('PRAGMA table_info(shop_sales)').get();
     if (!columns.any(
           (row) => row.read<String>('name') == 'cash_tendered_mmk',
@@ -4617,6 +5059,100 @@ class ShopDatabase extends _$ShopDatabase {
         }
       }
       return true;
+    } on Object {
+      return false;
+    }
+  }
+
+  Future<void> _requireUnifiedV23Schema() async {
+    await _requireUnifiedV22Schema(allowConnectedV23: true);
+    final objects = await _readSchemaObjects();
+    final definitions = shopConnectedSiteSchemaDefinitionsV23();
+    if (!_definitionGroupExact(
+          objects,
+          definitions,
+          definitions.keys.toSet(),
+        ) ||
+        !await _v23ConnectedSiteRowsValid()) {
+      throw StateError(
+        'The unified Shop v23 connected-site schema failed verification.',
+      );
+    }
+  }
+
+  Future<bool> _v23ConnectedSiteRowsValid() async {
+    try {
+      final invalidAccepted = await customSelect('''
+        SELECT 1 FROM shop_site_commands command
+        LEFT JOIN shop_site_events event ON event.command_id = command.command_id
+        LEFT JOIN shop_site_command_acks ack ON ack.command_id = command.command_id
+        LEFT JOIN shop_site_audit audit ON audit.command_id = command.command_id
+        WHERE command.state = 'accepted' AND (
+          event.command_id IS NULL OR ack.status != 'accepted' OR
+          ack.event_row_id != event.event_row_id OR
+          ack.site_sequence != event.site_sequence OR
+          ack.canonical_version != event.aggregate_version OR
+          audit.command_id IS NULL OR
+          event.tenant_id != command.tenant_id OR
+          event.site_id != command.site_id OR
+          event.aggregate_type != command.aggregate_type OR
+          event.aggregate_id != command.aggregate_id
+        ) LIMIT 1
+      ''').getSingleOrNull();
+      if (invalidAccepted != null) return false;
+      final invalidConflict = await customSelect('''
+        SELECT 1 FROM shop_site_commands command
+        LEFT JOIN shop_site_events event ON event.command_id = command.command_id
+        LEFT JOIN shop_site_command_acks ack ON ack.command_id = command.command_id
+        LEFT JOIN shop_site_conflicts conflict
+          ON conflict.command_id = command.command_id
+        WHERE command.state = 'conflict' AND (
+          event.command_id IS NOT NULL OR ack.status != 'conflict' OR
+          ack.event_row_id IS NOT NULL OR ack.site_sequence IS NOT NULL OR
+          conflict.command_id IS NULL
+        ) LIMIT 1
+      ''').getSingleOrNull();
+      if (invalidConflict != null) return false;
+      final invalidAggregate = await customSelect('''
+        SELECT 1 FROM shop_site_aggregate_versions aggregate_row
+        LEFT JOIN shop_site_events event
+          ON event.event_row_id = aggregate_row.last_event_row_id
+        WHERE event.event_row_id IS NULL OR
+          event.tenant_id != aggregate_row.tenant_id OR
+          event.site_id != aggregate_row.site_id OR
+          event.aggregate_type != aggregate_row.aggregate_type OR
+          event.aggregate_id != aggregate_row.aggregate_id OR
+          event.aggregate_version != aggregate_row.version OR
+          event.site_sequence != aggregate_row.last_site_sequence OR
+          aggregate_row.version != (
+            SELECT MAX(candidate.aggregate_version) FROM shop_site_events candidate
+            WHERE candidate.tenant_id = aggregate_row.tenant_id
+              AND candidate.site_id = aggregate_row.site_id
+              AND candidate.aggregate_type = aggregate_row.aggregate_type
+              AND candidate.aggregate_id = aggregate_row.aggregate_id
+          ) LIMIT 1
+      ''').getSingleOrNull();
+      if (invalidAggregate != null) return false;
+      final missingAggregate = await customSelect('''
+        SELECT 1 FROM shop_site_events event
+        LEFT JOIN shop_site_aggregate_versions aggregate_row
+          ON aggregate_row.tenant_id = event.tenant_id
+          AND aggregate_row.site_id = event.site_id
+          AND aggregate_row.aggregate_type = event.aggregate_type
+          AND aggregate_row.aggregate_id = event.aggregate_id
+        WHERE aggregate_row.aggregate_id IS NULL LIMIT 1
+      ''').getSingleOrNull();
+      if (missingAggregate != null) return false;
+      final siteSequenceGap = await customSelect('''
+        SELECT 1 FROM shop_site_events event
+        WHERE event.site_sequence != (
+          SELECT COUNT(*) FROM shop_site_events candidate
+          WHERE candidate.tenant_id = event.tenant_id
+            AND candidate.site_id = event.site_id
+            AND candidate.site_sequence <= event.site_sequence
+        ) LIMIT 1
+      ''').getSingleOrNull();
+      return siteSequenceGap == null;
     } on Object {
       return false;
     }
@@ -5980,6 +6516,461 @@ class ShopDatabase extends _$ShopDatabase {
     } catch (_) {
       if (await target.exists()) await target.delete();
       rethrow;
+    }
+  }
+
+  /// Applies one already authenticated connected-site command atomically.
+  ///
+  /// This persistence seam deliberately performs no signature verification or
+  /// network enrollment. A caller must keep [connectedSiteEnabled] false until
+  /// a production issuer, key store, and coordinator policy are injected. The
+  /// database still rechecks the persisted device, lease, capability,
+  /// revocation generation, aggregate version, and reservation invariant.
+  Future<ShopConnectedSiteCommandResult> applyConnectedSiteCommand(
+    ShopConnectedSiteCommandInput input, {
+    required bool connectedSiteEnabled,
+  }) async {
+    if (!connectedSiteEnabled) {
+      throw StateError('Connected-site commands are disabled.');
+    }
+    _validateConnectedSiteCommandInput(input);
+    final payload = _connectedSiteEventPayload(input.eventPayloadJson);
+    final canonicalPayloadJson = canonicalConnectedSiteJson(payload);
+    final eventEnvelope = _connectedSiteEventEnvelope(
+      input,
+      aggregateVersion: input.expectedVersion + 1,
+      payload: payload,
+    );
+    if (connectedSiteSha256(eventEnvelope) != input.eventDigest) {
+      throw StateError('The connected-site event digest is invalid.');
+    }
+    return transaction(() async {
+      final existing = await customSelect(
+        'SELECT command.command_digest, command.state, ack.status, '
+        'ack.site_sequence, ack.canonical_version, ack.ack_digest '
+        'FROM shop_site_commands command '
+        'JOIN shop_site_command_acks ack '
+        'ON ack.command_id = command.command_id '
+        'WHERE command.command_id = ?',
+        variables: [Variable<String>(input.commandId)],
+      ).getSingleOrNull();
+      if (existing != null) {
+        if (existing.read<String>('command_digest') != input.commandDigest) {
+          throw StateError(
+            'A connected-site command ID was reused with different bytes.',
+          );
+        }
+        final accepted = existing.read<String>('state') == 'accepted';
+        return ShopConnectedSiteCommandResult(
+          status: accepted
+              ? ShopConnectedSiteCommandStatus.replayed
+              : ShopConnectedSiteCommandStatus.conflict,
+          commandId: input.commandId,
+          ackDigest: existing.read<String>('ack_digest'),
+          canonicalVersion: existing.read<int>('canonical_version'),
+          eventSequence: existing.readNullable<int>('site_sequence'),
+        );
+      }
+
+      final authority = await customSelect(
+        'SELECT lease.capabilities_json, lease.session_generation, '
+        'lease.revocation_generation, lease.issued_at_millis, '
+        'lease.expires_at_millis, device.session_generation AS device_generation, '
+        'device.state AS device_state, observation.generation AS observed_generation '
+        'FROM shop_site_offline_leases lease '
+        'JOIN shop_site_devices device ON device.device_id = lease.device_id '
+        'LEFT JOIN shop_site_revocation_observations observation '
+        'ON observation.tenant_id = lease.tenant_id '
+        'AND observation.site_id = lease.site_id '
+        'WHERE lease.payload_digest = ? AND lease.tenant_id = ? '
+        'AND lease.site_id = ? AND lease.actor_id = ? AND lease.device_id = ?',
+        variables: [
+          Variable<String>(input.leaseDigest),
+          Variable<String>(input.tenantId),
+          Variable<String>(input.siteId),
+          Variable<String>(input.actorId),
+          Variable<String>(input.deviceId),
+        ],
+      ).getSingleOrNull();
+      if (authority == null ||
+          authority.read<String>('device_state') != 'active' ||
+          authority.read<int>('session_generation') !=
+              authority.read<int>('device_generation') ||
+          authority.readNullable<int>('observed_generation') !=
+              authority.read<int>('revocation_generation') ||
+          input.createdAtMillis < authority.read<int>('issued_at_millis') ||
+          input.createdAtMillis >= authority.read<int>('expires_at_millis')) {
+        throw StateError('Connected-site authority is absent or expired.');
+      }
+      final capabilities = jsonDecode(
+        authority.read<String>('capabilities_json'),
+      );
+      if (capabilities is! List ||
+          capabilities.any((value) => value is! String) ||
+          !capabilities.contains(input.capability)) {
+        throw StateError('The offline lease lacks this capability.');
+      }
+
+      final aggregate = await customSelect(
+        'SELECT version FROM shop_site_aggregate_versions '
+        'WHERE tenant_id = ? AND site_id = ? AND aggregate_type = ? '
+        'AND aggregate_id = ?',
+        variables: [
+          Variable<String>(input.tenantId),
+          Variable<String>(input.siteId),
+          Variable<String>(input.aggregateType),
+          Variable<String>(input.aggregateId),
+        ],
+      ).getSingleOrNull();
+      final currentVersion = aggregate?.read<int>('version') ?? 0;
+
+      String? conflictReason;
+      if (currentVersion != input.expectedVersion) {
+        conflictReason = 'aggregate_version_mismatch';
+      } else if (input.reservationProductId != null) {
+        final product = await customSelect(
+          'SELECT product.on_hand - COALESCE(SUM(reservation.quantity), 0) '
+          'AS available FROM shop_products product '
+          'LEFT JOIN shop_site_stock_reservations reservation '
+          "ON reservation.product_id = product.id AND reservation.state = 'held' "
+          'WHERE product.id = ? GROUP BY product.id, product.on_hand',
+          variables: [Variable<String>(input.reservationProductId!)],
+        ).getSingleOrNull();
+        if (product == null ||
+            product.read<int>('available') < input.reservationQuantity!) {
+          conflictReason = 'stock_reservation_unavailable';
+        }
+      }
+
+      if (conflictReason != null) {
+        final conflictDigest = await _sha256Hex(
+          '${input.commandDigest}:$conflictReason:$currentVersion',
+        );
+        await customInsert(
+          'INSERT INTO shop_site_commands '
+          '(command_id, tenant_id, site_id, actor_id, device_id, aggregate_id, '
+          'aggregate_type, capability, expected_version, payload_digest, lease_digest, '
+          'command_digest, state, received_at_millis) '
+          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'conflict', ?)",
+          variables: [
+            Variable<String>(input.commandId),
+            Variable<String>(input.tenantId),
+            Variable<String>(input.siteId),
+            Variable<String>(input.actorId),
+            Variable<String>(input.deviceId),
+            Variable<String>(input.aggregateId),
+            Variable<String>(input.aggregateType),
+            Variable<String>(input.capability),
+            Variable<int>(input.expectedVersion),
+            Variable<String>(input.payloadDigest),
+            Variable<String>(input.leaseDigest),
+            Variable<String>(input.commandDigest),
+            Variable<int>(input.createdAtMillis),
+          ],
+        );
+        await customInsert(
+          'INSERT INTO shop_site_conflicts '
+          '(conflict_id, command_id, reason_code, detail_digest, state, '
+          "created_at_millis) VALUES (?, ?, ?, ?, 'pending', ?)",
+          variables: [
+            Variable<String>('conflict:${input.commandId}'),
+            Variable<String>(input.commandId),
+            Variable<String>(conflictReason),
+            Variable<String>(conflictDigest),
+            Variable<int>(input.createdAtMillis),
+          ],
+        );
+        await customInsert(
+          'INSERT INTO shop_site_command_acks '
+          '(command_id, status, event_row_id, site_sequence, canonical_version, '
+          "ack_digest, created_at_millis) VALUES (?, 'conflict', NULL, NULL, ?, ?, ?)",
+          variables: [
+            Variable<String>(input.commandId),
+            Variable<int>(currentVersion),
+            Variable<String>(conflictDigest),
+            Variable<int>(input.createdAtMillis),
+          ],
+        );
+        return ShopConnectedSiteCommandResult(
+          status: ShopConnectedSiteCommandStatus.conflict,
+          commandId: input.commandId,
+          ackDigest: conflictDigest,
+          canonicalVersion: currentVersion,
+          eventSequence: null,
+        );
+      }
+
+      final nextVersion = currentVersion + 1;
+      await customInsert(
+        'INSERT INTO shop_site_commands '
+        '(command_id, tenant_id, site_id, actor_id, device_id, aggregate_id, '
+        'aggregate_type, capability, expected_version, payload_digest, lease_digest, '
+        'command_digest, state, received_at_millis) '
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'accepted', ?)",
+        variables: [
+          Variable<String>(input.commandId),
+          Variable<String>(input.tenantId),
+          Variable<String>(input.siteId),
+          Variable<String>(input.actorId),
+          Variable<String>(input.deviceId),
+          Variable<String>(input.aggregateId),
+          Variable<String>(input.aggregateType),
+          Variable<String>(input.capability),
+          Variable<int>(input.expectedVersion),
+          Variable<String>(input.payloadDigest),
+          Variable<String>(input.leaseDigest),
+          Variable<String>(input.commandDigest),
+          Variable<int>(input.createdAtMillis),
+        ],
+      );
+      final nextSiteSequenceRow = await customSelect(
+        'SELECT COALESCE(MAX(site_sequence), 0) + 1 AS next_sequence '
+        'FROM shop_site_events WHERE tenant_id = ? AND site_id = ?',
+        variables: [
+          Variable<String>(input.tenantId),
+          Variable<String>(input.siteId),
+        ],
+      ).getSingle();
+      final siteSequence = nextSiteSequenceRow.read<int>('next_sequence');
+      final eventRowId = await customInsert(
+        'INSERT INTO shop_site_events '
+        '(site_sequence, event_id, command_id, tenant_id, site_id, '
+        'aggregate_type, aggregate_id, '
+        'aggregate_version, event_type, payload_json, event_digest, '
+        'created_at_millis) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        variables: [
+          Variable<int>(siteSequence),
+          Variable<String>(input.eventId),
+          Variable<String>(input.commandId),
+          Variable<String>(input.tenantId),
+          Variable<String>(input.siteId),
+          Variable<String>(input.aggregateType),
+          Variable<String>(input.aggregateId),
+          Variable<int>(nextVersion),
+          Variable<String>(input.eventType),
+          Variable<String>(canonicalPayloadJson),
+          Variable<String>(input.eventDigest),
+          Variable<int>(input.createdAtMillis),
+        ],
+      );
+      await customInsert(
+        'INSERT INTO shop_site_aggregate_versions '
+        '(tenant_id, site_id, aggregate_type, aggregate_id, version, '
+        'last_event_row_id, last_site_sequence, updated_at_millis) '
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?) '
+        'ON CONFLICT(tenant_id, site_id, aggregate_type, aggregate_id) DO UPDATE SET '
+        'version = excluded.version, '
+        'last_event_row_id = excluded.last_event_row_id, '
+        'last_site_sequence = excluded.last_site_sequence, '
+        'updated_at_millis = excluded.updated_at_millis',
+        variables: [
+          Variable<String>(input.tenantId),
+          Variable<String>(input.siteId),
+          Variable<String>(input.aggregateType),
+          Variable<String>(input.aggregateId),
+          Variable<int>(nextVersion),
+          Variable<int>(eventRowId),
+          Variable<int>(siteSequence),
+          Variable<int>(input.createdAtMillis),
+        ],
+      );
+      if (input.reservationProductId != null) {
+        await customInsert(
+          'INSERT INTO shop_site_stock_reservations '
+          '(reservation_id, command_id, product_id, quantity, state, '
+          'expires_at_millis, created_at_millis) '
+          "VALUES (?, ?, ?, ?, 'held', ?, ?)",
+          variables: [
+            Variable<String>(input.reservationId!),
+            Variable<String>(input.commandId),
+            Variable<String>(input.reservationProductId!),
+            Variable<int>(input.reservationQuantity!),
+            Variable<int>(input.reservationExpiresAtMillis!),
+            Variable<int>(input.createdAtMillis),
+          ],
+        );
+      }
+      await customInsert(
+        'INSERT INTO shop_site_audit '
+        '(audit_id, command_id, actor_id, action, metadata_digest, '
+        'created_at_millis) VALUES (?, ?, ?, ?, ?, ?)',
+        variables: [
+          Variable<String>('audit:${input.commandId}'),
+          Variable<String>(input.commandId),
+          Variable<String>(input.actorId),
+          Variable<String>(input.auditAction),
+          Variable<String>(input.auditMetadataDigest),
+          Variable<int>(input.createdAtMillis),
+        ],
+      );
+      await customInsert(
+        'INSERT INTO shop_site_command_acks '
+        '(command_id, status, event_row_id, site_sequence, canonical_version, '
+        "ack_digest, created_at_millis) VALUES (?, 'accepted', ?, ?, ?, ?, ?)",
+        variables: [
+          Variable<String>(input.commandId),
+          Variable<int>(eventRowId),
+          Variable<int>(siteSequence),
+          Variable<int>(nextVersion),
+          Variable<String>(input.ackDigest),
+          Variable<int>(input.createdAtMillis),
+        ],
+      );
+      return ShopConnectedSiteCommandResult(
+        status: ShopConnectedSiteCommandStatus.accepted,
+        commandId: input.commandId,
+        ackDigest: input.ackDigest,
+        canonicalVersion: nextVersion,
+        eventSequence: siteSequence,
+      );
+    });
+  }
+
+  /// Reconstructs strict wire events from immutable database rows.
+  ///
+  /// [tenantId] is the local persistence name for the wire `workspaceId`.
+  /// Construction of [ConnectedSitePendingEvent] revalidates the complete
+  /// canonical event-envelope digest and fails closed on any stored mismatch.
+  Future<List<ConnectedSitePendingEvent>> readConnectedSitePendingEvents({
+    required String tenantId,
+    required String siteId,
+    required int afterSequence,
+    int limit = 100,
+  }) async {
+    final id = RegExp(r'^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$');
+    if (!id.hasMatch(tenantId) ||
+        !id.hasMatch(siteId) ||
+        afterSequence < 0 ||
+        limit < 1 ||
+        limit > 500) {
+      throw ArgumentError('Connected-site pending-event query is invalid.');
+    }
+    final rows = await customSelect(
+      'SELECT event.site_sequence, event.event_id, event.aggregate_type, '
+      'event.aggregate_id, event.aggregate_version, event.event_type, '
+      'event.payload_json, event.event_digest, event.created_at_millis, '
+      'command.command_id, command.command_digest '
+      'FROM shop_site_events event '
+      'JOIN shop_site_commands command ON command.command_id = event.command_id '
+      'WHERE event.tenant_id = ? AND event.site_id = ? '
+      'AND event.site_sequence > ? ORDER BY event.site_sequence LIMIT ?',
+      variables: [
+        Variable<String>(tenantId),
+        Variable<String>(siteId),
+        Variable<int>(afterSequence),
+        Variable<int>(limit),
+      ],
+    ).get();
+    return rows
+        .map((row) {
+          final payload = _connectedSiteEventPayload(
+            row.read<String>('payload_json'),
+          );
+          final event = <String, Object?>{
+            'eventId': row.read<String>('event_id'),
+            'workspaceId': tenantId,
+            'siteId': siteId,
+            'aggregateType': row.read<String>('aggregate_type'),
+            'aggregateId': row.read<String>('aggregate_id'),
+            'aggregateVersion': row.read<int>('aggregate_version'),
+            'eventType': row.read<String>('event_type'),
+            'occurredAt': _connectedSiteOccurredAt(
+              row.read<int>('created_at_millis'),
+            ),
+            'payload': payload,
+          };
+          return ConnectedSitePendingEvent(
+            cursor: row.read<int>('site_sequence'),
+            commandId: row.read<String>('command_id'),
+            commandDigest: row.read<String>('command_digest'),
+            event: event,
+            eventDigest: row.read<String>('event_digest'),
+          );
+        })
+        .toList(growable: false);
+  }
+
+  Map<String, Object?> _connectedSiteEventPayload(String payloadJson) {
+    final Object? decoded;
+    try {
+      decoded = jsonDecode(payloadJson);
+    } on FormatException {
+      throw ArgumentError('Connected-site event JSON is invalid.');
+    }
+    if (decoded is! Map) {
+      throw ArgumentError('Connected-site event payload must be an object.');
+    }
+    final payload = decoded.cast<String, Object?>();
+    // The shared canonicalizer rejects non-JSON values, floating point values,
+    // and malformed map keys before the payload can reach durable storage.
+    canonicalConnectedSiteJson(payload);
+    return payload;
+  }
+
+  Map<String, Object?> _connectedSiteEventEnvelope(
+    ShopConnectedSiteCommandInput input, {
+    required int aggregateVersion,
+    required Map<String, Object?> payload,
+  }) => <String, Object?>{
+    'eventId': input.eventId,
+    'workspaceId': input.tenantId,
+    'siteId': input.siteId,
+    'aggregateType': input.aggregateType,
+    'aggregateId': input.aggregateId,
+    'aggregateVersion': aggregateVersion,
+    'eventType': input.eventType,
+    'occurredAt': _connectedSiteOccurredAt(input.createdAtMillis),
+    'payload': payload,
+  };
+
+  String _connectedSiteOccurredAt(int millis) =>
+      DateTime.fromMillisecondsSinceEpoch(
+        millis,
+        isUtc: true,
+      ).toIso8601String();
+
+  void _validateConnectedSiteCommandInput(ShopConnectedSiteCommandInput input) {
+    final id = RegExp(r'^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$');
+    final digest = RegExp(r'^[0-9a-f]{64}$');
+    final values = [
+      input.commandId,
+      input.tenantId,
+      input.siteId,
+      input.actorId,
+      input.deviceId,
+      input.aggregateType,
+      input.aggregateId,
+      input.capability,
+      input.eventId,
+      input.eventType,
+      input.auditAction,
+    ];
+    if (values.any((value) => !id.hasMatch(value)) ||
+        input.expectedVersion < 0 ||
+        input.createdAtMillis <= 0 ||
+        !digest.hasMatch(input.payloadDigest) ||
+        !digest.hasMatch(input.leaseDigest) ||
+        !digest.hasMatch(input.commandDigest) ||
+        !digest.hasMatch(input.eventDigest) ||
+        !digest.hasMatch(input.ackDigest) ||
+        !digest.hasMatch(input.auditMetadataDigest)) {
+      throw ArgumentError('Connected-site command values are invalid.');
+    }
+    _connectedSiteEventPayload(input.eventPayloadJson);
+    final reservationFields = [
+      input.reservationId,
+      input.reservationProductId,
+      input.reservationQuantity,
+      input.reservationExpiresAtMillis,
+    ];
+    final hasReservation = reservationFields.every((value) => value != null);
+    if (reservationFields.any((value) => value != null) != hasReservation ||
+        (hasReservation &&
+            (!id.hasMatch(input.reservationId!) ||
+                !id.hasMatch(input.reservationProductId!) ||
+                input.reservationQuantity! <= 0 ||
+                input.reservationExpiresAtMillis! <= input.createdAtMillis))) {
+      throw ArgumentError('Connected-site reservation values are invalid.');
     }
   }
 
